@@ -12,8 +12,37 @@ import {
   TemplateTwinPhiScanUnavailableError,
   TemplateTwinSourcePrivacyUnsupportedError,
 } from '../source-phi';
+import {
+  TemplateTwinStaticAssetError,
+  type TemplateTwinStaticAssetApprovalBinding,
+} from '../static-assets';
 
 const cleanDocument = syntheticOpc.documentXml.replaceAll('2026-01-01', 'Date');
+const approvedPng = Uint8Array.from(
+  Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGOor6//DwAFewJ94ITM6gAAAABJRU5ErkJggg==',
+    'base64',
+  ),
+);
+
+function approvedBinding(
+  sha256: string,
+  sizeBytes = approvedPng.byteLength,
+): TemplateTwinStaticAssetApprovalBinding {
+  return {
+    sha256,
+    assetId: 'asset_synthetic',
+    decisionId: 'decision_synthetic',
+    decisionVersion: 1,
+    inspectionEvidenceSha256: 'a'.repeat(64),
+    mimeType: 'image/png',
+    width: 1,
+    height: 1,
+    sizeBytes,
+    scannerVersion: 'template-twin-static-png/1.0.0',
+    privacyEvidenceSha256: 'b'.repeat(64),
+  };
+}
 
 afterEach(() => {
   delete process.env.TEMPLATE_TWIN_APPROVED_STATIC_ASSETS_BY_PRACTICE_JSON;
@@ -149,6 +178,7 @@ describe('Template Twin immutable-source PHI gate', () => {
           practiceId: 'practice_1',
           userId: 'doctor_1',
           client: { complete } as never,
+          staticAssetApprovalResolver: async () => [],
         }),
       ).rejects.toBeInstanceOf(TemplateTwinSourcePrivacyUnsupportedError);
     }
@@ -156,14 +186,12 @@ describe('Template Twin immutable-source PHI gate', () => {
   });
 
   it('allows only a byte-exact administratively approved static asset', async () => {
-    const asset = new Uint8Array([1, 2, 3, 4]);
+    const asset = approvedPng;
     const digest = createHash('sha256').update(asset).digest('hex');
     const complete = vi.fn().mockResolvedValue({
       phiFields: [],
       anyUncertain: false,
     });
-    process.env.TEMPLATE_TWIN_APPROVED_STATIC_ASSETS_BY_PRACTICE_JSON =
-      JSON.stringify({ practice_1: [digest] });
     await expect(
       assertTemplateTwinSourcePhiFree({
         source: await buildSyntheticDocx({
@@ -173,6 +201,11 @@ describe('Template Twin immutable-source PHI gate', () => {
         practiceId: 'practice_1',
         userId: 'doctor_1',
         client: { complete } as never,
+        staticAssetApprovalResolver: async (practiceId, sha256) => {
+          expect(practiceId).toBe('practice_1');
+          expect(sha256).toEqual([digest]);
+          return [approvedBinding(digest)];
+        },
       }),
     ).resolves.toMatchObject({
       approvedStaticAssetCount: 1,
@@ -184,10 +217,8 @@ describe('Template Twin immutable-source PHI gate', () => {
   });
 
   it('scopes configured static-asset approvals to one exact practice', async () => {
-    const asset = new Uint8Array([5, 6, 7, 8]);
+    const asset = approvedPng;
     const digest = createHash('sha256').update(asset).digest('hex');
-    process.env.TEMPLATE_TWIN_APPROVED_STATIC_ASSETS_BY_PRACTICE_JSON =
-      JSON.stringify({ practice_alpha: [digest] });
     const source = await buildSyntheticDocx({
       documentXml: cleanDocument,
       extraEntries: { 'word/media/image1.png': asset },
@@ -203,6 +234,7 @@ describe('Template Twin immutable-source PHI gate', () => {
         practiceId: 'practice_alpha',
         userId: 'doctor_alpha',
         client: { complete } as never,
+        staticAssetApprovalResolver: async () => [approvedBinding(digest)],
       }),
     ).resolves.toMatchObject({
       approvedStaticAssetCount: 1,
@@ -214,15 +246,80 @@ describe('Template Twin immutable-source PHI gate', () => {
         practiceId: 'practice_beta',
         userId: 'doctor_beta',
         client: { complete } as never,
+        staticAssetApprovalResolver: async () => [],
       }),
     ).rejects.toBeInstanceOf(TemplateTwinSourcePrivacyUnsupportedError);
+  });
+
+  it('fails closed when a previously reviewed image has been revoked', async () => {
+    const digest = createHash('sha256').update(approvedPng).digest('hex');
+    const complete = vi.fn();
+    await expect(
+      assertTemplateTwinSourcePhiFree({
+        source: await buildSyntheticDocx({
+          documentXml: cleanDocument,
+          extraEntries: { 'word/media/image1.png': approvedPng },
+        }),
+        practiceId: 'practice_alpha',
+        userId: 'doctor_alpha',
+        client: { complete } as never,
+        staticAssetApprovalResolver: async (_practiceId, requested) => {
+          expect(requested).toEqual([digest]);
+          throw new TemplateTwinStaticAssetError(
+            'TT_STATIC_ASSET_NOT_APPROVED',
+            'Synthetic revocation.',
+          );
+        },
+      }),
+    ).rejects.toBeInstanceOf(TemplateTwinSourcePrivacyUnsupportedError);
+    expect(complete).not.toHaveBeenCalled();
+  });
+
+  it('rejects approval metadata that no longer matches the exact image bytes', async () => {
+    const digest = createHash('sha256').update(approvedPng).digest('hex');
+    const complete = vi.fn();
+    await expect(
+      assertTemplateTwinSourcePhiFree({
+        source: await buildSyntheticDocx({
+          documentXml: cleanDocument,
+          extraEntries: { 'word/media/image1.png': approvedPng },
+        }),
+        practiceId: 'practice_alpha',
+        userId: 'doctor_alpha',
+        client: { complete } as never,
+        staticAssetApprovalResolver: async () => [
+          approvedBinding(digest, approvedPng.byteLength + 1),
+        ],
+      }),
+    ).rejects.toBeInstanceOf(TemplateTwinSourcePrivacyUnsupportedError);
+    expect(complete).not.toHaveBeenCalled();
+  });
+
+  it('rejects a PNG whose OPC content type is shadowed as another media type', async () => {
+    const digest = createHash('sha256').update(approvedPng).digest('hex');
+    const complete = vi.fn();
+    await expect(
+      assertTemplateTwinSourcePhiFree({
+        source: await buildSyntheticDocx({
+          documentXml: cleanDocument,
+          contentTypes: syntheticOpc.contentTypes.replace(
+            'Extension="png" ContentType="image/png"',
+            'Extension="png" ContentType="image/jpeg"',
+          ),
+          extraEntries: { 'word/media/image1.png': approvedPng },
+        }),
+        practiceId: 'practice_alpha',
+        userId: 'doctor_alpha',
+        client: { complete } as never,
+        staticAssetApprovalResolver: async () => [approvedBinding(digest)],
+      }),
+    ).rejects.toBeInstanceOf(TemplateTwinSourcePrivacyUnsupportedError);
+    expect(complete).not.toHaveBeenCalled();
   });
 
   it('rejects identifier-bearing media paths even for approved bytes', async () => {
     const asset = new Uint8Array([9, 10, 11, 12]);
     const digest = createHash('sha256').update(asset).digest('hex');
-    process.env.TEMPLATE_TWIN_APPROVED_STATIC_ASSETS_BY_PRACTICE_JSON =
-      JSON.stringify({ practice_alpha: [digest] });
     const complete = vi.fn();
     await expect(
       assertTemplateTwinSourcePhiFree({
@@ -233,6 +330,7 @@ describe('Template Twin immutable-source PHI gate', () => {
         practiceId: 'practice_alpha',
         userId: 'doctor_alpha',
         client: { complete } as never,
+        staticAssetApprovalResolver: async () => [approvedBinding(digest)],
       }),
     ).rejects.toBeInstanceOf(TemplateTwinSourcePrivacyUnsupportedError);
     expect(complete).not.toHaveBeenCalled();
@@ -251,6 +349,7 @@ describe('Template Twin immutable-source PHI gate', () => {
         practiceId: 'practice_alpha',
         userId: 'doctor_alpha',
         client: { complete: vi.fn() } as never,
+        staticAssetApprovalResolver: async () => [],
       }),
     ).rejects.toBeInstanceOf(TemplateTwinSourcePrivacyUnsupportedError);
   });
@@ -353,15 +452,16 @@ describe('Template Twin immutable-source PHI gate', () => {
     expect(complete).not.toHaveBeenCalled();
   });
 
-  it('fails closed on malformed practice-scoped asset approval configuration', async () => {
-    process.env.TEMPLATE_TWIN_APPROVED_STATIC_ASSETS_BY_PRACTICE_JSON =
-      '{not-valid-json';
+  it('fails closed when the durable practice approval lookup is unavailable', async () => {
     await expect(
       assertTemplateTwinSourcePhiFree({
         source: await buildSyntheticDocx({ documentXml: cleanDocument }),
         practiceId: 'practice_alpha',
         userId: 'doctor_alpha',
         client: { complete: vi.fn() } as never,
+        staticAssetApprovalResolver: async () => {
+          throw new Error('synthetic database outage');
+        },
       }),
     ).rejects.toBeInstanceOf(TemplateTwinPhiScanUnavailableError);
   });

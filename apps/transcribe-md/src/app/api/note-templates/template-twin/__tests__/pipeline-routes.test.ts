@@ -96,10 +96,17 @@ import { POST as certify } from '../[id]/certify/route';
 import { PATCH as updateMappings } from '../[id]/mappings/route';
 import { POST as runSyntheticTest } from '../[id]/synthetic-test/route';
 import { AuthError } from '@/lib/auth';
+import { canonicalSha256 } from '@/lib/template-twin/canonical';
 
 const HASH = 'a'.repeat(64);
+const EMPTY_FIELD_INTENTS_SHA256 = canonicalSha256([]);
 const FIELD_ID = `ttf_${'b'.repeat(24)}`;
 const SESSION = {
+  templateTwinRolloutToken: {
+    practiceId: 'practice-synthetic-1',
+    globalGeneration: BigInt(2),
+    practiceGeneration: BigInt(4),
+  },
   user: {
     id: 'doctor-synthetic-1',
     email: 'doctor@synthetic.test',
@@ -110,6 +117,7 @@ const ACTOR = {
   userId: SESSION.user.id,
   userEmail: SESSION.user.email,
   practiceId: SESSION.user.practiceId,
+  rolloutToken: SESSION.templateTwinRolloutToken,
 };
 const WORKSPACE = {
   template: { id: 'template-synthetic-1' },
@@ -213,7 +221,12 @@ describe('Template Twin route orchestration', () => {
       status: 'certified',
     };
     const mappingsResponse = await updateMappings(
-      jsonRequest({ expectedMappingsSha256: HASH, mappings: [mapping] }),
+      jsonRequest({
+        expectedMappingsSha256: HASH,
+        expectedFieldIntentsSha256: EMPTY_FIELD_INTENTS_SHA256,
+        mappings: [mapping],
+        fieldIntents: [],
+      }),
       { params: Promise.resolve({ id: 'template-synthetic-1' }) },
     );
     expect(mappingsResponse.status).toBe(200);
@@ -221,12 +234,15 @@ describe('Template Twin route orchestration', () => {
       noteTemplateId: 'template-synthetic-1',
       actor: ACTOR,
       expectedMappingsSha256: HASH,
+      expectedFieldIntentsSha256: EMPTY_FIELD_INTENTS_SHA256,
       mappings: [mapping],
+      fieldIntents: [],
     });
 
     const syntheticResponse = await runSyntheticTest(
       jsonRequest({
         expectedMappingsSha256: HASH,
+        expectedFieldIntentsSha256: EMPTY_FIELD_INTENTS_SHA256,
         encounterText: 'Synthetic encounter evidence only.',
       }),
       { params: Promise.resolve({ id: 'template-synthetic-1' }) },
@@ -236,12 +252,14 @@ describe('Template Twin route orchestration', () => {
       noteTemplateId: 'template-synthetic-1',
       actor: ACTOR,
       expectedMappingsSha256: HASH,
+      expectedFieldIntentsSha256: EMPTY_FIELD_INTENTS_SHA256,
       encounterText: 'Synthetic encounter evidence only.',
     });
 
     const certifyResponse = await certify(
       jsonRequest({
         expectedMappingsSha256: HASH,
+        expectedFieldIntentsSha256: EMPTY_FIELD_INTENTS_SHA256,
         expectedSyntheticTestProvenanceSha256: HASH,
         acknowledgeStructure: true,
         acknowledgeSyntheticOutput: true,
@@ -253,6 +271,7 @@ describe('Template Twin route orchestration', () => {
       noteTemplateId: 'template-synthetic-1',
       actor: ACTOR,
       expectedMappingsSha256: HASH,
+      expectedFieldIntentsSha256: EMPTY_FIELD_INTENTS_SHA256,
       expectedSyntheticTestProvenanceSha256: HASH,
       optionalFieldWaivers: [],
     });
@@ -294,6 +313,7 @@ describe('Template Twin route orchestration', () => {
     const response = await certify(
       jsonRequest({
         expectedMappingsSha256: HASH,
+        expectedFieldIntentsSha256: EMPTY_FIELD_INTENTS_SHA256,
         acknowledgeStructure: true,
         acknowledgeSyntheticOutput: true,
       }),

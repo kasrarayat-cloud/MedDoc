@@ -947,6 +947,9 @@ function expectedManifestMatchesCertifiedIr(
       candidate.certifiedBinding.canonicalPath === binding.canonicalPath &&
       candidate.certifiedBinding.bindingType === binding.bindingType &&
       candidate.certifiedBinding.bindingProfile === binding.bindingProfile &&
+      canonicalSha256(
+        candidate.certifiedBinding.ordinaryPlaceholder ?? null,
+      ) === canonicalSha256(binding.ordinaryPlaceholder ?? null) &&
       candidate.certifiedBinding.ordinal === binding.ordinal &&
       canonicalSha256(candidate.certifiedBinding.nativeIdentity) ===
         canonicalSha256({

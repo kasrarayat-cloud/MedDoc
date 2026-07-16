@@ -6,6 +6,7 @@ export interface TemplateTwinSyntheticTestProvenanceInput {
   compiledVersionId: string;
   latestSyntheticTestManifest: unknown;
   latestTestMappingsSha256: string | null;
+  latestTestFieldIntentsSha256?: string | null;
   latestTestOutputObjectKey: string | null;
   latestTestOutputVersionId: string | null;
   latestTestOutputEtag: string | null;
@@ -31,6 +32,8 @@ export function templateTwinSyntheticTestProvenanceSha256(
     input.latestSyntheticTestManifest === undefined ||
     !input.latestTestMappingsSha256 ||
     !SHA256.test(input.latestTestMappingsSha256) ||
+    !input.latestTestFieldIntentsSha256 ||
+    !SHA256.test(input.latestTestFieldIntentsSha256) ||
     !input.latestTestOutputObjectKey ||
     !input.latestTestOutputVersionId?.trim() ||
     !input.latestTestOutputEtag?.trim() ||
@@ -49,6 +52,7 @@ export function templateTwinSyntheticTestProvenanceSha256(
   return canonicalSha256({
     compiledVersionId: input.compiledVersionId,
     mappingsSha256: input.latestTestMappingsSha256,
+    fieldIntentsSha256: input.latestTestFieldIntentsSha256,
     manifestSha256: canonicalSha256(input.latestSyntheticTestManifest),
     outputObjectKey: input.latestTestOutputObjectKey,
     outputVersionId: input.latestTestOutputVersionId,

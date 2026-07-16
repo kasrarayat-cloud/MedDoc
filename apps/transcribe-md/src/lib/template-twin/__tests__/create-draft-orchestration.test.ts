@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   ledgerUpdate: vi.fn(),
   ledgerFind: vi.fn(),
   outboxCreate: vi.fn(),
+  finalRollout: vi.fn(),
 }));
 
 vi.mock('@meddoc/ai', () => ({
@@ -44,13 +45,36 @@ vi.mock('@meddoc/db', () => {
   return { default: prisma, prisma };
 });
 
+vi.mock('../rollout', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../rollout')>();
+  return {
+    ...actual,
+    lockTemplateTwinRolloutForFinalClaim: mocks.finalRollout,
+  };
+});
+
 import { createTemplateTwinDraft } from '../create-draft';
 import type { TemplateTwinArtifactStore } from '../storage';
 import { buildTemplateTwinIntegrationFixture } from './integration-fixture';
 import { buildSyntheticDocx } from '../../note-template-docx/__tests__/synthetic-docx';
 
+const ACTOR = {
+  userId: 'doctor-synthetic-1',
+  userEmail: 'doctor@synthetic.test',
+  practiceId: 'practice-synthetic-1',
+  rolloutToken: {
+    practiceId: 'practice-synthetic-1',
+    globalGeneration: BigInt(3),
+    practiceGeneration: BigInt(7),
+  },
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.finalRollout.mockResolvedValue({
+    allowed: true,
+    token: ACTOR.rolloutToken,
+  });
   mocks.transaction.mockImplementation(
     async (callback: (client: unknown) => Promise<unknown>) =>
       callback({
@@ -119,11 +143,7 @@ describe('Template Twin upload/compile proposal orchestration', () => {
         encounterType: 'Orthopedic initial visit',
         versionDescription: 'Initial synthetic QA version',
       },
-      actor: {
-        userId: 'doctor-synthetic-1',
-        userEmail: 'doctor@synthetic.test',
-        practiceId: 'practice-synthetic-1',
-      },
+      actor: ACTOR,
       storage,
     });
 
@@ -220,6 +240,72 @@ describe('Template Twin upload/compile proposal orchestration', () => {
     );
   });
 
+  it('leaves uploaded bytes unclaimed when rollout changes before the draft claim', async () => {
+    const fixture = await buildTemplateTwinIntegrationFixture();
+    mocks.modelComplete.mockImplementation(
+      async (request: { purpose: string }) => {
+        if (request.purpose === 'tm_template_phi_scan') {
+          return { phiFields: [], anyUncertain: false };
+        }
+        if (request.purpose === 'tm_template_parse') {
+          return {
+            mappings: fixture.mappings.map((mapping) => ({
+              ...mapping,
+              status: 'recognized',
+              practiceDefault: null,
+            })),
+          };
+        }
+        throw new Error('Unexpected synthetic model purpose');
+      },
+    );
+    const digest = createHash('sha256').update(fixture.source).digest('hex');
+    const storeSourceArtifact = vi.fn().mockResolvedValue({
+      bucket: 'synthetic-template-artifacts',
+      objectKey: `practices/${ACTOR.practiceId}/template-twin/sources/lineage/v1/artifact/${digest}.docx`,
+      objectVersionId: 'provider-source-version-stale-synthetic',
+      objectEtag: 'provider-source-etag-stale-synthetic',
+      sha256: digest,
+      mimeType:
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      sizeBytes: fixture.source.byteLength,
+      created: true,
+    });
+    mocks.finalRollout.mockResolvedValueOnce({
+      allowed: false,
+      code: 'TEMPLATE_TWIN_PRACTICE_GENERATION_STALE',
+      reason: 'Synthetic practice generation changed.',
+      currentToken: {
+        practiceId: ACTOR.practiceId,
+        globalGeneration: BigInt(3),
+        practiceGeneration: BigInt(8),
+      },
+    });
+
+    await expect(
+      createTemplateTwinDraft({
+        source: fixture.source,
+        identity: {
+          name: 'Synthetic stale rollout intake',
+          encounterType: 'Synthetic initial visit',
+          versionDescription: 'Synthetic stale rollout proof',
+        },
+        actor: ACTOR,
+        storage: { storeSourceArtifact } as unknown as TemplateTwinArtifactStore,
+      }),
+    ).rejects.toMatchObject({
+      code: 'ROLLOUT_CHANGED',
+      message: expect.stringContaining(
+        'TEMPLATE_TWIN_PRACTICE_GENERATION_STALE',
+      ),
+    });
+    expect(storeSourceArtifact).toHaveBeenCalledTimes(1);
+    expect(mocks.noteTemplateCreate).not.toHaveBeenCalled();
+    expect(mocks.compiledVersionCreate).not.toHaveBeenCalled();
+    expect(mocks.ledgerUpdate).not.toHaveBeenCalled();
+    expect(mocks.outboxCreate).not.toHaveBeenCalled();
+  });
+
   it('fails the upload transaction when its durable audit event cannot be enqueued', async () => {
     const fixture = await buildTemplateTwinIntegrationFixture();
     mocks.modelComplete.mockImplementation(
@@ -265,11 +351,7 @@ describe('Template Twin upload/compile proposal orchestration', () => {
           encounterType: 'Orthopedic initial visit',
           versionDescription: 'Initial synthetic QA version',
         },
-        actor: {
-          userId: 'doctor-synthetic-1',
-          userEmail: 'doctor@synthetic.test',
-          practiceId: 'practice-synthetic-1',
-        },
+        actor: ACTOR,
         storage,
       }),
     ).rejects.toMatchObject({ code: 'PERSISTENCE_FAILED' });
@@ -291,11 +373,7 @@ describe('Template Twin upload/compile proposal orchestration', () => {
           encounterType: 'Synthetic initial visit',
           versionDescription: 'Synthetic rejected QA version',
         },
-        actor: {
-          userId: 'doctor-synthetic-1',
-          userEmail: 'doctor@synthetic.test',
-          practiceId: 'practice-synthetic-1',
-        },
+        actor: ACTOR,
       }),
     ).rejects.toMatchObject({ code: 'PERSISTENCE_FAILED' });
 
@@ -331,11 +409,7 @@ describe('Template Twin upload/compile proposal orchestration', () => {
           encounterType: 'Synthetic initial visit',
           versionDescription: 'Synthetic privacy gate outage case',
         },
-        actor: {
-          userId: 'doctor-synthetic-1',
-          userEmail: 'doctor@synthetic.test',
-          practiceId: 'practice-synthetic-1',
-        },
+        actor: ACTOR,
       }),
     ).rejects.toMatchObject({ code: 'TEMPLATE_TWIN_PHI_SCAN_UNAVAILABLE' });
 
@@ -373,11 +447,7 @@ describe('Template Twin upload/compile proposal orchestration', () => {
           encounterType: 'Synthetic initial visit',
           versionDescription: 'Synthetic unscannable package case',
         },
-        actor: {
-          userId: 'doctor-synthetic-1',
-          userEmail: 'doctor@synthetic.test',
-          practiceId: 'practice-synthetic-1',
-        },
+        actor: ACTOR,
       }),
     ).rejects.toMatchObject({
       code: 'TEMPLATE_TWIN_SOURCE_PRIVACY_UNSUPPORTED',

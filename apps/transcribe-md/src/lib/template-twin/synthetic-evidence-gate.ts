@@ -56,20 +56,13 @@ export class TemplateTwinSyntheticEvidenceScanUnavailableError extends Error {
   }
 }
 
-/**
- * Fail-closed gate before synthetic certification evidence reaches Layer 3 or
- * any persistent manifest/output. This cannot prove that a fictional history
- * is not inspired by a real person, so the server requires an explicit test
- * marker, rejects structured identifiers deterministically, and then uses the
- * shared provider boundary for a conservative second opinion.
- */
-export async function assertTemplateTwinSyntheticEvidencePhiFree(input: {
-  encounterText: string;
-  practiceId: string;
-  userId: string;
-  client?: Pick<ModelClient, 'complete'>;
-}): Promise<void> {
-  const encounterText = input.encounterText.trim();
+/** Deterministic half of the synthetic-evidence privacy boundary. Callers
+ * that batch several examples for one provider scan must still apply this to
+ * every original example so one explicit marker cannot bless another item. */
+export function assertTemplateTwinSyntheticEvidenceLocallySafe(
+  encounterTextInput: string,
+): string {
+  const encounterText = encounterTextInput.trim();
   if (
     encounterText.length < 10 ||
     encounterText.length > MAX_SYNTHETIC_SCAN_CHARS ||
@@ -83,6 +76,68 @@ export async function assertTemplateTwinSyntheticEvidencePhiFree(input: {
   if (wrapped.injectionAttemptDetected) {
     throw new TemplateTwinSyntheticEvidenceRejectedError();
   }
+  return encounterText;
+}
+
+/** One bounded privacy-provider call for all physician-authored custom-field
+ * metadata and examples. Each fragment is deterministically checked first;
+ * compact server labels keep the combined request within the existing 12k
+ * provider boundary without allowing one item to conceal another. */
+export async function assertTemplateTwinAuthoredCorpusPhiFree(input: {
+  fragments: readonly string[];
+  practiceId: string;
+  userId: string;
+  client?: Pick<ModelClient, 'complete'>;
+}): Promise<void> {
+  if (input.fragments.length === 0) return;
+  if (input.fragments.length > 600) {
+    throw new TemplateTwinSyntheticEvidenceRejectedError();
+  }
+  const fragments = input.fragments.map((rawFragment) => {
+    const fragment = rawFragment.trim();
+    const privacyScanFragment = fragment.replace(
+      /\b2099-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])\b/gu,
+      '[reserved synthetic date]',
+    );
+    if (
+      fragment.length === 0 ||
+      fragment.length > 2_000 ||
+      detectStructuredPhi(privacyScanFragment).length > 0 ||
+      wrapAsData(privacyScanFragment, 'transcript').injectionAttemptDetected
+    ) {
+      throw new TemplateTwinSyntheticEvidenceRejectedError();
+    }
+    return privacyScanFragment;
+  });
+  const corpus = [
+    'Synthetic template certification metadata and examples.',
+    ...fragments.map((fragment, index) => `[${index + 1}]${fragment}`),
+  ].join('\n');
+  await assertTemplateTwinSyntheticEvidencePhiFree({
+    encounterText: corpus,
+    practiceId: input.practiceId,
+    userId: input.userId,
+    client: input.client,
+  });
+}
+
+/**
+ * Fail-closed gate before synthetic certification evidence reaches Layer 3 or
+ * any persistent manifest/output. This cannot prove that a fictional history
+ * is not inspired by a real person, so the server requires an explicit test
+ * marker, rejects structured identifiers deterministically, and then uses the
+ * shared provider boundary for a conservative second opinion.
+ */
+export async function assertTemplateTwinSyntheticEvidencePhiFree(input: {
+  encounterText: string;
+  practiceId: string;
+  userId: string;
+  client?: Pick<ModelClient, 'complete'>;
+}): Promise<void> {
+  const encounterText = assertTemplateTwinSyntheticEvidenceLocallySafe(
+    input.encounterText,
+  );
+  const wrapped = wrapAsData(encounterText, 'transcript');
 
   try {
     const scan = await (input.client ?? modelClient).complete({

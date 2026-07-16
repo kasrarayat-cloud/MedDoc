@@ -86,11 +86,19 @@ describe('Template Twin fresh physician authorization', () => {
     });
 
     await expect(requireDoctorSession()).resolves.toMatchObject({
+      templateTwinRolloutToken: {
+        practiceId: 'practice-current',
+        globalGeneration: BigInt(1),
+        practiceGeneration: BigInt(1),
+      },
       user: {
         id: 'user-synthetic-role',
         role: 'DOCTOR',
         practiceId: 'practice-current',
       },
+    });
+    expect(mocks.pinRollout).toHaveBeenCalledWith({
+      practiceId: 'practice-current',
     });
   });
 

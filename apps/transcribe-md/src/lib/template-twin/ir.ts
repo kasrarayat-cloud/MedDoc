@@ -9,9 +9,9 @@
 import { z } from 'zod';
 
 export const TEMPLATE_TWIN_IR_SCHEMA_VERSION = 2 as const;
-export const TEMPLATE_TWIN_COMPILER_VERSION = 'template-docx-compiler/1.2.0';
+export const TEMPLATE_TWIN_COMPILER_VERSION = 'template-docx-compiler/1.3.0';
 export const TEMPLATE_TWIN_RESOLVER_VERSION = 'template-field-resolver/1.0.0';
-export const TEMPLATE_TWIN_RENDERER_VERSION = 'template-docx-renderer/1.2.0';
+export const TEMPLATE_TWIN_RENDERER_VERSION = 'template-docx-renderer/1.3.0';
 
 export const Sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
 
@@ -48,6 +48,49 @@ export const TemplateOptionSchema = z.object({
 });
 export type TemplateOption = z.infer<typeof TemplateOptionSchema>;
 
+export const OrdinaryPlaceholderTokenBindingSchema = z
+  .object({
+    contractVersion: z.literal('ordinary-placeholder-token-binding/1.0.0'),
+    tokenSyntax: z.enum(['angle', 'square', 'curly', 'underscore']),
+    tokenTextSha256: Sha256Schema,
+    tokenTextLength: z.number().int().positive().max(512),
+    span: z
+      .object({
+        startTextNodeIndex: z.number().int().nonnegative(),
+        startOffset: z.number().int().nonnegative(),
+        endTextNodeIndex: z.number().int().nonnegative(),
+        endOffset: z.number().int().positive(),
+        paragraphTextNodeCount: z.number().int().positive(),
+      })
+      .strict(),
+    staticPrefixLength: z.number().int().nonnegative(),
+    staticSuffixLength: z.number().int().nonnegative(),
+    staticPrefixSha256: Sha256Schema,
+    staticSuffixSha256: Sha256Schema,
+    staticContextSha256: Sha256Schema,
+    sourceParagraphShapeSha256: Sha256Schema,
+    clinicalMappingStatus: z.literal('needs_confirmation'),
+  })
+  .strict()
+  .superRefine((binding, context) => {
+    if (
+      binding.span.endTextNodeIndex < binding.span.startTextNodeIndex ||
+      binding.span.startTextNodeIndex >= binding.span.paragraphTextNodeCount ||
+      binding.span.endTextNodeIndex >= binding.span.paragraphTextNodeCount ||
+      (binding.span.startTextNodeIndex === binding.span.endTextNodeIndex &&
+        binding.span.endOffset <= binding.span.startOffset)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['span'],
+        message: 'Ordinary placeholder span falls outside the paragraph.',
+      });
+    }
+  });
+export type OrdinaryPlaceholderTokenBinding = z.infer<
+  typeof OrdinaryPlaceholderTokenBindingSchema
+>;
+
 export const RendererBindingSchema = z
   .object({
     partName: z.string().min(1).max(240),
@@ -55,14 +98,18 @@ export const RendererBindingSchema = z
       'content_control',
       'table_cell',
       'legacy_form_field',
+      'ordinary_placeholder',
       'repeating_row',
     ]),
     /**
      * An exact, versioned structural profile for bindings whose safe mutable
      * region cannot be inferred from bindingType alone. Absence preserves the
-     * original safe-alpha table-cell contract and its persisted fingerprints.
+     * original safe-alpha contracts and their persisted fingerprints.
      */
-    bindingProfile: z.enum(['TAB_ONLY_BLANK_TABLE_CELL_V1']).optional(),
+    bindingProfile: z
+      .enum(['TAB_ONLY_BLANK_TABLE_CELL_V1', 'ORDINARY_PLACEHOLDER_TOKEN_V1'])
+      .optional(),
+    ordinaryPlaceholder: OrdinaryPlaceholderTokenBindingSchema.optional(),
     /** Deterministic structural path; labels are never renderer locators. */
     path: z.string().min(1).max(512),
     /** Namespace-URI-aware, prefix-independent immutable source path. */
@@ -93,6 +140,39 @@ export const RendererBindingSchema = z
         path: ['bindingProfile'],
         message:
           'TAB_ONLY_BLANK_TABLE_CELL_V1 is valid only for table_cell bindings.',
+      });
+    }
+    if (
+      binding.bindingProfile === 'ORDINARY_PLACEHOLDER_TOKEN_V1' &&
+      binding.bindingType !== 'ordinary_placeholder'
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['bindingProfile'],
+        message:
+          'ORDINARY_PLACEHOLDER_TOKEN_V1 is valid only for ordinary_placeholder bindings.',
+      });
+    }
+    if (
+      (binding.bindingType === 'ordinary_placeholder') !==
+      (binding.ordinaryPlaceholder !== undefined)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['ordinaryPlaceholder'],
+        message:
+          'Ordinary placeholder bindings require exactly one immutable token descriptor.',
+      });
+    }
+    if (
+      binding.bindingType === 'ordinary_placeholder' &&
+      binding.bindingProfile !== 'ORDINARY_PLACEHOLDER_TOKEN_V1'
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['bindingProfile'],
+        message:
+          'Ordinary placeholder bindings require ORDINARY_PLACEHOLDER_TOKEN_V1.',
       });
     }
   });
@@ -458,6 +538,46 @@ export const TemplateTwinFillManifestSchema = z
     resolverVersion: z.string().min(1),
     resolverModelVersion: z.string().nullable(),
     rendererVersion: z.string().min(1),
+    fieldIntentsSha256: Sha256Schema.nullable().default(null),
+    customExampleProofSha256: Sha256Schema.nullable().default(null),
+    customExtraction: z
+      .object({
+        extractorVersion: z.string().min(1).max(160),
+        extractionSchemaVersion: z.string().min(1).max(160),
+        extractionSchemaHash: Sha256Schema,
+        provider: z.string().min(1).max(80),
+        model: z.string().min(1).max(160),
+        fields: z
+          .array(
+            z
+              .object({
+                fieldId: z.string().regex(/^ttf_[a-f0-9]{24}$/),
+                conceptId: z.string().regex(/^ttcustom_[a-f0-9]{24}$/),
+                status: z.enum([
+                  'supported',
+                  'explicitly_denied',
+                  'not_mentioned',
+                  'unknown',
+                  'ambiguous',
+                  'conflict',
+                ]),
+                sourceFactIds: z.array(
+                  z.string().regex(/^ttfact_[a-f0-9]{24}$/),
+                ),
+                evidenceAnchorIds: z.array(z.string().min(1).max(120)),
+                reasonCode: z.string().min(1).max(120),
+                needsClinicianReview: z.boolean(),
+                blocksSigning: z.boolean(),
+              })
+              .strict(),
+          )
+          .max(64)
+          .default([]),
+        blocksSigning: z.boolean().default(false),
+      })
+      .strict()
+      .nullable()
+      .default(null),
     facts: z.array(EncounterFactSchema),
     fields: z.array(FieldResolutionSchema),
     validation: TemplateTwinValidationResultSchema,

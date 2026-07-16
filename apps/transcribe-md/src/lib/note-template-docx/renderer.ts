@@ -1,23 +1,24 @@
-import { createHash } from 'node:crypto';
+import { createHash } from "node:crypto";
 
-import JSZip from 'jszip';
+import JSZip from "jszip";
 
-import { canonicalSha256 } from '../template-twin/canonical';
+import { canonicalSha256 } from "../template-twin/canonical";
 import {
   FieldResolutionSchema,
   TEMPLATE_TWIN_COMPILER_VERSION,
   TEMPLATE_TWIN_RENDERER_VERSION,
   TemplateDocIRSchema,
+  TemplateFieldSchema,
   TemplateTwinValidationResultSchema,
   type FieldResolution,
   type TemplateDocIR,
   type TemplateField,
   type TemplateTwinValidationResult,
-} from '../template-twin/ir';
-import { compileTemplateDocx } from './compiler';
-import type { TemplateDocxLimits } from './limits';
-import { inspectDocxPackage } from './package-security';
-import { readbackTemplateDocxOutput } from './output-readback';
+} from "../template-twin/ir";
+import { compileTemplateDocx } from "./compiler";
+import type { TemplateDocxLimits } from "./limits";
+import { inspectDocxPackage } from "./package-security";
+import { readbackTemplateDocxOutput } from "./output-readback";
 import {
   applyApprovedXmlPatches,
   descendantXmlElements,
@@ -36,7 +37,7 @@ import {
   type ScannedXmlPart,
   type TemplateDocxRoundTripVerification,
   type XmlElementSpan,
-} from './roundtrip-verify';
+} from "./roundtrip-verify";
 
 const MAX_RENDERED_FIELD_CHARACTERS = 32_767;
 const INVALID_XML_CHARACTER_RE =
@@ -58,6 +59,11 @@ export interface RenderTemplateDocxInput {
   /** Bytes read from the immutable source-artifact key after SHA verification. */
   source: Uint8Array;
   ir: TemplateDocIR;
+  /**
+   * Physician-certified scalar semantics for deterministically bound ordinary
+   * placeholders. Structural identity always remains anchored to `ir`.
+   */
+  effectiveFields?: ReadonlyArray<TemplateField>;
   resolutions: ReadonlyArray<FieldResolution>;
   /** Result of the independent resolver-output validator. */
   validation: TemplateTwinValidationResult;
@@ -83,27 +89,31 @@ export async function renderTemplateDocx(
   const validation = parseValidation(input.validation);
   if (
     !validation.valid ||
-    validation.issues.some((issue) => issue.severity === 'blocking')
+    validation.issues.some((issue) => issue.severity === "blocking")
   ) {
-    failTemplateDocxRender('VALIDATION_REQUIRED');
+    failTemplateDocxRender("VALIDATION_REQUIRED");
   }
 
   const inspected = inspectDocxPackage(input.source, input.limits);
   assertSourceMatchesIr(input.source, ir, inspected.sourceSha256, input.limits);
-  const resolutions = parseResolutions(ir, input.resolutions);
+  const effectiveFields = parseEffectiveFields(ir, input.effectiveFields);
+  const effectiveById = new Map(
+    effectiveFields.map((field) => [field.fieldId, field]),
+  );
+  const resolutions = parseResolutions(effectiveFields, input.resolutions);
   const partPlans = new Map<string, MutablePartPlan>();
 
   const getPartPlan = (partName: string): MutablePartPlan => {
     const existing = partPlans.get(partName);
     if (existing) return existing;
     const entry = inspected.zip.entries.get(partName);
-    if (!entry) failTemplateDocxRender('BINDING_NOT_FOUND');
+    if (!entry) failTemplateDocxRender("BINDING_NOT_FOUND");
     const created = { scan: scanXmlPart(entry.bytes), patches: [] };
     partPlans.set(partName, created);
     return created;
   };
 
-  const repeatingFields = ir.fields.filter((field) => field.rowPrototype);
+  const repeatingFields = effectiveFields.filter((field) => field.rowPrototype);
   const repeatingFieldIds = new Set(
     repeatingFields.map((field) => field.fieldId),
   );
@@ -114,12 +124,14 @@ export async function renderTemplateDocx(
     getPartPlan,
   });
 
-  for (const field of ir.fields) {
+  for (const structuralField of ir.fields) {
+    const field = effectiveById.get(structuralField.fieldId);
+    if (!field) failTemplateDocxRender("FIELD_RESOLUTION_INVALID");
     if (repeatingFieldIds.has(field.fieldId)) continue;
     const resolution = resolutions.get(field.fieldId)!;
-    if (field.detectionStatus === 'unsupported') {
+    if (field.detectionStatus === "unsupported") {
       if (resolution.value !== null)
-        failTemplateDocxRender('FIELD_VALUE_INVALID');
+        failTemplateDocxRender("FIELD_VALUE_INVALID");
       continue;
     }
     const prepared = prepareScalarResolution(field, resolution);
@@ -152,7 +164,7 @@ export async function renderTemplateDocx(
         const original = zip.file(partName);
         const sourceEntry = inspected.zip.entries.get(partName);
         if (!original || !sourceEntry)
-          failTemplateDocxRender('BINDING_NOT_FOUND');
+          failTemplateDocxRender("BINDING_NOT_FOUND");
         zip.file(partName, bytes, {
           binary: true,
           createFolders: false,
@@ -161,7 +173,7 @@ export async function renderTemplateDocx(
           unixPermissions: original.unixPermissions,
           dosPermissions: original.dosPermissions,
           compression:
-            sourceEntry.compressionMethod === 0 ? 'STORE' : 'DEFLATE',
+            sourceEntry.compressionMethod === 0 ? "STORE" : "DEFLATE",
           compressionOptions:
             sourceEntry.compressionMethod === 0 ? undefined : { level: 6 },
         });
@@ -170,21 +182,21 @@ export async function renderTemplateDocx(
         (entry) =>
           entry.unixPermissions !== null && entry.unixPermissions !== undefined,
       )
-        ? 'UNIX'
-        : 'DOS';
+        ? "UNIX"
+        : "DOS";
       output = await zip.generateAsync({
-        type: 'nodebuffer',
-        compression: 'DEFLATE',
+        type: "nodebuffer",
+        compression: "DEFLATE",
         compressionOptions: { level: 6 },
         platform,
       });
     } catch (cause) {
       if (cause instanceof TemplateDocxRenderError) throw cause;
-      throw new TemplateDocxRenderError('PACKAGE_WRITE_FAILED', { cause });
+      throw new TemplateDocxRenderError("PACKAGE_WRITE_FAILED", { cause });
     }
   }
 
-  const plannedFieldProofs = ir.fields.map((field) => {
+  const plannedFieldProofs = effectiveFields.map((field) => {
     const resolution = resolutions.get(field.fieldId)!;
     const occurrences =
       field.rowPrototype && Array.isArray(resolution.value)
@@ -203,6 +215,7 @@ export async function renderTemplateDocx(
     source: input.source,
     output,
     ir,
+    effectiveFields,
     resolutions: [...resolutions.values()],
     limits: input.limits,
   });
@@ -210,12 +223,12 @@ export async function renderTemplateDocx(
     ...structuralVerification,
     fields: outputFields.map((field) => ({
       ...field,
-      status: 'verified' as const,
+      status: "verified" as const,
     })),
   });
-  const outputSha256 = createHash('sha256').update(output).digest('hex');
+  const outputSha256 = createHash("sha256").update(output).digest("hex");
   if (verification.outputSha256 !== outputSha256) {
-    failTemplateDocxRender('ROUNDTRIP_PACKAGE_INVALID');
+    failTemplateDocxRender("ROUNDTRIP_PACKAGE_INVALID");
   }
   return Object.freeze({
     document: output,
@@ -227,7 +240,7 @@ export async function renderTemplateDocx(
 
 function parseIr(ir: TemplateDocIR): TemplateDocIR {
   const parsed = TemplateDocIRSchema.safeParse(ir);
-  if (!parsed.success) failTemplateDocxRender('SOURCE_IR_MISMATCH');
+  if (!parsed.success) failTemplateDocxRender("SOURCE_IR_MISMATCH");
   return parsed.data;
 }
 
@@ -235,8 +248,56 @@ function parseValidation(
   validation: TemplateTwinValidationResult,
 ): TemplateTwinValidationResult {
   const parsed = TemplateTwinValidationResultSchema.safeParse(validation);
-  if (!parsed.success) failTemplateDocxRender('VALIDATION_REQUIRED');
+  if (!parsed.success) failTemplateDocxRender("VALIDATION_REQUIRED");
   return parsed.data;
+}
+
+function parseEffectiveFields(
+  ir: TemplateDocIR,
+  rawFields: ReadonlyArray<TemplateField> | undefined,
+): TemplateField[] {
+  if (!rawFields) return [...ir.fields];
+  if (rawFields.length !== ir.fields.length) {
+    failTemplateDocxRender("FIELD_RESOLUTION_INVALID");
+  }
+  const sourceById = new Map(ir.fields.map((field) => [field.fieldId, field]));
+  const seen = new Set<string>();
+  return rawFields.map((rawField) => {
+    const parsed = TemplateFieldSchema.safeParse(rawField);
+    if (!parsed.success || seen.has(parsed.data.fieldId)) {
+      failTemplateDocxRender("FIELD_RESOLUTION_INVALID");
+    }
+    seen.add(parsed.data.fieldId);
+    const source = sourceById.get(parsed.data.fieldId);
+    if (!source) failTemplateDocxRender("FIELD_RESOLUTION_INVALID");
+    if (source.rendererBinding.bindingType !== "ordinary_placeholder") {
+      if (canonicalSha256(source) !== canonicalSha256(parsed.data)) {
+        failTemplateDocxRender("FIELD_RESOLUTION_INVALID");
+      }
+      return parsed.data;
+    }
+    // Custom scalar intent may change only clinical semantics. Exact package
+    // identity, source paths, labels, ordinals, and table coordinates remain
+    // immutable and are independently derived again during output readback.
+    const structural = (field: TemplateField) => ({
+      fieldId: field.fieldId,
+      originalLabel: field.originalLabel,
+      labelSource: field.labelSource,
+      displayOrder: field.displayOrder,
+      detectionStatus: field.detectionStatus,
+      rendererBinding: field.rendererBinding,
+      criticality: field.criticality,
+      tableId: field.tableId,
+      rowPrototype: field.rowPrototype,
+    });
+    if (
+      canonicalSha256(structural(source)) !==
+      canonicalSha256(structural(parsed.data))
+    ) {
+      failTemplateDocxRender("FIELD_RESOLUTION_INVALID");
+    }
+    return parsed.data;
+  });
 }
 
 function assertSourceMatchesIr(
@@ -249,17 +310,20 @@ function assertSourceMatchesIr(
     sourceSha256 !== ir.source.sha256 ||
     source.byteLength !== ir.source.sizeBytes
   ) {
-    failTemplateDocxRender('SOURCE_IR_MISMATCH');
+    failTemplateDocxRender("SOURCE_IR_MISMATCH");
   }
   const compiled = compileTemplateDocx(source, { limits });
-  // The draft 1.1 alpha can render through 1.2 only when every independently
+  // Earlier draft alphas can render through 1.3 only when every independently
   // recompiled structure, field, table, and static hash below is unchanged.
   // A source that gains the new profile therefore fails closed and must create
   // and certify a new immutable version; unchanged older templates keep working.
   if (
     !(
       compiled.compilerVersion === ir.compilerVersion ||
-      (ir.compilerVersion === 'template-docx-compiler/1.1.0' &&
+      ([
+        "template-docx-compiler/1.1.0",
+        "template-docx-compiler/1.2.0",
+      ].includes(ir.compilerVersion) &&
         compiled.compilerVersion === TEMPLATE_TWIN_COMPILER_VERSION)
     ) ||
     compiled.structureSha256 !== ir.structureSha256 ||
@@ -268,19 +332,19 @@ function assertSourceMatchesIr(
     canonicalSha256(compiled.fields) !== canonicalSha256(ir.fields) ||
     canonicalSha256(compiled.tables) !== canonicalSha256(ir.tables)
   ) {
-    failTemplateDocxRender('SOURCE_IR_MISMATCH');
+    failTemplateDocxRender("SOURCE_IR_MISMATCH");
   }
 }
 
 function parseResolutions(
-  ir: TemplateDocIR,
+  fields: readonly TemplateField[],
   rawResolutions: ReadonlyArray<FieldResolution>,
 ): Map<string, FieldResolution> {
-  if (rawResolutions.length !== ir.fields.length) {
-    failTemplateDocxRender('FIELD_RESOLUTION_INVALID');
+  if (rawResolutions.length !== fields.length) {
+    failTemplateDocxRender("FIELD_RESOLUTION_INVALID");
   }
-  const fieldIds = new Set(ir.fields.map((field) => field.fieldId));
-  const fieldById = new Map(ir.fields.map((field) => [field.fieldId, field]));
+  const fieldIds = new Set(fields.map((field) => field.fieldId));
+  const fieldById = new Map(fields.map((field) => [field.fieldId, field]));
   const resolutions = new Map<string, FieldResolution>();
   for (const raw of rawResolutions) {
     const parsed = FieldResolutionSchema.safeParse(raw);
@@ -289,13 +353,13 @@ function parseResolutions(
       !fieldIds.has(parsed.data.fieldId) ||
       resolutions.has(parsed.data.fieldId)
     ) {
-      failTemplateDocxRender('FIELD_RESOLUTION_INVALID');
+      failTemplateDocxRender("FIELD_RESOLUTION_INVALID");
     }
     assertResolutionStatus(fieldById.get(parsed.data.fieldId)!, parsed.data);
     resolutions.set(parsed.data.fieldId, parsed.data);
   }
-  if (resolutions.size !== ir.fields.length) {
-    failTemplateDocxRender('FIELD_RESOLUTION_INVALID');
+  if (resolutions.size !== fields.length) {
+    failTemplateDocxRender("FIELD_RESOLUTION_INVALID");
   }
   return resolutions;
 }
@@ -305,34 +369,35 @@ function assertResolutionStatus(
   resolution: FieldResolution,
 ): void {
   const populatedStatuses = new Set([
-    'supported',
-    'explicitly_denied',
-    'approved_practice_default',
+    "supported",
+    "explicitly_denied",
+    "approved_practice_default",
   ]);
   if (resolution.value === null) {
     if (
       populatedStatuses.has(resolution.status) ||
       resolution.selectedOptionOrdinal !== null
     ) {
-      failTemplateDocxRender('FIELD_RESOLUTION_INVALID');
+      failTemplateDocxRender("FIELD_RESOLUTION_INVALID");
     }
     return;
   }
   if (!populatedStatuses.has(resolution.status)) {
-    failTemplateDocxRender('FIELD_RESOLUTION_INVALID');
+    failTemplateDocxRender("FIELD_RESOLUTION_INVALID");
   }
   if (
-    resolution.status === 'explicitly_denied' &&
-    (field.kind !== 'checkbox' || resolution.value !== false)
+    resolution.status === "explicitly_denied" &&
+    field.rendererBinding.bindingType !== "ordinary_placeholder" &&
+    (field.kind !== "checkbox" || resolution.value !== false)
   ) {
-    failTemplateDocxRender('FIELD_RESOLUTION_INVALID');
+    failTemplateDocxRender("FIELD_RESOLUTION_INVALID");
   }
   if (
-    field.kind === 'checkbox' &&
+    field.kind === "checkbox" &&
     resolution.value === false &&
-    resolution.status !== 'explicitly_denied'
+    resolution.status !== "explicitly_denied"
   ) {
-    failTemplateDocxRender('FIELD_RESOLUTION_INVALID');
+    failTemplateDocxRender("FIELD_RESOLUTION_INVALID");
   }
 }
 
@@ -341,17 +406,17 @@ function prepareScalarResolution(
   resolution: FieldResolution,
 ): PreparedResolution {
   if (
-    field.kind !== 'single_select' &&
+    field.kind !== "single_select" &&
     resolution.selectedOptionOrdinal !== null
   ) {
-    failTemplateDocxRender('FIELD_VALUE_INVALID');
+    failTemplateDocxRender("FIELD_VALUE_INVALID");
   }
   if (Array.isArray(resolution.value)) {
     if (
-      field.kind !== 'multi_select' ||
-      resolution.value.some((value) => typeof value !== 'string')
+      field.kind !== "multi_select" ||
+      resolution.value.some((value) => typeof value !== "string")
     ) {
-      failTemplateDocxRender('FIELD_VALUE_INVALID');
+      failTemplateDocxRender("FIELD_VALUE_INVALID");
     }
     return {
       value: resolution.value as string[],
@@ -373,7 +438,7 @@ function renderRepeatingRows(input: {
   const byTable = new Map<string, TemplateField[]>();
   for (const field of input.fields) {
     if (!field.tableId || !field.rendererBinding.repeatAncestorPath) {
-      failTemplateDocxRender('UNSUPPORTED_BINDING');
+      failTemplateDocxRender("UNSUPPORTED_BINDING");
     }
     const group = byTable.get(field.tableId) ?? [];
     group.push(field);
@@ -386,21 +451,21 @@ function renderRepeatingRows(input: {
     );
     if (
       !table ||
-      table.kind !== 'repeating_table' ||
+      table.kind !== "repeating_table" ||
       table.repeatPrototypeRow === null ||
       fields.some((field) => field.rendererBinding.partName !== table.partName)
     ) {
-      failTemplateDocxRender('UNSUPPORTED_BINDING');
+      failTemplateDocxRender("UNSUPPORTED_BINDING");
     }
     const part = input.getPartPlan(table.partName);
     const tableNode = part.scan.byPath.get(table.path);
-    if (!tableNode || xmlLocalName(tableNode.name) !== 'tbl') {
-      failTemplateDocxRender('BINDING_NOT_FOUND');
+    if (!tableNode || xmlLocalName(tableNode.name) !== "tbl") {
+      failTemplateDocxRender("BINDING_NOT_FOUND");
     }
     const rows = tableRows(tableNode);
     const prototypeRow = rows[table.repeatPrototypeRow];
     if (!prototypeRow || rows.length !== table.rowCount) {
-      failTemplateDocxRender('BINDING_NOT_FOUND');
+      failTemplateDocxRender("BINDING_NOT_FOUND");
     }
     const prototype = repeatingItemContainer(prototypeRow, tableNode);
     if (
@@ -411,7 +476,7 @@ function renderRepeatingRows(input: {
         );
       })
     ) {
-      failTemplateDocxRender('BINDING_AMBIGUOUS');
+      failTemplateDocxRender("BINDING_AMBIGUOUS");
     }
 
     const lengths = new Set<number>();
@@ -419,14 +484,14 @@ function renderRepeatingRows(input: {
       const resolution = input.resolutions.get(field.fieldId)!;
       if (resolution.value === null) continue;
       if (!isRowRecordArray(resolution.value)) {
-        failTemplateDocxRender('FIELD_VALUE_INVALID');
+        failTemplateDocxRender("FIELD_VALUE_INVALID");
       }
       lengths.add(resolution.value.length);
     }
-    if (lengths.size > 1) failTemplateDocxRender('FIELD_VALUE_INVALID');
+    if (lengths.size > 1) failTemplateDocxRender("FIELD_VALUE_INVALID");
     const rowCount = [...lengths][0] ?? 1;
     if (rowCount < 1 || rowCount > table.maxRows) {
-      failTemplateDocxRender('TABLE_ROW_LIMIT_EXCEEDED');
+      failTemplateDocxRender("TABLE_ROW_LIMIT_EXCEEDED");
     }
 
     const renderedRows: string[] = [];
@@ -434,9 +499,9 @@ function renderRepeatingRows(input: {
       const rowPatches: ApprovedXmlPatch[] = [];
       for (const field of fields) {
         const resolution = input.resolutions.get(field.fieldId)!;
-        if (field.detectionStatus === 'unsupported') {
+        if (field.detectionStatus === "unsupported") {
           if (resolution.value !== null)
-            failTemplateDocxRender('FIELD_VALUE_INVALID');
+            failTemplateDocxRender("FIELD_VALUE_INVALID");
           continue;
         }
         const prepared = rowPreparedResolution(field, resolution, rowOrdinal);
@@ -456,15 +521,15 @@ function renderRepeatingRows(input: {
     }
 
     const renderedFieldIds = fields
-      .filter((field) => field.detectionStatus !== 'unsupported')
+      .filter((field) => field.detectionStatus !== "unsupported")
       .map((field) => field.fieldId);
     if (renderedFieldIds.length === 0) continue;
     part.patches.push({
       start: prototype.start,
       end: prototype.end,
-      replacement: renderedRows.join(''),
+      replacement: renderedRows.join(""),
       fieldIds: renderedFieldIds,
-      kind: 'repeating_row',
+      kind: "repeating_row",
     });
   }
 }
@@ -474,8 +539,8 @@ function tableRows(table: XmlElementSpan): XmlElementSpan[] {
   const visit = (node: XmlElementSpan): void => {
     for (const child of node.children) {
       const local = xmlLocalName(child.name);
-      if (local === 'tbl') continue;
-      if (local === 'tr') {
+      if (local === "tbl") continue;
+      if (local === "tr") {
         rows.push(child);
         continue;
       }
@@ -492,11 +557,11 @@ function repeatingItemContainer(
 ): XmlElementSpan {
   let candidate = row.parent;
   while (candidate && candidate !== table) {
-    if (xmlLocalName(candidate.name) === 'sdt') {
-      const properties = directXmlChild(candidate, 'sdtPr');
+    if (xmlLocalName(candidate.name) === "sdt") {
+      const properties = directXmlChild(candidate, "sdtPr");
       if (
         properties &&
-        descendantXmlElements(properties, 'repeatingSectionItem').length > 0
+        descendantXmlElements(properties, "repeatingSectionItem").length > 0
       ) {
         return candidate;
       }
@@ -507,13 +572,13 @@ function repeatingItemContainer(
 }
 
 function isRowRecordArray(
-  value: FieldResolution['value'],
+  value: FieldResolution["value"],
 ): value is Array<Record<string, string | null>> {
   return (
     Array.isArray(value) &&
     value.every(
       (entry) =>
-        typeof entry === 'object' && entry !== null && !Array.isArray(entry),
+        typeof entry === "object" && entry !== null && !Array.isArray(entry),
     )
   );
 }
@@ -527,47 +592,47 @@ function rowPreparedResolution(
     return { value: null, selectedOptionOrdinal: null };
   }
   if (!isRowRecordArray(resolution.value)) {
-    failTemplateDocxRender('FIELD_VALUE_INVALID');
+    failTemplateDocxRender("FIELD_VALUE_INVALID");
   }
   if (resolution.selectedOptionOrdinal !== null) {
-    failTemplateDocxRender('FIELD_VALUE_INVALID');
+    failTemplateDocxRender("FIELD_VALUE_INVALID");
   }
   const row = resolution.value[rowOrdinal];
   if (
     !row ||
-    typeof row.value !== 'string' ||
-    typeof row.sourceFactId !== 'string' ||
+    typeof row.value !== "string" ||
+    typeof row.sourceFactId !== "string" ||
     !resolution.sourceFactIds.includes(row.sourceFactId) ||
-    typeof row.evidenceAnchorId !== 'string' ||
+    typeof row.evidenceAnchorId !== "string" ||
     !resolution.evidenceAnchorIds.includes(row.evidenceAnchorId)
   ) {
-    failTemplateDocxRender('FIELD_RESOLUTION_INVALID');
+    failTemplateDocxRender("FIELD_RESOLUTION_INVALID");
   }
   const ordinal =
     row.optionOrdinal === null || row.optionOrdinal === undefined
       ? null
       : parseNonnegativeInteger(row.optionOrdinal);
   let value: ScalarRenderValue = row.value;
-  if (field.kind === 'checkbox') {
-    if (row.value !== 'true' && row.value !== 'false') {
-      failTemplateDocxRender('FIELD_VALUE_INVALID');
+  if (field.kind === "checkbox") {
+    if (row.value !== "true" && row.value !== "false") {
+      failTemplateDocxRender("FIELD_VALUE_INVALID");
     }
-    value = row.value === 'true';
-  } else if (field.kind === 'number') {
+    value = row.value === "true";
+  } else if (field.kind === "number") {
     const parsed = Number(row.value);
     if (!Number.isFinite(parsed) || String(parsed) !== row.value) {
-      failTemplateDocxRender('FIELD_VALUE_INVALID');
+      failTemplateDocxRender("FIELD_VALUE_INVALID");
     }
     value = parsed;
-  } else if (field.kind === 'multi_select') {
-    value = row.value.split(';').map((entry) => entry.trim());
+  } else if (field.kind === "multi_select") {
+    value = row.value.split(";").map((entry) => entry.trim());
   }
   return { value, selectedOptionOrdinal: ordinal };
 }
 
 function parseNonnegativeInteger(value: string): number {
   if (!/^(?:0|[1-9][0-9]*)$/.test(value)) {
-    failTemplateDocxRender('FIELD_VALUE_INVALID');
+    failTemplateDocxRender("FIELD_VALUE_INVALID");
   }
   return Number(value);
 }
@@ -579,26 +644,239 @@ function createFieldPatches(
 ): ApprovedXmlPatch[] {
   const binding = field.rendererBinding;
   const bound = part.byPath.get(binding.path);
-  if (!bound) failTemplateDocxRender('BINDING_NOT_FOUND');
+  if (!bound) failTemplateDocxRender("BINDING_NOT_FOUND");
   switch (binding.bindingType) {
-    case 'content_control':
-      if (xmlLocalName(bound.name) !== 'sdt') {
-        failTemplateDocxRender('BINDING_NOT_FOUND');
+    case "content_control":
+      if (xmlLocalName(bound.name) !== "sdt") {
+        failTemplateDocxRender("BINDING_NOT_FOUND");
       }
       return contentControlPatches(part.text, bound, field, resolution);
-    case 'legacy_form_field':
-      if (xmlLocalName(bound.name) !== 'fldChar') {
-        failTemplateDocxRender('BINDING_NOT_FOUND');
+    case "legacy_form_field":
+      if (xmlLocalName(bound.name) !== "fldChar") {
+        failTemplateDocxRender("BINDING_NOT_FOUND");
       }
       return legacyFieldPatches(part.text, bound, field, resolution);
-    case 'table_cell':
-      if (xmlLocalName(bound.name) !== 'tc') {
-        failTemplateDocxRender('BINDING_NOT_FOUND');
+    case "table_cell":
+      if (xmlLocalName(bound.name) !== "tc") {
+        failTemplateDocxRender("BINDING_NOT_FOUND");
       }
       return tableCellPatches(part.text, bound, field, resolution);
-    case 'repeating_row':
-      failTemplateDocxRender('UNSUPPORTED_BINDING');
+    case "ordinary_placeholder":
+      if (
+        xmlLocalName(bound.name) !== "p" ||
+        binding.bindingProfile !== "ORDINARY_PLACEHOLDER_TOKEN_V1"
+      ) {
+        failTemplateDocxRender("BINDING_NOT_FOUND");
+      }
+      return ordinaryPlaceholderPatches(part.text, bound, field, resolution);
+    case "repeating_row":
+      failTemplateDocxRender("UNSUPPORTED_BINDING");
   }
+}
+
+function ordinaryPlaceholderPatches(
+  xml: string,
+  paragraph: XmlElementSpan,
+  field: TemplateField,
+  resolution: PreparedResolution,
+): ApprovedXmlPatch[] {
+  const binding = field.rendererBinding.ordinaryPlaceholder;
+  if (!binding) failTemplateDocxRender("BINDING_AMBIGUOUS");
+  const textNodes = ordinaryPlaceholderTextSpans(paragraph);
+  if (textNodes.length !== binding.span.paragraphTextNodeCount) {
+    failTemplateDocxRender("BINDING_AMBIGUOUS");
+  }
+  const decoded = textNodes.map((node) =>
+    decodeRawTextNode(xml.slice(node.startTagEnd, node.endTagStart)),
+  );
+  const startNode = textNodes[binding.span.startTextNodeIndex];
+  const endNode = textNodes[binding.span.endTextNodeIndex];
+  const startText = decoded[binding.span.startTextNodeIndex];
+  const endText = decoded[binding.span.endTextNodeIndex];
+  if (
+    !startNode ||
+    !endNode ||
+    startText === undefined ||
+    endText === undefined
+  ) {
+    failTemplateDocxRender("BINDING_AMBIGUOUS");
+  }
+  const prefix = startText.slice(0, binding.span.startOffset);
+  const suffix = endText.slice(binding.span.endOffset);
+  const sourceToken =
+    binding.span.startTextNodeIndex === binding.span.endTextNodeIndex
+      ? startText.slice(binding.span.startOffset, binding.span.endOffset)
+      : [
+          startText.slice(binding.span.startOffset),
+          ...decoded.slice(
+            binding.span.startTextNodeIndex + 1,
+            binding.span.endTextNodeIndex,
+          ),
+          endText.slice(0, binding.span.endOffset),
+        ].join("");
+  if (
+    prefix.length !== binding.staticPrefixLength ||
+    suffix.length !== binding.staticSuffixLength ||
+    canonicalSha256(prefix) !== binding.staticPrefixSha256 ||
+    canonicalSha256(suffix) !== binding.staticSuffixSha256 ||
+    canonicalSha256({ prefix, suffix }) !== binding.staticContextSha256 ||
+    sourceToken.length !== binding.tokenTextLength ||
+    canonicalSha256(sourceToken) !== binding.tokenTextSha256
+  ) {
+    failTemplateDocxRender("BINDING_AMBIGUOUS");
+  }
+  if (resolution.value === null) return [];
+  const display = safeDisplayText(
+    ordinaryPlaceholderDisplayValue(field, resolution),
+  );
+  if (/^[\t\r\n]|[\t\r\n]$/u.test(display) || /[\t\r\n]/u.test(display)) {
+    failTemplateDocxRender("FIELD_VALUE_INVALID");
+  }
+  if (/^\s|\s$/u.test(display)) {
+    // Whitespace at a Word text-node boundary requires mutating xml:space,
+    // which is outside this exact token-span profile.
+    failTemplateDocxRender("FIELD_VALUE_INVALID");
+  }
+
+  const startRaw = xml.slice(startNode.startTagEnd, startNode.endTagStart);
+  const endRaw = xml.slice(endNode.startTagEnd, endNode.endTagStart);
+  const startRawOffset = rawOffsetForDecodedOffset(
+    startRaw,
+    binding.span.startOffset,
+  );
+  const endRawOffset = rawOffsetForDecodedOffset(
+    endRaw,
+    binding.span.endOffset,
+  );
+  const patch = (
+    node: XmlElementSpan,
+    start: number,
+    end: number,
+    replacement: string,
+  ): ApprovedXmlPatch => ({
+    start: node.startTagEnd + start,
+    end: node.startTagEnd + end,
+    replacement,
+    fieldIds: [field.fieldId],
+    kind: "field_content",
+  });
+  if (startNode === endNode) {
+    return [
+      patch(startNode, startRawOffset, endRawOffset, escapeXmlText(display)),
+    ];
+  }
+  const patches: ApprovedXmlPatch[] = [
+    patch(startNode, startRawOffset, startRaw.length, escapeXmlText(display)),
+  ];
+  for (
+    let index = binding.span.startTextNodeIndex + 1;
+    index < binding.span.endTextNodeIndex;
+    index += 1
+  ) {
+    const node = textNodes[index]!;
+    patches.push(
+      patch(node, 0, xml.slice(node.startTagEnd, node.endTagStart).length, ""),
+    );
+  }
+  patches.push(patch(endNode, 0, endRawOffset, ""));
+  return patches;
+}
+
+function ordinaryPlaceholderTextSpans(
+  paragraph: XmlElementSpan,
+): XmlElementSpan[] {
+  if (
+    paragraph.children.some(
+      (child) =>
+        child.namespaceUri !== paragraph.namespaceUri ||
+        !["pPr", "r"].includes(xmlLocalName(child.name)),
+    ) ||
+    paragraph.children.filter((child) => xmlLocalName(child.name) === "pPr")
+      .length > 1
+  ) {
+    failTemplateDocxRender("BINDING_AMBIGUOUS");
+  }
+  const output: XmlElementSpan[] = [];
+  for (const run of paragraph.children.filter(
+    (child) => xmlLocalName(child.name) === "r",
+  )) {
+    if (
+      run.namespaceUri !== paragraph.namespaceUri ||
+      run.children.some(
+        (child) =>
+          child.namespaceUri !== paragraph.namespaceUri ||
+          !["rPr", "t"].includes(xmlLocalName(child.name)),
+      ) ||
+      run.children.filter((child) => xmlLocalName(child.name) === "rPr")
+        .length > 1
+    ) {
+      failTemplateDocxRender("BINDING_AMBIGUOUS");
+    }
+    const texts = run.children.filter(
+      (child) => xmlLocalName(child.name) === "t",
+    );
+    if (texts.length === 0 || texts.some((text) => text.children.length > 0)) {
+      failTemplateDocxRender("BINDING_AMBIGUOUS");
+    }
+    output.push(...texts);
+  }
+  return output;
+}
+
+function decodeRawTextNode(raw: string): string {
+  if (raw.includes("<")) failTemplateDocxRender("BINDING_AMBIGUOUS");
+  return raw
+    .replace(/&(?:#x[0-9a-f]+|#[0-9]+|amp|apos|gt|lt|quot);/giu, (entity) =>
+      decodeXmlEntity(entity),
+    )
+    .replace(/&[^;\s]{1,40};/gu, () => {
+      failTemplateDocxRender("BINDING_AMBIGUOUS");
+    });
+}
+
+function decodeXmlEntity(entity: string): string {
+  if (/^&#x[0-9a-f]+;$/iu.test(entity)) {
+    return String.fromCodePoint(Number.parseInt(entity.slice(3, -1), 16));
+  }
+  if (/^&#[0-9]+;$/u.test(entity)) {
+    return String.fromCodePoint(Number.parseInt(entity.slice(2, -1), 10));
+  }
+  const named: Record<string, string> = {
+    "&amp;": "&",
+    "&apos;": "'",
+    "&gt;": ">",
+    "&lt;": "<",
+    "&quot;": '"',
+  };
+  const value = named[entity];
+  if (value === undefined) failTemplateDocxRender("BINDING_AMBIGUOUS");
+  return value;
+}
+
+function rawOffsetForDecodedOffset(raw: string, target: number): number {
+  let rawOffset = 0;
+  let decodedOffset = 0;
+  while (rawOffset < raw.length) {
+    if (decodedOffset === target) return rawOffset;
+    let rawLength: number;
+    let decoded: string;
+    if (raw[rawOffset] === "&") {
+      const end = raw.indexOf(";", rawOffset + 1);
+      if (end < 0) failTemplateDocxRender("BINDING_AMBIGUOUS");
+      rawLength = end - rawOffset + 1;
+      decoded = decodeXmlEntity(raw.slice(rawOffset, end + 1));
+    } else {
+      const point = raw.codePointAt(rawOffset);
+      if (point === undefined) failTemplateDocxRender("BINDING_AMBIGUOUS");
+      decoded = String.fromCodePoint(point);
+      rawLength = decoded.length;
+    }
+    rawOffset += rawLength;
+    decodedOffset += decoded.length;
+    if (decodedOffset > target) failTemplateDocxRender("BINDING_AMBIGUOUS");
+  }
+  if (decodedOffset === target) return rawOffset;
+  failTemplateDocxRender("BINDING_AMBIGUOUS");
 }
 
 function contentControlPatches(
@@ -607,22 +885,22 @@ function contentControlPatches(
   field: TemplateField,
   resolution: PreparedResolution,
 ): ApprovedXmlPatch[] {
-  const properties = directWordChild(control, 'sdtPr');
-  const content = directWordChild(control, 'sdtContent');
-  if (!properties || !content) failTemplateDocxRender('BINDING_NOT_FOUND');
+  const properties = directWordChild(control, "sdtPr");
+  const content = directWordChild(control, "sdtContent");
+  if (!properties || !content) failTemplateDocxRender("BINDING_NOT_FOUND");
   const placeholderPatches =
     resolution.value === null
       ? []
       : placeholderMetadataPatches(xml, properties, content, field.fieldId);
 
-  if (field.kind === 'checkbox') {
-    const checkbox = descendantXmlElements(properties, 'checkbox')[0];
+  if (field.kind === "checkbox") {
+    const checkbox = descendantXmlElements(properties, "checkbox")[0];
     const checked = checkbox
-      ? descendantXmlElements(checkbox, 'checked')[0]
+      ? descendantXmlElements(checkbox, "checked")[0]
       : undefined;
-    if (!checkbox || !checked) failTemplateDocxRender('BINDING_NOT_FOUND');
-    if (resolution.value !== null && typeof resolution.value !== 'boolean') {
-      failTemplateDocxRender('FIELD_VALUE_INVALID');
+    if (!checkbox || !checked) failTemplateDocxRender("BINDING_NOT_FOUND");
+    if (resolution.value !== null && typeof resolution.value !== "boolean") {
+      failTemplateDocxRender("FIELD_VALUE_INVALID");
     }
     // A missing/unknown checkbox is a third state, not a denial. Preserve the
     // physician's source control byte-for-byte until affirmative or explicitly
@@ -631,37 +909,37 @@ function contentControlPatches(
     if (resolution.value === null) return [];
     const selected = resolution.value === true;
     const state = selected
-      ? descendantXmlElements(checkbox, 'checkedState')[0]
-      : descendantXmlElements(checkbox, 'uncheckedState')[0];
+      ? descendantXmlElements(checkbox, "checkedState")[0]
+      : descendantXmlElements(checkbox, "uncheckedState")[0];
     const glyph = state
-      ? glyphFromWordCode(readXmlAttribute(xml, state, 'val'))
+      ? glyphFromWordCode(readXmlAttribute(xml, state, "val"))
       : selected
-        ? '☒'
-        : '☐';
+        ? "☒"
+        : "☐";
     return [
       ...placeholderPatches,
       setXmlAttributePatch(
         xml,
         checked,
-        'val',
-        selected ? '1' : '0',
+        "val",
+        selected ? "1" : "0",
         field.fieldId,
       ),
       ...textContainerPatches(xml, content, glyph, field.fieldId),
     ];
   }
 
-  if (field.kind === 'date') {
-    const date = directWordChild(properties, 'date');
-    if (!date) failTemplateDocxRender('BINDING_NOT_FOUND');
+  if (field.kind === "date") {
+    const date = directWordChild(properties, "date");
+    if (!date) failTemplateDocxRender("BINDING_NOT_FOUND");
     const display = formatDateValue(xml, date, resolution.value);
     const statePatch =
       resolution.value === null
-        ? removeXmlAttributePatch(xml, date, 'fullDate', field.fieldId)
+        ? removeXmlAttributePatch(xml, date, "fullDate", field.fieldId)
         : setXmlAttributePatch(
             xml,
             date,
-            'fullDate',
+            "fullDate",
             `${String(resolution.value)}T00:00:00Z`,
             field.fieldId,
           );
@@ -672,15 +950,15 @@ function contentControlPatches(
     ];
   }
 
-  if (field.kind === 'single_select') {
-    const comboBox = directWordChild(properties, 'comboBox');
+  if (field.kind === "single_select") {
+    const comboBox = directWordChild(properties, "comboBox");
     const lastValue = comboBox
-      ? descendantXmlElements(comboBox, 'lastValue')[0]
+      ? descendantXmlElements(comboBox, "lastValue")[0]
       : undefined;
     if (resolution.value === null) {
       return [
         ...(lastValue ? [removeXmlElementPatch(lastValue, field.fieldId)] : []),
-        ...textContainerPatches(xml, content, '', field.fieldId),
+        ...textContainerPatches(xml, content, "", field.fieldId),
       ];
     }
     const option = exactSelectedOption(field, resolution);
@@ -691,7 +969,7 @@ function contentControlPatches(
             setXmlAttributePatch(
               xml,
               lastValue,
-              'val',
+              "val",
               option.value,
               field.fieldId,
             ),
@@ -719,11 +997,11 @@ function placeholderMetadataPatches(
   content: XmlElementSpan,
   fieldId: string,
 ): ApprovedXmlPatch[] {
-  const patches = descendantWordElements(properties, 'showingPlcHdr').map(
+  const patches = descendantWordElements(properties, "showingPlcHdr").map(
     (node) => removeXmlElementPatch(node, fieldId),
   );
-  for (const style of descendantWordElements(content, 'rStyle')) {
-    if (readXmlAttribute(xml, style, 'val') === 'PlaceholderText') {
+  for (const style of descendantWordElements(content, "rStyle")) {
+    if (readXmlAttribute(xml, style, "val") === "PlaceholderText") {
       patches.push(removeXmlElementPatch(style, fieldId));
     }
   }
@@ -736,19 +1014,19 @@ function legacyFieldPatches(
   field: TemplateField,
   resolution: PreparedResolution,
 ): ApprovedXmlPatch[] {
-  const formData = descendantWordElements(begin, 'ffData')[0];
-  if (!formData) failTemplateDocxRender('BINDING_NOT_FOUND');
+  const formData = descendantWordElements(begin, "ffData")[0];
+  if (!formData) failTemplateDocxRender("BINDING_NOT_FOUND");
   // Legacy FORMCHECKBOX fields use the same tri-state clinical contract as
   // native content controls. An unresolved value must not be coerced to 0 or
   // have its visible result text cleared.
-  if (field.kind === 'checkbox' && resolution.value === null) return [];
+  if (field.kind === "checkbox" && resolution.value === null) return [];
   const patches: ApprovedXmlPatch[] = [];
   const display = displayValue(field, resolution);
 
-  if (field.kind === 'single_select') {
-    const list = descendantWordElements(formData, 'ddList')[0];
-    if (!list) failTemplateDocxRender('BINDING_NOT_FOUND');
-    const result = descendantWordElements(list, 'result')[0];
+  if (field.kind === "single_select") {
+    const list = descendantWordElements(formData, "ddList")[0];
+    if (!list) failTemplateDocxRender("BINDING_NOT_FOUND");
+    const result = descendantWordElements(list, "result")[0];
     if (resolution.value === null) {
       if (result) patches.push(removeXmlElementPatch(result, field.fieldId));
     } else {
@@ -758,7 +1036,7 @@ function legacyFieldPatches(
           ? setXmlAttributePatch(
               xml,
               result,
-              'val',
+              "val",
               String(ordinal),
               field.fieldId,
             )
@@ -766,35 +1044,35 @@ function legacyFieldPatches(
               xml,
               list,
               list.children.find(
-                (child) => xmlLocalName(child.name) === 'listEntry',
+                (child) => xmlLocalName(child.name) === "listEntry",
               ),
-              wordElement(list, 'result', ordinal),
+              wordElement(list, "result", ordinal),
               field.fieldId,
             ),
       );
     }
-  } else if (field.kind === 'checkbox') {
-    const checkbox = descendantWordElements(formData, 'checkBox')[0];
-    if (!checkbox) failTemplateDocxRender('BINDING_NOT_FOUND');
-    const checked = descendantWordElements(checkbox, 'checked')[0];
-    if (resolution.value !== null && typeof resolution.value !== 'boolean') {
-      failTemplateDocxRender('FIELD_VALUE_INVALID');
+  } else if (field.kind === "checkbox") {
+    const checkbox = descendantWordElements(formData, "checkBox")[0];
+    if (!checkbox) failTemplateDocxRender("BINDING_NOT_FOUND");
+    const checked = descendantWordElements(checkbox, "checked")[0];
+    if (resolution.value !== null && typeof resolution.value !== "boolean") {
+      failTemplateDocxRender("FIELD_VALUE_INVALID");
     }
-    const value = resolution.value === true ? '1' : '0';
+    const value = resolution.value === true ? "1" : "0";
     patches.push(
       checked
-        ? setXmlAttributePatch(xml, checked, 'val', value, field.fieldId)
+        ? setXmlAttributePatch(xml, checked, "val", value, field.fieldId)
         : appendXmlChildPatch(
             xml,
             checkbox,
-            wordElement(checkbox, 'checked', value),
+            wordElement(checkbox, "checked", value),
             field.fieldId,
           ),
     );
   } else {
-    const textInput = descendantWordElements(formData, 'textInput')[0];
-    if (!textInput) failTemplateDocxRender('BINDING_NOT_FOUND');
-    const currentDefault = descendantWordElements(textInput, 'default')[0];
+    const textInput = descendantWordElements(formData, "textInput")[0];
+    if (!textInput) failTemplateDocxRender("BINDING_NOT_FOUND");
+    const currentDefault = descendantWordElements(textInput, "default")[0];
     if (resolution.value === null) {
       if (currentDefault) {
         patches.push(removeXmlElementPatch(currentDefault, field.fieldId));
@@ -805,7 +1083,7 @@ function legacyFieldPatches(
           ? setXmlAttributePatch(
               xml,
               currentDefault,
-              'val',
+              "val",
               display,
               field.fieldId,
             )
@@ -813,9 +1091,9 @@ function legacyFieldPatches(
               xml,
               textInput,
               textInput.children.find((child) =>
-                ['maxLength', 'format'].includes(xmlLocalName(child.name)),
+                ["maxLength", "format"].includes(xmlLocalName(child.name)),
               ),
-              wordElement(textInput, 'default', display),
+              wordElement(textInput, "default", display),
               field.fieldId,
             ),
       );
@@ -837,18 +1115,18 @@ function tableCellPatches(
   field: TemplateField,
   resolution: PreparedResolution,
 ): ApprovedXmlPatch[] {
-  if (field.rendererBinding.bindingProfile === 'TAB_ONLY_BLANK_TABLE_CELL_V1') {
+  if (field.rendererBinding.bindingProfile === "TAB_ONLY_BLANK_TABLE_CELL_V1") {
     return tabOnlyBlankTableCellPatches(xml, cell, field, resolution);
   }
-  if (field.kind === 'checkbox' && resolution.value === null) return [];
+  if (field.kind === "checkbox" && resolution.value === null) return [];
   const display = displayValue(field, resolution);
-  const textNodes = descendantWordElements(cell, 't');
+  const textNodes = descendantWordElements(cell, "t");
   if (textNodes.length > 0) {
     return patchExistingTextNodes(xml, textNodes, display, field.fieldId);
   }
-  if (display === '') return [];
-  const paragraph = descendantXmlElements(cell, 'p')[0];
-  if (!paragraph) failTemplateDocxRender('BINDING_NOT_FOUND');
+  if (display === "") return [];
+  const paragraph = descendantXmlElements(cell, "p")[0];
+  if (!paragraph) failTemplateDocxRender("BINDING_NOT_FOUND");
   const prefix = qualifiedPrefix(paragraph.name);
   const run = `<${prefix}r><${prefix}t>${escapeXmlText(display)}</${prefix}t></${prefix}r>`;
   return [appendXmlChildPatch(xml, paragraph, run, field.fieldId)];
@@ -864,36 +1142,36 @@ function tabOnlyBlankTableCellPatches(
   const paragraphs = cellChildren.filter(
     (child) =>
       child.namespaceUri === cell.namespaceUri &&
-      xmlLocalName(child.name) === 'p',
+      xmlLocalName(child.name) === "p",
   );
   if (
     paragraphs.length !== 1 ||
     cellChildren.filter(
       (child) =>
         child.namespaceUri === cell.namespaceUri &&
-        xmlLocalName(child.name) === 'tcPr',
+        xmlLocalName(child.name) === "tcPr",
     ).length > 1 ||
     cellChildren.some(
       (child) =>
         child.namespaceUri !== cell.namespaceUri ||
-        !['tcPr', 'p'].includes(xmlLocalName(child.name)),
+        !["tcPr", "p"].includes(xmlLocalName(child.name)),
     )
   ) {
-    failTemplateDocxRender('BINDING_AMBIGUOUS');
+    failTemplateDocxRender("BINDING_AMBIGUOUS");
   }
   const paragraph = paragraphs[0]!;
-  const paragraphProperties = directWordChild(paragraph, 'pPr');
+  const paragraphProperties = directWordChild(paragraph, "pPr");
   if (
     !paragraphProperties ||
     paragraph.children.length !== 1 ||
     paragraph.children[0] !== paragraphProperties
   ) {
-    failTemplateDocxRender('BINDING_AMBIGUOUS');
+    failTemplateDocxRender("BINDING_AMBIGUOUS");
   }
   const tabSets = paragraphProperties.children.filter(
     (child) =>
       child.namespaceUri === paragraphProperties.namespaceUri &&
-      xmlLocalName(child.name) === 'tabs',
+      xmlLocalName(child.name) === "tabs",
   );
   if (
     tabSets.length !== 1 ||
@@ -901,22 +1179,22 @@ function tabOnlyBlankTableCellPatches(
     tabSets[0]!.children.some(
       (child) =>
         child.namespaceUri !== paragraphProperties.namespaceUri ||
-        xmlLocalName(child.name) !== 'tab',
+        xmlLocalName(child.name) !== "tab",
     )
   ) {
-    failTemplateDocxRender('BINDING_AMBIGUOUS');
+    failTemplateDocxRender("BINDING_AMBIGUOUS");
   }
   if (resolution.value === null) return [];
   const display = safeDisplayText(displayValue(field, resolution));
   if (
-    display.includes('\t') ||
-    display.includes('\r') ||
-    display.includes('\n')
+    display.includes("\t") ||
+    display.includes("\r") ||
+    display.includes("\n")
   ) {
-    failTemplateDocxRender('FIELD_VALUE_INVALID');
+    failTemplateDocxRender("FIELD_VALUE_INVALID");
   }
   const prefix = qualifiedPrefix(paragraph.name);
-  const preserve = /^\s|\s$/u.test(display) ? ' xml:space="preserve"' : '';
+  const preserve = /^\s|\s$/u.test(display) ? ' xml:space="preserve"' : "";
   const run =
     `<${prefix}r><${prefix}t${preserve}>` +
     `${escapeXmlText(display)}</${prefix}t></${prefix}r>`;
@@ -927,81 +1205,98 @@ function displayValue(
   field: TemplateField,
   resolution: PreparedResolution,
 ): string {
-  if (resolution.value === null) return '';
+  if (resolution.value === null) return "";
   switch (field.kind) {
-    case 'narrative_text':
-      if (typeof resolution.value !== 'string') {
-        failTemplateDocxRender('FIELD_VALUE_INVALID');
+    case "narrative_text":
+      if (typeof resolution.value !== "string") {
+        failTemplateDocxRender("FIELD_VALUE_INVALID");
       }
       return safeDisplayText(resolution.value);
-    case 'single_select':
+    case "single_select":
       return safeDisplayText(
         exactSelectedOption(field, resolution).displayText,
       );
-    case 'multi_select': {
+    case "multi_select": {
       if (!Array.isArray(resolution.value)) {
-        failTemplateDocxRender('FIELD_VALUE_INVALID');
+        failTemplateDocxRender("FIELD_VALUE_INVALID");
       }
       const values = resolution.value.map((value) => {
         const option = field.allowedOptions.find(
           (candidate) => candidate.value === value,
         );
-        if (!option) failTemplateDocxRender('FIELD_VALUE_INVALID');
+        if (!option) failTemplateDocxRender("FIELD_VALUE_INVALID");
         return option.displayText;
       });
       if (new Set(resolution.value).size !== resolution.value.length) {
-        failTemplateDocxRender('FIELD_VALUE_INVALID');
+        failTemplateDocxRender("FIELD_VALUE_INVALID");
       }
-      return safeDisplayText(values.join('; '));
+      return safeDisplayText(values.join("; "));
     }
-    case 'checkbox':
-      if (typeof resolution.value !== 'boolean') {
-        failTemplateDocxRender('FIELD_VALUE_INVALID');
+    case "checkbox":
+      if (typeof resolution.value !== "boolean") {
+        failTemplateDocxRender("FIELD_VALUE_INVALID");
       }
-      return resolution.value ? '☒' : '☐';
-    case 'date':
+      return resolution.value ? "☒" : "☐";
+    case "date":
       if (
-        typeof resolution.value !== 'string' ||
+        typeof resolution.value !== "string" ||
         !isStrictIsoDate(resolution.value)
       ) {
-        failTemplateDocxRender('FIELD_VALUE_INVALID');
+        failTemplateDocxRender("FIELD_VALUE_INVALID");
       }
       return resolution.value;
-    case 'number':
+    case "number":
       if (
-        typeof resolution.value !== 'number' ||
+        typeof resolution.value !== "number" ||
         !Number.isFinite(resolution.value)
       ) {
-        failTemplateDocxRender('FIELD_VALUE_INVALID');
+        failTemplateDocxRender("FIELD_VALUE_INVALID");
       }
       return String(resolution.value);
-    case 'measurement':
+    case "measurement":
       if (
-        (typeof resolution.value !== 'number' ||
+        (typeof resolution.value !== "number" ||
           !Number.isFinite(resolution.value)) &&
-        typeof resolution.value !== 'string'
+        typeof resolution.value !== "string"
       ) {
-        failTemplateDocxRender('FIELD_VALUE_INVALID');
+        failTemplateDocxRender("FIELD_VALUE_INVALID");
       }
       return safeDisplayText(String(resolution.value));
   }
 }
 
+function ordinaryPlaceholderDisplayValue(
+  field: TemplateField,
+  resolution: PreparedResolution,
+): string {
+  if (field.rendererBinding.bindingType !== "ordinary_placeholder") {
+    failTemplateDocxRender("UNSUPPORTED_BINDING");
+  }
+  if (resolution.value === null) return "";
+  if (field.kind === "checkbox") {
+    if (typeof resolution.value !== "boolean") {
+      failTemplateDocxRender("FIELD_VALUE_INVALID");
+    }
+    return resolution.value ? "true" : "false";
+  }
+  return displayValue(field, resolution);
+}
+
 function exactSelectedOption(
   field: TemplateField,
   resolution: PreparedResolution,
-): TemplateField['allowedOptions'][number] {
+): TemplateField["allowedOptions"][number] {
   if (
-    typeof resolution.value !== 'string' ||
+    typeof resolution.value !== "string" ||
     resolution.selectedOptionOrdinal === null
   ) {
-    failTemplateDocxRender('FIELD_VALUE_INVALID');
+    failTemplateDocxRender("FIELD_VALUE_INVALID");
   }
   const option = field.allowedOptions.find(
     (candidate) => candidate.ordinal === resolution.selectedOptionOrdinal,
   );
   if (!option || option.value !== resolution.value) {
-    failTemplateDocxRender('FIELD_VALUE_INVALID');
+    failTemplateDocxRender("FIELD_VALUE_INVALID");
   }
   return option;
 }
@@ -1011,35 +1306,35 @@ function formatDateValue(
   dateControl: XmlElementSpan,
   value: ScalarRenderValue,
 ): string {
-  if (value === null) return '';
-  if (typeof value !== 'string' || !isStrictIsoDate(value)) {
-    failTemplateDocxRender('FIELD_VALUE_INVALID');
+  if (value === null) return "";
+  if (typeof value !== "string" || !isStrictIsoDate(value)) {
+    failTemplateDocxRender("FIELD_VALUE_INVALID");
   }
-  const formatNode = descendantXmlElements(dateControl, 'dateFormat')[0];
-  const format = formatNode ? readXmlAttribute(xml, formatNode, 'val') : null;
+  const formatNode = descendantXmlElements(dateControl, "dateFormat")[0];
+  const format = formatNode ? readXmlAttribute(xml, formatNode, "val") : null;
   if (!format) return value;
-  const [year, month, day] = value.split('-');
+  const [year, month, day] = value.split("-");
   if (
     !year ||
     !month ||
     !day ||
-    /[A-Za-z]/.test(format.replace(/yyyy|yy|MM|M|dd|d/g, ''))
+    /[A-Za-z]/.test(format.replace(/yyyy|yy|MM|M|dd|d/g, ""))
   ) {
     return value;
   }
   return format.replace(/yyyy|yy|MM|M|dd|d/g, (token) => {
     switch (token) {
-      case 'yyyy':
+      case "yyyy":
         return year;
-      case 'yy':
+      case "yy":
         return year.slice(-2);
-      case 'MM':
+      case "MM":
         return month;
-      case 'M':
+      case "M":
         return String(Number(month));
-      case 'dd':
+      case "dd":
         return day;
-      case 'd':
+      case "d":
         return String(Number(day));
       default:
         return token;
@@ -1067,8 +1362,8 @@ function safeDisplayText(value: string): string {
   ) {
     failTemplateDocxRender(
       value.length > MAX_RENDERED_FIELD_CHARACTERS
-        ? 'FIELD_VALUE_TOO_LARGE'
-        : 'FIELD_VALUE_INVALID',
+        ? "FIELD_VALUE_TOO_LARGE"
+        : "FIELD_VALUE_INVALID",
     );
   }
   return value;
@@ -1080,8 +1375,8 @@ function textContainerPatches(
   display: string,
   fieldId: string,
 ): ApprovedXmlPatch[] {
-  const textNodes = descendantWordElements(container, 't');
-  if (textNodes.length === 0) failTemplateDocxRender('BINDING_NOT_FOUND');
+  const textNodes = descendantWordElements(container, "t");
+  if (textNodes.length === 0) failTemplateDocxRender("BINDING_NOT_FOUND");
   return patchExistingTextNodes(
     xml,
     textNodes,
@@ -1097,7 +1392,7 @@ function patchExistingTextNodes(
   fieldId: string,
 ): ApprovedXmlPatch[] {
   return nodes.map((node, index) =>
-    textNodePatch(xml, node, index === 0 ? display : '', fieldId),
+    textNodePatch(xml, node, index === 0 ? display : "", fieldId),
   );
 }
 
@@ -1107,8 +1402,8 @@ function textNodePatch(
   value: string,
   fieldId: string,
 ): ApprovedXmlPatch {
-  if (xmlLocalName(node.name) !== 't')
-    failTemplateDocxRender('BINDING_NOT_FOUND');
+  if (xmlLocalName(node.name) !== "t")
+    failTemplateDocxRender("BINDING_NOT_FOUND");
   const escaped = escapeXmlText(value);
   const hasWordWhitespaceControls = /[\r\n\t]/.test(value);
   const needsPreserve = /^\s|\s(?:\r\n|\r|\n|\t)|\s$/.test(value);
@@ -1118,7 +1413,7 @@ function textNodePatch(
       end: node.endTagStart,
       replacement: escaped,
       fieldIds: [fieldId],
-      kind: 'field_content',
+      kind: "field_content",
     };
   }
 
@@ -1128,29 +1423,29 @@ function textNodePatch(
   const tokens = value.split(/(\r\n|\r|\n|\t)/);
   const body = tokens
     .map((token, index) => {
-      if (token === '\t') return `<${prefix}tab/>`;
-      if (token === '\r' || token === '\n' || token === '\r\n') {
+      if (token === "\t") return `<${prefix}tab/>`;
+      if (token === "\r" || token === "\n" || token === "\r\n") {
         return `<${prefix}br/>`;
       }
-      if (!token && index > 0) return '';
+      if (!token && index > 0) return "";
       const tokenOpenTag =
         index === 0
           ? openTag
-          : `<${node.name}${/^\s|\s$/.test(token) ? ' xml:space="preserve"' : ''}>`;
+          : `<${node.name}${/^\s|\s$/.test(token) ? ' xml:space="preserve"' : ""}>`;
       return `${tokenOpenTag}${escapeXmlText(token)}</${node.name}>`;
     })
-    .join('');
+    .join("");
   return {
     start: node.start,
     end: node.end,
     replacement: body || `${openTag}</${node.name}>`,
     fieldIds: [fieldId],
-    kind: 'field_content',
+    kind: "field_content",
   };
 }
 
 function ensureOpenTextTag(rawStartTag: string, preserve: boolean): string {
-  let open = rawStartTag.replace(/\/\s*>$/, '>');
+  let open = rawStartTag.replace(/\/\s*>$/, ">");
   if (preserve && !/\sxml:space\s*=/.test(open)) {
     open = open.replace(/>$/, ' xml:space="preserve">');
   }
@@ -1159,15 +1454,15 @@ function ensureOpenTextTag(rawStartTag: string, preserve: boolean): string {
 
 function escapeXmlText(value: string): string {
   return safeDisplayText(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;');
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }
 
 function escapeXmlAttribute(value: string): string {
   return escapeXmlText(value)
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&apos;');
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
 }
 
 interface AttributeLocation {
@@ -1224,19 +1519,19 @@ function setXmlAttributePatch(
       end: location.valueEnd,
       replacement: escapeXmlAttribute(value),
       fieldIds: [fieldId],
-      kind: 'control_state',
+      kind: "control_state",
     };
   }
   const startTag = xml.slice(node.start, node.startTagEnd);
   const closeOffset = startTag.search(/\/?\s*>$/);
-  if (closeOffset < 0) failTemplateDocxRender('BINDING_NOT_FOUND');
+  if (closeOffset < 0) failTemplateDocxRender("BINDING_NOT_FOUND");
   const qualifiedName = `${qualifiedPrefix(node.name)}${localName}`;
   return {
     start: node.start + closeOffset,
     end: node.start + closeOffset,
     replacement: ` ${qualifiedName}="${escapeXmlAttribute(value)}"`,
     fieldIds: [fieldId],
-    kind: 'control_state',
+    kind: "control_state",
   };
 }
 
@@ -1251,9 +1546,9 @@ function removeXmlAttributePatch(
   return {
     start: location.fullStart,
     end: location.fullEnd,
-    replacement: '',
+    replacement: "",
     fieldIds: [fieldId],
-    kind: 'control_state',
+    kind: "control_state",
   };
 }
 
@@ -1269,17 +1564,17 @@ function appendXmlChildPatch(
       end: parent.endTagStart,
       replacement: childXml,
       fieldIds: [fieldId],
-      kind: 'field_content',
+      kind: "field_content",
     };
   }
   const raw = xml.slice(parent.start, parent.end);
-  const open = raw.replace(/\/\s*>$/, '>');
+  const open = raw.replace(/\/\s*>$/, ">");
   return {
     start: parent.start,
     end: parent.end,
     replacement: `${open}${childXml}</${parent.name}>`,
     fieldIds: [fieldId],
-    kind: 'field_content',
+    kind: "field_content",
   };
 }
 
@@ -1292,14 +1587,14 @@ function insertXmlChildPatch(
 ): ApprovedXmlPatch {
   if (!before) return appendXmlChildPatch(xml, parent, childXml, fieldId);
   if (before.parent !== parent || parent.selfClosing) {
-    failTemplateDocxRender('BINDING_AMBIGUOUS');
+    failTemplateDocxRender("BINDING_AMBIGUOUS");
   }
   return {
     start: before.start,
     end: before.start,
     replacement: childXml,
     fieldIds: [fieldId],
-    kind: 'field_content',
+    kind: "field_content",
   };
 }
 
@@ -1310,9 +1605,9 @@ function removeXmlElementPatch(
   return {
     start: node.start,
     end: node.end,
-    replacement: '',
+    replacement: "",
     fieldIds: [fieldId],
-    kind: 'control_state',
+    kind: "control_state",
   };
 }
 
@@ -1326,17 +1621,17 @@ function wordElement(
 }
 
 function qualifiedPrefix(name: string): string {
-  const colon = name.indexOf(':');
-  return colon < 0 ? '' : `${name.slice(0, colon)}:`;
+  const colon = name.indexOf(":");
+  return colon < 0 ? "" : `${name.slice(0, colon)}:`;
 }
 
 function glyphFromWordCode(value: string | null): string {
   if (!value || !/^[a-f0-9]{1,6}$/i.test(value)) {
-    failTemplateDocxRender('FIELD_VALUE_INVALID');
+    failTemplateDocxRender("FIELD_VALUE_INVALID");
   }
   const codePoint = Number.parseInt(value, 16);
   if (codePoint > 0x10ffff || (codePoint >= 0xd800 && codePoint <= 0xdfff)) {
-    failTemplateDocxRender('FIELD_VALUE_INVALID');
+    failTemplateDocxRender("FIELD_VALUE_INVALID");
   }
   return String.fromCodePoint(codePoint);
 }
@@ -1346,47 +1641,47 @@ function legacyResultTextNodes(
   begin: XmlElementSpan,
 ): XmlElementSpan[] {
   let paragraph: XmlElementSpan | null = begin.parent;
-  while (paragraph && xmlLocalName(paragraph.name) !== 'p') {
+  while (paragraph && xmlLocalName(paragraph.name) !== "p") {
     paragraph = paragraph.parent;
   }
   if (!paragraph) return [];
-  const fieldCharacters = descendantWordElements(paragraph, 'fldChar');
+  const fieldCharacters = descendantWordElements(paragraph, "fldChar");
   const beginIndex = fieldCharacters.findIndex(
     (candidate) => candidate === begin,
   );
-  if (beginIndex < 0) failTemplateDocxRender('BINDING_AMBIGUOUS');
+  if (beginIndex < 0) failTemplateDocxRender("BINDING_AMBIGUOUS");
   let depth = 0;
   let separate: XmlElementSpan | null = null;
   let end: XmlElementSpan | null = null;
   for (const character of fieldCharacters.slice(beginIndex)) {
-    const type = readXmlAttribute(xml, character, 'fldCharType');
-    if (type === 'begin') {
+    const type = readXmlAttribute(xml, character, "fldCharType");
+    if (type === "begin") {
       depth += 1;
       continue;
     }
-    if (type === 'separate' && depth === 1) {
-      if (separate) failTemplateDocxRender('BINDING_AMBIGUOUS');
+    if (type === "separate" && depth === 1) {
+      if (separate) failTemplateDocxRender("BINDING_AMBIGUOUS");
       separate = character;
       continue;
     }
-    if (type === 'end') {
+    if (type === "end") {
       depth -= 1;
       if (depth === 0) {
         end = character;
         break;
       }
-      if (depth < 0) failTemplateDocxRender('BINDING_AMBIGUOUS');
+      if (depth < 0) failTemplateDocxRender("BINDING_AMBIGUOUS");
     }
   }
   if (!separate || !end) return [];
-  return descendantWordElements(paragraph, 't').filter(
+  return descendantWordElements(paragraph, "t").filter(
     (node) => node.start >= separate!.end && node.end <= end!.start,
   );
 }
 
 function fieldProof(
   field: TemplateField,
-  value: FieldResolution['value'],
+  value: FieldResolution["value"],
   occurrences: number,
 ): RenderedFieldProof {
   return {
@@ -1396,12 +1691,13 @@ function fieldProof(
     valueSha256: canonicalSha256({ fieldId: field.fieldId, value }),
     occurrences,
     disposition:
-      field.detectionStatus === 'unsupported'
-        ? 'preserved_unsupported'
+      field.detectionStatus === "unsupported"
+        ? "preserved_unsupported"
         : value === null
-          ? field.kind === 'checkbox'
-            ? 'preserved_unresolved'
-            : 'unresolved_blank'
-          : 'rendered',
+          ? field.kind === "checkbox" ||
+            field.rendererBinding.bindingType === "ordinary_placeholder"
+            ? "preserved_unresolved"
+            : "unresolved_blank"
+          : "rendered",
   };
 }

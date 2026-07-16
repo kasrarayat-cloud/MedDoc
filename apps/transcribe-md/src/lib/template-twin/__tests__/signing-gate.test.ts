@@ -11,6 +11,7 @@ import type {
   TemplateTwinFillManifest,
 } from '../ir';
 import { templateTwinMappingsSha256 } from '../mapping-hash';
+import { templateTwinFieldIntentsSha256 } from '../field-intent';
 import {
   assessTemplateTwinSigning,
   type TemplateTwinSigningContext,
@@ -66,6 +67,7 @@ function persistedMapping(mapping: SemanticMapping) {
 
 beforeAll(async () => {
   const fixture = await buildTemplateTwinIntegrationFixture();
+  const fieldIntentsSha256 = templateTwinFieldIntentsSha256([]);
   const prepared = await prepareTemplateTwinFill({
     soapVersion: 7,
     soapFinal: REVIEWED_SOAP,
@@ -79,6 +81,7 @@ beforeAll(async () => {
     source: fixture.source,
     resolverModelVersion: 'synthetic-model-v1',
     validationNow: VALIDATION_NOW,
+    fieldIntentsSha256,
   });
   if (!prepared.render) {
     throw new Error(
@@ -136,8 +139,10 @@ beforeAll(async () => {
           );
           if (!mapping) throw new Error('Synthetic mapping is missing.');
           return {
+            id: `definition-${field.fieldId}`,
             fieldId: field.fieldId,
             detectionStatus: 'CERTIFIED',
+            intentDecisions: [],
             mapping: persistedMapping(mapping),
           };
         }),
@@ -145,6 +150,8 @@ beforeAll(async () => {
           id: 'certification-1',
           compiledStructureSha256: fixture.ir.structureSha256,
           approvedMappingsSha256: mappingsSha256,
+          approvedFieldIntentsSha256: fieldIntentsSha256,
+          approvedCustomExampleProofSha256: null,
           sourcePrivacyScanEvidenceSha256: canonicalSha256(
             SOURCE_PRIVACY_SCAN_EVIDENCE,
           ),
@@ -170,6 +177,7 @@ beforeAll(async () => {
       manifestVersion: prepared.manifest.manifestVersion,
       manifestSha256: prepared.manifestSha256,
       factSetSha256: prepared.factSetSha256,
+      fieldIntentsSha256,
       validationResult: prepared.manifest.validation,
       filledCount: prepared.manifest.counts.filled,
       needsReviewCount: prepared.manifest.counts.needsReview,

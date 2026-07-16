@@ -77,6 +77,13 @@ const RETAINED_TEMPLATE_TWIN_AUDIT_ACTIONS: readonly AuditAction[] = [
   AuditAction.TEMPLATE_TWIN_ROLLED_BACK,
   AuditAction.TEMPLATE_TWIN_SAFETY_GATE_BLOCKED,
   AuditAction.TEMPLATE_TWIN_OBJECT_RECONCILED,
+  AuditAction.TEMPLATE_TWIN_FIELD_INTENT_RECORDED,
+  AuditAction.TEMPLATE_TWIN_CUSTOM_EXAMPLE_EXECUTED,
+  AuditAction.TEMPLATE_TWIN_CUSTOM_EXAMPLE_ACKNOWLEDGED,
+  AuditAction.TEMPLATE_TWIN_STATIC_ASSET_APPROVED,
+  AuditAction.TEMPLATE_TWIN_STATIC_ASSET_REJECTED,
+  AuditAction.TEMPLATE_TWIN_STATIC_ASSET_REVOKED,
+  AuditAction.TEMPLATE_TWIN_STATIC_ASSET_USED,
   AuditAction.EXPORT_TEMPLATE_TWIN_DOCX_DOWNLOADED,
 ];
 
@@ -85,6 +92,11 @@ type RetainedTemplateTwinClient = Pick<
   | 'templateTwinSourceArtifact'
   | 'templateTwinCertification'
   | 'templateTwinFieldTestWaiver'
+  | 'templateTwinFieldIntentDecision'
+  | 'templateTwinStaticAsset'
+  | 'templateTwinStaticAssetDecision'
+  | 'templateTwinStaticAssetReviewReceipt'
+  | 'templateTwinCustomExampleExecution'
   | 'noteTemplate'
   | 'templateTwinFillManifest'
   | 'templateTwinObjectLedger'
@@ -105,6 +117,27 @@ async function countRetainedTemplateTwinRecords(
     }),
     client.templateTwinFieldTestWaiver.count({
       where: { waivedById: user.id },
+    }),
+    client.templateTwinFieldIntentDecision.count({
+      where: { decidedById: user.id },
+    }),
+    client.templateTwinStaticAsset.count({
+      where: { practiceId: user.practiceId },
+    }),
+    client.templateTwinStaticAssetDecision.count({
+      where: { asset: { practiceId: user.practiceId } },
+    }),
+    client.templateTwinStaticAssetReviewReceipt.count({
+      where: { practiceId: user.practiceId },
+    }),
+    client.templateTwinCustomExampleExecution.count({
+      where: {
+        OR: [
+          { practiceId: user.practiceId },
+          { executedById: user.id },
+          { acknowledgedById: user.id },
+        ],
+      },
     }),
     client.noteTemplate.count({
       where: { doctorId: user.id, templateKind: 'template_twin_docx' },

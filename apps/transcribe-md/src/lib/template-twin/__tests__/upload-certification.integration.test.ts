@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   ledgerUpdate: vi.fn(),
   ledgerFind: vi.fn(),
   outboxCreate: vi.fn(),
+  finalRollout: vi.fn(),
 }));
 
 vi.mock('@meddoc/ai', () => ({
@@ -67,6 +68,14 @@ vi.mock('@/worker/layers/03-extract-entities', () => ({
   extractTemplateTwinTextEntities: mocks.extractText,
 }));
 
+vi.mock('../rollout', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../rollout')>();
+  return {
+    ...actual,
+    lockTemplateTwinRolloutForFinalClaim: mocks.finalRollout,
+  };
+});
+
 import {
   certifyAndActivateTemplateTwin,
   updateTemplateTwinMappings,
@@ -91,6 +100,11 @@ const ACTOR = {
   userId: 'doctor-stateful-synthetic',
   userEmail: 'stateful-doctor@synthetic.test',
   practiceId: 'practice-stateful-synthetic',
+  rolloutToken: {
+    practiceId: 'practice-stateful-synthetic',
+    globalGeneration: BigInt(13),
+    practiceGeneration: BigInt(21),
+  },
 };
 const PRIOR_TEMPLATE_ID = 'prior-structured-template';
 
@@ -127,6 +141,7 @@ interface MemoryField {
   clinicallyMaterial: boolean;
   criticality: string;
   required: boolean;
+  intentDecisions: [];
   mapping: MemoryMapping;
 }
 
@@ -152,6 +167,7 @@ interface MemoryCertification {
   certifiedById: string;
   compiledStructureSha256: string;
   approvedMappingsSha256: string;
+  approvedFieldIntentsSha256: string;
   syntheticTestManifest: unknown;
   testOutputObjectKey: string;
   testOutputVersionId: string;
@@ -175,6 +191,7 @@ interface MemoryCompiled {
   blockingUnsupportedCount: number;
   latestSyntheticTestManifest: unknown;
   latestTestMappingsSha256: string | null;
+  latestTestFieldIntentsSha256: string | null;
   latestTestOutputObjectKey: string | null;
   latestTestOutputVersionId: string | null;
   latestTestOutputEtag: string | null;
@@ -301,6 +318,7 @@ function configureInMemoryPrisma(): void {
         ...(field as unknown as Omit<MemoryField, 'id' | 'compiledVersionId' | 'mapping'>),
         id: fieldId,
         compiledVersionId: compiledId,
+        intentDecisions: [],
         mapping,
       };
     });
@@ -310,6 +328,7 @@ function configureInMemoryPrisma(): void {
         | 'compiledAt'
         | 'latestSyntheticTestManifest'
         | 'latestTestMappingsSha256'
+        | 'latestTestFieldIntentsSha256'
         | 'latestTestOutputObjectKey'
         | 'latestTestOutputVersionId'
         | 'latestTestOutputEtag'
@@ -324,6 +343,7 @@ function configureInMemoryPrisma(): void {
       compiledAt: new Date('2026-07-15T10:00:00.000Z'),
       latestSyntheticTestManifest: null,
       latestTestMappingsSha256: null,
+      latestTestFieldIntentsSha256: null,
       latestTestOutputObjectKey: null,
       latestTestOutputVersionId: null,
       latestTestOutputEtag: null,
@@ -528,6 +548,10 @@ function compiledForTemplate(noteTemplateId: string): MemoryCompiled {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.finalRollout.mockResolvedValue({
+    allowed: true,
+    token: ACTOR.rolloutToken,
+  });
   database = {
     templates: new Map(),
     sources: new Map(),
@@ -646,6 +670,7 @@ describe('Template Twin stateful upload-to-certification integration', () => {
         noteTemplateId: draft.noteTemplateId,
         actor: ACTOR,
         expectedMappingsSha256: draftWorkspace!.mappingsSha256,
+        expectedFieldIntentsSha256: draftWorkspace!.fieldIntentsSha256,
       }),
     ).rejects.toMatchObject({ code: 'CERTIFICATION_BLOCKED' });
     expect(database.templates.get(draft.noteTemplateId)?.status).toBe('draft');
@@ -655,7 +680,9 @@ describe('Template Twin stateful upload-to-certification integration', () => {
       noteTemplateId: draft.noteTemplateId,
       actor: ACTOR,
       expectedMappingsSha256: draftWorkspace!.mappingsSha256,
+      expectedFieldIntentsSha256: draftWorkspace!.fieldIntentsSha256,
       mappings: fixture.mappings,
+      fieldIntents: [],
     });
     expect(confirmed.mappingsSha256).toBe(
       templateTwinMappingsSha256(fixture.mappings),
@@ -667,14 +694,52 @@ describe('Template Twin stateful upload-to-certification integration', () => {
         noteTemplateId: draft.noteTemplateId,
         actor: ACTOR,
         expectedMappingsSha256: confirmed.mappingsSha256,
+        expectedFieldIntentsSha256: confirmed.fieldIntentsSha256,
       }),
     ).rejects.toMatchObject({ code: 'CERTIFICATION_BLOCKED' });
     expect(database.templates.get(draft.noteTemplateId)?.status).toBe('draft');
+
+    const sourceClaimCallsBeforeStaleProof = mocks.ledgerUpdate.mock.calls.length;
+    mocks.finalRollout.mockResolvedValueOnce({
+      allowed: false,
+      code: 'TEMPLATE_TWIN_GLOBAL_GENERATION_STALE',
+      reason: 'Synthetic global generation changed.',
+      currentToken: {
+        practiceId: ACTOR.practiceId,
+        globalGeneration: BigInt(14),
+        practiceGeneration: BigInt(21),
+      },
+    });
+    await expect(
+      runTemplateTwinSyntheticTest({
+        noteTemplateId: draft.noteTemplateId,
+        actor: ACTOR,
+        expectedMappingsSha256: confirmed.mappingsSha256,
+        expectedFieldIntentsSha256: confirmed.fieldIntentsSha256,
+        encounterText: SYNTHETIC_CONTEXT,
+        encounterMode: 'text',
+        storage,
+      }),
+    ).rejects.toMatchObject({
+      code: 'ROLLOUT_CHANGED',
+      message: expect.stringContaining(
+        'TEMPLATE_TWIN_GLOBAL_GENERATION_STALE',
+      ),
+    });
+    expect(compiledForTemplate(draft.noteTemplateId)).toMatchObject({
+      latestSyntheticTestManifest: null,
+      latestTestOutputObjectKey: null,
+      latestTestOutputSha256: null,
+    });
+    expect(mocks.ledgerUpdate).toHaveBeenCalledTimes(
+      sourceClaimCallsBeforeStaleProof,
+    );
 
     const firstProof = await runTemplateTwinSyntheticTest({
       noteTemplateId: draft.noteTemplateId,
       actor: ACTOR,
       expectedMappingsSha256: confirmed.mappingsSha256,
+      expectedFieldIntentsSha256: confirmed.fieldIntentsSha256,
       encounterText: SYNTHETIC_CONTEXT,
       encounterMode: 'text',
       storage,
@@ -705,7 +770,9 @@ describe('Template Twin stateful upload-to-certification integration', () => {
       noteTemplateId: draft.noteTemplateId,
       actor: ACTOR,
       expectedMappingsSha256: firstProof.mappingsSha256,
+      expectedFieldIntentsSha256: firstProof.fieldIntentsSha256,
       mappings: changedMappings,
+      fieldIntents: [],
     });
     expect(invalidated.mappingsSha256).toBe(changedHash);
     expect(invalidated.latestSyntheticTest).toBeNull();
@@ -725,6 +792,7 @@ describe('Template Twin stateful upload-to-certification integration', () => {
         noteTemplateId: draft.noteTemplateId,
         actor: ACTOR,
         expectedMappingsSha256: firstProof.mappingsSha256,
+        expectedFieldIntentsSha256: firstProof.fieldIntentsSha256,
         encounterText: SYNTHETIC_CONTEXT,
         encounterMode: 'text',
         storage,
@@ -735,6 +803,7 @@ describe('Template Twin stateful upload-to-certification integration', () => {
         noteTemplateId: draft.noteTemplateId,
         actor: ACTOR,
         expectedMappingsSha256: changedHash,
+        expectedFieldIntentsSha256: invalidated.fieldIntentsSha256,
       }),
     ).rejects.toMatchObject({ code: 'CERTIFICATION_BLOCKED' });
     expect(database.templates.get(draft.noteTemplateId)?.status).toBe('draft');
@@ -743,6 +812,7 @@ describe('Template Twin stateful upload-to-certification integration', () => {
       noteTemplateId: draft.noteTemplateId,
       actor: ACTOR,
       expectedMappingsSha256: changedHash,
+      expectedFieldIntentsSha256: invalidated.fieldIntentsSha256,
       encounterText: SYNTHETIC_CONTEXT,
       encounterMode: 'text',
       storage,
@@ -756,6 +826,7 @@ describe('Template Twin stateful upload-to-certification integration', () => {
       noteTemplateId: draft.noteTemplateId,
       actor: ACTOR,
       expectedMappingsSha256: changedHash,
+      expectedFieldIntentsSha256: refreshedProof.fieldIntentsSha256,
       expectedSyntheticTestProvenanceSha256:
         refreshedProof.latestSyntheticTest!.provenanceSha256,
     });
@@ -780,19 +851,20 @@ describe('Template Twin stateful upload-to-certification integration', () => {
     );
     expect(sourceObjects).toHaveLength(1);
     expect(sourceObjects[0]![1].bytes).toEqual(fixture.source);
-    expect(outputObjects).toHaveLength(2);
-    expect(new Set(outputObjects.map(([key]) => key)).size).toBe(2);
+    expect(outputObjects).toHaveLength(3);
+    expect(new Set(outputObjects.map(([key]) => key)).size).toBe(3);
     expect(
       outputObjects.every(([, artifact]) => artifact.bytes.byteLength > 0),
     ).toBe(true);
-    expect(memory.getPutCount()).toBe(3);
+    expect(memory.getPutCount()).toBe(4);
     expect(mocks.modelComplete.mock.calls.map((call) => call[0].purpose)).toEqual([
       'tm_template_phi_scan',
       'tm_template_parse',
       'tm_template_synthetic_phi_scan',
       'tm_template_synthetic_phi_scan',
+      'tm_template_synthetic_phi_scan',
     ]);
-    expect(mocks.extractText).toHaveBeenCalledTimes(2);
+    expect(mocks.extractText).toHaveBeenCalledTimes(3);
     const syntheticAuditRows = mocks.outboxCreate.mock.calls
       .map((call) => record(call[0]).data)
       .map(record)

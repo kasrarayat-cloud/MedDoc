@@ -76,9 +76,16 @@ vi.mock('@/lib/template-twin/synthetic-test', () => ({
 
 import { POST } from '../[id]/synthetic-test-voice/route';
 import { AuthError } from '@/lib/auth';
+import { canonicalSha256 } from '@/lib/template-twin/canonical';
 
 const HASH = 'a'.repeat(64);
+const EMPTY_FIELD_INTENTS_SHA256 = canonicalSha256([]);
 const SESSION = {
+  templateTwinRolloutToken: {
+    practiceId: 'practice-synthetic-voice',
+    globalGeneration: BigInt(6),
+    practiceGeneration: BigInt(10),
+  },
   user: {
     id: 'doctor-synthetic-voice',
     email: 'voice-doctor@synthetic.test',
@@ -134,6 +141,7 @@ describe('Template Twin synthetic voice certification route', () => {
       }),
     );
     form.set('expectedMappingsSha256', HASH);
+    form.set('expectedFieldIntentsSha256', EMPTY_FIELD_INTENTS_SHA256);
 
     const response = await POST(
       {
@@ -175,8 +183,10 @@ describe('Template Twin synthetic voice certification route', () => {
         userId: SESSION.user.id,
         userEmail: SESSION.user.email,
         practiceId: SESSION.user.practiceId,
+        rolloutToken: SESSION.templateTwinRolloutToken,
       },
       expectedMappingsSha256: HASH,
+      expectedFieldIntentsSha256: EMPTY_FIELD_INTENTS_SHA256,
       encounterText: 'Synthetic voice encounter evidence only.',
       encounterMode: 'dictation',
     });

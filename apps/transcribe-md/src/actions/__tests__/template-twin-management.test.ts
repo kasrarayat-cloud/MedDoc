@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   outboxCreate: vi.fn(),
   transaction: vi.fn(),
   revalidatePath: vi.fn(),
+  finalRollout: vi.fn(),
 }));
 
 vi.mock('@/lib/auth', () => ({
@@ -27,6 +28,16 @@ vi.mock('@/lib/auth', () => ({
 vi.mock('next/cache', () => ({
   revalidatePath: mocks.revalidatePath,
 }));
+
+vi.mock('@/lib/template-twin/rollout', async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import('@/lib/template-twin/rollout')
+  >();
+  return {
+    ...actual,
+    lockTemplateTwinRolloutForFinalClaim: mocks.finalRollout,
+  };
+});
 
 vi.mock('@meddoc/db', () => {
   const tx = {
@@ -62,6 +73,14 @@ import {
 const DOCTOR_ID = 'doctor-synthetic';
 const PRACTICE_ID = 'practice-synthetic';
 const EMAIL = 'physician@synthetic.test';
+
+function latch<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
 
 function certifiedVersion(overrides: Record<string, unknown> = {}) {
   return {
@@ -140,7 +159,20 @@ function certifiedVersion(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.finalRollout.mockResolvedValue({
+    allowed: true,
+    token: {
+      practiceId: PRACTICE_ID,
+      globalGeneration: BigInt(11),
+      practiceGeneration: BigInt(17),
+    },
+  });
   mocks.requireDoctorSession.mockResolvedValue({
+    templateTwinRolloutToken: {
+      practiceId: PRACTICE_ID,
+      globalGeneration: BigInt(11),
+      practiceGeneration: BigInt(17),
+    },
     user: {
       id: DOCTOR_ID,
       email: EMAIL,
@@ -298,6 +330,56 @@ describe('createTemplateTwinVersionAction', () => {
     expect(result).toMatchObject({ ok: false, code: 'INVALID_IDENTITY' });
     expect(mocks.noteTemplateCreate).not.toHaveBeenCalled();
     expect(mocks.compiledCreate).not.toHaveBeenCalled();
+  });
+
+  it('does not persist a new version after its pinned rollout epoch is revoked', async () => {
+    const entered = latch<void>();
+    const release = latch<{
+      allowed: false;
+      code: 'TEMPLATE_TWIN_PRACTICE_GENERATION_STALE';
+      reason: string;
+      currentToken: {
+        practiceId: string;
+        globalGeneration: bigint;
+        practiceGeneration: bigint;
+      };
+    }>();
+    mocks.finalRollout.mockImplementationOnce(async () => {
+      entered.resolve();
+      return release.promise;
+    });
+
+    const pending = createTemplateTwinVersionAction({
+      sourceNoteTemplateId: 'template-v1',
+      name: 'Synthetic primary care template',
+      encounterType: 'primary-care',
+      versionDescription: 'Synthetic stale-generation fork',
+    });
+    await entered.promise;
+    expect(mocks.noteTemplateFindFirst).not.toHaveBeenCalled();
+    expect(mocks.noteTemplateCreate).not.toHaveBeenCalled();
+
+    release.resolve({
+      allowed: false,
+      code: 'TEMPLATE_TWIN_PRACTICE_GENERATION_STALE',
+      reason: 'Synthetic practice generation changed.',
+      currentToken: {
+        practiceId: PRACTICE_ID,
+        globalGeneration: BigInt(11),
+        practiceGeneration: BigInt(18),
+      },
+    });
+
+    await expect(pending).resolves.toMatchObject({
+      ok: false,
+      code: 'ROLLOUT_CHANGED',
+      error: expect.stringContaining(
+        'TEMPLATE_TWIN_PRACTICE_GENERATION_STALE',
+      ),
+    });
+    expect(mocks.noteTemplateCreate).not.toHaveBeenCalled();
+    expect(mocks.compiledCreate).not.toHaveBeenCalled();
+    expect(mocks.outboxCreate).not.toHaveBeenCalled();
   });
 });
 

@@ -10,6 +10,7 @@ import {
 } from '../../template-twin/ir';
 import { assertTemplateTwinSourcePhiFree } from '../../template-twin/source-phi';
 import {
+  ORDINARY_PLACEHOLDER_TOKEN_PROFILE,
   TAB_ONLY_BLANK_TABLE_CELL_PROFILE,
   compileTemplateDocx,
 } from '../compiler';
@@ -50,7 +51,7 @@ describe('existing WM IOV Template.docx read-only compatibility audit', () => {
     const ir = compileTemplateDocx(source);
 
     expect(placeholderControls).toBe(28);
-    expect(ir.fields.length).toBe(80);
+    expect(ir.fields.length).toBe(87);
     expect(ir.stats).toMatchObject({
       dropdowns: 28,
       comboBoxes: 0,
@@ -60,22 +61,29 @@ describe('existing WM IOV Template.docx read-only compatibility audit', () => {
       repeatingTables: 0,
       headers: 2,
       footers: 0,
-      unsupported: 7,
-      blockingUnsupported: 7,
+      unsupported: 0,
+      blockingUnsupported: 0,
     });
-    expect([...new Set(ir.unsupported.map((item) => item.code))]).toEqual([
-      'UNBOUND_ORDINARY_PLACEHOLDER',
-    ]);
+    expect(ir.unsupported).toEqual([]);
     expect(
       ir.unsupported.filter(
         (item) => item.code === 'UNBOUND_COMPLEX_TABLE_CELL',
       ),
     ).toHaveLength(0);
+    const recognizedPlaceholders = ir.fields.filter(
+      (field) => field.rendererBinding.bindingType === 'ordinary_placeholder',
+    );
+    expect(recognizedPlaceholders).toHaveLength(7);
     expect(
-      ir.unsupported.filter(
-        (item) => item.code === 'UNBOUND_ORDINARY_PLACEHOLDER',
+      recognizedPlaceholders.every(
+        (field) =>
+          field.detectionStatus === 'needs_confirmation' &&
+          field.rendererBinding.bindingProfile ===
+            ORDINARY_PLACEHOLDER_TOKEN_PROFILE &&
+          field.rendererBinding.ordinaryPlaceholder?.clinicalMappingStatus ===
+            'needs_confirmation',
       ),
-    ).toHaveLength(7);
+    ).toBe(true);
 
     const admittedTabStopCells = ir.fields.filter(
       (field) => field.rendererBinding.bindingType === 'table_cell',
@@ -96,7 +104,7 @@ describe('existing WM IOV Template.docx read-only compatibility audit', () => {
             TAB_ONLY_BLANK_TABLE_CELL_PROFILE,
       ),
     ).toBe(true);
-    expect(59 - ir.unsupported.length).toBe(52);
+    expect(80 + recognizedPlaceholders.length).toBe(87);
 
     const packagePartNames = [...inspected.zip.entries.keys()];
     expect(

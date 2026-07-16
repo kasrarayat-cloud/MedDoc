@@ -503,9 +503,12 @@ export interface VerifiedBindingEvidence {
     | 'content_control'
     | 'table_cell'
     | 'legacy_form_field'
+    | 'ordinary_placeholder'
     | 'repeating_row';
-  /** Output-derived exact structural profile, present only for profiled cells. */
-  readonly outputBindingProfile?: 'TAB_ONLY_BLANK_TABLE_CELL_V1';
+  /** Output-derived exact structural profile, present only for profiled bindings. */
+  readonly outputBindingProfile?:
+    | 'TAB_ONLY_BLANK_TABLE_CELL_V1'
+    | 'ORDINARY_PLACEHOLDER_TOKEN_V1';
   readonly outputBindingOrdinal: number;
   readonly outputNativeIdentity: NativeBindingIdentity;
   readonly outputBindingIdentitySha256: string;

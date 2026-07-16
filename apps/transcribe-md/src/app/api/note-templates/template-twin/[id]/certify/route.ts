@@ -44,8 +44,11 @@ export async function POST(
         userId: session.user.id,
         userEmail: session.user.email,
         practiceId: session.user.practiceId,
+        rolloutToken: session.templateTwinRolloutToken,
       },
       expectedMappingsSha256: parsed.data.expectedMappingsSha256,
+      expectedFieldIntentsSha256:
+        parsed.data.expectedFieldIntentsSha256,
       expectedSyntheticTestProvenanceSha256:
         parsed.data.expectedSyntheticTestProvenanceSha256,
       optionalFieldWaivers: parsed.data.optionalFieldWaivers,

@@ -167,8 +167,11 @@ export function resolveSupportedTemplateTwinConcept(
   return null;
 }
 
-export function isSupportedTemplateTwinConcept(concept: string): boolean {
-  return resolveSupportedTemplateTwinConcept(concept) !== null;
+export function isSupportedTemplateTwinConcept(
+  concept: string,
+  extensions: readonly TemplateTwinConceptProvider[] = [],
+): boolean {
+  return resolveSupportedTemplateTwinConcept(concept, extensions) !== null;
 }
 
 /** Maps free-text L3 system labels only to the bounded safe-alpha taxonomy. */

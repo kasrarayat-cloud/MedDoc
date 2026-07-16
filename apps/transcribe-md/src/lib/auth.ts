@@ -15,6 +15,7 @@ import {
   evaluateTemplateTwinRollout,
   pinTemplateTwinRollout,
   TemplateTwinRolloutError,
+  type TemplateTwinRolloutToken,
 } from '@/lib/template-twin/rollout';
 
 export { AuthError };
@@ -69,6 +70,7 @@ export async function requireSession(): Promise<Session> {
 export async function requireFreshDoctorIdentity(userId: string): Promise<{
   role: 'DOCTOR';
   practiceId: string;
+  rolloutToken: TemplateTwinRolloutToken;
 }> {
   try {
     const user = await prisma.user.findUnique({
@@ -97,15 +99,22 @@ export async function requireFreshDoctorIdentity(userId: string): Promise<{
     if (!rollout.allowed) {
       throw new AuthError('FORBIDDEN', rollout.reason);
     }
+    let rolloutToken: TemplateTwinRolloutToken;
     try {
-      await pinTemplateTwinRollout({ practiceId: user.practiceId });
+      rolloutToken = await pinTemplateTwinRollout({
+        practiceId: user.practiceId,
+      });
     } catch (error) {
       if (error instanceof TemplateTwinRolloutError) {
         throw new AuthError('FORBIDDEN', error.message);
       }
       throw error;
     }
-    return { role: 'DOCTOR', practiceId: user.practiceId };
+    return {
+      role: 'DOCTOR',
+      practiceId: user.practiceId,
+      rolloutToken,
+    };
   } catch (error) {
     if (error instanceof AuthError) throw error;
     // Role evidence is mandatory on this boundary. Do not fall back to a
@@ -117,13 +126,24 @@ export async function requireFreshDoctorIdentity(userId: string): Promise<{
   }
 }
 
-export async function requireDoctorSession(): Promise<Session> {
+export type TemplateTwinDoctorSession = Session & {
+  /**
+   * The persisted global + practice generations admitted by the fresh
+   * physician authorization check. Configuration mutations must carry this
+   * exact token to their final transaction; they must never re-pin after
+   * provider, rendering, or browser work has started.
+   */
+  templateTwinRolloutToken: TemplateTwinRolloutToken;
+};
+
+export async function requireDoctorSession(): Promise<TemplateTwinDoctorSession> {
   const nextAuthSession = await auth();
   if (!nextAuthSession?.user?.id) {
     throw new AuthError('UNAUTHENTICATED', 'You must be logged in.');
   }
   const doctor = await requireFreshDoctorIdentity(nextAuthSession.user.id);
   return {
+    templateTwinRolloutToken: doctor.rolloutToken,
     user: {
       id: nextAuthSession.user.id,
       email: nextAuthSession.user.email ?? '',

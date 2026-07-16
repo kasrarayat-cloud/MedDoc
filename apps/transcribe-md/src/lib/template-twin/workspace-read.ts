@@ -6,12 +6,22 @@ import {
   TemplateTwinFillManifestSchema,
   type SemanticMapping,
 } from './ir';
+import { deriveCustomConceptId } from './custom-concepts';
+import {
+  fieldRequiresExplicitIntent,
+  parsePersistedFieldIntent,
+  templateTwinFieldIntentsSha256,
+  unresolvedFieldIntent,
+  type PersistedTemplateTwinFieldIntent,
+  type TemplateTwinFieldIntentView,
+} from './field-intent';
 import type {
   TemplateTwinWorkspace,
   TemplateTwinWorkspaceField,
 } from './client-types';
 import { templateTwinMappingsSha256 } from './mapping-hash';
 import { templateTwinSyntheticTestProvenanceSha256 } from './synthetic-test-provenance';
+import { readTemplateTwinCustomExampleCoverage } from './custom-example-service';
 
 interface WorkspaceMappingRow {
   clinicalConcept: string | null;
@@ -32,6 +42,34 @@ interface WorkspaceFieldRow {
   id: string;
   fieldId: string;
   mapping: WorkspaceMappingRow | null;
+  intentDecisions: Array<{
+    id: string;
+    version: number;
+    intentKind: string;
+    supportedConcept: string | null;
+    customConceptId: string | null;
+    customSpec: unknown;
+    customSpecSha256: string | null;
+    reason: string | null;
+    decidedById: string;
+    decidedAt: Date;
+  }>;
+}
+
+function derivedNativeIntent(mapping: SemanticMapping): TemplateTwinFieldIntentView {
+  return mapping.clinicalConcept === null
+    ? unresolvedFieldIntent()
+    : {
+        intentKind: 'supported_concept',
+        decisionId: null,
+        version: null,
+        supportedConcept: mapping.clinicalConcept,
+        customConceptId: null,
+        customSpec: null,
+        reason: null,
+        decidedAtIso: null,
+        lockedInVersion: false,
+      };
 }
 
 function lowerStatus(value: string): TemplateTwinWorkspace['template']['certificationStatus'] {
@@ -86,6 +124,7 @@ export async function readTemplateTwinWorkspace(input: {
           compiledDocumentIr: true,
           certificationStatus: true,
           latestTestMappingsSha256: true,
+          latestTestFieldIntentsSha256: true,
           latestSyntheticTestManifest: true,
           latestTestOutputObjectKey: true,
           latestTestOutputVersionId: true,
@@ -106,6 +145,22 @@ export async function readTemplateTwinWorkspace(input: {
             select: {
               id: true,
               fieldId: true,
+              intentDecisions: {
+                orderBy: { version: 'desc' },
+                take: 1,
+                select: {
+                  id: true,
+                  version: true,
+                  intentKind: true,
+                  supportedConcept: true,
+                  customConceptId: true,
+                  customSpec: true,
+                  customSpecSha256: true,
+                  reason: true,
+                  decidedById: true,
+                  decidedAt: true,
+                },
+              },
               mapping: {
                 select: {
                   clinicalConcept: true,
@@ -144,10 +199,41 @@ export async function readTemplateTwinWorkspace(input: {
     if (!dbField?.mapping) {
       throw new Error('Template Twin mapping set is incomplete');
     }
+    const mapping = parseMapping(dbField.mapping, field.fieldId);
+    const explicitIntent = fieldRequiresExplicitIntent(field);
+    // Prisma always materializes this selected relation as an array. A few
+    // in-memory callers (and older serialized test doubles) can omit a
+    // relation that did not exist when they were created. Treating that
+    // omission as no decision is fail-closed for intent-bearing fields: they
+    // remain unresolved and cannot certify. Fields that do not require an
+    // explicit intent continue to derive their existing supported mapping.
+    const persistedIntent = dbField.intentDecisions?.[0];
+    const intent = explicitIntent
+      ? persistedIntent
+        ? parsePersistedFieldIntent({
+            ...persistedIntent,
+            fieldDefinitionId: dbField.id,
+            fieldId: field.fieldId,
+          } satisfies PersistedTemplateTwinFieldIntent)
+        : unresolvedFieldIntent()
+      : derivedNativeIntent(mapping);
     return {
       definitionId: dbField.id,
       field,
-      mapping: parseMapping(dbField.mapping, field.fieldId),
+      mapping,
+      intent,
+      customConceptScaffold: explicitIntent
+        ? {
+            templateLineageId: row.lineageId,
+            compiledVersionId: compiled.id,
+            fieldId: field.fieldId,
+            conceptId: deriveCustomConceptId({
+              templateLineageId: row.lineageId,
+              compiledVersionId: compiled.id,
+              fieldId: field.fieldId,
+            }),
+          }
+        : null,
     };
   });
   if (fields.length !== persistedRows.length) {
@@ -156,6 +242,12 @@ export async function readTemplateTwinWorkspace(input: {
 
   const mappings = fields.map((field) => field.mapping);
   const mappingsSha256 = templateTwinMappingsSha256(mappings);
+  const explicitIntentFields = fields
+    .filter((item) => fieldRequiresExplicitIntent(item.field))
+    .map((item) => ({ fieldId: item.field.fieldId, intent: item.intent }));
+  const fieldIntentsSha256 = templateTwinFieldIntentsSha256(
+    explicitIntentFields,
+  );
   const roundTrip = compiled.latestTestRoundTrip as
     | { verified?: boolean; warningCodes?: unknown }
     | null;
@@ -178,6 +270,7 @@ export async function readTemplateTwinWorkspace(input: {
       compiledVersionId: compiled.id,
       latestSyntheticTestManifest: compiled.latestSyntheticTestManifest,
       latestTestMappingsSha256: compiled.latestTestMappingsSha256,
+      latestTestFieldIntentsSha256: compiled.latestTestFieldIntentsSha256,
       latestTestOutputObjectKey: compiled.latestTestOutputObjectKey,
       latestTestOutputVersionId: compiled.latestTestOutputVersionId,
       latestTestOutputEtag: compiled.latestTestOutputEtag,
@@ -189,17 +282,28 @@ export async function readTemplateTwinWorkspace(input: {
   const syntheticManifest = TemplateTwinFillManifestSchema.safeParse(
     compiled.latestSyntheticTestManifest,
   );
+  const staticFieldIds = new Set(
+    explicitIntentFields.flatMap((entry) =>
+      entry.intent.intentKind === 'static' ? [entry.fieldId] : [],
+    ),
+  );
   const fieldCoverage = syntheticManifest.success
     ? syntheticManifest.data.fields.map((resolution) => ({
         fieldId: resolution.fieldId,
         exercised:
-          resolution.value !== null &&
-          (resolution.status === 'supported' ||
-            resolution.status === 'explicitly_denied' ||
-            resolution.status === 'approved_practice_default'),
+          staticFieldIds.has(resolution.fieldId) ||
+          (resolution.value !== null &&
+            (resolution.status === 'supported' ||
+              resolution.status === 'explicitly_denied' ||
+              resolution.status === 'approved_practice_default')),
         status: resolution.status,
       }))
     : [];
+  const customExampleCoverage = await readTemplateTwinCustomExampleCoverage({
+    noteTemplateId: row.id,
+    doctorId: input.doctorId,
+    practiceId: input.practiceId,
+  });
 
   return {
     template: {
@@ -222,6 +326,8 @@ export async function readTemplateTwinWorkspace(input: {
     fields,
     unsupported: ir.unsupported,
     mappingsSha256,
+    fieldIntentsSha256,
+    customExampleCoverage,
     latestSyntheticTest: hasTest && syntheticTestProvenanceSha256
       ? {
           provenanceSha256: syntheticTestProvenanceSha256,

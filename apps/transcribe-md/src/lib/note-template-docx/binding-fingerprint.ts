@@ -1,10 +1,14 @@
 import { canonicalSha256 } from '../template-twin/canonical';
-import type { RendererBinding } from '../template-twin/ir';
+import type {
+  OrdinaryPlaceholderTokenBinding,
+  RendererBinding,
+} from '../template-twin/ir';
 import {
   WORDPROCESSINGML_NAMESPACE,
   WORDPROCESSINGML_2010_NAMESPACE,
   XML_NAMESPACE,
   childrenOf,
+  decodeXmlScalar,
   exactExpandedAttribute,
   expandedXmlVisits,
   tagOf,
@@ -62,6 +66,7 @@ export interface CertifiedBindingFingerprintInput {
   readonly canonicalPath: string;
   readonly bindingType: RendererBinding['bindingType'];
   readonly bindingProfile?: RendererBinding['bindingProfile'];
+  readonly ordinaryPlaceholder?: RendererBinding['ordinaryPlaceholder'];
   readonly bindingOrdinal: number;
   readonly nativeIdentity: NativeBindingIdentity;
   readonly sourceControlSha256: string;
@@ -82,6 +87,9 @@ export function certifiedBindingFingerprintSha256(
     ...(input.bindingProfile === undefined
       ? {}
       : { bindingProfile: input.bindingProfile }),
+    ...(input.ordinaryPlaceholder === undefined
+      ? {}
+      : { ordinaryPlaceholder: input.ordinaryPlaceholder }),
     bindingOrdinal: input.bindingOrdinal,
     nativeIdentity: input.nativeIdentity,
     sourceControlSha256: input.sourceControlSha256,
@@ -101,6 +109,7 @@ export function rendererBindingFingerprintSha256(
     canonicalPath: binding.canonicalPath,
     bindingType: binding.bindingType,
     bindingProfile: binding.bindingProfile,
+    ordinaryPlaceholder: binding.ordinaryPlaceholder,
     bindingOrdinal: binding.ordinal,
     nativeIdentity: nativeIdentityFromRendererBinding(binding),
     sourceControlSha256: binding.sourceControlSha256,
@@ -182,6 +191,8 @@ export function deriveOoxmlBindingIdentity(
   part: IndexedBindingPart,
   bound: IndexedBindingNode,
   bindingType: RendererBinding['bindingType'],
+  ordinaryPlaceholder?: OrdinaryPlaceholderTokenBinding,
+  ordinaryPlaceholderMode: 'source' | 'output' = 'source',
 ): DerivedOoxmlBindingIdentity | null {
   if (bindingType === 'content_control') {
     if (!isWordElement(bound, 'sdt')) return null;
@@ -243,8 +254,383 @@ export function deriveOoxmlBindingIdentity(
     };
   }
 
+  if (bindingType === 'ordinary_placeholder') {
+    if (!ordinaryPlaceholder || !isWordElement(bound, 'p')) return null;
+    const descriptor = deriveOrdinaryPlaceholderBinding(
+      part,
+      bound,
+      ordinaryPlaceholder,
+      ordinaryPlaceholderMode,
+    );
+    if (!descriptor) return null;
+    return {
+      bindingType,
+      nativeIdentity: emptyNativeIdentity(),
+      identitySha256: descriptor.identitySha256,
+    };
+  }
+
   // Complex repeating structures remain certification-blocked in safe alpha.
   return null;
+}
+
+export interface DerivedOrdinaryPlaceholderBinding {
+  readonly identitySha256: string;
+  /** Output-observable slot identity. Unlike the certified identity this
+   * deliberately excludes source-token text/syntax, which no longer exists
+   * after a legitimate replacement. It is used only for the package-wide
+   * duplicate census; exact certified path/identity is still checked
+   * separately for every field. */
+  readonly outputCensusSha256: string;
+  /** Source token in source mode; populated clinical value in output mode. */
+  readonly mutableValue: string;
+}
+
+/**
+ * Independently derives the placeholder slot from parsed OOXML. The immutable
+ * descriptor supplies only certified offsets and hashes; every structural
+ * node, static character, and output value is read from the provided part.
+ */
+export function deriveOrdinaryPlaceholderBinding(
+  part: IndexedBindingPart,
+  paragraph: IndexedBindingNode,
+  binding: OrdinaryPlaceholderTokenBinding,
+  mode: 'source' | 'output',
+): DerivedOrdinaryPlaceholderBinding | null {
+  if (!isWordElement(paragraph, 'p')) return null;
+  const textNodes = ordinaryPlaceholderTextNodes(part, paragraph);
+  if (!textNodes || textNodes.length !== binding.span.paragraphTextNodeCount) {
+    return null;
+  }
+  const values = textNodes.map((node) => wordTextNodeValue(node));
+  const startIndex = binding.span.startTextNodeIndex;
+  const endIndex = binding.span.endTextNodeIndex;
+  const start = values[startIndex];
+  const end = values[endIndex];
+  if (start === undefined || end === undefined) return null;
+
+  let mutableValue: string;
+  let prefix: string;
+  let suffix: string;
+  const normalized = [...values];
+  if (mode === 'source') {
+    if (
+      binding.span.startOffset > start.length ||
+      binding.span.endOffset > end.length ||
+      (startIndex === endIndex &&
+        binding.span.endOffset <= binding.span.startOffset)
+    ) {
+      return null;
+    }
+    prefix = start.slice(0, binding.span.startOffset);
+    suffix = end.slice(binding.span.endOffset);
+    mutableValue =
+      startIndex === endIndex
+        ? start.slice(binding.span.startOffset, binding.span.endOffset)
+        : [
+            start.slice(binding.span.startOffset),
+            ...values.slice(startIndex + 1, endIndex),
+            end.slice(0, binding.span.endOffset),
+          ].join('');
+  } else {
+    if (
+      start.length < binding.staticPrefixLength ||
+      end.length < binding.staticSuffixLength
+    ) {
+      return null;
+    }
+    prefix = start.slice(0, binding.staticPrefixLength);
+    suffix = binding.staticSuffixLength
+      ? end.slice(-binding.staticSuffixLength)
+      : '';
+    if (startIndex === endIndex) {
+      if (
+        start.length <
+        binding.staticPrefixLength + binding.staticSuffixLength
+      ) {
+        return null;
+      }
+      mutableValue = start.slice(
+        binding.staticPrefixLength,
+        binding.staticSuffixLength
+          ? start.length - binding.staticSuffixLength
+          : start.length,
+      );
+    } else {
+      if (
+        values.slice(startIndex + 1, endIndex).some((value) => value !== '')
+      ) {
+        return null;
+      }
+      const lastMutableEnd = binding.staticSuffixLength
+        ? end.length - binding.staticSuffixLength
+        : end.length;
+      if (lastMutableEnd !== 0) return null;
+      mutableValue = start.slice(binding.staticPrefixLength);
+    }
+  }
+
+  if (
+    prefix.length !== binding.staticPrefixLength ||
+    suffix.length !== binding.staticSuffixLength ||
+    canonicalSha256(prefix) !== binding.staticPrefixSha256 ||
+    canonicalSha256(suffix) !== binding.staticSuffixSha256 ||
+    canonicalSha256({ prefix, suffix }) !== binding.staticContextSha256
+  ) {
+    return null;
+  }
+  if (
+    mode === 'source' &&
+    (mutableValue.length !== binding.tokenTextLength ||
+      canonicalSha256(mutableValue) !== binding.tokenTextSha256 ||
+      ordinaryPlaceholderSyntax(mutableValue) !== binding.tokenSyntax)
+  ) {
+    return null;
+  }
+
+  normalized[startIndex] = `${prefix}\u0000TEMPLATE_TWIN_MUTABLE\u0000`;
+  for (let index = startIndex + 1; index < endIndex; index += 1) {
+    normalized[index] = '';
+  }
+  if (startIndex === endIndex) {
+    normalized[startIndex] =
+      `${prefix}\u0000TEMPLATE_TWIN_MUTABLE\u0000${suffix}`;
+  } else {
+    normalized[endIndex] = suffix;
+  }
+  const shapeSha256 = canonicalSha256(
+    ordinaryPlaceholderShapeDescriptor(part, paragraph, textNodes, normalized),
+  );
+  if (shapeSha256 !== binding.sourceParagraphShapeSha256) return null;
+  return {
+    mutableValue,
+    outputCensusSha256: canonicalSha256({
+      bindingType: 'ordinary_placeholder',
+      bindingProfile: 'ORDINARY_PLACEHOLDER_TOKEN_V1',
+      paragraphTextNodeCount: binding.span.paragraphTextNodeCount,
+      startTextNodeIndex: binding.span.startTextNodeIndex,
+      endTextNodeIndex: binding.span.endTextNodeIndex,
+      staticPrefixLength: binding.staticPrefixLength,
+      staticSuffixLength: binding.staticSuffixLength,
+      staticPrefixSha256: binding.staticPrefixSha256,
+      staticSuffixSha256: binding.staticSuffixSha256,
+      staticContextSha256: binding.staticContextSha256,
+      sourceParagraphShapeSha256: shapeSha256,
+    }),
+    identitySha256: canonicalSha256({
+      bindingType: 'ordinary_placeholder',
+      bindingProfile: 'ORDINARY_PLACEHOLDER_TOKEN_V1',
+      tokenSyntax: binding.tokenSyntax,
+      tokenTextSha256: binding.tokenTextSha256,
+      tokenTextLength: binding.tokenTextLength,
+      span: binding.span,
+      staticPrefixSha256: binding.staticPrefixSha256,
+      staticSuffixSha256: binding.staticSuffixSha256,
+      staticContextSha256: binding.staticContextSha256,
+      sourceParagraphShapeSha256: shapeSha256,
+    }),
+  };
+}
+
+export function ordinaryPlaceholderSyntax(
+  token: string,
+): OrdinaryPlaceholderTokenBinding['tokenSyntax'] | null {
+  if (/^<<[^<>\r\n]{1,160}>>$/u.test(token)) return 'angle';
+  if (/^\[\[[^\[\]\r\n]{1,160}\]\]$/u.test(token)) return 'square';
+  if (/^\{\{[^{}\r\n]{1,160}\}\}$/u.test(token)) return 'curly';
+  if (/^_{3,160}$/u.test(token)) return 'underscore';
+  return null;
+}
+
+export function certifyOrdinaryPlaceholderTokenBinding(input: {
+  part: IndexedBindingPart;
+  paragraph: IndexedBindingNode;
+  startTextNodeIndex: number;
+  startOffset: number;
+  endTextNodeIndex: number;
+  endOffset: number;
+}): OrdinaryPlaceholderTokenBinding | null {
+  const textNodes = ordinaryPlaceholderTextNodes(input.part, input.paragraph);
+  if (!textNodes) return null;
+  const values = textNodes.map((node) => wordTextNodeValue(node));
+  const start = values[input.startTextNodeIndex];
+  const end = values[input.endTextNodeIndex];
+  if (
+    start === undefined ||
+    end === undefined ||
+    input.endTextNodeIndex < input.startTextNodeIndex ||
+    input.startOffset > start.length ||
+    input.endOffset > end.length ||
+    (input.startTextNodeIndex === input.endTextNodeIndex &&
+      input.endOffset <= input.startOffset)
+  ) {
+    return null;
+  }
+  const prefix = start.slice(0, input.startOffset);
+  const suffix = end.slice(input.endOffset);
+  const token =
+    input.startTextNodeIndex === input.endTextNodeIndex
+      ? start.slice(input.startOffset, input.endOffset)
+      : [
+          start.slice(input.startOffset),
+          ...values.slice(input.startTextNodeIndex + 1, input.endTextNodeIndex),
+          end.slice(0, input.endOffset),
+        ].join('');
+  const tokenSyntax = ordinaryPlaceholderSyntax(token);
+  if (!tokenSyntax) return null;
+  const normalized = [...values];
+  normalized[input.startTextNodeIndex] =
+    `${prefix}\u0000TEMPLATE_TWIN_MUTABLE\u0000`;
+  for (
+    let index = input.startTextNodeIndex + 1;
+    index < input.endTextNodeIndex;
+    index += 1
+  ) {
+    normalized[index] = '';
+  }
+  if (input.startTextNodeIndex === input.endTextNodeIndex) {
+    normalized[input.startTextNodeIndex] =
+      `${prefix}\u0000TEMPLATE_TWIN_MUTABLE\u0000${suffix}`;
+  } else {
+    normalized[input.endTextNodeIndex] = suffix;
+  }
+  return {
+    contractVersion: 'ordinary-placeholder-token-binding/1.0.0',
+    tokenSyntax,
+    tokenTextSha256: canonicalSha256(token),
+    tokenTextLength: token.length,
+    span: {
+      startTextNodeIndex: input.startTextNodeIndex,
+      startOffset: input.startOffset,
+      endTextNodeIndex: input.endTextNodeIndex,
+      endOffset: input.endOffset,
+      paragraphTextNodeCount: textNodes.length,
+    },
+    staticPrefixLength: prefix.length,
+    staticSuffixLength: suffix.length,
+    staticPrefixSha256: canonicalSha256(prefix),
+    staticSuffixSha256: canonicalSha256(suffix),
+    staticContextSha256: canonicalSha256({ prefix, suffix }),
+    sourceParagraphShapeSha256: canonicalSha256(
+      ordinaryPlaceholderShapeDescriptor(
+        input.part,
+        input.paragraph,
+        textNodes,
+        normalized,
+      ),
+    ),
+    clinicalMappingStatus: 'needs_confirmation',
+  };
+}
+
+function ordinaryPlaceholderTextNodes(
+  part: IndexedBindingPart,
+  paragraph: IndexedBindingNode,
+): IndexedBindingNode[] | null {
+  const paragraphChildren = elementChildren(part, paragraph);
+  if (
+    paragraphChildren.some(
+      (child) => !isWordElement(child, 'pPr') && !isWordElement(child, 'r'),
+    ) ||
+    paragraphChildren.filter((child) => isWordElement(child, 'pPr')).length > 1
+  ) {
+    return null;
+  }
+  const runs = paragraphChildren.filter((child) => isWordElement(child, 'r'));
+  if (runs.length === 0) return null;
+  const textNodes: IndexedBindingNode[] = [];
+  for (const run of runs) {
+    const runChildren = elementChildren(part, run);
+    if (
+      runChildren.some(
+        (child) => !isWordElement(child, 'rPr') && !isWordElement(child, 't'),
+      ) ||
+      runChildren.filter((child) => isWordElement(child, 'rPr')).length > 1
+    ) {
+      return null;
+    }
+    const texts = runChildren.filter((child) => isWordElement(child, 't'));
+    if (texts.length === 0) return null;
+    for (const text of texts) {
+      if (elementChildren(part, text).length > 0) return null;
+      if (
+        text.visit.attributes.some(
+          (attribute) =>
+            attribute.namespaceUri !== XML_NAMESPACE ||
+            attribute.localName !== 'space' ||
+            attribute.value !== 'preserve',
+        ) ||
+        text.visit.attributes.length > 1
+      ) {
+        return null;
+      }
+      textNodes.push(text);
+    }
+  }
+  const allowedCharacterParents = new Set(textNodes.map((text) => text.node));
+  const stack = [paragraph.node];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    for (const child of childrenOf(current)) {
+      if (tagOf(child) === '#text') {
+        if (
+          !allowedCharacterParents.has(current) &&
+          !/^\s*$/u.test(String(child['#text'] ?? ''))
+        ) {
+          return null;
+        }
+        continue;
+      }
+      stack.push(child);
+    }
+  }
+  return textNodes;
+}
+
+function wordTextNodeValue(node: IndexedBindingNode): string {
+  return childrenOf(node.node)
+    .filter((child) => tagOf(child) === '#text')
+    .map((child) => decodeXmlScalar(String(child['#text'] ?? '')))
+    .join('');
+}
+
+function ordinaryPlaceholderShapeDescriptor(
+  part: IndexedBindingPart,
+  paragraph: IndexedBindingNode,
+  textNodes: readonly IndexedBindingNode[],
+  normalizedValues: readonly string[],
+): unknown {
+  const normalizedByNode = new Map(
+    textNodes.map((node, index) => [node, normalizedValues[index] ?? '']),
+  );
+  const describe = (node: IndexedBindingNode): unknown => {
+    const replacement = normalizedByNode.get(node);
+    const children = childrenOf(node.node).flatMap((child) => {
+      if (tagOf(child) === '#text') {
+        if (replacement !== undefined) return [];
+        const value = decodeXmlScalar(String(child['#text'] ?? ''));
+        return /^\s*$/u.test(value)
+          ? []
+          : [{ namespaceUri: null, localName: '#text', value }];
+      }
+      const indexed = part.byNode.get(child);
+      return indexed ? [describe(indexed)] : [];
+    });
+    if (replacement !== undefined) {
+      children.push({
+        namespaceUri: null,
+        localName: '#text',
+        value: replacement,
+      });
+    }
+    return {
+      namespaceUri: node.visit.namespaceUri,
+      localName: node.visit.localName,
+      attributes: immutableAttributeDescriptor(node),
+      children,
+    };
+  };
+  return describe(paragraph);
 }
 
 /**

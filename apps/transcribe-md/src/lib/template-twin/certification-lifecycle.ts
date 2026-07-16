@@ -1,5 +1,8 @@
+import { randomUUID } from 'node:crypto';
+
 import { Prisma } from '@prisma/client';
 import prisma from '@meddoc/db';
+import type { ModelClient } from '@meddoc/ai';
 
 import {
   SemanticMappingSchema,
@@ -24,6 +27,7 @@ import {
   TEMPLATE_TWIN_UNSUPPORTED_CONCEPT_REASON,
   isSupportedTemplateTwinConcept,
 } from './supported-concepts';
+import type { TemplateTwinConceptProvider } from './supported-concepts';
 import { evaluateTemplateTwinCertificationCoverage } from './certification-coverage';
 import { enqueueTemplateTwinAudit } from './audit-outbox';
 import { templateTwinSyntheticTestProvenanceSha256 } from './synthetic-test-provenance';
@@ -32,12 +36,42 @@ import {
   templateTwinSyntheticProofSourceEvidenceSha256,
   TEMPLATE_TWIN_SOURCE_PROVENANCE_GATE_MESSAGE,
 } from './source-phi-evidence';
+import { lockAndAssertTemplateTwinStaticAssetBindingsCurrent } from './static-assets';
 import {
   TEMPLATE_TWIN_BINDING_FINGERPRINT_VERSION,
   TEMPLATE_TWIN_READBACK_CONTRACT_VERSION,
   nativeIdentityFromRendererBinding,
   rendererBindingFingerprintSha256,
 } from '../note-template-docx/binding-fingerprint';
+import {
+  certifyCustomFieldSpecification,
+  customConceptSpecifications,
+  fieldRequiresExplicitIntent,
+  fieldsWithCertifiedCustomIntent,
+  parsePersistedFieldIntent,
+  templateTwinFieldIntentsSha256,
+  unresolvedFieldIntent,
+  type PersistedTemplateTwinFieldIntent,
+  type TemplateTwinFieldIntentInput,
+  type TemplateTwinFieldIntentView,
+  TemplateTwinFieldIntentInputSchema,
+} from './field-intent';
+import {
+  assertTemplateFieldSpecificationSetWithinLimits,
+  computeTemplateFieldSpecificationContentSha256,
+  createCertifiedCustomConceptProvider,
+  templateFieldSpecificationAuthoredText,
+} from './custom-concepts';
+import type { CertifiedTemplateFieldSpecification } from './custom-concepts/specification';
+import {
+  assertTemplateTwinCustomExamplesReadyForCertification,
+  TemplateTwinCustomExampleError,
+} from './custom-example-service';
+import {
+  lockTemplateTwinRolloutForFinalClaim,
+  type TemplateTwinRolloutToken,
+} from './rollout';
+import { assertTemplateTwinAuthoredCorpusPhiFree } from './synthetic-evidence-gate';
 
 export class TemplateTwinLifecycleError extends Error {
   readonly code:
@@ -47,7 +81,8 @@ export class TemplateTwinLifecycleError extends Error {
     | 'FIELD_SET_MISMATCH'
     | 'MAPPING_INVALID'
     | 'UNSUPPORTED_CLINICAL_CONCEPT'
-    | 'CERTIFICATION_BLOCKED';
+    | 'CERTIFICATION_BLOCKED'
+    | 'ROLLOUT_CHANGED';
 
   constructor(code: TemplateTwinLifecycleError['code'], message: string) {
     super(message);
@@ -60,6 +95,26 @@ export interface TemplateTwinActor {
   userId: string;
   userEmail: string;
   practiceId: string;
+  /** Exact rollout generations pinned by fresh physician authorization. */
+  rolloutToken: TemplateTwinRolloutToken;
+}
+
+async function assertConfigurationRolloutFinality(
+  tx: Prisma.TransactionClient,
+  actor: TemplateTwinActor,
+  operation: string,
+): Promise<void> {
+  const decision = await lockTemplateTwinRolloutForFinalClaim({
+    tx,
+    practiceId: actor.practiceId,
+    pinnedToken: actor.rolloutToken,
+  });
+  if (!decision.allowed) {
+    throw new TemplateTwinLifecycleError(
+      'ROLLOUT_CHANGED',
+      `${decision.code}: Template Twin availability changed while ${operation}. Reload and try again.`,
+    );
+  }
 }
 
 interface PersistedMappingRow {
@@ -151,6 +206,40 @@ function validPracticeDefault(
   }
 }
 
+function mappingMatchesCustomSpecification(
+  mapping: SemanticMapping,
+  specification: CertifiedTemplateFieldSpecification,
+): boolean {
+  const expectedDataType =
+    specification.dataType === 'narrative_text'
+      ? 'text'
+      : specification.dataType;
+  const expectedPolarity = specification.polarityPolicy.allowExplicitDenial
+    ? 'explicit_denial_allowed'
+    : specification.dataType === 'boolean'
+      ? 'affirmative_only'
+      : 'value_only';
+  const expectedUnitPolicy =
+    specification.dataType === 'measurement'
+      ? 'required'
+      : specification.dataType === 'number'
+        ? 'forbidden'
+        : 'not_applicable';
+  return (
+    mapping.clinicalConcept === specification.conceptId &&
+    mapping.expectedDataType === expectedDataType &&
+    mapping.polarityBehavior === expectedPolarity &&
+    mapping.temporality === 'any' &&
+    mapping.laterality === 'optional' &&
+    mapping.unitPolicy === expectedUnitPolicy &&
+    mapping.approvedSynonyms.length === 0 &&
+    mapping.required === specification.required &&
+    mapping.blankPolicy === specification.unknownPolicy &&
+    mapping.unknownPolicy === specification.unknownPolicy &&
+    mapping.practiceDefault === null
+  );
+}
+
 async function loadOwnedCompilation(
   client: Prisma.TransactionClient,
   noteTemplateId: string,
@@ -165,6 +254,7 @@ async function loadOwnedCompilation(
     select: {
       id: true,
       doctorId: true,
+      lineageId: true,
       encounterType: true,
       version: true,
       status: true,
@@ -176,6 +266,7 @@ async function loadOwnedCompilation(
           blockingUnsupportedCount: true,
           latestSyntheticTestManifest: true,
           latestTestMappingsSha256: true,
+          latestTestFieldIntentsSha256: true,
           latestTestOutputObjectKey: true,
           latestTestOutputVersionId: true,
           latestTestOutputEtag: true,
@@ -183,7 +274,9 @@ async function loadOwnedCompilation(
           latestTestStaticContentSha256: true,
           latestTestRoundTrip: true,
           latestTestVerifiedAt: true,
-          certification: { select: { id: true } },
+          certification: {
+            select: { id: true, approvedFieldIntentsSha256: true },
+          },
           sourceArtifact: {
             select: {
               practiceId: true,
@@ -200,6 +293,22 @@ async function loadOwnedCompilation(
               id: true,
               fieldId: true,
               detectionStatus: true,
+              intentDecisions: {
+                orderBy: { version: 'desc' },
+                take: 1,
+                select: {
+                  id: true,
+                  version: true,
+                  intentKind: true,
+                  supportedConcept: true,
+                  customConceptId: true,
+                  customSpec: true,
+                  customSpecSha256: true,
+                  reason: true,
+                  decidedById: true,
+                  decidedAt: true,
+                },
+              },
               mapping: {
                 select: {
                   id: true,
@@ -248,6 +357,54 @@ function currentMappings(
     }
     return fromPersistedMapping(field.fieldId, field.mapping);
   });
+}
+
+type LoadedCompilation = Awaited<
+  ReturnType<typeof loadOwnedCompilation>
+>['compiled'];
+
+function currentExplicitFieldIntents(
+  ir: TemplateDocIR,
+  compiled: LoadedCompilation,
+): Array<{
+  fieldId: string;
+  definitionId: string;
+  intent: TemplateTwinFieldIntentView;
+}> {
+  const persisted = new Map(
+    compiled.fields.map((field) => [field.fieldId, field]),
+  );
+  return ir.fields
+    .filter(fieldRequiresExplicitIntent)
+    .map((field) => {
+      const row = persisted.get(field.fieldId);
+      if (!row) {
+        throw new TemplateTwinLifecycleError(
+          'FIELD_SET_MISMATCH',
+          'A placeholder field has no persisted field definition.',
+        );
+      }
+      const decision = row.intentDecisions[0];
+      return {
+        fieldId: field.fieldId,
+        definitionId: row.id,
+        intent: decision
+          ? parsePersistedFieldIntent({
+              ...decision,
+              fieldDefinitionId: row.id,
+              fieldId: field.fieldId,
+            } satisfies PersistedTemplateTwinFieldIntent)
+          : unresolvedFieldIntent(),
+      };
+    });
+}
+
+function explicitFieldIntentsSha256(
+  intents: ReadonlyArray<{ fieldId: string; intent: TemplateTwinFieldIntentView }>,
+): string {
+  return templateTwinFieldIntentsSha256(
+    intents.map(({ fieldId, intent }) => ({ fieldId, intent })),
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -370,7 +527,12 @@ function isVerifiedSyntheticManifest(input: {
   noteTemplateId: string;
   noteTemplateVersion: number;
   ir: TemplateDocIR;
+  effectiveFields: readonly TemplateField[];
   mappings: readonly SemanticMapping[];
+  staticFieldIds: readonly string[];
+  conceptProviders: readonly TemplateTwinConceptProvider[];
+  fieldIntentsSha256: string;
+  customSpecifications: ReturnType<typeof customConceptSpecifications>;
 }): boolean {
   const parsed = TemplateTwinFillManifestSchema.safeParse(input.manifest);
   if (!parsed.success) return false;
@@ -385,6 +547,7 @@ function isVerifiedSyntheticManifest(input: {
     manifest.compilerVersion !== input.ir.compilerVersion ||
     manifest.resolverVersion !== TEMPLATE_TWIN_RESOLVER_VERSION ||
     manifest.rendererVersion !== TEMPLATE_TWIN_RENDERER_VERSION
+    || manifest.fieldIntentsSha256 !== input.fieldIntentsSha256
   ) {
     return false;
   }
@@ -394,18 +557,21 @@ function isVerifiedSyntheticManifest(input: {
     new Set(manifestFieldIds).size !== expectedFieldIds.length ||
     canonicalSha256(manifestFieldIds) !== canonicalSha256(expectedFieldIds) ||
     canonicalSha256(manifest.counts) !==
-      canonicalSha256(templateTwinCounts(manifest.fields, input.ir.fields))
+      canonicalSha256(templateTwinCounts(manifest.fields, input.effectiveFields))
   ) {
     return false;
   }
   const reproduced = validateTemplateTwin({
-    fields: input.ir.fields,
+    fields: input.effectiveFields,
     mappings: input.mappings,
     facts: manifest.facts,
     resolutions: manifest.fields,
     tables: input.ir.tables,
     unsupported: input.ir.unsupported,
     allowUncertifiedForSyntheticTest: true,
+    staticFieldIds: input.staticFieldIds,
+    conceptProviders: input.conceptProviders,
+    customSpecifications: input.customSpecifications,
     now: manifest.validation.checkedAt,
   });
   return (
@@ -437,10 +603,183 @@ export async function updateTemplateTwinMappings(input: {
   noteTemplateId: string;
   actor: TemplateTwinActor;
   expectedMappingsSha256: string;
+  /** Older generic-template service callers have no explicit placeholder
+   * intent set. HTTP callers always send this hash; omission is accepted only
+   * when the compiled IR has zero intent-bearing fields. */
+  expectedFieldIntentsSha256?: string;
   mappings: readonly SemanticMapping[];
+  fieldIntents?: readonly TemplateTwinFieldIntentInput[];
+  privacyClient?: Pick<ModelClient, 'complete'>;
 }): Promise<TemplateTwinWorkspace> {
+  // Authenticate ownership, mutability, optimistic hashes, and exact compiler
+  // field sets before any privacy-provider work. This cheap read is repeated
+  // under the final rollout-locked write transaction, closing its TOCTOU gap.
+  const preflight = await prisma.$transaction(
+    async (tx: Prisma.TransactionClient) => {
+      await assertConfigurationRolloutFinality(
+        tx,
+        input.actor,
+        'the mapping and field intent were being checked',
+      );
+      return loadOwnedCompilation(
+        tx,
+        input.noteTemplateId,
+        input.actor,
+      );
+    },
+    { isolationLevel: 'Serializable' },
+  );
+  if (
+    preflight.compiled.certification ||
+    preflight.compiled.certificationStatus === 'CERTIFIED'
+  ) {
+    throw new TemplateTwinLifecycleError(
+      'IMMUTABLE',
+      'Certified Template Twin versions cannot be edited.',
+    );
+  }
+  const preflightIr = TemplateDocIRSchema.parse(
+    preflight.compiled.compiledDocumentIr,
+  );
+  if (
+    templateTwinMappingsSha256(currentMappings(preflight.compiled)) !==
+    input.expectedMappingsSha256
+  ) {
+    throw new TemplateTwinLifecycleError(
+      'CONFLICT',
+      'This mapping draft changed in another tab. Reload before saving.',
+    );
+  }
+  const preflightIntents = currentExplicitFieldIntents(
+    preflightIr,
+    preflight.compiled,
+  );
+  const preflightIntentHash = explicitFieldIntentsSha256(preflightIntents);
+  if (
+    (preflightIntents.length > 0 && !input.expectedFieldIntentsSha256) ||
+    (input.expectedFieldIntentsSha256 !== undefined &&
+      preflightIntentHash !== input.expectedFieldIntentsSha256)
+  ) {
+    throw new TemplateTwinLifecycleError(
+      'CONFLICT',
+      'This field-intent draft changed in another tab. Reload before saving.',
+    );
+  }
+  let parsedPreflightMappings: SemanticMapping[];
+  try {
+    parsedPreflightMappings = input.mappings.map((mapping) =>
+      SemanticMappingSchema.parse(mapping),
+    );
+  } catch {
+    throw new TemplateTwinLifecycleError(
+      'MAPPING_INVALID',
+      'A semantic mapping is invalid.',
+    );
+  }
+  const compilerFieldIds = new Set(
+    preflightIr.fields.map((field) => field.fieldId),
+  );
+  const requestedMappingIds = new Set(
+    parsedPreflightMappings.map(({ fieldId }) => fieldId),
+  );
+  if (
+    requestedMappingIds.size !== parsedPreflightMappings.length ||
+    requestedMappingIds.size !== compilerFieldIds.size ||
+    [...requestedMappingIds].some((fieldId) => !compilerFieldIds.has(fieldId))
+  ) {
+    throw new TemplateTwinLifecycleError(
+      'FIELD_SET_MISMATCH',
+      'Mappings must preserve the exact compiler field set.',
+    );
+  }
+  const explicitFieldIds = new Set(
+    preflightIr.fields
+      .filter(fieldRequiresExplicitIntent)
+      .map((field) => field.fieldId),
+  );
+  let parsedIntents: TemplateTwinFieldIntentInput[];
+  try {
+    parsedIntents = (input.fieldIntents ?? []).map((intent) =>
+      TemplateTwinFieldIntentInputSchema.parse(intent),
+    );
+  } catch {
+    throw new TemplateTwinLifecycleError(
+      'MAPPING_INVALID',
+      'A placeholder field intent is invalid.',
+    );
+  }
+  const requestedIntentIds = new Set(parsedIntents.map(({ fieldId }) => fieldId));
+  if (
+    requestedIntentIds.size !== parsedIntents.length ||
+    requestedIntentIds.size !== explicitFieldIds.size ||
+    [...requestedIntentIds].some((fieldId) => !explicitFieldIds.has(fieldId))
+  ) {
+    throw new TemplateTwinLifecycleError(
+      'FIELD_SET_MISMATCH',
+      'Field intent decisions must preserve the exact placeholder field set.',
+    );
+  }
+  const preflightCurrentIntentById = new Map(
+    preflightIntents.map((entry) => [entry.fieldId, entry.intent]),
+  );
+  for (const requested of parsedIntents) {
+    const current = preflightCurrentIntentById.get(requested.fieldId);
+    if (!current || current.intentKind === 'unresolved') continue;
+    const unchanged =
+      (requested.intentKind === 'supported_concept' &&
+        current.intentKind === 'supported_concept' &&
+        requested.supportedConcept === current.supportedConcept) ||
+      (requested.intentKind === 'static' &&
+        current.intentKind === 'static' &&
+        requested.reason === current.reason) ||
+      (requested.intentKind === 'custom_concept' &&
+        current.intentKind === 'custom_concept' &&
+        current.customSpec !== null &&
+        computeTemplateFieldSpecificationContentSha256(requested.customSpec) ===
+          current.customSpec.certification.contentSha256);
+    if (!unchanged) {
+      throw new TemplateTwinLifecycleError(
+        'IMMUTABLE',
+        'This field intent is already recorded for this version. Create a new draft version to change it.',
+      );
+    }
+  }
+  const requestedCustomSpecifications = parsedIntents.flatMap((intent) =>
+    intent.intentKind === 'custom_concept' ? [intent.customSpec] : [],
+  );
+  try {
+    assertTemplateFieldSpecificationSetWithinLimits(
+      requestedCustomSpecifications,
+    );
+    const privacyFragments = [
+      ...requestedCustomSpecifications.flatMap(
+        templateFieldSpecificationAuthoredText,
+      ),
+      ...parsedIntents.flatMap((intent) =>
+        intent.intentKind === 'static' ? [intent.reason] : [],
+      ),
+    ];
+    await assertTemplateTwinAuthoredCorpusPhiFree({
+      fragments: privacyFragments,
+      practiceId: input.actor.practiceId,
+      userId: input.actor.userId,
+      client: input.privacyClient,
+    });
+  } catch {
+    throw new TemplateTwinLifecycleError(
+      'MAPPING_INVALID',
+      'Custom-field metadata and examples must pass bounded safe-alpha and privacy checks before they can be saved.',
+    );
+  }
   await prisma.$transaction(
     async (tx: Prisma.TransactionClient) => {
+      // Lock order is load-bearing: rollout global -> practice must precede
+      // every template/configuration row touched by this final transaction.
+      await assertConfigurationRolloutFinality(
+        tx,
+        input.actor,
+        'the mapping and field intent were being saved',
+      );
       const { template, compiled } = await loadOwnedCompilation(
         tx,
         input.noteTemplateId,
@@ -456,6 +795,7 @@ export async function updateTemplateTwinMappings(input: {
         );
       }
 
+      const ir = TemplateDocIRSchema.parse(compiled.compiledDocumentIr);
       const before = currentMappings(compiled);
       const beforeHash = templateTwinMappingsSha256(before);
       if (beforeHash !== input.expectedMappingsSha256) {
@@ -465,7 +805,18 @@ export async function updateTemplateTwinMappings(input: {
         );
       }
 
-      const ir = TemplateDocIRSchema.parse(compiled.compiledDocumentIr);
+      const beforeIntents = currentExplicitFieldIntents(ir, compiled);
+      const beforeIntentsHash = explicitFieldIntentsSha256(beforeIntents);
+      if (
+        (beforeIntents.length > 0 && !input.expectedFieldIntentsSha256) ||
+        (input.expectedFieldIntentsSha256 !== undefined &&
+          beforeIntentsHash !== input.expectedFieldIntentsSha256)
+      ) {
+        throw new TemplateTwinLifecycleError(
+          'CONFLICT',
+          'This field-intent draft changed in another tab. Reload before saving.',
+        );
+      }
       const fieldById = new Map(
         ir.fields.map((field) => [field.fieldId, field]),
       );
@@ -492,11 +843,166 @@ export async function updateTemplateTwinMappings(input: {
         );
       }
 
+      const explicitFieldIds = new Set(
+        ir.fields.filter(fieldRequiresExplicitIntent).map((field) => field.fieldId),
+      );
+      const requestedIntentById = new Map(
+        parsedIntents.map((intent) => [intent.fieldId, intent]),
+      );
+      if (
+        requestedIntentById.size !== explicitFieldIds.size ||
+        [...requestedIntentById.keys()].some(
+          (fieldId) => !explicitFieldIds.has(fieldId),
+        )
+      ) {
+        throw new TemplateTwinLifecycleError(
+          'FIELD_SET_MISMATCH',
+          'Field intent decisions must preserve the exact placeholder field set.',
+        );
+      }
+
+      const now = new Date();
+      const currentIntentById = new Map(
+        beforeIntents.map((entry) => [entry.fieldId, entry]),
+      );
+      const afterIntents = [...beforeIntents];
+      const newIntentRows: Array<{
+        id: string;
+        fieldId: string;
+        definitionId: string;
+        view: TemplateTwinFieldIntentView;
+        customSpecJson: Prisma.InputJsonValue | undefined;
+        customSpecSha256: string | null;
+      }> = [];
+      for (const fieldId of [...explicitFieldIds].sort()) {
+        const requested = requestedIntentById.get(fieldId)!;
+        const current = currentIntentById.get(fieldId)!;
+        if (current.intent.intentKind !== 'unresolved') {
+          const unchanged =
+            (requested.intentKind === 'supported_concept' &&
+              current.intent.intentKind === 'supported_concept' &&
+              requested.supportedConcept === current.intent.supportedConcept) ||
+            (requested.intentKind === 'static' &&
+              current.intent.intentKind === 'static' &&
+              requested.reason === current.intent.reason) ||
+            (requested.intentKind === 'custom_concept' &&
+              current.intent.intentKind === 'custom_concept' &&
+              current.intent.customSpec !== null &&
+              computeTemplateFieldSpecificationContentSha256(
+                requested.customSpec,
+              ) === current.intent.customSpec.certification.contentSha256);
+          if (!unchanged) {
+            throw new TemplateTwinLifecycleError(
+              'IMMUTABLE',
+              'This field intent is already recorded for this version. Create a new draft version to change it.',
+            );
+          }
+          continue;
+        }
+        if (requested.intentKind === 'unresolved') continue;
+
+        const id = randomUUID();
+        let view: TemplateTwinFieldIntentView;
+        let customSpecJson: Prisma.InputJsonValue | undefined;
+        let customSpecSha256: string | null = null;
+        if (requested.intentKind === 'supported_concept') {
+          if (!isSupportedTemplateTwinConcept(requested.supportedConcept)) {
+            throw new TemplateTwinLifecycleError(
+              'UNSUPPORTED_CLINICAL_CONCEPT',
+              `${TEMPLATE_TWIN_UNSUPPORTED_CONCEPT_CODE}: ${TEMPLATE_TWIN_UNSUPPORTED_CONCEPT_REASON}`,
+            );
+          }
+          view = {
+            intentKind: 'supported_concept',
+            decisionId: id,
+            version: 1,
+            supportedConcept: requested.supportedConcept,
+            customConceptId: null,
+            customSpec: null,
+            reason: null,
+            decidedAtIso: now.toISOString(),
+            lockedInVersion: true,
+          };
+        } else if (requested.intentKind === 'static') {
+          view = {
+            intentKind: 'static',
+            decisionId: id,
+            version: 1,
+            supportedConcept: null,
+            customConceptId: null,
+            customSpec: null,
+            reason: requested.reason,
+            decidedAtIso: now.toISOString(),
+            lockedInVersion: true,
+          };
+        } else {
+          const customSpec = certifyCustomFieldSpecification({
+            content: requested.customSpec,
+            templateLineageId: template.lineageId,
+            compiledVersionId: compiled.id,
+            fieldId,
+            physicianUserId: input.actor.userId,
+            certifiedAt: now,
+          });
+          customSpecSha256 = customSpec.certification.contentSha256;
+          customSpecJson = asJson(customSpec);
+          view = {
+            intentKind: 'custom_concept',
+            decisionId: id,
+            version: 1,
+            supportedConcept: null,
+            customConceptId: customSpec.conceptId,
+            customSpec,
+            reason: null,
+            decidedAtIso: now.toISOString(),
+            lockedInVersion: true,
+          };
+        }
+        const index = afterIntents.findIndex((entry) => entry.fieldId === fieldId);
+        afterIntents[index] = { ...current, intent: view };
+        newIntentRows.push({
+          id,
+          fieldId,
+          definitionId: current.definitionId,
+          view,
+          customSpecJson,
+          customSpecSha256,
+        });
+      }
+
+      const customSpecifications = customConceptSpecifications(afterIntents);
+      const effectiveFields = fieldsWithCertifiedCustomIntent({
+        fields: ir.fields,
+        intents: afterIntents,
+      });
+      const effectiveFieldById = new Map(
+        effectiveFields.map((field) => [field.fieldId, field]),
+      );
+      const customProviders =
+        customSpecifications.length > 0
+          ? [createCertifiedCustomConceptProvider(customSpecifications)]
+          : [];
+      const afterIntentById = new Map(
+        afterIntents.map((entry) => [entry.fieldId, entry.intent]),
+      );
       for (const mapping of parsed) {
-        const field = fieldById.get(mapping.fieldId)!;
+        const field = effectiveFieldById.get(mapping.fieldId)!;
+        const intent = afterIntentById.get(mapping.fieldId);
+        const isStatic = intent?.intentKind === 'static';
+        const expectedConcept =
+          intent?.intentKind === 'supported_concept'
+            ? intent.supportedConcept
+            : intent?.intentKind === 'custom_concept'
+              ? intent.customConceptId
+              : null;
+        const customSpecification =
+          intent?.intentKind === 'custom_concept' ? intent.customSpec : null;
         if (
           mapping.clinicalConcept !== null &&
-          !isSupportedTemplateTwinConcept(mapping.clinicalConcept)
+          !isSupportedTemplateTwinConcept(
+            mapping.clinicalConcept,
+            customProviders,
+          )
         ) {
           throw new TemplateTwinLifecycleError(
             'UNSUPPORTED_CLINICAL_CONCEPT',
@@ -507,7 +1013,19 @@ export async function updateTemplateTwinMappings(input: {
           mapping.status === 'unsupported' ||
           !isMappingTypeCompatible(field, mapping) ||
           !validPracticeDefault(field, mapping) ||
-          (mapping.status === 'certified' && !mapping.clinicalConcept)
+          (mapping.status === 'certified' &&
+            !isStatic &&
+            !mapping.clinicalConcept) ||
+          (intent?.intentKind === 'unresolved' &&
+            mapping.status === 'certified') ||
+          (intent && intent.intentKind !== 'unresolved' && !isStatic &&
+            mapping.clinicalConcept !== expectedConcept) ||
+          (customSpecification !== null &&
+            !mappingMatchesCustomSpecification(mapping, customSpecification)) ||
+          (isStatic &&
+            (mapping.clinicalConcept !== null ||
+              mapping.required ||
+              mapping.practiceDefault !== null))
         ) {
           throw new TemplateTwinLifecycleError(
             'MAPPING_INVALID',
@@ -517,7 +1035,8 @@ export async function updateTemplateTwinMappings(input: {
       }
 
       const afterHash = templateTwinMappingsSha256(parsed);
-      if (afterHash === beforeHash) return;
+      const afterIntentsHash = explicitFieldIntentsSha256(afterIntents);
+      if (afterHash === beforeHash && afterIntentsHash === beforeIntentsHash) return;
 
       const persistedByFieldId = new Map(
         compiled.fields.map((field) => [field.fieldId, field]),
@@ -547,7 +1066,44 @@ export async function updateTemplateTwinMappings(input: {
             practiceDefault: mapping.practiceDefault,
             mappingStatus: dbStatus(mapping.status),
             approvedById: approved ? input.actor.userId : null,
-            approvedAt: approved ? new Date() : null,
+            approvedAt: approved ? now : null,
+          },
+        });
+      }
+
+      for (const intent of newIntentRows) {
+        await tx.templateTwinFieldIntentDecision.create({
+          data: {
+            id: intent.id,
+            fieldDefinitionId: intent.definitionId,
+            version: 1,
+            intentKind: intent.view.intentKind.toLocaleUpperCase('en-US'),
+            supportedConcept: intent.view.supportedConcept,
+            customConceptId: intent.view.customConceptId,
+            ...(intent.customSpecJson === undefined
+              ? {}
+              : { customSpec: intent.customSpecJson }),
+            customSpecSha256: intent.customSpecSha256,
+            reason: intent.view.reason,
+            decidedById: input.actor.userId,
+          },
+        });
+        await enqueueTemplateTwinAudit(tx, {
+          eventKey: `template-twin:field-intent:${compiled.id}:${intent.fieldId}:v1`,
+          practiceId: input.actor.practiceId,
+          actorId: input.actor.userId,
+          actorEmailSnapshot: input.actor.userEmail,
+          action: 'TEMPLATE_TWIN_FIELD_INTENT_RECORDED',
+          targetType: 'TemplateTwinFieldDefinition',
+          targetId: intent.definitionId,
+          metadata: {
+            compiledVersionId: compiled.id,
+            templateVersion: template.version,
+            fieldId: intent.fieldId,
+            intentKind: intent.view.intentKind,
+            customConceptId: intent.view.customConceptId,
+            customSpecSha256: intent.customSpecSha256,
+            fieldIntentsSha256: afterIntentsHash,
           },
         });
       }
@@ -563,6 +1119,7 @@ export async function updateTemplateTwinMappings(input: {
               : 'NEEDS_CONFIRMATION',
           latestSyntheticTestManifest: Prisma.DbNull,
           latestTestMappingsSha256: null,
+          latestTestFieldIntentsSha256: null,
           latestTestOutputObjectKey: null,
           latestTestOutputVersionId: null,
           latestTestOutputEtag: null,
@@ -587,6 +1144,12 @@ export async function updateTemplateTwinMappings(input: {
             (mapping) => mapping.status === 'certified',
           ).length,
           mappingsSha256: afterHash,
+          fieldIntentsSha256: afterIntentsHash,
+          fieldIntentDecisionCount: newIntentRows.length,
+          rolloutGlobalGeneration:
+            input.actor.rolloutToken.globalGeneration.toString(),
+          rolloutPracticeGeneration:
+            input.actor.rolloutToken.practiceGeneration.toString(),
         },
       });
     },
@@ -601,6 +1164,8 @@ export async function certifyAndActivateTemplateTwin(input: {
   noteTemplateId: string;
   actor: TemplateTwinActor;
   expectedMappingsSha256: string;
+  /** Required whenever the compiled IR contains an intent-bearing field. */
+  expectedFieldIntentsSha256?: string;
   /** Required by runtime callers. Omitting it fails closed for a certifiable
    * proof, preserving safe behavior for older direct service callers. */
   expectedSyntheticTestProvenanceSha256?: string;
@@ -608,6 +1173,13 @@ export async function certifyAndActivateTemplateTwin(input: {
 }): Promise<TemplateTwinWorkspace> {
   await prisma.$transaction(
     async (tx: Prisma.TransactionClient) => {
+      // Certification activates a document version. Its rollout epoch is
+      // revalidated under the same global -> practice locks as disable.
+      await assertConfigurationRolloutFinality(
+        tx,
+        input.actor,
+        'the template was being certified',
+      );
       const { template, compiled } = await loadOwnedCompilation(
         tx,
         input.noteTemplateId,
@@ -633,13 +1205,22 @@ export async function certifyAndActivateTemplateTwin(input: {
       }
       let sourcePrivacyScanEvidenceSha256: string;
       try {
-        sourcePrivacyScanEvidenceSha256 = assertTemplateTwinSourceProvenance({
+        const sourceProvenance = assertTemplateTwinSourceProvenance({
           privacyScanEvidence: compiled.sourceArtifact.privacyScanEvidence,
           requireBinding: true,
           boundEvidenceSha256: templateTwinSyntheticProofSourceEvidenceSha256(
             compiled.latestTestRoundTrip,
           ),
-        }).evidenceSha256;
+        });
+        await lockAndAssertTemplateTwinStaticAssetBindingsCurrent({
+          practiceId: input.actor.practiceId,
+          bindings:
+            sourceProvenance.evidence.staticAssetApprovalBindings ?? [],
+          db: tx as unknown as Parameters<
+            typeof lockAndAssertTemplateTwinStaticAssetBindingsCurrent
+          >[0]['db'],
+        });
+        sourcePrivacyScanEvidenceSha256 = sourceProvenance.evidenceSha256;
       } catch {
         throw new TemplateTwinLifecycleError(
           'CERTIFICATION_BLOCKED',
@@ -656,6 +1237,53 @@ export async function certifyAndActivateTemplateTwin(input: {
         );
       }
       const ir = TemplateDocIRSchema.parse(compiled.compiledDocumentIr);
+      const explicitIntents = currentExplicitFieldIntents(ir, compiled);
+      const fieldIntentsSha256 = explicitFieldIntentsSha256(explicitIntents);
+      if (
+        (explicitIntents.length > 0 && !input.expectedFieldIntentsSha256) ||
+        (input.expectedFieldIntentsSha256 !== undefined &&
+          fieldIntentsSha256 !== input.expectedFieldIntentsSha256)
+      ) {
+        throw new TemplateTwinLifecycleError(
+          'CONFLICT',
+          'Field intent changed after the page loaded. Reload before certifying.',
+        );
+      }
+      const intentByFieldId = new Map(
+        explicitIntents.map((entry) => [entry.fieldId, entry.intent]),
+      );
+      const customSpecifications = customConceptSpecifications(explicitIntents);
+      let approvedCustomExampleProofSha256: string | null;
+      try {
+        approvedCustomExampleProofSha256 =
+          await assertTemplateTwinCustomExamplesReadyForCertification({
+            tx,
+            compiledVersionId: compiled.id,
+            specifications: customSpecifications,
+            mappingsSha256: mappingHash,
+            fieldIntentsSha256,
+            physicianUserId: input.actor.userId,
+          });
+      } catch (error) {
+        if (error instanceof TemplateTwinCustomExampleError) {
+          throw new TemplateTwinLifecycleError(
+            'CERTIFICATION_BLOCKED',
+            error.message,
+          );
+        }
+        throw error;
+      }
+      const effectiveFields = fieldsWithCertifiedCustomIntent({
+        fields: ir.fields,
+        intents: explicitIntents,
+      });
+      const effectiveFieldById = new Map(
+        effectiveFields.map((field) => [field.fieldId, field]),
+      );
+      const customProviders =
+        customSpecifications.length > 0
+          ? [createCertifiedCustomConceptProvider(customSpecifications)]
+          : [];
       const syntheticManifest = TemplateTwinFillManifestSchema.safeParse(
         compiled.latestSyntheticTestManifest,
       );
@@ -674,7 +1302,10 @@ export async function certifyAndActivateTemplateTwin(input: {
         mappings.some(
           (mapping) =>
             mapping.clinicalConcept !== null &&
-            !isSupportedTemplateTwinConcept(mapping.clinicalConcept),
+            !isSupportedTemplateTwinConcept(
+              mapping.clinicalConcept,
+              customProviders,
+            ),
         )
       ) {
         throw new TemplateTwinLifecycleError(
@@ -683,13 +1314,28 @@ export async function certifyAndActivateTemplateTwin(input: {
         );
       }
       const fieldsReady = ir.fields.every((field) => {
+        const effectiveField = effectiveFieldById.get(field.fieldId)!;
         const mapping = mappingById.get(field.fieldId);
+        const intent = intentByFieldId.get(field.fieldId);
+        if (intent?.intentKind === 'unresolved') return false;
+        if (intent?.intentKind === 'static') {
+          return Boolean(
+            mapping &&
+              mapping.status === 'certified' &&
+              mapping.clinicalConcept === null &&
+              isMappingTypeCompatible(effectiveField, mapping),
+          );
+        }
         return Boolean(
           mapping &&
           mapping.status === 'certified' &&
           mapping.clinicalConcept &&
-          isMappingTypeCompatible(field, mapping) &&
-          validPracticeDefault(field, mapping),
+          isSupportedTemplateTwinConcept(
+            mapping.clinicalConcept,
+            customProviders,
+          ) &&
+          isMappingTypeCompatible(effectiveField, mapping) &&
+          validPracticeDefault(effectiveField, mapping),
         );
       });
       const waiverTimestamp = new Date();
@@ -703,9 +1349,12 @@ export async function certifyAndActivateTemplateTwin(input: {
       }));
       const coverage = syntheticManifest.success
         ? evaluateTemplateTwinCertificationCoverage({
-            fields: ir.fields,
+            fields: effectiveFields,
             mappings,
             manifest: syntheticManifest.data,
+            staticFieldIds: explicitIntents.flatMap((entry) =>
+              entry.intent.intentKind === 'static' ? [entry.fieldId] : [],
+            ),
             waivers: waiverEvidence,
             currentMappingsSha256: mappingHash,
             actorUserId: input.actor.userId,
@@ -774,6 +1423,7 @@ export async function certifyAndActivateTemplateTwin(input: {
         compiled.latestTestStaticContentSha256 &&
         compiled.latestTestVerifiedAt &&
         compiled.latestTestMappingsSha256 === mappingHash &&
+        compiled.latestTestFieldIntentsSha256 === fieldIntentsSha256 &&
         outputArtifact?.practiceId === input.actor.practiceId &&
         outputArtifact.kind === 'output' &&
         outputArtifact.sha256 === compiled.latestTestOutputSha256 &&
@@ -784,7 +1434,14 @@ export async function certifyAndActivateTemplateTwin(input: {
           noteTemplateId: template.id,
           noteTemplateVersion: template.version,
           ir,
+          effectiveFields,
           mappings,
+          staticFieldIds: explicitIntents.flatMap((entry) =>
+            entry.intent.intentKind === 'static' ? [entry.fieldId] : [],
+          ),
+          conceptProviders: customProviders,
+          fieldIntentsSha256,
+          customSpecifications,
         }) &&
         proofReady,
       );
@@ -810,6 +1467,8 @@ export async function certifyAndActivateTemplateTwin(input: {
           compiledVersionId: compiled.id,
           latestSyntheticTestManifest: compiled.latestSyntheticTestManifest,
           latestTestMappingsSha256: compiled.latestTestMappingsSha256,
+          latestTestFieldIntentsSha256:
+            compiled.latestTestFieldIntentsSha256,
           latestTestOutputObjectKey: compiled.latestTestOutputObjectKey,
           latestTestOutputVersionId: compiled.latestTestOutputVersionId,
           latestTestOutputEtag: compiled.latestTestOutputEtag,
@@ -874,6 +1533,8 @@ export async function certifyAndActivateTemplateTwin(input: {
           certifiedById: input.actor.userId,
           compiledStructureSha256: ir.structureSha256,
           approvedMappingsSha256: mappingHash,
+          approvedFieldIntentsSha256: fieldIntentsSha256,
+          approvedCustomExampleProofSha256,
           sourcePrivacyScanEvidenceSha256,
           syntheticTestManifest:
             compiled.latestSyntheticTestManifest as Prisma.InputJsonValue,
@@ -917,7 +1578,13 @@ export async function certifyAndActivateTemplateTwin(input: {
           optionalFieldWaiverCount: waiverEvidence.length,
           sourcePrivacyScanEvidenceSha256,
           mappingsSha256: mappingHash,
+          fieldIntentsSha256,
+          approvedCustomExampleProofSha256,
           syntheticTestProvenanceSha256,
+          rolloutGlobalGeneration:
+            input.actor.rolloutToken.globalGeneration.toString(),
+          rolloutPracticeGeneration:
+            input.actor.rolloutToken.practiceGeneration.toString(),
         },
       });
       await enqueueTemplateTwinAudit(tx, {
@@ -932,6 +1599,10 @@ export async function certifyAndActivateTemplateTwin(input: {
           templateVersion: template.version,
           compiledVersionId: compiled.id,
           mappingsSha256: mappingHash,
+          rolloutGlobalGeneration:
+            input.actor.rolloutToken.globalGeneration.toString(),
+          rolloutPracticeGeneration:
+            input.actor.rolloutToken.practiceGeneration.toString(),
         },
       });
     },

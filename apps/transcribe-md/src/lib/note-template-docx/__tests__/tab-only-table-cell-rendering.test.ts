@@ -237,7 +237,24 @@ describe('TAB_ONLY_BLANK_TABLE_CELL_V1 rendering and strict readback', () => {
     });
 
     expect(rendered.verification.verified).toBe(true);
-    expect(rendered.rendererVersion).toBe('template-docx-renderer/1.2.0');
+    expect(rendered.rendererVersion).toBe('template-docx-renderer/1.3.0');
+  });
+
+  it('keeps an unchanged 1.2 tab-only template renderable through 1.3', async () => {
+    const source = await sourceDocx();
+    const oldIr = {
+      ...compileTemplateDocx(source),
+      compilerVersion: 'template-docx-compiler/1.2.0',
+    };
+    const rendered = await renderTemplateDocx({
+      source,
+      ir: oldIr,
+      resolutions: oldIr.fields.map((field) => fieldResolution(field, null)),
+      validation: VALIDATION,
+    });
+
+    expect(rendered.verification.verified).toBe(true);
+    expect(rendered.rendererVersion).toBe('template-docx-renderer/1.3.0');
   });
 
   it('rejects the same populated cell moved to another table row', async () => {

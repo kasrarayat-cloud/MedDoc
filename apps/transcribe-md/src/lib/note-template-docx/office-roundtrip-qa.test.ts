@@ -242,6 +242,68 @@ async function tabOnlyTableCellFixture(
   };
 }
 
+async function ordinaryPlaceholderFixture(): Promise<Fixture> {
+  const source = await buildSyntheticDocx({
+    documentXml: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
+<w:p><w:r><w:t>Synthetic finding: [[fi</w:t></w:r><w:r><w:t>nding]]</w:t></w:r></w:p>
+<w:sectPr/></w:body></w:document>`,
+    extraEntries: {
+      "word/header1.xml": `<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Synthetic static header</w:t></w:r></w:p></w:hdr>`,
+      "word/footer1.xml": `<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Synthetic static footer</w:t></w:r></w:p></w:ftr>`,
+    },
+  });
+  const ir = compileTemplateDocx(source);
+  const field = ir.fields.find(
+    (candidate) =>
+      candidate.rendererBinding.bindingType === "ordinary_placeholder",
+  );
+  if (!field || ir.fields.length !== 1) {
+    throw new Error(
+      "Synthetic ordinary placeholder was not uniquely admitted.",
+    );
+  }
+  const resolutions = [
+    FieldResolutionSchema.parse({
+      fieldId: field.fieldId,
+      status: "supported",
+      value: "Synthetic stable finding",
+      sourceFactIds: [FACT_ID],
+      evidenceAnchorIds: ["synthetic-ordinary-office-anchor"],
+      selectedOptionOrdinal: null,
+      reasonCode: "synthetic_ordinary_office_evidence",
+      clinicianReviewed: true,
+    }),
+  ];
+  const rendered = await renderTemplateDocx({
+    source,
+    ir,
+    resolutions,
+    validation: VALIDATION,
+  });
+  const expected = buildOfficeExpectedValueManifest({
+    syntheticOnly: true,
+    sourceDocxBytes: source,
+    rendererOutputDocxBytes: rendered.document,
+    ir,
+    resolutions,
+  });
+  const officeSaved = await mutateDocument(rendered.document, (xml) =>
+    xml.replace(
+      "<w:p><w:r><w:t>Synthetic finding: Synthetic stable finding</w:t></w:r><w:r><w:t></w:t></w:r></w:p>",
+      "<w:p><w:r><w:t>Synthetic finding: Synthetic stable finding</w:t></w:r></w:p>",
+    ),
+  );
+  return {
+    source,
+    ir,
+    resolutions,
+    rendererOutput: rendered.document,
+    officeSaved,
+    expected,
+  };
+}
+
 function mutateSdtWithId(
   xml: string,
   nativeId: string,
@@ -658,6 +720,37 @@ function classifiedExternalDiagnostics(
 }
 
 describe("completed-byte Office QA readback", () => {
+  it("accepts QA-only ordinary-placeholder run normalization while strict v2 remains separate", async () => {
+    const ordinary = await ordinaryPlaceholderFixture();
+    expect(() =>
+      readbackTemplateDocxOutput({
+        source: ordinary.source,
+        output: ordinary.officeSaved,
+        ir: ordinary.ir,
+        resolutions: ordinary.resolutions,
+      }),
+    ).toThrowError(
+      expect.objectContaining({ code: "ROUNDTRIP_FIELD_MISMATCH" }),
+    );
+
+    const result = verifyOfficeRoundTripQa(
+      validInput(ordinary.officeSaved, undefined, ordinary),
+    );
+    expect(result.status).toBe("passed");
+    expect(result.fields).toEqual([
+      expect.objectContaining({
+        status: "survived",
+        controlKindMatches: true,
+        valueMatches: true,
+        controlStateMatches: true,
+        occurrenceMatches: true,
+        logicalBindingIdentityMatches: true,
+        pathNormalizationObserved: false,
+        serializationNormalized: true,
+      }),
+    ]);
+  });
+
   it.each([
     ["unresolved blank", null],
     ["maximum approved length", "x".repeat(32_767)],

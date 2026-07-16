@@ -197,6 +197,9 @@ export function evaluateTemplateTwinCertificationCoverage(input: {
   fields: readonly TemplateField[];
   mappings: readonly SemanticMapping[];
   manifest: TemplateTwinFillManifest;
+  /** Physician-designated static placeholder regions are proven preserved by
+   * renderer/readback/static-invariance checks, not by encounter evidence. */
+  staticFieldIds?: readonly string[];
   waivers: readonly TemplateTwinFieldTestWaiverEvidence[];
   currentMappingsSha256: string;
   actorUserId: string;
@@ -205,6 +208,7 @@ export function evaluateTemplateTwinCertificationCoverage(input: {
   const mappingById = new Map(input.mappings.map((mapping) => [mapping.fieldId, mapping]));
   const fieldById = new Map(input.fields.map((field) => [field.fieldId, field]));
   const waiverByFieldId = new Map<string, TemplateTwinFieldTestWaiverEvidence>();
+  const staticFieldIds = new Set(input.staticFieldIds ?? []);
 
   for (const waiver of input.waivers) {
     if (waiverByFieldId.has(waiver.fieldId)) {
@@ -256,6 +260,13 @@ export function evaluateTemplateTwinCertificationCoverage(input: {
   }
 
   const results = input.fields.map((field): TemplateTwinFieldCoverageResult => {
+    if (staticFieldIds.has(field.fieldId)) {
+      return {
+        fieldId: field.fieldId,
+        disposition: 'exercised',
+        checks: ['physician_designated_static_preserved'],
+      };
+    }
     const mapping = mappingById.get(field.fieldId);
     const coverage = mapping
       ? isExercised({ field, mapping, manifest: input.manifest })

@@ -32,6 +32,7 @@ vi.mock("@meddoc/db", () => ({
 }));
 
 import { templateTwinMappingsSha256 } from "../mapping-hash";
+import { templateTwinFieldIntentsSha256 } from "../field-intent";
 import { processTemplateTwinVisit } from "../fill-engine";
 import { canonicalSha256 } from "../canonical";
 import { canonicalSoapSha256 } from "../soap-binding";
@@ -60,6 +61,7 @@ const SOURCE_PRIVACY_SCAN_EVIDENCE = {
   approvedStaticAssetUsedCount: 0,
   approvedStaticAssetUsageSha256: "b".repeat(64),
 };
+const EMPTY_FIELD_INTENTS_SHA256 = templateTwinFieldIntentsSha256([]);
 
 type Fixture = Awaited<ReturnType<typeof buildTemplateTwinIntegrationFixture>>;
 let fixture: Fixture;
@@ -81,6 +83,8 @@ function templateRow() {
       certification: {
         id: "certification-fill-concurrency",
         approvedMappingsSha256: templateTwinMappingsSha256(fixture.mappings),
+        approvedFieldIntentsSha256: EMPTY_FIELD_INTENTS_SHA256,
+        approvedCustomExampleProofSha256: null,
         sourcePrivacyScanEvidenceSha256: canonicalSha256(
           SOURCE_PRIVACY_SCAN_EVIDENCE,
         ),
@@ -98,6 +102,7 @@ function templateRow() {
       fields: fixture.mappings.map((mapping) => ({
         fieldId: mapping.fieldId,
         detectionStatus: "CERTIFIED",
+        intentDecisions: [],
         mapping: {
           clinicalConcept: mapping.clinicalConcept,
           expectedDataType: mapping.expectedDataType,

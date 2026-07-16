@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   ledgerUpdate: vi.fn(),
   ledgerFind: vi.fn(),
   outboxCreate: vi.fn(),
+  finalRollout: vi.fn(),
 }));
 
 vi.mock('next/server', () => {
@@ -92,7 +93,18 @@ vi.mock('@/lib/template-twin/storage', async (importOriginal) => {
   };
 });
 
+vi.mock('@/lib/template-twin/rollout', async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import('@/lib/template-twin/rollout')
+  >();
+  return {
+    ...actual,
+    lockTemplateTwinRolloutForFinalClaim: mocks.finalRollout,
+  };
+});
+
 import { inspectDocxPackage } from '@/lib/note-template-docx';
+import { templateTwinFieldIntentsSha256 } from '@/lib/template-twin/field-intent';
 import { templateTwinMappingsSha256 } from '@/lib/template-twin/mapping-hash';
 import {
   TEMPLATE_TWIN_SOURCE_PROVENANCE_GATE_CODE,
@@ -108,6 +120,11 @@ import {
 import { POST } from '../[id]/synthetic-test-voice/route';
 
 const SESSION = {
+  templateTwinRolloutToken: {
+    practiceId: 'practice-synthetic-route-render',
+    globalGeneration: BigInt(4),
+    practiceGeneration: BigInt(9),
+  },
   user: {
     id: 'doctor-synthetic-route-render',
     email: 'route-render-doctor@synthetic.test',
@@ -135,12 +152,14 @@ const SOURCE_PRIVACY_SCAN_EVIDENCE = {
   approvedStaticAssetUsedCount: 0,
   approvedStaticAssetUsageSha256: 'b'.repeat(64),
 };
+const EMPTY_FIELD_INTENTS_SHA256 = templateTwinFieldIntentsSha256([]);
 
 type Fixture = Awaited<ReturnType<typeof buildTemplateTwinIntegrationFixture>>;
 
 interface PersistedSyntheticProof {
   latestSyntheticTestManifest: unknown | null;
   latestTestMappingsSha256: string | null;
+  latestTestFieldIntentsSha256: string | null;
   latestTestOutputObjectKey: string | null;
   latestTestOutputVersionId: string | null;
   latestTestOutputEtag: string | null;
@@ -155,6 +174,7 @@ let sourceSha256: string;
 let mappingRows: Array<{
   id: string;
   fieldId: string;
+  intentDecisions: [];
   mapping: {
     clinicalConcept: string | null;
     expectedDataType: string;
@@ -216,6 +236,7 @@ function syntheticVoiceRequest(): {
     }),
   );
   form.set('expectedMappingsSha256', mappingsSha256);
+  form.set('expectedFieldIntentsSha256', EMPTY_FIELD_INTENTS_SHA256);
   return {
     audio,
     mappingsSha256,
@@ -267,6 +288,7 @@ function templateRow() {
       compiledDocumentIr: fixture.ir,
       certificationStatus: 'DRAFT',
       latestTestMappingsSha256: proof.latestTestMappingsSha256,
+      latestTestFieldIntentsSha256: proof.latestTestFieldIntentsSha256,
       latestSyntheticTestManifest: proof.latestSyntheticTestManifest,
       latestTestOutputObjectKey: proof.latestTestOutputObjectKey,
       latestTestOutputVersionId: proof.latestTestOutputVersionId,
@@ -340,6 +362,7 @@ beforeAll(async () => {
   mappingRows = fixture.mappings.map((mapping, index) => ({
     id: `field-definition-synthetic-${index + 1}`,
     fieldId: mapping.fieldId,
+    intentDecisions: [],
     mapping: {
       clinicalConcept: mapping.clinicalConcept,
       expectedDataType: mapping.expectedDataType,
@@ -364,6 +387,7 @@ beforeEach(() => {
   proof = {
     latestSyntheticTestManifest: null,
     latestTestMappingsSha256: null,
+    latestTestFieldIntentsSha256: null,
     latestTestOutputObjectKey: null,
     latestTestOutputVersionId: null,
     latestTestOutputEtag: null,
@@ -373,6 +397,10 @@ beforeEach(() => {
     latestTestVerifiedAt: null,
   };
   mocks.requireDoctorSession.mockResolvedValue(SESSION);
+  mocks.finalRollout.mockResolvedValue({
+    allowed: true,
+    token: SESSION.templateTwinRolloutToken,
+  });
   mocks.rateLimitOr429.mockReturnValue(null);
   mocks.transcribe.mockResolvedValue({ transcript: SYNTHETIC_CONTEXT });
   mocks.completeEntities.mockImplementation(
@@ -536,6 +564,7 @@ describe('Template Twin synthetic voice route to exact original DOCX', () => {
     expect(proof).toEqual({
       latestSyntheticTestManifest: null,
       latestTestMappingsSha256: null,
+      latestTestFieldIntentsSha256: null,
       latestTestOutputObjectKey: null,
       latestTestOutputVersionId: null,
       latestTestOutputEtag: null,

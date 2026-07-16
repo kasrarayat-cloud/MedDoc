@@ -27,7 +27,9 @@ import {
 import {
   TEMPLATE_TWIN_UNSUPPORTED_CONCEPT_CODE,
   isSupportedTemplateTwinConcept,
+  type TemplateTwinConceptProvider,
 } from '../supported-concepts';
+import type { CertifiedTemplateFieldSpecification } from '../custom-concepts/specification';
 
 export interface ResolveTemplateFieldsInput {
   fields: ReadonlyArray<TemplateField>;
@@ -38,6 +40,9 @@ export interface ResolveTemplateFieldsInput {
   certifiedFieldIds?: ReadonlyArray<string>;
   /** Certification tests may opt in; production resolution stays strict. */
   allowUncertifiedForSyntheticTest?: boolean;
+  staticFieldIds?: ReadonlyArray<string>;
+  conceptProviders?: ReadonlyArray<TemplateTwinConceptProvider>;
+  customSpecifications?: ReadonlyArray<CertifiedTemplateFieldSpecification>;
 }
 
 interface ConvertedValue {
@@ -122,6 +127,7 @@ function convertValue(
   polarity: EncounterFact['polarity'],
   explicitNumber: number | null,
   explicitUnit: string | null,
+  customSpecification?: CertifiedTemplateFieldSpecification,
 ): ConversionResult {
   switch (field.kind) {
     case 'narrative_text':
@@ -138,6 +144,23 @@ function convertValue(
     }
 
     case 'checkbox':
+      if (customSpecification?.dataType === 'boolean') {
+        if (typeof rawValue !== 'boolean') {
+          return { code: 'custom_boolean_value_not_boolean' };
+        }
+        if (rawValue === true && polarity === 'affirmed') {
+          return { value: true, optionOrdinal: null };
+        }
+        if (
+          rawValue === false &&
+          polarity === 'denied' &&
+          customSpecification.polarityPolicy.allowExplicitDenial &&
+          customSpecification.polarityPolicy.exactDeniedOutput === false
+        ) {
+          return { value: false, optionOrdinal: null };
+        }
+        return { code: 'custom_boolean_polarity_or_denial_policy_invalid' };
+      }
       if (polarity === 'affirmed') return { value: true, optionOrdinal: null };
       if (polarity === 'denied') return { value: false, optionOrdinal: null };
       return { code: 'checkbox_polarity_unresolved' };
@@ -351,7 +374,19 @@ function resolveOne(
   allFacts: ReadonlyArray<EncounterFact>,
   allowUncertified: boolean,
   certifiedFieldIds: ReadonlySet<string>,
+  staticFieldIds: ReadonlySet<string>,
+  conceptProviders: readonly TemplateTwinConceptProvider[],
+  customSpecification: CertifiedTemplateFieldSpecification | undefined,
 ): FieldResolution {
+  if (staticFieldIds.has(field.fieldId)) {
+    return makeResolution(
+      field.fieldId,
+      'not_mentioned',
+      null,
+      [],
+      'physician_designated_static',
+    );
+  }
   if (!mapping) {
     return makeResolution(
       field.fieldId,
@@ -402,7 +437,7 @@ function resolveOne(
       'clinical_concept_unmapped',
     );
   }
-  if (!isSupportedTemplateTwinConcept(mapping.clinicalConcept)) {
+  if (!isSupportedTemplateTwinConcept(mapping.clinicalConcept, conceptProviders)) {
     return makeResolution(
       field.fieldId,
       'needs_clinician_input',
@@ -536,7 +571,13 @@ function resolveOne(
         'checkbox_false_semantics_not_certified',
       );
     }
-  } else if (allDenied) {
+  } else if (
+    allDenied &&
+    !(
+      customSpecification?.polarityPolicy.allowExplicitDenial === true &&
+      customSpecification.polarityPolicy.exactDeniedOutput !== null
+    )
+  ) {
     // Safe-alpha mappings do not yet carry an exact, physician-certified
     // negative rendering value for non-checkbox fields. Preserve the denial
     // evidence for review, but never coerce it into narrative/select/date or
@@ -607,6 +648,7 @@ function resolveOne(
       fact.polarity,
       fact.number,
       fact.unit,
+      customSpecification,
     );
     if ('code' in converted) {
       return makeResolution(
@@ -666,6 +708,14 @@ export function resolveTemplateFields(
   const facts = input.facts.map((fact) => EncounterFactSchema.parse(fact));
   const mappingById = new Map(mappings.map((mapping) => [mapping.fieldId, mapping]));
   const certifiedFieldIds = new Set(input.certifiedFieldIds ?? []);
+  const staticFieldIds = new Set(input.staticFieldIds ?? []);
+  const conceptProviders = input.conceptProviders ?? [];
+  const customSpecificationByFieldId = new Map(
+    (input.customSpecifications ?? []).map((specification) => [
+      specification.fieldId,
+      specification,
+    ]),
+  );
 
   return [...fields]
     .sort((a, b) => a.displayOrder - b.displayOrder || a.fieldId.localeCompare(b.fieldId))
@@ -676,6 +726,9 @@ export function resolveTemplateFields(
         facts,
         input.allowUncertifiedForSyntheticTest === true,
         certifiedFieldIds,
+        staticFieldIds,
+        conceptProviders,
+        customSpecificationByFieldId.get(field.fieldId),
       ),
     );
 }

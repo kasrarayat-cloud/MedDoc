@@ -51,10 +51,20 @@ export async function POST(
     const form = await request.formData();
     const file = form.get('audio');
     const expectedMappingsSha256 = form.get('expectedMappingsSha256');
-    if (!(file instanceof File) || typeof expectedMappingsSha256 !== 'string') {
+    const expectedFieldIntentsSha256 = form.get(
+      'expectedFieldIntentsSha256',
+    );
+    if (
+      !(file instanceof File) ||
+      typeof expectedMappingsSha256 !== 'string' ||
+      typeof expectedFieldIntentsSha256 !== 'string'
+    ) {
       return response({ ok: false, error: 'Record synthetic audio before running the test.' }, 400);
     }
-    if (!SHA256.test(expectedMappingsSha256)) {
+    if (
+      !SHA256.test(expectedMappingsSha256) ||
+      !SHA256.test(expectedFieldIntentsSha256)
+    ) {
       return response({ ok: false, error: 'The mapping version changed. Reload before testing.' }, 409);
     }
     const ownedTemplate = await prisma.noteTemplate.findFirst({
@@ -126,8 +136,10 @@ export async function POST(
         userId: session.user.id,
         userEmail: session.user.email,
         practiceId: session.user.practiceId,
+        rolloutToken: session.templateTwinRolloutToken,
       },
       expectedMappingsSha256,
+      expectedFieldIntentsSha256,
       encounterText: transcription.transcript,
       encounterMode: 'dictation',
     });
