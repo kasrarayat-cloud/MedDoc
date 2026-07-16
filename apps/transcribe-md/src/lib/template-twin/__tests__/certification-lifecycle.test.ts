@@ -61,6 +61,11 @@ import { resolveTemplateFields } from '../resolver';
 import { validateTemplateTwin } from '../validation';
 import { canonicalSha256 } from '../canonical';
 import { canonicalSoapSha256 } from '../soap-binding';
+import {
+  TEMPLATE_TWIN_BINDING_FINGERPRINT_VERSION,
+  TEMPLATE_TWIN_READBACK_CONTRACT_VERSION,
+  nativeIdentityFromRendererBinding,
+} from '../../note-template-docx/binding-fingerprint';
 import { templateTwinSyntheticTestProvenanceSha256 } from '../synthetic-test-provenance';
 import {
   buildTemplateTwinIntegrationFixture,
@@ -111,6 +116,7 @@ function validRoundTrip(
     manifest.fields.map((field) => [field.fieldId, field]),
   );
   return {
+    verificationContractVersion: TEMPLATE_TWIN_READBACK_CONTRACT_VERSION,
     verified: true,
     packageCheck: 'verified',
     fieldCheck: 'verified',
@@ -127,6 +133,28 @@ function validRoundTrip(
         fieldId: field.fieldId,
         partName: field.rendererBinding.partName,
         bindingPath: field.rendererBinding.path,
+        bindingEvidence: {
+          contractVersion: TEMPLATE_TWIN_BINDING_FINGERPRINT_VERSION,
+          status: 'verified',
+          certifiedFingerprintSha256:
+            field.rendererBinding.certifiedBindingSha256,
+          outputFingerprintSha256:
+            field.rendererBinding.certifiedBindingSha256,
+          outputPartName: field.rendererBinding.partName,
+          outputCanonicalPath: field.rendererBinding.canonicalPath,
+          outputBindingType: field.rendererBinding.bindingType,
+          outputBindingOrdinal: field.rendererBinding.ordinal,
+          outputNativeIdentity: nativeIdentityFromRendererBinding(
+            field.rendererBinding,
+          ),
+          outputBindingIdentitySha256:
+            field.rendererBinding.sourceBindingIdentitySha256,
+          outputTableLocation: {
+            tableIndex: field.rendererBinding.tableIndex,
+            rowIndex: field.rendererBinding.rowIndex,
+            cellIndex: field.rendererBinding.cellIndex,
+          },
+        },
         valueSha256: canonicalSha256({
           fieldId: field.fieldId,
           value: resolutions.get(field.fieldId)?.value,

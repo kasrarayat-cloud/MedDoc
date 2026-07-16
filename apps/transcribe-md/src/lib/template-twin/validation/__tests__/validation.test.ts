@@ -40,6 +40,7 @@ function field(
       partName: 'word/document.xml',
       bindingType: overrides.tableId ? 'table_cell' : 'content_control',
       path: `/document/${seed}`,
+      canonicalPath: `/document/${seed}`,
       ordinal: 0,
       sdtId: '1',
       tag: 'synthetic',
@@ -49,7 +50,12 @@ function field(
       rowIndex: overrides.tableId ? 1 : null,
       cellIndex: overrides.tableId ? 0 : null,
       repeatAncestorPath: overrides.rowPrototype ? '/document/table/row' : null,
+      canonicalRepeatAncestorPath: overrides.rowPrototype
+        ? '/document/table/row'
+        : null,
       sourceControlSha256: SHA,
+      sourceBindingIdentitySha256: SHA,
+      certifiedBindingSha256: SHA,
       originalContentSha256: SHA,
     },
     required: false,

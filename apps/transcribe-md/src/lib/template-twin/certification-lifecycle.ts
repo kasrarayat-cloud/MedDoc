@@ -32,6 +32,12 @@ import {
   templateTwinSyntheticProofSourceEvidenceSha256,
   TEMPLATE_TWIN_SOURCE_PROVENANCE_GATE_MESSAGE,
 } from './source-phi-evidence';
+import {
+  TEMPLATE_TWIN_BINDING_FINGERPRINT_VERSION,
+  TEMPLATE_TWIN_READBACK_CONTRACT_VERSION,
+  nativeIdentityFromRendererBinding,
+  rendererBindingFingerprintSha256,
+} from '../note-template-docx/binding-fingerprint';
 
 export class TemplateTwinLifecycleError extends Error {
   readonly code:
@@ -240,6 +246,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function canonicalValuesEqual(left: unknown, right: unknown): boolean {
+  try {
+    return canonicalSha256(left) === canonicalSha256(right);
+  } catch {
+    return false;
+  }
+}
+
 /** Certification must bind the synthetic proof to this exact immutable
  * source, compiled static region, and persisted output. A truthy `verified`
  * bit alone is not an integrity boundary. */
@@ -253,6 +267,17 @@ function isVerifiedSyntheticProof(input: {
     fieldId: string;
     partName: string;
     bindingPath: string;
+    canonicalBindingPath: string;
+    bindingType: TemplateField['rendererBinding']['bindingType'];
+    bindingOrdinal: number;
+    nativeIdentity: ReturnType<typeof nativeIdentityFromRendererBinding>;
+    sourceBindingIdentitySha256: string;
+    certifiedBindingSha256: string;
+    tableLocation: {
+      tableIndex: number | null;
+      rowIndex: number | null;
+      cellIndex: number | null;
+    };
     valueSha256: string;
     occurrences: number;
   }>;
@@ -272,19 +297,45 @@ function isVerifiedSyntheticProof(input: {
     fieldProofById.size === input.expectedFields.length &&
     input.expectedFields.every((expected) => {
       const field = fieldProofById.get(expected.fieldId);
+      const bindingEvidence = field?.bindingEvidence;
       return Boolean(
         field &&
+          isRecord(bindingEvidence) &&
           field.status === 'verified' &&
           field.partName === expected.partName &&
           field.bindingPath === expected.bindingPath &&
           field.valueSha256 === expected.valueSha256 &&
           Number.isSafeInteger(expected.occurrences) &&
           expected.occurrences > 0 &&
-          field.occurrences === expected.occurrences,
+          field.occurrences === expected.occurrences &&
+          bindingEvidence.contractVersion ===
+            TEMPLATE_TWIN_BINDING_FINGERPRINT_VERSION &&
+          bindingEvidence.status === 'verified' &&
+          bindingEvidence.certifiedFingerprintSha256 ===
+            expected.certifiedBindingSha256 &&
+          bindingEvidence.outputFingerprintSha256 ===
+            expected.certifiedBindingSha256 &&
+          bindingEvidence.outputPartName === expected.partName &&
+          bindingEvidence.outputCanonicalPath ===
+            expected.canonicalBindingPath &&
+          bindingEvidence.outputBindingType === expected.bindingType &&
+          bindingEvidence.outputBindingOrdinal === expected.bindingOrdinal &&
+          canonicalValuesEqual(
+            bindingEvidence.outputNativeIdentity,
+            expected.nativeIdentity,
+          ) &&
+          bindingEvidence.outputBindingIdentitySha256 ===
+            expected.sourceBindingIdentitySha256 &&
+          canonicalValuesEqual(
+            bindingEvidence.outputTableLocation,
+            expected.tableLocation,
+          ),
       );
     });
   return (
     input.staticContentSha256 === input.expectedStaticContentSha256 &&
+    proof.verificationContractVersion ===
+      TEMPLATE_TWIN_READBACK_CONTRACT_VERSION &&
     proof.verified === true &&
     proof.packageCheck === 'verified' &&
     proof.fieldCheck === 'verified' &&
@@ -638,7 +689,15 @@ export async function certifyAndActivateTemplateTwin(input: {
             actorUserId: input.actor.userId,
           })
         : null;
+      const certifiedBindingsReady = ir.fields.every((field) => {
+        const { certifiedBindingSha256, ...binding } = field.rendererBinding;
+        return (
+          rendererBindingFingerprintSha256(field.fieldId, binding) ===
+          certifiedBindingSha256
+        );
+      });
       const proofReady = Boolean(
+        certifiedBindingsReady &&
         syntheticManifest.success &&
         compiled.latestTestOutputSha256 &&
           compiled.latestTestStaticContentSha256 &&
@@ -652,6 +711,21 @@ export async function certifyAndActivateTemplateTwin(input: {
               fieldId: field.fieldId,
               partName: field.rendererBinding.partName,
               bindingPath: field.rendererBinding.path,
+              canonicalBindingPath: field.rendererBinding.canonicalPath,
+              bindingType: field.rendererBinding.bindingType,
+              bindingOrdinal: field.rendererBinding.ordinal,
+              nativeIdentity: nativeIdentityFromRendererBinding(
+                field.rendererBinding,
+              ),
+              sourceBindingIdentitySha256:
+                field.rendererBinding.sourceBindingIdentitySha256,
+              certifiedBindingSha256:
+                field.rendererBinding.certifiedBindingSha256,
+              tableLocation: {
+                tableIndex: field.rendererBinding.tableIndex,
+                rowIndex: field.rendererBinding.rowIndex,
+                cellIndex: field.rendererBinding.cellIndex,
+              },
               valueSha256: canonicalSha256({
                 fieldId: field.fieldId,
                 value: syntheticResolutions.get(field.fieldId)?.value,

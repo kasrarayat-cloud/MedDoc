@@ -1,4 +1,8 @@
 export { compileTemplateDocx, computeStaticXmlSha256 } from './compiler';
+export {
+  TEMPLATE_TWIN_BINDING_FINGERPRINT_VERSION,
+  TEMPLATE_TWIN_READBACK_CONTRACT_VERSION,
+} from './binding-fingerprint';
 export type { CompileTemplateDocxOptions } from './compiler';
 export { TemplateDocxError } from './errors';
 export type { TemplateDocxErrorCode } from './errors';

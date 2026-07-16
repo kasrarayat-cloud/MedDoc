@@ -8,10 +8,10 @@
 
 import { z } from 'zod';
 
-export const TEMPLATE_TWIN_IR_SCHEMA_VERSION = 1 as const;
-export const TEMPLATE_TWIN_COMPILER_VERSION = 'template-docx-compiler/1.0.0';
+export const TEMPLATE_TWIN_IR_SCHEMA_VERSION = 2 as const;
+export const TEMPLATE_TWIN_COMPILER_VERSION = 'template-docx-compiler/1.1.0';
 export const TEMPLATE_TWIN_RESOLVER_VERSION = 'template-field-resolver/1.0.0';
-export const TEMPLATE_TWIN_RENDERER_VERSION = 'template-docx-renderer/1.0.0';
+export const TEMPLATE_TWIN_RENDERER_VERSION = 'template-docx-renderer/1.1.0';
 
 export const Sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
 
@@ -59,6 +59,8 @@ export const RendererBindingSchema = z
     ]),
     /** Deterministic structural path; labels are never renderer locators. */
     path: z.string().min(1).max(512),
+    /** Namespace-URI-aware, prefix-independent immutable source path. */
+    canonicalPath: z.string().min(1).max(2048),
     ordinal: z.number().int().nonnegative(),
     sdtId: z.string().max(80).nullable(),
     tag: z.string().max(240).nullable(),
@@ -68,7 +70,10 @@ export const RendererBindingSchema = z
     rowIndex: z.number().int().nonnegative().nullable(),
     cellIndex: z.number().int().nonnegative().nullable(),
     repeatAncestorPath: z.string().max(512).nullable(),
+    canonicalRepeatAncestorPath: z.string().max(2048).nullable(),
     sourceControlSha256: Sha256Schema,
+    sourceBindingIdentitySha256: Sha256Schema,
+    certifiedBindingSha256: Sha256Schema,
     originalContentSha256: Sha256Schema,
   })
   .strict();

@@ -160,6 +160,81 @@ describe('independent Template Twin DOCX output readback', () => {
     ).toThrowError(expect.objectContaining({ code: 'ROUNDTRIP_FIELD_MISMATCH' }));
   });
 
+  it('detects an appended Word SDT even when it lacks sdtPr identity metadata', async () => {
+    const fixture = await renderFixture();
+    const malformed =
+      '<w:p><w:sdt><w:sdtContent><w:r><w:t>Synthetic unexpected control</w:t></w:r></w:sdtContent></w:sdt></w:p>';
+    const tampered = await replacePart(
+      fixture.rendered.document,
+      'word/document.xml',
+      (xml) => xml.replace('<w:sectPr>', `${malformed}<w:sectPr>`),
+    );
+
+    expect(() =>
+      readbackTemplateDocxOutput({
+        source: fixture.source,
+        output: tampered,
+        ir: fixture.ir,
+        resolutions: fixture.resolutions,
+      }),
+    ).toThrowError(expect.objectContaining({ code: 'ROUNDTRIP_FIELD_MISMATCH' }));
+  });
+
+  it('detects an appended malformed legacy form field with no supported ffData control', async () => {
+    const fixture = await renderFixture();
+    const malformed =
+      '<w:p><w:r><w:fldChar w:fldCharType="begin"><w:ffData/></w:fldChar></w:r><w:r><w:instrText> FORMTEXT </w:instrText></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>';
+    const tampered = await replacePart(
+      fixture.rendered.document,
+      'word/document.xml',
+      (xml) => xml.replace('<w:sectPr>', `${malformed}<w:sectPr>`),
+    );
+
+    expect(() =>
+      readbackTemplateDocxOutput({
+        source: fixture.source,
+        output: tampered,
+        ir: fixture.ir,
+        resolutions: fixture.resolutions,
+      }),
+    ).toThrowError(expect.objectContaining({ code: 'ROUNDTRIP_FIELD_MISMATCH' }));
+  });
+
+  it('preserves harmless complex Word fields but detects appended field markers', async () => {
+    const harmlessField =
+      '<w:p><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText> PAGE </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>1</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>';
+    const source = await buildSyntheticDocx({
+      documentXml: syntheticOpc.documentXml.replace(
+        '<w:sectPr>',
+        `${harmlessField}<w:sectPr>`,
+      ),
+    });
+    const fixture = await renderFixture(source);
+
+    expect(() =>
+      readbackTemplateDocxOutput({
+        source: fixture.source,
+        output: fixture.rendered.document,
+        ir: fixture.ir,
+        resolutions: fixture.resolutions,
+      }),
+    ).not.toThrow();
+
+    const tampered = await replacePart(
+      fixture.rendered.document,
+      'word/document.xml',
+      (xml) => xml.replace('<w:sectPr>', `${harmlessField}<w:sectPr>`),
+    );
+    expect(() =>
+      readbackTemplateDocxOutput({
+        source: fixture.source,
+        output: tampered,
+        ir: fixture.ir,
+        resolutions: fixture.resolutions,
+      }),
+    ).toThrowError(expect.objectContaining({ code: 'ROUNDTRIP_FIELD_MISMATCH' }));
+  });
+
   it('clears Word placeholder state and PlaceholderText style only when populated', async () => {
     const documentXml = syntheticOpc.documentXml
       .replace(

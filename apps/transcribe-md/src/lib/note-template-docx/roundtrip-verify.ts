@@ -1,6 +1,12 @@
 import { createHash } from 'node:crypto';
 
 import type { TemplateDocIR } from '../template-twin/ir';
+import {
+  TEMPLATE_TWIN_BINDING_FINGERPRINT_VERSION,
+  TEMPLATE_TWIN_READBACK_CONTRACT_VERSION,
+  type BindingTableLocation,
+  type NativeBindingIdentity,
+} from './binding-fingerprint';
 import type { TemplateDocxLimits } from './limits';
 import { inspectDocxPackage } from './package-security';
 import { WORDPROCESSINGML_NAMESPACE } from './xml';
@@ -459,11 +465,30 @@ export interface RenderedFieldProof {
   readonly bindingPath: string;
   readonly valueSha256: string;
   readonly occurrences: number;
+  readonly bindingEvidence?: VerifiedBindingEvidence;
   readonly disposition:
     | 'rendered'
     | 'unresolved_blank'
     | 'preserved_unresolved'
     | 'preserved_unsupported';
+}
+
+export interface VerifiedBindingEvidence {
+  readonly contractVersion: typeof TEMPLATE_TWIN_BINDING_FINGERPRINT_VERSION;
+  readonly status: 'verified';
+  readonly certifiedFingerprintSha256: string;
+  readonly outputFingerprintSha256: string;
+  readonly outputPartName: string;
+  readonly outputCanonicalPath: string;
+  readonly outputBindingType:
+    | 'content_control'
+    | 'table_cell'
+    | 'legacy_form_field'
+    | 'repeating_row';
+  readonly outputBindingOrdinal: number;
+  readonly outputNativeIdentity: NativeBindingIdentity;
+  readonly outputBindingIdentitySha256: string;
+  readonly outputTableLocation: BindingTableLocation;
 }
 
 export interface RenderedPartProof {
@@ -483,10 +508,14 @@ export interface VerifiedRenderedField {
   readonly valueSha256: string;
   readonly occurrences: number;
   readonly disposition: RenderedFieldProof['disposition'];
+  /** Required by the persisted readback contract; optional only during the
+   * internal structural-verification phase before independent readback. */
+  readonly bindingEvidence?: VerifiedBindingEvidence;
   readonly status: 'verified';
 }
 
 export interface TemplateDocxRoundTripVerification {
+  readonly verificationContractVersion: typeof TEMPLATE_TWIN_READBACK_CONTRACT_VERSION;
   readonly verified: true;
   readonly packageCheck: 'verified';
   readonly fieldCheck: 'verified';
@@ -624,6 +653,7 @@ export function verifyRenderedTemplateDocx(
     }
   }
   return Object.freeze({
+    verificationContractVersion: TEMPLATE_TWIN_READBACK_CONTRACT_VERSION,
     verified: true,
     packageCheck: 'verified',
     fieldCheck: 'verified',

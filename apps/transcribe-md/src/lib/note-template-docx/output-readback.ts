@@ -7,14 +7,27 @@ import type {
 import type { TemplateDocxLimits } from './limits';
 import { inspectDocxPackage } from './package-security';
 import {
+  TEMPLATE_TWIN_BINDING_FINGERPRINT_VERSION,
+  certifiedBindingFingerprintSha256,
+  deriveOoxmlBindingIdentity,
+  deriveTableLocation,
+  hasStrongNativeIdentity,
+  indexBindingXmlPart,
+  nativeIdentityFromRendererBinding,
+  rendererBindingFingerprintSha256,
+  sameNativeIdentity,
+  type BindingTableLocation,
+  type DerivedOoxmlBindingIdentity,
+  type IndexedBindingNode as IndexedNode,
+  type IndexedBindingPart as IndexedPart,
+} from './binding-fingerprint';
+import {
   WORDPROCESSINGML_NAMESPACE,
   WORDPROCESSINGML_2010_NAMESPACE,
   childrenOf,
   exactExpandedAttribute,
-  expandedXmlVisits,
   parseOrderedXml,
   tagOf,
-  type ExpandedXmlVisit,
   type OrderedXmlNode,
 } from './xml';
 import {
@@ -22,26 +35,24 @@ import {
   type RenderedFieldProof,
 } from './roundtrip-verify';
 
-interface IndexedNode {
-  readonly node: OrderedXmlNode;
-  readonly path: string;
-  readonly visit: ExpandedXmlVisit;
-  readonly parent: IndexedNode | null;
-}
-
-interface IndexedPart {
-  readonly roots: OrderedXmlNode[];
-  readonly nodes: readonly IndexedNode[];
-  readonly byPath: ReadonlyMap<string, IndexedNode>;
-  readonly byNode: ReadonlyMap<OrderedXmlNode, IndexedNode>;
-}
-
 export interface ReadbackTemplateDocxOutputInput {
   readonly source: Uint8Array;
   readonly output: Uint8Array;
   readonly ir: TemplateDocIR;
   readonly resolutions: readonly FieldResolution[];
   readonly limits?: Partial<TemplateDocxLimits>;
+}
+
+interface FieldBindingRecord {
+  readonly field: TemplateField;
+  readonly partName: string;
+  readonly part: IndexedPart;
+  readonly node: IndexedNode;
+  readonly identity: DerivedOoxmlBindingIdentity;
+  readonly tableLocation: BindingTableLocation;
+  readonly repeatAncestorCanonicalPath: string | null;
+  readonly occurrences: number;
+  ordinal: number;
 }
 
 /**
@@ -76,27 +87,63 @@ export function readbackTemplateDocxOutput(
       partName,
     );
     if (!entry) failTemplateDocxRender('BINDING_NOT_FOUND');
-    const indexed = indexPart(
-      parseOrderedXml(entry.bytes, (source ? sourcePackage : outputPackage).limits),
-    );
+    let indexed: IndexedPart;
+    try {
+      indexed = indexBindingXmlPart(
+        parseOrderedXml(
+          entry.bytes,
+          (source ? sourcePackage : outputPackage).limits,
+        ),
+      );
+    } catch {
+      failTemplateDocxRender('ROUNDTRIP_PACKAGE_INVALID');
+    }
     cache.set(partName, indexed);
     return indexed;
   };
 
-  return input.ir.fields.map((field) => {
+  const structuralPartNames = [
+    sourcePackage.mainPartName,
+    ...sourcePackage.headerPartNames,
+    ...sourcePackage.footerPartNames,
+  ];
+  if (
+    canonicalSha256(structuralPartNames) !==
+    canonicalSha256([
+      outputPackage.mainPartName,
+      ...outputPackage.headerPartNames,
+      ...outputPackage.footerPartNames,
+    ])
+  ) {
+    failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+  }
+  for (const partName of structuralPartNames) {
+    loadPart(partName, true);
+    loadPart(partName, false);
+  }
+  assertPackageBindingCensus(sourceParts, outputParts, structuralPartNames);
+
+  const sourceRecords = input.ir.fields.map((field) =>
+    certifiedSourceRecord(field, loadPart(field.rendererBinding.partName, true)),
+  );
+  assignOutputDerivedOrdinals(sourceRecords, structuralPartNames);
+  for (const record of sourceRecords) assertCertifiedSourceRecord(record);
+
+  const outputRecords = sourceRecords.map((sourceRecord) =>
+    locateOutputBinding(sourceRecord, outputParts, structuralPartNames),
+  );
+  assignOutputDerivedOrdinals(outputRecords, structuralPartNames);
+
+  return outputRecords.map((outputRecord) => {
+    const field = outputRecord.field;
     const resolution = resolutions.get(field.fieldId);
     if (!resolution) failTemplateDocxRender('FIELD_RESOLUTION_INVALID');
-    const sourcePart = loadPart(field.rendererBinding.partName, true);
-    const outputPart = loadPart(field.rendererBinding.partName, false);
-    const sourceBound = sourcePart.byPath.get(field.rendererBinding.path);
-    const outputBound = outputPart.byPath.get(field.rendererBinding.path);
-    if (!sourceBound || !outputBound) {
-      failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
-    }
-    const occurrences = countStableOccurrences(outputPart, field);
-    if (occurrences !== 1) {
-      failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
-    }
+    const sourceRecord = sourceRecords.find(
+      (candidate) => candidate.field.fieldId === field.fieldId,
+    );
+    if (!sourceRecord) failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+    const bindingEvidence = verifiedBindingEvidence(sourceRecord, outputRecord);
+    const occurrences = outputRecord.occurrences;
 
     if (field.rowPrototype) {
       // Repeating structures are certification-blocked in safe alpha. A
@@ -112,18 +159,19 @@ export function readbackTemplateDocxOutput(
         field.rowPrototype;
       if (mustBePreserved) {
         if (
-          canonicalSha256(proofContainer(sourceBound)) !==
-          canonicalSha256(proofContainer(outputBound))
+          canonicalSha256(proofContainer(sourceRecord.node)) !==
+          canonicalSha256(proofContainer(outputRecord.node))
         ) {
           failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
         }
-      } else if (!isBlankBinding(outputPart, outputBound, field)) {
+      } else if (!isBlankBinding(outputRecord.part, outputRecord.node, field)) {
         failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
       }
       return {
         fieldId: field.fieldId,
         partName: field.rendererBinding.partName,
         bindingPath: field.rendererBinding.path,
+        bindingEvidence,
         valueSha256: fieldValueSha256(field.fieldId, null),
         occurrences,
         disposition:
@@ -135,7 +183,7 @@ export function readbackTemplateDocxOutput(
       };
     }
 
-    const actual = readFieldValue(outputPart, outputBound, field);
+    const actual = readFieldValue(outputRecord.part, outputRecord.node, field);
     if (fieldValueSha256(field.fieldId, actual) !== fieldValueSha256(field.fieldId, resolution.value)) {
       failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
     }
@@ -143,11 +191,282 @@ export function readbackTemplateDocxOutput(
       fieldId: field.fieldId,
       partName: field.rendererBinding.partName,
       bindingPath: field.rendererBinding.path,
+      bindingEvidence,
       valueSha256: fieldValueSha256(field.fieldId, actual),
       occurrences,
       disposition: 'rendered',
     };
   });
+}
+
+function assertPackageBindingCensus(
+  sourceParts: ReadonlyMap<string, IndexedPart>,
+  outputParts: ReadonlyMap<string, IndexedPart>,
+  structuralPartNames: readonly string[],
+): void {
+  const census = (parts: ReadonlyMap<string, IndexedPart>) =>
+    structuralPartNames.flatMap((partName) => {
+      const part = parts.get(partName);
+      if (!part) failTemplateDocxRender('ROUNDTRIP_PACKAGE_INVALID');
+      return part.nodes.flatMap((node) => {
+        if (isWordElement(node, 'sdt')) {
+          const identity = deriveOoxmlBindingIdentity(
+            part,
+            node,
+            'content_control',
+          );
+          return [
+            identity
+              ? {
+                  partName,
+                  canonicalPath: node.canonicalPath,
+                  bindingType: 'content_control',
+                  nativeIdentity: identity.nativeIdentity,
+                  identitySha256: identity.identitySha256,
+                }
+              : {
+                  partName,
+                  canonicalPath: node.canonicalPath,
+                  bindingType: 'malformed_content_control',
+                  nodeSha256: canonicalSha256(node.node),
+                },
+          ];
+        }
+        if (isWordElement(node, 'fldChar')) {
+          const identity = deriveOoxmlBindingIdentity(
+            part,
+            node,
+            'legacy_form_field',
+          );
+          return [
+            identity
+              ? {
+                  partName,
+                  canonicalPath: node.canonicalPath,
+                  bindingType: 'legacy_form_field',
+                  nativeIdentity: identity.nativeIdentity,
+                  identitySha256: identity.identitySha256,
+                }
+              : {
+                  partName,
+                  canonicalPath: node.canonicalPath,
+                  bindingType: 'word_field_marker',
+                  fieldMarkerType: wordAttribute(node, 'fldCharType') ?? null,
+                  nodeSha256: canonicalSha256(node.node),
+                },
+          ];
+        }
+        return [];
+      });
+    });
+  if (canonicalSha256(census(sourceParts)) !== canonicalSha256(census(outputParts))) {
+    failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+  }
+}
+
+function deriveRepeatAncestorCanonicalPath(
+  part: IndexedPart,
+  node: IndexedNode,
+  expectedCanonicalPath: string | null,
+): string | null {
+  if (!expectedCanonicalPath) return null;
+  const expectedSourceAncestor = part.byCanonicalPath.get(expectedCanonicalPath);
+  if (expectedSourceAncestor && isAncestor(expectedSourceAncestor, node)) {
+    return expectedSourceAncestor.canonicalPath;
+  }
+  const terminalSegment = expectedCanonicalPath.slice(
+    expectedCanonicalPath.lastIndexOf('/') + 1,
+  );
+  let ancestor = node.parent;
+  while (ancestor) {
+    if (ancestor.canonicalPath.endsWith(`/${terminalSegment}`)) {
+      return ancestor.canonicalPath;
+    }
+    ancestor = ancestor.parent;
+  }
+  return null;
+}
+
+function isAncestor(ancestor: IndexedNode, node: IndexedNode): boolean {
+  let current = node.parent;
+  while (current) {
+    if (current === ancestor) return true;
+    current = current.parent;
+  }
+  return false;
+}
+
+function certifiedSourceRecord(
+  field: TemplateField,
+  part: IndexedPart,
+): FieldBindingRecord {
+  const node = part.byPath.get(field.rendererBinding.path);
+  if (!node) failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+  const identity = deriveOoxmlBindingIdentity(
+    part,
+    node,
+    field.rendererBinding.bindingType,
+  );
+  if (!identity) failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+  return {
+    field,
+    partName: field.rendererBinding.partName,
+    part,
+    node,
+    identity,
+    tableLocation: deriveTableLocation(part, node),
+    repeatAncestorCanonicalPath: deriveRepeatAncestorCanonicalPath(
+      part,
+      node,
+      field.rendererBinding.canonicalRepeatAncestorPath,
+    ),
+    occurrences: 1,
+    ordinal: -1,
+  };
+}
+
+function assertCertifiedSourceRecord(record: FieldBindingRecord): void {
+  const binding = record.field.rendererBinding;
+  const { certifiedBindingSha256, ...unsignedBinding } = binding;
+  if (
+    record.node.canonicalPath !== binding.canonicalPath ||
+    record.node.path !== binding.path ||
+    canonicalSha256(record.node.node) !== binding.sourceControlSha256 ||
+    record.identity.bindingType !== binding.bindingType ||
+    record.identity.identitySha256 !== binding.sourceBindingIdentitySha256 ||
+    !sameNativeIdentity(
+      record.identity.nativeIdentity,
+      nativeIdentityFromRendererBinding(binding),
+    ) ||
+    canonicalSha256(record.tableLocation) !==
+      canonicalSha256({
+        tableIndex: binding.tableIndex,
+        rowIndex: binding.rowIndex,
+        cellIndex: binding.cellIndex,
+      }) ||
+    record.repeatAncestorCanonicalPath !==
+      binding.canonicalRepeatAncestorPath ||
+    record.ordinal !== binding.ordinal ||
+    rendererBindingFingerprintSha256(record.field.fieldId, unsignedBinding) !==
+      certifiedBindingSha256
+  ) {
+    failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+  }
+}
+
+function locateOutputBinding(
+  source: FieldBindingRecord,
+  outputParts: ReadonlyMap<string, IndexedPart>,
+  structuralPartNames: readonly string[],
+): FieldBindingRecord {
+  const binding = source.field.rendererBinding;
+  const matches: Array<{
+    partName: string;
+    part: IndexedPart;
+    node: IndexedNode;
+    identity: DerivedOoxmlBindingIdentity;
+  }> = [];
+  for (const partName of structuralPartNames) {
+    const part = outputParts.get(partName);
+    if (!part) failTemplateDocxRender('ROUNDTRIP_PACKAGE_INVALID');
+    const candidates =
+      binding.bindingType === 'table_cell'
+        ? partName === binding.partName
+          ? part.nodes.filter((node) => {
+              const location = deriveTableLocation(part, node);
+              return (
+                isWordElement(node, 'tc') &&
+                location.tableIndex === binding.tableIndex &&
+                location.rowIndex === binding.rowIndex &&
+                location.cellIndex === binding.cellIndex
+              );
+            })
+          : []
+        : part.nodes;
+    for (const node of candidates) {
+      const identity = deriveOoxmlBindingIdentity(part, node, binding.bindingType);
+      if (!identity) continue;
+      const identityMatches = hasStrongNativeIdentity(source.identity.nativeIdentity)
+        ? sameNativeIdentity(identity.nativeIdentity, source.identity.nativeIdentity)
+        : identity.identitySha256 === source.identity.identitySha256;
+      if (
+        identityMatches &&
+        identity.identitySha256 === source.identity.identitySha256
+      ) {
+        matches.push({ partName, part, node, identity });
+      }
+    }
+  }
+  if (matches.length !== 1) failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+  const match = matches[0]!;
+  return {
+    field: source.field,
+    partName: match.partName,
+    part: match.part,
+    node: match.node,
+    identity: match.identity,
+    tableLocation: deriveTableLocation(match.part, match.node),
+    repeatAncestorCanonicalPath: deriveRepeatAncestorCanonicalPath(
+      match.part,
+      match.node,
+      binding.canonicalRepeatAncestorPath,
+    ),
+    occurrences: matches.length,
+    ordinal: -1,
+  };
+}
+
+function assignOutputDerivedOrdinals(
+  records: FieldBindingRecord[],
+  structuralPartNames: readonly string[],
+): void {
+  const partOrder = new Map(
+    structuralPartNames.map((partName, index) => [partName, index]),
+  );
+  const ordered = [...records].sort((left, right) => {
+    const partDifference =
+      (partOrder.get(left.partName) ?? Number.MAX_SAFE_INTEGER) -
+      (partOrder.get(right.partName) ?? Number.MAX_SAFE_INTEGER);
+    return partDifference || left.node.order - right.node.order;
+  });
+  ordered.forEach((record, ordinal) => {
+    record.ordinal = ordinal;
+  });
+}
+
+function verifiedBindingEvidence(
+  source: FieldBindingRecord,
+  output: FieldBindingRecord,
+): RenderedFieldProof['bindingEvidence'] {
+  const binding = source.field.rendererBinding;
+  const outputFingerprintSha256 = certifiedBindingFingerprintSha256({
+    fieldId: source.field.fieldId,
+    partName: output.partName,
+    canonicalPath: output.node.canonicalPath,
+    bindingType: output.identity.bindingType,
+    bindingOrdinal: output.ordinal,
+    nativeIdentity: output.identity.nativeIdentity,
+    sourceControlSha256: binding.sourceControlSha256,
+    sourceBindingIdentitySha256: output.identity.identitySha256,
+    tableLocation: output.tableLocation,
+    canonicalRepeatAncestorPath: output.repeatAncestorCanonicalPath,
+  });
+  if (outputFingerprintSha256 !== binding.certifiedBindingSha256) {
+    failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+  }
+  return {
+    contractVersion: TEMPLATE_TWIN_BINDING_FINGERPRINT_VERSION,
+    status: 'verified',
+    certifiedFingerprintSha256: binding.certifiedBindingSha256,
+    outputFingerprintSha256,
+    outputPartName: output.partName,
+    outputCanonicalPath: output.node.canonicalPath,
+    outputBindingType: output.identity.bindingType,
+    outputBindingOrdinal: output.ordinal,
+    outputNativeIdentity: output.identity.nativeIdentity,
+    outputBindingIdentitySha256: output.identity.identitySha256,
+    outputTableLocation: output.tableLocation,
+  };
 }
 
 function isBlankBinding(
@@ -190,73 +509,11 @@ function isBlankBinding(
   return false;
 }
 
-function indexPart(roots: OrderedXmlNode[]): IndexedPart {
-  const visits = new Map(
-    expandedXmlVisits(roots).map((visit) => [visit.node, visit]),
-  );
-  const nodes: IndexedNode[] = [];
-  const byPath = new Map<string, IndexedNode>();
-  const byNode = new Map<OrderedXmlNode, IndexedNode>();
-  const walk = (
-    children: OrderedXmlNode[],
-    parentPath: string,
-    parent: IndexedNode | null,
-  ): void => {
-    const counts = new Map<string, number>();
-    for (const node of children) {
-      const tag = tagOf(node);
-      if (!tag || tag === '#text' || tag === '?xml') continue;
-      const ordinal = counts.get(tag) ?? 0;
-      counts.set(tag, ordinal + 1);
-      const path = `${parentPath}/${tag}[${ordinal}]`;
-      const visit = visits.get(node);
-      if (!visit || byPath.has(path)) failTemplateDocxRender('ROUNDTRIP_PACKAGE_INVALID');
-      const indexed: IndexedNode = { node, path, visit, parent };
-      nodes.push(indexed);
-      byPath.set(path, indexed);
-      byNode.set(node, indexed);
-      walk(childrenOf(node), path, indexed);
-    }
-  };
-  walk(roots, '', null);
-  return { roots, nodes, byPath, byNode };
-}
-
 function proofContainer(node: IndexedNode): OrderedXmlNode {
   if (node.visit.localName !== 'fldChar') return node.node;
   let parent: IndexedNode | null = node;
   while (parent && !isWordElement(parent, 'p')) parent = parent.parent;
   return parent?.node ?? node.node;
-}
-
-function countStableOccurrences(part: IndexedPart, field: TemplateField): number {
-  const binding = field.rendererBinding;
-  if (binding.bindingType === 'content_control') {
-    return part.nodes.filter((node) => {
-      if (!isWordElement(node, 'sdt')) return false;
-      const properties = directWordChild(node, 'sdtPr', part);
-      if (!properties) return false;
-      if (binding.sdtId) {
-        return wordAttribute(directWordChild(properties, 'id', part), 'val') === binding.sdtId;
-      }
-      if (binding.tag) {
-        return wordAttribute(directWordChild(properties, 'tag', part), 'val') === binding.tag;
-      }
-      if (binding.alias) {
-        return wordAttribute(directWordChild(properties, 'alias', part), 'val') === binding.alias;
-      }
-      return node.path === binding.path;
-    }).length;
-  }
-  if (binding.bindingType === 'legacy_form_field' && binding.legacyName) {
-    return part.nodes.filter((node) => {
-      if (!isWordElement(node, 'fldChar')) return false;
-      const formData = descendantsWord(node, 'ffData', part)[0];
-      const name = formData ? descendantsWord(formData, 'name', part)[0] : undefined;
-      return wordAttribute(name, 'val') === binding.legacyName;
-    }).length;
-  }
-  return part.byPath.has(binding.path) ? 1 : 0;
 }
 
 function readFieldValue(

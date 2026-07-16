@@ -29,6 +29,7 @@ beforeEach(() => {
       outputSha256: OUTPUT_SHA,
       rendererVersion: 'template-docx-renderer/1.0.0',
       verification: {
+        verificationContractVersion: 'template-docx-readback/2.0.0',
         verified: true,
         packageCheck: 'verified',
         fieldCheck: 'verified',

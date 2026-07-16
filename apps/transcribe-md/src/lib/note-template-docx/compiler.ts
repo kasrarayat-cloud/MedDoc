@@ -29,6 +29,15 @@ import {
   visibleText,
   type OrderedXmlNode,
 } from "./xml";
+import {
+  certifiedBindingFingerprintSha256,
+  deriveOoxmlBindingIdentity,
+  hasStrongNativeIdentity,
+  indexBindingXmlPart,
+  nativeIdentityFromRendererBinding,
+  sameNativeIdentity,
+  type IndexedBindingPart,
+} from "./binding-fingerprint";
 
 const DOCX_MIME =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document" as const;
@@ -75,6 +84,7 @@ interface CompilerState {
   nextBindingOrdinal: number;
   tableCountByPart: Map<string, number>;
   comboBoxes: number;
+  bindingIndexes: Map<string, IndexedBindingPart>;
 }
 
 interface TableRowLocation {
@@ -100,6 +110,7 @@ export function compileTemplateDocx(
     nextBindingOrdinal: 0,
     tableCountByPart: new Map(),
     comboBoxes: 0,
+    bindingIndexes: new Map(),
   };
 
   const parsedParts = new Map<string, OrderedXmlNode[]>();
@@ -114,8 +125,10 @@ export function compileTemplateDocx(
     if (!entry) failTemplateDocx("OPC_REQUIRED_PART_MISSING");
     const tree = parseOrderedXml(entry.bytes, inspected.limits);
     parsedParts.set(partName, tree);
+    state.bindingIndexes.set(partName, indexBindingXmlPart(tree));
     walkNodes(tree, "", defaultContext(partName), state);
   }
+  blockAmbiguousAnonymousBindingIdentities(state);
 
   const parts = buildPartManifest(inspected, parsedParts);
   const staticContentSha256 = canonicalSha256(
@@ -174,6 +187,53 @@ export function compileTemplateDocx(
   return result.data;
 }
 
+function blockAmbiguousAnonymousBindingIdentities(state: CompilerState): void {
+  const groups = new Map<string, TemplateField[]>();
+  for (const field of state.fields) {
+    const binding = field.rendererBinding;
+    if (
+      binding.bindingType === "table_cell" ||
+      binding.bindingType === "repeating_row" ||
+      hasStrongNativeIdentity({
+        sdtId: binding.sdtId,
+        tag: binding.tag,
+        alias: binding.alias,
+        legacyName: binding.legacyName,
+      })
+    ) {
+      continue;
+    }
+    const key = `${binding.bindingType}:${binding.sourceBindingIdentitySha256}`;
+    const group = groups.get(key) ?? [];
+    group.push(field);
+    groups.set(key, group);
+  }
+  const blockedFieldIds = new Set<string>();
+  for (const group of groups.values()) {
+    if (group.length < 2) continue;
+    for (const field of group) {
+      blockedFieldIds.add(field.fieldId);
+      addUnsupported(state, {
+        code: "AMBIGUOUS_ANONYMOUS_BINDING_IDENTITY",
+        partName: field.rendererBinding.partName,
+        path: field.rendererBinding.path,
+        label: field.originalLabel,
+        detail:
+          "This field has no native Word identity and is indistinguishable from another control. Add a unique Word tag, alias, ID, or legacy name before certification.",
+        clinicallyMaterial: field.clinicallyMaterial,
+        blocksCertification: true,
+      });
+    }
+  }
+  if (blockedFieldIds.size > 0) {
+    state.fields = state.fields.map((field) =>
+      blockedFieldIds.has(field.fieldId)
+        ? { ...field, detectionStatus: "unsupported" }
+        : field,
+    );
+  }
+}
+
 function defaultContext(partName: string): WalkContext {
   return {
     partName,
@@ -181,6 +241,78 @@ function defaultContext(partName: string): WalkContext {
     repeatAncestorPath: null,
     containerText: null,
     insideFieldContent: false,
+  };
+}
+
+function createCertifiedRendererBinding(input: {
+  fieldId: string;
+  node: OrderedXmlNode;
+  context: WalkContext;
+  bindingType: "content_control" | "legacy_form_field" | "table_cell";
+  sdtId: string | null;
+  tag: string | null;
+  alias: string | null;
+  legacyName: string | null;
+  sourceControlSha256: string;
+  originalContentSha256: string;
+  state: CompilerState;
+}): RendererBinding {
+  const index = input.state.bindingIndexes.get(input.context.partName);
+  const indexed = index?.byNode.get(input.node);
+  if (!index || !indexed) failTemplateDocx("IR_VALIDATION_FAILED");
+  const sourceIdentity = deriveOoxmlBindingIdentity(
+    index,
+    indexed,
+    input.bindingType,
+  );
+  if (!sourceIdentity) failTemplateDocx("IR_VALIDATION_FAILED");
+  const repeatAncestor = input.context.repeatAncestorPath
+    ? index.byPath.get(input.context.repeatAncestorPath)
+    : null;
+  if (input.context.repeatAncestorPath && !repeatAncestor) {
+    failTemplateDocx("IR_VALIDATION_FAILED");
+  }
+  const base: Omit<RendererBinding, "certifiedBindingSha256"> = {
+    partName: input.context.partName,
+    bindingType: input.bindingType,
+    path: indexed.path,
+    canonicalPath: indexed.canonicalPath,
+    ordinal: input.state.nextBindingOrdinal++,
+    sdtId: input.sdtId,
+    tag: input.tag,
+    alias: input.alias,
+    legacyName: input.legacyName,
+    tableIndex: input.context.table?.tableIndex ?? null,
+    rowIndex: input.context.table?.rowIndex ?? null,
+    cellIndex: input.context.table?.cellIndex ?? null,
+    repeatAncestorPath: input.context.repeatAncestorPath,
+    canonicalRepeatAncestorPath: repeatAncestor?.canonicalPath ?? null,
+    sourceControlSha256: input.sourceControlSha256,
+    sourceBindingIdentitySha256: sourceIdentity.identitySha256,
+    originalContentSha256: input.originalContentSha256,
+  };
+  const certifiedNativeIdentity = nativeIdentityFromRendererBinding(base);
+  if (!sameNativeIdentity(certifiedNativeIdentity, sourceIdentity.nativeIdentity)) {
+    failTemplateDocx("IR_VALIDATION_FAILED");
+  }
+  return {
+    ...base,
+    certifiedBindingSha256: certifiedBindingFingerprintSha256({
+      fieldId: input.fieldId,
+      partName: base.partName,
+      canonicalPath: base.canonicalPath,
+      bindingType: base.bindingType,
+      bindingOrdinal: base.ordinal,
+      nativeIdentity: certifiedNativeIdentity,
+      sourceControlSha256: base.sourceControlSha256,
+      sourceBindingIdentitySha256: base.sourceBindingIdentitySha256,
+      tableLocation: {
+        tableIndex: base.tableIndex,
+        rowIndex: base.rowIndex,
+        cellIndex: base.cellIndex,
+      },
+      canonicalRepeatAncestorPath: base.canonicalRepeatAncestorPath,
+    }),
   };
 }
 
@@ -553,22 +685,19 @@ function processContentControl(
     context.containerText,
     state.fields.length + 1,
   );
-  const binding: RendererBinding = {
-    partName: context.partName,
+  const binding = createCertifiedRendererBinding({
+    fieldId,
+    node,
+    context,
     bindingType: "content_control",
-    path: nodePath,
-    ordinal: state.nextBindingOrdinal++,
     sdtId: trimNullable(identity.id, 80),
     tag: trimNullable(identity.tag, 240),
     alias: trimNullable(identity.alias, 240),
     legacyName: null,
-    tableIndex: context.table?.tableIndex ?? null,
-    rowIndex: context.table?.rowIndex ?? null,
-    cellIndex: context.table?.cellIndex ?? null,
-    repeatAncestorPath: context.repeatAncestorPath,
     sourceControlSha256: canonicalSha256(node),
     originalContentSha256: canonicalSha256(content),
-  };
+    state,
+  });
   const field: TemplateField = {
     fieldId,
     kind,
@@ -694,22 +823,19 @@ function processLegacyField(
     nodePath,
     kind,
   );
-  const binding: RendererBinding = {
-    partName: context.partName,
+  const binding = createCertifiedRendererBinding({
+    fieldId,
+    node,
+    context,
     bindingType: "legacy_form_field",
-    path: nodePath,
-    ordinal: state.nextBindingOrdinal++,
     sdtId: null,
     tag: null,
     alias: null,
     legacyName: trimNullable(legacyName, 240),
-    tableIndex: context.table?.tableIndex ?? null,
-    rowIndex: context.table?.rowIndex ?? null,
-    cellIndex: context.table?.cellIndex ?? null,
-    repeatAncestorPath: context.repeatAncestorPath,
     sourceControlSha256: canonicalSha256(node),
     originalContentSha256: canonicalSha256(formData),
-  };
+    state,
+  });
   const displayOrder = state.nextDisplayOrder++;
   const field: TemplateField = {
     fieldId,
@@ -956,22 +1082,19 @@ function createAmbiguousTableCellField(
     displayOrder,
     detectionStatus: "needs_confirmation",
     allowedOptions: [],
-    rendererBinding: {
-      partName: context.partName,
+    rendererBinding: createCertifiedRendererBinding({
+      fieldId,
+      node: cell,
+      context,
       bindingType: "table_cell",
-      path: cellPath,
-      ordinal: state.nextBindingOrdinal++,
       sdtId: null,
       tag: null,
       alias: null,
       legacyName: null,
-      tableIndex: context.table?.tableIndex ?? null,
-      rowIndex: context.table?.rowIndex ?? null,
-      cellIndex: context.table?.cellIndex ?? null,
-      repeatAncestorPath: context.repeatAncestorPath,
       sourceControlSha256: canonicalSha256(cell),
       originalContentSha256: canonicalSha256(cell),
-    },
+      state,
+    }),
     required: false,
     unknownPolicy: "blank",
     clinicallyMaterial: true,

@@ -114,6 +114,32 @@ describe("deterministic Template Twin DOCX compiler", () => {
     );
   });
 
+  it("certification-blocks indistinguishable controls without native Word identities", async () => {
+    const anonymous =
+      '<w:p><w:sdt><w:sdtPr><w:text/></w:sdtPr><w:sdtContent><w:r><w:t>Anonymous placeholder</w:t></w:r></w:sdtContent></w:sdt></w:p>';
+    const documentXml = syntheticOpc.documentXml.replace(
+      "<w:sectPr>",
+      `${anonymous}${anonymous}<w:sectPr>`,
+    );
+    const compiled = compileTemplateDocx(
+      await buildSyntheticDocx({ documentXml }),
+    );
+    const blockers = compiled.unsupported.filter(
+      (item) => item.code === "AMBIGUOUS_ANONYMOUS_BINDING_IDENTITY",
+    );
+
+    expect(blockers).toHaveLength(2);
+    expect(blockers.every((item) => item.blocksCertification)).toBe(true);
+    expect(
+      compiled.fields
+        .filter((field) => field.rendererBinding.sdtId === null)
+        .filter((field) =>
+          blockers.some((blocker) => blocker.path === field.rendererBinding.path),
+        )
+        .every((field) => field.detectionStatus === "unsupported"),
+    ).toBe(true);
+  });
+
   it("certification-blocks rich-text and compatibility representations", async () => {
     const richText = `<w:p><w:sdt><w:sdtPr><w:id w:val="901"/><w:alias w:val="Synthetic rich narrative"/></w:sdtPr><w:sdtContent><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Rich placeholder</w:t></w:r></w:p><w:p><w:r><w:t>Second paragraph</w:t></w:r></w:p></w:sdtContent></w:sdt></w:p>`;
     const alternate = `<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice Requires="w15"><w:p><w:r><w:t>Choice</w:t></w:r></w:p></mc:Choice><mc:Fallback><w:p><w:r><w:t>Fallback</w:t></w:r></w:p></mc:Fallback></mc:AlternateContent>`;
