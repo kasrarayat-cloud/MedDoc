@@ -15,6 +15,104 @@ default. Template Twin cannot be enabled until
 `template_twin_lineage_migration_progress(operationKey='note_templates_lineage_v1')`
 is in phase `CONTRACTED`.
 
+## Rollout-generation migration lock envelope
+
+Migration
+`20260716113000_template_twin_rollout_generations` installs the persisted
+generation contract. It is one explicit PostgreSQL transaction:
+
+```sql
+BEGIN;
+SET LOCAL lock_timeout = '2s';
+SET LOCAL statement_timeout = '30s';
+-- complete additive rollout-generation DDL
+COMMIT;
+```
+
+The `SET LOCAL` values apply to every subsequent statement and disappear on
+commit or rollback. They do not leak into Prisma's connection pool or the next
+migration. The two-second value bounds each wait to acquire a lock; it is not a
+two-second bound on the whole migration. The 30-second value independently
+bounds each DDL statement. Prisma's migration advisory lock still serializes
+migration runners; these PostgreSQL bounds protect ordinary application/table
+contention after that advisory lock is obtained.
+
+Expected locks, in migration order:
+
+1. Both `ALTER TABLE practices` statements require `ACCESS EXCLUSIVE`. The
+   first granted lock is held through commit.
+2. `CREATE TABLE template_twin_rollout_controls` holds `ACCESS EXCLUSIVE` on
+   that new relation; its seed `INSERT` takes `ROW EXCLUSIVE`. The function DDL
+   also takes ordinary write locks on its new PostgreSQL catalog rows.
+3. Each `CREATE TRIGGER` requires `SHARE ROW EXCLUSIVE` on its target. The
+   global trigger targets the new rollout-control table. The practice trigger
+   reuses the stronger `ACCESS EXCLUSIVE` lock already held on `practices`.
+4. Both `ALTER TABLE template_twin_fill_manifests` statements require
+   `ACCESS EXCLUSIVE`, also held through commit. The second statement adds the
+   three generation-pair proof constraints; the signed-match proof remains
+   `NOT VALID` for historical immutable rows.
+
+Consequently a conflict on either populated table fails closed. The explicit
+transaction rolls back the earlier column, table, seed, functions, triggers,
+and constraints as one unit. A later conflict on
+`template_twin_fill_manifests` cannot leave the earlier `practices` change or
+global singleton installed.
+
+Prisma currently reports a lock timeout inside this explicit transaction as a
+non-zero migration failure ending in `current transaction is aborted`; the
+PostgreSQL server diagnostic retains the originating `55P03`/lock-timeout
+reason. Do not treat the less-specific Prisma terminal message as evidence that
+the bound was absent. Require all of the following before retry:
+
+- PostgreSQL recorded the lock-timeout reason and the elapsed wait was bounded;
+- `_prisma_migrations.finished_at` is null for the failed attempt;
+- every rollout-generation column/table/function/trigger/constraint remains
+  absent; and
+- pre-existing practice/template data is unchanged.
+
+After the conflicting transaction is identified and safely cleared, mark only
+that verified failed attempt rolled back and rerun the unchanged migration:
+
+```bash
+prisma migrate resolve --rolled-back \
+  20260716113000_template_twin_rollout_generations
+prisma migrate deploy
+```
+
+Do not delete or update `_prisma_migrations` manually, use `--applied`, or retry
+while the blocker remains. A second `migrate deploy` after success must report
+no pending migration. Rollout stays disabled throughout installation and retry.
+
+The focused disposable proof is:
+
+```bash
+node_modules/.bin/tsx \
+  packages/db/scripts/template-twin-rollout-migration-lock-test.ts
+```
+
+It creates isolated synthetic PostgreSQL databases from the actual preceding
+70 migrations, invokes the real `prisma migrate deploy/resolve` runner, and
+uses a granted `ACCESS SHARE` lock as a deterministic barrier. One scenario
+blocks the first `practices` DDL; a second blocks the later fill-manifest DDL
+after the migration has performed earlier work. Each scenario proves atomic
+rollback, unchanged synthetic data, reviewed rollback resolution, complete
+retry, and an idempotent no-pending run. Sanitized evidence is written to
+`/tmp/template-twin-rollout-migration-lock-evidence.json`. The harness starts
+and destroys its own loopback-only `pgvector/pgvector:pg16` container and never
+accepts a production database URL.
+
+### Development checksum handling
+
+This migration changed before any production application. A disposable
+development/QA database that successfully applied its earlier checksum must be
+destroyed and recreated from the committed migrations. Do not copy the new
+checksum into `_prisma_migrations` or use `migrate resolve` to disguise drift.
+A non-disposable environment that recorded the earlier successful checksum is
+blocked pending a reviewed DBA forward-reconciliation plan and snapshot; the
+automatic retry procedure above does not apply to checksum drift. It applies
+only to a failed attempt of the current checksum whose full transactional
+rollback was independently verified.
+
 ## Linearization protocol
 
 Every worker render, correction, signing request, and original-template
