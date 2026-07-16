@@ -75,6 +75,16 @@ exists only in the QA-only reader after an Office save; immutable pre-delivery
 output must still pass exact path, profile, fingerprint, occurrence, and static
 invariance checks under production readback v2.
 
+`ORDINARY_PLACEHOLDER_TOKEN_V1` requires a separate final-SHA corpus run. Its
+pre-delivery output must pass strict binding/readback v2 at the exact certified
+token span and surrounding-static-context hashes. After an Office save, the
+QA-only contract may compare normalized visible replacement and surrounding
+static text while recording run/path normalization, but it may not authorize
+signing or reimport. The earlier tab-only LibreOffice result is not evidence
+that ordinary placeholders passed; that profile remains Office-QA pending
+until its synthetic corpus is opened, saved, exported, security-inspected, and
+visually compared. Desktop Microsoft Word remains pending independently.
+
 This assessment does not authorize a reimported or Office-edited clinical
 document. Reimport would require a separate product and threat model.
 

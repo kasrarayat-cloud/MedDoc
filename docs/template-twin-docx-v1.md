@@ -2,11 +2,11 @@
 
 ## Status and safety invariant
 
-**Repository status:** safe-alpha hardening is in progress on
-`fix/template-twin-audit-gates-v1`, based on the preserved seven-commit
-`feat/template-twin-docx-v1` prototype. It is not deployed. This document is
-an architecture and release-gate handoff, not deployment approval or evidence
-that the feature is ready for real PHI.
+**Repository status:** deterministic WM IOV compatibility work is in progress
+on the draft stacked branch `feat/template-twin-wm-iov-compatibility-v1`, based
+on the still-draft safety branch `fix/template-twin-audit-gates-v1`. Neither
+branch is deployed. This document is an architecture and release-gate handoff,
+not deployment approval or evidence that the feature is ready for real PHI.
 
 Template Twin is **default off at two independent server-side gates**:
 
@@ -79,7 +79,7 @@ The implementation is divided into these boundaries:
 | ------------------------------ | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | Untrusted DOCX                 | `apps/transcribe-md/src/lib/note-template-docx/`                                                   | ZIP/OPC/XML validation, deterministic compilation, exact rendering, independent output readback, and static-region proof                        |
 | Shared contracts               | `apps/transcribe-md/src/lib/template-twin/ir.ts`                                                   | Provider-neutral IR, facts, mappings, resolutions, validation, and manifest schemas                                                             |
-| Safe-alpha extraction boundary | `supported-concepts.ts`, `encounter-facts/`                                                        | Versioned exact concept allowlist and the extension interface for a later Template-Aware Extraction Agent                                       |
+| Safe-alpha extraction boundary | `supported-concepts.ts`, `custom-concepts/`, `encounter-facts/`                                   | Versioned exact core allowlist plus physician-certified, template-scoped scalar extraction                                                      |
 | Artifact custody               | `apps/transcribe-md/src/lib/template-twin/storage/`                                                | Tenant-scoped keys, immutable-style writes, readiness evidence, bounded stream reads, byte/hash verification, and durable object-write ledger   |
 | Draft and certification        | `create-draft.ts`, `certification-lifecycle.ts`, `synthetic-test.ts`                               | Persist draft, propose/approve mappings, synthetic proof, certify, and activate                                                                 |
 | Encounter filling              | `encounter-facts/`, `resolver/`, `validation/`, `fill-engine.ts`                                   | One voice/text fact path, exact field resolution, validation, rendering, and manifest persistence                                               |
@@ -90,17 +90,20 @@ The implementation is divided into these boundaries:
 Version constants in v1 are:
 
 - IR schema: `2`
-- compiler: `template-docx-compiler/1.2.0`
+- compiler: `template-docx-compiler/1.3.0`
 - resolver: `template-field-resolver/1.0.0`
-- renderer: `template-docx-renderer/1.2.0`
+- renderer: `template-docx-renderer/1.3.0`
 - validator: `template-field-validator/1.0.0`
 - strict binding/readback: `template-docx-certified-binding/2.0.0` and
   `template-docx-readback/2.0.0`
-- QA-only Office round-trip: `template-twin-office-roundtrip-qa/2.1.0`
+- QA-only Office round-trip: `template-twin-office-roundtrip-qa/2.2.0`
+- custom scalar extraction: `template-twin-custom-scalar-extractor/1.0.0`
+- custom outcome proof: `template-twin-custom-outcome-proof/1.0.0`
+- field intent: `template-twin-field-intent/1.0.0`
 
-The 1.2 renderer accepts a persisted compiler-1.1 IR only when a fresh
+The 1.3 renderer accepts a persisted compiler-1.1 or compiler-1.2 IR only when a fresh
 independent compile produces identical structure/static hashes and identical
-parts, fields, and tables. A source that newly qualifies for a 1.2 structural
+parts, fields, and tables. A source that newly qualifies for a 1.3 structural
 profile therefore fails closed and requires a new immutable certified version.
 
 ## Immutable artifacts and tenant boundary
@@ -191,24 +194,43 @@ are rejected rather than declared scanned. The one container exception is an
 exact Microsoft A220/A028 all-zero local-header growth pad; any other byte in
 that payload is rejected.
 
-Embedded media is rejected by default because its pixels cannot be reliably
-scanned. A byte-exact, administratively reviewed static practice asset may be
-approved only through the practice-scoped non-secret configuration:
+Embedded media is rejected by default because unscanned pixels could preserve
+patient information in every output. Safe alpha admits only a non-animated,
+bounded RGB/RGBA PNG that passes byte-level chunk, CRC, dimension,
+decompression, metadata, local-OCR, deterministic privacy, and shared
+`modelClient` privacy checks. Image bytes are never sent to the model. An
+active practice administrator must inspect the safe preview and attest that
+the exact bytes are a reusable blank practice asset. Approval is scoped to the
+practice and exact SHA-256; changed bytes, cross-practice use, stale scanner
+evidence, or revocation blocks a new source or certification.
 
-```json
-{
-  "practice_synthetic_example": [
-    "<lowercase-sha256-of-the-reviewed-static-asset>"
-  ]
-}
-```
+Approval, rejection, use, and revocation are append-only decisions with a
+transactional audit-outbox event. The persisted evidence contains hashes and
+scanner identities, not OCR text or image contents. The local OCR executable
+must be explicitly configured through
+`TEMPLATE_TWIN_LOCAL_OCR_EXECUTABLE`; missing or unhealthy local OCR is a
+readiness blocker. Safe alpha supports this workflow only for PNG. JPEG, SVG,
+animation, polyglots, archives, scripts, unscannable metadata, and unknown
+media remain rejected. The repository contains only synthetic PNG test assets
+and no real practice approval.
 
-The JSON is supplied in
-`TEMPLATE_TWIN_APPROVED_STATIC_ASSETS_BY_PRACTICE_JSON`. No global or
-cross-practice hash is honored. Privacy/Legal and Operations own approval and
-change control; Engineering must verify that each digest belongs to a blank,
-static practice asset before configuration. The repository contains no real
-asset or approval hash fixture.
+The preview response carries a single-use 256-bit review receipt. The browser
+keeps the bearer value in memory; the database retains only its digest. The
+receipt is short-lived and binds the practice, reviewing administrator, exact
+asset digest, scanner/OCR/privacy evidence, and pinned global/practice rollout
+generations. Approval consumes that receipt in the same transaction that
+locks global rollout, practice rollout, receipt, and asset in that order,
+appends the decision, and enqueues its uniquely linked audit-outbox event.
+Expiry, replay, evidence drift, rollout change, cross-practice use, or a
+missing/mismatched audit event fails closed.
+
+That receipt proves server-side evidence binding and a durable attributable
+decision; it cannot prove that the authorized person actually looked at every
+pixel. A compromised administrator session or a privileged database operator
+also remains an operational threat boundary. Fresh-session administration,
+least-privilege database access, review procedure, audit monitoring, and
+Privacy/Legal approval are therefore release gates rather than properties the
+receipt can establish by itself.
 
 The resulting inventory passes the deterministic PHI detector and a
 fail-closed privacy scan through the shared `modelClient`. The scan sends the
@@ -241,7 +263,11 @@ be rendered and independently read back:
 - combo boxes, dates, and native Word checkboxes;
 - safely detectable legacy text, dropdown, date, and checkbox form fields;
 - simple fixed-table cells, including deterministic labels from adjacent or
-  header cells; and
+  header cells;
+- exact `TAB_ONLY_BLANK_TABLE_CELL_V1` blank-cell regions; and
+- exact `ORDINARY_PLACEHOLDER_TOKEN_V1` visible tokens contained within one
+  paragraph and one certified OOXML story/path, including tokens split across
+  adjacent ordinary Word text runs; and
 - table grids, horizontal `gridSpan`, vertical `vMerge`, nested-table
   inventory, fixed rows, headers, footers, bookmarks, tags, aliases, Word IDs,
   legacy names, static hashes, and exact structural paths.
@@ -263,17 +289,24 @@ blockers include:
   including non-table repeats; no cloned row is certified in this phase;
 - rich-text controls and plain-text controls containing multiple paragraphs or
   list structure;
-- unbound ordinary placeholders and visually blank complex table cells outside
-  an explicitly versioned structural profile;
+- ordinary placeholders and visually blank complex table cells outside an
+  explicitly versioned structural profile;
 - `mc:AlternateContent`, data-bound/malformed/unrecognized controls, ambiguous
   or duplicate choice options, dynamic/active fields outside the harmless
   allowlist, and imported alternative-format content; and
 - structures with a missing, duplicated, moved, or otherwise unstable binding.
 
-An ordinary placeholder has no safe manual-binding path in this alpha. It must
-be replaced with a supported Word control in a new template version. No
-unsupported item is silently dropped or allowed to render blank under a claim
-that the template is fully mapped.
+An ordinary placeholder is fillable only under
+`ORDINARY_PLACEHOLDER_TOKEN_V1`: exactly one bounded `<<...>>`, `[[...]]`,
+`{{...}}`, or recognized underscore token reconstructed within one paragraph,
+with immutable token/span and surrounding-static-context hashes. It cannot
+cross paragraphs, cells, stories, drawings, fields, bookmarks, revisions, or
+compatibility branches. Repeated visible labels remain distinct by certified
+path. Missing, moved, swapped, duplicated, partially replaced, stale, or
+context-mutated tokens fail independent readback. Every other ordinary
+placeholder remains a certification blocker; no unsupported item is silently
+dropped or allowed to render blank under a claim that the template is fully
+mapped.
 
 The IR separately hashes:
 
@@ -290,26 +323,38 @@ real document. The current deterministic inventory reports:
 
 | Structure                       | Aggregate finding                                                        |
 | ------------------------------- | ------------------------------------------------------------------------ |
-| Fillable controls               | 28 native dropdowns plus 52 `TAB_ONLY_BLANK_TABLE_CELL_V1` fields        |
+| Fillable controls               | 28 native dropdowns, 52 `TAB_ONLY_BLANK_TABLE_CELL_V1` fields, and 7 `ORDINARY_PLACEHOLDER_TOKEN_V1` fields |
 | Other supported control kinds   | 0 combo boxes, 0 checkboxes, 0 date controls                             |
 | Tables                          | 1 fixed table; 0 repeating tables                                        |
 | Headers/footers                 | 2 header parts; 0 footer parts                                           |
-| Compiler certification blockers | 7 `UNBOUND_ORDINARY_PLACEHOLDER`; no unrelated blocker is removed        |
-| Pre-storage privacy blockers    | 6 auxiliary/glossary parts and 1 media part remain outside the allowlist |
+| Compiler certification blockers | 0 for the 87 intended structural fields; all 7 ordinary placeholders remain `needs_confirmation` |
+| Pre-storage privacy blockers    | The six exact standard glossary parts pass the narrow auxiliary profile; the embedded JPEG remains rejected |
 
-The renderer/readback compatibility test can mechanically fill all 80 compiled
-fields, removes all 28 `w:showingPlcHdr` markers, and verifies every field proof
-plus static-region invariance. That does **not** certify the complete template:
-the seven visible ordinary placeholders remain blocking and the package fails
-the pre-storage auxiliary/media privacy profile. Desktop Word remains pending.
+The compiler census now recognizes all 87 intended structural fields. The seven
+ordinary placeholders are deliberately not assigned clinical meaning: each
+requires one physician decision and field-level synthetic evidence. The exact
+six-part Word glossary profile can scan and statically bind the package's
+standard glossary document, relationship, font-table, settings, styles, and
+web-settings parts. The existing JPEG is still rejected, so the unchanged
+fixture does **not** pass the complete upload gate. Desktop Word remains
+pending.
 
-This fixture does **not** pass the complete upload gate. Aggregate inspection
-finds one media entry and six auxiliary/custom package parts outside the
-current safe-alpha privacy/package allowlist. Its image would additionally
-need a byte-exact, practice-scoped administrative approval. Therefore the WM
-IOV result is compiler/renderer compatibility evidence only, not evidence that
-the document can be uploaded, stored, certified, or used with PHI. Every extra
-part must first be safely classified or remain pre-storage blocked.
+The accepted auxiliary paths are exactly
+`word/glossary/document.xml`,
+`word/glossary/_rels/document.xml.rels`,
+`word/glossary/fontTable.xml`, `word/glossary/settings.xml`,
+`word/glossary/styles.xml`, and `word/glossary/webSettings.xml` under their
+versioned namespace, content-type, relationship, resource, active-content,
+privacy, and static-fingerprint profiles. This is not a wildcard allowance:
+an unknown, custom, malformed, data-bound, externally related, active, or
+unscannable auxiliary part still blocks storage and certification.
+
+The embedded JPEG cannot be grandfathered into the PNG workflow and is not
+automatically approved. A physician must provide a new safe template version
+with the image removed or replaced by an independently reviewed synthetic/test
+PNG before the ordinary upload workflow can be exercised. The existing fixture
+therefore remains analysis-only and must not be described as certifiable or
+usable with PHI.
 
 ## Semantic mapping and certification lifecycle
 
@@ -320,12 +365,44 @@ registry `template-twin-soap-concepts/1.0.0`. It contains only exact concepts
 that the current Layer-3 SOAP entity projection can produce and the resolver
 can validate: chief concern/HPI facets, medical history, medication and allergy
 components, family/social history, named tests, assessment/plan items, and the
-bounded ROS/exam system lists in `supported-concepts.ts`. Free-form specialty
-concepts such as GAD-7, pregnancy status, monofilament findings, or custom
-measurements are rejected with `TT_CONCEPT_UNSUPPORTED_V1`; they are not
-silently left blank. `TemplateTwinConceptProvider` is the explicit extension
-seam for a later versioned Template-Aware Extraction Agent, but safe alpha
-registers no dynamic provider.
+bounded ROS/exam system lists in `supported-concepts.ts`. An ordinary
+placeholder may instead use one template/version/field-scoped custom scalar
+concept after the physician defines and certifies its name, description, type,
+options or units, temporality, laterality, polarity/denial policy,
+requiredness, blank policy, bounds, a bounded exact evidence-cue list,
+evidence requirements, and positive,
+negative, and ambiguity examples. The original placeholder structure remains
+unchanged.
+
+Custom extraction v1 supports only narrative text, finite number, exact
+measurement/unit, ISO date, boolean, and exact single-select values. The
+bounded schema is built solely from the immutable physician-certified field
+specifications and is sent through the shared `modelClient`; template text is
+wrapped as untrusted data and cannot add fields or instructions. Typed and
+voice encounters use the same evidence-anchor contract. Every returned fact is
+independently checked against exact concept identity, type, option/unit/range,
+polarity, temporality, laterality, and direct evidence anchors. Not-mentioned,
+denied, unknown, ambiguous, and conflict states remain distinct, and a required
+unresolved custom field blocks signing. Repeating entities, arbitrary tables,
+nested objects, calculations, rich text, automatic unit conversion, and
+automatic clinical-policy approval remain unsupported.
+
+Safe-alpha association is deliberately literal: one physician-approved cue and
+the exact value, option, date, number, and bounded unit must occur in the same
+evidence clause. Denial requires conservative cue-local negation syntax. A cue
+and value split between clauses, an unrelated SOAP fact with the same number,
+an unrelated negation, a unit prefix such as `mm` inside `mmHg`, or one shared
+anchor assigned to multiple custom concepts becomes ambiguous and cannot
+render.
+
+The custom-field result is proof-bound rather than trusted as a free-form model
+answer. Certification, fill, and signing pin the immutable field
+specification, mapping/intent hash, bounded extraction-schema hash,
+provider/model identity, extractor version, and acknowledged synthetic-example
+outcomes. Runtime acceptance additionally requires direct patient evidence and
+the certified cue, type, range, exact option/unit, polarity, temporality, and
+laterality contract. Provider quality against real specialty speech remains a
+separate pending evaluation and is not established by mocked synthetic tests.
 
 If the mapping provider is unavailable, deterministic fallback mappings are saved as visibly unconfirmed. They cannot be certified without physician review.
 
@@ -334,9 +411,17 @@ The certification flow is:
 1. Upload a blank source DOCX.
 2. Compile the package through all structural/security gates and build the IR/unsupported register.
 3. Run the fail-closed template PHI gate, then store the accepted immutable source.
-4. Review totals, controls, tables, every field, allowed options, semantic mapping, requiredness, and unknown policy.
+4. Review totals, controls, tables, every field, allowed options, semantic mapping, requiredness, and unknown policy. For every ordinary placeholder, explicitly map a supported concept, designate the token static with a reason, define a bounded custom scalar specification, or leave it unresolved and certification-blocking.
 5. Save physician mapping corrections. Saving invalidates any previous synthetic proof.
-6. Exercise every required or clinically material field with explicitly marked
+6. For every custom scalar field, execute every exact positive, negative, and
+   ambiguity example through the shared extractor. The append-only result binds
+   the current specification set, mapping/intent hashes, extraction schema,
+   provider/model hashes, actual status/value/unit, and evidence/fact counts.
+   The physician reviews every safe synthetic input, expected result, actual
+   result, and failure code before a one-way per-example acknowledgement. A
+   specification or mapping change makes the batch stale; activation requires
+   every current result to pass and be acknowledged.
+7. Exercise every required or clinically material field with explicitly marked
    synthetic evidence through the same Layer-3 fact/resolver/validator/renderer
    pipeline. Coverage records exact dropdown option/ordinal, checkbox polarity,
    date, number/unit, laterality, and table behavior as applicable. A single
@@ -344,9 +429,9 @@ The certification flow is:
    persistence, synthetic input passes deterministic structured-PHI rejection
    and the conservative shared `modelClient` privacy gate. Synthetic audio uses
    the existing transcription orchestrator and is not stored by QuillMD.
-7. Download and inspect the synthetic clone.
-8. Explicitly acknowledge both certification statements.
-9. Certify and activate only if every field mapping is supported/certified, the
+8. Download and inspect the synthetic clone.
+9. Explicitly acknowledge both certification statements.
+10. Certify and activate only if every field mapping and placeholder intent is supported/certified, the
    field set and mapping hash are current, required/material field coverage is
    complete, every optional untested field has a current physician waiver,
    there are no blocking unsupported items, and the synthetic output has
@@ -360,7 +445,11 @@ invalidates waivers and coverage evidence.
 
 Certification and activation run in a serializable transaction. Activation inactivates another active template for the same physician/encounter scope. The append-only certification records the certifier, exact structure hash, approved mapping hash, synthetic manifest, output key/hash, and timestamp.
 
-Changing a certified mapping must create a new `NoteTemplate` lineage version. It must never mutate the activated version or silently learn from a visit correction.
+Changing a certified mapping or placeholder intent must create a new
+`NoteTemplate` lineage version. Intent decisions are append-only,
+physician-attributed, hash-bound to synthetic proof/certification/fill/signing,
+and durably audited. Neither a model proposal nor a visit correction can
+self-certify or silently change future behavior.
 
 ## Encounter facts, resolution, and validation
 
@@ -391,11 +480,12 @@ not-mentioned states remain unresolved; they cannot collapse to false in
 native or legacy checkbox bindings. A clinically meaningful unresolved
 checkbox keeps the fill `NEEDS_REVIEW` and blocks signing.
 
-For narrative, dropdown, multi-select, date, and repeating fields,
-`explicitly_denied` is not renderable unless a future certified mapping schema
-defines an exact negative output policy. Safe alpha has no such general policy,
-so denial remains unresolved instead of being accepted by validation and then
-failing in the renderer.
+Core narrative, dropdown, multi-select, date, and repeating fields do not
+render `explicitly_denied`; their current mapping contract has no exact
+negative output. A physician-certified custom scalar ordinary placeholder may
+render a denial only when its immutable field specification explicitly allows
+denial and names the exact typed output. Resolver, validator, renderer,
+independent readback, correction, and signing all enforce the same policy.
 
 Independent validation reruns after resolution and before rendering. Blocking checks cover:
 
@@ -420,7 +510,10 @@ It patches only approved XML spans:
 - checkbox state plus visible checked/unchecked glyph;
 - date control value/display format;
 - legacy form field state/result text;
-- exact simple fixed-table-cell content; and
+- exact simple fixed-table-cell and tab-only-cell content;
+- only the certified ordinary-placeholder token span, preserving separately
+  fingerprinted surrounding static text and the original run formatting
+  boundary; and
 - populated control placeholder metadata (`w:showingPlcHdr` and
   placeholder-only `PlaceholderText` styling) without treating an unresolved
   control as populated.
@@ -524,6 +617,7 @@ The feature uses these forward migrations:
 2. `packages/db/prisma/migrations/20260715180000_template_twin_version_forks/migration.sql`
 3. `packages/db/prisma/migrations/20260715203000_template_twin_audit_gates_v1/migration.sql`
 4. `packages/db/prisma/migrations/20260716113000_template_twin_rollout_generations/migration.sql`
+5. `packages/db/prisma/migrations/20260716190000_template_twin_placeholder_assets_v1/migration.sql`
 
 The first migration is an atomic, timeout-bounded **expand only** migration. It
 does not backfill `note_templates`, set `lineageId` non-null, or build a plain
@@ -555,6 +649,13 @@ The third migration is additive and fail-closed. It adds:
 
 The fourth migration adds the database-backed monotonic global/practice rollout
 generations and pinned/signed fill generations used for linearizable revocation.
+
+The fifth migration is additive and performs no existing-row backfill. It adds
+the immutable ordinary-placeholder intent and custom-example proof bindings,
+practice-scoped static-asset evidence, single-use review receipts, append-only
+asset decisions, and the decision-to-audit-outbox foreign-key contract. It
+also adds database guards for intent immutability, receipt expiry/replay and
+rollout generation, asset lifecycle, and exact audit-event consistency.
 
 `prisma migrate deploy` intentionally stops at the lineage expand shape. The
 versioned operator in `packages/db/scripts/template-twin-lineage-online.ts`
@@ -658,7 +759,7 @@ Required order:
 1. Record app/worker image digests, database migration status, and backup/restore evidence.
 2. Provision and verify the private bucket and least-privilege runtime policy.
 3. Confirm Anthropic/vendor agreement and privacy controls for source PHI scanning and mapping proposals.
-4. Apply all three Prisma migrations through the existing migration deployment path.
+4. Apply all Template Twin Prisma migrations through the existing migration deployment path.
 5. Deploy compatible TranscribeMD app and worker images together; the app owns upload/review/sign/export, while the worker owns encounter filling.
 6. Verify application and worker health without real PHI.
 7. Run one synthetic upload → mapping review → synthetic output → certification → typed visit → review → sign → original DOCX flow.
@@ -757,20 +858,21 @@ Complete this table at merge handoff; do not replace missing evidence with assum
 
 | Gate                                        | Command/evidence                                                             | Result                                                                                                             | UTC        | Commit/run link                    |
 | ------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ---------- | ---------------------------------- |
-| Prisma format/validate/generate             | Commands above                                                               | `PASS`                                                                                                             | 2026-07-16 | Local compatibility-branch run     |
-| Full Template Twin suite                    | Consolidated feature-path invocation, including the tracked WM fixture       | `PASS — 63 files / 664 tests`                                                                                      | 2026-07-16 | Synthetic/local only               |
-| Full TranscribeMD unit suite                | `npm run test:unit -w transcribe-md`                                         | `PASS — 205 files / 2,510 tests`                                                                                   | 2026-07-16 | Synthetic/local only               |
-| Type generation/typecheck                   | `next typegen` then active `tsc --noEmit` command                            | `PASS`                                                                                                             | 2026-07-16 | Local compatibility-branch run     |
-| Focused/full lint                           | Changed-path files / full active command                                     | `FOCUSED PASS; FULL ACTIVE MATCHES PRE-EXISTING DEBT — 29 errors / 39 warnings (main baseline: 30 / 41)`           | 2026-07-16 | Marketing: 0/1; legacy: 0/3        |
-| Production build                            | Clean Docker app/worker/migrator image builds                                | `PASS`; app bundle assertions passed                                                                               | 2026-07-16 | Disposable local images            |
-| Migration tests                             | Fresh QA PostgreSQL plus interrupted/resumed one-million-row upgrade harness | `PASS — all 71 migrations; 1,000,000 requested rows; retry/idempotency/lock-contention proof passed`               | 2026-07-16 | Disposable QA only                 |
-| Isolated infrastructure-backed QA E2E       | `playwright test --project=template-twin`                                    | `PASS — 1 scenario / 28.9 s`                                                                                       | 2026-07-16 | QA stack and volumes removed       |
-| Browser safety/accessibility                | Chromium, PHI reject, Rx safety, and axe projects                            | `PASS — 54 + 1 + 7 + 26 tests`                                                                                     | 2026-07-16 | Synthetic/local only               |
-| Open XML and LibreOffice gate               | SDK 3.5.1 plus pinned LibreOffice 25.8.7.3                                   | `PRE-DELIVERY PASS; QA-ONLY ROUND-TRIP PASS; 7 classified LibreOffice-only schema diagnostics remain Word-pending` | 2026-07-16 | Exact tab-only corpus              |
-| Desktop Microsoft Word                      | Returned no-network Windows QA bundle                                        | `PENDING`                                                                                                          | —          | Mandatory release gate             |
-| Dependency/secret gates                     | npm high/critical audit and TruffleHog filesystem scan                       | `PASS — 0 high/critical; 0 detected secrets`                                                                       | 2026-07-16 | Moderate/low audit findings remain |
-| Backup/restore and production bucket policy | Operations evidence                                                          | `PENDING`                                                                                                          | —          | Production-readiness prerequisite  |
-| Clinical/privacy approval                   | Named approval records                                                       | `PENDING`                                                                                                          | —          | Real-PHI prerequisite              |
+| Prisma format/validate/generate             | Commands above                                                               | `PASS`                                                                                                                  | 2026-07-16 | Local compatibility change set        |
+| Full Template Twin suite                    | Consolidated feature-path invocation, including the tracked WM fixture       | `PASS — 77 files / 920 tests`                                                                                           | 2026-07-16 | Synthetic/local only                  |
+| Full TranscribeMD unit suite                | `npm run test:unit -w transcribe-md`                                         | `PASS — 219 files / 2,766 tests`                                                                                        | 2026-07-16 | Synthetic/local only                  |
+| Type generation/typecheck                   | `next typegen` then active `tsc --noEmit` command                            | `TYPECHECK PASS; type generation pending final-SHA rerun`                                                              | 2026-07-16 | Local compatibility change set        |
+| Focused/full lint                           | Changed-path files / full active command                                     | `FOCUSED PASS; full repository lint pending final-SHA result and baseline comparison`                                  | 2026-07-16 | Do not infer a full-lint pass          |
+| Production build                            | Clean Docker app/worker/migrator image builds                                | `PENDING FINAL-SHA RERUN`                                                                                               | —          | Disposable local images only          |
+| Migration tests                             | Fresh QA PostgreSQL plus interrupted/resumed one-million-row upgrade harness | `PASS — all 72 migrations; 1,000,000 requested / 1,000,226 processed; retry/idempotency/lock-contention proof passed` | 2026-07-16 | Disposable QA only                    |
+| Isolated infrastructure-backed QA E2E       | `playwright test --project=template-twin`                                    | `PENDING FINAL-SHA RERUN`                                                                                               | —          | QA stack must be disposable            |
+| Browser safety/accessibility                | Chromium, PHI reject, Rx safety, and axe projects                            | `PENDING FINAL-SHA RERUN`                                                                                               | —          | Synthetic/local only                  |
+| Open XML and LibreOffice gate               | SDK 3.5.1 plus pinned LibreOffice 25.8.7.3                                   | `PENDING ORDINARY-PLACEHOLDER CORPUS RERUN`                                                                             | —          | Pre-delivery and QA-only proofs differ |
+| Desktop Microsoft Word                      | Returned no-network Windows QA bundle                                        | `PENDING`                                                                                                               | —          | Mandatory release gate                |
+| Dependency/secret gates                     | npm high/critical audit and TruffleHog filesystem scan                       | `PENDING FINAL-DIFF RERUN`                                                                                              | —          | Never infer from an earlier SHA        |
+| Live provider quality                       | Approved synthetic specialty evaluation with provider provenance             | `PENDING`                                                                                                               | —          | Mocked tests are not provider evidence |
+| Backup/restore and production bucket policy | Operations evidence                                                          | `PENDING`                                                                                                               | —          | Production-readiness prerequisite     |
+| Clinical/privacy approval                   | Named Clinical Safety and Privacy/Legal approval records                     | `PENDING`                                                                                                               | —          | Real-PHI prerequisite                 |
 
 ## Current limitations and v1 non-goals
 
@@ -800,13 +902,15 @@ conditionally required `xml:space="preserve"`. Tracked-deletion attributes,
 raw property text, added run attributes, and unnecessary text-preservation
 metadata all fail strict readback.
 
-The unchanged WM IOV fixture now deterministically compiles 52 cells under this
-profile. Its seven ordinary placeholders remain
-`UNBOUND_ORDINARY_PLACEHOLDER` certification blockers. Six auxiliary/glossary
-parts and one media part remain rejected by the pre-storage privacy profile, so
-the complete document still cannot upload or certify. Media, auxiliary parts,
-ordinary placeholders, rich text, repeating sections, and every other complex
-cell signature remain outside this slice.
+The unchanged WM IOV fixture still deterministically compiles 52 cells under
+this profile. `ORDINARY_PLACEHOLDER_TOKEN_V1` separately recognizes its seven
+visible ordinary tokens as physician-confirmation-required fields; it does not
+guess their clinical meaning. The exact six standard glossary parts pass the
+narrow auxiliary inspection profile. The embedded JPEG remains rejected, so
+the complete unchanged document still cannot upload or certify. Rich text,
+repeating sections, unprofiled placeholders, unprofiled auxiliary content,
+unapproved/unsupported media, and every other complex-cell signature remain
+outside this slice.
 
 Current implementation limitations that must remain visible:
 
@@ -818,12 +922,14 @@ Current implementation limitations that must remain visible:
   visual/open-repair QA remains a release gate.
 - The ZIP container is rebuilt, so ZIP-level timestamps/compression/order may differ. The guarantee is approved XML patches plus byte-identical decompressed untouched entries and static-content invariance, not a byte-identical whole file.
 - All repeating sections, multi-paragraph/list rich text, data-bound controls,
-  ordinary unbound placeholders, unprofiled complex table cells,
+  ordinary placeholders outside `ORDINARY_PLACEHOLDER_TOKEN_V1`, unprofiled complex table cells,
   `mc:AlternateContent`, active/unapproved fields, and ambiguous structures are
   certification-blocked in safe alpha.
-- The fixed SOAP taxonomy cannot extract arbitrary specialty concepts. The
-  later Template-Aware Extraction Agent must extend the versioned registry and
-  all projection/resolution/validation paths before such a concept can certify.
+- Template-aware extraction is intentionally limited to physician-certified
+  scalar specifications attached to deterministic ordinary placeholders. It
+  does not support repeating entities, arbitrary structures, calculated
+  conclusions, or general template-driven instructions. Those require a later
+  separately reviewed extraction-agent phase.
 - Object-ledger reconciliation and audit delivery exist but are opt-in and do
   not replace an operations dashboard, alert owner, approved retention policy,
   or documented restore test. Orphan purge remains separately off.
@@ -850,7 +956,7 @@ Explicit v1 non-goals:
 
 Production remains blocked until all of the following have evidence:
 
-- all three migrations reviewed and applied in isolated QA;
+- all Template Twin migrations reviewed and applied in isolated QA;
 - private bucket, IAM, encryption, immutability control, retention, backup, restore, and alert ownership approved;
 - all test-result placeholders above completed with passing or explicitly dispositioned results;
 - correction/rerender/new-version workflow tested in isolated QA with synthetic values;
