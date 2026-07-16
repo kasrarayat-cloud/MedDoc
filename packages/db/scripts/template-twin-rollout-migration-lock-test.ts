@@ -77,6 +77,7 @@ interface ScenarioEvidence {
   prismaReportedP3018: boolean;
   prismaReportedAbortedTransaction: boolean;
   postgresReportedLockTimeout: boolean;
+  postgresReportedBlockedTable: boolean;
   failedMigrationRowPresent: boolean;
   failedMigrationUnfinished: boolean;
   failedMigrationNotPretendedSuccessful: boolean;
@@ -406,21 +407,36 @@ async function runScenario(input: {
     }
 
     progress(`${input.scenario}: blocker granted; run target migration`);
+    const logsBeforeDeploy = run("docker", ["logs", CONTAINER]);
     const failedDeploy = prisma(workspace, databaseUrl, ["migrate", "deploy"]);
     const diagnostic = `${failedDeploy.stdout}\n${failedDeploy.stderr}`;
     const prismaReportedP3018 = /P3018/.test(diagnostic);
     const prismaReportedAbortedTransaction =
       /current transaction is aborted/i.test(diagnostic);
     const postgresLogs = run("docker", ["logs", CONTAINER]);
-    const postgresDiagnostic = `${postgresLogs.stdout}\n${postgresLogs.stderr}`;
+    if (
+      !postgresLogs.stdout.startsWith(logsBeforeDeploy.stdout) ||
+      !postgresLogs.stderr.startsWith(logsBeforeDeploy.stderr)
+    ) {
+      throw new Error(
+        `Disposable PostgreSQL logs were not append-only for ${input.scenario}.`,
+      );
+    }
+    const postgresDiagnostic =
+      `${postgresLogs.stdout.slice(logsBeforeDeploy.stdout.length)}\n` +
+      postgresLogs.stderr.slice(logsBeforeDeploy.stderr.length);
     const postgresReportedLockTimeout =
       /55P03|lock timeout|canceling statement due to lock timeout/i.test(
         `${diagnostic}\n${postgresDiagnostic}`,
       );
+    const postgresReportedBlockedTable = postgresDiagnostic.includes(
+      `ALTER TABLE "${input.blockedTable}"`,
+    );
     if (
       failedDeploy.status === 0 ||
       (!prismaReportedP3018 && !prismaReportedAbortedTransaction) ||
       !postgresReportedLockTimeout ||
+      !postgresReportedBlockedTable ||
       failedDeploy.durationMs < 1_500 ||
       failedDeploy.durationMs > 15_000
     ) {
@@ -431,7 +447,8 @@ async function runScenario(input: {
         `Expected bounded Prisma lock failure was not observed for ${input.scenario} ` +
           `(exit=${failedDeploy.status}, durationMs=${failedDeploy.durationMs.toFixed(3)}, ` +
           `P3018=${prismaReportedP3018}, aborted=${prismaReportedAbortedTransaction}, ` +
-          `lockTimeout=${postgresReportedLockTimeout}): ` +
+          `lockTimeout=${postgresReportedLockTimeout}, ` +
+          `blockedTable=${postgresReportedBlockedTable}): ` +
           failureDiagnostic,
       );
     }
@@ -546,6 +563,7 @@ async function runScenario(input: {
       prismaReportedP3018,
       prismaReportedAbortedTransaction,
       postgresReportedLockTimeout,
+      postgresReportedBlockedTable,
       failedMigrationRowPresent,
       failedMigrationUnfinished,
       failedMigrationNotPretendedSuccessful,

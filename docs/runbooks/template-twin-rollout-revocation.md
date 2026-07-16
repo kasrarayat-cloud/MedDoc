@@ -96,7 +96,10 @@ uses a granted `ACCESS SHARE` lock as a deterministic barrier. One scenario
 blocks the first `practices` DDL; a second blocks the later fill-manifest DDL
 after the migration has performed earlier work. Each scenario proves atomic
 rollback, unchanged synthetic data, reviewed rollback resolution, complete
-retry, and an idempotent no-pending run. Sanitized evidence is written to
+retry, and an idempotent no-pending run. The harness accepts only PostgreSQL
+diagnostics appended during that scenario and requires the failed statement to
+name the expected blocked table; an earlier scenario's server log cannot prove
+a later timeout. Sanitized evidence is written to
 `/tmp/template-twin-rollout-migration-lock-evidence.json`. The harness starts
 and destroys its own loopback-only `pgvector/pgvector:pg16` container and never
 accepts a production database URL.
