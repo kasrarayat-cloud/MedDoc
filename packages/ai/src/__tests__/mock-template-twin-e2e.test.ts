@@ -27,8 +27,10 @@ beforeEach(() => {
   process.env = { ...ORIGINAL_ENV };
   process.env.MOCK_AI_CALLS = 'true';
   delete process.env.MOCK_TEMPLATE_TWIN_E2E;
-  process.env.DATABASE_URL =
-    'postgresql://synthetic:synthetic@postgres:5432/meddoc_qa_test';
+  // The fixture gate only needs a parseable database name. A credential-free
+  // URL keeps this unmistakably synthetic and avoids resembling a committed
+  // PostgreSQL credential to offline secret scanners.
+  process.env.DATABASE_URL = 'postgresql:///meddoc_qa_test';
 });
 
 afterEach(() => {
@@ -131,7 +133,7 @@ describe('Template Twin infrastructure-E2E model fixture', () => {
     ['dedicated flag off', { MOCK_TEMPLATE_TWIN_E2E: 'false' }],
     [
       'database name not marked QA/test/synthetic',
-      { DATABASE_URL: 'postgresql://app:secret@postgres:5432/meddoc' },
+      { DATABASE_URL: 'postgresql:///meddoc' },
     ],
     ['database URL absent', { DATABASE_URL: '' }],
   ])('fails closed when %s', (_label, overrides) => {
