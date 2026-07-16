@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; connect-src 'none'; object-src 'none'; base-uri 'none'"
+    />
+    <title>Template Twin desktop Word human gate</title>
+    <style>
+      body {
+        font:
+          17px/1.5 Arial,
+          sans-serif;
+        max-width: 860px;
+        margin: 40px auto;
+        padding: 0 24px;
+        color: #18211b;
+      }
+      h1 {
+        font-size: 30px;
+      }
+      .card {
+        border: 1px solid #bcc8c0;
+        border-radius: 9px;
+        padding: 20px;
+        margin: 20px 0;
+        background: #f7faf8;
+      }
+      .warning {
+        border-left: 6px solid #9a5b00;
+        padding: 12px;
+        background: #fff7e3;
+      }
+      code {
+        word-break: break-all;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Desktop Microsoft Word human gate</h1>
+    <div class="warning">
+      <strong>Synthetic documents only.</strong> This package cannot certify,
+      activate, sign, import, deploy, or approve a template or media. Microsoft
+      Word validation remains pending until the returned ZIP passes an
+      independent local check.
+    </div>
+    <div class="card">
+      <ol>
+        <li>Extract this ZIP to a local folder.</li>
+        <li>
+          Double-click <strong>RUN-WORD-QA.cmd</strong>. No administrator
+          permission is required.
+        </li>
+        <li>
+          Watch Word for repair or conversion dialogs and answer every console
+          question.
+        </li>
+        <li>
+          Inspect every copied document and PDF using the visual checklist.
+        </li>
+        <li>
+          Return the generated
+          <code>template-twin-word-evidence-__SHORT_SHA__.zip</code> and its
+          <code>.sha256</code> file.
+        </li>
+      </ol>
+    </div>
+    <p>Repository commit: <code>__SOURCE_COMMIT__</code></p>
+    <p>
+      The script makes a disposable copy before Word opens anything. Original
+      package documents are hash-checked before and after. The script contains
+      no network request and never uploads evidence.
+    </p>
+  </body>
+</html>
