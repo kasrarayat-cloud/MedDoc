@@ -30,6 +30,15 @@ function textControl(input: {
   return `<w:p><w:sdt><w:sdtPr><w:id w:val="${input.id}"/><w:alias w:val="${input.alias}"/>${tag}<w:text/></w:sdtPr><w:sdtContent><w:r><w:t>${input.value ?? "Synthetic placeholder"}</w:t></w:r></w:sdtContent></w:sdt></w:p>`;
 }
 
+function textControlWithIds(input: {
+  ids: readonly string[];
+  alias: string;
+}): string {
+  return `<w:p><w:sdt><w:sdtPr>${input.ids
+    .map((id) => `<w:id w:val="${id}"/>`)
+    .join("")}<w:alias w:val="${input.alias}"/><w:text/></w:sdtPr><w:sdtContent><w:r><w:t>Synthetic placeholder</w:t></w:r></w:sdtContent></w:sdt></w:p>`;
+}
+
 function legacyTextField(name: string): string {
   return `<w:p><w:r><w:fldChar w:fldCharType="begin"><w:ffData><w:name w:val="${name}"/><w:textInput><w:default w:val="Synthetic default"/></w:textInput></w:ffData></w:fldChar></w:r><w:r><w:instrText> FORMTEXT </w:instrText></w:r><w:r><w:t>Synthetic default</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>`;
 }
@@ -43,6 +52,26 @@ function insertBeforeSection(fragment: string): string {
 
 function headerWith(fragment: string): string {
   return `<?xml version="1.0" encoding="UTF-8"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">${fragment}</w:hdr>`;
+}
+
+function buildSyntheticDocxWithFootnote(fragment = "") {
+  return buildSyntheticDocx({
+    contentTypes: syntheticOpc.contentTypes.replace(
+      "</Types>",
+      '  <Override PartName="/word/footnotes.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml"/>\n</Types>',
+    ),
+    documentRelationships: syntheticOpc.documentRelationships.replace(
+      "</Relationships>",
+      '  <Relationship Id="rIdFootnotes" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes" Target="footnotes.xml"/>\n</Relationships>',
+    ),
+    documentXml: syntheticOpc.documentXml.replace(
+      "<w:sectPr>",
+      '<w:p><w:r><w:footnoteReference w:id="2"/></w:r></w:p><w:sectPr>',
+    ),
+    extraEntries: {
+      "word/footnotes.xml": `<?xml version="1.0" encoding="UTF-8"?><w:footnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:footnote w:type="separator" w:id="-1"><w:p><w:r><w:separator/></w:r></w:p></w:footnote><w:footnote w:type="continuationSeparator" w:id="0"><w:p><w:r><w:continuationSeparator/></w:r></w:p></w:footnote><w:footnote w:id="2"><w:p><w:r><w:t>Synthetic footnote anchor</w:t></w:r></w:p>${fragment}</w:footnote></w:footnotes>`,
+    },
+  });
 }
 
 function duplicateBlockers(
@@ -146,10 +175,12 @@ describe("native Word identity admission", () => {
     expect(new Set(blockers.map((item) => item.partName))).toEqual(
       new Set(["word/document.xml"]),
     );
+    const affected = compiled.fields.filter(
+      (field) => field.rendererBinding.sdtId === "102",
+    );
+    expect(affected).toHaveLength(2);
     expect(
-      compiled.fields
-        .filter((field) => field.rendererBinding.sdtId === "102")
-        .every((field) => field.detectionStatus === "unsupported"),
+      affected.every((field) => field.detectionStatus === "unsupported"),
     ).toBe(true);
   });
 
@@ -264,7 +295,7 @@ describe("native Word identity admission", () => {
     ).toBe(true);
   });
 
-  it("allows the same legacy name in different Word story parts", async () => {
+  it("blocks legacy names outside the main story and package-wide duplicates", async () => {
     const sharedName = "SyntheticStoryScopedLegacy";
     const compiled = compileTemplateDocx(
       await buildSyntheticDocx({
@@ -277,7 +308,15 @@ describe("native Word identity admission", () => {
 
     expect(
       duplicateBlockers(compiled, "DUPLICATE_LEGACY_FORM_FIELD_NAME"),
-    ).toHaveLength(0);
+    ).toHaveLength(2);
+    expect(
+      duplicateBlockers(compiled, "UNSUPPORTED_LEGACY_FORM_FIELD_STORY"),
+    ).toEqual([
+      expect.objectContaining({
+        partName: "word/header1.xml",
+        blocksCertification: true,
+      }),
+    ]);
     const fields = compiled.fields.filter(
       (field) => field.rendererBinding.legacyName === sharedName,
     );
@@ -285,9 +324,101 @@ describe("native Word identity admission", () => {
     expect(
       new Set(fields.map((field) => field.rendererBinding.partName)),
     ).toEqual(new Set(["word/document.xml", "word/header1.xml"]));
+    expect(fields.every((field) => field.detectionStatus === "unsupported")).toBe(
+      true,
+    );
+  });
+
+  it("blocks missing SDT IDs even when aliases differ", async () => {
+    const compiled = compileTemplateDocx(
+      await buildSyntheticDocx({
+        documentXml: insertBeforeSection(
+          `${textControlWithIds({ ids: [], alias: "Missing one" })}${textControlWithIds({ ids: [], alias: "Missing two" })}`,
+        ),
+      }),
+    );
+
+    const blockers = duplicateBlockers(compiled, "MISSING_SDT_ID");
+    expect(blockers).toHaveLength(2);
+    const affected = compiled.fields.filter((field) =>
+      ["Missing one", "Missing two"].includes(field.originalLabel),
+    );
+    expect(affected).toHaveLength(2);
     expect(
-      fields.every((field) => field.detectionStatus !== "unsupported"),
+      affected.every((field) => field.detectionStatus === "unsupported"),
     ).toBe(true);
+  });
+
+  it.each(["not-a-decimal", "", "4294967296", "-2147483649"])(
+    "blocks invalid SDT identity %j",
+    async (id) => {
+      const compiled = compileTemplateDocx(
+        await buildSyntheticDocx({
+          documentXml: insertBeforeSection(
+            textControlWithIds({ ids: [id], alias: "Invalid ID" }),
+          ),
+        }),
+      );
+      expect(duplicateBlockers(compiled, "INVALID_SDT_ID")).toEqual([
+        expect.objectContaining({
+          label: "Invalid ID",
+          blocksCertification: true,
+        }),
+      ]);
+      expect(
+        compiled.fields.find((field) => field.originalLabel === "Invalid ID")
+          ?.detectionStatus,
+      ).toBe("unsupported");
+    },
+  );
+
+  it("blocks multiple SDT ID elements even when values are equal", async () => {
+    const compiled = compileTemplateDocx(
+      await buildSyntheticDocx({
+        documentXml: insertBeforeSection(
+          textControlWithIds({
+            ids: ["940", "940"],
+            alias: "Multiple IDs",
+          }),
+        ),
+      }),
+    );
+    expect(duplicateBlockers(compiled, "MULTIPLE_SDT_ID")).toEqual([
+      expect.objectContaining({
+        label: "Multiple IDs",
+        blocksCertification: true,
+      }),
+    ]);
+  });
+
+  it("censuses auxiliary Word stories and blocks their controls", async () => {
+    const compiled = compileTemplateDocx(
+      await buildSyntheticDocxWithFootnote(
+        textControl({ id: "102", alias: "Footnote duplicate" }),
+      ),
+    );
+    expect(duplicateBlockers(compiled, "DUPLICATE_SDT_ID")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ partName: "word/document.xml" }),
+        expect.objectContaining({ partName: "word/footnotes.xml" }),
+      ]),
+    );
+    expect(
+      duplicateBlockers(
+        compiled,
+        "UNSUPPORTED_AUXILIARY_STORY_CONTENT_CONTROL",
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        partName: "word/footnotes.xml",
+        blocksCertification: true,
+      }),
+    ]);
+    expect(
+      compiled.fields.filter((field) => field.rendererBinding.sdtId === "102"),
+    ).toEqual([
+      expect.objectContaining({ detectionStatus: "unsupported" }),
+    ]);
   });
 
   it("allows repeated physician labels when native identities and paths differ", async () => {
@@ -361,6 +492,38 @@ describe("native Word identity admission", () => {
         ir,
         resolutions,
       }),
+    ).toThrowError(
+      expect.objectContaining({ code: "ROUNDTRIP_FIELD_MISMATCH" }),
+    );
+  });
+
+  it("censuses post-render identity tampering in auxiliary Word stories", async () => {
+    const source = await buildSyntheticDocxWithFootnote();
+    const ir = compileTemplateDocx(source);
+    const resolutions = ir.fields.map(resolutionFor);
+    const rendered = await renderTemplateDocx({
+      source,
+      ir,
+      resolutions,
+      validation: VALIDATION,
+    });
+    const zip = await JSZip.loadAsync(rendered.document);
+    const entry = zip.file("word/footnotes.xml");
+    if (!entry) throw new Error("Synthetic footnote part is missing.");
+    const before = await entry.async("string");
+    const after = before.replace(
+      "<w:p><w:r><w:t>Synthetic footnote anchor</w:t></w:r></w:p>",
+      `<w:p><w:r><w:t>Synthetic footnote anchor</w:t></w:r></w:p>${textControl({ id: "102", alias: "Post-render footnote duplicate" })}`,
+    );
+    expect(after).not.toBe(before);
+    zip.file("word/footnotes.xml", after);
+    const tampered = await zip.generateAsync({
+      type: "nodebuffer",
+      compression: "DEFLATE",
+    });
+
+    expect(() =>
+      readbackTemplateDocxOutput({ source, output: tampered, ir, resolutions }),
     ).toThrowError(
       expect.objectContaining({ code: "ROUNDTRIP_FIELD_MISMATCH" }),
     );

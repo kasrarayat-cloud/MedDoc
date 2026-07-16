@@ -121,7 +121,27 @@ export function readbackTemplateDocxOutput(
     loadPart(partName, true);
     loadPart(partName, false);
   }
-  assertPackageBindingCensus(sourceParts, outputParts, structuralPartNames);
+  const sourceIdentityPartNames = [...sourcePackage.zip.entries.keys()]
+    .filter((partName) => /^word\/.*\.xml$/i.test(partName))
+    .sort();
+  const outputIdentityPartNames = [...outputPackage.zip.entries.keys()]
+    .filter((partName) => /^word\/.*\.xml$/i.test(partName))
+    .sort();
+  if (
+    canonicalSha256(sourceIdentityPartNames) !==
+    canonicalSha256(outputIdentityPartNames)
+  ) {
+    failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+  }
+  for (const partName of sourceIdentityPartNames) {
+    loadPart(partName, true);
+    loadPart(partName, false);
+  }
+  assertPackageBindingCensus(
+    sourceParts,
+    outputParts,
+    sourceIdentityPartNames,
+  );
 
   const sourceRecords = input.ir.fields.map((field) =>
     certifiedSourceRecord(field, loadPart(field.rendererBinding.partName, true)),
@@ -202,10 +222,10 @@ export function readbackTemplateDocxOutput(
 function assertPackageBindingCensus(
   sourceParts: ReadonlyMap<string, IndexedPart>,
   outputParts: ReadonlyMap<string, IndexedPart>,
-  structuralPartNames: readonly string[],
+  identityPartNames: readonly string[],
 ): void {
   const census = (parts: ReadonlyMap<string, IndexedPart>) =>
-    structuralPartNames.flatMap((partName) => {
+    identityPartNames.flatMap((partName) => {
       const part = parts.get(partName);
       if (!part) failTemplateDocxRender('ROUNDTRIP_PACKAGE_INVALID');
       return part.nodes.flatMap((node) => {
