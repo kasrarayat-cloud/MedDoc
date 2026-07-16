@@ -12,7 +12,7 @@ export const TEST_EMAIL_PREFIX = 'qa-e2e-';
 export function uniqueTestEmail(tag: string): string {
   const stamp = Date.now().toString(36);
   const noise = Math.random().toString(36).slice(2, 6);
-  return `${TEST_EMAIL_PREFIX}${tag}-${stamp}-${noise}@test.dev`;
+  return `${TEST_EMAIL_PREFIX}${tag}-${stamp}-${noise}@synthetic.test`;
 }
 
 /** Password that passes the signup policy (10+ chars, upper, lower, digit). */
