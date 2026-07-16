@@ -45,10 +45,10 @@ function psql(sql: string): void {
  *  anything. Logs how many users were deleted so the test output
  *  shows whether cleanup is actually running. */
 export function cleanupTestUsers(): void {
-  // Materialize the exact synthetic tenant set, lock its practice rows, then
-  // delete in FK order inside one transaction. The FOR UPDATE lock waits for
-  // in-flight audit inserts and blocks new FK KEY SHARE writers until cleanup
-  // commits, closing the old race between separate audit/practice connections.
+  // Materialize the exact synthetic tenant set, lock its practice/user/visit
+  // rows in deterministic order, then delete in FK order inside one
+  // transaction. The locks wait for in-flight child inserts and block new FK
+  // KEY SHARE writers until cleanup commits.
   const sql = `
     BEGIN;
 
@@ -60,14 +60,27 @@ export function cleanupTestUsers(): void {
     CREATE TEMP TABLE e2e_target_practices ON COMMIT DROP AS
       SELECT DISTINCT "practiceId" AS id FROM e2e_target_users;
 
+    SELECT p.id
+    FROM practices p
+    JOIN e2e_target_practices target ON target.id = p.id
+    ORDER BY p.id
+    FOR UPDATE OF p;
+
+    SELECT u.id
+    FROM users u
+    JOIN e2e_target_users target ON target.id = u.id
+    ORDER BY u.id
+    FOR UPDATE OF u;
+
     CREATE TEMP TABLE e2e_target_visits ON COMMIT DROP AS
       SELECT id FROM transcribe_visits
       WHERE "userId" IN (SELECT id FROM e2e_target_users);
 
-    SELECT p.id
-    FROM practices p
-    JOIN e2e_target_practices target ON target.id = p.id
-    FOR UPDATE OF p;
+    SELECT v.id
+    FROM transcribe_visits v
+    JOIN e2e_target_visits target ON target.id = v.id
+    ORDER BY v.id
+    FOR UPDATE OF v;
 
     DELETE FROM audit_logs
     WHERE "practiceId" IN (SELECT id FROM e2e_target_practices);
