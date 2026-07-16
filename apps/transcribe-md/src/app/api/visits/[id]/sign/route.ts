@@ -64,6 +64,13 @@ import {
   createTemplateTwinArtifactStore,
   TemplateTwinStorageUnavailableError,
 } from "@/lib/template-twin/storage";
+import {
+  lockTemplateTwinRolloutForFinalClaim,
+  pinTemplateTwinRollout,
+  templateTwinRolloutAuditMetadata,
+  TemplateTwinRolloutError,
+  type TemplateTwinRolloutToken,
+} from "@/lib/template-twin/rollout";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -213,6 +220,7 @@ export const POST = withApiHandler<{ id: string }>(
     }
 
     let templateTwinPracticeId = session.user.practiceId ?? "";
+    let templateTwinRolloutToken: TemplateTwinRolloutToken | null = null;
     if (visit.noteTemplate?.templateKind === "template_twin_docx") {
       try {
         templateTwinPracticeId = (await requireFreshDoctorIdentity(userId))
@@ -225,6 +233,38 @@ export const POST = withApiHandler<{ id: string }>(
           });
         }
         throw error;
+      }
+      try {
+        templateTwinRolloutToken = await pinTemplateTwinRollout({
+          practiceId: templateTwinPracticeId,
+        });
+      } catch (error) {
+        if (!(error instanceof TemplateTwinRolloutError)) throw error;
+        try {
+          await enqueueTemplateTwinAudit(prisma, {
+            eventKey: `template-twin-sign-rollout-blocked:${visitId}:${randomUUID()}`,
+            practiceId: templateTwinPracticeId,
+            actorId: userId,
+            actorEmailSnapshot: sessionEmail,
+            action: "TEMPLATE_TWIN_SIGN_BLOCKED",
+            targetType: "TranscribeVisit",
+            targetId: visitId,
+            metadata: {
+              reasonCode: error.code,
+              operation: "sign_admission",
+            },
+          });
+        } catch {
+          return apiError(
+            "The signing safety decision could not be recorded. Try again.",
+            503,
+            { code: "TEMPLATE_TWIN_AUDIT_UNAVAILABLE", retry: true },
+          );
+        }
+        return apiError(error.message, 409, {
+          code: error.code,
+          retry: true,
+        });
       }
     }
 
@@ -569,11 +609,70 @@ export const POST = withApiHandler<{ id: string }>(
         },
       };
 
-      let updated: { count: number };
+      let updated: {
+        count: number;
+        rolloutRejected?: {
+          code: string;
+          reason: string;
+        } | null;
+      };
       if (twinClaim) {
+        if (!templateTwinRolloutToken) {
+          return apiError(
+            "Template Twin rollout controls are unavailable. Try again.",
+            409,
+            {
+              code: "TEMPLATE_TWIN_ROLLOUT_CONTROL_UNAVAILABLE",
+              retry: true,
+            },
+          );
+        }
         try {
           updated = await prisma.$transaction(
-            async (tx: typeof prisma): Promise<{ count: number }> => {
+            async (
+              tx: typeof prisma,
+            ): Promise<{
+              count: number;
+              rolloutRejected?: { code: string; reason: string } | null;
+            }> => {
+              const finalRollout =
+                await lockTemplateTwinRolloutForFinalClaim({
+                  tx,
+                  practiceId: templateTwinPracticeId,
+                  pinnedToken: templateTwinRolloutToken!,
+                });
+              if (!finalRollout.allowed) {
+                await enqueueTemplateTwinAudit(tx, {
+                  eventKey:
+                    `template-twin-sign-rollout-blocked:${visitId}:` +
+                    `${twinClaim.manifestVersion}:${finalRollout.code}:` +
+                    `${templateTwinRolloutToken!.globalGeneration.toString()}:` +
+                    templateTwinRolloutToken!.practiceGeneration.toString(),
+                  practiceId: templateTwinPracticeId,
+                  actorId: userId,
+                  actorEmailSnapshot: sessionEmail,
+                  action: "TEMPLATE_TWIN_SIGN_BLOCKED",
+                  targetType: "TranscribeVisit",
+                  targetId: visitId,
+                  metadata: {
+                    reasonCode: finalRollout.code,
+                    operation: "sign_final_claim",
+                    fillManifestId: twinClaim.id,
+                    manifestVersion: twinClaim.manifestVersion,
+                    ...templateTwinRolloutAuditMetadata(
+                      templateTwinRolloutToken!,
+                      finalRollout.currentToken,
+                    ),
+                  },
+                });
+                return {
+                  count: 0,
+                  rolloutRejected: {
+                    code: finalRollout.code,
+                    reason: finalRollout.reason,
+                  },
+                };
+              }
               // Optimistically claim the exact manifest assessed above. Any
               // concurrent correction/regeneration changes status, version,
               // digest, output, or updatedAt and rolls back this transaction.
@@ -602,12 +701,20 @@ export const POST = withApiHandler<{ id: string }>(
                   needsReviewCount: 0,
                   conflictCount: 0,
                   criticalUnresolvedCount: 0,
+                  pinnedGlobalRolloutGeneration:
+                    templateTwinRolloutToken!.globalGeneration,
+                  pinnedPracticeRolloutGeneration:
+                    templateTwinRolloutToken!.practiceGeneration,
                   signedDecisionAt: null,
                   updatedAt: twinClaim.updatedAt,
                 },
                 data: {
                   status: "SIGNED",
                   signedDecisionAt: signDecisionAt,
+                  signedGlobalRolloutGeneration:
+                    templateTwinRolloutToken!.globalGeneration,
+                  signedPracticeRolloutGeneration:
+                    templateTwinRolloutToken!.practiceGeneration,
                 },
               });
               if (claimed.count !== 1) {
@@ -637,9 +744,13 @@ export const POST = withApiHandler<{ id: string }>(
                   soapSha256: twinClaim.soapSha256,
                   outputVersionId: twinClaim.outputVersionId,
                   outputEtag: twinClaim.outputEtag,
+                  rolloutGlobalGeneration:
+                    templateTwinRolloutToken!.globalGeneration.toString(),
+                  rolloutPracticeGeneration:
+                    templateTwinRolloutToken!.practiceGeneration.toString(),
                 },
               });
-              return visitUpdated;
+              return { ...visitUpdated, rolloutRejected: null };
             },
           );
         } catch (error) {
@@ -648,6 +759,12 @@ export const POST = withApiHandler<{ id: string }>(
         }
       } else {
         updated = await prisma.transcribeVisit.updateMany(visitUpdate);
+      }
+      if (updated.rolloutRejected) {
+        return apiError(updated.rolloutRejected.reason, 409, {
+          code: updated.rolloutRejected.code,
+          retry: true,
+        });
       }
       if (updated.count === 0) {
         // Another concurrent request got there first. Re-read.

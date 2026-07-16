@@ -11,6 +11,12 @@ import {
 } from './ir';
 import { templateTwinMappingsSha256 } from './mapping-hash';
 import { canonicalSoapSha256 } from './soap-binding';
+import {
+  TEMPLATE_TWIN_BINDING_FINGERPRINT_VERSION,
+  TEMPLATE_TWIN_READBACK_CONTRACT_VERSION,
+  nativeIdentityFromRendererBinding,
+  rendererBindingFingerprintSha256,
+} from '../note-template-docx/binding-fingerprint';
 import { DOCX_MIME_TYPE } from './storage/keys';
 import { parseTemplateTwinArtifactKey } from './storage/ownership';
 import { validateTemplateTwin } from './validation';
@@ -126,6 +132,10 @@ export const TEMPLATE_TWIN_SIGNING_VISIT_SELECT = {
       staticContentSha256: true,
       roundTripVerified: true,
       roundTripVerification: true,
+      pinnedGlobalRolloutGeneration: true,
+      pinnedPracticeRolloutGeneration: true,
+      signedGlobalRolloutGeneration: true,
+      signedPracticeRolloutGeneration: true,
       reviewedAt: true,
       reviewedById: true,
       reviewedManifestVersion: true,
@@ -147,6 +157,7 @@ export type TemplateTwinSignBlockerCode =
   | 'FILL_MANIFEST_VERSION_MISMATCH'
   | 'FILL_MANIFEST_INVALID'
   | 'FILL_REVIEW_REQUIRED'
+  | 'ROLLOUT_PROVENANCE_MISSING'
   | 'SOAP_BINDING_MISMATCH'
   | 'VALIDATION_FAILED'
   | 'CRITICAL_FIELDS_UNRESOLVED'
@@ -252,6 +263,10 @@ export interface TemplateTwinSigningContext {
     staticContentSha256: string | null;
     roundTripVerified: boolean;
     roundTripVerification: unknown;
+    pinnedGlobalRolloutGeneration: bigint | null;
+    pinnedPracticeRolloutGeneration: bigint | null;
+    signedGlobalRolloutGeneration: bigint | null;
+    signedPracticeRolloutGeneration: bigint | null;
     reviewedAt: Date | null;
     reviewedById: string | null;
     reviewedManifestVersion: number | null;
@@ -274,6 +289,8 @@ export interface TemplateTwinManifestSignClaim {
   outputEtag: string;
   outputSha256: string;
   outputSizeBytes: number;
+  pinnedGlobalRolloutGeneration: bigint;
+  pinnedPracticeRolloutGeneration: bigint;
   updatedAt: Date;
 }
 
@@ -305,6 +322,26 @@ interface ExpectedRoundTripField {
   fieldId: string;
   partName: string;
   bindingPath: string;
+  canonicalBindingPath: string;
+  bindingType:
+    | 'content_control'
+    | 'table_cell'
+    | 'legacy_form_field'
+    | 'repeating_row';
+  bindingOrdinal: number;
+  nativeIdentity: {
+    sdtId: string | null;
+    tag: string | null;
+    alias: string | null;
+    legacyName: string | null;
+  };
+  sourceBindingIdentitySha256: string;
+  certifiedBindingSha256: string;
+  tableLocation: {
+    tableIndex: number | null;
+    rowIndex: number | null;
+    cellIndex: number | null;
+  };
   valueSha256: string;
   occurrences: number;
   disposition:
@@ -312,6 +349,14 @@ interface ExpectedRoundTripField {
     | 'unresolved_blank'
     | 'preserved_unresolved'
     | 'preserved_unsupported';
+}
+
+function canonicalValuesEqual(left: unknown, right: unknown): boolean {
+  try {
+    return canonicalSha256(left) === canonicalSha256(right);
+  } catch {
+    return false;
+  }
 }
 
 function parseCertifiedTemplateState(
@@ -439,10 +484,30 @@ function expectedRoundTripFields(
         ? resolution.value.length
         : 1;
     if (!Number.isSafeInteger(occurrences) || occurrences < 1) return null;
+    const { certifiedBindingSha256, ...unsignedBinding } =
+      field.rendererBinding;
+    if (
+      rendererBindingFingerprintSha256(field.fieldId, unsignedBinding) !==
+      certifiedBindingSha256
+    ) {
+      return null;
+    }
     expected.push({
       fieldId: field.fieldId,
       partName: field.rendererBinding.partName,
       bindingPath: field.rendererBinding.path,
+      canonicalBindingPath: field.rendererBinding.canonicalPath,
+      bindingType: field.rendererBinding.bindingType,
+      bindingOrdinal: field.rendererBinding.ordinal,
+      nativeIdentity: nativeIdentityFromRendererBinding(field.rendererBinding),
+      sourceBindingIdentitySha256:
+        field.rendererBinding.sourceBindingIdentitySha256,
+      certifiedBindingSha256,
+      tableLocation: {
+        tableIndex: field.rendererBinding.tableIndex,
+        rowIndex: field.rendererBinding.rowIndex,
+        cellIndex: field.rendererBinding.cellIndex,
+      },
       valueSha256: canonicalSha256({
         fieldId: field.fieldId,
         value: resolution.value,
@@ -491,17 +556,48 @@ function isVerifiedRoundTrip(
   }
   const fieldsVerified = expected.fields.every((field) => {
     const proof = proofByFieldId.get(field.fieldId);
+    const bindingEvidence = proof?.bindingEvidence;
     return Boolean(
       proof &&
+        bindingEvidence &&
+        typeof bindingEvidence === 'object' &&
+        !Array.isArray(bindingEvidence) &&
         proof.status === 'verified' &&
         proof.partName === field.partName &&
         proof.bindingPath === field.bindingPath &&
         proof.valueSha256 === field.valueSha256 &&
         proof.occurrences === field.occurrences &&
-        proof.disposition === field.disposition,
+        proof.disposition === field.disposition &&
+        (bindingEvidence as Record<string, unknown>).contractVersion ===
+          TEMPLATE_TWIN_BINDING_FINGERPRINT_VERSION &&
+        (bindingEvidence as Record<string, unknown>).status === 'verified' &&
+        (bindingEvidence as Record<string, unknown>)
+          .certifiedFingerprintSha256 === field.certifiedBindingSha256 &&
+        (bindingEvidence as Record<string, unknown>).outputFingerprintSha256 ===
+          field.certifiedBindingSha256 &&
+        (bindingEvidence as Record<string, unknown>).outputPartName ===
+          field.partName &&
+        (bindingEvidence as Record<string, unknown>).outputCanonicalPath ===
+          field.canonicalBindingPath &&
+        (bindingEvidence as Record<string, unknown>).outputBindingType ===
+          field.bindingType &&
+        (bindingEvidence as Record<string, unknown>).outputBindingOrdinal ===
+          field.bindingOrdinal &&
+        canonicalValuesEqual(
+          (bindingEvidence as Record<string, unknown>).outputNativeIdentity,
+          field.nativeIdentity,
+        ) &&
+        (bindingEvidence as Record<string, unknown>)
+          .outputBindingIdentitySha256 === field.sourceBindingIdentitySha256 &&
+        canonicalValuesEqual(
+          (bindingEvidence as Record<string, unknown>).outputTableLocation,
+          field.tableLocation,
+        ),
     );
   });
   return (
+    row.verificationContractVersion ===
+      TEMPLATE_TWIN_READBACK_CONTRACT_VERSION &&
     row.verified === true &&
     row.packageCheck === 'verified' &&
     row.fieldCheck === 'verified' &&
@@ -635,6 +731,19 @@ export function assessTemplateTwinSigning(
   if (!fill) {
     add('FILL_MANIFEST_MISSING');
   } else {
+    if (
+      fill.pinnedGlobalRolloutGeneration === null ||
+      fill.pinnedPracticeRolloutGeneration === null ||
+      (context.visitStatus === 'SIGNED' &&
+        (fill.signedGlobalRolloutGeneration === null ||
+          fill.signedPracticeRolloutGeneration === null ||
+          fill.signedGlobalRolloutGeneration !==
+            fill.pinnedGlobalRolloutGeneration ||
+          fill.signedPracticeRolloutGeneration !==
+            fill.pinnedPracticeRolloutGeneration))
+    ) {
+      add('ROLLOUT_PROVENANCE_MISSING');
+    }
     if (fill.practiceId !== context.practiceId) add('TENANT_MISMATCH');
     const expectedFillStatus =
       context.visitStatus === 'SIGNED' ? 'SIGNED' : 'VERIFIED';
@@ -806,6 +915,8 @@ export function assessTemplateTwinSigning(
       fill.outputEtag &&
       fill.outputSha256 &&
       fill.outputSizeBytes &&
+      fill.pinnedGlobalRolloutGeneration !== null &&
+      fill.pinnedPracticeRolloutGeneration !== null &&
       manifestSoapVersion !== null &&
       manifestSoapSha256
         ? {
@@ -821,6 +932,10 @@ export function assessTemplateTwinSigning(
             outputEtag: fill.outputEtag,
             outputSha256: fill.outputSha256,
             outputSizeBytes: fill.outputSizeBytes,
+            pinnedGlobalRolloutGeneration:
+              fill.pinnedGlobalRolloutGeneration,
+            pinnedPracticeRolloutGeneration:
+              fill.pinnedPracticeRolloutGeneration,
             updatedAt: fill.updatedAt,
           }
         : null,

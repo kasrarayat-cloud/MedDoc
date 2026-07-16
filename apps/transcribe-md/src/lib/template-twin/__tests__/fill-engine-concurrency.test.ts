@@ -64,6 +64,10 @@ const SOURCE_PRIVACY_SCAN_EVIDENCE = {
 type Fixture = Awaited<ReturnType<typeof buildTemplateTwinIntegrationFixture>>;
 let fixture: Fixture;
 let outputWrites: number;
+let globalRolloutEnabled: boolean;
+let globalRolloutGeneration: bigint;
+let practiceRolloutEnabled: boolean;
+let practiceRolloutGeneration: bigint;
 
 function templateRow() {
   return {
@@ -134,7 +138,37 @@ function lockedVisitRow(
   };
 }
 
-function storage(onOutputStored?: () => void): TemplateTwinArtifactStore {
+function mockRolloutAndVisitLocks(visit = lockedVisitRow()) {
+  mocks.lockVisit.mockImplementation(async (query: unknown) => {
+    const text = String(
+      (query as { strings?: readonly string[] }).strings?.join(" ") ?? "",
+    );
+    if (text.includes("template_twin_rollout_controls")) {
+      return [
+        {
+          enabled: globalRolloutEnabled,
+          generation: globalRolloutGeneration,
+        },
+      ];
+    }
+    if (text.includes("templateTwinRolloutGeneration")) {
+      return [
+        {
+          templateTwinEnabled: practiceRolloutEnabled,
+          templateTwinRolloutGeneration: practiceRolloutGeneration,
+        },
+      ];
+    }
+    if (text.includes("template_twin_lineage_migration_progress")) {
+      return [{ phase: "CONTRACTED" }];
+    }
+    return [visit];
+  });
+}
+
+function storage(
+  onOutputStored?: () => void | Promise<void>,
+): TemplateTwinArtifactStore {
   return {
     bucket: "synthetic-memory-only",
     storeSourceArtifact: vi.fn(),
@@ -156,9 +190,28 @@ function storage(onOutputStored?: () => void): TemplateTwinArtifactStore {
         sizeBytes: input.bytes.byteLength,
         created: true,
       };
-      onOutputStored?.();
+      await onOutputStored?.();
       return stored;
     }),
+  };
+}
+
+function deterministicBarrier() {
+  let signalEntered!: () => void;
+  let release!: () => void;
+  const entered = new Promise<void>((resolve) => {
+    signalEntered = resolve;
+  });
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return {
+    entered,
+    release,
+    async stop() {
+      signalEntered();
+      await released;
+    },
   };
 }
 
@@ -176,6 +229,11 @@ function processInput(artifactStorage = storage()) {
     entities: SYNTHETIC_ENTITIES,
     validationNow: "2026-07-15T12:00:00.000Z",
     resolverModelVersion: "synthetic-resolver-model",
+    rolloutToken: {
+      practiceId: PRACTICE_ID,
+      globalGeneration: BigInt(1),
+      practiceGeneration: BigInt(1),
+    },
     storage: artifactStorage,
   };
 }
@@ -188,15 +246,19 @@ beforeEach(() => {
   vi.clearAllMocks();
   process.env.TEMPLATE_TWIN_KILL_SWITCH = "false";
   outputWrites = 0;
+  globalRolloutEnabled = true;
+  globalRolloutGeneration = BigInt(1);
+  practiceRolloutEnabled = true;
+  practiceRolloutGeneration = BigInt(1);
   mocks.claimVisit.mockResolvedValue({ count: 1 });
   mocks.findTemplate.mockImplementation(async () => templateRow());
   mocks.createFill.mockResolvedValue({ id: "fill-created" });
   mocks.updateFill.mockResolvedValue({ count: 1 });
-  mocks.findPractice.mockResolvedValue({ templateTwinEnabled: true });
+  mocks.findPractice.mockResolvedValue({ id: PRACTICE_ID });
   mocks.ledgerUpdate.mockResolvedValue({ count: 1 });
   mocks.ledgerFind.mockResolvedValue(null);
   mocks.outboxCreate.mockResolvedValue({ id: "render-audit-outbox" });
-  mocks.lockVisit.mockResolvedValue([lockedVisitRow()]);
+  mockRolloutAndVisitLocks();
   mocks.transaction.mockImplementation(
     async (callback: (tx: unknown) => Promise<unknown>) =>
       callback({
@@ -245,7 +307,7 @@ describe("Template Twin worker provenance and manifest concurrency", () => {
   });
 
   it("fails before pinning or rendering when the practice rollout flag is disabled", async () => {
-    mocks.findPractice.mockResolvedValue({ templateTwinEnabled: false });
+    mocks.findPractice.mockResolvedValue(null);
     const artifacts = storage();
 
     await expect(
@@ -258,6 +320,132 @@ describe("Template Twin worker provenance and manifest concurrency", () => {
     expect(mocks.claimVisit).not.toHaveBeenCalled();
     expect(artifacts.readSourceArtifact).not.toHaveBeenCalled();
     expect(outputWrites).toBe(0);
+  });
+
+  it.each([
+    {
+      name: "practice",
+      revoke: () => {
+        practiceRolloutEnabled = false;
+        practiceRolloutGeneration = BigInt(2);
+      },
+      code: "TEMPLATE_TWIN_PRACTICE_DISABLED",
+    },
+    {
+      name: "global",
+      revoke: () => {
+        globalRolloutEnabled = false;
+        globalRolloutGeneration = BigInt(2);
+      },
+      code: "TEMPLATE_TWIN_GLOBAL_DISABLED",
+    },
+  ])(
+    "rejects a final output claim when $name rollout is revoked after worker admission",
+    async ({ revoke, code }) => {
+      mocks.findFill.mockResolvedValue(null);
+      const barrier = deterministicBarrier();
+      const operation = processTemplateTwinVisit(
+        processInput(storage(() => barrier.stop())),
+      );
+
+      await barrier.entered;
+      revoke();
+      barrier.release();
+
+      await expect(operation).rejects.toMatchObject({ code });
+      expect(outputWrites).toBe(1);
+      expect(mocks.createFill).not.toHaveBeenCalled();
+      expect(mocks.updateFill).not.toHaveBeenCalled();
+      expect(mocks.ledgerUpdate).not.toHaveBeenCalled();
+      expect(mocks.outboxCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          action: "TEMPLATE_TWIN_SAFETY_GATE_BLOCKED",
+          metadata: expect.objectContaining({
+            reasonCode: code,
+            operation: "final_output_claim",
+            outputWrittenUnclaimed: true,
+          }),
+        }),
+      });
+    },
+  );
+
+  it("rejects an old worker token after disable and re-enable advances the generation", async () => {
+    mocks.findFill.mockResolvedValue(null);
+    const barrier = deterministicBarrier();
+    const operation = processTemplateTwinVisit(
+      processInput(storage(() => barrier.stop())),
+    );
+
+    await barrier.entered;
+    globalRolloutEnabled = false;
+    globalRolloutGeneration = BigInt(2);
+    globalRolloutEnabled = true;
+    globalRolloutGeneration = BigInt(3);
+    barrier.release();
+
+    await expect(operation).rejects.toMatchObject({
+      code: "TEMPLATE_TWIN_GLOBAL_GENERATION_STALE",
+    });
+    expect(mocks.createFill).not.toHaveBeenCalled();
+    expect(mocks.ledgerUpdate).not.toHaveBeenCalled();
+  });
+
+  it("rejects the selection token when disable and re-enable happen before fill processing starts", async () => {
+    mocks.findFill.mockResolvedValue(null);
+    const admittedAtTemplateSelection = processInput().rolloutToken;
+
+    // Selection admitted generation 1. A complete disable/re-enable cycle
+    // happens before L4-L6 hand the selected Twin to the fill engine.
+    globalRolloutEnabled = false;
+    globalRolloutGeneration = BigInt(2);
+    globalRolloutEnabled = true;
+    globalRolloutGeneration = BigInt(3);
+
+    await expect(
+      processTemplateTwinVisit({
+        ...processInput(),
+        rolloutToken: admittedAtTemplateSelection,
+      }),
+    ).rejects.toMatchObject({
+      code: "TEMPLATE_TWIN_GLOBAL_GENERATION_STALE",
+    });
+    expect(outputWrites).toBe(1);
+    expect(mocks.createFill).not.toHaveBeenCalled();
+    expect(mocks.updateFill).not.toHaveBeenCalled();
+    expect(mocks.ledgerUpdate).not.toHaveBeenCalled();
+  });
+
+  it("admits and claims a new worker operation at the re-enabled generation", async () => {
+    globalRolloutGeneration = BigInt(3);
+    practiceRolloutGeneration = BigInt(3);
+    mocks.findFill.mockResolvedValue(null);
+
+    await expect(
+      processTemplateTwinVisit({
+        ...processInput(),
+        rolloutToken: {
+          practiceId: PRACTICE_ID,
+          globalGeneration: BigInt(3),
+          practiceGeneration: BigInt(3),
+        },
+      }),
+    ).resolves.toBeDefined();
+
+    expect(mocks.createFill).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "VERIFIED",
+          pinnedGlobalRolloutGeneration: BigInt(3),
+          pinnedPracticeRolloutGeneration: BigInt(3),
+        }),
+      }),
+    );
+    expect(mocks.ledgerUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ state: "CLAIMED" }),
+      }),
+    );
   });
 
   it("pins the selected template before source access and stops on a conflicting pin", async () => {
@@ -368,9 +556,9 @@ describe("Template Twin worker provenance and manifest concurrency", () => {
     });
 
     const editedSoap = `${CURRENT_SOAP} Synthetic plan edit.`;
-    mocks.lockVisit.mockResolvedValue([
+    mockRolloutAndVisitLocks(
       lockedVisitRow({ soapVersion: 2, soapFinal: editedSoap }),
-    ]);
+    );
     await expect(
       processTemplateTwinVisit({
         ...processInput(),
@@ -417,12 +605,13 @@ describe("Template Twin worker provenance and manifest concurrency", () => {
     const outputObjectKey =
       `practices/${PRACTICE_ID}/template-twin/outputs/${VISIT_ID}/` +
       `${result.manifestSha256}/artifact/${result.render!.outputSha256}.docx`;
-    const expectedRenderEventKey =
-      `template-twin:render-verified:${canonicalSha256({
+    const expectedRenderEventKey = `template-twin:render-verified:${canonicalSha256(
+      {
         visitId: VISIT_ID,
         manifestSha256: result.manifestSha256,
         outputObjectKey,
-      })}`;
+      },
+    )}`;
     expect(mocks.updateFill).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
@@ -484,6 +673,9 @@ describe("Template Twin worker provenance and manifest concurrency", () => {
       processTemplateTwinVisit(processInput()),
     ).resolves.toBeDefined();
 
+    // The selection admission is carried into this function; there is only
+    // one transaction here, the final claim. A second transaction would be a
+    // dangerous re-pin that could adopt a post-revocation generation.
     expect(mocks.transaction).toHaveBeenCalledTimes(1);
     expect(mocks.createFill).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -512,9 +704,9 @@ describe("Template Twin worker provenance and manifest concurrency", () => {
     mocks.findFill.mockResolvedValue(null);
     const editedSoap = `${CURRENT_SOAP} Synthetic allergy edit.`;
     const artifacts = storage(() => {
-      mocks.lockVisit.mockResolvedValue([
+      mockRolloutAndVisitLocks(
         lockedVisitRow({ soapVersion: 1, soapFinal: editedSoap }),
-      ]);
+      );
     });
 
     await expect(
@@ -526,7 +718,9 @@ describe("Template Twin worker provenance and manifest concurrency", () => {
     });
 
     expect(outputWrites).toBe(1);
-    expect(mocks.lockVisit).toHaveBeenCalledTimes(1);
+    // global + practice + lineage + visit in the final transaction. There is
+    // no second set of rollout reads that replaces the selection token.
+    expect(mocks.lockVisit).toHaveBeenCalledTimes(4);
     expect(mocks.createFill).not.toHaveBeenCalled();
     expect(mocks.updateFill).not.toHaveBeenCalled();
     expect(mocks.ledgerUpdate).toHaveBeenCalledWith({
@@ -568,9 +762,9 @@ describe("Template Twin worker provenance and manifest concurrency", () => {
     });
     const editedSoap = `${CURRENT_SOAP} Synthetic medication edit.`;
     const artifacts = storage(() => {
-      mocks.lockVisit.mockResolvedValue([
+      mockRolloutAndVisitLocks(
         lockedVisitRow({ soapVersion: 2, soapFinal: editedSoap }),
-      ]);
+      );
     });
 
     await expect(
@@ -638,9 +832,9 @@ describe("Template Twin worker provenance and manifest concurrency", () => {
       new Error("synthetic audit outbox unavailable"),
     );
 
-    await expect(
-      processTemplateTwinVisit(processInput()),
-    ).rejects.toThrow("synthetic audit outbox unavailable");
+    await expect(processTemplateTwinVisit(processInput())).rejects.toThrow(
+      "synthetic audit outbox unavailable",
+    );
 
     expect(mocks.ledgerUpdate).toHaveBeenCalledTimes(1);
     expect(mocks.outboxCreate).toHaveBeenCalledTimes(1);

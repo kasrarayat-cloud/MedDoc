@@ -196,6 +196,8 @@ describe('visit Template Twin corrections route', () => {
     expect(await response.json()).toEqual({
       ok: false,
       error: 'This review changed in another session. Refresh and try again.',
+      code: 'OPTIMISTIC_CONFLICT',
+      retry: false,
     });
   });
 

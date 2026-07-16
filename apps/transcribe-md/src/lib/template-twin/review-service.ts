@@ -59,6 +59,15 @@ import {
   TEMPLATE_TWIN_UNSUPPORTED_CONCEPT_CODE,
   isSupportedTemplateTwinConcept,
 } from './supported-concepts';
+import {
+  lockTemplateTwinRolloutForFinalClaim,
+  pinTemplateTwinRollout,
+  templateTwinRolloutAuditMetadata,
+  TemplateTwinRolloutError,
+  type LockedTemplateTwinRolloutDecision,
+  type TemplateTwinRolloutCode,
+  type TemplateTwinRolloutToken,
+} from './rollout';
 
 export interface TemplateTwinReviewActor {
   userId: string;
@@ -74,7 +83,8 @@ export class TemplateTwinReviewError extends Error {
     | 'MANIFEST_INVALID'
     | 'SOAP_BINDING_STALE'
     | 'CORRECTION_INVALID'
-    | 'TEMPLATE_PROVENANCE_INVALID';
+    | 'TEMPLATE_PROVENANCE_INVALID'
+    | TemplateTwinRolloutCode;
 
   constructor(code: TemplateTwinReviewError['code'], message: string, cause?: unknown) {
     super(message, { cause });
@@ -204,6 +214,7 @@ interface CommitReviewPlan {
   storedOutput: StoredTemplateTwinArtifact | null;
   staticContentSha256: string;
   reviewerEmail: string;
+  rolloutToken: TemplateTwinRolloutToken;
   decision: ReviewDecisionPlan;
   fork: MappingRuleForkPlan | null;
 }
@@ -211,12 +222,17 @@ interface CommitReviewPlan {
 interface CommitReviewResult {
   applied: boolean;
   soapBindingStale?: boolean;
+  rolloutRejected?: Exclude<
+    LockedTemplateTwinRolloutDecision,
+    { allowed: true }
+  > | null;
   manifestVersion: number | null;
   draftTemplateId: string | null;
   draftTemplateVersion: number | null;
 }
 
 export interface TemplateTwinReviewRepository {
+  pinRollout(practiceId: string): Promise<TemplateTwinRolloutToken>;
   loadOwned(input: {
     visitId: string;
     actor: TemplateTwinReviewActor;
@@ -676,6 +692,10 @@ function assertProvenance(
 
 export function createTemplateTwinReviewRepository(): TemplateTwinReviewRepository {
   return {
+    pinRollout(practiceId) {
+      return pinTemplateTwinRollout({ practiceId });
+    },
+
     async loadOwned(input): Promise<OwnedReviewContext | null> {
       const row = await prisma.templateTwinFillManifest.findFirst({
         where: {
@@ -791,6 +811,46 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
     async commit(plan): Promise<CommitReviewResult> {
       return prisma.$transaction(
         async (tx: Prisma.TransactionClient) => {
+          const finalRollout =
+            await lockTemplateTwinRolloutForFinalClaim({
+              tx,
+              practiceId: plan.practiceId,
+              pinnedToken: plan.rolloutToken,
+            });
+          if (!finalRollout.allowed) {
+            await enqueueTemplateTwinAudit(tx, {
+              eventKey:
+                `template-twin:review-rollout-blocked:${plan.fillManifestId}` +
+                `:v${plan.expectedManifestVersion}:${finalRollout.code}:` +
+                `${plan.rolloutToken.globalGeneration.toString()}:` +
+                plan.rolloutToken.practiceGeneration.toString(),
+              practiceId: plan.practiceId,
+              actorId: plan.decision.reviewerId,
+              actorEmailSnapshot: plan.reviewerEmail,
+              action: 'TEMPLATE_TWIN_SAFETY_GATE_BLOCKED',
+              targetType: 'TemplateTwinFillManifest',
+              targetId: plan.fillManifestId,
+              metadata: {
+                reasonCode: finalRollout.code,
+                operation: 'field_correction_final_claim',
+                visitId: plan.visitId,
+                manifestVersion: plan.expectedManifestVersion,
+                outputWrittenUnclaimed: plan.storedOutput !== null,
+                ...templateTwinRolloutAuditMetadata(
+                  plan.rolloutToken,
+                  finalRollout.currentToken,
+                ),
+              },
+            });
+            return {
+              applied: false,
+              soapBindingStale: false,
+              rolloutRejected: finalRollout,
+              manifestVersion: null,
+              draftTemplateId: null,
+              draftTemplateVersion: null,
+            };
+          }
           const lockedVisit = await lockCurrentTemplateTwinVisit(
             tx,
             plan.visitId,
@@ -854,6 +914,7 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
             return {
               applied: false,
               soapBindingStale: true,
+              rolloutRejected: null,
               manifestVersion: null,
               draftTemplateId: null,
               draftTemplateVersion: null,
@@ -896,6 +957,12 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
               roundTripVerification: plan.prepared.render
                 ? asJson(plan.prepared.render.verification)
                 : Prisma.JsonNull,
+              pinnedGlobalRolloutGeneration:
+                plan.rolloutToken.globalGeneration,
+              pinnedPracticeRolloutGeneration:
+                plan.rolloutToken.practiceGeneration,
+              signedGlobalRolloutGeneration: null,
+              signedPracticeRolloutGeneration: null,
               // A field correction creates a new immutable manifest version.
               // It is not a whole-document acknowledgement; the physician
               // must explicitly confirm the regenerated manifest afterward.
@@ -909,6 +976,7 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
             return {
               applied: false,
               soapBindingStale: false,
+              rolloutRejected: null,
               manifestVersion: null,
               draftTemplateId: null,
               draftTemplateVersion: null,
@@ -1072,6 +1140,7 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
           return {
             applied: true,
             soapBindingStale: false,
+            rolloutRejected: null,
             manifestVersion: plan.expectedManifestVersion + 1,
             draftTemplateId,
             draftTemplateVersion,
@@ -1100,6 +1169,15 @@ export async function reviewTemplateTwinField(
   });
   if (!context) {
     throw new TemplateTwinReviewError('NOT_FOUND', 'Template Twin review was not found.');
+  }
+  let rolloutToken: TemplateTwinRolloutToken;
+  try {
+    rolloutToken = await repository.pinRollout(input.actor.practiceId);
+  } catch (error) {
+    if (error instanceof TemplateTwinRolloutError) {
+      throw new TemplateTwinReviewError(error.code, error.message, error);
+    }
+    throw error;
   }
   if (
     context.status === 'SIGNED' ||
@@ -1290,6 +1368,7 @@ export async function reviewTemplateTwinField(
     storedOutput,
     staticContentSha256: ir.staticContentSha256,
     reviewerEmail: input.actor.userEmail,
+    rolloutToken,
     decision: {
       fillManifestId: context.id,
       fieldId: field.fieldId,
@@ -1318,6 +1397,12 @@ export async function reviewTemplateTwinField(
     throw new TemplateTwinReviewError(
       'SOAP_BINDING_STALE',
       TEMPLATE_TWIN_SOAP_BINDING_REVIEW_REASON,
+    );
+  }
+  if (committed.rolloutRejected) {
+    throw new TemplateTwinReviewError(
+      committed.rolloutRejected.code,
+      committed.rolloutRejected.reason,
     );
   }
   if (!committed.applied || committed.manifestVersion === null) {

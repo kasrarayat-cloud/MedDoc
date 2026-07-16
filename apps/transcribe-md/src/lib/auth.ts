@@ -11,7 +11,11 @@
 import { auth } from '@/lib/nextauth';
 import prisma from '@meddoc/db';
 import { AuthError, type Session, type UserRole } from '@meddoc/auth';
-import { evaluateTemplateTwinRollout } from '@/lib/template-twin/rollout';
+import {
+  evaluateTemplateTwinRollout,
+  pinTemplateTwinRollout,
+  TemplateTwinRolloutError,
+} from '@/lib/template-twin/rollout';
 
 export { AuthError };
 export type { Session, UserRole };
@@ -92,6 +96,14 @@ export async function requireFreshDoctorIdentity(userId: string): Promise<{
     });
     if (!rollout.allowed) {
       throw new AuthError('FORBIDDEN', rollout.reason);
+    }
+    try {
+      await pinTemplateTwinRollout({ practiceId: user.practiceId });
+    } catch (error) {
+      if (error instanceof TemplateTwinRolloutError) {
+        throw new AuthError('FORBIDDEN', error.message);
+      }
+      throw error;
     }
     return { role: 'DOCTOR', practiceId: user.practiceId };
   } catch (error) {

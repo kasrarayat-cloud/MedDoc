@@ -183,6 +183,10 @@ beforeAll(async () => {
       staticContentSha256: fixture.ir.staticContentSha256,
       roundTripVerified: prepared.render.verification.verified,
       roundTripVerification: prepared.render.verification,
+      pinnedGlobalRolloutGeneration: BigInt(1),
+      pinnedPracticeRolloutGeneration: BigInt(1),
+      signedGlobalRolloutGeneration: null,
+      signedPracticeRolloutGeneration: null,
       reviewedAt: new Date('2026-07-15T12:03:00.000Z'),
       reviewedById: 'doctor-1',
       reviewedManifestVersion: prepared.manifest.manifestVersion,
@@ -204,6 +208,10 @@ function validContext(
     visitStatus === 'SIGNED'
       ? new Date('2026-07-15T12:05:00.000Z')
       : null;
+  context.templateTwinFill!.signedGlobalRolloutGeneration =
+    visitStatus === 'SIGNED' ? BigInt(1) : null;
+  context.templateTwinFill!.signedPracticeRolloutGeneration =
+    visitStatus === 'SIGNED' ? BigInt(1) : null;
   return context;
 }
 
@@ -261,6 +269,8 @@ describe('Template Twin server-side signing gate', () => {
       outputEtag: 'provider-output-etag-synthetic',
       outputSha256: expect.stringMatching(/^[a-f0-9]{64}$/),
       outputSizeBytes: expect.any(Number),
+      pinnedGlobalRolloutGeneration: BigInt(1),
+      pinnedPracticeRolloutGeneration: BigInt(1),
       updatedAt: new Date('2026-07-15T12:04:00.000Z'),
     });
   });
@@ -471,6 +481,38 @@ describe('Template Twin server-side signing gate', () => {
 
     expect(result.ready).toBe(false);
     expect(result.blockerCodes).toContain('ROUND_TRIP_UNVERIFIED');
+  });
+
+  it('fails closed for an unsigned manifest using the previous readback proof contract', () => {
+    const input = validContext();
+    const proof = input.templateTwinFill!.roundTripVerification as {
+      verificationContractVersion: string;
+      fields: Array<{ bindingEvidence?: unknown }>;
+    };
+    proof.verificationContractVersion = 'template-docx-readback/1.0.0';
+    for (const field of proof.fields) delete field.bindingEvidence;
+
+    const result = assessTemplateTwinSigning(input);
+
+    expect(result.ready).toBe(false);
+    expect(result.blockerCodes).toContain('ROUND_TRIP_UNVERIFIED');
+    expect(result.claim).toBeNull();
+  });
+
+  it('fails closed without throwing when v2 binding evidence is incomplete', () => {
+    const input = validContext();
+    const proof = input.templateTwinFill!.roundTripVerification as {
+      fields: Array<{
+        bindingEvidence: { outputNativeIdentity?: unknown };
+      }>;
+    };
+    delete proof.fields[0]!.bindingEvidence.outputNativeIdentity;
+
+    const result = assessTemplateTwinSigning(input);
+
+    expect(result.ready).toBe(false);
+    expect(result.blockerCodes).toContain('ROUND_TRIP_UNVERIFIED');
+    expect(result.claim).toBeNull();
   });
 
   it('requires an output-derived disposition for every IR field proof', () => {

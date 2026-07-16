@@ -3,18 +3,33 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   findUser: vi.fn(),
+  pinRollout: vi.fn(),
 }));
 
 vi.mock('@/lib/nextauth', () => ({ auth: mocks.auth }));
 vi.mock('@meddoc/db', () => ({
   default: { user: { findUnique: mocks.findUser } },
 }));
+vi.mock('@/lib/template-twin/rollout', async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import('@/lib/template-twin/rollout')
+  >();
+  return {
+    ...actual,
+    pinTemplateTwinRollout: mocks.pinRollout,
+  };
+});
 
 import { requireDoctorSession } from '../auth';
 
 beforeEach(() => {
   vi.clearAllMocks();
   process.env.TEMPLATE_TWIN_KILL_SWITCH = 'false';
+  mocks.pinRollout.mockResolvedValue({
+    practiceId: 'practice-current',
+    globalGeneration: BigInt(1),
+    practiceGeneration: BigInt(1),
+  });
   mocks.auth.mockResolvedValue({
     user: {
       id: 'user-synthetic-role',

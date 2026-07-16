@@ -84,7 +84,15 @@ async function mutate(
               error.code === 'TEMPLATE_PROVENANCE_INVALID'
             ? 422
             : 409;
-      return response({ ok: false, error: error.message }, status);
+      return response(
+        {
+          ok: false,
+          error: error.message,
+          code: error.code,
+          retry: error.code.startsWith('TEMPLATE_TWIN_'),
+        },
+        status,
+      );
     }
     if (
       error instanceof TemplateTwinStorageUnavailableError ||

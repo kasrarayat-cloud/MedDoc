@@ -265,24 +265,71 @@ export function setTemplateTwinQaPractice(input: {
   assertSyntheticEmail(input.email);
   const enabledSql = input.enabled ? "true" : "false";
   return psqlJson(`
-    WITH verified AS (
+    DO $template_twin_qa_rollout$
+    DECLARE
+      owning_user TEXT;
+      owning_practice TEXT;
+      lineage_contracted BOOLEAN;
+    BEGIN
+      SELECT id, "practiceId"
+      INTO owning_user, owning_practice
+      FROM users
+      WHERE email = ${sqlLiteral(input.email.toLowerCase())};
+      IF owning_user IS NULL OR owning_practice IS NULL THEN
+        RAISE EXCEPTION 'Synthetic Template Twin QA actor was not found';
+      END IF;
+
+      SELECT EXISTS (
+        SELECT 1
+        FROM template_twin_lineage_migration_progress
+        WHERE "operationKey" = 'note_templates_lineage_v1'
+          AND phase = 'CONTRACTED'
+      ) INTO lineage_contracted;
+      IF ${enabledSql} AND NOT lineage_contracted THEN
+        RAISE EXCEPTION 'Template Twin lineage migration is not contracted';
+      END IF;
+
       UPDATE users
       SET "emailVerified" = COALESCE("emailVerified", CURRENT_TIMESTAMP)
-      WHERE email = ${sqlLiteral(input.email.toLowerCase())}
-      RETURNING id, "practiceId"
-    ), enabled AS (
-      UPDATE practices p
-      SET "templateTwinEnabled" = ${enabledSql}
-      FROM verified v
-      WHERE p.id = v."practiceId"
-      RETURNING p.id
-    )
+      WHERE id = owning_user;
+
+      -- Test setup follows the production lock order exactly. The DO block is
+      -- one transaction, so neither generation becomes externally visible
+      -- until both mutations commit.
+      PERFORM 1
+      FROM template_twin_rollout_controls
+      WHERE id = 'global'
+      FOR UPDATE;
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'Global Template Twin rollout control is unavailable';
+      END IF;
+      PERFORM 1
+      FROM practices
+      WHERE id = owning_practice
+      FOR UPDATE;
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'Synthetic Template Twin QA practice is unavailable';
+      END IF;
+
+      UPDATE template_twin_rollout_controls
+      SET enabled = ${enabledSql},
+          generation = generation + 1,
+          "updatedAt" = CURRENT_TIMESTAMP
+      WHERE id = 'global';
+      UPDATE practices
+      SET "templateTwinEnabled" = ${enabledSql},
+          "templateTwinRolloutGeneration" =
+            "templateTwinRolloutGeneration" + 1
+      WHERE id = owning_practice;
+    END
+    $template_twin_qa_rollout$;
+
     SELECT json_build_object(
-      'userId', v.id,
-      'practiceId', v."practiceId"
+      'userId', id,
+      'practiceId', "practiceId"
     )
-    FROM verified v
-    JOIN enabled e ON e.id = v."practiceId";
+    FROM users
+    WHERE email = ${sqlLiteral(input.email.toLowerCase())};
   `);
 }
 

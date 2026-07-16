@@ -8,6 +8,10 @@ const mocks = vi.hoisted(() => ({
   readOutput: vi.fn(),
   enqueueAudit: vi.fn(),
   logDelivery: vi.fn(),
+  pinRollout: vi.fn(),
+  finalRollout: vi.fn(),
+  transaction: vi.fn(),
+  findFill: vi.fn(),
 }));
 
 vi.mock("next/server", () => {
@@ -37,7 +41,10 @@ vi.mock("next/server", () => {
 });
 
 vi.mock("@meddoc/db", () => ({
-  default: { transcribeVisit: { findFirst: mocks.findFirst } },
+  default: {
+    transcribeVisit: { findFirst: mocks.findFirst },
+    $transaction: mocks.transaction,
+  },
 }));
 vi.mock("@/lib/nextauth", () => ({ auth: mocks.auth }));
 vi.mock("@/lib/auth", () => ({
@@ -60,6 +67,24 @@ vi.mock("@/lib/template-twin/storage/ownership", () => ({
 }));
 vi.mock("@/lib/template-twin/audit-outbox", () => ({
   enqueueTemplateTwinAudit: mocks.enqueueAudit,
+}));
+vi.mock("@/lib/template-twin/rollout", () => ({
+  TemplateTwinRolloutError: class TemplateTwinRolloutError extends Error {
+    constructor(
+      public readonly code: string,
+      message: string,
+    ) {
+      super(message);
+    }
+  },
+  pinTemplateTwinRollout: mocks.pinRollout,
+  lockTemplateTwinRolloutForFinalClaim: mocks.finalRollout,
+  templateTwinRolloutAuditMetadata: () => ({
+    pinnedGlobalGeneration: "1",
+    pinnedPracticeGeneration: "1",
+    currentGlobalGeneration: "1",
+    currentPracticeGeneration: "1",
+  }),
 }));
 vi.mock("@/lib/deliveries", () => ({ logDelivery: mocks.logDelivery }));
 vi.mock("@/lib/log", () => ({
@@ -103,11 +128,16 @@ beforeEach(() => {
     noteTemplateVersion: 3,
     noteTemplate: { templateKind: "template_twin_docx" },
     templateTwinFill: {
+      id: "synthetic-fill-1",
       outputObjectKey: OUTPUT_KEY,
       outputVersionId: "provider-output-version-synthetic",
       outputEtag: "provider-output-etag-synthetic",
       outputSha256: "b".repeat(64),
       outputSizeBytes: 128,
+      pinnedGlobalRolloutGeneration: BigInt(1),
+      pinnedPracticeRolloutGeneration: BigInt(1),
+      signedGlobalRolloutGeneration: BigInt(1),
+      signedPracticeRolloutGeneration: BigInt(1),
     },
   });
   mocks.assess.mockReturnValue({
@@ -120,6 +150,38 @@ beforeEach(() => {
   });
   mocks.readOutput.mockResolvedValue(Buffer.from("synthetic DOCX bytes"));
   mocks.enqueueAudit.mockResolvedValue(undefined);
+  mocks.pinRollout.mockResolvedValue({
+    practiceId: "synthetic-practice-1",
+    globalGeneration: BigInt(1),
+    practiceGeneration: BigInt(1),
+  });
+  mocks.finalRollout.mockResolvedValue({
+    allowed: true,
+    token: {
+      practiceId: "synthetic-practice-1",
+      globalGeneration: BigInt(1),
+      practiceGeneration: BigInt(1),
+    },
+  });
+  mocks.findFill.mockResolvedValue({
+    status: "SIGNED",
+    signedDecisionAt: new Date("2026-07-15T12:00:00.000Z"),
+    outputObjectKey: OUTPUT_KEY,
+    outputVersionId: "provider-output-version-synthetic",
+    outputEtag: "provider-output-etag-synthetic",
+    outputSha256: "b".repeat(64),
+    outputSizeBytes: 128,
+    pinnedGlobalRolloutGeneration: BigInt(1),
+    pinnedPracticeRolloutGeneration: BigInt(1),
+    signedGlobalRolloutGeneration: BigInt(1),
+    signedPracticeRolloutGeneration: BigInt(1),
+  });
+  mocks.transaction.mockImplementation(
+    async (callback: (tx: unknown) => Promise<unknown>) =>
+      callback({
+        templateTwinFillManifest: { findUnique: mocks.findFill },
+      }),
+  );
 });
 
 describe("Original Template DOCX export durable audit gate", () => {

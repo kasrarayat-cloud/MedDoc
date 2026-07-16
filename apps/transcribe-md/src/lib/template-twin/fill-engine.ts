@@ -28,7 +28,13 @@ import {
 import { templateTwinMappingsSha256 } from "./mapping-hash";
 import { canonicalSoapSha256 } from "./soap-binding";
 import { assertTemplateTwinSourceProvenance } from "./source-phi-evidence";
-import { evaluateTemplateTwinRollout } from "./rollout";
+import {
+  lockTemplateTwinRolloutForFinalClaim,
+  templateTwinRolloutAuditMetadata,
+  type LockedTemplateTwinRolloutDecision,
+  type TemplateTwinRolloutCode,
+  type TemplateTwinRolloutToken,
+} from "./rollout";
 import {
   resolveTemplateFields,
   withApprovedPracticeDefaultFacts,
@@ -53,6 +59,7 @@ export class TemplateTwinFillError extends Error {
     | "TEMPLATE_PROVENANCE_MISMATCH"
     | "SOURCE_ARTIFACT_UNAVAILABLE"
     | "ROLLOUT_DISABLED"
+    | TemplateTwinRolloutCode
     | "SOAP_BINDING_STALE"
     | "SIGNED_MANIFEST_IMMUTABLE"
     | "MANIFEST_CONFLICT";
@@ -278,16 +285,16 @@ export function visitMatchesPreparedSoap(input: {
   const { visit, manifest } = input;
   return Boolean(
     visit &&
-      visit.userId === input.doctorId &&
-      visit.status !== "SIGNED" &&
-      visit.deletedAt === null &&
-      visit.archivedAt === null &&
-      visit.noteTemplateId === input.noteTemplateId &&
-      visit.noteTemplateVersion === input.noteTemplateVersion &&
-      visit.soapVersion === manifest.soapVersion &&
-      typeof visit.soapFinal === "string" &&
-      visit.soapFinal === input.soapFinal &&
-      canonicalSoapSha256(visit.soapFinal) === manifest.soapSha256,
+    visit.userId === input.doctorId &&
+    visit.status !== "SIGNED" &&
+    visit.deletedAt === null &&
+    visit.archivedAt === null &&
+    visit.noteTemplateId === input.noteTemplateId &&
+    visit.noteTemplateVersion === input.noteTemplateVersion &&
+    visit.soapVersion === manifest.soapVersion &&
+    typeof visit.soapFinal === "string" &&
+    visit.soapFinal === input.soapFinal &&
+    canonicalSoapSha256(visit.soapFinal) === manifest.soapSha256,
   );
 }
 
@@ -308,6 +315,9 @@ export interface ProcessTemplateTwinVisitInput {
   asrQuality?: "high" | "review" | "unknown";
   validationNow: Date | string;
   resolverModelVersion: string | null;
+  /** Exact epoch returned with the worker's selected Template Twin. It must
+   * survive L4-L6 and is never replaced by a later admission token. */
+  rolloutToken: TemplateTwinRolloutToken;
   storage?: TemplateTwinArtifactStore;
 }
 
@@ -327,13 +337,22 @@ export async function processTemplateTwinVisit(
         },
       },
     },
-    select: { templateTwinEnabled: true },
+    select: { id: true },
   });
-  const rollout = evaluateTemplateTwinRollout({
-    practiceEnabled: practice?.templateTwinEnabled === true,
-  });
-  if (!rollout.allowed) {
-    throw new TemplateTwinFillError("ROLLOUT_DISABLED", rollout.reason);
+  if (!practice) {
+    throw new TemplateTwinFillError(
+      "ROLLOUT_DISABLED",
+      "Template Twin is not enabled for this practice.",
+    );
+  }
+  const rolloutToken: TemplateTwinRolloutToken = {
+    ...input.rolloutToken,
+  };
+  if (rolloutToken.practiceId !== input.practiceId) {
+    throw new TemplateTwinFillError(
+      "TEMPLATE_TWIN_ROLLOUT_CONTROL_UNAVAILABLE",
+      "The selected Template Twin rollout admission does not belong to this practice.",
+    );
   }
 
   // Persist the first selected version before source I/O, resolution, model-
@@ -543,6 +562,8 @@ export async function processTemplateTwinVisit(
       manifestVersion: true,
       manifestSha256: true,
       roundTripVerified: true,
+      pinnedGlobalRolloutGeneration: true,
+      pinnedPracticeRolloutGeneration: true,
     },
   });
   if (
@@ -556,6 +577,9 @@ export async function processTemplateTwinVisit(
   }
   if (
     existing?.manifestSha256 === prepared.manifestSha256 &&
+    existing.pinnedGlobalRolloutGeneration === rolloutToken.globalGeneration &&
+    existing.pinnedPracticeRolloutGeneration ===
+      rolloutToken.practiceGeneration &&
     (prepared.render === null || existing.roundTripVerified)
   ) {
     return prepared;
@@ -651,7 +675,9 @@ export async function processTemplateTwinVisit(
         compiledVersionId: compiled.id,
         templateVersion: row.version,
         manifestSha256: prepared.manifestSha256,
-        blockerCodes: [...new Set(blockingIssues.map((issue) => issue.code))].sort(),
+        blockerCodes: [
+          ...new Set(blockingIssues.map((issue) => issue.code)),
+        ].sort(),
         blockerCount: blockingIssues.length,
         affectedFieldIds: [
           ...new Set(
@@ -697,6 +723,39 @@ export async function processTemplateTwinVisit(
       },
     });
   };
+  const enqueueRolloutRejectedAudit = async (
+    tx: Prisma.TransactionClient,
+    decision: Exclude<LockedTemplateTwinRolloutDecision, { allowed: true }>,
+  ): Promise<void> => {
+    await enqueueTemplateTwinAudit(tx, {
+      eventKey: `template-twin:rollout-final-claim-blocked:${canonicalSha256({
+        visitId: input.visitId,
+        manifestSha256: prepared.manifestSha256,
+        reasonCode: decision.code,
+        ...templateTwinRolloutAuditMetadata(
+          rolloutToken,
+          decision.currentToken,
+        ),
+      })}`,
+      practiceId: input.practiceId,
+      actorId: input.doctorId,
+      action: "TEMPLATE_TWIN_SAFETY_GATE_BLOCKED",
+      targetType: "TranscribeVisit",
+      targetId: input.visitId,
+      metadata: {
+        reasonCode: decision.code,
+        operation: "final_output_claim",
+        compiledVersionId: compiled.id,
+        templateVersion: row.version,
+        manifestSha256: prepared.manifestSha256,
+        outputWrittenUnclaimed: storedOutput !== null,
+        ...templateTwinRolloutAuditMetadata(
+          rolloutToken,
+          decision.currentToken,
+        ),
+      },
+    });
+  };
   const writeData = {
     compiledVersionId: compiled.id,
     noteTemplateId: row.id,
@@ -728,6 +787,10 @@ export async function processTemplateTwinVisit(
     roundTripVerification: prepared.render
       ? asJson(prepared.render.verification)
       : Prisma.JsonNull,
+    pinnedGlobalRolloutGeneration: rolloutToken.globalGeneration,
+    pinnedPracticeRolloutGeneration: rolloutToken.practiceGeneration,
+    signedGlobalRolloutGeneration: null,
+    signedPracticeRolloutGeneration: null,
     // Regeneration creates a new review boundary. Prior physician decisions
     // remain append-only rows, but they cannot authorize the new SOAP-bound
     // manifest without a fresh review.
@@ -743,6 +806,19 @@ export async function processTemplateTwinVisit(
     // replaced row produces no update and remains untouched.
     const updated = await prisma.$transaction(
       async (tx: Prisma.TransactionClient) => {
+        const finalRollout = await lockTemplateTwinRolloutForFinalClaim({
+          tx,
+          practiceId: input.practiceId,
+          pinnedToken: rolloutToken,
+        });
+        if (!finalRollout.allowed) {
+          await enqueueRolloutRejectedAudit(tx, finalRollout);
+          return {
+            count: 0,
+            soapBindingStale: false,
+            rolloutRejected: finalRollout,
+          } as const;
+        }
         const lockedVisit = await lockCurrentTemplateTwinVisit(
           tx,
           input.visitId,
@@ -781,7 +857,11 @@ export async function processTemplateTwinVisit(
             tx,
             lockedVisit?.soapVersion ?? null,
           );
-          return { count: 0, soapBindingStale: true } as const;
+          return {
+            count: 0,
+            soapBindingStale: true,
+            rolloutRejected: null,
+          } as const;
         }
         const claimedManifest = await tx.templateTwinFillManifest.updateMany({
           where: {
@@ -811,7 +891,11 @@ export async function processTemplateTwinVisit(
         if (claimedManifest.count === 1 && !storedOutput) {
           await enqueueSafetyGateAudit(tx);
         }
-        return { ...claimedManifest, soapBindingStale: false } as const;
+        return {
+          ...claimedManifest,
+          soapBindingStale: false,
+          rolloutRejected: null,
+        } as const;
       },
       { isolationLevel: "Serializable" },
     );
@@ -819,6 +903,12 @@ export async function processTemplateTwinVisit(
       throw new TemplateTwinFillError(
         "SOAP_BINDING_STALE",
         "The SOAP note changed while the Original Template DOCX was being generated. Regenerate and review it before signing.",
+      );
+    }
+    if (updated.rolloutRejected) {
+      throw new TemplateTwinFillError(
+        updated.rolloutRejected.code,
+        updated.rolloutRejected.reason,
       );
     }
     if (updated.count !== 1) {
@@ -844,6 +934,18 @@ export async function processTemplateTwinVisit(
     try {
       const createdResult = await prisma.$transaction(
         async (tx: Prisma.TransactionClient) => {
+          const finalRollout = await lockTemplateTwinRolloutForFinalClaim({
+            tx,
+            practiceId: input.practiceId,
+            pinnedToken: rolloutToken,
+          });
+          if (!finalRollout.allowed) {
+            await enqueueRolloutRejectedAudit(tx, finalRollout);
+            return {
+              soapBindingStale: false,
+              rolloutRejected: finalRollout,
+            } as const;
+          }
           const lockedVisit = await lockCurrentTemplateTwinVisit(
             tx,
             input.visitId,
@@ -863,7 +965,10 @@ export async function processTemplateTwinVisit(
               tx,
               lockedVisit?.soapVersion ?? null,
             );
-            return { soapBindingStale: true } as const;
+            return {
+              soapBindingStale: true,
+              rolloutRejected: null,
+            } as const;
           }
           const created = await tx.templateTwinFillManifest.create({
             data: {
@@ -884,7 +989,10 @@ export async function processTemplateTwinVisit(
           } else {
             await enqueueSafetyGateAudit(tx);
           }
-          return { soapBindingStale: false } as const;
+          return {
+            soapBindingStale: false,
+            rolloutRejected: null,
+          } as const;
         },
         { isolationLevel: "Serializable" },
       );
@@ -892,6 +1000,12 @@ export async function processTemplateTwinVisit(
         throw new TemplateTwinFillError(
           "SOAP_BINDING_STALE",
           "The SOAP note changed while the Original Template DOCX was being generated. Regenerate and review it before signing.",
+        );
+      }
+      if (createdResult.rolloutRejected) {
+        throw new TemplateTwinFillError(
+          createdResult.rolloutRejected.code,
+          createdResult.rolloutRejected.reason,
         );
       }
     } catch (error) {

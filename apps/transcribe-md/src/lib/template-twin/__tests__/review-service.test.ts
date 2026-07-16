@@ -46,6 +46,7 @@ import {
 } from '../fill-engine';
 import {
   TEMPLATE_TWIN_COMPILER_VERSION,
+  TEMPLATE_TWIN_IR_SCHEMA_VERSION,
   TEMPLATE_TWIN_RENDERER_VERSION,
   TEMPLATE_TWIN_RESOLVER_VERSION,
   TemplateTwinFillManifestSchema,
@@ -85,6 +86,10 @@ const SOURCE_PRIVACY_SCAN_EVIDENCE = {
   approvedStaticAssetUsedCount: 0,
   approvedStaticAssetUsageSha256: 'f'.repeat(64),
 };
+let globalRolloutEnabled: boolean;
+let globalRolloutGeneration: bigint;
+let practiceRolloutEnabled: boolean;
+let practiceRolloutGeneration: bigint;
 
 type ReviewContext = NonNullable<
   Awaited<ReturnType<TemplateTwinReviewRepository['loadOwned']>>
@@ -113,6 +118,7 @@ function field(
       partName: 'word/document.xml',
       bindingType: 'content_control',
       path: '/document/body/sdt[0]',
+      canonicalPath: '/document/body/sdt[0]',
       ordinal: 0,
       sdtId: '1',
       tag: 'synthetic_severity',
@@ -122,7 +128,10 @@ function field(
       rowIndex: null,
       cellIndex: null,
       repeatAncestorPath: null,
+      canonicalRepeatAncestorPath: null,
       sourceControlSha256: SHA,
+      sourceBindingIdentitySha256: SHA,
+      certifiedBindingSha256: SHA,
       originalContentSha256: SHA,
     },
     required: false,
@@ -171,7 +180,7 @@ function mapping(
 
 function ir(definition = field()): TemplateDocIR {
   return {
-    irSchemaVersion: 1,
+    irSchemaVersion: TEMPLATE_TWIN_IR_SCHEMA_VERSION,
     compilerVersion: TEMPLATE_TWIN_COMPILER_VERSION,
     source: {
       sha256: SHA,
@@ -318,7 +327,7 @@ function context(definition = field()): ReviewContext {
       id: 'compiled-1',
       sourceArtifactId: 'source-1',
       compilerVersion: TEMPLATE_TWIN_COMPILER_VERSION,
-      irSchemaVersion: 1,
+      irSchemaVersion: TEMPLATE_TWIN_IR_SCHEMA_VERSION,
       compiledDocumentIr: documentIr,
       unsupportedElements: [],
       structureSha256: SHA,
@@ -408,12 +417,45 @@ function lockedVisitRow(
   };
 }
 
+function mockRolloutAndVisitLocks(visit = lockedVisitRow()) {
+  database.lockVisit.mockImplementation(async (query: unknown) => {
+    const text = String(
+      (query as { strings?: readonly string[] }).strings?.join(' ') ?? '',
+    );
+    if (text.includes('template_twin_rollout_controls')) {
+      return [
+        {
+          enabled: globalRolloutEnabled,
+          generation: globalRolloutGeneration,
+        },
+      ];
+    }
+    if (text.includes('templateTwinRolloutGeneration')) {
+      return [
+        {
+          templateTwinEnabled: practiceRolloutEnabled,
+          templateTwinRolloutGeneration: practiceRolloutGeneration,
+        },
+      ];
+    }
+    if (text.includes('template_twin_lineage_migration_progress')) {
+      return [{ phase: 'CONTRACTED' }];
+    }
+    return [visit];
+  });
+}
+
 function repository(
   loaded: ReviewContext | null,
   result: Partial<Awaited<ReturnType<TemplateTwinReviewRepository['commit']>>> = {},
 ) {
   let committed: CommitPlan | null = null;
   const repo: TemplateTwinReviewRepository = {
+    pinRollout: vi.fn(async (practiceId: string) => ({
+      practiceId,
+      globalGeneration: BigInt(1),
+      practiceGeneration: BigInt(1),
+    })),
     loadOwned: vi.fn(async () => loaded),
     commit: vi.fn(async (plan) => {
       committed = plan;
@@ -429,7 +471,9 @@ function repository(
   return { repo, committed: () => committed };
 }
 
-function storage(onOutputStored?: () => void): TemplateTwinArtifactStore {
+function storage(
+  onOutputStored?: () => void | Promise<void>,
+): TemplateTwinArtifactStore {
   const storeOutputArtifact: TemplateTwinArtifactStore['storeOutputArtifact'] =
     vi.fn(async (): Promise<StoredTemplateTwinArtifact> => {
       const stored = {
@@ -442,7 +486,7 @@ function storage(onOutputStored?: () => void): TemplateTwinArtifactStore {
         sizeBytes: 24,
         created: true,
       } as const;
-      onOutputStored?.();
+      await onOutputStored?.();
       return stored;
     });
 
@@ -452,6 +496,25 @@ function storage(onOutputStored?: () => void): TemplateTwinArtifactStore {
     readOutputArtifact: vi.fn(),
     readSourceArtifact: vi.fn(async () => Buffer.alloc(20, 1)),
     storeOutputArtifact,
+  };
+}
+
+function deterministicBarrier() {
+  let signalEntered!: () => void;
+  let release!: () => void;
+  const entered = new Promise<void>((resolve) => {
+    signalEntered = resolve;
+  });
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return {
+    entered,
+    release,
+    async stop() {
+      signalEntered();
+      await released;
+    },
   };
 }
 
@@ -494,6 +557,8 @@ async function fakeFinalize(
           outputSha256: OUTPUT_SHA,
           rendererVersion: TEMPLATE_TWIN_RENDERER_VERSION,
           verification: {
+            verificationContractVersion:
+              'template-docx-readback/2.0.0' as const,
             verified: true as const,
             packageCheck: 'verified' as const,
             fieldCheck: 'verified' as const,
@@ -518,6 +583,11 @@ const actor = {
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  process.env.TEMPLATE_TWIN_KILL_SWITCH = 'false';
+  globalRolloutEnabled = true;
+  globalRolloutGeneration = BigInt(1);
+  practiceRolloutEnabled = true;
+  practiceRolloutGeneration = BigInt(1);
   const databaseModule = await import('@meddoc/db');
   const tx = (databaseModule as unknown as { __tx: unknown }).__tx;
   database.transaction.mockImplementation(
@@ -528,7 +598,7 @@ beforeEach(async () => {
   database.decisionCreate.mockResolvedValue({ id: 'decision-synthetic-1' });
   database.ledgerUpdateMany.mockResolvedValue({ count: 1 });
   database.outboxCreate.mockResolvedValue({ id: 'outbox-synthetic-1' });
-  database.lockVisit.mockResolvedValue([lockedVisitRow()]);
+  mockRolloutAndVisitLocks();
 });
 
 describe('buildClinicianCorrection exact rules', () => {
@@ -873,9 +943,7 @@ describe('reviewTemplateTwinField lifecycle', () => {
     'quarantines correction output and leaves the fill NEEDS_REVIEW after $name during storage',
     async ({ soapVersion, soapFinal }) => {
       const artifacts = storage(() => {
-        database.lockVisit.mockResolvedValue([
-          lockedVisitRow({ soapVersion, soapFinal }),
-        ]);
+        mockRolloutAndVisitLocks(lockedVisitRow({ soapVersion, soapFinal }));
       });
 
       await expect(
@@ -900,7 +968,7 @@ describe('reviewTemplateTwinField lifecycle', () => {
       });
 
       expect(artifacts.storeOutputArtifact).toHaveBeenCalledTimes(1);
-      expect(database.lockVisit).toHaveBeenCalledTimes(1);
+      expect(database.lockVisit).toHaveBeenCalledTimes(7);
       expect(database.manifestUpdateMany).toHaveBeenCalledTimes(1);
       expect(database.manifestUpdateMany).toHaveBeenCalledWith({
         where: {
@@ -970,6 +1038,47 @@ describe('reviewTemplateTwinField lifecycle', () => {
     await expect(
       createTemplateTwinReviewRepository().commit(capture.committed()!),
     ).rejects.toThrow('synthetic durable audit unavailable');
+  });
+
+  it('rejects a corrected output claim when rollout generation changes during rendering', async () => {
+    const barrier = deterministicBarrier();
+    const artifacts = storage(() => barrier.stop());
+    const operation = reviewTemplateTwinField(
+      {
+        visitId: 'visit-1',
+        actor,
+        correction: correction(),
+        validationNow: NOW,
+      },
+      {
+        storage: artifacts,
+        finalizeFill: fakeFinalize,
+        factIdFactory: () => 'd'.repeat(24),
+        now: () => new Date(NOW),
+      },
+    );
+
+    await barrier.entered;
+    practiceRolloutEnabled = false;
+    practiceRolloutGeneration = BigInt(2);
+    barrier.release();
+
+    await expect(operation).rejects.toMatchObject({
+      code: 'TEMPLATE_TWIN_PRACTICE_DISABLED',
+    });
+    expect(database.manifestUpdateMany).not.toHaveBeenCalled();
+    expect(database.decisionCreate).not.toHaveBeenCalled();
+    expect(database.ledgerUpdateMany).not.toHaveBeenCalled();
+    expect(database.outboxCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'TEMPLATE_TWIN_SAFETY_GATE_BLOCKED',
+        metadata: expect.objectContaining({
+          reasonCode: 'TEMPLATE_TWIN_PRACTICE_DISABLED',
+          operation: 'field_correction_final_claim',
+          outputWrittenUnclaimed: true,
+        }),
+      }),
+    });
   });
 
   it('never asks the repository to clear generic visit review state', async () => {

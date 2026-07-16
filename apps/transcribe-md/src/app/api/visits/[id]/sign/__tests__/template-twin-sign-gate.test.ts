@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   loadVisitExportData: vi.fn(),
   criticalWarningRefs: vi.fn(),
   enqueueAudit: vi.fn(),
+  pinRollout: vi.fn(),
+  finalRollout: vi.fn(),
 }));
 
 vi.mock("next/server", () => {
@@ -98,6 +100,24 @@ vi.mock("@/lib/template-twin/storage", () => ({
 vi.mock("@/lib/template-twin/audit-outbox", () => ({
   enqueueTemplateTwinAudit: mocks.enqueueAudit,
 }));
+vi.mock("@/lib/template-twin/rollout", () => ({
+  TemplateTwinRolloutError: class TemplateTwinRolloutError extends Error {
+    constructor(
+      public readonly code: string,
+      message: string,
+    ) {
+      super(message);
+    }
+  },
+  pinTemplateTwinRollout: mocks.pinRollout,
+  lockTemplateTwinRolloutForFinalClaim: mocks.finalRollout,
+  templateTwinRolloutAuditMetadata: () => ({
+    pinnedGlobalGeneration: "1",
+    pinnedPracticeGeneration: "1",
+    currentGlobalGeneration: "1",
+    currentPracticeGeneration: "1",
+  }),
+}));
 
 import type { NextRequest } from "next/server";
 import { TranscribeVisitStatus } from "@prisma/client";
@@ -144,6 +164,25 @@ function call(destinations: string[] = []) {
     json: async () => ({ destinations }),
   } as unknown as NextRequest;
   return POST(request, { params: Promise.resolve({ id: VISIT_ID }) });
+}
+
+function deterministicBarrier() {
+  let signalEntered!: () => void;
+  let release!: () => void;
+  const entered = new Promise<void>((resolve) => {
+    signalEntered = resolve;
+  });
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return {
+    entered,
+    release,
+    async stop() {
+      signalEntered();
+      await released;
+    },
+  };
 }
 
 beforeEach(() => {
@@ -193,6 +232,19 @@ beforeEach(() => {
   mocks.criticalWarningRefs.mockReturnValue([]);
   mocks.rxOverrideFindMany.mockResolvedValue([]);
   mocks.enqueueAudit.mockResolvedValue(undefined);
+  mocks.pinRollout.mockResolvedValue({
+    practiceId: "practice-1",
+    globalGeneration: BigInt(1),
+    practiceGeneration: BigInt(1),
+  });
+  mocks.finalRollout.mockResolvedValue({
+    allowed: true,
+    token: {
+      practiceId: "practice-1",
+      globalGeneration: BigInt(1),
+      practiceGeneration: BigInt(1),
+    },
+  });
   mocks.txFillUpdateMany.mockResolvedValue({ count: 1 });
   mocks.txVisitUpdateMany.mockResolvedValue({ count: 1 });
   mocks.transaction.mockImplementation(
@@ -358,12 +410,16 @@ describe("POST /api/visits/[id]/sign — Template Twin server gate", () => {
         needsReviewCount: 0,
         conflictCount: 0,
         criticalUnresolvedCount: 0,
+        pinnedGlobalRolloutGeneration: BigInt(1),
+        pinnedPracticeRolloutGeneration: BigInt(1),
         signedDecisionAt: null,
         updatedAt: CLAIM_UPDATED_AT,
       },
       data: {
         status: "SIGNED",
         signedDecisionAt: expect.any(Date),
+        signedGlobalRolloutGeneration: BigInt(1),
+        signedPracticeRolloutGeneration: BigInt(1),
       },
     });
     expect(mocks.txVisitUpdateMany).toHaveBeenCalledWith(
@@ -398,6 +454,53 @@ describe("POST /api/visits/[id]/sign — Template Twin server gate", () => {
     );
   });
 
+  it("rolls back both clinical transitions when durable audit enqueue fails", async () => {
+    const clinicalState: {
+      fillStatus: string;
+      visitStatus: TranscribeVisitStatus;
+    } = {
+      fillStatus: "VERIFIED",
+      visitStatus: TranscribeVisitStatus.READY,
+    };
+    mocks.txFillUpdateMany.mockImplementation(async () => {
+      clinicalState.fillStatus = "SIGNED";
+      return { count: 1 };
+    });
+    mocks.txVisitUpdateMany.mockImplementation(async () => {
+      clinicalState.visitStatus = TranscribeVisitStatus.SIGNED;
+      return { count: 1 };
+    });
+    mocks.enqueueAudit.mockImplementation(async (_tx, input) => {
+      if ((input as { action?: string }).action === "VISIT_SIGNED") {
+        throw new Error("synthetic transactional outbox failure");
+      }
+    });
+    mocks.transaction.mockImplementation(async (callback) => {
+      const before = { ...clinicalState };
+      try {
+        return await callback({
+          templateTwinFillManifest: {
+            updateMany: mocks.txFillUpdateMany,
+          },
+          transcribeVisit: { updateMany: mocks.txVisitUpdateMany },
+        });
+      } catch (error) {
+        Object.assign(clinicalState, before);
+        throw error;
+      }
+    });
+
+    const response = await call([]);
+
+    expect(response.status).toBe(500);
+    expect(clinicalState).toEqual({
+      fillStatus: "VERIFIED",
+      visitStatus: TranscribeVisitStatus.READY,
+    });
+    expect(mocks.txFillUpdateMany).toHaveBeenCalledTimes(1);
+    expect(mocks.txVisitUpdateMany).toHaveBeenCalledTimes(1);
+  });
+
   it("reads and verifies stored bytes before signing when no destination is selected", async () => {
     const response = await call([]);
 
@@ -414,6 +517,58 @@ describe("POST /api/visits/[id]/sign — Template Twin server gate", () => {
     });
     expect(mocks.transaction).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    [
+      "practice",
+      "TEMPLATE_TWIN_PRACTICE_DISABLED",
+      "Template Twin was disabled for this practice.",
+    ],
+    [
+      "global",
+      "TEMPLATE_TWIN_GLOBAL_DISABLED",
+      "Template Twin is temporarily unavailable.",
+    ],
+  ] as const)(
+    "rejects the SIGNED transition when %s rollout is revoked after sign admission",
+    async (_scope, code, reason) => {
+      const barrier = deterministicBarrier();
+      mocks.readTemplateTwinOutput.mockImplementation(async () => {
+        await barrier.stop();
+        return Buffer.from("synthetic verified DOCX bytes");
+      });
+      const operation = call([]);
+
+      await barrier.entered;
+      mocks.finalRollout.mockResolvedValue({
+        allowed: false,
+        code,
+        reason,
+        currentToken: {
+          practiceId: "practice-1",
+          globalGeneration: BigInt(2),
+          practiceGeneration: BigInt(2),
+        },
+      });
+      barrier.release();
+
+      const response = await operation;
+      expect(response.status).toBe(409);
+      expect(await response.json()).toMatchObject({ code, retry: true });
+      expect(mocks.txFillUpdateMany).not.toHaveBeenCalled();
+      expect(mocks.txVisitUpdateMany).not.toHaveBeenCalled();
+      expect(mocks.enqueueAudit).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          action: "TEMPLATE_TWIN_SIGN_BLOCKED",
+          metadata: expect.objectContaining({
+            reasonCode: code,
+            operation: "sign_final_claim",
+          }),
+        }),
+      );
+    },
+  );
 
   it.each([
     ["unavailable", new TemplateTwinStorageUnavailableError(), 503],

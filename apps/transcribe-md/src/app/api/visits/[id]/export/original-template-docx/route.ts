@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 
 import prisma from "@meddoc/db";
-import { TranscribeVisitStatus } from "@prisma/client";
+import { Prisma, TranscribeVisitStatus } from "@prisma/client";
 import { apiError, withApiHandler } from "@/lib/api-error";
 import { AuthError, requireFreshDoctorIdentity } from "@/lib/auth";
 import { logDelivery } from "@/lib/deliveries";
@@ -20,6 +20,13 @@ import {
 import { DOCX_MIME_TYPE } from "@/lib/template-twin/storage/keys";
 import { TemplateTwinArtifactNotFoundError } from "@/lib/template-twin/storage/ownership";
 import { enqueueTemplateTwinAudit } from "@/lib/template-twin/audit-outbox";
+import {
+  lockTemplateTwinRolloutForFinalClaim,
+  pinTemplateTwinRollout,
+  templateTwinRolloutAuditMetadata,
+  TemplateTwinRolloutError,
+  type TemplateTwinRolloutToken,
+} from "@/lib/template-twin/rollout";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,6 +46,7 @@ export const GET = withApiHandler<{ id: string }>(
     const userId = session?.user?.id;
     if (!userId) return apiError("unauthorized", 401);
     let practiceId: string;
+    let rolloutToken: TemplateTwinRolloutToken;
     try {
       practiceId = (await requireFreshDoctorIdentity(userId)).practiceId;
     } catch (error) {
@@ -49,6 +57,15 @@ export const GET = withApiHandler<{ id: string }>(
         });
       }
       throw error;
+    }
+    try {
+      rolloutToken = await pinTemplateTwinRollout({ practiceId });
+    } catch (error) {
+      if (!(error instanceof TemplateTwinRolloutError)) throw error;
+      return apiError(error.message, 409, {
+        code: error.code,
+        retry: true,
+      });
     }
 
     const visit = await prisma.transcribeVisit.findFirst({
@@ -124,6 +141,43 @@ export const GET = withApiHandler<{ id: string }>(
     }
 
     const fill = visit.templateTwinFill;
+    if (
+      fill.pinnedGlobalRolloutGeneration !== rolloutToken.globalGeneration ||
+      fill.pinnedPracticeRolloutGeneration !==
+        rolloutToken.practiceGeneration ||
+      fill.signedGlobalRolloutGeneration !== rolloutToken.globalGeneration ||
+      fill.signedPracticeRolloutGeneration !== rolloutToken.practiceGeneration
+    ) {
+      try {
+        await enqueueTemplateTwinAudit(prisma, {
+          eventKey: `template-twin-export-rollout-stale:${visitId}:${randomUUID()}`,
+          practiceId,
+          actorId: userId,
+          actorEmailSnapshot: session.user.email ?? null,
+          action: "TEMPLATE_TWIN_SAFETY_GATE_BLOCKED",
+          targetType: "TranscribeVisit",
+          targetId: visitId,
+          metadata: {
+            reasonCode: "TEMPLATE_TWIN_OUTPUT_ROLLOUT_STALE",
+            fillManifestId: fill.id,
+            currentGlobalGeneration: rolloutToken.globalGeneration.toString(),
+            currentPracticeGeneration:
+              rolloutToken.practiceGeneration.toString(),
+          },
+        });
+      } catch {
+        return apiError(
+          "The export safety decision could not be recorded. Try again.",
+          503,
+          { code: "TEMPLATE_TWIN_AUDIT_UNAVAILABLE", retry: true },
+        );
+      }
+      return apiError(
+        "The Original Template DOCX was generated before rollout changed. Regenerate and sign it again.",
+        409,
+        { code: "TEMPLATE_TWIN_OUTPUT_ROLLOUT_STALE", retry: true },
+      );
+    }
     // These columns are proven non-null by assessTemplateTwinSigning. Keep the
     // guard explicit so a future refactor cannot weaken that invariant.
     if (
@@ -203,25 +257,129 @@ export const GET = withApiHandler<{ id: string }>(
       );
     }
 
+    let finalAuthorization:
+      | { allowed: true }
+      | { allowed: false; code: string; reason: string };
     try {
-      await enqueueTemplateTwinAudit(prisma, {
-        eventKey: `template-twin-exported:${visitId}:${randomUUID()}`,
-        practiceId,
-        actorId: userId,
-        actorEmailSnapshot: session.user.email ?? null,
-        action: "EXPORT_TEMPLATE_TWIN_DOCX_DOWNLOADED",
-        targetType: "TranscribeVisit",
-        targetId: visitId,
-        metadata: {
-          sizeBytes: document.byteLength,
-          compiledVersionId: assessment.compiledVersionId,
-          fillManifestId: assessment.fillManifestId,
-          noteTemplateVersion: visit.noteTemplateVersion,
+      finalAuthorization = await prisma.$transaction(
+        async (tx: Prisma.TransactionClient) => {
+          const finalRollout = await lockTemplateTwinRolloutForFinalClaim({
+            tx,
+            practiceId,
+            pinnedToken: rolloutToken,
+          });
+          if (!finalRollout.allowed) {
+            await enqueueTemplateTwinAudit(tx, {
+              eventKey: `template-twin-export-rollout-blocked:${visitId}:${randomUUID()}`,
+              practiceId,
+              actorId: userId,
+              actorEmailSnapshot: session.user.email ?? null,
+              action: "TEMPLATE_TWIN_SAFETY_GATE_BLOCKED",
+              targetType: "TranscribeVisit",
+              targetId: visitId,
+              metadata: {
+                reasonCode: finalRollout.code,
+                operation: "download_final_authorization",
+                fillManifestId: fill.id,
+                ...templateTwinRolloutAuditMetadata(
+                  rolloutToken,
+                  finalRollout.currentToken,
+                ),
+              },
+            });
+            return {
+              allowed: false as const,
+              code: finalRollout.code,
+              reason: finalRollout.reason,
+            };
+          }
+
+          const currentFill = await tx.templateTwinFillManifest.findUnique({
+            where: { id: fill.id },
+            select: {
+              status: true,
+              signedDecisionAt: true,
+              outputObjectKey: true,
+              outputVersionId: true,
+              outputEtag: true,
+              outputSha256: true,
+              outputSizeBytes: true,
+              pinnedGlobalRolloutGeneration: true,
+              pinnedPracticeRolloutGeneration: true,
+              signedGlobalRolloutGeneration: true,
+              signedPracticeRolloutGeneration: true,
+            },
+          });
+          if (
+            !currentFill ||
+            currentFill.status !== "SIGNED" ||
+            currentFill.signedDecisionAt === null ||
+            currentFill.outputObjectKey !== fill.outputObjectKey ||
+            currentFill.outputVersionId !== fill.outputVersionId ||
+            currentFill.outputEtag !== fill.outputEtag ||
+            currentFill.outputSha256 !== fill.outputSha256 ||
+            currentFill.outputSizeBytes !== fill.outputSizeBytes ||
+            currentFill.pinnedGlobalRolloutGeneration !==
+              rolloutToken.globalGeneration ||
+            currentFill.pinnedPracticeRolloutGeneration !==
+              rolloutToken.practiceGeneration ||
+            currentFill.signedGlobalRolloutGeneration !==
+              rolloutToken.globalGeneration ||
+            currentFill.signedPracticeRolloutGeneration !==
+              rolloutToken.practiceGeneration
+          ) {
+            await enqueueTemplateTwinAudit(tx, {
+              eventKey: `template-twin-export-claim-stale:${visitId}:${randomUUID()}`,
+              practiceId,
+              actorId: userId,
+              actorEmailSnapshot: session.user.email ?? null,
+              action: "TEMPLATE_TWIN_SAFETY_GATE_BLOCKED",
+              targetType: "TranscribeVisit",
+              targetId: visitId,
+              metadata: {
+                reasonCode: "TEMPLATE_TWIN_OUTPUT_CLAIM_STALE",
+                operation: "download_final_authorization",
+                fillManifestId: fill.id,
+              },
+            });
+            return {
+              allowed: false as const,
+              code: "TEMPLATE_TWIN_OUTPUT_CLAIM_STALE",
+              reason:
+                "The Original Template DOCX changed before download authorization. Refresh and try again.",
+            };
+          }
+
+          await enqueueTemplateTwinAudit(tx, {
+            eventKey: `template-twin-exported:${visitId}:${randomUUID()}`,
+            practiceId,
+            actorId: userId,
+            actorEmailSnapshot: session.user.email ?? null,
+            action: "EXPORT_TEMPLATE_TWIN_DOCX_DOWNLOADED",
+            targetType: "TranscribeVisit",
+            targetId: visitId,
+            metadata: {
+              sizeBytes: document.byteLength,
+              compiledVersionId: assessment.compiledVersionId,
+              fillManifestId: assessment.fillManifestId,
+              noteTemplateVersion: visit.noteTemplateVersion,
+              rolloutGlobalGeneration: rolloutToken.globalGeneration.toString(),
+              rolloutPracticeGeneration:
+                rolloutToken.practiceGeneration.toString(),
+            },
+          });
+          return { allowed: true as const };
         },
-      });
+      );
     } catch {
       return apiError("The export could not be recorded. Try again.", 503, {
         code: "TEMPLATE_TWIN_AUDIT_UNAVAILABLE",
+        retry: true,
+      });
+    }
+    if (!finalAuthorization.allowed) {
+      return apiError(finalAuthorization.reason, 409, {
+        code: finalAuthorization.code,
         retry: true,
       });
     }
