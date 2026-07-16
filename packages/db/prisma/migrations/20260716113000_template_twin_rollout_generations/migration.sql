@@ -5,6 +5,15 @@
 -- practice flags also remain default-off. Operators must explicitly enable
 -- both database scopes in addition to disabling the environment kill switch.
 
+-- Prisma Migrate executes this explicit transaction as written. Every table,
+-- trigger, and constraint lock below is therefore covered by one
+-- transaction-local timeout. A conflicting workload fails the migration
+-- quickly and rolls back the complete rollout-generation contract; no session
+-- setting leaks into a later migration attempt.
+BEGIN;
+SET LOCAL lock_timeout = '2s';
+SET LOCAL statement_timeout = '30s';
+
 ALTER TABLE "practices"
   ADD COLUMN "templateTwinRolloutGeneration" BIGINT NOT NULL DEFAULT 1;
 
@@ -107,3 +116,5 @@ ALTER TABLE "template_twin_fill_manifests"
         "pinnedPracticeRolloutGeneration"
     )
   ) NOT VALID;
+
+COMMIT;
