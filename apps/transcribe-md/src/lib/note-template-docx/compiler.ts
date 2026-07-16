@@ -128,6 +128,7 @@ export function compileTemplateDocx(
     state.bindingIndexes.set(partName, indexBindingXmlPart(tree));
     walkNodes(tree, "", defaultContext(partName), state);
   }
+  blockDuplicateNativeBindingIdentities(state);
   blockAmbiguousAnonymousBindingIdentities(state);
 
   const parts = buildPartManifest(inspected, parsedParts);
@@ -185,6 +186,158 @@ export function compileTemplateDocx(
   const result = TemplateDocIRSchema.safeParse(candidate);
   if (!result.success) failTemplateDocx("IR_VALIDATION_FAILED");
   return result.data;
+}
+
+interface NativeBindingOccurrence {
+  readonly partName: string;
+  readonly path: string;
+  readonly label: string | null;
+}
+
+/**
+ * Native Word identities have deliberately different scopes:
+ *
+ * - w:sdtPr/w:id is a document-wide decimal identity. Word resolves duplicate
+ *   IDs by rewriting every occurrence after the first when it opens the file,
+ *   so a duplicate in a header/footer is just as unsafe as one in the body.
+ * - legacy w:ffData/w:name is used to address a form field within its Word
+ *   story. A main-document and header field may share a name, but two fields in
+ *   the same OOXML part are ambiguous to Template Twin.
+ * - aliases, tags, and physician-visible labels are not unique identities and
+ *   may repeat. Certified part/path/binding fingerprints distinguish them.
+ *
+ * Scan the namespace-aware binding indexes rather than only emitted fields so
+ * duplicates in unsupported/container controls cannot cause Word to renumber a
+ * neighboring supported control after certification.
+ */
+function blockDuplicateNativeBindingIdentities(state: CompilerState): void {
+  const sdtIds = new Map<string, NativeBindingOccurrence[]>();
+  const legacyNames = new Map<string, NativeBindingOccurrence[]>();
+
+  for (const [partName, index] of state.bindingIndexes) {
+    for (const indexed of index.nodes) {
+      const contentControl = deriveOoxmlBindingIdentity(
+        index,
+        indexed,
+        "content_control",
+      );
+      if (contentControl?.nativeIdentity.sdtId) {
+        const identity = contentControl.nativeIdentity;
+        pushIdentityOccurrence(
+          sdtIds,
+          canonicalDecimalIdentity(identity.sdtId),
+          {
+            partName,
+            path: indexed.path,
+            label: identity.alias ?? identity.tag,
+          },
+        );
+      }
+
+      const legacyField = deriveOoxmlBindingIdentity(
+        index,
+        indexed,
+        "legacy_form_field",
+      );
+      if (legacyField?.nativeIdentity.legacyName) {
+        const legacyName = legacyField.nativeIdentity.legacyName;
+        pushIdentityOccurrence(
+          legacyNames,
+          `${partName}\0${canonicalLegacyName(legacyName)}`,
+          { partName, path: indexed.path, label: legacyName },
+        );
+      }
+    }
+  }
+
+  const blockedLocations = new Set<string>();
+  addDuplicateIdentityBlockers(
+    state,
+    sdtIds,
+    "DUPLICATE_SDT_ID",
+    "Two Word controls share the same internal control ID. Word can silently renumber one when the file opens, so this template version cannot be certified. Recreate the duplicate control with a unique ID and upload a new version.",
+    blockedLocations,
+  );
+  addDuplicateIdentityBlockers(
+    state,
+    legacyNames,
+    "DUPLICATE_LEGACY_FORM_FIELD_NAME",
+    "Two legacy Word form fields in the same document story share one internal name. Rename the fields uniquely in the original template and upload a new version before certification.",
+    blockedLocations,
+  );
+
+  if (blockedLocations.size > 0) {
+    state.fields = state.fields.map((field) =>
+      blockedLocations.has(bindingLocationKey(field.rendererBinding))
+        ? { ...field, detectionStatus: "unsupported" }
+        : field,
+    );
+  }
+}
+
+function pushIdentityOccurrence(
+  groups: Map<string, NativeBindingOccurrence[]>,
+  key: string,
+  occurrence: NativeBindingOccurrence,
+): void {
+  const group = groups.get(key) ?? [];
+  group.push(occurrence);
+  groups.set(key, group);
+}
+
+function addDuplicateIdentityBlockers(
+  state: CompilerState,
+  groups: ReadonlyMap<string, readonly NativeBindingOccurrence[]>,
+  code: string,
+  detail: string,
+  blockedLocations: Set<string>,
+): void {
+  for (const occurrences of groups.values()) {
+    if (occurrences.length < 2) continue;
+    for (const occurrence of occurrences) {
+      blockedLocations.add(
+        nativeBindingLocationKey(occurrence.partName, occurrence.path),
+      );
+      addUnsupported(state, {
+        code,
+        partName: occurrence.partName,
+        path: occurrence.path,
+        label: occurrence.label,
+        detail,
+        clinicallyMaterial: true,
+        blocksCertification: true,
+      });
+    }
+  }
+}
+
+function bindingLocationKey(binding: RendererBinding): string {
+  return nativeBindingLocationKey(binding.partName, binding.path);
+}
+
+function nativeBindingLocationKey(partName: string, path: string): string {
+  return `${partName}\0${path}`;
+}
+
+function canonicalDecimalIdentity(value: string): string {
+  if (!/^[+-]?[0-9]+$/.test(value)) return `lexical:${value}`;
+  try {
+    const parsed = BigInt(value);
+    // Word's object model exposes ContentControl.ID as an unsigned 32-bit
+    // number even though WordprocessingML commonly persists the same bits as
+    // a signed decimal. Treat -1 and 4294967295 (and the rest of that overlap)
+    // as one native ID without wrapping arbitrary out-of-range input.
+    if (parsed >= -2147483648n && parsed <= 4294967295n) {
+      return `word-uint32:${BigInt.asUintN(32, parsed).toString(10)}`;
+    }
+    return `decimal:${parsed.toString(10)}`;
+  } catch {
+    return `lexical:${value}`;
+  }
+}
+
+function canonicalLegacyName(value: string): string {
+  return value.normalize("NFC").toLocaleLowerCase("en-US");
 }
 
 function blockAmbiguousAnonymousBindingIdentities(state: CompilerState): void {
