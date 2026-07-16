@@ -516,11 +516,16 @@ The feature uses these forward migrations:
 1. `packages/db/prisma/migrations/20260715162000_template_twin_docx_v1/migration.sql`
 2. `packages/db/prisma/migrations/20260715180000_template_twin_version_forks/migration.sql`
 3. `packages/db/prisma/migrations/20260715203000_template_twin_audit_gates_v1/migration.sql`
+4. `packages/db/prisma/migrations/20260716113000_template_twin_rollout_generations/migration.sql`
 
-The first migration is additive except for backfilling each existing `NoteTemplate.lineageId` to its own ID. It adds:
+The first migration is an atomic, timeout-bounded **expand only** migration. It
+does not backfill `note_templates`, set `lineageId` non-null, or build a plain
+index over the populated table. It adds:
 
 - Template Twin audit actions and certification/detection/resolution/fill enums;
-- `NoteTemplate.lineageId`, `parentVersionId`, and `templateKind`;
+- nullable `NoteTemplate.lineageId`, `parentVersionId`, and `templateKind`, plus
+  a mixed-version insert trigger;
+- PHI-free durable lineage-backfill cursor/progress state;
 - source artifacts, compiled versions, field definitions, semantic mappings, certifications, visit fill manifests, and review decisions;
 - hash/count/state constraints, ownership/provenance foreign keys, lookup indexes, and one-fill-per-visit uniqueness;
 - database triggers enforcing source, certification, certified-definition/mapping, and signed-manifest immutability.
@@ -540,6 +545,18 @@ The third migration is additive and fail-closed. It adds:
 - compiled-source/physician-owner tenant validation, owner-reassignment,
   tenant/lineage, output-key, review-field, waiver, and immutability constraint
   triggers plus supporting indexes.
+
+The fourth migration adds the database-backed monotonic global/practice rollout
+generations and pinned/signed fill generations used for linearizable revocation.
+
+`prisma migrate deploy` intentionally stops at the lineage expand shape. The
+versioned operator in `packages/db/scripts/template-twin-lineage-online.ts`
+must then build a transition guard index concurrently, backfill bounded
+primary-key batches, build final indexes concurrently, validate a non-null
+proof, and take the short final contract lock. Template Twin enablement fails
+closed until the durable phase is `CONTRACTED`. Full deployment, pause/resume,
+lock, failure, checksum, and future Prisma-drift handling are in
+`docs/runbooks/template-twin-lineage-online-migration.md`.
 
 The third migration intentionally takes `SHARE ROW EXCLUSIVE` locks on the
 compiled-version, source-artifact, note-template, and user tables for the
