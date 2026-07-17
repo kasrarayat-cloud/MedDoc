@@ -24,6 +24,7 @@ import { redactPhi } from "@meddoc/ai";
 import { log } from "@/lib/log";
 import { logAudit } from "@/lib/audit";
 import { isOwnedTemplateTwinStagingQaVisit } from "@/lib/template-twin/staging-qa-access";
+import { isTemplateTwinStagingQaRequested } from "@/lib/template-twin/staging-qa-gate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,7 +43,10 @@ export const POST = withApiHandler<{ id: string }>(
     const userId = session?.user?.id;
     const sessionEmail = session?.user?.email;
     if (!userId || !sessionEmail) return apiError("unauthorized", 401);
-    if (await isOwnedTemplateTwinStagingQaVisit({ visitId, userId })) {
+    if (
+      isTemplateTwinStagingQaRequested() ||
+      (await isOwnedTemplateTwinStagingQaVisit({ visitId, userId }))
+    ) {
       return apiError("not found", 404);
     }
 

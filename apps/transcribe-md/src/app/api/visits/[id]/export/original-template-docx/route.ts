@@ -95,6 +95,7 @@ export const GET = withApiHandler<{ id: string }>(
         run: visit.templateTwinSyntheticQaRun,
         actor: { userId, practiceId },
         currentRolloutToken: rolloutToken,
+        allowedAdmissionPhases: ["SIGNED"],
       });
       stagingQaRunId = stagingAdmission.applies ? stagingAdmission.runId : null;
       stagingQaAttempt = stagingAdmission.applies
@@ -342,6 +343,7 @@ export const GET = withApiHandler<{ id: string }>(
                 actor: { userId, practiceId },
                 currentRolloutToken: finalRollout.token,
                 allowedStatuses: ["COMPLETED"],
+                allowedAdmissionPhases: ["SIGNED"],
               });
             } catch (error) {
               if (

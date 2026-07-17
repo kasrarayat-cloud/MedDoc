@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION,
@@ -14,6 +14,21 @@ import {
   TemplateTwinStagingQaUploadProviderError,
   runWithTemplateTwinStagingQaUploadProvider,
 } from "../staging-qa-upload-provider";
+
+const mocks = vi.hoisted(() => ({
+  findAdmission: vi.fn(),
+  pinRollout: vi.fn(),
+}));
+
+vi.mock("@meddoc/db", () => ({
+  default: {
+    templateTwinSyntheticQaAdmission: { findFirst: mocks.findAdmission },
+  },
+}));
+vi.mock("../rollout", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../rollout")>()),
+  pinTemplateTwinRollout: mocks.pinRollout,
+}));
 
 const SAFE_ENV: SyntheticQaProviderEnvironment = {
   TEMPLATE_TWIN_STAGING_QA_ENABLED: "true",
@@ -35,13 +50,9 @@ const TOKEN = {
   globalGeneration: BigInt(5),
   practiceGeneration: BigInt(11),
 };
-type PinRollout = (input: {
-  practiceId: string;
-  env?: Readonly<Record<string, string | undefined>>;
-}) => Promise<typeof TOKEN>;
-
 function admittedInput<T>(operation: (providerVisitId: string) => T) {
   return {
+    admissionId: "admission-upload-synthetic",
     source: {
       sha256: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256,
       sizeBytes: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES,
@@ -52,18 +63,50 @@ function admittedInput<T>(operation: (providerVisitId: string) => T) {
       rolloutToken: TOKEN,
     },
     operation,
-    dependencies: {
-      env: SAFE_ENV,
-      pinRollout: vi.fn<PinRollout>().mockResolvedValue(TOKEN),
-    },
+    env: SAFE_ENV,
   };
 }
+
+function admission() {
+  return {
+    id: "admission-upload-synthetic",
+    practiceId: TOKEN.practiceId,
+    actorId: "doctor-upload-synthetic",
+    parentAdmissionId: null,
+    sourceSha256: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256,
+    sourceSizeBytes: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES,
+    fixtureVersion: TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION,
+    providerMode: "SYNTHETIC_LIFECYCLE",
+    purpose: "UPLOAD",
+    phase: "ADMITTED",
+    requestSha256: "a".repeat(64),
+    payloadSha256: null,
+    pinnedGlobalRolloutGeneration: TOKEN.globalGeneration,
+    pinnedPracticeRolloutGeneration: TOKEN.practiceGeneration,
+    sourceArtifactId: null,
+    noteTemplateId: null,
+    noteTemplateVersion: null,
+    certificationId: null,
+    mappingSha256: null,
+    visitId: null,
+    attempt: 1,
+    expiresAt: new Date("2099-07-17T00:00:00.000Z"),
+    failedAt: null,
+    revokedAt: null,
+    consumedAt: null,
+  };
+}
+
+beforeEach(() => {
+  mocks.findAdmission.mockReset().mockResolvedValue(admission());
+  mocks.pinRollout.mockReset().mockResolvedValue(TOKEN);
+});
 
 describe("staging fixture upload provider boundary", () => {
   it("enters deterministic ALS before draft compilation starts", async () => {
     const operation = vi.fn((providerVisitId: string) => {
       expect(providerVisitId).toMatch(
-        /^template-twin-staging-upload-visit:[a-f0-9]{64}$/u,
+        /^template-twin-staging-admission-visit:/u,
       );
       expect(getTemplateTwinSyntheticQaProviderContext()).toMatchObject({
         visitId: providerVisitId,
@@ -77,37 +120,33 @@ describe("staging fixture upload provider boundary", () => {
 
     await expect(
       runWithTemplateTwinStagingQaUploadProvider(admittedInput(operation)),
-    ).resolves.toMatch(/^template-twin-staging-upload-visit:[a-f0-9]{64}$/u);
+    ).resolves.toMatch(/^template-twin-staging-admission-visit:/u);
     expect(operation).toHaveBeenCalledTimes(1);
     expect(getTemplateTwinSyntheticQaProviderContext()).toBeNull();
   });
 
   it("blocks disabled resources before compilation or provider callbacks", async () => {
     const operation = vi.fn();
-    const pinRollout = vi.fn<PinRollout>().mockResolvedValue(TOKEN);
     await expect(
       runWithTemplateTwinStagingQaUploadProvider({
         ...admittedInput(operation),
-        dependencies: {
-          env: { ...SAFE_ENV, TEMPLATE_TWIN_STAGING_QA_ENABLED: "false" },
-          pinRollout,
-        },
+        env: { ...SAFE_ENV, TEMPLATE_TWIN_STAGING_QA_ENABLED: "false" },
       }),
     ).rejects.toBeInstanceOf(TemplateTwinStagingQaUploadProviderError);
-    expect(pinRollout).not.toHaveBeenCalled();
+    expect(mocks.pinRollout).not.toHaveBeenCalled();
     expect(operation).not.toHaveBeenCalled();
   });
 
   it("rejects a stale session generation before draft compilation", async () => {
     const operation = vi.fn();
-    const pinRollout = vi.fn<PinRollout>().mockResolvedValue({
+    mocks.pinRollout.mockResolvedValue({
       ...TOKEN,
       practiceGeneration: TOKEN.practiceGeneration + BigInt(1),
     });
     await expect(
       runWithTemplateTwinStagingQaUploadProvider({
         ...admittedInput(operation),
-        dependencies: { env: SAFE_ENV, pinRollout },
+        env: SAFE_ENV,
       }),
     ).rejects.toMatchObject({
       code: "TEMPLATE_TWIN_STAGING_QA_UPLOAD_PROVIDER_UNAVAILABLE",
@@ -127,10 +166,7 @@ describe("staging fixture upload provider boundary", () => {
         );
         return "still-bounded";
       }),
-      dependencies: {
-        env: mutableEnv,
-        pinRollout: vi.fn<PinRollout>().mockResolvedValue(TOKEN),
-      },
+      env: mutableEnv,
     });
     expect(result).toBe("still-bounded");
   });

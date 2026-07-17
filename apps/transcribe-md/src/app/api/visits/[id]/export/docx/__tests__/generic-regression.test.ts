@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   logDelivery: vi.fn(),
   logAudit: vi.fn(),
   isOwnedTemplateTwinStagingQaVisit: vi.fn(),
+  isTemplateTwinStagingQaRequested: vi.fn(),
 }));
 
 vi.mock("next/server", () => {
@@ -47,6 +48,9 @@ vi.mock("@/lib/audit", () => ({ logAudit: mocks.logAudit }));
 vi.mock("@/lib/template-twin/staging-qa-access", () => ({
   isOwnedTemplateTwinStagingQaVisit: mocks.isOwnedTemplateTwinStagingQaVisit,
 }));
+vi.mock("@/lib/template-twin/staging-qa-gate", () => ({
+  isTemplateTwinStagingQaRequested: mocks.isTemplateTwinStagingQaRequested,
+}));
 vi.mock("@meddoc/ai", () => ({ redactPhi: (value: unknown) => value }));
 
 import { GET } from "../route";
@@ -75,6 +79,7 @@ beforeEach(() => {
   mocks.loadVisitExportData.mockResolvedValue(STRUCTURED_EXPORT);
   mocks.generateVisitDocx.mockResolvedValue(DOCUMENT);
   mocks.isOwnedTemplateTwinStagingQaVisit.mockResolvedValue(false);
+  mocks.isTemplateTwinStagingQaRequested.mockReturnValue(false);
 });
 
 describe("generic DOCX export regression", () => {
@@ -109,5 +114,17 @@ describe("generic DOCX export regression", () => {
     expect(mocks.logAudit).toHaveBeenCalledWith(
       expect.objectContaining({ action: "EXPORT_DOCX_DOWNLOADED" }),
     );
+  });
+
+  it("rejects a generic export when synthetic QA requires durable admission", async () => {
+    mocks.isTemplateTwinStagingQaRequested.mockReturnValue(true);
+
+    const response = await GET({} as never, {
+      params: Promise.resolve({ id: "visit-structured-1" }),
+    });
+
+    expect(response).toEqual({ error: "not found", status: 404 });
+    expect(mocks.loadVisitExportData).not.toHaveBeenCalled();
+    expect(mocks.generateVisitDocx).not.toHaveBeenCalled();
   });
 });

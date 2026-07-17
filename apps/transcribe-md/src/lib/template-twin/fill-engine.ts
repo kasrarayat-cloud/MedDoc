@@ -1087,6 +1087,7 @@ export async function processTemplateTwinVisit(
         claim: syntheticQaAttempt,
         currentRolloutToken,
         allowedStatuses: ["PROCESSING"],
+        allowedAdmissionPhases: ["PROCESSING"],
         requireLiveWorkerLease: true,
       });
       return null;

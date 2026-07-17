@@ -8,6 +8,7 @@
 // ============================================================================
 
 import prisma from "@meddoc/db";
+import { TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION } from "@meddoc/ai";
 import type {
   NoteTemplateSection,
   ParsedStyleProfile,
@@ -140,6 +141,74 @@ export async function listDoctorTemplates(
     }) => rowToListItem(r),
   );
   // Active first, then drafts, then inactive — stable within each by recency.
+  const rank: Record<TemplateStatus, number> = {
+    active: 0,
+    draft: 1,
+    inactive: 2,
+    retired: 3,
+  };
+  return items.sort(
+    (a: TemplateListItem, b: TemplateListItem) =>
+      rank[a.status] - rank[b.status],
+  );
+}
+
+/**
+ * Synthetic QA never receives the doctor's ordinary template collection.
+ * This query is tenant- and actor-scoped to a current, durable root admission
+ * whose immutable rollout generations match the database token pinned by the
+ * settings server component. Generic templates therefore remain available
+ * only through the ordinary note-format experience.
+ */
+export async function listDoctorStagingQaTemplates(input: {
+  doctorId: string;
+  practiceId: string;
+  globalGeneration: bigint;
+  practiceGeneration: bigint;
+  now?: Date;
+}): Promise<TemplateListItem[]> {
+  const rows = await prisma.noteTemplate.findMany({
+    where: {
+      doctorId: input.doctorId,
+      templateKind: "template_twin_docx",
+      templateTwinSyntheticQaAdmissions: {
+        some: {
+          practiceId: input.practiceId,
+          actorId: input.doctorId,
+          purpose: "UPLOAD",
+          providerMode: "SYNTHETIC_LIFECYCLE",
+          fixtureVersion: TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION,
+          phase: { in: ["TEMPLATE_LINKED", "CERTIFIED"] },
+          pinnedGlobalRolloutGeneration: input.globalGeneration,
+          pinnedPracticeRolloutGeneration: input.practiceGeneration,
+          failedAt: null,
+          revokedAt: null,
+          expiresAt: { gt: input.now ?? new Date() },
+        },
+      },
+    },
+    select: {
+      id: true,
+      name: true,
+      encounterType: true,
+      status: true,
+      version: true,
+      sections: true,
+      templateKind: true,
+      templateTwinCompiledVersion: {
+        select: {
+          certificationStatus: true,
+          blockingUnsupportedCount: true,
+          _count: { select: { fields: true } },
+        },
+      },
+      updatedAt: true,
+    },
+    orderBy: [{ updatedAt: "desc" }],
+  });
+  const items: TemplateListItem[] = rows.map(
+    (row: Parameters<typeof rowToListItem>[0]) => rowToListItem(row),
+  );
   const rank: Record<TemplateStatus, number> = {
     active: 0,
     draft: 1,

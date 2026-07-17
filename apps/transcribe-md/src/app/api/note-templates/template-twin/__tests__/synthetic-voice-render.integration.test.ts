@@ -291,7 +291,7 @@ function templateRow() {
     name: 'Synthetic route renderer template',
     encounterType: null,
     status: 'draft',
-    templateTwinSyntheticQaRuns: [],
+    templateTwinSyntheticQaAdmissions: [],
     templateTwinCompiledVersion: {
       id: COMPILED_ID,
       compilerVersion: fixture.ir.compilerVersion,

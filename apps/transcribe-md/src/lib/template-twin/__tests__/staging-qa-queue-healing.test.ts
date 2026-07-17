@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   rootRunFindFirst: vi.fn(),
   txRunFindFirst: vi.fn(),
   txRunUpdateMany: vi.fn(),
+  txAdmissionUpdateMany: vi.fn(),
   txVisitUpdate: vi.fn(),
   rootVisitUpdateMany: vi.fn(),
   enqueueVisit: vi.fn(),
@@ -32,6 +33,14 @@ vi.mock("../rollout", () => ({
 }));
 vi.mock("../staging-qa-visit-guard", () => ({
   lockAndAssertTemplateTwinStagingQaRun: mocks.lockRun,
+  TemplateTwinStagingQaVisitGuardError: class TemplateTwinStagingQaVisitGuardError extends Error {
+    constructor(
+      public readonly code: string,
+      message: string,
+    ) {
+      super(message);
+    }
+  },
 }));
 vi.mock("../fill-engine", () => ({
   lockCurrentTemplateTwinVisit: mocks.lockVisit,
@@ -44,6 +53,7 @@ import {
   enqueueOwnedRun,
   type TemplateTwinStagingQaActor,
 } from "../staging-qa-service";
+import { TemplateTwinStagingQaVisitGuardError } from "../staging-qa-visit-guard";
 import { TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION } from "../staging-qa-fixtures";
 
 const ORIGINAL_ENV = { ...process.env };
@@ -60,6 +70,7 @@ const actor: TemplateTwinStagingQaActor = {
 
 interface QueueRunState {
   id: string;
+  admissionId: string;
   practiceId: string;
   doctorId: string;
   visitId: string;
@@ -89,6 +100,7 @@ interface QueueRunState {
 function baseRun(overrides: Partial<QueueRunState> = {}): QueueRunState {
   return {
     id: "run-synthetic-queue-1",
+    admissionId: "admission-synthetic-queue-1",
     practiceId: actor.practiceId,
     doctorId: actor.userId,
     visitId: "visit-synthetic-queue-1",
@@ -122,12 +134,16 @@ function installStatefulQueueHarness(
   options: { serializeTransactions?: boolean } = {},
 ) {
   let state = initial;
+  let admission = { phase: "VISIT_LINKED", attempt: initial.attempt || 1 };
   let transactionTail = Promise.resolve();
   const snapshot = () => ({ ...state, visit: { ...state.visit } });
   const tx = {
     templateTwinSyntheticQaRun: {
       findFirst: mocks.txRunFindFirst,
       updateMany: mocks.txRunUpdateMany,
+    },
+    templateTwinSyntheticQaAdmission: {
+      updateMany: mocks.txAdmissionUpdateMany,
     },
     transcribeVisit: { update: mocks.txVisitUpdate },
   };
@@ -167,6 +183,21 @@ function installStatefulQueueHarness(
       return { count: 1 };
     },
   );
+  mocks.txAdmissionUpdateMany.mockImplementation(
+    async (input: {
+      where: { phase: string; attempt: number };
+      data: { phase: string; attempt: number };
+    }) => {
+      if (
+        input.where.phase !== admission.phase ||
+        input.where.attempt !== admission.attempt
+      ) {
+        return { count: 0 };
+      }
+      admission = { ...admission, ...input.data };
+      return { count: 1 };
+    },
+  );
   mocks.lockRollout.mockResolvedValue({
     allowed: true,
     token: actor.rolloutToken,
@@ -184,7 +215,7 @@ function installStatefulQueueHarness(
     },
   );
 
-  return { state: () => snapshot() };
+  return { state: () => snapshot(), admission: () => ({ ...admission }) };
 }
 
 beforeEach(() => {
@@ -270,7 +301,7 @@ describe("Template Twin staging queue-admission healing", () => {
     const harness = installStatefulQueueHarness(
       baseRun({
         status: "PENDING_ENQUEUE",
-        attempt: 0,
+        attempt: 1,
         enqueuedAt: null,
       }),
     );
@@ -304,6 +335,10 @@ describe("Template Twin staging queue-admission healing", () => {
       status: "ENQUEUED",
       attempt: 2,
     });
+    expect(harness.admission()).toEqual({
+      phase: "VISIT_LINKED",
+      attempt: 2,
+    });
     expect(
       mocks.enqueueVisit.mock.calls.map(([input]) => input.attempt),
     ).toEqual([1, 2]);
@@ -319,15 +354,12 @@ describe("Template Twin staging queue-admission healing", () => {
     );
   });
 
-  it("serializes a repeated retry into one durable next attempt", async () => {
+  it("serializes a repeated queue retry into one durable next attempt", async () => {
     const harness = installStatefulQueueHarness(
       baseRun({
-        status: "PROCESSING_FAILED",
+        status: "ENQUEUE_FAILED",
         attempt: 1,
-        visit: {
-          ...baseRun().visit,
-          status: TranscribeVisitStatus.FAILED,
-        },
+        enqueuedAt: null,
       }),
       { serializeTransactions: true },
     );
@@ -359,15 +391,12 @@ describe("Template Twin staging queue-admission healing", () => {
     expect(mocks.enqueueAudit).toHaveBeenCalledTimes(1);
   });
 
-  it("collapses concurrent double-submit requests under the run lock", async () => {
+  it("collapses concurrent queue retry requests under the run lock", async () => {
     const harness = installStatefulQueueHarness(
       baseRun({
-        status: "PROCESSING_FAILED",
+        status: "ENQUEUE_FAILED",
         attempt: 4,
-        visit: {
-          ...baseRun().visit,
-          status: TranscribeVisitStatus.FAILED,
-        },
+        enqueuedAt: null,
       }),
       { serializeTransactions: true },
     );
@@ -400,7 +429,7 @@ describe("Template Twin staging queue-admission healing", () => {
 
   it("rejects a stale retry instead of reserving another attempt", async () => {
     const harness = installStatefulQueueHarness(
-      baseRun({ status: "PROCESSING_FAILED", attempt: 5 }),
+      baseRun({ status: "ENQUEUE_FAILED", attempt: 5, enqueuedAt: null }),
     );
 
     await expect(
@@ -412,6 +441,36 @@ describe("Template Twin staging queue-admission healing", () => {
       }),
     ).rejects.toMatchObject({ code: "RETRY_ATTEMPT_STALE" });
     expect(harness.state().attempt).toBe(5);
+    expect(mocks.txRunUpdateMany).not.toHaveBeenCalled();
+    expect(mocks.enqueueVisit).not.toHaveBeenCalled();
+  });
+
+  it("fails a terminal provider admission with a stable non-retryable result", async () => {
+    installStatefulQueueHarness(
+      baseRun({
+        status: "PROCESSING_FAILED",
+        attempt: 3,
+        visit: {
+          ...baseRun().visit,
+          status: TranscribeVisitStatus.FAILED,
+        },
+      }),
+    );
+    mocks.lockRun.mockRejectedValue(
+      new TemplateTwinStagingQaVisitGuardError(
+        "TEMPLATE_TWIN_STAGING_QA_ADMISSION_STALE",
+        "Synthetic QA admission is unavailable.",
+      ),
+    );
+
+    await expect(
+      enqueueOwnedRun({
+        actor,
+        runId: "run-synthetic-queue-1",
+        explicitRetry: true,
+        expectedAttempt: 3,
+      }),
+    ).rejects.toMatchObject({ code: "RUN_NOT_RETRYABLE" });
     expect(mocks.txRunUpdateMany).not.toHaveBeenCalled();
     expect(mocks.enqueueVisit).not.toHaveBeenCalled();
   });

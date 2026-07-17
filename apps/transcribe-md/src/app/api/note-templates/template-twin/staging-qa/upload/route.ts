@@ -29,12 +29,22 @@ import {
   runWithTemplateTwinStagingQaUploadProvider,
   TemplateTwinStagingQaUploadProviderError,
 } from "@/lib/template-twin/staging-qa-upload-provider";
+import {
+  beginTemplateTwinStagingQaUploadAdmission,
+  completeTemplateTwinStagingQaUploadAdmission,
+  markTemplateTwinStagingQaAdmissionFailed,
+  readTemplateTwinStagingQaAdmittedDraft,
+  TemplateTwinStagingQaAdmissionError,
+} from "@/lib/template-twin/staging-qa-admission";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 const MAX_MULTIPART_BYTES = 1024 * 1024;
+const IdempotencyKeySchema = z
+  .string()
+  .regex(/^[A-Za-z0-9._~-]{16,128}$/u);
 const IdentitySchema = z
   .object({
     templateName: z.literal(TEMPLATE_TWIN_STAGING_QA_TEMPLATE_NAME),
@@ -121,21 +131,70 @@ export async function POST(request: Request) {
       practiceId: session.user.practiceId,
       rolloutToken: session.templateTwinRolloutToken,
     };
-    const result = await runWithTemplateTwinStagingQaUploadProvider({
-      source: { sha256: fixture.sha256, sizeBytes: fixture.sizeBytes },
+    const idempotencyKey = IdempotencyKeySchema.safeParse(
+      form.get("idempotencyKey"),
+    );
+    if (!idempotencyKey.success) {
+      return response(
+        {
+          ok: false,
+          error: "Create a fresh synthetic upload request and try again.",
+          code: "SYNTHETIC_UPLOAD_REQUEST_INVALID",
+        },
+        400,
+      );
+    }
+    const admission = await beginTemplateTwinStagingQaUploadAdmission({
       actor,
-      operation: (providerVisitId) =>
-        createTemplateTwinDraft({
-          source,
-          identity: {
-            name: identity.data.templateName,
-            encounterType: identity.data.encounterScope,
-            versionDescription: identity.data.versionDescription,
-          },
-          actor,
-          providerVisitId,
-        }),
+      idempotencyKey: idempotencyKey.data,
+      source: { sha256: fixture.sha256, sizeBytes: fixture.sizeBytes },
     });
+    let result = await readTemplateTwinStagingQaAdmittedDraft({
+      admission,
+      actor,
+    });
+    if (!result) {
+      try {
+        const created = await runWithTemplateTwinStagingQaUploadProvider({
+          admissionId: admission.id,
+          source: { sha256: fixture.sha256, sizeBytes: fixture.sizeBytes },
+          actor,
+          operation: (providerVisitId) =>
+            createTemplateTwinDraft({
+              source,
+              identity: {
+                name: identity.data.templateName,
+                encounterType: identity.data.encounterScope,
+                versionDescription: identity.data.versionDescription,
+              },
+              actor,
+              providerVisitId,
+            }),
+        });
+        await completeTemplateTwinStagingQaUploadAdmission({
+          admissionId: admission.id,
+          actor,
+          noteTemplateId: created.noteTemplateId,
+        });
+        result = created;
+      } catch (error) {
+        try {
+          await markTemplateTwinStagingQaAdmissionFailed({
+            admissionId: admission.id,
+            actor,
+            failureCode:
+              error instanceof TemplateTwinDraftError
+                ? `UPLOAD_${error.code}`
+                : "UPLOAD_PROVIDER_FAILED",
+          });
+        } catch {
+          throw new TemplateTwinStagingQaAdmissionError(
+            "TEMPLATE_TWIN_STAGING_QA_ADMISSION_FAILED",
+          );
+        }
+        throw error;
+      }
+    }
     return response(
       {
         ok: true,
@@ -153,7 +212,8 @@ export async function POST(request: Request) {
     if (
       error instanceof AuthError ||
       error instanceof TemplateTwinStagingQaDisabledError ||
-      error instanceof TemplateTwinStagingQaUploadProviderError
+      error instanceof TemplateTwinStagingQaUploadProviderError ||
+      error instanceof TemplateTwinStagingQaAdmissionError
     ) {
       return response({ ok: false, error: "not found" }, 404);
     }

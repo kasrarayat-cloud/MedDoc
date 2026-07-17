@@ -291,6 +291,7 @@ export const POST = withApiHandler<{ id: string }>(
           run: visit.templateTwinSyntheticQaRun,
           actor: { userId, practiceId: templateTwinPracticeId },
           currentRolloutToken: templateTwinRolloutToken,
+          allowedAdmissionPhases: ["REVIEW_READY"],
         });
         stagingQaRunId = stagingAdmission.applies
           ? stagingAdmission.runId
@@ -738,6 +739,7 @@ export const POST = withApiHandler<{ id: string }>(
                   },
                 };
               }
+              let finalStagingAdmissionId: string | null = null;
               if (stagingQaRunId) {
                 try {
                   if (stagingQaAttempt === null) {
@@ -746,14 +748,17 @@ export const POST = withApiHandler<{ id: string }>(
                       "Synthetic QA attempt identity is unavailable.",
                     );
                   }
-                  await lockAndAssertTemplateTwinStagingQaOperation({
+                  const lockedStagingRun =
+                    await lockAndAssertTemplateTwinStagingQaOperation({
                     tx,
                     runId: stagingQaRunId,
                     expectedAttempt: stagingQaAttempt,
                     actor: { userId, practiceId: templateTwinPracticeId },
                     currentRolloutToken: finalRollout.token,
                     allowedStatuses: ["COMPLETED"],
+                    allowedAdmissionPhases: ["REVIEW_READY"],
                   });
+                  finalStagingAdmissionId = lockedStagingRun.admissionId;
                 } catch (error) {
                   if (
                     error instanceof TemplateTwinStagingQaDisabledError ||
@@ -864,6 +869,26 @@ export const POST = withApiHandler<{ id: string }>(
                 await tx.transcribeVisit.updateMany(visitUpdate);
               if (visitUpdated.count !== 1) {
                 throw new TemplateTwinSignClaimConflict();
+              }
+              if (finalStagingAdmissionId) {
+                const signedAdmission =
+                  await tx.templateTwinSyntheticQaAdmission.updateMany({
+                    where: {
+                      id: finalStagingAdmissionId,
+                      practiceId: templateTwinPracticeId,
+                      actorId: userId,
+                      visitId,
+                      attempt: stagingQaAttempt!,
+                      phase: "REVIEW_READY",
+                    },
+                    data: {
+                      phase: "SIGNED",
+                      consumedAt: signDecisionAt,
+                    },
+                  });
+                if (signedAdmission.count !== 1) {
+                  throw new TemplateTwinSignClaimConflict();
+                }
               }
               await enqueueTemplateTwinAudit(tx, {
                 eventKey: `template-twin-signed:${visitId}:${twinClaim.manifestVersion}`,

@@ -99,6 +99,7 @@ export async function runTemplateTwinSyntheticQaClaimBoundMutation<T>(input: {
             pinnedPracticeGeneration: context.pinnedPracticeGeneration,
           },
           allowedStatuses: ["PROCESSING"],
+          allowedAdmissionPhases: ["PROCESSING"],
           requireLiveWorkerLease: true,
         });
       } catch (error) {

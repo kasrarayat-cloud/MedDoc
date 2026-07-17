@@ -170,14 +170,51 @@ function visitRow() {
 }
 
 function stagingRun() {
+  const requestSha256 = "d".repeat(64);
+  const payloadSha256 = "e".repeat(64);
   return {
     id: "staging-run-1",
+    admissionId: "staging-admission-1",
+    visitId: VISIT_ID,
     practiceId: "practice-1",
     doctorId: "doctor-1",
+    noteTemplateId: "template-1",
+    noteTemplateVersion: 1,
+    requestSha256,
+    payloadSha256,
+    mode: "typed",
+    status: "COMPLETED",
     fixtureVersion: "template-twin-staging-safe-docx/1.0.0",
     attempt: 1,
     pinnedGlobalRolloutGeneration: BigInt(1),
     pinnedPracticeRolloutGeneration: BigInt(1),
+    admission: {
+      id: "staging-admission-1",
+      practiceId: "practice-1",
+      actorId: "doctor-1",
+      parentAdmissionId: "staging-root-admission-1",
+      sourceSha256: "9c917a831e661d5fdcf92a6e13cbc542adda9fb86a2292cf34689fc333c375d4",
+      sourceSizeBytes: 4_686,
+      fixtureVersion: "template-twin-staging-safe-docx/1.0.0",
+      providerMode: "SYNTHETIC_TYPED",
+      purpose: "VISIT",
+      phase: "REVIEW_READY",
+      requestSha256,
+      payloadSha256,
+      pinnedGlobalRolloutGeneration: BigInt(1),
+      pinnedPracticeRolloutGeneration: BigInt(1),
+      sourceArtifactId: "source-artifact-1",
+      noteTemplateId: "template-1",
+      noteTemplateVersion: 1,
+      certificationId: "certification-1",
+      mappingSha256: "f".repeat(64),
+      visitId: VISIT_ID,
+      attempt: 1,
+      expiresAt: new Date("2099-07-15T12:00:00.000Z"),
+      failedAt: null,
+      revokedAt: null,
+      consumedAt: null,
+    },
   };
 }
 

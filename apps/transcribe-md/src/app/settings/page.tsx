@@ -38,10 +38,16 @@ import { ChangeEmailDialog } from "./change-email-dialog";
 import { EmailChangeToast } from "./email-change-toast";
 import { isDataExportEnabled } from "@/lib/data-export-feature";
 import { NoteFormatManager } from "./note-format/note-format-manager";
-import { listDoctorTemplates } from "@/lib/note-template-persist/read";
+import {
+  listDoctorStagingQaTemplates,
+  listDoctorTemplates,
+} from "@/lib/note-template-persist/read";
 import { findSpecialty } from "@meddoc/shared/specialties";
 import type { ClientTemplateListItem } from "@/lib/note-template-persist/types";
-import { evaluateTemplateTwinRollout } from "@/lib/template-twin/rollout";
+import {
+  evaluateTemplateTwinRollout,
+  pinTemplateTwinRollout,
+} from "@/lib/template-twin/rollout";
 import {
   evaluateTemplateTwinStagingQaGate,
   isTemplateTwinStagingQaRequested,
@@ -95,7 +101,7 @@ export default async function SettingsPage() {
     timeZone: string | null;
     mfaEnabled: boolean;
     role: string;
-    practice: { templateTwinEnabled: boolean } | null;
+    practice: { id: string; templateTwinEnabled: boolean } | null;
   };
 
   const [user, sessionId] = (await Promise.all([
@@ -111,7 +117,7 @@ export default async function SettingsPage() {
         timeZone: true,
         mfaEnabled: true,
         role: true,
-        practice: { select: { templateTwinEnabled: true } },
+        practice: { select: { id: true, templateTwinEnabled: true } },
       },
     }),
     getCurrentSessionId(),
@@ -143,28 +149,6 @@ export default async function SettingsPage() {
     },
   });
 
-  // Phase 2b — the doctor's own note-format templates (scoped to session.user.id;
-  // a doctor never sees another's). Date → ISO + display labels for the client.
-  const noteTemplates: ClientTemplateListItem[] = (
-    await listDoctorTemplates(session.user.id)
-  ).map((t) => ({
-    id: t.id,
-    name: t.name,
-    encounterType: t.encounterType,
-    encounterLabel: t.encounterType
-      ? findSpecialty(t.encounterType).label
-      : "All my visits",
-    status: t.status,
-    version: t.version,
-    sectionCount: t.sectionCount,
-    defaultCount: t.defaultCount,
-    templateKind: t.templateKind,
-    twinCertificationStatus: t.twinCertificationStatus,
-    twinFieldCount: t.twinFieldCount,
-    twinBlockingUnsupportedCount: t.twinBlockingUnsupportedCount,
-    updatedAtIso: t.updatedAt.toISOString(),
-  }));
-
   // Which upload formats can this image actually extract (see getUploadCaps).
   const uploadCaps = await getUploadCaps();
   const templateTwinStagingQaRequested = isTemplateTwinStagingQaRequested(
@@ -187,6 +171,40 @@ export default async function SettingsPage() {
           evaluateTemplateTwinStagingQaGate(process.env).allowed
         ? "enabled"
         : "unavailable";
+
+  // Phase 2b — the doctor's own templates. Synthetic QA receives a separate
+  // server-filtered collection backed by a current durable PostgreSQL
+  // admission; it never receives ordinary generic Template Twin rows.
+  const templateRows = templateTwinStagingQaRequested
+    ? templateTwinSyntheticQaState === "enabled" && user.practice
+      ? await pinTemplateTwinRollout({ practiceId: user.practice.id }).then(
+          (token) =>
+            listDoctorStagingQaTemplates({
+              doctorId: session.user.id,
+              practiceId: user.practice!.id,
+              globalGeneration: token.globalGeneration,
+              practiceGeneration: token.practiceGeneration,
+            }),
+        )
+      : []
+    : await listDoctorTemplates(session.user.id);
+  const noteTemplates: ClientTemplateListItem[] = templateRows.map((t) => ({
+    id: t.id,
+    name: t.name,
+    encounterType: t.encounterType,
+    encounterLabel: t.encounterType
+      ? findSpecialty(t.encounterType).label
+      : "All my visits",
+    status: t.status,
+    version: t.version,
+    sectionCount: t.sectionCount,
+    defaultCount: t.defaultCount,
+    templateKind: t.templateKind,
+    twinCertificationStatus: t.twinCertificationStatus,
+    twinFieldCount: t.twinFieldCount,
+    twinBlockingUnsupportedCount: t.twinBlockingUnsupportedCount,
+    updatedAtIso: t.updatedAt.toISOString(),
+  }));
 
   // ── C3 calm-skin settings (Stage 3, flag-gated) ───────────────────────────
   // SKIN-ONLY: identical auth + Prisma reads + VIEWED_SETTINGS audit row + the

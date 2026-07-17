@@ -7,9 +7,9 @@ import {
   getTemplateTwinSyntheticQaProviderContext,
   markTemplateTwinSyntheticQaWorkerLeaseUnhealthy,
   runWithLegacyTemplateTwinInfrastructureFixture,
-  runWithTemplateTwinSyntheticQaProviderContext,
   type SyntheticQaProviderEnvironment,
 } from "@meddoc/ai";
+import { runWithTemplateTwinSyntheticQaProviderContext } from "@meddoc/ai/internal/synthetic-qa-context";
 
 import {
   TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256,
@@ -82,6 +82,7 @@ export function templateTwinSyntheticQaWorkerFailureCode(
 
 export interface TemplateTwinSyntheticQaRunSnapshot {
   readonly id: string;
+  readonly admissionId: string | null;
   readonly visitId: string;
   readonly practiceId: string;
   readonly doctorId: string;
@@ -100,6 +101,29 @@ export interface TemplateTwinSyntheticQaRunSnapshot {
   readonly workerClaimedAt: Date | null;
   readonly workerHeartbeatAt: Date | null;
   readonly workerLeaseExpiresAt: Date | null;
+  readonly admission: {
+    readonly id: string;
+    readonly practiceId: string;
+    readonly actorId: string;
+    readonly parentAdmissionId: string | null;
+    readonly sourceSha256: string;
+    readonly sourceSizeBytes: number;
+    readonly providerMode: string;
+    readonly purpose: string;
+    readonly phase: string;
+    readonly requestSha256: string;
+    readonly payloadSha256: string | null;
+    readonly noteTemplateId: string | null;
+    readonly noteTemplateVersion: number | null;
+    readonly certificationId: string | null;
+    readonly visitId: string | null;
+    readonly attempt: number;
+    readonly expiresAt: Date;
+    readonly failedAt: Date | null;
+    readonly revokedAt: Date | null;
+    readonly pinnedGlobalRolloutGeneration: bigint;
+    readonly pinnedPracticeRolloutGeneration: bigint;
+  } | null;
 }
 
 export interface TemplateTwinSyntheticQaVisitSnapshot {
@@ -218,6 +242,7 @@ function assertRunMatchesVisit(
   run: TemplateTwinSyntheticQaRunSnapshot,
 ): void {
   if (
+    !run.admissionId ||
     run.visitId !== visit.id ||
     run.practiceId !== visit.practiceId ||
     run.doctorId !== visit.userId ||
@@ -227,6 +252,42 @@ function assertRunMatchesVisit(
     fail(
       "TEMPLATE_TWIN_SYNTHETIC_QA_TENANT_MISMATCH",
       "Synthetic QA run does not match the visit owner and immutable template version.",
+    );
+  }
+  const admission = run.admission;
+  const expectedProviderMode =
+    run.mode === "typed" ? "SYNTHETIC_TYPED" : "SYNTHETIC_MOCK_VOICE";
+  const expectedAdmissionPhase =
+    run.status === "PROCESSING" ? "PROCESSING" : "VISIT_LINKED";
+  if (
+    !admission ||
+    admission.id !== run.admissionId ||
+    admission.practiceId !== run.practiceId ||
+    admission.actorId !== run.doctorId ||
+    !admission.parentAdmissionId ||
+    admission.sourceSha256 !== TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256 ||
+    admission.sourceSizeBytes !== TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES ||
+    admission.providerMode !== expectedProviderMode ||
+    admission.purpose !== "VISIT" ||
+    admission.phase !== expectedAdmissionPhase ||
+    admission.requestSha256 !== run.requestSha256 ||
+    admission.payloadSha256 !== run.payloadSha256 ||
+    admission.noteTemplateId !== run.noteTemplateId ||
+    admission.noteTemplateVersion !== run.noteTemplateVersion ||
+    !admission.certificationId ||
+    admission.visitId !== run.visitId ||
+    admission.attempt !== run.attempt ||
+    admission.failedAt !== null ||
+    admission.revokedAt !== null ||
+    admission.expiresAt <= new Date() ||
+    admission.pinnedGlobalRolloutGeneration !==
+      run.pinnedGlobalRolloutGeneration ||
+    admission.pinnedPracticeRolloutGeneration !==
+      run.pinnedPracticeRolloutGeneration
+  ) {
+    fail(
+      "TEMPLATE_TWIN_SYNTHETIC_QA_RUN_INVALID",
+      "Synthetic QA worker run lacks its current durable provider admission.",
     );
   }
   if (
@@ -432,6 +493,26 @@ export async function claimTemplateTwinSyntheticQaWorkerAttempt(input: {
           "Synthetic QA worker attempt was already claimed or replaced.",
         );
       }
+      if (lockedRun.status !== "PROCESSING") {
+        const advancedAdmission =
+          await tx.templateTwinSyntheticQaAdmission.updateMany({
+            where: {
+              id: input.run.admissionId!,
+              practiceId: input.visit.practiceId,
+              actorId: input.visit.userId,
+              visitId: input.visit.id,
+              attempt: input.run.attempt,
+              phase: "VISIT_LINKED",
+            },
+            data: { phase: "PROCESSING" },
+          });
+        if (advancedAdmission.count !== 1) {
+          fail(
+            "TEMPLATE_TWIN_SYNTHETIC_QA_RUN_INVALID",
+            "Synthetic QA durable admission could not enter processing.",
+          );
+        }
+      }
       if (lockedRun.status === "PROCESSING") {
         await enqueueTemplateTwinAudit(tx, {
           eventKey: `template-twin:staging-worker-reclaimed:${input.run.id}:${input.run.attempt}:${input.workerClaimId}`,
@@ -497,6 +578,7 @@ export async function renewTemplateTwinSyntheticQaWorkerLease(input: {
           pinnedPracticeGeneration: input.pinnedPracticeGeneration,
         },
         allowedStatuses: ["PROCESSING"],
+        allowedAdmissionPhases: ["PROCESSING"],
         requireLiveWorkerLease: true,
       });
       const renewed = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
@@ -642,6 +724,7 @@ export async function runWithWorkerSyntheticQaProviderSelection<T>(
   const providerContext = {
     mode: TEMPLATE_TWIN_SYNTHETIC_QA_MODE,
     fixtureVersion: TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION,
+    admissionId: run.admissionId!,
     runId: run.id,
     visitId: visit.id,
     practiceId: visit.practiceId,
@@ -699,6 +782,7 @@ export async function reconcileExpiredTemplateTwinSyntheticQaWorkerClaim(input: 
       attempt: input.attempt,
     },
     select: {
+      admissionId: true,
       practiceId: true,
       pinnedGlobalRolloutGeneration: true,
       pinnedPracticeRolloutGeneration: true,
@@ -745,6 +829,34 @@ export async function reconcileExpiredTemplateTwinSyntheticQaWorkerClaim(input: 
         data: { status: "PROCESSING_FAILED" },
       });
       if (reconciled.count !== 1) return false;
+      if (!snapshot.admissionId) {
+        fail(
+          "TEMPLATE_TWIN_SYNTHETIC_QA_RUN_INVALID",
+          "Synthetic QA crash reconciliation lacks durable admission.",
+        );
+      }
+      const failedAdmission =
+        await tx.templateTwinSyntheticQaAdmission.updateMany({
+          where: {
+            id: snapshot.admissionId,
+            practiceId: snapshot.practiceId,
+            actorId: input.userId,
+            visitId: input.visitId,
+            attempt: input.attempt,
+            phase: "PROCESSING",
+          },
+          data: {
+            phase: "FAILED",
+            failedAt: now,
+            failureCode: "TEMPLATE_TWIN_SYNTHETIC_QA_WORKER_LEASE_EXPIRED",
+          },
+        });
+      if (failedAdmission.count !== 1) {
+        fail(
+          "TEMPLATE_TWIN_SYNTHETIC_QA_FINAL_CLAIM_REJECTED",
+          "Synthetic QA crash reconciliation could not retire its admission.",
+        );
+      }
       const visit = await lockCurrentTemplateTwinVisit(tx, input.visitId);
       if (
         !visit ||
@@ -851,6 +963,7 @@ export async function failTemplateTwinSyntheticQaProcessing(input: {
           pinnedPracticeGeneration: context.pinnedPracticeGeneration,
         },
         allowedStatuses: ["PROCESSING"],
+        allowedAdmissionPhases: ["PROCESSING"],
         requireLiveWorkerLease: true,
       });
       const failed = await tx.templateTwinSyntheticQaRun.updateMany({
@@ -869,6 +982,28 @@ export async function failTemplateTwinSyntheticQaProcessing(input: {
         fail(
           "TEMPLATE_TWIN_SYNTHETIC_QA_FINAL_CLAIM_REJECTED",
           "Synthetic QA attempt was replaced before failure publication.",
+        );
+      }
+      const failedAdmission =
+        await tx.templateTwinSyntheticQaAdmission.updateMany({
+          where: {
+            id: context.admissionId,
+            practiceId: input.practiceId,
+            actorId: input.userId,
+            visitId: input.visitId,
+            attempt: context.attempt,
+            phase: "PROCESSING",
+          },
+          data: {
+            phase: "FAILED",
+            failedAt: new Date(),
+            failureCode: "TEMPLATE_TWIN_SYNTHETIC_QA_PROCESSING_FAILED",
+          },
+        });
+      if (failedAdmission.count !== 1) {
+        fail(
+          "TEMPLATE_TWIN_SYNTHETIC_QA_FINAL_CLAIM_REJECTED",
+          "Synthetic QA failure could not retire its durable admission.",
         );
       }
       const visit = await lockCurrentTemplateTwinVisit(tx, input.visitId);
@@ -1017,6 +1152,7 @@ export async function finalizeTemplateTwinSyntheticQaReady(input: {
             pinnedPracticeGeneration: context.pinnedPracticeGeneration,
           },
           allowedStatuses: ["PROCESSING"],
+          allowedAdmissionPhases: ["PROCESSING"],
           requireLiveWorkerLease: true,
         });
       } catch (error) {
@@ -1128,6 +1264,24 @@ export async function finalizeTemplateTwinSyntheticQaReady(input: {
         fail(
           "TEMPLATE_TWIN_SYNTHETIC_QA_FINAL_CLAIM_REJECTED",
           "Synthetic QA worker attempt was replaced before finalization.",
+        );
+      }
+      const readyAdmission =
+        await tx.templateTwinSyntheticQaAdmission.updateMany({
+          where: {
+            id: context.admissionId,
+            practiceId: input.practiceId,
+            actorId: input.userId,
+            visitId: input.visitId,
+            attempt: context.attempt,
+            phase: "PROCESSING",
+          },
+          data: { phase: "REVIEW_READY" },
+        });
+      if (readyAdmission.count !== 1) {
+        fail(
+          "TEMPLATE_TWIN_SYNTHETIC_QA_FINAL_CLAIM_REJECTED",
+          "Synthetic QA output could not enter durable review.",
         );
       }
       await enqueueTemplateTwinAudit(tx, {

@@ -27,7 +27,6 @@ export {
   templateTwinSyntheticQaPrivacyScanText,
   SyntheticQaProviderContextError,
   assertTemplateTwinSyntheticQaProviderEnvironment,
-  runWithTemplateTwinSyntheticQaProviderContext,
   getTemplateTwinSyntheticQaProviderContext,
   markTemplateTwinSyntheticQaWorkerLeaseUnhealthy,
   assertTemplateTwinSyntheticQaWorkerLeaseHealthy,
@@ -37,7 +36,6 @@ export {
   type TemplateTwinSyntheticQaFixtureVersion,
   type TemplateTwinSyntheticQaEvidenceClaim,
   type TemplateTwinSyntheticQaProviderContext,
-  type TemplateTwinSyntheticQaProviderContextInput,
 } from "./synthetic-qa-context";
 export {
   whisperBatchTranscribe,

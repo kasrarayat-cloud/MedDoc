@@ -28,16 +28,70 @@ const SAFE_ENV = {
 function run(
   overrides: Partial<TemplateTwinStagingQaRunGuardRow> = {},
 ): TemplateTwinStagingQaRunGuardRow {
-  return {
+  const base: TemplateTwinStagingQaRunGuardRow = {
     id: "run-synthetic-1",
+    admissionId: "admission-synthetic-1",
+    visitId: "visit-synthetic-1",
     practiceId: "practice-synthetic-1",
     doctorId: "doctor-synthetic-1",
+    noteTemplateId: "template-synthetic-1",
+    noteTemplateVersion: 4,
+    requestSha256: "a".repeat(64),
+    payloadSha256: "b".repeat(64),
+    mode: "typed",
+    status: "COMPLETED",
     fixtureVersion: "template-twin-staging-safe-docx/1.0.0",
     attempt: 2,
     pinnedGlobalRolloutGeneration: BigInt(7),
     pinnedPracticeRolloutGeneration: BigInt(11),
-    ...overrides,
+    admission: {
+      id: "admission-synthetic-1",
+      practiceId: "practice-synthetic-1",
+      actorId: "doctor-synthetic-1",
+      parentAdmissionId: "admission-upload-synthetic-1",
+      sourceSha256:
+        "9c917a831e661d5fdcf92a6e13cbc542adda9fb86a2292cf34689fc333c375d4",
+      sourceSizeBytes: 4686,
+      fixtureVersion: "template-twin-staging-safe-docx/1.0.0",
+      providerMode: "SYNTHETIC_TYPED",
+      purpose: "VISIT",
+      phase: "REVIEW_READY",
+      requestSha256: "a".repeat(64),
+      payloadSha256: "b".repeat(64),
+      pinnedGlobalRolloutGeneration: BigInt(7),
+      pinnedPracticeRolloutGeneration: BigInt(11),
+      sourceArtifactId: "source-synthetic-1",
+      noteTemplateId: "template-synthetic-1",
+      noteTemplateVersion: 4,
+      certificationId: "certification-synthetic-1",
+      mappingSha256: "c".repeat(64),
+      visitId: "visit-synthetic-1",
+      attempt: 2,
+      expiresAt: new Date("2099-07-17T00:00:00.000Z"),
+      failedAt: null,
+      revokedAt: null,
+      consumedAt: null,
+    },
   };
+  const merged = { ...base, ...overrides };
+  return overrides.admission === undefined
+    ? {
+        ...merged,
+        admission: {
+          ...base.admission!,
+          requestSha256: merged.requestSha256,
+          payloadSha256: merged.payloadSha256,
+          noteTemplateId: merged.noteTemplateId,
+          noteTemplateVersion: merged.noteTemplateVersion,
+          visitId: merged.visitId,
+          attempt: merged.attempt,
+          pinnedGlobalRolloutGeneration:
+            merged.pinnedGlobalRolloutGeneration,
+          pinnedPracticeRolloutGeneration:
+            merged.pinnedPracticeRolloutGeneration,
+        },
+      }
+    : merged;
 }
 
 const token = {
@@ -45,6 +99,87 @@ const token = {
   globalGeneration: BigInt(7),
   practiceGeneration: BigInt(11),
 };
+
+function lockedClient(input: {
+  lockedRun: TemplateTwinStagingQaRunGuardRow & {
+    enqueuedAt: Date | null;
+    workerClaimId: string | null;
+    workerClaimedAt: Date | null;
+    workerHeartbeatAt: Date | null;
+    workerLeaseExpiresAt: Date | null;
+  };
+  databaseNow?: Date;
+  beforeRunLock?: () => Promise<void>;
+}) {
+  const admissionPhase =
+    input.lockedRun.status === "PROCESSING"
+      ? "PROCESSING"
+      : input.lockedRun.status === "ENQUEUED"
+        ? "VISIT_LINKED"
+        : "REVIEW_READY";
+  const admission = {
+    ...input.lockedRun.admission!,
+    phase: admissionPhase,
+    attempt: input.lockedRun.attempt,
+  };
+  const queryRaw = vi.fn(async (query: { strings?: readonly string[] }) => {
+    const sql = query.strings?.join(" ") ?? "";
+    if (sql.includes('SELECT "admissionId"')) {
+      return [{ admissionId: input.lockedRun.admissionId }];
+    }
+    if (sql.includes('FROM "template_twin_synthetic_qa_admissions"')) {
+      return [admission];
+    }
+    if (sql.includes('FROM "template_twin_synthetic_qa_runs"')) {
+      await input.beforeRunLock?.();
+      return [input.lockedRun];
+    }
+    if (sql.includes('FROM "users"')) {
+      return [
+        {
+          id: "doctor-synthetic-1",
+          practiceId: "practice-synthetic-1",
+          role: "DOCTOR",
+          isActive: true,
+        },
+      ];
+    }
+    if (sql.includes("clock_timestamp()")) {
+      return [
+        {
+          databaseNow:
+            input.databaseNow ?? new Date("2026-07-17T00:00:20.000Z"),
+        },
+      ];
+    }
+    throw new Error(`Unexpected synthetic lock query: ${sql}`);
+  });
+  return {
+    $queryRaw: queryRaw as unknown as <T>(query: unknown) => Promise<T>,
+    queryRaw,
+  };
+}
+
+function lockedRun(
+  overrides: Partial<ReturnType<typeof run>> & {
+    enqueuedAt?: Date | null;
+    workerClaimId?: string | null;
+    workerClaimedAt?: Date | null;
+    workerHeartbeatAt?: Date | null;
+    workerLeaseExpiresAt?: Date | null;
+  } = {},
+) {
+  return {
+    ...run(),
+    status: "ENQUEUED",
+    enqueuedAt: new Date("2026-07-17T00:00:00.000Z"),
+    workerClaimId: "11111111-1111-4111-8111-111111111111",
+    workerClaimedAt: null,
+    workerHeartbeatAt: null,
+    workerLeaseExpiresAt: null,
+    ...overrides,
+  };
+}
 
 beforeEach(() => {
   vi.unstubAllEnvs();
@@ -64,6 +199,23 @@ describe("synthetic QA visit admission", () => {
         currentRolloutToken: token,
       }),
     ).toEqual({ applies: false });
+  });
+
+  it("rejects a missing durable run whenever synthetic QA is requested", () => {
+    expect(() =>
+      assertTemplateTwinStagingQaVisitGuard({
+        run: null,
+        actor: {
+          userId: "doctor-synthetic-1",
+          practiceId: "practice-synthetic-1",
+        },
+        currentRolloutToken: token,
+      }),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "TEMPLATE_TWIN_STAGING_QA_NOT_FOUND",
+      }),
+    );
   });
 
   it("fails closed when a marked visit is accessed with the process gate off", () => {
@@ -122,6 +274,71 @@ describe("synthetic QA visit admission", () => {
     );
   });
 
+  it("rejects a consumed admission before the SIGNED phase", () => {
+    const current = run();
+    expect(() =>
+      assertTemplateTwinStagingQaVisitGuard({
+        run: {
+          ...current,
+          admission: {
+            ...current.admission!,
+            consumedAt: new Date("2026-07-17T00:00:00.000Z"),
+          },
+        },
+        actor: {
+          userId: "doctor-synthetic-1",
+          practiceId: "practice-synthetic-1",
+        },
+        currentRolloutToken: token,
+      }),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "TEMPLATE_TWIN_STAGING_QA_ADMISSION_STALE",
+      }),
+    );
+  });
+
+  it("requires signed download admission to carry its atomic consumption proof", () => {
+    const current = run();
+    expect(() =>
+      assertTemplateTwinStagingQaVisitGuard({
+        run: {
+          ...current,
+          admission: { ...current.admission!, phase: "SIGNED" },
+        },
+        actor: {
+          userId: "doctor-synthetic-1",
+          practiceId: "practice-synthetic-1",
+        },
+        currentRolloutToken: token,
+        allowedAdmissionPhases: ["SIGNED"],
+      }),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "TEMPLATE_TWIN_STAGING_QA_ADMISSION_STALE",
+      }),
+    );
+
+    expect(
+      assertTemplateTwinStagingQaVisitGuard({
+        run: {
+          ...current,
+          admission: {
+            ...current.admission!,
+            phase: "SIGNED",
+            consumedAt: new Date("2026-07-17T00:00:00.000Z"),
+          },
+        },
+        actor: {
+          userId: "doctor-synthetic-1",
+          practiceId: "practice-synthetic-1",
+        },
+        currentRolloutToken: token,
+        allowedAdmissionPhases: ["SIGNED"],
+      }),
+    ).toEqual({ applies: true, runId: "run-synthetic-1" });
+  });
+
   it("permits no delivery or one Original Template DOCX and rejects every external/generic destination", () => {
     expect(templateTwinStagingQaDestinationsAreAllowed(run(), [])).toBe(true);
     expect(
@@ -149,30 +366,10 @@ describe("synthetic QA visit admission", () => {
   });
 
   it("locks and rejects a stale worker attempt before the output claim", async () => {
-    const queryRaw = vi
-      .fn()
-      .mockResolvedValueOnce([
-        {
-          ...run(),
-          visitId: "visit-synthetic-1",
-          requestSha256: "a".repeat(64),
-          workerClaimId: "11111111-1111-4111-8111-111111111111",
-          status: "ENQUEUED",
-          attempt: 2,
-          enqueuedAt: new Date("2026-07-17T00:00:00Z"),
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          id: "doctor-synthetic-1",
-          practiceId: "practice-synthetic-1",
-          role: "DOCTOR",
-          isActive: true,
-        },
-      ]);
+    const client = lockedClient({ lockedRun: lockedRun() });
     await expect(
       lockAndAssertTemplateTwinStagingQaAttempt({
-        tx: { $queryRaw: queryRaw },
+        tx: client,
         currentRolloutToken: token,
         claim: {
           runId: "run-synthetic-1",
@@ -190,34 +387,14 @@ describe("synthetic QA visit admission", () => {
     ).rejects.toMatchObject({
       code: "TEMPLATE_TWIN_STAGING_QA_ATTEMPT_STALE",
     });
-    expect(queryRaw).toHaveBeenCalledTimes(1);
+    expect(client.queryRaw).toHaveBeenCalled();
   });
 
   it("accepts the exact durable run and attempt under the current epoch", async () => {
-    const queryRaw = vi
-      .fn()
-      .mockResolvedValueOnce([
-        {
-          ...run(),
-          visitId: "visit-synthetic-1",
-          requestSha256: "a".repeat(64),
-          workerClaimId: "11111111-1111-4111-8111-111111111111",
-          status: "ENQUEUED",
-          attempt: 2,
-          enqueuedAt: new Date("2026-07-17T00:00:00Z"),
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          id: "doctor-synthetic-1",
-          practiceId: "practice-synthetic-1",
-          role: "DOCTOR",
-          isActive: true,
-        },
-      ]);
+    const client = lockedClient({ lockedRun: lockedRun() });
     await expect(
       lockAndAssertTemplateTwinStagingQaAttempt({
-        tx: { $queryRaw: queryRaw },
+        tx: client,
         currentRolloutToken: token,
         claim: {
           runId: "run-synthetic-1",
@@ -237,34 +414,19 @@ describe("synthetic QA visit admission", () => {
 
   it("rejects a terminal claim whose worker lease expired at database time", async () => {
     const databaseNow = new Date("2026-07-17T00:00:20.000Z");
-    const queryRaw = vi
-      .fn()
-      .mockResolvedValueOnce([
-        {
-          ...run(),
-          visitId: "visit-synthetic-1",
-          requestSha256: "a".repeat(64),
-          workerClaimId: "11111111-1111-4111-8111-111111111111",
-          workerClaimedAt: new Date("2026-07-17T00:00:00.000Z"),
-          workerHeartbeatAt: new Date("2026-07-17T00:00:05.000Z"),
-          workerLeaseExpiresAt: databaseNow,
-          status: "PROCESSING",
-          enqueuedAt: new Date("2026-07-17T00:00:00.000Z"),
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          id: "doctor-synthetic-1",
-          practiceId: "practice-synthetic-1",
-          role: "DOCTOR",
-          isActive: true,
-        },
-      ])
-      .mockResolvedValueOnce([{ databaseNow }]);
+    const client = lockedClient({
+      databaseNow,
+      lockedRun: lockedRun({
+        status: "PROCESSING",
+        workerClaimedAt: new Date("2026-07-17T00:00:00.000Z"),
+        workerHeartbeatAt: new Date("2026-07-17T00:00:05.000Z"),
+        workerLeaseExpiresAt: databaseNow,
+      }),
+    });
 
     await expect(
       lockAndAssertTemplateTwinStagingQaAttempt({
-        tx: { $queryRaw: queryRaw },
+        tx: client,
         currentRolloutToken: token,
         claim: {
           runId: "run-synthetic-1",
@@ -287,36 +449,18 @@ describe("synthetic QA visit admission", () => {
   });
 
   it("accepts a terminal claim only while its database-time lease is live", async () => {
-    const queryRaw = vi
-      .fn()
-      .mockResolvedValueOnce([
-        {
-          ...run(),
-          visitId: "visit-synthetic-1",
-          requestSha256: "a".repeat(64),
-          workerClaimId: "11111111-1111-4111-8111-111111111111",
-          workerClaimedAt: new Date("2026-07-17T00:00:00.000Z"),
-          workerHeartbeatAt: new Date("2026-07-17T00:00:05.000Z"),
-          workerLeaseExpiresAt: new Date("2026-07-17T00:00:25.000Z"),
-          status: "PROCESSING",
-          enqueuedAt: new Date("2026-07-17T00:00:00.000Z"),
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          id: "doctor-synthetic-1",
-          practiceId: "practice-synthetic-1",
-          role: "DOCTOR",
-          isActive: true,
-        },
-      ])
-      .mockResolvedValueOnce([
-        { databaseNow: new Date("2026-07-17T00:00:20.000Z") },
-      ]);
+    const client = lockedClient({
+      lockedRun: lockedRun({
+        status: "PROCESSING",
+        workerClaimedAt: new Date("2026-07-17T00:00:00.000Z"),
+        workerHeartbeatAt: new Date("2026-07-17T00:00:05.000Z"),
+        workerLeaseExpiresAt: new Date("2026-07-17T00:00:25.000Z"),
+      }),
+    });
 
     await expect(
       lockAndAssertTemplateTwinStagingQaAttempt({
-        tx: { $queryRaw: queryRaw },
+        tx: client,
         currentRolloutToken: token,
         claim: {
           runId: "run-synthetic-1",
@@ -345,39 +489,22 @@ describe("synthetic QA visit admission", () => {
     const entered = new Promise<void>((resolve) => {
       runQueryEntered = resolve;
     });
-    const queryRaw = vi
-      .fn()
-      .mockImplementationOnce(async () => {
+    const client = lockedClient({
+      databaseNow: new Date("2026-07-17T00:00:21.000Z"),
+      beforeRunLock: async () => {
         runQueryEntered();
         await runLock;
-        return [
-          {
-            ...run(),
-            visitId: "visit-synthetic-1",
-            requestSha256: "a".repeat(64),
-            workerClaimId: "11111111-1111-4111-8111-111111111111",
-            workerClaimedAt: new Date("2026-07-17T00:00:00.000Z"),
-            workerHeartbeatAt: new Date("2026-07-17T00:00:05.000Z"),
-            workerLeaseExpiresAt: new Date("2026-07-17T00:00:20.000Z"),
-            status: "PROCESSING",
-            enqueuedAt: new Date("2026-07-17T00:00:00.000Z"),
-          },
-        ];
-      })
-      .mockResolvedValueOnce([
-        {
-          id: "doctor-synthetic-1",
-          practiceId: "practice-synthetic-1",
-          role: "DOCTOR",
-          isActive: true,
-        },
-      ])
-      .mockResolvedValueOnce([
-        { databaseNow: new Date("2026-07-17T00:00:21.000Z") },
-      ]);
+      },
+      lockedRun: lockedRun({
+        status: "PROCESSING",
+        workerClaimedAt: new Date("2026-07-17T00:00:00.000Z"),
+        workerHeartbeatAt: new Date("2026-07-17T00:00:05.000Z"),
+        workerLeaseExpiresAt: new Date("2026-07-17T00:00:20.000Z"),
+      }),
+    });
 
     const claim = lockAndAssertTemplateTwinStagingQaAttempt({
-      tx: { $queryRaw: queryRaw },
+      tx: client,
       currentRolloutToken: token,
       claim: {
         runId: "run-synthetic-1",
@@ -400,34 +527,19 @@ describe("synthetic QA visit admission", () => {
     await expect(claim).rejects.toMatchObject({
       code: "TEMPLATE_TWIN_STAGING_QA_ATTEMPT_STALE",
     });
-    expect(queryRaw).toHaveBeenCalledTimes(3);
+    expect(client.queryRaw).toHaveBeenCalled();
   });
 
   it("rejects the old worker after the same attempt is lease-reclaimed", async () => {
-    const queryRaw = vi
-      .fn()
-      .mockResolvedValueOnce([
-        {
-          ...run(),
-          visitId: "visit-synthetic-1",
-          requestSha256: "a".repeat(64),
-          workerClaimId: "22222222-2222-4222-8222-222222222222",
-          status: "PROCESSING",
-          attempt: 2,
-          enqueuedAt: new Date("2026-07-17T00:00:00Z"),
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          id: "doctor-synthetic-1",
-          practiceId: "practice-synthetic-1",
-          role: "DOCTOR",
-          isActive: true,
-        },
-      ]);
+    const client = lockedClient({
+      lockedRun: lockedRun({
+        status: "PROCESSING",
+        workerClaimId: "22222222-2222-4222-8222-222222222222",
+      }),
+    });
     await expect(
       lockAndAssertTemplateTwinStagingQaAttempt({
-        tx: { $queryRaw: queryRaw },
+        tx: client,
         currentRolloutToken: token,
         claim: {
           runId: "run-synthetic-1",
@@ -446,22 +558,16 @@ describe("synthetic QA visit admission", () => {
     ).rejects.toMatchObject({
       code: "TEMPLATE_TWIN_STAGING_QA_ATTEMPT_STALE",
     });
-    expect(queryRaw).toHaveBeenCalledTimes(2);
+    expect(client.queryRaw).toHaveBeenCalled();
   });
 
   it("rejects signing, correction, or download claims from a prior attempt", async () => {
-    const queryRaw = vi.fn().mockResolvedValue([
-      {
-        ...run({ attempt: 4 }),
-        visitId: "visit-synthetic-1",
-        requestSha256: "a".repeat(64),
-        status: "ENQUEUED",
-        enqueuedAt: new Date("2026-07-17T00:00:00Z"),
-      },
-    ]);
+    const client = lockedClient({
+      lockedRun: lockedRun({ attempt: 4 }),
+    });
     await expect(
       lockAndAssertTemplateTwinStagingQaOperation({
-        tx: { $queryRaw: queryRaw },
+        tx: client,
         runId: "run-synthetic-1",
         expectedAttempt: 3,
         actor: {

@@ -6,6 +6,10 @@ const mocks = vi.hoisted(() => ({
   requireDoctor: vi.fn(),
   createDraft: vi.fn(),
   uploadProvider: vi.fn(),
+  beginAdmission: vi.fn(),
+  readAdmittedDraft: vi.fn(),
+  completeAdmission: vi.fn(),
+  failAdmission: vi.fn(),
   rateLimit: vi.fn(),
 }));
 
@@ -31,6 +35,14 @@ vi.mock("@/lib/template-twin/create-draft", () => ({
 vi.mock("@/lib/template-twin/staging-qa-upload-provider", () => ({
   TemplateTwinStagingQaUploadProviderError: class TemplateTwinStagingQaUploadProviderError extends Error {},
   runWithTemplateTwinStagingQaUploadProvider: mocks.uploadProvider,
+}));
+vi.mock("@/lib/template-twin/staging-qa-admission", () => ({
+  TemplateTwinStagingQaAdmissionError:
+    class TemplateTwinStagingQaAdmissionError extends Error {},
+  beginTemplateTwinStagingQaUploadAdmission: mocks.beginAdmission,
+  readTemplateTwinStagingQaAdmittedDraft: mocks.readAdmittedDraft,
+  completeTemplateTwinStagingQaUploadAdmission: mocks.completeAdmission,
+  markTemplateTwinStagingQaAdmissionFailed: mocks.failAdmission,
 }));
 
 import {
@@ -112,6 +124,7 @@ async function uploadRequest(
   form.set("encounterScope", TEMPLATE_TWIN_STAGING_QA_ENCOUNTER_SCOPE);
   form.set("versionDescription", TEMPLATE_TWIN_STAGING_QA_VERSION_DESCRIPTION);
   form.set("fixtureVersion", input.fixtureVersion ?? fixture.fixtureVersion);
+  form.set("idempotencyKey", "synthetic-upload-request-0001");
   return new Request(ENDPOINT, {
     method: "POST",
     headers: {
@@ -127,6 +140,13 @@ beforeEach(() => {
   vi.clearAllMocks();
   safeEnvironment();
   mocks.rateLimit.mockReturnValue(null);
+  mocks.beginAdmission.mockResolvedValue({
+    id: "admission-upload-synthetic-1",
+    phase: "ADMITTED",
+  });
+  mocks.readAdmittedDraft.mockResolvedValue(null);
+  mocks.completeAdmission.mockResolvedValue(undefined);
+  mocks.failAdmission.mockResolvedValue(undefined);
   mocks.uploadProvider.mockImplementation(
     (input: { operation: (providerVisitId: string) => unknown }) =>
       input.operation("template-twin-staging-upload-visit:synthetic"),
@@ -181,6 +201,7 @@ describe("synthetic staging fixture upload route", () => {
     );
     expect(mocks.uploadProvider).toHaveBeenCalledWith(
       expect.objectContaining({
+        admissionId: "admission-upload-synthetic-1",
         source: expect.objectContaining({
           sha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
         }),
@@ -188,6 +209,15 @@ describe("synthetic staging fixture upload route", () => {
           practiceId: "practice-synthetic-1",
         }),
         operation: expect.any(Function),
+      }),
+    );
+    expect(mocks.beginAdmission.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.uploadProvider.mock.invocationCallOrder[0]!,
+    );
+    expect(mocks.completeAdmission).toHaveBeenCalledWith(
+      expect.objectContaining({
+        admissionId: "admission-upload-synthetic-1",
+        noteTemplateId: "template-synthetic-1",
       }),
     );
   });

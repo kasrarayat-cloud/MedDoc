@@ -6,7 +6,11 @@ import {
   TEMPLATE_TWIN_SYNTHETIC_QA_TRANSCRIPT,
 } from "@meddoc/ai";
 
-import { DOCX_MIME_TYPE } from "./storage";
+import { DOCX_MIME_TYPE } from "./storage/keys";
+import {
+  TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256,
+  TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES,
+} from "./staging-qa-fixture-contract";
 import { TEMPLATE_TWIN_STAGING_QA_TYPED_STARTER } from "./staging-qa-ui-contract";
 export {
   TEMPLATE_TWIN_STAGING_QA_STATIC_INTENT_REASON,
@@ -19,6 +23,10 @@ const W14 = "http://schemas.microsoft.com/office/word/2010/wordml";
 const R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 
 export { TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION };
+export {
+  TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256,
+  TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES,
+} from "./staging-qa-fixture-contract";
 export const TEMPLATE_TWIN_STAGING_QA_FIXTURE_FILENAME =
   "template-twin-synthetic-qa-v1.docx" as const;
 export const TEMPLATE_TWIN_STAGING_QA_FIXTURE_MIME = DOCX_MIME_TYPE;
@@ -28,9 +36,6 @@ export const TEMPLATE_TWIN_STAGING_QA_FIXTURE_MIME = DOCX_MIME_TYPE;
  * an uploaded file. Changing the fixture requires a new fixture version and a
  * migration review of the database admission backstop.
  */
-export const TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256 =
-  "9c917a831e661d5fdcf92a6e13cbc542adda9fb86a2292cf34689fc333c375d4" as const;
-export const TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES = 4_686 as const;
 export const TEMPLATE_TWIN_STAGING_QA_TEMPLATE_NAME =
   "Template Twin Synthetic QA Fixture" as const;
 export const TEMPLATE_TWIN_STAGING_QA_ENCOUNTER_SCOPE =

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -7,6 +7,20 @@ const APP_ROOT = resolve(process.cwd(), "src");
 
 function source(relative: string): string {
   return readFileSync(resolve(APP_ROOT, relative), "utf8");
+}
+
+function productionTypeScriptFiles(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const absolute = resolve(directory, entry.name);
+    if (entry.isDirectory()) {
+      return entry.name === "__tests__"
+        ? []
+        : productionTypeScriptFiles(absolute);
+    }
+    return /\.(?:ts|tsx)$/u.test(entry.name) && !/\.test\.[^.]+$/u.test(entry.name)
+      ? [absolute]
+      : [];
+  });
 }
 
 describe("synthetic QA server-boundary architecture", () => {
@@ -18,6 +32,7 @@ describe("synthetic QA server-boundary architecture", () => {
   ])("blocks the generic delivery route %s", (route) => {
     const routeSource = source(route);
     expect(routeSource).toContain("isOwnedTemplateTwinStagingQaVisit");
+    expect(routeSource).toContain("isTemplateTwinStagingQaRequested");
     expect(routeSource).toContain('return apiError("not found", 404)');
   });
 
@@ -160,7 +175,11 @@ describe("synthetic QA server-boundary architecture", () => {
   it("proves run source and mappings before the model-backed privacy callback", () => {
     const service = source("lib/template-twin/staging-qa-service.ts");
     const boundaryCall = service.indexOf(
-      "runWithTemplateTwinStagingQaCertificationProvider",
+      "runWithVerifiedTemplateTwinStagingQaAdmissionProvider",
+      service.indexOf("createTemplateTwinStagingQaRun"),
+    );
+    const persistenceCall = service.indexOf(
+      "beginTemplateTwinStagingQaVisitAdmission",
       service.indexOf("createTemplateTwinStagingQaRun"),
     );
     const privacyCall = service.indexOf(
@@ -168,11 +187,16 @@ describe("synthetic QA server-boundary architecture", () => {
       boundaryCall,
     );
     expect(boundaryCall).toBeGreaterThan(0);
+    expect(persistenceCall).toBeGreaterThan(0);
+    expect(persistenceCall).toBeLessThan(boundaryCall);
     expect(privacyCall).toBeGreaterThan(boundaryCall);
-    expect(service.slice(boundaryCall, privacyCall)).toContain(
+    const durableAdmission = source(
+      "lib/template-twin/staging-qa-admission.ts",
+    );
+    expect(durableAdmission).toContain(
       "TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256",
     );
-    expect(service.slice(boundaryCall, privacyCall)).toContain(
+    expect(durableAdmission).toContain(
       "TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES",
     );
     expect(service.slice(privacyCall, privacyCall + 500)).toContain(
@@ -218,7 +242,50 @@ describe("synthetic QA server-boundary architecture", () => {
     );
     expect(boundary).toContain("pinTemplateTwinRollout");
     expect(boundary).toContain(
+      "runWithVerifiedTemplateTwinStagingQaAdmissionProvider",
+    );
+    const publicAiIndex = readFileSync(
+      resolve(process.cwd(), "../../packages/ai/src/index.ts"),
+      "utf8",
+    );
+    expect(publicAiIndex).not.toContain(
       "runWithTemplateTwinSyntheticQaProviderContext",
     );
+  });
+
+  it("shares one canonical visit request hash between admission and run lineage", () => {
+    const admission = source("lib/template-twin/staging-qa-admission.ts");
+    const service = source("lib/template-twin/staging-qa-service.ts");
+    const digest = source("lib/template-twin/staging-qa-digest.ts");
+
+    expect(digest).toContain(
+      "export function templateTwinStagingQaRunRequestSha256",
+    );
+    expect(admission).toContain("templateTwinStagingQaRunRequestSha256({");
+    expect(service).toContain("templateTwinStagingQaRunRequestSha256({");
+    expect(service).toContain(
+      'error.code === "TEMPLATE_TWIN_STAGING_QA_ADMISSION_MISMATCH"',
+    );
+    expect(service).toContain('"IDEMPOTENCY_CONFLICT"');
+    expect(service).toContain(
+      'status: "PENDING_ENQUEUE",\n            // The durable child admission starts at attempt one.',
+    );
+    expect(service).toContain("attempt: 1,");
+    expect(service).not.toContain(
+      "requestSha256: canonicalSha256({\n      contractVersion: TEMPLATE_TWIN_STAGING_QA_REQUEST_CONTRACT_VERSION",
+    );
+  });
+
+  it("confines the raw provider-context constructor to database-verifying wrappers", () => {
+    const rawContextImport = "@meddoc/ai/internal/synthetic-qa-context";
+    const importers = productionTypeScriptFiles(APP_ROOT)
+      .filter((file) => readFileSync(file, "utf8").includes(rawContextImport))
+      .map((file) => file.slice(APP_ROOT.length + 1))
+      .sort();
+
+    expect(importers).toEqual([
+      "lib/template-twin/staging-qa-admission.ts",
+      "worker/synthetic-qa-provider.ts",
+    ]);
   });
 });

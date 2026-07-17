@@ -47,7 +47,10 @@ import { RATE_LIMITS, rateLimitOr429 } from "@/lib/rate-limit";
 import { log } from "@/lib/log";
 import { logAudit } from "@/lib/audit";
 import { AuthError, requireFreshDoctorIdentity } from "@/lib/auth";
-import { TemplateTwinStagingQaDisabledError } from "@/lib/template-twin/staging-qa-gate";
+import {
+  isTemplateTwinStagingQaRequested,
+  TemplateTwinStagingQaDisabledError,
+} from "@/lib/template-twin/staging-qa-gate";
 import { isOwnedTemplateTwinStagingQaVisit } from "@/lib/template-twin/staging-qa-access";
 import {
   assertTemplateTwinStagingQaVisitGuard,
@@ -146,7 +149,10 @@ export const GET = withApiHandler<{ id: string }>(
     });
     // 404 on both "not found" AND "not yours" prevents ID enumeration.
     if (!visit || visit.userId !== userId) return apiError("not found", 404);
-    if (visit.templateTwinSyntheticQaRun) {
+    if (
+      visit.templateTwinSyntheticQaRun ||
+      isTemplateTwinStagingQaRequested()
+    ) {
       try {
         const doctor = await requireFreshDoctorIdentity(userId);
         assertTemplateTwinStagingQaVisitGuard({

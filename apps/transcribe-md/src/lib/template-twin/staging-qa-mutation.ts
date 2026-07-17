@@ -21,6 +21,7 @@ import {
   type TemplateTwinStagingQaVisitGuardCode,
 } from "./staging-qa-visit-guard";
 import { TEMPLATE_TWIN_STAGING_QA_SOAP_EDIT_SUFFIX } from "./staging-qa-fixtures";
+import { isTemplateTwinStagingQaRequested } from "./staging-qa-gate";
 export { isTemplateTwinStagingQaCorrectionValueAllowed } from "./staging-qa-values";
 
 export type TemplateTwinStagingQaMutationCode =
@@ -77,9 +78,9 @@ export async function pinTemplateTwinStagingQaMutation(input: {
   userId: string;
   run: TemplateTwinStagingQaRunGuardRow | null | undefined;
 }): Promise<TemplateTwinStagingQaMutationClaim | null> {
-  if (!input.run) return null;
+  if (!input.run && !isTemplateTwinStagingQaRequested()) return null;
   const identity = await requireFreshDoctorIdentity(input.userId);
-  if (identity.practiceId !== input.run.practiceId) {
+  if (input.run && identity.practiceId !== input.run.practiceId) {
     throw new TemplateTwinStagingQaMutationError(
       "TEMPLATE_TWIN_STAGING_QA_NOT_FOUND",
       "Synthetic QA visit not found.",
@@ -100,8 +101,9 @@ export async function pinTemplateTwinStagingQaMutation(input: {
     run: input.run,
     actor: { userId: input.userId, practiceId: identity.practiceId },
     currentRolloutToken: rolloutToken,
+    allowedAdmissionPhases: ["REVIEW_READY"],
   });
-  if (!admission.applies || input.run.id !== admission.runId) {
+  if (!admission.applies || input.run?.id !== admission.runId) {
     throw new TemplateTwinStagingQaMutationError(
       "TEMPLATE_TWIN_STAGING_QA_NOT_FOUND",
       "Synthetic QA visit not found.",
@@ -120,7 +122,8 @@ export async function pinTemplateTwinStagingQaMutation(input: {
 /**
  * Final linearization boundary for a staging visit mutation. Call inside the
  * same transaction as the clinical update and fill invalidation. Lock order is
- * always global rollout -> practice rollout -> staging run -> visit -> fill.
+ * always global rollout -> practice rollout -> durable admission -> staging
+ * run -> actor -> visit -> fill.
  */
 export async function lockTemplateTwinStagingQaMutation(input: {
   tx: Prisma.TransactionClient;
@@ -145,6 +148,7 @@ export async function lockTemplateTwinStagingQaMutation(input: {
     },
     currentRolloutToken: rollout.token,
     allowedStatuses: ["COMPLETED"],
+    allowedAdmissionPhases: ["REVIEW_READY"],
   });
   const visit = await lockCurrentTemplateTwinVisit(
     input.tx,

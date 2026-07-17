@@ -142,6 +142,7 @@ export function NoteFormatManager({
   const fileRef = useRef<HTMLInputElement>(null);
   const twinFileRef = useRef<HTMLInputElement>(null);
   const twinUploadReturnFocusRef = useRef<HTMLElement | null>(null);
+  const twinUploadKeyRef = useRef<string | null>(null);
   const [twinUploadOpen, setTwinUploadOpen] = useState(false);
   const [twinUploadMode, setTwinUploadMode] =
     useState<TwinUploadMode>("generic");
@@ -273,6 +274,15 @@ export function NoteFormatManager({
     // synthetic-only. This is intentionally stronger than the full staging
     // readiness result: partial staging configuration must fail closed.
     if (mode === "generic" && templateTwinStagingQaRequested) return;
+    if (
+      mode === "synthetic_staging" &&
+      typeof crypto.randomUUID !== "function"
+    ) {
+      toast.error("This browser cannot create a replay-safe staging request");
+      return;
+    }
+    twinUploadKeyRef.current =
+      mode === "synthetic_staging" ? crypto.randomUUID() : null;
     twinUploadReturnFocusRef.current =
       document.activeElement instanceof HTMLElement
         ? document.activeElement
@@ -337,10 +347,17 @@ export function NoteFormatManager({
     formData.append("encounterScope", encounterScope);
     formData.append("versionDescription", versionDescription);
     if (twinUploadMode === "synthetic_staging") {
+      const idempotencyKey = twinUploadKeyRef.current;
+      if (!idempotencyKey) {
+        toast.error("Create a fresh synthetic upload request and try again");
+        setView(recoverView);
+        return;
+      }
       formData.append(
         "fixtureVersion",
         TEMPLATE_TWIN_STAGING_QA_FIXTURE_VERSION,
       );
+      formData.append("idempotencyKey", idempotencyKey);
     }
 
     try {
@@ -369,6 +386,7 @@ export function NoteFormatManager({
         setView(recoverView);
         return;
       }
+      twinUploadKeyRef.current = null;
       router.push(payload.certificationUrl);
     } catch {
       toast.error("Template upload did not finish", {

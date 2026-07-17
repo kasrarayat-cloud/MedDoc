@@ -1009,7 +1009,10 @@ test("Template Twin staging UI drives the real synthetic pipeline fail closed", 
     ).status(),
   ).toBe(404);
 
-  const currentAdmission = await page.request.post(
+  // Re-enabling the rollout does not silently re-admit the previously
+  // certified source/template capability. A fresh, explicit source admission
+  // is required before another synthetic provider operation may begin.
+  const postReenableAdmission = await page.request.post(
     "/api/note-templates/template-twin/staging-qa/runs",
     {
       headers: {
@@ -1023,25 +1026,13 @@ test("Template Twin staging UI drives the real synthetic pipeline fail closed", 
       },
     },
   );
-  expect(currentAdmission.status()).toBe(202);
-  const currentAdmissionBody = (await currentAdmission.json()) as {
-    ok: true;
-    runId: string;
-    visitId: string;
-    run: {
-      globalRolloutGeneration: string;
-      practiceRolloutGeneration: string;
-    };
-  };
-  expect(currentAdmissionBody.runId).not.toBe(staleAdmissionBody.runId);
-  expect(currentAdmissionBody.visitId).not.toBe(staleAdmissionBody.visitId);
-  expect(currentAdmissionBody.run.globalRolloutGeneration).not.toBe(
-    staleAdmissionBody.run.globalRolloutGeneration,
-  );
-  expect(currentAdmissionBody.run.practiceRolloutGeneration).not.toBe(
-    staleAdmissionBody.run.practiceRolloutGeneration,
-  );
-  await waitForVerifiedFill(page, currentAdmissionBody.visitId);
+  expect(postReenableAdmission.status()).toBe(422);
+  expect(
+    (await postReenableAdmission.json()) as {
+      ok: boolean;
+      code: string;
+    },
+  ).toMatchObject({ ok: false, code: "TEMPLATE_NOT_READY" });
   expect(
     (
       await page.request.get(

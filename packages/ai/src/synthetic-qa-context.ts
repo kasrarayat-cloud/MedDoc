@@ -145,6 +145,8 @@ export interface SyntheticQaProviderEnvironment {
 export interface TemplateTwinSyntheticQaProviderContextInput {
   readonly mode: TemplateTwinSyntheticQaMode;
   readonly fixtureVersion: TemplateTwinSyntheticQaFixtureVersion;
+  /** PostgreSQL-verified capability that authorized this provider context. */
+  readonly admissionId: string;
   readonly runId: string;
   readonly visitId: string;
   readonly practiceId: string;
@@ -391,6 +393,7 @@ function validateContextInput(
       "Template Twin synthetic QA mode or fixture version is unsupported.",
     );
   }
+  assertIdentifier(input.admissionId, "admission identifier");
   assertIdentifier(input.runId, "run identifier");
   assertIdentifier(input.visitId, "visit identifier");
   assertIdentifier(input.practiceId, "practice identifier");

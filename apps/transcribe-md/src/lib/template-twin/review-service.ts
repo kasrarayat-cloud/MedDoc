@@ -1008,6 +1008,7 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
               },
               currentRolloutToken: finalRollout.token,
               allowedStatuses: ["COMPLETED"],
+              allowedAdmissionPhases: ["REVIEW_READY"],
             });
           }
           const lockedVisit = await lockCurrentTemplateTwinVisit(
@@ -1347,6 +1348,7 @@ export async function reviewTemplateTwinField(
     run: context.visit.templateTwinSyntheticQaRun,
     actor: input.actor,
     currentRolloutToken: rolloutToken,
+    allowedAdmissionPhases: ["REVIEW_READY"],
   });
   if (
     context.status === "SIGNED" ||

@@ -16,7 +16,10 @@ import { TranscribeVisitStatus } from "@prisma/client";
 import { apiError, withApiHandler } from "@/lib/api-error";
 import { parseSoapSections } from "@/lib/parse-soap-sections";
 import { AuthError, requireFreshDoctorIdentity } from "@/lib/auth";
-import { TemplateTwinStagingQaDisabledError } from "@/lib/template-twin/staging-qa-gate";
+import {
+  isTemplateTwinStagingQaRequested,
+  TemplateTwinStagingQaDisabledError,
+} from "@/lib/template-twin/staging-qa-gate";
 import {
   assertTemplateTwinStagingQaVisitGuard,
   TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
@@ -105,7 +108,10 @@ export const GET = withApiHandler<{ id: string }>(
     });
     // 404 on both "not found" AND "not yours" prevents ID enumeration.
     if (!visit || visit.userId !== userId) return apiError("not found", 404);
-    if (visit.templateTwinSyntheticQaRun) {
+    if (
+      visit.templateTwinSyntheticQaRun ||
+      isTemplateTwinStagingQaRequested()
+    ) {
       try {
         const doctor = await requireFreshDoctorIdentity(userId);
         assertTemplateTwinStagingQaVisitGuard({

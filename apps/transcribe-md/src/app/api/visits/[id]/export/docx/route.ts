@@ -16,6 +16,7 @@ import { apiError, withApiHandler } from "@/lib/api-error";
 import { redactPhi } from "@meddoc/ai";
 import { logAudit } from "@/lib/audit";
 import { isOwnedTemplateTwinStagingQaVisit } from "@/lib/template-twin/staging-qa-access";
+import { isTemplateTwinStagingQaRequested } from "@/lib/template-twin/staging-qa-gate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,7 +33,10 @@ export const GET = withApiHandler<{ id: string }>(
     const session = await auth();
     const userId = session?.user?.id;
     if (!userId) return apiError("unauthorized", 401);
-    if (await isOwnedTemplateTwinStagingQaVisit({ visitId, userId })) {
+    if (
+      isTemplateTwinStagingQaRequested() ||
+      (await isOwnedTemplateTwinStagingQaVisit({ visitId, userId }))
+    ) {
       return apiError("not found", 404);
     }
 

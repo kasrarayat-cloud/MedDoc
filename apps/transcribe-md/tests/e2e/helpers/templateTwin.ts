@@ -330,12 +330,14 @@ export function setTemplateTwinQaPractice(input: {
       SET enabled = ${enabledSql},
           generation = generation + 1,
           "updatedAt" = CURRENT_TIMESTAMP
-      WHERE id = 'global';
+      WHERE id = 'global'
+        AND enabled IS DISTINCT FROM ${enabledSql};
       UPDATE practices
       SET "templateTwinEnabled" = ${enabledSql},
           "templateTwinRolloutGeneration" =
             "templateTwinRolloutGeneration" + 1
-      WHERE id = owning_practice;
+      WHERE id = owning_practice
+        AND "templateTwinEnabled" IS DISTINCT FROM ${enabledSql};
     END
     $template_twin_qa_rollout$;
 
@@ -586,7 +588,9 @@ export function assertTemplateTwinStagingQaDatabaseTenantGuard(
       WHERE id = ${sqlLiteral(runId)};
       ROLLBACK;
     `,
-    "Template Twin synthetic QA tenant or lineage mismatch",
+    // The durable admission is checked before the broader tenant lineage.
+    // A copied practice cannot match the admission's immutable tenant.
+    "Template Twin synthetic QA run admission mismatch",
   );
 }
 

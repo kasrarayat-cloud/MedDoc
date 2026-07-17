@@ -4,9 +4,9 @@ import {
   TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION,
   TEMPLATE_TWIN_SYNTHETIC_QA_MODE,
   TEMPLATE_TWIN_SYNTHETIC_QA_TRANSCRIPT,
-  runWithTemplateTwinSyntheticQaProviderContext,
   type SyntheticQaProviderEnvironment,
 } from "@meddoc/ai";
+import { runWithTemplateTwinSyntheticQaProviderContext } from "@meddoc/ai/internal/synthetic-qa-context";
 import { TranscribeVisitStatus } from "@prisma/client";
 
 import { TemplateTwinStagingQaVisitGuardError } from "../../lib/template-twin/staging-qa-visit-guard";
@@ -58,6 +58,7 @@ function context(workerClaimId: string) {
   return {
     mode: TEMPLATE_TWIN_SYNTHETIC_QA_MODE,
     fixtureVersion: TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION,
+    admissionId: "admission-synthetic-1",
     runId: "run-synthetic-1",
     visitId: "visit-synthetic-1",
     practiceId: "practice-synthetic-1",

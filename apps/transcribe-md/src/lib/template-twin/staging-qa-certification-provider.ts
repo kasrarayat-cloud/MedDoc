@@ -81,10 +81,6 @@ export async function runWithTemplateTwinStagingQaCertificationProvider<
         confirmMappings:
           input.dependencies?.confirmMappings ??
           confirmTemplateTwinStagingQaMappings,
-        // The caller already loaded this immutable source through the owned
-        // template relation; mapping confirmation repeats doctor/practice and
-        // exact-source ownership before any provider admission.
-        inspect: async () => ({ stagingQa: true, source: input.source }),
       },
     });
   } catch (error) {

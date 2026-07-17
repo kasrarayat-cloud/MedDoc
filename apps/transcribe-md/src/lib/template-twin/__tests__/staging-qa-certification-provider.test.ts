@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION,
@@ -15,6 +15,23 @@ import {
   TemplateTwinStagingQaCertificationProviderError,
   runWithTemplateTwinStagingQaCertificationProvider,
 } from "../staging-qa-certification-provider";
+
+const mocks = vi.hoisted(() => ({
+  findTemplate: vi.fn(),
+  findAdmission: vi.fn(),
+  pinRollout: vi.fn(),
+}));
+
+vi.mock("@meddoc/db", () => ({
+  default: {
+    noteTemplate: { findFirst: mocks.findTemplate },
+    templateTwinSyntheticQaAdmission: { findFirst: mocks.findAdmission },
+  },
+}));
+vi.mock("../rollout", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../rollout")>()),
+  pinTemplateTwinRollout: mocks.pinRollout,
+}));
 
 const SAFE_ENV: SyntheticQaProviderEnvironment = {
   TEMPLATE_TWIN_STAGING_QA_ENABLED: "true",
@@ -53,6 +70,51 @@ function exactSource() {
     sizeBytes: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES,
   };
 }
+
+function admission() {
+  return {
+    id: "admission-certification-synthetic",
+    practiceId: TOKEN.practiceId,
+    actorId: "doctor-certification-synthetic",
+    parentAdmissionId: null,
+    sourceSha256: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256,
+    sourceSizeBytes: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES,
+    fixtureVersion: TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION,
+    providerMode: "SYNTHETIC_LIFECYCLE",
+    purpose: "UPLOAD",
+    phase: "TEMPLATE_LINKED",
+    requestSha256: "a".repeat(64),
+    payloadSha256: null,
+    pinnedGlobalRolloutGeneration: TOKEN.globalGeneration,
+    pinnedPracticeRolloutGeneration: TOKEN.practiceGeneration,
+    sourceArtifactId: "source-certification-synthetic",
+    noteTemplateId: "template-certification-synthetic",
+    noteTemplateVersion: 1,
+    certificationId: null,
+    mappingSha256: null,
+    visitId: null,
+    attempt: 1,
+    expiresAt: new Date("2099-07-17T00:00:00.000Z"),
+    failedAt: null,
+    revokedAt: null,
+    consumedAt: null,
+  };
+}
+
+beforeEach(() => {
+  const admitted = admission();
+  mocks.pinRollout.mockReset().mockResolvedValue(TOKEN);
+  mocks.findAdmission.mockReset().mockResolvedValue(admitted);
+  mocks.findTemplate.mockReset().mockResolvedValue({
+    templateTwinCompiledVersion: {
+      sourceArtifact: {
+        practiceId: TOKEN.practiceId,
+        ...exactSource(),
+      },
+    },
+    templateTwinSyntheticQaAdmissions: [admitted],
+  });
+});
 
 function input(
   encounterMode: "text" | "dictation",
@@ -100,7 +162,7 @@ describe("staging fixture certification provider boundary", () => {
           (providerVisitId) => {
             order.push("provider-call");
             expect(providerVisitId).toMatch(
-              /^template-twin-staging-lifecycle-visit:[a-f0-9]{64}$/u,
+              /^template-twin-staging-admission-visit:/u,
             );
             const context = getTemplateTwinSyntheticQaProviderContext();
             expect(context).toMatchObject({

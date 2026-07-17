@@ -164,6 +164,7 @@ function visit(
     },
     syntheticQaRun: {
       id: "run-synthetic-1",
+      admissionId: "admission-visit-synthetic-1",
       visitId: "visit-synthetic-1",
       practiceId: "practice-synthetic-1",
       doctorId: "doctor-synthetic-1",
@@ -182,6 +183,31 @@ function visit(
       workerClaimedAt: null,
       workerHeartbeatAt: null,
       workerLeaseExpiresAt: null,
+      admission: {
+        id: "admission-visit-synthetic-1",
+        practiceId: "practice-synthetic-1",
+        actorId: "doctor-synthetic-1",
+        parentAdmissionId: "admission-upload-synthetic-1",
+        sourceSha256: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256,
+        sourceSizeBytes: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES,
+        providerMode: "SYNTHETIC_TYPED",
+        purpose: "VISIT",
+        phase: "VISIT_LINKED",
+        requestSha256: "a".repeat(64),
+        payloadSha256: payloadSha256(
+          TEMPLATE_TWIN_SYNTHETIC_QA_TRANSCRIPT,
+        ),
+        noteTemplateId: "template-synthetic-1",
+        noteTemplateVersion: 4,
+        certificationId: "certification-synthetic-1",
+        visitId: "visit-synthetic-1",
+        attempt: 1,
+        expiresAt: new Date("2099-07-17T00:00:00.000Z"),
+        failedAt: null,
+        revokedAt: null,
+        pinnedGlobalRolloutGeneration: BigInt(11),
+        pinnedPracticeRolloutGeneration: BigInt(19),
+      },
     },
     ...overrides,
   };
@@ -196,6 +222,10 @@ function typedEvidenceVisit(
     syntheticQaRun: {
       ...base.syntheticQaRun!,
       payloadSha256: payloadSha256(evidenceText),
+      admission: {
+        ...base.syntheticQaRun!.admission!,
+        payloadSha256: payloadSha256(evidenceText),
+      },
     },
   });
 }
@@ -216,6 +246,14 @@ function mockVoiceVisit(): TemplateTwinSyntheticQaVisitSnapshot {
         TEMPLATE_TWIN_SYNTHETIC_QA_TRANSCRIPT,
         "mock_voice",
       ),
+      admission: {
+        ...base.syntheticQaRun!.admission!,
+        providerMode: "SYNTHETIC_MOCK_VOICE",
+        payloadSha256: payloadSha256(
+          TEMPLATE_TWIN_SYNTHETIC_QA_TRANSCRIPT,
+          "mock_voice",
+        ),
+      },
     },
   });
 }
@@ -419,7 +457,7 @@ describe("worker synthetic QA provider selection", () => {
     [
       "wrong mode",
       { mode: "mock_voice" },
-      "TEMPLATE_TWIN_SYNTHETIC_QA_MODE_MISMATCH",
+      "TEMPLATE_TWIN_SYNTHETIC_QA_RUN_INVALID",
     ],
   ])("rejects %s before provider admission", async (_label, runPatch, code) => {
     const base = visit();
@@ -622,6 +660,9 @@ describe("worker synthetic QA attempt ownership", () => {
         available = false;
         return [{ id: "run-synthetic-1" }];
       }),
+      templateTwinSyntheticQaAdmission: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
     };
     dependencyMocks.transaction.mockImplementation(
       async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),
@@ -823,12 +864,16 @@ describe("worker synthetic QA attempt ownership", () => {
 describe("worker synthetic QA crash reconciliation", () => {
   it("turns an expired terminal stalled delivery into an explicit retry state", async () => {
     dependencyMocks.rootRunFindFirst.mockResolvedValue({
+      admissionId: "admission-visit-synthetic-1",
       practiceId: "practice-synthetic-1",
       pinnedGlobalRolloutGeneration: BigInt(11),
       pinnedPracticeRolloutGeneration: BigInt(19),
     });
     const tx = {
       templateTwinSyntheticQaRun: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      templateTwinSyntheticQaAdmission: {
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
       transcribeVisit: { update: vi.fn().mockResolvedValue({}) },
@@ -907,6 +952,9 @@ interface ReadyFinalizationHarness {
   readonly tx: {
     transcribeVisit: { updateMany: ReturnType<typeof vi.fn> };
     templateTwinSyntheticQaRun: { updateMany: ReturnType<typeof vi.fn> };
+    templateTwinSyntheticQaAdmission: {
+      updateMany: ReturnType<typeof vi.fn>;
+    };
     templateTwinFillManifest: { findUnique: ReturnType<typeof vi.fn> };
   };
   readonly status: () => TranscribeVisitStatus;
@@ -924,6 +972,9 @@ function readyFinalizationHarness(): ReadyFinalizationHarness {
       ),
     },
     templateTwinSyntheticQaRun: {
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+    },
+    templateTwinSyntheticQaAdmission: {
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
     templateTwinFillManifest: {

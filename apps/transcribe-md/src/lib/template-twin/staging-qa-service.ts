@@ -19,16 +19,23 @@ import {
   TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION,
 } from "./staging-qa-fixtures";
 import {
-  TEMPLATE_TWIN_STAGING_QA_REQUEST_CONTRACT_VERSION,
   templateTwinStagingQaPayloadSha256,
+  templateTwinStagingQaRunRequestSha256,
 } from "./staging-qa-digest";
 import { assertTemplateTwinStagingQaGate } from "./staging-qa-gate";
 import {
   lockAndAssertTemplateTwinStagingQaActor,
   lockAndAssertTemplateTwinStagingQaRun,
+  TemplateTwinStagingQaVisitGuardError,
 } from "./staging-qa-visit-guard";
 import { assertTemplateTwinStagingQaEvidencePhiFree } from "./synthetic-evidence-gate";
-import { runWithTemplateTwinStagingQaCertificationProvider } from "./staging-qa-certification-provider";
+import {
+  beginTemplateTwinStagingQaVisitAdmission,
+  lockAndAssertTemplateTwinStagingQaAdmission,
+  markTemplateTwinStagingQaAdmissionFailed,
+  runWithVerifiedTemplateTwinStagingQaAdmissionProvider,
+  TemplateTwinStagingQaAdmissionError,
+} from "./staging-qa-admission";
 import {
   TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID,
   TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_NAME,
@@ -138,8 +145,7 @@ export function templateTwinStagingQaRequestDigests(input: {
 }): { requestSha256: string; payloadSha256: string; evidenceSha256: string } {
   const evidenceSha256 = sha256Text(input.evidenceText);
   return {
-    requestSha256: canonicalSha256({
-      contractVersion: TEMPLATE_TWIN_STAGING_QA_REQUEST_CONTRACT_VERSION,
+    requestSha256: templateTwinStagingQaRunRequestSha256({
       practiceId: input.actor.practiceId,
       doctorId: input.actor.userId,
       idempotencyKey: input.request.idempotencyKey,
@@ -210,6 +216,7 @@ const RUN_VIEW_SELECT = {
   visitId: true,
   noteTemplateId: true,
   noteTemplateVersion: true,
+  admissionId: true,
   requestSha256: true,
   payloadSha256: true,
   mode: true,
@@ -274,6 +281,11 @@ async function recordEnqueueFailure(input: {
       },
       data: { status: "ENQUEUE_FAILED", enqueuedAt: null },
     });
+    // Queue/object-store admission failed before a provider owned the run.
+    // Keep the child admission at VISIT_LINKED so an exact, physician-requested
+    // retry can advance its monotonic attempt. Provider/worker failures are
+    // different: those transition the admission to terminal FAILED and cannot
+    // be revived.
     await enqueueTemplateTwinAudit(tx, {
       eventKey: `template-twin:staging-qa:enqueue-blocked:${input.runId}:${input.attempt}`,
       practiceId: input.actor.practiceId,
@@ -332,15 +344,32 @@ export async function enqueueOwnedRun(input: {
       if (!rollout.allowed) {
         throw new TemplateTwinStagingQaError("ROLLOUT_CHANGED", rollout.reason);
       }
-      await lockAndAssertTemplateTwinStagingQaRun({
-        tx,
-        runId: snapshot.id,
-        actor: {
-          userId: input.actor.userId,
-          practiceId: input.actor.practiceId,
-        },
-        currentRolloutToken: rollout.token,
-      });
+      try {
+        await lockAndAssertTemplateTwinStagingQaRun({
+          tx,
+          runId: snapshot.id,
+          actor: {
+            userId: input.actor.userId,
+            practiceId: input.actor.practiceId,
+          },
+          currentRolloutToken: rollout.token,
+        });
+      } catch (error) {
+        if (error instanceof TemplateTwinStagingQaVisitGuardError) {
+          throw new TemplateTwinStagingQaError(
+            error.code === "TEMPLATE_TWIN_STAGING_QA_NOT_FOUND"
+              ? "NOT_FOUND"
+              : error.code === "TEMPLATE_TWIN_STAGING_QA_ROLLOUT_STALE"
+                ? "ROLLOUT_CHANGED"
+                : "RUN_NOT_RETRYABLE",
+            error.code === "TEMPLATE_TWIN_STAGING_QA_NOT_FOUND"
+              ? "Synthetic QA run not found."
+              : "This synthetic QA admission is no longer current. Start a new synthetic run.",
+            { cause: error },
+          );
+        }
+        throw error;
+      }
       await lockCurrentTemplateTwinVisit(tx, snapshot.visitId);
       const run = await tx.templateTwinSyntheticQaRun.findFirst({
         where: {
@@ -481,6 +510,29 @@ export async function enqueueOwnedRun(input: {
         },
       });
       if (claim.count !== 1) return null;
+
+      if (incrementsAttempt && run.attempt > 0 && run.admissionId) {
+        const currentAdmissionPhase = regeneratingReadyVisit
+          ? "REVIEW_READY"
+          : "VISIT_LINKED";
+        const reset = await tx.templateTwinSyntheticQaAdmission.updateMany({
+          where: {
+            id: run.admissionId,
+            phase: currentAdmissionPhase,
+            attempt: run.attempt,
+          },
+          data: {
+            phase: "VISIT_LINKED",
+            attempt,
+          },
+        });
+        if (reset.count !== 1) {
+          throw new TemplateTwinStagingQaError(
+            "RUN_NOT_RETRYABLE",
+            "The durable synthetic QA admission cannot be regenerated.",
+          );
+        }
+      }
 
       if (
         run.visit.status === TranscribeVisitStatus.FAILED ||
@@ -623,41 +675,107 @@ export async function createTemplateTwinStagingQaRun(input: {
     parsed.mode === "typed"
       ? parsed.encounterText
       : TEMPLATE_TWIN_STAGING_QA_VOICE_TRANSCRIPT;
-  // The boundary first proves the durable template source and every mapping,
-  // then admits the privacy model call inside the deterministic synthetic ALS.
-  // It cannot consult a live provider if process flags change mid-callback.
-  await runWithTemplateTwinStagingQaCertificationProvider({
-    source: {
-      sha256: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256,
-      sizeBytes: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES,
-    },
-    noteTemplateId: parsed.templateId,
-    doctorId: input.actor.userId,
-    practiceId: input.actor.practiceId,
-    rolloutToken: input.actor.rolloutToken,
-    encounterMode: parsed.mode === "typed" ? "text" : "dictation",
-    evidenceText,
-    operation: (providerVisitId) =>
-      assertTemplateTwinStagingQaEvidencePhiFree({
-        encounterText: evidenceText,
-        practiceId: input.actor.practiceId,
-        userId: input.actor.userId,
-        providerVisitId,
-      }),
-  });
-  // A callback may have observed an operator revocation. Recheck before any
-  // durable run admission; the transaction below separately locks rollout
-  // generations so a later disable is also linearized.
-  assertTemplateTwinStagingQaGate();
   const digests = templateTwinStagingQaRequestDigests({
     actor: input.actor,
     request: parsed,
     evidenceText,
   });
+  let durableAdmission: Awaited<
+    ReturnType<typeof beginTemplateTwinStagingQaVisitAdmission>
+  >;
+  try {
+    durableAdmission = await beginTemplateTwinStagingQaVisitAdmission({
+      actor: input.actor,
+      idempotencyKey: parsed.idempotencyKey,
+      noteTemplateId: parsed.templateId,
+      noteTemplateVersion: parsed.expectedTemplateVersion,
+      mode: parsed.mode,
+      payloadSha256: digests.payloadSha256,
+    });
+  } catch (error) {
+    if (error instanceof TemplateTwinStagingQaAdmissionError) {
+      if (error.code === "TEMPLATE_TWIN_STAGING_QA_ADMISSION_MISMATCH") {
+        throw new TemplateTwinStagingQaError(
+          "IDEMPOTENCY_CONFLICT",
+          "That request token was already used for different synthetic evidence.",
+          { cause: error },
+        );
+      }
+      throw new TemplateTwinStagingQaError(
+        error.code === "TEMPLATE_TWIN_STAGING_QA_ADMISSION_STALE"
+          ? "ROLLOUT_CHANGED"
+          : "TEMPLATE_NOT_READY",
+        "The durable synthetic QA admission is unavailable.",
+        { cause: error },
+      );
+    }
+    throw error;
+  }
+  if (durableAdmission.phase !== "CERTIFIED") {
+    const existingRun = await prisma.templateTwinSyntheticQaRun.findFirst({
+      where: {
+        admissionId: durableAdmission.id,
+        practiceId: input.actor.practiceId,
+        doctorId: input.actor.userId,
+      },
+      select: { id: true },
+    });
+    if (!existingRun) {
+      throw new TemplateTwinStagingQaError(
+        "TEMPLATE_NOT_READY",
+        "The durable synthetic QA admission is incomplete.",
+      );
+    }
+    return enqueueOwnedRun({
+      actor: input.actor,
+      runId: existingRun.id,
+      explicitRetry: false,
+    });
+  }
+  try {
+    await runWithVerifiedTemplateTwinStagingQaAdmissionProvider({
+      admissionId: durableAdmission.id,
+      actor: input.actor,
+      allowedPhases: ["CERTIFIED"],
+      expectedProviderMode:
+        parsed.mode === "typed"
+          ? "SYNTHETIC_TYPED"
+          : "SYNTHETIC_MOCK_VOICE",
+      expectedTemplate: {
+        id: parsed.templateId,
+        version: parsed.expectedTemplateVersion,
+      },
+      evidenceText,
+      operation: (providerVisitId) =>
+        assertTemplateTwinStagingQaEvidencePhiFree({
+          encounterText: evidenceText,
+          practiceId: input.actor.practiceId,
+          userId: input.actor.userId,
+          providerVisitId,
+        }),
+    });
+  } catch (error) {
+    await markTemplateTwinStagingQaAdmissionFailed({
+      admissionId: durableAdmission.id,
+      actor: input.actor,
+      failureCode: "VISIT_EVIDENCE_REJECTED",
+    });
+    if (error instanceof TemplateTwinStagingQaAdmissionError) {
+      throw new TemplateTwinStagingQaError(
+        "TEMPLATE_NOT_READY",
+        "The durable synthetic QA admission is unavailable.",
+        { cause: error },
+      );
+    }
+    throw error;
+  }
+  // A callback may have observed an operator revocation. Recheck before the
+  // visit/run link; the transaction below separately locks rollout generations.
+  assertTemplateTwinStagingQaGate();
 
   let runId: string;
   try {
-    const admission = await prisma.$transaction(
+    const runAdmission = await prisma.$transaction(
       async (tx: Prisma.TransactionClient) => {
         const rollout = await lockTemplateTwinRolloutForFinalClaim({
           tx,
@@ -677,16 +795,34 @@ export async function createTemplateTwinStagingQaRun(input: {
             practiceId: input.actor.practiceId,
           },
         });
+        await lockAndAssertTemplateTwinStagingQaAdmission({
+          tx,
+          admissionId: durableAdmission.id,
+          actor: input.actor,
+          currentToken: rollout.token,
+          allowedPhases: ["CERTIFIED"],
+          expectedProviderMode:
+            parsed.mode === "typed"
+              ? "SYNTHETIC_TYPED"
+              : "SYNTHETIC_MOCK_VOICE",
+          expectedTemplate: {
+            id: parsed.templateId,
+            version: parsed.expectedTemplateVersion,
+          },
+        });
         const existing = await tx.templateTwinSyntheticQaRun.findFirst({
           where: {
             practiceId: input.actor.practiceId,
             doctorId: input.actor.userId,
             requestSha256: digests.requestSha256,
           },
-          select: { id: true, payloadSha256: true },
+          select: { id: true, payloadSha256: true, admissionId: true },
         });
         if (existing) {
-          if (existing.payloadSha256 !== digests.payloadSha256) {
+          if (
+            existing.payloadSha256 !== digests.payloadSha256 ||
+            existing.admissionId !== durableAdmission.id
+          ) {
             throw new TemplateTwinStagingQaError(
               "IDEMPOTENCY_CONFLICT",
               "That request token was already used for different synthetic evidence.",
@@ -800,10 +936,19 @@ export async function createTemplateTwinStagingQaRun(input: {
           },
           select: { id: true },
         });
+        await tx.templateTwinSyntheticQaAdmission.update({
+          where: { id: durableAdmission.id },
+          data: {
+            phase: "VISIT_LINKED",
+            visitId,
+            visitLinkedAt: new Date(),
+          },
+        });
 
         const run = await tx.templateTwinSyntheticQaRun.create({
           data: {
             id: randomUUID(),
+            admissionId: durableAdmission.id,
             practiceId: input.actor.practiceId,
             doctorId: input.actor.userId,
             visitId,
@@ -818,7 +963,10 @@ export async function createTemplateTwinStagingQaRun(input: {
             pinnedPracticeRolloutGeneration:
               input.actor.rolloutToken.practiceGeneration,
             status: "PENDING_ENQUEUE",
-            attempt: 0,
+            // The durable child admission starts at attempt one. Persist the
+            // matching run epoch before any queue operation so the shared
+            // admission guard can validate the initial enqueue transaction.
+            attempt: 1,
           },
           select: { id: true },
         });
@@ -837,6 +985,7 @@ export async function createTemplateTwinStagingQaRun(input: {
             requestSha256: digests.requestSha256,
             payloadSha256: digests.payloadSha256,
             evidenceSha256: digests.evidenceSha256,
+            admissionId: durableAdmission.id,
             globalRolloutGeneration:
               input.actor.rolloutToken.globalGeneration.toString(),
             practiceRolloutGeneration:
@@ -847,7 +996,7 @@ export async function createTemplateTwinStagingQaRun(input: {
       },
       { isolationLevel: "Serializable" },
     );
-    runId = admission.runId;
+    runId = runAdmission.runId;
   } catch (error) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -859,9 +1008,13 @@ export async function createTemplateTwinStagingQaRun(input: {
           doctorId: input.actor.userId,
           requestSha256: digests.requestSha256,
         },
-        select: { id: true, payloadSha256: true },
+        select: { id: true, payloadSha256: true, admissionId: true },
       });
-      if (!existing || existing.payloadSha256 !== digests.payloadSha256) {
+      if (
+        !existing ||
+        existing.payloadSha256 !== digests.payloadSha256 ||
+        existing.admissionId !== durableAdmission.id
+      ) {
         throw new TemplateTwinStagingQaError(
           "IDEMPOTENCY_CONFLICT",
           "That request token was already used for different synthetic evidence.",

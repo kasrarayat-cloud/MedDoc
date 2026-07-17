@@ -77,6 +77,7 @@ function context(
   return {
     mode: TEMPLATE_TWIN_SYNTHETIC_QA_MODE,
     fixtureVersion: TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION,
+    admissionId: "synthetic-admission-1",
     runId: "synthetic-run-1",
     visitId: "synthetic-visit-1",
     practiceId: "synthetic-practice-1",

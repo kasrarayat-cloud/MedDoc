@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   TEMPLATE_TWIN_SYNTHETIC_QA_TRANSCRIPT,
@@ -15,6 +15,21 @@ import {
   TemplateTwinStagingQaLifecycleGuardError,
   runWithTemplateTwinStagingQaLifecycleGuard,
 } from "../staging-qa-lifecycle-guard";
+
+const mocks = vi.hoisted(() => ({
+  findAdmission: vi.fn(),
+  pinRollout: vi.fn(),
+}));
+
+vi.mock("@meddoc/db", () => ({
+  default: {
+    templateTwinSyntheticQaAdmission: { findFirst: mocks.findAdmission },
+  },
+}));
+vi.mock("../rollout", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../rollout")>()),
+  pinTemplateTwinRollout: mocks.pinRollout,
+}));
 
 const SAFE_ENV: SyntheticQaProviderEnvironment = {
   TEMPLATE_TWIN_STAGING_QA_ENABLED: "true",
@@ -49,17 +64,78 @@ const EXACT_SOURCE = {
   sizeBytes: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES,
 };
 
+function admission() {
+  return {
+    id: "admission-lifecycle-synthetic",
+    practiceId: TOKEN.practiceId,
+    actorId: ACTOR.userId,
+    parentAdmissionId: null,
+    sourceSha256: EXACT_SOURCE.sha256,
+    sourceSizeBytes: EXACT_SOURCE.sizeBytes,
+    fixtureVersion: "template-twin-staging-safe-docx/1.0.0",
+    providerMode: "SYNTHETIC_LIFECYCLE",
+    purpose: "UPLOAD",
+    phase: "TEMPLATE_LINKED",
+    requestSha256: "a".repeat(64),
+    payloadSha256: null,
+    pinnedGlobalRolloutGeneration: TOKEN.globalGeneration,
+    pinnedPracticeRolloutGeneration: TOKEN.practiceGeneration,
+    sourceArtifactId: "source-lifecycle-synthetic",
+    noteTemplateId: "template-lifecycle-synthetic",
+    noteTemplateVersion: 1,
+    certificationId: null,
+    mappingSha256: null,
+    visitId: null,
+    attempt: 1,
+    expiresAt: new Date("2099-07-17T00:00:00.000Z"),
+    failedAt: null,
+    revokedAt: null,
+    consumedAt: null,
+  };
+}
+
 function stagingInspect(
   source: { sha256: string; sizeBytes: number } = EXACT_SOURCE,
 ) {
-  return vi.fn().mockResolvedValue({ stagingQa: true, source });
+  return vi.fn().mockResolvedValue({
+    stagingQa: true,
+    source,
+    admission: admission(),
+  });
 }
 
 function matchingPin() {
   return vi.fn().mockResolvedValue(TOKEN);
 }
 
+beforeEach(() => {
+  mocks.findAdmission.mockReset().mockResolvedValue(admission());
+  mocks.pinRollout.mockReset().mockResolvedValue(TOKEN);
+});
+
 describe("generic staging lifecycle guard", () => {
+  it("rejects exact staging source provenance without a durable root admission", async () => {
+    const operation = vi.fn();
+    await expect(
+      runWithTemplateTwinStagingQaLifecycleGuard({
+        noteTemplateId: "template-lifecycle-synthetic",
+        actor: ACTOR,
+        purpose: "workspace-read",
+        operation,
+        dependencies: {
+          inspect: vi.fn().mockResolvedValue({
+            stagingQa: true,
+            source: EXACT_SOURCE,
+            admission: null,
+          }),
+          pinRollout: matchingPin(),
+          env: SAFE_ENV,
+        },
+      }),
+    ).rejects.toBeInstanceOf(TemplateTwinStagingQaLifecycleGuardError);
+    expect(operation).not.toHaveBeenCalled();
+  });
+
   it("rejects exact persisted staging provenance before any callback after process revocation", async () => {
     const operation = vi.fn();
     const pinRollout = matchingPin();
@@ -82,7 +158,7 @@ describe("generic staging lifecycle guard", () => {
     expect(operation).not.toHaveBeenCalled();
   });
 
-  it("treats a durable staging-run relation as staging even if the source digest is not the fixture", async () => {
+  it("rejects a copied admission when the persisted source is not the fixture", async () => {
     const operation = vi.fn(() => {
       const context = getTemplateTwinSyntheticQaProviderContext();
       expect(context?.practiceId).toBe(ACTOR.practiceId);
@@ -91,7 +167,7 @@ describe("generic staging lifecycle guard", () => {
 
     await expect(
       runWithTemplateTwinStagingQaLifecycleGuard({
-        noteTemplateId: "template-run-related-synthetic",
+        noteTemplateId: "template-lifecycle-synthetic",
         actor: ACTOR,
         purpose: "workspace-read",
         operation,
@@ -104,14 +180,14 @@ describe("generic staging lifecycle guard", () => {
           env: SAFE_ENV,
         },
       }),
-    ).resolves.toMatch(/^template-twin-staging-lifecycle-visit:[a-f0-9]{64}$/u);
-    expect(operation).toHaveBeenCalledTimes(1);
+    ).rejects.toBeInstanceOf(TemplateTwinStagingQaLifecycleGuardError);
+    expect(operation).not.toHaveBeenCalled();
   });
 
   it("keeps the deterministic provider context active if flags are revoked during an admitted callback", async () => {
     const mutableEnv = { ...SAFE_ENV };
     const result = await runWithTemplateTwinStagingQaLifecycleGuard({
-      noteTemplateId: "template-provider-escape-synthetic",
+      noteTemplateId: "template-lifecycle-synthetic",
       actor: ACTOR,
       purpose: "custom-example-run",
       evidenceText: TEMPLATE_TWIN_SYNTHETIC_QA_TRANSCRIPT,
@@ -139,7 +215,7 @@ describe("generic staging lifecycle guard", () => {
     const operation = vi.fn();
     await expect(
       runWithTemplateTwinStagingQaLifecycleGuard({
-        noteTemplateId: "template-stale-synthetic",
+        noteTemplateId: "template-lifecycle-synthetic",
         actor: ACTOR,
         purpose: "certification-activation",
         operation,

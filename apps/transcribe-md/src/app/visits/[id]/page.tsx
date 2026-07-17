@@ -46,6 +46,7 @@ import {
 import { evaluateTemplateTwinRollout } from "@/lib/template-twin/rollout";
 import {
   evaluateTemplateTwinStagingQaGate,
+  isTemplateTwinStagingQaRequested,
   TemplateTwinStagingQaDisabledError,
 } from "@/lib/template-twin/staging-qa-gate";
 import {
@@ -364,7 +365,10 @@ export default async function VisitPage({
 
   if (!user) redirect("/login");
   if (!visit || visit.userId !== session.user.id) notFound();
-  if (visit.templateTwinSyntheticQaRun) {
+  if (
+    visit.templateTwinSyntheticQaRun ||
+    isTemplateTwinStagingQaRequested()
+  ) {
     try {
       const doctor = await requireFreshDoctorIdentity(session.user.id);
       assertTemplateTwinStagingQaVisitGuard({

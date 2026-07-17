@@ -1,13 +1,6 @@
-import { createHash } from "node:crypto";
-
 import {
-  TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION,
-  TEMPLATE_TWIN_SYNTHETIC_QA_MODE,
   TEMPLATE_TWIN_SYNTHETIC_QA_TRANSCRIPT,
-  SyntheticQaProviderContextError,
   assertTemplateTwinSyntheticQaProviderEnvironment,
-  getTemplateTwinSyntheticQaProviderContext,
-  runWithTemplateTwinSyntheticQaProviderContext,
   type SyntheticQaProviderEnvironment,
 } from "@meddoc/ai";
 import { Prisma } from "@prisma/client";
@@ -27,6 +20,15 @@ import {
   confirmTemplateTwinStagingQaMappings,
   type TemplateTwinStagingQaExpectedMappingConfirmation,
 } from "./staging-qa-mapping-confirmation";
+import {
+  certifyTemplateTwinStagingQaAdmission,
+  lockAndAssertTemplateTwinStagingQaAdmission,
+  markTemplateTwinStagingQaAdmissionFailed,
+  runWithVerifiedTemplateTwinStagingQaAdmissionProvider,
+  TEMPLATE_TWIN_STAGING_QA_ADMISSION_SELECT,
+  TemplateTwinStagingQaAdmissionError,
+  type TemplateTwinStagingQaAdmissionRow,
+} from "./staging-qa-admission";
 
 export const TEMPLATE_TWIN_STAGING_QA_LIFECYCLE_GUARD_CODE =
   "TEMPLATE_TWIN_STAGING_QA_LIFECYCLE_UNAVAILABLE" as const;
@@ -49,6 +51,7 @@ export interface TemplateTwinStagingQaLifecycleActor {
 export interface TemplateTwinStagingQaLifecycleProvenance {
   readonly stagingQa: boolean;
   readonly source: { readonly sha256: string; readonly sizeBytes: number };
+  readonly admission: TemplateTwinStagingQaAdmissionRow | null;
 }
 
 interface GuardDependencies {
@@ -70,15 +73,6 @@ function sameRolloutGeneration(
     pinned.globalGeneration === current.globalGeneration &&
     pinned.practiceGeneration === current.practiceGeneration
   );
-}
-
-function digest(value: string): string {
-  return createHash("sha256").update(value, "utf8").digest("hex");
-}
-
-function lifecycleWorkerClaimId(input: string): string {
-  const value = digest(`template-twin-staging-lifecycle-claim:${input}`);
-  return `${value.slice(0, 8)}-${value.slice(8, 12)}-4${value.slice(13, 16)}-8${value.slice(17, 20)}-${value.slice(20, 32)}`;
 }
 
 /**
@@ -105,13 +99,16 @@ export async function inspectTemplateTwinStagingQaLifecycleProvenance(input: {
           },
         },
       },
-      templateTwinSyntheticQaRuns: {
+      templateTwinSyntheticQaAdmissions: {
         where: {
           practiceId: input.actor.practiceId,
-          doctorId: input.actor.userId,
+          actorId: input.actor.userId,
+          purpose: "UPLOAD",
+          providerMode: "SYNTHETIC_LIFECYCLE",
         },
+        orderBy: { createdAt: "desc" as const },
         take: 1,
-        select: { id: true },
+        select: TEMPLATE_TWIN_STAGING_QA_ADMISSION_SELECT,
       },
     },
   });
@@ -121,7 +118,8 @@ export async function inspectTemplateTwinStagingQaLifecycleProvenance(input: {
     source: { sha256: source.sha256, sizeBytes: source.sizeBytes },
     stagingQa:
       isTemplateTwinStagingQaFixtureSource(source) ||
-      row.templateTwinSyntheticQaRuns.length > 0,
+      row.templateTwinSyntheticQaAdmissions.length > 0,
+    admission: row.templateTwinSyntheticQaAdmissions[0] ?? null,
   };
 }
 
@@ -157,6 +155,9 @@ export async function runWithTemplateTwinStagingQaLifecycleGuard<T>(input: {
     }
     return input.operation(null);
   }
+  if (!provenance.admission) {
+    throw new TemplateTwinStagingQaLifecycleGuardError();
+  }
 
   const pinRollout = input.dependencies?.pinRollout ?? pinTemplateTwinRollout;
   const confirmMappings =
@@ -191,56 +192,45 @@ export async function runWithTemplateTwinStagingQaLifecycleGuard<T>(input: {
     throw new TemplateTwinStagingQaLifecycleGuardError();
   }
 
-  const requestSha256 = digest(
-    JSON.stringify({
-      contract: "template-twin-staging-lifecycle-guard-v1",
-      noteTemplateId: input.noteTemplateId,
-      practiceId: input.actor.practiceId,
-      purpose: input.purpose,
-      sourceSha256: provenance.source.sha256,
-      sourceSizeBytes: provenance.source.sizeBytes,
-      evidenceSha256: digest(evidenceText),
-      globalGeneration: currentToken.globalGeneration.toString(),
-      practiceGeneration: currentToken.practiceGeneration.toString(),
-    }),
-  );
-  const active = getTemplateTwinSyntheticQaProviderContext();
-  if (active) {
-    if (
-      active.practiceId !== input.actor.practiceId ||
-      active.pinnedGlobalGeneration !== currentToken.globalGeneration ||
-      active.pinnedPracticeGeneration !== currentToken.practiceGeneration ||
-      active.evidenceSha256 !== digest(evidenceText)
-    ) {
+  try {
+    const result =
+      await runWithVerifiedTemplateTwinStagingQaAdmissionProvider({
+        admissionId: provenance.admission.id,
+        actor: input.actor,
+        allowedPhases:
+          input.purpose === "certification-activation"
+            ? ["TEMPLATE_LINKED"]
+            : ["TEMPLATE_LINKED", "CERTIFIED"],
+        expectedProviderMode: "SYNTHETIC_LIFECYCLE",
+        expectedSource: provenance.source,
+        expectedTemplate: { id: input.noteTemplateId },
+        evidenceText,
+        operation: input.operation,
+        env,
+      });
+    if (input.purpose === "certification-activation") {
+      await certifyTemplateTwinStagingQaAdmission({
+        admissionId: provenance.admission.id,
+        actor: input.actor,
+        noteTemplateId: input.noteTemplateId,
+        env,
+      });
+    }
+    return result;
+  } catch (error) {
+    if (error instanceof TemplateTwinStagingQaAdmissionError) {
       throw new TemplateTwinStagingQaLifecycleGuardError();
     }
-    return input.operation(active.visitId);
-  }
-
-  const identity = digest(
-    `${input.noteTemplateId}:${input.actor.userId}:${input.purpose}`,
-  );
-  const providerVisitId = `template-twin-staging-lifecycle-visit:${identity}`;
-  try {
-    return await runWithTemplateTwinSyntheticQaProviderContext(
-      {
-        mode: TEMPLATE_TWIN_SYNTHETIC_QA_MODE,
-        fixtureVersion: TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION,
-        runId: `template-twin-staging-lifecycle-run:${identity}`,
-        visitId: providerVisitId,
-        practiceId: input.actor.practiceId,
-        requestSha256,
-        attempt: 1,
-        workerClaimId: lifecycleWorkerClaimId(identity),
-        pinnedGlobalGeneration: currentToken.globalGeneration,
-        pinnedPracticeGeneration: currentToken.practiceGeneration,
-        evidenceText,
-      },
-      () => input.operation(providerVisitId),
-      env,
-    );
-  } catch (error) {
-    if (error instanceof SyntheticQaProviderContextError) {
+    try {
+      await markTemplateTwinStagingQaAdmissionFailed({
+        admissionId: provenance.admission.id,
+        actor: {
+          userId: input.actor.userId,
+          practiceId: input.actor.practiceId,
+        },
+        failureCode: "TEMPLATE_TWIN_STAGING_QA_LIFECYCLE_PROVIDER_FAILED",
+      });
+    } catch {
       throw new TemplateTwinStagingQaLifecycleGuardError();
     }
     throw error;
@@ -275,6 +265,9 @@ export async function assertTemplateTwinStagingQaLifecycleFinality(input: {
     }
     return;
   }
+  if (!provenance.admission) {
+    throw new TemplateTwinStagingQaLifecycleGuardError();
+  }
 
   try {
     assertTemplateTwinStagingQaGate(env);
@@ -282,13 +275,25 @@ export async function assertTemplateTwinStagingQaLifecycleFinality(input: {
     const lockFinal =
       input.dependencies?.lockFinal ?? lockTemplateTwinRolloutForFinalClaim;
     const decision = await prisma.$transaction(
-      (tx: Prisma.TransactionClient) =>
-        lockFinal({
+      async (tx: Prisma.TransactionClient) => {
+        const decision = await lockFinal({
           tx,
           practiceId: input.actor.practiceId,
           pinnedToken: input.actor.rolloutToken,
           env,
-        }),
+        });
+        if (!decision.allowed) return decision;
+        await lockAndAssertTemplateTwinStagingQaAdmission({
+          tx,
+          admissionId: provenance.admission!.id,
+          actor: input.actor,
+          currentToken: decision.token,
+          allowedPhases: ["TEMPLATE_LINKED", "CERTIFIED"],
+          expectedProviderMode: "SYNTHETIC_LIFECYCLE",
+          expectedTemplate: { id: input.noteTemplateId },
+        });
+        return decision;
+      },
       { isolationLevel: "Serializable" },
     );
     if (!decision.allowed) {

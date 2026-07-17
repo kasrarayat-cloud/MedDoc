@@ -122,6 +122,7 @@ export async function acknowledgeTemplateTwinReview(input: {
     run: visit.templateTwinSyntheticQaRun,
     actor: input.actor,
     currentRolloutToken: rolloutToken,
+    allowedAdmissionPhases: ["REVIEW_READY"],
   });
   const stagingQaClaim = stagingAdmission.applies
     ? {
@@ -251,6 +252,7 @@ export async function acknowledgeTemplateTwinReview(input: {
           actor: input.actor,
           currentRolloutToken: finalRollout.token,
           allowedStatuses: ["COMPLETED"],
+          allowedAdmissionPhases: ["REVIEW_READY"],
         });
         const lockedVisit = await lockCurrentTemplateTwinVisit(
           tx,

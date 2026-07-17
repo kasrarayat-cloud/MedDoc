@@ -2,7 +2,15 @@ import { TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION } from "@meddoc/ai";
 import { Prisma } from "@prisma/client";
 
 import type { TemplateTwinRolloutToken } from "./rollout";
-import { assertTemplateTwinStagingQaGate } from "./staging-qa-gate";
+import {
+  assertTemplateTwinStagingQaGate,
+  isTemplateTwinStagingQaRequested,
+} from "./staging-qa-gate";
+import {
+  lockAndAssertTemplateTwinStagingQaAdmission,
+  type TemplateTwinStagingQaAdmissionPhase,
+  type TemplateTwinStagingQaAdmissionRow,
+} from "./staging-qa-admission";
 
 /**
  * Small projection shared by every visit-bound staging QA entry point. Keeping
@@ -11,28 +19,75 @@ import { assertTemplateTwinStagingQaGate } from "./staging-qa-gate";
  */
 export const TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT = {
   id: true,
+  admissionId: true,
+  visitId: true,
   practiceId: true,
   doctorId: true,
+  noteTemplateId: true,
+  noteTemplateVersion: true,
+  requestSha256: true,
+  payloadSha256: true,
+  mode: true,
+  status: true,
   fixtureVersion: true,
   attempt: true,
   pinnedGlobalRolloutGeneration: true,
   pinnedPracticeRolloutGeneration: true,
+  admission: {
+    select: {
+      id: true,
+      practiceId: true,
+      actorId: true,
+      parentAdmissionId: true,
+      sourceSha256: true,
+      sourceSizeBytes: true,
+      fixtureVersion: true,
+      providerMode: true,
+      purpose: true,
+      phase: true,
+      requestSha256: true,
+      payloadSha256: true,
+      pinnedGlobalRolloutGeneration: true,
+      pinnedPracticeRolloutGeneration: true,
+      sourceArtifactId: true,
+      noteTemplateId: true,
+      noteTemplateVersion: true,
+      certificationId: true,
+      mappingSha256: true,
+      visitId: true,
+      attempt: true,
+      expiresAt: true,
+      failedAt: true,
+      revokedAt: true,
+      consumedAt: true,
+    },
+  },
 } as const;
 
 export interface TemplateTwinStagingQaRunGuardRow {
   id: string;
+  admissionId: string | null;
+  visitId: string;
   practiceId: string;
   doctorId: string;
+  noteTemplateId: string;
+  noteTemplateVersion: number;
+  requestSha256: string;
+  payloadSha256: string;
+  mode: string;
+  status: string;
   fixtureVersion: string;
   attempt: number;
   pinnedGlobalRolloutGeneration: bigint;
   pinnedPracticeRolloutGeneration: bigint;
+  admission: TemplateTwinStagingQaAdmissionRow | null;
 }
 
 export type TemplateTwinStagingQaVisitGuardCode =
   | "TEMPLATE_TWIN_STAGING_QA_NOT_FOUND"
   | "TEMPLATE_TWIN_STAGING_QA_FIXTURE_STALE"
   | "TEMPLATE_TWIN_STAGING_QA_ROLLOUT_STALE"
+  | "TEMPLATE_TWIN_STAGING_QA_ADMISSION_STALE"
   | "TEMPLATE_TWIN_STAGING_QA_ATTEMPT_STALE";
 
 export class TemplateTwinStagingQaVisitGuardError extends Error {
@@ -94,9 +149,6 @@ export interface TemplateTwinSyntheticQaAttemptClaim {
 }
 
 export interface LockedStagingQaRunRow extends TemplateTwinStagingQaRunGuardRow {
-  visitId: string;
-  requestSha256: string;
-  status: string;
   attempt: number;
   enqueuedAt: Date | null;
   workerClaimId: string | null;
@@ -108,7 +160,8 @@ export interface LockedStagingQaRunRow extends TemplateTwinStagingQaRunGuardRow 
 /**
  * Locks one durable staging operation after the caller has acquired rollout
  * controls. All clinical transitions use the same order:
- * global rollout -> practice rollout -> staging run -> visit -> fill.
+ * global rollout -> practice rollout -> durable admission -> staging run ->
+ * actor -> visit -> fill.
  *
  * `expectedAttempt` is the admission epoch for retry/correction/signing. A
  * later retry increments it, so an operation that performed expensive work
@@ -121,11 +174,39 @@ export async function lockAndAssertTemplateTwinStagingQaRun(input: {
   expectedAttempt?: number;
   actor: { userId: string; practiceId: string };
   currentRolloutToken: TemplateTwinRolloutToken;
+  allowedAdmissionPhases?: readonly TemplateTwinStagingQaAdmissionPhase[];
 }): Promise<LockedStagingQaRunRow> {
+  const identities = await input.tx.$queryRaw<{ admissionId: string | null }[]>(
+    Prisma.sql`
+      SELECT "admissionId"
+      FROM "template_twin_synthetic_qa_runs"
+      WHERE "id" = ${input.runId}
+    `,
+  );
+  const admissionId = identities[0]?.admissionId ?? null;
+  if (!admissionId) {
+    throw new TemplateTwinStagingQaVisitGuardError(
+      "TEMPLATE_TWIN_STAGING_QA_ADMISSION_STALE",
+      "Synthetic QA admission is unavailable.",
+    );
+  }
+  const admission = await lockAndAssertTemplateTwinStagingQaAdmission({
+    tx: input.tx,
+    admissionId,
+    actor: input.actor,
+    currentToken: input.currentRolloutToken,
+    allowedPhases: input.allowedAdmissionPhases ?? [
+      "VISIT_LINKED",
+      "PROCESSING",
+      "REVIEW_READY",
+      "SIGNED",
+    ],
+  });
   const rows = await input.tx.$queryRaw<LockedStagingQaRunRow[]>(Prisma.sql`
     SELECT
-      "id", "visitId", "practiceId", "doctorId", "fixtureVersion",
-      "requestSha256", "status", "attempt", "enqueuedAt",
+      "id", "admissionId", "visitId", "practiceId", "doctorId",
+      "noteTemplateId", "noteTemplateVersion", "requestSha256",
+      "payloadSha256", "mode", "fixtureVersion", "status", "attempt", "enqueuedAt",
       "workerClaimId", "workerClaimedAt", "workerHeartbeatAt",
       "workerLeaseExpiresAt",
       "pinnedGlobalRolloutGeneration", "pinnedPracticeRolloutGeneration"
@@ -133,12 +214,14 @@ export async function lockAndAssertTemplateTwinStagingQaRun(input: {
     WHERE "id" = ${input.runId}
     FOR UPDATE
   `);
-  const run = rows[0] ?? null;
+  const rawRun = rows[0] ?? null;
+  const run = rawRun ? { ...rawRun, admission } : null;
   assertTemplateTwinStagingQaVisitGuard({
     run,
     actor: input.actor,
     currentRolloutToken: input.currentRolloutToken,
     expectedRunId: input.runId,
+    allowedAdmissionPhases: input.allowedAdmissionPhases,
   });
   if (
     !run ||
@@ -164,6 +247,7 @@ export async function lockAndAssertTemplateTwinStagingQaOperation(input: {
   actor: { userId: string; practiceId: string };
   currentRolloutToken: TemplateTwinRolloutToken;
   allowedStatuses?: readonly string[];
+  allowedAdmissionPhases?: readonly TemplateTwinStagingQaAdmissionPhase[];
 }): Promise<LockedStagingQaRunRow> {
   const run = await lockAndAssertTemplateTwinStagingQaRun(input);
   const allowedStatuses = input.allowedStatuses ?? [
@@ -191,6 +275,7 @@ export async function lockAndAssertTemplateTwinStagingQaAttempt(input: {
   claim: TemplateTwinSyntheticQaAttemptClaim | null;
   currentRolloutToken: TemplateTwinRolloutToken;
   allowedStatuses?: readonly string[];
+  allowedAdmissionPhases?: readonly TemplateTwinStagingQaAdmissionPhase[];
   requireLiveWorkerLease?: boolean;
 }): Promise<void> {
   if (!input.claim) return;
@@ -204,6 +289,7 @@ export async function lockAndAssertTemplateTwinStagingQaAttempt(input: {
     },
     currentRolloutToken: input.currentRolloutToken,
     allowedStatuses: input.allowedStatuses,
+    allowedAdmissionPhases: input.allowedAdmissionPhases,
   });
   if (
     run.visitId !== input.claim.visitId ||
@@ -261,9 +347,11 @@ export function assertTemplateTwinStagingQaVisitGuard(input: {
   actor: { userId: string; practiceId: string };
   currentRolloutToken: TemplateTwinRolloutToken;
   expectedRunId?: string;
+  allowedAdmissionPhases?: readonly TemplateTwinStagingQaAdmissionPhase[];
+  env?: Readonly<Record<string, string | undefined>>;
 }): { applies: false } | { applies: true; runId: string } {
   if (!input.run) {
-    if (input.expectedRunId) {
+    if (input.expectedRunId || isTemplateTwinStagingQaRequested(input.env)) {
       throw new TemplateTwinStagingQaVisitGuardError(
         "TEMPLATE_TWIN_STAGING_QA_NOT_FOUND",
         "Synthetic QA visit not found.",
@@ -283,6 +371,52 @@ export function assertTemplateTwinStagingQaVisitGuard(input: {
     throw new TemplateTwinStagingQaVisitGuardError(
       "TEMPLATE_TWIN_STAGING_QA_NOT_FOUND",
       "Synthetic QA visit not found.",
+    );
+  }
+  const admission = input.run.admission;
+  const allowedAdmissionPhases = input.allowedAdmissionPhases ?? [
+    "VISIT_LINKED",
+    "PROCESSING",
+    "REVIEW_READY",
+    "SIGNED",
+  ];
+  const expectedProviderMode =
+    input.run.mode === "typed"
+      ? "SYNTHETIC_TYPED"
+      : input.run.mode === "mock_voice"
+        ? "SYNTHETIC_MOCK_VOICE"
+        : null;
+  if (
+    !admission ||
+    input.run.admissionId !== admission.id ||
+    admission.practiceId !== input.run.practiceId ||
+    admission.actorId !== input.run.doctorId ||
+    !admission.parentAdmissionId ||
+    admission.purpose !== "VISIT" ||
+    admission.providerMode !== expectedProviderMode ||
+    !allowedAdmissionPhases.includes(
+      admission.phase as TemplateTwinStagingQaAdmissionPhase,
+    ) ||
+    admission.requestSha256 !== input.run.requestSha256 ||
+    admission.payloadSha256 !== input.run.payloadSha256 ||
+    admission.noteTemplateId !== input.run.noteTemplateId ||
+    admission.noteTemplateVersion !== input.run.noteTemplateVersion ||
+    admission.visitId !== input.run.visitId ||
+    admission.attempt !== input.run.attempt ||
+    admission.failedAt !== null ||
+    admission.revokedAt !== null ||
+    (admission.phase === "SIGNED"
+      ? admission.consumedAt === null
+      : admission.consumedAt !== null) ||
+    admission.expiresAt <= new Date() ||
+    admission.pinnedGlobalRolloutGeneration !==
+      input.run.pinnedGlobalRolloutGeneration ||
+    admission.pinnedPracticeRolloutGeneration !==
+      input.run.pinnedPracticeRolloutGeneration
+  ) {
+    throw new TemplateTwinStagingQaVisitGuardError(
+      "TEMPLATE_TWIN_STAGING_QA_ADMISSION_STALE",
+      "Synthetic QA admission is unavailable.",
     );
   }
   if (input.run.fixtureVersion !== TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION) {
