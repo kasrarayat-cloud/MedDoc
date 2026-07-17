@@ -132,6 +132,15 @@ The final transaction always locks rows in this order:
 2. owning practice `FOR UPDATE`;
 3. operation-specific visit/fill rows.
 
+The synthetic staging workflow extends (and does not replace) that ordering.
+Its complete order is global rollout, practice, durable staging run, current
+actor, visit, then fill manifest or output claim when that operation uses one:
+`global -> practice -> run -> actor -> visit -> fill/output`. A transaction
+may omit rows that are not applicable, but must never reverse the relative
+order of rows it locks. Re-locking the actor at this boundary ensures that
+tenant membership, active state, and the DOCTOR role have not been revoked
+after admission.
+
 It then rereads enabled state and both generations, verifies the lineage phase
 is `CONTRACTED`, and compares the rows with the admission token. The clinical
 transition/output claim and its PHI-safe audit-outbox event commit in the same
