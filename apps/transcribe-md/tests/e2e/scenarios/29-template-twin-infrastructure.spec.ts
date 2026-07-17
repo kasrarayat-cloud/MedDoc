@@ -520,7 +520,10 @@ test("Template Twin: isolated QA routes, Postgres, worker, and MinIO preserve th
 
   const staleSign = await page.request.post(
     `/api/visits/${encodeURIComponent(typedVisitId)}/sign`,
-    { data: { destinations: [] } },
+    {
+      headers: sameOriginHeaders(page),
+      data: { destinations: [] },
+    },
   );
   const staleSignPayload = await responseJson<{
     code: string;
@@ -535,6 +538,7 @@ test("Template Twin: isolated QA routes, Postgres, worker, and MinIO preserve th
   markTemplateTwinQaVisitFailed(typedVisitId);
   const retry = await page.request.post(
     `/api/visits/${encodeURIComponent(typedVisitId)}/retry`,
+    { headers: sameOriginHeaders(page) },
   );
   expect(retry.status(), `Worker retry failed: ${await retry.text()}`).toBe(
     200,
@@ -545,7 +549,10 @@ test("Template Twin: isolated QA routes, Postgres, worker, and MinIO preserve th
   expect(typedFill.soapSha256).not.toBe(staleFill.soapSha256);
   const unreviewedSign = await page.request.post(
     `/api/visits/${encodeURIComponent(typedVisitId)}/sign`,
-    { data: { destinations: [] } },
+    {
+      headers: sameOriginHeaders(page),
+      data: { destinations: [] },
+    },
   );
   expect(unreviewedSign.status()).toBe(422);
   expect(
@@ -564,7 +571,10 @@ test("Template Twin: isolated QA routes, Postgres, worker, and MinIO preserve th
   // still requires a stream-read/hash/size check of the stored DOCX.
   const sign = await page.request.post(
     `/api/visits/${encodeURIComponent(typedVisitId)}/sign`,
-    { data: { destinations: [] } },
+    {
+      headers: sameOriginHeaders(page),
+      data: { destinations: [] },
+    },
   );
   expect(sign.status(), `Template Twin sign failed: ${await sign.text()}`).toBe(
     200,
@@ -603,7 +613,10 @@ test("Template Twin: isolated QA routes, Postgres, worker, and MinIO preserve th
   );
   const dictationSign = await page.request.post(
     `/api/visits/${encodeURIComponent(dictationVisitId)}/sign`,
-    { data: { destinations: [] } },
+    {
+      headers: sameOriginHeaders(page),
+      data: { destinations: [] },
+    },
   );
   expect(
     dictationSign.status(),
@@ -630,7 +643,10 @@ test("Template Twin: isolated QA routes, Postgres, worker, and MinIO preserve th
   );
   const corruptSign = await page.request.post(
     `/api/visits/${encodeURIComponent(corruptVisitId)}/sign`,
-    { data: { destinations: [] } },
+    {
+      headers: sameOriginHeaders(page),
+      data: { destinations: [] },
+    },
   );
   const corruptPayload = await responseJson<{ code: string }>(corruptSign);
   expect(corruptSign.status()).toBe(409);

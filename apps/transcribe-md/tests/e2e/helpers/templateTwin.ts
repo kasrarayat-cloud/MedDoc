@@ -37,6 +37,18 @@ export interface TemplateTwinQaFillState {
   outputSha256: string | null;
   outputSizeBytes: number | null;
   roundTripVerified: boolean;
+  roundTripVerification: {
+    verificationContractVersion?: string;
+    verified?: boolean;
+    packageCheck?: string;
+    fieldCheck?: string;
+    staticRegionCheck?: string;
+    fields?: Array<{
+      fieldId?: string;
+      occurrences?: number;
+      bindingEvidence?: unknown;
+    }>;
+  } | null;
   visitStatus: string;
   currentSoapVersion: number;
   currentSoapFinal: string | null;
@@ -289,10 +301,6 @@ export function setTemplateTwinQaPractice(input: {
         RAISE EXCEPTION 'Template Twin lineage migration is not contracted';
       END IF;
 
-      UPDATE users
-      SET "emailVerified" = COALESCE("emailVerified", CURRENT_TIMESTAMP)
-      WHERE id = owning_user;
-
       -- Test setup follows the production lock order exactly. The DO block is
       -- one transaction, so neither generation becomes externally visible
       -- until both mutations commit.
@@ -310,6 +318,13 @@ export function setTemplateTwinQaPractice(input: {
       IF NOT FOUND THEN
         RAISE EXCEPTION 'Synthetic Template Twin QA practice is unavailable';
       END IF;
+
+      -- The actor row is deliberately taken only after global and practice.
+      -- Moving this write above either rollout lock can deadlock a worker that
+      -- follows global -> practice -> operation -> actor.
+      UPDATE users
+      SET "emailVerified" = COALESCE("emailVerified", CURRENT_TIMESTAMP)
+      WHERE id = owning_user;
 
       UPDATE template_twin_rollout_controls
       SET enabled = ${enabledSql},
@@ -409,6 +424,24 @@ export function readTemplateTwinQaFields(noteTemplateId: string): {
   };
 }
 
+export function readTemplateTwinQaApprovedMappingsSha256(
+  noteTemplateId: string,
+): string {
+  const value = psqlJson<string | null>(`
+    SELECT to_json(certification."approvedMappingsSha256")
+    FROM template_twin_compiled_versions compiled
+    JOIN template_twin_certifications certification
+      ON certification."compiledVersionId" = compiled.id
+    WHERE compiled."noteTemplateId" = ${sqlLiteral(noteTemplateId)};
+  `);
+  if (!value || !/^[a-f0-9]{64}$/.test(value)) {
+    throw new Error(
+      "The synthetic QA template has no immutable approved mapping version.",
+    );
+  }
+  return value;
+}
+
 export function readTemplateTwinQaFill(
   visitId: string,
 ): TemplateTwinQaFillState | null {
@@ -428,6 +461,7 @@ export function readTemplateTwinQaFill(
         'outputSha256', f."outputSha256",
         'outputSizeBytes', f."outputSizeBytes",
         'roundTripVerified', f."roundTripVerified",
+        'roundTripVerification', f."roundTripVerification",
         'visitStatus', v.status,
         'currentSoapVersion', v."soapVersion",
         'currentSoapFinal', v."soapFinal",
@@ -439,6 +473,351 @@ export function readTemplateTwinQaFill(
       WHERE v.id = ${sqlLiteral(visitId)}
     ), 'null'::json);
   `);
+}
+
+export interface TemplateTwinStagingQaRunState {
+  runId: string;
+  visitId: string;
+  practiceId: string;
+  doctorId: string;
+  status: string;
+  attempt: number;
+  fixtureVersion: string;
+  pinnedGlobalRolloutGeneration: string;
+  pinnedPracticeRolloutGeneration: string;
+  visitStatus: string;
+}
+
+export interface TemplateTwinStagingQaIdempotencyInventory {
+  matchingRuns: number;
+  matchingVisits: number;
+  matchingFills: number;
+  matchingOutputObjects: number;
+}
+
+export function readTemplateTwinStagingQaRunByVisit(
+  visitId: string,
+): TemplateTwinStagingQaRunState | null {
+  return psqlJson<TemplateTwinStagingQaRunState | null>(`
+    SELECT COALESCE((
+      SELECT json_build_object(
+        'runId', run.id,
+        'visitId', run."visitId",
+        'practiceId', run."practiceId",
+        'doctorId', run."doctorId",
+        'status', run.status,
+        'attempt', run.attempt,
+        'fixtureVersion', run."fixtureVersion",
+        'pinnedGlobalRolloutGeneration', run."pinnedGlobalRolloutGeneration"::text,
+        'pinnedPracticeRolloutGeneration', run."pinnedPracticeRolloutGeneration"::text,
+        'visitStatus', visit.status
+      )
+      FROM template_twin_synthetic_qa_runs run
+      JOIN transcribe_visits visit ON visit.id = run."visitId"
+      WHERE run."visitId" = ${sqlLiteral(visitId)}
+    ), 'null'::json);
+  `);
+}
+
+/**
+ * Counts the durable records attributable to one browser admission token.
+ * The raw token never enters this helper: it follows the stored request hash
+ * from an already-owned synthetic QA run. A byte-for-byte HTTP replay must
+ * leave all four counts unchanged.
+ */
+export function readTemplateTwinStagingQaIdempotencyInventory(
+  runId: string,
+): TemplateTwinStagingQaIdempotencyInventory {
+  return psqlJson<TemplateTwinStagingQaIdempotencyInventory>(`
+    WITH target AS (
+      SELECT "practiceId", "doctorId", "requestSha256"
+      FROM template_twin_synthetic_qa_runs
+      WHERE id = ${sqlLiteral(runId)}
+    ), matching_runs AS (
+      SELECT run.id, run."visitId"
+      FROM template_twin_synthetic_qa_runs run
+      JOIN target
+        ON target."practiceId" = run."practiceId"
+       AND target."doctorId" = run."doctorId"
+       AND target."requestSha256" = run."requestSha256"
+    )
+    SELECT json_build_object(
+      'matchingRuns', (SELECT count(*) FROM matching_runs),
+      'matchingVisits', (
+        SELECT count(*)
+        FROM transcribe_visits visit
+        JOIN matching_runs run ON run."visitId" = visit.id
+      ),
+      'matchingFills', (
+        SELECT count(*)
+        FROM template_twin_fill_manifests fill
+        JOIN matching_runs run ON run."visitId" = fill."visitId"
+      ),
+      'matchingOutputObjects', (
+        SELECT count(*)
+        FROM template_twin_object_ledgers ledger
+        JOIN template_twin_fill_manifests fill
+          ON fill."outputObjectKey" = ledger."objectKey"
+        JOIN matching_runs run ON run."visitId" = fill."visitId"
+      )
+    );
+  `);
+}
+
+/** Direct-database tenant backstop for the authenticated staging admission. */
+export function assertTemplateTwinStagingQaDatabaseTenantGuard(
+  runId: string,
+): void {
+  const suffix = runId.replace(/[^A-Za-z0-9]/g, "").slice(-16);
+  const foreignPracticeId = `qa-template-twin-staging-foreign-${suffix}`;
+  expectPsqlRejected(
+    `
+      BEGIN;
+      INSERT INTO practices (id, name, slug, "isActive", "updatedAt")
+      VALUES (
+        ${sqlLiteral(foreignPracticeId)},
+        'Synthetic staging tenant adversary',
+        ${sqlLiteral(`qa-tt-staging-foreign-${suffix}`)},
+        true,
+        CURRENT_TIMESTAMP
+      );
+      UPDATE template_twin_synthetic_qa_runs
+      SET "practiceId" = ${sqlLiteral(foreignPracticeId)}
+      WHERE id = ${sqlLiteral(runId)};
+      ROLLBACK;
+    `,
+    "Template Twin synthetic QA tenant or lineage mismatch",
+  );
+}
+
+/**
+ * Direct-service-role tampering probes for the staging admission record and
+ * its pinned encounter evidence. The QA database is disposable and guarded
+ * by assertNonProdDbName; every rejected write is isolated in its own aborted
+ * transaction. A before/after snapshot additionally proves that none of the
+ * attempted statements left a partial mutation behind.
+ */
+export function assertTemplateTwinStagingQaDatabaseTamperGuards(
+  runId: string,
+): void {
+  const suffix = runId.replace(/[^A-Za-z0-9]/g, "").slice(-16);
+  const foreignPracticeId = `qa-template-twin-visit-foreign-${suffix}`;
+  const foreignPatientId = `qa-template-twin-patient-foreign-${suffix}`;
+  const invariantSnapshot = (): string =>
+    psql(`
+      SELECT json_build_object(
+        'run', json_build_object(
+          'practiceId', run."practiceId",
+          'doctorId', run."doctorId",
+          'visitId', run."visitId",
+          'noteTemplateId', run."noteTemplateId",
+          'noteTemplateVersion', run."noteTemplateVersion",
+          'requestSha256', run."requestSha256",
+          'payloadSha256', run."payloadSha256",
+          'mode', run.mode,
+          'fixtureVersion', run."fixtureVersion",
+          'globalGeneration', run."pinnedGlobalRolloutGeneration"::text,
+          'practiceGeneration', run."pinnedPracticeRolloutGeneration"::text,
+          'status', run.status,
+          'attempt', run.attempt,
+          'enqueuedAt', run."enqueuedAt"
+        ),
+        'visit', json_build_object(
+          'userId', visit."userId",
+          'patientId', visit."patientId",
+          'patientName', visit."patientName",
+          'inputMode', visit."inputMode",
+          'rawTextInput', visit."rawTextInput",
+          'dictationAudioKey', visit."dictationAudioKey",
+          'audioMimeType', visit."audioMimeType",
+          'audioSizeBytes', visit."audioSizeBytes",
+          'noteTemplateId', visit."noteTemplateId",
+          'noteTemplateVersion', visit."noteTemplateVersion"
+        ),
+        'patient', json_build_object(
+          'practiceId', patient."practiceId",
+          'name', patient.name,
+          'externalId', patient."externalId",
+          'dateOfBirth', patient."dateOfBirth",
+          'mrn', patient.mrn,
+          'insurance', patient.insurance,
+          'problemList', patient."problemList",
+          'weightKg', patient."weightKg",
+          'allergies', patient.allergies,
+          'deletedAt', patient."deletedAt"
+        )
+      )
+      FROM template_twin_synthetic_qa_runs run
+      JOIN transcribe_visits visit ON visit.id = run."visitId"
+      JOIN transcribe_md_patients patient ON patient.id = visit."patientId"
+      WHERE run.id = ${sqlLiteral(runId)};
+    `);
+
+  const before = invariantSnapshot();
+  const beforeState = before
+    ? (JSON.parse(before) as { run?: { status?: string } })
+    : null;
+  if (beforeState?.run?.status !== "COMPLETED") {
+    throw new Error(
+      "Template Twin staging DB tamper probes require one completed synthetic QA run.",
+    );
+  }
+
+  expectPsqlRejected(
+    `
+      BEGIN;
+      UPDATE template_twin_synthetic_qa_runs
+      SET "payloadSha256" =
+        CASE WHEN "payloadSha256" = repeat('0', 64)
+          THEN repeat('1', 64) ELSE repeat('0', 64) END
+      WHERE id = ${sqlLiteral(runId)};
+      ROLLBACK;
+    `,
+    "Template Twin synthetic QA admission identity is immutable",
+  );
+
+  expectPsqlRejected(
+    `
+      BEGIN;
+      UPDATE transcribe_visits visit
+      SET "rawTextInput" = COALESCE(visit."rawTextInput", '') ||
+        ' Synthetic database tamper probe.'
+      FROM template_twin_synthetic_qa_runs run
+      WHERE run.id = ${sqlLiteral(runId)}
+        AND visit.id = run."visitId";
+      ROLLBACK;
+    `,
+    "Template Twin synthetic QA visit provenance is immutable",
+  );
+
+  expectPsqlRejected(
+    `
+      BEGIN;
+      INSERT INTO practices (id, name, slug, "isActive", "updatedAt")
+      VALUES (
+        ${sqlLiteral(foreignPracticeId)},
+        'Synthetic staging visit adversary',
+        ${sqlLiteral(`qa-tt-visit-foreign-${suffix}`)},
+        true,
+        CURRENT_TIMESTAMP
+      );
+      INSERT INTO transcribe_md_patients (
+        id, "practiceId", name, "externalId", "updatedAt"
+      ) VALUES (
+        ${sqlLiteral(foreignPatientId)},
+        ${sqlLiteral(foreignPracticeId)},
+        'Synthetic Foreign QA Patient',
+        'SYNTHETIC-FOREIGN-QA-ONLY',
+        CURRENT_TIMESTAMP
+      );
+      UPDATE transcribe_visits visit
+      SET "patientId" = ${sqlLiteral(foreignPatientId)}
+      FROM template_twin_synthetic_qa_runs run
+      WHERE run.id = ${sqlLiteral(runId)}
+        AND visit.id = run."visitId";
+      ROLLBACK;
+    `,
+    "Template Twin synthetic QA visit provenance is immutable",
+  );
+
+  expectPsqlRejected(
+    `
+      BEGIN;
+      UPDATE transcribe_visits visit
+      SET "dictationAudioKey" =
+        'synthetic-qa/tamper-probe/mock-voice.wav',
+          "audioMimeType" = 'audio/wav',
+          "audioSizeBytes" = 44
+      FROM template_twin_synthetic_qa_runs run
+      WHERE run.id = ${sqlLiteral(runId)}
+        AND visit.id = run."visitId";
+      ROLLBACK;
+    `,
+    "Template Twin synthetic QA visit provenance is immutable",
+  );
+
+  expectPsqlRejected(
+    `
+      BEGIN;
+      UPDATE transcribe_md_patients patient
+      SET name = 'Synthetic QA identity tamper probe'
+      FROM transcribe_visits visit
+      JOIN template_twin_synthetic_qa_runs run ON run."visitId" = visit.id
+      WHERE run.id = ${sqlLiteral(runId)}
+        AND patient.id = visit."patientId";
+      ROLLBACK;
+    `,
+    "Template Twin synthetic QA patient is immutable",
+  );
+
+  expectPsqlRejected(
+    `
+      BEGIN;
+      UPDATE transcribe_md_patients patient
+      SET mrn = 'SYNTHETIC-TAMPER-PROBE'
+      FROM transcribe_visits visit
+      JOIN template_twin_synthetic_qa_runs run ON run."visitId" = visit.id
+      WHERE run.id = ${sqlLiteral(runId)}
+        AND patient.id = visit."patientId";
+      ROLLBACK;
+    `,
+    "Template Twin synthetic QA patient is immutable",
+  );
+
+  expectPsqlRejected(
+    `
+      BEGIN;
+      DELETE FROM transcribe_md_patients patient
+      USING transcribe_visits visit, template_twin_synthetic_qa_runs run
+      WHERE run.id = ${sqlLiteral(runId)}
+        AND visit.id = run."visitId"
+        AND patient.id = visit."patientId";
+      ROLLBACK;
+    `,
+    "Template Twin synthetic QA patient cannot be deleted",
+  );
+
+  assertTemplateTwinStagingQaDatabaseTenantGuard(runId);
+
+  expectPsqlRejected(
+    `
+      BEGIN;
+      UPDATE template_twin_synthetic_qa_runs
+      SET attempt = attempt + 2
+      WHERE id = ${sqlLiteral(runId)};
+      ROLLBACK;
+    `,
+    "Template Twin synthetic QA attempt is not monotonic",
+  );
+
+  expectPsqlRejected(
+    `
+      BEGIN;
+      UPDATE template_twin_synthetic_qa_runs
+      SET attempt = attempt - 1
+      WHERE id = ${sqlLiteral(runId)};
+      ROLLBACK;
+    `,
+    "Template Twin synthetic QA attempt is not monotonic",
+  );
+
+  expectPsqlRejected(
+    `
+      BEGIN;
+      UPDATE template_twin_synthetic_qa_runs
+      SET status = 'PENDING_ENQUEUE', "enqueuedAt" = NULL
+      WHERE id = ${sqlLiteral(runId)};
+      ROLLBACK;
+    `,
+    "Template Twin synthetic QA queue transition is invalid",
+  );
+
+  const after = invariantSnapshot();
+  if (after !== before) {
+    throw new Error(
+      "A rejected Template Twin staging database tamper changed immutable QA state.",
+    );
+  }
 }
 
 export function readTemplateTwinQaInventory(

@@ -49,6 +49,7 @@ next-env.d.ts
 # playwright / test artifacts
 playwright-report/
 test-results/
+template-twin-staging-artifacts/
 
 # local tool state
 /venv/

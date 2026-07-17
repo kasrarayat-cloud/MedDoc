@@ -30,15 +30,15 @@
 //                   against an app instance recreated with that flag.
 // ============================================================================
 
-import { defineConfig, devices } from '@playwright/test';
+import { defineConfig, devices } from "@playwright/test";
 
-const BASE_URL = process.env.PW_BASE_URL ?? 'http://localhost:9020';
+const BASE_URL = process.env.PW_BASE_URL ?? "http://localhost:9020";
 
 export default defineConfig({
-  testDir: './tests/e2e',
-  testMatch: '**/*.spec.ts',
-  globalSetup: './tests/e2e/global-setup.ts',
-  globalTeardown: './tests/e2e/global-teardown.ts',
+  testDir: "./tests/e2e",
+  testMatch: "**/*.spec.ts",
+  globalSetup: "./tests/e2e/global-setup.ts",
+  globalTeardown: "./tests/e2e/global-teardown.ts",
 
   // Each scenario creates a signup + visit + optional pipeline wait. With
   // mocks on the pipeline is fast but the UI round-trips + animations add
@@ -51,8 +51,8 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
 
   reporter: [
-    ['list'],
-    ['html', { outputFolder: 'playwright-report', open: 'never' }],
+    ["list"],
+    ["html", { outputFolder: "playwright-report", open: "never" }],
   ],
 
   use: {
@@ -60,9 +60,9 @@ export default defineConfig({
     // Collect screenshot + trace on first failure for post-mortem — the
     // VPS runs headless, there's no way to re-run with --headed on a CI
     // box and catch the same flake twice.
-    screenshot: 'only-on-failure',
-    trace: 'retain-on-failure',
-    video: 'retain-on-failure',
+    screenshot: "only-on-failure",
+    trace: "retain-on-failure",
+    video: "retain-on-failure",
     actionTimeout: 15_000,
     navigationTimeout: 20_000,
   },
@@ -72,32 +72,50 @@ export default defineConfig({
       // Default project — existing scenario suite. Excludes a11y.spec.ts
       // so the a11y gate doesn't run twice (once here, once under the
       // a11y project below).
-      name: 'chromium',
+      name: "chromium",
       // a11y → its own project; 23-…phi-parse-reject → the phi-reject project
       // (needs MOCK_TEMPLATE_PHI_FLAG=true, which would reject every parse);
       // 24-…rx-clinical-safety → the rx-safety project (needs MOCK_RX_WARNINGS=true,
       // whose critical warning would block every other spec's sign).
       testIgnore: [
-        '**/a11y.spec.ts',
-        '**/23-note-format-phi-parse-reject.spec.ts',
-        '**/24-rx-clinical-safety.spec.ts',
-        '**/25-rx-override-correlation.spec.ts',
-        '**/28-marketing-smoke.spec.ts',
+        "**/a11y.spec.ts",
+        "**/23-note-format-phi-parse-reject.spec.ts",
+        "**/24-rx-clinical-safety.spec.ts",
+        "**/25-rx-override-correlation.spec.ts",
+        "**/28-marketing-smoke.spec.ts",
         // Dedicated QA provider fixture + Template Twin artifact bucket.
-        '**/29-template-twin-infrastructure.spec.ts',
+        "**/29-template-twin-infrastructure.spec.ts",
+        // Authenticated, browser-driven synthetic staging workflow. This has
+        // its own fail-closed environment profile and artifact policy.
+        "**/30-template-twin-staging-ui.spec.ts",
         // Real-model eval specs (real tokens) — NEVER in the default/CI run.
-        '**/*.eval.spec.ts',
+        "**/*.eval.spec.ts",
       ],
-      use: { ...devices['Desktop Chrome'] },
+      use: { ...devices["Desktop Chrome"] },
     },
     {
       // Template Twin safe-alpha infrastructure path. The app and worker are
       // recreated with MOCK_TEMPLATE_TWIN_E2E=true for this project only; the
       // fixture itself also requires MOCK_AI_CALLS plus a qa/test/synthetic DB
       // name, so it cannot become reachable in a production database.
-      name: 'template-twin',
-      testMatch: '**/29-template-twin-infrastructure.spec.ts',
-      use: { ...devices['Desktop Chrome'] },
+      name: "template-twin",
+      testMatch: "**/29-template-twin-infrastructure.spec.ts",
+      use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      // The staging UI project intentionally records only the explicit,
+      // synthetic screenshots and hash manifest written by scenario 30.
+      // Traces and video can contain session cookies or request payloads, so
+      // they remain disabled even on failure for this clinical workflow.
+      name: "template-twin-staging-ui",
+      testMatch: "**/30-template-twin-staging-ui.spec.ts",
+      timeout: 420_000,
+      use: {
+        ...devices["Desktop Chrome"],
+        screenshot: "off",
+        trace: "off",
+        video: "off",
+      },
     },
     {
       // A11y CI gate — Phase 3 Wave 1 (Subagent 5). Runs the axe-core
@@ -109,9 +127,9 @@ export default defineConfig({
       // Triggered explicitly in .github/workflows/a11y.yml via
       // `npx playwright test --project=a11y`. NOT included in the
       // default `playwright test` run.
-      name: 'a11y',
-      testMatch: '**/a11y.spec.ts',
-      use: { ...devices['Desktop Chrome'] },
+      name: "a11y",
+      testMatch: "**/a11y.spec.ts",
+      use: { ...devices["Desktop Chrome"] },
     },
     {
       // Note-format PARSE-time PHI rejection (scenario 23). Runs ONLY when
@@ -119,9 +137,9 @@ export default defineConfig({
       // MOCK_TEMPLATE_PHI_FLAG=true (see .github/workflows/e2e.yml + the qa
       // compose passthrough). Kept out of the default run so the flag-on app
       // env never rejects the happy-path parses the other specs depend on.
-      name: 'phi-reject',
-      testMatch: '**/23-note-format-phi-parse-reject.spec.ts',
-      use: { ...devices['Desktop Chrome'] },
+      name: "phi-reject",
+      testMatch: "**/23-note-format-phi-parse-reject.spec.ts",
+      use: { ...devices["Desktop Chrome"] },
     },
     {
       // Rx clinical-safety (scenarios 24 + 25). Runs ONLY via
@@ -130,12 +148,12 @@ export default defineConfig({
       // of the default run so that critical warning never blocks the other
       // specs' sign flows. Scenario 25 is the per-warning-correlation regression
       // (fix/rx-override-gate-correlation) and shares the same app env.
-      name: 'rx-safety',
+      name: "rx-safety",
       testMatch: [
-        '**/24-rx-clinical-safety.spec.ts',
-        '**/25-rx-override-correlation.spec.ts',
+        "**/24-rx-clinical-safety.spec.ts",
+        "**/25-rx-override-correlation.spec.ts",
       ],
-      use: { ...devices['Desktop Chrome'] },
+      use: { ...devices["Desktop Chrome"] },
     },
     {
       // Marketing site smoke (scenario 28). Runs ONLY via `--project=marketing`
@@ -144,11 +162,11 @@ export default defineConfig({
       // Deliberately NOT wired into the required e2e CI gate (a 2nd full app
       // build for a static-page smoke would bloat the gate); validated locally
       // against a marketing container on the qa network. See docker-compose.qa.yml.
-      name: 'marketing',
-      testMatch: '**/28-marketing-smoke.spec.ts',
+      name: "marketing",
+      testMatch: "**/28-marketing-smoke.spec.ts",
       use: {
-        ...devices['Desktop Chrome'],
-        baseURL: process.env.PW_MARKETING_URL ?? 'http://localhost:9010',
+        ...devices["Desktop Chrome"],
+        baseURL: process.env.PW_MARKETING_URL ?? "http://localhost:9010",
       },
     },
     {
@@ -158,10 +176,10 @@ export default defineConfig({
       // from the default run + the required CI gate, and additionally self-skip
       // unless REAL_MODEL_EVAL=1. Manual/operator-invoked only. Generous timeout:
       // real Fable/Opus pipeline runs are far slower than MOCK.
-      name: 'real-model-eval',
-      testMatch: '**/*.eval.spec.ts',
+      name: "real-model-eval",
+      testMatch: "**/*.eval.spec.ts",
       timeout: 300_000,
-      use: { ...devices['Desktop Chrome'] },
+      use: { ...devices["Desktop Chrome"] },
     },
   ],
 

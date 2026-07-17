@@ -28,14 +28,14 @@ services:
     image: pgvector/pgvector:pg16
     restart: "no"
     mem_limit: 512m
-    cpus: '1.0'
+    cpus: "1.0"
     environment:
-      POSTGRES_DB: meddoc_qa_test        # qa/test marker → db-guard allows mutation
+      POSTGRES_DB: meddoc_qa_test # qa/test marker → db-guard allows mutation
       POSTGRES_USER: meddoc
       POSTGRES_PASSWORD: qa_test_pw
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
-      - qa_pgdata:/var/lib/postgresql/data   # FRESH isolated volume (NOT prod)
+      - qa_pgdata:/var/lib/postgresql/data # FRESH isolated volume (NOT prod)
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U meddoc"]
       interval: 5s
@@ -46,7 +46,7 @@ services:
     image: redis:7-alpine
     restart: "no"
     mem_limit: 128m
-    cpus: '0.5'
+    cpus: "0.5"
     command: ["redis-server", "--appendonly", "no"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -58,7 +58,7 @@ services:
     image: minio/minio:latest
     restart: "no"
     mem_limit: 256m
-    cpus: '0.5'
+    cpus: "0.5"
     command: ["server", "/data", "--console-address", ":9001"]
     environment:
       MINIO_ROOT_USER: qa_minio
@@ -86,7 +86,7 @@ services:
       - -ec
       - |
         mc alias set qa http://minio:9000 qa_minio qa_minio_pw
-        mc mb --ignore-existing qa/transcribe-md-audio
+        mc mb --ignore-existing qa/transcribe-md-audio-qa
         mc mb --ignore-existing --with-lock qa/transcribe-md-template-artifacts-qa
         mc anonymous set none qa/transcribe-md-template-artifacts-qa
         mc version enable qa/transcribe-md-template-artifacts-qa
@@ -109,7 +109,7 @@ services:
     image: ${QA_TRANSCRIBE_MD_IMAGE:-meddoc-pro-transcribe-md:latest}
     restart: "no"
     mem_limit: 512m
-    cpus: '1.0'
+    cpus: "1.0"
     depends_on:
       postgres:
         condition: service_healthy
@@ -119,7 +119,7 @@ services:
         condition: service_completed_successfully
     environment:
       DATABASE_URL: *qa-db-url
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://redis:6379/15
       AUTH_URL: http://localhost:9020
       NEXTAUTH_URL: http://localhost:9020
       AUTH_TRUST_HOST: "true"
@@ -128,7 +128,7 @@ services:
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: qa_minio
       MINIO_SECRET_KEY: qa_minio_pw
-      TRANSCRIBE_MD_MINIO_BUCKET: transcribe-md-audio
+      TRANSCRIBE_MD_MINIO_BUCKET: transcribe-md-audio-qa
       TRANSCRIBE_MD_TEMPLATE_BUCKET: transcribe-md-template-artifacts-qa
       MINIO_USE_SSL: "false"
       TEMPLATE_TWIN_STORAGE_PROFILE: qa
@@ -145,6 +145,12 @@ services:
       # require practice-scoped Privacy/Legal + Operations change control.
       TEMPLATE_TWIN_APPROVED_STATIC_ASSETS_BY_PRACTICE_JSON: "{}"
       TEMPLATE_TWIN_KILL_SWITCH: "false"
+      # Authenticated synthetic staging UI. Both values default empty, so the
+      # UI and every server mutation remain unavailable unless a QA operator
+      # deliberately enables the dedicated Playwright profile.
+      TEMPLATE_TWIN_STAGING_QA_ENABLED: "${TEMPLATE_TWIN_STAGING_QA_ENABLED:-}"
+      TEMPLATE_TWIN_STAGING_QA_ENVIRONMENT: "${TEMPLATE_TWIN_STAGING_QA_ENVIRONMENT:-}"
+      TEMPLATE_TWIN_STAGING_QA_RESOURCE_ATTESTATION: "${TEMPLATE_TWIN_STAGING_QA_RESOURCE_ATTESTATION:-}"
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
       # E2E signups use reserved synthetic-only domains; auto-confirm needs BOTH the allowlist and
@@ -186,7 +192,8 @@ services:
       # the app/worker keep their hardcoded per-layer models (prod behaviour).
       TRANSCRIBE_MD_CLINICAL_MODEL: "${TRANSCRIBE_MD_CLINICAL_MODEL:-}"
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "--spider", "http://127.0.0.1:3011/api/health"]
+      test:
+        ["CMD", "wget", "-qO-", "--spider", "http://127.0.0.1:3011/api/health"]
       interval: 15s
       timeout: 5s
       retries: 10
@@ -198,7 +205,7 @@ services:
     image: ${QA_TRANSCRIBE_MD_WORKER_IMAGE:-meddoc-pro-transcribe-md-worker:latest}
     restart: "no"
     mem_limit: 1g
-    cpus: '1.0'
+    cpus: "1.0"
     depends_on:
       postgres:
         condition: service_healthy
@@ -210,13 +217,13 @@ services:
         condition: service_completed_successfully
     environment:
       DATABASE_URL: *qa-db-url
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://redis:6379/15
       AUTH_SECRET: *qa-secret
       NEXTAUTH_SECRET: *qa-secret
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: qa_minio
       MINIO_SECRET_KEY: qa_minio_pw
-      TRANSCRIBE_MD_MINIO_BUCKET: transcribe-md-audio
+      TRANSCRIBE_MD_MINIO_BUCKET: transcribe-md-audio-qa
       TRANSCRIBE_MD_TEMPLATE_BUCKET: transcribe-md-template-artifacts-qa
       MINIO_USE_SSL: "false"
       TEMPLATE_TWIN_STORAGE_PROFILE: qa
@@ -231,6 +238,9 @@ services:
       TEMPLATE_TWIN_ORPHAN_RETENTION_DAYS: "7"
       TEMPLATE_TWIN_MAINTENANCE_ENABLED: "true"
       TEMPLATE_TWIN_KILL_SWITCH: "false"
+      TEMPLATE_TWIN_STAGING_QA_ENABLED: "${TEMPLATE_TWIN_STAGING_QA_ENABLED:-}"
+      TEMPLATE_TWIN_STAGING_QA_ENVIRONMENT: "${TEMPLATE_TWIN_STAGING_QA_ENVIRONMENT:-}"
+      TEMPLATE_TWIN_STAGING_QA_RESOURCE_ATTESTATION: "${TEMPLATE_TWIN_STAGING_QA_RESOURCE_ATTESTATION:-}"
       TRANSCRIBE_MD_WORKER_CONCURRENCY: "2"
       MOCK_AI_CALLS: "${MOCK_AI_CALLS:-true}"
       MOCK_TEMPLATE_TWIN_E2E: "${MOCK_TEMPLATE_TWIN_E2E:-}"
@@ -258,7 +268,7 @@ services:
     profiles: ["marketing"]
     restart: "no"
     mem_limit: 256m
-    cpus: '0.5'
+    cpus: "0.5"
     environment:
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
