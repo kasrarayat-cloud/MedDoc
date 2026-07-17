@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   requireDoctorSession: vi.fn(),
@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   updateMappings: vi.fn(),
   runSyntheticTest: vi.fn(),
   certify: vi.fn(),
+  sameOrigin: vi.fn(),
+  boundedMultipart: vi.fn(),
   lifecycleGuard: vi.fn(async (input: { operation: () => unknown }) =>
     input.operation(),
   ),
@@ -52,8 +54,8 @@ vi.mock("@/lib/auth", () => ({
   requireDoctorSession: mocks.requireDoctorSession,
 }));
 vi.mock("@/lib/template-twin/request-security", () => ({
-  isSameOriginTemplateTwinMutation: () => true,
-  boundedMultipartFormData: (request: Request) => request.formData(),
+  isSameOriginTemplateTwinMutation: mocks.sameOrigin,
+  boundedMultipartFormData: mocks.boundedMultipart,
   isMultipartFile: (value: unknown) => value instanceof File,
   TemplateTwinMultipartError: class TemplateTwinMultipartError extends Error {
     code = "MULTIPART_INVALID";
@@ -142,6 +144,11 @@ function jsonRequest(body: unknown): Request {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.stubEnv("TEMPLATE_TWIN_STAGING_QA_ENABLED", "false");
+  mocks.sameOrigin.mockReturnValue(true);
+  mocks.boundedMultipart.mockImplementation((request: Request) =>
+    request.formData(),
+  );
   mocks.requireDoctorSession.mockResolvedValue(SESSION);
   mocks.createDraft.mockResolvedValue({
     noteTemplateId: "template-synthetic-1",
@@ -154,7 +161,29 @@ beforeEach(() => {
   });
 });
 
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 describe("Template Twin route orchestration", () => {
+  it("hides generic upload before request, authentication, or service work when staging QA is requested", async () => {
+    vi.stubEnv("TEMPLATE_TWIN_STAGING_QA_ENABLED", "true");
+    const bodyRead = vi.fn();
+
+    const response = await upload({
+      headers: new Headers(),
+      formData: bodyRead,
+    } as unknown as Request);
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ ok: false, error: "not found" });
+    expect(mocks.sameOrigin).not.toHaveBeenCalled();
+    expect(mocks.boundedMultipart).not.toHaveBeenCalled();
+    expect(bodyRead).not.toHaveBeenCalled();
+    expect(mocks.requireDoctorSession).not.toHaveBeenCalled();
+    expect(mocks.createDraft).not.toHaveBeenCalled();
+  });
+
   it.each(["STAFF", "ADMIN"] as const)(
     "rejects a fresh %s role across upload, mapping, synthetic test, and certification",
     async (role) => {

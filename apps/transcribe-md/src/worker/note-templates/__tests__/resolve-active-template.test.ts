@@ -68,6 +68,7 @@ const systemDefault = tmpl({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  delete process.env.TEMPLATE_TWIN_STAGING_QA_ENABLED;
   process.env.TEMPLATE_TWIN_KILL_SWITCH = 'false';
   rolloutMocks.pin.mockResolvedValue({
     practiceId: 'practice-1',
@@ -243,6 +244,7 @@ describe('resolveVisitTemplate — immutable retry provenance', () => {
   });
 
   it('requires a matching durable run for a pinned exact staging source', async () => {
+    process.env.TEMPLATE_TWIN_STAGING_QA_ENABLED = 'true';
     const pinnedStaging = {
       ...tmpl({
         id: 'staging-pinned',
@@ -333,6 +335,47 @@ describe('resolveVisitTemplate — immutable retry provenance', () => {
     await expect(
       resolveActiveTemplate({ doctorId: 'doc1', encounterType: 'cardiology' }),
     ).resolves.toBe(systemDefault);
+  });
+
+  it('excludes every generic active Template Twin when synthetic-only staging is requested', async () => {
+    process.env.TEMPLATE_TWIN_STAGING_QA_ENABLED = 'true';
+    const twin = tmpl({
+      id: 'twin-staging-bypass-active',
+      doctorId: 'doc1',
+      encounterType: 'cardiology',
+      templateKind: 'template_twin_docx',
+    });
+    vi.mocked(prisma.noteTemplate.findMany).mockResolvedValueOnce([
+      systemDefault,
+      twin,
+    ]);
+
+    await expect(
+      resolveActiveTemplate({ doctorId: 'doc1', encounterType: 'cardiology' }),
+    ).resolves.toBe(systemDefault);
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    expect(rolloutMocks.pin).not.toHaveBeenCalled();
+  });
+
+  it('rejects a pinned non-fixture Template Twin when synthetic-only staging is requested', async () => {
+    process.env.TEMPLATE_TWIN_STAGING_QA_ENABLED = 'true';
+    const pinned = tmpl({
+      id: 'twin-staging-bypass-pinned',
+      doctorId: 'doc1',
+      templateKind: 'template_twin_docx',
+    });
+    vi.mocked(prisma.noteTemplate.findFirst).mockResolvedValueOnce(pinned);
+
+    await expect(
+      resolveVisitTemplate({
+        visitId: 'visit-staging-bypass',
+        doctorId: 'doc1',
+        pinnedTemplateId: pinned.id,
+        pinnedTemplateVersion: pinned.version,
+      }),
+    ).rejects.toBeInstanceOf(PinnedTemplateUnavailableError);
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    expect(rolloutMocks.pin).not.toHaveBeenCalled();
   });
 
   it('uses persisted global and lineage admission before selecting an active Twin', async () => {

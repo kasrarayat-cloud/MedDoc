@@ -43,22 +43,42 @@ vi.mock("./template-review-editor", () => ({
 }));
 
 import { NoteFormatManager } from "./note-format-manager";
+import type { ClientTemplateListItem } from "@/lib/note-template-persist/types";
+
+const SYNTHETIC_TEMPLATE: ClientTemplateListItem = {
+  id: "template_synthetic_existing",
+  name: "Synthetic existing format",
+  encounterType: null,
+  encounterLabel: "All my visits",
+  status: "active",
+  version: 1,
+  sectionCount: 4,
+  defaultCount: 0,
+  templateKind: "structured",
+  twinCertificationStatus: null,
+  twinFieldCount: 0,
+  twinBlockingUnsupportedCount: 0,
+  updatedAtIso: "2026-07-17T00:00:00.000Z",
+};
 
 function renderManager(
   state: "enabled" | "unavailable" | "hidden" = "enabled",
+  requested = state === "enabled",
+  templates: ClientTemplateListItem[] = [],
 ) {
   render(
     <NoteFormatManager
-      templates={[]}
+      templates={templates}
       uploadCaps={{ pdf: true, docx: true }}
       templateTwinSyntheticQaState={state}
+      templateTwinStagingQaRequested={requested}
     />,
   );
 }
 
 describe("Template Twin synthetic upload dialog", () => {
   it("preserves the existing generic Template Twin upload when staging is hidden", async () => {
-    renderManager("hidden");
+    renderManager("hidden", false);
 
     expect(
       screen.queryByRole("button", { name: "Upload synthetic DOCX" }),
@@ -72,6 +92,39 @@ describe("Template Twin synthetic upload dialog", () => {
         name: "Add a Word template for certification",
       }),
     ).toBeInTheDocument();
+  });
+
+  it("removes the generic DOCX upload from the synthetic-only entry surface", () => {
+    renderManager("enabled", true);
+
+    expect(
+      screen.getByRole("button", { name: "Upload synthetic DOCX" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Upload original DOCX" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("removes the generic DOCX upload from the synthetic-only template list", () => {
+    renderManager("enabled", true, [SYNTHETIC_TEMPLATE]);
+
+    expect(
+      screen.getByRole("button", { name: "Template Twin — Synthetic QA" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Preserve Word template" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("fails closed when staging is requested but the staging gate is unavailable", () => {
+    renderManager("unavailable", true);
+
+    expect(
+      screen.queryByRole("button", { name: "Upload synthetic DOCX" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Upload original DOCX" }),
+    ).not.toBeInTheDocument();
   });
 
   it("traps modal focus and restores it to the staging trigger on Escape", async () => {

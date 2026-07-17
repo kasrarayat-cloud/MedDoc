@@ -11,6 +11,7 @@ import {
   TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES,
 } from "../staging-qa-fixtures";
 import {
+  assertTemplateTwinStagingQaLifecycleFinality,
   TemplateTwinStagingQaLifecycleGuardError,
   runWithTemplateTwinStagingQaLifecycleGuard,
 } from "../staging-qa-lifecycle-guard";
@@ -171,9 +172,51 @@ describe("generic staging lifecycle guard", () => {
             stagingQa: false,
             source: { sha256: "e".repeat(64), sizeBytes: 9_999 },
           }),
+          env: { ...SAFE_ENV, TEMPLATE_TWIN_STAGING_QA_ENABLED: "false" },
         },
       }),
     ).resolves.toBeNull();
     expect(operation).toHaveBeenCalledWith(null);
+  });
+
+  it("rejects an ordinary Template Twin before its lifecycle callback in synthetic-only staging", async () => {
+    const operation = vi.fn();
+
+    await expect(
+      runWithTemplateTwinStagingQaLifecycleGuard({
+        noteTemplateId: "template-ordinary-staging-bypass",
+        actor: ACTOR,
+        purpose: "mapping-update",
+        operation,
+        dependencies: {
+          inspect: vi.fn().mockResolvedValue({
+            stagingQa: false,
+            source: { sha256: "d".repeat(64), sizeBytes: 8_888 },
+          }),
+          env: SAFE_ENV,
+        },
+      }),
+    ).rejects.toBeInstanceOf(TemplateTwinStagingQaLifecycleGuardError);
+    expect(operation).not.toHaveBeenCalled();
+  });
+
+  it("rejects ordinary Template Twin response finality before any database lock in synthetic-only staging", async () => {
+    const lockFinal = vi.fn();
+
+    await expect(
+      assertTemplateTwinStagingQaLifecycleFinality({
+        noteTemplateId: "template-ordinary-staging-download",
+        actor: ACTOR,
+        dependencies: {
+          inspect: vi.fn().mockResolvedValue({
+            stagingQa: false,
+            source: { sha256: "c".repeat(64), sizeBytes: 7_777 },
+          }),
+          env: SAFE_ENV,
+          lockFinal,
+        },
+      }),
+    ).rejects.toBeInstanceOf(TemplateTwinStagingQaLifecycleGuardError);
+    expect(lockFinal).not.toHaveBeenCalled();
   });
 });

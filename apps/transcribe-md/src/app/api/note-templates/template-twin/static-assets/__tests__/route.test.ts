@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   revoke: vi.fn(),
   list: vi.fn(),
   rateLimit: vi.fn(),
+  stagingRequested: vi.fn(),
 }));
 
 vi.mock('next/server', () => {
@@ -61,6 +62,9 @@ vi.mock('@/lib/template-twin/static-asset-admin', () => ({
 }));
 vi.mock('@/lib/template-twin/static-asset-ocr', () => ({
   configuredTemplateTwinLocalOcr: mocks.readiness,
+}));
+vi.mock('@/lib/template-twin/staging-qa-gate', () => ({
+  isTemplateTwinStagingQaRequested: mocks.stagingRequested,
 }));
 vi.mock('@/lib/template-twin/static-assets', () => ({
   TemplateTwinStaticAssetError: class TemplateTwinStaticAssetError extends Error {
@@ -119,9 +123,16 @@ function imageForm(action: 'inspect' | 'approve' | 'reject'): FormData {
   form.set('action', action);
   form.set(
     'file',
-    new File([Uint8Array.from([1, 2, 3, 4])], 'synthetic-logo.png', {
-      type: 'image/png',
-    }),
+    new File(
+      [
+        Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGOor6//DwAFewJ94ITM6gAAAABJRU5ErkJggg==',
+          'base64',
+        ),
+      ],
+      'synthetic-logo.png',
+      { type: 'image/png' },
+    ),
   );
   return form;
 }
@@ -129,6 +140,7 @@ function imageForm(action: 'inspect' | 'approve' | 'reject'): FormData {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.requireAdmin.mockResolvedValue(ACTOR);
+  mocks.stagingRequested.mockReturnValue(false);
   mocks.readiness.mockResolvedValue(READY);
   mocks.rateLimit.mockReturnValue(null);
   mocks.inspect.mockResolvedValue({
@@ -162,6 +174,26 @@ beforeEach(() => {
 });
 
 describe('Template Twin static-image management route', () => {
+  it('returns a non-revealing 404 before arbitrary media reaches any service in synthetic-only mode', async () => {
+    mocks.stagingRequested.mockReturnValue(true);
+
+    const getResponse = await GET();
+    const postResponse = await POST(formRequest(imageForm('inspect')));
+
+    expect(getResponse.status).toBe(404);
+    expect(postResponse.status).toBe(404);
+    expect(await getResponse.json()).toEqual({ ok: false, error: 'not found' });
+    expect(await postResponse.json()).toEqual({ ok: false, error: 'not found' });
+    expect(mocks.requireAdmin).not.toHaveBeenCalled();
+    expect(mocks.readiness).not.toHaveBeenCalled();
+    expect(mocks.rateLimit).not.toHaveBeenCalled();
+    expect(mocks.inspect).not.toHaveBeenCalled();
+    expect(mocks.approve).not.toHaveBeenCalled();
+    expect(mocks.reject).not.toHaveBeenCalled();
+    expect(mocks.revoke).not.toHaveBeenCalled();
+    expect(mocks.list).not.toHaveBeenCalled();
+  });
+
   it('rejects cross-site mutations before authentication or body parsing', async () => {
     const form = imageForm('inspect');
     const request = new Request(ENDPOINT, {

@@ -300,12 +300,40 @@ describe("worker synthetic QA provider selection", () => {
               .default([]),
           }),
         }),
-      admittedDependencies(),
+      {
+        ...admittedDependencies(),
+        env: { ...SAFE_ENV, TEMPLATE_TWIN_STAGING_QA_ENABLED: undefined },
+      },
     );
 
     expect(result.medications).toEqual([
       expect.objectContaining({ name: "Syntheticmed" }),
     ]);
+  });
+
+  it("rejects a certified non-staging Template Twin without durable admission when staging QA is requested", async () => {
+    const callback = vi.fn();
+    const base = visit();
+
+    await expect(
+      runWithWorkerSyntheticQaProviderSelection(
+        visit({
+          syntheticQaRun: null,
+          templateAdmission: {
+            ...base.templateAdmission!,
+            sourceArtifactSha256: "b".repeat(64),
+            sourceArtifactSizeBytes: 5_432,
+          },
+        }),
+        { userId: "doctor-synthetic-1" },
+        callback,
+        admittedDependencies(),
+      ),
+    ).rejects.toMatchObject({
+      code: "TEMPLATE_TWIN_SYNTHETIC_QA_RUN_INVALID",
+    });
+    expect(callback).not.toHaveBeenCalled();
+    expect(dependencyMocks.claimWorkerAttempt).not.toHaveBeenCalled();
   });
 
   it("rejects the allowlisted staging fixture without its durable run", async () => {
