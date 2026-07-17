@@ -47,12 +47,15 @@ locality or TLS of the storage endpoint, deterministic provider fixture, and
 the exact source fixture digest and size. There is no production-resource
 exception and no substring/fallback attestation.
 
-The staging-run database row pins the exact doctor, practice, visit, immutable
-template version, fixture version, idempotency digest, mode, and rollout
-generations. The queue contains only identifiers. The worker validates that row
-and enters a request-local mocked-provider context; it never switches process
-environment variables for one job. A disable/re-enable changes generations and
-permanently invalidates the old admission.
+A committed root admission precedes upload inspection and every lifecycle
+provider callback. Each visit then receives a separate committed child
+admission before evidence privacy processing. The child and staging-run rows
+pin the exact doctor, practice, visit, immutable template version, source,
+certification/mapping, fixture version, idempotency digest, provider mode, and
+rollout generations. The queue contains only identifiers. The worker validates
+both rows and enters a request-local mocked-provider context; it never switches
+process environment variables for one job. A disable/re-enable changes
+generations and permanently invalidates the old admission.
 
 ### Synthetic-only process fence
 
@@ -75,12 +78,13 @@ single order:
 
 1. global rollout control;
 2. owning practice;
-3. durable synthetic-QA run;
-4. current actor/user;
-5. visit; and
-6. fill manifest or final output claim, when applicable.
+3. durable synthetic-QA admission;
+4. durable synthetic-QA run;
+5. current actor/user;
+6. visit; and
+7. fill manifest or final output claim, when applicable.
 
-This is `global -> practice -> run -> actor -> visit -> fill/output`.
+This is `global -> practice -> admission -> run -> actor -> visit -> fill/output`.
 Operations may omit rows that do not apply, but they must not acquire a later
 applicable row and then an earlier one. The actor lock repeats the tenant,
 active-account, and DOCTOR-role check at the commit boundary.
@@ -157,8 +161,10 @@ change that status.
 The browser supplies a random idempotency token; only its tenant/doctor-scoped
 SHA-256 is stored. Repeating an uncertain request with the same payload returns
 the same run. Reusing the token with another template, version, mode, fixture,
-or evidence digest is rejected. Deliberate retries receive a monotonically
-increasing attempt and a stable BullMQ job ID.
+or evidence digest is rejected. Queue/storage retries and review regeneration
+receive a monotonically increasing attempt and a stable BullMQ job ID. A
+provider-owned admission that reaches terminal `FAILED` cannot be revived; the
+physician must start a new synthetic run.
 
 The feature can be rolled back by disabling the staging environment gate or
 either existing rollout gate. Existing rows remain inert. No migration rollback
@@ -167,15 +173,15 @@ claims stay on the existing reconciliation path.
 
 ## Additive migration and expected locks
 
-`20260717013000_template_twin_staging_qa_v1` is one bounded transaction with
-`SET LOCAL lock_timeout = '2s'` and `statement_timeout = '30s'`. It creates an
-empty admission table and indexes; it does not scan, backfill, or rewrite an
-existing clinical table. The three `AuditAction` additions briefly lock the
-enum type. Foreign-key creation reads the referenced practice, user, visit,
-and template catalogs. Installing the two guard triggers takes the short
-PostgreSQL table-definition lock required by `CREATE TRIGGER` on
-`transcribe_visits` and `transcribe_md_patients`; creating functions and the
-new-table indexes does not lock existing clinical rows.
+The initial staging migration and
+`20260717170000_template_twin_durable_staging_admission_v1` are bounded
+transactions with `SET LOCAL lock_timeout = '2s'` and
+`statement_timeout = '30s'`. The durable migration creates an empty admission
+table and adds one nullable relation to the existing default-off staging-run
+table; it does not scan, backfill, or rewrite a clinical table or auto-admit an
+existing template. See
+`docs/runbooks/template-twin-durable-staging-admission.md` for exact locks and
+recovery.
 
 An incompatible concurrent DDL or long transaction must therefore produce a
 timeout and roll back the entire migration, never a partial “complete” state.
