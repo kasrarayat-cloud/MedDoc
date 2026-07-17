@@ -19,7 +19,10 @@ import {
   type TemplateTwinRolloutToken,
 } from "./rollout";
 import { isTemplateTwinStagingQaFixtureSource } from "./staging-qa-fixtures";
-import { assertTemplateTwinStagingQaGate } from "./staging-qa-gate";
+import {
+  assertTemplateTwinStagingQaGate,
+  isTemplateTwinStagingQaRequested,
+} from "./staging-qa-gate";
 import {
   confirmTemplateTwinStagingQaMappings,
   type TemplateTwinStagingQaExpectedMappingConfirmation,
@@ -147,9 +150,14 @@ export async function runWithTemplateTwinStagingQaLifecycleGuard<T>(input: {
     actor: input.actor,
   });
   if (!provenance) throw new TemplateTwinStagingQaLifecycleGuardError();
-  if (!provenance.stagingQa) return input.operation(null);
-
   const env = input.dependencies?.env ?? process.env;
+  if (!provenance.stagingQa) {
+    if (isTemplateTwinStagingQaRequested(env)) {
+      throw new TemplateTwinStagingQaLifecycleGuardError();
+    }
+    return input.operation(null);
+  }
+
   const pinRollout = input.dependencies?.pinRollout ?? pinTemplateTwinRollout;
   const confirmMappings =
     input.dependencies?.confirmMappings ?? confirmTemplateTwinStagingQaMappings;
@@ -260,9 +268,14 @@ export async function assertTemplateTwinStagingQaLifecycleFinality(input: {
     actor: input.actor,
   });
   if (!provenance) throw new TemplateTwinStagingQaLifecycleGuardError();
-  if (!provenance.stagingQa) return;
-
   const env = input.dependencies?.env ?? process.env;
+  if (!provenance.stagingQa) {
+    if (isTemplateTwinStagingQaRequested(env)) {
+      throw new TemplateTwinStagingQaLifecycleGuardError();
+    }
+    return;
+  }
+
   try {
     assertTemplateTwinStagingQaGate(env);
     assertTemplateTwinSyntheticQaProviderEnvironment(env);

@@ -42,7 +42,10 @@ import { listDoctorTemplates } from "@/lib/note-template-persist/read";
 import { findSpecialty } from "@meddoc/shared/specialties";
 import type { ClientTemplateListItem } from "@/lib/note-template-persist/types";
 import { evaluateTemplateTwinRollout } from "@/lib/template-twin/rollout";
-import { evaluateTemplateTwinStagingQaGate } from "@/lib/template-twin/staging-qa-gate";
+import {
+  evaluateTemplateTwinStagingQaGate,
+  isTemplateTwinStagingQaRequested,
+} from "@/lib/template-twin/staging-qa-gate";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -164,7 +167,11 @@ export default async function SettingsPage() {
 
   // Which upload formats can this image actually extract (see getUploadCaps).
   const uploadCaps = await getUploadCaps();
+  const templateTwinStagingQaRequested = isTemplateTwinStagingQaRequested(
+    process.env,
+  );
   const canManageTemplateTwinStaticAssets =
+    !templateTwinStagingQaRequested &&
     (user.role === "ADMIN" || user.role === "SUPER_ADMIN") &&
     user.practice !== null &&
     evaluateTemplateTwinRollout({
@@ -241,6 +248,7 @@ export default async function SettingsPage() {
               templates={noteTemplates}
               uploadCaps={uploadCaps}
               templateTwinSyntheticQaState={templateTwinSyntheticQaState}
+              templateTwinStagingQaRequested={templateTwinStagingQaRequested}
             />
           </>
         ),
@@ -652,6 +660,7 @@ export default async function SettingsPage() {
               templates={noteTemplates}
               uploadCaps={uploadCaps}
               templateTwinSyntheticQaState={templateTwinSyntheticQaState}
+              templateTwinStagingQaRequested={templateTwinStagingQaRequested}
             />
           </Section>
 

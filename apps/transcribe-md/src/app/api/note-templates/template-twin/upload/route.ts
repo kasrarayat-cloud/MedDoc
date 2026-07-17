@@ -27,6 +27,7 @@ import {
   isTemplateTwinStagingQaFixtureSource,
   templateTwinStagingQaSha256,
 } from "@/lib/template-twin/staging-qa-fixtures";
+import { isTemplateTwinStagingQaRequested } from "@/lib/template-twin/staging-qa-gate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -140,6 +141,13 @@ function safeError(error: unknown): { status: number; message: string } {
 }
 
 export async function POST(request: Request) {
+  // An explicit staging-QA request makes this process synthetic-only even when
+  // the remaining staging resources are misconfigured. The generic endpoint
+  // must not disclose or parse anything; the exact fixture has its own route.
+  if (isTemplateTwinStagingQaRequested()) {
+    return json({ ok: false, error: "not found" }, 404);
+  }
+
   if (!isSameOriginTemplateTwinMutation(request)) {
     return json(
       { ok: false, error: "The upload request was not same-origin." },

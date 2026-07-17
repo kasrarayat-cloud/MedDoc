@@ -25,6 +25,18 @@ function explicitlyTrue(value: string | undefined): boolean {
   return value === "true";
 }
 
+/**
+ * The synthetic-only boundary is requested by one exact, case-sensitive flag.
+ * This intentionally does not depend on the rest of the staging readiness
+ * checks: a partially configured staging process must still fence ordinary
+ * Template Twin entry points instead of falling back to production behavior.
+ */
+export function isTemplateTwinStagingQaRequested(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): boolean {
+  return env[TEMPLATE_TWIN_STAGING_QA_ENABLED_ENV] === "true";
+}
+
 function isolatedDatabaseName(rawUrl: string | undefined): boolean {
   if (!rawUrl) return false;
   try {
@@ -145,7 +157,7 @@ function isolatedObjectStorageIdentity(
 export function evaluateTemplateTwinStagingQaGate(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): TemplateTwinStagingQaGateDecision {
-  if (!explicitlyTrue(env[TEMPLATE_TWIN_STAGING_QA_ENABLED_ENV])) {
+  if (!isTemplateTwinStagingQaRequested(env)) {
     return { allowed: false, code: "STAGING_QA_DISABLED" };
   }
   const environment = env[TEMPLATE_TWIN_STAGING_QA_ENVIRONMENT_ENV];

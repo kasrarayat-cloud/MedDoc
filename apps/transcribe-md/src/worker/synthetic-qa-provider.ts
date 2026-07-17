@@ -33,7 +33,10 @@ import {
   lockAndAssertTemplateTwinStagingQaOperation,
   TemplateTwinStagingQaVisitGuardError,
 } from "@/lib/template-twin/staging-qa-visit-guard";
-import { TemplateTwinStagingQaDisabledError } from "@/lib/template-twin/staging-qa-gate";
+import {
+  isTemplateTwinStagingQaRequested,
+  TemplateTwinStagingQaDisabledError,
+} from "@/lib/template-twin/staging-qa-gate";
 import { templateTwinStagingQaPayloadSha256 } from "@/lib/template-twin/staging-qa-digest";
 import { downloadAudio } from "@/lib/minio";
 
@@ -579,6 +582,15 @@ export async function runWithWorkerSyntheticQaProviderSelection<T>(
       fail(
         "TEMPLATE_TWIN_SYNTHETIC_QA_RUN_INVALID",
         "A synthetic QA worker claim has no durable run.",
+      );
+    }
+    if (
+      isTemplateTwinStagingQaRequested(env) &&
+      isCertifiedTemplateTwin(visit.templateAdmission)
+    ) {
+      fail(
+        "TEMPLATE_TWIN_SYNTHETIC_QA_RUN_INVALID",
+        "Template Twin staging requires a durable synthetic QA admission.",
       );
     }
     if (isStagingFixtureTemplate(visit.templateAdmission)) {

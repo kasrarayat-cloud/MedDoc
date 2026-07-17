@@ -11,6 +11,7 @@ import {
 } from '@/lib/template-twin/request-security';
 import { requireTemplateTwinStaticAssetAdmin } from '@/lib/template-twin/static-asset-admin';
 import { configuredTemplateTwinLocalOcr } from '@/lib/template-twin/static-asset-ocr';
+import { isTemplateTwinStagingQaRequested } from '@/lib/template-twin/staging-qa-gate';
 import {
   approveTemplateTwinStaticAsset,
   inspectTemplateTwinStaticAssetForReview,
@@ -89,6 +90,13 @@ function safeError(error: unknown): { status: number; message: string; code: str
 }
 
 export async function GET() {
+  // The staging-QA process is exact-fixture-only. Return a non-revealing 404
+  // before authentication, readiness probes, or storage access so arbitrary
+  // practice media cannot enter this boundary.
+  if (isTemplateTwinStagingQaRequested(process.env)) {
+    return json({ ok: false, error: 'not found' }, 404);
+  }
+
   try {
     const actor = await requireTemplateTwinStaticAssetAdmin();
     const [readiness, assets] = await Promise.all([
@@ -118,6 +126,13 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  // Keep this ahead of origin/header/body parsing and every admin/OCR/storage
+  // dependency. Staging admits no media in this slice; any future synthetic
+  // asset requires its own dedicated exact-byte path and threat review.
+  if (isTemplateTwinStagingQaRequested(process.env)) {
+    return json({ ok: false, error: 'not found' }, 404);
+  }
+
   if (!isSameOriginTemplateTwinMutation(request)) {
     return json(
       {

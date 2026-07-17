@@ -122,10 +122,12 @@ export function NoteFormatManager({
   templates,
   uploadCaps,
   templateTwinSyntheticQaState,
+  templateTwinStagingQaRequested,
 }: {
   templates: ClientTemplateListItem[];
   uploadCaps: UploadCaps;
   templateTwinSyntheticQaState: "enabled" | "unavailable" | "hidden";
+  templateTwinStagingQaRequested: boolean;
 }) {
   const router = useRouter();
   const hasTemplates = templates.length > 0;
@@ -266,6 +268,11 @@ export function NoteFormatManager({
   }
 
   function openTwinUpload(mode: TwinUploadMode) {
+    // The server remains authoritative, but do not retain a generic-upload
+    // affordance or stale client callback in a process explicitly requested as
+    // synthetic-only. This is intentionally stronger than the full staging
+    // readiness result: partial staging configuration must fail closed.
+    if (mode === "generic" && templateTwinStagingQaRequested) return;
     twinUploadReturnFocusRef.current =
       document.activeElement instanceof HTMLElement
         ? document.activeElement
@@ -630,12 +637,14 @@ export function NoteFormatManager({
           uploadCaps={uploadCaps}
           onTwinUploadClick={openTwinUpload}
           templateTwinSyntheticQaState={templateTwinSyntheticQaState}
+          templateTwinStagingQaRequested={templateTwinStagingQaRequested}
         />
         <TwinUploadDialog
           open={
             twinUploadOpen &&
-            (twinUploadMode === "generic" ||
-              templateTwinSyntheticQaState === "enabled")
+            (twinUploadMode === "synthetic_staging"
+              ? templateTwinSyntheticQaState === "enabled"
+              : !templateTwinStagingQaRequested)
           }
           mode={twinUploadMode}
           file={twinFile}
@@ -708,14 +717,16 @@ export function NoteFormatManager({
             justifyContent: "flex-end",
           }}
         >
-          <button
-            type="button"
-            style={btn}
-            onClick={() => openTwinUpload("generic")}
-            disabled={pending}
-          >
-            Preserve Word template
-          </button>
+          {!templateTwinStagingQaRequested && (
+            <button
+              type="button"
+              style={btn}
+              onClick={() => openTwinUpload("generic")}
+              disabled={pending}
+            >
+              Preserve Word template
+            </button>
+          )}
           {templateTwinSyntheticQaState === "enabled" && (
             <button
               type="button"
@@ -820,8 +831,9 @@ export function NoteFormatManager({
       <TwinUploadDialog
         open={
           twinUploadOpen &&
-          (twinUploadMode === "generic" ||
-            templateTwinSyntheticQaState === "enabled")
+          (twinUploadMode === "synthetic_staging"
+            ? templateTwinSyntheticQaState === "enabled"
+            : !templateTwinStagingQaRequested)
         }
         mode={twinUploadMode}
         file={twinFile}
@@ -1759,6 +1771,7 @@ function EntryState({
   uploadCaps,
   onTwinUploadClick,
   templateTwinSyntheticQaState,
+  templateTwinStagingQaRequested,
 }: {
   pasteText: string;
   setPasteText: (v: string) => void;
@@ -1772,6 +1785,7 @@ function EntryState({
   uploadCaps: UploadCaps;
   onTwinUploadClick: (mode: TwinUploadMode) => void;
   templateTwinSyntheticQaState: "enabled" | "unavailable" | "hidden";
+  templateTwinStagingQaRequested: boolean;
 }) {
   // Only offer a format whose extractor actually loads in this image (incident
   // 2026-06-04). .txt/.md always available; .pdf/.docx gated on uploadCaps so we
@@ -1889,59 +1903,61 @@ function EntryState({
         </button>
       </div>
 
-      <section
-        aria-labelledby="template-twin-docx-entry"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 18,
-          padding: "14px 16px",
-          border: "1px solid var(--color-linear-border)",
-          borderRadius: 8,
-          background: "var(--color-linear-surface-2)",
-          marginTop: 14,
-          flexWrap: "wrap",
-        }}
-      >
-        <div style={{ flex: 1, minWidth: 240 }}>
-          <div
-            id="template-twin-docx-entry"
-            style={{ ...subLabel, color: "var(--color-linear-sage-bright)" }}
-          >
-            Template Twin · DOCX
-          </div>
-          <div
-            style={{
-              fontSize: 13,
-              color: "var(--color-linear-text)",
-              fontWeight: 500,
-              marginTop: 4,
-            }}
-          >
-            Keep the original Word layout and controls
-          </div>
-          <p
-            style={{
-              margin: "4px 0 0",
-              fontSize: 12,
-              lineHeight: 1.5,
-              color: "var(--color-linear-text-2)",
-            }}
-          >
-            QuillMD stores an immutable copy, inventories every field, and asks
-            you to certify the mapping before it can be used.
-          </p>
-        </div>
-        <button
-          type="button"
-          style={btn}
-          onClick={() => onTwinUploadClick("generic")}
-          disabled={pending}
+      {!templateTwinStagingQaRequested && (
+        <section
+          aria-labelledby="template-twin-docx-entry"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 18,
+            padding: "14px 16px",
+            border: "1px solid var(--color-linear-border)",
+            borderRadius: 8,
+            background: "var(--color-linear-surface-2)",
+            marginTop: 14,
+            flexWrap: "wrap",
+          }}
         >
-          Upload original DOCX
-        </button>
-      </section>
+          <div style={{ flex: 1, minWidth: 240 }}>
+            <div
+              id="template-twin-docx-entry"
+              style={{ ...subLabel, color: "var(--color-linear-sage-bright)" }}
+            >
+              Template Twin · DOCX
+            </div>
+            <div
+              style={{
+                fontSize: 13,
+                color: "var(--color-linear-text)",
+                fontWeight: 500,
+                marginTop: 4,
+              }}
+            >
+              Keep the original Word layout and controls
+            </div>
+            <p
+              style={{
+                margin: "4px 0 0",
+                fontSize: 12,
+                lineHeight: 1.5,
+                color: "var(--color-linear-text-2)",
+              }}
+            >
+              QuillMD stores an immutable copy, inventories every field, and
+              asks you to certify the mapping before it can be used.
+            </p>
+          </div>
+          <button
+            type="button"
+            style={btn}
+            onClick={() => onTwinUploadClick("generic")}
+            disabled={pending}
+          >
+            Upload original DOCX
+          </button>
+        </section>
+      )}
 
       {templateTwinSyntheticQaState === "enabled" && (
         <section

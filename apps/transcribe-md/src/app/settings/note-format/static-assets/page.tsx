@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 
 import { AppFrame } from '@/components/ui/app-frame';
 import { logAudit } from '@/lib/audit';
+import { isTemplateTwinStagingQaRequested } from '@/lib/template-twin/staging-qa-gate';
 import { requireTemplateTwinStaticAssetAdmin } from '@/lib/template-twin/static-asset-admin';
 
 import styles from './static-asset-review.module.css';
@@ -14,6 +15,12 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export default async function TemplateTwinStaticAssetSettingsPage() {
+  // This surface manages arbitrary reusable practice media. A process
+  // explicitly requested as synthetic-only must not disclose the page or even
+  // evaluate its admin/service dependencies, including during partial staging
+  // configuration.
+  if (isTemplateTwinStagingQaRequested(process.env)) notFound();
+
   const actor = await requireTemplateTwinStaticAssetAdmin().catch(() => null);
   if (!actor) notFound();
 

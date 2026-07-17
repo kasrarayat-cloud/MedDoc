@@ -34,6 +34,7 @@ import {
   TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256,
   TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES,
 } from '@/lib/template-twin/staging-qa-fixtures';
+import { isTemplateTwinStagingQaRequested } from '@/lib/template-twin/staging-qa-gate';
 
 export interface ResolveTemplateInput {
   /** The signing/owning doctor (User.id). */
@@ -212,8 +213,11 @@ export async function resolveActiveTemplateAdmission(
       },
     },
   })) as TemplateWithSourceProvenance[];
+  const stagingQaRequested = isTemplateTwinStagingQaRequested();
   const ordinaryCandidates = candidates.filter(
-    (template) => !isStagingFixtureTemplate(template),
+    (template) =>
+      !isStagingFixtureTemplate(template) &&
+      (!stagingQaRequested || template.templateKind !== 'template_twin_docx'),
   );
   const preferred = selectTemplate(ordinaryCandidates, input);
   if (preferred.templateKind !== 'template_twin_docx') {
@@ -267,7 +271,15 @@ export async function resolveVisitTemplateAdmission(
     },
   })) as TemplateWithSourceProvenance | null;
   if (!pinned) throw new PinnedTemplateUnavailableError();
-  if (isStagingFixtureTemplate(pinned)) {
+  const stagingFixture = isStagingFixtureTemplate(pinned);
+  if (
+    isTemplateTwinStagingQaRequested() &&
+    pinned.templateKind === 'template_twin_docx' &&
+    !stagingFixture
+  ) {
+    throw new PinnedTemplateUnavailableError();
+  }
+  if (stagingFixture) {
     if (!input.visitId) throw new PinnedTemplateUnavailableError();
     const run = await prisma.templateTwinSyntheticQaRun.findFirst({
       where: {
