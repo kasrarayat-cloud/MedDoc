@@ -72,6 +72,14 @@ function sameOriginHeaders(page: Page): Record<string, string> {
   };
 }
 
+async function revealNoteFormatSettings(page: Page): Promise<void> {
+  await expect(
+    page.getByRole("heading", { name: "Settings", exact: true }),
+  ).toBeVisible();
+  const tab = page.getByRole("button", { name: "Note format", exact: true });
+  if ((await tab.count()) > 0) await tab.click();
+}
+
 async function signupSyntheticDoctor(page: Page, email: string): Promise<void> {
   await page.goto("/signup");
   await page.getByLabel("Full name").fill("Synthetic Template Twin Doctor");
@@ -204,7 +212,7 @@ test("Template Twin staging UI drives the real synthetic pipeline fail closed", 
   await signupSyntheticDoctor(page, email);
   setTemplateTwinQaPractice({ email, enabled: false });
   await page.goto("/settings");
-  await page.getByRole("button", { name: "Note format", exact: true }).click();
+  await revealNoteFormatSettings(page);
   await expect(
     page.getByText(/Template Twin synthetic QA is unavailable/i).first(),
   ).toBeVisible();
@@ -215,7 +223,7 @@ test("Template Twin staging UI drives the real synthetic pipeline fail closed", 
 
   setTemplateTwinQaPractice({ email, enabled: true });
   await page.reload();
-  await page.getByRole("button", { name: "Note format", exact: true }).click();
+  await revealNoteFormatSettings(page);
   await expect(
     page.getByText("SYNTHETIC TEST ONLY — NOT FOR PATIENT CARE").first(),
   ).toBeVisible();
