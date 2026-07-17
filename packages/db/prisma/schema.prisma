@@ -160,6 +160,9 @@ enum AuditAction {
   TEMPLATE_TWIN_FIELD_INTENT_RECORDED
   TEMPLATE_TWIN_CUSTOM_EXAMPLE_EXECUTED
   TEMPLATE_TWIN_CUSTOM_EXAMPLE_ACKNOWLEDGED
+  TEMPLATE_TWIN_STAGING_QA_RUN_CREATED
+  TEMPLATE_TWIN_STAGING_QA_RUN_RETRIED
+  TEMPLATE_TWIN_STAGING_QA_SOAP_EDITED
 
   // transcribe-md — patient CRUD (TranscribeMdPatient; CRM patient
   // events use CREATED_PATIENT / UPDATED_PATIENT / ARCHIVED_PATIENT
@@ -575,6 +578,7 @@ model Practice {
   templateTwinStaticAssets              TemplateTwinStaticAsset[]
   templateTwinStaticAssetReviewReceipts TemplateTwinStaticAssetReviewReceipt[]
   templateTwinCustomExampleExecutions   TemplateTwinCustomExampleExecution[]
+  templateTwinSyntheticQaRuns           TemplateTwinSyntheticQaRun[]
 
   @@index([slug])
   @@map("practices")
@@ -735,6 +739,7 @@ model User {
   templateTwinStaticAssetReviews         TemplateTwinStaticAssetReviewReceipt[] @relation("TemplateTwinStaticAssetReviewer")
   templateTwinCustomExamplesRun          TemplateTwinCustomExampleExecution[]   @relation("TemplateTwinCustomExampleExecutor")
   templateTwinCustomExamplesAcknowledged TemplateTwinCustomExampleExecution[]   @relation("TemplateTwinCustomExampleAcknowledger")
+  templateTwinSyntheticQaRuns            TemplateTwinSyntheticQaRun[]           @relation("TemplateTwinSyntheticQaDoctor")
   // T-M16.2: one-time tokens for password reset, email verification,
   // email change. All cascade-deleted with the user.
   authTokens                             AuthToken[]
@@ -1991,6 +1996,12 @@ model TranscribeVisit {
   /// and output digest used for review and signing.
   templateTwinFill TemplateTwinFillManifest?
 
+  /// One synthetic-only staging admission record at most. The separate table
+  /// keeps the default-off QA marker, request idempotency, and rollout epoch
+  /// out of the large clinical visit row while giving the worker a durable,
+  /// fail-closed relation to inspect.
+  templateTwinSyntheticQaRun TemplateTwinSyntheticQaRun?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -2216,6 +2227,8 @@ model NoteTemplate {
 
   templateTwinCompiledVersion TemplateTwinCompiledVersion?
 
+  templateTwinSyntheticQaRuns TemplateTwinSyntheticQaRun[]
+
   /// Phase-1 provenance back-reference — visits generated with this template.
   visits TranscribeVisit[]
 
@@ -2227,6 +2240,65 @@ model NoteTemplate {
   @@index([isSystemDefault])
   @@index([doctorId, templateKind, status])
   @@map("note_templates")
+}
+
+/// Default-off, synthetic-only browser QA admission. This row is never a
+/// substitute for the normal Template Twin fill manifest or signing proof. It
+/// only proves that an authenticated doctor admitted an allowlisted synthetic
+/// run under one exact template version and rollout generation.
+model TemplateTwinSyntheticQaRun {
+  id String @id @default(cuid())
+
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict, map: "template_twin_qa_practice_fkey")
+
+  doctorId String
+  doctor   User   @relation("TemplateTwinSyntheticQaDoctor", fields: [doctorId], references: [id], onDelete: Restrict, map: "template_twin_qa_doctor_fkey")
+
+  visitId String          @unique(map: "template_twin_qa_visit_unique")
+  visit   TranscribeVisit @relation(fields: [visitId], references: [id], onDelete: Cascade, map: "template_twin_qa_visit_fkey")
+
+  noteTemplateId      String
+  noteTemplate        NoteTemplate @relation(fields: [noteTemplateId], references: [id], onDelete: Restrict, map: "template_twin_qa_template_fkey")
+  noteTemplateVersion Int
+
+  /// Versioned, tenant/doctor-scoped hash of the caller's idempotency token.
+  /// The raw browser token is never persisted or logged.
+  requestSha256 String @db.Char(64)
+  /// Canonical hash of template, mode, fixture, and evidence digest. Reusing
+  /// one idempotency token with a different payload is rejected.
+  payloadSha256 String @db.Char(64)
+
+  /// "typed" or "mock_voice". A database CHECK constrains this open-text
+  /// field so adding a future mode requires an explicit reviewed migration.
+  mode           String
+  fixtureVersion String
+
+  pinnedGlobalRolloutGeneration   BigInt
+  pinnedPracticeRolloutGeneration BigInt
+
+  /// Admission/queue state only; clinical processing state remains the visit's
+  /// authoritative TranscribeVisitStatus and the fill manifest remains the
+  /// authoritative Template Twin state.
+  status               String    @default("PENDING_ENQUEUE")
+  attempt              Int       @default(0)
+  enqueuedAt           DateTime? @db.Timestamptz(6)
+  lastRetriedAt        DateTime? @db.Timestamptz(6)
+  /// Per-delivery ownership for BullMQ stalled-job recovery. A replacement
+  /// worker may claim the same attempt only after this lease expires; final
+  /// output and READY claims must match workerClaimId.
+  workerClaimId        String?   @db.VarChar(64)
+  workerClaimedAt      DateTime? @db.Timestamptz(6)
+  workerHeartbeatAt    DateTime? @db.Timestamptz(6)
+  workerLeaseExpiresAt DateTime? @db.Timestamptz(6)
+  createdAt            DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([practiceId, doctorId, requestSha256], map: "template_twin_qa_request_unique")
+  @@index([practiceId, createdAt], map: "template_twin_qa_practice_created_idx")
+  @@index([doctorId, status], map: "template_twin_qa_doctor_status_idx")
+  @@index([noteTemplateId, noteTemplateVersion], map: "template_twin_qa_template_version_idx")
+  @@map("template_twin_synthetic_qa_runs")
 }
 
 // ============================================================================

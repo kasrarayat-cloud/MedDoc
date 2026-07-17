@@ -1,0 +1,179 @@
+import { describe, expect, it, vi } from "vitest";
+
+import {
+  TEMPLATE_TWIN_SYNTHETIC_QA_TRANSCRIPT,
+  getTemplateTwinSyntheticQaProviderContext,
+  type SyntheticQaProviderEnvironment,
+} from "@meddoc/ai";
+
+import {
+  TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256,
+  TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES,
+} from "../staging-qa-fixtures";
+import {
+  TemplateTwinStagingQaLifecycleGuardError,
+  runWithTemplateTwinStagingQaLifecycleGuard,
+} from "../staging-qa-lifecycle-guard";
+
+const SAFE_ENV: SyntheticQaProviderEnvironment = {
+  TEMPLATE_TWIN_STAGING_QA_ENABLED: "true",
+  TEMPLATE_TWIN_STAGING_QA_ENVIRONMENT: "test",
+  TEMPLATE_TWIN_STAGING_QA_RESOURCE_ATTESTATION: "isolated-disposable-qa-v1",
+  TEMPLATE_TWIN_STORAGE_PROFILE: "qa",
+  DATABASE_URL: "postgresql:///meddoc_qa_test",
+  REDIS_URL: "redis://redis:6379/15",
+  MINIO_ENDPOINT: "minio:9000",
+  MINIO_USE_SSL: "false",
+  TRANSCRIBE_MD_MINIO_BUCKET: "transcribe-md-audio-qa",
+  TRANSCRIBE_MD_TEMPLATE_BUCKET: "transcribe-md-template-artifacts-qa",
+  MOCK_AI_CALLS: "true",
+  MOCK_TEMPLATE_TWIN_E2E: "true",
+  TEMPLATE_TWIN_KILL_SWITCH: "false",
+};
+
+const TOKEN = {
+  practiceId: "practice-lifecycle-synthetic",
+  globalGeneration: BigInt(5),
+  practiceGeneration: BigInt(8),
+};
+
+const ACTOR = {
+  userId: "doctor-lifecycle@synthetic.test",
+  practiceId: TOKEN.practiceId,
+  rolloutToken: TOKEN,
+};
+
+const EXACT_SOURCE = {
+  sha256: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256,
+  sizeBytes: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES,
+};
+
+function stagingInspect(
+  source: { sha256: string; sizeBytes: number } = EXACT_SOURCE,
+) {
+  return vi.fn().mockResolvedValue({ stagingQa: true, source });
+}
+
+function matchingPin() {
+  return vi.fn().mockResolvedValue(TOKEN);
+}
+
+describe("generic staging lifecycle guard", () => {
+  it("rejects exact persisted staging provenance before any callback after process revocation", async () => {
+    const operation = vi.fn();
+    const pinRollout = matchingPin();
+
+    await expect(
+      runWithTemplateTwinStagingQaLifecycleGuard({
+        noteTemplateId: "template-lifecycle-synthetic",
+        actor: ACTOR,
+        purpose: "mapping-update",
+        operation,
+        dependencies: {
+          inspect: stagingInspect(),
+          pinRollout,
+          env: { ...SAFE_ENV, TEMPLATE_TWIN_STAGING_QA_ENABLED: "false" },
+        },
+      }),
+    ).rejects.toBeInstanceOf(TemplateTwinStagingQaLifecycleGuardError);
+
+    expect(pinRollout).not.toHaveBeenCalled();
+    expect(operation).not.toHaveBeenCalled();
+  });
+
+  it("treats a durable staging-run relation as staging even if the source digest is not the fixture", async () => {
+    const operation = vi.fn(() => {
+      const context = getTemplateTwinSyntheticQaProviderContext();
+      expect(context?.practiceId).toBe(ACTOR.practiceId);
+      return context?.visitId;
+    });
+
+    await expect(
+      runWithTemplateTwinStagingQaLifecycleGuard({
+        noteTemplateId: "template-run-related-synthetic",
+        actor: ACTOR,
+        purpose: "workspace-read",
+        operation,
+        dependencies: {
+          inspect: stagingInspect({
+            sha256: "f".repeat(64),
+            sizeBytes: 7_777,
+          }),
+          pinRollout: matchingPin(),
+          env: SAFE_ENV,
+        },
+      }),
+    ).resolves.toMatch(/^template-twin-staging-lifecycle-visit:[a-f0-9]{64}$/u);
+    expect(operation).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the deterministic provider context active if flags are revoked during an admitted callback", async () => {
+    const mutableEnv = { ...SAFE_ENV };
+    const result = await runWithTemplateTwinStagingQaLifecycleGuard({
+      noteTemplateId: "template-provider-escape-synthetic",
+      actor: ACTOR,
+      purpose: "custom-example-run",
+      evidenceText: TEMPLATE_TWIN_SYNTHETIC_QA_TRANSCRIPT,
+      operation: (providerVisitId) => {
+        mutableEnv.TEMPLATE_TWIN_STAGING_QA_ENABLED = "false";
+        mutableEnv.MOCK_AI_CALLS = "false";
+        mutableEnv.MOCK_TEMPLATE_TWIN_E2E = "false";
+        const context = getTemplateTwinSyntheticQaProviderContext();
+        expect(context?.visitId).toBe(providerVisitId);
+        expect(context?.practiceId).toBe(ACTOR.practiceId);
+        return context?.fixtureVersion;
+      },
+      dependencies: {
+        inspect: stagingInspect(),
+        pinRollout: matchingPin(),
+        env: mutableEnv,
+      },
+    });
+
+    expect(result).toBe("template-twin-staging-safe-docx/1.0.0");
+    expect(getTemplateTwinSyntheticQaProviderContext()).toBeNull();
+  });
+
+  it("rejects stale generations before a certification or download operation", async () => {
+    const operation = vi.fn();
+    await expect(
+      runWithTemplateTwinStagingQaLifecycleGuard({
+        noteTemplateId: "template-stale-synthetic",
+        actor: ACTOR,
+        purpose: "certification-activation",
+        operation,
+        dependencies: {
+          inspect: stagingInspect(),
+          pinRollout: vi.fn().mockResolvedValue({
+            ...TOKEN,
+            practiceGeneration: TOKEN.practiceGeneration + BigInt(2),
+          }),
+          env: SAFE_ENV,
+        },
+      }),
+    ).rejects.toBeInstanceOf(TemplateTwinStagingQaLifecycleGuardError);
+    expect(operation).not.toHaveBeenCalled();
+  });
+
+  it("preserves the ordinary Template Twin lifecycle path without a synthetic provider context", async () => {
+    const operation = vi.fn((providerVisitId: string | null) => {
+      expect(getTemplateTwinSyntheticQaProviderContext()).toBeNull();
+      return providerVisitId;
+    });
+    await expect(
+      runWithTemplateTwinStagingQaLifecycleGuard({
+        noteTemplateId: "template-ordinary",
+        actor: ACTOR,
+        purpose: "mapping-update",
+        operation,
+        dependencies: {
+          inspect: vi.fn().mockResolvedValue({
+            stagingQa: false,
+            source: { sha256: "e".repeat(64), sizeBytes: 9_999 },
+          }),
+        },
+      }),
+    ).resolves.toBeNull();
+    expect(operation).toHaveBeenCalledWith(null);
+  });
+});
