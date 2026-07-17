@@ -33,6 +33,22 @@ database name, Redis host and non-zero logical database, distinct bucket
 names, storage profile, endpoint locality/TLS, provider-fixture enablement,
 and the exact allowlisted source bytes before admitting a run.
 
+### Synthetic-only process fence
+
+Explicitly requesting the staging-QA profile changes the process admission
+boundary, not merely the visible UI. While that profile is requested, the
+generic Template Twin DOCX upload, generic template lifecycle mutations,
+generic worker admission, and generic static-asset review or approval workflow
+are unavailable. The process accepts only the exact byte-and-size allowlisted
+synthetic DOCX and only worker work backed by its tenant-scoped durable staging
+run. A missing, stale, cross-tenant, or non-matching run fails closed; it cannot
+fall through to the generic worker or provider path.
+
+This fence is staging-specific. When the staging-QA flag is absent, existing
+production generic Template Twin behavior is preserved and remains governed by
+its ordinary rollout, authorization, clinical-safety, privacy, and storage
+gates.
+
 ## Product reference lock
 
 The implementation follows QuillMD's existing Calm Clinical surfaces:
@@ -122,3 +138,8 @@ The previously observed Windows CMD/Word COM launcher hang is a separate
 human-QA tooling defect. It is not diagnosed or fixed by this staging browser
 slice, the browser does not invoke that launcher, and no launcher result is
 counted as an Office or Microsoft Word pass here.
+
+Staging deployment remains blocked until a fresh independent audit accepts the
+exact remediation head. Any later environment must also prove network-level
+outbound-provider denial, private authenticated access with public registration
+disabled, and separately provisioned synthetic ADMIN and DOCTOR identities.

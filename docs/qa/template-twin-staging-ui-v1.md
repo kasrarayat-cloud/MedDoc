@@ -54,6 +54,20 @@ and enters a request-local mocked-provider context; it never switches process
 environment variables for one job. A disable/re-enable changes generations and
 permanently invalidates the old admission.
 
+### Synthetic-only process fence
+
+When `TEMPLATE_TWIN_STAGING_QA_ENABLED=true` is explicitly requested for a
+process, that process must not expose the generic Template Twin DOCX upload,
+generic lifecycle mutations, generic worker admission, or generic static-asset
+review and approval workflow. Only the exact allowlisted synthetic fixture may
+compile, and only a job matching its tenant-scoped durable staging run may enter
+the worker. A rejected staging request must never fall through to a generic
+Template Twin route, worker, asset, or provider path.
+
+Leaving the staging-QA flag absent preserves the existing generic production
+behavior; it does not turn production into the staging profile or disable the
+ordinary production authorization and safety gates.
+
 ## Database lock order and linearization
 
 Every state-changing staging transaction takes the rows it needs in this
@@ -110,6 +124,12 @@ resolution, rendering, verification, and signing pipeline.
 No step may point to a production database, Redis, bucket, provider, or
 credential. The database-name guard and staging gate are independent checks,
 not documentation-only conventions.
+
+Deployment is not authorized by this runbook alone. It remains blocked until a
+fresh independent exact-head audit accepts the remediation, the environment has
+network-enforced provider egress denial, access is private and authenticated
+with public registration disabled, and isolated synthetic ADMIN and DOCTOR
+accounts have been provisioned through an approved non-production procedure.
 
 ## Browser journey
 
