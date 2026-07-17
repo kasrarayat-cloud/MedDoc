@@ -7,7 +7,7 @@ import { expect, test, type Browser, type Page } from "@playwright/test";
 import {
   TEMPLATE_TWIN_SYNTHETIC_QA_EVIDENCE,
   TEMPLATE_TWIN_SYNTHETIC_QA_TRANSCRIPT,
-} from "@meddoc/ai";
+} from "../../../../../packages/ai/src/synthetic-qa-context";
 
 import {
   TEMPLATE_TWIN_READBACK_CONTRACT_VERSION,
