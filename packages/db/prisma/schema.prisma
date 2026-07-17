@@ -163,6 +163,9 @@ enum AuditAction {
   TEMPLATE_TWIN_STAGING_QA_RUN_CREATED
   TEMPLATE_TWIN_STAGING_QA_RUN_RETRIED
   TEMPLATE_TWIN_STAGING_QA_SOAP_EDITED
+  TEMPLATE_TWIN_STAGING_QA_ADMISSION_CREATED
+  TEMPLATE_TWIN_STAGING_QA_ADMISSION_ADVANCED
+  TEMPLATE_TWIN_STAGING_QA_ADMISSION_FAILED
 
   // transcribe-md — patient CRUD (TranscribeMdPatient; CRM patient
   // events use CREATED_PATIENT / UPDATED_PATIENT / ARCHIVED_PATIENT
@@ -578,6 +581,7 @@ model Practice {
   templateTwinStaticAssets              TemplateTwinStaticAsset[]
   templateTwinStaticAssetReviewReceipts TemplateTwinStaticAssetReviewReceipt[]
   templateTwinCustomExampleExecutions   TemplateTwinCustomExampleExecution[]
+  templateTwinSyntheticQaAdmissions     TemplateTwinSyntheticQaAdmission[]
   templateTwinSyntheticQaRuns           TemplateTwinSyntheticQaRun[]
 
   @@index([slug])
@@ -739,6 +743,7 @@ model User {
   templateTwinStaticAssetReviews         TemplateTwinStaticAssetReviewReceipt[] @relation("TemplateTwinStaticAssetReviewer")
   templateTwinCustomExamplesRun          TemplateTwinCustomExampleExecution[]   @relation("TemplateTwinCustomExampleExecutor")
   templateTwinCustomExamplesAcknowledged TemplateTwinCustomExampleExecution[]   @relation("TemplateTwinCustomExampleAcknowledger")
+  templateTwinSyntheticQaAdmissions      TemplateTwinSyntheticQaAdmission[]     @relation("TemplateTwinSyntheticQaAdmissionActor")
   templateTwinSyntheticQaRuns            TemplateTwinSyntheticQaRun[]           @relation("TemplateTwinSyntheticQaDoctor")
   // T-M16.2: one-time tokens for password reset, email verification,
   // email change. All cascade-deleted with the user.
@@ -2000,7 +2005,8 @@ model TranscribeVisit {
   /// keeps the default-off QA marker, request idempotency, and rollout epoch
   /// out of the large clinical visit row while giving the worker a durable,
   /// fail-closed relation to inspect.
-  templateTwinSyntheticQaRun TemplateTwinSyntheticQaRun?
+  templateTwinSyntheticQaRun       TemplateTwinSyntheticQaRun?
+  templateTwinSyntheticQaAdmission TemplateTwinSyntheticQaAdmission?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2227,7 +2233,8 @@ model NoteTemplate {
 
   templateTwinCompiledVersion TemplateTwinCompiledVersion?
 
-  templateTwinSyntheticQaRuns TemplateTwinSyntheticQaRun[]
+  templateTwinSyntheticQaRuns       TemplateTwinSyntheticQaRun[]
+  templateTwinSyntheticQaAdmissions TemplateTwinSyntheticQaAdmission[]
 
   /// Phase-1 provenance back-reference — visits generated with this template.
   visits TranscribeVisit[]
@@ -2261,6 +2268,12 @@ model TemplateTwinSyntheticQaRun {
   noteTemplateId      String
   noteTemplate        NoteTemplate @relation(fields: [noteTemplateId], references: [id], onDelete: Restrict, map: "template_twin_qa_template_fkey")
   noteTemplateVersion Int
+
+  /// Durable pre-provider capability. Nullable only for retained rows created
+  /// by the earlier staging prototype; all current application and database
+  /// admission paths reject a run without this one-to-one relation.
+  admissionId String?                           @unique(map: "template_twin_qa_run_admission_unique")
+  admission   TemplateTwinSyntheticQaAdmission? @relation(fields: [admissionId], references: [id], onDelete: Restrict, map: "template_twin_qa_run_admission_fkey")
 
   /// Versioned, tenant/doctor-scoped hash of the caller's idempotency token.
   /// The raw browser token is never persisted or logged.
@@ -2301,6 +2314,80 @@ model TemplateTwinSyntheticQaRun {
   @@map("template_twin_synthetic_qa_runs")
 }
 
+/// Database-backed capability for synthetic-only Template Twin work. A root
+/// admission is committed before upload inspection or any provider boundary;
+/// each visit receives a separate child admission so a capability cannot be
+/// reused across visits. No document or encounter text is stored here.
+model TemplateTwinSyntheticQaAdmission {
+  id String @id @default(cuid())
+
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict, map: "template_twin_qa_admission_practice_fkey")
+
+  actorId String
+  actor   User   @relation("TemplateTwinSyntheticQaAdmissionActor", fields: [actorId], references: [id], onDelete: Restrict, map: "template_twin_qa_admission_actor_fkey")
+
+  parentAdmissionId String?
+  parentAdmission   TemplateTwinSyntheticQaAdmission?  @relation("TemplateTwinSyntheticQaAdmissionParent", fields: [parentAdmissionId], references: [id], onDelete: Restrict, map: "template_twin_qa_admission_parent_fkey")
+  childAdmissions   TemplateTwinSyntheticQaAdmission[] @relation("TemplateTwinSyntheticQaAdmissionParent")
+
+  sourceSha256    String @db.Char(64)
+  sourceSizeBytes Int
+  fixtureVersion  String
+
+  /// `SYNTHETIC_LIFECYCLE`, `SYNTHETIC_TYPED`, or
+  /// `SYNTHETIC_MOCK_VOICE`; constrained by the migration.
+  providerMode String
+  /// `UPLOAD` for the root source/template capability and `VISIT` for a
+  /// one-run child capability.
+  purpose      String
+  /// Monotonic reviewed lifecycle state constrained by a transition trigger.
+  phase        String @default("ADMITTED")
+
+  /// Hash of the browser idempotency token; the raw token is never retained.
+  requestSha256 String  @db.Char(64)
+  /// Hash of the bounded run request/evidence identity for visit admissions.
+  payloadSha256 String? @db.Char(64)
+
+  pinnedGlobalRolloutGeneration   BigInt
+  pinnedPracticeRolloutGeneration BigInt
+
+  sourceArtifactId String?
+  sourceArtifact   TemplateTwinSourceArtifact? @relation(fields: [sourceArtifactId], references: [id], onDelete: Restrict, map: "template_twin_qa_admission_source_fkey")
+
+  noteTemplateId      String?
+  noteTemplate        NoteTemplate? @relation(fields: [noteTemplateId], references: [id], onDelete: Restrict, map: "template_twin_qa_admission_template_fkey")
+  noteTemplateVersion Int?
+
+  certificationId String?
+  certification   TemplateTwinCertification? @relation(fields: [certificationId], references: [id], onDelete: Restrict, map: "template_twin_qa_admission_certification_fkey")
+  mappingSha256   String?                    @db.Char(64)
+
+  visitId String?                     @unique(map: "template_twin_qa_admission_visit_unique")
+  visit   TranscribeVisit?            @relation(fields: [visitId], references: [id], onDelete: Restrict, map: "template_twin_qa_admission_visit_fkey")
+  run     TemplateTwinSyntheticQaRun?
+
+  attempt          Int       @default(1)
+  expiresAt        DateTime  @db.Timestamptz(6)
+  sourceVerifiedAt DateTime? @db.Timestamptz(6)
+  templateLinkedAt DateTime? @db.Timestamptz(6)
+  certifiedAt      DateTime? @db.Timestamptz(6)
+  visitLinkedAt    DateTime? @db.Timestamptz(6)
+  failedAt         DateTime? @db.Timestamptz(6)
+  revokedAt        DateTime? @db.Timestamptz(6)
+  consumedAt       DateTime? @db.Timestamptz(6)
+  failureCode      String?   @db.VarChar(80)
+  createdAt        DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([practiceId, actorId, requestSha256], map: "template_twin_qa_admission_request_unique")
+  @@index([practiceId, phase, createdAt], map: "template_twin_qa_admission_practice_phase_idx")
+  @@index([actorId, phase, expiresAt], map: "template_twin_qa_admission_actor_phase_idx")
+  @@index([noteTemplateId, noteTemplateVersion, phase], map: "template_twin_qa_admission_template_phase_idx")
+  @@index([parentAdmissionId, phase], map: "template_twin_qa_admission_parent_phase_idx")
+  @@map("template_twin_synthetic_qa_admissions")
+}
+
 // ============================================================================
 // TEMPLATE TWIN — structure-preserving DOCX v1
 // ----------------------------------------------------------------------------
@@ -2337,7 +2424,8 @@ model TemplateTwinSourceArtifact {
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
 
-  compiledVersions TemplateTwinCompiledVersion[]
+  compiledVersions      TemplateTwinCompiledVersion[]
+  syntheticQaAdmissions TemplateTwinSyntheticQaAdmission[]
 
   @@index([practiceId, createdAt])
   @@index([lineageId, lineageVersion])
@@ -2513,6 +2601,8 @@ model TemplateTwinCertification {
   testOutputEtag                   String?
   testOutputSha256                 String   @db.Char(64)
   certifiedAt                      DateTime @default(now()) @db.Timestamptz(6)
+
+  syntheticQaAdmissions TemplateTwinSyntheticQaAdmission[]
 
   @@index([certifiedById, certifiedAt])
   @@map("template_twin_certifications")
