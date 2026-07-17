@@ -4,8 +4,8 @@ import {
   screen,
   waitFor,
   within,
-} from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   refresh: vi.fn(),
@@ -13,24 +13,24 @@ const mocks = vi.hoisted(() => ({
   toastSuccess: vi.fn(),
 }));
 
-vi.mock('next/navigation', () => ({
+vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: mocks.refresh, push: mocks.push }),
 }));
 
-vi.mock('sonner', () => ({
+vi.mock("sonner", () => ({
   toast: { success: mocks.toastSuccess, error: vi.fn() },
 }));
 
-import { TemplateTwinReview } from '../template-twin-review';
+import { TemplateTwinReview } from "../template-twin-review";
 import {
   serializeTemplateTwinReview,
   type TemplateTwinReviewData,
   type TemplateTwinReviewField,
   type TemplateTwinReviewRow,
-} from '../template-twin-review-data';
+} from "../template-twin-review-data";
 
-const FIELD_ID = `ttf_${'a'.repeat(24)}`;
-const FACT_ID = `ttfact_${'b'.repeat(24)}`;
+const FIELD_ID = `ttf_${"a".repeat(24)}`;
+const FACT_ID = `ttfact_${"b".repeat(24)}`;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -44,32 +44,32 @@ function reviewField(
   overrides: Partial<TemplateTwinReviewField>,
 ): TemplateTwinReviewField {
   return {
-    definitionId: 'definition-1',
+    definitionId: "definition-1",
     fieldId: FIELD_ID,
     displayOrder: 0,
-    originalLabel: 'Synthetic symptom severity',
-    fieldKind: 'single_select',
-    criticality: 'number_unit',
+    originalLabel: "Synthetic symptom severity",
+    fieldKind: "single_select",
+    criticality: "number_unit",
     required: false,
     allowedOptions: [
-      { ordinal: 0, displayText: 'Mild', value: 'Mild' },
-      { ordinal: 1, displayText: 'Moderate', value: 'Moderate' },
-      { ordinal: 2, displayText: 'Severe', value: 'Severe' },
+      { ordinal: 0, displayText: "Mild", value: "Mild" },
+      { ordinal: 1, displayText: "Moderate", value: "Moderate" },
+      { ordinal: 2, displayText: "Severe", value: "Severe" },
     ],
     rowPrototype: false,
-    status: 'verified',
-    resolutionStatus: 'supported',
-    value: 'Moderate',
+    status: "verified",
+    resolutionStatus: "supported",
+    value: "Moderate",
     selectedOptionOrdinal: 1,
-    reasonCode: 'exact_option_supported',
+    reasonCode: "exact_option_supported",
     clinicianReviewed: false,
     evidence: [
       {
         factId: FACT_ID,
-        quote: 'The synthetic symptom is moderate today.',
+        quote: "The synthetic symptom is moderate today.",
         audioTimestampSeconds: 74,
-        speaker: 'Clinician',
-        evidenceAnchorIds: ['anchor-synthetic-1'],
+        speaker: "Clinician",
+        evidenceAnchorIds: ["anchor-synthetic-1"],
       },
     ],
     validationIssues: [],
@@ -79,79 +79,87 @@ function reviewField(
 
 function reviewData(): TemplateTwinReviewData {
   return {
-    fillManifestId: 'fill-synthetic-1',
+    fillManifestId: "fill-synthetic-1",
     manifestVersion: 1,
-    manifestSha256: 'e'.repeat(64),
-    templateName: 'Synthetic clinic template',
+    manifestSha256: "e".repeat(64),
+    templateName: "Synthetic clinic template",
     templateVersion: 3,
-    processingStatus: 'review_required',
+    processingStatus: "review_required",
     roundTripVerified: true,
     physicianReviewConfirmed: false,
     layoutWarningCodes: [],
     dataIntegrityError: false,
+    syntheticQaMode: false,
+    syntheticQaRunId: null,
+    syntheticQaAttempt: null,
+    canDownloadOriginal: false,
+    wordCompatibilityStatus: "pending",
+    technicalDetails: null,
     counts: {
       filled: 2,
       needsReview: 2,
       notMentioned: 1,
       conflicts: 1,
       criticalUnresolved: 1,
+      intentionallyStatic: 0,
+      blocked: 0,
     },
     fields: [
       reviewField({}),
       reviewField({
-        definitionId: 'definition-2',
-        fieldId: `ttf_${'c'.repeat(24)}`,
+        definitionId: "definition-2",
+        fieldId: `ttf_${"c".repeat(24)}`,
         displayOrder: 1,
-        originalLabel: 'Synthetic allergy',
-        fieldKind: 'narrative_text',
-        criticality: 'allergy',
+        originalLabel: "Synthetic allergy",
+        fieldKind: "narrative_text",
+        criticality: "allergy",
         allowedOptions: [],
-        status: 'conflict',
-        resolutionStatus: 'conflict',
+        status: "conflict",
+        resolutionStatus: "conflict",
         value: null,
         selectedOptionOrdinal: null,
-        reasonCode: 'source_evidence_conflict',
+        reasonCode: "source_evidence_conflict",
         evidence: [
           {
-            factId: `ttfact_${'d'.repeat(24)}`,
-            quote: 'The synthetic sources disagree about the allergy.',
+            factId: `ttfact_${"d".repeat(24)}`,
+            quote: "The synthetic sources disagree about the allergy.",
             audioTimestampSeconds: null,
             speaker: null,
-            evidenceAnchorIds: ['anchor-synthetic-2'],
+            evidenceAnchorIds: ["anchor-synthetic-2"],
           },
         ],
       }),
       reviewField({
-        definitionId: 'definition-3',
-        fieldId: `ttf_${'e'.repeat(24)}`,
+        definitionId: "definition-3",
+        fieldId: `ttf_${"e".repeat(24)}`,
         displayOrder: 2,
-        originalLabel: 'Synthetic laterality',
-        fieldKind: 'single_select',
-        criticality: 'laterality',
+        originalLabel: "Synthetic laterality",
+        fieldKind: "single_select",
+        criticality: "laterality",
         allowedOptions: [
-          { ordinal: 0, displayText: 'Left', value: 'Left' },
-          { ordinal: 1, displayText: 'Right', value: 'Right' },
+          { ordinal: 0, displayText: "Left", value: "Left" },
+          { ordinal: 1, displayText: "Right", value: "Right" },
         ],
-        status: 'not_mentioned',
-        resolutionStatus: 'not_mentioned',
+        status: "not_mentioned",
+        resolutionStatus: "not_mentioned",
         value: null,
         selectedOptionOrdinal: null,
-        reasonCode: 'fact_not_mentioned',
+        reasonCode: "fact_not_mentioned",
         evidence: [],
       }),
       reviewField({
-        definitionId: 'definition-4',
-        fieldId: `ttf_${'f'.repeat(24)}`,
+        definitionId: "definition-4",
+        fieldId: `ttf_${"f".repeat(24)}`,
         displayOrder: 3,
-        originalLabel: 'Synthetic measurement',
-        fieldKind: 'measurement',
-        criticality: 'number_unit',
+        originalLabel: "Synthetic measurement",
+        fieldKind: "measurement",
+        criticality: "number_unit",
         allowedOptions: [],
-        status: 'needs_review',
-        resolutionStatus: 'needs_clinician_input',
+        status: "needs_review",
+        resolutionStatus: "needs_clinician_input",
         value: null,
         selectedOptionOrdinal: null,
-        reasonCode: 'measurement_unit_missing',
+        reasonCode: "measurement_unit_missing",
         evidence: [],
       }),
     ],
@@ -166,7 +174,7 @@ function successfulCorrectionFetch() {
       result: { certificationUrl: null },
     }),
   });
-  vi.stubGlobal('fetch', fetchMock);
+  vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 }
 
@@ -181,48 +189,60 @@ function onlyField(
     notMentioned: 0,
     conflicts: 0,
     criticalUnresolved: 0,
+    intentionallyStatic: 0,
+    blocked: 0,
   };
   return data;
 }
 
-describe('TemplateTwinReview', () => {
-  it('shows review counts and prioritizes critical conflicts', () => {
-    render(<TemplateTwinReview data={reviewData()} visitId="visit-synthetic-1" />);
+describe("TemplateTwinReview", () => {
+  it("shows review counts and prioritizes critical conflicts", () => {
+    render(
+      <TemplateTwinReview data={reviewData()} visitId="visit-synthetic-1" />,
+    );
 
-    expect(screen.getByText('Fields filled')).toBeInTheDocument();
-    expect(screen.getByText('Need review')).toBeInTheDocument();
-    expect(screen.getAllByText('Not mentioned').length).toBeGreaterThan(0);
-    expect(screen.getByText('Conflicts')).toBeInTheDocument();
+    expect(screen.getByText("Fields filled")).toBeInTheDocument();
+    expect(screen.getByText("Need review")).toBeInTheDocument();
+    expect(screen.getAllByText("Not mentioned").length).toBeGreaterThan(0);
+    expect(screen.getByText("Conflicts")).toBeInTheDocument();
     expect(
-      screen.getByText('1 critical field requires clinician review before signing.'),
+      screen.getByText(
+        "1 critical field requires clinician review before signing.",
+      ),
     ).toBeInTheDocument();
 
-    const fieldList = screen.getByRole('list', { name: 'Template fields' });
-    const fieldButtons = within(fieldList).getAllByRole('button');
-    expect(fieldButtons[0]).toHaveTextContent('Synthetic allergy');
-    expect(screen.getByText('Why this needs review')).toBeInTheDocument();
+    const fieldList = screen.getByRole("list", { name: "Template fields" });
+    const fieldButtons = within(fieldList).getAllByRole("button");
+    expect(fieldButtons[0]).toHaveTextContent("Synthetic allergy");
+    expect(screen.getByText("Why this needs review")).toBeInTheDocument();
     expect(
-      screen.getByText('The encounter contains conflicting evidence for this field.'),
+      screen.getByText(
+        "The encounter contains conflicting evidence for this field.",
+      ),
     ).toBeInTheDocument();
   });
 
-  it('shows exact dropdown options, supporting quote, and audio timestamp', () => {
-    render(<TemplateTwinReview data={reviewData()} visitId="visit-synthetic-1" />);
+  it("shows exact dropdown options, supporting quote, and audio timestamp", () => {
+    render(
+      <TemplateTwinReview data={reviewData()} visitId="visit-synthetic-1" />,
+    );
 
-    fireEvent.click(screen.getByRole('button', { name: /Synthetic symptom severity/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Synthetic symptom severity/ }),
+    );
 
-    expect(screen.getByText('Moderate · selected')).toBeInTheDocument();
-    expect(screen.getByText('Mild')).toBeInTheDocument();
-    expect(screen.getByText('Severe')).toBeInTheDocument();
+    expect(screen.getByText("Moderate · selected")).toBeInTheDocument();
+    expect(screen.getByText("Mild")).toBeInTheDocument();
+    expect(screen.getByText("Severe")).toBeInTheDocument();
     expect(
-      screen.getByText('“The synthetic symptom is moderate today.”'),
+      screen.getByText("“The synthetic symptom is moderate today.”"),
     ).toBeInTheDocument();
-    expect(screen.getByText('Audio 1:14')).toBeInTheDocument();
+    expect(screen.getByText("Audio 1:14")).toBeInTheDocument();
   });
 
-  it('surfaces deterministic Word layout-risk warnings before signing', () => {
+  it("surfaces deterministic Word layout-risk warnings before signing", () => {
     const data = reviewData();
-    data.layoutWarningCodes = ['LAYOUT_OVERFLOW_REVIEW_RECOMMENDED'];
+    data.layoutWarningCodes = ["LAYOUT_OVERFLOW_REVIEW_RECOMMENDED"];
     render(<TemplateTwinReview data={data} visitId="visit-synthetic-1" />);
 
     expect(
@@ -230,147 +250,270 @@ describe('TemplateTwinReview', () => {
     ).toBeInTheDocument();
   });
 
-  it('filters the list to fields that need attention', () => {
-    render(<TemplateTwinReview data={reviewData()} visitId="visit-synthetic-1" />);
+  it("keeps the synthetic restriction and Word approval pending", () => {
+    const data = reviewData();
+    data.syntheticQaMode = true;
+    data.processingStatus = "signed";
+    data.physicianReviewConfirmed = true;
+    data.canDownloadOriginal = true;
+    data.technicalDetails = {
+      mappingVersionSha256: "d".repeat(64),
+      compilerVersion: "template-docx-compiler/1.0.0",
+      resolverVersion: "template-field-resolver/1.0.0",
+      resolverModelVersion: "mock-template-twin/1",
+      rendererVersion: "template-docx-renderer/1.0.0",
+      soapVersion: 4,
+      soapSha256: "a".repeat(64),
+      outputSha256: "b".repeat(64),
+      outputSizeBytes: 4096,
+      staticContentSha256: "c".repeat(64),
+      auditStatus: "signed_transition_enqueued",
+    };
 
-    fireEvent.click(screen.getByRole('checkbox', { name: /Needs attention/ }));
+    render(<TemplateTwinReview data={data} visitId="visit-synthetic-1" />);
 
-    expect(screen.queryByText('Synthetic symptom severity')).not.toBeInTheDocument();
-    expect(screen.queryByText('Synthetic laterality')).not.toBeInTheDocument();
-    const filteredList = screen.getByRole('list', { name: 'Template fields' });
-    expect(within(filteredList).getByText('Synthetic allergy')).toBeInTheDocument();
-    expect(within(filteredList).getByText('Synthetic measurement')).toBeInTheDocument();
+    expect(
+      screen.getByText("Synthetic test only — not for patient care"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Microsoft Word compatibility: PENDING"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Word compatibility: approved/i),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Mapping version (SHA-256)")).toBeInTheDocument();
+    expect(screen.getByText("d".repeat(64))).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Download generated DOCX" }),
+    ).toHaveAttribute(
+      "href",
+      "/api/visits/visit-synthetic-1/export/original-template-docx",
+    );
   });
 
-  it('requires an explicit whole-document acknowledgement for the exact manifest', async () => {
-    const data = onlyField({ status: 'verified', validationIssues: [] });
+  it("does not expose the Original Template download before signed proof", () => {
+    const data = reviewData();
+    data.syntheticQaMode = true;
+    data.canDownloadOriginal = false;
+
+    render(<TemplateTwinReview data={data} visitId="visit-synthetic-1" />);
+
+    expect(
+      screen.queryByRole("link", { name: "Download generated DOCX" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Download locked until the signed synthetic output passes every gate.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("requeues an invalidated synthetic output through its guarded run without creating another visit", async () => {
+    const data = reviewData();
+    data.syntheticQaMode = true;
+    data.syntheticQaRunId = "run-synthetic-1";
+    data.syntheticQaAttempt = 1;
+    data.processingStatus = "needs_review";
+    data.roundTripVerified = false;
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        run: {
+          runId: "run-synthetic-1",
+          visitId: "visit-synthetic-1",
+          attempt: 2,
+        },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TemplateTwinReview data={data} visitId="visit-synthetic-1" />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Regenerate synthetic DOCX" }),
+    );
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/note-templates/template-twin/staging-qa/runs/run-synthetic-1/retry",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "same-origin",
+        body: JSON.stringify({ expectedAttempt: 1 }),
+      }),
+    );
+    expect(mocks.toastSuccess).toHaveBeenCalledWith(
+      "Synthetic DOCX regeneration queued",
+    );
+    expect(mocks.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("filters the list to fields that need attention", () => {
+    render(
+      <TemplateTwinReview data={reviewData()} visitId="visit-synthetic-1" />,
+    );
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /Needs attention/ }));
+
+    expect(
+      screen.queryByText("Synthetic symptom severity"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Synthetic laterality")).not.toBeInTheDocument();
+    const filteredList = screen.getByRole("list", { name: "Template fields" });
+    expect(
+      within(filteredList).getByText("Synthetic allergy"),
+    ).toBeInTheDocument();
+    expect(
+      within(filteredList).getByText("Synthetic measurement"),
+    ).toBeInTheDocument();
+  });
+
+  it("requires an explicit whole-document acknowledgement for the exact manifest", async () => {
+    const data = onlyField({ status: "verified", validationIssues: [] });
     data.counts.needsReview = 0;
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ ok: true }),
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal("fetch", fetchMock);
     render(<TemplateTwinReview data={data} visitId="visit-synthetic-1" />);
 
     fireEvent.click(
-      screen.getByRole('button', { name: 'I reviewed every Template Twin field' }),
+      screen.getByRole("button", {
+        name: "I reviewed every Template Twin field",
+      }),
     );
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/visits/visit-synthetic-1/template-twin/review',
+      "/api/visits/visit-synthetic-1/template-twin/review",
       expect.objectContaining({
-        method: 'POST',
+        method: "POST",
         body: JSON.stringify({
           expectedManifestVersion: 1,
-          expectedManifestSha256: 'e'.repeat(64),
+          expectedManifestSha256: "e".repeat(64),
         }),
       }),
     );
     expect(mocks.toastSuccess).toHaveBeenCalledWith(
-      'Original Template DOCX review confirmed',
+      "Original Template DOCX review confirmed",
     );
     expect(mocks.refresh).toHaveBeenCalledTimes(1);
   });
 
-  it('submits an exact dropdown correction with optimistic version and evidence IDs', async () => {
+  it("submits an exact dropdown correction with optimistic version and evidence IDs", async () => {
     const fetchMock = successfulCorrectionFetch();
-    render(<TemplateTwinReview data={reviewData()} visitId="visit-synthetic-1" />);
-    fireEvent.click(screen.getByRole('button', { name: /Synthetic symptom severity/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Correct this field' }));
-    fireEvent.change(screen.getByLabelText('Exact dropdown option'), {
-      target: { value: 'Severe' },
+    render(
+      <TemplateTwinReview data={reviewData()} visitId="visit-synthetic-1" />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /Synthetic symptom severity/ }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Correct this field" }));
+    fireEvent.change(screen.getByLabelText("Exact dropdown option"), {
+      target: { value: "Severe" },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Save and verify correction' }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save and verify correction" }),
+    );
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(JSON.parse(String(request.body))).toEqual({
       expectedManifestVersion: 1,
       fieldId: FIELD_ID,
-      value: 'Severe',
+      value: "Severe",
       sourceFactIds: [FACT_ID],
-      reasonCode: 'selected_exact_option',
+      reasonCode: "selected_exact_option",
       createMappingRule: false,
     });
     expect(mocks.refresh).toHaveBeenCalledTimes(1);
   });
 
-  it('uses exact option checkboxes for multi-select corrections', async () => {
+  it("uses exact option checkboxes for multi-select corrections", async () => {
     const fetchMock = successfulCorrectionFetch();
     const data = onlyField({
-      fieldKind: 'multi_select',
+      fieldKind: "multi_select",
       value: null,
       evidence: [],
       selectedOptionOrdinal: null,
-      status: 'needs_review',
+      status: "needs_review",
     });
     render(<TemplateTwinReview data={data} visitId="visit-synthetic-1" />);
-    fireEvent.click(screen.getByRole('button', { name: 'Correct this field' }));
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Mild' }));
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Severe' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Save and verify correction' }));
+    fireEvent.click(screen.getByRole("button", { name: "Correct this field" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Mild" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Severe" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save and verify correction" }),
+    );
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
-    expect(JSON.parse(String(request.body)).value).toEqual(['Mild', 'Severe']);
+    expect(JSON.parse(String(request.body)).value).toEqual(["Mild", "Severe"]);
   });
 
   it.each([
-    ['narrative_text', 'Corrected value'],
-    ['date', 'Date'],
-    ['number', 'Finite number'],
-    ['measurement', 'Number and stated unit'],
-    ['checkbox', 'Checkbox state'],
-  ] as const)('renders the constrained %s correction control', (fieldKind, label) => {
-    const data = onlyField({
-      fieldKind,
-      rowPrototype: false,
-      allowedOptions: [],
-      value: null,
-      evidence: [],
-      selectedOptionOrdinal: null,
-      status: 'needs_review',
-    });
-    render(<TemplateTwinReview data={data} visitId="visit-synthetic-1" />);
-    fireEvent.click(screen.getByRole('button', { name: 'Correct this field' }));
-    expect(screen.getByLabelText(label)).toBeInTheDocument();
-  });
+    ["narrative_text", "Corrected value"],
+    ["date", "Date"],
+    ["number", "Finite number"],
+    ["measurement", "Number and stated unit"],
+    ["checkbox", "Checkbox state"],
+  ] as const)(
+    "renders the constrained %s correction control",
+    (fieldKind, label) => {
+      const data = onlyField({
+        fieldKind,
+        rowPrototype: false,
+        allowedOptions: [],
+        value: null,
+        evidence: [],
+        selectedOptionOrdinal: null,
+        status: "needs_review",
+      });
+      render(<TemplateTwinReview data={data} visitId="visit-synthetic-1" />);
+      fireEvent.click(
+        screen.getByRole("button", { name: "Correct this field" }),
+      );
+      expect(screen.getByLabelText(label)).toBeInTheDocument();
+    },
+  );
 
-  it('submits repeating numeric table rows as explicit value records', async () => {
+  it("submits repeating numeric table rows as explicit value records", async () => {
     const fetchMock = successfulCorrectionFetch();
     const data = onlyField({
-      fieldKind: 'number',
+      fieldKind: "number",
       rowPrototype: true,
       allowedOptions: [],
-      value: [{ value: '11', sourceFactId: null }],
+      value: [{ value: "11", sourceFactId: null }],
       evidence: [],
       selectedOptionOrdinal: null,
-      status: 'needs_review',
+      status: "needs_review",
     });
     render(<TemplateTwinReview data={data} visitId="visit-synthetic-1" />);
-    fireEvent.click(screen.getByRole('button', { name: 'Correct this field' }));
-    fireEvent.change(screen.getByLabelText('Repeating table row values'), {
-      target: { value: '12\n13.5' },
+    fireEvent.click(screen.getByRole("button", { name: "Correct this field" }));
+    fireEvent.change(screen.getByLabelText("Repeating table row values"), {
+      target: { value: "12\n13.5" },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Save and verify correction' }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save and verify correction" }),
+    );
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(JSON.parse(String(request.body)).value).toEqual([
-      { value: '12' },
-      { value: '13.5' },
+      { value: "12" },
+      { value: "13.5" },
     ]);
   });
 });
 
-describe('serializeTemplateTwinReview', () => {
+describe("serializeTemplateTwinReview", () => {
   function row(fillManifest: unknown): TemplateTwinReviewRow {
     return {
-      id: 'fill-synthetic-1',
-      status: 'REVIEW_REQUIRED',
+      id: "fill-synthetic-1",
+      status: "REVIEW_REQUIRED",
       manifestVersion: 1,
-      manifestSha256: 'e'.repeat(64),
+      manifestSha256: "e".repeat(64),
       fillManifest,
       filledCount: 1,
       needsReviewCount: 0,
@@ -381,27 +524,37 @@ describe('serializeTemplateTwinReview', () => {
       reviewedAt: null,
       reviewedManifestVersion: null,
       reviewedManifestSha256: null,
+      compilerVersion: "template-docx-compiler/1.0.0",
+      resolverVersion: "template-field-resolver/1.0.0",
+      resolverModelVersion: null,
+      rendererVersion: "template-docx-renderer/1.0.0",
+      soapVersion: 4,
+      soapSha256: "a".repeat(64),
+      outputSha256: "b".repeat(64),
+      outputSizeBytes: 4096,
+      staticContentSha256: "c".repeat(64),
       compiledVersion: {
-        noteTemplate: { name: 'Synthetic clinic template' },
+        noteTemplate: { name: "Synthetic clinic template" },
+        certification: { approvedMappingsSha256: "d".repeat(64) },
         fields: [
           {
-            id: 'definition-1',
+            id: "definition-1",
             fieldId: FIELD_ID,
             displayOrder: 0,
-            originalLabel: 'Synthetic symptom severity',
-            fieldKind: 'single_select',
+            originalLabel: "Synthetic symptom severity",
+            fieldKind: "single_select",
             allowedOptions: [
-              { ordinal: 0, displayText: 'Mild', value: 'Mild' },
-              { ordinal: 1, displayText: 'Moderate', value: 'Moderate' },
+              { ordinal: 0, displayText: "Mild", value: "Mild" },
+              { ordinal: 1, displayText: "Moderate", value: "Moderate" },
             ],
             rendererBinding: {
-              partName: 'word/document.xml',
-              bindingType: 'content_control',
-              path: '/document/body/sdt[0]',
-              canonicalPath: '/document/body/sdt[0]',
+              partName: "word/document.xml",
+              bindingType: "content_control",
+              path: "/document/body/sdt[0]",
+              canonicalPath: "/document/body/sdt[0]",
               ordinal: 0,
-              sdtId: '1',
-              tag: 'synthetic_severity',
+              sdtId: "1",
+              tag: "synthetic_severity",
               alias: null,
               legacyName: null,
               tableIndex: null,
@@ -409,12 +562,12 @@ describe('serializeTemplateTwinReview', () => {
               cellIndex: null,
               repeatAncestorPath: null,
               canonicalRepeatAncestorPath: null,
-              sourceControlSha256: 'c'.repeat(64),
-              sourceBindingIdentitySha256: 'c'.repeat(64),
-              certifiedBindingSha256: 'c'.repeat(64),
-              originalContentSha256: 'd'.repeat(64),
+              sourceControlSha256: "c".repeat(64),
+              sourceBindingIdentitySha256: "c".repeat(64),
+              certifiedBindingSha256: "c".repeat(64),
+              originalContentSha256: "d".repeat(64),
             },
-            criticality: 'number_unit',
+            criticality: "number_unit",
             required: false,
           },
         ],
@@ -422,55 +575,55 @@ describe('serializeTemplateTwinReview', () => {
     };
   }
 
-  it('joins only referenced evidence into the client review DTO', () => {
+  it("joins only referenced evidence into the client review DTO", () => {
     const serialized = serializeTemplateTwinReview(
       row({
         manifestVersion: 1,
         soapVersion: 4,
-        soapSha256: 'a'.repeat(64),
-        compiledVersionId: 'compiled-synthetic-1',
-        noteTemplateId: 'template-synthetic-1',
+        soapSha256: "a".repeat(64),
+        compiledVersionId: "compiled-synthetic-1",
+        noteTemplateId: "template-synthetic-1",
         noteTemplateVersion: 3,
-        compilerVersion: 'template-docx-compiler/1.0.0',
-        resolverVersion: 'template-field-resolver/1.0.0',
+        compilerVersion: "template-docx-compiler/1.0.0",
+        resolverVersion: "template-field-resolver/1.0.0",
         resolverModelVersion: null,
-        rendererVersion: 'template-docx-renderer/1.0.0',
+        rendererVersion: "template-docx-renderer/1.0.0",
         facts: [
           {
             factId: FACT_ID,
-            concept: 'symptom.severity',
-            value: 'Moderate',
-            polarity: 'affirmed',
-            temporality: 'current',
-            experiencer: 'patient',
-            laterality: 'not_applicable',
+            concept: "symptom.severity",
+            value: "Moderate",
+            polarity: "affirmed",
+            temporality: "current",
+            experiencer: "patient",
+            laterality: "not_applicable",
             number: null,
             unit: null,
-            speaker: 'Clinician',
+            speaker: "Clinician",
             sourceTranscriptOffsets: { start: 0, end: 43 },
             audioTimestampSeconds: 74,
-            evidenceAnchorIds: ['anchor-synthetic-1'],
-            evidenceQuote: 'The synthetic symptom is moderate today.',
-            quality: { asr: 'high', evidence: 'direct' },
+            evidenceAnchorIds: ["anchor-synthetic-1"],
+            evidenceQuote: "The synthetic symptom is moderate today.",
+            quality: { asr: "high", evidence: "direct" },
           },
         ],
         fields: [
           {
             fieldId: FIELD_ID,
-            status: 'supported',
-            value: 'Moderate',
+            status: "supported",
+            value: "Moderate",
             sourceFactIds: [FACT_ID],
-            evidenceAnchorIds: ['anchor-synthetic-1'],
+            evidenceAnchorIds: ["anchor-synthetic-1"],
             selectedOptionOrdinal: 1,
-            reasonCode: 'exact_option_supported',
+            reasonCode: "exact_option_supported",
             clinicianReviewed: false,
           },
         ],
         validation: {
           valid: true,
           issues: [],
-          checkedAt: '2026-07-15T12:00:00.000Z',
-          validatorVersion: 'template-field-validator/1.0.0',
+          checkedAt: "2026-07-15T12:00:00.000Z",
+          validatorVersion: "template-field-validator/1.0.0",
         },
         counts: {
           filled: 1,
@@ -483,17 +636,20 @@ describe('serializeTemplateTwinReview', () => {
     );
 
     expect(serialized?.templateVersion).toBe(3);
-    expect(serialized?.manifestSha256).toBe('e'.repeat(64));
+    expect(serialized?.manifestSha256).toBe("e".repeat(64));
+    expect(serialized?.technicalDetails?.mappingVersionSha256).toBe(
+      "d".repeat(64),
+    );
     expect(serialized?.fields[0]?.evidence).toEqual([
       expect.objectContaining({
-        quote: 'The synthetic symptom is moderate today.',
+        quote: "The synthetic symptom is moderate today.",
         audioTimestampSeconds: 74,
       }),
     ]);
     expect(serialized?.fields[0]?.allowedOptions).toHaveLength(2);
   });
 
-  it('surfaces an invalid manifest as a critical integrity state', () => {
+  it("surfaces an invalid manifest as a critical integrity state", () => {
     const serialized = serializeTemplateTwinReview(row({ malformed: true }));
 
     expect(serialized).toMatchObject({
@@ -504,4 +660,54 @@ describe('serializeTemplateTwinReview', () => {
     });
   });
 
+  it("fails closed when immutable mapping provenance is unavailable", () => {
+    const input = row({
+      manifestVersion: 1,
+      soapVersion: 4,
+      soapSha256: "a".repeat(64),
+      compiledVersionId: "compiled-synthetic-1",
+      noteTemplateId: "template-synthetic-1",
+      noteTemplateVersion: 3,
+      compilerVersion: "template-docx-compiler/1.0.0",
+      resolverVersion: "template-field-resolver/1.0.0",
+      resolverModelVersion: null,
+      rendererVersion: "template-docx-renderer/1.0.0",
+      facts: [],
+      fields: [
+        {
+          fieldId: FIELD_ID,
+          status: "not_mentioned",
+          value: null,
+          sourceFactIds: [],
+          evidenceAnchorIds: [],
+          selectedOptionOrdinal: null,
+          reasonCode: "fact_not_mentioned",
+          clinicianReviewed: false,
+        },
+      ],
+      validation: {
+        valid: true,
+        issues: [],
+        checkedAt: "2026-07-15T12:00:00.000Z",
+        validatorVersion: "template-field-validator/1.0.0",
+      },
+      counts: {
+        filled: 0,
+        needsReview: 0,
+        notMentioned: 1,
+        conflicts: 0,
+        criticalUnresolved: 0,
+      },
+    });
+    input.status = "SIGNED";
+    input.reviewedAt = new Date("2026-07-15T12:00:00.000Z");
+    input.reviewedManifestVersion = input.manifestVersion;
+    input.reviewedManifestSha256 = input.manifestSha256;
+    input.compiledVersion.certification = null;
+
+    const serialized = serializeTemplateTwinReview(input);
+
+    expect(serialized?.technicalDetails).toBeNull();
+    expect(serialized?.canDownloadOriginal).toBe(false);
+  });
 });

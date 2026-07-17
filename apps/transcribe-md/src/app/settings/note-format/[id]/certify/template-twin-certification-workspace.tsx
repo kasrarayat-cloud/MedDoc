@@ -25,6 +25,11 @@ import {
   TEMPLATE_TWIN_SUPPORTED_CONCEPTS,
   isSupportedTemplateTwinConcept,
 } from "@/lib/template-twin/supported-concepts";
+import { TemplateTwinSyntheticQaBanner } from "@/components/template-twin-synthetic-qa-banner";
+import {
+  TEMPLATE_TWIN_STAGING_QA_STATIC_INTENT_REASON,
+  TEMPLATE_TWIN_STAGING_QA_TYPED_STARTER,
+} from "@/lib/template-twin/staging-qa-ui-contract";
 
 import styles from "./template-twin-certification.module.css";
 
@@ -191,6 +196,18 @@ function titleCase(value: string): string {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function displaySyntheticValue(value: unknown): string {
+  if (value === null || value === undefined) return "Blank";
+  if (typeof value === "boolean") return value ? "True" : "False";
+  if (Array.isArray(value)) {
+    if (value.every((item) => typeof item === "string")) {
+      return value.join(", ") || "Blank";
+    }
+    return `${value.length} synthetic table row${value.length === 1 ? "" : "s"}`;
+  }
+  return String(value);
+}
+
 const POLARITY_LABELS: Record<SemanticMapping["polarityBehavior"], string> = {
   affirmative_only: "Fill only when directly stated as present",
   explicit_denial_allowed: "Allow an exact approved negative value",
@@ -265,11 +282,18 @@ function StatusPill({
 
 export function TemplateTwinCertificationWorkspace({
   initial,
+  stagingQaGateAllowed,
 }: {
   initial: TemplateTwinWorkspace;
+  stagingQaGateAllowed: boolean;
 }) {
   const router = useRouter();
   const [workspace, setWorkspace] = useState(initial);
+  // The global/practice gate alone never confers fixture provenance. This
+  // keeps ordinary physician templates out of the staging-only workflow even
+  // in a QA deployment where the global gate is enabled.
+  const stagingQaEnabled =
+    stagingQaGateAllowed && workspace.stagingQaFixtureSource;
   const [fields, setFields] = useState(initial.fields);
   const [intentDrafts, setIntentDrafts] = useState(() =>
     intentDraftsFor(initial.fields),
@@ -283,10 +307,20 @@ export function TemplateTwinCertificationWorkspace({
   const [filter, setFilter] = useState<FieldFilter>("all");
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState<
-    "save" | "test" | "custom-examples" | "ack-custom-examples" | "certify" | null
+    | "save"
+    | "test"
+    | "custom-examples"
+    | "ack-custom-examples"
+    | "certify"
+    | "staging-run"
+    | null
   >(null);
   const [announcement, setAnnouncement] = useState("");
-  const [syntheticText, setSyntheticText] = useState(SYNTHETIC_STARTER);
+  const [syntheticText, setSyntheticText] = useState(() =>
+    initial.stagingQaFixtureSource
+      ? TEMPLATE_TWIN_STAGING_QA_TYPED_STARTER
+      : SYNTHETIC_STARTER,
+  );
   const [ackStructure, setAckStructure] = useState(false);
   const [ackTest, setAckTest] = useState(false);
   const [waiverReasons, setWaiverReasons] = useState<Record<string, string>>(
@@ -297,6 +331,12 @@ export function TemplateTwinCertificationWorkspace({
   const recordingChunksRef = useRef<Blob[]>([]);
   const [recording, setRecording] = useState(false);
   const [syntheticVoice, setSyntheticVoice] = useState<Blob | null>(null);
+  const [stagingEncounterText, setStagingEncounterText] = useState(() =>
+    initial.stagingQaFixtureSource
+      ? TEMPLATE_TWIN_STAGING_QA_TYPED_STARTER
+      : "",
+  );
+  const stagingRunKeyRef = useRef<string | null>(null);
 
   useEffect(
     () => () => {
@@ -377,12 +417,45 @@ export function TemplateTwinCertificationWorkspace({
     ackStructure &&
     ackTest &&
     !busy;
+  const inventory = useMemo(
+    () => ({
+      textControls: fields.filter(
+        (item) =>
+          ["narrative_text", "number", "measurement"].includes(
+            item.field.kind,
+          ) &&
+          ["content_control", "legacy_form_field"].includes(
+            item.field.rendererBinding.bindingType,
+          ),
+      ).length,
+      tabOnlyCells: fields.filter(
+        (item) =>
+          item.field.rendererBinding.bindingProfile ===
+          "TAB_ONLY_BLANK_TABLE_CELL_V1",
+      ).length,
+      placeholders: fields.filter(
+        (item) =>
+          item.field.rendererBinding.bindingProfile ===
+          "ORDINARY_PLACEHOLDER_TOKEN_V1",
+      ).length,
+    }),
+    [fields],
+  );
 
   function updateMapping(fieldId: string, patch: Partial<SemanticMapping>) {
     setFields((current) =>
       current.map((item) =>
         item.field.fieldId === fieldId
-          ? { ...item, mapping: { ...item.mapping, ...patch } }
+          ? {
+              ...item,
+              mapping: {
+                ...item.mapping,
+                ...patch,
+                ...(stagingQaEnabled
+                  ? { approvedSynonyms: [], practiceDefault: null }
+                  : {}),
+              },
+            }
           : item,
       ),
     );
@@ -421,7 +494,15 @@ export function TemplateTwinCertificationWorkspace({
           body: JSON.stringify({
             expectedMappingsSha256: workspace.mappingsSha256,
             expectedFieldIntentsSha256: workspace.fieldIntentsSha256,
-            mappings: fields.map((item) => item.mapping),
+            mappings: fields.map((item) =>
+              stagingQaEnabled
+                ? {
+                    ...item.mapping,
+                    approvedSynonyms: [],
+                    practiceDefault: null,
+                  }
+                : item.mapping,
+            ),
             fieldIntents: fields.flatMap((item) => {
               if (
                 item.field.rendererBinding.bindingType !==
@@ -605,10 +686,7 @@ export function TemplateTwinCertificationWorkspace({
         ),
       );
       form.append("expectedMappingsSha256", workspace.mappingsSha256);
-      form.append(
-        "expectedFieldIntentsSha256",
-        workspace.fieldIntentsSha256,
-      );
+      form.append("expectedFieldIntentsSha256", workspace.fieldIntentsSha256);
       const response = await fetch(
         `/api/note-templates/template-twin/${encodeURIComponent(workspace.template.id)}/synthetic-test-voice`,
         {
@@ -660,12 +738,20 @@ export function TemplateTwinCertificationWorkspace({
         {
           method: "POST",
           credentials: "same-origin",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
           body: JSON.stringify({ action: "run" }),
         },
       );
       const payload = (await response.json().catch(() => null)) as
-        | { ok: true; coverage: NonNullable<TemplateTwinWorkspace["customExampleCoverage"]> }
+        | {
+            ok: true;
+            coverage: NonNullable<
+              TemplateTwinWorkspace["customExampleCoverage"]
+            >;
+          }
         | { ok: false; error: string }
         | null;
       if (!response.ok || !payload?.ok) {
@@ -688,7 +774,8 @@ export function TemplateTwinCertificationWorkspace({
       );
     } catch {
       toast.error("Custom-field examples did not finish", {
-        description: "No example review was recorded. Check your connection and try again.",
+        description:
+          "No example review was recorded. Check your connection and try again.",
       });
     } finally {
       setBusy(null);
@@ -705,12 +792,20 @@ export function TemplateTwinCertificationWorkspace({
         {
           method: "POST",
           credentials: "same-origin",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
           body: JSON.stringify({ action: "acknowledge", batchId }),
         },
       );
       const payload = (await response.json().catch(() => null)) as
-        | { ok: true; coverage: NonNullable<TemplateTwinWorkspace["customExampleCoverage"]> }
+        | {
+            ok: true;
+            coverage: NonNullable<
+              TemplateTwinWorkspace["customExampleCoverage"]
+            >;
+          }
         | { ok: false; error: string }
         | null;
       if (!response.ok || !payload?.ok) {
@@ -724,7 +819,9 @@ export function TemplateTwinCertificationWorkspace({
         ...current,
         customExampleCoverage: payload.coverage,
       }));
-      setAnnouncement("Every current custom-field example is passed and physician-reviewed.");
+      setAnnouncement(
+        "Every current custom-field example is passed and physician-reviewed.",
+      );
       toast.success("Custom-field examples reviewed");
     } catch {
       toast.error("Example review was not recorded", {
@@ -794,11 +891,97 @@ export function TemplateTwinCertificationWorkspace({
     }
   }
 
+  async function startStagingRun(mode: "typed" | "mock_voice") {
+    if (workspace.template.certificationStatus !== "certified") {
+      toast.error("Certify this exact template version first");
+      return;
+    }
+    if (mode === "typed" && stagingEncounterText.trim().length < 20) {
+      toast.error("Add a clearly synthetic encounter before starting");
+      return;
+    }
+    if (typeof crypto.randomUUID !== "function") {
+      toast.error("This browser cannot create a replay-safe staging request");
+      return;
+    }
+    const idempotencyKey = stagingRunKeyRef.current ?? crypto.randomUUID();
+    stagingRunKeyRef.current = idempotencyKey;
+    setBusy("staging-run");
+    setAnnouncement(
+      mode === "typed"
+        ? "Creating a typed synthetic staging visit."
+        : "Creating a mocked-voice synthetic staging visit.",
+    );
+    try {
+      const response = await fetch(
+        "/api/note-templates/template-twin/staging-qa/runs",
+        {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            templateId: workspace.template.id,
+            mode,
+            idempotencyKey,
+            expectedTemplateVersion: workspace.template.version,
+            ...(mode === "typed"
+              ? { encounterText: stagingEncounterText.trim() }
+              : {}),
+          }),
+        },
+      );
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            ok: true;
+            run: {
+              runId: string;
+              visitId: string;
+              reused: boolean;
+            };
+            visitUrl: string;
+          }
+        | { ok: false; error: string }
+        | null;
+      if (!response.ok || !payload?.ok) {
+        throw new Error(
+          payload && !payload.ok
+            ? payload.error
+            : "The synthetic visit could not be created.",
+        );
+      }
+      stagingRunKeyRef.current = null;
+      setAnnouncement(
+        payload.run.reused
+          ? "The existing synthetic run was recovered without creating a duplicate."
+          : "Synthetic visit queued through the staging worker.",
+      );
+      router.push(payload.visitUrl);
+    } catch (caught) {
+      toast.error("Synthetic staging visit did not start", {
+        description:
+          caught instanceof Error
+            ? caught.message
+            : "No duplicate run was created. Try again safely.",
+      });
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <div className={styles.shell}>
       <div className="sr-only" role="status" aria-live="polite">
         {announcement}
       </div>
+
+      {stagingQaEnabled && (
+        <div className={styles.syntheticBanner}>
+          <TemplateTwinSyntheticQaBanner />
+        </div>
+      )}
 
       <header className={styles.header}>
         <div className={styles.eyebrow}>
@@ -834,17 +1017,66 @@ export function TemplateTwinCertificationWorkspace({
         </div>
       </header>
 
+      {stagingQaEnabled && (
+        <section
+          className={styles.guidedIntro}
+          aria-labelledby="template-twin-guided-workflow"
+        >
+          <div>
+            <h2
+              id="template-twin-guided-workflow"
+              className={styles.sectionTitle}
+            >
+              One-time physician setup
+            </h2>
+            <ol className={styles.stepList}>
+              <li>Inspect the uploaded DOCX and every detected field.</li>
+              <li>Confirm clinical meaning; no answer is selected for you.</li>
+              <li>Test every material field with synthetic evidence.</li>
+              <li>Certify this immutable version, then run a staging visit.</li>
+            </ol>
+          </div>
+          <dl
+            className={styles.admissionGrid}
+            aria-label="Source inspection results"
+          >
+            {workspace.admissionChecks.map((check) => (
+              <div key={check.id} className={styles.admissionItem}>
+                <dt>
+                  {check.label}
+                  <span
+                    className={styles.status}
+                    data-tone={
+                      check.status === "passed"
+                        ? "safe"
+                        : check.status === "blocked"
+                          ? "block"
+                          : "review"
+                    }
+                  >
+                    {titleCase(check.status)}
+                  </span>
+                </dt>
+                <dd>{check.detail}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
+
       <section
         className={styles.summary}
         aria-label="Detected structure summary"
       >
         <Metric label="Fields" value={workspace.stats.totalFields} />
-        <Metric
-          label="Dropdowns"
-          value={workspace.stats.dropdowns + workspace.stats.comboBoxes}
-        />
+        <Metric label="Dropdowns" value={workspace.stats.dropdowns} />
+        <Metric label="Combo boxes" value={workspace.stats.comboBoxes} />
         <Metric label="Checkboxes" value={workspace.stats.checkboxes} />
+        <Metric label="Dates" value={workspace.stats.dateControls} />
+        <Metric label="Text controls" value={inventory.textControls} />
         <Metric label="Tables" value={workspace.stats.tables} />
+        <Metric label="Tab-only cells" value={inventory.tabOnlyCells} />
+        <Metric label="Placeholders" value={inventory.placeholders} />
         <Metric label="Unsupported" value={workspace.stats.unsupported} />
         <Metric
           label="Confirmed"
@@ -874,17 +1106,16 @@ export function TemplateTwinCertificationWorkspace({
               </button>
             </div>
           </div>
-          <div
-            className={styles.fieldList}
-            role="listbox"
-            aria-label="Detected fields"
-          >
+          <nav className={styles.fieldList} aria-label="Detected fields">
             {visibleFields.map((item) => (
               <button
                 key={item.field.fieldId}
                 type="button"
-                role="option"
-                aria-selected={item.field.fieldId === selected?.field.fieldId}
+                aria-current={
+                  item.field.fieldId === selected?.field.fieldId
+                    ? "true"
+                    : undefined
+                }
                 className={styles.fieldButton}
                 data-selected={item.field.fieldId === selected?.field.fieldId}
                 onClick={() => setSelectedId(item.field.fieldId)}
@@ -909,7 +1140,7 @@ export function TemplateTwinCertificationWorkspace({
                 Every detected field is confirmed.
               </div>
             )}
-          </div>
+          </nav>
         </aside>
 
         <section
@@ -922,6 +1153,7 @@ export function TemplateTwinCertificationWorkspace({
                 item={selected}
                 canEdit={workspace.canEdit}
                 busy={busy !== null}
+                stagingQaMode={stagingQaEnabled}
                 intentDraft={
                   intentDrafts[selected.field.fieldId] ?? {
                     intentKind: "unresolved",
@@ -994,12 +1226,14 @@ export function TemplateTwinCertificationWorkspace({
 
             {hasCustomConcepts && (
               <div className={styles.section}>
-                <h2 className={styles.sectionTitle}>Custom-field safety examples</h2>
+                <h2 className={styles.sectionTitle}>
+                  Custom-field safety examples
+                </h2>
                 <div className={styles.callout}>
                   QuillMD runs every positive, negative, and unclear synthetic
-                  example you approved through the same extractor used for
-                  typed and voice visits. Activation stays blocked until every
-                  current example passes and you review the results.
+                  example you approved through the same extractor used for typed
+                  and voice visits. Activation stays blocked until every current
+                  example passes and you review the results.
                 </div>
                 <div className={styles.testStatus} style={{ marginTop: 12 }}>
                   <span>
@@ -1014,7 +1248,9 @@ export function TemplateTwinCertificationWorkspace({
                       onClick={() => void runCustomExamples()}
                       disabled={dirty || busy !== null || !allConfirmed}
                     >
-                      {busy === "custom-examples" ? "Running…" : "Run all examples"}
+                      {busy === "custom-examples"
+                        ? "Running…"
+                        : "Run all examples"}
                     </button>
                     <button
                       type="button"
@@ -1051,23 +1287,44 @@ export function TemplateTwinCertificationWorkspace({
                       data-tone={example.passed ? undefined : "block"}
                       style={{ marginTop: 9 }}
                     >
-                      <strong>{example.physicianName} · {titleCase(example.exampleKind)}</strong>
+                      <strong>
+                        {example.physicianName} ·{" "}
+                        {titleCase(example.exampleKind)}
+                      </strong>
                       <div style={{ marginTop: 5 }}>
-                        <span className={styles.monoLabel}>Synthetic evidence</span>
+                        <span className={styles.monoLabel}>
+                          Synthetic evidence
+                        </span>
                         <div>“{example.syntheticEvidence}”</div>
                       </div>
-                      <div className={styles.fieldMeta} style={{ marginTop: 6 }}>
+                      <div
+                        className={styles.fieldMeta}
+                        style={{ marginTop: 6 }}
+                      >
                         Expected: {expected}
                       </div>
-                      <div className={styles.fieldMeta} style={{ marginTop: 3 }}>
-                        Actual: {example.actualStatus ? titleCase(example.actualStatus) : "Not run"}
+                      <div
+                        className={styles.fieldMeta}
+                        style={{ marginTop: 3 }}
+                      >
+                        Actual:{" "}
+                        {example.actualStatus
+                          ? titleCase(example.actualStatus)
+                          : "Not run"}
                         {example.actualValue !== null
                           ? ` · ${String(example.actualValue)}${example.actualUnit ? ` ${example.actualUnit}` : ""}`
                           : ""}
                         {` · ${example.actualEvidenceAnchorCount} evidence anchor${example.actualEvidenceAnchorCount === 1 ? "" : "s"} · ${example.actualSourceFactCount} source fact${example.actualSourceFactCount === 1 ? "" : "s"}`}
                       </div>
-                      <div className={styles.fieldMeta} style={{ marginTop: 3 }}>
-                        {example.passed ? "Passed" : `Needs attention${example.failureCode ? ` · ${example.failureCode}` : ""}`} · {example.acknowledged ? "Reviewed" : "Not yet reviewed"}
+                      <div
+                        className={styles.fieldMeta}
+                        style={{ marginTop: 3 }}
+                      >
+                        {example.passed
+                          ? "Passed"
+                          : `Needs attention${example.failureCode ? ` · ${example.failureCode}` : ""}`}{" "}
+                        ·{" "}
+                        {example.acknowledged ? "Reviewed" : "Not yet reviewed"}
                       </div>
                     </div>
                   );
@@ -1088,6 +1345,29 @@ export function TemplateTwinCertificationWorkspace({
                 resolver and exact renderer used by voice and typed visits, then
                 reopens the DOCX and verifies fields and untouched regions.
               </div>
+              {stagingQaEnabled && (
+                <div className={styles.voiceTest}>
+                  <div>
+                    <strong>Reviewed synthetic evidence fixture</strong>
+                    <p>
+                      This visible starter is the only typed evidence accepted
+                      by the bounded staging provider. It supplies synthetic
+                      encounter facts only and does not confirm any field
+                      meaning or physician mapping.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className={styles.button}
+                    onClick={() =>
+                      setSyntheticText(TEMPLATE_TWIN_STAGING_QA_TYPED_STARTER)
+                    }
+                    disabled={!workspace.canEdit || busy !== null}
+                  >
+                    Restore reviewed certification evidence
+                  </button>
+                </div>
+              )}
               <label
                 className={`${styles.field} ${styles.fieldWide}`}
                 style={{ marginTop: 12 }}
@@ -1163,6 +1443,80 @@ export function TemplateTwinCertificationWorkspace({
                     >
                       Inspect filled DOCX
                     </a>
+                  </div>
+                  <div className={styles.evidenceGrid}>
+                    <div>
+                      <h3 className={styles.monoLabel}>
+                        Extracted synthetic facts
+                      </h3>
+                      {workspace.latestSyntheticTest.facts.length === 0 ? (
+                        <p className={styles.fieldMeta}>
+                          No source facts were extracted.
+                        </p>
+                      ) : (
+                        <ul className={styles.evidenceList}>
+                          {workspace.latestSyntheticTest.facts.map((fact) => (
+                            <li key={fact.factId}>
+                              <strong>{titleCase(fact.concept)}</strong>
+                              <span>
+                                {displaySyntheticValue(fact.value)} ·{" "}
+                                {titleCase(fact.polarity)}
+                              </span>
+                              <blockquote>“{fact.evidenceQuote}”</blockquote>
+                              <small>
+                                {fact.evidenceAnchorIds.length} evidence anchor
+                                {fact.evidenceAnchorIds.length === 1 ? "" : "s"}
+                                {fact.audioTimestampSeconds !== null
+                                  ? ` · audio ${Math.floor(fact.audioTimestampSeconds / 60)}:${String(Math.floor(fact.audioTimestampSeconds % 60)).padStart(2, "0")}`
+                                  : ""}
+                                {` · ${titleCase(fact.quality.evidence)}`}
+                              </small>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                    <div>
+                      <h3 className={styles.monoLabel}>
+                        Field resolution preview
+                      </h3>
+                      <ul className={styles.resolutionList}>
+                        {workspace.latestSyntheticTest.fieldResults.map(
+                          (result) => {
+                            const field = fields.find(
+                              (item) => item.field.fieldId === result.fieldId,
+                            );
+                            return (
+                              <li key={result.fieldId}>
+                                <span>
+                                  {field?.field.originalLabel ?? result.fieldId}
+                                </span>
+                                <span
+                                  className={styles.status}
+                                  data-tone={
+                                    result.status === "supported" ||
+                                    result.status === "explicitly_denied" ||
+                                    result.status ===
+                                      "approved_practice_default"
+                                      ? "safe"
+                                      : result.status === "conflict"
+                                        ? "block"
+                                        : "review"
+                                  }
+                                >
+                                  {titleCase(result.status)}
+                                </span>
+                                <small>
+                                  {displaySyntheticValue(result.value)} ·{" "}
+                                  {result.sourceFactIds.length} source fact
+                                  {result.sourceFactIds.length === 1 ? "" : "s"}
+                                </small>
+                              </li>
+                            );
+                          },
+                        )}
+                      </ul>
+                    </div>
                   </div>
                   {workspace.latestSyntheticTest.layoutWarningCodes.length >
                     0 && (
@@ -1251,6 +1605,136 @@ export function TemplateTwinCertificationWorkspace({
                 </label>
               </div>
             </div>
+
+            {stagingQaEnabled && (
+              <>
+                <div className={styles.section}>
+                  <h2 className={styles.sectionTitle}>
+                    Run a synthetic staging visit
+                  </h2>
+                  <div className={styles.callout}>
+                    This step uses the authenticated visit route, tenant-scoped
+                    database, queue, worker, object storage, exact DOCX
+                    renderer, and strict verification contract. It does not call
+                    a live voice or clinical model provider.
+                  </div>
+                  <div className={styles.voiceTest}>
+                    <div>
+                      <strong>Reviewed typed visit fixture</strong>
+                      <p>
+                        Load the exact bounded synthetic evidence used by the
+                        mocked-voice path. This action never selects clinical
+                        field meanings or certifies mappings.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className={styles.button}
+                      onClick={() =>
+                        setStagingEncounterText(
+                          TEMPLATE_TWIN_STAGING_QA_TYPED_STARTER,
+                        )
+                      }
+                      disabled={
+                        workspace.template.certificationStatus !==
+                          "certified" || busy !== null
+                      }
+                    >
+                      Restore reviewed visit evidence
+                    </button>
+                  </div>
+                  <label
+                    className={`${styles.field} ${styles.fieldWide}`}
+                    style={{ marginTop: 12 }}
+                  >
+                    <span className={styles.monoLabel}>
+                      Typed synthetic encounter
+                    </span>
+                    <textarea
+                      className={styles.textarea}
+                      value={stagingEncounterText}
+                      onChange={(event) =>
+                        setStagingEncounterText(event.target.value)
+                      }
+                      placeholder="Example format only: Synthetic encounter. State each synthetic symptom, denial, date, side, number, and unit needed by this template."
+                      minLength={20}
+                      maxLength={5_000}
+                      disabled={
+                        workspace.template.certificationStatus !==
+                          "certified" || busy !== null
+                      }
+                    />
+                  </label>
+                  <p className={styles.fieldMeta} style={{ marginTop: 7 }}>
+                    No clinical answer is preselected. Use synthetic details
+                    only.
+                  </p>
+                  <div
+                    className={styles.voiceActions}
+                    style={{ marginTop: 12 }}
+                  >
+                    <button
+                      type="button"
+                      className={styles.primaryButton}
+                      disabled={
+                        workspace.template.certificationStatus !==
+                          "certified" ||
+                        stagingEncounterText.trim().length < 20 ||
+                        busy !== null
+                      }
+                      onClick={() => void startStagingRun("typed")}
+                    >
+                      {busy === "staging-run"
+                        ? "Starting synthetic visit…"
+                        : "Start typed synthetic visit"}
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.button}
+                      disabled={
+                        workspace.template.certificationStatus !==
+                          "certified" || busy !== null
+                      }
+                      onClick={() => void startStagingRun("mock_voice")}
+                    >
+                      Start mocked-voice visit
+                    </button>
+                  </div>
+                  <p className={styles.fieldMeta} style={{ marginTop: 7 }}>
+                    Mocked voice uses a deterministic synthetic recording and
+                    transcription. Repeated submissions recover the same run
+                    rather than creating duplicate visits or objects.
+                  </p>
+                </div>
+
+                <div
+                  className={styles.wordPending}
+                  aria-labelledby="word-qa-status"
+                >
+                  <div>
+                    <span className={styles.monoLabel}>
+                      Final manual release gate
+                    </span>
+                    <h2 id="word-qa-status">
+                      Microsoft Word compatibility: Pending
+                    </h2>
+                    <p>
+                      After a synthetic visit is signed, download its generated
+                      Original Template DOCX and open it manually in desktop
+                      Microsoft Word. Pending never means approved or ready for
+                      patient care; LibreOffice evidence is not a substitute.
+                    </p>
+                  </div>
+                  <ol>
+                    <li>
+                      Finish the synthetic visit review and signing gates.
+                    </li>
+                    <li>Download the generated Original Template DOCX.</li>
+                    <li>Open and inspect it in desktop Microsoft Word.</li>
+                  </ol>
+                </div>
+              </>
+            )}
           </div>
         </section>
       </div>
@@ -1327,6 +1811,7 @@ function FieldInspector({
   item,
   canEdit,
   busy,
+  stagingQaMode,
   intentDraft,
   onChange,
   onIntentChange,
@@ -1334,6 +1819,7 @@ function FieldInspector({
   item: TemplateTwinWorkspaceField;
   canEdit: boolean;
   busy: boolean;
+  stagingQaMode: boolean;
   intentDraft: FieldIntentDraft;
   onChange: (patch: Partial<SemanticMapping>) => void;
   onIntentChange: (intent: FieldIntentDraft) => void;
@@ -1350,6 +1836,7 @@ function FieldInspector({
         intentDraft.intentKind === "static"));
 
   function changeIntent(next: FieldIntentDraft) {
+    if (stagingQaMode && next.intentKind === "custom_concept") return;
     onIntentChange(next);
     if (next.intentKind === "supported_concept") {
       onChange({
@@ -1406,7 +1893,9 @@ function FieldInspector({
       }
       onChange({
         clinicalConcept: intentDraft.customSpec.conceptId,
-        expectedDataType: expectedTypeForCustom(intentDraft.customSpec.dataType),
+        expectedDataType: expectedTypeForCustom(
+          intentDraft.customSpec.dataType,
+        ),
         required: intentDraft.customSpec.required,
         unknownPolicy: intentDraft.customSpec.unknownPolicy,
         blankPolicy: intentDraft.customSpec.unknownPolicy,
@@ -1458,6 +1947,7 @@ function FieldInspector({
           item={item}
           draft={intentDraft}
           disabled={disabled || intentLocked}
+          stagingQaMode={stagingQaMode}
           onChange={changeIntent}
         />
       )}
@@ -1511,40 +2001,40 @@ function FieldInspector({
         <h3 className={styles.sectionTitle}>How QuillMD fills this field</h3>
         <div className={styles.formGrid}>
           {!requiresIntent && (
-          <label className={`${styles.field} ${styles.fieldWide}`}>
-            <span className={styles.monoLabel}>Clinical detail to fill</span>
-            <select
-              className={styles.select}
-              value={mapping.clinicalConcept ?? ""}
-              onChange={(event) =>
-                onChange({
-                  clinicalConcept: event.target.value || null,
-                  status: "needs_confirmation",
-                })
-              }
-              disabled={mappingDisabled}
-            >
-              <option value="">Choose a supported clinical detail</option>
+            <label className={`${styles.field} ${styles.fieldWide}`}>
+              <span className={styles.monoLabel}>Clinical detail to fill</span>
+              <select
+                className={styles.select}
+                value={mapping.clinicalConcept ?? ""}
+                onChange={(event) =>
+                  onChange({
+                    clinicalConcept: event.target.value || null,
+                    status: "needs_confirmation",
+                  })
+                }
+                disabled={mappingDisabled}
+              >
+                <option value="">Choose a supported clinical detail</option>
+                {mapping.clinicalConcept &&
+                  !isSupportedTemplateTwinConcept(mapping.clinicalConcept) && (
+                    <option value={mapping.clinicalConcept}>
+                      Unsupported in this version — {mapping.clinicalConcept}
+                    </option>
+                  )}
+                {TEMPLATE_TWIN_SUPPORTED_CONCEPTS.map((concept) => (
+                  <option key={concept.concept} value={concept.concept}>
+                    {concept.physicianLabel}
+                  </option>
+                ))}
+              </select>
               {mapping.clinicalConcept &&
                 !isSupportedTemplateTwinConcept(mapping.clinicalConcept) && (
-                  <option value={mapping.clinicalConcept}>
-                    Unsupported in this version — {mapping.clinicalConcept}
-                  </option>
+                  <span className={styles.warningText} role="alert">
+                    QuillMD cannot safely extract and validate this clinical
+                    detail in the current alpha, so certification is blocked.
+                  </span>
                 )}
-              {TEMPLATE_TWIN_SUPPORTED_CONCEPTS.map((concept) => (
-                <option key={concept.concept} value={concept.concept}>
-                  {concept.physicianLabel}
-                </option>
-              ))}
-            </select>
-            {mapping.clinicalConcept &&
-              !isSupportedTemplateTwinConcept(mapping.clinicalConcept) && (
-                <span className={styles.warningText} role="alert">
-                  QuillMD cannot safely extract and validate this clinical
-                  detail in the current alpha, so certification is blocked.
-                </span>
-              )}
-          </label>
+            </label>
           )}
           <label className={styles.field}>
             <span className={styles.monoLabel}>Expected data type</span>
@@ -1694,26 +2184,36 @@ function FieldInspector({
               )}
             </select>
           </label>
-          <label className={`${styles.field} ${styles.fieldWide}`}>
-            <span className={styles.monoLabel}>
-              Approved synonyms · comma separated
-            </span>
-            <input
-              className={styles.input}
-              value={mapping.approvedSynonyms.join(", ")}
-              onChange={(event) =>
-                onChange({
-                  approvedSynonyms: event.target.value
-                    .split(",")
-                    .map((value) => value.trim())
-                    .filter(Boolean)
-                    .slice(0, 50),
-                  status: "needs_confirmation",
-                })
-              }
-              disabled={mappingDisabled}
-            />
-          </label>
+          {stagingQaMode ? (
+            <div className={`${styles.field} ${styles.fieldWide}`}>
+              <span className={styles.monoLabel}>Approved synonyms</span>
+              <p className={styles.fieldMeta}>
+                None. This reviewed staging fixture accepts only the exact
+                supported clinical detail vocabulary.
+              </p>
+            </div>
+          ) : (
+            <label className={`${styles.field} ${styles.fieldWide}`}>
+              <span className={styles.monoLabel}>
+                Approved synonyms · comma separated
+              </span>
+              <input
+                className={styles.input}
+                value={mapping.approvedSynonyms.join(", ")}
+                onChange={(event) =>
+                  onChange({
+                    approvedSynonyms: event.target.value
+                      .split(",")
+                      .map((value) => value.trim())
+                      .filter(Boolean)
+                      .slice(0, 50),
+                    status: "needs_confirmation",
+                  })
+                }
+                disabled={mappingDisabled}
+              />
+            </label>
+          )}
           <label className={styles.checkLabel}>
             <input
               type="checkbox"
@@ -1744,7 +2244,8 @@ function FieldInspector({
               disabled={
                 busy ||
                 mapping.status === "certified" ||
-                (requiresIntent && intentDraft.intentKind === "unresolved")
+                (requiresIntent && intentDraft.intentKind === "unresolved") ||
+                (stagingQaMode && intentDraft.intentKind === "custom_concept")
               }
             >
               {mapping.status === "certified"
@@ -1762,11 +2263,13 @@ function FieldIntentEditor({
   item,
   draft,
   disabled,
+  stagingQaMode,
   onChange,
 }: {
   item: TemplateTwinWorkspaceField;
   draft: FieldIntentDraft;
   disabled: boolean;
+  stagingQaMode: boolean;
   onChange: (intent: FieldIntentDraft) => void;
 }) {
   const binding = item.field.rendererBinding;
@@ -1815,6 +2318,11 @@ function FieldIntentEditor({
           Confirm this visible placeholder once. QuillMD will bind the decision
           to this exact document location; it will not guess from the label.
         </div>
+        <div style={{ marginTop: 4 }}>
+          Only a licensed physician should choose the clinical intent. No
+          clinical answer is preselected, and leaving it unresolved keeps
+          certification blocked.
+        </div>
         <div className={styles.fieldMeta} style={{ marginTop: 7 }}>
           {binding.tableIndex === null
             ? `Document paragraph · ${binding.partName}`
@@ -1837,20 +2345,43 @@ function FieldIntentEditor({
             onChange={(event) => {
               const value = event.target.value;
               if (value === "supported_concept") {
-                onChange({ intentKind: "supported_concept", supportedConcept: "" });
+                onChange({
+                  intentKind: "supported_concept",
+                  supportedConcept: "",
+                });
               } else if (value === "static") {
-                onChange({ intentKind: "static", reason: "" });
-              } else if (value === "custom_concept" && defaultSpec) {
-                onChange({ intentKind: "custom_concept", customSpec: defaultSpec });
+                onChange({
+                  intentKind: "static",
+                  reason: stagingQaMode
+                    ? TEMPLATE_TWIN_STAGING_QA_STATIC_INTENT_REASON
+                    : "",
+                });
+              } else if (
+                !stagingQaMode &&
+                value === "custom_concept" &&
+                defaultSpec
+              ) {
+                onChange({
+                  intentKind: "custom_concept",
+                  customSpec: defaultSpec,
+                });
               } else {
                 onChange({ intentKind: "unresolved" });
               }
             }}
           >
-            <option value="unresolved">Leave unresolved — blocks certification</option>
-            <option value="supported_concept">Use an existing clinical detail</option>
+            <option value="unresolved">
+              Leave unresolved — blocks certification
+            </option>
+            <option value="supported_concept">
+              Use an existing clinical detail
+            </option>
             <option value="static">Keep this text static; never fill it</option>
-            <option value="custom_concept">Define a template-specific scalar detail</option>
+            {!stagingQaMode && (
+              <option value="custom_concept">
+                Define a template-specific scalar detail
+              </option>
+            )}
           </select>
         </label>
 
@@ -1878,25 +2409,41 @@ function FieldIntentEditor({
           </label>
         )}
 
-        {draft.intentKind === "static" && (
-          <label className={`${styles.field} ${styles.fieldWide}`}>
-            <span className={styles.monoLabel}>Why this remains static</span>
-            <textarea
-              className={styles.textarea}
-              rows={2}
-              minLength={10}
-              maxLength={500}
-              value={draft.reason}
-              disabled={disabled}
-              placeholder="Explain why this visible token is intentional fixed text."
-              onChange={(event) =>
-                onChange({ intentKind: "static", reason: event.target.value })
-              }
-            />
-          </label>
+        {draft.intentKind === "static" &&
+          (stagingQaMode ? (
+            <div className={`${styles.field} ${styles.fieldWide}`}>
+              <span className={styles.monoLabel}>Why this remains static</span>
+              <p className={styles.fieldMeta}>
+                {TEMPLATE_TWIN_STAGING_QA_STATIC_INTENT_REASON}
+              </p>
+            </div>
+          ) : (
+            <label className={`${styles.field} ${styles.fieldWide}`}>
+              <span className={styles.monoLabel}>Why this remains static</span>
+              <textarea
+                className={styles.textarea}
+                rows={2}
+                minLength={10}
+                maxLength={500}
+                value={draft.reason}
+                disabled={disabled}
+                placeholder="Explain why this visible token is intentional fixed text."
+                onChange={(event) =>
+                  onChange({ intentKind: "static", reason: event.target.value })
+                }
+              />
+            </label>
+          ))}
+
+        {draft.intentKind === "custom_concept" && stagingQaMode && (
+          <p className={styles.warningText} role="alert">
+            Template-specific custom concepts are not admitted by this reviewed
+            synthetic staging fixture. Leave the field unresolved or choose an
+            existing supported clinical detail.
+          </p>
         )}
 
-        {draft.intentKind === "custom_concept" && (
+        {draft.intentKind === "custom_concept" && !stagingQaMode && (
           <>
             <label className={styles.field}>
               <span className={styles.monoLabel}>Physician-facing name</span>
@@ -1905,7 +2452,9 @@ function FieldIntentEditor({
                 value={draft.customSpec.physicianName}
                 maxLength={160}
                 disabled={disabled}
-                onChange={(event) => updateSpec({ physicianName: event.target.value })}
+                onChange={(event) =>
+                  updateSpec({ physicianName: event.target.value })
+                }
               />
             </label>
             <label className={styles.field}>
@@ -1918,8 +2467,7 @@ function FieldIntentEditor({
                   const dataType = event.target.value as CustomScalarDataType;
                   const next = defaultSpec!;
                   const expectedValue = defaultScalarFor(dataType);
-                  const expectedUnit =
-                    dataType === "measurement" ? "mm" : null;
+                  const expectedUnit = dataType === "measurement" ? "mm" : null;
                   const evidenceCue =
                     draft.customSpec.approvedEvidenceCues[0] ??
                     draft.customSpec.physicianName;
@@ -1960,7 +2508,9 @@ function FieldIntentEditor({
                 <option value="measurement">Measurement with unit</option>
                 <option value="date">Date</option>
                 <option value="boolean">Yes or no</option>
-                <option value="single_select">Exact single-select option</option>
+                <option value="single_select">
+                  Exact single-select option
+                </option>
               </select>
             </label>
             <label className={`${styles.field} ${styles.fieldWide}`}>
@@ -1996,13 +2546,15 @@ function FieldIntentEditor({
                 }
               />
               <span className={styles.fieldMeta}>
-                A value is accepted only when one of these exact phrases and
-                the value appear together in the same evidence clause.
+                A value is accepted only when one of these exact phrases and the
+                value appear together in the same evidence clause.
               </span>
             </label>
             {draft.customSpec.dataType === "single_select" && (
               <label className={`${styles.field} ${styles.fieldWide}`}>
-                <span className={styles.monoLabel}>Allowed values · comma separated</span>
+                <span className={styles.monoLabel}>
+                  Allowed values · comma separated
+                </span>
                 <input
                   className={styles.input}
                   value={draft.customSpec.allowedOptions
@@ -2022,10 +2574,10 @@ function FieldIntentEditor({
                     }
                     updateSpec({
                       allowedOptions: values.map((value, ordinal) => ({
-                          ordinal,
-                          value,
-                          displayText: value,
-                        })),
+                        ordinal,
+                        value,
+                        displayText: value,
+                      })),
                     });
                   }}
                 />
@@ -2033,7 +2585,9 @@ function FieldIntentEditor({
             )}
             {draft.customSpec.dataType === "measurement" && (
               <label className={`${styles.field} ${styles.fieldWide}`}>
-                <span className={styles.monoLabel}>Allowed units · comma separated</span>
+                <span className={styles.monoLabel}>
+                  Allowed units · comma separated
+                </span>
                 <input
                   className={styles.input}
                   value={draft.customSpec.allowedUnits.join(", ")}
@@ -2077,7 +2631,9 @@ function FieldIntentEditor({
               draft.customSpec.dataType === "measurement") && (
               <>
                 <label className={styles.field}>
-                  <span className={styles.monoLabel}>Minimum value · optional</span>
+                  <span className={styles.monoLabel}>
+                    Minimum value · optional
+                  </span>
                   <input
                     className={styles.input}
                     type="number"
@@ -2098,7 +2654,9 @@ function FieldIntentEditor({
                   />
                 </label>
                 <label className={styles.field}>
-                  <span className={styles.monoLabel}>Maximum value · optional</span>
+                  <span className={styles.monoLabel}>
+                    Maximum value · optional
+                  </span>
                   <input
                     className={styles.input}
                     type="number"
@@ -2129,7 +2687,10 @@ function FieldIntentEditor({
                 onChange={(event) =>
                   updateSpec({
                     allowedTemporalities: [
-                      event.target.value as "current" | "historical" | "planned",
+                      event.target.value as
+                        | "current"
+                        | "historical"
+                        | "planned",
                     ],
                   })
                 }
@@ -2143,7 +2704,9 @@ function FieldIntentEditor({
               <span className={styles.monoLabel}>Laterality</span>
               <select
                 className={styles.select}
-                value={draft.customSpec.allowedLateralities[0] ?? "not_applicable"}
+                value={
+                  draft.customSpec.allowedLateralities[0] ?? "not_applicable"
+                }
                 disabled={disabled}
                 onChange={(event) =>
                   updateSpec({
@@ -2170,7 +2733,9 @@ function FieldIntentEditor({
                 type="checkbox"
                 checked={draft.customSpec.required}
                 disabled={disabled}
-                onChange={(event) => updateSpec({ required: event.target.checked })}
+                onChange={(event) =>
+                  updateSpec({ required: event.target.checked })
+                }
               />
               Required before signing
             </label>
@@ -2178,7 +2743,9 @@ function FieldIntentEditor({
               <input
                 type="checkbox"
                 checked={draft.customSpec.polarityPolicy.allowExplicitDenial}
-                disabled={disabled || draft.customSpec.dataType === "measurement"}
+                disabled={
+                  disabled || draft.customSpec.dataType === "measurement"
+                }
                 onChange={(event) =>
                   updateSpec({
                     polarityPolicy: {
@@ -2262,7 +2829,9 @@ function FieldIntentEditor({
                     />
                   </label>
                   <label className={styles.field}>
-                    <span className={styles.monoLabel}>Expected exact output</span>
+                    <span className={styles.monoLabel}>
+                      Expected exact output
+                    </span>
                     <input
                       className={styles.input}
                       value={String(example.expectedValue)}
@@ -2295,7 +2864,9 @@ function FieldIntentEditor({
               ),
             )}
             <label className={`${styles.field} ${styles.fieldWide}`}>
-              <span className={styles.monoLabel}>Negative synthetic evidence</span>
+              <span className={styles.monoLabel}>
+                Negative synthetic evidence
+              </span>
               <textarea
                 className={styles.textarea}
                 rows={2}
@@ -2305,8 +2876,7 @@ function FieldIntentEditor({
                 }
                 disabled={disabled}
                 onChange={(event) => {
-                  const first =
-                    draft.customSpec.negativeSyntheticExamples[0]!;
+                  const first = draft.customSpec.negativeSyntheticExamples[0]!;
                   updateSpec({
                     negativeSyntheticExamples: [
                       { ...first, syntheticEvidence: event.target.value },
@@ -2316,7 +2886,9 @@ function FieldIntentEditor({
               />
             </label>
             <label className={`${styles.field} ${styles.fieldWide}`}>
-              <span className={styles.monoLabel}>Ambiguity synthetic evidence</span>
+              <span className={styles.monoLabel}>
+                Ambiguity synthetic evidence
+              </span>
               <textarea
                 className={styles.textarea}
                 rows={2}
@@ -2326,8 +2898,7 @@ function FieldIntentEditor({
                 }
                 disabled={disabled}
                 onChange={(event) => {
-                  const first =
-                    draft.customSpec.ambiguitySyntheticExamples[0]!;
+                  const first = draft.customSpec.ambiguitySyntheticExamples[0]!;
                   updateSpec({
                     ambiguitySyntheticExamples: [
                       { ...first, syntheticEvidence: event.target.value },
@@ -2343,14 +2914,13 @@ function FieldIntentEditor({
               <input
                 className={styles.input}
                 value={
-                  draft.customSpec.ambiguitySyntheticExamples[0]
-                    ?.possibleValues.map(String)
+                  draft.customSpec.ambiguitySyntheticExamples[0]?.possibleValues
+                    .map(String)
                     .join(", ") ?? ""
                 }
                 disabled={disabled}
                 onChange={(event) => {
-                  const first =
-                    draft.customSpec.ambiguitySyntheticExamples[0]!;
+                  const first = draft.customSpec.ambiguitySyntheticExamples[0]!;
                   const possibleValues = event.target.value
                     .split(",")
                     .map((value) => value.trim())

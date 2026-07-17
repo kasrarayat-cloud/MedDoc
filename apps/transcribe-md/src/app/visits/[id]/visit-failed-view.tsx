@@ -25,6 +25,7 @@ type VisitFailedViewTheme = 'legacy' | 'clinician';
 
 interface Props {
   visitId: string;
+  syntheticQaAttempt?: number | null;
   reason: string | null;
   /** One of 'transient' | 'permanent' | 'provider_down' (or null on
    *  pre-categorization rows). Drives icon + headline + CTA. */
@@ -38,6 +39,7 @@ interface Props {
 
 export function VisitFailedView({
   visitId,
+  syntheticQaAttempt = null,
   reason,
   failureCategory,
   inputMode,
@@ -63,6 +65,12 @@ export function VisitFailedView({
       try {
         const r = await fetch(`/api/visits/${visitId}/retry`, {
           method: 'POST',
+          ...(syntheticQaAttempt === null
+            ? {}
+            : {
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ expectedAttempt: syntheticQaAttempt }),
+              }),
         });
         if (r.ok) {
           router.refresh();

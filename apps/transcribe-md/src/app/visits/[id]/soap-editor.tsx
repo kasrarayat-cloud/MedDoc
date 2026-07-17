@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 // ============================================================================
 // SoapEditor — visit-detail SOAP note pane (Phase 5.2 v6 Coding Coach).
@@ -31,48 +31,58 @@
 // the Phase 5.2 stage rollout.
 // ============================================================================
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
-import { Lock, Send } from 'lucide-react';
-import { toast } from 'sonner';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
+import { Lock, Send } from "lucide-react";
+import { toast } from "sonner";
 
-import { saveSoapDraftAction } from '@/actions/soap';
-import { parseSoapSections, type SoapSectionKey } from '@/lib/parse-soap-sections';
-import { placeholderSections } from '@/lib/parse-note-sections';
-import { PlaceholderAdvisoryDialog } from '@/components/placeholder-advisory-dialog';
-import { isSkinBeta } from '@/config/skin-beta';
-import { CodingRail } from '@/components/visits/CodingRail';
-import { CodingRailSkeleton } from '@/components/visits/CodingRailSkeleton';
+import { saveSoapDraftAction } from "@/actions/soap";
+import {
+  parseSoapSections,
+  type SoapSectionKey,
+} from "@/lib/parse-soap-sections";
+import { placeholderSections } from "@/lib/parse-note-sections";
+import { PlaceholderAdvisoryDialog } from "@/components/placeholder-advisory-dialog";
+import { isSkinBeta } from "@/config/skin-beta";
+import { CodingRail } from "@/components/visits/CodingRail";
+import { CodingRailSkeleton } from "@/components/visits/CodingRailSkeleton";
 import type {
   EmCode,
   EmScore,
   SoapSectionKey as EmSoapSectionKey,
-} from '@/lib/em-coding-ui/types';
-import { SoapBody } from './soap/SoapBody';
-import type { SoapPulseHint, SoapSectionStatus } from './soap/SoapSection';
-import { SignAndSendModal } from './sign-and-send-modal';
+} from "@/lib/em-coding-ui/types";
+import { SoapBody } from "./soap/SoapBody";
+import type { SoapPulseHint, SoapSectionStatus } from "./soap/SoapSection";
+import { SignAndSendModal } from "./sign-and-send-modal";
 
 /** Engine `SoapSectionKey` (long form: 'subjective' | …) → the SOAP
  *  body's letter-form key ('S' | 'O' | 'A' | 'P'). The two key sets
  *  exist for historical reasons (parser uses letters; em-coding-ui
  *  predates that). */
 const EM_KEY_TO_LETTER: Record<EmSoapSectionKey, SoapSectionKey> = {
-  subjective: 'S',
-  objective: 'O',
-  assessment: 'A',
-  plan: 'P',
+  subjective: "S",
+  objective: "O",
+  assessment: "A",
+  plan: "P",
 };
 
 /** EmCriterion id prefix → SOAP section letter. Mirrors
  *  `lib/em-coding/criterion-to-section.ts`'s table; inline here so the
  *  bump-CTA highlight handler stays self-contained. */
 const CRITERION_TO_SECTION: Record<string, SoapSectionKey> = {
-  'hpi.elements': 'S',
-  'ros.systems': 'S',
-  'pfsh.categories': 'S',
-  'exam.systems': 'O',
-  'mdm.problems': 'A',
-  'mdm.data': 'P',
-  'mdm.risk': 'A',
+  "hpi.elements": "S",
+  "ros.systems": "S",
+  "pfsh.categories": "S",
+  "exam.systems": "O",
+  "mdm.problems": "A",
+  "mdm.data": "P",
+  "mdm.risk": "A",
 };
 
 /** Length of the highlight pulse on bump-CTA click — long enough for
@@ -80,7 +90,7 @@ const CRITERION_TO_SECTION: Record<string, SoapSectionKey> = {
  *  doesn't linger as background visual noise. */
 const HIGHLIGHT_DURATION_MS = 2500;
 
-type SoapEditorTheme = 'legacy' | 'clinician';
+type SoapEditorTheme = "legacy" | "clinician";
 
 /** Source-rail entry — kept on the interface for caller back-compat
  *  (visit-ready-view still computes `soapSources` from utterances).
@@ -102,6 +112,9 @@ interface SoapEditorProps {
   emailEnabled: boolean;
   /** Server-derived verified/signed Template Twin output availability. */
   originalTemplateDocxAvailable?: boolean;
+  /** Persisted synthetic staging visit. Generic billing mutations and export
+   *  destinations stay hidden; server routes remain authoritative. */
+  syntheticQaMode?: boolean;
   initialText: string;
   /**
    * Round 3 PR-E (A09-P0-003) — optimistic-concurrency token. The
@@ -141,6 +154,7 @@ export function SoapEditor({
   doctorEmail,
   emailEnabled,
   originalTemplateDocxAvailable = false,
+  syntheticQaMode = false,
   initialText,
   initialSoapVersion,
   readonly = false,
@@ -174,7 +188,7 @@ export function SoapEditor({
       }
       setSignModalOpen(next);
     },
-    [text]
+    [text],
   );
   // Keep a local response only while it belongs to the exact server score
   // that produced it. A new server-rendered score automatically supersedes
@@ -202,13 +216,13 @@ export function SoapEditor({
     if (!lean) return {};
     const out: Partial<Record<SoapSectionKey, SoapPulseHint>> = {};
     for (const [emKey, tone] of Object.entries(lean) as Array<
-      [EmSoapSectionKey, 'ok' | 'boost']
+      [EmSoapSectionKey, "ok" | "boost"]
     >) {
       const letter = EM_KEY_TO_LETTER[emKey];
       if (!letter) continue;
       out[letter] = {
         tone,
-        text: tone === 'boost' ? 'gap to next tier' : 'criteria satisfied',
+        text: tone === "boost" ? "gap to next tier" : "criteria satisfied",
       };
     }
     return out;
@@ -221,29 +235,26 @@ export function SoapEditor({
     SoapSectionKey[]
   >([]);
   const highlightTimerRef = useRef<number | null>(null);
-  const handleHighlightCriteria = useCallback(
-    (criterionIds: string[]) => {
-      if (typeof window === 'undefined') return;
-      const targets = new Set<SoapSectionKey>();
-      for (const id of criterionIds) {
-        const section = CRITERION_TO_SECTION[id];
-        if (section) targets.add(section);
-      }
-      if (targets.size === 0) return;
-      setHighlightedSections(Array.from(targets));
-      if (highlightTimerRef.current !== null) {
-        window.clearTimeout(highlightTimerRef.current);
-      }
-      highlightTimerRef.current = window.setTimeout(() => {
-        highlightTimerRef.current = null;
-        setHighlightedSections([]);
-      }, HIGHLIGHT_DURATION_MS);
-    },
-    []
-  );
+  const handleHighlightCriteria = useCallback((criterionIds: string[]) => {
+    if (typeof window === "undefined") return;
+    const targets = new Set<SoapSectionKey>();
+    for (const id of criterionIds) {
+      const section = CRITERION_TO_SECTION[id];
+      if (section) targets.add(section);
+    }
+    if (targets.size === 0) return;
+    setHighlightedSections(Array.from(targets));
+    if (highlightTimerRef.current !== null) {
+      window.clearTimeout(highlightTimerRef.current);
+    }
+    highlightTimerRef.current = window.setTimeout(() => {
+      highlightTimerRef.current = null;
+      setHighlightedSections([]);
+    }, HIGHLIGHT_DURATION_MS);
+  }, []);
   useEffect(() => {
     return () => {
-      if (typeof window !== 'undefined' && highlightTimerRef.current !== null) {
+      if (typeof window !== "undefined" && highlightTimerRef.current !== null) {
         window.clearTimeout(highlightTimerRef.current);
         highlightTimerRef.current = null;
       }
@@ -256,17 +267,14 @@ export function SoapEditor({
   const handleApplyOverride = useCallback(
     async (
       code: EmCode,
-      reason?: string
+      reason?: string,
     ): Promise<{ ok: boolean; error?: string; newScore?: EmScore }> => {
       try {
-        const res = await fetch(
-          `/api/visits/${visitId}/em-score/override`,
-          {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ overrideToCode: code, reason }),
-          }
-        );
+        const res = await fetch(`/api/visits/${visitId}/em-score/override`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ overrideToCode: code, reason }),
+        });
         if (!res.ok) {
           const body = (await res.json().catch(() => ({}))) as {
             error?: string;
@@ -290,11 +298,11 @@ export function SoapEditor({
           error:
             err instanceof Error
               ? err.message
-              : 'Network error applying override.',
+              : "Network error applying override.",
         };
       }
     },
-    [initialScore, visitId]
+    [initialScore, visitId],
   );
 
   // Batch H — signedAt is the canonical signal that the note is locked,
@@ -312,12 +320,12 @@ export function SoapEditor({
   const sections = useMemo(() => parseSoapSections(text), [text]);
   const statusFor = useCallback(
     (key: SoapSectionKey | null, body?: string): SoapSectionStatus => {
-      if (isSigned) return 'signed';
-      if (key === null) return body && body.trim() ? 'reviewed' : 'drafted';
+      if (isSigned) return "signed";
+      if (key === null) return body && body.trim() ? "reviewed" : "drafted";
       const sec = sections.find((s) => s.key === key);
-      return sec && sec.body.trim() ? 'reviewed' : 'drafted';
+      return sec && sec.body.trim() ? "reviewed" : "drafted";
     },
-    [sections, isSigned]
+    [sections, isSigned],
   );
 
   /** PROTECTED CONTRACT — saveSoapDraftAction signature evolved in
@@ -334,22 +342,23 @@ export function SoapEditor({
             // Conflict-shape result: another save landed first. Show a
             // distinct toast and offer reload — do NOT silently
             // overwrite the conflicting copy.
-            if (res.error === 'conflict' && res.conflict) {
+            if (res.error === "conflict" && res.conflict) {
               toast.error(
-                'Another edit happened on this note — reload to see the latest version before saving again.',
+                "Another edit happened on this note — reload to see the latest version before saving again.",
                 {
-                  description: 'Your unsaved changes are still in this tab; reloading will replace them.',
+                  description:
+                    "Your unsaved changes are still in this tab; reloading will replace them.",
                   action: {
-                    label: 'Reload',
+                    label: "Reload",
                     onClick: () => window.location.reload(),
                   },
                   duration: 10_000,
-                }
+                },
               );
-              resolve({ ok: false, error: 'conflict' });
+              resolve({ ok: false, error: "conflict" });
               return;
             }
-            toast.error('Save failed — try again', { description: res.error });
+            toast.error("Save failed — try again", { description: res.error });
             resolve({ ok: false, error: res.error });
             return;
           }
@@ -359,7 +368,7 @@ export function SoapEditor({
         });
       });
     },
-    [visitId, soapVersion]
+    [visitId, soapVersion],
   );
 
   // C3 billing-simplify (flag-gated): the dense permanent coding rail moves
@@ -370,12 +379,16 @@ export function SoapEditor({
   // → the original 1fr/340px rail layout renders verbatim.
   const c3 = isSkinBeta();
   const displayedEmCode = emScore
-    ? emScore.override?.code ?? emScore.suggestedCode
+    ? (emScore.override?.code ?? emScore.suggestedCode)
     : null;
 
   return (
     <div className="space-y-4">
-      <div className={c3 ? 'qm-lin-coach-grid qm-lin-coach-grid--solo' : 'qm-lin-coach-grid'}>
+      <div
+        className={
+          c3 ? "qm-lin-coach-grid qm-lin-coach-grid--solo" : "qm-lin-coach-grid"
+        }
+      >
         {/* LEFT — v6 SOAP body (4 section blocks + bottom strip). */}
         <SoapBody
           text={text}
@@ -394,69 +407,71 @@ export function SoapEditor({
             the displayed tier without a page reload. */}
         {/* C3 hides the permanent rail (its content moves to the drawer's
             BillingCardC3); flag OFF renders the rail verbatim. */}
-        {!c3 && (
-        <aside className="qm-lin-coding-rail-slot" aria-label="Billing support">
-          {emScore ? (
-            <CodingRail
-              emScore={emScore}
-              visitId={visitId}
-              readonly={isReadonly}
-              currentSoapText={text}
-              onConfirmSign={
-                isReadonly || isSigned
-                  ? undefined
-                  : () => requestSignOpen(true)
-              }
-              onApplyOverride={
-                isReadonly || isSigned ? undefined : handleApplyOverride
-              }
-              onHighlightCriteria={handleHighlightCriteria}
-              onApplyAdditions={async (additions) => {
-                try {
-                  const res = await fetch(
-                    `/api/visits/${visitId}/em-score/apply-additions`,
-                    {
-                      method: 'POST',
-                      headers: { 'content-type': 'application/json' },
-                      body: JSON.stringify({ additions }),
+        {!c3 && !syntheticQaMode && (
+          <aside
+            className="qm-lin-coding-rail-slot"
+            aria-label="Billing support"
+          >
+            {emScore ? (
+              <CodingRail
+                emScore={emScore}
+                visitId={visitId}
+                readonly={isReadonly}
+                currentSoapText={text}
+                onConfirmSign={
+                  isReadonly || isSigned
+                    ? undefined
+                    : () => requestSignOpen(true)
+                }
+                onApplyOverride={
+                  isReadonly || isSigned ? undefined : handleApplyOverride
+                }
+                onHighlightCriteria={handleHighlightCriteria}
+                onApplyAdditions={async (additions) => {
+                  try {
+                    const res = await fetch(
+                      `/api/visits/${visitId}/em-score/apply-additions`,
+                      {
+                        method: "POST",
+                        headers: { "content-type": "application/json" },
+                        body: JSON.stringify({ additions }),
+                      },
+                    );
+                    if (!res.ok) {
+                      const body = (await res.json().catch(() => ({}))) as {
+                        error?: string;
+                      };
+                      return {
+                        ok: false,
+                        error: body.error ?? `Apply failed (${res.status}).`,
+                      };
                     }
-                  );
-                  if (!res.ok) {
-                    const body = (await res.json().catch(() => ({}))) as {
-                      error?: string;
+                    const data = (await res.json()) as {
+                      ok: boolean;
+                      newScore?: EmScore;
                     };
+                    if (data.ok && data.newScore) {
+                      setEmScoreOverride({
+                        base: initialScore,
+                        score: data.newScore,
+                      });
+                    }
+                    return { ok: data.ok, newScore: data.newScore };
+                  } catch (err) {
                     return {
                       ok: false,
                       error:
-                        body.error ?? `Apply failed (${res.status}).`,
+                        err instanceof Error
+                          ? err.message
+                          : "Network error applying additions.",
                     };
                   }
-                  const data = (await res.json()) as {
-                    ok: boolean;
-                    newScore?: EmScore;
-                  };
-                  if (data.ok && data.newScore) {
-                    setEmScoreOverride({
-                      base: initialScore,
-                      score: data.newScore,
-                    });
-                  }
-                  return { ok: data.ok, newScore: data.newScore };
-                } catch (err) {
-                  return {
-                    ok: false,
-                    error:
-                      err instanceof Error
-                        ? err.message
-                        : 'Network error applying additions.',
-                  };
-                }
-              }}
-            />
-          ) : (
-            <CodingRailSkeleton />
-          )}
-        </aside>
+                }}
+              />
+            ) : (
+              <CodingRailSkeleton />
+            )}
+          </aside>
         )}
       </div>
 
@@ -465,79 +480,85 @@ export function SoapEditor({
           per the v6 mockup. V2 chromeless: the shell's persistent bottom
           Sign bar hosts this instead, so suppress it here. */}
       {!chromeless && (
-      <div className="flex flex-wrap items-center justify-end gap-2 border-t border-linear-hairline pt-4">
-        {/* C3 billing-simplify — a calm confirmable code chip next to Sign so
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-linear-hairline pt-4">
+          {/* C3 billing-simplify — a calm confirmable code chip next to Sign so
             the doctor sees the E/M code at the moment of signing without the
             dense rail. Amber + "confirm" when a level change is pending; it
             just opens the sign modal — the actual E/M confirm GATE stays in
             <SignAndSendModal>. Flag OFF → no chip (the rail showed the code). */}
-        {c3 && !readonly && !isSigned && displayedEmCode && (
-          <button
-            type="button"
-            className={`qm-c3-bill-chip ${emPendingChange ? 'pending' : ''} qm-tap-44`}
-            onClick={() => requestSignOpen(true)}
-            aria-label={
-              emPendingChange
-                ? `Billing code ${emPendingChange.to} — confirm at sign`
-                : `Billing code ${displayedEmCode}`
-            }
-          >
-            <span className="qm-c3-bill-chip-code">
-              {emPendingChange ? emPendingChange.to : displayedEmCode}
-            </span>
-            <span className="qm-c3-bill-chip-tag">
-              {emPendingChange ? 'confirm' : 'E/M'}
-            </span>
-          </button>
-        )}
+          {c3 &&
+            !syntheticQaMode &&
+            !readonly &&
+            !isSigned &&
+            displayedEmCode && (
+              <button
+                type="button"
+                className={`qm-c3-bill-chip ${emPendingChange ? "pending" : ""} qm-tap-44`}
+                onClick={() => requestSignOpen(true)}
+                aria-label={
+                  emPendingChange
+                    ? `Billing code ${emPendingChange.to} — confirm at sign`
+                    : `Billing code ${displayedEmCode}`
+                }
+              >
+                <span className="qm-c3-bill-chip-code">
+                  {emPendingChange ? emPendingChange.to : displayedEmCode}
+                </span>
+                <span className="qm-c3-bill-chip-tag">
+                  {emPendingChange ? "confirm" : "E/M"}
+                </span>
+              </button>
+            )}
 
-        {/* Batch H — the Sign & Send CTA renders ONLY when the visit
+          {/* Batch H — the Sign & Send CTA renders ONLY when the visit
             is unsigned (signedAt == null). Once a note has a sign
             timestamp it's locked. */}
-        {!readonly && !isSigned && (
-          <SignAndSendModal
-            visitId={visitId}
-            doctorEmail={doctorEmail}
-            emailEnabled={emailEnabled}
-            originalTemplateDocxAvailable={originalTemplateDocxAvailable}
-            signOnSubmit
-            triggerLabel="Sign & Send"
-            triggerIcon={<Lock className="h-3.5 w-3.5" aria-hidden />}
-            controlledOpen={signModalOpen}
-            onControlledOpenChange={requestSignOpen}
-            emPendingChange={emPendingChange}
-          />
-        )}
-        {!readonly && !isSigned && (
-          <PlaceholderAdvisoryDialog
-            open={signAdvisoryOpen}
-            onOpenChange={setSignAdvisoryOpen}
-            sections={placeholderSections(text)}
-            // Legacy path renders the lane outside this component — the
-            // advisory copy degrades gracefully without a count.
-            suggestionCount={0}
-            onContinue={() => {
-              setSignAdvisoryOpen(false);
-              setSignModalOpen(true);
-            }}
-          />
-        )}
+          {!readonly && !isSigned && (
+            <SignAndSendModal
+              visitId={visitId}
+              doctorEmail={doctorEmail}
+              emailEnabled={emailEnabled}
+              originalTemplateDocxAvailable={originalTemplateDocxAvailable}
+              originalTemplateOnly={syntheticQaMode}
+              signOnSubmit
+              triggerLabel="Sign & Send"
+              triggerIcon={<Lock className="h-3.5 w-3.5" aria-hidden />}
+              controlledOpen={signModalOpen}
+              onControlledOpenChange={requestSignOpen}
+              emPendingChange={emPendingChange}
+            />
+          )}
+          {!readonly && !isSigned && (
+            <PlaceholderAdvisoryDialog
+              open={signAdvisoryOpen}
+              onOpenChange={setSignAdvisoryOpen}
+              sections={placeholderSections(text)}
+              // Legacy path renders the lane outside this component — the
+              // advisory copy degrades gracefully without a count.
+              suggestionCount={0}
+              onContinue={() => {
+                setSignAdvisoryOpen(false);
+                setSignModalOpen(true);
+              }}
+            />
+          )}
 
-        {/* Batch H — Export again stays available on signed visits
+          {/* Batch H — Export again stays available on signed visits
             so the doctor can still re-send a copy of the locked note. */}
-        {(readonly || isSigned) && (
-          <SignAndSendModal
-            visitId={visitId}
-            doctorEmail={doctorEmail}
-            emailEnabled={emailEnabled}
-            originalTemplateDocxAvailable={originalTemplateDocxAvailable}
-            signOnSubmit={false}
-            triggerLabel="Export again"
-            triggerIcon={<Send className="h-3.5 w-3.5" aria-hidden />}
-            triggerVariant="secondary"
-          />
-        )}
-      </div>
+          {(readonly || isSigned) && (
+            <SignAndSendModal
+              visitId={visitId}
+              doctorEmail={doctorEmail}
+              emailEnabled={emailEnabled}
+              originalTemplateDocxAvailable={originalTemplateDocxAvailable}
+              originalTemplateOnly={syntheticQaMode}
+              signOnSubmit={false}
+              triggerLabel="Export again"
+              triggerIcon={<Send className="h-3.5 w-3.5" aria-hidden />}
+              triggerVariant="secondary"
+            />
+          )}
+        </div>
       )}
     </div>
   );

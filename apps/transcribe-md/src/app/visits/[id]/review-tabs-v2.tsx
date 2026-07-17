@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 // ============================================================================
 // ReviewTabsV2 — "Tabbed sign-gate workspace" review skin (skin-only, flag-gated)
@@ -27,12 +27,12 @@
 //     Billing tab; the modal stays untouched.
 // ============================================================================
 
-import { useCallback, useRef, useState } from 'react';
-import { Lock, Send } from 'lucide-react';
-import { PlaceholderAdvisoryDialog } from '@/components/placeholder-advisory-dialog';
-import { SignAndSendModal } from './sign-and-send-modal';
+import { useCallback, useRef, useState } from "react";
+import { Lock, Send } from "lucide-react";
+import { PlaceholderAdvisoryDialog } from "@/components/placeholder-advisory-dialog";
+import { SignAndSendModal } from "./sign-and-send-modal";
 
-export type V2BadgeTone = 'danger' | 'warn' | 'info' | 'ok';
+export type V2BadgeTone = "danger" | "warn" | "info" | "ok";
 
 export interface V2Tab {
   key: string;
@@ -61,6 +61,8 @@ export interface ReviewTabsV2Props {
   doctorEmail: string;
   emailEnabled: boolean;
   originalTemplateDocxAvailable?: boolean;
+  /** Synthetic staging visits expose only the verified source-template clone. */
+  originalTemplateOnly?: boolean;
   /** readonly || signedAt !== null. */
   signed: boolean;
   /** F-7 (2026-07-02): section labels still carrying the anchored-verifier
@@ -73,7 +75,7 @@ export interface ReviewTabsV2Props {
 }
 
 export function ReviewTabsV2(props: ReviewTabsV2Props) {
-  const [active, setActive] = useState<string>(props.tabs[0]?.key ?? 'note');
+  const [active, setActive] = useState<string>(props.tabs[0]?.key ?? "note");
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   // F-7: the unsigned Sign modal runs in CONTROLLED mode so every open
   // request (its own trigger button included) routes through one gatekeeper:
@@ -90,7 +92,7 @@ export function ReviewTabsV2(props: ReviewTabsV2Props) {
       }
       setSignOpen(next);
     },
-    [hasPlaceholders]
+    [hasPlaceholders],
   );
 
   const onTabKey = useCallback(
@@ -98,38 +100,42 @@ export function ReviewTabsV2(props: ReviewTabsV2Props) {
       const order = props.tabs.map((t) => t.key);
       const i = order.indexOf(active);
       let next = i;
-      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (i + 1) % order.length;
-      else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (i - 1 + order.length) % order.length;
-      else if (e.key === 'Home') next = 0;
-      else if (e.key === 'End') next = order.length - 1;
+      if (e.key === "ArrowRight" || e.key === "ArrowDown")
+        next = (i + 1) % order.length;
+      else if (e.key === "ArrowLeft" || e.key === "ArrowUp")
+        next = (i - 1 + order.length) % order.length;
+      else if (e.key === "Home") next = 0;
+      else if (e.key === "End") next = order.length - 1;
       else return;
       e.preventDefault();
       const key = order[next];
       setActive(key);
       tabRefs.current[key]?.focus();
     },
-    [active, props.tabs]
+    [active, props.tabs],
   );
 
   // ── Readiness model — honest two-stage gate. Rx is a PRE-SIGN gate (clears
   //    on the Rx tab → enables the Sign trigger); E/M is an AT-SIGN gate
   //    (confirmed inside SignAndSendModal). Both stay visible. ──
   const items: { label: string; done: boolean; atSign?: boolean }[] = [];
-  if (props.rxCritical) items.push({ label: 'Rx safety', done: props.rxResolved });
-  if (props.pendingEmChange) items.push({ label: 'Coding confirm', done: false, atSign: true });
+  if (props.rxCritical)
+    items.push({ label: "Rx safety", done: props.rxResolved });
+  if (props.pendingEmChange)
+    items.push({ label: "Coding confirm", done: false, atSign: true });
   const total = items.length;
   const cleared = items.filter((it) => it.done).length;
   const rxBlocking = props.rxCritical && !props.rxResolved;
 
   const readyText = props.signed
-    ? 'This note is signed'
+    ? "This note is signed"
     : total === 0
-      ? 'Ready to sign'
+      ? "Ready to sign"
       : rxBlocking
-        ? 'Resolve the critical interaction to sign'
+        ? "Resolve the critical interaction to sign"
         : props.pendingEmChange
           ? `Ready — you'll confirm the ${props.pendingEmChange.from} → ${props.pendingEmChange.to} coding change as you sign`
-          : 'Ready to sign';
+          : "Ready to sign";
 
   const activeTab = props.tabs.find((t) => t.key === active) ?? props.tabs[0];
 
@@ -142,21 +148,32 @@ export function ReviewTabsV2(props: ReviewTabsV2Props) {
             className="qm-c3-rev2-ready"
             aria-label={
               total === 0
-                ? 'Ready to sign'
+                ? "Ready to sign"
                 : `Sign readiness: ${cleared} of ${total} checks cleared`
             }
           >
-            <span className={`qm-c3-rev2-dot ${rxBlocking ? 'warn' : 'ok'}`} aria-hidden />
+            <span
+              className={`qm-c3-rev2-dot ${rxBlocking ? "warn" : "ok"}`}
+              aria-hidden
+            />
             <span className="qm-c3-rev2-ready-text">
-              {total === 0 ? 'Ready to sign' : `${cleared} of ${total} checks cleared`}
+              {total === 0
+                ? "Ready to sign"
+                : `${cleared} of ${total} checks cleared`}
             </span>
             {total > 0 && (
               <span className="qm-c3-rev2-pips" aria-hidden>
                 {items.map((it, i) => (
                   <span
                     key={i}
-                    className={`qm-c3-rev2-pip ${it.done ? 'on' : it.atSign ? 'atsign' : 'off'}`}
-                    title={it.atSign ? `${it.label} — confirm at sign` : it.done ? `${it.label} — cleared` : `${it.label} — resolve to sign`}
+                    className={`qm-c3-rev2-pip ${it.done ? "on" : it.atSign ? "atsign" : "off"}`}
+                    title={
+                      it.atSign
+                        ? `${it.label} — confirm at sign`
+                        : it.done
+                          ? `${it.label} — cleared`
+                          : `${it.label} — resolve to sign`
+                    }
                   />
                 ))}
               </span>
@@ -182,13 +199,15 @@ export function ReviewTabsV2(props: ReviewTabsV2Props) {
               aria-selected={active === t.key}
               aria-controls="qm-c3-rev2-panel"
               tabIndex={active === t.key ? 0 : -1}
-              className={`qm-c3-rev2-tab qm-tap-44 ${active === t.key ? 'on' : ''}`}
+              className={`qm-c3-rev2-tab qm-tap-44 ${active === t.key ? "on" : ""}`}
               onClick={() => setActive(t.key)}
             >
               {t.icon}
               <span className="qm-c3-rev2-tab-label">{t.label}</span>
               {t.badge && (
-                <span className={`qm-c3-rev2-tab-badge ${t.badge.tone}`}>{t.badge.text}</span>
+                <span className={`qm-c3-rev2-tab-badge ${t.badge.tone}`}>
+                  {t.badge.text}
+                </span>
               )}
             </button>
           ))}
@@ -213,7 +232,11 @@ export function ReviewTabsV2(props: ReviewTabsV2Props) {
         <div className="qm-c3-rev2-signbar-in">
           {props.signed ? (
             <div className="qm-c3-rev2-sign-status">
-              <Lock className="h-3.5 w-3.5 flex-none" aria-hidden style={{ color: 'var(--color-linear-sage-bright)' }} />
+              <Lock
+                className="h-3.5 w-3.5 flex-none"
+                aria-hidden
+                style={{ color: "var(--color-linear-sage-bright)" }}
+              />
               <span className="qm-c3-rev2-sign-msg">{readyText}</span>
             </div>
           ) : rxBlocking ? (
@@ -225,7 +248,10 @@ export function ReviewTabsV2(props: ReviewTabsV2Props) {
             >
               <span className="qm-c3-rev2-dot warn" aria-hidden />
               <span className="qm-c3-rev2-sign-msg">
-                {readyText} <span className="qm-c3-rev2-go" aria-hidden>→</span>
+                {readyText}{" "}
+                <span className="qm-c3-rev2-go" aria-hidden>
+                  →
+                </span>
               </span>
             </button>
           ) : (
@@ -241,7 +267,10 @@ export function ReviewTabsV2(props: ReviewTabsV2Props) {
                 visitId={props.visitId}
                 doctorEmail={props.doctorEmail}
                 emailEnabled={props.emailEnabled}
-                originalTemplateDocxAvailable={props.originalTemplateDocxAvailable}
+                originalTemplateDocxAvailable={
+                  props.originalTemplateDocxAvailable
+                }
+                originalTemplateOnly={props.originalTemplateOnly}
                 signOnSubmit={false}
                 triggerLabel="Export again"
                 triggerIcon={<Send className="h-3.5 w-3.5" aria-hidden />}
@@ -253,7 +282,10 @@ export function ReviewTabsV2(props: ReviewTabsV2Props) {
                   visitId={props.visitId}
                   doctorEmail={props.doctorEmail}
                   emailEnabled={props.emailEnabled}
-                  originalTemplateDocxAvailable={props.originalTemplateDocxAvailable}
+                  originalTemplateDocxAvailable={
+                    props.originalTemplateDocxAvailable
+                  }
+                  originalTemplateOnly={props.originalTemplateOnly}
                   signOnSubmit
                   triggerLabel="Sign & Send"
                   triggerIcon={<Lock className="h-3.5 w-3.5" aria-hidden />}

@@ -16,6 +16,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import * as Dialog from "@radix-ui/react-dialog";
 import { toast } from "sonner";
 
 import { parseNoteTemplateAction } from "@/actions/parse-note-template";
@@ -41,6 +42,7 @@ import type {
   ClientTemplateListItem,
 } from "@/lib/note-template-persist/types";
 import { TemplateReviewEditor } from "./template-review-editor";
+import { TemplateTwinSyntheticQaBanner } from "@/components/template-twin-synthetic-qa-banner";
 
 const mono = "var(--font-mono)";
 const sans = "var(--font-sans)";
@@ -98,6 +100,15 @@ type View =
   | "rejected";
 
 const TEMPLATE_TWIN_MAX_BYTES = 10 * 1024 * 1024;
+const TEMPLATE_TWIN_STAGING_QA_FIXTURE_VERSION =
+  "template-twin-staging-safe-docx/1.0.0";
+const TEMPLATE_TWIN_STAGING_QA_TEMPLATE_NAME =
+  "Template Twin Synthetic QA Fixture";
+const TEMPLATE_TWIN_STAGING_QA_ENCOUNTER_SCOPE =
+  "Synthetic follow-up encounter";
+const TEMPLATE_TWIN_STAGING_QA_VERSION_DESCRIPTION =
+  "Reviewed synthetic staging fixture v1";
+type TwinUploadMode = "generic" | "synthetic_staging";
 
 /** Which uploadable formats this image can actually extract. Computed server-
  *  side (see SettingsPage.getUploadCaps) so the UI never advertises a format
@@ -110,9 +121,11 @@ export interface UploadCaps {
 export function NoteFormatManager({
   templates,
   uploadCaps,
+  templateTwinSyntheticQaState,
 }: {
   templates: ClientTemplateListItem[];
   uploadCaps: UploadCaps;
+  templateTwinSyntheticQaState: "enabled" | "unavailable" | "hidden";
 }) {
   const router = useRouter();
   const hasTemplates = templates.length > 0;
@@ -126,7 +139,10 @@ export function NoteFormatManager({
   const [pending, startTransition] = useTransition();
   const fileRef = useRef<HTMLInputElement>(null);
   const twinFileRef = useRef<HTMLInputElement>(null);
+  const twinUploadReturnFocusRef = useRef<HTMLElement | null>(null);
   const [twinUploadOpen, setTwinUploadOpen] = useState(false);
+  const [twinUploadMode, setTwinUploadMode] =
+    useState<TwinUploadMode>("generic");
   const [twinFile, setTwinFile] = useState<File | null>(null);
   const [twinName, setTwinName] = useState("");
   const [twinScope, setTwinScope] = useState("");
@@ -249,11 +265,28 @@ export function NoteFormatManager({
     });
   }
 
-  function openTwinUpload() {
+  function openTwinUpload(mode: TwinUploadMode) {
+    twinUploadReturnFocusRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     setTwinFile(null);
-    setTwinName("");
-    setTwinScope("");
-    setTwinVersionDescription("");
+    setTwinName(
+      mode === "synthetic_staging"
+        ? TEMPLATE_TWIN_STAGING_QA_TEMPLATE_NAME
+        : "",
+    );
+    setTwinScope(
+      mode === "synthetic_staging"
+        ? TEMPLATE_TWIN_STAGING_QA_ENCOUNTER_SCOPE
+        : "",
+    );
+    setTwinVersionDescription(
+      mode === "synthetic_staging"
+        ? TEMPLATE_TWIN_STAGING_QA_VERSION_DESCRIPTION
+        : "",
+    );
+    setTwinUploadMode(mode);
     setTwinUploadOpen(true);
   }
 
@@ -296,14 +329,25 @@ export function NoteFormatManager({
     formData.append("templateName", name);
     formData.append("encounterScope", encounterScope);
     formData.append("versionDescription", versionDescription);
+    if (twinUploadMode === "synthetic_staging") {
+      formData.append(
+        "fixtureVersion",
+        TEMPLATE_TWIN_STAGING_QA_FIXTURE_VERSION,
+      );
+    }
 
     try {
-      const response = await fetch("/api/note-templates/template-twin/upload", {
-        method: "POST",
-        body: formData,
-        credentials: "same-origin",
-        headers: { Accept: "application/json" },
-      });
+      const response = await fetch(
+        twinUploadMode === "synthetic_staging"
+          ? "/api/note-templates/template-twin/staging-qa/upload"
+          : "/api/note-templates/template-twin/upload",
+        {
+          method: "POST",
+          body: formData,
+          credentials: "same-origin",
+          headers: { Accept: "application/json" },
+        },
+      );
       const payload = (await response.json().catch(() => null)) as
         | { ok: true; certificationUrl: string }
         | { ok: false; error: string }
@@ -585,14 +629,21 @@ export function NoteFormatManager({
           fileRef={fileRef}
           uploadCaps={uploadCaps}
           onTwinUploadClick={openTwinUpload}
+          templateTwinSyntheticQaState={templateTwinSyntheticQaState}
         />
         <TwinUploadDialog
-          open={twinUploadOpen}
+          open={
+            twinUploadOpen &&
+            (twinUploadMode === "generic" ||
+              templateTwinSyntheticQaState === "enabled")
+          }
+          mode={twinUploadMode}
           file={twinFile}
           name={twinName}
           scope={twinScope}
           versionDescription={twinVersionDescription}
           fileRef={twinFileRef}
+          returnFocusRef={twinUploadReturnFocusRef}
           onFileSelected={onTwinFileSelected}
           onNameChange={setTwinName}
           onScopeChange={setTwinScope}
@@ -607,6 +658,27 @@ export function NoteFormatManager({
   // view === 'home'
   return (
     <div>
+      {templateTwinSyntheticQaState === "enabled" && (
+        <div style={{ marginBottom: 14 }}>
+          <TemplateTwinSyntheticQaBanner />
+        </div>
+      )}
+      {templateTwinSyntheticQaState === "unavailable" && (
+        <p
+          role="status"
+          style={{
+            margin: "0 0 14px",
+            padding: "10px 12px",
+            border: "1px solid var(--color-linear-border)",
+            borderRadius: 8,
+            color: "var(--color-linear-text-3)",
+            fontSize: 12,
+          }}
+        >
+          Template Twin synthetic QA is unavailable in this practice or
+          environment. No patient workflow was enabled.
+        </p>
+      )}
       <div
         style={{
           display: "flex",
@@ -639,11 +711,21 @@ export function NoteFormatManager({
           <button
             type="button"
             style={btn}
-            onClick={openTwinUpload}
+            onClick={() => openTwinUpload("generic")}
             disabled={pending}
           >
             Preserve Word template
           </button>
+          {templateTwinSyntheticQaState === "enabled" && (
+            <button
+              type="button"
+              style={btn}
+              onClick={() => openTwinUpload("synthetic_staging")}
+              disabled={pending}
+            >
+              Template Twin — Synthetic QA
+            </button>
+          )}
           <button
             type="button"
             style={btnPrimary}
@@ -736,12 +818,18 @@ export function NoteFormatManager({
         QuillMD writes in the standard SOAP format.
       </p>
       <TwinUploadDialog
-        open={twinUploadOpen}
+        open={
+          twinUploadOpen &&
+          (twinUploadMode === "generic" ||
+            templateTwinSyntheticQaState === "enabled")
+        }
+        mode={twinUploadMode}
         file={twinFile}
         name={twinName}
         scope={twinScope}
         versionDescription={twinVersionDescription}
         fileRef={twinFileRef}
+        returnFocusRef={twinUploadReturnFocusRef}
         onFileSelected={onTwinFileSelected}
         onNameChange={setTwinName}
         onScopeChange={setTwinScope}
@@ -772,11 +860,13 @@ export function NoteFormatManager({
 
 function TwinUploadDialog({
   open,
+  mode,
   file,
   name,
   scope,
   versionDescription,
   fileRef,
+  returnFocusRef,
   onFileSelected,
   onNameChange,
   onScopeChange,
@@ -785,11 +875,13 @@ function TwinUploadDialog({
   onSubmit,
 }: {
   open: boolean;
+  mode: TwinUploadMode;
   file: File | null;
   name: string;
   scope: string;
   versionDescription: string;
   fileRef: React.RefObject<HTMLInputElement | null>;
+  returnFocusRef: React.RefObject<HTMLElement | null>;
   onFileSelected: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onNameChange: (value: string) => void;
   onScopeChange: (value: string) => void;
@@ -797,7 +889,6 @@ function TwinUploadDialog({
   onCancel: () => void;
   onSubmit: () => Promise<void>;
 }) {
-  if (!open) return null;
   const inputStyle: React.CSSProperties = {
     width: "100%",
     marginTop: 6,
@@ -810,206 +901,232 @@ function TwinUploadDialog({
   };
 
   return (
-    <div
-      role="presentation"
-      onKeyDown={(event) => {
-        if (event.key === "Escape") onCancel();
-      }}
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 80,
-        display: "grid",
-        placeItems: "center",
-        padding: 20,
-        background: "rgba(5, 9, 7, 0.68)",
+    <Dialog.Root
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) onCancel();
       }}
     >
-      <section
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="template-twin-upload-title"
-        aria-describedby="template-twin-upload-description"
-        style={{
-          width: "min(560px, 100%)",
-          maxHeight: "min(760px, calc(100vh - 40px))",
-          overflowY: "auto",
-          borderRadius: 12,
-          border: "1px solid var(--color-linear-border)",
-          background: "var(--color-linear-surface-2)",
-          boxShadow: "0 24px 70px rgba(0,0,0,0.38)",
-          padding: 22,
-        }}
-      >
-        <div style={{ ...subLabel, color: "var(--color-linear-sage-bright)" }}>
-          Original Template DOCX
-        </div>
-        <h2
-          id="template-twin-upload-title"
+      <Dialog.Portal>
+        <Dialog.Overlay
+          data-testid="template-twin-upload-overlay"
           style={{
-            margin: "6px 0 0",
-            fontSize: 18,
-            fontWeight: 600,
-            color: "var(--color-linear-text)",
+            position: "fixed",
+            inset: 0,
+            zIndex: 80,
+            background: "rgba(5, 9, 7, 0.68)",
+          }}
+        />
+        <Dialog.Content
+          onInteractOutside={(event) => event.preventDefault()}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            returnFocusRef.current?.focus();
+          }}
+          style={{
+            position: "fixed",
+            left: "50%",
+            top: "50%",
+            zIndex: 81,
+            transform: "translate(-50%, -50%)",
+            width: "min(560px, 100%)",
+            maxHeight: "min(760px, calc(100vh - 40px))",
+            overflowY: "auto",
+            overscrollBehavior: "contain",
+            borderRadius: 12,
+            border: "1px solid var(--color-linear-border)",
+            background: "var(--color-linear-surface-2)",
+            boxShadow: "0 24px 70px rgba(0,0,0,0.38)",
+            padding: 22,
+            outline: "none",
           }}
         >
-          Add a Word template for certification
-        </h2>
-        <p
-          id="template-twin-upload-description"
-          style={{
-            margin: "7px 0 18px",
-            fontSize: 12.5,
-            lineHeight: 1.55,
-            color: "var(--color-linear-text-2)",
-          }}
-        >
-          Name the template and say which visits use it. QuillMD will inspect
-          the original structure, then show every supported and blocked item
-          before anything can be activated.
-        </p>
+          {mode === "synthetic_staging" && <TemplateTwinSyntheticQaBanner />}
+          <div
+            style={{ ...subLabel, color: "var(--color-linear-sage-bright)" }}
+          >
+            Original Template DOCX
+          </div>
+          <Dialog.Title asChild>
+            <h2
+              style={{
+                margin: "6px 0 0",
+                fontSize: 18,
+                fontWeight: 600,
+                color: "var(--color-linear-text)",
+              }}
+            >
+              {mode === "synthetic_staging"
+                ? "Add the synthetic Word fixture for certification"
+                : "Add a Word template for certification"}
+            </h2>
+          </Dialog.Title>
+          <Dialog.Description asChild>
+            <p
+              style={{
+                margin: "7px 0 18px",
+                fontSize: 12.5,
+                lineHeight: 1.55,
+                color: "var(--color-linear-text-2)",
+              }}
+            >
+              {mode === "synthetic_staging"
+                ? "Use only the downloaded QuillMD synthetic fixture. Its bytes and fixture version are verified before storage, then every supported and blocked item is shown before activation."
+                : "Name the template and say which visits use it. QuillMD will inspect the original structure, then show every supported and blocked item before anything can be activated."}
+            </p>
+          </Dialog.Description>
 
-        <div style={{ display: "grid", gap: 14 }}>
-          <div>
-            <label htmlFor="twin-template-name" style={subLabel}>
-              Template name
-            </label>
-            <input
-              id="twin-template-name"
-              autoFocus
-              required
-              maxLength={120}
-              value={name}
-              onChange={(event) => onNameChange(event.target.value)}
-              placeholder="e.g. Sports medicine initial visit"
-              style={inputStyle}
-            />
-          </div>
-          <div>
-            <label htmlFor="twin-template-scope" style={subLabel}>
-              Visit or specialty scope
-            </label>
-            <input
-              id="twin-template-scope"
-              required
-              maxLength={120}
-              value={scope}
-              onChange={(event) => onScopeChange(event.target.value)}
-              placeholder="e.g. New musculoskeletal consultation"
-              style={inputStyle}
-            />
-            <div
-              style={{
-                marginTop: 5,
-                fontSize: 11.5,
-                color: "var(--color-linear-text-3)",
-              }}
-            >
-              This prevents a specialized template from becoming a catch-all
-              format.
+          <div style={{ display: "grid", gap: 14 }}>
+            <div>
+              <label htmlFor="twin-template-name" style={subLabel}>
+                Template name
+              </label>
+              <input
+                id="twin-template-name"
+                required
+                autoComplete="off"
+                maxLength={120}
+                value={name}
+                readOnly={mode === "synthetic_staging"}
+                onChange={(event) => onNameChange(event.target.value)}
+                placeholder="e.g. Sports medicine initial visit"
+                style={inputStyle}
+              />
             </div>
-          </div>
-          <div>
-            <label htmlFor="twin-version-description" style={subLabel}>
-              What is this version?
-            </label>
-            <textarea
-              id="twin-version-description"
-              required
-              maxLength={500}
-              rows={3}
-              value={versionDescription}
-              onChange={(event) =>
-                onVersionDescriptionChange(event.target.value)
-              }
-              placeholder="e.g. Initial version supplied by the practice"
-              style={{ ...inputStyle, resize: "vertical", lineHeight: 1.45 }}
-            />
-          </div>
-          <div>
-            <div style={subLabel}>Original DOCX</div>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                marginTop: 6,
-                flexWrap: "wrap",
-              }}
-            >
-              <button
-                type="button"
-                style={btn}
-                onClick={() => fileRef.current?.click()}
-              >
-                {file ? "Choose a different file" : "Choose DOCX"}
-              </button>
-              <span
+            <div>
+              <label htmlFor="twin-template-scope" style={subLabel}>
+                Visit or specialty scope
+              </label>
+              <input
+                id="twin-template-scope"
+                required
+                autoComplete="off"
+                maxLength={120}
+                value={scope}
+                readOnly={mode === "synthetic_staging"}
+                onChange={(event) => onScopeChange(event.target.value)}
+                placeholder="e.g. New musculoskeletal consultation"
+                style={inputStyle}
+              />
+              <div
                 style={{
-                  fontSize: 12,
-                  color: file
-                    ? "var(--color-linear-text)"
-                    : "var(--color-linear-text-3)",
+                  marginTop: 5,
+                  fontSize: 11.5,
+                  color: "var(--color-linear-text-3)",
                 }}
               >
-                {file?.name ?? "No file selected"}
-              </span>
+                This prevents a specialized template from becoming a catch-all
+                format.
+              </div>
             </div>
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-              onChange={onFileSelected}
-              style={{ display: "none" }}
-              tabIndex={-1}
-            />
+            <div>
+              <label htmlFor="twin-version-description" style={subLabel}>
+                What is this version?
+              </label>
+              <textarea
+                id="twin-version-description"
+                required
+                maxLength={500}
+                rows={3}
+                value={versionDescription}
+                readOnly={mode === "synthetic_staging"}
+                onChange={(event) =>
+                  onVersionDescriptionChange(event.target.value)
+                }
+                placeholder="e.g. Initial version supplied by the practice"
+                style={{ ...inputStyle, resize: "vertical", lineHeight: 1.45 }}
+              />
+            </div>
+            <div>
+              <div style={subLabel}>Original DOCX</div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  marginTop: 6,
+                  flexWrap: "wrap",
+                }}
+              >
+                <button
+                  type="button"
+                  style={btn}
+                  onClick={() => fileRef.current?.click()}
+                >
+                  {file ? "Choose a different file" : "Choose DOCX"}
+                </button>
+                <span
+                  style={{
+                    fontSize: 12,
+                    color: file
+                      ? "var(--color-linear-text)"
+                      : "var(--color-linear-text-3)",
+                  }}
+                >
+                  {file?.name ?? "No file selected"}
+                </span>
+              </div>
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                onChange={onFileSelected}
+                style={{ display: "none" }}
+                tabIndex={-1}
+              />
+            </div>
           </div>
-        </div>
 
-        <details
-          style={{
-            marginTop: 16,
-            fontSize: 11.5,
-            color: "var(--color-linear-text-3)",
-          }}
-        >
-          <summary style={{ cursor: "pointer" }}>
-            Advanced artifact details
-          </summary>
-          <p style={{ margin: "7px 0 0", lineHeight: 1.5 }}>
-            The uploaded source is stored as an immutable, tenant-scoped
-            artifact. A changed template always creates a new version; the
-            activated source is never overwritten.
-          </p>
-        </details>
-
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "flex-end",
-            gap: 8,
-            marginTop: 20,
-          }}
-        >
-          <button type="button" style={btn} onClick={onCancel}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            style={btnPrimary}
-            onClick={() => void onSubmit()}
-            disabled={
-              !file ||
-              !name.trim() ||
-              !scope.trim() ||
-              !versionDescription.trim()
-            }
+          <details
+            style={{
+              marginTop: 16,
+              fontSize: 11.5,
+              color: "var(--color-linear-text-3)",
+            }}
           >
-            Inspect and compile
-          </button>
-        </div>
-      </section>
-    </div>
+            <summary style={{ cursor: "pointer" }}>
+              Advanced artifact details
+            </summary>
+            <p style={{ margin: "7px 0 0", lineHeight: 1.5 }}>
+              The uploaded source is stored as an immutable, tenant-scoped
+              artifact. A changed template always creates a new version; the
+              activated source is never overwritten.
+              {mode === "synthetic_staging"
+                ? ` Fixture contract: ${TEMPLATE_TWIN_STAGING_QA_FIXTURE_VERSION}.`
+                : ""}
+            </p>
+          </details>
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              gap: 8,
+              marginTop: 20,
+            }}
+          >
+            <Dialog.Close asChild>
+              <button type="button" style={btn}>
+                Cancel
+              </button>
+            </Dialog.Close>
+            <button
+              type="button"
+              style={btnPrimary}
+              onClick={() => void onSubmit()}
+              disabled={
+                !file ||
+                !name.trim() ||
+                !scope.trim() ||
+                !versionDescription.trim()
+              }
+            >
+              Inspect and compile
+            </button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 
@@ -1641,6 +1758,7 @@ function EntryState({
   fileRef,
   uploadCaps,
   onTwinUploadClick,
+  templateTwinSyntheticQaState,
 }: {
   pasteText: string;
   setPasteText: (v: string) => void;
@@ -1652,7 +1770,8 @@ function EntryState({
   pending: boolean;
   fileRef: React.RefObject<HTMLInputElement | null>;
   uploadCaps: UploadCaps;
-  onTwinUploadClick: () => void;
+  onTwinUploadClick: (mode: TwinUploadMode) => void;
+  templateTwinSyntheticQaState: "enabled" | "unavailable" | "hidden";
 }) {
   // Only offer a format whose extractor actually loads in this image (incident
   // 2026-06-04). .txt/.md always available; .pdf/.docx gated on uploadCaps so we
@@ -1770,7 +1889,8 @@ function EntryState({
         </button>
       </div>
 
-      <div
+      <section
+        aria-labelledby="template-twin-docx-entry"
         style={{
           display: "flex",
           alignItems: "center",
@@ -1786,6 +1906,7 @@ function EntryState({
       >
         <div style={{ flex: 1, minWidth: 240 }}>
           <div
+            id="template-twin-docx-entry"
             style={{ ...subLabel, color: "var(--color-linear-sage-bright)" }}
           >
             Template Twin · DOCX
@@ -1815,12 +1936,107 @@ function EntryState({
         <button
           type="button"
           style={btn}
-          onClick={onTwinUploadClick}
+          onClick={() => onTwinUploadClick("generic")}
           disabled={pending}
         >
           Upload original DOCX
         </button>
-      </div>
+      </section>
+
+      {templateTwinSyntheticQaState === "enabled" && (
+        <section
+          aria-labelledby="template-twin-synthetic-qa-entry"
+          style={{
+            marginTop: 14,
+            padding: 16,
+            border: "1px solid var(--color-linear-border)",
+            borderRadius: 10,
+            background: "var(--color-linear-surface-2)",
+          }}
+        >
+          <TemplateTwinSyntheticQaBanner />
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 18,
+              marginTop: 14,
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ flex: 1, minWidth: 240 }}>
+              <div
+                id="template-twin-synthetic-qa-entry"
+                style={{
+                  ...subLabel,
+                  color: "var(--color-linear-sage-bright)",
+                }}
+              >
+                Template Twin — Synthetic QA
+              </div>
+              <div
+                style={{
+                  fontSize: 13,
+                  color: "var(--color-linear-text)",
+                  fontWeight: 500,
+                  marginTop: 4,
+                }}
+              >
+                Preserve the original Word layout through the real safety
+                pipeline
+              </div>
+              <p
+                style={{
+                  margin: "4px 0 0",
+                  fontSize: 12,
+                  lineHeight: 1.5,
+                  color: "var(--color-linear-text-2)",
+                }}
+              >
+                Upload an allowlisted synthetic DOCX, inspect its fields,
+                confirm clinical meaning, and run a synthetic visit before
+                signing.
+              </p>
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              <a
+                href="/api/note-templates/template-twin/staging-qa/fixture"
+                style={{ ...btn, textDecoration: "none" }}
+                download
+              >
+                Download synthetic fixture
+              </a>
+              <button
+                type="button"
+                style={btnPrimary}
+                onClick={() => onTwinUploadClick("synthetic_staging")}
+                disabled={pending}
+              >
+                Upload synthetic DOCX
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+      {templateTwinSyntheticQaState === "unavailable" && (
+        <div
+          role="status"
+          style={{
+            marginTop: 14,
+            padding: "12px 14px",
+            border: "1px solid var(--color-linear-border)",
+            borderRadius: 8,
+            background: "var(--color-linear-surface-2)",
+            color: "var(--color-linear-text-3)",
+            fontSize: 12,
+            lineHeight: 1.5,
+          }}
+        >
+          Template Twin synthetic QA is unavailable in this practice or
+          environment. No template or patient workflow was enabled.
+        </div>
+      )}
 
       <div style={{ marginTop: 16 }}>
         <label style={{ ...subLabel }} htmlFor="nf-paste">

@@ -6,21 +6,25 @@
 // (absent → step 1, present → step 2).
 // ============================================================================
 
-import type { Metadata } from 'next';
-import { redirect } from 'next/navigation';
+import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
-import prisma from '@meddoc/db';
-import { auth } from '@/lib/nextauth';
-import { isSkinBeta } from '@/config/skin-beta';
-import { AppFrame } from '@/components/ui/app-frame';
-import { Ic } from '@/components/ui/icon';
-import { PageHeader } from '@/components/ui/page-header';
-import { visibleSpecialties, findSpecialty } from '@meddoc/shared/specialties';
-import { NewVisitClient } from './new-visit-client';
-import { NewVisitClientC3 } from './new-visit-client-c3';
-import type { SelectedPatient } from './patient-types';
+import prisma from "@meddoc/db";
+import {
+  isTemplateTwinSyntheticQaPatient,
+  ordinaryClinicalVisitWhere,
+} from "@/lib/template-twin/synthetic-qa-patient";
+import { auth } from "@/lib/nextauth";
+import { isSkinBeta } from "@/config/skin-beta";
+import { AppFrame } from "@/components/ui/app-frame";
+import { Ic } from "@/components/ui/icon";
+import { PageHeader } from "@/components/ui/page-header";
+import { visibleSpecialties, findSpecialty } from "@meddoc/shared/specialties";
+import { NewVisitClient } from "./new-visit-client";
+import { NewVisitClientC3 } from "./new-visit-client-c3";
+import type { SelectedPatient } from "./patient-types";
 
-export const metadata: Metadata = { title: 'New visit' };
+export const metadata: Metadata = { title: "New visit" };
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -30,7 +34,7 @@ export default async function NewVisitPage({
   searchParams: Promise<SearchParams>;
 }) {
   const session = await auth();
-  if (!session?.user?.id) redirect('/login');
+  if (!session?.user?.id) redirect("/login");
 
   type MinimalUser = {
     name: string | null;
@@ -45,16 +49,16 @@ export default async function NewVisitPage({
       select: { name: true, email: true, practiceId: true },
     }),
     prisma.transcribeVisit.findFirst({
-      where: {
+      where: ordinaryClinicalVisitWhere({
         userId: session.user.id,
         deletedAt: null,
         archivedAt: null,
-      },
-      orderBy: { createdAt: 'desc' },
+      }),
+      orderBy: { createdAt: "desc" },
       select: { specialty: true },
     }),
   ])) as [MinimalUser | null, MinimalVisit];
-  if (!user) redirect('/login');
+  if (!user) redirect("/login");
 
   const params = await searchParams;
   const patientIdParam = Array.isArray(params.patientId)
@@ -71,23 +75,25 @@ export default async function NewVisitPage({
       externalId: string | null;
       deletedAt: Date | null;
     };
-    const patient: PatientRow | null = await prisma.transcribeMdPatient.findUnique({
-      where: { id: patientIdParam },
-      select: {
-        id: true,
-        practiceId: true,
-        name: true,
-        dateOfBirth: true,
-        externalId: true,
-        deletedAt: true,
-      },
-    });
+    const patient: PatientRow | null =
+      await prisma.transcribeMdPatient.findUnique({
+        where: { id: patientIdParam },
+        select: {
+          id: true,
+          practiceId: true,
+          name: true,
+          dateOfBirth: true,
+          externalId: true,
+          deletedAt: true,
+        },
+      });
     if (
       !patient ||
       patient.practiceId !== user.practiceId ||
-      patient.deletedAt !== null
+      patient.deletedAt !== null ||
+      isTemplateTwinSyntheticQaPatient(patient)
     ) {
-      redirect('/visits/new');
+      redirect("/visits/new");
     }
     initialPatient = {
       id: patient.id,
@@ -119,7 +125,11 @@ export default async function NewVisitPage({
       <AppFrame>
         <div className="qm-c3-nv-top">
           <span className="qm-c3-nv-eyebrow">New visit</span>
-          <a href="/dashboard" className="qm-lin-btn" style={{ textDecoration: 'none' }}>
+          <a
+            href="/dashboard"
+            className="qm-lin-btn"
+            style={{ textDecoration: "none" }}
+          >
             <Ic.close width={13} height={13} />
             Cancel
           </a>
@@ -140,14 +150,14 @@ export default async function NewVisitPage({
         title="Start a new visit"
         subtitle={
           initialPatient
-            ? 'Pick a capture mode below and we\u2019ll take it from there.'
-            : 'Pick the patient, then choose how you want to capture the encounter.'
+            ? "Pick a capture mode below and we\u2019ll take it from there."
+            : "Pick the patient, then choose how you want to capture the encounter."
         }
         actions={
           <a
             href="/dashboard"
             className="qm-lin-btn"
-            style={{ textDecoration: 'none' }}
+            style={{ textDecoration: "none" }}
           >
             <Ic.close width={13} height={13} />
             Cancel
@@ -155,7 +165,7 @@ export default async function NewVisitPage({
         }
       />
 
-      <div style={{ padding: '24px 24px 48px', maxWidth: 1280 }}>
+      <div style={{ padding: "24px 24px 48px", maxWidth: 1280 }}>
         <NewVisitClient
           initialPatient={initialPatient}
           specialties={pickerSpecialties}

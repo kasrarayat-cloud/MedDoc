@@ -79,6 +79,7 @@ interface StatusResponse {
 
 interface ProcessingTypewriterProps {
   visitId: string;
+  syntheticQaAttempt?: number | null;
   initialStatus: TranscribeVisitStatus;
   initialIcdCount?: number;
   initialCptCount?: number;
@@ -160,6 +161,7 @@ function renderInlineMd(text: string): React.ReactNode[] {
 
 export function ProcessingTypewriter({
   visitId,
+  syntheticQaAttempt = null,
   initialStatus,
   initialIcdCount = 0,
   initialCptCount = 0,
@@ -471,7 +473,10 @@ export function ProcessingTypewriter({
                 : `This visit appears stuck · elapsed ${elapsedFmt}`}
               {stuckLevel === 'stuck' && (
                 <div style={{ marginTop: 12 }}>
-                  <RetryButton visitId={visitId} />
+                  <RetryButton
+                    visitId={visitId}
+                    syntheticQaAttempt={syntheticQaAttempt}
+                  />
                 </div>
               )}
             </div>
@@ -642,7 +647,10 @@ export function ProcessingTypewriter({
             <span className="qm-tw-stuck-meta">
               elapsed {elapsedFmt}
               {stuckLevel === 'stuck' && (
-                <RetryButton visitId={visitId} />
+                <RetryButton
+                  visitId={visitId}
+                  syntheticQaAttempt={syntheticQaAttempt}
+                />
               )}
             </span>
           </div>
@@ -996,7 +1004,13 @@ export function ProcessingTypewriter({
 }
 
 // ── stuck-state retry button ─────────────────────────────────────
-function RetryButton({ visitId }: { visitId: string }) {
+function RetryButton({
+  visitId,
+  syntheticQaAttempt,
+}: {
+  visitId: string;
+  syntheticQaAttempt: number | null;
+}) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const onClick = useCallback(async () => {
@@ -1006,6 +1020,12 @@ function RetryButton({ visitId }: { visitId: string }) {
       const res = await fetch(`/api/visits/${visitId}/retry`, {
         method: 'POST',
         credentials: 'same-origin',
+        ...(syntheticQaAttempt === null
+          ? {}
+          : {
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ expectedAttempt: syntheticQaAttempt }),
+            }),
       });
       if (res.status === 409) {
         toast.info('Already processing — give it another minute.');
@@ -1023,7 +1043,7 @@ function RetryButton({ visitId }: { visitId: string }) {
     } finally {
       setSubmitting(false);
     }
-  }, [router, submitting, visitId]);
+  }, [router, submitting, syntheticQaAttempt, visitId]);
 
   return (
     <button

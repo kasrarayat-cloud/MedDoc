@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 // ============================================================================
 // VisitReadyView — visit-detail body for READY/SIGNED states.
@@ -12,8 +12,8 @@
 // is preserved as a no-op for caller back-compat.
 // ============================================================================
 
-import { useCallback, useMemo, useState } from 'react';
-import type { EmScore } from '@/lib/em-coding-ui/types';
+import { useCallback, useMemo, useState } from "react";
+import type { EmScore } from "@/lib/em-coding-ui/types";
 import {
   FileText as FileTextIcon,
   MessageSquare as MessageSquareIcon,
@@ -24,44 +24,44 @@ import {
   ChevronDown,
   Lock,
   FileCheck2,
-} from 'lucide-react';
+} from "lucide-react";
 
-import { cn } from '@/lib/cn';
-import { isSkinBeta } from '@/config/skin-beta';
-import { criticalWarningRefs } from '@/lib/rx-warnings';
-import { placeholderSections } from '@/lib/parse-note-sections';
-import { ReviewTabsV2, type V2Tab } from './review-tabs-v2';
-import { BillingCardC3 } from './billing-card-c3';
-import { SoapEditor } from './soap-editor';
-import { SuggestionsLane, type SuggestedClaimView } from './suggestions-lane';
-import { CodesTab, codesTabHasWarnings } from './codes-tab';
-import { RxTab, rxTabWarningLevel } from './rx-tab';
-import { ExtrasTab, extrasTabHasFlag } from './extras-tab';
-import { CopySectionButton } from './copy-section-button';
-import { TranscriptTab, utterancesToSources } from './transcript-tab';
-import { projectEmForDisplay } from '@/lib/visit-export';
-import type { VisitExportData } from '@/lib/visit-export';
+import { cn } from "@/lib/cn";
+import { isSkinBeta } from "@/config/skin-beta";
+import { criticalWarningRefs } from "@/lib/rx-warnings";
+import { placeholderSections } from "@/lib/parse-note-sections";
+import { ReviewTabsV2, type V2Tab } from "./review-tabs-v2";
+import { BillingCardC3 } from "./billing-card-c3";
+import { SoapEditor } from "./soap-editor";
+import { SuggestionsLane, type SuggestedClaimView } from "./suggestions-lane";
+import { CodesTab, codesTabHasWarnings } from "./codes-tab";
+import { RxTab, rxTabWarningLevel } from "./rx-tab";
+import { ExtrasTab, extrasTabHasFlag } from "./extras-tab";
+import { CopySectionButton } from "./copy-section-button";
+import { TranscriptTab, utterancesToSources } from "./transcript-tab";
+import { projectEmForDisplay } from "@/lib/visit-export";
+import type { VisitExportData } from "@/lib/visit-export";
 import {
   sectionSoap,
   sectionCodes,
   sectionRx,
   sectionExtras,
-} from '@/lib/ehr-formatters';
-import { formatLocalDateTime } from '@/lib/format-time';
-import { TemplateTwinReview } from '@/components/visit/template-twin-review';
-import type { TemplateTwinReviewData } from '@/components/visit/template-twin-review-data';
+} from "@/lib/ehr-formatters";
+import { formatLocalDateTime } from "@/lib/format-time";
+import { TemplateTwinReview } from "@/components/visit/template-twin-review";
+import type { TemplateTwinReviewData } from "@/components/visit/template-twin-review-data";
 
-type VisitReadyViewTheme = 'legacy' | 'clinician';
+type VisitReadyViewTheme = "legacy" | "clinician";
 
 // T-M6: six tabs — SOAP, Transcript/Input, Codes, Rx, Extras, Pipeline.
 type TabKey =
-  | 'soap'
-  | 'template'
-  | 'transcript'
-  | 'codes'
-  | 'rx'
-  | 'extras'
-  | 'pipeline';
+  | "soap"
+  | "template"
+  | "transcript"
+  | "codes"
+  | "rx"
+  | "extras"
+  | "pipeline";
 
 export interface Utterance {
   speaker?: number;
@@ -112,7 +112,12 @@ export interface VisitReadyViewProps {
   rawTextInput: string | null;
   entities: unknown;
   critique: {
-    issues: { severity: string; location: string; description: string; suggested_fix: string }[];
+    issues: {
+      severity: string;
+      location: string;
+      description: string;
+      suggested_fix: string;
+    }[];
     overall_quality: string;
     safe_to_sign_without_review: boolean;
   } | null;
@@ -154,6 +159,9 @@ export interface VisitReadyViewProps {
   /** Template Twin — minimal, visit-scoped review DTO. Present only when the
    *  encounter was resolved against a structure-preserving DOCX version. */
   templateTwinReview?: TemplateTwinReviewData | null;
+  /** Persisted staging-run identity supplied by the authenticated server
+   *  route. Synthetic visits expose only the bounded QA mutation/delivery UI. */
+  syntheticQaMode?: boolean;
 
   /** Phase 5.2 — server-rendered initial E&M score for the Coding Coach
    *  rail. Null when the engine fail-soft'd (rail renders skeleton). */
@@ -192,20 +200,21 @@ export interface VisitReadyViewProps {
  *  would re-sync forever). */
 function pendingEmChangeEq(
   a: { from: string; to: string } | null,
-  b: { from: string; to: string } | null
+  b: { from: string; to: string } | null,
 ): boolean {
   if (a === null || b === null) return a === b;
   return a.from === b.from && a.to === b.to;
 }
 
 export function VisitReadyView(props: VisitReadyViewProps) {
-  const [tab, setTab] = useState<TabKey>('soap');
+  const [tab, setTab] = useState<TabKey>("soap");
+  const syntheticQaMode = props.syntheticQaMode === true;
   const originalTemplateDocxAvailable = Boolean(
     props.templateTwinReview &&
-      !props.templateTwinReview.dataIntegrityError &&
-      props.templateTwinReview.roundTripVerified &&
-      (props.templateTwinReview.processingStatus === 'verified' ||
-        props.templateTwinReview.processingStatus === 'signed'),
+    !props.templateTwinReview.dataIntegrityError &&
+    props.templateTwinReview.roundTripVerified &&
+    (props.templateTwinReview.processingStatus === "verified" ||
+      props.templateTwinReview.processingStatus === "signed"),
   );
 
   // Hybrid anchored generation (2026-06-11) — when the doctor adopts a
@@ -226,9 +235,10 @@ export function VisitReadyView(props: VisitReadyViewProps) {
   // object); the adopt action's response updates it immediately so the
   // confirm control appears without waiting for the refresh round-trip.
   const propPendingEm = props.emPendingChange ?? null;
-  const [pendingEmChange, setPendingEmChange] = useState<
-    { from: string; to: string } | null
-  >(propPendingEm);
+  const [pendingEmChange, setPendingEmChange] = useState<{
+    from: string;
+    to: string;
+  } | null>(propPendingEm);
   const [syncedPendingEm, setSyncedPendingEm] = useState(propPendingEm);
   if (!pendingEmChangeEq(syncedPendingEm, propPendingEm)) {
     setSyncedPendingEm(propPendingEm);
@@ -249,7 +259,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
         setPendingEmChange(r.emPendingChange);
       }
     },
-    []
+    [],
   );
 
   // V2 review (skin-only, flag-gated) — live mirror of the server's fail-closed
@@ -262,25 +272,28 @@ export function VisitReadyView(props: VisitReadyViewProps) {
   const initialRxResolved = useMemo(
     () =>
       criticalWarningRefs(props.rxDrafts).every((ref) =>
-        (props.rxOverriddenWarningIds ?? []).includes(ref.id)
+        (props.rxOverriddenWarningIds ?? []).includes(ref.id),
       ),
-    [props.rxDrafts, props.rxOverriddenWarningIds]
+    [props.rxDrafts, props.rxOverriddenWarningIds],
   );
   const [rxResolved, setRxResolved] = useState(initialRxResolved);
 
   // The second tab is labelled "Input" for text_notes, "Transcript" for
   // the other two modes. Everything else renders identically.
   const secondTabLabel =
-    props.inputMode === 'text_notes' ? 'Input' : 'Transcript';
+    props.inputMode === "text_notes" ? "Input" : "Transcript";
 
   // Extract Layer 7e readability metadata for the Extras-tab chip.
   const cs =
     (props.confidenceScores as Record<
       string,
-      { status?: string; metadata?: { flesch_kincaid?: number; flagged?: boolean } }
+      {
+        status?: string;
+        metadata?: { flesch_kincaid?: number; flagged?: boolean };
+      }
     > | null) ?? {};
   const fleschKincaid =
-    typeof cs.patient_summary?.metadata?.flesch_kincaid === 'number'
+    typeof cs.patient_summary?.metadata?.flesch_kincaid === "number"
       ? cs.patient_summary.metadata.flesch_kincaid
       : null;
   const summaryFlagged = Boolean(cs.patient_summary?.metadata?.flagged);
@@ -290,7 +303,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
   const rxWarn = rxTabWarningLevel(props.rxDrafts);
   const extrasWarn = extrasTabHasFlag(
     props.confidenceScores,
-    Boolean(props.patientSummary)
+    Boolean(props.patientSummary),
   );
 
   // Synthesize the minimum VisitExportData shape the section-copy
@@ -315,10 +328,10 @@ export function VisitReadyView(props: VisitReadyViewProps) {
 
   const soapSources = useMemo(
     () =>
-      props.inputMode === 'audio_upload'
+      props.inputMode === "audio_upload"
         ? utterancesToSources(props.utterances, props.speakerMap)
         : [],
-    [props.inputMode, props.utterances, props.speakerMap]
+    [props.inputMode, props.utterances, props.speakerMap],
   );
 
   // Phase 5.1 — Transcript V3 audio source URL + duration label.
@@ -330,7 +343,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
   // case and TranscriptTab handles the fallback gracefully.
   const audioSrc = null;
   const durationLabel =
-    typeof props.durationSec === 'number' && props.durationSec > 0
+    typeof props.durationSec === "number" && props.durationSec > 0
       ? formatDurationLabel(props.durationSec)
       : null;
 
@@ -348,6 +361,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
   if (isSkinBeta()) {
     const isSigned = props.readonly || props.signedAt !== null;
     const showSuggestions =
+      !syntheticQaMode &&
       !props.readonly &&
       !props.signedAt &&
       (props.suggestedClaims?.length ?? 0) > 0;
@@ -356,19 +370,19 @@ export function VisitReadyView(props: VisitReadyViewProps) {
       : 0;
 
     const transcriptInner =
-      props.inputMode === 'audio_upload' ? (
+      props.inputMode === "audio_upload" ? (
         <TranscriptTab
           visitId={props.visitId}
           utterances={props.utterances}
           speakerMap={props.speakerMap}
-          readonly={props.readonly}
+          readonly={props.readonly || syntheticQaMode}
           audioSrc={audioSrc}
           durationLabel={durationLabel}
           specialtyLabel={props.specialtyLabel}
           recordedByName={props.recordedByName ?? null}
           encounterId={props.visitId.slice(0, 8)}
         />
-      ) : props.inputMode === 'voice_dictation' ? (
+      ) : props.inputMode === "voice_dictation" ? (
         <DictationTranscriptView
           visitId={props.visitId}
           transcript={props.dictationTranscript}
@@ -377,13 +391,13 @@ export function VisitReadyView(props: VisitReadyViewProps) {
         <RawTextInputView text={props.rawTextInput} />
       );
 
-    const rxBadge: V2Tab['badge'] =
-      rxWarn === 'critical'
+    const rxBadge: V2Tab["badge"] =
+      rxWarn === "critical"
         ? rxResolved
-          ? { tone: 'ok', text: '✓' }
-          : { tone: 'danger', text: '!' }
-        : rxWarn === 'any'
-          ? { tone: 'warn', text: '!' }
+          ? { tone: "ok", text: "✓" }
+          : { tone: "danger", text: "!" }
+        : rxWarn === "any"
+          ? { tone: "warn", text: "!" }
           : null;
 
     // Tabs — each child is the SAME gate-bearing component the legacy tabs
@@ -391,8 +405,8 @@ export function VisitReadyView(props: VisitReadyViewProps) {
     // pushes so each literal is contextually typed as V2Tab.
     const tabs: V2Tab[] = [];
     tabs.push({
-      key: 'note',
-      label: isSigned ? 'Note · signed' : 'Note',
+      key: "note",
+      label: isSigned ? "Note · signed" : "Note",
       node: (
         <>
           {props.signedAt && (
@@ -401,13 +415,14 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               signedByName={props.signedByName}
             />
           )}
-          <div className={props.signedAt ? 'mt-3' : undefined}>
+          <div className={props.signedAt ? "mt-3" : undefined}>
             <SoapEditor
               key={`soap-editor-${adoption?.seq ?? 0}`}
               visitId={props.visitId}
               doctorEmail={props.doctorEmail}
               emailEnabled={props.emailEnabled}
               originalTemplateDocxAvailable={originalTemplateDocxAvailable}
+              syntheticQaMode={syntheticQaMode}
               initialText={adoption?.text ?? props.soapText}
               initialSoapVersion={adoption?.version ?? props.soapVersion}
               readonly={props.readonly}
@@ -424,8 +439,8 @@ export function VisitReadyView(props: VisitReadyViewProps) {
     if (props.templateTwinReview) {
       const twinAttention = props.templateTwinReview.counts.needsReview;
       tabs.push({
-        key: 'template',
-        label: 'Template',
+        key: "template",
+        label: "Template",
         icon: <FileCheck2 className="h-3.5 w-3.5" aria-hidden />,
         badge:
           twinAttention > 0
@@ -433,11 +448,11 @@ export function VisitReadyView(props: VisitReadyViewProps) {
                 tone:
                   props.templateTwinReview.counts.conflicts > 0 ||
                   props.templateTwinReview.counts.criticalUnresolved > 0
-                    ? 'danger'
-                    : 'warn',
+                    ? "danger"
+                    : "warn",
                 text: String(twinAttention),
               }
-            : { tone: 'ok', text: '✓' },
+            : { tone: "ok", text: "✓" },
         node: (
           <TemplateTwinReview
             data={props.templateTwinReview}
@@ -449,9 +464,9 @@ export function VisitReadyView(props: VisitReadyViewProps) {
     }
     if (showSuggestions) {
       tabs.push({
-        key: 'review',
-        label: 'Review',
-        badge: { tone: 'info', text: String(suggestionCount) },
+        key: "review",
+        label: "Review",
+        badge: { tone: "info", text: String(suggestionCount) },
         node: (
           <SuggestionsLane
             visitId={props.visitId}
@@ -462,38 +477,43 @@ export function VisitReadyView(props: VisitReadyViewProps) {
       });
     }
     tabs.push({
-      key: 'rx',
-      label: 'Rx',
+      key: "rx",
+      label: "Rx",
       badge: rxBadge,
       node: (
         <RxTab
           rx={props.rxDrafts}
           visitId={props.visitId}
-          readonly={props.readonly}
+          readonly={props.readonly || syntheticQaMode}
           initialOverriddenIds={props.rxOverriddenWarningIds}
           onResolvedChange={setRxResolved}
         />
       ),
     });
+    if (!syntheticQaMode) {
+      tabs.push({
+        key: "billing",
+        label: "Billing",
+        badge: props.emNotApplicable
+          ? null
+          : pendingEmChange
+            ? { tone: "warn", text: "!" }
+            : null,
+        node: (
+          <BillingCardC3
+            initialScore={props.initialEmScore ?? null}
+            visitId={props.visitId}
+            readonly={props.readonly}
+            emPendingChange={pendingEmChange}
+            notApplicable={props.emNotApplicable}
+          />
+        ),
+      });
+    }
     tabs.push({
-      key: 'billing',
-      label: 'Billing',
-      badge:
-        props.emNotApplicable ? null : pendingEmChange ? { tone: 'warn', text: '!' } : null,
-      node: (
-        <BillingCardC3
-          initialScore={props.initialEmScore ?? null}
-          visitId={props.visitId}
-          readonly={props.readonly}
-          emPendingChange={pendingEmChange}
-          notApplicable={props.emNotApplicable}
-        />
-      ),
-    });
-    tabs.push({
-      key: 'codes',
-      label: 'Codes',
-      badge: codesWarn ? { tone: 'warn', text: '!' } : null,
+      key: "codes",
+      label: "Codes",
+      badge: codesWarn ? { tone: "warn", text: "!" } : null,
       node: (
         <CodesTab
           icd={props.icdCodes}
@@ -503,9 +523,9 @@ export function VisitReadyView(props: VisitReadyViewProps) {
       ),
     });
     tabs.push({
-      key: 'extras',
-      label: 'Extras',
-      badge: extrasWarn ? { tone: 'warn', text: '!' } : null,
+      key: "extras",
+      label: "Extras",
+      badge: extrasWarn ? { tone: "warn", text: "!" } : null,
       node: (
         <ExtrasTab
           referrals={props.referrals}
@@ -533,8 +553,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
           chronicMedications={[]}
           problems={parseProblemList(props.patientProblemList)}
           visitMeta={{
-            specialty:
-              props.specialtyLabel ?? props.inputMode ?? 'Encounter',
+            specialty: props.specialtyLabel ?? props.inputMode ?? "Encounter",
             durationSec: props.durationSec,
             audioDurationSec: props.durationSec,
             inputMode: props.inputMode,
@@ -554,14 +573,14 @@ export function VisitReadyView(props: VisitReadyViewProps) {
       ),
     });
     tabs.push({
-      key: 'transcript',
+      key: "transcript",
       label: secondTabLabel,
       node: transcriptInner,
     });
     if (props.showPipelineTab) {
       tabs.push({
-        key: 'pipeline',
-        label: 'Pipeline',
+        key: "pipeline",
+        label: "Pipeline",
         node: (
           <PipelineView
             entities={props.entities}
@@ -584,21 +603,21 @@ export function VisitReadyView(props: VisitReadyViewProps) {
             className="mb-4 rounded-lg border px-4 py-3 text-[13px] leading-relaxed"
             style={{
               borderColor:
-                'color-mix(in srgb, var(--color-linear-amber) 35%, transparent)',
+                "color-mix(in srgb, var(--color-linear-amber) 35%, transparent)",
               background:
-                'color-mix(in srgb, var(--color-linear-amber) 8%, transparent)',
-              color: 'var(--color-linear-amber)',
+                "color-mix(in srgb, var(--color-linear-amber) 8%, transparent)",
+              color: "var(--color-linear-amber)",
             }}
           >
             <span className="font-medium">Review before signing — </span>
-            <span style={{ color: 'var(--color-linear-text-2)' }}>
+            <span style={{ color: "var(--color-linear-text-2)" }}>
               {props.reviewReason}
             </span>
           </div>
         )}
         <ReviewTabsV2
           tabs={tabs}
-          rxCritical={rxWarn === 'critical'}
+          rxCritical={rxWarn === "critical"}
           rxResolved={rxResolved}
           pendingEmChange={pendingEmChange}
           rxTabKey="rx"
@@ -606,6 +625,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
           doctorEmail={props.doctorEmail}
           emailEnabled={props.emailEnabled}
           originalTemplateDocxAvailable={originalTemplateDocxAvailable}
+          originalTemplateOnly={syntheticQaMode}
           signed={isSigned}
           placeholderSections={setAsideSections}
           suggestionCount={suggestionCount}
@@ -624,13 +644,15 @@ export function VisitReadyView(props: VisitReadyViewProps) {
           data-testid="review-reason-banner"
           className="mb-4 rounded-lg border px-4 py-3 text-[13px] leading-relaxed"
           style={{
-            borderColor: 'color-mix(in srgb, var(--color-linear-amber) 35%, transparent)',
-            background: 'color-mix(in srgb, var(--color-linear-amber) 8%, transparent)',
-            color: 'var(--color-linear-amber)',
+            borderColor:
+              "color-mix(in srgb, var(--color-linear-amber) 35%, transparent)",
+            background:
+              "color-mix(in srgb, var(--color-linear-amber) 8%, transparent)",
+            color: "var(--color-linear-amber)",
           }}
         >
           <span className="font-medium">Review before signing — </span>
-          <span style={{ color: 'var(--color-linear-text-2)' }}>
+          <span style={{ color: "var(--color-linear-text-2)" }}>
             {props.reviewReason}
           </span>
         </div>
@@ -645,18 +667,18 @@ export function VisitReadyView(props: VisitReadyViewProps) {
           template: props.templateTwinReview
             ? props.templateTwinReview.counts.conflicts > 0 ||
               props.templateTwinReview.counts.criticalUnresolved > 0
-              ? 'critical'
+              ? "critical"
               : props.templateTwinReview.counts.needsReview > 0
-                ? 'any'
+                ? "any"
                 : null
             : null,
-          codes: codesWarn ? 'any' : null,
+          codes: codesWarn ? "any" : null,
           rx: rxWarn,
-          extras: extrasWarn ? 'any' : null,
+          extras: extrasWarn ? "any" : null,
         }}
       />
       <div className="mt-6">
-        {tab === 'soap' && (
+        {tab === "soap" && (
           <div className="space-y-3">
             <div className="flex justify-end">
               <CopySectionButton
@@ -681,6 +703,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               doctorEmail={props.doctorEmail}
               emailEnabled={props.emailEnabled}
               originalTemplateDocxAvailable={originalTemplateDocxAvailable}
+              syntheticQaMode={syntheticQaMode}
               initialText={adoption?.text ?? props.soapText}
               initialSoapVersion={adoption?.version ?? props.soapVersion}
               readonly={props.readonly}
@@ -693,7 +716,8 @@ export function VisitReadyView(props: VisitReadyViewProps) {
                 explicit doctor adoption. Hidden once signed (the note is
                 locked; the lane's actions reject SIGNED anyway) and on
                 readonly views. */}
-            {!props.readonly &&
+            {!syntheticQaMode &&
+              !props.readonly &&
               !props.signedAt &&
               (props.suggestedClaims?.length ?? 0) > 0 && (
                 <SuggestionsLane
@@ -704,27 +728,27 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               )}
           </div>
         )}
-        {tab === 'template' && props.templateTwinReview && (
+        {tab === "template" && props.templateTwinReview && (
           <TemplateTwinReview
             data={props.templateTwinReview}
             visitId={props.visitId}
             readonly={props.readonly || Boolean(props.signedAt)}
           />
         )}
-        {tab === 'transcript' &&
-          (props.inputMode === 'audio_upload' ? (
+        {tab === "transcript" &&
+          (props.inputMode === "audio_upload" ? (
             <TranscriptTab
               visitId={props.visitId}
               utterances={props.utterances}
               speakerMap={props.speakerMap}
-              readonly={props.readonly}
+              readonly={props.readonly || syntheticQaMode}
               audioSrc={audioSrc}
               durationLabel={durationLabel}
               specialtyLabel={props.specialtyLabel}
               recordedByName={props.recordedByName ?? null}
               encounterId={props.visitId.slice(0, 8)}
             />
-          ) : props.inputMode === 'voice_dictation' ? (
+          ) : props.inputMode === "voice_dictation" ? (
             <DictationTranscriptView
               visitId={props.visitId}
               transcript={props.dictationTranscript}
@@ -732,7 +756,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
           ) : (
             <RawTextInputView text={props.rawTextInput} />
           ))}
-        {tab === 'codes' && (
+        {tab === "codes" && (
           <div className="space-y-3">
             <div className="flex justify-end">
               <CopySectionButton
@@ -748,7 +772,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
             />
           </div>
         )}
-        {tab === 'rx' && (
+        {tab === "rx" && (
           <div className="space-y-3">
             <div className="flex justify-end">
               <CopySectionButton
@@ -760,12 +784,12 @@ export function VisitReadyView(props: VisitReadyViewProps) {
             <RxTab
               rx={props.rxDrafts}
               visitId={props.visitId}
-              readonly={props.readonly}
+              readonly={props.readonly || syntheticQaMode}
               initialOverriddenIds={props.rxOverriddenWarningIds}
             />
           </div>
         )}
-        {tab === 'extras' && (
+        {tab === "extras" && (
           <div className="space-y-3">
             <div className="flex justify-end">
               <CopySectionButton
@@ -802,7 +826,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               problems={parseProblemList(props.patientProblemList)}
               visitMeta={{
                 specialty:
-                  props.specialtyLabel ?? props.inputMode ?? 'Encounter',
+                  props.specialtyLabel ?? props.inputMode ?? "Encounter",
                 durationSec: props.durationSec,
                 audioDurationSec: props.durationSec,
                 inputMode: props.inputMode,
@@ -821,7 +845,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
             />
           </div>
         )}
-        {props.showPipelineTab && tab === 'pipeline' && (
+        {props.showPipelineTab && tab === "pipeline" && (
           <PipelineView
             entities={props.entities}
             critique={props.critique}
@@ -850,52 +874,63 @@ export function VisitReadyView(props: VisitReadyViewProps) {
 // table from this read-only display surface.
 // ---------------------------------------------------------------------------
 
-import type { Problem } from './extras/ProblemsCard';
-import type { AuditEvent } from './extras/AuditLogCard';
+import type { Problem } from "./extras/ProblemsCard";
+import type { AuditEvent } from "./extras/AuditLogCard";
 
 function parseProblemList(raw: unknown): Problem[] {
   if (!Array.isArray(raw)) return [];
   return raw.map((entry, i) => {
-    if (typeof entry === 'string') {
-      return { icd: null, name: entry, status: 'active' as const, detail: null };
+    if (typeof entry === "string") {
+      return {
+        icd: null,
+        name: entry,
+        status: "active" as const,
+        detail: null,
+      };
     }
-    if (entry && typeof entry === 'object') {
+    if (entry && typeof entry === "object") {
       const obj = entry as Record<string, unknown>;
       const name =
-        (typeof obj.name === 'string' && obj.name) ||
-        (typeof obj.label === 'string' && obj.label) ||
-        (typeof obj.title === 'string' && obj.title) ||
+        (typeof obj.name === "string" && obj.name) ||
+        (typeof obj.label === "string" && obj.label) ||
+        (typeof obj.title === "string" && obj.title) ||
         `Problem ${i + 1}`;
       const code =
-        (typeof obj.icd === 'string' && obj.icd) ||
-        (typeof obj.icd10 === 'string' && obj.icd10) ||
-        (typeof obj.code === 'string' && obj.code) ||
+        (typeof obj.icd === "string" && obj.icd) ||
+        (typeof obj.icd10 === "string" && obj.icd10) ||
+        (typeof obj.code === "string" && obj.code) ||
         null;
       const status = (() => {
-        const s = typeof obj.status === 'string' ? obj.status.toLowerCase() : '';
-        if (s === 'resolved' || s === 'inactive') return 'resolved' as const;
-        if (s === 'draft' || s === 'pending') return 'draft' as const;
-        return 'active' as const;
+        const s =
+          typeof obj.status === "string" ? obj.status.toLowerCase() : "";
+        if (s === "resolved" || s === "inactive") return "resolved" as const;
+        if (s === "draft" || s === "pending") return "draft" as const;
+        return "active" as const;
       })();
       const detail =
-        (typeof obj.detail === 'string' && obj.detail) ||
-        (typeof obj.note === 'string' && obj.note) ||
+        (typeof obj.detail === "string" && obj.detail) ||
+        (typeof obj.note === "string" && obj.note) ||
         null;
       return { icd: code, name, status, detail };
     }
-    return { icd: null, name: `Problem ${i + 1}`, status: 'active' as const, detail: null };
+    return {
+      icd: null,
+      name: `Problem ${i + 1}`,
+      status: "active" as const,
+      detail: null,
+    };
   });
 }
 
 function initialsOf(name: string | null | undefined): string {
-  if (!name) return '·';
+  if (!name) return "·";
   return (
     name
       .split(/\s+/)
       .filter(Boolean)
       .slice(0, 2)
-      .map((s) => s[0]?.toUpperCase() ?? '')
-      .join('') || '·'
+      .map((s) => s[0]?.toUpperCase() ?? "")
+      .join("") || "·"
   );
 }
 
@@ -908,34 +943,34 @@ function synthesizeAuditEvents(args: {
   doctorName?: string | null;
 }): AuditEvent[] {
   const events: AuditEvent[] = [];
-  const doctor = args.doctorName ?? args.signedByName ?? 'Doctor';
+  const doctor = args.doctorName ?? args.signedByName ?? "Doctor";
   const doctorInits = initialsOf(doctor);
   if (args.createdAt) {
     events.push({
       at: args.createdAt,
       actorInitials: doctorInits,
       actorName: doctor,
-      verb: 'created visit',
+      verb: "created visit",
       obj: null,
     });
   }
   if (args.processingStartedAt) {
     events.push({
       at: args.processingStartedAt,
-      actorInitials: '·',
-      actorName: 'System',
+      actorInitials: "·",
+      actorName: "System",
       system: true,
-      verb: 'started processing pipeline',
+      verb: "started processing pipeline",
       obj: null,
     });
   }
   if (args.processingFinishedAt) {
     events.push({
       at: args.processingFinishedAt,
-      actorInitials: '·',
-      actorName: 'System',
+      actorInitials: "·",
+      actorName: "System",
       system: true,
-      verb: 'completed transcription + draft',
+      verb: "completed transcription + draft",
       obj: null,
     });
   }
@@ -944,7 +979,7 @@ function synthesizeAuditEvents(args: {
       at: args.signedAt,
       actorInitials: initialsOf(args.signedByName ?? doctor),
       actorName: args.signedByName ?? doctor,
-      verb: 'signed visit',
+      verb: "signed visit",
       obj: null,
     });
   }
@@ -958,27 +993,27 @@ function synthesizeAuditEvents(args: {
 function buildSectionData(props: VisitReadyViewProps): VisitExportData {
   const cptBlob =
     (props.cptCodes as {
-      em?: VisitExportData['em'];
-      procedures?: VisitExportData['procedures'];
-      modifiers?: VisitExportData['modifiers'];
+      em?: VisitExportData["em"];
+      procedures?: VisitExportData["procedures"];
+      modifiers?: VisitExportData["modifiers"];
     } | null) ?? null;
   const rxBlob =
     (props.rxDrafts as {
-      prescriptions?: VisitExportData['prescriptions'];
-      warnings?: VisitExportData['rxWarnings'];
+      prescriptions?: VisitExportData["prescriptions"];
+      warnings?: VisitExportData["rxWarnings"];
     } | null) ?? null;
   const icdBlob =
-    (props.icdCodes as { codes?: VisitExportData['icdCodes'] } | null) ?? null;
+    (props.icdCodes as { codes?: VisitExportData["icdCodes"] } | null) ?? null;
   const refBlob =
-    (props.referrals as { referrals?: VisitExportData['referrals'] } | null) ??
+    (props.referrals as { referrals?: VisitExportData["referrals"] } | null) ??
     null;
 
   return {
     visitId: props.visitId,
     patientName: null,
-    specialty: '',
+    specialty: "",
     chiefComplaint: null,
-    status: 'READY',
+    status: "READY",
     createdAt: new Date(0),
     signedAt: null,
     clinicianName: null,
@@ -1005,7 +1040,7 @@ interface TabDescriptor {
   label: string;
   icon: React.ReactNode;
   /** When set, draws a dot badge — danger for 'critical', warning otherwise. */
-  warning?: 'critical' | 'any' | null;
+  warning?: "critical" | "any" | null;
 }
 
 function Tabs({
@@ -1022,40 +1057,69 @@ function Tabs({
   showPipelineTab: boolean;
   showTemplateTwin: boolean;
   warnings: {
-    template: 'critical' | 'any' | null;
-    codes: 'critical' | 'any' | null;
-    rx: 'critical' | 'any' | null;
-    extras: 'critical' | 'any' | null;
+    template: "critical" | "any" | null;
+    codes: "critical" | "any" | null;
+    rx: "critical" | "any" | null;
+    extras: "critical" | "any" | null;
   };
 }) {
   const tabs: TabDescriptor[] = [
-    { key: 'soap', label: 'SOAP Note', icon: <FileTextIcon className="h-3.5 w-3.5" aria-hidden /> },
+    {
+      key: "soap",
+      label: "SOAP Note",
+      icon: <FileTextIcon className="h-3.5 w-3.5" aria-hidden />,
+    },
     ...(showTemplateTwin
       ? [
           {
-            key: 'template' as const,
-            label: 'Template',
+            key: "template" as const,
+            label: "Template",
             icon: <FileCheck2 className="h-3.5 w-3.5" aria-hidden />,
             warning: warnings.template,
           },
         ]
       : []),
-    { key: 'transcript', label: secondTabLabel, icon: <MessageSquareIcon className="h-3.5 w-3.5" aria-hidden /> },
-    { key: 'codes', label: 'Codes', icon: <Stethoscope className="h-3.5 w-3.5" aria-hidden />, warning: warnings.codes },
-    { key: 'rx', label: 'Rx', icon: <Pill className="h-3.5 w-3.5" aria-hidden />, warning: warnings.rx },
-    { key: 'extras', label: 'Extras', icon: <Sparkles className="h-3.5 w-3.5" aria-hidden />, warning: warnings.extras },
+    {
+      key: "transcript",
+      label: secondTabLabel,
+      icon: <MessageSquareIcon className="h-3.5 w-3.5" aria-hidden />,
+    },
+    {
+      key: "codes",
+      label: "Codes",
+      icon: <Stethoscope className="h-3.5 w-3.5" aria-hidden />,
+      warning: warnings.codes,
+    },
+    {
+      key: "rx",
+      label: "Rx",
+      icon: <Pill className="h-3.5 w-3.5" aria-hidden />,
+      warning: warnings.rx,
+    },
+    {
+      key: "extras",
+      label: "Extras",
+      icon: <Sparkles className="h-3.5 w-3.5" aria-hidden />,
+      warning: warnings.extras,
+    },
     ...(showPipelineTab
-      ? [{ key: 'pipeline' as const, label: 'Pipeline', icon: <LayersIcon className="h-3.5 w-3.5" aria-hidden /> }]
+      ? [
+          {
+            key: "pipeline" as const,
+            label: "Pipeline",
+            icon: <LayersIcon className="h-3.5 w-3.5" aria-hidden />,
+          },
+        ]
       : []),
   ];
   return (
     <div
       role="tablist"
       style={{
-        display: 'flex',
-        alignItems: 'center',
+        display: "flex",
+        alignItems: "center",
         gap: 0,
-        borderBottom: '1px solid var(--color-linear-hairline)',
+        borderBottom: "1px solid var(--color-linear-hairline)",
       }}
     >
       {tabs.map((t, i) => {
@@ -1070,31 +1134,31 @@ function Tabs({
             aria-label={t.label}
             className="qm-tap-44"
             style={{
-              position: 'relative',
-              padding: i === 0 ? '8px 14px 10px 0' : '8px 14px 10px',
-              fontFamily: 'var(--font-mono)',
+              position: "relative",
+              padding: i === 0 ? "8px 14px 10px 0" : "8px 14px 10px",
+              fontFamily: "var(--font-mono)",
               fontSize: 11,
-              letterSpacing: '0.07em',
-              textTransform: 'uppercase',
+              letterSpacing: "0.07em",
+              textTransform: "uppercase",
               fontWeight: 500,
               color: active
-                ? 'var(--color-linear-text)'
-                : 'var(--color-linear-text-3)',
-              cursor: 'pointer',
-              background: 'transparent',
+                ? "var(--color-linear-text)"
+                : "var(--color-linear-text-3)",
+              cursor: "pointer",
+              background: "transparent",
               border: 0,
-              transition: 'color 100ms ease-out',
-              display: 'inline-flex',
-              alignItems: 'center',
+              transition: "color 100ms ease-out",
+              display: "inline-flex",
+              alignItems: "center",
               gap: 6,
             }}
             onMouseEnter={(e) => {
               if (!active)
-                e.currentTarget.style.color = 'var(--color-linear-text)';
+                e.currentTarget.style.color = "var(--color-linear-text)";
             }}
             onMouseLeave={(e) => {
               if (!active)
-                e.currentTarget.style.color = 'var(--color-linear-text-3)';
+                e.currentTarget.style.color = "var(--color-linear-text-3)";
             }}
           >
             {t.icon}
@@ -1103,14 +1167,14 @@ function Tabs({
               <span
                 aria-hidden
                 style={{
-                  display: 'inline-block',
+                  display: "inline-block",
                   width: 5,
                   height: 5,
                   borderRadius: 999,
                   background:
-                    t.warning === 'critical'
-                      ? 'var(--color-linear-danger)'
-                      : 'var(--color-linear-warning)',
+                    t.warning === "critical"
+                      ? "var(--color-linear-danger)"
+                      : "var(--color-linear-warning)",
                 }}
               />
             )}
@@ -1118,13 +1182,13 @@ function Tabs({
               <span
                 aria-hidden
                 style={{
-                  position: 'absolute',
+                  position: "absolute",
                   left: i === 0 ? 0 : 0,
                   right: 0,
                   bottom: -1,
                   height: 1.5,
-                  borderRadius: '1px 1px 0 0',
-                  background: 'var(--color-linear-sage)',
+                  borderRadius: "1px 1px 0 0",
+                  background: "var(--color-linear-sage)",
                 }}
               />
             )}
@@ -1154,7 +1218,7 @@ function PipelineView({
   processingFinishedAt,
 }: {
   entities: unknown;
-  critique: VisitReadyViewProps['critique'];
+  critique: VisitReadyViewProps["critique"];
   durationSec: number | null;
   costCents: number | null;
   processingStartedAt: string | null;
@@ -1171,15 +1235,19 @@ function PipelineView({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Stat
           label="Audio duration"
-          value={durationSec ? `${Math.round(durationSec / 60)} min ${durationSec % 60}s` : '—'}
+          value={
+            durationSec
+              ? `${Math.round(durationSec / 60)} min ${durationSec % 60}s`
+              : "—"
+          }
         />
         <Stat
           label="Pipeline wall-time"
-          value={processingMs ? `${Math.round(processingMs / 1000)}s` : '—'}
+          value={processingMs ? `${Math.round(processingMs / 1000)}s` : "—"}
         />
         <Stat
           label="Compute cost"
-          value={costCents != null ? `$${(costCents / 100).toFixed(2)}` : '—'}
+          value={costCents != null ? `$${(costCents / 100).toFixed(2)}` : "—"}
         />
       </div>
 
@@ -1187,14 +1255,14 @@ function PipelineView({
         {critique ? (
           <div className="space-y-3">
             <div className="text-[12px] text-linear-text-3">
-              Overall quality:{' '}
+              Overall quality:{" "}
               <span className="font-medium text-linear-text">
                 {critique.overall_quality}
               </span>
-              {' · '}
-              Safe to sign without review:{' '}
+              {" · "}
+              Safe to sign without review:{" "}
               <span className="font-medium text-linear-text">
-                {critique.safe_to_sign_without_review ? 'yes' : 'no'}
+                {critique.safe_to_sign_without_review ? "yes" : "no"}
               </span>
             </div>
             {critique.issues.length === 0 ? (
@@ -1211,12 +1279,12 @@ function PipelineView({
                     <div className="mb-1 flex items-center gap-2">
                       <span
                         className={cn(
-                          'qm-lin-pill',
-                          i.severity === 'critical'
-                            ? 'bg-linear-danger/15 text-linear-danger'
-                            : i.severity === 'major'
-                              ? 'bg-linear-warning/15 text-linear-warning'
-                              : ''
+                          "qm-lin-pill",
+                          i.severity === "critical"
+                            ? "bg-linear-danger/15 text-linear-danger"
+                            : i.severity === "major"
+                              ? "bg-linear-warning/15 text-linear-warning"
+                              : "",
                         )}
                       >
                         {i.severity}
@@ -1282,7 +1350,7 @@ function CollapsibleSection({
       >
         {title}
         <ChevronDown
-          className={cn('h-3 w-3 transition-transform', open && 'rotate-180')}
+          className={cn("h-3 w-3 transition-transform", open && "rotate-180")}
           aria-hidden
         />
       </button>
@@ -1366,34 +1434,34 @@ function SignedStateCard({
   signedByName: string | null;
 }) {
   const formatted = formatLocalDateTime(signedAt);
-  const signer = signedByName?.trim() || 'you';
+  const signer = signedByName?.trim() || "you";
   return (
     <div
       role="status"
       aria-label="This note is signed"
       className="flex items-center gap-3 rounded-lg border px-4 py-3"
       style={{
-        background: 'var(--color-linear-surface-1)',
-        borderColor: 'rgba(122,166,140,0.32)',
+        background: "var(--color-linear-surface-1)",
+        borderColor: "rgba(122,166,140,0.32)",
       }}
     >
       <div
         aria-hidden
         className="flex h-8 w-8 flex-none items-center justify-center rounded-md"
         style={{
-          background: 'var(--color-linear-sage-tint)',
-          color: 'var(--color-linear-sage-bright)',
+          background: "var(--color-linear-sage-tint)",
+          color: "var(--color-linear-sage-bright)",
         }}
       >
         <Lock className="h-4 w-4" aria-hidden />
       </div>
       <div className="min-w-0">
         <div className="text-[13px] text-linear-text">
-          Signed at{' '}
-          <span style={{ color: 'var(--color-linear-sage-bright)' }}>
+          Signed at{" "}
+          <span style={{ color: "var(--color-linear-sage-bright)" }}>
             {formatted}
-          </span>{' '}
-          by <span style={{ color: 'var(--color-linear-text)' }}>{signer}</span>
+          </span>{" "}
+          by <span style={{ color: "var(--color-linear-text)" }}>{signer}</span>
         </div>
         <div className="mt-0.5 text-[11.5px] text-linear-text-3">
           This note is locked. Use Export again below to re-send a copy.
@@ -1410,6 +1478,6 @@ function SignedStateCard({
 function formatDurationLabel(totalSec: number): string {
   const t = Math.max(0, Math.floor(totalSec));
   const m = Math.floor(t / 60);
-  const s = (t % 60).toString().padStart(2, '0');
+  const s = (t % 60).toString().padStart(2, "0");
   return `${m}m ${s}s`;
 }

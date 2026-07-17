@@ -82,6 +82,10 @@ interface SignAndSendModalProps {
    *  verified Template Twin fill for this visit. The export route repeats all
    *  ownership, signing, version, round-trip, and digest checks. */
   originalTemplateDocxAvailable?: boolean;
+  /** Synthetic staging visits may deliver only the strictly verified clone of
+   *  the original template. This is presentation-level defense in depth; the
+   *  sign and export routes enforce the same restriction server-side. */
+  originalTemplateOnly?: boolean;
   /** The trigger button's label — "Sign & Send" vs "Export again". */
   triggerLabel: string;
   /** Icon shown on the trigger. */
@@ -132,7 +136,7 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
     [isControlled, props],
   );
   const [selected, setSelected] = useState<Set<Destination>>(() =>
-    props.originalTemplateDocxAvailable
+    props.originalTemplateDocxAvailable || props.originalTemplateOnly
       ? new Set(["docx_original_template"])
       : new Set(["clipboard_epic", "pdf"]),
   );
@@ -166,12 +170,16 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
     // Strip 'email' defensively — if emailEnabled flips off between
     // renders, or a stale entry somehow lingers in `selected`, don't
     // send it to the server.
-    const destinations = Array.from(selected).filter(
-      (d) =>
-        (d !== "email" || props.emailEnabled) &&
-        (d !== "docx_original_template" ||
-          props.originalTemplateDocxAvailable === true),
-    );
+    const destinations = props.originalTemplateOnly
+      ? props.originalTemplateDocxAvailable
+        ? (["docx_original_template"] satisfies Destination[])
+        : []
+      : Array.from(selected).filter(
+          (d) =>
+            (d !== "email" || props.emailEnabled) &&
+            (d !== "docx_original_template" ||
+              props.originalTemplateDocxAvailable === true),
+        );
     if (destinations.length === 0) {
       toast.error("Pick at least one destination.");
       return;
@@ -248,9 +256,13 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
           );
         } else {
           toast.success(props.signOnSubmit ? "Signed" : "Exported", {
-            description: props.signOnSubmit
-              ? "Your note is locked. Delivered to the chosen destinations."
-              : "Delivered to the chosen destinations.",
+            description: props.originalTemplateOnly
+              ? props.signOnSubmit
+                ? "The synthetic note is locked and its verified Original Template DOCX is downloading."
+                : "The verified Original Template DOCX is downloading."
+              : props.signOnSubmit
+                ? "Your note is locked. Delivered to the chosen destinations."
+                : "Delivered to the chosen destinations.",
           });
         }
 
@@ -275,6 +287,7 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
     props.signOnSubmit,
     props.emailEnabled,
     props.originalTemplateDocxAvailable,
+    props.originalTemplateOnly,
     props.emPendingChange,
     emChangeRequired,
     emChangeConfirmed,
@@ -334,11 +347,15 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
                   color: "var(--color-linear-text)",
                 }}
               >
-                {props.signOnSubmit
-                  ? "Sign and deliver your note"
-                  : "Export signed note"}
+                {props.originalTemplateOnly
+                  ? props.signOnSubmit
+                    ? "Sign synthetic Original Template DOCX"
+                    : "Download signed synthetic DOCX"
+                  : props.signOnSubmit
+                    ? "Sign and deliver your note"
+                    : "Export signed note"}
               </Dialog.Title>
-              <p
+              <Dialog.Description
                 style={{
                   marginTop: 6,
                   marginBottom: 0,
@@ -346,9 +363,14 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
                   color: "var(--color-linear-text-2)",
                 }}
               >
-                Pick one or more destinations.{" "}
-                {props.signOnSubmit && "The note locks after signing."}
-              </p>
+                {props.originalTemplateOnly
+                  ? props.signOnSubmit
+                    ? "Synthetic QA permits only the independently verified clone of the original Word template. The note locks after signing."
+                    : "Synthetic QA permits only the independently verified clone of the original Word template."
+                  : `Pick one or more destinations.${
+                      props.signOnSubmit ? " The note locks after signing." : ""
+                    }`}
+              </Dialog.Description>
             </div>
             <Dialog.Close asChild>
               <button
@@ -365,30 +387,39 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
             className="max-h-[60vh] overflow-y-auto"
             style={{ padding: "4px 24px 8px" }}
           >
-            <Group
-              title="Copy to clipboard"
-              hint="Paste the formatted note into your EHR's note field."
-              items={DESTINATIONS.filter((d) => d.group === "clipboard")}
-              selected={selected}
-              onToggle={toggle}
-            />
+            {!props.originalTemplateOnly && (
+              <Group
+                title="Copy to clipboard"
+                hint="Paste the formatted note into your EHR's note field."
+                items={DESTINATIONS.filter((d) => d.group === "clipboard")}
+                selected={selected}
+                onToggle={toggle}
+              />
+            )}
             <Group
               title="Download"
               hint={
-                props.originalTemplateDocxAvailable
-                  ? "The verified clone of your original Word template is the primary document. Generic exports remain available."
-                  : "Save a PDF for records or a DOCX to edit in Word."
+                props.originalTemplateOnly
+                  ? props.originalTemplateDocxAvailable
+                    ? "Required for synthetic QA. PDF, clipboard, email, and generic DOCX delivery are intentionally unavailable."
+                    : "Complete Template Twin review and strict verification before this synthetic DOCX can be signed or downloaded."
+                  : props.originalTemplateDocxAvailable
+                    ? "The verified clone of your original Word template is the primary document. Generic exports remain available."
+                    : "Save a PDF for records or a DOCX to edit in Word."
               }
               items={DESTINATIONS.filter(
                 (d) =>
                   d.group === "download" &&
+                  (!props.originalTemplateOnly ||
+                    d.key === "docx_original_template") &&
                   (d.key !== "docx_original_template" ||
                     props.originalTemplateDocxAvailable === true),
               )}
               selected={selected}
               onToggle={toggle}
+              locked={props.originalTemplateOnly}
             />
-            {props.emailEnabled && (
+            {props.emailEnabled && !props.originalTemplateOnly && (
               <Group
                 title="Email"
                 hint={`Send a PDF to ${props.doctorEmail} for your records. Don't use for patient communication.`}
@@ -504,9 +535,13 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
                 color: "var(--color-linear-text-3)",
               }}
             >
-              {props.signOnSubmit
-                ? "Locked notes can still be re-exported later."
-                : "This visit is already signed."}
+              {props.originalTemplateOnly
+                ? props.signOnSubmit
+                  ? "Microsoft Word compatibility remains PENDING after signing."
+                  : "Microsoft Word compatibility remains PENDING."
+                : props.signOnSubmit
+                  ? "Locked notes can still be re-exported later."
+                  : "This visit is already signed."}
             </p>
             <div className="flex items-center gap-2">
               <Dialog.Close asChild>
@@ -521,7 +556,12 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
                 // E/M visible-confirm: the sign CTA stays disabled until
                 // the doctor explicitly confirms a recorded level change.
                 // The server gate rejects unconfirmed signs regardless.
-                disabled={pending || (emChangeRequired && !emChangeConfirmed)}
+                disabled={
+                  pending ||
+                  (emChangeRequired && !emChangeConfirmed) ||
+                  (props.originalTemplateOnly &&
+                    !props.originalTemplateDocxAvailable)
+                }
               >
                 {pending ? (
                   <>
@@ -557,12 +597,14 @@ function Group({
   items,
   selected,
   onToggle,
+  locked = false,
 }: {
   title: string;
   hint: string;
   items: { key: Destination; label: string }[];
   selected: Set<Destination>;
   onToggle: (k: Destination) => void;
+  locked?: boolean;
 }) {
   return (
     <div className="py-3">
@@ -577,6 +619,7 @@ function Group({
             label={it.label}
             checked={selected.has(it.key)}
             onToggle={() => onToggle(it.key)}
+            locked={locked}
           />
         ))}
       </div>
@@ -588,20 +631,24 @@ function CheckboxRow({
   label,
   checked,
   onToggle,
+  locked = false,
 }: {
   label: string;
   checked: boolean;
   onToggle: () => void;
+  locked?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onToggle}
       aria-pressed={checked}
+      disabled={locked}
       className={cn(
         "flex w-full items-center gap-3 rounded-md border px-3 py-2 text-left",
         "transition-colors duration-150 ease-out",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-linear-sage focus-visible:ring-offset-2 focus-visible:ring-offset-linear-bg",
+        locked && "cursor-default opacity-90",
         checked
           ? "border-[rgba(122,166,140,0.34)] bg-linear-sage-tint text-linear-text"
           : "border-linear-border bg-linear-surface-2 text-linear-text-2 hover:border-linear-border-strong hover:text-linear-text",
