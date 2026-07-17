@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   requireDoctorSession: vi.fn(),
@@ -6,9 +6,12 @@ const mocks = vi.hoisted(() => ({
   updateMappings: vi.fn(),
   runSyntheticTest: vi.fn(),
   certify: vi.fn(),
+  lifecycleGuard: vi.fn(async (input: { operation: () => unknown }) =>
+    input.operation(),
+  ),
 }));
 
-vi.mock('next/server', () => {
+vi.mock("next/server", () => {
   class FakeNextResponse {
     status: number;
     headers: Headers;
@@ -37,10 +40,10 @@ vi.mock('next/server', () => {
   return { NextResponse: FakeNextResponse };
 });
 
-vi.mock('@/lib/auth', () => ({
+vi.mock("@/lib/auth", () => ({
   AuthError: class AuthError extends Error {
     constructor(
-      public readonly code: 'UNAUTHENTICATED' | 'FORBIDDEN',
+      public readonly code: "UNAUTHENTICATED" | "FORBIDDEN",
       message: string,
     ) {
       super(message);
@@ -48,69 +51,75 @@ vi.mock('@/lib/auth', () => ({
   },
   requireDoctorSession: mocks.requireDoctorSession,
 }));
-vi.mock('@/lib/template-twin/request-security', () => ({
+vi.mock("@/lib/template-twin/request-security", () => ({
   isSameOriginTemplateTwinMutation: () => true,
   boundedMultipartFormData: (request: Request) => request.formData(),
   isMultipartFile: (value: unknown) => value instanceof File,
   TemplateTwinMultipartError: class TemplateTwinMultipartError extends Error {
-    code = 'MULTIPART_INVALID';
+    code = "MULTIPART_INVALID";
   },
 }));
-vi.mock('@/lib/template-twin/create-draft', () => ({
+vi.mock("@/lib/template-twin/create-draft", () => ({
   TemplateTwinDraftError: class TemplateTwinDraftError extends Error {
-    code = 'PERSISTENCE_FAILED';
+    code = "PERSISTENCE_FAILED";
   },
   createTemplateTwinDraft: mocks.createDraft,
 }));
-vi.mock('@/lib/template-twin/certification-lifecycle', () => ({
+vi.mock("@/lib/template-twin/certification-lifecycle", () => ({
   TemplateTwinLifecycleError: class TemplateTwinLifecycleError extends Error {
-    code = 'CONFLICT';
+    code = "CONFLICT";
   },
   updateTemplateTwinMappings: mocks.updateMappings,
   certifyAndActivateTemplateTwin: mocks.certify,
 }));
-vi.mock('@/lib/template-twin/synthetic-test', () => ({
+vi.mock("@/lib/template-twin/synthetic-test", () => ({
   TemplateTwinSyntheticTestError: class TemplateTwinSyntheticTestError extends Error {
-    code = 'CONFLICT';
+    code = "CONFLICT";
   },
   runTemplateTwinSyntheticTest: mocks.runSyntheticTest,
 }));
-vi.mock('@/lib/template-twin/source-phi', () => ({
+vi.mock("@/lib/template-twin/staging-qa-lifecycle-guard", () => ({
+  TemplateTwinStagingQaLifecycleGuardError: class TemplateTwinStagingQaLifecycleGuardError extends Error {},
+  runWithTemplateTwinStagingQaLifecycleGuard: mocks.lifecycleGuard,
+}));
+vi.mock("@/lib/template-twin/source-phi", () => ({
   TemplateTwinPhiRejectedError: class TemplateTwinPhiRejectedError extends Error {},
   TemplateTwinPhiScanUnavailableError: class TemplateTwinPhiScanUnavailableError extends Error {},
   TemplateTwinSourcePrivacyUnsupportedError: class TemplateTwinSourcePrivacyUnsupportedError extends Error {},
 }));
-vi.mock('@/lib/template-twin/storage', () => ({
+vi.mock("@/lib/template-twin/storage", () => ({
+  DOCX_MIME_TYPE:
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   TemplateTwinArtifactTooLargeError: class TemplateTwinArtifactTooLargeError extends Error {},
   TemplateTwinArtifactIntegrityError: class TemplateTwinArtifactIntegrityError extends Error {},
   TemplateTwinStorageUnavailableError: class TemplateTwinStorageUnavailableError extends Error {},
 }));
-vi.mock('@/lib/note-template-docx', () => ({
+vi.mock("@/lib/note-template-docx", () => ({
   TemplateDocxError: class TemplateDocxError extends Error {
-    code = 'XML_INVALID';
+    code = "XML_INVALID";
   },
 }));
 
-import { POST as upload } from '../upload/route';
-import { POST as certify } from '../[id]/certify/route';
-import { PATCH as updateMappings } from '../[id]/mappings/route';
-import { POST as runSyntheticTest } from '../[id]/synthetic-test/route';
-import { AuthError } from '@/lib/auth';
-import { canonicalSha256 } from '@/lib/template-twin/canonical';
+import { POST as upload } from "../upload/route";
+import { POST as certify } from "../[id]/certify/route";
+import { PATCH as updateMappings } from "../[id]/mappings/route";
+import { POST as runSyntheticTest } from "../[id]/synthetic-test/route";
+import { AuthError } from "@/lib/auth";
+import { canonicalSha256 } from "@/lib/template-twin/canonical";
 
-const HASH = 'a'.repeat(64);
+const HASH = "a".repeat(64);
 const EMPTY_FIELD_INTENTS_SHA256 = canonicalSha256([]);
-const FIELD_ID = `ttf_${'b'.repeat(24)}`;
+const FIELD_ID = `ttf_${"b".repeat(24)}`;
 const SESSION = {
   templateTwinRolloutToken: {
-    practiceId: 'practice-synthetic-1',
+    practiceId: "practice-synthetic-1",
     globalGeneration: BigInt(2),
     practiceGeneration: BigInt(4),
   },
   user: {
-    id: 'doctor-synthetic-1',
-    email: 'doctor@synthetic.test',
-    practiceId: 'practice-synthetic-1',
+    id: "doctor-synthetic-1",
+    email: "doctor@synthetic.test",
+    practiceId: "practice-synthetic-1",
   },
 };
 const ACTOR = {
@@ -120,7 +129,7 @@ const ACTOR = {
   rolloutToken: SESSION.templateTwinRolloutToken,
 };
 const WORKSPACE = {
-  template: { id: 'template-synthetic-1' },
+  template: { id: "template-synthetic-1" },
   mappingsSha256: HASH,
 };
 
@@ -135,28 +144,28 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.requireDoctorSession.mockResolvedValue(SESSION);
   mocks.createDraft.mockResolvedValue({
-    noteTemplateId: 'template-synthetic-1',
+    noteTemplateId: "template-synthetic-1",
   });
   mocks.updateMappings.mockResolvedValue(WORKSPACE);
   mocks.runSyntheticTest.mockResolvedValue(WORKSPACE);
   mocks.certify.mockResolvedValue({
     ...WORKSPACE,
-    template: { id: 'template-synthetic-1', status: 'active' },
+    template: { id: "template-synthetic-1", status: "active" },
   });
 });
 
-describe('Template Twin route orchestration', () => {
-  it.each(['STAFF', 'ADMIN'] as const)(
-    'rejects a fresh %s role across upload, mapping, synthetic test, and certification',
+describe("Template Twin route orchestration", () => {
+  it.each(["STAFF", "ADMIN"] as const)(
+    "rejects a fresh %s role across upload, mapping, synthetic test, and certification",
     async (role) => {
       mocks.requireDoctorSession.mockRejectedValue(
         new AuthError(
-          'FORBIDDEN',
+          "FORBIDDEN",
           `Synthetic ${role} is not authorized for Template Twin.`,
         ),
       );
       const params = {
-        params: Promise.resolve({ id: 'template-synthetic-1' }),
+        params: Promise.resolve({ id: "template-synthetic-1" }),
       };
 
       const responses = await Promise.all([
@@ -166,7 +175,9 @@ describe('Template Twin route orchestration', () => {
         certify(jsonRequest({}), params),
       ]);
 
-      expect(responses.map((item) => item.status)).toEqual([403, 403, 403, 403]);
+      expect(responses.map((item) => item.status)).toEqual([
+        403, 403, 403, 403,
+      ]);
       expect(mocks.createDraft).not.toHaveBeenCalled();
       expect(mocks.updateMappings).not.toHaveBeenCalled();
       expect(mocks.runSyntheticTest).not.toHaveBeenCalled();
@@ -174,17 +185,21 @@ describe('Template Twin route orchestration', () => {
     },
   );
 
-  it('preserves actor, template, mapping hash, and acknowledgements through the full flow', async () => {
+  it("preserves actor, template, mapping hash, and acknowledgements through the full flow", async () => {
     const form = new FormData();
     form.set(
-      'file',
-      new File([Buffer.from('PK\u0003\u0004synthetic-docx')], 'synthetic-template.docx', {
-        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      }),
+      "file",
+      new File(
+        [Buffer.from("PK\u0003\u0004synthetic-docx")],
+        "synthetic-template.docx",
+        {
+          type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        },
+      ),
     );
-    form.set('templateName', 'Synthetic musculoskeletal intake');
-    form.set('encounterScope', 'Musculoskeletal initial visit');
-    form.set('versionDescription', 'Initial synthetic QA version');
+    form.set("templateName", "Synthetic musculoskeletal intake");
+    form.set("encounterScope", "Musculoskeletal initial visit");
+    form.set("versionDescription", "Initial synthetic QA version");
     const uploadResponse = await upload({
       headers: new Headers(),
       formData: async () => form,
@@ -192,33 +207,32 @@ describe('Template Twin route orchestration', () => {
     expect(uploadResponse.status).toBe(201);
     expect(await uploadResponse.json()).toEqual({
       ok: true,
-      certificationUrl:
-        '/settings/note-format/template-synthetic-1/certify',
+      certificationUrl: "/settings/note-format/template-synthetic-1/certify",
     });
     expect(mocks.createDraft).toHaveBeenCalledWith({
       source: expect.any(Uint8Array),
       actor: ACTOR,
       identity: {
-        name: 'Synthetic musculoskeletal intake',
-        encounterType: 'Musculoskeletal initial visit',
-        versionDescription: 'Initial synthetic QA version',
+        name: "Synthetic musculoskeletal intake",
+        encounterType: "Musculoskeletal initial visit",
+        versionDescription: "Initial synthetic QA version",
       },
     });
 
     const mapping = {
       fieldId: FIELD_ID,
-      clinicalConcept: 'chief_complaint',
-      expectedDataType: 'text',
-      polarityBehavior: 'value_only',
-      temporality: 'any',
-      laterality: 'not_applicable',
-      unitPolicy: 'not_applicable',
+      clinicalConcept: "chief_complaint",
+      expectedDataType: "text",
+      polarityBehavior: "value_only",
+      temporality: "any",
+      laterality: "not_applicable",
+      unitPolicy: "not_applicable",
       approvedSynonyms: [],
       required: true,
-      blankPolicy: 'requires_input',
-      unknownPolicy: 'requires_input',
+      blankPolicy: "requires_input",
+      unknownPolicy: "requires_input",
       practiceDefault: null,
-      status: 'certified',
+      status: "certified",
     };
     const mappingsResponse = await updateMappings(
       jsonRequest({
@@ -227,11 +241,11 @@ describe('Template Twin route orchestration', () => {
         mappings: [mapping],
         fieldIntents: [],
       }),
-      { params: Promise.resolve({ id: 'template-synthetic-1' }) },
+      { params: Promise.resolve({ id: "template-synthetic-1" }) },
     );
     expect(mappingsResponse.status).toBe(200);
     expect(mocks.updateMappings).toHaveBeenCalledWith({
-      noteTemplateId: 'template-synthetic-1',
+      noteTemplateId: "template-synthetic-1",
       actor: ACTOR,
       expectedMappingsSha256: HASH,
       expectedFieldIntentsSha256: EMPTY_FIELD_INTENTS_SHA256,
@@ -243,17 +257,17 @@ describe('Template Twin route orchestration', () => {
       jsonRequest({
         expectedMappingsSha256: HASH,
         expectedFieldIntentsSha256: EMPTY_FIELD_INTENTS_SHA256,
-        encounterText: 'Synthetic encounter evidence only.',
+        encounterText: "Synthetic encounter evidence only.",
       }),
-      { params: Promise.resolve({ id: 'template-synthetic-1' }) },
+      { params: Promise.resolve({ id: "template-synthetic-1" }) },
     );
     expect(syntheticResponse.status).toBe(200);
     expect(mocks.runSyntheticTest).toHaveBeenCalledWith({
-      noteTemplateId: 'template-synthetic-1',
+      noteTemplateId: "template-synthetic-1",
       actor: ACTOR,
       expectedMappingsSha256: HASH,
       expectedFieldIntentsSha256: EMPTY_FIELD_INTENTS_SHA256,
-      encounterText: 'Synthetic encounter evidence only.',
+      encounterText: "Synthetic encounter evidence only.",
     });
 
     const certifyResponse = await certify(
@@ -264,11 +278,11 @@ describe('Template Twin route orchestration', () => {
         acknowledgeStructure: true,
         acknowledgeSyntheticOutput: true,
       }),
-      { params: Promise.resolve({ id: 'template-synthetic-1' }) },
+      { params: Promise.resolve({ id: "template-synthetic-1" }) },
     );
     expect(certifyResponse.status).toBe(200);
     expect(mocks.certify).toHaveBeenCalledWith({
-      noteTemplateId: 'template-synthetic-1',
+      noteTemplateId: "template-synthetic-1",
       actor: ACTOR,
       expectedMappingsSha256: HASH,
       expectedFieldIntentsSha256: EMPTY_FIELD_INTENTS_SHA256,
@@ -287,24 +301,24 @@ describe('Template Twin route orchestration', () => {
     );
   });
 
-  it('keeps no-placeholder Template Twin route payloads backward compatible', async () => {
+  it("keeps no-placeholder Template Twin route payloads backward compatible", async () => {
     const mapping = {
       fieldId: FIELD_ID,
-      clinicalConcept: 'chief_complaint',
-      expectedDataType: 'text',
-      polarityBehavior: 'value_only',
-      temporality: 'any',
-      laterality: 'not_applicable',
-      unitPolicy: 'not_applicable',
+      clinicalConcept: "chief_complaint",
+      expectedDataType: "text",
+      polarityBehavior: "value_only",
+      temporality: "any",
+      laterality: "not_applicable",
+      unitPolicy: "not_applicable",
       approvedSynonyms: [],
       required: true,
-      blankPolicy: 'requires_input',
-      unknownPolicy: 'requires_input',
+      blankPolicy: "requires_input",
+      unknownPolicy: "requires_input",
       practiceDefault: null,
-      status: 'certified',
+      status: "certified",
     };
     const params = {
-      params: Promise.resolve({ id: 'template-synthetic-1' }),
+      params: Promise.resolve({ id: "template-synthetic-1" }),
     };
 
     const mappingsResponse = await updateMappings(
@@ -316,7 +330,7 @@ describe('Template Twin route orchestration', () => {
     );
     expect(mappingsResponse.status).toBe(200);
     expect(mocks.updateMappings).toHaveBeenCalledWith({
-      noteTemplateId: 'template-synthetic-1',
+      noteTemplateId: "template-synthetic-1",
       actor: ACTOR,
       expectedMappingsSha256: HASH,
       mappings: [mapping],
@@ -325,16 +339,16 @@ describe('Template Twin route orchestration', () => {
     const syntheticResponse = await runSyntheticTest(
       jsonRequest({
         expectedMappingsSha256: HASH,
-        encounterText: 'Synthetic encounter evidence only.',
+        encounterText: "Synthetic encounter evidence only.",
       }),
       params,
     );
     expect(syntheticResponse.status).toBe(200);
     expect(mocks.runSyntheticTest).toHaveBeenCalledWith({
-      noteTemplateId: 'template-synthetic-1',
+      noteTemplateId: "template-synthetic-1",
       actor: ACTOR,
       expectedMappingsSha256: HASH,
-      encounterText: 'Synthetic encounter evidence only.',
+      encounterText: "Synthetic encounter evidence only.",
     });
 
     const certifyResponse = await certify(
@@ -348,7 +362,7 @@ describe('Template Twin route orchestration', () => {
     );
     expect(certifyResponse.status).toBe(200);
     expect(mocks.certify).toHaveBeenCalledWith({
-      noteTemplateId: 'template-synthetic-1',
+      noteTemplateId: "template-synthetic-1",
       actor: ACTOR,
       expectedMappingsSha256: HASH,
       expectedFieldIntentsSha256: undefined,
@@ -357,13 +371,17 @@ describe('Template Twin route orchestration', () => {
     });
   });
 
-  it('rejects an upload without physician-readable identity and scope', async () => {
+  it("rejects an upload without physician-readable identity and scope", async () => {
     const form = new FormData();
     form.set(
-      'file',
-      new File([Buffer.from('PK\u0003\u0004synthetic-docx')], 'synthetic-template.docx', {
-        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      }),
+      "file",
+      new File(
+        [Buffer.from("PK\u0003\u0004synthetic-docx")],
+        "synthetic-template.docx",
+        {
+          type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        },
+      ),
     );
 
     const response = await upload({
@@ -374,12 +392,13 @@ describe('Template Twin route orchestration', () => {
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
       ok: false,
-      error: 'Name the template, choose its visit scope, and describe this version.',
+      error:
+        "Name the template, choose its visit scope, and describe this version.",
     });
     expect(mocks.createDraft).not.toHaveBeenCalled();
   });
 
-  it('rejects certification without the exact synthetic-test provenance acknowledgement', async () => {
+  it("rejects certification without the exact synthetic-test provenance acknowledgement", async () => {
     const response = await certify(
       jsonRequest({
         expectedMappingsSha256: HASH,
@@ -387,7 +406,7 @@ describe('Template Twin route orchestration', () => {
         acknowledgeStructure: true,
         acknowledgeSyntheticOutput: true,
       }),
-      { params: Promise.resolve({ id: 'template-synthetic-1' }) },
+      { params: Promise.resolve({ id: "template-synthetic-1" }) },
     );
 
     expect(response.status).toBe(400);

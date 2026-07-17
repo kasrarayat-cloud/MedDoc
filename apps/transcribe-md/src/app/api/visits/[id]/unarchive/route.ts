@@ -9,27 +9,31 @@
 //   Trashed            → 400 VISIT_DELETED (handle via /restore first)
 // ============================================================================
 
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
 
-import prisma from '@meddoc/db';
+import prisma from "@meddoc/db";
 
-import { apiError, withApiHandler } from '@/lib/api-error';
-import { auth } from '@/lib/nextauth';
-import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
-import { log } from '@/lib/log';
-import { logAudit } from '@/lib/audit';
+import { apiError, withApiHandler } from "@/lib/api-error";
+import { auth } from "@/lib/nextauth";
+import { RATE_LIMITS, rateLimitOr429 } from "@/lib/rate-limit";
+import { log } from "@/lib/log";
+import { logAudit } from "@/lib/audit";
+import { isOwnedTemplateTwinStagingQaVisit } from "@/lib/template-twin/staging-qa-access";
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export const POST = withApiHandler<{ id: string }>(
-  'api:visits:unarchive',
+  "api:visits:unarchive",
   async (_req, { params }) => {
     const { id: visitId } = await params;
 
     const session = await auth();
     const userId = session?.user?.id;
-    if (!userId) return apiError('unauthorized', 401);
+    if (!userId) return apiError("unauthorized", 401);
+    if (await isOwnedTemplateTwinStagingQaVisit({ visitId, userId })) {
+      return apiError("not found", 404);
+    }
 
     const blocked = rateLimitOr429(RATE_LIMITS.VISIT_OPS, userId);
     if (blocked) return blocked;
@@ -43,15 +47,15 @@ export const POST = withApiHandler<{ id: string }>(
         archivedAt: true,
       },
     });
-    if (!visit || visit.userId !== userId) return apiError('not found', 404);
+    if (!visit || visit.userId !== userId) return apiError("not found", 404);
 
     if (visit.deletedAt !== null) {
       return NextResponse.json(
         {
-          error: 'Trashed visits must be restored first.',
-          code: 'VISIT_DELETED',
+          error: "Trashed visits must be restored first.",
+          code: "VISIT_DELETED",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -63,12 +67,12 @@ export const POST = withApiHandler<{ id: string }>(
       where: { id: visit.id },
       data: { archivedAt: null },
     });
-    log.info('api:visits:unarchive', 'unarchived', { userId, visitId });
+    log.info("api:visits:unarchive", "unarchived", { userId, visitId });
     void logAudit({
-      action: 'VISIT_UNARCHIVED',
-      targetType: 'TranscribeVisit',
+      action: "VISIT_UNARCHIVED",
+      targetType: "TranscribeVisit",
       targetId: visitId,
     });
     return NextResponse.json({ ok: true });
-  }
+  },
 );

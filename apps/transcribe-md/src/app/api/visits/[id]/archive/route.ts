@@ -11,28 +11,32 @@
 // Already-archived → 200 idempotent.
 // ============================================================================
 
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
 
-import prisma from '@meddoc/db';
-import { TranscribeVisitStatus } from '@prisma/client';
+import prisma from "@meddoc/db";
+import { TranscribeVisitStatus } from "@prisma/client";
 
-import { apiError, withApiHandler } from '@/lib/api-error';
-import { auth } from '@/lib/nextauth';
-import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
-import { log } from '@/lib/log';
-import { logAudit } from '@/lib/audit';
+import { apiError, withApiHandler } from "@/lib/api-error";
+import { auth } from "@/lib/nextauth";
+import { RATE_LIMITS, rateLimitOr429 } from "@/lib/rate-limit";
+import { log } from "@/lib/log";
+import { logAudit } from "@/lib/audit";
+import { isOwnedTemplateTwinStagingQaVisit } from "@/lib/template-twin/staging-qa-access";
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export const POST = withApiHandler<{ id: string }>(
-  'api:visits:archive',
+  "api:visits:archive",
   async (_req, { params }) => {
     const { id: visitId } = await params;
 
     const session = await auth();
     const userId = session?.user?.id;
-    if (!userId) return apiError('unauthorized', 401);
+    if (!userId) return apiError("unauthorized", 401);
+    if (await isOwnedTemplateTwinStagingQaVisit({ visitId, userId })) {
+      return apiError("not found", 404);
+    }
 
     const blocked = rateLimitOr429(RATE_LIMITS.VISIT_OPS, userId);
     if (blocked) return blocked;
@@ -46,16 +50,16 @@ export const POST = withApiHandler<{ id: string }>(
         archivedAt: true,
       },
     });
-    if (!visit || visit.userId !== userId) return apiError('not found', 404);
+    if (!visit || visit.userId !== userId) return apiError("not found", 404);
 
     if (visit.status !== TranscribeVisitStatus.SIGNED) {
       return NextResponse.json(
         {
           error:
-            'Only signed visits can be archived. Use Delete for draft or in-progress visits.',
-          code: 'VISIT_NOT_SIGNED',
+            "Only signed visits can be archived. Use Delete for draft or in-progress visits.",
+          code: "VISIT_NOT_SIGNED",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -67,12 +71,12 @@ export const POST = withApiHandler<{ id: string }>(
       where: { id: visit.id },
       data: { archivedAt: new Date() },
     });
-    log.info('api:visits:archive', 'archived', { userId, visitId });
+    log.info("api:visits:archive", "archived", { userId, visitId });
     void logAudit({
-      action: 'VISIT_ARCHIVED',
-      targetType: 'TranscribeVisit',
+      action: "VISIT_ARCHIVED",
+      targetType: "TranscribeVisit",
       targetId: visitId,
     });
     return NextResponse.json({ ok: true });
-  }
+  },
 );

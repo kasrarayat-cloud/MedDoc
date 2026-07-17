@@ -38,6 +38,7 @@ import { generateVisitPdf } from '@/lib/pdf-generator';
 import { redactPhi } from '@meddoc/ai';
 import { log } from '@/lib/log';
 import { isDataExportEnabled } from '@/lib/data-export-feature';
+import { ordinaryClinicalVisitWhere } from '@/lib/template-twin/synthetic-qa-patient';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -75,7 +76,12 @@ export const GET = withApiHandler('api:settings:export-data', async () => {
 
   // Light visit list — we fetch full bytes per-visit as we stream.
   const visits = await prisma.transcribeVisit.findMany({
-    where: { userId },
+    where: ordinaryClinicalVisitWhere({
+      userId,
+      // Synthetic staging visits have one narrow, verified Original Template
+      // DOCX delivery path. They must never leak through the generic account
+      // archive as JSON, audio, or a newly generated PDF.
+    }),
     select: {
       id: true,
       audioKey: true,

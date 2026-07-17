@@ -1,34 +1,38 @@
-'use server';
+"use server";
 
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from "node:crypto";
 
-import { Prisma } from '@prisma/client';
-import prisma from '@meddoc/db';
-import { revalidatePath } from 'next/cache';
-import { z } from 'zod';
+import { Prisma } from "@prisma/client";
+import prisma from "@meddoc/db";
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
 
-import { AuthError, requireDoctorSession } from '@/lib/auth';
-import { enqueueTemplateTwinAudit } from '@/lib/template-twin/audit-outbox';
+import { AuthError, requireDoctorSession } from "@/lib/auth";
+import { enqueueTemplateTwinAudit } from "@/lib/template-twin/audit-outbox";
 import {
   lockTemplateTwinRolloutForFinalClaim,
   type TemplateTwinRolloutToken,
-} from '@/lib/template-twin/rollout';
+} from "@/lib/template-twin/rollout";
+import {
+  TemplateTwinStagingQaLifecycleGuardError,
+  runWithTemplateTwinStagingQaLifecycleGuard,
+} from "@/lib/template-twin/staging-qa-lifecycle-guard";
 
 type TemplateTwinManagementCode =
-  | 'INVALID_INPUT'
-  | 'INVALID_IDENTITY'
-  | 'NOT_FOUND'
-  | 'NOT_CERTIFIED'
-  | 'RETIRED'
-  | 'SOURCE_UNSAFE'
-  | 'SOURCE_INCONSISTENT'
-  | 'INVALID_TRANSITION'
-  | 'ROLLBACK_REQUIRED'
-  | 'ROLLBACK_NOT_ALLOWED'
-  | 'CONFLICT'
-  | 'ROLLOUT_CHANGED'
-  | 'FORBIDDEN'
-  | 'PERSISTENCE_FAILED';
+  | "INVALID_INPUT"
+  | "INVALID_IDENTITY"
+  | "NOT_FOUND"
+  | "NOT_CERTIFIED"
+  | "RETIRED"
+  | "SOURCE_UNSAFE"
+  | "SOURCE_INCONSISTENT"
+  | "INVALID_TRANSITION"
+  | "ROLLBACK_REQUIRED"
+  | "ROLLBACK_NOT_ALLOWED"
+  | "CONFLICT"
+  | "ROLLOUT_CHANGED"
+  | "FORBIDDEN"
+  | "PERSISTENCE_FAILED";
 
 type TemplateTwinManagementFailure = {
   ok: false;
@@ -40,7 +44,7 @@ type TemplateTwinStatusResult =
   | {
       ok: true;
       id: string;
-      status: 'draft' | 'active' | 'inactive' | 'retired';
+      status: "draft" | "active" | "inactive" | "retired";
       changed: boolean;
     }
   | TemplateTwinManagementFailure;
@@ -50,7 +54,7 @@ type TemplateTwinVersionResult =
       ok: true;
       id: string;
       version: number;
-      status: 'draft';
+      status: "draft";
     }
   | TemplateTwinManagementFailure;
 
@@ -58,7 +62,7 @@ type TemplateTwinRollbackResult =
   | {
       ok: true;
       id: string;
-      status: 'active';
+      status: "active";
       changed: true;
       rolledBackFromVersion: number;
       rolledBackToVersion: number;
@@ -71,13 +75,13 @@ export type TemplateTwinLineageVersion = {
   name: string;
   encounterType: string;
   versionDescription: string;
-  status: 'draft' | 'active' | 'inactive' | 'retired';
+  status: "draft" | "active" | "inactive" | "retired";
   certificationStatus:
-    | 'recognized'
-    | 'needs_confirmation'
-    | 'unsupported'
-    | 'certified'
-    | 'quarantined';
+    | "recognized"
+    | "needs_confirmation"
+    | "unsupported"
+    | "certified"
+    | "quarantined";
   certifiedAtIso: string | null;
   compiledAtIso: string;
   compilerVersion: string;
@@ -111,7 +115,7 @@ class TemplateTwinManagementError extends Error {
     message: string,
   ) {
     super(message);
-    this.name = 'TemplateTwinManagementError';
+    this.name = "TemplateTwinManagementError";
   }
 }
 
@@ -162,7 +166,7 @@ const OWNED_VERSION_SELECT = {
         },
       },
       fields: {
-        orderBy: { displayOrder: 'asc' as const },
+        orderBy: { displayOrder: "asc" as const },
         select: {
           fieldId: true,
           displayOrder: true,
@@ -201,36 +205,46 @@ type OwnedVersion = Prisma.NoteTemplateGetPayload<{
   select: typeof OWNED_VERSION_SELECT;
 }>;
 
-type TemplateTwinReadClient = Pick<Prisma.TransactionClient, 'noteTemplate'>;
+type TemplateTwinReadClient = Pick<Prisma.TransactionClient, "noteTemplate">;
 
 function fail(error: unknown): TemplateTwinManagementFailure {
+  if (error instanceof TemplateTwinStagingQaLifecycleGuardError) {
+    return {
+      ok: false,
+      code: "NOT_FOUND",
+      error:
+        "That Template Twin version does not exist or is not available to this practice.",
+    };
+  }
   if (error instanceof TemplateTwinManagementError) {
     return { ok: false, code: error.code, error: error.message };
   }
   if (error instanceof AuthError) {
     return {
       ok: false,
-      code: 'FORBIDDEN',
+      code: "FORBIDDEN",
       error:
-        error.code === 'UNAUTHENTICATED'
-          ? 'Sign in again before managing Template Twin.'
+        error.code === "UNAUTHENTICATED"
+          ? "Sign in again before managing Template Twin."
           : error.message,
     };
   }
   if (
     error instanceof Prisma.PrismaClientKnownRequestError &&
-    error.code === 'P2002'
+    error.code === "P2002"
   ) {
     return {
       ok: false,
-      code: 'CONFLICT',
-      error: 'This template lineage changed in another request. Reload and try again.',
+      code: "CONFLICT",
+      error:
+        "This template lineage changed in another request. Reload and try again.",
     };
   }
   return {
     ok: false,
-    code: 'PERSISTENCE_FAILED',
-    error: 'Template Twin could not complete that change. Nothing was partially activated.',
+    code: "PERSISTENCE_FAILED",
+    error:
+      "Template Twin could not complete that change. Nothing was partially activated.",
   };
 }
 
@@ -247,6 +261,20 @@ async function currentActor(): Promise<TemplateTwinActor> {
   };
 }
 
+async function runManagementStagingGuard<T>(input: {
+  noteTemplateId: string;
+  actor: TemplateTwinActor;
+  purpose: string;
+  operation: () => Promise<T>;
+}): Promise<T> {
+  return runWithTemplateTwinStagingQaLifecycleGuard({
+    noteTemplateId: input.noteTemplateId,
+    actor: input.actor,
+    purpose: input.purpose,
+    operation: input.operation,
+  });
+}
+
 async function assertManagementRolloutFinality(
   tx: Prisma.TransactionClient,
   actor: TemplateTwinActor,
@@ -259,7 +287,7 @@ async function assertManagementRolloutFinality(
   });
   if (!decision.allowed) {
     throw new TemplateTwinManagementError(
-      'ROLLOUT_CHANGED',
+      "ROLLOUT_CHANGED",
       `${decision.code}: Template Twin availability changed while ${operation}. Reload and try again.`,
     );
   }
@@ -274,17 +302,18 @@ async function loadOwnedVersion(
     where: {
       id: noteTemplateId,
       doctorId: actor.userId,
-      templateKind: 'template_twin_docx',
+      templateKind: "template_twin_docx",
     },
     select: OWNED_VERSION_SELECT,
   });
   if (
     !row?.templateTwinCompiledVersion ||
-    row.templateTwinCompiledVersion.sourceArtifact.practiceId !== actor.practiceId
+    row.templateTwinCompiledVersion.sourceArtifact.practiceId !==
+      actor.practiceId
   ) {
     throw new TemplateTwinManagementError(
-      'NOT_FOUND',
-      'That Template Twin version does not exist or is not available to this practice.',
+      "NOT_FOUND",
+      "That Template Twin version does not exist or is not available to this practice.",
     );
   }
   return row;
@@ -294,31 +323,28 @@ function compiled(row: OwnedVersion) {
   const value = row.templateTwinCompiledVersion;
   if (!value) {
     throw new TemplateTwinManagementError(
-      'SOURCE_INCONSISTENT',
-      'This Template Twin version has no compiled structure and cannot be managed.',
+      "SOURCE_INCONSISTENT",
+      "This Template Twin version has no compiled structure and cannot be managed.",
     );
   }
   return value;
 }
 
 function assertAcceptedSource(row: OwnedVersion): void {
-  if (compiled(row).sourceArtifact.validationStatus !== 'accepted') {
+  if (compiled(row).sourceArtifact.validationStatus !== "accepted") {
     throw new TemplateTwinManagementError(
-      'SOURCE_UNSAFE',
-      'This source document is quarantined and cannot be activated.',
+      "SOURCE_UNSAFE",
+      "This source document is quarantined and cannot be activated.",
     );
   }
 }
 
 function assertCertified(row: OwnedVersion): void {
   const version = compiled(row);
-  if (
-    version.certificationStatus !== 'CERTIFIED' ||
-    !version.certification
-  ) {
+  if (version.certificationStatus !== "CERTIFIED" || !version.certification) {
     throw new TemplateTwinManagementError(
-      'NOT_CERTIFIED',
-      'This version must pass synthetic testing and physician certification before activation.',
+      "NOT_CERTIFIED",
+      "This version must pass synthetic testing and physician certification before activation.",
     );
   }
 }
@@ -332,8 +358,8 @@ function assertActivationIdentity(row: OwnedVersion): void {
     row.versionDescription.trim().length < 3
   ) {
     throw new TemplateTwinManagementError(
-      'INVALID_IDENTITY',
-      'Name the template, choose its visit scope, and describe this version before activation.',
+      "INVALID_IDENTITY",
+      "Name the template, choose its visit scope, and describe this version before activation.",
     );
   }
 }
@@ -342,38 +368,38 @@ function asInputJson(value: Prisma.JsonValue): Prisma.InputJsonValue {
   return value as Prisma.InputJsonValue;
 }
 
-function publicStatus(value: string): TemplateTwinLineageVersion['status'] {
+function publicStatus(value: string): TemplateTwinLineageVersion["status"] {
   if (
-    value === 'draft' ||
-    value === 'active' ||
-    value === 'inactive' ||
-    value === 'retired'
+    value === "draft" ||
+    value === "active" ||
+    value === "inactive" ||
+    value === "retired"
   ) {
     return value;
   }
   // Unknown legacy states are never treated as active/eligible.
-  return 'inactive';
+  return "inactive";
 }
 
 function certificationStatus(
   value: string,
-): TemplateTwinLineageVersion['certificationStatus'] {
+): TemplateTwinLineageVersion["certificationStatus"] {
   const lowered = value.toLowerCase();
   if (
-    lowered === 'recognized' ||
-    lowered === 'needs_confirmation' ||
-    lowered === 'unsupported' ||
-    lowered === 'certified' ||
-    lowered === 'quarantined'
+    lowered === "recognized" ||
+    lowered === "needs_confirmation" ||
+    lowered === "unsupported" ||
+    lowered === "certified" ||
+    lowered === "quarantined"
   ) {
     return lowered;
   }
-  return 'needs_confirmation';
+  return "needs_confirmation";
 }
 
 function revalidateTemplateManagement(): void {
-  revalidatePath('/settings');
-  revalidatePath('/settings/note-format');
+  revalidatePath("/settings");
+  revalidatePath("/settings/note-format");
 }
 
 /**
@@ -389,180 +415,193 @@ export async function createTemplateTwinVersionAction(
     const input = NewVersionSchema.safeParse(rawInput);
     if (!input.success) {
       throw new TemplateTwinManagementError(
-        'INVALID_IDENTITY',
-        'Name the template, choose its visit scope, and describe this version.',
+        "INVALID_IDENTITY",
+        "Name the template, choose its visit scope, and describe this version.",
       );
     }
 
     const noteTemplateId = randomUUID();
     const compiledVersionId = randomUUID();
-    const result = await prisma.$transaction(
-      async (tx: Prisma.TransactionClient) => {
-        await assertManagementRolloutFinality(
-          tx,
-          actor,
-          'the new template version was being created',
-        );
-        const source = await loadOwnedVersion(
-          tx,
-          input.data.sourceNoteTemplateId,
-          actor,
-        );
-        assertAcceptedSource(source);
-        assertCertified(source);
-        const sourceCompiled = compiled(source);
-        if (source.encounterType !== input.data.encounterType) {
-          throw new TemplateTwinManagementError(
-            'INVALID_IDENTITY',
-            'A version must keep the same visit scope. Upload a separate template to create a new scope.',
-          );
-        }
-
-        const latest = await tx.noteTemplate.findFirst({
-          where: {
-            doctorId: actor.userId,
-            lineageId: source.lineageId,
-            templateKind: 'template_twin_docx',
-          },
-          orderBy: { version: 'desc' },
-          select: { version: true },
-        });
-        if (!latest) {
-          throw new TemplateTwinManagementError(
-            'SOURCE_INCONSISTENT',
-            'This Template Twin lineage could not be verified.',
-          );
-        }
-        const nextVersion = latest.version + 1;
-
-        await tx.noteTemplate.create({
-          data: {
-            id: noteTemplateId,
-            doctorId: actor.userId,
-            name: input.data.name,
-            encounterType: input.data.encounterType,
-            sections: asInputJson(source.sections),
-            ...(source.styleProfile === null
-              ? {}
-              : { styleProfile: asInputJson(source.styleProfile) }),
-            specialtyBaseline: source.specialtyBaseline,
-            version: nextVersion,
-            versionDescription: input.data.versionDescription,
-            status: 'draft',
-            isSystemDefault: false,
-            lineageId: source.lineageId,
-            parentVersionId: source.id,
-            templateKind: 'template_twin_docx',
-          },
-          select: { id: true },
-        });
-
-        const fieldCreates = sourceCompiled.fields.map((field) => {
-          if (!field.mapping) {
-            throw new TemplateTwinManagementError(
-              'SOURCE_INCONSISTENT',
-              'A certified field is missing its semantic mapping.',
+    const result = await runManagementStagingGuard<{ version: number }>({
+      noteTemplateId: input.data.sourceNoteTemplateId,
+      actor,
+      purpose: "management-create-version",
+      operation: () =>
+        prisma.$transaction(
+          async (tx: Prisma.TransactionClient) => {
+            await assertManagementRolloutFinality(
+              tx,
+              actor,
+              "the new template version was being created",
             );
-          }
-          const unsupported =
-            field.detectionStatus === 'UNSUPPORTED' ||
-            field.mapping.mappingStatus === 'UNSUPPORTED';
-          return {
-            fieldId: field.fieldId,
-            displayOrder: field.displayOrder,
-            originalLabel: field.originalLabel,
-            fieldKind: field.fieldKind,
-            ...(field.allowedOptions === null
-              ? {}
-              : { allowedOptions: asInputJson(field.allowedOptions) }),
-            rendererBinding: asInputJson(field.rendererBinding),
-            detectionStatus: unsupported
-              ? ('UNSUPPORTED' as const)
-              : ('NEEDS_CONFIRMATION' as const),
-            clinicallyMaterial: field.clinicallyMaterial,
-            criticality: field.criticality,
-            required: field.required,
-            mapping: {
-              create: {
-                clinicalConcept: field.mapping.clinicalConcept,
-                expectedDataType: field.mapping.expectedDataType,
-                polarityBehavior: field.mapping.polarityBehavior,
-                temporality: field.mapping.temporality,
-                laterality: field.mapping.laterality,
-                unitPolicy: field.mapping.unitPolicy,
-                approvedSynonyms: asInputJson(field.mapping.approvedSynonyms),
-                required: field.mapping.required,
-                blankPolicy: field.mapping.blankPolicy,
-                unknownPolicy: field.mapping.unknownPolicy,
-                practiceDefault: field.mapping.practiceDefault,
-                mappingStatus: unsupported
-                  ? ('UNSUPPORTED' as const)
-                  : ('NEEDS_CONFIRMATION' as const),
-                proposedByModel: field.mapping.proposedByModel,
-                approvedById: null,
-                approvedAt: null,
+            const source = await loadOwnedVersion(
+              tx,
+              input.data.sourceNoteTemplateId,
+              actor,
+            );
+            assertAcceptedSource(source);
+            assertCertified(source);
+            const sourceCompiled = compiled(source);
+            if (source.encounterType !== input.data.encounterType) {
+              throw new TemplateTwinManagementError(
+                "INVALID_IDENTITY",
+                "A version must keep the same visit scope. Upload a separate template to create a new scope.",
+              );
+            }
+
+            const latest = await tx.noteTemplate.findFirst({
+              where: {
+                doctorId: actor.userId,
+                lineageId: source.lineageId,
+                templateKind: "template_twin_docx",
               },
-            },
-          };
-        });
+              orderBy: { version: "desc" },
+              select: { version: true },
+            });
+            if (!latest) {
+              throw new TemplateTwinManagementError(
+                "SOURCE_INCONSISTENT",
+                "This Template Twin lineage could not be verified.",
+              );
+            }
+            const nextVersion = latest.version + 1;
 
-        await tx.templateTwinCompiledVersion.create({
-          data: {
-            id: compiledVersionId,
-            sourceArtifactId: sourceCompiled.sourceArtifactId,
-            noteTemplateId,
-            compilerVersion: sourceCompiled.compilerVersion,
-            irSchemaVersion: sourceCompiled.irSchemaVersion,
-            compiledDocumentIr: asInputJson(sourceCompiled.compiledDocumentIr),
-            unsupportedElements: asInputJson(sourceCompiled.unsupportedElements),
-            structureSha256: sourceCompiled.structureSha256,
-            staticContentSha256: sourceCompiled.staticContentSha256,
-            certificationStatus:
-              sourceCompiled.blockingUnsupportedCount > 0
-                ? 'UNSUPPORTED'
-                : 'NEEDS_CONFIRMATION',
-            blockingUnsupportedCount: sourceCompiled.blockingUnsupportedCount,
-            fields: { create: fieldCreates },
-          },
-          select: { id: true },
-        });
+            await tx.noteTemplate.create({
+              data: {
+                id: noteTemplateId,
+                doctorId: actor.userId,
+                name: input.data.name,
+                encounterType: input.data.encounterType,
+                sections: asInputJson(source.sections),
+                ...(source.styleProfile === null
+                  ? {}
+                  : { styleProfile: asInputJson(source.styleProfile) }),
+                specialtyBaseline: source.specialtyBaseline,
+                version: nextVersion,
+                versionDescription: input.data.versionDescription,
+                status: "draft",
+                isSystemDefault: false,
+                lineageId: source.lineageId,
+                parentVersionId: source.id,
+                templateKind: "template_twin_docx",
+              },
+              select: { id: true },
+            });
 
-        await enqueueTemplateTwinAudit(tx, {
-          eventKey: `template-twin:compiled:${compiledVersionId}:v${nextVersion}`,
-          practiceId: actor.practiceId,
-          actorId: actor.userId,
-          actorEmailSnapshot: actor.userEmail,
-          action: 'TEMPLATE_TWIN_COMPILED',
-          targetType: 'TemplateTwinCompiledVersion',
-          targetId: compiledVersionId,
-          metadata: {
-            templateVersion: nextVersion,
-            parentVersion: source.version,
-            sourceArtifactId: sourceCompiled.sourceArtifactId,
-            structureSha256: sourceCompiled.structureSha256,
-            fieldCount: fieldCreates.length,
-            certificationReset: true,
-            rolloutGlobalGeneration:
-              actor.rolloutToken.globalGeneration.toString(),
-            rolloutPracticeGeneration:
-              actor.rolloutToken.practiceGeneration.toString(),
+            const fieldCreates = sourceCompiled.fields.map((field) => {
+              if (!field.mapping) {
+                throw new TemplateTwinManagementError(
+                  "SOURCE_INCONSISTENT",
+                  "A certified field is missing its semantic mapping.",
+                );
+              }
+              const unsupported =
+                field.detectionStatus === "UNSUPPORTED" ||
+                field.mapping.mappingStatus === "UNSUPPORTED";
+              return {
+                fieldId: field.fieldId,
+                displayOrder: field.displayOrder,
+                originalLabel: field.originalLabel,
+                fieldKind: field.fieldKind,
+                ...(field.allowedOptions === null
+                  ? {}
+                  : { allowedOptions: asInputJson(field.allowedOptions) }),
+                rendererBinding: asInputJson(field.rendererBinding),
+                detectionStatus: unsupported
+                  ? ("UNSUPPORTED" as const)
+                  : ("NEEDS_CONFIRMATION" as const),
+                clinicallyMaterial: field.clinicallyMaterial,
+                criticality: field.criticality,
+                required: field.required,
+                mapping: {
+                  create: {
+                    clinicalConcept: field.mapping.clinicalConcept,
+                    expectedDataType: field.mapping.expectedDataType,
+                    polarityBehavior: field.mapping.polarityBehavior,
+                    temporality: field.mapping.temporality,
+                    laterality: field.mapping.laterality,
+                    unitPolicy: field.mapping.unitPolicy,
+                    approvedSynonyms: asInputJson(
+                      field.mapping.approvedSynonyms,
+                    ),
+                    required: field.mapping.required,
+                    blankPolicy: field.mapping.blankPolicy,
+                    unknownPolicy: field.mapping.unknownPolicy,
+                    practiceDefault: field.mapping.practiceDefault,
+                    mappingStatus: unsupported
+                      ? ("UNSUPPORTED" as const)
+                      : ("NEEDS_CONFIRMATION" as const),
+                    proposedByModel: field.mapping.proposedByModel,
+                    approvedById: null,
+                    approvedAt: null,
+                  },
+                },
+              };
+            });
+
+            await tx.templateTwinCompiledVersion.create({
+              data: {
+                id: compiledVersionId,
+                sourceArtifactId: sourceCompiled.sourceArtifactId,
+                noteTemplateId,
+                compilerVersion: sourceCompiled.compilerVersion,
+                irSchemaVersion: sourceCompiled.irSchemaVersion,
+                compiledDocumentIr: asInputJson(
+                  sourceCompiled.compiledDocumentIr,
+                ),
+                unsupportedElements: asInputJson(
+                  sourceCompiled.unsupportedElements,
+                ),
+                structureSha256: sourceCompiled.structureSha256,
+                staticContentSha256: sourceCompiled.staticContentSha256,
+                certificationStatus:
+                  sourceCompiled.blockingUnsupportedCount > 0
+                    ? "UNSUPPORTED"
+                    : "NEEDS_CONFIRMATION",
+                blockingUnsupportedCount:
+                  sourceCompiled.blockingUnsupportedCount,
+                fields: { create: fieldCreates },
+              },
+              select: { id: true },
+            });
+
+            await enqueueTemplateTwinAudit(tx, {
+              eventKey: `template-twin:compiled:${compiledVersionId}:v${nextVersion}`,
+              practiceId: actor.practiceId,
+              actorId: actor.userId,
+              actorEmailSnapshot: actor.userEmail,
+              action: "TEMPLATE_TWIN_COMPILED",
+              targetType: "TemplateTwinCompiledVersion",
+              targetId: compiledVersionId,
+              metadata: {
+                templateVersion: nextVersion,
+                parentVersion: source.version,
+                sourceArtifactId: sourceCompiled.sourceArtifactId,
+                structureSha256: sourceCompiled.structureSha256,
+                fieldCount: fieldCreates.length,
+                certificationReset: true,
+                rolloutGlobalGeneration:
+                  actor.rolloutToken.globalGeneration.toString(),
+                rolloutPracticeGeneration:
+                  actor.rolloutToken.practiceGeneration.toString(),
+              },
+            });
+            return { version: nextVersion };
           },
-        });
-        return { version: nextVersion };
-      },
-      // Compiled-lineage triggers intentionally require READ COMMITTED so a
-      // post-advisory-lock ownership read cannot use a stale transaction
-      // snapshot. The lineage/version unique constraints still make a losing
-      // concurrent fork fail closed.
-      { isolationLevel: 'ReadCommitted' },
-    );
+          // Compiled-lineage triggers intentionally require READ COMMITTED so a
+          // post-advisory-lock ownership read cannot use a stale transaction
+          // snapshot. The lineage/version unique constraints still make a losing
+          // concurrent fork fail closed.
+          { isolationLevel: "ReadCommitted" },
+        ),
+    });
 
     revalidateTemplateManagement();
     return {
       ok: true,
       id: noteTemplateId,
       version: result.version,
-      status: 'draft',
+      status: "draft",
     };
   } catch (error) {
     return fail(error);
@@ -576,92 +615,101 @@ export async function activateTemplateTwinVersionAction(
     const actor = await currentActor();
     const id = TemplateIdSchema.safeParse(rawId);
     if (!id.success) {
-      throw new TemplateTwinManagementError('INVALID_INPUT', 'Choose a valid template version.');
+      throw new TemplateTwinManagementError(
+        "INVALID_INPUT",
+        "Choose a valid template version.",
+      );
     }
     const operationId = randomUUID();
-    const result = await prisma.$transaction(
-      async (tx: Prisma.TransactionClient) => {
-        await assertManagementRolloutFinality(
-          tx,
-          actor,
-          'the template version was being activated',
-        );
-        const target = await loadOwnedVersion(tx, id.data, actor);
-        if (target.status === 'retired') {
-          throw new TemplateTwinManagementError(
-            'RETIRED',
-            'A retired Template Twin version cannot be activated.',
-          );
-        }
-        assertAcceptedSource(target);
-        assertCertified(target);
-        assertActivationIdentity(target);
-        if (target.status === 'active') return { changed: false };
+    const result = await runManagementStagingGuard<{ changed: boolean }>({
+      noteTemplateId: id.data,
+      actor,
+      purpose: "management-activate",
+      operation: () =>
+        prisma.$transaction(
+          async (tx: Prisma.TransactionClient) => {
+            await assertManagementRolloutFinality(
+              tx,
+              actor,
+              "the template version was being activated",
+            );
+            const target = await loadOwnedVersion(tx, id.data, actor);
+            if (target.status === "retired") {
+              throw new TemplateTwinManagementError(
+                "RETIRED",
+                "A retired Template Twin version cannot be activated.",
+              );
+            }
+            assertAcceptedSource(target);
+            assertCertified(target);
+            assertActivationIdentity(target);
+            if (target.status === "active") return { changed: false };
 
-        const current = await tx.noteTemplate.findFirst({
-          where: {
-            doctorId: actor.userId,
-            encounterType: target.encounterType,
-            status: 'active',
+            const current = await tx.noteTemplate.findFirst({
+              where: {
+                doctorId: actor.userId,
+                encounterType: target.encounterType,
+                status: "active",
+              },
+              select: { id: true, lineageId: true, version: true },
+            });
+            if (
+              current?.lineageId === target.lineageId &&
+              current.version > target.version
+            ) {
+              throw new TemplateTwinManagementError(
+                "ROLLBACK_REQUIRED",
+                "Use the explicit rollback action to restore an older certified version.",
+              );
+            }
+            await tx.noteTemplate.updateMany({
+              where: {
+                doctorId: actor.userId,
+                encounterType: target.encounterType,
+                status: "active",
+                NOT: { id: target.id },
+              },
+              data: { status: "inactive" },
+            });
+            const activated = await tx.noteTemplate.updateMany({
+              where: {
+                id: target.id,
+                doctorId: actor.userId,
+                status: { in: ["draft", "inactive"] },
+              },
+              data: { status: "active" },
+            });
+            if (activated.count !== 1) {
+              throw new TemplateTwinManagementError(
+                "CONFLICT",
+                "This version changed in another request. Reload before activating.",
+              );
+            }
+            await enqueueTemplateTwinAudit(tx, {
+              eventKey: `template-twin:activated:${target.id}:${operationId}`,
+              practiceId: actor.practiceId,
+              actorId: actor.userId,
+              actorEmailSnapshot: actor.userEmail,
+              action: "TEMPLATE_TWIN_ACTIVATED",
+              targetType: "NoteTemplate",
+              targetId: target.id,
+              metadata: {
+                templateVersion: target.version,
+                compiledVersionId: compiled(target).id,
+                previousActiveId: current?.id ?? null,
+                rolloutGlobalGeneration:
+                  actor.rolloutToken.globalGeneration.toString(),
+                rolloutPracticeGeneration:
+                  actor.rolloutToken.practiceGeneration.toString(),
+              },
+            });
+            return { changed: true };
           },
-          select: { id: true, lineageId: true, version: true },
-        });
-        if (
-          current?.lineageId === target.lineageId &&
-          current.version > target.version
-        ) {
-          throw new TemplateTwinManagementError(
-            'ROLLBACK_REQUIRED',
-            'Use the explicit rollback action to restore an older certified version.',
-          );
-        }
-        await tx.noteTemplate.updateMany({
-          where: {
-            doctorId: actor.userId,
-            encounterType: target.encounterType,
-            status: 'active',
-            NOT: { id: target.id },
-          },
-          data: { status: 'inactive' },
-        });
-        const activated = await tx.noteTemplate.updateMany({
-          where: {
-            id: target.id,
-            doctorId: actor.userId,
-            status: { in: ['draft', 'inactive'] },
-          },
-          data: { status: 'active' },
-        });
-        if (activated.count !== 1) {
-          throw new TemplateTwinManagementError(
-            'CONFLICT',
-            'This version changed in another request. Reload before activating.',
-          );
-        }
-        await enqueueTemplateTwinAudit(tx, {
-          eventKey: `template-twin:activated:${target.id}:${operationId}`,
-          practiceId: actor.practiceId,
-          actorId: actor.userId,
-          actorEmailSnapshot: actor.userEmail,
-          action: 'TEMPLATE_TWIN_ACTIVATED',
-          targetType: 'NoteTemplate',
-          targetId: target.id,
-          metadata: {
-            templateVersion: target.version,
-            compiledVersionId: compiled(target).id,
-            previousActiveId: current?.id ?? null,
-            rolloutGlobalGeneration:
-              actor.rolloutToken.globalGeneration.toString(),
-            rolloutPracticeGeneration:
-              actor.rolloutToken.practiceGeneration.toString(),
-          },
-        });
-        return { changed: true };
-      },
-      { isolationLevel: 'Serializable' },
-    );
+          { isolationLevel: "Serializable" },
+        ),
+    });
     if (result.changed) revalidateTemplateManagement();
-    return { ok: true, id: id.data, status: 'active', changed: result.changed };
+    return { ok: true, id: id.data, status: "active", changed: result.changed };
   } catch (error) {
     return fail(error);
   }
@@ -674,59 +722,77 @@ export async function deactivateTemplateTwinVersionAction(
     const actor = await currentActor();
     const id = TemplateIdSchema.safeParse(rawId);
     if (!id.success) {
-      throw new TemplateTwinManagementError('INVALID_INPUT', 'Choose a valid template version.');
+      throw new TemplateTwinManagementError(
+        "INVALID_INPUT",
+        "Choose a valid template version.",
+      );
     }
     const operationId = randomUUID();
-    const result = await prisma.$transaction(
-      async (tx: Prisma.TransactionClient) => {
-        await assertManagementRolloutFinality(
-          tx,
-          actor,
-          'the template version was being deactivated',
-        );
-        const target = await loadOwnedVersion(tx, id.data, actor);
-        if (target.status === 'retired') {
-          throw new TemplateTwinManagementError(
-            'RETIRED',
-            'This Template Twin version is already retired.',
-          );
-        }
-        if (target.status === 'inactive') return { changed: false };
-        if (target.status !== 'active') {
-          throw new TemplateTwinManagementError(
-            'INVALID_TRANSITION',
-            'Only the active Template Twin version can be deactivated.',
-          );
-        }
-        const changed = await tx.noteTemplate.updateMany({
-          where: { id: target.id, doctorId: actor.userId, status: 'active' },
-          data: { status: 'inactive' },
-        });
-        if (changed.count !== 1) {
-          throw new TemplateTwinManagementError(
-            'CONFLICT',
-            'This version changed in another request. Reload before deactivating.',
-          );
-        }
-        await enqueueTemplateTwinAudit(tx, {
-          eventKey: `template-twin:deactivated:${target.id}:${operationId}`,
-          practiceId: actor.practiceId,
-          actorId: actor.userId,
-          actorEmailSnapshot: actor.userEmail,
-          action: 'TEMPLATE_TWIN_DEACTIVATED',
-          targetType: 'NoteTemplate',
-          targetId: target.id,
-          metadata: {
-            templateVersion: target.version,
-            compiledVersionId: compiled(target).id,
+    const result = await runManagementStagingGuard<{ changed: boolean }>({
+      noteTemplateId: id.data,
+      actor,
+      purpose: "management-deactivate",
+      operation: () =>
+        prisma.$transaction(
+          async (tx: Prisma.TransactionClient) => {
+            await assertManagementRolloutFinality(
+              tx,
+              actor,
+              "the template version was being deactivated",
+            );
+            const target = await loadOwnedVersion(tx, id.data, actor);
+            if (target.status === "retired") {
+              throw new TemplateTwinManagementError(
+                "RETIRED",
+                "This Template Twin version is already retired.",
+              );
+            }
+            if (target.status === "inactive") return { changed: false };
+            if (target.status !== "active") {
+              throw new TemplateTwinManagementError(
+                "INVALID_TRANSITION",
+                "Only the active Template Twin version can be deactivated.",
+              );
+            }
+            const changed = await tx.noteTemplate.updateMany({
+              where: {
+                id: target.id,
+                doctorId: actor.userId,
+                status: "active",
+              },
+              data: { status: "inactive" },
+            });
+            if (changed.count !== 1) {
+              throw new TemplateTwinManagementError(
+                "CONFLICT",
+                "This version changed in another request. Reload before deactivating.",
+              );
+            }
+            await enqueueTemplateTwinAudit(tx, {
+              eventKey: `template-twin:deactivated:${target.id}:${operationId}`,
+              practiceId: actor.practiceId,
+              actorId: actor.userId,
+              actorEmailSnapshot: actor.userEmail,
+              action: "TEMPLATE_TWIN_DEACTIVATED",
+              targetType: "NoteTemplate",
+              targetId: target.id,
+              metadata: {
+                templateVersion: target.version,
+                compiledVersionId: compiled(target).id,
+              },
+            });
+            return { changed: true };
           },
-        });
-        return { changed: true };
-      },
-      { isolationLevel: 'Serializable' },
-    );
+          { isolationLevel: "Serializable" },
+        ),
+    });
     if (result.changed) revalidateTemplateManagement();
-    return { ok: true, id: id.data, status: 'inactive', changed: result.changed };
+    return {
+      ok: true,
+      id: id.data,
+      status: "inactive",
+      changed: result.changed,
+    };
   } catch (error) {
     return fail(error);
   }
@@ -739,69 +805,83 @@ export async function retireTemplateTwinVersionAction(
     const actor = await currentActor();
     const id = TemplateIdSchema.safeParse(rawId);
     if (!id.success) {
-      throw new TemplateTwinManagementError('INVALID_INPUT', 'Choose a valid template version.');
+      throw new TemplateTwinManagementError(
+        "INVALID_INPUT",
+        "Choose a valid template version.",
+      );
     }
     const operationId = randomUUID();
-    const result = await prisma.$transaction(
-      async (tx: Prisma.TransactionClient) => {
-        await assertManagementRolloutFinality(
-          tx,
-          actor,
-          'the template version was being retired',
-        );
-        const target = await loadOwnedVersion(tx, id.data, actor);
-        if (target.status === 'retired') return { changed: false };
-        const wasActive = target.status === 'active';
-        const changed = await tx.noteTemplate.updateMany({
-          where: {
-            id: target.id,
-            doctorId: actor.userId,
-            status: { not: 'retired' },
+    const result = await runManagementStagingGuard<{ changed: boolean }>({
+      noteTemplateId: id.data,
+      actor,
+      purpose: "management-retire",
+      operation: () =>
+        prisma.$transaction(
+          async (tx: Prisma.TransactionClient) => {
+            await assertManagementRolloutFinality(
+              tx,
+              actor,
+              "the template version was being retired",
+            );
+            const target = await loadOwnedVersion(tx, id.data, actor);
+            if (target.status === "retired") return { changed: false };
+            const wasActive = target.status === "active";
+            const changed = await tx.noteTemplate.updateMany({
+              where: {
+                id: target.id,
+                doctorId: actor.userId,
+                status: { not: "retired" },
+              },
+              data: { status: "retired" },
+            });
+            if (changed.count !== 1) {
+              throw new TemplateTwinManagementError(
+                "CONFLICT",
+                "This version changed in another request. Reload before retiring.",
+              );
+            }
+            if (wasActive) {
+              await enqueueTemplateTwinAudit(tx, {
+                eventKey: `template-twin:deactivated:${target.id}:${operationId}`,
+                practiceId: actor.practiceId,
+                actorId: actor.userId,
+                actorEmailSnapshot: actor.userEmail,
+                action: "TEMPLATE_TWIN_DEACTIVATED",
+                targetType: "NoteTemplate",
+                targetId: target.id,
+                metadata: {
+                  templateVersion: target.version,
+                  compiledVersionId: compiled(target).id,
+                  reasonCode: "VERSION_RETIRED",
+                },
+              });
+            }
+            await enqueueTemplateTwinAudit(tx, {
+              eventKey: `template-twin:retired:${target.id}:${operationId}`,
+              practiceId: actor.practiceId,
+              actorId: actor.userId,
+              actorEmailSnapshot: actor.userEmail,
+              action: "TEMPLATE_TWIN_RETIRED",
+              targetType: "NoteTemplate",
+              targetId: target.id,
+              metadata: {
+                templateVersion: target.version,
+                compiledVersionId: compiled(target).id,
+                priorStatus: publicStatus(target.status),
+              },
+            });
+            return { changed: true };
           },
-          data: { status: 'retired' },
-        });
-        if (changed.count !== 1) {
-          throw new TemplateTwinManagementError(
-            'CONFLICT',
-            'This version changed in another request. Reload before retiring.',
-          );
-        }
-        if (wasActive) {
-          await enqueueTemplateTwinAudit(tx, {
-            eventKey: `template-twin:deactivated:${target.id}:${operationId}`,
-            practiceId: actor.practiceId,
-            actorId: actor.userId,
-            actorEmailSnapshot: actor.userEmail,
-            action: 'TEMPLATE_TWIN_DEACTIVATED',
-            targetType: 'NoteTemplate',
-            targetId: target.id,
-            metadata: {
-              templateVersion: target.version,
-              compiledVersionId: compiled(target).id,
-              reasonCode: 'VERSION_RETIRED',
-            },
-          });
-        }
-        await enqueueTemplateTwinAudit(tx, {
-          eventKey: `template-twin:retired:${target.id}:${operationId}`,
-          practiceId: actor.practiceId,
-          actorId: actor.userId,
-          actorEmailSnapshot: actor.userEmail,
-          action: 'TEMPLATE_TWIN_RETIRED',
-          targetType: 'NoteTemplate',
-          targetId: target.id,
-          metadata: {
-            templateVersion: target.version,
-            compiledVersionId: compiled(target).id,
-            priorStatus: publicStatus(target.status),
-          },
-        });
-        return { changed: true };
-      },
-      { isolationLevel: 'Serializable' },
-    );
+          { isolationLevel: "Serializable" },
+        ),
+    });
     if (result.changed) revalidateTemplateManagement();
-    return { ok: true, id: id.data, status: 'retired', changed: result.changed };
+    return {
+      ok: true,
+      id: id.data,
+      status: "retired",
+      changed: result.changed,
+    };
   } catch (error) {
     return fail(error);
   }
@@ -814,78 +894,91 @@ export async function inspectTemplateTwinLineageAction(
     const actor = await currentActor();
     const id = TemplateIdSchema.safeParse(rawId);
     if (!id.success) {
-      throw new TemplateTwinManagementError('INVALID_INPUT', 'Choose a valid template version.');
-    }
-    const seed = await loadOwnedVersion(prisma, id.data, actor);
-    const rows: OwnedVersion[] = await prisma.noteTemplate.findMany({
-      where: {
-        doctorId: actor.userId,
-        lineageId: seed.lineageId,
-        templateKind: 'template_twin_docx',
-      },
-      select: OWNED_VERSION_SELECT,
-      orderBy: { version: 'desc' },
-    });
-    if (
-      rows.length === 0 ||
-      rows.some(
-        (row) =>
-          !row.templateTwinCompiledVersion ||
-          row.templateTwinCompiledVersion.sourceArtifact.practiceId !== actor.practiceId,
-      )
-    ) {
       throw new TemplateTwinManagementError(
-        'SOURCE_INCONSISTENT',
-        'This Template Twin lineage crosses an invalid practice boundary.',
+        "INVALID_INPUT",
+        "Choose a valid template version.",
       );
     }
-    const ordered = [...rows].sort((left, right) => right.version - left.version);
-    const activeVersion =
-      ordered.find((row) => row.status === 'active')?.version ?? null;
-    return {
-      ok: true,
-      lineage: {
-        lineageId: seed.lineageId,
-        activeVersion,
-        versions: ordered.map((row) => {
-          const rowCompiled = compiled(row);
-          const hasIdentity = Boolean(
-            row.name.trim().length >= 3 &&
-              row.encounterType &&
-              row.encounterType.trim().length >= 3 &&
-              row.versionDescription &&
-              row.versionDescription.trim().length >= 3,
+    return await runManagementStagingGuard({
+      noteTemplateId: id.data,
+      actor,
+      purpose: "management-lineage-read",
+      operation: async () => {
+        const seed = await loadOwnedVersion(prisma, id.data, actor);
+        const rows: OwnedVersion[] = await prisma.noteTemplate.findMany({
+          where: {
+            doctorId: actor.userId,
+            lineageId: seed.lineageId,
+            templateKind: "template_twin_docx",
+          },
+          select: OWNED_VERSION_SELECT,
+          orderBy: { version: "desc" },
+        });
+        if (
+          rows.length === 0 ||
+          rows.some(
+            (row) =>
+              !row.templateTwinCompiledVersion ||
+              row.templateTwinCompiledVersion.sourceArtifact.practiceId !==
+                actor.practiceId,
+          )
+        ) {
+          throw new TemplateTwinManagementError(
+            "SOURCE_INCONSISTENT",
+            "This Template Twin lineage crosses an invalid practice boundary.",
           );
-          return {
-            id: row.id,
-            version: row.version,
-            name: row.name,
-            encounterType: row.encounterType ?? '',
-            versionDescription: row.versionDescription ?? '',
-            status: publicStatus(row.status),
-            certificationStatus: certificationStatus(
-              rowCompiled.certificationStatus,
-            ),
-            certifiedAtIso:
-              rowCompiled.certification?.certifiedAt.toISOString() ?? null,
-            compiledAtIso: rowCompiled.compiledAt.toISOString(),
-            compilerVersion: rowCompiled.compilerVersion,
-            sourceSha256: rowCompiled.sourceArtifact.sha256,
-            sourceSizeBytes: rowCompiled.sourceArtifact.sizeBytes,
-            sourceMimeType: rowCompiled.sourceArtifact.mimeType,
-            rollbackEligible: Boolean(
-              activeVersion !== null &&
-                row.version < activeVersion &&
-                row.status === 'inactive' &&
-                rowCompiled.certificationStatus === 'CERTIFIED' &&
-                rowCompiled.certification &&
-                rowCompiled.sourceArtifact.validationStatus === 'accepted' &&
-                hasIdentity,
-            ),
-          };
-        }),
+        }
+        const ordered = [...rows].sort(
+          (left, right) => right.version - left.version,
+        );
+        const activeVersion =
+          ordered.find((row) => row.status === "active")?.version ?? null;
+        return {
+          ok: true,
+          lineage: {
+            lineageId: seed.lineageId,
+            activeVersion,
+            versions: ordered.map((row) => {
+              const rowCompiled = compiled(row);
+              const hasIdentity = Boolean(
+                row.name.trim().length >= 3 &&
+                row.encounterType &&
+                row.encounterType.trim().length >= 3 &&
+                row.versionDescription &&
+                row.versionDescription.trim().length >= 3,
+              );
+              return {
+                id: row.id,
+                version: row.version,
+                name: row.name,
+                encounterType: row.encounterType ?? "",
+                versionDescription: row.versionDescription ?? "",
+                status: publicStatus(row.status),
+                certificationStatus: certificationStatus(
+                  rowCompiled.certificationStatus,
+                ),
+                certifiedAtIso:
+                  rowCompiled.certification?.certifiedAt.toISOString() ?? null,
+                compiledAtIso: rowCompiled.compiledAt.toISOString(),
+                compilerVersion: rowCompiled.compilerVersion,
+                sourceSha256: rowCompiled.sourceArtifact.sha256,
+                sourceSizeBytes: rowCompiled.sourceArtifact.sizeBytes,
+                sourceMimeType: rowCompiled.sourceArtifact.mimeType,
+                rollbackEligible: Boolean(
+                  activeVersion !== null &&
+                  row.version < activeVersion &&
+                  row.status === "inactive" &&
+                  rowCompiled.certificationStatus === "CERTIFIED" &&
+                  rowCompiled.certification &&
+                  rowCompiled.sourceArtifact.validationStatus === "accepted" &&
+                  hasIdentity,
+                ),
+              };
+            }),
+          },
+        };
       },
-    };
+    });
   } catch (error) {
     return fail(error);
   }
@@ -898,118 +991,130 @@ export async function rollbackTemplateTwinVersionAction(
     const actor = await currentActor();
     const id = TemplateIdSchema.safeParse(rawId);
     if (!id.success) {
-      throw new TemplateTwinManagementError('INVALID_INPUT', 'Choose a valid template version.');
+      throw new TemplateTwinManagementError(
+        "INVALID_INPUT",
+        "Choose a valid template version.",
+      );
     }
     const operationId = randomUUID();
-    const result = await prisma.$transaction(
-      async (tx: Prisma.TransactionClient) => {
-        await assertManagementRolloutFinality(
-          tx,
-          actor,
-          'the prior template version was being restored',
-        );
-        const target = await loadOwnedVersion(tx, id.data, actor);
-        if (target.status === 'retired') {
-          throw new TemplateTwinManagementError(
-            'RETIRED',
-            'A retired version cannot be restored. Create a new version instead.',
-          );
-        }
-        assertAcceptedSource(target);
-        assertCertified(target);
-        assertActivationIdentity(target);
-        if (target.status !== 'inactive') {
-          throw new TemplateTwinManagementError(
-            'ROLLBACK_NOT_ALLOWED',
-            'Rollback requires an inactive, previously certified version.',
-          );
-        }
-        const current = await tx.noteTemplate.findFirst({
-          where: {
-            doctorId: actor.userId,
-            encounterType: target.encounterType,
-            status: 'active',
-          },
-          select: { id: true, lineageId: true, version: true },
-        });
-        if (
-          !current ||
-          current.lineageId !== target.lineageId ||
-          current.version <= target.version
-        ) {
-          throw new TemplateTwinManagementError(
-            'ROLLBACK_NOT_ALLOWED',
-            'Choose an older certified version from the currently active lineage.',
-          );
-        }
+    const result = await runManagementStagingGuard<{
+      fromVersion: number;
+      toVersion: number;
+    }>({
+      noteTemplateId: id.data,
+      actor,
+      purpose: "management-rollback",
+      operation: () =>
+        prisma.$transaction(
+          async (tx: Prisma.TransactionClient) => {
+            await assertManagementRolloutFinality(
+              tx,
+              actor,
+              "the prior template version was being restored",
+            );
+            const target = await loadOwnedVersion(tx, id.data, actor);
+            if (target.status === "retired") {
+              throw new TemplateTwinManagementError(
+                "RETIRED",
+                "A retired version cannot be restored. Create a new version instead.",
+              );
+            }
+            assertAcceptedSource(target);
+            assertCertified(target);
+            assertActivationIdentity(target);
+            if (target.status !== "inactive") {
+              throw new TemplateTwinManagementError(
+                "ROLLBACK_NOT_ALLOWED",
+                "Rollback requires an inactive, previously certified version.",
+              );
+            }
+            const current = await tx.noteTemplate.findFirst({
+              where: {
+                doctorId: actor.userId,
+                encounterType: target.encounterType,
+                status: "active",
+              },
+              select: { id: true, lineageId: true, version: true },
+            });
+            if (
+              !current ||
+              current.lineageId !== target.lineageId ||
+              current.version <= target.version
+            ) {
+              throw new TemplateTwinManagementError(
+                "ROLLBACK_NOT_ALLOWED",
+                "Choose an older certified version from the currently active lineage.",
+              );
+            }
 
-        const deactivated = await tx.noteTemplate.updateMany({
-          where: {
-            id: current.id,
-            doctorId: actor.userId,
-            status: 'active',
-            lineageId: target.lineageId,
-          },
-          data: { status: 'inactive' },
-        });
-        const activated = await tx.noteTemplate.updateMany({
-          where: {
-            id: target.id,
-            doctorId: actor.userId,
-            status: 'inactive',
-            lineageId: target.lineageId,
-          },
-          data: { status: 'active' },
-        });
-        if (deactivated.count !== 1 || activated.count !== 1) {
-          throw new TemplateTwinManagementError(
-            'CONFLICT',
-            'This lineage changed in another request. Reload before rolling back.',
-          );
-        }
+            const deactivated = await tx.noteTemplate.updateMany({
+              where: {
+                id: current.id,
+                doctorId: actor.userId,
+                status: "active",
+                lineageId: target.lineageId,
+              },
+              data: { status: "inactive" },
+            });
+            const activated = await tx.noteTemplate.updateMany({
+              where: {
+                id: target.id,
+                doctorId: actor.userId,
+                status: "inactive",
+                lineageId: target.lineageId,
+              },
+              data: { status: "active" },
+            });
+            if (deactivated.count !== 1 || activated.count !== 1) {
+              throw new TemplateTwinManagementError(
+                "CONFLICT",
+                "This lineage changed in another request. Reload before rolling back.",
+              );
+            }
 
-        await enqueueTemplateTwinAudit(tx, {
-          eventKey: `template-twin:rolled-back:${target.id}:${operationId}`,
-          practiceId: actor.practiceId,
-          actorId: actor.userId,
-          actorEmailSnapshot: actor.userEmail,
-          action: 'TEMPLATE_TWIN_ROLLED_BACK',
-          targetType: 'NoteTemplate',
-          targetId: target.id,
-          metadata: {
-            fromTemplateId: current.id,
-            fromVersion: current.version,
-            toVersion: target.version,
-            compiledVersionId: compiled(target).id,
+            await enqueueTemplateTwinAudit(tx, {
+              eventKey: `template-twin:rolled-back:${target.id}:${operationId}`,
+              practiceId: actor.practiceId,
+              actorId: actor.userId,
+              actorEmailSnapshot: actor.userEmail,
+              action: "TEMPLATE_TWIN_ROLLED_BACK",
+              targetType: "NoteTemplate",
+              targetId: target.id,
+              metadata: {
+                fromTemplateId: current.id,
+                fromVersion: current.version,
+                toVersion: target.version,
+                compiledVersionId: compiled(target).id,
+              },
+            });
+            await enqueueTemplateTwinAudit(tx, {
+              eventKey: `template-twin:activated:${target.id}:${operationId}`,
+              practiceId: actor.practiceId,
+              actorId: actor.userId,
+              actorEmailSnapshot: actor.userEmail,
+              action: "TEMPLATE_TWIN_ACTIVATED",
+              targetType: "NoteTemplate",
+              targetId: target.id,
+              metadata: {
+                templateVersion: target.version,
+                compiledVersionId: compiled(target).id,
+                activationReason: "ROLLBACK",
+              },
+            });
+            return {
+              fromVersion: current.version,
+              toVersion: target.version,
+            };
           },
-        });
-        await enqueueTemplateTwinAudit(tx, {
-          eventKey: `template-twin:activated:${target.id}:${operationId}`,
-          practiceId: actor.practiceId,
-          actorId: actor.userId,
-          actorEmailSnapshot: actor.userEmail,
-          action: 'TEMPLATE_TWIN_ACTIVATED',
-          targetType: 'NoteTemplate',
-          targetId: target.id,
-          metadata: {
-            templateVersion: target.version,
-            compiledVersionId: compiled(target).id,
-            activationReason: 'ROLLBACK',
-          },
-        });
-        return {
-          fromVersion: current.version,
-          toVersion: target.version,
-        };
-      },
-      { isolationLevel: 'Serializable' },
-    );
+          { isolationLevel: "Serializable" },
+        ),
+    });
 
     revalidateTemplateManagement();
     return {
       ok: true,
       id: id.data,
-      status: 'active',
+      status: "active",
       changed: true,
       rolledBackFromVersion: result.fromVersion,
       rolledBackToVersion: result.toVersion,

@@ -1,4 +1,4 @@
-'use server';
+"use server";
 
 // ============================================================================
 // Suggestions-lane server actions — hybrid anchored generation (2026-06-11).
@@ -42,25 +42,30 @@
 // cancel out to SQL NULL when the level returns to that baseline.
 // ============================================================================
 
-import { revalidatePath } from 'next/cache';
-import { z } from 'zod';
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
 
-import prisma from '@meddoc/db';
-import { Prisma, TranscribeVisitStatus } from '@prisma/client';
-import { requireSession } from '@/lib/auth';
-import { logAudit } from '@/lib/audit';
-import { computeDisplayedEmCode } from '@/lib/em-coding/displayed-level';
+import prisma from "@meddoc/db";
+import { Prisma, TranscribeVisitStatus } from "@prisma/client";
+import { requireSession } from "@/lib/auth";
+import { logAudit } from "@/lib/audit";
+import { computeDisplayedEmCode } from "@/lib/em-coding/displayed-level";
 import {
   renumberOrderedLists,
   stripEmptySectionPlaceholder,
-} from '@/lib/soap-format';
-import { log } from '@/lib/log';
+} from "@/lib/soap-format";
+import { log } from "@/lib/log";
 import {
   unacknowledgedEmChange,
   type EmChangeCause,
   type EmPendingChange,
-} from '@/lib/em-pending-change';
-import { invalidateTemplateTwinAfterSoapEdit } from '@/lib/template-twin/soap-binding';
+} from "@/lib/em-pending-change";
+import { invalidateTemplateTwinAfterSoapEdit } from "@/lib/template-twin/soap-binding";
+import { pinTemplateTwinStagingQaMutation } from "@/lib/template-twin/staging-qa-mutation";
+import {
+  TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
+  type TemplateTwinStagingQaRunGuardRow,
+} from "@/lib/template-twin/staging-qa-visit-guard";
 
 /** Mirror of the verifier's SuggestedClaim — duplicated here (rather than
  *  imported from the worker layer) so the server-action bundle never pulls
@@ -101,7 +106,7 @@ const SuggestionInputSchema = z.object({
 });
 
 const STALE_LANE_ERROR =
-  'The suggestions changed in another tab — reload and try again.';
+  "The suggestions changed in another tab — reload and try again.";
 
 // ─── Helpers (module-private — 'use server' files may only export async) ────
 
@@ -111,17 +116,22 @@ function parseClaims(raw: unknown): SuggestedClaimDto[] | null {
   if (!Array.isArray(raw) || raw.length === 0) return null;
   const out: SuggestedClaimDto[] = [];
   for (const entry of raw) {
-    if (entry === null || typeof entry !== 'object') return null;
+    if (entry === null || typeof entry !== "object") return null;
     const c = entry as Record<string, unknown>;
     if (
-      typeof c.text !== 'string' ||
-      typeof c.reason !== 'string' ||
-      typeof c.section !== 'string' ||
-      typeof c.anchor !== 'string'
+      typeof c.text !== "string" ||
+      typeof c.reason !== "string" ||
+      typeof c.section !== "string" ||
+      typeof c.anchor !== "string"
     ) {
       return null;
     }
-    out.push({ text: c.text, reason: c.reason, section: c.section, anchor: c.anchor });
+    out.push({
+      text: c.text,
+      reason: c.reason,
+      section: c.section,
+      anchor: c.anchor,
+    });
   }
   return out;
 }
@@ -129,7 +139,7 @@ function parseClaims(raw: unknown): SuggestedClaimDto[] | null {
 const HEADING_RE = /^#{1,6}\s+(.*)$/;
 
 function normalizeHeading(s: string): string {
-  return s.replace(/\*\*/g, '').replace(/:\s*$/, '').trim().toLowerCase();
+  return s.replace(/\*\*/g, "").replace(/:\s*$/, "").trim().toLowerCase();
 }
 
 /** Append `claimText` as a new line at the END of the `section` heading's
@@ -137,9 +147,13 @@ function normalizeHeading(s: string): string {
  *  verifier's '(preamble)' / '(entire note)' sentinels), append at the end
  *  of the note. The claim text goes in VERBATIM — no trailing label;
  *  adoption is the doctor's attestation and the audit row is the record. */
-function appendClaimToSoap(soap: string, section: string, claimText: string): string {
+function appendClaimToSoap(
+  soap: string,
+  section: string,
+  claimText: string,
+): string {
   const target = normalizeHeading(section);
-  let lines = soap.split('\n');
+  let lines = soap.split("\n");
 
   let headingIdx = -1;
   if (target.length > 0) {
@@ -153,9 +167,9 @@ function appendClaimToSoap(soap: string, section: string, claimText: string): st
   }
 
   if (headingIdx === -1) {
-    const trimmed = soap.replace(/\s+$/, '');
+    const trimmed = soap.replace(/\s+$/, "");
     return renumberOrderedLists(
-      trimmed.length > 0 ? `${trimmed}\n\n${claimText}` : claimText
+      trimmed.length > 0 ? `${trimmed}\n\n${claimText}` : claimText,
     );
   }
 
@@ -173,11 +187,12 @@ function appendClaimToSoap(soap: string, section: string, claimText: string): st
     }
   }
   let insertAt = end;
-  while (insertAt > headingIdx + 1 && lines[insertAt - 1].trim() === '') insertAt--;
+  while (insertAt > headingIdx + 1 && lines[insertAt - 1].trim() === "")
+    insertAt--;
   lines.splice(insertAt, 0, claimText);
   // Renumber so an adopted Plan item never reintroduces an ordinal hole
   // (its lane text may carry the original ordinal, e.g. "7. ...").
-  return renumberOrderedLists(lines.join('\n'));
+  return renumberOrderedLists(lines.join("\n"));
 }
 
 type LoadedVisit = {
@@ -193,12 +208,13 @@ type LoadedVisit = {
   rxDrafts: unknown;
   cptCodes: unknown;
   emPendingChange: unknown;
+  templateTwinSyntheticQaRun: TemplateTwinStagingQaRunGuardRow | null;
 };
 
 /** Shared auth + ownership + lifecycle gate (mirrors actions/soap.ts). */
 async function loadVisitForSuggestion(
   visitId: string,
-  userId: string
+  userId: string,
 ): Promise<{ visit: LoadedVisit } | { error: string }> {
   const visit = (await prisma.transcribeVisit.findUnique({
     where: { id: visitId },
@@ -218,20 +234,23 @@ async function loadVisitForSuggestion(
       rxDrafts: true,
       cptCodes: true,
       emPendingChange: true,
+      templateTwinSyntheticQaRun: {
+        select: TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
+      },
     },
   })) as LoadedVisit | null;
 
   if (!visit || visit.userId !== userId) {
-    return { error: 'Visit not found.' };
+    return { error: "Visit not found." };
   }
   if (visit.deletedAt !== null || visit.archivedAt !== null) {
-    return { error: 'Visit is no longer active. Restore it first.' };
+    return { error: "Visit is no longer active. Restore it first." };
   }
   if (visit.status === TranscribeVisitStatus.SIGNED) {
-    return { error: 'Signed notes cannot be changed.' };
+    return { error: "Signed notes cannot be changed." };
   }
   if (visit.status !== TranscribeVisitStatus.READY) {
-    return { error: 'Note is still processing.' };
+    return { error: "Note is still processing." };
   }
   return { visit };
 }
@@ -242,7 +261,7 @@ async function loadVisitForSuggestion(
  *  confirmation (the GOAL's invariant: never toward a silent sign). `from`
  *  and `to` differ so it survives the merge-cancel and forces the gate; the
  *  sign dialog renders an honest "couldn't recompute — review" prompt. */
-const EM_DELTA_INDETERMINATE = { from: 'unknown', to: 'review' } as const;
+const EM_DELTA_INDETERMINATE = { from: "unknown", to: "review" } as const;
 
 /** The level change an action produced, as the DOCTOR SEES IT. Computes the
  *  DISPLAYED code (override ?? engine, via the shared computeDisplayedEmCode)
@@ -288,10 +307,14 @@ async function computeEmLevelDelta(args: {
     if (from === to) return null;
     return { from, to };
   } catch (err) {
-    log.warn('suggestion-actions', 'em-delta scoring failed — forcing confirm', {
-      visitId: args.visitId,
-      error: err instanceof Error ? err.message : String(err),
-    });
+    log.warn(
+      "suggestion-actions",
+      "em-delta scoring failed — forcing confirm",
+      {
+        visitId: args.visitId,
+        error: err instanceof Error ? err.message : String(err),
+      },
+    );
     return { ...EM_DELTA_INDETERMINATE };
   }
 }
@@ -304,7 +327,7 @@ async function computeEmLevelDelta(args: {
 function mergeEmPendingChange(
   existing: EmPendingChange | null,
   delta: { from: string; to: string } | null,
-  cause: EmChangeCause
+  cause: EmChangeCause,
 ): Prisma.InputJsonValue | typeof Prisma.DbNull | undefined {
   if (!delta) return undefined;
   const baselineFrom = existing?.from ?? delta.from;
@@ -322,7 +345,7 @@ function mergeEmPendingChange(
  *  null). `write === undefined` means the column was left untouched. */
 function pendingChangeForResult(
   existing: EmPendingChange | null,
-  write: Prisma.InputJsonValue | typeof Prisma.DbNull | undefined
+  write: Prisma.InputJsonValue | typeof Prisma.DbNull | undefined,
 ): { from: string; to: string } | null {
   if (write === undefined) {
     return existing ? { from: existing.from, to: existing.to } : null;
@@ -341,36 +364,62 @@ function pendingChangeForResult(
 export async function adoptSuggestionAction(
   visitId: string,
   index: number,
-  expectedText: string
+  expectedText: string,
 ): Promise<SuggestionActionResult> {
   try {
     const session = await requireSession();
-    const parsed = SuggestionInputSchema.safeParse({ visitId, index, expectedText });
+    const parsed = SuggestionInputSchema.safeParse({
+      visitId,
+      index,
+      expectedText,
+    });
     if (!parsed.success) {
-      return { ok: false, error: 'Invalid input.' };
+      return { ok: false, error: "Invalid input." };
     }
 
-    const loaded = await loadVisitForSuggestion(parsed.data.visitId, session.user.id);
-    if ('error' in loaded) return { ok: false, error: loaded.error };
+    const loaded = await loadVisitForSuggestion(
+      parsed.data.visitId,
+      session.user.id,
+    );
+    if ("error" in loaded) return { ok: false, error: loaded.error };
     const { visit } = loaded;
+
+    try {
+      const stagingQaClaim = await pinTemplateTwinStagingQaMutation({
+        visitId: visit.id,
+        userId: session.user.id,
+        run: visit.templateTwinSyntheticQaRun,
+      });
+      // This generic action can invoke the E/M model while evaluating a
+      // suggestion. Synthetic QA visits are provider-isolated and therefore
+      // never enter this surface; their guided workflow uses the bounded
+      // Template Twin review/correction pipeline instead.
+      if (stagingQaClaim) return { ok: false, error: "Visit not found." };
+    } catch {
+      return { ok: false, error: "Visit not found." };
+    }
 
     const claims = parseClaims(visit.suggestedClaims);
     if (!claims || parsed.data.index >= claims.length) {
-      return { ok: false, error: 'Suggestion not found.' };
+      return { ok: false, error: "Suggestion not found." };
     }
     const claim = claims[parsed.data.index];
     if (claim.text !== parsed.data.expectedText) {
       return { ok: false, error: STALE_LANE_ERROR };
     }
     const remaining = claims.filter((_, i) => i !== parsed.data.index);
-    const newSoap = appendClaimToSoap(visit.soapFinal ?? '', claim.section, claim.text);
+    const newSoap = appendClaimToSoap(
+      visit.soapFinal ?? "",
+      claim.section,
+      claim.text,
+    );
 
     // E/M visible-confirm (prod smoke #311): did THIS adoption change the
     // computed level? Scored BEFORE the write so the pending-change record
     // lands in the SAME atomic update as the note — a crash between "note
     // changed" and "change recorded" (the silent-flip window) cannot exist.
     const emDelta = await computeEmLevelDelta({
-      beforeSoap: visit.soapFinal ?? '',
+      beforeSoap: visit.soapFinal ?? "",
       afterSoap: newSoap,
       visitId: visit.id,
       userId: session.user.id,
@@ -383,67 +432,73 @@ export async function adoptSuggestionAction(
     const emPendingWrite = mergeEmPendingChange(
       priorPending,
       emDelta,
-      'suggestion_adopted'
+      "suggestion_adopted",
     );
 
     // Single atomic update, gated on the soapVersion we just read — the
     // same optimistic-concurrency pattern as saveSoapDraftAction. count=0
     // means a section save (or another adopt) landed in between.
-    const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      const updated = await tx.transcribeVisit.updateMany({
-        // status:READY too (auditor WARN-1): the LLM-scoring window between
-        // this action's READY check and its write can straddle a concurrent
-        // READY→SIGNED transition — the write must MISS a signed row, never
-        // mutate it or deposit an unacknowledgeable emPendingChange.
-        where: {
-          id: visit.id,
-          soapVersion: visit.soapVersion,
-          status: TranscribeVisitStatus.READY,
-        },
-        data: {
-          soapFinal: newSoap,
-          soapVersion: { increment: 1 },
-          suggestedClaims:
-            remaining.length > 0
-              ? (remaining as unknown as Prisma.InputJsonValue)
-              : Prisma.DbNull,
-          ...(emPendingWrite !== undefined
-            ? { emPendingChange: emPendingWrite }
-            : {}),
-        },
-      });
-      if (updated.count === 1) {
-        await invalidateTemplateTwinAfterSoapEdit(tx, visit.id);
-      }
-      return updated;
-    });
+    const result = await prisma.$transaction(
+      async (tx: Prisma.TransactionClient) => {
+        const updated = await tx.transcribeVisit.updateMany({
+          // status:READY too (auditor WARN-1): the LLM-scoring window between
+          // this action's READY check and its write can straddle a concurrent
+          // READY→SIGNED transition — the write must MISS a signed row, never
+          // mutate it or deposit an unacknowledgeable emPendingChange.
+          where: {
+            id: visit.id,
+            soapVersion: visit.soapVersion,
+            status: TranscribeVisitStatus.READY,
+          },
+          data: {
+            soapFinal: newSoap,
+            soapVersion: { increment: 1 },
+            suggestedClaims:
+              remaining.length > 0
+                ? (remaining as unknown as Prisma.InputJsonValue)
+                : Prisma.DbNull,
+            ...(emPendingWrite !== undefined
+              ? { emPendingChange: emPendingWrite }
+              : {}),
+          },
+        });
+        if (updated.count === 1) {
+          await invalidateTemplateTwinAfterSoapEdit(tx, visit.id);
+        }
+        return updated;
+      },
+    );
     if (result.count === 0) {
       return {
         ok: false,
-        error: 'The note changed in another tab — reload and try again.',
+        error: "The note changed in another tab — reload and try again.",
       };
     }
 
     // PHI-safe metadata: section label + demotion reason + remaining count
     // only. NEVER the claim text — that is clinical content.
     void logAudit({
-      action: 'SUGGESTION_ADOPTED',
-      targetType: 'TranscribeVisit',
+      action: "SUGGESTION_ADOPTED",
+      targetType: "TranscribeVisit",
       targetId: visit.id,
-      metadata: { section: claim.section, reason: claim.reason, remaining: remaining.length },
+      metadata: {
+        section: claim.section,
+        reason: claim.reason,
+        remaining: remaining.length,
+      },
     });
     // One row per level-changing action (this leg's own {from, to} — the
     // persisted record may carry an older baseline `from`). Metadata is
     // EXACTLY { from, to, cause }: CPT codes + cause class, never note text.
     if (emDelta) {
       void logAudit({
-        action: 'EM_LEVEL_CHANGED',
-        targetType: 'TranscribeVisit',
+        action: "EM_LEVEL_CHANGED",
+        targetType: "TranscribeVisit",
         targetId: visit.id,
         metadata: {
           from: emDelta.from,
           to: emDelta.to,
-          cause: 'suggestion_adopted',
+          cause: "suggestion_adopted",
         },
       });
     }
@@ -457,7 +512,10 @@ export async function adoptSuggestionAction(
       emPendingChange: pendingChangeForResult(priorPending, emPendingWrite),
     };
   } catch {
-    return { ok: false, error: 'Something went wrong adopting the suggestion.' };
+    return {
+      ok: false,
+      error: "Something went wrong adopting the suggestion.",
+    };
   }
 }
 
@@ -467,22 +525,40 @@ export async function adoptSuggestionAction(
 export async function dismissSuggestionAction(
   visitId: string,
   index: number,
-  expectedText: string
+  expectedText: string,
 ): Promise<SuggestionActionResult> {
   try {
     const session = await requireSession();
-    const parsed = SuggestionInputSchema.safeParse({ visitId, index, expectedText });
+    const parsed = SuggestionInputSchema.safeParse({
+      visitId,
+      index,
+      expectedText,
+    });
     if (!parsed.success) {
-      return { ok: false, error: 'Invalid input.' };
+      return { ok: false, error: "Invalid input." };
     }
 
-    const loaded = await loadVisitForSuggestion(parsed.data.visitId, session.user.id);
-    if ('error' in loaded) return { ok: false, error: loaded.error };
+    const loaded = await loadVisitForSuggestion(
+      parsed.data.visitId,
+      session.user.id,
+    );
+    if ("error" in loaded) return { ok: false, error: loaded.error };
     const { visit } = loaded;
+
+    try {
+      const stagingQaClaim = await pinTemplateTwinStagingQaMutation({
+        visitId: visit.id,
+        userId: session.user.id,
+        run: visit.templateTwinSyntheticQaRun,
+      });
+      if (stagingQaClaim) return { ok: false, error: "Visit not found." };
+    } catch {
+      return { ok: false, error: "Visit not found." };
+    }
 
     const claims = parseClaims(visit.suggestedClaims);
     if (!claims || parsed.data.index >= claims.length) {
-      return { ok: false, error: 'Suggestion not found.' };
+      return { ok: false, error: "Suggestion not found." };
     }
     const claim = claims[parsed.data.index];
     if (claim.text !== parsed.data.expectedText) {
@@ -496,8 +572,8 @@ export async function dismissSuggestionAction(
     // still runs so the `suggestion_dismissed` cause is live the day the
     // lane's content ever influences scoring.
     const emDelta = await computeEmLevelDelta({
-      beforeSoap: visit.soapFinal ?? '',
-      afterSoap: visit.soapFinal ?? '',
+      beforeSoap: visit.soapFinal ?? "",
+      afterSoap: visit.soapFinal ?? "",
       visitId: visit.id,
       userId: session.user.id,
       practiceId: session.user.practiceId,
@@ -509,7 +585,7 @@ export async function dismissSuggestionAction(
     const emPendingWrite = mergeEmPendingChange(
       priorPending,
       emDelta,
-      'suggestion_dismissed'
+      "suggestion_dismissed",
     );
 
     // updateMany + status:READY (auditor WARN-1): a dismiss racing the
@@ -527,24 +603,31 @@ export async function dismissSuggestionAction(
       },
     });
     if (dismissResult.count === 0) {
-      return { ok: false, error: 'The visit was signed in another tab — reload.' };
+      return {
+        ok: false,
+        error: "The visit was signed in another tab — reload.",
+      };
     }
 
     void logAudit({
-      action: 'SUGGESTION_DISMISSED',
-      targetType: 'TranscribeVisit',
+      action: "SUGGESTION_DISMISSED",
+      targetType: "TranscribeVisit",
       targetId: visit.id,
-      metadata: { section: claim.section, reason: claim.reason, remaining: remaining.length },
+      metadata: {
+        section: claim.section,
+        reason: claim.reason,
+        remaining: remaining.length,
+      },
     });
     if (emDelta) {
       void logAudit({
-        action: 'EM_LEVEL_CHANGED',
-        targetType: 'TranscribeVisit',
+        action: "EM_LEVEL_CHANGED",
+        targetType: "TranscribeVisit",
         targetId: visit.id,
         metadata: {
           from: emDelta.from,
           to: emDelta.to,
-          cause: 'suggestion_dismissed',
+          cause: "suggestion_dismissed",
         },
       });
     }
@@ -556,6 +639,9 @@ export async function dismissSuggestionAction(
       emPendingChange: pendingChangeForResult(priorPending, emPendingWrite),
     };
   } catch {
-    return { ok: false, error: 'Something went wrong dismissing the suggestion.' };
+    return {
+      ok: false,
+      error: "Something went wrong dismissing the suggestion.",
+    };
   }
 }

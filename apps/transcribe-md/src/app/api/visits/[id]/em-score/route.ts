@@ -22,22 +22,23 @@
 // made the bump look like it had not persisted.
 // ============================================================================
 
-import { NextResponse } from 'next/server';
-import { z } from 'zod';
+import { NextResponse } from "next/server";
+import { z } from "zod";
 
-import prisma from '@meddoc/db';
-import { auth } from '@/lib/nextauth';
-import { apiError, withApiHandler } from '@/lib/api-error';
-import { computeEmScore } from '@/lib/em-coding/score';
-import { engineToUiScore } from '@/lib/em-coding/to-ui-score';
+import prisma from "@meddoc/db";
+import { auth } from "@/lib/nextauth";
+import { apiError, withApiHandler } from "@/lib/api-error";
+import { isOwnedTemplateTwinStagingQaVisit } from "@/lib/template-twin/staging-qa-access";
+import { computeEmScore } from "@/lib/em-coding/score";
+import { engineToUiScore } from "@/lib/em-coding/to-ui-score";
 import {
   extractIcdRows,
   extractRxRows,
   extractEmOverride,
-} from '@/lib/em-coding/displayed-level';
+} from "@/lib/em-coding/displayed-level";
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 const BodySchema = z.object({
@@ -45,23 +46,28 @@ const BodySchema = z.object({
 });
 
 export const POST = withApiHandler<{ id: string }>(
-  'api:visits:em-score',
+  "api:visits:em-score",
   async (req, { params }) => {
     const { id: visitId } = await params;
 
     const session = await auth();
     const userId = session?.user?.id;
     const practiceId = session?.user?.practiceId;
-    if (!userId || !practiceId) return apiError('unauthorized', 401);
+    if (!userId || !practiceId) return apiError("unauthorized", 401);
+    // The staging flow is provider-isolated. A direct request must not turn a
+    // synthetic visit into a live E/M-judge call when its cache is cold.
+    if (await isOwnedTemplateTwinStagingQaVisit({ visitId, userId })) {
+      return apiError("not found", 404);
+    }
 
     let body: unknown;
     try {
       body = await req.json();
     } catch {
-      return apiError('invalid JSON body', 400);
+      return apiError("invalid JSON body", 400);
     }
     const parsed = BodySchema.safeParse(body);
-    if (!parsed.success) return apiError('invalid soapText payload', 400);
+    if (!parsed.success) return apiError("invalid soapText payload", 400);
 
     // Ownership check — 404 on any mismatch (consistent with the rest
     // of the visits API; never expose existence of a foreign visit).
@@ -85,10 +91,10 @@ export const POST = withApiHandler<{ id: string }>(
         cptCodes: true,
       },
     });
-    if (!visit || visit.userId !== userId) return apiError('not found', 404);
+    if (!visit || visit.userId !== userId) return apiError("not found", 404);
     if (visit.deletedAt !== null || visit.archivedAt !== null) {
-      return apiError('Visit is no longer active.', 400, {
-        code: 'VISIT_NOT_ACTIVE',
+      return apiError("Visit is no longer active.", 400, {
+        code: "VISIT_NOT_ACTIVE",
       });
     }
 
@@ -110,16 +116,13 @@ export const POST = withApiHandler<{ id: string }>(
     // override route + apply-additions route). Same three inputs as
     // page.tsx so the rescore wire shape is consistent.
     const durationSec =
-      visit.inputMode === 'voice_dictation'
+      visit.inputMode === "voice_dictation"
         ? (visit.dictationDurationSec ?? 0)
         : (visit.audioDurationSec ?? 0);
     const existingOverride = extractEmOverride(visit.cptCodes);
     const uiScore = engineToUiScore(engineScore, durationSec, existingOverride);
 
-    return NextResponse.json(
-      { ok: true, score: uiScore },
-      { status: 200 },
-    );
+    return NextResponse.json({ ok: true, score: uiScore }, { status: 200 });
   },
 );
 // E/M signal extractors now live in @/lib/em-coding/displayed-level (the

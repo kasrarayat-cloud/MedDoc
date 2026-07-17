@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
   requireSession: vi.fn(),
   logAudit: vi.fn(),
   revalidatePath: vi.fn(),
+  stagingRunFindFirst: vi.fn(),
 }));
 
 vi.mock('@meddoc/db', () => ({
@@ -35,6 +36,9 @@ vi.mock('@meddoc/db', () => ({
     transcribeVisit: {
       findUnique: mocks.visitFindUnique,
       update: mocks.visitUpdate,
+    },
+    templateTwinSyntheticQaRun: {
+      findFirst: mocks.stagingRunFindFirst,
     },
   },
 }));
@@ -55,8 +59,13 @@ const FAKE_SPEAKER = '0';
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.requireSession.mockResolvedValue({
-    user: { id: FAKE_USER, practiceId: FAKE_PRACTICE, email: 'doc@example.com' },
+    user: {
+      id: FAKE_USER,
+      practiceId: FAKE_PRACTICE,
+      email: 'doctor@synthetic.test',
+    },
   });
+  mocks.stagingRunFindFirst.mockResolvedValue(null);
   mocks.visitFindUnique.mockResolvedValue({
     id: FAKE_VISIT,
     userId: FAKE_USER,

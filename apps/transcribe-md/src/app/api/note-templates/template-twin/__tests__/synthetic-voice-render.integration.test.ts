@@ -228,26 +228,36 @@ function syntheticVoiceRequest(): {
   const browserAudio = new Uint8Array(audio.byteLength);
   browserAudio.set(audio);
   const mappingsSha256 = templateTwinMappingsSha256(fixture.mappings);
-  const form = new FormData();
-  form.set(
-    'audio',
-    new File([browserAudio], 'synthetic-one-sample.wav', {
-      type: 'audio/wav',
-    }),
+  const boundary = '----template-twin-synthetic-route-render';
+  const multipart = Buffer.concat([
+    Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="audio"; filename="synthetic-one-sample.wav"\r\nContent-Type: audio/wav\r\n\r\n`,
+      'utf8',
+    ),
+    Buffer.from(browserAudio),
+    Buffer.from(
+      `\r\n--${boundary}\r\nContent-Disposition: form-data; name="expectedMappingsSha256"\r\n\r\n${mappingsSha256}` +
+        `\r\n--${boundary}\r\nContent-Disposition: form-data; name="expectedFieldIntentsSha256"\r\n\r\n${EMPTY_FIELD_INTENTS_SHA256}` +
+        `\r\n--${boundary}--\r\n`,
+      'utf8',
+    ),
+  ]);
+  const request = new Request(
+    `https://app.synthetic.test/api/note-templates/template-twin/${TEMPLATE_ID}/synthetic-test-voice`,
+    {
+      method: 'POST',
+      headers: {
+        origin: 'https://app.synthetic.test',
+        'sec-fetch-site': 'same-origin',
+        'content-type': `multipart/form-data; boundary=${boundary}`,
+      },
+      body: multipart,
+    },
   );
-  form.set('expectedMappingsSha256', mappingsSha256);
-  form.set('expectedFieldIntentsSha256', EMPTY_FIELD_INTENTS_SHA256);
   return {
     audio,
     mappingsSha256,
-    request: {
-      url: `https://app.synthetic.test/api/note-templates/template-twin/${TEMPLATE_ID}/synthetic-test-voice`,
-      headers: new Headers({
-        origin: 'https://app.synthetic.test',
-        'sec-fetch-site': 'same-origin',
-      }),
-      formData: async () => form,
-    } as unknown as Request,
+    request,
   };
 }
 
@@ -281,6 +291,7 @@ function templateRow() {
     name: 'Synthetic route renderer template',
     encounterType: null,
     status: 'draft',
+    templateTwinSyntheticQaRuns: [],
     templateTwinCompiledVersion: {
       id: COMPILED_ID,
       compilerVersion: fixture.ir.compilerVersion,

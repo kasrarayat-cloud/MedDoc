@@ -24,31 +24,35 @@
 // 404 on wrong owner (anti-enumeration — same pattern as /retry).
 // ============================================================================
 
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
 
-import prisma from '@meddoc/db';
-import { TranscribeVisitStatus } from '@prisma/client';
+import prisma from "@meddoc/db";
+import { TranscribeVisitStatus } from "@prisma/client";
 
-import { apiError, withApiHandler } from '@/lib/api-error';
-import { auth } from '@/lib/nextauth';
-import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
-import { deleteAudioObject } from '@/lib/minio';
-import { redactPhi } from '@meddoc/ai';
-import { log } from '@/lib/log';
-import { logAudit } from '@/lib/audit';
+import { apiError, withApiHandler } from "@/lib/api-error";
+import { auth } from "@/lib/nextauth";
+import { RATE_LIMITS, rateLimitOr429 } from "@/lib/rate-limit";
+import { deleteAudioObject } from "@/lib/minio";
+import { redactPhi } from "@meddoc/ai";
+import { log } from "@/lib/log";
+import { logAudit } from "@/lib/audit";
+import { isOwnedTemplateTwinStagingQaVisit } from "@/lib/template-twin/staging-qa-access";
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export const POST = withApiHandler<{ id: string }>(
-  'api:visits:delete',
+  "api:visits:delete",
   async (req, { params }) => {
     const { id: visitId } = await params;
-    const permanent = new URL(req.url).searchParams.get('permanent') === '1';
+    const permanent = new URL(req.url).searchParams.get("permanent") === "1";
 
     const session = await auth();
     const userId = session?.user?.id;
-    if (!userId) return apiError('unauthorized', 401);
+    if (!userId) return apiError("unauthorized", 401);
+    if (await isOwnedTemplateTwinStagingQaVisit({ visitId, userId })) {
+      return apiError("not found", 404);
+    }
 
     const blocked = rateLimitOr429(RATE_LIMITS.VISIT_OPS, userId);
     if (blocked) return blocked;
@@ -66,15 +70,15 @@ export const POST = withApiHandler<{ id: string }>(
         rawTextInput: true,
       },
     });
-    if (!visit || visit.userId !== userId) return apiError('not found', 404);
+    if (!visit || visit.userId !== userId) return apiError("not found", 404);
 
     if (visit.status === TranscribeVisitStatus.SIGNED) {
       return NextResponse.json(
         {
-          error: 'Signed visits cannot be deleted. Archive it instead.',
-          code: 'VISIT_SIGNED',
+          error: "Signed visits cannot be deleted. Archive it instead.",
+          code: "VISIT_SIGNED",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -87,10 +91,10 @@ export const POST = withApiHandler<{ id: string }>(
         });
       } catch (err) {
         console.error(
-          '[api:visits:delete] permanent-purge tx failed:',
-          redactPhi(err instanceof Error ? err.message : err)
+          "[api:visits:delete] permanent-purge tx failed:",
+          redactPhi(err instanceof Error ? err.message : err),
         );
-        return apiError('Could not delete permanently. Try again.', 500);
+        return apiError("Could not delete permanently. Try again.", 500);
       }
       await Promise.all(
         [visit.audioKey, visit.dictationAudioKey].map(async (key) => {
@@ -100,23 +104,23 @@ export const POST = withApiHandler<{ id: string }>(
           } catch (err) {
             console.warn(
               `[api:visits:delete] minio cleanup failed key=${key}:`,
-              redactPhi(err instanceof Error ? err.message : err)
+              redactPhi(err instanceof Error ? err.message : err),
             );
           }
-        })
+        }),
       );
-      log.info('api:visits:delete', 'permanent-purged', {
+      log.info("api:visits:delete", "permanent-purged", {
         userId,
         visitId,
         prevStatus: visit.status,
       });
       void logAudit({
-        action: 'VISIT_DELETED',
-        targetType: 'TranscribeVisit',
+        action: "VISIT_DELETED",
+        targetType: "TranscribeVisit",
         targetId: visitId,
-        metadata: { mode: 'permanent', prevStatus: visit.status },
+        metadata: { mode: "permanent", prevStatus: visit.status },
       });
-      return NextResponse.json({ ok: true, mode: 'permanent' });
+      return NextResponse.json({ ok: true, mode: "permanent" });
     }
 
     if (visit.deletedAt !== null) {
@@ -129,10 +133,7 @@ export const POST = withApiHandler<{ id: string }>(
       visit.dictationAudioKey === null &&
       (visit.rawTextInput === null || visit.rawTextInput.length === 0);
 
-    if (
-      visit.status === TranscribeVisitStatus.QUEUED &&
-      noInput
-    ) {
+    if (visit.status === TranscribeVisitStatus.QUEUED && noInput) {
       // Transaction: clear AiCall rows first (no FK cascade because
       // AiCall.visitId is a loose nullable pointer), then the visit.
       // If either step fails, both roll back and the row stays visible
@@ -144,10 +145,10 @@ export const POST = withApiHandler<{ id: string }>(
         });
       } catch (err) {
         console.error(
-          '[api:visits:delete] hard-delete tx failed:',
-          redactPhi(err instanceof Error ? err.message : err)
+          "[api:visits:delete] hard-delete tx failed:",
+          redactPhi(err instanceof Error ? err.message : err),
         );
-        return apiError('Could not delete visit. Try again.', 500);
+        return apiError("Could not delete visit. Try again.", 500);
       }
 
       // Best-effort MinIO sweep. The visit had no audioKey /
@@ -162,24 +163,24 @@ export const POST = withApiHandler<{ id: string }>(
           } catch (err) {
             console.warn(
               `[api:visits:delete] minio cleanup failed key=${key}:`,
-              redactPhi(err instanceof Error ? err.message : err)
+              redactPhi(err instanceof Error ? err.message : err),
             );
           }
-        })
+        }),
       );
 
-      log.info('api:visits:delete', 'hard-deleted', {
+      log.info("api:visits:delete", "hard-deleted", {
         userId,
         visitId,
         prevStatus: visit.status,
       });
       void logAudit({
-        action: 'VISIT_DELETED',
-        targetType: 'TranscribeVisit',
+        action: "VISIT_DELETED",
+        targetType: "TranscribeVisit",
         targetId: visitId,
-        metadata: { mode: 'hard', prevStatus: visit.status },
+        metadata: { mode: "hard", prevStatus: visit.status },
       });
-      return NextResponse.json({ ok: true, mode: 'hard' });
+      return NextResponse.json({ ok: true, mode: "hard" });
     }
 
     // SOFT delete path — everything else (PROCESSING / REVIEW / READY,
@@ -188,17 +189,17 @@ export const POST = withApiHandler<{ id: string }>(
       where: { id: visit.id },
       data: { deletedAt: new Date() },
     });
-    log.info('api:visits:delete', 'soft-deleted', {
+    log.info("api:visits:delete", "soft-deleted", {
       userId,
       visitId,
       prevStatus: visit.status,
     });
     void logAudit({
-      action: 'VISIT_DELETED',
-      targetType: 'TranscribeVisit',
+      action: "VISIT_DELETED",
+      targetType: "TranscribeVisit",
       targetId: visitId,
-      metadata: { mode: 'soft', prevStatus: visit.status },
+      metadata: { mode: "soft", prevStatus: visit.status },
     });
-    return NextResponse.json({ ok: true, mode: 'soft' });
-  }
+    return NextResponse.json({ ok: true, mode: "soft" });
+  },
 );

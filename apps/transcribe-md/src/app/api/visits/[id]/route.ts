@@ -33,27 +33,36 @@
 //                       different practice, or is soft-deleted.
 // ============================================================================
 
-import { z } from 'zod';
-import { NextResponse } from 'next/server';
+import { z } from "zod";
+import { NextResponse } from "next/server";
 
-import prisma from '@meddoc/db';
-import { TranscribeVisitStatus } from '@prisma/client';
-import { SPECIALTY_IDS } from '@meddoc/shared/specialties';
+import prisma from "@meddoc/db";
+import { TranscribeVisitStatus } from "@prisma/client";
+import { SPECIALTY_IDS } from "@meddoc/shared/specialties";
 
-import { apiError, withApiHandler } from '@/lib/api-error';
-import { auth } from '@/lib/nextauth';
-import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
-import { log } from '@/lib/log';
-import { logAudit } from '@/lib/audit';
+import { apiError, withApiHandler } from "@/lib/api-error";
+import { isTemplateTwinSyntheticQaPatient } from "@/lib/template-twin/synthetic-qa-patient";
+import { auth } from "@/lib/nextauth";
+import { RATE_LIMITS, rateLimitOr429 } from "@/lib/rate-limit";
+import { log } from "@/lib/log";
+import { logAudit } from "@/lib/audit";
+import { AuthError, requireFreshDoctorIdentity } from "@/lib/auth";
+import { TemplateTwinStagingQaDisabledError } from "@/lib/template-twin/staging-qa-gate";
+import { isOwnedTemplateTwinStagingQaVisit } from "@/lib/template-twin/staging-qa-access";
+import {
+  assertTemplateTwinStagingQaVisitGuard,
+  TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
+  TemplateTwinStagingQaVisitGuardError,
+} from "@/lib/template-twin/staging-qa-visit-guard";
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-const INPUT_MODES = ['audio_upload', 'voice_dictation', 'text_notes'] as const;
+const INPUT_MODES = ["audio_upload", "voice_dictation", "text_notes"] as const;
 
 const BodySchema = z.object({
   patientId: z.string().trim().min(1).optional(),
-  specialty: z.enum(SPECIALTY_IDS, { message: 'Pick a specialty' }).optional(),
+  specialty: z.enum(SPECIALTY_IDS, { message: "Pick a specialty" }).optional(),
   chiefComplaint: z
     .union([z.string().trim().max(500), z.null()])
     .optional()
@@ -66,13 +75,13 @@ const BodySchema = z.object({
 });
 
 export const GET = withApiHandler<{ id: string }>(
-  'api:visits:get',
+  "api:visits:get",
   async (_req, { params }) => {
     const { id: visitId } = await params;
 
     const session = await auth();
     const userId = session?.user?.id;
-    if (!userId) return apiError('unauthorized', 401);
+    if (!userId) return apiError("unauthorized", 401);
 
     const visit = await prisma.transcribeVisit.findUnique({
       where: { id: visitId },
@@ -130,33 +139,59 @@ export const GET = withApiHandler<{ id: string }>(
         referrals: true,
         patientSummary: true,
         confidenceScores: true,
+        templateTwinSyntheticQaRun: {
+          select: TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
+        },
       },
     });
     // 404 on both "not found" AND "not yours" prevents ID enumeration.
-    if (!visit || visit.userId !== userId) return apiError('not found', 404);
+    if (!visit || visit.userId !== userId) return apiError("not found", 404);
+    if (visit.templateTwinSyntheticQaRun) {
+      try {
+        const doctor = await requireFreshDoctorIdentity(userId);
+        assertTemplateTwinStagingQaVisitGuard({
+          run: visit.templateTwinSyntheticQaRun,
+          actor: { userId, practiceId: doctor.practiceId },
+          currentRolloutToken: doctor.rolloutToken,
+        });
+      } catch (error) {
+        if (
+          error instanceof AuthError ||
+          error instanceof TemplateTwinStagingQaDisabledError ||
+          error instanceof TemplateTwinStagingQaVisitGuardError
+        ) {
+          return apiError("not found", 404);
+        }
+        throw error;
+      }
+    }
 
     // Round 3 PR-C — §164.312(b) PHI-read audit (A05-P0-004). Fire-and-
     // forget; logAudit never throws and pulls userId/IP/UA from session
     // + headers internally. metadata uses field NAMES only, never PHI.
     void logAudit({
-      action: 'VIEWED_VISIT',
+      action: "VIEWED_VISIT",
       targetId: visit.id,
-      targetType: 'TranscribeVisit',
-      metadata: { source: 'api:GET /api/visits/[id]' },
+      targetType: "TranscribeVisit",
+      metadata: { source: "api:GET /api/visits/[id]" },
     });
 
-    return NextResponse.json({ visit }, { status: 200 });
-  }
+    const visitDto = { ...visit, templateTwinSyntheticQaRun: undefined };
+    return NextResponse.json({ visit: visitDto }, { status: 200 });
+  },
 );
 
 export const PATCH = withApiHandler<{ id: string }>(
-  'api:visits:edit',
+  "api:visits:edit",
   async (req, { params }) => {
     const { id: visitId } = await params;
 
     const session = await auth();
     const userId = session?.user?.id;
-    if (!userId) return apiError('unauthorized', 401);
+    if (!userId) return apiError("unauthorized", 401);
+    if (await isOwnedTemplateTwinStagingQaVisit({ visitId, userId })) {
+      return apiError("not found", 404);
+    }
 
     const blocked = rateLimitOr429(RATE_LIMITS.VISIT_OPS, userId);
     if (blocked) return blocked;
@@ -165,15 +200,15 @@ export const PATCH = withApiHandler<{ id: string }>(
     try {
       body = await req.json();
     } catch {
-      return apiError('invalid JSON body', 400);
+      return apiError("invalid JSON body", 400);
     }
     const parsed = BodySchema.safeParse(body);
     if (!parsed.success) {
       const first = parsed.error.issues[0];
-      const field = first?.path.join('.') || '_form';
+      const field = first?.path.join(".") || "_form";
       return NextResponse.json(
-        { error: first?.message || 'invalid payload', field },
-        { status: 400 }
+        { error: first?.message || "invalid payload", field },
+        { status: 400 },
       );
     }
 
@@ -182,7 +217,7 @@ export const PATCH = withApiHandler<{ id: string }>(
       where: { id: userId },
       select: { practiceId: true },
     });
-    if (!user) return apiError('user not found', 404);
+    if (!user) return apiError("user not found", 404);
 
     const visit = await prisma.transcribeVisit.findUnique({
       where: { id: visitId },
@@ -198,15 +233,15 @@ export const PATCH = withApiHandler<{ id: string }>(
         patientId: true,
       },
     });
-    if (!visit || visit.userId !== userId) return apiError('not found', 404);
+    if (!visit || visit.userId !== userId) return apiError("not found", 404);
 
     if (visit.deletedAt !== null) {
       return NextResponse.json(
         {
-          error: 'Visit is in trash. Restore it before editing.',
-          code: 'VISIT_DELETED',
+          error: "Visit is in trash. Restore it before editing.",
+          code: "VISIT_DELETED",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
     // archivedAt is impossible here (only SIGNED visits can be archived,
@@ -214,10 +249,10 @@ export const PATCH = withApiHandler<{ id: string }>(
     if (visit.archivedAt !== null) {
       return NextResponse.json(
         {
-          error: 'Archived visits cannot be edited.',
-          code: 'VISIT_ARCHIVED',
+          error: "Archived visits cannot be edited.",
+          code: "VISIT_ARCHIVED",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -230,10 +265,10 @@ export const PATCH = withApiHandler<{ id: string }>(
       return NextResponse.json(
         {
           error:
-            'Only draft visits (queued with no input uploaded) can be edited. Delete it instead.',
-          code: 'VISIT_NOT_DRAFT',
+            "Only draft visits (queued with no input uploaded) can be edited. Delete it instead.",
+          code: "VISIT_NOT_DRAFT",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -244,19 +279,26 @@ export const PATCH = withApiHandler<{ id: string }>(
     ) {
       const newPatient = await prisma.transcribeMdPatient.findUnique({
         where: { id: parsed.data.patientId },
-        select: { id: true, name: true, practiceId: true, deletedAt: true },
+        select: {
+          id: true,
+          name: true,
+          practiceId: true,
+          deletedAt: true,
+          externalId: true,
+        },
       });
       if (
         !newPatient ||
         newPatient.practiceId !== user.practiceId ||
-        newPatient.deletedAt !== null
+        newPatient.deletedAt !== null ||
+        isTemplateTwinSyntheticQaPatient(newPatient)
       ) {
         return NextResponse.json(
           {
-            error: 'Selected patient is not available.',
-            code: 'INVALID_PATIENT',
+            error: "Selected patient is not available.",
+            code: "INVALID_PATIENT",
           },
-          { status: 400 }
+          { status: 400 },
         );
       }
     }
@@ -294,8 +336,8 @@ export const PATCH = withApiHandler<{ id: string }>(
 
     if (Object.keys(data).length === 0) {
       return NextResponse.json(
-        { error: 'No fields to update.', field: '_form' },
-        { status: 400 }
+        { error: "No fields to update.", field: "_form" },
+        { status: 400 },
       );
     }
 
@@ -312,12 +354,12 @@ export const PATCH = withApiHandler<{ id: string }>(
       },
     });
 
-    log.info('api:visits:edit', 'draft edited', {
+    log.info("api:visits:edit", "draft edited", {
       userId,
       visitId,
       changedKeys: Object.keys(data),
     });
 
     return NextResponse.json({ visit: updated });
-  }
+  },
 );

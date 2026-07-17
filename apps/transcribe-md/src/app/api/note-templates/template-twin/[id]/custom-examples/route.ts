@@ -9,6 +9,10 @@ import {
   TemplateTwinCustomExampleError,
 } from "@/lib/template-twin/custom-example-service";
 import { isSameOriginTemplateTwinMutation } from "@/lib/template-twin/request-security";
+import {
+  TemplateTwinStagingQaLifecycleGuardError,
+  runWithTemplateTwinStagingQaLifecycleGuard,
+} from "@/lib/template-twin/staging-qa-lifecycle-guard";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -59,17 +63,25 @@ export async function POST(
       practiceId: session.user.practiceId,
       rolloutToken: session.templateTwinRolloutToken,
     };
-    const coverage =
-      parsed.data.action === "run"
-        ? await runTemplateTwinCustomExamples({
-            noteTemplateId: id,
-            actor,
-          })
-        : await acknowledgeTemplateTwinCustomExamples({
-            noteTemplateId: id,
-            batchId: parsed.data.batchId,
-            actor,
-          });
+    const coverage = await runWithTemplateTwinStagingQaLifecycleGuard({
+      noteTemplateId: id,
+      actor,
+      purpose:
+        parsed.data.action === "run"
+          ? "custom-example-run"
+          : "custom-example-acknowledgement",
+      operation: () =>
+        parsed.data.action === "run"
+          ? runTemplateTwinCustomExamples({
+              noteTemplateId: id,
+              actor,
+            })
+          : acknowledgeTemplateTwinCustomExamples({
+              noteTemplateId: id,
+              batchId: parsed.data.batchId,
+              actor,
+            }),
+    });
     return response({ ok: true, coverage }, 200);
   } catch (error) {
     if (error instanceof AuthError) {
@@ -93,6 +105,12 @@ export async function POST(
             ? 422
             : 409;
       return response({ ok: false, error: error.message }, status);
+    }
+    if (error instanceof TemplateTwinStagingQaLifecycleGuardError) {
+      return response(
+        { ok: false, error: "Template Twin version not found." },
+        404,
+      );
     }
     return response(
       {

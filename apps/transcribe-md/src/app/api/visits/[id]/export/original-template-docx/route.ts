@@ -27,6 +27,12 @@ import {
   TemplateTwinRolloutError,
   type TemplateTwinRolloutToken,
 } from "@/lib/template-twin/rollout";
+import { TemplateTwinStagingQaDisabledError } from "@/lib/template-twin/staging-qa-gate";
+import {
+  assertTemplateTwinStagingQaVisitGuard,
+  lockAndAssertTemplateTwinStagingQaOperation,
+  TemplateTwinStagingQaVisitGuardError,
+} from "@/lib/template-twin/staging-qa-visit-guard";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -82,6 +88,34 @@ export const GET = withApiHandler<{ id: string }>(
       },
     });
     if (!visit) return apiError("not found", 404);
+    let stagingQaRunId: string | null = null;
+    let stagingQaAttempt: number | null = null;
+    try {
+      const stagingAdmission = assertTemplateTwinStagingQaVisitGuard({
+        run: visit.templateTwinSyntheticQaRun,
+        actor: { userId, practiceId },
+        currentRolloutToken: rolloutToken,
+      });
+      stagingQaRunId = stagingAdmission.applies ? stagingAdmission.runId : null;
+      stagingQaAttempt = stagingAdmission.applies
+        ? visit.templateTwinSyntheticQaRun!.attempt
+        : null;
+    } catch (error) {
+      if (
+        error instanceof TemplateTwinStagingQaDisabledError ||
+        (error instanceof TemplateTwinStagingQaVisitGuardError &&
+          error.code === "TEMPLATE_TWIN_STAGING_QA_NOT_FOUND")
+      ) {
+        return apiError("not found", 404);
+      }
+      if (error instanceof TemplateTwinStagingQaVisitGuardError) {
+        return apiError(error.message, 409, {
+          code: error.code,
+          retry: false,
+        });
+      }
+      throw error;
+    }
 
     const assessment = assessTemplateTwinSigning({
       visitId: visit.id,
@@ -292,6 +326,53 @@ export const GET = withApiHandler<{ id: string }>(
               code: finalRollout.code,
               reason: finalRollout.reason,
             };
+          }
+          if (stagingQaRunId) {
+            try {
+              if (stagingQaAttempt === null) {
+                throw new TemplateTwinStagingQaVisitGuardError(
+                  "TEMPLATE_TWIN_STAGING_QA_ATTEMPT_STALE",
+                  "Synthetic QA attempt identity is unavailable.",
+                );
+              }
+              await lockAndAssertTemplateTwinStagingQaOperation({
+                tx,
+                runId: stagingQaRunId,
+                expectedAttempt: stagingQaAttempt,
+                actor: { userId, practiceId },
+                currentRolloutToken: finalRollout.token,
+                allowedStatuses: ["COMPLETED"],
+              });
+            } catch (error) {
+              if (
+                error instanceof TemplateTwinStagingQaDisabledError ||
+                error instanceof TemplateTwinStagingQaVisitGuardError
+              ) {
+                const code = error.code;
+                await enqueueTemplateTwinAudit(tx, {
+                  eventKey: `template-twin-export-staging-blocked:${visitId}:${code}`,
+                  practiceId,
+                  actorId: userId,
+                  actorEmailSnapshot: session.user.email ?? null,
+                  action: "TEMPLATE_TWIN_SAFETY_GATE_BLOCKED",
+                  targetType: "TranscribeVisit",
+                  targetId: visitId,
+                  metadata: {
+                    reasonCode: code,
+                    operation: "staging_download_final_authorization",
+                    stagingQaRunId,
+                    fillManifestId: fill.id,
+                  },
+                });
+                return {
+                  allowed: false as const,
+                  code,
+                  reason:
+                    "Synthetic QA authorization changed before download. Create a new run.",
+                };
+              }
+              throw error;
+            }
           }
 
           const currentFill = await tx.templateTwinFillManifest.findUnique({

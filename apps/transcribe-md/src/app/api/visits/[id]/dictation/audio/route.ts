@@ -7,27 +7,31 @@
 // access; the bytes go through the Node runtime with session validation.
 // ============================================================================
 
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
 
-import { auth } from '@/lib/nextauth';
-import prisma from '@meddoc/db';
-import { downloadAudio } from '@/lib/minio';
+import { auth } from "@/lib/nextauth";
+import prisma from "@meddoc/db";
+import { downloadAudio } from "@/lib/minio";
 
-import { apiError, withApiHandler } from '@/lib/api-error';
-import { redactPhi } from '@meddoc/ai';
-import { logAudit } from '@/lib/audit';
+import { apiError, withApiHandler } from "@/lib/api-error";
+import { redactPhi } from "@meddoc/ai";
+import { logAudit } from "@/lib/audit";
+import { isOwnedTemplateTwinStagingQaVisit } from "@/lib/template-twin/staging-qa-access";
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export const GET = withApiHandler<{ id: string }>(
-  'api:visits:dictation:audio',
+  "api:visits:dictation:audio",
   async (_req, { params }) => {
     const { id: visitId } = await params;
 
     const session = await auth();
     const userId = session?.user?.id;
-    if (!userId) return apiError('unauthorized', 401);
+    if (!userId) return apiError("unauthorized", 401);
+    if (await isOwnedTemplateTwinStagingQaVisit({ visitId, userId })) {
+      return apiError("not found", 404);
+    }
 
     const visit = await prisma.transcribeVisit.findUnique({
       where: { id: visitId },
@@ -37,9 +41,9 @@ export const GET = withApiHandler<{ id: string }>(
         audioMimeType: true,
       },
     });
-    if (!visit || visit.userId !== userId) return apiError('not found', 404);
+    if (!visit || visit.userId !== userId) return apiError("not found", 404);
     if (!visit.dictationAudioKey) {
-      return apiError('no dictation recorded', 404);
+      return apiError("no dictation recorded", 404);
     }
 
     let buf: Buffer;
@@ -47,10 +51,10 @@ export const GET = withApiHandler<{ id: string }>(
       buf = await downloadAudio(visit.dictationAudioKey);
     } catch (err) {
       console.error(
-        '[api:visits:dictation:audio] download failed:',
-        redactPhi(err instanceof Error ? err.message : err)
+        "[api:visits:dictation:audio] download failed:",
+        redactPhi(err instanceof Error ? err.message : err),
       );
-      return apiError('storage read failed', 502);
+      return apiError("storage read failed", 502);
     }
 
     // Round 3 PR-C — §164.312(b) PHI-read audit (A05-P0-004). Audio
@@ -58,13 +62,13 @@ export const GET = withApiHandler<{ id: string }>(
     // exits the server. Audited even though the session+ownership gate
     // already protects it.
     void logAudit({
-      action: 'VIEWED_VISIT_AUDIO',
+      action: "VIEWED_VISIT_AUDIO",
       targetId: visitId,
-      targetType: 'TranscribeVisit',
+      targetType: "TranscribeVisit",
       metadata: {
-        source: 'api:GET /api/visits/[id]/dictation/audio',
+        source: "api:GET /api/visits/[id]/dictation/audio",
         bytes: buf.byteLength,
-        mimeType: visit.audioMimeType ?? 'audio/webm',
+        mimeType: visit.audioMimeType ?? "audio/webm",
       },
     });
 
@@ -75,12 +79,12 @@ export const GET = withApiHandler<{ id: string }>(
     return new NextResponse(buf as unknown as BodyInit, {
       status: 200,
       headers: {
-        'Content-Type': visit.audioMimeType ?? 'audio/webm',
-        'Content-Length': String(buf.byteLength),
+        "Content-Type": visit.audioMimeType ?? "audio/webm",
+        "Content-Length": String(buf.byteLength),
         // Disable caching — the bytes are PHI and the session gate is the
         // only thing keeping them private.
-        'Cache-Control': 'no-store, private',
+        "Cache-Control": "no-store, private",
       },
     });
-  }
+  },
 );

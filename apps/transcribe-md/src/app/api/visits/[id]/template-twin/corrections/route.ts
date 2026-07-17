@@ -1,28 +1,30 @@
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
 
-import { AuthError, requireDoctorSession } from '@/lib/auth';
-import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
-import { TemplateTwinFieldCorrectionRequestSchema } from '@/lib/template-twin/contracts';
-import { isSameOriginTemplateTwinMutation } from '@/lib/template-twin/request-security';
+import { AuthError, requireDoctorSession } from "@/lib/auth";
+import { RATE_LIMITS, rateLimitOr429 } from "@/lib/rate-limit";
+import { TemplateTwinFieldCorrectionRequestSchema } from "@/lib/template-twin/contracts";
+import { isSameOriginTemplateTwinMutation } from "@/lib/template-twin/request-security";
 import {
   reviewTemplateTwinField,
   TemplateTwinReviewError,
-} from '@/lib/template-twin/review-service';
+} from "@/lib/template-twin/review-service";
 import {
   TemplateTwinArtifactIntegrityError,
   TemplateTwinStorageUnavailableError,
-} from '@/lib/template-twin/storage';
+} from "@/lib/template-twin/storage";
+import { TemplateTwinStagingQaDisabledError } from "@/lib/template-twin/staging-qa-gate";
+import { TemplateTwinStagingQaVisitGuardError } from "@/lib/template-twin/staging-qa-visit-guard";
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 function response(body: unknown, status: number) {
   return NextResponse.json(body, {
     status,
     headers: {
-      'Cache-Control': 'no-store, private',
-      'X-Content-Type-Options': 'nosniff',
+      "Cache-Control": "no-store, private",
+      "X-Content-Type-Options": "nosniff",
     },
   });
 }
@@ -33,7 +35,7 @@ async function mutate(
 ) {
   if (!isSameOriginTemplateTwinMutation(request)) {
     return response(
-      { ok: false, error: 'The correction request was not same-origin.' },
+      { ok: false, error: "The correction request was not same-origin." },
       403,
     );
   }
@@ -48,7 +50,7 @@ async function mutate(
     );
     if (!parsed.success) {
       return response(
-        { ok: false, error: 'The field correction is incomplete or invalid.' },
+        { ok: false, error: "The field correction is incomplete or invalid." },
         400,
       );
     }
@@ -63,25 +65,38 @@ async function mutate(
     });
     return response({ ok: true, result }, 200);
   } catch (error) {
+    if (
+      error instanceof TemplateTwinStagingQaDisabledError ||
+      (error instanceof TemplateTwinStagingQaVisitGuardError &&
+        error.code === "TEMPLATE_TWIN_STAGING_QA_NOT_FOUND")
+    ) {
+      return response({ ok: false, error: "not found" }, 404);
+    }
+    if (error instanceof TemplateTwinStagingQaVisitGuardError) {
+      return response(
+        { ok: false, error: error.message, code: error.code, retry: false },
+        409,
+      );
+    }
     if (error instanceof AuthError) {
       return response(
         {
           ok: false,
           error:
-            error.code === 'FORBIDDEN'
+            error.code === "FORBIDDEN"
               ? error.message
-              : 'Sign in again before reviewing.',
+              : "Sign in again before reviewing.",
         },
-        error.code === 'FORBIDDEN' ? 403 : 401,
+        error.code === "FORBIDDEN" ? 403 : 401,
       );
     }
     if (error instanceof TemplateTwinReviewError) {
       const status =
-        error.code === 'NOT_FOUND'
+        error.code === "NOT_FOUND"
           ? 404
-          : error.code === 'CORRECTION_INVALID' ||
-              error.code === 'MANIFEST_INVALID' ||
-              error.code === 'TEMPLATE_PROVENANCE_INVALID'
+          : error.code === "CORRECTION_INVALID" ||
+              error.code === "MANIFEST_INVALID" ||
+              error.code === "TEMPLATE_PROVENANCE_INVALID"
             ? 422
             : 409;
       return response(
@@ -89,7 +104,7 @@ async function mutate(
           ok: false,
           error: error.message,
           code: error.code,
-          retry: error.code.startsWith('TEMPLATE_TWIN_'),
+          retry: error.code.startsWith("TEMPLATE_TWIN_"),
         },
         status,
       );
@@ -102,7 +117,7 @@ async function mutate(
         {
           ok: false,
           error:
-            'Private Template Twin storage could not verify the source or corrected output.',
+            "Private Template Twin storage could not verify the source or corrected output.",
         },
         503,
       );
@@ -110,7 +125,8 @@ async function mutate(
     return response(
       {
         ok: false,
-        error: 'The correction was not saved because verification did not complete.',
+        error:
+          "The correction was not saved because verification did not complete.",
       },
       500,
     );

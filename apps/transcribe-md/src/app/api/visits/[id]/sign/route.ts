@@ -71,6 +71,15 @@ import {
   TemplateTwinRolloutError,
   type TemplateTwinRolloutToken,
 } from "@/lib/template-twin/rollout";
+import { isSameOriginTemplateTwinMutation } from "@/lib/template-twin/request-security";
+import { TemplateTwinStagingQaDisabledError } from "@/lib/template-twin/staging-qa-gate";
+import {
+  lockAndAssertTemplateTwinStagingQaOperation,
+  assertTemplateTwinStagingQaVisitGuard,
+  templateTwinStagingQaDestinationsAreAllowed,
+  TemplateTwinStagingQaVisitGuardError,
+} from "@/lib/template-twin/staging-qa-visit-guard";
+import { lockCurrentTemplateTwinVisit } from "@/lib/template-twin/fill-engine";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -197,6 +206,15 @@ export const POST = withApiHandler<{ id: string }>(
       },
     });
     if (!visit || visit.userId !== userId) return apiError("not found", 404);
+    if (
+      visit.noteTemplate?.templateKind === "template_twin_docx" &&
+      !isSameOriginTemplateTwinMutation(req)
+    ) {
+      return apiError("The signing request was not same-origin.", 403, {
+        code: "TEMPLATE_TWIN_CROSS_SITE_MUTATION",
+        retry: false,
+      });
+    }
     // T-M17.3: never silently sign a trashed / archived visit. Archived
     // SIGNED visits cannot be re-signed via this route — the operator
     // must unarchive first (dedicated flow, not in T-M17.3 scope).
@@ -221,6 +239,8 @@ export const POST = withApiHandler<{ id: string }>(
 
     let templateTwinPracticeId = session.user.practiceId ?? "";
     let templateTwinRolloutToken: TemplateTwinRolloutToken | null = null;
+    let stagingQaRunId: string | null = null;
+    let stagingQaAttempt: number | null = null;
     if (visit.noteTemplate?.templateKind === "template_twin_docx") {
       try {
         templateTwinPracticeId = (await requireFreshDoctorIdentity(userId))
@@ -266,6 +286,49 @@ export const POST = withApiHandler<{ id: string }>(
           retry: true,
         });
       }
+      try {
+        const stagingAdmission = assertTemplateTwinStagingQaVisitGuard({
+          run: visit.templateTwinSyntheticQaRun,
+          actor: { userId, practiceId: templateTwinPracticeId },
+          currentRolloutToken: templateTwinRolloutToken,
+        });
+        stagingQaRunId = stagingAdmission.applies
+          ? stagingAdmission.runId
+          : null;
+        stagingQaAttempt = stagingAdmission.applies
+          ? visit.templateTwinSyntheticQaRun!.attempt
+          : null;
+      } catch (error) {
+        if (
+          error instanceof TemplateTwinStagingQaDisabledError ||
+          (error instanceof TemplateTwinStagingQaVisitGuardError &&
+            error.code === "TEMPLATE_TWIN_STAGING_QA_NOT_FOUND")
+        ) {
+          return apiError("not found", 404);
+        }
+        if (error instanceof TemplateTwinStagingQaVisitGuardError) {
+          return apiError(error.message, 409, {
+            code: error.code,
+            retry: false,
+          });
+        }
+        throw error;
+      }
+    }
+    if (
+      !templateTwinStagingQaDestinationsAreAllowed(
+        visit.templateTwinSyntheticQaRun,
+        parsed.data.destinations,
+      )
+    ) {
+      return apiError(
+        "Synthetic QA visits may only deliver the verified Original Template DOCX.",
+        403,
+        {
+          code: "TEMPLATE_TWIN_STAGING_QA_DESTINATION_BLOCKED",
+          retry: false,
+        },
+      );
     }
 
     // Template Twin is a server-enforced clinical gate. The persisted
@@ -550,7 +613,10 @@ export const POST = withApiHandler<{ id: string }>(
         cptBlob && cptBlob.em && typeof cptBlob.em === "object"
           ? (cptBlob.em as Record<string, unknown>)
           : null;
-      if (emBlob) {
+      // The staging workflow never invokes the legacy direct Anthropic E/M
+      // judge. E/M scoring is outside DOCX compatibility QA and would violate
+      // the mocked-provider-only boundary.
+      if (emBlob && !stagingQaRunId) {
         try {
           const signedCode = await computeDisplayedEmCode(
             visit.soapFinal ?? "",
@@ -635,12 +701,11 @@ export const POST = withApiHandler<{ id: string }>(
               count: number;
               rolloutRejected?: { code: string; reason: string } | null;
             }> => {
-              const finalRollout =
-                await lockTemplateTwinRolloutForFinalClaim({
-                  tx,
-                  practiceId: templateTwinPracticeId,
-                  pinnedToken: templateTwinRolloutToken!,
-                });
+              const finalRollout = await lockTemplateTwinRolloutForFinalClaim({
+                tx,
+                practiceId: templateTwinPracticeId,
+                pinnedToken: templateTwinRolloutToken!,
+              });
               if (!finalRollout.allowed) {
                 await enqueueTemplateTwinAudit(tx, {
                   eventKey:
@@ -672,6 +737,81 @@ export const POST = withApiHandler<{ id: string }>(
                     reason: finalRollout.reason,
                   },
                 };
+              }
+              if (stagingQaRunId) {
+                try {
+                  if (stagingQaAttempt === null) {
+                    throw new TemplateTwinStagingQaVisitGuardError(
+                      "TEMPLATE_TWIN_STAGING_QA_ATTEMPT_STALE",
+                      "Synthetic QA attempt identity is unavailable.",
+                    );
+                  }
+                  await lockAndAssertTemplateTwinStagingQaOperation({
+                    tx,
+                    runId: stagingQaRunId,
+                    expectedAttempt: stagingQaAttempt,
+                    actor: { userId, practiceId: templateTwinPracticeId },
+                    currentRolloutToken: finalRollout.token,
+                    allowedStatuses: ["COMPLETED"],
+                  });
+                } catch (error) {
+                  if (
+                    error instanceof TemplateTwinStagingQaDisabledError ||
+                    error instanceof TemplateTwinStagingQaVisitGuardError
+                  ) {
+                    const code =
+                      error instanceof TemplateTwinStagingQaDisabledError
+                        ? error.code
+                        : error.code;
+                    await enqueueTemplateTwinAudit(tx, {
+                      eventKey:
+                        `template-twin-sign-staging-blocked:${visitId}:` +
+                        `${twinClaim.manifestVersion}:${code}`,
+                      practiceId: templateTwinPracticeId,
+                      actorId: userId,
+                      actorEmailSnapshot: sessionEmail,
+                      action: "TEMPLATE_TWIN_SIGN_BLOCKED",
+                      targetType: "TranscribeVisit",
+                      targetId: visitId,
+                      metadata: {
+                        reasonCode: code,
+                        operation: "staging_sign_final_claim",
+                        stagingQaRunId,
+                        fillManifestId: twinClaim.id,
+                      },
+                    });
+                    return {
+                      count: 0,
+                      rolloutRejected: {
+                        code,
+                        reason:
+                          "Synthetic QA authorization changed before signing. Create a new run.",
+                      },
+                    };
+                  }
+                  throw error;
+                }
+              }
+              // Keep the common lock order global -> practice -> staging run
+              // -> visit -> fill. This prevents a retry that observed READY
+              // before signing from overwriting SIGNED after waiting on the
+              // visit row lock.
+              const lockedVisit = await lockCurrentTemplateTwinVisit(
+                tx,
+                visitId,
+              );
+              if (
+                !lockedVisit ||
+                lockedVisit.userId !== userId ||
+                lockedVisit.status !== TranscribeVisitStatus.READY ||
+                lockedVisit.deletedAt !== null ||
+                lockedVisit.archivedAt !== null ||
+                lockedVisit.soapVersion !== twinClaim.soapVersion ||
+                lockedVisit.soapFinal !== visit.soapFinal ||
+                lockedVisit.noteTemplateId !== visit.noteTemplateId ||
+                lockedVisit.noteTemplateVersion !== visit.noteTemplateVersion
+              ) {
+                throw new TemplateTwinSignClaimConflict();
               }
               // Optimistically claim the exact manifest assessed above. Any
               // concurrent correction/regeneration changes status, version,
@@ -786,7 +926,12 @@ export const POST = withApiHandler<{ id: string }>(
         // winning transition — race losers already have a capture in
         // flight from the winner's handler, and the @unique visitId
         // constraint would reject a second insert anyway.
-        void captureEditPattern({ visitId, doctorId: userId });
+        // Synthetic QA never sends SOAP/note text to the edit-pattern
+        // embedding path. That path is asynchronous and provider-backed; it
+        // is outside the deterministic staging contract.
+        if (!stagingQaRunId) {
+          void captureEditPattern({ visitId, doctorId: userId });
+        }
         // HIPAA audit — one row per successful READY→SIGNED transition.
         // Race losers (updated.count===0) don't re-write; the winner
         // already covered them.

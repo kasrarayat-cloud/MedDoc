@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   staticAssetDecisionCount: vi.fn(),
   staticAssetReviewReceiptCount: vi.fn(),
   customExampleExecutionCount: vi.fn(),
+  syntheticQaRunCount: vi.fn(),
   noteTemplateCount: vi.fn(),
   fillCount: vi.fn(),
   objectLedgerCount: vi.fn(),
@@ -78,6 +79,7 @@ vi.mock("@meddoc/db", () => ({
     templateTwinCustomExampleExecution: {
       count: mocks.customExampleExecutionCount,
     },
+    templateTwinSyntheticQaRun: { count: mocks.syntheticQaRunCount },
     noteTemplate: { count: mocks.noteTemplateCount },
     templateTwinFillManifest: { count: mocks.fillCount },
     templateTwinObjectLedger: { count: mocks.objectLedgerCount },
@@ -124,6 +126,7 @@ beforeEach(() => {
   mocks.staticAssetDecisionCount.mockResolvedValue(0);
   mocks.staticAssetReviewReceiptCount.mockResolvedValue(0);
   mocks.customExampleExecutionCount.mockResolvedValue(0);
+  mocks.syntheticQaRunCount.mockResolvedValue(0);
   mocks.noteTemplateCount.mockResolvedValue(0);
   mocks.fillCount.mockResolvedValue(0);
   mocks.objectLedgerCount.mockResolvedValue(0);
@@ -157,6 +160,7 @@ beforeEach(() => {
         templateTwinCustomExampleExecution: {
           count: mocks.customExampleExecutionCount,
         },
+        templateTwinSyntheticQaRun: { count: mocks.syntheticQaRunCount },
         noteTemplate: { count: mocks.noteTemplateCount },
         templateTwinFillManifest: { count: mocks.fillCount },
         templateTwinObjectLedger: { count: mocks.objectLedgerCount },
@@ -201,9 +205,7 @@ describe("delete account with retained Template Twin records", () => {
   });
 
   it("rechecks after locking and blocks a retained row that races the initial check", async () => {
-    mocks.sourceCount
-      .mockResolvedValueOnce(0)
-      .mockResolvedValueOnce(1);
+    mocks.sourceCount.mockResolvedValueOnce(0).mockResolvedValueOnce(1);
 
     const response = await POST(request(), { params: Promise.resolve({}) });
 
@@ -245,6 +247,7 @@ describe("delete account with retained Template Twin records", () => {
     ["static-asset decision", "staticAssetDecisionCount"],
     ["static-asset preview-review receipt", "staticAssetReviewReceiptCount"],
     ["custom-example execution", "customExampleExecutionCount"],
+    ["synthetic staging QA run", "syntheticQaRunCount"],
   ] as const)(
     "blocks deletion for a retained %s without entering the transaction",
     async (_label, counter) => {

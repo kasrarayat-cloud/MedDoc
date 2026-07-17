@@ -5,6 +5,9 @@ const mocks = vi.hoisted(() => ({
   run: vi.fn(),
   acknowledge: vi.fn(),
   sameOrigin: vi.fn(() => true),
+  lifecycleGuard: vi.fn(async (input: { operation: () => unknown }) =>
+    input.operation(),
+  ),
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -31,6 +34,10 @@ vi.mock("@/lib/template-twin/custom-example-service", () => ({
   },
   runTemplateTwinCustomExamples: mocks.run,
   acknowledgeTemplateTwinCustomExamples: mocks.acknowledge,
+}));
+vi.mock("@/lib/template-twin/staging-qa-lifecycle-guard", () => ({
+  TemplateTwinStagingQaLifecycleGuardError: class TemplateTwinStagingQaLifecycleGuardError extends Error {},
+  runWithTemplateTwinStagingQaLifecycleGuard: mocks.lifecycleGuard,
 }));
 
 import { POST } from "../[id]/custom-examples/route";

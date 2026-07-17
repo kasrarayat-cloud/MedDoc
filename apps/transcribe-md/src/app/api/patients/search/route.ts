@@ -17,18 +17,19 @@
 // picker, dashboard) should use this POST surface.
 // ============================================================================
 
-import { z } from 'zod';
-import { NextResponse } from 'next/server';
+import { z } from "zod";
+import { NextResponse } from "next/server";
 
-import prisma from '@meddoc/db';
+import prisma from "@meddoc/db";
 
-import { apiError, withApiHandler } from '@/lib/api-error';
-import { getSession } from '@/lib/auth';
-import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
-import { logAudit } from '@/lib/audit';
+import { apiError, withApiHandler } from "@/lib/api-error";
+import { getSession } from "@/lib/auth";
+import { RATE_LIMITS, rateLimitOr429 } from "@/lib/rate-limit";
+import { logAudit } from "@/lib/audit";
+import { TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID } from "@/lib/template-twin/synthetic-qa-patient";
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 // Mirror the GET endpoint's constants — single SSOT for what
 // "match" means here.
@@ -46,12 +47,12 @@ interface PatientListRow {
 }
 
 const BodySchema = z.object({
-  search: z.string().trim().min(1, 'search is required').max(200),
+  search: z.string().trim().min(1, "search is required").max(200),
 });
 
-export const POST = withApiHandler('api:patients:search', async (req) => {
+export const POST = withApiHandler("api:patients:search", async (req) => {
   const session = await getSession();
-  if (!session) return apiError('unauthorized', 401);
+  if (!session) return apiError("unauthorized", 401);
 
   const blocked = rateLimitOr429(RATE_LIMITS.PATIENT_READ, session.user.id);
   if (blocked) return blocked;
@@ -60,13 +61,16 @@ export const POST = withApiHandler('api:patients:search', async (req) => {
   try {
     body = await req.json();
   } catch {
-    return apiError('invalid JSON body', 400);
+    return apiError("invalid JSON body", 400);
   }
   const parsed = BodySchema.safeParse(body);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
     return NextResponse.json(
-      { error: first?.message || 'invalid payload', field: first?.path.join('.') || 'search' },
+      {
+        error: first?.message || "invalid payload",
+        field: first?.path.join(".") || "search",
+      },
       { status: 400 },
     );
   }
@@ -85,11 +89,17 @@ export const POST = withApiHandler('api:patients:search', async (req) => {
     LEFT JOIN transcribe_visits v ON v."patientId" = p.id
       AND v."deletedAt" IS NULL
       AND v."archivedAt" IS NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM template_twin_synthetic_qa_runs qa
+        WHERE qa."visitId" = v.id
+      )
     WHERE p."practiceId" = ${session.user.practiceId}
       AND p."deletedAt" IS NULL
+      AND p."externalId" IS DISTINCT FROM ${TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID}
       AND (
         similarity(LOWER(p.name), LOWER(${search})) > ${SEARCH_SIMILARITY_THRESHOLD}
-        OR p."externalId" ILIKE ${'%' + search + '%'}
+        OR p."externalId" ILIKE ${"%" + search + "%"}
       )
     GROUP BY p.id
     ORDER BY MAX(v."createdAt") DESC NULLS LAST, p.id DESC
@@ -99,10 +109,10 @@ export const POST = withApiHandler('api:patients:search', async (req) => {
   // §164.312(b) PHI-read audit. Mirror the GET handler's metadata:
   // count + hasSearch boolean; never include the search term itself.
   void logAudit({
-    action: 'VIEWED_PATIENT_LIST',
-    targetType: 'TranscribeMdPatient',
+    action: "VIEWED_PATIENT_LIST",
+    targetType: "TranscribeMdPatient",
     metadata: {
-      source: 'api:POST /api/patients/search',
+      source: "api:POST /api/patients/search",
       count: rows.length,
       hasSearch: true,
     },

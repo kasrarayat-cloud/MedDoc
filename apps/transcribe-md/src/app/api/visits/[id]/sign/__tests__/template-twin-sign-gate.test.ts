@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   legacyVisitUpdateMany: vi.fn(),
   txVisitUpdateMany: vi.fn(),
   txFillUpdateMany: vi.fn(),
+  txQueryRaw: vi.fn(),
   transaction: vi.fn(),
   rxOverrideFindMany: vi.fn(),
   auth: vi.fn(),
@@ -69,7 +70,11 @@ vi.mock("@/lib/audit", () => ({ logAudit: mocks.logAudit }));
 vi.mock("@/lib/log", () => ({
   log: { warn: mocks.logWarn, info: vi.fn(), error: vi.fn() },
 }));
-vi.mock("@meddoc/ai", () => ({ redactPhi: (value: unknown) => value }));
+vi.mock("@meddoc/ai", () => ({
+  redactPhi: (value: unknown) => value,
+  TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION:
+    "template-twin-staging-safe-docx/1.0.0",
+}));
 vi.mock("@/lib/visit-export", () => ({ formatVisitDate: () => "2026-07-15" }));
 vi.mock("@/lib/visit-export-server", () => ({
   loadVisitExportData: mocks.loadVisitExportData,
@@ -99,6 +104,11 @@ vi.mock("@/lib/template-twin/storage", () => ({
 }));
 vi.mock("@/lib/template-twin/audit-outbox", () => ({
   enqueueTemplateTwinAudit: mocks.enqueueAudit,
+}));
+vi.mock("@/lib/template-twin/fill-engine", () => ({
+  lockCurrentTemplateTwinVisit: async (tx: {
+    $queryRaw: () => Promise<unknown[]>;
+  }) => (await tx.$queryRaw())[0] ?? null,
 }));
 vi.mock("@/lib/template-twin/rollout", () => ({
   TemplateTwinRolloutError: class TemplateTwinRolloutError extends Error {
@@ -159,10 +169,37 @@ function visitRow() {
   };
 }
 
-function call(destinations: string[] = []) {
-  const request = {
-    json: async () => ({ destinations }),
-  } as unknown as NextRequest;
+function stagingRun() {
+  return {
+    id: "staging-run-1",
+    practiceId: "practice-1",
+    doctorId: "doctor-1",
+    fixtureVersion: "template-twin-staging-safe-docx/1.0.0",
+    attempt: 1,
+    pinnedGlobalRolloutGeneration: BigInt(1),
+    pinnedPracticeRolloutGeneration: BigInt(1),
+  };
+}
+
+function call(
+  destinations: string[] = [],
+  headers: Record<string, string> = {
+    origin: "https://app.example.test",
+    host: "app.example.test",
+    "sec-fetch-site": "same-origin",
+  },
+) {
+  const request = new Request(
+    `https://app.example.test/api/visits/${VISIT_ID}/sign`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...headers,
+      },
+      body: JSON.stringify({ destinations }),
+    },
+  ) as unknown as NextRequest;
   return POST(request, { params: Promise.resolve({ id: VISIT_ID }) });
 }
 
@@ -186,6 +223,7 @@ function deterministicBarrier() {
 }
 
 beforeEach(() => {
+  vi.unstubAllEnvs();
   vi.clearAllMocks();
   mocks.auth.mockResolvedValue({
     user: {
@@ -247,6 +285,19 @@ beforeEach(() => {
   });
   mocks.txFillUpdateMany.mockResolvedValue({ count: 1 });
   mocks.txVisitUpdateMany.mockResolvedValue({ count: 1 });
+  mocks.txQueryRaw.mockResolvedValue([
+    {
+      id: VISIT_ID,
+      userId: "doctor-1",
+      status: TranscribeVisitStatus.READY,
+      deletedAt: null,
+      archivedAt: null,
+      soapVersion: 7,
+      soapFinal: "Synthetic SOAP note.",
+      noteTemplateId: "template-1",
+      noteTemplateVersion: 1,
+    },
+  ]);
   mocks.transaction.mockImplementation(
     async (callback: (tx: unknown) => Promise<unknown>) =>
       callback({
@@ -254,6 +305,7 @@ beforeEach(() => {
           updateMany: mocks.txFillUpdateMany,
         },
         transcribeVisit: { updateMany: mocks.txVisitUpdateMany },
+        $queryRaw: mocks.txQueryRaw,
       }),
   );
   mocks.loadVisitExportData.mockResolvedValue({
@@ -265,6 +317,61 @@ beforeEach(() => {
 });
 
 describe("POST /api/visits/[id]/sign — Template Twin server gate", () => {
+  it("rejects a cross-site Template Twin signing mutation before any clinical claim", async () => {
+    const response = await call([], {
+      origin: "https://cross-site.synthetic.test",
+      host: "app.example.test",
+      "sec-fetch-site": "cross-site",
+    });
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "TEMPLATE_TWIN_CROSS_SITE_MUTATION",
+      retry: false,
+    });
+    expect(mocks.assess).not.toHaveBeenCalled();
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
+  it.each(["email", "pdf", "docx", "clipboard_epic", "clipboard_generic"])(
+    "blocks the %s destination for a synthetic QA visit",
+    async (destination) => {
+      for (const [key, value] of Object.entries({
+        TEMPLATE_TWIN_STAGING_QA_ENABLED: "true",
+        TEMPLATE_TWIN_STAGING_QA_ENVIRONMENT: "test",
+        TEMPLATE_TWIN_STAGING_QA_RESOURCE_ATTESTATION:
+          "isolated-disposable-qa-v1",
+        TEMPLATE_TWIN_STORAGE_PROFILE: "qa",
+        MOCK_AI_CALLS: "true",
+        MOCK_TEMPLATE_TWIN_E2E: "true",
+        DATABASE_URL:
+          "postgresql://synthetic:synthetic@localhost/template_twin_test",
+        REDIS_URL: "redis://redis:6379/15",
+        MINIO_ENDPOINT: "minio:9000",
+        MINIO_USE_SSL: "false",
+        TRANSCRIBE_MD_MINIO_BUCKET: "transcribe-md-audio-qa",
+        TRANSCRIBE_MD_TEMPLATE_BUCKET: "transcribe-md-template-artifacts-qa",
+      })) {
+        vi.stubEnv(key, value);
+      }
+      mocks.findUnique.mockReset();
+      mocks.findUnique.mockResolvedValueOnce({
+        ...visitRow(),
+        templateTwinSyntheticQaRun: stagingRun(),
+      });
+
+      const response = await call([destination]);
+
+      expect(response.status).toBe(403);
+      await expect(response.json()).resolves.toMatchObject({
+        code: "TEMPLATE_TWIN_STAGING_QA_DESTINATION_BLOCKED",
+        retry: false,
+      });
+      expect(mocks.readTemplateTwinOutput).not.toHaveBeenCalled();
+      expect(mocks.transaction).not.toHaveBeenCalled();
+    },
+  );
+
   it.each(["STAFF", "ADMIN"] as const)(
     "rejects a fresh %s role before assessing or signing a Template Twin visit",
     async (role) => {
@@ -483,6 +590,7 @@ describe("POST /api/visits/[id]/sign — Template Twin server gate", () => {
             updateMany: mocks.txFillUpdateMany,
           },
           transcribeVisit: { updateMany: mocks.txVisitUpdateMany },
+          $queryRaw: mocks.txQueryRaw,
         });
       } catch (error) {
         Object.assign(clinicalState, before);

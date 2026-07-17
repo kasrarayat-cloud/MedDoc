@@ -2,6 +2,7 @@
 
 import prisma from '@meddoc/db';
 import { auth } from '@/lib/nextauth';
+import { ordinaryClinicalVisitWhere } from '@/lib/template-twin/synthetic-qa-patient';
 
 export interface RecentVisitItem {
   id: string;
@@ -19,11 +20,11 @@ export async function getRecentVisits(): Promise<RecentVisitItem[]> {
   if (!session?.user?.id) return [];
 
   const rows = await prisma.transcribeVisit.findMany({
-    where: {
+    where: ordinaryClinicalVisitWhere({
       userId: session.user.id,
       deletedAt: null,
       archivedAt: null,
-    },
+    }),
     orderBy: { createdAt: 'desc' },
     take: 10,
     select: {
