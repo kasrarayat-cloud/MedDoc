@@ -204,6 +204,7 @@ test("Template Twin staging UI drives the real synthetic pipeline fail closed", 
   await signupSyntheticDoctor(page, email);
   setTemplateTwinQaPractice({ email, enabled: false });
   await page.goto("/settings");
+  await page.getByRole("button", { name: "Note format", exact: true }).click();
   await expect(
     page.getByText(/Template Twin synthetic QA is unavailable/i).first(),
   ).toBeVisible();
@@ -214,6 +215,7 @@ test("Template Twin staging UI drives the real synthetic pipeline fail closed", 
 
   setTemplateTwinQaPractice({ email, enabled: true });
   await page.reload();
+  await page.getByRole("button", { name: "Note format", exact: true }).click();
   await expect(
     page.getByText("SYNTHETIC TEST ONLY — NOT FOR PATIENT CARE").first(),
   ).toBeVisible();
@@ -249,6 +251,7 @@ test("Template Twin staging UI drives the real synthetic pipeline fail closed", 
         encounterScope: ENCOUNTER_SCOPE,
         versionDescription: VERSION_DESCRIPTION,
         fixtureVersion: FIXTURE_VERSION,
+        idempotencyKey: `${suffix}-changed-fixture-upload`,
       },
     },
   );
@@ -606,7 +609,7 @@ test("Template Twin staging UI drives the real synthetic pipeline fail closed", 
 
   // An edited SOAP invalidates the old immutable output. The visible staging
   // recovery action requeues the same visit under a fresh guarded attempt.
-  await page.getByRole("tab", { name: /^soap/i }).click();
+  await page.getByRole("tab", { name: /^(?:note|soap)/i }).click();
   await page.getByRole("button", { name: "Edit SOAP note" }).first().click();
   const editor = page.getByRole("textbox", { name: "Edit SOAP note" });
   await editor.fill(
@@ -691,7 +694,7 @@ test("Template Twin staging UI drives the real synthetic pipeline fail closed", 
     page.getByRole("tab", { name: "Billing", exact: true }),
   ).toHaveCount(0);
 
-  await page.getByRole("tab", { name: /^soap/i }).click();
+  await page.getByRole("tab", { name: /^(?:note|soap)/i }).click();
   await page.getByRole("button", { name: "Sign & Send" }).click();
   const signDialog = page.getByRole("dialog", {
     name: "Sign synthetic Original Template DOCX",
