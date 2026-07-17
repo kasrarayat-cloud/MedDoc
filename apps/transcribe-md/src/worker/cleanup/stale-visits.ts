@@ -121,6 +121,7 @@ async function sweepAbandonedQueued(): Promise<SweepResult> {
       dictationAudioKey: null,
       OR: [{ rawTextInput: null }, { rawTextInput: '' }],
       createdAt: { lt: cutoff },
+      templateTwinSyntheticQaRun: { is: null },
     },
     select: {
       id: true,
@@ -147,6 +148,7 @@ async function sweepExpiredTrash(): Promise<SweepResult> {
   const targets = await prisma.transcribeVisit.findMany({
     where: {
       deletedAt: { lt: cutoff },
+      templateTwinSyntheticQaRun: { is: null },
     },
     select: {
       id: true,

@@ -32,6 +32,7 @@
 import { createHash } from 'node:crypto';
 import Anthropic from '@anthropic-ai/sdk';
 import {
+  getTemplateTwinSyntheticQaProviderContext,
   hashPrompt,
   logAiCall,
   logApiUsage,
@@ -320,6 +321,24 @@ export interface JudgeMdmResult {
  *  triggered), calls Claude; on any failure falls back to the
  *  deterministic heuristic. */
 export async function judgeMdm(args: JudgeMdmArgs): Promise<JudgeMdmResult> {
+  const syntheticQa = getTemplateTwinSyntheticQaProviderContext();
+  if (syntheticQa) {
+    if (
+      syntheticQa.practiceId !== args.practiceId ||
+      (args.visitId !== undefined && args.visitId !== syntheticQa.visitId)
+    ) {
+      throw new Error("Synthetic QA E/M context mismatch.");
+    }
+    return {
+      judgement: deterministicMdm(
+        args.soap,
+        args.icdCodes ?? [],
+        args.rxDrafts ?? [],
+      ),
+      cacheHit: false,
+      llmJudged: false,
+    };
+  }
   const cacheKey = buildCacheKey(args.soap);
 
   // Drift bypass — only if a priorSoap was provided.

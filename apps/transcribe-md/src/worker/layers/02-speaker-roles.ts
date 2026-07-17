@@ -18,7 +18,7 @@ import {
   wrapAsData,
   delimiterSystemSuffix,
 } from '@meddoc/ai';
-import prisma from '@meddoc/db';
+import { updateTemplateTwinSyntheticQaClaimBoundVisit } from '@/worker/staging-qa-mutation-fence';
 import { logAudit } from '@/lib/audit';
 
 const MODEL = 'claude-sonnet-4-6';
@@ -75,7 +75,7 @@ export interface Layer2Output {
 }
 
 function groupSamplesBySpeaker(
-  utterances: DeepgramUtterance[]
+  utterances: DeepgramUtterance[],
 ): Map<number, string[]> {
   const out = new Map<number, string[]>();
   for (const u of utterances) {
@@ -90,7 +90,7 @@ function groupSamplesBySpeaker(
 }
 
 export async function runLayer2SpeakerRoles(
-  input: Layer2Input
+  input: Layer2Input,
 ): Promise<Layer2Output> {
   const samples = groupSamplesBySpeaker(input.utterances);
   if (samples.size === 0) {
@@ -109,11 +109,14 @@ export async function runLayer2SpeakerRoles(
       '0': {
         role: 'doctor',
         confidence: 0.5,
-        reasoning: 'Diarization returned no speaker tags; defaulting to single-speaker doctor.',
+        reasoning:
+          'Diarization returned no speaker tags; defaulting to single-speaker doctor.',
       },
     });
-    await prisma.transcribeVisit.update({
-      where: { id: input.visitId },
+    await updateTemplateTwinSyntheticQaClaimBoundVisit({
+      visitId: input.visitId,
+      userId: input.userId ?? '',
+      practiceId: input.practiceId,
       data: { speakerMap: fallback as unknown as object, needsReview: true },
     });
     return {
@@ -141,8 +144,10 @@ export async function runLayer2SpeakerRoles(
           'Single speaker detected (one diarized voice) — treated as dictation and assigned doctor; flagged for review in case of a patient monologue.',
       },
     });
-    await prisma.transcribeVisit.update({
-      where: { id: input.visitId },
+    await updateTemplateTwinSyntheticQaClaimBoundVisit({
+      visitId: input.visitId,
+      userId: input.userId ?? '',
+      practiceId: input.practiceId,
       data: { speakerMap: fallback as unknown as object, needsReview: true },
     });
     return {
@@ -153,10 +158,12 @@ export async function runLayer2SpeakerRoles(
   }
 
   const blocks: string[] = [];
-  for (const [speakerId, lines] of [...samples.entries()].sort((a, b) => a[0] - b[0])) {
+  for (const [speakerId, lines] of [...samples.entries()].sort(
+    (a, b) => a[0] - b[0],
+  )) {
     blocks.push(
       `Speaker ${speakerId}:\n` +
-        lines.map((l, i) => `  ${i + 1}. ${l}`).join('\n')
+        lines.map((l, i) => `  ${i + 1}. ${l}`).join('\n'),
     );
   }
 
@@ -166,9 +173,9 @@ export async function runLayer2SpeakerRoles(
         'INTERPRETER SESSION CONTEXT:',
         '- This visit was flagged as having a medical interpreter present.',
         '  Expect THREE distinct voices: doctor, patient, and interpreter.',
-        '- The interpreter\'s utterances are translation conduits — they',
-        '  paraphrase the patient\'s words to the doctor in English and the',
-        '  doctor\'s words to the patient in the patient\'s native language.',
+        "- The interpreter's utterances are translation conduits — they",
+        "  paraphrase the patient's words to the doctor in English and the",
+        "  doctor's words to the patient in the patient's native language.",
         '  Map the interpreter\'s speaker ID to role "other".',
         '- If the transcript contains both English and Spanish (or another',
         '  non-English language), the bilingual speaker is almost always',
@@ -260,13 +267,13 @@ export async function runLayer2SpeakerRoles(
   });
 
   const confidences = Object.values(speakerMap).map((s) => s.confidence);
-  const lowestConfidence = confidences.length
-    ? Math.min(...confidences)
-    : 0;
+  const lowestConfidence = confidences.length ? Math.min(...confidences) : 0;
   const needsReview = lowestConfidence < SPEAKER_REVIEW_THRESHOLD;
 
-  await prisma.transcribeVisit.update({
-    where: { id: input.visitId },
+  await updateTemplateTwinSyntheticQaClaimBoundVisit({
+    visitId: input.visitId,
+    userId: input.userId ?? '',
+    practiceId: input.practiceId,
     data: {
       speakerMap: speakerMap as unknown as object,
       ...(needsReview

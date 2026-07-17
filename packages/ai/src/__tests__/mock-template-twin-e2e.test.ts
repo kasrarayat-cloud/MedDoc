@@ -1,45 +1,61 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { z } from 'zod';
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { z } from "zod";
 
-import { mockComplete, mockCompleteText, mockDeepgramBatch } from '../mock';
+import {
+  mockComplete,
+  mockCompleteText,
+  mockDeepgramBatch,
+  runWithLegacyTemplateTwinInfrastructureFixture,
+} from "../mock";
+import { TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION } from "../synthetic-qa-context";
 
 const EntitySchema = z.object({
   chief_complaint: z
     .object({ statement: z.string(), evidence_quote: z.string() })
     .nullable(),
-  hpi: z.unknown().nullable(),
-  medications: z.array(
-    z.object({ name: z.string(), evidence_quote: z.string() }),
-  ).default([]),
-  social_history: z.object({
-    smoking: z
-      .object({ status: z.string(), evidence_quote: z.string() })
-      .optional(),
-  }).default({}),
-  plan_discussed: z.array(
-    z.object({ item: z.string(), evidence_quote: z.string() }),
-  ).default([]),
+  hpi: z
+    .object({
+      onset: z.string().optional(),
+      severity: z.string().optional(),
+      context: z.string().optional(),
+      evidence_quote: z.string(),
+    })
+    .nullable(),
+  medications: z
+    .array(z.object({ name: z.string(), evidence_quote: z.string() }))
+    .default([]),
+  social_history: z
+    .object({
+      smoking: z
+        .object({ status: z.string(), evidence_quote: z.string() })
+        .optional(),
+    })
+    .default({}),
+  plan_discussed: z
+    .array(z.object({ item: z.string(), evidence_quote: z.string() }))
+    .default([]),
+  assessment_discussed: z
+    .array(z.object({ finding: z.string(), evidence_quote: z.string() }))
+    .default([]),
 });
 
 const ORIGINAL_ENV = { ...process.env };
 
 beforeEach(() => {
   process.env = { ...ORIGINAL_ENV };
-  process.env.MOCK_AI_CALLS = 'true';
-  delete process.env.MOCK_TEMPLATE_TWIN_E2E;
-  // The fixture gate only needs a parseable database name. A credential-free
-  // URL keeps this unmistakably synthetic and avoids resembling a committed
-  // PostgreSQL credential to offline secret scanners.
-  process.env.DATABASE_URL = 'postgresql:///meddoc_qa_test';
+  process.env.MOCK_AI_CALLS = "true";
 });
 
 afterEach(() => {
   process.env = { ...ORIGINAL_ENV };
 });
 
-describe('Template Twin infrastructure-E2E model fixture', () => {
-  it('preserves the existing empty entity fixture by default', () => {
-    const result = mockComplete({ purpose: 'tm_entities', schema: EntitySchema });
+describe("Template Twin infrastructure-E2E model fixture", () => {
+  it("preserves the existing empty entity fixture by default", () => {
+    const result = mockComplete({
+      purpose: "tm_entities",
+      schema: EntitySchema,
+    });
 
     expect(result).toMatchObject({
       chief_complaint: null,
@@ -47,109 +63,156 @@ describe('Template Twin infrastructure-E2E model fixture', () => {
     });
   });
 
-  it('preserves the existing generic transcription fixture by default', () => {
+  it("preserves the existing generic transcription fixture by default", () => {
     const result = mockDeepgramBatch();
 
-    expect(result.transcript).toContain('My head has been aching');
-    expect(result.transcript).not.toContain('Syntheticmed');
+    expect(result.transcript).toContain("My head has been aching");
+    expect(result.transcript).not.toContain("Syntheticmed");
   });
 
-  it('preserves the existing generic SOAP fixture by default', () => {
-    for (const purpose of ['tm_soap_draft', 'tm_polish'] as const) {
+  it("preserves the existing generic SOAP fixture by default", () => {
+    for (const purpose of ["tm_soap_draft", "tm_polish"] as const) {
       const result = mockCompleteText({ purpose });
-      expect(result.text).toContain('tension headache');
-      expect(result.text).not.toContain('Syntheticmed');
+      expect(result.text).toContain("tension headache");
+      expect(result.text).not.toContain("Syntheticmed");
     }
   });
 
-  it('returns fully synthetic, evidence-bearing entities only with every QA gate', () => {
-    process.env.MOCK_TEMPLATE_TWIN_E2E = 'true';
-
-    const result = mockComplete({ purpose: 'tm_entities', schema: EntitySchema });
+  it("returns fully synthetic, evidence-bearing entities for the explicit fixture profile", () => {
+    const result = mockComplete({
+      purpose: "tm_entities",
+      schema: EntitySchema,
+      fixtureVersion: TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION,
+    });
 
     expect(result).toEqual({
       chief_complaint: {
-        statement: 'synthetic wrist discomfort',
-        evidence_quote: 'Chief concern is synthetic wrist discomfort.',
+        statement: "synthetic wrist discomfort",
+        evidence_quote: "Chief concern is synthetic wrist discomfort.",
       },
-      hpi: null,
+      hpi: {
+        onset: "2099-07-16",
+        severity: "Moderate",
+        context: "Explicit synthetic detail",
+        evidence_quote:
+          "Synthetic wrist discomfort began on 2099-07-16 with Moderate severity and context Explicit synthetic detail.",
+      },
       medications: [
         {
-          name: 'Syntheticmed',
-          evidence_quote: 'Medication Syntheticmed documented.',
+          name: "Syntheticmed",
+          evidence_quote: "Medication Syntheticmed documented.",
         },
       ],
       social_history: {
         smoking: {
-          status: 'Current',
-          evidence_quote: 'Smoking status is Current.',
+          status: "Current",
+          evidence_quote: "Smoking status is Current.",
         },
       },
       plan_discussed: [
         {
-          item: 'Use synthetic brace',
-          evidence_quote: 'Plan use synthetic brace.',
+          item: "Use synthetic brace",
+          evidence_quote: "Plan use synthetic brace.",
+        },
+      ],
+      assessment_discussed: [
+        {
+          finding: "Follow-up",
+          evidence_quote: "Encounter category is Follow-up.",
         },
       ],
     });
   });
 
-  it('returns a transcript containing every synthetic evidence quote under the same gates', () => {
-    process.env.MOCK_TEMPLATE_TWIN_E2E = 'true';
-
+  it("returns a transcript containing every synthetic evidence quote under the same gates", () => {
     const entities = mockComplete({
-      purpose: 'tm_entities',
+      purpose: "tm_entities",
       schema: EntitySchema,
+      fixtureVersion: TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION,
     });
-    const transcription = mockDeepgramBatch();
+    const transcription = mockDeepgramBatch(
+      TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION,
+    );
     const evidenceQuotes = [
       entities.chief_complaint?.evidence_quote,
+      entities.hpi?.evidence_quote,
       entities.social_history.smoking?.evidence_quote,
       ...entities.medications.map((item) => item.evidence_quote),
       ...entities.plan_discussed.map((item) => item.evidence_quote),
-    ].filter((quote): quote is string => typeof quote === 'string');
+      ...entities.assessment_discussed.map((item) => item.evidence_quote),
+    ].filter((quote): quote is string => typeof quote === "string");
 
-    expect(evidenceQuotes).toHaveLength(4);
+    expect(evidenceQuotes).toHaveLength(6);
     for (const quote of evidenceQuotes) {
       expect(transcription.transcript).toContain(quote);
     }
   });
 
-  it('keeps the draft and polished SOAP aligned with the exact synthetic facts', () => {
-    process.env.MOCK_TEMPLATE_TWIN_E2E = 'true';
-
-    for (const purpose of ['tm_soap_draft', 'tm_polish'] as const) {
-      const result = mockCompleteText({ purpose });
-      expect(result.text).toContain('synthetic wrist discomfort');
-      expect(result.text).toContain('Current');
-      expect(result.text).toContain('Syntheticmed');
-      expect(result.text).toContain('synthetic brace');
-      expect(result.text).not.toContain('headache');
+  it("keeps the draft and polished SOAP aligned with the exact synthetic facts", () => {
+    for (const purpose of ["tm_soap_draft", "tm_polish"] as const) {
+      const result = mockCompleteText({
+        purpose,
+        fixtureVersion: TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION,
+      });
+      expect(result.text).toContain("synthetic wrist discomfort");
+      expect(result.text).toContain("Current");
+      expect(result.text).toContain("Syntheticmed");
+      expect(result.text).toContain("synthetic brace");
+      expect(result.text).toContain("2099-07-16");
+      expect(result.text).toContain("Follow-up");
+      expect(result.text).toContain("Explicit synthetic detail");
+      expect(result.text).not.toContain("headache");
     }
   });
 
-  it.each([
-    ['mock mode off', { MOCK_AI_CALLS: 'false' }],
-    ['dedicated flag off', { MOCK_TEMPLATE_TWIN_E2E: 'false' }],
-    [
-      'database name not marked QA/test/synthetic',
-      { DATABASE_URL: 'postgresql:///meddoc' },
-    ],
-    ['database URL absent', { DATABASE_URL: '' }],
-  ])('fails closed when %s', (_label, overrides) => {
-    process.env.MOCK_TEMPLATE_TWIN_E2E = 'true';
-    Object.assign(process.env, overrides);
+  it("temporarily preserves the legacy triple-gated certification harness", async () => {
+    process.env.MOCK_TEMPLATE_TWIN_E2E = "true";
+    process.env.DATABASE_URL = "postgresql:///meddoc_qa_test";
+    const { result, soap, transcription } =
+      await runWithLegacyTemplateTwinInfrastructureFixture(() => ({
+        result: mockComplete({
+          purpose: "tm_entities",
+          schema: EntitySchema,
+          visitId: "legacy-template-twin-qa-visit",
+        }),
+        soap: mockCompleteText({
+          purpose: "tm_soap_draft",
+          visitId: "legacy-template-twin-qa-visit",
+        }),
+        transcription: mockDeepgramBatch(
+          undefined,
+          "legacy-template-twin-qa-visit",
+        ),
+      }));
 
-    const result = mockComplete({ purpose: 'tm_entities', schema: EntitySchema });
-    const soap = mockCompleteText({ purpose: 'tm_soap_draft' });
-    const transcription = mockDeepgramBatch();
-
-    expect(result.chief_complaint).toBeNull();
-    expect(result.medications).toEqual([]);
-    expect(result.plan_discussed).toEqual([]);
-    expect(soap.text).toContain('tension headache');
-    expect(soap.text).not.toContain('Syntheticmed');
-    expect(transcription.transcript).toContain('head has been aching');
-    expect(transcription.transcript).not.toContain('Syntheticmed');
+    expect(result.medications).toEqual([
+      expect.objectContaining({ name: "Syntheticmed" }),
+    ]);
+    expect(result.hpi).toBeNull();
+    expect(soap.text).toContain("Syntheticmed");
+    expect(soap.text).not.toContain("2099-");
+    expect(transcription.transcript).toContain("Syntheticmed");
+    expect(transcription.transcript).not.toContain("2099-");
   });
+
+  it.each([
+    ["mock mode off", { MOCK_AI_CALLS: "false" }],
+    ["dedicated flag off", { MOCK_TEMPLATE_TWIN_E2E: "false" }],
+    ["unsafe database", { DATABASE_URL: "postgresql:///meddoc" }],
+    ["missing database", { DATABASE_URL: "" }],
+  ])(
+    "keeps the legacy compatibility fixture fail-closed when %s",
+    (_label, overrides) => {
+      process.env.MOCK_TEMPLATE_TWIN_E2E = "true";
+      process.env.DATABASE_URL = "postgresql:///meddoc_qa_test";
+      Object.assign(process.env, overrides);
+
+      const result = mockComplete({
+        purpose: "tm_entities",
+        schema: EntitySchema,
+      });
+      expect(result.chief_complaint).toBeNull();
+      expect(result.medications).toEqual([]);
+    },
+  );
 });

@@ -82,6 +82,10 @@ export async function runStuckVisitWatchdog(opts?: {
       status: { in: IN_FLIGHT_STATUSES },
       processingStartedAt: { lt: cutoff },
       deletedAt: null,
+      // Staging attempts are DB-exclusive and deliberately have no
+      // Promise.race cancellation. Only their attempt ledger may publish a
+      // terminal state; the generic watchdog must never race that claim.
+      templateTwinSyntheticQaRun: { is: null },
     },
     select: {
       id: true,

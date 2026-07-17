@@ -23,7 +23,12 @@ import {
 } from './storage';
 import type { TemplateTwinActor } from './certification-lifecycle';
 import { readTemplateTwinWorkspace } from './workspace-read';
-import { assertTemplateTwinSyntheticEvidencePhiFree } from './synthetic-evidence-gate';
+import {
+  assertTemplateTwinStagingQaEvidencePhiFree,
+  assertTemplateTwinSyntheticEvidencePhiFree,
+} from './synthetic-evidence-gate';
+import { isTemplateTwinStagingQaFixtureSource } from './staging-qa-fixtures';
+import { runWithTemplateTwinStagingQaCertificationProvider } from './staging-qa-certification-provider';
 import {
   assertTemplateTwinSourceProvenance,
   bindTemplateTwinSyntheticProofToSourceProvenance,
@@ -326,56 +331,92 @@ export async function runTemplateTwinSyntheticTest(input: {
     );
   }
 
-  // Certification artifacts retain evidence anchors and filled values. Gate
-  // the encounter before Layer 3 or storage so a mislabeled real encounter is
-  // not persisted as a synthetic proof.
-  try {
-    await assertTemplateTwinSyntheticEvidencePhiFree({
-      encounterText: input.encounterText,
-      practiceId: input.actor.practiceId,
-      userId: input.actor.userId,
-    });
-  } catch {
-    throw new TemplateTwinSyntheticTestError(
-      'SYNTHETIC_EVIDENCE_REJECTED',
-      'Use clearly labeled synthetic test evidence without patient identifiers.',
-    );
-  }
-
   const encounterMode = input.encounterMode ?? 'text';
-  const extracted = encounterMode === 'dictation'
-    ? await extractTemplateTwinDictationEntities({
-        practiceId: input.actor.practiceId,
-        userId: input.actor.userId,
-        noteTemplateId: row.id,
-        dictationText: input.encounterText,
-      })
-    : await extractTemplateTwinTextEntities({
-        practiceId: input.actor.practiceId,
-        userId: input.actor.userId,
-        noteTemplateId: row.id,
-        rawText: input.encounterText,
-      });
-  const projectedFacts = projectEncounterFacts({
-    mode: encounterMode,
-    contextText: extracted.contextText,
-    entities: extracted.entities as unknown as EncounterEntitySnapshot,
-    asrQuality: 'unknown',
-  });
-  const customExtraction =
-    customSpecifications.length > 0
-      ? await extractCertifiedCustomConcepts({
-          specifications: customSpecifications,
-          evidence: buildCanonicalCustomConceptEvidence({
-            mode: encounterMode,
-            contextText: extracted.contextText,
-            asrQuality: 'unknown',
-          }),
-          practiceId: input.actor.practiceId,
-          visitId: `template-twin-synthetic-${compiled.id}`,
-          userId: input.actor.userId,
-        })
-      : null;
+  const providerResult =
+    await runWithTemplateTwinStagingQaCertificationProvider({
+      source: {
+        sha256: compiled.sourceArtifact.sha256,
+        sizeBytes: compiled.sourceArtifact.sizeBytes,
+      },
+      noteTemplateId: row.id,
+      doctorId: input.actor.userId,
+      practiceId: input.actor.practiceId,
+      rolloutToken: input.actor.rolloutToken,
+      encounterMode,
+      evidenceText: input.encounterText,
+      expectedMappingConfirmation: {
+        mappingsSha256: input.expectedMappingsSha256,
+        fieldIntentsSha256,
+      },
+      operation: async (providerVisitId) => {
+        // Certification artifacts retain evidence anchors and filled values.
+        // Gate the encounter before Layer 3 or storage so a mislabeled real
+        // encounter is not persisted as a synthetic proof. For the exact
+        // staging fixture, this privacy-provider call is itself inside the
+        // deterministic provider context; it cannot fall through to live AI.
+        try {
+          const assertEvidencePhiFree =
+            isTemplateTwinStagingQaFixtureSource({
+              sha256: compiled.sourceArtifact.sha256,
+              sizeBytes: compiled.sourceArtifact.sizeBytes,
+            })
+              ? assertTemplateTwinStagingQaEvidencePhiFree
+              : assertTemplateTwinSyntheticEvidencePhiFree;
+          await assertEvidencePhiFree({
+            encounterText: input.encounterText,
+            practiceId: input.actor.practiceId,
+            userId: input.actor.userId,
+            providerVisitId,
+          });
+        } catch {
+          throw new TemplateTwinSyntheticTestError(
+            'SYNTHETIC_EVIDENCE_REJECTED',
+            'Use clearly labeled synthetic test evidence without patient identifiers.',
+          );
+        }
+
+        const extracted =
+          encounterMode === 'dictation'
+            ? await extractTemplateTwinDictationEntities({
+                practiceId: input.actor.practiceId,
+                userId: input.actor.userId,
+                noteTemplateId: row.id,
+                providerVisitId,
+                dictationText: input.encounterText,
+              })
+            : await extractTemplateTwinTextEntities({
+                practiceId: input.actor.practiceId,
+                userId: input.actor.userId,
+                noteTemplateId: row.id,
+                providerVisitId,
+                rawText: input.encounterText,
+              });
+        const projectedFacts = projectEncounterFacts({
+          mode: encounterMode,
+          contextText: extracted.contextText,
+          entities: extracted.entities as unknown as EncounterEntitySnapshot,
+          asrQuality: 'unknown',
+        });
+        const customExtraction =
+          customSpecifications.length > 0
+            ? await extractCertifiedCustomConcepts({
+                specifications: customSpecifications,
+                evidence: buildCanonicalCustomConceptEvidence({
+                  mode: encounterMode,
+                  contextText: extracted.contextText,
+                  asrQuality: 'unknown',
+                }),
+                practiceId: input.actor.practiceId,
+                visitId:
+                  providerVisitId ??
+                  `template-twin-synthetic-${compiled.id}`,
+                userId: input.actor.userId,
+              })
+            : null;
+        return { extracted, projectedFacts, customExtraction };
+      },
+    });
+  const { extracted, projectedFacts, customExtraction } = providerResult;
   const facts = [
     ...projectedFacts,
     ...(customExtraction?.facts ?? []),

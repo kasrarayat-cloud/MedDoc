@@ -6,11 +6,11 @@
 // import this module, so the job-name + payload shape live in one place.
 // ============================================================================
 
-import IORedis, { type RedisOptions } from 'ioredis';
-import { Queue } from 'bullmq';
-import { redactPhi } from '@meddoc/ai';
+import IORedis, { type RedisOptions } from "ioredis";
+import { Queue } from "bullmq";
+import { redactPhi } from "@meddoc/ai";
 
-const redisUrl = process.env.REDIS_URL?.trim() || 'redis://redis:6379';
+const redisUrl = process.env.REDIS_URL?.trim() || "redis://redis:6379";
 
 let connection: IORedis | null = null;
 let transcribeMdQueue: Queue | null = null;
@@ -23,25 +23,29 @@ function getConnection(): IORedis {
   // (otherwise blocking commands throw after the retry limit).
   const opts: RedisOptions = { maxRetriesPerRequest: null };
   connection = new IORedis(redisUrl, opts);
-  connection.on('error', (err) => {
+  connection.on("error", (err) => {
     // T-M18.3 A17: redactPhi guard — the ioredis error is almost never
     // PHI-shaped, but the pipeline sometimes passes payloads through
     // the command arg trace on failures, so err.message could leak a
     // patient name or email on a rare shape. Cheap insurance.
     console.error(
-      '[transcribe-md-queue] redis error:',
-      redactPhi(err instanceof Error ? err.message : err)
+      "[transcribe-md-queue] redis error:",
+      redactPhi(err instanceof Error ? err.message : err),
     );
   });
   return connection;
 }
 
-export const QUEUE_NAME = 'transcribe-md';
-export const JOB_PROCESS_VISIT = 'process_visit';
+export const QUEUE_NAME = "transcribe-md";
+export const JOB_PROCESS_VISIT = "process_visit";
 
 export interface ProcessVisitPayload {
   visitId: string;
   userId: string;
+  /** Present only for the authenticated synthetic QA path. The worker must
+   * compare both values with the durable one-to-one run before doing work. */
+  syntheticQaRunId?: string;
+  syntheticQaAttempt?: number;
 }
 
 export function getTranscribeMdQueue(): Queue<ProcessVisitPayload> {
@@ -53,7 +57,7 @@ export function getTranscribeMdQueue(): Queue<ProcessVisitPayload> {
       // Deepgram/Anthropic shouldn't poison the job. A 4th attempt is
       // almost always a real pipeline bug.
       attempts: 3,
-      backoff: { type: 'exponential', delay: 5_000 },
+      backoff: { type: "exponential", delay: 5_000 },
       removeOnComplete: { count: 500, age: 24 * 3600 },
       removeOnFail: { count: 500 },
     },
@@ -98,7 +102,7 @@ export interface EnqueueVisitOpts {
 export async function enqueueProcessVisit(
   visitId: string,
   userId: string,
-  opts: EnqueueVisitOpts = {}
+  opts: EnqueueVisitOpts = {},
 ): Promise<void> {
   const minute = Math.floor(Date.now() / 60_000);
   const jobId = opts.retry
@@ -117,7 +121,7 @@ export async function enqueueProcessVisit(
     const existing = await queue.getJob(jobId);
     if (existing) {
       const state = await existing.getState();
-      if (state === 'failed' || state === 'completed' || state === 'unknown') {
+      if (state === "failed" || state === "completed" || state === "unknown") {
         await existing.remove();
       }
     }
@@ -126,11 +130,63 @@ export async function enqueueProcessVisit(
     // the add(). add() throws cleanly with the dedup error if a live
     // job collides; that's preferred over masking the symptom.
     console.error(
-      '[enqueueProcessVisit] prior-job cleanup failed:',
+      "[enqueueProcessVisit] prior-job cleanup failed:",
       err instanceof Error ? err.message : err,
     );
   }
   await queue.add(JOB_PROCESS_VISIT, { visitId, userId }, { jobId });
+}
+
+/**
+ * Synthetic staging QA uses a persisted run + monotonic attempt rather than a
+ * wall-clock bucket for idempotency. Replaying the same browser request or
+ * recovering after an uncertain HTTP response therefore resolves to the same
+ * BullMQ job. A deliberate retry increments `attempt` transactionally before
+ * calling this helper and receives a new stable job id.
+ *
+ * The payload extends the production visit job only with the durable run id
+ * and monotonic attempt. The shared worker derives all synthetic provider
+ * context from the database relation; no caller-controlled mock flag or
+ * encounter text enters the queue payload.
+ */
+export function templateTwinSyntheticQaJobId(input: {
+  runId: string;
+  attempt: number;
+}): string {
+  if (!/^[A-Za-z0-9_-]{8,128}$/u.test(input.runId)) {
+    throw new TypeError("Template Twin synthetic QA run id is invalid.");
+  }
+  if (!Number.isSafeInteger(input.attempt) || input.attempt < 1) {
+    throw new TypeError("Template Twin synthetic QA attempt must be positive.");
+  }
+  return `template-twin-qa-${input.runId}-attempt-${input.attempt}`;
+}
+
+export async function enqueueTemplateTwinSyntheticQaVisit(input: {
+  runId: string;
+  attempt: number;
+  visitId: string;
+  userId: string;
+}): Promise<void> {
+  const jobId = templateTwinSyntheticQaJobId(input);
+  const queue = getTranscribeMdQueue();
+  await queue.add(
+    JOB_PROCESS_VISIT,
+    {
+      visitId: input.visitId,
+      userId: input.userId,
+      syntheticQaRunId: input.runId,
+      syntheticQaAttempt: input.attempt,
+    },
+    {
+      jobId,
+      // Application-error retries remain disabled. BullMQ may redeliver this
+      // same stable job after a hard-crash stall; the database worker lease
+      // admits that delivery only after expiry and replaces the final-claim
+      // owner without incrementing the clinical attempt.
+      attempts: 1,
+    },
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -140,25 +196,25 @@ export async function enqueueProcessVisit(
 // worker enables cleanup — so a web container that never opts in
 // doesn't accidentally create a Redis queue structure.
 // ---------------------------------------------------------------------------
-export const CLEANUP_QUEUE_NAME = 'transcribe-md-cleanup';
-export const JOB_MINIO_ORPHAN_CLEANUP = 'minio_orphan_cleanup';
+export const CLEANUP_QUEUE_NAME = "transcribe-md-cleanup";
+export const JOB_MINIO_ORPHAN_CLEANUP = "minio_orphan_cleanup";
 /** T-M17.3: daily sweep of abandoned-QUEUED drafts + expired trash.
  *  Shares the cleanup queue so a single BullMQ Worker processes both
  *  kinds of job. */
-export const JOB_STALE_VISIT_CLEANUP = 'stale_visit_cleanup';
+export const JOB_STALE_VISIT_CLEANUP = "stale_visit_cleanup";
 /** T-M18.1 A3: daily audio-retention sweep. Purges audioKey +
  *  dictationAudioKey on SIGNED visits past AUDIO_RETENTION_DAYS.
  *  Transcripts + SOAP stay — the 7-year clinical-record retention
  *  window is separate from the 180-day audio window. */
-export const JOB_RETENTION_SWEEP = 'retention_sweep';
+export const JOB_RETENTION_SWEEP = "retention_sweep";
 /** 2026-05-12 stuck-visit watchdog. Per-minute sweep that force-fails
  *  visits stuck in an in-flight status past the global processing
  *  budget. Catches dropped/deduped/orphaned BullMQ jobs the worker's
  *  per-attempt timeout can't reach. */
-export const JOB_STUCK_VISIT_WATCHDOG = 'stuck_visit_watchdog';
+export const JOB_STUCK_VISIT_WATCHDOG = "stuck_visit_watchdog";
 /** Delivers the durable Template Twin audit outbox and reconciles the
  * dedicated artifact bucket against the durable object-write ledger. */
-export const JOB_TEMPLATE_TWIN_MAINTENANCE = 'template_twin_maintenance';
+export const JOB_TEMPLATE_TWIN_MAINTENANCE = "template_twin_maintenance";
 
 export function getCleanupQueue(): Queue {
   if (cleanupQueue) return cleanupQueue;
@@ -197,7 +253,7 @@ export function getCleanupQueue(): Queue {
 // failed event fires, BullMQ has already exhausted the retry budget.
 // ---------------------------------------------------------------------------
 
-export const DLQ_QUEUE_NAME = 'dlq-permanent-failures';
+export const DLQ_QUEUE_NAME = "dlq-permanent-failures";
 
 export interface DlqJobPayload {
   /** Source queue the failed job came from (e.g. 'transcribe-md'). */
@@ -256,7 +312,7 @@ export function getDlqQueue(): Queue<DlqJobPayload> {
  *  while preserving the original uniqueness invariant (origin-queue +
  *  origin-jobId). */
 export async function enqueueDlq(payload: DlqJobPayload): Promise<void> {
-  await getDlqQueue().add('permanent-failure', payload, {
-    jobId: `${payload.originalQueue}--${payload.originalJobId ?? 'null'}`,
+  await getDlqQueue().add("permanent-failure", payload, {
+    jobId: `${payload.originalQueue}--${payload.originalJobId ?? "null"}`,
   });
 }

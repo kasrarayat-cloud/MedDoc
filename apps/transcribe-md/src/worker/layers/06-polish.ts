@@ -8,7 +8,7 @@
 // ============================================================================
 
 import { modelClient } from '@meddoc/ai';
-import prisma from '@meddoc/db';
+import { updateTemplateTwinSyntheticQaClaimBoundVisit } from '@/worker/staging-qa-mutation-fence';
 import { logAudit } from '@/lib/audit';
 import { applyAdditiveReviewState } from '@/worker/finalize-review-state';
 import {
@@ -76,20 +76,70 @@ export interface Layer6Output {
 // novel-term fallback misses them. Caution-first: a wrongly deferred fix
 // costs one cosmetic edit; a checkbox flip that slips through is an
 // unanchored clinical claim the deterministic L6b screen cannot see.
-const ADD_VERB_RE = /\b(add|adds|adding|insert|include|includes|populate|append|restore|introduce|state|document|check|checks|checked|mark|marks|marked|tick|ticks|fill|fills|filled|select|selects)\b/i;
-const REMOVAL_VERB_RE = /\b(remove|removes|delete|deletes|strike|drop|omit the|take out)\b/i;
+const ADD_VERB_RE =
+  /\b(add|adds|adding|insert|include|includes|populate|append|restore|introduce|state|document|check|checks|checked|mark|marks|marked|tick|ticks|fill|fills|filled|select|selects)\b/i;
+const REMOVAL_VERB_RE =
+  /\b(remove|removes|delete|deletes|strike|drop|omit the|take out)\b/i;
 // Instruction/editorial vocabulary that is "novel vs the draft" for nearly
 // any fix text but carries no clinical payload — excluded before counting.
 const EDITORIAL_TERMS = new Set([
-  'apply', 'applied', 'described', 'above', 'below', 'fix', 'fixes', 'issue',
-  'issues', 'auditor', 'consolidate', 'consolidated', 'reword', 'reworded',
-  'rephrase', 'rephrased', 'merge', 'merged', 'reorder', 'reordered',
-  'shorten', 'clarify', 'clarified', 'combine', 'combined', 'tighten',
-  'deduplicate', 'duplicate', 'duplicated', 'redundant', 'repeated',
-  'overlapping', 'formatting', 'format', 'wording', 'phrasing', 'sentence',
-  'sentences', 'paragraph', 'section', 'sections', 'heading', 'headings',
-  'bullet', 'bullets', 'line', 'lines', 'item', 'items', 'move', 'moved',
-  'single', 'instead', 'statement', 'statements', 'draft', 'note',
+  'apply',
+  'applied',
+  'described',
+  'above',
+  'below',
+  'fix',
+  'fixes',
+  'issue',
+  'issues',
+  'auditor',
+  'consolidate',
+  'consolidated',
+  'reword',
+  'reworded',
+  'rephrase',
+  'rephrased',
+  'merge',
+  'merged',
+  'reorder',
+  'reordered',
+  'shorten',
+  'clarify',
+  'clarified',
+  'combine',
+  'combined',
+  'tighten',
+  'deduplicate',
+  'duplicate',
+  'duplicated',
+  'redundant',
+  'repeated',
+  'overlapping',
+  'formatting',
+  'format',
+  'wording',
+  'phrasing',
+  'sentence',
+  'sentences',
+  'paragraph',
+  'section',
+  'sections',
+  'heading',
+  'headings',
+  'bullet',
+  'bullets',
+  'line',
+  'lines',
+  'item',
+  'items',
+  'move',
+  'moved',
+  'single',
+  'instead',
+  'statement',
+  'statements',
+  'draft',
+  'note',
 ]);
 
 /** True when applying this fix would require content the draft lacks —
@@ -103,14 +153,18 @@ export function isAdditiveFix(draft: string, issue: CritiqueIssue): boolean {
   if (REMOVAL_VERB_RE.test(fix)) return false;
   if (ADD_VERB_RE.test(fix)) return true;
   const novel = findNovelContentTerms([draft], fix).filter(
-    (t) => !EDITORIAL_TERMS.has(t)
+    (t) => !EDITORIAL_TERMS.has(t),
   );
   return novel.length >= 3;
 }
 
-export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output> {
+export async function runLayer6Polish(
+  input: Layer6Input,
+): Promise<Layer6Output> {
   const { fixable: fixableAll, unfixable } = classifyCritique(input.critique);
-  const deferredAdditive = fixableAll.filter((i) => isAdditiveFix(input.soapDraft, i));
+  const deferredAdditive = fixableAll.filter((i) =>
+    isAdditiveFix(input.soapDraft, i),
+  );
   const fixable = fixableAll.filter((i) => !isAdditiveFix(input.soapDraft, i));
   // Phase 1: validate the polished note against the resolved template's
   // required sections. System default → the 4 SOAP headers → unchanged.
@@ -172,7 +226,7 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
     const fixesText = fixable
       .map(
         (i, idx) =>
-          `${idx + 1}. [${i.severity}] ${i.location}: ${i.description}\n    Fix: ${i.suggested_fix}`
+          `${idx + 1}. [${i.severity}] ${i.location}: ${i.description}\n    Fix: ${i.suggested_fix}`,
       )
       .join('\n');
 
@@ -297,7 +351,8 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
         ? 'Auditor flagged issues worth a quick review before signing.'
         : null;
   const reviewReason =
-    [prefixReason, deferredReason, baseReason].filter(Boolean).join(' ') || null;
+    [prefixReason, deferredReason, baseReason].filter(Boolean).join(' ') ||
+    null;
 
   const needsReview =
     unfixable.length > 0 ||
@@ -306,8 +361,10 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
     polishValidationFailReason !== null ||
     polishRejected;
 
-  await prisma.transcribeVisit.update({
-    where: { id: input.visitId },
+  await updateTemplateTwinSyntheticQaClaimBoundVisit({
+    visitId: input.visitId,
+    userId: input.userId ?? '',
+    practiceId: input.practiceId,
     data: {
       soapFinal,
       // T-M14.1: immutable snapshot of the AI's final output. soapFinal
@@ -327,7 +384,11 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
   // the L6 reason. Compose instead, so the banner shows EVERY reason the note
   // needs review (existing reason first — it's usually the more safety-
   // relevant one; applyAdditiveReviewState concatenates SQL-side, atomic).
-  await applyAdditiveReviewState(input.visitId, { needsReview, reviewReason });
+  await applyAdditiveReviewState(
+    input.visitId,
+    { needsReview, reviewReason },
+    { userId: input.userId ?? '', practiceId: input.practiceId },
+  );
 
   return { soapFinal, needsReview, reviewReason, unfixable, polishRejected };
 }

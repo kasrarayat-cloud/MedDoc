@@ -66,6 +66,12 @@ export interface CreateTemplateTwinDraftInput {
     practiceId: string;
     rolloutToken: TemplateTwinRolloutToken;
   };
+  /**
+   * Visit-shaped provider identity supplied only by an admitted synthetic QA
+   * context. Ordinary uploads leave this unset and retain the existing null
+   * provider identity.
+   */
+  providerVisitId?: string | null;
   storage?: TemplateTwinArtifactStore;
 }
 
@@ -234,6 +240,7 @@ export async function createTemplateTwinDraft(
       source: input.source,
       practiceId: input.actor.practiceId,
       userId: input.actor.userId,
+      providerVisitId: input.providerVisitId,
     });
   } catch (error) {
     if (
@@ -257,6 +264,7 @@ export async function createTemplateTwinDraft(
     mappings = await proposeSemanticMappings(ir, {
       practiceId: input.actor.practiceId,
       userId: input.actor.userId,
+      providerVisitId: input.providerVisitId,
     });
     proposedByModel =
       process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-sonnet-4-6';

@@ -12,7 +12,7 @@
 
 import { Readable } from 'node:stream';
 
-import prisma from '@meddoc/db';
+import { updateTemplateTwinSyntheticQaClaimBoundVisit } from '@/worker/staging-qa-mutation-fence';
 // PR-L follow-up — same orchestrator swap as L1; dictation now also
 // gets Whisper fallback when Deepgram has a transient outage. The
 // dictation path is single-speaker so there are no diarization
@@ -73,7 +73,7 @@ export interface Layer1bOutput {
 const BACKOFF_MS = 2_000;
 
 export async function runLayer1bTranscribeDictation(
-  input: Layer1bInput
+  input: Layer1bInput,
 ): Promise<Layer1bOutput> {
   // T-M18.2 A7 + PR-L: stream MinIO → orchestrator. The fresh
   // toBuffer() callback re-opens the MinIO object on the rare
@@ -81,7 +81,7 @@ export async function runLayer1bTranscribeDictation(
   const stat = await statAudio(input.dictationAudioKey);
   if (!stat || typeof stat.size !== 'number') {
     throw new Error(
-      `[L1b] dictation audio missing or has no size: ${input.dictationAudioKey}`
+      `[L1b] dictation audio missing or has no size: ${input.dictationAudioKey}`,
     );
   }
   const nodeStream = await streamAudio(input.dictationAudioKey);
@@ -128,7 +128,11 @@ export async function runLayer1bTranscribeDictation(
             // Dictation stays single-speaker (diarize off) so the
             // utterances pipeline behaves identically downstream.
             model: 'nova-3',
-            options: { diarize: false, utterances: false, detectLanguage: true },
+            options: {
+              diarize: false,
+              utterances: false,
+              detectLanguage: true,
+            },
           }
         : {
             // Single-speaker dictation — disable diarize + utterances.
@@ -161,7 +165,7 @@ export async function runLayer1bTranscribeDictation(
             delayMs: info.delayMs,
             status: err?.status ?? null,
             code: err?.code ?? null,
-          })
+          }),
         );
       },
     });
@@ -221,8 +225,10 @@ export async function runLayer1bTranscribeDictation(
     ? `Dictation transcribed by ${result.provider} (Whisper fallback) — primary Deepgram failed${result.primaryError?.message ? ` with: ${result.primaryError.message.slice(0, 120)}` : ''}. Verify the transcript before signing.`
     : null;
 
-  await prisma.transcribeVisit.update({
-    where: { id: input.visitId },
+  await updateTemplateTwinSyntheticQaClaimBoundVisit({
+    visitId: input.visitId,
+    userId: input.userId ?? '',
+    practiceId: input.practiceId,
     data: {
       transcriptRaw: transcriptRaw as unknown as object,
       transcriptText: result.transcript,
@@ -262,26 +268,29 @@ export async function runLayer1bTranscribeDictation(
     });
   }
 
-  // Persist keyterm composition for audit attribution. Fire-and-
-  // forget; never block the visit. Skipped for interpreter-mode.
+  // Persist keyterm composition for audit attribution. Synthetic staging
+  // awaits and claim-fences this write so detached telemetry cannot outlive a
+  // reclaimed delivery. Failures remain non-load-bearing for ordinary visits.
   if (built?.metadata) {
-    void (async () => {
-      try {
-        await prisma.transcribeVisit.update({
-          where: { id: input.visitId },
-          data: {
-            keytermsApplied: built.metadata as unknown as object,
-          },
-        });
-      } catch {
-        // Non-load-bearing for the visit.
-      }
-    })();
+    try {
+      await updateTemplateTwinSyntheticQaClaimBoundVisit({
+        visitId: input.visitId,
+        userId: input.userId ?? '',
+        practiceId: input.practiceId,
+        data: {
+          keytermsApplied: built.metadata as unknown as object,
+        },
+      });
+    } catch {
+      // Non-load-bearing for the visit.
+    }
   }
 
   return {
     durationSec: result.durationSec,
     transcript: result.transcript,
-    detectedLanguage: input.interpreterMode ? result.language ?? undefined : undefined,
+    detectedLanguage: input.interpreterMode
+      ? (result.language ?? undefined)
+      : undefined,
   };
 }

@@ -14,6 +14,12 @@ import {
   type TemplateTwinRolloutToken,
 } from "./rollout";
 import { canonicalSoapSha256 } from "./soap-binding";
+import { lockCurrentTemplateTwinVisit } from "./fill-engine";
+import {
+  assertTemplateTwinStagingQaVisitGuard,
+  lockAndAssertTemplateTwinStagingQaOperation,
+  TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
+} from "./staging-qa-visit-guard";
 
 export interface TemplateTwinReviewAcknowledgementActor {
   userId: string;
@@ -58,6 +64,9 @@ export async function acknowledgeTemplateTwinReview(input: {
       status: true,
       soapVersion: true,
       soapFinal: true,
+      templateTwinSyntheticQaRun: {
+        select: TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
+      },
       user: {
         select: { practice: { select: { templateTwinEnabled: true } } },
       },
@@ -109,6 +118,17 @@ export async function acknowledgeTemplateTwinReview(input: {
     }
     throw error;
   }
+  const stagingAdmission = assertTemplateTwinStagingQaVisitGuard({
+    run: visit.templateTwinSyntheticQaRun,
+    actor: input.actor,
+    currentRolloutToken: rolloutToken,
+  });
+  const stagingQaClaim = stagingAdmission.applies
+    ? {
+        runId: stagingAdmission.runId,
+        attempt: visit.templateTwinSyntheticQaRun!.attempt,
+      }
+    : null;
 
   const fill = visit.templateTwinFill;
   if (
@@ -222,6 +242,31 @@ export async function acknowledgeTemplateTwinReview(input: {
           },
         });
         return { applied: false as const, rolloutRejected: finalRollout };
+      }
+      if (stagingQaClaim) {
+        await lockAndAssertTemplateTwinStagingQaOperation({
+          tx,
+          runId: stagingQaClaim.runId,
+          expectedAttempt: stagingQaClaim.attempt,
+          actor: input.actor,
+          currentRolloutToken: finalRollout.token,
+          allowedStatuses: ["COMPLETED"],
+        });
+        const lockedVisit = await lockCurrentTemplateTwinVisit(
+          tx,
+          input.visitId,
+        );
+        if (
+          !lockedVisit ||
+          lockedVisit.userId !== input.actor.userId ||
+          lockedVisit.status !== TranscribeVisitStatus.READY ||
+          lockedVisit.deletedAt !== null ||
+          lockedVisit.archivedAt !== null ||
+          lockedVisit.soapVersion !== visit.soapVersion ||
+          lockedVisit.soapFinal !== visit.soapFinal
+        ) {
+          return { applied: false as const, rolloutRejected: null };
+        }
       }
       const updated = await tx.templateTwinFillManifest.updateMany({
         where: {

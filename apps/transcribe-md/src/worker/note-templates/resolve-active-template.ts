@@ -30,6 +30,10 @@ import {
   pinTemplateTwinRollout,
   type TemplateTwinRolloutToken,
 } from '@/lib/template-twin/rollout';
+import {
+  TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256,
+  TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES,
+} from '@/lib/template-twin/staging-qa-fixtures';
 
 export interface ResolveTemplateInput {
   /** The signing/owning doctor (User.id). */
@@ -40,10 +44,29 @@ export interface ResolveTemplateInput {
 }
 
 export interface ResolveVisitTemplateInput extends ResolveTemplateInput {
+  /** Exact visit required to prove a pinned staging template has a durable,
+   * tenant-bound synthetic QA run. Ordinary templates do not require it. */
+  visitId?: string | null;
   /** Existing visit/fill provenance. When present, retries must reuse this
    * exact version even if a newer lineage version has since been activated. */
   pinnedTemplateId?: string | null;
   pinnedTemplateVersion?: number | null;
+}
+
+type TemplateWithSourceProvenance = NoteTemplate & {
+  templateTwinCompiledVersion?: {
+    sourceArtifact: { sha256: string; sizeBytes: number };
+  } | null;
+};
+
+function isStagingFixtureTemplate(
+  template: TemplateWithSourceProvenance,
+): boolean {
+  const source = template.templateTwinCompiledVersion?.sourceArtifact;
+  return (
+    source?.sha256 === TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256 &&
+    source.sizeBytes === TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES
+  );
 }
 
 /** Worker admission result. A Twin selection always carries the exact
@@ -132,7 +155,9 @@ export function selectTemplate(
   candidates: readonly NoteTemplate[],
   { doctorId, encounterType = null }: ResolveTemplateInput
 ): NoteTemplate {
-  const active = candidates.filter((t) => t.status === 'active');
+  const active = candidates.filter(
+    (t) => t.status === 'active'
+  );
 
   // 1. doctor's template for this exact encounter type (only when a type
   //    was requested — a null request skips straight to the catch-all).
@@ -175,12 +200,22 @@ export async function resolveActiveTemplate(
 export async function resolveActiveTemplateAdmission(
   input: ResolveTemplateInput
 ): Promise<ResolvedVisitTemplateAdmission> {
-  const candidates: NoteTemplate[] = await prisma.noteTemplate.findMany({
+  const candidates = (await prisma.noteTemplate.findMany({
     where: {
       OR: [{ doctorId: input.doctorId }, { isSystemDefault: true }],
     },
-  });
-  const preferred = selectTemplate(candidates, input);
+    include: {
+      templateTwinCompiledVersion: {
+        select: {
+          sourceArtifact: { select: { sha256: true, sizeBytes: true } },
+        },
+      },
+    },
+  })) as TemplateWithSourceProvenance[];
+  const ordinaryCandidates = candidates.filter(
+    (template) => !isStagingFixtureTemplate(template),
+  );
+  const preferred = selectTemplate(ordinaryCandidates, input);
   if (preferred.templateKind !== 'template_twin_docx') {
     return { template: preferred, templateTwinRolloutToken: null };
   }
@@ -188,7 +223,7 @@ export async function resolveActiveTemplateAdmission(
   if (token) {
     return { template: preferred, templateTwinRolloutToken: token };
   }
-  const eligible = candidates.filter(
+  const eligible = ordinaryCandidates.filter(
     (template) => template.templateKind !== 'template_twin_docx'
   );
   return {
@@ -217,14 +252,34 @@ export async function resolveVisitTemplateAdmission(
   if (hasId !== hasVersion) throw new PinnedTemplateUnavailableError();
   if (!hasId) return resolveActiveTemplateAdmission(input);
 
-  const pinned = await prisma.noteTemplate.findFirst({
+  const pinned = (await prisma.noteTemplate.findFirst({
     where: {
       id: input.pinnedTemplateId!,
       version: input.pinnedTemplateVersion!,
       OR: [{ doctorId: input.doctorId }, { isSystemDefault: true }],
     },
-  });
+    include: {
+      templateTwinCompiledVersion: {
+        select: {
+          sourceArtifact: { select: { sha256: true, sizeBytes: true } },
+        },
+      },
+    },
+  })) as TemplateWithSourceProvenance | null;
   if (!pinned) throw new PinnedTemplateUnavailableError();
+  if (isStagingFixtureTemplate(pinned)) {
+    if (!input.visitId) throw new PinnedTemplateUnavailableError();
+    const run = await prisma.templateTwinSyntheticQaRun.findFirst({
+      where: {
+        visitId: input.visitId,
+        doctorId: input.doctorId,
+        noteTemplateId: pinned.id,
+        noteTemplateVersion: pinned.version,
+      },
+      select: { id: true },
+    });
+    if (!run) throw new PinnedTemplateUnavailableError();
+  }
   if (pinned.templateKind === 'template_twin_docx') {
     const token = await admitTemplateTwinForDoctor(input.doctorId);
     if (!token) throw new TemplateTwinWorkerRolloutError();

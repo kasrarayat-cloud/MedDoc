@@ -9,14 +9,17 @@
 // ============================================================================
 
 import { modelClient, wrapAsData } from '@meddoc/ai';
-import prisma from '@meddoc/db';
+import { updateTemplateTwinSyntheticQaClaimBoundVisit } from '@/worker/staging-qa-mutation-fence';
 import { Prisma } from '@prisma/client';
 import { specialtyGuidance } from '../prompts/specialty-guidance';
 import type { ExtractedEntities } from './03-extract-entities';
 import { logAudit } from '@/lib/audit';
 import { log } from '@/lib/log';
 import { evidenceAnchorsEnabled } from '../evidence-anchors-flag';
-import { ANCHOR_GENERATION_ADDENDUM, runAnchorVerify } from './04b-anchor-verify';
+import {
+  ANCHOR_GENERATION_ADDENDUM,
+  runAnchorVerify,
+} from './04b-anchor-verify';
 import {
   shouldFlagForReview,
   LOW_CONFIDENCE_THRESHOLD,
@@ -75,7 +78,7 @@ export interface Layer4Input {
 }
 
 export async function runLayer4GenerateSoap(
-  input: Layer4Input
+  input: Layer4Input,
 ): Promise<string> {
   // Ultrasound (flag-gated): an imaging study is a REPORT, not a SOAP note.
   // When the specialty is an imaging-report type AND the flag is on, route to
@@ -90,7 +93,9 @@ export async function runLayer4GenerateSoap(
   // SOAP specialty guidance does not apply to an imaging report — the
   // ultrasound study-type routing lives in the report template's Findings
   // section, not in the SOAP specialtyGuidance() table.
-  const guidance = isUltrasoundReport ? null : specialtyGuidance(input.specialty);
+  const guidance = isUltrasoundReport
+    ? null
+    : specialtyGuidance(input.specialty);
   // Phase 1: build the prompt FROM the resolved template (no hard-coded
   // prompt string). For the system default this reproduces today's prompt
   // byte-for-byte — see worker/layers/__tests__/l4-golden-prompt.test.ts.
@@ -106,7 +111,7 @@ export async function runLayer4GenerateSoap(
     ? hasCustomTemplate
       ? (input.noteTemplate as ResolvedNoteTemplate)
       : (ULTRASOUND_REPORT_TEMPLATE as ResolvedNoteTemplate)
-    : input.noteTemplate ?? SYSTEM_DEFAULT_NOTE_TEMPLATE;
+    : (input.noteTemplate ?? SYSTEM_DEFAULT_NOTE_TEMPLATE);
 
   // Context-field defaults (feat/template-context-defaults): the doctor's
   // per-template context values (clinic / referring physician / machine /
@@ -119,7 +124,7 @@ export async function runLayer4GenerateSoap(
     ...resolvedTemplate,
     sections: applyContextDefaults(
       resolvedTemplate.sections,
-      resolvedTemplate.styleProfile?.contextDefaults ?? null
+      resolvedTemplate.styleProfile?.contextDefaults ?? null,
     ),
   };
 
@@ -184,8 +189,8 @@ export async function runLayer4GenerateSoap(
         'three voices (doctor, patient, interpreter).',
         '',
         'When writing the SOAP:',
-        '- Treat the interpreter\'s English-translation utterances as the',
-        '  patient\'s voice (the interpreter is a conduit, not a separate',
+        "- Treat the interpreter's English-translation utterances as the",
+        "  patient's voice (the interpreter is a conduit, not a separate",
         '  clinical actor). Consolidate "interpreter says X about patient"',
         '  + "patient says Y in [language]" into a single patient narrative.',
         '- The HPI should read as a coherent patient story, not a 3-way',
@@ -193,7 +198,7 @@ export async function runLayer4GenerateSoap(
         '  "in Spanish she said") unless clinically load-bearing.',
         '- If the interpreter rephrased ambiguously, flag the section with',
         '  "[via interpreter]" so the reviewing clinician knows the source.',
-        '- Write the SOAP in English regardless of the patient\'s native',
+        "- Write the SOAP in English regardless of the patient's native",
         '  language. Direct quotes that appear in the transcript in the',
         '  non-English language should be translated to English in the SOAP.',
       ].join('\n')
@@ -250,7 +255,9 @@ export async function runLayer4GenerateSoap(
   let suggestedClaims: object | undefined;
   // Flag OFF → {} so the persisted shape is byte-identical to the pre-anchor
   // path (test-pinned). Flag ON → set unconditionally inside the branch.
-  let suggestedClaimsWrite: { suggestedClaims?: Prisma.InputJsonValue | typeof Prisma.DbNull } = {};
+  let suggestedClaimsWrite: {
+    suggestedClaims?: Prisma.InputJsonValue | typeof Prisma.DbNull;
+  } = {};
   // Sections back-filled with the review placeholder (every drafted line
   // demoted) — drives a visible needsReview state so an emptied section is
   // never a SILENT placeholder in a signed note.
@@ -272,7 +279,8 @@ export async function runLayer4GenerateSoap(
       templateScaffold,
     });
     text = verified.body;
-    suggestedClaims = verified.suggestions.length > 0 ? verified.suggestions : undefined;
+    suggestedClaims =
+      verified.suggestions.length > 0 ? verified.suggestions : undefined;
     filledEmptySections = verified.stats.filledEmptySections ?? [];
     suggestedClaimsWrite = {
       // Always write the column when anchoring ran — a re-run that demotes
@@ -303,7 +311,10 @@ export async function runLayer4GenerateSoap(
   // a MODEL_OUTPUT_VALIDATION_FAIL audit row for forensics.
   // Validate against THIS template's required sections. System default →
   // the 4 SOAP headers → identical to the prior fixed check.
-  const validation = validateSoapStructure(text, requiredSectionLabels(template));
+  const validation = validateSoapStructure(
+    text,
+    requiredSectionLabels(template),
+  );
   if (!validation.ok) {
     void logAudit({
       action: 'MODEL_OUTPUT_VALIDATION_FAIL',
@@ -320,14 +331,16 @@ export async function runLayer4GenerateSoap(
         // NO raw output — PHI surface. Just the structural fail-class.
       },
     });
-    await prisma.transcribeVisit.update({
-      where: { id: input.visitId },
+    await updateTemplateTwinSyntheticQaClaimBoundVisit({
+      visitId: input.visitId,
+      userId: input.userId ?? '',
+      practiceId: input.practiceId,
       data: {
         soapDraft: text,
         ...suggestedClaimsWrite,
         needsReview: true,
         reviewReason:
-          'SOAP draft didn\'t match expected markdown structure — manual review required.',
+          "SOAP draft didn't match expected markdown structure — manual review required.",
         // Phase 1 provenance — which template + version generated this note.
         noteTemplateId: template.id,
         noteTemplateVersion: template.version,
@@ -347,8 +360,10 @@ export async function runLayer4GenerateSoap(
         }
       : {};
 
-  await prisma.transcribeVisit.update({
-    where: { id: input.visitId },
+  await updateTemplateTwinSyntheticQaClaimBoundVisit({
+    visitId: input.visitId,
+    userId: input.userId ?? '',
+    practiceId: input.practiceId,
     data: {
       soapDraft: text,
       ...suggestedClaimsWrite,

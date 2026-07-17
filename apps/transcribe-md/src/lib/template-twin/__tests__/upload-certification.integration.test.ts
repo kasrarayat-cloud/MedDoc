@@ -25,6 +25,10 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@meddoc/ai', () => ({
+  TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION:
+    'template-twin-staging-safe-docx/1.0.0',
+  TEMPLATE_TWIN_SYNTHETIC_QA_TRANSCRIPT:
+    'Chief concern is synthetic wrist discomfort.',
   delimiterSystemSuffix: () => '',
   modelClient: { complete: mocks.modelComplete },
   wrapAsData: (value: string) => ({

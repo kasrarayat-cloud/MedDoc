@@ -50,6 +50,7 @@ export const TEMPLATE_TWIN_CANONICAL_CONCEPT_GUIDANCE = Object.freeze(
 export interface ProposeSemanticMappingsContext {
   practiceId: string;
   userId: string | null;
+  providerVisitId?: string | null;
   model?: string;
   client?: Pick<ModelClient, 'complete'>;
 }
@@ -220,7 +221,7 @@ export async function proposeSemanticMappings(
   const client = context.client ?? modelClient;
   const proposed = await client.complete({
     practiceId: context.practiceId,
-    visitId: null,
+    visitId: context.providerVisitId ?? null,
     userId: context.userId,
     // Reuse the existing template-analysis accounting lane. A dedicated
     // purpose can be introduced later without bypassing ModelClient.

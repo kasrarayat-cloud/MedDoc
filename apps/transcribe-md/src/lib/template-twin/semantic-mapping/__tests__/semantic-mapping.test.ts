@@ -149,6 +149,7 @@ describe('proposeSemanticMappings', () => {
       provider: 'anthropic',
       purpose: 'tm_template_parse',
       temperature: 0,
+      visitId: null,
       retryOnSchemaFail: true,
       useToolUse: { name: 'submit_template_twin_semantic_mappings' },
     });

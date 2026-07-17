@@ -1,12 +1,12 @@
-import prisma from '@meddoc/db';
+import prisma from "@meddoc/db";
 
 import {
   SemanticMappingSchema,
   TemplateDocIRSchema,
   TemplateTwinFillManifestSchema,
   type SemanticMapping,
-} from './ir';
-import { deriveCustomConceptId } from './custom-concepts';
+} from "./ir";
+import { deriveCustomConceptId } from "./custom-concepts";
 import {
   fieldRequiresExplicitIntent,
   parsePersistedFieldIntent,
@@ -14,14 +14,15 @@ import {
   unresolvedFieldIntent,
   type PersistedTemplateTwinFieldIntent,
   type TemplateTwinFieldIntentView,
-} from './field-intent';
+} from "./field-intent";
 import type {
   TemplateTwinWorkspace,
   TemplateTwinWorkspaceField,
-} from './client-types';
-import { templateTwinMappingsSha256 } from './mapping-hash';
-import { templateTwinSyntheticTestProvenanceSha256 } from './synthetic-test-provenance';
-import { readTemplateTwinCustomExampleCoverage } from './custom-example-service';
+} from "./client-types";
+import { templateTwinMappingsSha256 } from "./mapping-hash";
+import { templateTwinSyntheticTestProvenanceSha256 } from "./synthetic-test-provenance";
+import { readTemplateTwinCustomExampleCoverage } from "./custom-example-service";
+import { isTemplateTwinStagingQaFixtureSource } from "./staging-qa-fixtures";
 
 interface WorkspaceMappingRow {
   clinicalConcept: string | null;
@@ -56,11 +57,13 @@ interface WorkspaceFieldRow {
   }>;
 }
 
-function derivedNativeIntent(mapping: SemanticMapping): TemplateTwinFieldIntentView {
+function derivedNativeIntent(
+  mapping: SemanticMapping,
+): TemplateTwinFieldIntentView {
   return mapping.clinicalConcept === null
     ? unresolvedFieldIntent()
     : {
-        intentKind: 'supported_concept',
+        intentKind: "supported_concept",
         decisionId: null,
         version: null,
         supportedConcept: mapping.clinicalConcept,
@@ -72,11 +75,16 @@ function derivedNativeIntent(mapping: SemanticMapping): TemplateTwinFieldIntentV
       };
 }
 
-function lowerStatus(value: string): TemplateTwinWorkspace['template']['certificationStatus'] {
-  return value.toLowerCase() as TemplateTwinWorkspace['template']['certificationStatus'];
+function lowerStatus(
+  value: string,
+): TemplateTwinWorkspace["template"]["certificationStatus"] {
+  return value.toLowerCase() as TemplateTwinWorkspace["template"]["certificationStatus"];
 }
 
-function parseMapping(row: WorkspaceMappingRow, fieldId: string): SemanticMapping {
+function parseMapping(
+  row: WorkspaceMappingRow,
+  fieldId: string,
+): SemanticMapping {
   return SemanticMappingSchema.parse({
     fieldId,
     clinicalConcept: row.clinicalConcept,
@@ -107,7 +115,7 @@ export async function readTemplateTwinWorkspace(input: {
     where: {
       id: input.noteTemplateId,
       doctorId: input.doctorId,
-      templateKind: 'template_twin_docx',
+      templateKind: "template_twin_docx",
     },
     select: {
       id: true,
@@ -146,7 +154,7 @@ export async function readTemplateTwinWorkspace(input: {
               id: true,
               fieldId: true,
               intentDecisions: {
-                orderBy: { version: 'desc' },
+                orderBy: { version: "desc" },
                 take: 1,
                 select: {
                   id: true,
@@ -185,7 +193,11 @@ export async function readTemplateTwinWorkspace(input: {
   });
 
   const compiled = row?.templateTwinCompiledVersion;
-  if (!row || !compiled || compiled.sourceArtifact.practiceId !== input.practiceId) {
+  if (
+    !row ||
+    !compiled ||
+    compiled.sourceArtifact.practiceId !== input.practiceId
+  ) {
     return null;
   }
 
@@ -197,7 +209,7 @@ export async function readTemplateTwinWorkspace(input: {
   const fields: TemplateTwinWorkspaceField[] = ir.fields.map((field) => {
     const dbField = persisted.get(field.fieldId);
     if (!dbField?.mapping) {
-      throw new Error('Template Twin mapping set is incomplete');
+      throw new Error("Template Twin mapping set is incomplete");
     }
     const mapping = parseMapping(dbField.mapping, field.fieldId);
     const explicitIntent = fieldRequiresExplicitIntent(field);
@@ -237,7 +249,9 @@ export async function readTemplateTwinWorkspace(input: {
     };
   });
   if (fields.length !== persistedRows.length) {
-    throw new Error('Template Twin IR and persisted field definitions disagree');
+    throw new Error(
+      "Template Twin IR and persisted field definitions disagree",
+    );
   }
 
   const mappings = fields.map((field) => field.mapping);
@@ -245,25 +259,25 @@ export async function readTemplateTwinWorkspace(input: {
   const explicitIntentFields = fields
     .filter((item) => fieldRequiresExplicitIntent(item.field))
     .map((item) => ({ fieldId: item.field.fieldId, intent: item.intent }));
-  const fieldIntentsSha256 = templateTwinFieldIntentsSha256(
-    explicitIntentFields,
-  );
-  const roundTrip = compiled.latestTestRoundTrip as
-    | { verified?: boolean; warningCodes?: unknown }
-    | null;
+  const fieldIntentsSha256 =
+    templateTwinFieldIntentsSha256(explicitIntentFields);
+  const roundTrip = compiled.latestTestRoundTrip as {
+    verified?: boolean;
+    warningCodes?: unknown;
+  } | null;
   const layoutWarningCodes = Array.isArray(roundTrip?.warningCodes)
     ? roundTrip.warningCodes.filter(
         (code): code is string =>
-          code === 'LAYOUT_OVERFLOW_REVIEW_RECOMMENDED' ||
-          code === 'REPEATING_TABLE_LAYOUT_REVIEW_RECOMMENDED',
+          code === "LAYOUT_OVERFLOW_REVIEW_RECOMMENDED" ||
+          code === "REPEATING_TABLE_LAYOUT_REVIEW_RECOMMENDED",
       )
     : [];
   const hasTest = Boolean(
     compiled.latestTestVerifiedAt &&
-      compiled.latestTestOutputVersionId &&
-      compiled.latestTestOutputEtag &&
-      compiled.latestTestOutputSha256 &&
-      compiled.latestTestMappingsSha256,
+    compiled.latestTestOutputVersionId &&
+    compiled.latestTestOutputEtag &&
+    compiled.latestTestOutputSha256 &&
+    compiled.latestTestMappingsSha256,
   );
   const syntheticTestProvenanceSha256 =
     templateTwinSyntheticTestProvenanceSha256({
@@ -284,7 +298,7 @@ export async function readTemplateTwinWorkspace(input: {
   );
   const staticFieldIds = new Set(
     explicitIntentFields.flatMap((entry) =>
-      entry.intent.intentKind === 'static' ? [entry.fieldId] : [],
+      entry.intent.intentKind === "static" ? [entry.fieldId] : [],
     ),
   );
   const fieldCoverage = syntheticManifest.success
@@ -293,9 +307,9 @@ export async function readTemplateTwinWorkspace(input: {
         exercised:
           staticFieldIds.has(resolution.fieldId) ||
           (resolution.value !== null &&
-            (resolution.status === 'supported' ||
-              resolution.status === 'explicitly_denied' ||
-              resolution.status === 'approved_practice_default')),
+            (resolution.status === "supported" ||
+              resolution.status === "explicitly_denied" ||
+              resolution.status === "approved_practice_default")),
         status: resolution.status,
       }))
     : [];
@@ -304,6 +318,12 @@ export async function readTemplateTwinWorkspace(input: {
     doctorId: input.doctorId,
     practiceId: input.practiceId,
   });
+  const mediaFindings = ir.unsupported.filter((item) =>
+    /MEDIA|IMAGE|AUXILIARY|GLOSSARY/.test(item.code),
+  );
+  const blockingStructure = ir.unsupported.filter(
+    (item) => item.blocksCertification,
+  );
 
   return {
     template: {
@@ -312,7 +332,7 @@ export async function readTemplateTwinWorkspace(input: {
       version: row.version,
       name: row.name,
       encounterType: row.encounterType,
-      status: row.status as 'draft' | 'active' | 'inactive',
+      status: row.status as "draft" | "active" | "inactive",
       certificationStatus: lowerStatus(compiled.certificationStatus),
     },
     source: {
@@ -322,24 +342,102 @@ export async function readTemplateTwinWorkspace(input: {
       compiledAtIso: compiled.compiledAt.toISOString(),
       compilerVersion: compiled.compilerVersion,
     },
+    stagingQaFixtureSource: isTemplateTwinStagingQaFixtureSource({
+      sha256: compiled.sourceArtifact.sha256,
+      sizeBytes: compiled.sourceArtifact.sizeBytes,
+    }),
     stats: ir.stats,
     fields,
     unsupported: ir.unsupported,
     mappingsSha256,
     fieldIntentsSha256,
+    admissionChecks: [
+      {
+        id: "upload",
+        label: "Immutable upload",
+        status: "passed",
+        detail:
+          "The byte-verified DOCX source was stored for this practice and version.",
+      },
+      {
+        id: "malware",
+        label: "Malware scan",
+        status: "not_attested",
+        detail:
+          "No separate antivirus result is attested here. OOXML active-content and package-safety checks still apply.",
+      },
+      {
+        id: "ooxml",
+        label: "OOXML package safety",
+        status: "passed",
+        detail:
+          "The package passed bounded OOXML, relationship, active-field, and namespace inspection.",
+      },
+      {
+        id: "privacy",
+        label: "PHI and privacy inspection",
+        status: "passed",
+        detail:
+          "The pre-storage privacy inspection completed before this immutable artifact was admitted.",
+      },
+      {
+        id: "media",
+        label: "Embedded media",
+        status: mediaFindings.some((item) => item.blocksCertification)
+          ? "blocked"
+          : mediaFindings.length > 0
+            ? "needs_review"
+            : "passed",
+        detail:
+          mediaFindings.length > 0
+            ? `${mediaFindings.length} media or auxiliary finding${mediaFindings.length === 1 ? "" : "s"} remain in the review register.`
+            : "No unapproved media finding remains in the compiler register.",
+      },
+      {
+        id: "structure",
+        label: "Document structure",
+        status: blockingStructure.length > 0 ? "blocked" : "passed",
+        detail:
+          blockingStructure.length > 0
+            ? `${blockingStructure.length} unsupported structure${blockingStructure.length === 1 ? "" : "s"} block certification.`
+            : "Every detected structure is within the current certified compiler boundary.",
+      },
+    ],
     customExampleCoverage,
-    latestSyntheticTest: hasTest && syntheticTestProvenanceSha256
-      ? {
-          provenanceSha256: syntheticTestProvenanceSha256,
-          verifiedAtIso: compiled.latestTestVerifiedAt!.toISOString(),
-          outputSha256: compiled.latestTestOutputSha256!,
-          mappingsSha256: compiled.latestTestMappingsSha256!,
-          roundTripVerified: roundTrip?.verified === true,
-          layoutWarningCodes,
-          fieldCoverage,
-          downloadUrl: `/api/note-templates/template-twin/${encodeURIComponent(row.id)}/test-output`,
-        }
-      : null,
-    canEdit: compiled.certificationStatus !== 'CERTIFIED',
+    latestSyntheticTest:
+      hasTest && syntheticTestProvenanceSha256
+        ? {
+            provenanceSha256: syntheticTestProvenanceSha256,
+            verifiedAtIso: compiled.latestTestVerifiedAt!.toISOString(),
+            outputSha256: compiled.latestTestOutputSha256!,
+            mappingsSha256: compiled.latestTestMappingsSha256!,
+            roundTripVerified: roundTrip?.verified === true,
+            layoutWarningCodes,
+            fieldCoverage,
+            facts: syntheticManifest.success
+              ? syntheticManifest.data.facts.map((fact) => ({
+                  factId: fact.factId,
+                  concept: fact.concept,
+                  value: fact.value,
+                  polarity: fact.polarity,
+                  evidenceQuote: fact.evidenceQuote,
+                  audioTimestampSeconds: fact.audioTimestampSeconds,
+                  evidenceAnchorIds: fact.evidenceAnchorIds,
+                  quality: fact.quality,
+                }))
+              : [],
+            fieldResults: syntheticManifest.success
+              ? syntheticManifest.data.fields.map((field) => ({
+                  fieldId: field.fieldId,
+                  status: field.status,
+                  value: field.value,
+                  sourceFactIds: field.sourceFactIds,
+                  reasonCode: field.reasonCode,
+                }))
+              : [],
+            downloadUrl: `/api/note-templates/template-twin/${encodeURIComponent(row.id)}/test-output`,
+          }
+        : null,
+    canEdit: compiled.certificationStatus !== "CERTIFIED",
   };
 }

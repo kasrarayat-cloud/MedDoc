@@ -144,6 +144,7 @@ describe('Template Twin upload/compile proposal orchestration', () => {
         versionDescription: 'Initial synthetic QA version',
       },
       actor: ACTOR,
+      providerVisitId: 'template-twin-staging-upload-visit:synthetic',
       storage,
     });
 
@@ -158,6 +159,10 @@ describe('Template Twin upload/compile proposal orchestration', () => {
     expect(mocks.modelComplete.mock.calls.map((call) => call[0].purpose)).toEqual([
       'tm_template_phi_scan',
       'tm_template_parse',
+    ]);
+    expect(mocks.modelComplete.mock.calls.map((call) => call[0].visitId)).toEqual([
+      'template-twin-staging-upload-visit:synthetic',
+      'template-twin-staging-upload-visit:synthetic',
     ]);
     expect(storeSourceArtifact).toHaveBeenCalledWith(
       expect.objectContaining({

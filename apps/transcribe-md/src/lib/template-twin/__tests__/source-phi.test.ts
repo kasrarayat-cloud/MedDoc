@@ -72,6 +72,7 @@ describe('Template Twin immutable-source PHI gate', () => {
       provider: 'anthropic',
       purpose: 'tm_template_phi_scan',
       temperature: 0,
+      visitId: null,
     });
   });
 

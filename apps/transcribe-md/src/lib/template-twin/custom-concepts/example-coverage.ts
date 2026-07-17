@@ -1,6 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
 
-import type { ModelClient } from "@meddoc/ai";
+import {
+  getTemplateTwinSyntheticQaProviderContext,
+  type ModelClient,
+} from "@meddoc/ai";
 
 import { canonicalSha256 } from "../canonical";
 import {
@@ -196,7 +199,9 @@ function scalarSetEquals(
 ): boolean {
   const normalized = (values: readonly CustomScalarValue[]) =>
     [...new Set(values.map((value) => canonicalSha256(value)))].sort();
-  return canonicalSha256(normalized(left)) === canonicalSha256(normalized(right));
+  return (
+    canonicalSha256(normalized(left)) === canonicalSha256(normalized(right))
+  );
 }
 
 function normalizedVisibleText(value: string): string {
@@ -211,10 +216,7 @@ function containsBoundedLiteral(haystack: string, needle: string): boolean {
     if (index < 0) return false;
     const before = haystack[index - 1] ?? "";
     const after = haystack[index + needle.length] ?? "";
-    if (
-      !/^[\p{L}\p{N}]$/u.test(before) &&
-      !/^[\p{L}\p{N}]$/u.test(after)
-    ) {
+    if (!/^[\p{L}\p{N}]$/u.test(before) && !/^[\p{L}\p{N}]$/u.test(after)) {
       return true;
     }
     start = index + 1;
@@ -273,8 +275,7 @@ function ambiguityEvidenceAnchorIds(
     const supports = clauses.some((clause) => {
       const cueOccurrenceCount = definition.approvedEvidenceCues.reduce(
         (count, rawCue) =>
-          count +
-          boundedLiteralCount(clause, normalizedVisibleText(rawCue)),
+          count + boundedLiteralCount(clause, normalizedVisibleText(rawCue)),
         0,
       );
       if (cueOccurrenceCount !== 1) return false;
@@ -301,7 +302,7 @@ function ambiguityEvidenceAnchorIds(
             );
             return matchingUnit
               ? candidate
-                  .slice(0, -(` ${normalizedVisibleText(matchingUnit)}`).length)
+                  .slice(0, -` ${normalizedVisibleText(matchingUnit)}`.length)
                   .trim()
               : candidate;
           });
@@ -478,12 +479,14 @@ export async function executeTemplateTwinCustomExamples(
     userId: input.userId,
     client: input.privacyClient,
   });
-  const specificationSetSha256 =
-    templateTwinCustomSpecificationSetSha256(input.specifications);
+  const specificationSetSha256 = templateTwinCustomSpecificationSetSha256(
+    input.specifications,
+  );
   const extractionSchemaSha256 = computeCustomExtractionSchemaHash(
     input.specifications,
   );
   const batchId = input.batchId ?? randomUUID();
+  const stagingContext = getTemplateTwinSyntheticQaProviderContext();
   const executions: TemplateTwinCustomExampleExecution[] = [];
 
   for (const definition of definitions) {
@@ -495,7 +498,9 @@ export async function executeTemplateTwinCustomExamples(
           contextText: definition.syntheticEvidence,
         }),
         practiceId: input.practiceId,
-        visitId: `template-custom-example:${input.noteTemplateId}:${batchId}`,
+        visitId:
+          stagingContext?.visitId ??
+          `template-custom-example:${input.noteTemplateId}:${batchId}`,
         userId: input.userId,
         model: input.model,
         client: input.client,
@@ -523,7 +528,9 @@ export async function executeTemplateTwinCustomExamples(
     } catch (error) {
       const provider = "anthropic";
       const failureCode =
-        error instanceof Error && "code" in error && typeof error.code === "string"
+        error instanceof Error &&
+        "code" in error &&
+        typeof error.code === "string"
           ? `TT_CUSTOM_EXAMPLE_${error.code}`
           : "TT_CUSTOM_EXAMPLE_EXTRACTION_REJECTED";
       const core = {
@@ -685,13 +692,15 @@ export function evaluateTemplateTwinCustomExampleCoverage(input: {
       definition,
     ]),
   );
-  const specificationSetSha256 =
-    templateTwinCustomSpecificationSetSha256(input.specifications);
+  const specificationSetSha256 = templateTwinCustomSpecificationSetSha256(
+    input.specifications,
+  );
   const expectedExtractionSchemaSha256 = computeCustomExtractionSchemaHash(
     input.specifications,
   );
   const seen = new Set<string>();
-  let stale = latestBatchId === null || input.rows.length !== definitions.length;
+  let stale =
+    latestBatchId === null || input.rows.length !== definitions.length;
   const examples = input.rows.map((row) => {
     const key = `${row.fieldId}:${row.exampleKind}:${row.exampleId}`;
     const definition = definitionByKey.get(key);
@@ -723,9 +732,7 @@ export function evaluateTemplateTwinCustomExampleCoverage(input: {
           candidateValues: persistedCandidateValues,
           unexpectedUnsafeOutcome:
             row.resultSummary.unexpectedUnsafeOutcome !== false,
-          evidenceAnchorIds: Array.isArray(
-            row.resultSummary.evidenceAnchorIds,
-          )
+          evidenceAnchorIds: Array.isArray(row.resultSummary.evidenceAnchorIds)
             ? row.resultSummary.evidenceAnchorIds.filter(
                 (value): value is string => typeof value === "string",
               )
@@ -757,33 +764,34 @@ export function evaluateTemplateTwinCustomExampleCoverage(input: {
       : null;
     const rowCurrent = Boolean(
       definition &&
-        !duplicate &&
-        row.conceptId === definition.conceptId &&
-        row.exampleDefinitionSha256 === definition.definitionSha256 &&
-        row.specificationSha256 === definition.specificationSha256 &&
-        row.specificationSetSha256 === specificationSetSha256 &&
-        row.mappingsSha256 === input.mappingsSha256 &&
-        row.fieldIntentsSha256 === input.fieldIntentsSha256 &&
-        row.contractVersion === TEMPLATE_TWIN_CUSTOM_EXAMPLE_CONTRACT_VERSION &&
-        row.extractionSchemaSha256 === expectedExtractionSchemaSha256 &&
-        row.extractorVersion === TEMPLATE_CUSTOM_EXTRACTION_VERSION &&
-        row.extractionSchemaVersion ===
-          TEMPLATE_CUSTOM_EXTRACTION_SCHEMA_VERSION &&
-        row.providerSha256 === sha256(row.provider) &&
-        row.model.trim().length > 0 &&
-        row.modelSha256 === sha256(row.model) &&
-        independentlyClassified !== null &&
-        row.passed === independentlyClassified.passed &&
-        row.failureCode === independentlyClassified.failureCode &&
-        resultCore &&
-        canonicalSha256(resultCore) === row.resultSha256,
+      !duplicate &&
+      row.conceptId === definition.conceptId &&
+      row.exampleDefinitionSha256 === definition.definitionSha256 &&
+      row.specificationSha256 === definition.specificationSha256 &&
+      row.specificationSetSha256 === specificationSetSha256 &&
+      row.mappingsSha256 === input.mappingsSha256 &&
+      row.fieldIntentsSha256 === input.fieldIntentsSha256 &&
+      row.contractVersion === TEMPLATE_TWIN_CUSTOM_EXAMPLE_CONTRACT_VERSION &&
+      row.extractionSchemaSha256 === expectedExtractionSchemaSha256 &&
+      row.extractorVersion === TEMPLATE_CUSTOM_EXTRACTION_VERSION &&
+      row.extractionSchemaVersion ===
+        TEMPLATE_CUSTOM_EXTRACTION_SCHEMA_VERSION &&
+      row.providerSha256 === sha256(row.provider) &&
+      row.model.trim().length > 0 &&
+      row.modelSha256 === sha256(row.model) &&
+      independentlyClassified !== null &&
+      row.passed === independentlyClassified.passed &&
+      row.failureCode === independentlyClassified.failureCode &&
+      resultCore &&
+      canonicalSha256(resultCore) === row.resultSha256,
     );
     if (!rowCurrent) stale = true;
     return {
       fieldId: row.fieldId,
       conceptId: row.conceptId,
       physicianName: definition?.physicianName ?? "Unknown custom field",
-      exampleKind: (definition?.kind ?? "positive") as TemplateTwinCustomExampleKind,
+      exampleKind: (definition?.kind ??
+        "positive") as TemplateTwinCustomExampleKind,
       exampleId: row.exampleId,
       syntheticEvidence: definition?.syntheticEvidence ?? "",
       expectedValue: definition?.expectedValue ?? null,
@@ -807,8 +815,7 @@ export function evaluateTemplateTwinCustomExampleCoverage(input: {
         rowCurrent &&
         row.acknowledgedById === input.physicianUserId &&
         row.acknowledgedAt !== null,
-      failureCode:
-        independentlyClassified?.failureCode ?? row.failureCode,
+      failureCode: independentlyClassified?.failureCode ?? row.failureCode,
     };
   });
   if (seen.size !== definitionByKey.size) stale = true;

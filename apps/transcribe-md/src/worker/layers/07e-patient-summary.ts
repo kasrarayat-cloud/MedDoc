@@ -10,7 +10,7 @@
 
 import { z } from 'zod';
 import { modelClient } from '@meddoc/ai';
-import prisma from '@meddoc/db';
+import { updateTemplateTwinSyntheticQaClaimBoundVisit } from '@/worker/staging-qa-mutation-fence';
 import { fleschKincaidGrade } from './readability';
 
 const MODEL = 'claude-sonnet-4-6';
@@ -41,7 +41,7 @@ export interface Layer7eOutput {
 }
 
 export async function runLayer7ePatientSummary(
-  input: Layer7eInput
+  input: Layer7eInput,
 ): Promise<Layer7eOutput> {
   const system = [
     'You are writing a visit summary for the patient to read at home.',
@@ -61,7 +61,7 @@ export async function runLayer7ePatientSummary(
     'Structure (use these exact headings, one blank line between):',
     '  What we talked about today',
     '  What we found',
-    '  What we\'re doing about it',
+    "  What we're doing about it",
     '  Your medications',
     '  Your next steps',
     '  When to call us',
@@ -108,8 +108,10 @@ export async function runLayer7ePatientSummary(
   const grade = fleschKincaidGrade(result.summary);
   const flagged = grade > HIGH_GRADE_THRESHOLD;
 
-  await prisma.transcribeVisit.update({
-    where: { id: input.visitId },
+  await updateTemplateTwinSyntheticQaClaimBoundVisit({
+    visitId: input.visitId,
+    userId: input.userId ?? '',
+    practiceId: input.practiceId,
     data: { patientSummary: result.summary },
   });
 

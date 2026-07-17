@@ -259,6 +259,7 @@ export async function assertTemplateTwinSourcePhiFree(input: {
   source: Uint8Array;
   practiceId: string;
   userId: string;
+  providerVisitId?: string | null;
   client?: Pick<ModelClient, 'complete'>;
   staticAssetApprovalResolver?: (
     practiceId: string,
@@ -302,7 +303,7 @@ export async function assertTemplateTwinSourcePhiFree(input: {
   try {
     const scan = await (input.client ?? modelClient).complete({
       practiceId: input.practiceId,
-      visitId: null,
+      visitId: input.providerVisitId ?? null,
       userId: input.userId,
       purpose: 'tm_template_phi_scan',
       provider: 'anthropic',

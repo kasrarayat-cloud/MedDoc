@@ -13,7 +13,7 @@
 
 import { z } from 'zod';
 import { modelClient, wrapAsData, delimiterSystemSuffix } from '@meddoc/ai';
-import prisma from '@meddoc/db';
+import { updateTemplateTwinSyntheticQaClaimBoundVisit } from '@/worker/staging-qa-mutation-fence';
 import type { ExtractedEntities } from './03-extract-entities';
 import { logAudit } from '@/lib/audit';
 import {
@@ -69,7 +69,7 @@ export interface Layer5Input {
 }
 
 export async function runLayer5SelfCritique(
-  input: Layer5Input
+  input: Layer5Input,
 ): Promise<CritiqueReport> {
   // Round 3 PR-J — A07-P0 prompt-injection delimiter (mirrors L4).
   const wrap = wrapAsData(input.roleLabeledTranscript, 'transcript');
@@ -101,7 +101,7 @@ export async function runLayer5SelfCritique(
           `with median confidence ${audioStats.median.toFixed(2)} and`,
           `${audioStats.lowConfPct.toFixed(0)}% of utterances below ${LOW_CONFIDENCE_THRESHOLD} confidence.`,
           'Be MORE willing to flag SOAP content that asserts as fact',
-          'something the audio doesn\'t clearly support. When a quoted',
+          "something the audio doesn't clearly support. When a quoted",
           'detail (specific numbers, doses, durations) does not appear',
           'in the transcript, treat that as a CRITICAL hallucination',
           'issue regardless of how plausible the value sounds.',
@@ -224,8 +224,10 @@ export async function runLayer5SelfCritique(
     temperature: 0.1,
   });
 
-  await prisma.transcribeVisit.update({
-    where: { id: input.visitId },
+  await updateTemplateTwinSyntheticQaClaimBoundVisit({
+    visitId: input.visitId,
+    userId: input.userId ?? '',
+    practiceId: input.practiceId,
     data: { critique: report as unknown as object },
   });
 

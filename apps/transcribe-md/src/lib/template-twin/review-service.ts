@@ -83,6 +83,13 @@ import {
   unresolvedFieldIntent,
   type PersistedTemplateTwinFieldIntent,
 } from "./field-intent";
+import {
+  assertTemplateTwinStagingQaVisitGuard,
+  lockAndAssertTemplateTwinStagingQaOperation,
+  TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
+  type TemplateTwinStagingQaRunGuardRow,
+} from "./staging-qa-visit-guard";
+import { isTemplateTwinStagingQaCorrectionValueAllowed } from "./staging-qa-values";
 
 export interface TemplateTwinReviewActor {
   userId: string;
@@ -172,6 +179,7 @@ interface OwnedReviewContext {
     reviewReason: string | null;
     soapFinal: string | null;
     soapVersion: number;
+    templateTwinSyntheticQaRun?: TemplateTwinStagingQaRunGuardRow | null;
   };
   compiledVersion: {
     id: string;
@@ -247,6 +255,7 @@ interface CommitReviewPlan {
   staticContentSha256: string;
   reviewerEmail: string;
   rolloutToken: TemplateTwinRolloutToken;
+  stagingQaClaim: { runId: string; attempt: number } | null;
   decision: ReviewDecisionPlan;
   fork: MappingRuleForkPlan | null;
 }
@@ -838,6 +847,9 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
               reviewReason: true,
               soapFinal: true,
               soapVersion: true,
+              templateTwinSyntheticQaRun: {
+                select: TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
+              },
             },
           },
           compiledVersion: {
@@ -984,6 +996,19 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
               draftTemplateId: null,
               draftTemplateVersion: null,
             };
+          }
+          if (plan.stagingQaClaim) {
+            await lockAndAssertTemplateTwinStagingQaOperation({
+              tx,
+              runId: plan.stagingQaClaim.runId,
+              expectedAttempt: plan.stagingQaClaim.attempt,
+              actor: {
+                userId: plan.decision.reviewerId,
+                practiceId: plan.practiceId,
+              },
+              currentRolloutToken: finalRollout.token,
+              allowedStatuses: ["COMPLETED"],
+            });
           }
           const lockedVisit = await lockCurrentTemplateTwinVisit(
             tx,
@@ -1318,6 +1343,11 @@ export async function reviewTemplateTwinField(
     }
     throw error;
   }
+  assertTemplateTwinStagingQaVisitGuard({
+    run: context.visit.templateTwinSyntheticQaRun,
+    actor: input.actor,
+    currentRolloutToken: rolloutToken,
+  });
   if (
     context.status === "SIGNED" ||
     context.signedDecisionAt !== null ||
@@ -1486,6 +1516,16 @@ export async function reviewTemplateTwinField(
       "A selected evidence reference is not attached to this field resolution.",
     );
   }
+  if (
+    context.visit.templateTwinSyntheticQaRun &&
+    (!isTemplateTwinStagingQaCorrectionValueAllowed(input.correction.value) ||
+      input.correction.createMappingRule)
+  ) {
+    throw new TemplateTwinReviewError(
+      "CORRECTION_INVALID",
+      "Synthetic QA accepts only reviewed fixture values and cannot create a reusable mapping rule.",
+    );
+  }
   const correction = buildClinicianCorrection({
     field,
     mapping,
@@ -1592,6 +1632,12 @@ export async function reviewTemplateTwinField(
     staticContentSha256: ir.staticContentSha256,
     reviewerEmail: input.actor.userEmail,
     rolloutToken,
+    stagingQaClaim: context.visit.templateTwinSyntheticQaRun
+      ? {
+          runId: context.visit.templateTwinSyntheticQaRun.id,
+          attempt: context.visit.templateTwinSyntheticQaRun.attempt,
+        }
+      : null,
     decision: {
       fillManifestId: context.id,
       fieldId: field.fieldId,

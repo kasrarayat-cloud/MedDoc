@@ -36,7 +36,7 @@ describe('worker.ts — redactPhi posture', () => {
     // quote Prisma column values + Anthropic 400 prompt fragments,
     // both of which are PHI.
     expect(WORKER_SRC).toMatch(
-      /lastError:\s*redactPhi\([\s\S]*?err instanceof Error[\s\S]*?\)/,
+      /lastError:\s*(?:syntheticQaFailureCode\s*\?\?\s*)?redactPhi\([\s\S]*?err instanceof Error[\s\S]*?\)/,
     );
   });
 
@@ -44,6 +44,21 @@ describe('worker.ts — redactPhi posture', () => {
     expect(WORKER_SRC).toMatch(
       /\[transcribe-md-worker\] job \$\{job\?\.id\} visit \$\{job\?\.data\.visitId\} FAILED:[\s\S]*?redactPhi\(/,
     );
+  });
+
+  it("synthetic QA global failures use stable codes instead of err.message", () => {
+    const failedHandler = WORKER_SRC.slice(
+      WORKER_SRC.indexOf('worker.on("failed"'),
+      WORKER_SRC.indexOf("// F6 (full-qa", WORKER_SRC.indexOf('worker.on("failed"')),
+    );
+    expect(failedHandler).toContain("templateTwinSyntheticQaWorkerFailureCode");
+    expect(failedHandler).toContain("syntheticQaFailureCode ??");
+    const syntheticLogBranch = failedHandler.slice(
+      failedHandler.indexOf("if (syntheticQaFailureCode)"),
+      failedHandler.indexOf("} else {"),
+    );
+    expect(syntheticLogBranch).toContain("log.warn");
+    expect(syntheticLogBranch).not.toContain("err.message");
   });
 
   it('DLQ-enqueue-catch stdout log scrubs dlqErr (P1-F-2)', () => {

@@ -72,6 +72,10 @@ import {
   type TemplateTwinRolloutToken,
 } from './rollout';
 import { assertTemplateTwinAuthoredCorpusPhiFree } from './synthetic-evidence-gate';
+import {
+  TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256,
+  TEMPLATE_TWIN_STAGING_QA_STATIC_INTENT_REASON,
+} from './staging-qa-fixtures';
 
 export class TemplateTwinLifecycleError extends Error {
   readonly code:
@@ -747,6 +751,28 @@ export async function updateTemplateTwinMappings(input: {
   const requestedCustomSpecifications = parsedIntents.flatMap((intent) =>
     intent.intentKind === 'custom_concept' ? [intent.customSpec] : [],
   );
+  const isStagingQaFixture =
+    preflight.compiled.sourceArtifact.sha256 ===
+    TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256;
+  if (
+    isStagingQaFixture &&
+    (parsedPreflightMappings.some(
+      (mapping) =>
+        mapping.approvedSynonyms.length !== 0 ||
+        mapping.practiceDefault !== null,
+    ) ||
+      parsedIntents.some(
+        (intent) =>
+          intent.intentKind === 'custom_concept' ||
+          (intent.intentKind === 'static' &&
+            intent.reason !== TEMPLATE_TWIN_STAGING_QA_STATIC_INTENT_REASON),
+      ))
+  ) {
+    throw new TemplateTwinLifecycleError(
+      'MAPPING_INVALID',
+      'Synthetic staging accepts only reviewed supported concepts, unresolved intent, or the fixed intentionally-static decision.',
+    );
+  }
   try {
     assertTemplateFieldSpecificationSetWithinLimits(
       requestedCustomSpecifications,

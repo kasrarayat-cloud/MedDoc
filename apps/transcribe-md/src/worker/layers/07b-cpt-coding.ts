@@ -9,7 +9,7 @@
 
 import { z } from 'zod';
 import { modelClient, isValidCpt } from '@meddoc/ai';
-import prisma from '@meddoc/db';
+import { updateTemplateTwinSyntheticQaClaimBoundVisit } from '@/worker/staging-qa-mutation-fence';
 import { logAudit } from '@/lib/audit';
 
 const MODEL = 'claude-sonnet-4-6';
@@ -21,7 +21,7 @@ const EmReasoning = z.object({
         description: z.string(),
         /** stable / unstable / new with uncertain prognosis */
         status: z.string(),
-      })
+      }),
     )
     .default([]),
   /** Free-text summary of labs/imaging/records reviewed. */
@@ -35,7 +35,9 @@ const EmReasoning = z.object({
   risk: z.preprocess(
     (value) => {
       if (typeof value !== 'string') return value;
-      const match = value.toLowerCase().match(/\b(minimal|low|moderate|high)\b/);
+      const match = value
+        .toLowerCase()
+        .match(/\b(minimal|low|moderate|high)\b/);
       return match ? match[1] : value;
     },
     z.enum(['minimal', 'low', 'moderate', 'high']),
@@ -83,7 +85,7 @@ export interface Layer7bInput {
 }
 
 export async function runLayer7bCptCoding(
-  input: Layer7bInput
+  input: Layer7bInput,
 ): Promise<CptResult> {
   const system = [
     'You are a certified CPT coding specialist. From this SOAP note:',
@@ -213,7 +215,7 @@ export async function runLayer7bCptCoding(
   // confidence. Doctor sees the warning before signing rather than
   // auto-attaching speculative billing codes.
   const lowConfProcedures = filteredProcedures.filter(
-    (p) => p.confidenceLevel === 'low'
+    (p) => p.confidenceLevel === 'low',
   );
 
   // FIND-P1-004 (comprehensive-audit 2026-05-14) — collapse the
@@ -226,15 +228,18 @@ export async function runLayer7bCptCoding(
   // most of these via L7b re-run, and the stuck-visit watchdog
   // backstopped the rest at 15 min — but the inconsistent window
   // is closed entirely by collapsing to a single atomic write.
-  const reviewFields = lowConfProcedures.length > 0
-    ? {
-        needsReview: true,
-        reviewReason: `${lowConfProcedures.length} CPT procedure code${lowConfProcedures.length === 1 ? '' : 's'} at low confidence — verify before billing: ${lowConfProcedures.map((p) => p.code).join(', ')}.`,
-      }
-    : {};
+  const reviewFields =
+    lowConfProcedures.length > 0
+      ? {
+          needsReview: true,
+          reviewReason: `${lowConfProcedures.length} CPT procedure code${lowConfProcedures.length === 1 ? '' : 's'} at low confidence — verify before billing: ${lowConfProcedures.map((p) => p.code).join(', ')}.`,
+        }
+      : {};
 
-  await prisma.transcribeVisit.update({
-    where: { id: input.visitId },
+  await updateTemplateTwinSyntheticQaClaimBoundVisit({
+    visitId: input.visitId,
+    userId: input.userId ?? '',
+    practiceId: input.practiceId,
     data: {
       cptCodes: filtered as unknown as object,
       ...reviewFields,

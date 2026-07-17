@@ -1,8 +1,12 @@
-import type { ModelClient } from '@meddoc/ai';
+import {
+  TEMPLATE_TWIN_SYNTHETIC_QA_TRANSCRIPT,
+  type ModelClient,
+} from '@meddoc/ai';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
   assertTemplateTwinSyntheticEvidencePhiFree,
+  assertTemplateTwinStagingQaEvidencePhiFree,
   TemplateTwinSyntheticEvidenceRejectedError,
   TemplateTwinSyntheticEvidenceScanUnavailableError,
 } from '../synthetic-evidence-gate';
@@ -21,6 +25,47 @@ function client(result: unknown) {
 }
 
 describe('Template Twin synthetic evidence privacy gate', () => {
+  it('admits the exact reviewed staging corpus while masking only its reserved future date from the generic scan', async () => {
+    const safe = client({
+      directIdentifierClasses: [],
+      appearsExplicitlySynthetic: true,
+      anyUncertain: false,
+    });
+
+    await expect(
+      assertTemplateTwinStagingQaEvidencePhiFree({
+        ...BASE,
+        encounterText: TEMPLATE_TWIN_SYNTHETIC_QA_TRANSCRIPT,
+        client: safe.value,
+      }),
+    ).resolves.toBeUndefined();
+
+    const call = safe.complete.mock.calls[0]?.[0] as { user?: string };
+    expect(call.user).toContain('[reserved synthetic date]');
+    expect(call.user).not.toContain('2099-07-16');
+  });
+
+  it.each([
+    'Synthetic patient Jordan Smith. Chief concern is synthetic wrist discomfort.',
+    `${TEMPLATE_TWIN_SYNTHETIC_QA_TRANSCRIPT} Extra synthetic statement.`,
+    TEMPLATE_TWIN_SYNTHETIC_QA_TRANSCRIPT.replace('2099-07-16', '2026-07-16'),
+  ])('rejects non-reviewed staging evidence before provider egress', async (encounterText) => {
+    const safe = client({
+      directIdentifierClasses: [],
+      appearsExplicitlySynthetic: true,
+      anyUncertain: false,
+    });
+
+    await expect(
+      assertTemplateTwinStagingQaEvidencePhiFree({
+        ...BASE,
+        encounterText,
+        client: safe.value,
+      }),
+    ).rejects.toBeInstanceOf(TemplateTwinSyntheticEvidenceRejectedError);
+    expect(safe.complete).not.toHaveBeenCalled();
+  });
+
   it('accepts explicitly synthetic identifier-free evidence after the independent scan', async () => {
     const safe = client({
       directIdentifierClasses: [],

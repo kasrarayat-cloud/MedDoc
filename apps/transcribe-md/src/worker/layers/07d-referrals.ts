@@ -8,7 +8,7 @@
 
 import { z } from 'zod';
 import { modelClient } from '@meddoc/ai';
-import prisma from '@meddoc/db';
+import { updateTemplateTwinSyntheticQaClaimBoundVisit } from '@/worker/staging-qa-mutation-fence';
 
 const MODEL = 'claude-sonnet-4-6';
 
@@ -35,7 +35,7 @@ export interface Layer7dInput {
 }
 
 export async function runLayer7dReferrals(
-  input: Layer7dInput
+  input: Layer7dInput,
 ): Promise<ReferralsResult> {
   const system = [
     'Review the SOAP plan for referrals (to specialists, imaging, labs,',
@@ -93,8 +93,10 @@ export async function runLayer7dReferrals(
     temperature: 0.1,
   });
 
-  await prisma.transcribeVisit.update({
-    where: { id: input.visitId },
+  await updateTemplateTwinSyntheticQaClaimBoundVisit({
+    visitId: input.visitId,
+    userId: input.userId ?? '',
+    practiceId: input.practiceId,
     data: { referrals: result as unknown as object },
   });
 

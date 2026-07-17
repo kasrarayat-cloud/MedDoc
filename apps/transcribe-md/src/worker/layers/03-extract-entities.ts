@@ -19,7 +19,7 @@ import {
   wrapAsData,
   delimiterSystemSuffix,
 } from '@meddoc/ai';
-import prisma from '@meddoc/db';
+import { updateTemplateTwinSyntheticQaClaimBoundVisit } from '@/worker/staging-qa-mutation-fence';
 import type { SpeakerMap } from './02-speaker-roles';
 import { markUnclearTranscript } from './transcript-clarity';
 import { logAudit } from '@/lib/audit';
@@ -49,8 +49,10 @@ export type Evidence = z.infer<typeof Evidence>;
 // concept. The retry-on-schema-fail loop catches the empty-string case
 // and re-prompts.
 function factWithEvidence<K extends string>(
-  key: K
-): z.ZodObject<{ [P in K | 'evidence_quote' | 'speaker' | 'timestamp']: z.ZodTypeAny }> {
+  key: K,
+): z.ZodObject<{
+  [P in K | 'evidence_quote' | 'speaker' | 'timestamp']: z.ZodTypeAny;
+}> {
   return z.object({
     [key]: z.string().min(1),
     evidence_quote: z.string().min(1),
@@ -118,7 +120,7 @@ export const ExtractedEntities = z.object({
         evidence_quote: z.string().min(1),
         speaker: z.string().optional(),
         timestamp: z.number().nonnegative().optional(),
-      })
+      }),
     )
     .default([]),
   allergies: z
@@ -141,7 +143,7 @@ export const ExtractedEntities = z.object({
         // the doctor resolves the conflict). See 07c-rx-drafting.ts.
         superseded: z.boolean().optional(),
         conflict_note: z.string().nullable().optional(),
-      })
+      }),
     )
     .default([]),
   family_history: z
@@ -153,7 +155,7 @@ export const ExtractedEntities = z.object({
         evidence_quote: z.string().min(1),
         speaker: z.string().optional(),
         timestamp: z.number().nonnegative().optional(),
-      })
+      }),
     )
     .default([]),
   social_history: z
@@ -177,7 +179,7 @@ export const ExtractedEntities = z.object({
         evidence_quote: z.string().min(1),
         speaker: z.string().optional(),
         timestamp: z.number().nonnegative().optional(),
-      })
+      }),
     )
     .default([]),
   exam_findings: z
@@ -189,7 +191,7 @@ export const ExtractedEntities = z.object({
         evidence_quote: z.string().min(1),
         speaker: z.string().optional(),
         timestamp: z.number().nonnegative().optional(),
-      })
+      }),
     )
     .default([]),
   tests_mentioned: z
@@ -201,12 +203,10 @@ export const ExtractedEntities = z.object({
         evidence_quote: z.string().min(1),
         speaker: z.string().optional(),
         timestamp: z.number().nonnegative().optional(),
-      })
+      }),
     )
     .default([]),
-  assessment_discussed: z
-    .array(factWithEvidence('finding'))
-    .default([]),
+  assessment_discussed: z.array(factWithEvidence('finding')).default([]),
   plan_discussed: z.array(factWithEvidence('item')).default([]),
 });
 export type ExtractedEntities = z.infer<typeof ExtractedEntities>;
@@ -218,9 +218,10 @@ export type ExtractedEntities = z.infer<typeof ExtractedEntities>;
 
 function formatRoleLabeledLine(
   u: DeepgramUtterance,
-  speakerMap: SpeakerMap
+  speakerMap: SpeakerMap,
 ): string {
-  const speakerKey = typeof u.speaker === 'number' ? String(u.speaker) : 'unknown';
+  const speakerKey =
+    typeof u.speaker === 'number' ? String(u.speaker) : 'unknown';
   const role = speakerMap[speakerKey]?.role ?? 'unknown';
   const displayRole = role.charAt(0).toUpperCase() + role.slice(1);
   const ts = Math.max(0, Math.floor(u.start ?? 0));
@@ -236,11 +237,9 @@ function formatRoleLabeledLine(
 
 export function buildRoleLabeledTranscript(
   utterances: DeepgramUtterance[],
-  speakerMap: SpeakerMap
+  speakerMap: SpeakerMap,
 ): string {
-  return utterances
-    .map((u) => formatRoleLabeledLine(u, speakerMap))
-    .join('\n');
+  return utterances.map((u) => formatRoleLabeledLine(u, speakerMap)).join('\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -289,6 +288,8 @@ export interface TemplateTwinTextExtractionInput {
   practiceId: string;
   userId: string;
   noteTemplateId: string;
+  /** Non-null only inside the exact staging-fixture provider boundary. */
+  providerVisitId?: string | null;
   rawText: string;
 }
 
@@ -296,6 +297,8 @@ export interface TemplateTwinDictationExtractionInput {
   practiceId: string;
   userId: string;
   noteTemplateId: string;
+  /** Non-null only inside the exact staging-fixture provider boundary. */
+  providerVisitId?: string | null;
   dictationText: string;
 }
 
@@ -393,21 +396,21 @@ function buildConversationPrompt(): { system: string; userPrefix: string } {
 function buildDictationPrompt(): { system: string; userPrefix: string } {
   const system = [
     'You are a medical entity extraction system. The input below is a',
-    'doctor\'s own dictated summary of a visit, transcribed as a single',
+    "doctor's own dictated summary of a visit, transcribed as a single",
     'block of text (no speakers, no patient-doctor turn-taking). Extract',
     'structured entities for downstream SOAP-note generation.',
     '',
     'CRITICAL RULES (violating these is a pipeline failure):',
     '1. Every entity MUST include an "evidence_quote" — a verbatim',
     '   snippet from the dictation. Speaker is always "Doctor". Timestamp',
-    '   is optional (there\'s no meaningful time cue in a single block).',
+    "   is optional (there's no meaningful time cue in a single block).",
     '2. If you CANNOT cite evidence for an entity, OMIT IT. Never invent.',
     '   Expanding shorthand is allowed (e.g. "f/u 3mo" → "Follow-up in 3',
     '   months", "bp 148/92" → systolic 148, diastolic 92). Inventing',
-    '   findings that weren\'t mentioned is hallucination.',
+    "   findings that weren't mentioned is hallucination.",
     '3. Treat the doctor as the only narrator. Everything in the',
     '   dictation is either (a) something the doctor observed, (b)',
-    '   something the patient told the doctor, or (c) the doctor\'s',
+    "   something the patient told the doctor, or (c) the doctor's",
     '   plan. Use context to decide which category each point belongs',
     '   to — if ambiguous, prefer exam_findings or plan_discussed over',
     '   hpi.',
@@ -417,13 +420,13 @@ function buildDictationPrompt(): { system: string; userPrefix: string } {
     '',
     'Respond with VALID JSON ONLY, no markdown fences.',
   ].join('\n');
-  return { system, userPrefix: 'Doctor\'s dictated visit summary:' };
+  return { system, userPrefix: "Doctor's dictated visit summary:" };
 }
 
 function buildTextPrompt(): { system: string; userPrefix: string } {
   const system = [
     'You are a medical entity extraction system. The input below is a',
-    'doctor\'s TYPED shorthand — bullets, abbreviations, or prose — that',
+    "doctor's TYPED shorthand — bullets, abbreviations, or prose — that",
     'they want expanded into a full SOAP note downstream. Extract',
     'structured entities.',
     '',
@@ -431,7 +434,7 @@ function buildTextPrompt(): { system: string; userPrefix: string } {
     '1. Every entity MUST include an "evidence_quote" — the relevant',
     '   line/phrase from the typed input, verbatim. Speaker and',
     '   timestamp are both optional and should usually be omitted (this',
-    '   isn\'t a recording).',
+    "   isn't a recording).",
     '2. Expand common medical shorthand sensibly:',
     '   - "yo" → "year-old", "f/u" → "follow-up", "RTC" → "return to',
     '     clinic", "ROS -" → "review of systems negative",',
@@ -439,7 +442,7 @@ function buildTextPrompt(): { system: string; userPrefix: string } {
     '   - "A1c 6.8" → HbA1c 6.8,',
     '   - "incr X to Y" → "increase X to Y".',
     '3. If you CANNOT cite an evidence line for an entity, OMIT IT.',
-    '   Inventing findings the doctor didn\'t type is hallucination and',
+    "   Inventing findings the doctor didn't type is hallucination and",
     '   a critical failure.',
     '4. Short or sparse inputs are valid; empty categories stay empty.',
     '',
@@ -447,7 +450,7 @@ function buildTextPrompt(): { system: string; userPrefix: string } {
     '',
     'Respond with VALID JSON ONLY, no markdown fences.',
   ].join('\n');
-  return { system, userPrefix: 'Doctor\'s typed shorthand:' };
+  return { system, userPrefix: "Doctor's typed shorthand:" };
 }
 
 // ---------------------------------------------------------------------------
@@ -510,13 +513,13 @@ async function completeLayer3Entities(input: {
  * without creating or mutating a visit. The caller persists only the derived,
  * versioned synthetic manifest; the source text is never logged. */
 export async function extractTemplateTwinTextEntities(
-  input: TemplateTwinTextExtractionInput
+  input: TemplateTwinTextExtractionInput,
 ): Promise<Layer3Output> {
   const contextText = input.rawText.trim();
   const entities = await completeLayer3Entities({
     practiceId: input.practiceId,
     userId: input.userId,
-    visitId: null,
+    visitId: input.providerVisitId ?? null,
     auditTargetId: input.noteTemplateId,
     auditTargetType: 'NoteTemplate',
     mode: 'text',
@@ -529,13 +532,13 @@ export async function extractTemplateTwinTextEntities(
 /** Same non-persisting certification seam for a synthetic voice recording
  * after the shared transcription provider has produced its exact transcript. */
 export async function extractTemplateTwinDictationEntities(
-  input: TemplateTwinDictationExtractionInput
+  input: TemplateTwinDictationExtractionInput,
 ): Promise<Layer3Output> {
   const contextText = input.dictationText.trim();
   const entities = await completeLayer3Entities({
     practiceId: input.practiceId,
     userId: input.userId,
-    visitId: null,
+    visitId: input.providerVisitId ?? null,
     auditTargetId: input.noteTemplateId,
     auditTargetType: 'NoteTemplate',
     mode: 'dictation',
@@ -546,14 +549,14 @@ export async function extractTemplateTwinDictationEntities(
 }
 
 export async function runLayer3ExtractEntities(
-  input: Layer3Input
+  input: Layer3Input,
 ): Promise<Layer3Output> {
   let contextText: string;
   let prompts: { system: string; userPrefix: string };
   if (input.mode === 'conversation') {
     contextText = buildRoleLabeledTranscript(
       input.utterances,
-      input.speakerMap
+      input.speakerMap,
     );
     prompts = buildConversationPrompt();
   } else if (input.mode === 'dictation') {
@@ -575,8 +578,10 @@ export async function runLayer3ExtractEntities(
     prompts,
   });
 
-  await prisma.transcribeVisit.update({
-    where: { id: input.visitId },
+  await updateTemplateTwinSyntheticQaClaimBoundVisit({
+    visitId: input.visitId,
+    userId: input.userId ?? '',
+    practiceId: input.practiceId,
     data: { entities: entities as unknown as object },
   });
 

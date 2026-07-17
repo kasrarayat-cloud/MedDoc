@@ -39,12 +39,16 @@ import {
 import type { CertifiedTemplateFieldSpecification } from "./custom-concepts/specification";
 import type { TemplateTwinConceptProvider } from "./supported-concepts";
 import { verifyCustomExtractionOutcomeProof } from "./custom-outcome-proof";
+import { TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT } from "./staging-qa-visit-guard";
 
 const SHA256 = /^[a-f0-9]{64}$/;
 
 export const TEMPLATE_TWIN_SIGNING_VISIT_SELECT = {
   soapFinal: true,
   soapVersion: true,
+  templateTwinSyntheticQaRun: {
+    select: TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
+  },
   noteTemplateId: true,
   noteTemplateVersion: true,
   noteTemplate: {
@@ -588,7 +592,7 @@ function certifiedCompilationIntegrity(
     (state.customSpecifications.length > 0
       ? Boolean(
           certification.approvedCustomExampleProofSha256 &&
-            SHA256.test(certification.approvedCustomExampleProofSha256),
+          SHA256.test(certification.approvedCustomExampleProofSha256),
         )
       : certification.approvedCustomExampleProofSha256 === null),
   );

@@ -1,5 +1,9 @@
 import { Prisma } from "@prisma/client";
 import prisma from "@meddoc/db";
+import {
+  assertTemplateTwinSyntheticQaWorkerLeaseHealthy,
+  getTemplateTwinSyntheticQaProviderContext,
+} from "@meddoc/ai";
 
 import {
   renderTemplateDocx,
@@ -69,6 +73,13 @@ import {
   type PersistedTemplateTwinFieldIntent,
 } from "./field-intent";
 import { verifyCustomExtractionOutcomeProof } from "./custom-outcome-proof";
+import { TemplateTwinStagingQaDisabledError } from "./staging-qa-gate";
+import {
+  lockAndAssertTemplateTwinStagingQaAttempt,
+  TemplateTwinStagingQaVisitGuardError,
+  type TemplateTwinSyntheticQaAttemptClaim,
+} from "./staging-qa-visit-guard";
+import { runTemplateTwinSyntheticQaClaimBoundMutation } from "@/worker/staging-qa-mutation-fence";
 
 /** The worker-owned review marker for an unresolved Template Twin fill.
  * Correction code may clear it only by exact equality after a fully verified
@@ -85,7 +96,8 @@ export class TemplateTwinFillError extends Error {
     | TemplateTwinRolloutCode
     | "SOAP_BINDING_STALE"
     | "SIGNED_MANIFEST_IMMUTABLE"
-    | "MANIFEST_CONFLICT";
+    | "MANIFEST_CONFLICT"
+    | "TEMPLATE_TWIN_STAGING_QA_ATTEMPT_STALE";
 
   constructor(
     code: TemplateTwinFillError["code"],
@@ -514,31 +526,63 @@ export async function processTemplateTwinVisit(
       "The selected Template Twin rollout admission does not belong to this practice.",
     );
   }
+  const syntheticQaContext = getTemplateTwinSyntheticQaProviderContext();
+  const syntheticQaAttempt: TemplateTwinSyntheticQaAttemptClaim | null =
+    syntheticQaContext
+      ? {
+          runId: syntheticQaContext.runId,
+          visitId: syntheticQaContext.visitId,
+          practiceId: syntheticQaContext.practiceId,
+          doctorId: input.doctorId,
+          fixtureVersion: syntheticQaContext.fixtureVersion,
+          requestSha256: syntheticQaContext.requestSha256,
+          attempt: syntheticQaContext.attempt,
+          workerClaimId: syntheticQaContext.workerClaimId,
+          pinnedGlobalGeneration: syntheticQaContext.pinnedGlobalGeneration,
+          pinnedPracticeGeneration: syntheticQaContext.pinnedPracticeGeneration,
+        }
+      : null;
+  if (
+    syntheticQaAttempt &&
+    (syntheticQaAttempt.visitId !== input.visitId ||
+      syntheticQaAttempt.practiceId !== input.practiceId)
+  ) {
+    throw new TemplateTwinFillError(
+      "TEMPLATE_TWIN_STAGING_QA_ATTEMPT_STALE",
+      "Synthetic QA worker context does not match this Template Twin fill.",
+    );
+  }
 
   // Persist the first selected version before source I/O, resolution, model-
   // derived evidence processing, or rendering. A retry must never switch to a
   // newly activated template after partial work against this version.
-  const claimedTemplate = await prisma.transcribeVisit.updateMany({
-    where: {
-      id: input.visitId,
-      userId: input.doctorId,
-      deletedAt: null,
-      archivedAt: null,
-      status: { not: "SIGNED" },
-      soapVersion: input.soapVersion,
-      soapFinal: input.soapFinal,
-      OR: [
-        { noteTemplateId: null, noteTemplateVersion: null },
-        {
+  const claimedTemplate = await runTemplateTwinSyntheticQaClaimBoundMutation({
+    visitId: input.visitId,
+    userId: input.doctorId,
+    practiceId: input.practiceId,
+    mutate: (client) =>
+      client.transcribeVisit.updateMany({
+        where: {
+          id: input.visitId,
+          userId: input.doctorId,
+          deletedAt: null,
+          archivedAt: null,
+          status: { not: "SIGNED" },
+          soapVersion: input.soapVersion,
+          soapFinal: input.soapFinal,
+          OR: [
+            { noteTemplateId: null, noteTemplateVersion: null },
+            {
+              noteTemplateId: input.noteTemplateId,
+              noteTemplateVersion: input.noteTemplateVersion,
+            },
+          ],
+        },
+        data: {
           noteTemplateId: input.noteTemplateId,
           noteTemplateVersion: input.noteTemplateVersion,
         },
-      ],
-    },
-    data: {
-      noteTemplateId: input.noteTemplateId,
-      noteTemplateVersion: input.noteTemplateVersion,
-    },
+      }),
   });
   if (claimedTemplate.count !== 1) {
     throw new TemplateTwinFillError(
@@ -1031,6 +1075,53 @@ export async function processTemplateTwinVisit(
       },
     });
   };
+  const lockSyntheticQaAttempt = async (
+    tx: Prisma.TransactionClient,
+    currentRolloutToken: TemplateTwinRolloutToken,
+  ): Promise<{ code: string; reason: string } | null> => {
+    if (!syntheticQaAttempt) return null;
+    assertTemplateTwinSyntheticQaWorkerLeaseHealthy();
+    try {
+      await lockAndAssertTemplateTwinStagingQaAttempt({
+        tx,
+        claim: syntheticQaAttempt,
+        currentRolloutToken,
+        allowedStatuses: ["PROCESSING"],
+        requireLiveWorkerLease: true,
+      });
+      return null;
+    } catch (error) {
+      if (
+        !(error instanceof TemplateTwinStagingQaDisabledError) &&
+        !(error instanceof TemplateTwinStagingQaVisitGuardError)
+      ) {
+        throw error;
+      }
+      const code = error.code;
+      await enqueueTemplateTwinAudit(tx, {
+        eventKey:
+          `template-twin:staging-attempt-final-claim-blocked:` +
+          `${syntheticQaAttempt.runId}:${syntheticQaAttempt.attempt}:${code}`,
+        practiceId: input.practiceId,
+        actorId: input.doctorId,
+        action: "TEMPLATE_TWIN_SAFETY_GATE_BLOCKED",
+        targetType: "TranscribeVisit",
+        targetId: input.visitId,
+        metadata: {
+          reasonCode: code,
+          operation: "staging_final_output_claim",
+          stagingQaRunId: syntheticQaAttempt.runId,
+          stagingQaAttempt: syntheticQaAttempt.attempt,
+          outputWrittenUnclaimed: storedOutput !== null,
+        },
+      });
+      return {
+        code,
+        reason:
+          "A newer synthetic QA attempt replaced this worker claim. Retry from the current run.",
+      };
+    }
+  };
   const writeData = {
     compiledVersionId: compiled.id,
     noteTemplateId: row.id,
@@ -1093,6 +1184,19 @@ export async function processTemplateTwinVisit(
             count: 0,
             soapBindingStale: false,
             rolloutRejected: finalRollout,
+            stagingAttemptRejected: null,
+          } as const;
+        }
+        const stagingAttemptRejected = await lockSyntheticQaAttempt(
+          tx,
+          finalRollout.token,
+        );
+        if (stagingAttemptRejected) {
+          return {
+            count: 0,
+            soapBindingStale: false,
+            rolloutRejected: null,
+            stagingAttemptRejected,
           } as const;
         }
         const lockedVisit = await lockCurrentTemplateTwinVisit(
@@ -1137,6 +1241,7 @@ export async function processTemplateTwinVisit(
             count: 0,
             soapBindingStale: true,
             rolloutRejected: null,
+            stagingAttemptRejected: null,
           } as const;
         }
         const claimedManifest = await tx.templateTwinFillManifest.updateMany({
@@ -1171,6 +1276,7 @@ export async function processTemplateTwinVisit(
           ...claimedManifest,
           soapBindingStale: false,
           rolloutRejected: null,
+          stagingAttemptRejected: null,
         } as const;
       },
       { isolationLevel: "Serializable" },
@@ -1185,6 +1291,12 @@ export async function processTemplateTwinVisit(
       throw new TemplateTwinFillError(
         updated.rolloutRejected.code,
         updated.rolloutRejected.reason,
+      );
+    }
+    if (updated.stagingAttemptRejected) {
+      throw new TemplateTwinFillError(
+        "TEMPLATE_TWIN_STAGING_QA_ATTEMPT_STALE",
+        updated.stagingAttemptRejected.reason,
       );
     }
     if (updated.count !== 1) {
@@ -1220,6 +1332,18 @@ export async function processTemplateTwinVisit(
             return {
               soapBindingStale: false,
               rolloutRejected: finalRollout,
+              stagingAttemptRejected: null,
+            } as const;
+          }
+          const stagingAttemptRejected = await lockSyntheticQaAttempt(
+            tx,
+            finalRollout.token,
+          );
+          if (stagingAttemptRejected) {
+            return {
+              soapBindingStale: false,
+              rolloutRejected: null,
+              stagingAttemptRejected,
             } as const;
           }
           const lockedVisit = await lockCurrentTemplateTwinVisit(
@@ -1244,6 +1368,7 @@ export async function processTemplateTwinVisit(
             return {
               soapBindingStale: true,
               rolloutRejected: null,
+              stagingAttemptRejected: null,
             } as const;
           }
           const created = await tx.templateTwinFillManifest.create({
@@ -1268,6 +1393,7 @@ export async function processTemplateTwinVisit(
           return {
             soapBindingStale: false,
             rolloutRejected: null,
+            stagingAttemptRejected: null,
           } as const;
         },
         { isolationLevel: "Serializable" },
@@ -1282,6 +1408,12 @@ export async function processTemplateTwinVisit(
         throw new TemplateTwinFillError(
           createdResult.rolloutRejected.code,
           createdResult.rolloutRejected.reason,
+        );
+      }
+      if (createdResult.stagingAttemptRejected) {
+        throw new TemplateTwinFillError(
+          "TEMPLATE_TWIN_STAGING_QA_ATTEMPT_STALE",
+          createdResult.stagingAttemptRejected.reason,
         );
       }
     } catch (error) {

@@ -23,7 +23,7 @@ import {
   validateRxDose,
   type InteractionMed,
 } from '@meddoc/ai';
-import prisma from '@meddoc/db';
+import { updateTemplateTwinSyntheticQaClaimBoundVisit } from '@/worker/staging-qa-mutation-fence';
 import { RX_PEDIATRIC_FEWSHOT_EXAMPLES } from '@/worker/prompts/rx-pediatric-examples';
 import { logAudit, type AuditAction } from '@/lib/audit';
 import { parseRxToMgPerDay } from './rx-sig-parser';
@@ -53,7 +53,7 @@ const PEDS_AGE_THRESHOLD_YEARS = 18;
  */
 export function mergeAllergiesForSafety(
   chartAllergies: ReadonlyArray<string> | null | undefined,
-  entitiesJson: string
+  entitiesJson: string,
 ): string[] {
   const set = new Map<string, string>(); // lowercased key → first-seen casing
   const add = (raw: unknown) => {
@@ -178,7 +178,7 @@ function computeAgeYears(dob: Date | string | null): number | null {
  */
 function buildPediatricContext(
   ageYears: number | null,
-  weightKg: number | null
+  weightKg: number | null,
 ): string {
   if (ageYears !== null && ageYears < PEDS_AGE_THRESHOLD_YEARS) {
     if (weightKg === null) {
@@ -210,13 +210,12 @@ function buildPediatricContext(
 }
 
 export async function runLayer7cRxDrafting(
-  input: Layer7cInput
+  input: Layer7cInput,
 ): Promise<RxResult> {
   // Fix-Pack 1 Q0-2 — derive age once at the top so prompt assembly +
   // (future) validator calls share the same number.
   const ageYears = computeAgeYears(input.patient.dateOfBirth);
-  const isPediatric =
-    ageYears !== null && ageYears < PEDS_AGE_THRESHOLD_YEARS;
+  const isPediatric = ageYears !== null && ageYears < PEDS_AGE_THRESHOLD_YEARS;
 
   const systemSections: string[] = [
     [
@@ -247,7 +246,7 @@ export async function runLayer7cRxDrafting(
       '  Use "unclear" WHEN YOU ARE NOT SURE rather than guessing.',
       '- evidence_quote: verbatim SOAP snippet supporting the Rx',
       '',
-      'SAFETY WARNINGS — surface, don\'t silently fix. For each concern,',
+      "SAFETY WARNINGS — surface, don't silently fix. For each concern,",
       'emit a warning object with severity and a human-readable message:',
       '',
       '  critical — likely patient harm if unaddressed:',
@@ -261,7 +260,7 @@ export async function runLayer7cRxDrafting(
       '    - Neonatal (< 28 days) without a neonate-specific protocol cited',
       '',
       '  major — almost certainly needs clarification:',
-      '    - Known drug-drug interaction with the patient\'s current',
+      "    - Known drug-drug interaction with the patient's current",
       '      medication list (from entities)',
       '    - Duplicate-therapy (two drugs in the same class without',
       '      rationale in the plan)',
@@ -279,10 +278,10 @@ export async function runLayer7cRxDrafting(
       '    (a) the adult max',
       '    (b) the peds mg/kg/day × patient weight (kg)',
       '- ALWAYS compute mg/kg/day from the prescribed dose and the',
-      '  patient\'s weight, and surface the calculation in BOTH the',
+      "  patient's weight, and surface the calculation in BOTH the",
       '  evidence_quote (e.g. "amoxicillin 250 mg TID — 47 mg/kg/day at',
       '  16 kg") AND any warning message that fires for that Rx.',
-      '- If the SOAP names a pediatric dose that\'s at-or-near the adult',
+      "- If the SOAP names a pediatric dose that's at-or-near the adult",
       '  ceiling for a peds patient, emit a major or minor warning with',
       '  the mg/kg/day calculation so the doctor can verify against',
       '  references before signing.',
@@ -343,7 +342,7 @@ export async function runLayer7cRxDrafting(
 
   const pediatricContext = buildPediatricContext(
     ageYears,
-    input.patient.weightKg
+    input.patient.weightKg,
   );
 
   const user = [
@@ -391,13 +390,10 @@ export async function runLayer7cRxDrafting(
   // ever a deliberate doctor action — never an extraction-layer decision.
   const effectiveAllergies = mergeAllergiesForSafety(
     input.patient.allergies,
-    input.entitiesJson
+    input.entitiesJson,
   );
   for (const rx of result.prescriptions) {
-    const doseMgPerDay = parseRxToMgPerDay(
-      rx.strength ?? null,
-      rx.sig ?? null
-    );
+    const doseMgPerDay = parseRxToMgPerDay(rx.strength ?? null, rx.sig ?? null);
     const validation = validateRxDose({
       drug: rx.drug,
       doseMgPerDay,
@@ -477,7 +473,12 @@ export async function runLayer7cRxDrafting(
   }));
   try {
     const entities = JSON.parse(input.entitiesJson) as {
-      medications?: Array<{ name?: unknown; dose?: unknown; frequency?: unknown; evidence_quote?: unknown }>;
+      medications?: Array<{
+        name?: unknown;
+        dose?: unknown;
+        frequency?: unknown;
+        evidence_quote?: unknown;
+      }>;
     };
     for (const m of entities.medications ?? []) {
       if (typeof m?.name !== 'string' || m.name.trim() === '') continue;
@@ -485,10 +486,11 @@ export async function runLayer7cRxDrafting(
         name: m.name,
         doseMgPerDay: parseRxToMgPerDay(
           typeof m.dose === 'string' ? m.dose : null,
-          typeof m.frequency === 'string' ? m.frequency : null
+          typeof m.frequency === 'string' ? m.frequency : null,
         ),
         source: 'current' as const,
-        evidenceQuote: typeof m.evidence_quote === 'string' ? m.evidence_quote : null,
+        evidenceQuote:
+          typeof m.evidence_quote === 'string' ? m.evidence_quote : null,
       });
     }
   } catch {
@@ -501,7 +503,8 @@ export async function runLayer7cRxDrafting(
       rx_drug: w.primaryDrug,
       message: `[deterministic] ${w.message}`,
       evidence_quote:
-        interactionMeds.find((m) => m.name === w.primaryDrug)?.evidenceQuote ?? null,
+        interactionMeds.find((m) => m.name === w.primaryDrug)?.evidenceQuote ??
+        null,
     });
     // F-8 audit leg (migration 20260702153000): PHI boundary per the PR-D
     // RX_* contract — drug names + rule id + numbers only; never the
@@ -519,13 +522,16 @@ export async function runLayer7cRxDrafting(
         otherDrug: w.otherDrug,
         severity: w.severity,
         doseMgPerDay:
-          interactionMeds.find((m) => m.name === w.primaryDrug)?.doseMgPerDay ?? null,
+          interactionMeds.find((m) => m.name === w.primaryDrug)?.doseMgPerDay ??
+          null,
       },
     });
   }
 
-  await prisma.transcribeVisit.update({
-    where: { id: input.visitId },
+  await updateTemplateTwinSyntheticQaClaimBoundVisit({
+    visitId: input.visitId,
+    userId: input.userId ?? '',
+    practiceId: input.practiceId,
     data: { rxDrafts: result as unknown as object },
   });
 

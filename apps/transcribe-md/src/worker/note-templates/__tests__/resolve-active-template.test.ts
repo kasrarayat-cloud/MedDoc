@@ -13,6 +13,7 @@ const rolloutMocks = vi.hoisted(() => ({ pin: vi.fn() }));
 vi.mock('@meddoc/db', () => ({
   default: {
     noteTemplate: { findMany: vi.fn(), findFirst: vi.fn() },
+    templateTwinSyntheticQaRun: { findFirst: vi.fn() },
     user: { findUnique: vi.fn() },
   },
 }));
@@ -25,6 +26,10 @@ vi.mock('@/lib/template-twin/rollout', async (importOriginal) => {
 
 import type { NoteTemplate } from '@prisma/client';
 import prisma from '@meddoc/db';
+import {
+  TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256,
+  TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES,
+} from '@/lib/template-twin/staging-qa-fixtures';
 import {
   selectTemplate,
   MissingSystemDefaultTemplateError,
@@ -159,6 +164,21 @@ describe('selectTemplate — fallback chain', () => {
       MissingSystemDefaultTemplateError
     );
   });
+
+  it('does not treat a user-facing staging-like name or scope as provenance', () => {
+    const ordinary = tmpl({
+      id: 'ordinary-lookalike',
+      doctorId: 'doc1',
+      name: 'Template Twin Synthetic QA',
+      encounterType: 'template-twin-synthetic-qa',
+    });
+    expect(
+      selectTemplate([systemDefault, ordinary], {
+        doctorId: 'doc1',
+        encounterType: 'template-twin-synthetic-qa',
+      }),
+    ).toBe(ordinary);
+  });
 });
 
 describe('resolveVisitTemplate — immutable retry provenance', () => {
@@ -185,7 +205,88 @@ describe('resolveVisitTemplate — immutable retry provenance', () => {
         version: 1,
         OR: [{ doctorId: 'doc1' }, { isSystemDefault: true }],
       },
+      include: {
+        templateTwinCompiledVersion: {
+          select: {
+            sourceArtifact: { select: { sha256: true, sizeBytes: true } },
+          },
+        },
+      },
     });
+  });
+
+  it('excludes an exact staging source from ordinary active resolution even after rename', async () => {
+    const renamedStaging = {
+      ...tmpl({
+        id: 'renamed-staging',
+        doctorId: 'doc1',
+        name: 'Ordinary looking name',
+        encounterType: 'cardiology',
+        templateKind: 'template_twin_docx',
+      }),
+      templateTwinCompiledVersion: {
+        sourceArtifact: {
+          sha256: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256,
+          sizeBytes: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES,
+        },
+      },
+    };
+    vi.mocked(prisma.noteTemplate.findMany).mockResolvedValueOnce([
+      systemDefault,
+      renamedStaging,
+    ] as never);
+
+    await expect(
+      resolveActiveTemplate({ doctorId: 'doc1', encounterType: 'cardiology' }),
+    ).resolves.toBe(systemDefault);
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('requires a matching durable run for a pinned exact staging source', async () => {
+    const pinnedStaging = {
+      ...tmpl({
+        id: 'staging-pinned',
+        doctorId: 'doc1',
+        templateKind: 'template_twin_docx',
+      }),
+      templateTwinCompiledVersion: {
+        sourceArtifact: {
+          sha256: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256,
+          sizeBytes: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES,
+        },
+      },
+    };
+    vi.mocked(prisma.noteTemplate.findFirst).mockResolvedValue(pinnedStaging as never);
+    vi.mocked(prisma.templateTwinSyntheticQaRun.findFirst).mockResolvedValueOnce(
+      null,
+    );
+
+    await expect(
+      resolveVisitTemplate({
+        visitId: 'visit-without-run',
+        doctorId: 'doc1',
+        pinnedTemplateId: pinnedStaging.id,
+        pinnedTemplateVersion: pinnedStaging.version,
+      }),
+    ).rejects.toBeInstanceOf(PinnedTemplateUnavailableError);
+
+    vi.mocked(prisma.templateTwinSyntheticQaRun.findFirst).mockResolvedValueOnce({
+      id: 'run-1',
+    } as never);
+    vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({
+      role: 'DOCTOR',
+      isActive: true,
+      practiceId: 'practice-1',
+      practice: { templateTwinEnabled: true },
+    } as never);
+    await expect(
+      resolveVisitTemplate({
+        visitId: 'visit-with-run',
+        doctorId: 'doc1',
+        pinnedTemplateId: pinnedStaging.id,
+        pinnedTemplateVersion: pinnedStaging.version,
+      }),
+    ).resolves.toBe(pinnedStaging);
   });
 
   it('rejects a pinned Template Twin when the practice rollout flag is off', async () => {

@@ -12,7 +12,7 @@
 
 import { Readable } from 'node:stream';
 
-import prisma from '@meddoc/db';
+import { updateTemplateTwinSyntheticQaClaimBoundVisit } from '@/worker/staging-qa-mutation-fence';
 // PR-L follow-up: swap direct Deepgram call → transcribe() orchestrator.
 // transcribe() = Deepgram primary + Whisper fallback on transient
 // failures. Result tagged provider='deepgram-batch' or 'whisper-fallback'
@@ -78,7 +78,7 @@ export interface Layer1Output {
 const BACKOFF_MS = 2_000;
 
 export async function runLayer1Transcribe(
-  input: Layer1Input
+  input: Layer1Input,
 ): Promise<Layer1Output> {
   if (!input.audioMimeType) {
     throw new Error('[L1] audioMimeType is missing — cannot contact Deepgram.');
@@ -92,7 +92,9 @@ export async function runLayer1Transcribe(
   // the rare fallback case.
   const stat = await statAudio(input.audioKey);
   if (!stat || typeof stat.size !== 'number') {
-    throw new Error(`[L1] audio object missing or has no size: ${input.audioKey}`);
+    throw new Error(
+      `[L1] audio object missing or has no size: ${input.audioKey}`,
+    );
   }
   const nodeStream = await streamAudio(input.audioKey);
   const webStream = Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>;
@@ -200,7 +202,7 @@ export async function runLayer1Transcribe(
             delayMs: info.delayMs,
             status: err?.status ?? null,
             code: err?.code ?? null,
-          })
+          }),
         );
       },
     });
@@ -281,8 +283,10 @@ export async function runLayer1Transcribe(
     ? `Transcription fell back to ${result.provider} (Whisper) — primary Deepgram failed${result.primaryError?.message ? ` with: ${result.primaryError.message.slice(0, 120)}` : ''}. Speaker diarization is unavailable; please review the transcript before signing.`
     : null;
 
-  await prisma.transcribeVisit.update({
-    where: { id: input.visitId },
+  await updateTemplateTwinSyntheticQaClaimBoundVisit({
+    visitId: input.visitId,
+    userId: input.userId ?? '',
+    practiceId: input.practiceId,
     data: {
       transcriptRaw: transcriptRaw as unknown as object,
       transcriptText: result.transcript,
@@ -335,23 +339,23 @@ export async function runLayer1Transcribe(
   }
 
   // Persist the keyterm metadata so a future transcription regression
-  // can be attributed to the exact composition that ran. Fire-and-
-  // forget; never block the visit on this write. Skipped for
+  // can be attributed to the exact composition that ran. Staging awaits and
+  // claim-fences it so detached telemetry cannot outlive a reclaim. Skipped for
   // interpreter-mode runs (the metadata is null there — model swap).
   if (built?.metadata) {
-    void (async () => {
-      try {
-        await prisma.transcribeVisit.update({
-          where: { id: input.visitId },
-          data: {
-            keytermsApplied: built.metadata as unknown as object,
-          },
-        });
-      } catch {
-        // Audit-attribution metadata is not load-bearing for the
-        // visit — never block on it. The pipeline proceeds.
-      }
-    })();
+    try {
+      await updateTemplateTwinSyntheticQaClaimBoundVisit({
+        visitId: input.visitId,
+        userId: input.userId ?? '',
+        practiceId: input.practiceId,
+        data: {
+          keytermsApplied: built.metadata as unknown as object,
+        },
+      });
+    } catch {
+      // Audit-attribution metadata is not load-bearing for the
+      // visit — never block on it. The pipeline proceeds.
+    }
   }
 
   return {
@@ -367,7 +371,7 @@ export async function runLayer1Transcribe(
       input.interpreterMode && result.language && result.language !== 'en'
         ? result.language
         : input.interpreterMode
-          ? result.language ?? undefined
+          ? (result.language ?? undefined)
           : undefined,
   };
 }
