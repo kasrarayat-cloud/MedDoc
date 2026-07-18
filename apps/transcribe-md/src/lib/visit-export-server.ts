@@ -10,10 +10,10 @@
 // types can stay in visit-export.ts and be safely client-imported.
 // ============================================================================
 
-import prisma from '@meddoc/db';
-import type { TranscribeVisitStatus } from '@prisma/client';
-import { findSpecialty } from '@meddoc/shared/specialties';
-import { projectEmForDisplay } from './visit-export';
+import prisma from "@meddoc/db";
+import type { TranscribeVisitStatus } from "@prisma/client";
+import { findSpecialty } from "@meddoc/shared/specialties";
+import { projectEmForDisplay } from "./visit-export";
 import type {
   CptEm,
   CptModifier,
@@ -23,7 +23,9 @@ import type {
   Referral,
   RxWarning,
   VisitExportData,
-} from './visit-export';
+} from "./visit-export";
+import { assessVisitAutomationProof } from "@/worker/automation-finalization";
+import { VISIT_AUTOMATION_MANIFEST_SELECT } from "@/worker/automation-manifest";
 
 /**
  * Auth + load. Returns null for "not found / not yours" so the route
@@ -32,7 +34,7 @@ import type {
  */
 export async function loadVisitExportData(
   visitId: string,
-  userId: string
+  userId: string,
 ): Promise<VisitExportData | null> {
   const visit = await prisma.transcribeVisit.findUnique({
     where: { id: visitId },
@@ -52,15 +54,43 @@ export async function loadVisitExportData(
       rxDrafts: true,
       referrals: true,
       patientSummary: true,
-      user: { select: { name: true, email: true } },
+      soapVersion: true,
+      automationManifest: { select: VISIT_AUTOMATION_MANIFEST_SELECT },
+      templateTwinSyntheticQaRun: {
+        select: {
+          id: true,
+          admissionId: true,
+          pinnedGlobalRolloutGeneration: true,
+          pinnedPracticeRolloutGeneration: true,
+        },
+      },
+      user: { select: { name: true, email: true, practiceId: true } },
     },
   });
   if (!visit || visit.userId !== userId) return null;
+  const automation = assessVisitAutomationProof({
+    visitId: visit.id,
+    practiceId: visit.user.practiceId,
+    soapVersion: visit.soapVersion,
+    soapFinal: visit.soapFinal,
+    manifest: visit.automationManifest,
+    staging: visit.templateTwinSyntheticQaRun
+      ? {
+          admissionId: visit.templateTwinSyntheticQaRun.admissionId ?? "",
+          runId: visit.templateTwinSyntheticQaRun.id,
+          globalGeneration:
+            visit.templateTwinSyntheticQaRun.pinnedGlobalRolloutGeneration,
+          practiceGeneration:
+            visit.templateTwinSyntheticQaRun.pinnedPracticeRolloutGeneration,
+        }
+      : null,
+  });
+  if (!automation.ready) return null;
 
   const soapText =
-    visit.status === 'SIGNED'
-      ? visit.signedSoap ?? visit.soapFinal ?? ''
-      : visit.soapFinal ?? '';
+    visit.status === "SIGNED"
+      ? (visit.signedSoap ?? visit.soapFinal ?? "")
+      : (visit.soapFinal ?? "");
 
   // All four of these are Json? columns — treat each as its own shape
   // with a tolerant cast + safe-default. Downstream code can rely on
@@ -84,7 +114,10 @@ export async function loadVisitExportData(
   // em.code so every artifact (PDF, DOCX, all EHR clipboard formats) prints
   // what the doctor reviewed — never the raw L7b suggestion. The SAME helper
   // the client Codes tab + "Copy codes" use, so all surfaces agree.
-  const emForExport = projectEmForDisplay(cptBlob?.em ?? null, visit.status === 'SIGNED');
+  const emForExport = projectEmForDisplay(
+    cptBlob?.em ?? null,
+    visit.status === "SIGNED",
+  );
 
   return {
     visitId: visit.id,

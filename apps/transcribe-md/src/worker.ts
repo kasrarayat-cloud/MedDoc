@@ -65,7 +65,6 @@ import {
   runRetentionSweep,
   resolveRetentionDays,
 } from "@/worker/cleanup/retention-sweep";
-import { applyAdditiveReviewState } from "@/worker/finalize-review-state";
 import { countUnclearMarkers } from "@/worker/layers/transcript-clarity";
 import { runStuckVisitWatchdog } from "@/worker/cleanup/stuck-visit-watchdog";
 import {
@@ -112,11 +111,7 @@ import { runLayer7bCptCoding } from "@/worker/layers/07b-cpt-coding";
 import { runLayer7cRxDrafting } from "@/worker/layers/07c-rx-drafting";
 import { runLayer7dReferrals } from "@/worker/layers/07d-referrals";
 import { runLayer7ePatientSummary } from "@/worker/layers/07e-patient-summary";
-import { logAudit } from "@/lib/audit";
-import {
-  detectIncompleteAutomation,
-  type AutomationConfidenceScores,
-} from "@/worker/automation-incomplete";
+import { logWorkerAudit } from "@/worker/worker-audit";
 import { isImagingReportSpecialty } from "@meddoc/shared/specialties";
 import {
   processTemplateTwinVisit,
@@ -126,7 +121,6 @@ import type { TemplateTwinRolloutToken } from "@/lib/template-twin/rollout";
 import {
   assertSyntheticQaResolvedRolloutToken,
   failTemplateTwinSyntheticQaProcessing,
-  finalizeTemplateTwinSyntheticQaReady,
   reconcileExpiredTemplateTwinSyntheticQaWorkerClaim,
   runWithWorkerSyntheticQaProviderSelection,
   templateTwinSyntheticQaWorkerFailureCode,
@@ -137,6 +131,16 @@ import {
   runTemplateTwinSyntheticQaClaimBoundMutation,
   updateTemplateTwinSyntheticQaClaimBoundVisit,
 } from "@/worker/staging-qa-mutation-fence";
+import {
+  initializeVisitAutomationManifest,
+  persistedAutomationOutput,
+} from "@/worker/automation-manifest";
+import { buildVisitAutomationPolicy } from "@/worker/automation-policy";
+import {
+  runAutomationFanout,
+  type AutomationFanoutTask,
+} from "@/worker/run-automation-fanout";
+import { finalizeVisitAutomationReady } from "@/worker/automation-finalization";
 
 const CONCURRENCY = Number.parseInt(
   process.env.TRANSCRIBE_MD_WORKER_CONCURRENCY ?? "2",
@@ -236,37 +240,6 @@ function withTimeout<T>(p: Promise<T>, ms: number, tag: string): Promise<T> {
       ),
     ),
   ]);
-}
-
-/** Null-out the persisted column for a failed automation layer so a
- *  partially-written row can't mislead the UI. Each L7x layer writes
- *  its own column inside the fulfilled path; if the call threw (e.g.
- *  schema-fail after a Prisma write already landed — vanishingly rare
- *  but possible), this wipes the column clean. */
-async function clearAutomationColumn(
-  visitId: string,
-  userId: string,
-  practiceId: string,
-  key:
-    | "icd_coding"
-    | "cpt_coding"
-    | "rx_drafting"
-    | "referrals"
-    | "patient_summary",
-): Promise<void> {
-  const map: Record<typeof key, Record<string, null>> = {
-    icd_coding: { icdCodes: null },
-    cpt_coding: { cptCodes: null },
-    rx_drafting: { rxDrafts: null },
-    referrals: { referrals: null },
-    patient_summary: { patientSummary: null },
-  };
-  await updateTemplateTwinSyntheticQaClaimBoundVisit({
-    visitId,
-    userId,
-    practiceId,
-    data: map[key],
-  });
 }
 
 // T-M13 / FIND-P1-011 — `loadResumeState` was extracted to
@@ -1021,10 +994,10 @@ async function processVisitPipeline(
     }
 
     // -------------------------------------------------------------------
-    // T-M6 — parallel automation fan-out. Each L7x layer runs
-    // independently against the same polished SOAP + entities; a single
-    // layer failing never fails the visit. Missing outputs show up as
-    // empty columns + a confidenceScores note.
+    // T-M6 — controlled automation fan-out. Each L7x layer runs against the
+    // same polished SOAP + entities and every outcome is persisted. Ordinary
+    // visits retain the existing optional-layer contract; synthetic staging
+    // requires all five deterministic L7 fixtures before finalization.
     // -------------------------------------------------------------------
     currentLayer = "automation";
     await updateTemplateTwinSyntheticQaClaimBoundVisit({
@@ -1054,18 +1027,7 @@ async function processVisitPipeline(
       summary: process.env.TM_ENABLE_PATIENT_SUMMARY !== "false",
     };
 
-    type AutomationTask = {
-      key:
-        | "icd_coding"
-        | "cpt_coding"
-        | "rx_drafting"
-        | "referrals"
-        | "patient_summary";
-      enabled: boolean;
-      run: () => Promise<unknown>;
-    };
-
-    const tasks: AutomationTask[] = [
+    const tasks: AutomationFanoutTask[] = [
       {
         key: "icd_coding",
         enabled: flags.icd,
@@ -1078,6 +1040,18 @@ async function processVisitPipeline(
             soapFinal: soapFinalForFanout,
             entitiesJson,
           }),
+        validate: (output) => {
+          const codes = (output as { codes?: Array<{ code?: string }> }).codes;
+          if (
+            !Array.isArray(codes) ||
+            codes.length === 0 ||
+            (codes.length === 1 && codes[0]?.code?.toUpperCase() === "Z76.89")
+          ) {
+            const error = new Error("Required ICD output validation failed.");
+            error.name = "AutomationOutputValidationError";
+            throw error;
+          }
+        },
       },
       {
         key: "cpt_coding",
@@ -1091,6 +1065,21 @@ async function processVisitPipeline(
             soapFinal: soapFinalForFanout,
             entitiesJson,
           }),
+        validate: (output) => {
+          const result = output as {
+            em?: { code?: string | null } | null;
+            procedures?: unknown[];
+          };
+          if (
+            !result.em?.code &&
+            (!Array.isArray(result.procedures) ||
+              result.procedures.length === 0)
+          ) {
+            const error = new Error("Required CPT output validation failed.");
+            error.name = "AutomationOutputValidationError";
+            throw error;
+          }
+        },
       },
       {
         key: "rx_drafting",
@@ -1138,49 +1127,58 @@ async function processVisitPipeline(
             soapFinal: soapFinalForFanout,
             entitiesJson,
           }),
+        metadata: (output) => {
+          const result = output as {
+            fleschKincaid?: number;
+            flagged?: boolean;
+          };
+          return {
+            flesch_kincaid: result.fleschKincaid,
+            flagged: result.flagged,
+          };
+        },
       },
     ];
 
-    // T-M13 — per-task resumability. For each enabled L7 task, check
-    // its checkpoint column: if populated from a prior attempt, skip
-    // the run and carry a bare 'ok' status. Failed L7 columns are
-    // nulled by the catch below, so the skip check correctly returns
-    // false for them and they re-run.
-    const TASK_KEY_TO_LAYER: Record<AutomationTask["key"], PipelineLayer> = {
+    // T-M13 — per-task resumability. A persisted output is reconciled into
+    // the durable manifest without another provider call. The output hash and
+    // current input binding are still recorded before finalization.
+    const TASK_KEY_TO_LAYER: Partial<
+      Record<AutomationFanoutTask["key"], PipelineLayer>
+    > = {
       icd_coding: "L7a",
       cpt_coding: "L7b",
       rx_drafting: "L7c",
       referrals: "L7d",
       patient_summary: "L7e",
     };
-    const enabled = tasks.filter((t) => t.enabled);
-    const toRun: AutomationTask[] = [];
-    const resumedOk = new Set<AutomationTask["key"]>();
-    for (const t of enabled) {
+    for (const t of tasks) {
+      if (!t.enabled) continue;
       const layer = TASK_KEY_TO_LAYER[t.key];
+      if (!layer) continue;
       if (isLayerComplete(resumeState, layer)) {
         logSkippedLayer(visitId, layer, attempt);
         skipped.push(layer);
-        resumedOk.add(t.key);
-      } else {
-        toRun.push(t);
+        t.resumedOutput = persistedAutomationOutput({
+          layerId: t.key,
+          resumeState,
+        });
       }
     }
-    // ── EM-score MDM judge pre-warm ────────────────────────────────
-    // Populates the Redis `em_mdm_cache:<sha256(soap)>` entry so the
-    // visit page's server-side render + the apply-additions route both
-    // hit a warm cache instead of paying the 10-30s LLM cost at click
-    // time. Fires alongside the L7 fan-out (parallel — same SOAP, no
-    // dependency on L7 outputs). Soft-fail: judging is idempotent +
-    // cached, so a missed pre-warm just shifts one judge call back to
-    // the page render. No new Prisma column needed — the cache is
-    // Redis-only with a 7-day TTL.
-    const judgeWarmPromise = (async () => {
-      // Synthetic staging never calls the legacy direct Anthropic E/M judge.
-      // Its deterministic provider context is intentionally supported only by
-      // modelClient-backed paths; Word QA does not need an E/M score.
-      if (getTemplateTwinSyntheticQaProviderContext()) return;
-      try {
+    const stagingAutomation = Boolean(
+      getTemplateTwinSyntheticQaProviderContext(),
+    );
+    // The legacy E/M cache path is not wired through modelClient's deterministic
+    // fixture. Never let an isolated MOCK_AI_CALLS run make a network request;
+    // production retains the existing opt-out default.
+    const emMdmPrewarmEnabled =
+      !stagingAutomation &&
+      process.env.MOCK_AI_CALLS !== "true" &&
+      process.env.TM_ENABLE_EM_MDM_PREWARM !== "false";
+    tasks.push({
+      key: "em_mdm_prewarm",
+      enabled: emMdmPrewarmEnabled,
+      run: async () => {
         const { judgeMdm } = await import("@/lib/em-coding/llm-mdm");
         await judgeMdm({
           soap: soapFinalForFanout,
@@ -1188,89 +1186,44 @@ async function processVisitPipeline(
           visitId,
           userId: visit.userId,
         });
-      } catch (err) {
-        console.error(
-          `[transcribe-md-worker] em-judge prewarm failed:`,
-          redactPhi(err instanceof Error ? err.message : err),
-        );
-      }
-    })();
+        return { cacheWarm: true };
+      },
+    });
 
-    const results = await Promise.allSettled(toRun.map((t) => t.run()));
-    // Wait for the judge pre-warm to finish before transitioning to
-    // READY. Without this await the doctor could open the page while
-    // the cache write is still in flight and trigger a duplicate judge
-    // call. Awaiting after `results` keeps wall-clock the same because
-    // both run in parallel; only matters if pre-warm outlives the L7
-    // tasks (rare — judge p95 ~11s, L7 layers each 5-30s).
-    await judgeWarmPromise;
-
-    // Roll settled results up into confidenceScores so the UI + future
-    // observability can see per-layer status without re-reading ai_calls.
-    type LayerStatus =
-      | { status: "ok"; metadata?: unknown }
-      | { status: "skipped" }
-      | { status: "failed"; reason: string };
-    const confidenceScores: Record<string, LayerStatus> = {};
-
-    for (const t of tasks) {
-      if (!t.enabled) {
-        confidenceScores[t.key] = { status: "skipped" };
-        continue;
-      }
-      if (resumedOk.has(t.key)) {
-        // Persisted from a prior attempt — we don't have the original
-        // metadata (flesch_kincaid grade for patient_summary) in memory
-        // and re-reading it isn't worth the complexity. Bare 'ok' is
-        // accurate. The actual patientSummary column is intact, which
-        // is what the Extras tab reads.
-        confidenceScores[t.key] = { status: "ok" };
-        continue;
-      }
-      const idx = toRun.indexOf(t);
-      const r = results[idx];
-      if (r.status === "fulfilled") {
-        // Persist Layer 7e readability grade into confidenceScores so
-        // the Extras tab can show the grade without re-computing.
-        if (t.key === "patient_summary") {
-          const out = r.value as {
-            fleschKincaid?: number;
-            flagged?: boolean;
-          };
-          confidenceScores[t.key] = {
-            status: "ok",
-            metadata: {
-              flesch_kincaid: out.fleschKincaid,
-              flagged: out.flagged,
-            },
-          };
-        } else {
-          confidenceScores[t.key] = { status: "ok" };
-        }
-      } else {
-        const reason =
-          r.reason instanceof Error
-            ? r.reason.message
-            : String(r.reason ?? "unknown");
-        console.error(
-          `[transcribe-md-worker] automation layer ${t.key} failed:`,
-          reason,
-        );
-        confidenceScores[t.key] = {
-          status: "failed",
-          reason: reason.slice(0, 500),
-        };
-        // Clear any column the layer might have partially written so a
-        // stale "almost-populated" row can't mislead the UI, AND so
-        // the T-M13 skip check returns false on the next retry.
-        await clearAutomationColumn(
-          visitId,
-          visit.userId,
-          practiceId,
-          t.key,
-        ).catch(() => {});
-      }
+    const automationSoap = await prisma.transcribeVisit.findUnique({
+      where: { id: visitId },
+      select: { soapFinal: true, soapVersion: true },
+    });
+    if (!automationSoap?.soapFinal) {
+      throw new Error("Current SOAP is unavailable for automation binding.");
     }
+    const automationPolicy = buildVisitAutomationPolicy({
+      staging: stagingAutomation,
+      enabled: {
+        icd_coding: flags.icd,
+        cpt_coding: flags.cpt,
+        rx_drafting: flags.rx,
+        referrals: flags.referrals,
+        patient_summary: flags.summary,
+        em_mdm_prewarm: emMdmPrewarmEnabled,
+      },
+    });
+    const automationAttempt = await initializeVisitAutomationManifest({
+      visitId,
+      userId: visit.userId,
+      practiceId,
+      soapVersion: automationSoap.soapVersion,
+      soapFinal: automationSoap.soapFinal,
+      sourceFacts: entities,
+      policy: automationPolicy,
+    });
+    const confidenceScores = await runAutomationFanout({
+      attempt: automationAttempt,
+      visitId,
+      userId: visit.userId,
+      practiceId,
+      tasks,
+    });
 
     // -------------------------------------------------------------------
     // Finalise. Sum per-layer costs from ai_calls (includes T-M4 layers
@@ -1287,66 +1240,6 @@ async function processVisitPipeline(
       0,
     );
 
-    // Deep-audit G9 (2026-05-12) + cross-input-mode-audit Finding 2
-    // extension (2026-05-13) — load-bearing L7 failure OR empty-codes-
-    // with-status-ok flips needsReview. Helper lives at
-    // worker/automation-incomplete.ts; comments there explain the
-    // design (T-M6 preserved, status stays READY).
-    //
-    // Re-read the visit's icdCodes + cptCodes columns post-fan-out so
-    // the helper can detect the "model returned nothing successfully"
-    // case (UC2 audio_upload on PR #232). Includes resumed layers — if
-    // a prior attempt landed empty codes the resume keeps them empty,
-    // and the doctor still deserves the review banner.
-    // DB-blip semantics worth noting (auditor NIT 2026-05-13): if this
-    // re-read throws, we fall through with `outputs.icdCodes=null` +
-    // `outputs.cptCodes=null`, which the helper interprets as empty
-    // → flips needsReview=true with cause='empty'. That's intentional
-    // defense-in-depth — the visit lands in review (doctor sees a
-    // banner, can retry) rather than silently passing through. A
-    // transient false-positive empty flag is preferable to silently
-    // missing a genuine empty-codes case during a real DB hiccup. (Since the
-    // 2026-07-02 icd dedup, the FRESH-run blip lands in review via the
-    // cpt-null leg only — the icd leg is resumed-attempts-only; the genuine
-    // fresh empty-icd case is covered by 07a's own committed flag.)
-    const automationOutputs = await prisma.transcribeVisit
-      .findUnique({
-        where: { id: visitId },
-        select: { icdCodes: true, cptCodes: true },
-      })
-      .catch(() => null);
-    const incomplete = detectIncompleteAutomation(
-      confidenceScores as AutomationConfidenceScores,
-      {
-        icdCodes: (automationOutputs?.icdCodes ?? null) as {
-          codes?: unknown[];
-        } | null,
-        cptCodes: (automationOutputs?.cptCodes ?? null) as {
-          em?: { code?: string | null } | null;
-          procedures?: unknown[];
-        } | null,
-        // Fresh L7a runs always self-flag empty codes (07a post-validation);
-        // pass-2's icd empty check only adds signal on RESUMED attempts,
-        // where the attempt-start reset wiped that flag and L7a is skipped.
-        icdResumed: resumedOk.has("icd_coding"),
-      },
-    );
-    if (incomplete.needsReview) {
-      void logAudit({
-        action: "VISIT_AUTOMATION_INCOMPLETE",
-        targetId: visitId,
-        targetType: "TranscribeVisit",
-        userId: visit.userId,
-        practiceId,
-        success: false,
-        metadata: {
-          failedLayers: incomplete.failedLayers,
-          reasons: incomplete.reasonsByLayer,
-          causes: incomplete.causeByLayer,
-        },
-      });
-    }
-
     // FIND-P1-012 (2026-05-14): parse + JSON-round-trip
     // confidenceScores before the write. Prisma's JSONB adapter
     // silently coerces non-serializable values (Map → {}, function
@@ -1361,15 +1254,9 @@ async function processVisitPipeline(
         `[transcribe-md-worker] confidenceScores schema/serialize fail for visit=${visitId}, writing null`,
       );
     }
-    // Apply additive review state while the staging run is still PROCESSING.
-    // For synthetic QA this write is claim-bound; READY then commits in the
-    // separate terminal transaction. Ordinary visits preserve the same data.
-    await applyAdditiveReviewState(visitId, incomplete, {
-      userId: visit.userId,
-      practiceId,
-    });
     const processingFinishedAt = new Date();
-    const stagingQaFinalized = await finalizeTemplateTwinSyntheticQaReady({
+    await finalizeVisitAutomationReady({
+      attempt: automationAttempt,
       visitId,
       userId: visit.userId,
       practiceId,
@@ -1377,22 +1264,6 @@ async function processVisitPipeline(
       processingCostCents: totalCents,
       confidenceScores: safeConfidenceScores as Prisma.InputJsonValue | null,
     });
-    if (!stagingQaFinalized) {
-      await updateTemplateTwinSyntheticQaClaimBoundVisit({
-        visitId,
-        userId: visit.userId,
-        practiceId,
-        data: {
-          status: TranscribeVisitStatus.READY,
-          processingFinishedAt,
-          processingCostCents: totalCents,
-          confidenceScores:
-            safeConfidenceScores === null
-              ? Prisma.JsonNull
-              : (safeConfidenceScores as Prisma.InputJsonValue),
-        },
-      });
-    }
     // T-M13 summary line — logs only when at least one layer was
     // skipped, so happy-path first attempts stay quiet.
     logSkipSummary(visitId, attempt, skipped);
@@ -1448,7 +1319,7 @@ async function processVisitPipeline(
       visitId,
       layer: currentLayer,
       userId: visit.userId,
-      practiceId: visit.user?.practiceId ?? null,
+      practiceId,
     });
 
     // T-M23.A: only persist FAILED on the final BullMQ attempt …
@@ -1462,15 +1333,16 @@ async function processVisitPipeline(
     // Q1 #09.1: surface Anthropic content-policy refusals as a distinct,
     // countable audit action (categorizeError maps them permanent → the
     // fail-fast path below fires on the first attempt, so this emits once).
-    // Fire-and-forget; never blocks the failure path. PHI-safe metadata.
+    // This PHI-safe refusal audit is awaited. If durable enqueue fails, the
+    // worker must fail rather than advancing through an unaudited branch.
     if (err instanceof Error && err.name === "AnthropicRefusalError") {
       const refusal = err as Error & { model?: string; purpose?: string };
-      void logAudit({
+      await logWorkerAudit({
         action: "AI_REFUSAL",
         targetType: "TranscribeVisit",
         targetId: visitId,
         userId: visit.userId,
-        practiceId: visit.user?.practiceId ?? null,
+        practiceId,
         success: false,
         errorCode: "AI_REFUSAL",
         metadata: {
@@ -1521,7 +1393,7 @@ async function processVisitPipeline(
       originalErr: err,
       reviewReason: buildUserFacingFailureReason(currentLayer, category, err),
       userId: visit.userId,
-      practiceId: visit.user?.practiceId ?? null,
+      practiceId,
     });
 
     // Best-effort admin alert. notifyAdminOnFailure swallows every

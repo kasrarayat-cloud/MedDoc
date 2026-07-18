@@ -75,11 +75,19 @@ import { isSameOriginTemplateTwinMutation } from "@/lib/template-twin/request-se
 import { TemplateTwinStagingQaDisabledError } from "@/lib/template-twin/staging-qa-gate";
 import {
   lockAndAssertTemplateTwinStagingQaOperation,
+  lockAndAssertTemplateTwinStagingQaActor,
   assertTemplateTwinStagingQaVisitGuard,
   templateTwinStagingQaDestinationsAreAllowed,
   TemplateTwinStagingQaVisitGuardError,
 } from "@/lib/template-twin/staging-qa-visit-guard";
 import { lockCurrentTemplateTwinVisit } from "@/lib/template-twin/fill-engine";
+import {
+  assessVisitAutomationProof,
+  lockAndAssertVisitAutomationProof,
+  VisitAutomationIncompleteError,
+} from "@/worker/automation-finalization";
+import { runVisitAutomationTransaction } from "@/worker/automation-locks";
+import { runSerializableTransactionWithRetry } from "@/lib/db/transaction-retry";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -202,6 +210,7 @@ export const POST = withApiHandler<{ id: string }>(
         deletedAt: true,
         archivedAt: true,
         emPendingChange: true,
+        user: { select: { practiceId: true } },
         ...TEMPLATE_TWIN_SIGNING_VISIT_SELECT,
       },
     });
@@ -236,7 +245,6 @@ export const POST = withApiHandler<{ id: string }>(
     if (!visit.soapFinal?.trim()) {
       return apiError("visit has no SOAP to sign", 409);
     }
-
     let templateTwinPracticeId = session.user.practiceId ?? "";
     let templateTwinRolloutToken: TemplateTwinRolloutToken | null = null;
     let stagingQaRunId: string | null = null;
@@ -412,6 +420,37 @@ export const POST = withApiHandler<{ id: string }>(
           blockerCodes: twinBlockerCodes,
         },
         { status: 422 },
+      );
+    }
+
+    // Preserve the more specific Template Twin SOAP/output blocker above,
+    // then independently require the current automation proof. The same proof
+    // is locked and checked again in the final signing transaction.
+    const automationProof = assessVisitAutomationProof({
+      visitId: visit.id,
+      practiceId: visit.user.practiceId,
+      soapVersion: visit.soapVersion,
+      soapFinal: visit.soapFinal,
+      manifest: visit.automationManifest,
+      staging: visit.templateTwinSyntheticQaRun
+        ? {
+            admissionId: visit.templateTwinSyntheticQaRun.admissionId ?? "",
+            runId: visit.templateTwinSyntheticQaRun.id,
+            globalGeneration:
+              visit.templateTwinSyntheticQaRun.pinnedGlobalRolloutGeneration,
+            practiceGeneration:
+              visit.templateTwinSyntheticQaRun.pinnedPracticeRolloutGeneration,
+          }
+        : null,
+    });
+    if (!automationProof.ready) {
+      return apiError(
+        "Required visit automation is incomplete. Retry processing before signing.",
+        409,
+        {
+          code: "VISIT_AUTOMATION_INCOMPLETE",
+          retry: true,
+        },
       );
     }
 
@@ -650,12 +689,8 @@ export const POST = withApiHandler<{ id: string }>(
         where: {
           id: visitId,
           status: TranscribeVisitStatus.READY,
-          ...(twinClaim
-            ? {
-                soapVersion: twinClaim.soapVersion,
-                soapFinal: visit.soapFinal,
-              }
-            : {}),
+          soapVersion: twinClaim?.soapVersion ?? visit.soapVersion,
+          soapFinal: visit.soapFinal,
         },
         data: {
           status: TranscribeVisitStatus.SIGNED,
@@ -695,9 +730,16 @@ export const POST = withApiHandler<{ id: string }>(
           );
         }
         try {
-          updated = await prisma.$transaction(
-            async (
-              tx: typeof prisma,
+          updated = await runSerializableTransactionWithRetry({
+            prisma,
+            operation: "template_twin_sign_final_claim",
+            context: {
+              visitId,
+              practiceId: templateTwinPracticeId,
+              runId: stagingQaRunId ?? undefined,
+            },
+            transaction: async (
+              tx: Prisma.TransactionClient,
             ): Promise<{
               count: number;
               rolloutRejected?: { code: string; reason: string } | null;
@@ -750,14 +792,14 @@ export const POST = withApiHandler<{ id: string }>(
                   }
                   const lockedStagingRun =
                     await lockAndAssertTemplateTwinStagingQaOperation({
-                    tx,
-                    runId: stagingQaRunId,
-                    expectedAttempt: stagingQaAttempt,
-                    actor: { userId, practiceId: templateTwinPracticeId },
-                    currentRolloutToken: finalRollout.token,
-                    allowedStatuses: ["COMPLETED"],
-                    allowedAdmissionPhases: ["REVIEW_READY"],
-                  });
+                      tx,
+                      runId: stagingQaRunId,
+                      expectedAttempt: stagingQaAttempt,
+                      actor: { userId, practiceId: templateTwinPracticeId },
+                      currentRolloutToken: finalRollout.token,
+                      allowedStatuses: ["COMPLETED"],
+                      allowedAdmissionPhases: ["REVIEW_READY"],
+                    });
                   finalStagingAdmissionId = lockedStagingRun.admissionId;
                 } catch (error) {
                   if (
@@ -796,6 +838,14 @@ export const POST = withApiHandler<{ id: string }>(
                   }
                   throw error;
                 }
+              } else {
+                await lockAndAssertTemplateTwinStagingQaActor({
+                  tx,
+                  actor: {
+                    userId,
+                    practiceId: templateTwinPracticeId,
+                  },
+                });
               }
               // Keep the common lock order global -> practice -> staging run
               // -> visit -> fill. This prevents a retry that observed READY
@@ -818,6 +868,21 @@ export const POST = withApiHandler<{ id: string }>(
               ) {
                 throw new TemplateTwinSignClaimConflict();
               }
+              await lockAndAssertVisitAutomationProof({
+                tx,
+                visitId,
+                practiceId: templateTwinPracticeId,
+                soapVersion: lockedVisit.soapVersion,
+                soapFinal: lockedVisit.soapFinal,
+                staging: finalStagingAdmissionId
+                  ? {
+                      admissionId: finalStagingAdmissionId,
+                      runId: stagingQaRunId!,
+                      globalGeneration: finalRollout.token.globalGeneration,
+                      practiceGeneration: finalRollout.token.practiceGeneration,
+                    }
+                  : null,
+              });
               // Optimistically claim the exact manifest assessed above. Any
               // concurrent correction/regeneration changes status, version,
               // digest, output, or updatedAt and rolls back this transaction.
@@ -917,13 +982,79 @@ export const POST = withApiHandler<{ id: string }>(
               });
               return { ...visitUpdated, rolloutRejected: null };
             },
-          );
+          });
         } catch (error) {
+          if (error instanceof VisitAutomationIncompleteError) {
+            return apiError(
+              "Required visit automation changed before signing. Retry processing.",
+              409,
+              { code: "VISIT_AUTOMATION_INCOMPLETE", retry: true },
+            );
+          }
           if (!(error instanceof TemplateTwinSignClaimConflict)) throw error;
           updated = { count: 0 };
         }
       } else {
-        updated = await prisma.transcribeVisit.updateMany(visitUpdate);
+        try {
+          updated = await runVisitAutomationTransaction({
+            operation: "ordinary_visit_sign_final_claim",
+            visitId,
+            userId,
+            practiceId: visit.user.practiceId,
+            transaction: async (tx, lockedVisit) => {
+              if (
+                lockedVisit.status !== TranscribeVisitStatus.READY ||
+                lockedVisit.soapVersion !== visit.soapVersion ||
+                lockedVisit.soapFinal !== visit.soapFinal
+              ) {
+                return { count: 0, rolloutRejected: null };
+              }
+              await lockAndAssertVisitAutomationProof({
+                tx,
+                visitId,
+                practiceId: visit.user.practiceId,
+                soapVersion: lockedVisit.soapVersion,
+                soapFinal: lockedVisit.soapFinal,
+                staging: null,
+              });
+              const ordinaryUpdated =
+                await tx.transcribeVisit.updateMany(visitUpdate);
+              if (ordinaryUpdated.count === 1) {
+                await enqueueTemplateTwinAudit(tx, {
+                  eventKey: `visit-signed:${visitId}:${visit.soapVersion}`,
+                  practiceId: visit.user.practiceId,
+                  actorId: userId,
+                  actorEmailSnapshot: sessionEmail,
+                  action: "VISIT_SIGNED",
+                  targetType: "TranscribeVisit",
+                  targetId: visitId,
+                  metadata: {
+                    destinations: parsed.data.destinations,
+                    automationProofVersion: "visit-automation-proof-v1",
+                    ...(pendingEm
+                      ? {
+                          emChangeAcknowledged: {
+                            from: pendingEm.from,
+                            to: pendingEm.to,
+                          },
+                        }
+                      : {}),
+                  },
+                });
+              }
+              return { ...ordinaryUpdated, rolloutRejected: null };
+            },
+          });
+        } catch (error) {
+          if (error instanceof VisitAutomationIncompleteError) {
+            return apiError(
+              "Required visit automation changed before signing. Retry processing.",
+              409,
+              { code: "VISIT_AUTOMATION_INCOMPLETE", retry: true },
+            );
+          }
+          throw error;
+        }
       }
       if (updated.rolloutRejected) {
         return apiError(updated.rolloutRejected.reason, 409, {
@@ -957,29 +1088,6 @@ export const POST = withApiHandler<{ id: string }>(
         if (!stagingQaRunId) {
           void captureEditPattern({ visitId, doctorId: userId });
         }
-        // HIPAA audit — one row per successful READY→SIGNED transition.
-        // Race losers (updated.count===0) don't re-write; the winner
-        // already covered them.
-        if (!twinClaim)
-          void logAudit({
-            action: "VISIT_SIGNED",
-            targetType: "TranscribeVisit",
-            targetId: visitId,
-            metadata: {
-              destinations: parsed.data.destinations,
-              // E/M visible-confirm: record on the SIGN audit row that the
-              // doctor explicitly acknowledged the suggestion-caused level
-              // change ({from, to} codes only — never note text).
-              ...(pendingEm
-                ? {
-                    emChangeAcknowledged: {
-                      from: pendingEm.from,
-                      to: pendingEm.to,
-                    },
-                  }
-                : {}),
-            },
-          });
       }
     }
 

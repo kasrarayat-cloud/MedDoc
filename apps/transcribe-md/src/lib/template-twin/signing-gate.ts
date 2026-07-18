@@ -40,6 +40,7 @@ import type { CertifiedTemplateFieldSpecification } from "./custom-concepts/spec
 import type { TemplateTwinConceptProvider } from "./supported-concepts";
 import { verifyCustomExtractionOutcomeProof } from "./custom-outcome-proof";
 import { TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT } from "./staging-qa-visit-guard";
+import { VISIT_AUTOMATION_MANIFEST_SELECT } from "@/worker/automation-manifest";
 
 const SHA256 = /^[a-f0-9]{64}$/;
 
@@ -49,6 +50,7 @@ export const TEMPLATE_TWIN_SIGNING_VISIT_SELECT = {
   templateTwinSyntheticQaRun: {
     select: TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
   },
+  automationManifest: { select: VISIT_AUTOMATION_MANIFEST_SELECT },
   noteTemplateId: true,
   noteTemplateVersion: true,
   noteTemplate: {

@@ -3,10 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   TemplateTwinAuditMetadataError,
   drainTemplateTwinAuditOutbox,
+  enqueueIdempotentTemplateTwinAudit,
   enqueueTemplateTwinAudit,
 } from "../audit-outbox";
 
 const create = vi.fn();
+const createMany = vi.fn();
 const findFirst = vi.fn();
 const update = vi.fn();
 const updateMany = vi.fn();
@@ -18,7 +20,13 @@ const transaction = vi.fn(
 );
 
 const db = {
-  templateTwinAuditOutbox: { create, findFirst, update, updateMany },
+  templateTwinAuditOutbox: {
+    create,
+    createMany,
+    findFirst,
+    update,
+    updateMany,
+  },
   auditLog: { create: auditCreate },
   $transaction: transaction,
 };
@@ -47,6 +55,7 @@ const event = {
 beforeEach(() => {
   vi.clearAllMocks();
   create.mockResolvedValue(event);
+  createMany.mockResolvedValue({ count: 1 });
   findFirst.mockResolvedValue(null);
   updateMany.mockResolvedValue({ count: 1 });
   update.mockResolvedValue(event);
@@ -73,6 +82,41 @@ describe("Template Twin durable audit outbox", () => {
         metadata: event.metadata,
       }),
     });
+  });
+
+  it("makes a digest-keyed worker audit idempotent without swallowing failures", async () => {
+    await expect(
+      enqueueIdempotentTemplateTwinAudit(db, {
+        eventKey: event.eventKey,
+        practiceId: event.practiceId,
+        actorId: event.actorId,
+        action: event.action,
+        targetId: event.targetId,
+        targetType: event.targetType,
+        metadata: event.metadata,
+      }),
+    ).resolves.toBe("CREATED");
+    createMany.mockResolvedValueOnce({ count: 0 });
+    await expect(
+      enqueueIdempotentTemplateTwinAudit(db, {
+        eventKey: event.eventKey,
+        practiceId: event.practiceId,
+        actorId: event.actorId,
+        action: event.action,
+        targetId: event.targetId,
+        targetType: event.targetType,
+        metadata: event.metadata,
+      }),
+    ).resolves.toBe("EXISTS");
+    createMany.mockRejectedValueOnce(new Error("synthetic outbox unavailable"));
+    await expect(
+      enqueueIdempotentTemplateTwinAudit(db, {
+        eventKey: "synthetic-worker-audit-failure",
+        practiceId: event.practiceId,
+        actorId: event.actorId,
+        action: event.action,
+      }),
+    ).rejects.toThrow("synthetic outbox unavailable");
   });
 
   it.each([

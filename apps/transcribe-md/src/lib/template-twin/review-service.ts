@@ -17,6 +17,17 @@ import {
 } from "@prisma/client";
 import prisma from "@meddoc/db";
 
+import { runSerializableTransactionWithRetry } from "@/lib/db/transaction-retry";
+import {
+  assessVisitAutomationProof,
+  lockAndAssertVisitAutomationProof,
+  VisitAutomationIncompleteError,
+} from "@/worker/automation-finalization";
+import {
+  VISIT_AUTOMATION_MANIFEST_SELECT,
+  type VisitAutomationManifestProof,
+} from "@/worker/automation-manifest";
+
 import { enqueueTemplateTwinAudit } from "./audit-outbox";
 import {
   canonicalSoapSha256,
@@ -85,6 +96,7 @@ import {
 } from "./field-intent";
 import {
   assertTemplateTwinStagingQaVisitGuard,
+  lockAndAssertTemplateTwinStagingQaActor,
   lockAndAssertTemplateTwinStagingQaOperation,
   TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
   type TemplateTwinStagingQaRunGuardRow,
@@ -106,6 +118,7 @@ export class TemplateTwinReviewError extends Error {
     | "SOAP_BINDING_STALE"
     | "CORRECTION_INVALID"
     | "TEMPLATE_PROVENANCE_INVALID"
+    | "VISIT_AUTOMATION_INCOMPLETE"
     | TemplateTwinRolloutCode;
 
   constructor(
@@ -179,6 +192,7 @@ interface OwnedReviewContext {
     reviewReason: string | null;
     soapFinal: string | null;
     soapVersion: number;
+    automationManifest?: VisitAutomationManifestProof | null;
     templateTwinSyntheticQaRun?: TemplateTwinStagingQaRunGuardRow | null;
   };
   compiledVersion: {
@@ -847,6 +861,9 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
               reviewReason: true,
               soapFinal: true,
               soapVersion: true,
+              automationManifest: {
+                select: VISIT_AUTOMATION_MANIFEST_SELECT,
+              },
               templateTwinSyntheticQaRun: {
                 select: TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
               },
@@ -956,8 +973,16 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
     },
 
     async commit(plan): Promise<CommitReviewResult> {
-      return prisma.$transaction(
-        async (tx: Prisma.TransactionClient) => {
+      return runSerializableTransactionWithRetry({
+        prisma,
+        operation: "template_twin_field_correction",
+        context: {
+          visitId: plan.visitId,
+          practiceId: plan.practiceId,
+          runId: plan.stagingQaClaim?.runId,
+        },
+        isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+        transaction: async (tx: Prisma.TransactionClient) => {
           const finalRollout = await lockTemplateTwinRolloutForFinalClaim({
             tx,
             practiceId: plan.practiceId,
@@ -997,18 +1022,27 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
               draftTemplateVersion: null,
             };
           }
-          if (plan.stagingQaClaim) {
-            await lockAndAssertTemplateTwinStagingQaOperation({
+          const lockedStagingRun = plan.stagingQaClaim
+            ? await lockAndAssertTemplateTwinStagingQaOperation({
+                tx,
+                runId: plan.stagingQaClaim.runId,
+                expectedAttempt: plan.stagingQaClaim.attempt,
+                actor: {
+                  userId: plan.decision.reviewerId,
+                  practiceId: plan.practiceId,
+                },
+                currentRolloutToken: finalRollout.token,
+                allowedStatuses: ["COMPLETED"],
+                allowedAdmissionPhases: ["REVIEW_READY"],
+              })
+            : null;
+          if (!lockedStagingRun) {
+            await lockAndAssertTemplateTwinStagingQaActor({
               tx,
-              runId: plan.stagingQaClaim.runId,
-              expectedAttempt: plan.stagingQaClaim.attempt,
               actor: {
                 userId: plan.decision.reviewerId,
                 practiceId: plan.practiceId,
               },
-              currentRolloutToken: finalRollout.token,
-              allowedStatuses: ["COMPLETED"],
-              allowedAdmissionPhases: ["REVIEW_READY"],
             });
           }
           const lockedVisit = await lockCurrentTemplateTwinVisit(
@@ -1080,6 +1114,21 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
               draftTemplateVersion: null,
             };
           }
+          await lockAndAssertVisitAutomationProof({
+            tx,
+            visitId: plan.visitId,
+            practiceId: plan.practiceId,
+            soapVersion: lockedVisit!.soapVersion,
+            soapFinal: lockedVisit!.soapFinal,
+            staging: lockedStagingRun
+              ? {
+                  admissionId: lockedStagingRun.admissionId ?? "",
+                  runId: lockedStagingRun.id,
+                  globalGeneration: finalRollout.token.globalGeneration,
+                  practiceGeneration: finalRollout.token.practiceGeneration,
+                }
+              : null,
+          });
           const status = plan.prepared.render ? "VERIFIED" : "NEEDS_REVIEW";
           const updated = await tx.templateTwinFillManifest.updateMany({
             where: {
@@ -1308,13 +1357,7 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
             draftTemplateVersion,
           };
         },
-        // A mapping-rule fork creates compiled lineage. Database lineage
-        // triggers require READ COMMITTED so their post-lock ownership reads
-        // cannot retain a stale transaction snapshot. Exact manifest/SOAP
-        // predicates and row locks above still make concurrent reviews lose
-        // closed.
-        { isolationLevel: "ReadCommitted" },
-      );
+      });
     },
   };
 }
@@ -1350,6 +1393,32 @@ export async function reviewTemplateTwinField(
     currentRolloutToken: rolloutToken,
     allowedAdmissionPhases: ["REVIEW_READY"],
   });
+  const automationProof = assessVisitAutomationProof({
+    visitId: input.visitId,
+    practiceId: input.actor.practiceId,
+    soapVersion: context.visit.soapVersion,
+    soapFinal: context.visit.soapFinal,
+    manifest: context.visit.automationManifest,
+    staging: context.visit.templateTwinSyntheticQaRun
+      ? {
+          admissionId:
+            context.visit.templateTwinSyntheticQaRun.admissionId ?? "",
+          runId: context.visit.templateTwinSyntheticQaRun.id,
+          globalGeneration:
+            context.visit.templateTwinSyntheticQaRun
+              .pinnedGlobalRolloutGeneration,
+          practiceGeneration:
+            context.visit.templateTwinSyntheticQaRun
+              .pinnedPracticeRolloutGeneration,
+        }
+      : null,
+  });
+  if (!automationProof.ready) {
+    throw new TemplateTwinReviewError(
+      "VISIT_AUTOMATION_INCOMPLETE",
+      "Required visit automation is incomplete. Retry processing before correcting fields.",
+    );
+  }
   if (
     context.status === "SIGNED" ||
     context.signedDecisionAt !== null ||
@@ -1622,48 +1691,60 @@ export async function reviewTemplateTwinField(
       })
     : null;
 
-  const committed = await repository.commit({
-    fillManifestId: context.id,
-    practiceId: input.actor.practiceId,
-    visitId: input.visitId,
-    soapVersion: manifest.soapVersion,
-    soapFinal: context.visit.soapFinal,
-    expectedManifestVersion: input.correction.expectedManifestVersion,
-    prepared,
-    storedOutput,
-    staticContentSha256: ir.staticContentSha256,
-    reviewerEmail: input.actor.userEmail,
-    rolloutToken,
-    stagingQaClaim: context.visit.templateTwinSyntheticQaRun
-      ? {
-          runId: context.visit.templateTwinSyntheticQaRun.id,
-          attempt: context.visit.templateTwinSyntheticQaRun.attempt,
-        }
-      : null,
-    decision: {
+  let committed: CommitReviewResult;
+  try {
+    committed = await repository.commit({
       fillManifestId: context.id,
-      fieldId: field.fieldId,
-      fieldDefinitionId: fieldRow.id,
-      resolutionStatus: resolutionStatusForDb(correction.resolution.status),
-      decisionKind:
-        input.correction.value === null
-          ? "clinician_clear"
-          : "clinician_correction",
-      previousValue: previousResolution.value,
-      correctedValue: correction.resolution.value,
-      sourceFactIds: [
-        ...input.correction.sourceFactIds,
-        ...correction.facts.map((fact) => fact.factId),
-      ],
-      reasonCode: input.correction.reasonCode,
-      createMappingRule: input.correction.createMappingRule,
+      practiceId: input.actor.practiceId,
+      visitId: input.visitId,
+      soapVersion: manifest.soapVersion,
+      soapFinal: context.visit.soapFinal,
       expectedManifestVersion: input.correction.expectedManifestVersion,
-      reviewerId: input.actor.userId,
-    },
-    fork: input.correction.createMappingRule
-      ? { targetFieldId: field.fieldId, context }
-      : null,
-  });
+      prepared,
+      storedOutput,
+      staticContentSha256: ir.staticContentSha256,
+      reviewerEmail: input.actor.userEmail,
+      rolloutToken,
+      stagingQaClaim: context.visit.templateTwinSyntheticQaRun
+        ? {
+            runId: context.visit.templateTwinSyntheticQaRun.id,
+            attempt: context.visit.templateTwinSyntheticQaRun.attempt,
+          }
+        : null,
+      decision: {
+        fillManifestId: context.id,
+        fieldId: field.fieldId,
+        fieldDefinitionId: fieldRow.id,
+        resolutionStatus: resolutionStatusForDb(correction.resolution.status),
+        decisionKind:
+          input.correction.value === null
+            ? "clinician_clear"
+            : "clinician_correction",
+        previousValue: previousResolution.value,
+        correctedValue: correction.resolution.value,
+        sourceFactIds: [
+          ...input.correction.sourceFactIds,
+          ...correction.facts.map((fact) => fact.factId),
+        ],
+        reasonCode: input.correction.reasonCode,
+        createMappingRule: input.correction.createMappingRule,
+        expectedManifestVersion: input.correction.expectedManifestVersion,
+        reviewerId: input.actor.userId,
+      },
+      fork: input.correction.createMappingRule
+        ? { targetFieldId: field.fieldId, context }
+        : null,
+    });
+  } catch (error) {
+    if (error instanceof VisitAutomationIncompleteError) {
+      throw new TemplateTwinReviewError(
+        "VISIT_AUTOMATION_INCOMPLETE",
+        "Required visit automation changed before the correction committed. Retry processing.",
+        error,
+      );
+    }
+    throw error;
+  }
   if (committed.soapBindingStale) {
     throw new TemplateTwinReviewError(
       "SOAP_BINDING_STALE",

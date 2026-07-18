@@ -560,6 +560,7 @@ export async function processTemplateTwinVisit(
     visitId: input.visitId,
     userId: input.doctorId,
     practiceId: input.practiceId,
+    requireOrdinaryProcessingStatus: false,
     mutate: (client) =>
       client.transcribeVisit.updateMany({
         where: {

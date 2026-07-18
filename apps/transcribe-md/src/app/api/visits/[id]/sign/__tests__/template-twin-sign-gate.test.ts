@@ -105,6 +105,28 @@ vi.mock("@/lib/template-twin/storage", () => ({
 vi.mock("@/lib/template-twin/audit-outbox", () => ({
   enqueueTemplateTwinAudit: mocks.enqueueAudit,
 }));
+vi.mock("@/worker/automation-finalization", () => ({
+  assessVisitAutomationProof: () => ({ ready: true, blockerCodes: [] }),
+  lockAndAssertVisitAutomationProof: vi.fn().mockResolvedValue({}),
+  VisitAutomationIncompleteError: class VisitAutomationIncompleteError extends Error {},
+}));
+vi.mock("@/worker/automation-locks", () => ({
+  runVisitAutomationTransaction: async (input: {
+    transaction: (tx: unknown, visit: unknown) => Promise<unknown>;
+  }) =>
+    mocks.transaction((tx: unknown) =>
+      input.transaction(tx, {
+        id: "visit-1",
+        userId: "doctor-1",
+        status: "READY",
+        soapVersion: 7,
+        soapFinal: "Synthetic SOAP note.",
+        reviewReason: null,
+        deletedAt: null,
+        archivedAt: null,
+      }),
+    ),
+}));
 vi.mock("@/lib/template-twin/fill-engine", () => ({
   lockCurrentTemplateTwinVisit: async (tx: {
     $queryRaw: () => Promise<unknown[]>;
@@ -153,6 +175,8 @@ function visitRow() {
     deletedAt: null,
     archivedAt: null,
     emPendingChange: null,
+    user: { practiceId: "practice-1" },
+    automationManifest: null,
     noteTemplateId: "template-1",
     noteTemplateVersion: 1,
     noteTemplate: { templateKind: "template_twin_docx" },
@@ -193,7 +217,8 @@ function stagingRun() {
       practiceId: "practice-1",
       actorId: "doctor-1",
       parentAdmissionId: "staging-root-admission-1",
-      sourceSha256: "9c917a831e661d5fdcf92a6e13cbc542adda9fb86a2292cf34689fc333c375d4",
+      sourceSha256:
+        "9c917a831e661d5fdcf92a6e13cbc542adda9fb86a2292cf34689fc333c375d4",
       sourceSizeBytes: 4_686,
       fixtureVersion: "template-twin-staging-safe-docx/1.0.0",
       providerMode: "SYNTHETIC_TYPED",
@@ -261,7 +286,20 @@ function deterministicBarrier() {
 
 beforeEach(() => {
   vi.unstubAllEnvs();
+  vi.stubEnv("TEMPLATE_TWIN_STAGING_QA_ENABLED", "false");
   vi.clearAllMocks();
+  for (const mock of [
+    mocks.findUnique,
+    mocks.transaction,
+    mocks.txQueryRaw,
+    mocks.txFillUpdateMany,
+    mocks.txVisitUpdateMany,
+    mocks.assess,
+    mocks.finalRollout,
+    mocks.enqueueAudit,
+  ]) {
+    mock.mockReset();
+  }
   mocks.auth.mockResolvedValue({
     user: {
       id: "doctor-1",
@@ -322,19 +360,28 @@ beforeEach(() => {
   });
   mocks.txFillUpdateMany.mockResolvedValue({ count: 1 });
   mocks.txVisitUpdateMany.mockResolvedValue({ count: 1 });
-  mocks.txQueryRaw.mockResolvedValue([
-    {
-      id: VISIT_ID,
-      userId: "doctor-1",
-      status: TranscribeVisitStatus.READY,
-      deletedAt: null,
-      archivedAt: null,
-      soapVersion: 7,
-      soapFinal: "Synthetic SOAP note.",
-      noteTemplateId: "template-1",
-      noteTemplateVersion: 1,
-    },
-  ]);
+  mocks.txQueryRaw
+    .mockResolvedValueOnce([
+      {
+        id: "doctor-1",
+        practiceId: "practice-1",
+        role: "DOCTOR",
+        isActive: true,
+      },
+    ])
+    .mockResolvedValue([
+      {
+        id: VISIT_ID,
+        userId: "doctor-1",
+        status: TranscribeVisitStatus.READY,
+        deletedAt: null,
+        archivedAt: null,
+        soapVersion: 7,
+        soapFinal: "Synthetic SOAP note.",
+        noteTemplateId: "template-1",
+        noteTemplateVersion: 1,
+      },
+    ]);
   mocks.transaction.mockImplementation(
     async (callback: (tx: unknown) => Promise<unknown>) =>
       callback({
@@ -342,6 +389,9 @@ beforeEach(() => {
           updateMany: mocks.txFillUpdateMany,
         },
         transcribeVisit: { updateMany: mocks.txVisitUpdateMany },
+        templateTwinSyntheticQaAdmission: {
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        },
         $queryRaw: mocks.txQueryRaw,
       }),
   );
@@ -452,8 +502,8 @@ describe("POST /api/visits/[id]/sign — Template Twin server gate", () => {
 
     expect(response.status).toBe(200);
     expect(mocks.freshDoctor).not.toHaveBeenCalled();
-    expect(mocks.legacyVisitUpdateMany).toHaveBeenCalledTimes(1);
-    expect(mocks.transaction).not.toHaveBeenCalled();
+    expect(mocks.txVisitUpdateMany).toHaveBeenCalledTimes(1);
+    expect(mocks.transaction).toHaveBeenCalledTimes(1);
   });
 
   it("blocks the transition and emits only PHI-safe blocker codes", async () => {

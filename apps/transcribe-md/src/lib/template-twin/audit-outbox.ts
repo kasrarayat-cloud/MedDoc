@@ -1,4 +1,4 @@
-import type { AuditAction } from "@prisma/client";
+import { Prisma, type AuditAction } from "@prisma/client";
 
 const FORBIDDEN_METADATA_KEY =
   /(?:field.?value|corrected.?value|previous.?value|evidence.?quote|transcript|soap.?text|note.?text|patient.?name|date.?of.?birth|diagnosis|medication|allerg)/i;
@@ -16,6 +16,13 @@ interface OutboxCreateClient {
   templateTwinAuditOutbox: {
     create(args: { data: Record<string, unknown> }): Promise<unknown>;
   };
+}
+
+interface IdempotentOutboxCreateClient {
+  templateTwinAuditOutbox: Pick<
+    Prisma.TransactionClient["templateTwinAuditOutbox"],
+    "createMany"
+  >;
 }
 
 interface PendingOutboxRow {
@@ -133,6 +140,39 @@ export async function enqueueTemplateTwinAudit(
       attemptCount: 0,
     },
   });
+}
+
+/**
+ * Idempotent outbox enqueue for retryable worker telemetry. Callers must make
+ * eventKey a digest of the complete PHI-safe event identity. A duplicate key
+ * therefore means the exact logical event was already durably committed, not
+ * that an audit failure may be ignored.
+ */
+export async function enqueueIdempotentTemplateTwinAudit(
+  tx: IdempotentOutboxCreateClient,
+  input: EnqueueTemplateTwinAuditInput,
+): Promise<"CREATED" | "EXISTS"> {
+  assertTemplateTwinAuditMetadata(input.metadata);
+  const inserted = await tx.templateTwinAuditOutbox.createMany({
+    data: [
+      {
+        eventKey: input.eventKey,
+        practiceId: input.practiceId,
+        actorId: input.actorId ?? null,
+        actorEmailSnapshot: input.actorEmailSnapshot ?? null,
+        ipAddress: input.ipAddress ?? null,
+        userAgent: input.userAgent ?? null,
+        action: input.action as AuditAction,
+        targetId: input.targetId ?? null,
+        targetType: input.targetType ?? null,
+        metadata: input.metadata ?? Prisma.JsonNull,
+        status: "PENDING",
+        attemptCount: 0,
+      },
+    ],
+    skipDuplicates: true,
+  });
+  return inserted.count === 1 ? "CREATED" : "EXISTS";
 }
 
 function retryAt(now: Date, attemptCount: number): Date {

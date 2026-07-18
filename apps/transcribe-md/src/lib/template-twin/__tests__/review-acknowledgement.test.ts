@@ -7,6 +7,10 @@ const mocks = vi.hoisted(() => ({
   transaction: vi.fn(),
   pinRollout: vi.fn(),
   finalRollout: vi.fn(),
+  assessAutomation: vi.fn(),
+  lockAutomation: vi.fn(),
+  lockActor: vi.fn(),
+  lockVisit: vi.fn(),
 }));
 
 vi.mock("@meddoc/db", () => ({
@@ -29,10 +33,26 @@ vi.mock("../rollout", async (importOriginal) => {
     }),
   };
 });
+vi.mock("../fill-engine", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../fill-engine")>()),
+  lockCurrentTemplateTwinVisit: mocks.lockVisit,
+}));
+vi.mock("../staging-qa-visit-guard", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../staging-qa-visit-guard")>()),
+  lockAndAssertTemplateTwinStagingQaActor: mocks.lockActor,
+}));
+vi.mock("@/worker/automation-finalization", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/worker/automation-finalization")
+  >()),
+  assessVisitAutomationProof: mocks.assessAutomation,
+  lockAndAssertVisitAutomationProof: mocks.lockAutomation,
+}));
 
 import { canonicalSoapSha256 } from "../soap-binding";
 import { prepareTemplateTwinFill } from "../fill-engine";
 import { acknowledgeTemplateTwinReview } from "../review-acknowledgement";
+import { VisitAutomationIncompleteError } from "@/worker/automation-finalization";
 import {
   buildTemplateTwinIntegrationFixture,
   factsForMode,
@@ -117,6 +137,18 @@ beforeEach(() => {
       practiceGeneration: BigInt(1),
     },
   });
+  mocks.assessAutomation.mockReturnValue({ ready: true, blockerCodes: [] });
+  mocks.lockAutomation.mockResolvedValue({ id: "automation-proof-synthetic" });
+  mocks.lockActor.mockResolvedValue(undefined);
+  mocks.lockVisit.mockResolvedValue({
+    id: "visit-review-ack",
+    userId: ACTOR.userId,
+    status: "READY",
+    deletedAt: null,
+    archivedAt: null,
+    soapVersion: 4,
+    soapFinal: SOAP,
+  });
   mocks.transaction.mockImplementation(
     async (callback: (tx: unknown) => Promise<unknown>) =>
       callback({
@@ -127,6 +159,41 @@ beforeEach(() => {
 });
 
 describe("whole-manifest Template Twin review acknowledgement", () => {
+  it("blocks review before the transaction when automation proof is incomplete", async () => {
+    mocks.assessAutomation.mockReturnValue({
+      ready: false,
+      blockerCodes: ["VISIT_AUTOMATION_REQUIRED_LAYER_INCOMPLETE"],
+    });
+    await expect(
+      acknowledgeTemplateTwinReview({
+        visitId: "visit-review-ack",
+        expectedManifestVersion: 3,
+        expectedManifestSha256: manifestSha256,
+        actor: ACTOR,
+      }),
+    ).rejects.toMatchObject({ code: "VISIT_AUTOMATION_INCOMPLETE" });
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
+  it("rolls review back when automation becomes incomplete after the precheck", async () => {
+    mocks.lockAutomation.mockRejectedValue(
+      new VisitAutomationIncompleteError([
+        "VISIT_AUTOMATION_REQUIRED_LAYER_INCOMPLETE",
+      ]),
+    );
+
+    await expect(
+      acknowledgeTemplateTwinReview({
+        visitId: "visit-review-ack",
+        expectedManifestVersion: 3,
+        expectedManifestSha256: manifestSha256,
+        actor: ACTOR,
+      }),
+    ).rejects.toMatchObject({ code: "VISIT_AUTOMATION_INCOMPLETE" });
+    expect(mocks.updateFill).not.toHaveBeenCalled();
+    expect(mocks.outboxCreate).not.toHaveBeenCalled();
+  });
+
   it("pins physician identity and the exact manifest version/hash transactionally", async () => {
     const now = new Date("2026-07-15T12:05:00.000Z");
     const result = await acknowledgeTemplateTwinReview({

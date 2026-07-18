@@ -1,6 +1,14 @@
 import { Prisma, TranscribeVisitStatus } from "@prisma/client";
 import prisma from "@meddoc/db";
 
+import { runSerializableTransactionWithRetry } from "@/lib/db/transaction-retry";
+import {
+  assessVisitAutomationProof,
+  lockAndAssertVisitAutomationProof,
+  VisitAutomationIncompleteError,
+} from "@/worker/automation-finalization";
+import { VISIT_AUTOMATION_MANIFEST_SELECT } from "@/worker/automation-manifest";
+
 import { enqueueTemplateTwinAudit } from "./audit-outbox";
 import { canonicalSha256 } from "./canonical";
 import { TemplateTwinFillManifestSchema } from "./ir";
@@ -17,6 +25,7 @@ import { canonicalSoapSha256 } from "./soap-binding";
 import { lockCurrentTemplateTwinVisit } from "./fill-engine";
 import {
   assertTemplateTwinStagingQaVisitGuard,
+  lockAndAssertTemplateTwinStagingQaActor,
   lockAndAssertTemplateTwinStagingQaOperation,
   TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
 } from "./staging-qa-visit-guard";
@@ -35,6 +44,7 @@ export class TemplateTwinReviewAcknowledgementError extends Error {
       | "MANIFEST_INVALID"
       | "SOAP_BINDING_STALE"
       | "OPTIMISTIC_CONFLICT"
+      | "VISIT_AUTOMATION_INCOMPLETE"
       | TemplateTwinRolloutCode,
     message: string,
   ) {
@@ -64,6 +74,7 @@ export async function acknowledgeTemplateTwinReview(input: {
       status: true,
       soapVersion: true,
       soapFinal: true,
+      automationManifest: { select: VISIT_AUTOMATION_MANIFEST_SELECT },
       templateTwinSyntheticQaRun: {
         select: TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
       },
@@ -130,6 +141,30 @@ export async function acknowledgeTemplateTwinReview(input: {
         attempt: visit.templateTwinSyntheticQaRun!.attempt,
       }
     : null;
+
+  const automationProof = assessVisitAutomationProof({
+    visitId: input.visitId,
+    practiceId: input.actor.practiceId,
+    soapVersion: visit.soapVersion,
+    soapFinal: visit.soapFinal,
+    manifest: visit.automationManifest,
+    staging: visit.templateTwinSyntheticQaRun
+      ? {
+          admissionId: visit.templateTwinSyntheticQaRun.admissionId ?? "",
+          runId: visit.templateTwinSyntheticQaRun.id,
+          globalGeneration:
+            visit.templateTwinSyntheticQaRun.pinnedGlobalRolloutGeneration,
+          practiceGeneration:
+            visit.templateTwinSyntheticQaRun.pinnedPracticeRolloutGeneration,
+        }
+      : null,
+  });
+  if (!automationProof.ready) {
+    throw new TemplateTwinReviewAcknowledgementError(
+      "VISIT_AUTOMATION_INCOMPLETE",
+      "Required visit automation is incomplete. Retry processing before confirming review.",
+    );
+  }
 
   const fill = visit.templateTwinFill;
   if (
@@ -211,8 +246,15 @@ export async function acknowledgeTemplateTwinReview(input: {
   }
 
   const reviewedAt = input.now ?? new Date();
-  const applied = await prisma.$transaction(
-    async (tx: Prisma.TransactionClient) => {
+  const applied = await runSerializableTransactionWithRetry({
+    prisma,
+    operation: "template_twin_review_acknowledgement",
+    context: {
+      visitId: input.visitId,
+      practiceId: input.actor.practiceId,
+      runId: stagingQaClaim?.runId,
+    },
+    transaction: async (tx: Prisma.TransactionClient) => {
       const finalRollout = await lockTemplateTwinRolloutForFinalClaim({
         tx,
         practiceId: input.actor.practiceId,
@@ -244,32 +286,53 @@ export async function acknowledgeTemplateTwinReview(input: {
         });
         return { applied: false as const, rolloutRejected: finalRollout };
       }
-      if (stagingQaClaim) {
-        await lockAndAssertTemplateTwinStagingQaOperation({
+      const lockedStagingRun = stagingQaClaim
+        ? await lockAndAssertTemplateTwinStagingQaOperation({
+            tx,
+            runId: stagingQaClaim.runId,
+            expectedAttempt: stagingQaClaim.attempt,
+            actor: input.actor,
+            currentRolloutToken: finalRollout.token,
+            allowedStatuses: ["COMPLETED"],
+            allowedAdmissionPhases: ["REVIEW_READY"],
+          })
+        : null;
+      if (!lockedStagingRun) {
+        await lockAndAssertTemplateTwinStagingQaActor({
           tx,
-          runId: stagingQaClaim.runId,
-          expectedAttempt: stagingQaClaim.attempt,
-          actor: input.actor,
-          currentRolloutToken: finalRollout.token,
-          allowedStatuses: ["COMPLETED"],
-          allowedAdmissionPhases: ["REVIEW_READY"],
+          actor: {
+            userId: input.actor.userId,
+            practiceId: input.actor.practiceId,
+          },
         });
-        const lockedVisit = await lockCurrentTemplateTwinVisit(
-          tx,
-          input.visitId,
-        );
-        if (
-          !lockedVisit ||
-          lockedVisit.userId !== input.actor.userId ||
-          lockedVisit.status !== TranscribeVisitStatus.READY ||
-          lockedVisit.deletedAt !== null ||
-          lockedVisit.archivedAt !== null ||
-          lockedVisit.soapVersion !== visit.soapVersion ||
-          lockedVisit.soapFinal !== visit.soapFinal
-        ) {
-          return { applied: false as const, rolloutRejected: null };
-        }
       }
+      const lockedVisit = await lockCurrentTemplateTwinVisit(tx, input.visitId);
+      if (
+        !lockedVisit ||
+        lockedVisit.userId !== input.actor.userId ||
+        lockedVisit.status !== TranscribeVisitStatus.READY ||
+        lockedVisit.deletedAt !== null ||
+        lockedVisit.archivedAt !== null ||
+        lockedVisit.soapVersion !== visit.soapVersion ||
+        lockedVisit.soapFinal !== visit.soapFinal
+      ) {
+        return { applied: false as const, rolloutRejected: null };
+      }
+      await lockAndAssertVisitAutomationProof({
+        tx,
+        visitId: input.visitId,
+        practiceId: input.actor.practiceId,
+        soapVersion: lockedVisit.soapVersion,
+        soapFinal: lockedVisit.soapFinal,
+        staging: lockedStagingRun
+          ? {
+              admissionId: lockedStagingRun.admissionId ?? "",
+              runId: lockedStagingRun.id,
+              globalGeneration: finalRollout.token.globalGeneration,
+              practiceGeneration: finalRollout.token.practiceGeneration,
+            }
+          : null,
+      });
       const updated = await tx.templateTwinFillManifest.updateMany({
         where: {
           id: fill.id,
@@ -334,8 +397,15 @@ export async function acknowledgeTemplateTwinReview(input: {
       });
       return { applied: true as const, rolloutRejected: null };
     },
-    { isolationLevel: "Serializable" },
-  );
+  }).catch((error: unknown) => {
+    if (error instanceof VisitAutomationIncompleteError) {
+      throw new TemplateTwinReviewAcknowledgementError(
+        "VISIT_AUTOMATION_INCOMPLETE",
+        "Required visit automation changed before review confirmation. Retry processing.",
+      );
+    }
+    throw error;
+  });
   if (applied.rolloutRejected) {
     throw new TemplateTwinReviewAcknowledgementError(
       applied.rolloutRejected.code,

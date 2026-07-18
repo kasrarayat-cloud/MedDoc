@@ -12,7 +12,7 @@ import {
 } from "@meddoc/shared/specialties";
 import { auth } from "@/lib/nextauth";
 import { AuthError, requireFreshDoctorIdentity } from "@/lib/auth";
-import { logAudit } from "@/lib/audit";
+import { logAudit, logRequiredAudit } from "@/lib/audit";
 import { AppFrame } from "@/components/ui/app-frame";
 import { Ic } from "@/components/ui/icon";
 import { type SpecialtyKind } from "@/components/ui/spec-chip";
@@ -365,12 +365,14 @@ export default async function VisitPage({
 
   if (!user) redirect("/login");
   if (!visit || visit.userId !== session.user.id) notFound();
+  let syntheticQaAuditPracticeId: string | null = null;
   if (
     visit.templateTwinSyntheticQaRun ||
     isTemplateTwinStagingQaRequested()
   ) {
     try {
       const doctor = await requireFreshDoctorIdentity(session.user.id);
+      syntheticQaAuditPracticeId = doctor.practiceId;
       assertTemplateTwinStagingQaVisitGuard({
         run: visit.templateTwinSyntheticQaRun,
         actor: {
@@ -418,12 +420,22 @@ export default async function VisitPage({
   // Round 3 PR-C — §164.312(b) PHI-read audit (A05-P0-004). Single
   // visit detail page is the highest-volume PHI surface — every doctor
   // visit-detail load lands a row.
-  void logAudit({
-    action: "VIEWED_VISIT",
+  const viewAudit = {
+    action: "VIEWED_VISIT" as const,
     targetId: visit.id,
     targetType: "TranscribeVisit",
     metadata: { source: "rsc:/visits/[id]", status: visit.status },
-  });
+  };
+  if (syntheticQaVisit) {
+    if (!syntheticQaAuditPracticeId) notFound();
+    await logRequiredAudit({
+      ...viewAudit,
+      userId: session.user.id,
+      practiceId: syntheticQaAuditPracticeId,
+    });
+  } else {
+    void logAudit(viewAudit);
+  }
 
   const hasInput =
     visit.audioKey !== null ||

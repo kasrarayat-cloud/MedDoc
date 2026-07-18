@@ -167,6 +167,18 @@ function mockRolloutAndVisitLocks(visit = lockedVisitRow()) {
     if (text.includes("template_twin_lineage_migration_progress")) {
       return [{ phase: "CONTRACTED" }];
     }
+    if (text.includes('FROM "practices"')) {
+      return [{ id: PRACTICE_ID }];
+    }
+    if (text.includes('FROM "users"')) {
+      return [
+        {
+          id: DOCTOR_ID,
+          practiceId: PRACTICE_ID,
+          isActive: true,
+        },
+      ];
+    }
     return [visit];
   });
 }
@@ -267,6 +279,7 @@ beforeEach(() => {
   mocks.transaction.mockImplementation(
     async (callback: (tx: unknown) => Promise<unknown>) =>
       callback({
+        transcribeVisit: { updateMany: mocks.claimVisit },
         templateTwinFillManifest: {
           create: mocks.createFill,
           findUnique: mocks.findFill,
@@ -678,10 +691,11 @@ describe("Template Twin worker provenance and manifest concurrency", () => {
       processTemplateTwinVisit(processInput()),
     ).resolves.toBeDefined();
 
-    // The selection admission is carried into this function; there is only
-    // one transaction here, the final claim. A second transaction would be a
-    // dangerous re-pin that could adopt a post-revocation generation.
-    expect(mocks.transaction).toHaveBeenCalledTimes(1);
+    // Template provenance is pinned in one canonical-lock transaction before
+    // source I/O, then the output is claimed in a second transaction. Both
+    // retain the caller's admission; neither obtains a replacement rollout
+    // generation after revocation.
+    expect(mocks.transaction).toHaveBeenCalledTimes(2);
     expect(mocks.createFill).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -723,9 +737,10 @@ describe("Template Twin worker provenance and manifest concurrency", () => {
     });
 
     expect(outputWrites).toBe(1);
-    // global + practice + lineage + visit in the final transaction. There is
-    // no second set of rollout reads that replaces the selection token.
-    expect(mocks.lockVisit).toHaveBeenCalledTimes(4);
+    // practice + actor + visit protect the initial provenance pin, followed
+    // by global + practice + lineage + visit in the final output transaction.
+    // Neither transaction replaces the selection admission token.
+    expect(mocks.lockVisit).toHaveBeenCalledTimes(7);
     expect(mocks.createFill).not.toHaveBeenCalled();
     expect(mocks.updateFill).not.toHaveBeenCalled();
     expect(mocks.ledgerUpdate).toHaveBeenCalledWith({

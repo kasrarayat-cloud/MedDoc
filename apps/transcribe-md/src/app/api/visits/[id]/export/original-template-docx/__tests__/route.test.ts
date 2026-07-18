@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   finalRollout: vi.fn(),
   transaction: vi.fn(),
   findFill: vi.fn(),
+  queryRaw: vi.fn(),
 }));
 
 vi.mock("next/server", () => {
@@ -67,6 +68,22 @@ vi.mock("@/lib/template-twin/storage/ownership", () => ({
 }));
 vi.mock("@/lib/template-twin/audit-outbox", () => ({
   enqueueTemplateTwinAudit: mocks.enqueueAudit,
+}));
+vi.mock("@/worker/automation-finalization", () => ({
+  assessVisitAutomationProof: () => ({ ready: true, blockerCodes: [] }),
+  lockAndAssertVisitAutomationProof: vi.fn().mockResolvedValue({}),
+  VisitAutomationIncompleteError: class VisitAutomationIncompleteError extends Error {},
+}));
+vi.mock("@/lib/template-twin/fill-engine", () => ({
+  lockCurrentTemplateTwinVisit: vi.fn().mockResolvedValue({
+    id: "synthetic-visit-1",
+    userId: "synthetic-doctor-1",
+    status: "SIGNED",
+    soapVersion: 2,
+    soapFinal: "Synthetic note.",
+    deletedAt: null,
+    archivedAt: null,
+  }),
 }));
 vi.mock("@/lib/template-twin/rollout", () => ({
   TemplateTwinRolloutError: class TemplateTwinRolloutError extends Error {
@@ -124,6 +141,7 @@ beforeEach(() => {
     status: TranscribeVisitStatus.SIGNED,
     soapFinal: "Synthetic note.",
     soapVersion: 2,
+    automationManifest: null,
     noteTemplateId: "synthetic-template-1",
     noteTemplateVersion: 3,
     noteTemplate: { templateKind: "template_twin_docx" },
@@ -180,8 +198,10 @@ beforeEach(() => {
     async (callback: (tx: unknown) => Promise<unknown>) =>
       callback({
         templateTwinFillManifest: { findUnique: mocks.findFill },
+        $queryRaw: mocks.queryRaw,
       }),
   );
+  mocks.queryRaw.mockResolvedValue([{ id: "synthetic-doctor-1" }]);
 });
 
 describe("Original Template DOCX export durable audit gate", () => {

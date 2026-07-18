@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { putAudioStream } from "@/lib/minio";
 import { enqueueTemplateTwinSyntheticQaVisit } from "@/lib/queue";
+import { runSerializableTransactionWithRetry } from "@/lib/db/transaction-retry";
 
 import { enqueueTemplateTwinAudit } from "./audit-outbox";
 import { canonicalSha256 } from "./canonical";
@@ -270,36 +271,44 @@ async function recordEnqueueFailure(input: {
   attempt: number;
   errorCode: "STORAGE_UNAVAILABLE" | "QUEUE_UNAVAILABLE";
 }): Promise<void> {
-  await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    await tx.templateTwinSyntheticQaRun.updateMany({
-      where: {
-        id: input.runId,
-        doctorId: input.actor.userId,
-        practiceId: input.actor.practiceId,
-        attempt: input.attempt,
-        status: "ENQUEUED",
-      },
-      data: { status: "ENQUEUE_FAILED", enqueuedAt: null },
-    });
-    // Queue/object-store admission failed before a provider owned the run.
-    // Keep the child admission at VISIT_LINKED so an exact, physician-requested
-    // retry can advance its monotonic attempt. Provider/worker failures are
-    // different: those transition the admission to terminal FAILED and cannot
-    // be revived.
-    await enqueueTemplateTwinAudit(tx, {
-      eventKey: `template-twin:staging-qa:enqueue-blocked:${input.runId}:${input.attempt}`,
+  await runSerializableTransactionWithRetry({
+    prisma,
+    operation: "record_staging_qa_enqueue_failure",
+    context: {
       practiceId: input.actor.practiceId,
-      actorId: input.actor.userId,
-      actorEmailSnapshot: input.actor.userEmail,
-      action: "TEMPLATE_TWIN_SAFETY_GATE_BLOCKED",
-      targetType: "TemplateTwinSyntheticQaRun",
-      targetId: input.runId,
-      metadata: {
-        errorCode: input.errorCode,
-        attempt: input.attempt,
-        gateOutcome: "blocked",
-      },
-    });
+      runId: input.runId,
+    },
+    transaction: async (tx: Prisma.TransactionClient) => {
+      await tx.templateTwinSyntheticQaRun.updateMany({
+        where: {
+          id: input.runId,
+          doctorId: input.actor.userId,
+          practiceId: input.actor.practiceId,
+          attempt: input.attempt,
+          status: "ENQUEUED",
+        },
+        data: { status: "ENQUEUE_FAILED", enqueuedAt: null },
+      });
+      // Queue/object-store admission failed before a provider owned the run.
+      // Keep the child admission at VISIT_LINKED so an exact, physician-requested
+      // retry can advance its monotonic attempt. Provider/worker failures are
+      // different: those transition the admission to terminal FAILED and cannot
+      // be revived.
+      await enqueueTemplateTwinAudit(tx, {
+        eventKey: `template-twin:staging-qa:enqueue-blocked:${input.runId}:${input.attempt}`,
+        practiceId: input.actor.practiceId,
+        actorId: input.actor.userId,
+        actorEmailSnapshot: input.actor.userEmail,
+        action: "TEMPLATE_TWIN_SAFETY_GATE_BLOCKED",
+        targetType: "TemplateTwinSyntheticQaRun",
+        targetId: input.runId,
+        metadata: {
+          errorCode: input.errorCode,
+          attempt: input.attempt,
+          gateOutcome: "blocked",
+        },
+      });
+    },
   });
 }
 
@@ -320,8 +329,15 @@ export async function enqueueOwnedRun(input: {
       "Refresh this synthetic QA run before retrying.",
     );
   }
-  const reserved = await prisma.$transaction(
-    async (tx: Prisma.TransactionClient) => {
+  const reserved = await runSerializableTransactionWithRetry({
+    prisma,
+    operation: "reserve_staging_qa_enqueue",
+    context: {
+      practiceId: input.actor.practiceId,
+      runId: input.runId,
+    },
+    isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+    transaction: async (tx: Prisma.TransactionClient) => {
       const snapshot = await tx.templateTwinSyntheticQaRun.findFirst({
         where: {
           id: input.runId,
@@ -579,8 +595,7 @@ export async function enqueueOwnedRun(input: {
         replayExistingAdmission: false,
       };
     },
-    { isolationLevel: "ReadCommitted" },
-  );
+  });
 
   if (!reserved) {
     const current = await findOwnedRun({
@@ -738,9 +753,7 @@ export async function createTemplateTwinStagingQaRun(input: {
       actor: input.actor,
       allowedPhases: ["CERTIFIED"],
       expectedProviderMode:
-        parsed.mode === "typed"
-          ? "SYNTHETIC_TYPED"
-          : "SYNTHETIC_MOCK_VOICE",
+        parsed.mode === "typed" ? "SYNTHETIC_TYPED" : "SYNTHETIC_MOCK_VOICE",
       expectedTemplate: {
         id: parsed.templateId,
         version: parsed.expectedTemplateVersion,
@@ -775,8 +788,11 @@ export async function createTemplateTwinStagingQaRun(input: {
 
   let runId: string;
   try {
-    const runAdmission = await prisma.$transaction(
-      async (tx: Prisma.TransactionClient) => {
+    const runAdmission = await runSerializableTransactionWithRetry({
+      prisma,
+      operation: "create_staging_qa_visit_and_run",
+      context: { practiceId: input.actor.practiceId },
+      transaction: async (tx: Prisma.TransactionClient) => {
         const rollout = await lockTemplateTwinRolloutForFinalClaim({
           tx,
           practiceId: input.actor.practiceId,
@@ -788,13 +804,6 @@ export async function createTemplateTwinStagingQaRun(input: {
             rollout.reason,
           );
         }
-        await lockAndAssertTemplateTwinStagingQaActor({
-          tx,
-          actor: {
-            userId: input.actor.userId,
-            practiceId: input.actor.practiceId,
-          },
-        });
         await lockAndAssertTemplateTwinStagingQaAdmission({
           tx,
           admissionId: durableAdmission.id,
@@ -808,6 +817,16 @@ export async function createTemplateTwinStagingQaRun(input: {
           expectedTemplate: {
             id: parsed.templateId,
             version: parsed.expectedTemplateVersion,
+          },
+        });
+        // Canonical lock order: rollout -> practice -> admission -> actor.
+        // Keep this after the durable-admission lock; the previous inverse
+        // order could oppose worker finalization under concurrency.
+        await lockAndAssertTemplateTwinStagingQaActor({
+          tx,
+          actor: {
+            userId: input.actor.userId,
+            practiceId: input.actor.practiceId,
           },
         });
         const existing = await tx.templateTwinSyntheticQaRun.findFirst({
@@ -924,8 +943,7 @@ export async function createTemplateTwinStagingQaRun(input: {
             rawTextInput: parsed.mode === "typed" ? evidenceText : null,
             dictationAudioKey:
               parsed.mode === "mock_voice" ? voiceObjectKey : null,
-            audioMimeType:
-              parsed.mode === "mock_voice" ? "audio/wav" : null,
+            audioMimeType: parsed.mode === "mock_voice" ? "audio/wav" : null,
             audioSizeBytes:
               parsed.mode === "mock_voice"
                 ? TEMPLATE_TWIN_STAGING_QA_WAV_SIZE_BYTES
@@ -994,8 +1012,7 @@ export async function createTemplateTwinStagingQaRun(input: {
         });
         return { runId: run.id };
       },
-      { isolationLevel: "Serializable" },
-    );
+    });
     runId = runAdmission.runId;
   } catch (error) {
     if (

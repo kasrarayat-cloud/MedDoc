@@ -45,7 +45,7 @@ import { isTemplateTwinSyntheticQaPatient } from "@/lib/template-twin/synthetic-
 import { auth } from "@/lib/nextauth";
 import { RATE_LIMITS, rateLimitOr429 } from "@/lib/rate-limit";
 import { log } from "@/lib/log";
-import { logAudit } from "@/lib/audit";
+import { logAudit, logRequiredAudit } from "@/lib/audit";
 import { AuthError, requireFreshDoctorIdentity } from "@/lib/auth";
 import {
   isTemplateTwinStagingQaRequested,
@@ -149,12 +149,14 @@ export const GET = withApiHandler<{ id: string }>(
     });
     // 404 on both "not found" AND "not yours" prevents ID enumeration.
     if (!visit || visit.userId !== userId) return apiError("not found", 404);
+    let syntheticQaAuditPracticeId: string | null = null;
     if (
       visit.templateTwinSyntheticQaRun ||
       isTemplateTwinStagingQaRequested()
     ) {
       try {
         const doctor = await requireFreshDoctorIdentity(userId);
+        syntheticQaAuditPracticeId = doctor.practiceId;
         assertTemplateTwinStagingQaVisitGuard({
           run: visit.templateTwinSyntheticQaRun,
           actor: { userId, practiceId: doctor.practiceId },
@@ -172,15 +174,25 @@ export const GET = withApiHandler<{ id: string }>(
       }
     }
 
-    // Round 3 PR-C — §164.312(b) PHI-read audit (A05-P0-004). Fire-and-
-    // forget; logAudit never throws and pulls userId/IP/UA from session
-    // + headers internally. metadata uses field NAMES only, never PHI.
-    void logAudit({
+    // Synthetic QA reads are fail-closed and awaited: lifecycle cleanup or
+    // another concurrent claim cannot race an unaudited page/API response.
+    // Ordinary visits retain the pre-existing best-effort read-audit policy.
+    const viewAudit = {
       action: "VIEWED_VISIT",
       targetId: visit.id,
       targetType: "TranscribeVisit",
       metadata: { source: "api:GET /api/visits/[id]" },
-    });
+    } as const;
+    if (visit.templateTwinSyntheticQaRun) {
+      if (!syntheticQaAuditPracticeId) return apiError("not found", 404);
+      await logRequiredAudit({
+        ...viewAudit,
+        userId,
+        practiceId: syntheticQaAuditPracticeId,
+      });
+    } else {
+      void logAudit(viewAudit);
+    }
 
     const visitDto = { ...visit, templateTwinSyntheticQaRun: undefined };
     return NextResponse.json({ visit: visitDto }, { status: 200 });

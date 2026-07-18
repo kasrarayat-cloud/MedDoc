@@ -19,7 +19,9 @@ import {
 } from "@/lib/template-twin/storage/artifact-store";
 import { DOCX_MIME_TYPE } from "@/lib/template-twin/storage/keys";
 import { TemplateTwinArtifactNotFoundError } from "@/lib/template-twin/storage/ownership";
+import { runSerializableTransactionWithRetry } from "@/lib/db/transaction-retry";
 import { enqueueTemplateTwinAudit } from "@/lib/template-twin/audit-outbox";
+import { lockCurrentTemplateTwinVisit } from "@/lib/template-twin/fill-engine";
 import {
   lockTemplateTwinRolloutForFinalClaim,
   pinTemplateTwinRollout,
@@ -33,6 +35,11 @@ import {
   lockAndAssertTemplateTwinStagingQaOperation,
   TemplateTwinStagingQaVisitGuardError,
 } from "@/lib/template-twin/staging-qa-visit-guard";
+import {
+  assessVisitAutomationProof,
+  lockAndAssertVisitAutomationProof,
+  VisitAutomationIncompleteError,
+} from "@/worker/automation-finalization";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,6 +71,7 @@ export const GET = withApiHandler<{ id: string }>(
       }
       throw error;
     }
+
     try {
       rolloutToken = await pinTemplateTwinRollout({ practiceId });
     } catch (error) {
@@ -116,6 +124,31 @@ export const GET = withApiHandler<{ id: string }>(
         });
       }
       throw error;
+    }
+
+    const automationProof = assessVisitAutomationProof({
+      visitId: visit.id,
+      practiceId,
+      soapVersion: visit.soapVersion,
+      soapFinal: visit.soapFinal,
+      manifest: visit.automationManifest,
+      staging: visit.templateTwinSyntheticQaRun
+        ? {
+            admissionId: visit.templateTwinSyntheticQaRun.admissionId ?? "",
+            runId: visit.templateTwinSyntheticQaRun.id,
+            globalGeneration:
+              visit.templateTwinSyntheticQaRun.pinnedGlobalRolloutGeneration,
+            practiceGeneration:
+              visit.templateTwinSyntheticQaRun.pinnedPracticeRolloutGeneration,
+          }
+        : null,
+    });
+    if (!automationProof.ready) {
+      return apiError(
+        "Required visit automation is incomplete. Retry processing before download.",
+        409,
+        { code: "VISIT_AUTOMATION_INCOMPLETE", retry: true },
+      );
     }
 
     const assessment = assessTemplateTwinSigning({
@@ -296,8 +329,11 @@ export const GET = withApiHandler<{ id: string }>(
       | { allowed: true }
       | { allowed: false; code: string; reason: string };
     try {
-      finalAuthorization = await prisma.$transaction(
-        async (tx: Prisma.TransactionClient) => {
+      finalAuthorization = await runSerializableTransactionWithRetry({
+        prisma,
+        operation: "original_template_docx_download_final_claim",
+        context: { visitId, practiceId, runId: stagingQaRunId ?? undefined },
+        transaction: async (tx: Prisma.TransactionClient) => {
           const finalRollout = await lockTemplateTwinRolloutForFinalClaim({
             tx,
             practiceId,
@@ -375,7 +411,57 @@ export const GET = withApiHandler<{ id: string }>(
               }
               throw error;
             }
+          } else {
+            const actors = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+              SELECT "id"
+              FROM "users"
+              WHERE "id" = ${userId}
+                AND "practiceId" = ${practiceId}
+                AND "isActive" = true
+              FOR UPDATE
+            `);
+            if (actors.length !== 1) {
+              return {
+                allowed: false as const,
+                code: "VISIT_AUTOMATION_PROOF_STALE",
+                reason:
+                  "Download authorization changed. Refresh and try again.",
+              };
+            }
           }
+
+          const lockedVisit = await lockCurrentTemplateTwinVisit(tx, visitId);
+          if (
+            !lockedVisit ||
+            lockedVisit.userId !== userId ||
+            lockedVisit.status !== TranscribeVisitStatus.SIGNED ||
+            lockedVisit.soapVersion !== visit.soapVersion ||
+            lockedVisit.soapFinal !== visit.soapFinal ||
+            lockedVisit.deletedAt !== null ||
+            lockedVisit.archivedAt !== null
+          ) {
+            return {
+              allowed: false as const,
+              code: "VISIT_AUTOMATION_PROOF_STALE",
+              reason: "Download authorization changed. Refresh and try again.",
+            };
+          }
+          await lockAndAssertVisitAutomationProof({
+            tx,
+            visitId,
+            practiceId,
+            soapVersion: lockedVisit.soapVersion,
+            soapFinal: lockedVisit.soapFinal,
+            staging: stagingQaRunId
+              ? {
+                  admissionId:
+                    visit.templateTwinSyntheticQaRun!.admissionId ?? "",
+                  runId: stagingQaRunId,
+                  globalGeneration: finalRollout.token.globalGeneration,
+                  practiceGeneration: finalRollout.token.practiceGeneration,
+                }
+              : null,
+          });
 
           const currentFill = await tx.templateTwinFillManifest.findUnique({
             where: { id: fill.id },
@@ -453,8 +539,15 @@ export const GET = withApiHandler<{ id: string }>(
           });
           return { allowed: true as const };
         },
-      );
-    } catch {
+      });
+    } catch (error) {
+      if (error instanceof VisitAutomationIncompleteError) {
+        return apiError(
+          "Required visit automation changed before download. Retry processing.",
+          409,
+          { code: "VISIT_AUTOMATION_INCOMPLETE", retry: true },
+        );
+      }
       return apiError("The export could not be recorded. Try again.", 503, {
         code: "TEMPLATE_TWIN_AUDIT_UNAVAILABLE",
         retry: true,

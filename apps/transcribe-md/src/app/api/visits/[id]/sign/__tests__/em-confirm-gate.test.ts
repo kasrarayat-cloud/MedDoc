@@ -18,7 +18,7 @@
 //   - already-SIGNED visits (re-deliver path) skip the gate
 // ============================================================================
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   findUnique: vi.fn(),
@@ -32,12 +32,13 @@ const mocks = vi.hoisted(() => ({
   logDelivery: vi.fn(),
   captureEditPattern: vi.fn(),
   computeDisplayedEmCode: vi.fn(),
+  enqueueAudit: vi.fn(),
 }));
 
 // Minimal NextResponse stand-in — deterministic across vitest
 // environments (the route + api-error only use NextResponse.json and
 // response.headers.set).
-vi.mock('next/server', () => {
+vi.mock("next/server", () => {
   class FakeNextResponse {
     status: number;
     headers = new Map<string, string>();
@@ -56,7 +57,7 @@ vi.mock('next/server', () => {
   return { NextResponse: FakeNextResponse };
 });
 
-vi.mock('@meddoc/db', () => {
+vi.mock("@meddoc/db", () => {
   const prisma = {
     transcribeVisit: {
       findUnique: mocks.findUnique,
@@ -66,63 +67,94 @@ vi.mock('@meddoc/db', () => {
   };
   return { default: prisma, prisma };
 });
-vi.mock('@/lib/nextauth', () => ({ auth: mocks.auth }));
-vi.mock('@/lib/audit', () => ({ logAudit: mocks.logAudit }));
-vi.mock('@/lib/log', () => ({
+vi.mock("@/lib/nextauth", () => ({ auth: mocks.auth }));
+vi.mock("@/lib/audit", () => ({ logAudit: mocks.logAudit }));
+vi.mock("@/lib/log", () => ({
   log: { warn: mocks.logWarn, info: vi.fn(), error: vi.fn() },
 }));
-vi.mock('@meddoc/ai', () => ({
+vi.mock("@meddoc/ai", () => ({
   redactPhi: (x: unknown) => x,
-  delimiterSystemSuffix: () => '',
+  delimiterSystemSuffix: () => "",
 }));
-vi.mock('@/lib/visit-export', () => ({ formatVisitDate: () => '2026-06-12' }));
-vi.mock('@/lib/visit-export-server', () => ({
+vi.mock("@/lib/visit-export", () => ({ formatVisitDate: () => "2026-06-12" }));
+vi.mock("@/lib/visit-export-server", () => ({
   loadVisitExportData: mocks.loadVisitExportData,
 }));
-vi.mock('@/lib/ehr-formatters', () => ({ formatForEhr: () => 'formatted' }));
-vi.mock('@/lib/pdf-generator', () => ({
-  generateVisitPdf: vi.fn(async () => Buffer.from('pdf')),
+vi.mock("@/lib/ehr-formatters", () => ({ formatForEhr: () => "formatted" }));
+vi.mock("@/lib/pdf-generator", () => ({
+  generateVisitPdf: vi.fn(async () => Buffer.from("pdf")),
 }));
-vi.mock('@/lib/email', () => ({ sendVisitPdfEmail: vi.fn() }));
-vi.mock('@/lib/deliveries', () => ({ logDelivery: mocks.logDelivery }));
-vi.mock('@/lib/edit-tracking', () => ({
+vi.mock("@/lib/email", () => ({ sendVisitPdfEmail: vi.fn() }));
+vi.mock("@/lib/deliveries", () => ({ logDelivery: mocks.logDelivery }));
+vi.mock("@/lib/edit-tracking", () => ({
   captureEditPattern: mocks.captureEditPattern,
 }));
-vi.mock('@/lib/rx-warnings', () => ({
+vi.mock("@/lib/rx-warnings", () => ({
   criticalWarningRefs: mocks.criticalWarningRefs,
 }));
-vi.mock('@/lib/em-coding/displayed-level', () => ({
+vi.mock("@/lib/em-coding/displayed-level", () => ({
   computeDisplayedEmCode: mocks.computeDisplayedEmCode,
 }));
+vi.mock("@/worker/automation-finalization", () => ({
+  assessVisitAutomationProof: () => ({ ready: true, blockerCodes: [] }),
+  lockAndAssertVisitAutomationProof: vi.fn(async () => ({})),
+  VisitAutomationIncompleteError: class VisitAutomationIncompleteError extends Error {},
+}));
+vi.mock("@/worker/automation-locks", () => ({
+  runVisitAutomationTransaction: async (input: {
+    transaction: (tx: unknown, visit: unknown) => Promise<unknown>;
+  }) =>
+    input.transaction(
+      { transcribeVisit: { updateMany: mocks.updateMany } },
+      {
+        id: "visit-1",
+        userId: "doc1",
+        status: "READY",
+        soapVersion: 1,
+        soapFinal: "## Subjective\nElbow pain.\n\n## Plan\nNSAIDs.",
+        reviewReason: null,
+        deletedAt: null,
+        archivedAt: null,
+      },
+    ),
+}));
+vi.mock("@/lib/template-twin/audit-outbox", () => ({
+  enqueueTemplateTwinAudit: mocks.enqueueAudit,
+}));
 
-import type { NextRequest } from 'next/server';
-import { TranscribeVisitStatus } from '@prisma/client';
+import type { NextRequest } from "next/server";
+import { TranscribeVisitStatus } from "@prisma/client";
 
-import { POST } from '../route';
+import { POST } from "../route";
 
-const DOCTOR = 'doc1';
-const VISIT = 'visit-1';
+const DOCTOR = "doc1";
+const VISIT = "visit-1";
 
 const PENDING = {
-  from: '99213',
-  to: '99214',
-  cause: 'suggestion_adopted',
-  at: '2026-06-12T10:00:00.000Z',
+  from: "99213",
+  to: "99214",
+  cause: "suggestion_adopted",
+  at: "2026-06-12T10:00:00.000Z",
 };
 
 const BLOCK_ERROR =
-  'Documentation level changed (99213 → 99214) by an AI-suggestion action — confirm the new level before signing.';
+  "Documentation level changed (99213 → 99214) by an AI-suggestion action — confirm the new level before signing.";
 
 function visitRow(over: Record<string, unknown> = {}) {
   return {
     id: VISIT,
     userId: DOCTOR,
     status: TranscribeVisitStatus.READY,
-    soapFinal: '## Subjective\nElbow pain.\n\n## Plan\nNSAIDs.',
+    soapVersion: 1,
+    soapFinal: "## Subjective\nElbow pain.\n\n## Plan\nNSAIDs.",
     rxDrafts: null,
     signedAt: null,
     deletedAt: null,
     archivedAt: null,
+    automationManifest: null,
+    templateTwinSyntheticQaRun: null,
+    noteTemplate: null,
+    user: { practiceId: "p1" },
     emPendingChange: null,
     ...over,
   };
@@ -136,23 +168,23 @@ function call(body: unknown) {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.auth.mockResolvedValue({
-    user: { id: DOCTOR, email: 'doc@test.dev', practiceId: 'p1' },
+    user: { id: DOCTOR, email: "doc@test.dev", practiceId: "p1" },
   });
   mocks.findUnique.mockResolvedValue(visitRow());
   mocks.updateMany.mockResolvedValue({ count: 1 });
   mocks.rxOverrideFindMany.mockResolvedValue([]);
   mocks.criticalWarningRefs.mockReturnValue([]);
-  mocks.computeDisplayedEmCode.mockResolvedValue('99214');
+  mocks.computeDisplayedEmCode.mockResolvedValue("99214");
   mocks.loadVisitExportData.mockResolvedValue({
-    clinicianName: 'Dr. Test',
-    patientName: 'P',
-    signedAt: new Date('2026-06-12T11:00:00.000Z'),
-    createdAt: new Date('2026-06-12T09:00:00.000Z'),
+    clinicianName: "Dr. Test",
+    patientName: "P",
+    signedAt: new Date("2026-06-12T11:00:00.000Z"),
+    createdAt: new Date("2026-06-12T09:00:00.000Z"),
   });
 });
 
-describe('sign gate — unacknowledged E/M change blocks (fail-closed)', () => {
-  it('REJECTS 400 { ok:false, error } when an unacknowledged change exists and no ack is in the request', async () => {
+describe("sign gate — unacknowledged E/M change blocks (fail-closed)", () => {
+  it("REJECTS 400 { ok:false, error } when an unacknowledged change exists and no ack is in the request", async () => {
     mocks.findUnique.mockResolvedValue(visitRow({ emPendingChange: PENDING }));
 
     const res = await call({ destinations: [] });
@@ -160,62 +192,62 @@ describe('sign gate — unacknowledged E/M change blocks (fail-closed)', () => {
     const body = await res.json();
     expect(body.ok).toBe(false);
     expect(body.error).toBe(BLOCK_ERROR);
-    expect(body.code).toBe('EM_CHANGE_UNACKNOWLEDGED');
-    expect(body.pendingEmChange).toEqual({ from: '99213', to: '99214' });
+    expect(body.code).toBe("EM_CHANGE_UNACKNOWLEDGED");
+    expect(body.pendingEmChange).toEqual({ from: "99213", to: "99214" });
 
     // Fail-closed: the READY→SIGNED transition never ran.
     expect(mocks.updateMany).not.toHaveBeenCalled();
 
     const blocked = mocks.logAudit.mock.calls
       .map((c) => c[0])
-      .find((c) => c.action === 'EM_SIGN_BLOCKED_UNACKNOWLEDGED_CHANGE');
+      .find((c) => c.action === "EM_SIGN_BLOCKED_UNACKNOWLEDGED_CHANGE");
     expect(blocked).toBeDefined();
     expect(blocked.success).toBe(false);
     expect(blocked.metadata).toEqual({
-      from: '99213',
-      to: '99214',
-      cause: 'suggestion_adopted',
+      from: "99213",
+      to: "99214",
+      cause: "suggestion_adopted",
     });
   });
 
-  it('REJECTS a STALE acknowledgement — the echo must match the recorded {from, to} exactly', async () => {
+  it("REJECTS a STALE acknowledgement — the echo must match the recorded {from, to} exactly", async () => {
     mocks.findUnique.mockResolvedValue(visitRow({ emPendingChange: PENDING }));
 
     const res = await call({
       destinations: [],
-      acknowledgedEmChange: { from: '99212', to: '99214' },
+      acknowledgedEmChange: { from: "99212", to: "99214" },
     });
     expect(res.status).toBe(400);
-    expect((await res.json()).code).toBe('EM_CHANGE_UNACKNOWLEDGED');
+    expect((await res.json()).code).toBe("EM_CHANGE_UNACKNOWLEDGED");
     expect(mocks.updateMany).not.toHaveBeenCalled();
   });
 
-  it('a malformed-but-present record fails CLOSED (unknown sentinel still demands confirmation)', async () => {
+  it("a malformed-but-present record fails CLOSED (unknown sentinel still demands confirmation)", async () => {
     mocks.findUnique.mockResolvedValue(
-      visitRow({ emPendingChange: { bogus: true } })
+      visitRow({ emPendingChange: { bogus: true } }),
     );
 
     const res = await call({ destinations: [] });
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.ok).toBe(false);
-    expect(body.pendingEmChange).toEqual({ from: 'unknown', to: 'unknown' });
+    expect(body.pendingEmChange).toEqual({ from: "unknown", to: "unknown" });
     expect(mocks.updateMany).not.toHaveBeenCalled();
   });
 });
 
-describe('sign gate — explicit acknowledgement signs + leaves the trail', () => {
-  it('signs with a matching ack: record MARKED acknowledged in the same update, VISIT_SIGNED metadata carries emChangeAcknowledged', async () => {
+describe("sign gate — explicit acknowledgement signs + leaves the trail", () => {
+  it("signs with a matching ack: record MARKED acknowledged in the same update, VISIT_SIGNED metadata carries emChangeAcknowledged", async () => {
     mocks.findUnique
       .mockResolvedValueOnce(visitRow({ emPendingChange: PENDING }))
       .mockResolvedValue({
-        signedAt: new Date('2026-06-12T11:00:00.000Z'),
+        signedAt: new Date("2026-06-12T11:00:00.000Z"),
         status: TranscribeVisitStatus.SIGNED,
       });
 
     const res = await call({
       destinations: [],
-      acknowledgedEmChange: { from: '99213', to: '99214' },
+      acknowledgedEmChange: { from: "99213", to: "99214" },
     });
     expect(res.status).toBe(200);
 
@@ -224,6 +256,8 @@ describe('sign gate — explicit acknowledgement signs + leaves the trail', () =
     expect(args.where).toEqual({
       id: VISIT,
       status: TranscribeVisitStatus.READY,
+      soapVersion: 1,
+      soapFinal: "## Subjective\nElbow pain.\n\n## Plan\nNSAIDs.",
     });
     expect(args.data.status).toBe(TranscribeVisitStatus.SIGNED);
     // MARKED, not cleared — the row keeps the forensic record.
@@ -232,60 +266,60 @@ describe('sign gate — explicit acknowledgement signs + leaves the trail', () =
       acknowledgedAt: expect.any(String),
     });
 
-    const signed = mocks.logAudit.mock.calls
-      .map((c) => c[0])
-      .find((c) => c.action === 'VISIT_SIGNED');
+    const signed = mocks.enqueueAudit.mock.calls
+      .map((c) => c[1])
+      .find((c) => c.action === "VISIT_SIGNED");
     expect(signed).toBeDefined();
     expect(signed.metadata.emChangeAcknowledged).toEqual({
-      from: '99213',
-      to: '99214',
+      from: "99213",
+      to: "99214",
     });
     // No block audit on the success path.
     expect(
       mocks.logAudit.mock.calls
         .map((c) => c[0])
-        .find((c) => c.action === 'EM_SIGN_BLOCKED_UNACKNOWLEDGED_CHANGE')
+        .find((c) => c.action === "EM_SIGN_BLOCKED_UNACKNOWLEDGED_CHANGE"),
     ).toBeUndefined();
   });
 
-  it('no recorded change → signs without an ack, never touches emPendingChange, no acknowledgement metadata', async () => {
+  it("no recorded change → signs without an ack, never touches emPendingChange, no acknowledgement metadata", async () => {
     const res = await call({ destinations: [] });
     expect(res.status).toBe(200);
 
     const args = mocks.updateMany.mock.calls[0][0];
-    expect('emPendingChange' in args.data).toBe(false);
+    expect("emPendingChange" in args.data).toBe(false);
 
-    const signed = mocks.logAudit.mock.calls
-      .map((c) => c[0])
-      .find((c) => c.action === 'VISIT_SIGNED');
+    const signed = mocks.enqueueAudit.mock.calls
+      .map((c) => c[1])
+      .find((c) => c.action === "VISIT_SIGNED");
     expect(signed).toBeDefined();
-    expect('emChangeAcknowledged' in signed.metadata).toBe(false);
+    expect("emChangeAcknowledged" in signed.metadata).toBe(false);
   });
 
-  it('an already-ACKNOWLEDGED record does not gate (it was confirmed when recorded sign happened)', async () => {
+  it("an already-ACKNOWLEDGED record does not gate (it was confirmed when recorded sign happened)", async () => {
     mocks.findUnique.mockResolvedValue(
       visitRow({
         emPendingChange: {
           ...PENDING,
-          acknowledgedAt: '2026-06-12T10:30:00.000Z',
+          acknowledgedAt: "2026-06-12T10:30:00.000Z",
         },
-      })
+      }),
     );
 
     const res = await call({ destinations: [] });
     expect(res.status).toBe(200);
-    expect('emPendingChange' in mocks.updateMany.mock.calls[0][0].data).toBe(
-      false
+    expect("emPendingChange" in mocks.updateMany.mock.calls[0][0].data).toBe(
+      false,
     );
   });
 
-  it('already-SIGNED visit (re-deliver path) skips the gate even with an unacknowledged record', async () => {
+  it("already-SIGNED visit (re-deliver path) skips the gate even with an unacknowledged record", async () => {
     mocks.findUnique.mockResolvedValue(
       visitRow({
         status: TranscribeVisitStatus.SIGNED,
-        signedAt: new Date('2026-06-11T11:00:00.000Z'),
+        signedAt: new Date("2026-06-11T11:00:00.000Z"),
         emPendingChange: PENDING,
-      })
+      }),
     );
 
     const res = await call({ destinations: [] });
@@ -295,68 +329,99 @@ describe('sign gate — explicit acknowledgement signs + leaves the trail', () =
   });
 });
 
-describe('sign — E/M parity freeze (#315 obs#2): the confirmed displayed level is persisted as the authoritative billing code', () => {
+describe("sign — E/M parity freeze (#315 obs#2): the confirmed displayed level is persisted as the authoritative billing code", () => {
   const EM_BLOB = {
-    em: { code: '99213', description: 'Established, low', reasoning: { problems: [], data: '', risk: '' }, evidence_quote: '' },
+    em: {
+      code: "99213",
+      description: "Established, low",
+      reasoning: { problems: [], data: "", risk: "" },
+      evidence_quote: "",
+    },
   };
 
-  it('freezes cptCodes.em.signedCode = computeDisplayedEmCode(signedSoap) in the SAME READY→SIGNED update; raw em.code preserved', async () => {
-    mocks.computeDisplayedEmCode.mockResolvedValue('99214');
+  it("freezes cptCodes.em.signedCode = computeDisplayedEmCode(signedSoap) in the SAME READY→SIGNED update; raw em.code preserved", async () => {
+    mocks.computeDisplayedEmCode.mockResolvedValue("99214");
     mocks.findUnique
       .mockResolvedValueOnce(
-        visitRow({ emPendingChange: PENDING, cptCodes: EM_BLOB, icdCodes: null })
+        visitRow({
+          emPendingChange: PENDING,
+          cptCodes: EM_BLOB,
+          icdCodes: null,
+        }),
       )
-      .mockResolvedValue({ signedAt: new Date(), status: TranscribeVisitStatus.SIGNED });
+      .mockResolvedValue({
+        signedAt: new Date(),
+        status: TranscribeVisitStatus.SIGNED,
+      });
 
-    const res = await call({ destinations: [], acknowledgedEmChange: { from: '99213', to: '99214' } });
+    const res = await call({
+      destinations: [],
+      acknowledgedEmChange: { from: "99213", to: "99214" },
+    });
     expect(res.status).toBe(200);
 
     const data = mocks.updateMany.mock.calls[0][0].data;
     // signedCode === the acknowledged TO-level → printed === confirmed.
-    expect(data.cptCodes.em.signedCode).toBe('99214');
+    expect(data.cptCodes.em.signedCode).toBe("99214");
     expect(data.cptCodes.em.signedCode).toBe(PENDING.to);
     // The raw L7b suggestion is preserved for provenance.
-    expect(data.cptCodes.em.code).toBe('99213');
+    expect(data.cptCodes.em.code).toBe("99213");
     // It rode the SAME atomic transition that flips status → SIGNED.
     expect(data.status).toBe(TranscribeVisitStatus.SIGNED);
   });
 
-  it('an OVERRIDDEN visit freezes the override level (computeDisplayedEmCode returns override ?? engine)', async () => {
-    mocks.computeDisplayedEmCode.mockResolvedValue('99215');
+  it("an OVERRIDDEN visit freezes the override level (computeDisplayedEmCode returns override ?? engine)", async () => {
+    mocks.computeDisplayedEmCode.mockResolvedValue("99215");
     mocks.findUnique
       .mockResolvedValueOnce(
         visitRow({
-          cptCodes: { em: { ...EM_BLOB.em, override: { code: '99215', overriddenAt: 'x' } } },
-        })
+          cptCodes: {
+            em: {
+              ...EM_BLOB.em,
+              override: { code: "99215", overriddenAt: "x" },
+            },
+          },
+        }),
       )
-      .mockResolvedValue({ signedAt: new Date(), status: TranscribeVisitStatus.SIGNED });
+      .mockResolvedValue({
+        signedAt: new Date(),
+        status: TranscribeVisitStatus.SIGNED,
+      });
 
     const res = await call({ destinations: [] });
     expect(res.status).toBe(200);
-    expect(mocks.updateMany.mock.calls[0][0].data.cptCodes.em.signedCode).toBe('99215');
+    expect(mocks.updateMany.mock.calls[0][0].data.cptCodes.em.signedCode).toBe(
+      "99215",
+    );
   });
 
-  it('FAIL-SAFE: a scoring error never blocks signing — no cptCodes write, status still flips', async () => {
-    mocks.computeDisplayedEmCode.mockRejectedValue(new Error('judge down'));
+  it("FAIL-SAFE: a scoring error never blocks signing — no cptCodes write, status still flips", async () => {
+    mocks.computeDisplayedEmCode.mockRejectedValue(new Error("judge down"));
     mocks.findUnique
       .mockResolvedValueOnce(visitRow({ cptCodes: EM_BLOB }))
-      .mockResolvedValue({ signedAt: new Date(), status: TranscribeVisitStatus.SIGNED });
+      .mockResolvedValue({
+        signedAt: new Date(),
+        status: TranscribeVisitStatus.SIGNED,
+      });
 
     const res = await call({ destinations: [] });
     expect(res.status).toBe(200);
     const data = mocks.updateMany.mock.calls[0][0].data;
     expect(data.status).toBe(TranscribeVisitStatus.SIGNED);
-    expect('cptCodes' in data).toBe(false);
+    expect("cptCodes" in data).toBe(false);
   });
 
-  it('a visit with NO em block does not compute or write a signed code (backward compatible)', async () => {
+  it("a visit with NO em block does not compute or write a signed code (backward compatible)", async () => {
     mocks.findUnique
       .mockResolvedValueOnce(visitRow({ cptCodes: { procedures: [] } }))
-      .mockResolvedValue({ signedAt: new Date(), status: TranscribeVisitStatus.SIGNED });
+      .mockResolvedValue({
+        signedAt: new Date(),
+        status: TranscribeVisitStatus.SIGNED,
+      });
 
     const res = await call({ destinations: [] });
     expect(res.status).toBe(200);
     expect(mocks.computeDisplayedEmCode).not.toHaveBeenCalled();
-    expect('cptCodes' in mocks.updateMany.mock.calls[0][0].data).toBe(false);
+    expect("cptCodes" in mocks.updateMany.mock.calls[0][0].data).toBe(false);
   });
 });
