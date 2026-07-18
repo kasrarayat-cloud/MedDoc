@@ -92,11 +92,7 @@ export function retriableDatabaseCode(
         return code;
       }
     }
-    if (
-      current.depth >= 5 ||
-      typeof cursor !== "object" ||
-      cursor === null
-    ) {
+    if (current.depth >= 5 || typeof cursor !== "object" || cursor === null) {
       continue;
     }
     const record = cursor as Record<string, unknown>;
@@ -117,7 +113,10 @@ export function retriableDatabaseCode(
 }
 
 function backoffMs(attempt: number, random: () => number): number {
-  const ceiling = Math.min(BASE_BACKOFF_MS * 2 ** (attempt - 1), MAX_BACKOFF_MS);
+  const ceiling = Math.min(
+    BASE_BACKOFF_MS * 2 ** (attempt - 1),
+    MAX_BACKOFF_MS,
+  );
   return Math.max(1, Math.round(ceiling / 2 + random() * (ceiling / 2)));
 }
 
@@ -142,10 +141,7 @@ export async function runSerializableTransactionWithRetry<T>(input: {
   context?: TransactionRetrySafeContext;
   maxAttempts?: number;
   isolationLevel?: Prisma.TransactionIsolationLevel;
-  transaction: (
-    tx: Prisma.TransactionClient,
-    attempt: number,
-  ) => Promise<T>;
+  transaction: (tx: Prisma.TransactionClient, attempt: number) => Promise<T>;
   /** Test-only deterministic hooks; production callers must omit these. */
   retryHooks?: {
     sleep?: (ms: number) => Promise<void>;
@@ -157,10 +153,17 @@ export async function runSerializableTransactionWithRetry<T>(input: {
     }) => void;
   };
 }): Promise<T> {
-  const maxAttempts = Math.max(
-    1,
-    Math.min(input.maxAttempts ?? DATABASE_TRANSACTION_MAX_ATTEMPTS, 5),
-  );
+  if (
+    input.maxAttempts !== undefined &&
+    (!Number.isInteger(input.maxAttempts) ||
+      input.maxAttempts < 1 ||
+      input.maxAttempts > DATABASE_TRANSACTION_MAX_ATTEMPTS)
+  ) {
+    throw new RangeError(
+      `maxAttempts must be an integer between 1 and ${DATABASE_TRANSACTION_MAX_ATTEMPTS}.`,
+    );
+  }
+  const maxAttempts = input.maxAttempts ?? DATABASE_TRANSACTION_MAX_ATTEMPTS;
   const wait = input.retryHooks?.sleep ?? sleep;
   const random = input.retryHooks?.random ?? Math.random;
 

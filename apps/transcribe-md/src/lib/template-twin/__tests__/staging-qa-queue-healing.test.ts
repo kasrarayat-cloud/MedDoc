@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   rootRunFindFirst: vi.fn(),
   txRunFindFirst: vi.fn(),
   txRunUpdateMany: vi.fn(),
+  txRunUpdate: vi.fn(),
   txAdmissionUpdateMany: vi.fn(),
   txVisitUpdate: vi.fn(),
   rootVisitUpdateMany: vi.fn(),
@@ -13,6 +14,8 @@ const mocks = vi.hoisted(() => ({
   putAudio: vi.fn(),
   lockRollout: vi.fn(),
   lockRun: vi.fn(),
+  lockAdmissionThenRun: vi.fn(),
+  lockActor: vi.fn(),
   lockVisit: vi.fn(),
   enqueueAudit: vi.fn(),
 }));
@@ -33,6 +36,8 @@ vi.mock("../rollout", () => ({
 }));
 vi.mock("../staging-qa-visit-guard", () => ({
   lockAndAssertTemplateTwinStagingQaRun: mocks.lockRun,
+  lockTemplateTwinStagingQaAdmissionThenRun: mocks.lockAdmissionThenRun,
+  lockAndAssertTemplateTwinStagingQaActor: mocks.lockActor,
   TemplateTwinStagingQaVisitGuardError: class TemplateTwinStagingQaVisitGuardError extends Error {
     constructor(
       public readonly code: string,
@@ -141,6 +146,7 @@ function installStatefulQueueHarness(
     templateTwinSyntheticQaRun: {
       findFirst: mocks.txRunFindFirst,
       updateMany: mocks.txRunUpdateMany,
+      update: mocks.txRunUpdate,
     },
     templateTwinSyntheticQaAdmission: {
       updateMany: mocks.txAdmissionUpdateMany,
@@ -203,6 +209,11 @@ function installStatefulQueueHarness(
     token: actor.rolloutToken,
   });
   mocks.lockRun.mockResolvedValue(undefined);
+  mocks.lockAdmissionThenRun.mockImplementation(async () => ({
+    admissionId: state.admissionId,
+    run: snapshot(),
+  }));
+  mocks.lockActor.mockResolvedValue(undefined);
   mocks.lockVisit.mockResolvedValue(undefined);
   mocks.enqueueAudit.mockResolvedValue(undefined);
   mocks.enqueueVisit.mockResolvedValue(undefined);
@@ -212,6 +223,12 @@ function installStatefulQueueHarness(
     }) => {
       state = { ...state, visit: { ...state.visit, ...input.data } };
       return { ...state.visit };
+    },
+  );
+  mocks.txRunUpdate.mockImplementation(
+    async (input: { data: Partial<QueueRunState> }) => {
+      state = { ...state, ...input.data };
+      return snapshot();
     },
   );
 

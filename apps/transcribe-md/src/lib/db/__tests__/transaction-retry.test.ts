@@ -15,7 +15,9 @@ function hostWithFailures(failures: unknown[]) {
   return {
     host: {
       $transaction: vi.fn(
-        async (callback: (tx: Prisma.TransactionClient) => Promise<unknown>) => {
+        async (
+          callback: (tx: Prisma.TransactionClient) => Promise<unknown>,
+        ) => {
           const index = calls++;
           const result = await callback({
             attempt: calls,
@@ -101,6 +103,23 @@ describe("whole-transaction PostgreSQL retry", () => {
       exhausted: 1,
       serializationFailures: 3,
     });
+  });
+
+  it("rejects a caller override above the hard three-attempt ceiling", async () => {
+    const harness = hostWithFailures([]);
+    const transaction = vi.fn().mockResolvedValue("unreachable");
+
+    await expect(
+      runSerializableTransactionWithRetry({
+        prisma: harness.host,
+        operation: "invalid_retry_override",
+        maxAttempts: 4,
+        transaction,
+      }),
+    ).rejects.toThrow(/between 1 and 3/u);
+
+    expect(transaction).not.toHaveBeenCalled();
+    expect(harness.calls()).toBe(0);
   });
 
   it("does not repeat an external provider call when the database commit retries", async () => {

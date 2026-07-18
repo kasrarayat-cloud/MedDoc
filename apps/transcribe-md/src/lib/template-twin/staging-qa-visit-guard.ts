@@ -158,6 +158,73 @@ export interface LockedStagingQaRunRow extends TemplateTwinStagingQaRunGuardRow 
 }
 
 /**
+ * The one low-level admission/run lock primitive used by normal processing,
+ * failure publication, and crash reconciliation. Callers must already hold
+ * rollout locks. The first lookup is deliberately unlocked because the run
+ * stores the admission identity; authority starts only after the admission
+ * row is locked, followed by the run row. Updating either row before this
+ * helper returns would invert the canonical order.
+ */
+export async function lockTemplateTwinStagingQaAdmissionThenRun(input: {
+  tx: StagingQaRunLockClient;
+  runId: string;
+  expectedAdmissionId?: string;
+}): Promise<{ admissionId: string; run: LockedStagingQaRunRow }> {
+  const identities = await input.tx.$queryRaw<{ admissionId: string | null }[]>(
+    Prisma.sql`
+      SELECT "admissionId"
+      FROM "template_twin_synthetic_qa_runs"
+      WHERE "id" = ${input.runId}
+    `,
+  );
+  const admissionId = identities[0]?.admissionId ?? null;
+  if (
+    !admissionId ||
+    (input.expectedAdmissionId !== undefined &&
+      input.expectedAdmissionId !== admissionId)
+  ) {
+    throw new TemplateTwinStagingQaVisitGuardError(
+      "TEMPLATE_TWIN_STAGING_QA_ADMISSION_STALE",
+      "Synthetic QA admission is unavailable.",
+    );
+  }
+  const lockedAdmissions = await input.tx.$queryRaw<Array<{ id: string }>>(
+    Prisma.sql`
+      SELECT "id"
+      FROM "template_twin_synthetic_qa_admissions"
+      WHERE "id" = ${admissionId}
+      FOR UPDATE
+    `,
+  );
+  if (lockedAdmissions.length !== 1) {
+    throw new TemplateTwinStagingQaVisitGuardError(
+      "TEMPLATE_TWIN_STAGING_QA_ADMISSION_STALE",
+      "Synthetic QA admission is unavailable.",
+    );
+  }
+  const rows = await input.tx.$queryRaw<LockedStagingQaRunRow[]>(Prisma.sql`
+    SELECT
+      "id", "admissionId", "visitId", "practiceId", "doctorId",
+      "noteTemplateId", "noteTemplateVersion", "requestSha256",
+      "payloadSha256", "mode", "fixtureVersion", "status", "attempt", "enqueuedAt",
+      "workerClaimId", "workerClaimedAt", "workerHeartbeatAt",
+      "workerLeaseExpiresAt",
+      "pinnedGlobalRolloutGeneration", "pinnedPracticeRolloutGeneration"
+    FROM "template_twin_synthetic_qa_runs"
+    WHERE "id" = ${input.runId}
+    FOR UPDATE
+  `);
+  const run = rows[0] ?? null;
+  if (!run || run.admissionId !== admissionId) {
+    throw new TemplateTwinStagingQaVisitGuardError(
+      "TEMPLATE_TWIN_STAGING_QA_ADMISSION_STALE",
+      "Synthetic QA admission changed before the operation acquired its locks.",
+    );
+  }
+  return { admissionId, run };
+}
+
+/**
  * Locks one durable staging operation after the caller has acquired rollout
  * controls. All clinical transitions use the same order:
  * global rollout -> practice rollout -> durable admission -> staging run ->
@@ -176,23 +243,13 @@ export async function lockAndAssertTemplateTwinStagingQaRun(input: {
   currentRolloutToken: TemplateTwinRolloutToken;
   allowedAdmissionPhases?: readonly TemplateTwinStagingQaAdmissionPhase[];
 }): Promise<LockedStagingQaRunRow> {
-  const identities = await input.tx.$queryRaw<{ admissionId: string | null }[]>(
-    Prisma.sql`
-      SELECT "admissionId"
-      FROM "template_twin_synthetic_qa_runs"
-      WHERE "id" = ${input.runId}
-    `,
-  );
-  const admissionId = identities[0]?.admissionId ?? null;
-  if (!admissionId) {
-    throw new TemplateTwinStagingQaVisitGuardError(
-      "TEMPLATE_TWIN_STAGING_QA_ADMISSION_STALE",
-      "Synthetic QA admission is unavailable.",
-    );
-  }
+  const locked = await lockTemplateTwinStagingQaAdmissionThenRun({
+    tx: input.tx,
+    runId: input.runId,
+  });
   const admission = await lockAndAssertTemplateTwinStagingQaAdmission({
     tx: input.tx,
-    admissionId,
+    admissionId: locked.admissionId,
     actor: input.actor,
     currentToken: input.currentRolloutToken,
     allowedPhases: input.allowedAdmissionPhases ?? [
@@ -202,20 +259,7 @@ export async function lockAndAssertTemplateTwinStagingQaRun(input: {
       "SIGNED",
     ],
   });
-  const rows = await input.tx.$queryRaw<LockedStagingQaRunRow[]>(Prisma.sql`
-    SELECT
-      "id", "admissionId", "visitId", "practiceId", "doctorId",
-      "noteTemplateId", "noteTemplateVersion", "requestSha256",
-      "payloadSha256", "mode", "fixtureVersion", "status", "attempt", "enqueuedAt",
-      "workerClaimId", "workerClaimedAt", "workerHeartbeatAt",
-      "workerLeaseExpiresAt",
-      "pinnedGlobalRolloutGeneration", "pinnedPracticeRolloutGeneration"
-    FROM "template_twin_synthetic_qa_runs"
-    WHERE "id" = ${input.runId}
-    FOR UPDATE
-  `);
-  const rawRun = rows[0] ?? null;
-  const run = rawRun ? { ...rawRun, admission } : null;
+  const run = { ...locked.run, admission };
   assertTemplateTwinStagingQaVisitGuard({
     run,
     actor: input.actor,

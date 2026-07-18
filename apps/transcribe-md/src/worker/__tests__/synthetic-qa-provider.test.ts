@@ -35,6 +35,7 @@ const dependencyMocks = vi.hoisted(() => ({
   lockRollout: vi.fn(),
   lockAttempt: vi.fn(),
   lockOperation: vi.fn(),
+  lockAdmissionThenRun: vi.fn(),
   lockVisit: vi.fn(),
   enqueueAudit: vi.fn(),
   claimWorkerAttempt: vi.fn(),
@@ -92,6 +93,8 @@ vi.mock(
     >()),
     lockAndAssertTemplateTwinStagingQaAttempt: dependencyMocks.lockAttempt,
     lockAndAssertTemplateTwinStagingQaOperation: dependencyMocks.lockOperation,
+    lockTemplateTwinStagingQaAdmissionThenRun:
+      dependencyMocks.lockAdmissionThenRun,
   }),
 );
 
@@ -860,7 +863,7 @@ describe("worker synthetic QA crash reconciliation", () => {
     });
     const tx = {
       templateTwinSyntheticQaRun: {
-        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        update: vi.fn().mockResolvedValue({}),
       },
       templateTwinSyntheticQaAdmission: {
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
@@ -871,6 +874,20 @@ describe("worker synthetic QA crash reconciliation", () => {
       async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),
     );
     dependencyMocks.lockRollout.mockResolvedValue({ allowed: false });
+    dependencyMocks.lockAdmissionThenRun.mockResolvedValue({
+      admissionId: "admission-visit-synthetic-1",
+      run: {
+        id: "run-synthetic-1",
+        admissionId: "admission-visit-synthetic-1",
+        visitId: "visit-synthetic-1",
+        doctorId: "doctor-synthetic-1",
+        practiceId: "practice-synthetic-1",
+        attempt: 1,
+        status: "PROCESSING",
+        workerClaimId: "claim-synthetic-1",
+        workerLeaseExpiresAt: new Date("2026-07-17T00:01:00.000Z"),
+      },
+    });
     dependencyMocks.lockVisit.mockResolvedValue({
       userId: "doctor-synthetic-1",
       status: TranscribeVisitStatus.AUTOMATING,
@@ -887,12 +904,9 @@ describe("worker synthetic QA crash reconciliation", () => {
         now,
       }),
     ).resolves.toBe(true);
-    expect(tx.templateTwinSyntheticQaRun.updateMany).toHaveBeenCalledWith(
+    expect(tx.templateTwinSyntheticQaRun.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({
-          status: "PROCESSING",
-          workerLeaseExpiresAt: { lte: now },
-        }),
+        where: { id: "run-synthetic-1" },
         data: { status: "PROCESSING_FAILED" },
       }),
     );
@@ -905,6 +919,7 @@ describe("worker synthetic QA crash reconciliation", () => {
 
   it("leaves a live or already-reclaimed claim untouched", async () => {
     dependencyMocks.rootRunFindFirst.mockResolvedValue({
+      admissionId: "admission-visit-synthetic-1",
       practiceId: "practice-synthetic-1",
       pinnedGlobalRolloutGeneration: BigInt(11),
       pinnedPracticeRolloutGeneration: BigInt(19),
@@ -916,7 +931,7 @@ describe("worker synthetic QA crash reconciliation", () => {
           { databaseNow: new Date("2026-07-17T00:00:10.000Z") },
         ]),
       templateTwinSyntheticQaRun: {
-        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+        update: vi.fn(),
       },
       transcribeVisit: { update: vi.fn() },
     };
@@ -924,6 +939,20 @@ describe("worker synthetic QA crash reconciliation", () => {
       async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),
     );
     dependencyMocks.lockRollout.mockResolvedValue({ allowed: true });
+    dependencyMocks.lockAdmissionThenRun.mockResolvedValue({
+      admissionId: "admission-visit-synthetic-1",
+      run: {
+        id: "run-synthetic-1",
+        admissionId: "admission-visit-synthetic-1",
+        visitId: "visit-synthetic-1",
+        doctorId: "doctor-synthetic-1",
+        practiceId: "practice-synthetic-1",
+        attempt: 1,
+        status: "PROCESSING",
+        workerClaimId: "claim-synthetic-1",
+        workerLeaseExpiresAt: new Date("2026-07-17T00:10:00.000Z"),
+      },
+    });
     await expect(
       reconcileExpiredTemplateTwinSyntheticQaWorkerClaim({
         runId: "run-synthetic-1",

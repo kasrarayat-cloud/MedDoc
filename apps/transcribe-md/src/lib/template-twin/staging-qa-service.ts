@@ -27,6 +27,7 @@ import { assertTemplateTwinStagingQaGate } from "./staging-qa-gate";
 import {
   lockAndAssertTemplateTwinStagingQaActor,
   lockAndAssertTemplateTwinStagingQaRun,
+  lockTemplateTwinStagingQaAdmissionThenRun,
   TemplateTwinStagingQaVisitGuardError,
 } from "./staging-qa-visit-guard";
 import { assertTemplateTwinStagingQaEvidencePhiFree } from "./synthetic-evidence-gate";
@@ -279,14 +280,40 @@ async function recordEnqueueFailure(input: {
       runId: input.runId,
     },
     transaction: async (tx: Prisma.TransactionClient) => {
-      await tx.templateTwinSyntheticQaRun.updateMany({
-        where: {
-          id: input.runId,
-          doctorId: input.actor.userId,
-          practiceId: input.actor.practiceId,
-          attempt: input.attempt,
-          status: "ENQUEUED",
-        },
+      // Failure cleanup is allowed after rollout revocation, but it still
+      // acquires the exact canonical prefix. It can only remove authority;
+      // it cannot advance admission, clinical, or output state.
+      await lockTemplateTwinRolloutForFinalClaim({
+        tx,
+        practiceId: input.actor.practiceId,
+        pinnedToken: input.actor.rolloutToken,
+      });
+      const locked = await lockTemplateTwinStagingQaAdmissionThenRun({
+        tx,
+        runId: input.runId,
+      });
+      await lockAndAssertTemplateTwinStagingQaActor({
+        tx,
+        actor: input.actor,
+      });
+      const run = locked.run;
+      if (
+        run.doctorId !== input.actor.userId ||
+        run.practiceId !== input.actor.practiceId ||
+        run.attempt !== input.attempt ||
+        run.status !== "ENQUEUED" ||
+        run.pinnedGlobalRolloutGeneration !==
+          input.actor.rolloutToken.globalGeneration ||
+        run.pinnedPracticeRolloutGeneration !==
+          input.actor.rolloutToken.practiceGeneration
+      ) {
+        throw new TemplateTwinStagingQaError(
+          "RUN_NOT_RETRYABLE",
+          "The synthetic QA enqueue attempt is no longer current.",
+        );
+      }
+      await tx.templateTwinSyntheticQaRun.update({
+        where: { id: run.id },
         data: { status: "ENQUEUE_FAILED", enqueuedAt: null },
       });
       // Queue/object-store admission failed before a provider owned the run.

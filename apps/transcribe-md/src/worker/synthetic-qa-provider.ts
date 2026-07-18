@@ -31,6 +31,7 @@ import {
 import {
   lockAndAssertTemplateTwinStagingQaAttempt,
   lockAndAssertTemplateTwinStagingQaOperation,
+  lockTemplateTwinStagingQaAdmissionThenRun,
 } from "@/lib/template-twin/staging-qa-visit-guard";
 import { isTemplateTwinStagingQaRequested } from "@/lib/template-twin/staging-qa-gate";
 import { templateTwinStagingQaPayloadSha256 } from "@/lib/template-twin/staging-qa-digest";
@@ -819,6 +820,17 @@ export async function reconcileExpiredTemplateTwinSyntheticQaWorkerClaim(input: 
           practiceGeneration: snapshot.pinnedPracticeRolloutGeneration,
         },
       });
+      if (!snapshot.admissionId) {
+        fail(
+          "TEMPLATE_TWIN_SYNTHETIC_QA_RUN_INVALID",
+          "Synthetic QA crash reconciliation lacks durable admission.",
+        );
+      }
+      const locked = await lockTemplateTwinStagingQaAdmissionThenRun({
+        tx,
+        runId: input.runId,
+        expectedAdmissionId: snapshot.admissionId,
+      });
       const now =
         input.now ??
         (
@@ -832,26 +844,23 @@ export async function reconcileExpiredTemplateTwinSyntheticQaWorkerClaim(input: 
           "Synthetic QA crash reconciliation could not establish database time.",
         );
       }
-      const reconciled = await tx.templateTwinSyntheticQaRun.updateMany({
-        where: {
-          id: input.runId,
-          visitId: input.visitId,
-          doctorId: input.userId,
-          practiceId: snapshot.practiceId,
-          attempt: input.attempt,
-          status: "PROCESSING",
-          workerClaimId: { not: null },
-          workerLeaseExpiresAt: { lte: now },
-        },
+      const run = locked.run;
+      if (
+        run.visitId !== input.visitId ||
+        run.doctorId !== input.userId ||
+        run.practiceId !== snapshot.practiceId ||
+        run.attempt !== input.attempt ||
+        run.status !== "PROCESSING" ||
+        run.workerClaimId === null ||
+        run.workerLeaseExpiresAt === null ||
+        run.workerLeaseExpiresAt > now
+      ) {
+        return false;
+      }
+      await tx.templateTwinSyntheticQaRun.update({
+        where: { id: run.id },
         data: { status: "PROCESSING_FAILED" },
       });
-      if (reconciled.count !== 1) return false;
-      if (!snapshot.admissionId) {
-        fail(
-          "TEMPLATE_TWIN_SYNTHETIC_QA_RUN_INVALID",
-          "Synthetic QA crash reconciliation lacks durable admission.",
-        );
-      }
       const failedAdmission =
         await tx.templateTwinSyntheticQaAdmission.updateMany({
           where: {
