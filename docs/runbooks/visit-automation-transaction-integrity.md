@@ -16,14 +16,14 @@ Clinical content is not stored in the manifest or its failure metadata.
 
 ## Layer policy
 
-| Layer                        | Ordinary visits          | Synthetic staging | Reason                                                                    |
-| ---------------------------- | ------------------------ | ----------------- | ------------------------------------------------------------------------- |
-| ICD coding                   | Optional when enabled    | Required          | Existing ordinary coding-assist contract; staging fixture is mandatory     |
-| CPT coding                   | Optional when applicable | Required          | Existing ordinary coding-assist contract; staging fixture is mandatory     |
-| Prescription drafting/safety | Optional when enabled    | Required          | No draft means no prescription claim; staging fixture is mandatory         |
-| Referrals                    | Optional when enabled    | Required          | Adjunct ordinarily; staging exercises the complete deterministic boundary |
-| Patient summary              | Optional when enabled    | Required          | Adjunct ordinarily; staging exercises the complete deterministic boundary |
-| E/M MDM cache prewarm        | Optional                 | Not applicable    | Performance cache only; live E/M provider use is prohibited in staging    |
+| Layer                        | Ordinary visits          | Synthetic staging | Reason                                                                                  |
+| ---------------------------- | ------------------------ | ----------------- | --------------------------------------------------------------------------------------- |
+| ICD coding                   | Optional when enabled    | Required          | Existing ordinary coding-assist contract; staging fixture is mandatory                  |
+| CPT coding                   | Optional when applicable | Required          | Existing ordinary coding-assist contract; staging fixture is mandatory                  |
+| Prescription drafting/safety | Optional when enabled    | Required          | No draft means no prescription claim; staging fixture is mandatory                      |
+| Referrals                    | Optional when enabled    | Required          | Adjunct ordinarily; staging exercises the complete deterministic boundary               |
+| Patient summary              | Optional when enabled    | Required          | Adjunct ordinarily; staging exercises the complete deterministic boundary               |
+| E/M MDM cache prewarm        | Not applicable           | Not applicable    | On-demand E/M remains available; the legacy prewarm cannot satisfy this ledger contract |
 
 A disabled or specialty-inapplicable layer is persisted as
 `NOT_APPLICABLE`; it never disappears from the inventory. Required failures,
@@ -36,8 +36,10 @@ The original ordinary product contract, however, explicitly treated each L7
 assistant as optional; only synthetic staging requires all five L7 fixtures.
 Accordingly, an ordinary optional failure is recorded and visible without
 silently redefining SOAP readiness, while a staging failure blocks `READY`.
-The E/M prewarm is also `NOT_APPLICABLE` under `MOCK_AI_CALLS` so disposable QA
-cannot escape the deterministic provider boundary.
+The E/M cache prewarm is `NOT_APPLICABLE` in the durable fanout for both
+workflows. Its legacy helper performs an internal provider retry and Redis
+write, so it cannot be represented as one at-most-once provider execution plus
+one atomic database projection. On-demand E/M scoring is unchanged.
 
 ## Canonical lock order
 
@@ -51,7 +53,8 @@ All affected state-changing transactions acquire locks in this order:
 6. visit;
 7. visit automation manifest;
 8. automation layer rows in ascending `layerId` order;
-9. transactional audit outbox.
+9. provider execution rows in ascending `id` order;
+10. transactional audit outbox.
 
 `automation-locks.ts` owns this order. Staging reuses the rollout/admission
 locking helpers and ordinary visits start at practice. Worker audits use the
@@ -59,18 +62,48 @@ same helper and the transactional outbox. They no longer insert directly into
 `audit_logs`, whose implicit user/practice foreign-key checks caused the
 independently reproduced inverse lock order.
 
-Database-owning L7 tasks execute in deterministic layer order. Their provider
-call occurs outside a retryable database transaction, followed by separately
-retryable output and manifest commits. This intentionally trades some fanout
-latency for bounded, observable transaction behavior until each L7 layer is
-split into an independently pure provider phase and one aggregate commit.
+Queue-admission failure cleanup uses the same shared admission-then-run lock
+primitive as normal processing and crash reconciliation. Rollout revocation
+does not prevent that cleanup from recording `ENQUEUE_FAILED`, but the cleanup
+may only remove authority: it cannot advance admission, visit, manifest, or
+output state.
+
+Database-owning L7 tasks execute in deterministic layer order. A committed
+provider reservation is independently reread before the provider boundary is
+invoked. The provider call occurs outside every retryable database transaction.
+Its durable private result is then projected with the clinical result, layer
+terminal state, captured worker audits, and layer-completion outbox event in
+one separately retryable transaction.
+
+## Durable provider execution
+
+Each enabled L7 layer owns one tenant-scoped execution row and one deterministic
+idempotency key. The state machine is:
+
+`RESERVED -> IN_FLIGHT -> SUCCEEDED | FAILED | UNKNOWN_OUTCOME`
+
+- `RESERVED` is committed and independently reread before the call.
+- `SUCCEEDED` stores the bounded private result envelope, result SHA-256, and
+  capture contract version. A job retry reuses that result and cannot invoke
+  the provider again.
+- `UNKNOWN_OUTCOME` is terminal and blocks review, signing, and download. It is
+  used when a process can no longer prove whether an in-flight provider call
+  completed. The system never blindly replays it.
+- Provider implementations receive the deterministic key, but the application
+  does not claim provider exactly-once semantics. Providers without a proven
+  retrieval/idempotency contract remain at-most-once with fail-closed unknown
+  outcomes.
+
+The result envelope is private clinical workflow data. Audit metadata contains
+only safe identifiers, versions, hashes, status codes, and layer names.
 
 ## Transaction retry contract
 
 `runSerializableTransactionWithRetry` retries the complete idempotent database
 transaction for PostgreSQL `40P01`, `40001`, and Prisma `P2034` only.
 
-- Maximum: three attempts (hard-capped at five for explicit callers).
+- Maximum: three attempts. Values outside one through three are rejected before
+  a transaction begins; a fourth attempt is impossible.
 - Backoff: bounded exponential jitter, 25–200 ms ceilings.
 - Metrics: attempts, retries, exhausted retries, deadlocks, and serialization
   failures; logs contain only operation names and non-clinical identifiers.
@@ -79,10 +112,11 @@ transaction for PostgreSQL `40P01`, `40001`, and Prisma `P2034` only.
 - Forbidden inside retry: provider calls, object writes, email, or other
   irreversible side effects.
 
-An already committed layer result is identified by its input hash,
-idempotency key, and output hash, so retry/resume does not call the provider
-again. Worker audit event keys are hashes of the complete safe logical event;
-re-enqueue is idempotent, while an actual outbox failure propagates.
+An already committed provider result is identified by its tenant lineage,
+input hash, deterministic idempotency key, and output hash. Clinical projection
+failure therefore reuses the provider result without a second call. Worker
+audit event keys are hashes of the complete safe logical event; re-enqueue is
+idempotent, while an actual outbox failure rolls the projection back.
 
 An unsigned visit that is deliberately reprocessed after a SOAP/Twin
 invalidation first enters `AUTOMATING` under the canonical locks. PostgreSQL
@@ -116,6 +150,17 @@ Rollback/disable does not delete proof. Disable staging through the existing
 global/practice controls, stop new workers, and retain the additive rows and
 outbox evidence. Application rollback to code unaware of the trigger requires
 a reviewed forward migration; do not drop proof tables or triggers ad hoc.
+
+Migration `20260718090000_visit_automation_provider_execution_v1` is also
+additive. It creates the private provider-execution ledger, tenant/lineage
+foreign keys, unique layer and idempotency identities, transition guards, and
+the provider-execution lock-order index. It performs no historical insert or
+update and never infers a successful execution for an existing visit. It uses
+the same transaction-local 5-second lock timeout and 60-second statement
+timeout. Rollback is operational: disable the feature and preserve immutable
+evidence. A known failed disposable/development attempt must be marked rolled
+back before retrying; production operators must not edit migration checksums or
+drop evidence ad hoc.
 
 ## Disposable PostgreSQL verification
 

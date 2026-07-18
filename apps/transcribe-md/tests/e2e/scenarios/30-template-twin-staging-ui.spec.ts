@@ -24,6 +24,7 @@ import {
   readTemplateTwinQaApprovedMappingsSha256,
   readTemplateTwinQaFill,
   readTemplateTwinStagingQaIdempotencyInventory,
+  readTemplateTwinProviderAtomicityInventory,
   readTemplateTwinStagingQaRunByVisit,
   setTemplateTwinQaPractice,
 } from "../helpers/templateTwin";
@@ -44,6 +45,18 @@ const SYNTHETIC_ENCOUNTER = TEMPLATE_TWIN_SYNTHETIC_QA_TRANSCRIPT;
 const TEMPLATE_NAME = "Template Twin Synthetic QA Fixture";
 const ENCOUNTER_SCOPE = "Synthetic follow-up encounter";
 const VERSION_DESCRIPTION = "Reviewed synthetic staging fixture v1";
+const PROVIDER_ATOMICITY_JOURNEY_COUNT = Number(
+  process.env.TEMPLATE_TWIN_PROVIDER_ATOMICITY_JOURNEYS ?? "0",
+);
+if (
+  !Number.isInteger(PROVIDER_ATOMICITY_JOURNEY_COUNT) ||
+  PROVIDER_ATOMICITY_JOURNEY_COUNT < 0 ||
+  PROVIDER_ATOMICITY_JOURNEY_COUNT > 20
+) {
+  throw new Error(
+    "TEMPLATE_TWIN_PROVIDER_ATOMICITY_JOURNEYS must be an integer 0..20.",
+  );
+}
 
 const CONCEPT_BY_LABEL: ReadonlyArray<{
   matches: RegExp;
@@ -59,7 +72,7 @@ const CONCEPT_BY_LABEL: ReadonlyArray<{
   { matches: /synthetic detail|insert synthetic/i, value: "hpi.context" },
 ];
 
-test.setTimeout(420_000);
+test.setTimeout(Math.max(420_000, PROVIDER_ATOMICITY_JOURNEY_COUNT * 60_000));
 
 function sha256(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
@@ -176,6 +189,81 @@ async function openTemplateReview(page: Page, visitId: string): Promise<void> {
   await expect(
     page.getByRole("heading", { name: "Original Template DOCX" }).first(),
   ).toBeVisible({ timeout: 20_000 });
+}
+
+async function runCompleteProviderAtomicityJourney(input: {
+  page: Page;
+  admission: {
+    templateId: string;
+    mode: "typed";
+    expectedTemplateVersion: number;
+    encounterText: string;
+  };
+  index: number;
+}): Promise<string> {
+  const response = await input.page.request.post(
+    "/api/note-templates/template-twin/staging-qa/runs",
+    {
+      headers: {
+        ...sameOriginHeaders(input.page),
+        "Content-Type": "application/json",
+      },
+      data: {
+        ...input.admission,
+        idempotencyKey: crypto.randomUUID(),
+        encounterText: SYNTHETIC_ENCOUNTER,
+      },
+    },
+  );
+  expect(
+    response.status(),
+    `Atomicity journey ${input.index} admission failed: ${await response.text()}`,
+  ).toBe(202);
+  const admitted = (await response.json()) as {
+    visitId: string;
+    runId: string;
+  };
+  const fill = await waitForVerifiedFill(input.page, admitted.visitId);
+  const review = await input.page.request.post(
+    `/api/visits/${encodeURIComponent(admitted.visitId)}/template-twin/review`,
+    {
+      headers: {
+        ...sameOriginHeaders(input.page),
+        "Content-Type": "application/json",
+      },
+      data: {
+        expectedManifestVersion: fill.fillManifest.manifestVersion,
+        expectedManifestSha256: fill.manifestSha256,
+      },
+    },
+  );
+  expect(
+    review.status(),
+    `Atomicity journey ${input.index} review failed: ${await review.text()}`,
+  ).toBe(200);
+  const sign = await input.page.request.post(
+    `/api/visits/${encodeURIComponent(admitted.visitId)}/sign`,
+    {
+      headers: sameOriginHeaders(input.page),
+      data: { destinations: [] },
+    },
+  );
+  expect(
+    sign.status(),
+    `Atomicity journey ${input.index} sign failed: ${await sign.text()}`,
+  ).toBe(200);
+  await waitForVisitStatus(input.page, admitted.visitId, "SIGNED", {
+    timeoutMs: 30_000,
+  });
+  const output = await input.page.request.get(
+    `/api/visits/${encodeURIComponent(admitted.visitId)}/export/original-template-docx`,
+  );
+  expect(output.status()).toBe(200);
+  const bytes = await output.body();
+  expect(sha256(bytes)).toBe(fill.outputSha256);
+  expect(bytes.byteLength).toBe(fill.outputSizeBytes);
+  inspectDocxPackage(bytes);
+  return admitted.visitId;
 }
 
 async function signupCrossTenantDoctor(
@@ -852,6 +940,60 @@ test("Template Twin staging UI drives the real synthetic pipeline fail closed", 
     staticRegionCheck: "verified",
   });
 
+  const atomicityVisitIds: string[] = [];
+  for (let index = 1; index <= PROVIDER_ATOMICITY_JOURNEY_COUNT; index += 1) {
+    atomicityVisitIds.push(
+      await runCompleteProviderAtomicityJourney({
+        page,
+        admission: {
+          templateId: typedAdmissionPayload.templateId,
+          mode: typedAdmissionPayload.mode,
+          expectedTemplateVersion:
+            typedAdmissionPayload.expectedTemplateVersion,
+          encounterText: typedAdmissionPayload.encounterText,
+        },
+        index,
+      }),
+    );
+  }
+  if (atomicityVisitIds.length > 0) {
+    const inventory =
+      readTemplateTwinProviderAtomicityInventory(atomicityVisitIds);
+    expect(inventory).toEqual({
+      visits: PROVIDER_ATOMICITY_JOURNEY_COUNT,
+      signedVisits: PROVIDER_ATOMICITY_JOURNEY_COUNT,
+      completeManifests: PROVIDER_ATOMICITY_JOURNEY_COUNT,
+      layerRows: PROVIDER_ATOMICITY_JOURNEY_COUNT * 6,
+      succeededLayers: PROVIDER_ATOMICITY_JOURNEY_COUNT * 5,
+      notApplicableLayers: PROVIDER_ATOMICITY_JOURNEY_COUNT,
+      providerExecutions: PROVIDER_ATOMICITY_JOURNEY_COUNT * 5,
+      providerInvocations: PROVIDER_ATOMICITY_JOURNEY_COUNT * 5,
+      nonSucceededProviderExecutions: 0,
+      duplicateProviderIdempotencyKeys: 0,
+      fillManifests: PROVIDER_ATOMICITY_JOURNEY_COUNT,
+      outputObjects: PROVIDER_ATOMICITY_JOURNEY_COUNT,
+      layerCompletionAudits: PROVIDER_ATOMICITY_JOURNEY_COUNT * 5,
+      completionAudits: PROVIDER_ATOMICITY_JOURNEY_COUNT,
+    });
+    writeFileSync(
+      resolve(ARTIFACT_ROOT, "provider-atomicity-journeys.json"),
+      `${JSON.stringify(
+        {
+          contractVersion: "template-twin-provider-atomicity-evidence-v1",
+          sourceCommit: execFileSync("git", ["rev-parse", "HEAD"], {
+            encoding: "utf8",
+          }).trim(),
+          syntheticOnly: true,
+          journeyCount: atomicityVisitIds.length,
+          inventory,
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+  }
+
   const foreign = await signupCrossTenantDoctor(browser, foreignEmail);
   try {
     expect(
@@ -1078,6 +1220,9 @@ test("Template Twin staging UI drives the real synthetic pipeline fail closed", 
     "05-signed-word-pending.png",
     "template-twin-staging-source.docx",
     "template-twin-staging-output.docx",
+    ...(PROVIDER_ATOMICITY_JOURNEY_COUNT > 0
+      ? ["provider-atomicity-journeys.json"]
+      : []),
   ];
   const manifest = {
     contractVersion: "template-twin-staging-ui-artifacts/1.0.0",

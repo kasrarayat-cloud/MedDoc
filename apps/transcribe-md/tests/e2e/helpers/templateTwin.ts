@@ -67,6 +67,23 @@ export interface TemplateTwinQaInventory {
   auditOutboxRows: number;
 }
 
+export interface TemplateTwinProviderAtomicityInventory {
+  visits: number;
+  signedVisits: number;
+  completeManifests: number;
+  layerRows: number;
+  succeededLayers: number;
+  notApplicableLayers: number;
+  providerExecutions: number;
+  providerInvocations: number;
+  nonSucceededProviderExecutions: number;
+  duplicateProviderIdempotencyKeys: number;
+  fillManifests: number;
+  outputObjects: number;
+  layerCompletionAudits: number;
+  completionAudits: number;
+}
+
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'"'"'`)}'`;
 }
@@ -837,6 +854,77 @@ export function readTemplateTwinQaInventory(
       'reviewDecisions', (SELECT count(*) FROM template_twin_review_decisions r JOIN template_twin_fill_manifests f ON f.id = r."fillManifestId" WHERE f."practiceId" = ${sqlLiteral(practiceId)}),
       'objectLedgerRows', (SELECT count(*) FROM template_twin_object_ledgers WHERE "practiceId" = ${sqlLiteral(practiceId)}),
       'auditOutboxRows', (SELECT count(*) FROM template_twin_audit_outbox WHERE "practiceId" = ${sqlLiteral(practiceId)})
+    );
+  `);
+}
+
+export function readTemplateTwinProviderAtomicityInventory(
+  visitIds: readonly string[],
+): TemplateTwinProviderAtomicityInventory {
+  if (
+    visitIds.length === 0 ||
+    visitIds.some((visitId) => !/^[A-Za-z0-9_-]{8,128}$/u.test(visitId))
+  ) {
+    throw new Error(
+      "Provider atomicity inventory requires synthetic visit IDs.",
+    );
+  }
+  const ids = visitIds.map(sqlLiteral).join(", ");
+  return psqlJson(`
+    WITH selected_visits AS (
+      SELECT id FROM transcribe_visits WHERE id IN (${ids})
+    ), selected_manifests AS (
+      SELECT manifest.*
+      FROM visit_automation_manifests manifest
+      JOIN selected_visits visit ON visit.id = manifest."visitId"
+    ), selected_layers AS (
+      SELECT layer.*
+      FROM visit_automation_layers layer
+      JOIN selected_manifests manifest ON manifest.id = layer."manifestId"
+    ), selected_executions AS (
+      SELECT execution.*
+      FROM visit_automation_provider_executions execution
+      JOIN selected_manifests manifest ON manifest.id = execution."manifestId"
+    ), duplicate_keys AS (
+      SELECT "idempotencyKey"
+      FROM selected_executions
+      GROUP BY "idempotencyKey"
+      HAVING count(*) > 1
+    )
+    SELECT json_build_object(
+      'visits', (SELECT count(*)::int FROM selected_visits),
+      'signedVisits', (SELECT count(*)::int FROM transcribe_visits visit JOIN selected_visits selected ON selected.id = visit.id WHERE visit.status = 'SIGNED'),
+      'completeManifests', (SELECT count(*)::int FROM selected_manifests WHERE status = 'COMPLETE'),
+      'layerRows', (SELECT count(*)::int FROM selected_layers),
+      'succeededLayers', (SELECT count(*)::int FROM selected_layers WHERE status = 'SUCCEEDED'),
+      'notApplicableLayers', (SELECT count(*)::int FROM selected_layers WHERE status = 'NOT_APPLICABLE'),
+      'providerExecutions', (SELECT count(*)::int FROM selected_executions),
+      'providerInvocations', (SELECT COALESCE(sum("invocationCount"), 0)::int FROM selected_executions),
+      'nonSucceededProviderExecutions', (SELECT count(*)::int FROM selected_executions WHERE status <> 'SUCCEEDED'),
+      'duplicateProviderIdempotencyKeys', (SELECT count(*)::int FROM duplicate_keys),
+      'fillManifests', (SELECT count(*)::int FROM template_twin_fill_manifests fill JOIN selected_visits visit ON visit.id = fill."visitId"),
+      'outputObjects', (
+        SELECT count(*)::int
+        FROM template_twin_object_ledgers ledger
+        JOIN template_twin_fill_manifests fill ON fill.id = ledger."claimId"
+        JOIN selected_visits visit ON visit.id = fill."visitId"
+        WHERE ledger."claimType" = 'fill_manifest'
+      ),
+      'layerCompletionAudits', (
+        SELECT count(*)::int
+        FROM template_twin_audit_outbox audit
+        JOIN selected_visits visit ON visit.id = audit."targetId"
+        WHERE audit."targetType" = 'VisitAutomationLayer'
+          AND audit.action = 'VISIT_AUTOMATION_COMPLETED'
+      ),
+      'completionAudits', (
+        SELECT count(*)::int
+        FROM template_twin_audit_outbox audit
+        JOIN selected_visits visit ON visit.id = audit."targetId"
+        WHERE audit."targetType" = 'TranscribeVisit'
+          AND audit.action = 'VISIT_AUTOMATION_COMPLETED'
+          AND audit."eventKey" LIKE 'visit-automation:completed:%'
+      )
     );
   `);
 }

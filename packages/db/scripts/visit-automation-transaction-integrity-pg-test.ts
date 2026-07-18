@@ -23,13 +23,18 @@ import {
   VisitAutomationIncompleteError,
   finalizeVisitAutomationReady,
 } from "../../../apps/transcribe-md/src/worker/automation-finalization";
-import { initializeVisitAutomationManifest } from "../../../apps/transcribe-md/src/worker/automation-manifest";
+import {
+  initializeVisitAutomationManifest,
+  markVisitAutomationLayerRunning,
+  recordVisitAutomationLayerSuccess,
+} from "../../../apps/transcribe-md/src/worker/automation-manifest";
 import { runVisitAutomationTransaction } from "../../../apps/transcribe-md/src/worker/automation-locks";
 import {
   buildVisitAutomationPolicy,
   VISIT_AUTOMATION_LAYER_IDS,
 } from "../../../apps/transcribe-md/src/worker/automation-policy";
 import { runAutomationFanout } from "../../../apps/transcribe-md/src/worker/run-automation-fanout";
+import { runDurableVisitAutomationProvider } from "../../../apps/transcribe-md/src/worker/provider-execution";
 import { assertNonProdDatabase } from "../src/db-guard";
 
 const databaseUrl =
@@ -49,6 +54,11 @@ const journeyCount = Number(process.env.VISIT_AUTOMATION_JOURNEY_COUNT ?? "20");
 if (!Number.isInteger(journeyCount) || journeyCount < 1 || journeyCount > 100) {
   throw new Error("VISIT_AUTOMATION_JOURNEY_COUNT must be an integer 1..100.");
 }
+process.env.MOCK_AI_CALLS = "true";
+
+const APPLICABLE_LAYER_IDS = VISIT_AUTOMATION_LAYER_IDS.filter(
+  (layerId) => layerId !== "em_mdm_prewarm",
+);
 
 function client(applicationName: string): PrismaClient {
   const url = new URL(verifiedDatabaseUrl);
@@ -122,7 +132,10 @@ function policy(staging = false) {
   return buildVisitAutomationPolicy({
     staging,
     enabled: Object.fromEntries(
-      VISIT_AUTOMATION_LAYER_IDS.map((layerId) => [layerId, true]),
+      VISIT_AUTOMATION_LAYER_IDS.map((layerId) => [
+        layerId,
+        layerId !== "em_mdm_prewarm",
+      ]),
     ) as Record<(typeof VISIT_AUTOMATION_LAYER_IDS)[number], boolean>,
   });
 }
@@ -130,8 +143,13 @@ function policy(staging = false) {
 function syntheticTasks(providerCalls: Map<string, number>) {
   return VISIT_AUTOMATION_LAYER_IDS.map((key) => ({
     key,
-    enabled: true,
-    run: async () => {
+    enabled: key !== "em_mdm_prewarm",
+    provider: {
+      provider: "anthropic" as const,
+      model: "synthetic-automation-model-v1",
+      operationVersion: `${key}-synthetic-v1`,
+    },
+    run: async (_providerIdempotencyKey: string) => {
       providerCalls.set(key, (providerCalls.get(key) ?? 0) + 1);
       return { synthetic: true, layer: key };
     },
@@ -171,31 +189,52 @@ async function runSuccessfulJourney(label: string): Promise<{
     processingCostCents: 0,
     confidenceScores: { synthetic: true },
   });
-  const [visit, manifest, completionAudits] = await Promise.all([
-    observer.transcribeVisit.findUniqueOrThrow({
-      where: { id: visitId },
-      select: { status: true },
-    }),
-    observer.visitAutomationManifest.findUniqueOrThrow({
-      where: { visitId },
-      include: { layers: true },
-    }),
-    observer.templateTwinAuditOutbox.count({
-      where: {
-        eventKey: `visit-automation:completed:${visitId}:${attempt.manifestVersion}`,
-      },
-    }),
-  ]);
+  const [visit, manifest, providerExecutions, layerAudits, completionAudits] =
+    await Promise.all([
+      observer.transcribeVisit.findUniqueOrThrow({
+        where: { id: visitId },
+        select: { status: true },
+      }),
+      observer.visitAutomationManifest.findUniqueOrThrow({
+        where: { visitId },
+        include: { layers: true },
+      }),
+      observer.visitAutomationProviderExecution.findMany({
+        where: { visitId },
+        select: { status: true, invocationCount: true, resultSha256: true },
+      }),
+      observer.templateTwinAuditOutbox.count({
+        where: {
+          targetId: visitId,
+          targetType: "VisitAutomationLayer",
+          action: "VISIT_AUTOMATION_COMPLETED",
+        },
+      }),
+      observer.templateTwinAuditOutbox.count({
+        where: {
+          eventKey: `visit-automation:completed:${visitId}:${attempt.manifestVersion}`,
+        },
+      }),
+    ]);
   if (
     visit.status !== "READY" ||
     manifest.status !== "COMPLETE" ||
     manifest.layers.length !== VISIT_AUTOMATION_LAYER_IDS.length ||
-    manifest.layers.some(
-      (layer) =>
-        layer.status !== "SUCCEEDED" ||
-        layer.outputSha256 === null ||
-        layer.completedAt === null,
+    manifest.layers.some((layer) =>
+      layer.layerId === "em_mdm_prewarm"
+        ? layer.status !== "NOT_APPLICABLE" || layer.completedAt === null
+        : layer.status !== "SUCCEEDED" ||
+          layer.outputSha256 === null ||
+          layer.completedAt === null,
     ) ||
+    providerExecutions.length !== APPLICABLE_LAYER_IDS.length ||
+    providerExecutions.some(
+      (execution) =>
+        execution.status !== "SUCCEEDED" ||
+        execution.invocationCount !== 1 ||
+        execution.resultSha256 === null,
+    ) ||
+    layerAudits !== APPLICABLE_LAYER_IDS.length ||
     completionAudits !== 1 ||
     [...providerCalls.values()].some((count) => count !== 1)
   ) {
@@ -209,6 +248,131 @@ async function runSuccessfulJourney(label: string): Promise<{
       0,
     ),
   };
+}
+
+async function provePostProviderProjectionRollbackAndReuse(): Promise<void> {
+  const visitId = await createVisit("provider-projection-retry");
+  const attempt = await initializeVisitAutomationManifest({
+    visitId,
+    userId,
+    practiceId,
+    soapVersion: 1,
+    soapFinal: soap,
+    sourceFacts: { synthetic: true, case: "provider-projection-retry" },
+    policy: buildVisitAutomationPolicy({
+      staging: false,
+      enabled: Object.fromEntries(
+        VISIT_AUTOMATION_LAYER_IDS.map((layerId) => [
+          layerId,
+          layerId === "icd_coding",
+        ]),
+      ) as Record<(typeof VISIT_AUTOMATION_LAYER_IDS)[number], boolean>,
+    }),
+  });
+  await markVisitAutomationLayerRunning({
+    attempt,
+    visitId,
+    userId,
+    practiceId,
+    layerId: "icd_coding",
+  });
+  let providerCalls = 0;
+  const providerInput = {
+    attempt,
+    visitId,
+    userId,
+    practiceId,
+    layerId: "icd_coding" as const,
+    descriptor: {
+      provider: "anthropic" as const,
+      model: "synthetic-automation-model-v1",
+      operationVersion: "icd-projection-retry-v1",
+    },
+    invoke: async (_providerIdempotencyKey: string) => {
+      providerCalls += 1;
+      return { codes: [{ code: "Z00.00" }] };
+    },
+  };
+  const first = await runDurableVisitAutomationProvider(providerInput);
+  await observer.$executeRawUnsafe(`
+    CREATE OR REPLACE FUNCTION qa_force_automation_outbox_failure()
+    RETURNS trigger AS $body$
+    BEGIN
+      RAISE EXCEPTION 'synthetic audit outbox failure' USING ERRCODE = '23514';
+    END
+    $body$ LANGUAGE plpgsql;
+    CREATE TRIGGER qa_force_automation_outbox_failure
+      BEFORE INSERT ON template_twin_audit_outbox
+      FOR EACH ROW EXECUTE FUNCTION qa_force_automation_outbox_failure();
+  `);
+  const effects = {
+    visitMutations: [{ data: { icdCodes: { codes: [{ code: "Z00.00" }] } } }],
+    audits: [],
+  };
+  try {
+    await recordVisitAutomationLayerSuccess({
+      attempt,
+      visitId,
+      userId,
+      practiceId,
+      layerId: "icd_coding",
+      output: first.output,
+      providerExecutionId: first.executionId,
+      effects,
+    }).then(
+      () => {
+        throw new Error("Layer projection advanced despite audit failure.");
+      },
+      () => undefined,
+    );
+  } finally {
+    await observer.$executeRawUnsafe(`
+      DROP TRIGGER IF EXISTS qa_force_automation_outbox_failure
+        ON template_twin_audit_outbox;
+      DROP FUNCTION IF EXISTS qa_force_automation_outbox_failure();
+    `);
+  }
+  const afterFailure = await observer.transcribeVisit.findUniqueOrThrow({
+    where: { id: visitId },
+    select: {
+      icdCodes: true,
+      automationManifest: {
+        select: {
+          layers: {
+            where: { layerId: "icd_coding" },
+            select: { status: true },
+          },
+        },
+      },
+    },
+  });
+  if (
+    afterFailure.icdCodes !== null ||
+    afterFailure.automationManifest?.layers[0]?.status !== "RUNNING"
+  ) {
+    throw new Error("Layer audit failure left a partial clinical projection.");
+  }
+  const reused = await runDurableVisitAutomationProvider(providerInput);
+  if (!reused.reused || providerCalls !== 1) {
+    throw new Error("Projection retry repeated a durable provider execution.");
+  }
+  await recordVisitAutomationLayerSuccess({
+    attempt,
+    visitId,
+    userId,
+    practiceId,
+    layerId: "icd_coding",
+    output: reused.output,
+    providerExecutionId: reused.executionId,
+    effects: reused.effects,
+  });
+  const committed = await observer.visitAutomationLayer.findFirstOrThrow({
+    where: { manifestId: attempt.manifestId, layerId: "icd_coding" },
+    select: { status: true },
+  });
+  if (committed.status !== "SUCCEEDED") {
+    throw new Error("Reused provider result did not commit exactly once.");
+  }
 }
 
 async function proveRequiredFailuresPersist(): Promise<void> {
@@ -388,11 +552,10 @@ async function proveUnsignedReprocessAndSignedImmutability(): Promise<void> {
     processingCostCents: 0,
     confidenceScores: { synthetic: true },
   });
-  const reprocessed =
-    await observer.visitAutomationManifest.findUniqueOrThrow({
-      where: { visitId: first.visitId },
-      include: { layers: true, visit: { select: { status: true } } },
-    });
+  const reprocessed = await observer.visitAutomationManifest.findUniqueOrThrow({
+    where: { visitId: first.visitId },
+    include: { layers: true, visit: { select: { status: true } } },
+  });
   if (
     reprocessed.status !== "COMPLETE" ||
     reprocessed.manifestVersion !== 2 ||
@@ -767,6 +930,11 @@ async function proveSerializationRetry(): Promise<{
 }
 
 async function cleanup(): Promise<void> {
+  await observer.$executeRawUnsafe(`
+    DROP TRIGGER IF EXISTS qa_force_automation_outbox_failure
+      ON template_twin_audit_outbox;
+    DROP FUNCTION IF EXISTS qa_force_automation_outbox_failure();
+  `);
   await observer.templateTwinAuditOutbox.deleteMany({
     where: {
       practiceId: {
@@ -799,6 +967,7 @@ async function main(): Promise<void> {
     await proveDatabaseConstraints();
     const canonicalLockOrder = await proveCanonicalLockOrder();
     await proveRequiredFailuresPersist();
+    await provePostProviderProjectionRollbackAndReuse();
     await proveAuditRollbackAndRetry();
     await proveUnsignedReprocessAndSignedImmutability();
     const forcedDeadlock = await proveDeadlockRetry();
