@@ -11,27 +11,27 @@
 // draft. Keep Layer 6 the only place that edits the note.
 // ============================================================================
 
-import { z } from 'zod';
-import { modelClient, wrapAsData, delimiterSystemSuffix } from '@meddoc/ai';
-import { updateTemplateTwinSyntheticQaClaimBoundVisit } from '@/worker/staging-qa-mutation-fence';
-import type { ExtractedEntities } from './03-extract-entities';
-import { logAudit } from '@/lib/audit';
+import { z } from "zod";
+import { modelClient, wrapAsData, delimiterSystemSuffix } from "@meddoc/ai";
+import { updateTemplateTwinSyntheticQaClaimBoundVisit } from "@/worker/staging-qa-mutation-fence";
+import type { ExtractedEntities } from "./03-extract-entities";
+import { logWorkerAudit } from "@/worker/worker-audit";
 import {
   shouldFlagForReview,
   LOW_CONFIDENCE_THRESHOLD,
   type AudioConfidenceStats,
-} from './audio-confidence';
+} from "./audio-confidence";
 import {
   insertedDefaultSections,
   type ResolvedNoteTemplate,
-} from '../note-templates/build-soap-prompt';
-import { SYSTEM_DEFAULT_NOTE_TEMPLATE } from '../note-templates/system-default-template';
+} from "../note-templates/build-soap-prompt";
+import { SYSTEM_DEFAULT_NOTE_TEMPLATE } from "../note-templates/system-default-template";
 
 // TRANSCRIBE_MD_CLINICAL_MODEL — eval override (feat/fable5-eval); unset → default unchanged.
-const MODEL = process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-opus-4-8';
+const MODEL = process.env.TRANSCRIBE_MD_CLINICAL_MODEL || "claude-opus-4-8";
 
 export const CritiqueIssue = z.object({
-  severity: z.enum(['critical', 'major', 'minor']),
+  severity: z.enum(["critical", "major", "minor"]),
   location: z.string(),
   description: z.string(),
   suggested_fix: z.string(),
@@ -40,7 +40,7 @@ export type CritiqueIssue = z.infer<typeof CritiqueIssue>;
 
 export const CritiqueReport = z.object({
   issues: z.array(CritiqueIssue).default([]),
-  overall_quality: z.enum(['high', 'medium', 'low']),
+  overall_quality: z.enum(["high", "medium", "low"]),
   safe_to_sign_without_review: z.boolean(),
 });
 export type CritiqueReport = z.infer<typeof CritiqueReport>;
@@ -72,17 +72,17 @@ export async function runLayer5SelfCritique(
   input: Layer5Input,
 ): Promise<CritiqueReport> {
   // Round 3 PR-J — A07-P0 prompt-injection delimiter (mirrors L4).
-  const wrap = wrapAsData(input.roleLabeledTranscript, 'transcript');
+  const wrap = wrapAsData(input.roleLabeledTranscript, "transcript");
   if (wrap.injectionAttemptDetected) {
-    void logAudit({
-      action: 'PIPELINE_REJECTED_INJECTION_DELIMITER',
-      targetType: 'transcribe_visit',
+    await logWorkerAudit({
+      action: "PIPELINE_REJECTED_INJECTION_DELIMITER",
+      targetType: "transcribe_visit",
       targetId: input.visitId,
       userId: input.userId,
       practiceId: input.practiceId,
       success: false,
-      errorCode: 'INJECTION_DELIMITER_DETECTED',
-      metadata: { layer: 'L5', suffix: wrap.suffix },
+      errorCode: "INJECTION_DELIMITER_DETECTED",
+      metadata: { layer: "L5", suffix: wrap.suffix },
     });
   }
 
@@ -97,15 +97,15 @@ export async function runLayer5SelfCritique(
   const audioQualityAlert =
     lowConfidence && audioStats
       ? [
-          'AUDIO QUALITY ALERT: this transcript was produced from audio',
+          "AUDIO QUALITY ALERT: this transcript was produced from audio",
           `with median confidence ${audioStats.median.toFixed(2)} and`,
           `${audioStats.lowConfPct.toFixed(0)}% of utterances below ${LOW_CONFIDENCE_THRESHOLD} confidence.`,
-          'Be MORE willing to flag SOAP content that asserts as fact',
+          "Be MORE willing to flag SOAP content that asserts as fact",
           "something the audio doesn't clearly support. When a quoted",
-          'detail (specific numbers, doses, durations) does not appear',
-          'in the transcript, treat that as a CRITICAL hallucination',
-          'issue regardless of how plausible the value sounds.',
-        ].join('\n')
+          "detail (specific numbers, doses, durations) does not appear",
+          "in the transcript, treat that as a CRITICAL hallucination",
+          "issue regardless of how plausible the value sounds.",
+        ].join("\n")
       : null;
 
   // Phase 1 normals-scrutiny (additive — strengthens L5, removes nothing).
@@ -120,99 +120,99 @@ export async function runLayer5SelfCritique(
   const normalsScrutinyAlert =
     insertedSections.length > 0
       ? [
-          'TEMPLATE-DEFAULT SCRUTINY: the SOAP draft may contain text inserted',
-          'from the note template as a default/scaffold (NOT derived from this',
+          "TEMPLATE-DEFAULT SCRUTINY: the SOAP draft may contain text inserted",
+          "from the note template as a default/scaffold (NOT derived from this",
           `encounter) in these sections: ${insertedSections
             .map((s) => s.label)
-            .join(', ')}.`,
-          'For each such inserted finding, verify it is actually supported by',
-          'the transcript or entities. If an inserted finding is NOT supported,',
+            .join(", ")}.`,
+          "For each such inserted finding, verify it is actually supported by",
+          "the transcript or entities. If an inserted finding is NOT supported,",
           'raise it as a CRITICAL issue whose description begins "Unsupported',
           'template default:" so it is surfaced for clinician review rather',
-          'than silently kept. Supported inserted content needs no issue.',
-        ].join('\n')
+          "than silently kept. Supported inserted content needs no issue.",
+        ].join("\n")
       : null;
 
   const system = [
-    'You are an auditor reviewing a SOAP note for clinical quality. The',
-    'note was generated from a transcript + extracted entities by a',
-    'separate system. Your job is to identify issues using these rules:',
-    '',
+    "You are an auditor reviewing a SOAP note for clinical quality. The",
+    "note was generated from a transcript + extracted entities by a",
+    "separate system. Your job is to identify issues using these rules:",
+    "",
     audioQualityAlert,
-    audioQualityAlert ? '' : null,
+    audioQualityAlert ? "" : null,
     normalsScrutinyAlert,
-    normalsScrutinyAlert ? '' : null,
-    'CRITICAL issues (must fix):',
-    '1. Any factual claim in the SOAP that CANNOT be traced to the',
-    '   transcript or entities — i.e. hallucination.',
-    '2. Internal contradictions between sections (e.g. Assessment',
-    '   disagrees with Subjective).',
-    '3. Missing red-flag screening for the presenting complaint.',
+    normalsScrutinyAlert ? "" : null,
+    "CRITICAL issues (must fix):",
+    "1. Any factual claim in the SOAP that CANNOT be traced to the",
+    "   transcript or entities — i.e. hallucination.",
+    "2. Internal contradictions between sections (e.g. Assessment",
+    "   disagrees with Subjective).",
+    "3. Missing red-flag screening for the presenting complaint.",
     '   Examples: "chest pain" without SOB/radiation/diaphoresis',
-    '   screen; new-onset headache in an adult without red-flag',
-    '   questions; pediatric fever without hydration/activity check.',
+    "   screen; new-onset headache in an adult without red-flag",
+    "   questions; pediatric fever without hydration/activity check.",
     // 2026-06-11 inaudible-span hardening — aim the critique at the class
     // the transcript markers now make visible.
-    '3b. Any claim whose only transcript support overlaps an',
+    "3b. Any claim whose only transcript support overlaps an",
     '   "[unclear in recording]" marker — a medication, dose, diagnosis,',
-    '   finding, or name asserted where the audio was unintelligible is a',
-    '   CRITICAL hallucination-class issue: the note must carry the marker',
-    '   (hedged), never a guessed value. Also flag patient-reported',
-    '   sensations rewritten as examination findings when no exam is',
-    '   documented in the transcript.',
-    '',
-    'MAJOR issues (should fix):',
-    '4. Assessment not supported by Subjective + Objective.',
-    '5. Plan does not address the Assessment.',
-    '6. Significant information in the transcript omitted from the note.',
-    '7. Specialty-inappropriate framing.',
-    '',
-    'MINOR issues (nice to fix):',
-    '8. Unclear phrasing.',
-    '9. Redundancy across sections.',
-    '10. Suboptimal structure.',
-    '',
+    "   finding, or name asserted where the audio was unintelligible is a",
+    "   CRITICAL hallucination-class issue: the note must carry the marker",
+    "   (hedged), never a guessed value. Also flag patient-reported",
+    "   sensations rewritten as examination findings when no exam is",
+    "   documented in the transcript.",
+    "",
+    "MAJOR issues (should fix):",
+    "4. Assessment not supported by Subjective + Objective.",
+    "5. Plan does not address the Assessment.",
+    "6. Significant information in the transcript omitted from the note.",
+    "7. Specialty-inappropriate framing.",
+    "",
+    "MINOR issues (nice to fix):",
+    "8. Unclear phrasing.",
+    "9. Redundancy across sections.",
+    "10. Suboptimal structure.",
+    "",
     'For overall_quality: "high" when there are zero critical issues',
     'and at most one major; "medium" when there are <=1 critical and',
     '<=3 major; "low" otherwise.',
-    '',
-    'For safe_to_sign_without_review: true ONLY when there are zero',
-    'critical issues AND overall_quality is high.',
-    '',
-    'Respond with VALID JSON ONLY, no markdown fences:',
-    '{',
+    "",
+    "For safe_to_sign_without_review: true ONLY when there are zero",
+    "critical issues AND overall_quality is high.",
+    "",
+    "Respond with VALID JSON ONLY, no markdown fences:",
+    "{",
     '  "issues": [ { "severity": "critical|major|minor",',
     '                "location": "Subjective/HPI",',
     '                "description": "...",',
     '                "suggested_fix": "..." } ],',
     '  "overall_quality": "high|medium|low",',
     '  "safe_to_sign_without_review": true|false',
-    '}',
+    "}",
     // Round 3 PR-J — instruction-as-data boundary.
-    delimiterSystemSuffix('transcript'),
+    delimiterSystemSuffix("transcript"),
   ]
-    .filter((l): l is string => typeof l === 'string')
-    .join('\n');
+    .filter((l): l is string => typeof l === "string")
+    .join("\n");
 
   const user = [
     `Specialty: ${input.specialty}`,
-    '',
-    'SOAP draft (the artifact under audit):',
+    "",
+    "SOAP draft (the artifact under audit):",
     input.soapDraft,
-    '',
-    'Extracted entities (the structured inputs the draft was built from):',
+    "",
+    "Extracted entities (the structured inputs the draft was built from):",
     JSON.stringify(input.entities, null, 2),
-    '',
-    'Role-labeled transcript (the ground truth):',
+    "",
+    "Role-labeled transcript (the ground truth):",
     wrap.wrapped,
-  ].join('\n');
+  ].join("\n");
 
   const report = await modelClient.complete({
     practiceId: input.practiceId,
     visitId: input.visitId,
     userId: input.userId,
-    purpose: 'tm_critique',
-    provider: 'anthropic',
+    purpose: "tm_critique",
+    provider: "anthropic",
     model: MODEL,
     system,
     user,
@@ -226,7 +226,7 @@ export async function runLayer5SelfCritique(
 
   await updateTemplateTwinSyntheticQaClaimBoundVisit({
     visitId: input.visitId,
-    userId: input.userId ?? '',
+    userId: input.userId ?? "",
     practiceId: input.practiceId,
     data: { critique: report as unknown as object },
   });
@@ -257,13 +257,13 @@ function isStructurallyFixable(issue: CritiqueIssue): boolean {
   //   or rewrite the offending line).
   // - Critical "missing red-flag screening" is NOT fixable — we don't
   //   have the answers; the clinician has to add them manually.
-  if (issue.severity !== 'critical') return true;
+  if (issue.severity !== "critical") return true;
   const d = issue.description.toLowerCase();
   if (
-    d.includes('red flag') ||
-    d.includes('red-flag') ||
-    d.includes('screening missing') ||
-    d.includes('missing red')
+    d.includes("red flag") ||
+    d.includes("red-flag") ||
+    d.includes("screening missing") ||
+    d.includes("missing red")
   ) {
     return false;
   }
@@ -271,8 +271,8 @@ function isStructurallyFixable(issue: CritiqueIssue): boolean {
   // NOT be auto-patched away — it surfaces for clinician review, same posture
   // as missing red-flag screening. Additive; existing classes unchanged.
   if (
-    d.includes('unsupported template default') ||
-    d.includes('unsupported inserted')
+    d.includes("unsupported template default") ||
+    d.includes("unsupported inserted")
   ) {
     return false;
   }

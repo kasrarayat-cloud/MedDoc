@@ -7,12 +7,12 @@
 // "how we got 99214" alongside the code itself.
 // ============================================================================
 
-import { z } from 'zod';
-import { modelClient, isValidCpt } from '@meddoc/ai';
-import { updateTemplateTwinSyntheticQaClaimBoundVisit } from '@/worker/staging-qa-mutation-fence';
-import { logAudit } from '@/lib/audit';
+import { z } from "zod";
+import { modelClient, isValidCpt } from "@meddoc/ai";
+import { updateTemplateTwinSyntheticQaClaimBoundVisit } from "@/worker/staging-qa-mutation-fence";
+import { logWorkerAudit } from "@/worker/worker-audit";
 
-const MODEL = 'claude-sonnet-4-6';
+const MODEL = "claude-sonnet-4-6";
 
 const EmReasoning = z.object({
   problems: z
@@ -34,18 +34,18 @@ const EmReasoning = z.object({
   // strict enum still applies if extraction returns no match.
   risk: z.preprocess(
     (value) => {
-      if (typeof value !== 'string') return value;
+      if (typeof value !== "string") return value;
       const match = value
         .toLowerCase()
         .match(/\b(minimal|low|moderate|high)\b/);
       return match ? match[1] : value;
     },
-    z.enum(['minimal', 'low', 'moderate', 'high']),
+    z.enum(["minimal", "low", "moderate", "high"]),
   ),
 });
 
 export const EmCode = z.object({
-  code: z.string().regex(/^[0-9]{5}$/, '5-digit CPT'),
+  code: z.string().regex(/^[0-9]{5}$/, "5-digit CPT"),
   /** Optional human description ("Established patient, level 4"). */
   description: z.string(),
   reasoning: EmReasoning,
@@ -53,18 +53,18 @@ export const EmCode = z.object({
 });
 
 export const ProcedureCpt = z.object({
-  code: z.string().regex(/^[0-9]{5}$/, '5-digit CPT'),
+  code: z.string().regex(/^[0-9]{5}$/, "5-digit CPT"),
   description: z.string(),
   evidence_quote: z.string().min(1),
   /** Q2 fix-pack §06.6 — categorical confidence on the procedure
    *  attribution. "low" → SOAP barely supports this procedure; the
    *  doctor should review before billing. The post-processor uses
    *  this to flip needsReview when any procedure lands "low". */
-  confidenceLevel: z.enum(['high', 'medium', 'low']).default('high'),
+  confidenceLevel: z.enum(["high", "medium", "low"]).default("high"),
 });
 
 export const Modifier = z.object({
-  code: z.string().regex(/^[0-9]{2}$/, '2-digit modifier'),
+  code: z.string().regex(/^[0-9]{2}$/, "2-digit modifier"),
   rationale: z.string().min(1),
 });
 
@@ -88,49 +88,49 @@ export async function runLayer7bCptCoding(
   input: Layer7bInput,
 ): Promise<CptResult> {
   const system = [
-    'You are a certified CPT coding specialist. From this SOAP note:',
-    '',
-    '1. Determine the E&M code under 2021 AMA guidelines. Level is the',
-    '   HIGHER OF Medical Decision Making complexity OR total time',
-    '   (including documentation).',
-    '',
-    '   Established patient (99212-99215):',
-    '     99212 — Straightforward. 1 minor, self-limited problem.',
-    '     99213 — Low. 2 minor OR 1 stable chronic; minimal data',
-    '             review; minimal risk.',
-    '     99214 — Moderate. 1+ chronic not at goal OR 2+ chronic',
-    '             stable; moderate data review; moderate risk',
-    '             (e.g. prescription-drug management).',
-    '     99215 — High. 1+ chronic with severe exacerbation OR new',
-    '             problem with uncertain prognosis; extensive data',
-    '             review; high risk.',
-    '',
-    '   New patient (99202-99205) — parallel tiers. Default to',
+    "You are a certified CPT coding specialist. From this SOAP note:",
+    "",
+    "1. Determine the E&M code under 2021 AMA guidelines. Level is the",
+    "   HIGHER OF Medical Decision Making complexity OR total time",
+    "   (including documentation).",
+    "",
+    "   Established patient (99212-99215):",
+    "     99212 — Straightforward. 1 minor, self-limited problem.",
+    "     99213 — Low. 2 minor OR 1 stable chronic; minimal data",
+    "             review; minimal risk.",
+    "     99214 — Moderate. 1+ chronic not at goal OR 2+ chronic",
+    "             stable; moderate data review; moderate risk",
+    "             (e.g. prescription-drug management).",
+    "     99215 — High. 1+ chronic with severe exacerbation OR new",
+    "             problem with uncertain prognosis; extensive data",
+    "             review; high risk.",
+    "",
+    "   New patient (99202-99205) — parallel tiers. Default to",
     '   ESTABLISHED unless the SOAP explicitly says "new patient".',
-    '',
-    '2. List any procedural CPT codes performed during the visit',
-    '   (injections, biopsies, EKG interpretation, etc.) — only those',
-    '   the SOAP documents as performed at this encounter.',
-    '',
-    '3. Suggest CPT modifiers ONLY when clearly warranted:',
-    '     -25 separately identifiable E&M on the same day as a',
-    '         procedure',
-    '     -59 distinct procedural service',
-    '     -95 telehealth synchronous',
-    '   Skip modifiers if none apply.',
-    '',
-    'Evidence rule: every code carries a specific SOAP quote. If you',
-    'cannot cite evidence, omit the code.',
-    '',
-    'Procedure confidence: assign confidenceLevel to each procedure:',
+    "",
+    "2. List any procedural CPT codes performed during the visit",
+    "   (injections, biopsies, EKG interpretation, etc.) — only those",
+    "   the SOAP documents as performed at this encounter.",
+    "",
+    "3. Suggest CPT modifiers ONLY when clearly warranted:",
+    "     -25 separately identifiable E&M on the same day as a",
+    "         procedure",
+    "     -59 distinct procedural service",
+    "     -95 telehealth synchronous",
+    "   Skip modifiers if none apply.",
+    "",
+    "Evidence rule: every code carries a specific SOAP quote. If you",
+    "cannot cite evidence, omit the code.",
+    "",
+    "Procedure confidence: assign confidenceLevel to each procedure:",
     '  "high"   — SOAP explicitly documents the procedure as performed',
     '  "medium" — implied by findings + plan but not unambiguous',
     '  "low"    — speculative based on context (worth doctor review)',
     'When in doubt, prefer "low" + let the doctor confirm rather than',
     '"medium" + risk a speculative bill.',
-    '',
-    'Respond with VALID JSON ONLY, no markdown fences:',
-    '{',
+    "",
+    "Respond with VALID JSON ONLY, no markdown fences:",
+    "{",
     '  "em": {',
     '    "code": "99214",',
     '    "description": "Established patient, moderate complexity",',
@@ -138,34 +138,34 @@ export async function runLayer7bCptCoding(
     '      "problems": [{ "description": "HTN not at goal", "status": "unstable" }],',
     '      "data": "reviewed last 3 months of BP log",',
     '      "risk": "moderate"',
-    '    },',
+    "    },",
     '    "evidence_quote": "…"',
-    '  },',
+    "  },",
     '  "procedures": [{ "code": "...", "description": "...", "evidence_quote": "..." }],',
     '  "modifiers": [{ "code": "25", "rationale": "..." }]',
-    '}',
-    '',
-    'If the SOAP really describes no E&M encounter (rare — edge case',
-    'for telephone-only encounters captured accidentally), return',
+    "}",
+    "",
+    "If the SOAP really describes no E&M encounter (rare — edge case",
+    "for telephone-only encounters captured accidentally), return",
     '{ "em": null, "procedures": [], "modifiers": [] }.',
-  ].join('\n');
+  ].join("\n");
 
   const user = [
     `Specialty: ${input.specialty}`,
-    '',
-    'Entities:',
+    "",
+    "Entities:",
     input.entitiesJson,
-    '',
-    'SOAP note:',
+    "",
+    "SOAP note:",
     input.soapFinal,
-  ].join('\n');
+  ].join("\n");
 
   const result = await modelClient.complete({
     practiceId: input.practiceId,
     visitId: input.visitId,
     userId: input.userId,
-    purpose: 'tm_cpt_coding',
-    provider: 'anthropic',
+    purpose: "tm_cpt_coding",
+    provider: "anthropic",
     model: MODEL,
     system,
     user,
@@ -192,10 +192,10 @@ export async function runLayer7bCptCoding(
     return ok;
   });
   if (rejectedCodes.length > 0) {
-    void logAudit({
-      action: 'CODING_COACH_REJECTED_INVALID_CPT',
+    await logWorkerAudit({
+      action: "CODING_COACH_REJECTED_INVALID_CPT",
       targetId: input.visitId,
-      targetType: 'TranscribeVisit',
+      targetType: "TranscribeVisit",
       userId: input.userId,
       practiceId: input.practiceId,
       success: false,
@@ -215,7 +215,7 @@ export async function runLayer7bCptCoding(
   // confidence. Doctor sees the warning before signing rather than
   // auto-attaching speculative billing codes.
   const lowConfProcedures = filteredProcedures.filter(
-    (p) => p.confidenceLevel === 'low',
+    (p) => p.confidenceLevel === "low",
   );
 
   // FIND-P1-004 (comprehensive-audit 2026-05-14) — collapse the
@@ -232,13 +232,13 @@ export async function runLayer7bCptCoding(
     lowConfProcedures.length > 0
       ? {
           needsReview: true,
-          reviewReason: `${lowConfProcedures.length} CPT procedure code${lowConfProcedures.length === 1 ? '' : 's'} at low confidence — verify before billing: ${lowConfProcedures.map((p) => p.code).join(', ')}.`,
+          reviewReason: `${lowConfProcedures.length} CPT procedure code${lowConfProcedures.length === 1 ? "" : "s"} at low confidence — verify before billing: ${lowConfProcedures.map((p) => p.code).join(", ")}.`,
         }
       : {};
 
   await updateTemplateTwinSyntheticQaClaimBoundVisit({
     visitId: input.visitId,
-    userId: input.userId ?? '',
+    userId: input.userId ?? "",
     practiceId: input.practiceId,
     data: {
       cptCodes: filtered as unknown as object,

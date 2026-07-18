@@ -2,9 +2,10 @@
 // Deep-audit G9 helper — detect a partial L7 failure that should flip
 // needsReview + populate a reviewReason for the doctor.
 // ----------------------------------------------------------------------------
-// The worker's L7 fan-out (worker.ts) runs five tasks via
-// Promise.allSettled and rolls per-task outcomes into a
-// `confidenceScores` shape:
+// Legacy display helper for the worker's L7 confidence-score roll-up.
+// The durable visit-automation manifest and authoritative finalizer now own
+// completion and signing eligibility; this helper only supplies a concise
+// clinician-facing explanation for older confidence-score consumers.
 //
 //   {
 //     icd_coding:      { status: 'ok' | 'failed' | 'skipped'; reason?: string },
@@ -20,12 +21,10 @@
 // Deep-audit G9 documents the demo-blocking scenario where Anthropic
 // credit exhaustion mid-pipeline left V3 in this state.
 //
-// The fix: when ANY of the THREE load-bearing layers (icd-coding /
-// cpt-coding / rx-drafting) fails, flip needsReview + populate
-// reviewReason so the visit surfaces in the review queue with a
-// specific reason + retry CTA. Status stays READY because the SOAP
-// itself is valid; the T-M6 design choice (one layer's failure doesn't
-// fail the visit) is preserved.
+// The historical fix flipped needsReview for the three load-bearing layers.
+// Current workers additionally persist every configured layer outcome and
+// refuse REVIEW_READY while a required layer is missing or failed. Do not use
+// this helper as a completion proof.
 //
 // 7d (referrals) and 7e (patient summary) are NOT load-bearing — they
 // augment the visit page but the doctor doesn't need them to sign the
@@ -47,18 +46,18 @@
  *  worker's L7 fan-out roll-up. Mirrors the inline shape in
  *  apps/transcribe-md/src/worker.ts:775-779. */
 export type LayerStatus =
-  | { status: 'ok'; metadata?: unknown }
-  | { status: 'skipped' }
-  | { status: 'failed'; reason: string };
+  | { status: "ok"; metadata?: unknown }
+  | { status: "skipped" }
+  | { status: "failed"; reason: string };
 
 export type AutomationConfidenceScores = Record<string, LayerStatus>;
 
 /** Load-bearing tasks — failure of any of these flips needsReview.
  *  Order matters for `reviewReason` readability (icd → cpt → rx). */
 export const LOAD_BEARING_L7_TASKS = [
-  'icd_coding',
-  'cpt_coding',
-  'rx_drafting',
+  "icd_coding",
+  "cpt_coding",
+  "rx_drafting",
 ] as const;
 
 export type LoadBearingTaskKey = (typeof LOAD_BEARING_L7_TASKS)[number];
@@ -91,7 +90,7 @@ export interface LayerOutputs {
 /** Distinguishes "the layer crashed" from "the layer returned nothing
  *  successfully." Both flip needsReview, but the audit-log metadata
  *  uses the discriminator so admin forensics can grep separately. */
-export type IncompleteCause = 'failed' | 'empty';
+export type IncompleteCause = "failed" | "empty";
 
 export interface IncompleteAutomationResult {
   /** True iff at least one load-bearing layer failed OR returned empty. */
@@ -141,10 +140,10 @@ export function detectIncompleteAutomation(
   if (scores) {
     for (const key of LOAD_BEARING_L7_TASKS) {
       const entry = scores[key];
-      if (entry && entry.status === 'failed') {
+      if (entry && entry.status === "failed") {
         tripped.push(key);
-        reasonsByLayer[key] = entry.reason?.slice(0, 300) ?? 'unknown';
-        causeByLayer[key] = 'failed';
+        reasonsByLayer[key] = entry.reason?.slice(0, 300) ?? "unknown";
+        causeByLayer[key] = "failed";
       }
     }
   }
@@ -169,22 +168,22 @@ export function detectIncompleteAutomation(
   if (outputs) {
     if (
       outputs.icdResumed === true &&
-      scores?.icd_coding?.status === 'ok' &&
+      scores?.icd_coding?.status === "ok" &&
       causeByLayer.icd_coding == null &&
       isIcdEmpty(outputs.icdCodes)
     ) {
-      tripped.push('icd_coding');
-      reasonsByLayer.icd_coding = 'returned empty codes array (status:ok)';
-      causeByLayer.icd_coding = 'empty';
+      tripped.push("icd_coding");
+      reasonsByLayer.icd_coding = "returned empty codes array (status:ok)";
+      causeByLayer.icd_coding = "empty";
     }
     if (
-      scores?.cpt_coding?.status === 'ok' &&
+      scores?.cpt_coding?.status === "ok" &&
       causeByLayer.cpt_coding == null &&
       isCptEmpty(outputs.cptCodes)
     ) {
-      tripped.push('cpt_coding');
-      reasonsByLayer.cpt_coding = 'no E&M code emitted (status:ok)';
-      causeByLayer.cpt_coding = 'empty';
+      tripped.push("cpt_coding");
+      reasonsByLayer.cpt_coding = "no E&M code emitted (status:ok)";
+      causeByLayer.cpt_coding = "empty";
     }
   }
 
@@ -199,10 +198,10 @@ export function detectIncompleteAutomation(
   }
 
   const perLayer = tripped.map((k) => {
-    const reason = reasonsByLayer[k] ?? 'unknown';
-    return `${k.replace('_', '-')}: ${reason}`;
+    const reason = reasonsByLayer[k] ?? "unknown";
+    return `${k.replace("_", "-")}: ${reason}`;
   });
-  const joined = perLayer.join('; ').slice(0, 500);
+  const joined = perLayer.join("; ").slice(0, 500);
   return {
     needsReview: true,
     reviewReason: `Auto-coding incomplete — ${joined}. Click Retry to reprocess.`,
@@ -229,5 +228,5 @@ function isCptEmpty(cpt: CptLikeResult | null | undefined): boolean {
   const em = cpt.em;
   if (em == null) return true;
   const code = em.code;
-  return typeof code !== 'string' || code.trim() === '';
+  return typeof code !== "string" || code.trim() === "";
 }

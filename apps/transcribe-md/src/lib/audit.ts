@@ -20,7 +20,9 @@
 import { headers } from "next/headers";
 
 import prisma from "@meddoc/db";
+import { Prisma } from "@prisma/client";
 import { auth } from "@/lib/nextauth";
+import { runSerializableTransactionWithRetry } from "@/lib/db/transaction-retry";
 import { getRedis, isRedisReady, ADMIN_AUDIT_STREAM_CHANNEL } from "./redis";
 
 // AuditAction is a Prisma enum — we mirror the relevant slice for
@@ -153,6 +155,7 @@ export type AuditAction =
   // needsReview on the visit. Metadata carries the failedLayers list
   // + per-layer reasons (truncated). Forensics surface in /admin/audit.
   | "VISIT_AUTOMATION_INCOMPLETE"
+  | "VISIT_AUTOMATION_COMPLETED"
   // 2026-05-12 stuck-visit watchdog. Emitted by the per-minute sweep
   // when a visit is force-failed because its status has been in an
   // in-flight state (TRANSCRIBING / EXTRACTING / DRAFTING / etc.) past
@@ -236,80 +239,177 @@ async function getRequestContext(): Promise<{
   }
 }
 
+interface ResolvedAuditEntry {
+  userId: string | null;
+  userEmailSnapshot: string | null;
+  action: AuditAction;
+  targetId: string | null;
+  targetType: string | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  metadata: object | null;
+  success: boolean;
+  errorCode: string | null;
+  timestamp: Date;
+  practiceId: string;
+}
+
+async function resolveAuditEntry(
+  input: AuditLogInput,
+): Promise<ResolvedAuditEntry> {
+  // 2026-05-13 — when callers pass both userId AND practiceId we
+  // skip session resolution entirely. Two wins: (1) saves the
+  // round-trip in request scope; (2) avoids the worker-context
+  // failure mode where `auth()` throws synchronously inside the
+  // Auth.js v5 internals (it reads `headers()` while computing the
+  // JWT callback chain, and headers() is request-scoped only).
+  //
+  // The `Promise.resolve().then(...)` wrap is the synchronous-throw
+  // belt: `.catch()` only fires for REJECTED promises, but auth()
+  // can throw BEFORE returning a thenable (the worker-context
+  // path); wrapping the call in a `.then` callback re-routes the
+  // throw into a promise rejection that `.catch` then handles.
+  const hasFullOverride = !!input.userId && !!input.practiceId;
+  const session = hasFullOverride
+    ? null
+    : await Promise.resolve()
+        .then(() => auth())
+        .catch(() => null);
+  const { ipAddress, userAgent } = await getRequestContext();
+
+  const userId = input.userId ?? session?.user?.id ?? null;
+  const userEmailSnapshot = input.userEmail ?? session?.user?.email ?? null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sessionPracticeId = (session?.user as any)?.practiceId as
+    | string
+    | undefined;
+  const practiceId = input.practiceId ?? sessionPracticeId ?? "clinic_main";
+
+  return {
+    userId,
+    userEmailSnapshot,
+    action: input.action,
+    targetId: input.targetId ?? null,
+    targetType: input.targetType ?? null,
+    ipAddress,
+    userAgent,
+    metadata: (input.metadata ?? null) as unknown as object | null,
+    success: input.success ?? true,
+    errorCode: input.errorCode ?? null,
+    timestamp: new Date(),
+    practiceId,
+  };
+}
+
+function publishAuditEntry(entry: ResolvedAuditEntry): void {
+  // The database row is the durable record. Redis only wakes the admin SSE
+  // stream, so it remains bounded best-effort after persistence succeeds.
+  setImmediate(() => {
+    if (!isRedisReady()) return;
+    const publishPromise = getRedis().publish(
+      ADMIN_AUDIT_STREAM_CHANNEL,
+      JSON.stringify(entry),
+    );
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("publish timeout")), 100),
+    );
+    Promise.race([publishPromise, timeout]).catch(() => {
+      // Silent — best-effort, row is durable.
+    });
+  });
+}
+
+/**
+ * Fail-closed audit persistence for the synthetic clinical QA workflow.
+ * Callers must await this function. A transient PostgreSQL deadlock or
+ * serialization abort retries the whole single-row transaction; exhaustion
+ * rejects the request instead of representing an unaudited action as done.
+ */
+export async function logRequiredAudit(input: AuditLogInput): Promise<void> {
+  const entry = await resolveAuditEntry(input);
+  if (
+    !entry.userId ||
+    entry.targetType !== "TranscribeVisit" ||
+    !entry.targetId
+  ) {
+    throw new Error("Required visit audit identity is incomplete.");
+  }
+  await runSerializableTransactionWithRetry({
+    prisma,
+    operation: "required_audit_log_create",
+    // This transaction records a read event; it does not derive or advance
+    // clinical state. READ COMMITTED plus explicit ordered row locks avoids
+    // manufacturing serialization aborts while the worker legitimately
+    // advances the same visit, while the shared wrapper still retries a
+    // genuine 40P01 deadlock as one complete idempotent transaction.
+    isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+    context: {
+      visitId:
+        entry.targetType === "TranscribeVisit"
+          ? (entry.targetId ?? undefined)
+          : undefined,
+      practiceId: entry.practiceId,
+    },
+    transaction: async (tx) => {
+      // Acquire the subset of the automation lock order used by this read:
+      // practice -> actor -> visit -> audit row. Taking the first lock before
+      // asking PostgreSQL to validate later foreign keys prevents the E2E
+      // tenant cleanup (and account-retirement paths with the same order)
+      // from forming a practice/user FK deadlock cycle.
+      const practices = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        SELECT "id"
+        FROM "practices"
+        WHERE "id" = ${entry.practiceId}
+        FOR KEY SHARE
+      `);
+      if (practices.length !== 1) {
+        throw new Error("Required visit audit practice is unavailable.");
+      }
+      const actors = await tx.$queryRaw<
+        Array<{ id: string; practiceId: string; isActive: boolean }>
+      >(Prisma.sql`
+        SELECT "id", "practiceId", "isActive"
+        FROM "users"
+        WHERE "id" = ${entry.userId}
+        FOR KEY SHARE
+      `);
+      if (
+        actors.length !== 1 ||
+        actors[0]?.practiceId !== entry.practiceId ||
+        actors[0]?.isActive !== true
+      ) {
+        throw new Error("Required visit audit actor is unavailable.");
+      }
+      const visits = await tx.$queryRaw<Array<{ id: string; userId: string }>>(
+        Prisma.sql`
+          SELECT "id", "userId"
+          FROM "transcribe_visits"
+          WHERE "id" = ${entry.targetId}
+          FOR KEY SHARE
+        `,
+      );
+      if (visits.length !== 1 || visits[0]?.userId !== entry.userId) {
+        throw new Error("Required visit audit target is unavailable.");
+      }
+      // Prisma's shared barrel exports `any` (see memory note on typing).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await tx.auditLog.create({ data: entry as any });
+    },
+  });
+  publishAuditEntry(entry);
+}
+
 /** Write a single audit row. Never throws. */
 export async function logAudit(input: AuditLogInput): Promise<void> {
   try {
-    // 2026-05-13 — when callers pass both userId AND practiceId we
-    // skip session resolution entirely. Two wins: (1) saves the
-    // round-trip in request scope; (2) avoids the worker-context
-    // failure mode where `auth()` throws synchronously inside the
-    // Auth.js v5 internals (it reads `headers()` while computing the
-    // JWT callback chain, and headers() is request-scoped only).
-    //
-    // The `Promise.resolve().then(...)` wrap is the synchronous-throw
-    // belt: `.catch()` only fires for REJECTED promises, but auth()
-    // can throw BEFORE returning a thenable (the worker-context
-    // path); wrapping the call in a `.then` callback re-routes the
-    // throw into a promise rejection that `.catch` then handles.
-    const hasFullOverride = !!input.userId && !!input.practiceId;
-    const session = hasFullOverride
-      ? null
-      : await Promise.resolve()
-          .then(() => auth())
-          .catch(() => null);
-    const { ipAddress, userAgent } = await getRequestContext();
-
-    const userId = input.userId ?? session?.user?.id ?? null;
-    const userEmailSnapshot = input.userEmail ?? session?.user?.email ?? null;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sessionPracticeId = (session?.user as any)?.practiceId as
-      | string
-      | undefined;
-    const practiceId = input.practiceId ?? sessionPracticeId ?? "clinic_main";
-
-    const entry = {
-      userId,
-      userEmailSnapshot,
-      action: input.action,
-      targetId: input.targetId ?? null,
-      targetType: input.targetType ?? null,
-      ipAddress,
-      userAgent,
-      metadata: (input.metadata ?? null) as unknown as object | null,
-      success: input.success ?? true,
-      errorCode: input.errorCode ?? null,
-      timestamp: new Date(),
-      practiceId,
-    };
+    const entry = await resolveAuditEntry(input);
 
     // Prisma's shared barrel exports `any` (see memory note on typing).
     // The cast keeps the call site strict without dragging the global
     // any through the rest of the file.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await prisma.auditLog.create({ data: entry as any });
-
-    // Symmetric SSE fan-out — mirrors meddoc-pro/audit.ts. Uses the
-    // dedicated pub/sub singleton from `./redis` (kept separate from
-    // the BullMQ-shared connection in `./queue`, which uses
-    // `maxRetriesPerRequest: null` and would risk blocking the
-    // calling request if a publish queued indefinitely on a degraded
-    // broker). Three layers keep this fire-and-forget:
-    //   1. setImmediate — defer past the current request response
-    //   2. isRedisReady() — skip silently if the singleton isn't live
-    //   3. 100ms race — bound the publish wallclock either way
-    setImmediate(() => {
-      if (!isRedisReady()) return;
-      const publishPromise = getRedis().publish(
-        ADMIN_AUDIT_STREAM_CHANNEL,
-        JSON.stringify(entry),
-      );
-      const timeout = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("publish timeout")), 100),
-      );
-      Promise.race([publishPromise, timeout]).catch(() => {
-        // Silent — best-effort, row is durable.
-      });
-    });
+    publishAuditEntry(entry);
   } catch (err) {
     // Audit logging must never break the calling request. A Prisma
     // failure here likely means the audit_logs table is unreachable —

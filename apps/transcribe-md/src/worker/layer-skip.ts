@@ -18,11 +18,11 @@
 //     the downstream layer that consumes it will re-throw on parse,
 //     which fails the attempt → retry → same skip → same failure
 //     → FAILED after `attempts: 3`. Acceptable; the user can re-submit.
-//   - L7a-e (parallel): individual failures are caught by the
-//     Promise.allSettled wrapper in worker.ts AND by clearAutomationColumn
-//     which nulls the column on failure. So a failed L7 layer always
-//     has a null column going into the next attempt → skip check
-//     correctly returns false → it re-runs.
+//   - L7a-e: database-owning layer functions run in deterministic order. The
+//     controlled fan-out records every configured outcome in the durable
+//     automation manifest, and clearAutomationColumn nulls a failed layer's
+//     checkpoint. A later attempt therefore reruns the failed layer while
+//     preserving independently completed siblings.
 // ============================================================================
 
 /** Shape of a TranscribeVisit row trimmed to the columns the skip
@@ -46,26 +46,26 @@ export interface LayerSkipState {
 /** All sequential-stage layers. Names align with the comments in
  *  worker.ts and the docs so cross-referencing stays obvious. */
 export type SequentialLayer =
-  | 'L1'   // audio-mode transcribe
-  | 'L1b'  // voice-dictation transcribe
-  | 'L2'   // speaker roles
-  | 'L3'   // extract entities
-  | 'L4'   // generate SOAP
-  | 'L5'   // self-critique
-  | 'L6';  // polish
+  | "L1" // audio-mode transcribe
+  | "L1b" // voice-dictation transcribe
+  | "L2" // speaker roles
+  | "L3" // extract entities
+  | "L4" // generate SOAP
+  | "L5" // self-critique
+  | "L6"; // polish
 
 export type AutomationLayer =
-  | 'L7a'  // ICD coding
-  | 'L7b'  // CPT coding
-  | 'L7c'  // Rx drafting
-  | 'L7d'  // referrals
-  | 'L7e'; // patient summary
+  | "L7a" // ICD coding
+  | "L7b" // CPT coding
+  | "L7c" // Rx drafting
+  | "L7d" // referrals
+  | "L7e"; // patient summary
 
 export type PipelineLayer = SequentialLayer | AutomationLayer;
 
 function hasContent(v: unknown): boolean {
   if (v === null || v === undefined) return false;
-  if (typeof v === 'string') return v.trim().length > 0;
+  if (typeof v === "string") return v.trim().length > 0;
   // Prisma JSONB returns parsed objects. Empty {} and [] count as
   // "present" — the layer wrote something, even if empty. That's
   // intentional: Layer 2's fallback writes an empty-ish map and
@@ -79,40 +79,40 @@ function hasContent(v: unknown): boolean {
  *  attempt. */
 export function isLayerComplete(
   state: LayerSkipState,
-  layer: PipelineLayer
+  layer: PipelineLayer,
 ): boolean {
   switch (layer) {
     // L1 and L1b share transcriptRaw — both transcription layers write
     // the same column, and the caller only runs one of them per visit.
-    case 'L1':
-    case 'L1b':
+    case "L1":
+    case "L1b":
       return hasContent(state.transcriptRaw);
-    case 'L2':
+    case "L2":
       return hasContent(state.speakerMap);
-    case 'L3':
+    case "L3":
       return hasContent(state.entities);
-    case 'L4':
+    case "L4":
       return hasContent(state.soapDraft);
-    case 'L5':
+    case "L5":
       return hasContent(state.critique);
-    case 'L6':
+    case "L6":
       return hasContent(state.soapFinal);
-    case 'L7a':
+    case "L7a":
       return hasContent(state.icdCodes);
-    case 'L7b':
+    case "L7b":
       return hasContent(state.cptCodes);
-    case 'L7c':
+    case "L7c":
       return hasContent(state.rxDrafts);
-    case 'L7d':
+    case "L7d":
       return hasContent(state.referrals);
-    case 'L7e':
+    case "L7e":
       return hasContent(state.patientSummary);
   }
 }
 
-import { log } from '@/lib/log';
+import { log } from "@/lib/log";
 
-const SCOPE = 'layer-skip';
+const SCOPE = "layer-skip";
 
 /** Uniform log line for a skipped layer so cost-recovered attempts
  *  are grepable. `attempt` comes from BullMQ's job.attemptsMade — the
@@ -121,9 +121,9 @@ const SCOPE = 'layer-skip';
 export function logSkippedLayer(
   visitId: string,
   layer: PipelineLayer,
-  attempt: number
+  attempt: number,
 ): void {
-  log.info(SCOPE, 'skipped layer (column already populated)', {
+  log.info(SCOPE, "skipped layer (column already populated)", {
     visitId,
     layer,
     attempt,
@@ -135,10 +135,10 @@ export function logSkippedLayer(
 export function logSkipSummary(
   visitId: string,
   attempt: number,
-  skipped: PipelineLayer[]
+  skipped: PipelineLayer[],
 ): void {
   if (skipped.length === 0) return;
-  log.info(SCOPE, 'resumed attempt — layers skipped', {
+  log.info(SCOPE, "resumed attempt — layers skipped", {
     visitId,
     attempt,
     skippedCount: skipped.length,

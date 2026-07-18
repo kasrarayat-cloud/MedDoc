@@ -20,7 +20,7 @@
 // Anthropic calls and no real Postgres connection.
 // ============================================================================
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   modelComplete: vi.fn(),
@@ -28,31 +28,39 @@ const mocks = vi.hoisted(() => ({
   logAudit: vi.fn(),
 }));
 
-vi.mock('@meddoc/ai', async () => {
-  const actual = await vi.importActual<typeof import('@meddoc/ai')>('@meddoc/ai');
+vi.mock("@meddoc/ai", async () => {
+  const actual =
+    await vi.importActual<typeof import("@meddoc/ai")>("@meddoc/ai");
   return {
     ...actual,
     modelClient: { complete: mocks.modelComplete },
   };
 });
 
-vi.mock('@meddoc/db', () => ({
+vi.mock("@meddoc/db", () => ({
   default: {
     transcribeVisit: { update: mocks.prismaUpdate },
   },
 }));
 
-vi.mock('@/lib/audit', () => ({ logAudit: mocks.logAudit }));
+vi.mock("@/lib/audit", () => ({ logAudit: mocks.logAudit }));
+vi.mock("@/worker/worker-audit", () => ({ logWorkerAudit: mocks.logAudit }));
+vi.mock("@/worker/staging-qa-mutation-fence", () => ({
+  updateTemplateTwinSyntheticQaClaimBoundVisit: (input: {
+    visitId: string;
+    data: unknown;
+  }) => mocks.prismaUpdate({ where: { id: input.visitId }, data: input.data }),
+}));
 
 import {
   runLayer2SpeakerRoles,
   SpeakerMap,
   type Layer2Input,
-} from '../02-speaker-roles';
+} from "../02-speaker-roles";
 
-const FAKE_VISIT = 'vis-1';
-const FAKE_USER = 'u1';
-const FAKE_PRACTICE = 'p1';
+const FAKE_VISIT = "vis-1";
+const FAKE_USER = "u1";
+const FAKE_PRACTICE = "p1";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -70,21 +78,34 @@ function makeInput(overrides: Partial<Layer2Input> = {}): Layer2Input {
     practiceId: FAKE_PRACTICE,
     userId: FAKE_USER,
     utterances: [
-      { speaker: 0, transcript: 'How can I help you today?', start: 0, end: 2 },
-      { speaker: 1, transcript: 'I have a headache.', start: 2, end: 4 },
-      { speaker: 0, transcript: 'How long has it been going on?', start: 4, end: 6 },
-      { speaker: 1, transcript: 'Three days now.', start: 6, end: 8 },
-    ] as Layer2Input['utterances'],
+      { speaker: 0, transcript: "How can I help you today?", start: 0, end: 2 },
+      { speaker: 1, transcript: "I have a headache.", start: 2, end: 4 },
+      {
+        speaker: 0,
+        transcript: "How long has it been going on?",
+        start: 4,
+        end: 6,
+      },
+      { speaker: 1, transcript: "Three days now.", start: 6, end: 8 },
+    ] as Layer2Input["utterances"],
     interpreterMode: false,
     ...overrides,
   };
 }
 
-describe('runLayer2SpeakerRoles — happy path (useToolUse main branch)', () => {
-  it('passes useToolUse with submit_speaker_roles to modelClient.complete', async () => {
+describe("runLayer2SpeakerRoles — happy path (useToolUse main branch)", () => {
+  it("passes useToolUse with submit_speaker_roles to modelClient.complete", async () => {
     const wellFormed = {
-      '0': { role: 'doctor', confidence: 0.95, reasoning: 'asks diagnostic questions' },
-      '1': { role: 'patient', confidence: 0.92, reasoning: 'describes symptoms in lay terms' },
+      "0": {
+        role: "doctor",
+        confidence: 0.95,
+        reasoning: "asks diagnostic questions",
+      },
+      "1": {
+        role: "patient",
+        confidence: 0.92,
+        reasoning: "describes symptoms in lay terms",
+      },
     };
     mocks.modelComplete.mockResolvedValueOnce(wellFormed);
 
@@ -97,8 +118,8 @@ describe('runLayer2SpeakerRoles — happy path (useToolUse main branch)', () => 
     // the canonical tool name. The downstream Anthropic call uses
     // this to force tool_use, eliminating JSON_PARSE_FAIL.
     expect(callArgs.useToolUse).toEqual({
-      name: 'submit_speaker_roles',
-      description: expect.stringContaining('speaker role classification'),
+      name: "submit_speaker_roles",
+      description: expect.stringContaining("speaker role classification"),
     });
 
     // The Zod schema is still passed (defense-in-depth: tool_use is
@@ -111,10 +132,10 @@ describe('runLayer2SpeakerRoles — happy path (useToolUse main branch)', () => 
     expect(result.needsReview).toBe(false);
   });
 
-  it('flips needsReview when lowest confidence falls below the threshold', async () => {
+  it("flips needsReview when lowest confidence falls below the threshold", async () => {
     const lowConf = {
-      '0': { role: 'doctor', confidence: 0.95, reasoning: 'ok' },
-      '1': { role: 'patient', confidence: 0.55, reasoning: 'noisy audio' },
+      "0": { role: "doctor", confidence: 0.95, reasoning: "ok" },
+      "1": { role: "patient", confidence: 0.55, reasoning: "noisy audio" },
     };
     mocks.modelComplete.mockResolvedValueOnce(lowConf);
 
@@ -127,9 +148,9 @@ describe('runLayer2SpeakerRoles — happy path (useToolUse main branch)', () => 
     expect(updateArg.data.reviewReason).toMatch(/confidence below/);
   });
 
-  it('passes deterministic temperature=0 and the Zod schema (no regression)', async () => {
+  it("passes deterministic temperature=0 and the Zod schema (no regression)", async () => {
     mocks.modelComplete.mockResolvedValueOnce({
-      '0': { role: 'doctor', confidence: 0.9, reasoning: '' },
+      "0": { role: "doctor", confidence: 0.9, reasoning: "" },
     });
 
     await runLayer2SpeakerRoles(makeInput());
@@ -137,13 +158,13 @@ describe('runLayer2SpeakerRoles — happy path (useToolUse main branch)', () => 
     const callArgs = mocks.modelComplete.mock.calls[0][0];
     expect(callArgs.temperature).toBe(0);
     expect(callArgs.schema).toBe(SpeakerMap);
-    expect(callArgs.provider).toBe('anthropic');
-    expect(callArgs.purpose).toBe('tm_speaker_roles');
+    expect(callArgs.provider).toBe("anthropic");
+    expect(callArgs.purpose).toBe("tm_speaker_roles");
   });
 });
 
-describe('runLayer2SpeakerRoles — fallback branch (no samples, FIND-P1-017)', () => {
-  it('writes the hardcoded fallback when utterances yield zero samples', async () => {
+describe("runLayer2SpeakerRoles — fallback branch (no samples, FIND-P1-017)", () => {
+  it("writes the hardcoded fallback when utterances yield zero samples", async () => {
     // utterances=[] → samples.size === 0 → fallback path
     const result = await runLayer2SpeakerRoles(makeInput({ utterances: [] }));
 
@@ -154,10 +175,11 @@ describe('runLayer2SpeakerRoles — fallback branch (no samples, FIND-P1-017)', 
     // Result shape matches the canonical single-speaker-doctor fallback.
     expect(result).toEqual({
       speakerMap: {
-        '0': {
-          role: 'doctor',
+        "0": {
+          role: "doctor",
           confidence: 0.5,
-          reasoning: 'Diarization returned no speaker tags; defaulting to single-speaker doctor.',
+          reasoning:
+            "Diarization returned no speaker tags; defaulting to single-speaker doctor.",
         },
       },
       lowestConfidence: 0.5,
@@ -168,7 +190,7 @@ describe('runLayer2SpeakerRoles — fallback branch (no samples, FIND-P1-017)', 
     expect(updateArg.data.needsReview).toBe(true);
   });
 
-  it('fallback shape parses cleanly through SpeakerMap Zod schema (drift guard)', async () => {
+  it("fallback shape parses cleanly through SpeakerMap Zod schema (drift guard)", async () => {
     // This is the FIND-P1-017 invariant: if a future schema bump adds a
     // required field but the hardcoded fallback isn't updated, the
     // `SpeakerMap.parse(...)` call inside the fallback branch will
@@ -186,41 +208,59 @@ describe('runLayer2SpeakerRoles — fallback branch (no samples, FIND-P1-017)', 
 
     // And explicit shape: confidence is a number in [0, 1], role is
     // one of the SpeakerRole enum values.
-    const entry = result.speakerMap['0'];
-    expect(typeof entry.confidence).toBe('number');
+    const entry = result.speakerMap["0"];
+    expect(typeof entry.confidence).toBe("number");
     expect(entry.confidence).toBeGreaterThanOrEqual(0);
     expect(entry.confidence).toBeLessThanOrEqual(1);
-    expect(['doctor', 'patient', 'family', 'other', 'unknown']).toContain(entry.role);
+    expect(["doctor", "patient", "family", "other", "unknown"]).toContain(
+      entry.role,
+    );
   });
 
-  it('fallback ignores interpreterMode (single-speaker fallback is mode-agnostic)', async () => {
+  it("fallback ignores interpreterMode (single-speaker fallback is mode-agnostic)", async () => {
     const result = await runLayer2SpeakerRoles(
-      makeInput({ utterances: [], interpreterMode: true })
+      makeInput({ utterances: [], interpreterMode: true }),
     );
 
     // The fallback short-circuits before the system-prompt construction
     // that branches on interpreterMode — so the result shape is identical
     // for both modes. (If a future change adds an interpreter-mode
     // fallback, this test should fail and prompt a deliberate rewrite.)
-    expect(result.speakerMap['0'].role).toBe('doctor');
-    expect(result.speakerMap['0'].confidence).toBe(0.5);
+    expect(result.speakerMap["0"].role).toBe("doctor");
+    expect(result.speakerMap["0"].confidence).toBe(0.5);
     expect(mocks.modelComplete).not.toHaveBeenCalled();
   });
 });
 
-describe('runLayer2SpeakerRoles — single speaker (Q1 #02.2)', () => {
-  it('size===1 → dictation: assigns doctor + needsReview, NO model call', async () => {
+describe("runLayer2SpeakerRoles — single speaker (Q1 #02.2)", () => {
+  it("size===1 → dictation: assigns doctor + needsReview, NO model call", async () => {
     // All utterances from one diarized speaker (e.g. a dictation submitted
     // through a conversation-mode upload). The size===1 short-circuit must
     // fire — no L2 model call.
     const result = await runLayer2SpeakerRoles(
       makeInput({
         utterances: [
-          { speaker: 0, transcript: 'This is a dictation for a follow-up visit.', start: 0, end: 3 },
-          { speaker: 0, transcript: 'The patient has hypertension, blood pressure 148 over 90.', start: 3, end: 7 },
-          { speaker: 0, transcript: 'Plan is to increase lisinopril.', start: 7, end: 10 },
-        ] as Layer2Input['utterances'],
-      })
+          {
+            speaker: 0,
+            transcript: "This is a dictation for a follow-up visit.",
+            start: 0,
+            end: 3,
+          },
+          {
+            speaker: 0,
+            transcript:
+              "The patient has hypertension, blood pressure 148 over 90.",
+            start: 3,
+            end: 7,
+          },
+          {
+            speaker: 0,
+            transcript: "Plan is to increase lisinopril.",
+            start: 7,
+            end: 10,
+          },
+        ] as Layer2Input["utterances"],
+      }),
     );
 
     // Model NEVER called — one voice doesn't need role-splitting.
@@ -228,41 +268,53 @@ describe('runLayer2SpeakerRoles — single speaker (Q1 #02.2)', () => {
     expect(mocks.prismaUpdate).toHaveBeenCalledTimes(1);
 
     // Lone speaker (id 0) assigned doctor; flagged for review.
-    expect(result.speakerMap['0'].role).toBe('doctor');
+    expect(result.speakerMap["0"].role).toBe("doctor");
     expect(result.needsReview).toBe(true);
-    expect(result.speakerMap['0'].reasoning).toMatch(/dictation/i);
+    expect(result.speakerMap["0"].reasoning).toMatch(/dictation/i);
 
     const updateArg = mocks.prismaUpdate.mock.calls[0][0];
     expect(updateArg.data.needsReview).toBe(true);
   });
 
-  it('size===1 preserves the actual diarized speaker id (not hardcoded 0)', async () => {
+  it("size===1 preserves the actual diarized speaker id (not hardcoded 0)", async () => {
     // A dictation where Deepgram tagged the lone voice as speaker 1.
     const result = await runLayer2SpeakerRoles(
       makeInput({
         utterances: [
-          { speaker: 1, transcript: 'Dictating the assessment now.', start: 0, end: 3 },
-          { speaker: 1, transcript: 'Continue current medications.', start: 3, end: 6 },
-        ] as Layer2Input['utterances'],
-      })
+          {
+            speaker: 1,
+            transcript: "Dictating the assessment now.",
+            start: 0,
+            end: 3,
+          },
+          {
+            speaker: 1,
+            transcript: "Continue current medications.",
+            start: 3,
+            end: 6,
+          },
+        ] as Layer2Input["utterances"],
+      }),
     );
     expect(mocks.modelComplete).not.toHaveBeenCalled();
-    expect(result.speakerMap['1'].role).toBe('doctor');
-    expect(result.speakerMap['0']).toBeUndefined();
+    expect(result.speakerMap["1"].role).toBe("doctor");
+    expect(result.speakerMap["0"]).toBeUndefined();
     expect(() => SpeakerMap.parse(result.speakerMap)).not.toThrow();
   });
 });
 
-describe('runLayer2SpeakerRoles — propagation of model errors', () => {
-  it('SCHEMA_FAIL from modelClient propagates up to the caller', async () => {
+describe("runLayer2SpeakerRoles — propagation of model errors", () => {
+  it("SCHEMA_FAIL from modelClient propagates up to the caller", async () => {
     // modelClient.complete internally retries on SCHEMA_FAIL up to
     // MAX_RETRIES=2 and then throws `Error('SCHEMA_FAIL')`. L2 itself
     // does NOT swallow — it propagates so the worker's outer catch
     // can categorize (transient → BullMQ retry) and surface a
     // user-facing reviewReason.
-    mocks.modelComplete.mockRejectedValueOnce(new Error('SCHEMA_FAIL'));
+    mocks.modelComplete.mockRejectedValueOnce(new Error("SCHEMA_FAIL"));
 
-    await expect(runLayer2SpeakerRoles(makeInput())).rejects.toThrow('SCHEMA_FAIL');
+    await expect(runLayer2SpeakerRoles(makeInput())).rejects.toThrow(
+      "SCHEMA_FAIL",
+    );
     // No DB write on the failure path.
     expect(mocks.prismaUpdate).not.toHaveBeenCalled();
   });

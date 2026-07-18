@@ -10,9 +10,9 @@
 // for the cost math + UI replay duration hint.
 // ============================================================================
 
-import { Readable } from 'node:stream';
+import { Readable } from "node:stream";
 
-import { updateTemplateTwinSyntheticQaClaimBoundVisit } from '@/worker/staging-qa-mutation-fence';
+import { updateTemplateTwinSyntheticQaClaimBoundVisit } from "@/worker/staging-qa-mutation-fence";
 // PR-L follow-up — same orchestrator swap as L1; dictation now also
 // gets Whisper fallback when Deepgram has a transient outage. The
 // dictation path is single-speaker so there are no diarization
@@ -24,22 +24,22 @@ import {
   CrossProviderFallbackDisabledError,
   type TranscribeResult,
   type RetryAttemptInfo,
-} from '@meddoc/ai';
-import { statAudio, streamAudio } from '@/lib/minio';
+} from "@meddoc/ai";
+import { statAudio, streamAudio } from "@/lib/minio";
 import {
   isWhisperFallbackEnabled,
   WHISPER_FALLBACK_FLAG,
-} from '@/worker/transcription-fallback-flag';
+} from "@/worker/transcription-fallback-flag";
 // 2026-05-13 Issues #202 + #206 — keyterms are now scoped per-visit
 // via the builder rather than a single global list.
-import { buildKeytermsForVisit } from '@/lib/deepgram-keyterm-builder';
-import { CONFUSED_DRUG_NAMES_FLAT } from '@/lib/confused-drug-names';
-import { logAudit } from '@/lib/audit';
+import { buildKeytermsForVisit } from "@/lib/deepgram-keyterm-builder";
+import { CONFUSED_DRUG_NAMES_FLAT } from "@/lib/confused-drug-names";
+import { logWorkerAudit } from "@/worker/worker-audit";
 import {
   computeAudioConfidenceStats,
   shouldFlagForReview,
   LOW_CONFIDENCE_THRESHOLD,
-} from './audio-confidence';
+} from "./audio-confidence";
 
 export interface Layer1bInput {
   visitId: string;
@@ -79,7 +79,7 @@ export async function runLayer1bTranscribeDictation(
   // toBuffer() callback re-opens the MinIO object on the rare
   // fallback path so Whisper's multipart upload has a Buffer.
   const stat = await statAudio(input.dictationAudioKey);
-  if (!stat || typeof stat.size !== 'number') {
+  if (!stat || typeof stat.size !== "number") {
     throw new Error(
       `[L1b] dictation audio missing or has no size: ${input.dictationAudioKey}`,
     );
@@ -106,7 +106,7 @@ export async function runLayer1bTranscribeDictation(
       practiceId: input.practiceId,
       visitId: input.visitId,
       userId: input.userId,
-      purpose: 'tm_transcribe',
+      purpose: "tm_transcribe",
       allowCrossProviderFallback,
       audio: {
         stream: webStream,
@@ -127,7 +127,7 @@ export async function runLayer1bTranscribeDictation(
             // switch to multilingual nova-3 + language detection.
             // Dictation stays single-speaker (diarize off) so the
             // utterances pipeline behaves identically downstream.
-            model: 'nova-3',
+            model: "nova-3",
             options: {
               diarize: false,
               utterances: false,
@@ -158,7 +158,7 @@ export async function runLayer1bTranscribeDictation(
       onRetry: (info: RetryAttemptInfo) => {
         const err = info.error as { status?: number; code?: string };
         console.warn(
-          '[layer-01b-transcribe-dictation] retrying',
+          "[layer-01b-transcribe-dictation] retrying",
           JSON.stringify({
             attempt: info.attempt,
             maxAttempts: info.maxAttempts,
@@ -175,21 +175,21 @@ export async function runLayer1bTranscribeDictation(
     // the cross-provider hop is disabled → audit + re-throw → DLQ. Raw
     // dictation audio never leaves to OpenAI.
     if (err instanceof CrossProviderFallbackDisabledError) {
-      void logAudit({
-        action: 'TRANSCRIPTION_PROVIDER_FALLBACK',
-        targetType: 'TranscribeVisit',
+      await logWorkerAudit({
+        action: "TRANSCRIPTION_PROVIDER_FALLBACK",
+        targetType: "TranscribeVisit",
         targetId: input.visitId,
         userId: input.userId,
         practiceId: input.practiceId,
         success: false,
-        errorCode: 'CROSS_PROVIDER_FALLBACK_DISABLED',
+        errorCode: "CROSS_PROVIDER_FALLBACK_DISABLED",
         metadata: {
-          layer: 'L1b',
+          layer: "L1b",
           suppressed: true,
-          reason: 'fallback_disabled',
+          reason: "fallback_disabled",
           flag: WHISPER_FALLBACK_FLAG,
-          primaryProvider: 'deepgram-batch',
-          wouldHaveUsed: 'whisper-fallback',
+          primaryProvider: "deepgram-batch",
+          wouldHaveUsed: "whisper-fallback",
           primaryError: err.primaryError.message ?? null,
           primaryStatus: err.primaryError.status ?? null,
         },
@@ -207,14 +207,14 @@ export async function runLayer1bTranscribeDictation(
   // for dictation, the same wiring fires automatically.
   // PR-L: same discriminated-union handling as L1.
   const utterances =
-    result.raw.kind === 'deepgram' ? result.raw.data.utterances : [];
+    result.raw.kind === "deepgram" ? result.raw.data.utterances : [];
   const audioStats = computeAudioConfidenceStats(utterances);
   const lowConfFlag = audioStats ? shouldFlagForReview(audioStats) : false;
 
   const transcriptRaw =
-    result.raw.kind === 'deepgram'
+    result.raw.kind === "deepgram"
       ? result.raw.data.raw
-      : { kind: 'whisper', segments: result.raw.data.segments };
+      : { kind: "whisper", segments: result.raw.data.segments };
 
   // PR-L: dictation is single-speaker so there's no diarization gap
   // on the fallback path; the transcript is still usable. We still
@@ -222,12 +222,12 @@ export async function runLayer1bTranscribeDictation(
   // recording took (helps explain stylistic differences after the
   // fact).
   const fallbackReviewReason = result.fallbackUsed
-    ? `Dictation transcribed by ${result.provider} (Whisper fallback) — primary Deepgram failed${result.primaryError?.message ? ` with: ${result.primaryError.message.slice(0, 120)}` : ''}. Verify the transcript before signing.`
+    ? `Dictation transcribed by ${result.provider} (Whisper fallback) — primary Deepgram failed${result.primaryError?.message ? ` with: ${result.primaryError.message.slice(0, 120)}` : ""}. Verify the transcript before signing.`
     : null;
 
   await updateTemplateTwinSyntheticQaClaimBoundVisit({
     visitId: input.visitId,
-    userId: input.userId ?? '',
+    userId: input.userId ?? "",
     practiceId: input.practiceId,
     data: {
       transcriptRaw: transcriptRaw as unknown as object,
@@ -251,15 +251,15 @@ export async function runLayer1bTranscribeDictation(
 
   // PR-L canary — same audit row L1 emits, scoped to L1b.
   if (result.fallbackUsed) {
-    void logAudit({
-      action: 'TRANSCRIPTION_PROVIDER_FALLBACK',
-      targetType: 'TranscribeVisit',
+    await logWorkerAudit({
+      action: "TRANSCRIPTION_PROVIDER_FALLBACK",
+      targetType: "TranscribeVisit",
       targetId: input.visitId,
       userId: input.userId,
       practiceId: input.practiceId,
       metadata: {
-        layer: 'L1b',
-        primaryProvider: 'deepgram-batch',
+        layer: "L1b",
+        primaryProvider: "deepgram-batch",
         fallbackProvider: result.provider,
         primaryError: result.primaryError?.message ?? null,
         primaryStatus: result.primaryError?.status ?? null,
@@ -275,7 +275,7 @@ export async function runLayer1bTranscribeDictation(
     try {
       await updateTemplateTwinSyntheticQaClaimBoundVisit({
         visitId: input.visitId,
-        userId: input.userId ?? '',
+        userId: input.userId ?? "",
         practiceId: input.practiceId,
         data: {
           keytermsApplied: built.metadata as unknown as object,

@@ -6,7 +6,6 @@ import {
   TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION,
   TEMPLATE_TWIN_SYNTHETIC_QA_TRANSCRIPT,
   getTemplateTwinSyntheticQaProviderContext,
-  markTemplateTwinSyntheticQaWorkerLeaseUnhealthy,
   modelClient,
   type SyntheticQaProviderEnvironment,
 } from "@meddoc/ai";
@@ -21,7 +20,6 @@ import { templateTwinStagingQaPayloadSha256 } from "../../lib/template-twin/stag
 import {
   assertSyntheticQaResolvedRolloutToken,
   claimTemplateTwinSyntheticQaWorkerAttempt,
-  finalizeTemplateTwinSyntheticQaReady,
   reconcileExpiredTemplateTwinSyntheticQaWorkerClaim,
   renewTemplateTwinSyntheticQaWorkerLease,
   runWithWorkerSyntheticQaProviderSelection,
@@ -30,7 +28,6 @@ import {
   TemplateTwinSyntheticQaWorkerAdmissionError,
   type TemplateTwinSyntheticQaVisitSnapshot,
 } from "../synthetic-qa-provider";
-import { TemplateTwinStagingQaVisitGuardError } from "../../lib/template-twin/staging-qa-visit-guard";
 
 const dependencyMocks = vi.hoisted(() => ({
   transaction: vi.fn(),
@@ -42,6 +39,7 @@ const dependencyMocks = vi.hoisted(() => ({
   enqueueAudit: vi.fn(),
   claimWorkerAttempt: vi.fn(),
   rootRunFindFirst: vi.fn(),
+  markManifestFailed: vi.fn(),
 }));
 
 vi.mock("@meddoc/db", () => ({
@@ -57,6 +55,9 @@ vi.mock("@/lib/template-twin/rollout", () => ({
 }));
 vi.mock("@/lib/template-twin/audit-outbox", () => ({
   enqueueTemplateTwinAudit: dependencyMocks.enqueueAudit,
+}));
+vi.mock("@/worker/automation-manifest", () => ({
+  markVisitAutomationManifestFailed: dependencyMocks.markManifestFailed,
 }));
 
 describe("synthetic QA global worker failure telemetry", () => {
@@ -117,14 +118,6 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllEnvs();
 });
-
-function deferred<T = void>() {
-  let resolve!: (value: T | PromiseLike<T>) => void;
-  const promise = new Promise<T>((done) => {
-    resolve = done;
-  });
-  return { promise, resolve };
-}
 
 function payloadSha256(
   evidenceText: string,
@@ -194,9 +187,7 @@ function visit(
         purpose: "VISIT",
         phase: "VISIT_LINKED",
         requestSha256: "a".repeat(64),
-        payloadSha256: payloadSha256(
-          TEMPLATE_TWIN_SYNTHETIC_QA_TRANSCRIPT,
-        ),
+        payloadSha256: payloadSha256(TEMPLATE_TWIN_SYNTHETIC_QA_TRANSCRIPT),
         noteTemplateId: "template-synthetic-1",
         noteTemplateVersion: 4,
         certificationId: "certification-synthetic-1",
@@ -333,9 +324,7 @@ describe("worker synthetic QA provider selection", () => {
           visitId: "visit-synthetic-1",
           practiceId: "practice-synthetic-1",
           schema: z.object({
-            medications: z
-              .array(z.object({ name: z.string() }))
-              .default([]),
+            medications: z.array(z.object({ name: z.string() })).default([]),
           }),
         }),
       {
@@ -945,268 +934,5 @@ describe("worker synthetic QA crash reconciliation", () => {
     ).resolves.toBe(false);
     expect(tx.transcribeVisit.update).not.toHaveBeenCalled();
     expect(dependencyMocks.enqueueAudit).not.toHaveBeenCalled();
-  });
-});
-
-interface ReadyFinalizationHarness {
-  readonly tx: {
-    transcribeVisit: { updateMany: ReturnType<typeof vi.fn> };
-    templateTwinSyntheticQaRun: { updateMany: ReturnType<typeof vi.fn> };
-    templateTwinSyntheticQaAdmission: {
-      updateMany: ReturnType<typeof vi.fn>;
-    };
-    templateTwinFillManifest: { findUnique: ReturnType<typeof vi.fn> };
-  };
-  readonly status: () => TranscribeVisitStatus;
-}
-
-function readyFinalizationHarness(): ReadyFinalizationHarness {
-  let status: TranscribeVisitStatus = TranscribeVisitStatus.AUTOMATING;
-  const tx = {
-    transcribeVisit: {
-      updateMany: vi.fn(
-        async (input: { data: { status: TranscribeVisitStatus } }) => {
-          status = input.data.status;
-          return { count: 1 };
-        },
-      ),
-    },
-    templateTwinSyntheticQaRun: {
-      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
-    },
-    templateTwinSyntheticQaAdmission: {
-      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
-    },
-    templateTwinFillManifest: {
-      findUnique: vi.fn().mockResolvedValue({
-        id: "fill-synthetic-1",
-        status: "VERIFIED",
-        signedDecisionAt: null,
-        manifestVersion: 3,
-        pinnedGlobalRolloutGeneration: BigInt(11),
-        pinnedPracticeRolloutGeneration: BigInt(19),
-      }),
-    },
-  };
-
-  dependencyMocks.transaction.mockImplementation(
-    async (callback: (client: typeof tx) => Promise<unknown>) => {
-      const before = status;
-      try {
-        return await callback(tx);
-      } catch (error) {
-        // Model the transaction rollback so an outbox failure cannot be
-        // mistaken for a committed READY transition in this unit harness.
-        status = before;
-        throw error;
-      }
-    },
-  );
-  dependencyMocks.lockRollout.mockResolvedValue({
-    allowed: true,
-    token: {
-      practiceId: "practice-synthetic-1",
-      globalGeneration: BigInt(11),
-      practiceGeneration: BigInt(19),
-    },
-  });
-  dependencyMocks.lockAttempt.mockResolvedValue(undefined);
-  dependencyMocks.lockVisit.mockImplementation(async () => ({
-    userId: "doctor-synthetic-1",
-    deletedAt: null,
-    archivedAt: null,
-    status,
-  }));
-  dependencyMocks.enqueueAudit.mockResolvedValue(undefined);
-
-  return { tx, status: () => status };
-}
-
-function finalizeReadyUnderAdmittedContext(): Promise<boolean> {
-  return runWithWorkerSyntheticQaProviderSelection(
-    visit(),
-    matchingJob(),
-    () =>
-      finalizeTemplateTwinSyntheticQaReady({
-        visitId: "visit-synthetic-1",
-        userId: "doctor-synthetic-1",
-        practiceId: "practice-synthetic-1",
-        processingFinishedAt: new Date("2026-07-17T02:00:00.000Z"),
-        processingCostCents: 0,
-        confidenceScores: null,
-      }),
-    admittedDependencies(),
-  );
-}
-
-describe("worker synthetic QA READY final claim", () => {
-  it("commits READY only with the exact rollout, attempt, fill proof, and durable audit", async () => {
-    const harness = readyFinalizationHarness();
-
-    await expect(finalizeReadyUnderAdmittedContext()).resolves.toBe(true);
-
-    expect(harness.status()).toBe(TranscribeVisitStatus.READY);
-    expect(
-      harness.tx.templateTwinSyntheticQaRun.updateMany,
-    ).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          attempt: 1,
-          status: "PROCESSING",
-        }),
-        data: { status: "COMPLETED" },
-      }),
-    );
-    expect(dependencyMocks.lockAttempt).toHaveBeenCalledWith(
-      expect.objectContaining({
-        claim: expect.objectContaining({
-          runId: "run-synthetic-1",
-          attempt: 1,
-          requestSha256: "a".repeat(64),
-        }),
-        requireLiveWorkerLease: true,
-      }),
-    );
-    expect(dependencyMocks.enqueueAudit).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        action: "TEMPLATE_TWIN_RENDER_VERIFIED",
-        metadata: expect.objectContaining({
-          operation: "staging_visit_ready_final_claim",
-          stagingQaAttempt: 1,
-        }),
-      }),
-    );
-  });
-
-  it("rejects READY when disable/re-enable changes rollout generation after work starts", async () => {
-    const harness = readyFinalizationHarness();
-    const lockEntered = deferred();
-    const releaseChangedGeneration = deferred();
-    dependencyMocks.lockRollout.mockImplementation(async () => {
-      lockEntered.resolve();
-      await releaseChangedGeneration.promise;
-      return {
-        allowed: false,
-        code: "TEMPLATE_TWIN_GLOBAL_GENERATION_STALE",
-        reason: "Synthetic rollout generation changed.",
-        currentToken: {
-          practiceId: "practice-synthetic-1",
-          globalGeneration: BigInt(13),
-          practiceGeneration: BigInt(21),
-        },
-      };
-    });
-
-    const finalization = finalizeReadyUnderAdmittedContext();
-    await lockEntered.promise;
-    releaseChangedGeneration.resolve();
-
-    await expect(finalization).rejects.toMatchObject({
-      code: "TEMPLATE_TWIN_SYNTHETIC_QA_FINAL_CLAIM_REJECTED",
-    });
-    expect(harness.status()).toBe(TranscribeVisitStatus.AUTOMATING);
-    expect(harness.tx.transcribeVisit.updateMany).not.toHaveBeenCalled();
-  });
-
-  it("rejects READY when a newer retry replaces the admitted attempt", async () => {
-    const harness = readyFinalizationHarness();
-    const attemptLockEntered = deferred();
-    const releaseNewAttempt = deferred();
-    dependencyMocks.lockAttempt.mockImplementation(async () => {
-      attemptLockEntered.resolve();
-      await releaseNewAttempt.promise;
-      throw new TemplateTwinStagingQaVisitGuardError(
-        "TEMPLATE_TWIN_STAGING_QA_ATTEMPT_STALE",
-        "A newer synthetic attempt replaced this claim.",
-      );
-    });
-
-    const finalization = finalizeReadyUnderAdmittedContext();
-    await attemptLockEntered.promise;
-    releaseNewAttempt.resolve();
-
-    await expect(finalization).rejects.toMatchObject({
-      code: "TEMPLATE_TWIN_SYNTHETIC_QA_FINAL_CLAIM_REJECTED",
-    });
-    expect(harness.status()).toBe(TranscribeVisitStatus.AUTOMATING);
-    expect(harness.tx.transcribeVisit.updateMany).not.toHaveBeenCalled();
-  });
-
-  it("rejects READY when the database-time worker lease expired", async () => {
-    const harness = readyFinalizationHarness();
-    dependencyMocks.lockAttempt.mockRejectedValue(
-      new TemplateTwinStagingQaVisitGuardError(
-        "TEMPLATE_TWIN_STAGING_QA_ATTEMPT_STALE",
-        "The worker lease expired before final claim.",
-      ),
-    );
-
-    await expect(finalizeReadyUnderAdmittedContext()).rejects.toMatchObject({
-      code: "TEMPLATE_TWIN_SYNTHETIC_QA_FINAL_CLAIM_REJECTED",
-    });
-    expect(harness.status()).toBe(TranscribeVisitStatus.AUTOMATING);
-    expect(harness.tx.transcribeVisit.updateMany).not.toHaveBeenCalled();
-    expect(dependencyMocks.lockAttempt).toHaveBeenCalledWith(
-      expect.objectContaining({ requireLiveWorkerLease: true }),
-    );
-  });
-
-  it("fences READY before its transaction when lease renewal has failed", async () => {
-    const harness = readyFinalizationHarness();
-
-    await expect(
-      runWithWorkerSyntheticQaProviderSelection(
-        visit(),
-        matchingJob(),
-        () => {
-          markTemplateTwinSyntheticQaWorkerLeaseUnhealthy();
-          return finalizeTemplateTwinSyntheticQaReady({
-            visitId: "visit-synthetic-1",
-            userId: "doctor-synthetic-1",
-            practiceId: "practice-synthetic-1",
-            processingFinishedAt: new Date("2026-07-17T02:00:00.000Z"),
-            processingCostCents: 0,
-            confidenceScores: null,
-          });
-        },
-        admittedDependencies(),
-      ),
-    ).rejects.toMatchObject({
-      code: "SYNTHETIC_QA_WORKER_LEASE_UNHEALTHY",
-    });
-    expect(harness.status()).toBe(TranscribeVisitStatus.AUTOMATING);
-    expect(dependencyMocks.transaction).not.toHaveBeenCalled();
-    expect(harness.tx.transcribeVisit.updateMany).not.toHaveBeenCalled();
-  });
-
-  it("rolls back READY when durable audit enqueue fails", async () => {
-    const harness = readyFinalizationHarness();
-    dependencyMocks.enqueueAudit.mockRejectedValue(
-      new Error("synthetic outbox unavailable"),
-    );
-
-    await expect(finalizeReadyUnderAdmittedContext()).rejects.toThrow(
-      "synthetic outbox unavailable",
-    );
-
-    expect(harness.tx.transcribeVisit.updateMany).toHaveBeenCalledTimes(1);
-    expect(harness.status()).toBe(TranscribeVisitStatus.AUTOMATING);
-  });
-
-  it("rolls back READY when the processing attempt lost ownership", async () => {
-    const harness = readyFinalizationHarness();
-    harness.tx.templateTwinSyntheticQaRun.updateMany.mockResolvedValue({
-      count: 0,
-    });
-
-    await expect(finalizeReadyUnderAdmittedContext()).rejects.toMatchObject({
-      code: "TEMPLATE_TWIN_SYNTHETIC_QA_FINAL_CLAIM_REJECTED",
-    });
-    expect(harness.status()).toBe(TranscribeVisitStatus.AUTOMATING);
-    expect(dependencyMocks.enqueueAudit).not.toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ action: "TEMPLATE_TWIN_RENDER_VERIFIED" }),
-    );
   });
 });

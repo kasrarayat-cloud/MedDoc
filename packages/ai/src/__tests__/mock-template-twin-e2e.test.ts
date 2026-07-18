@@ -39,6 +39,37 @@ const EntitySchema = z.object({
     .default([]),
 });
 
+const IcdSchema = z.object({
+  codes: z.array(
+    z.object({
+      code: z.string(),
+      description: z.string(),
+      evidence_quote: z.string(),
+      confidence: z.number(),
+      confidenceLevel: z.enum(["high", "medium", "low"]),
+    }),
+  ),
+});
+
+const CptSchema = z.object({
+  em: z
+    .object({
+      code: z.string(),
+      description: z.string(),
+      reasoning: z.object({
+        problems: z.array(
+          z.object({ description: z.string(), status: z.string() }),
+        ),
+        data: z.string(),
+        risk: z.enum(["minimal", "low", "moderate", "high"]),
+      }),
+      evidence_quote: z.string(),
+    })
+    .nullable(),
+  procedures: z.array(z.unknown()).default([]),
+  modifiers: z.array(z.unknown()).default([]),
+});
+
 const ORIGINAL_ENV = { ...process.env };
 
 beforeEach(() => {
@@ -163,6 +194,38 @@ describe("Template Twin infrastructure-E2E model fixture", () => {
       expect(result.text).toContain("Explicit synthetic detail");
       expect(result.text).not.toContain("headache");
     }
+  });
+
+  it("provides non-empty evidence-bound coding fixtures only for admitted staging", () => {
+    const icd = mockComplete({
+      purpose: "tm_icd_coding",
+      schema: IcdSchema,
+      fixtureVersion: TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION,
+    });
+    const cpt = mockComplete({
+      purpose: "tm_cpt_coding",
+      schema: CptSchema,
+      fixtureVersion: TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION,
+    });
+    expect(icd.codes).toEqual([
+      expect.objectContaining({
+        code: "M25.50",
+        evidence_quote: "synthetic wrist discomfort",
+      }),
+    ]);
+    expect(cpt.em).toEqual(
+      expect.objectContaining({
+        code: "99212",
+        evidence_quote: "Encounter category is Follow-up.",
+      }),
+    );
+
+    expect(
+      mockComplete({ purpose: "tm_icd_coding", schema: IcdSchema }).codes,
+    ).toEqual([]);
+    expect(
+      mockComplete({ purpose: "tm_cpt_coding", schema: CptSchema }).em,
+    ).toBeNull();
   });
 
   it("temporarily preserves the legacy triple-gated certification harness", async () => {

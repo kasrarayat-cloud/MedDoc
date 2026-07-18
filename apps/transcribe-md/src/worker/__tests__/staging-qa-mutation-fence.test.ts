@@ -14,6 +14,7 @@ import { TemplateTwinStagingQaVisitGuardError } from "../../lib/template-twin/st
 const mocks = vi.hoisted(() => ({
   transaction: vi.fn(),
   rootUpdate: vi.fn(),
+  automationTransaction: vi.fn(),
   lockRollout: vi.fn(),
   lockAttempt: vi.fn(),
 }));
@@ -26,6 +27,9 @@ vi.mock("@meddoc/db", () => ({
 }));
 vi.mock("@/lib/template-twin/rollout", () => ({
   lockTemplateTwinRolloutForFinalClaim: mocks.lockRollout,
+}));
+vi.mock("@/worker/automation-locks", () => ({
+  runVisitAutomationTransaction: mocks.automationTransaction,
 }));
 vi.mock("@/lib/template-twin/staging-qa-visit-guard", async (original) => ({
   ...(await original<
@@ -84,8 +88,19 @@ beforeEach(() => {
 });
 
 describe("synthetic QA intermediate-write claim fence", () => {
-  it("preserves the ordinary worker's direct mutation path", async () => {
+  it("commits an ordinary provider result through the canonical retry boundary", async () => {
+    const tx = {
+      transcribeVisit: { update: mocks.rootUpdate },
+    };
     mocks.rootUpdate.mockResolvedValue({});
+    mocks.automationTransaction.mockImplementation(
+      async (input: {
+        transaction: (
+          client: typeof tx,
+          visit: { status: TranscribeVisitStatus },
+        ) => Promise<unknown>;
+      }) => input.transaction(tx, { status: TranscribeVisitStatus.DRAFTING }),
+    );
 
     await updateTemplateTwinSyntheticQaClaimBoundVisit({
       visitId: "visit-ordinary-1",
@@ -94,11 +109,43 @@ describe("synthetic QA intermediate-write claim fence", () => {
       data: { status: TranscribeVisitStatus.DRAFTING },
     });
 
-    expect(mocks.transaction).not.toHaveBeenCalled();
+    expect(mocks.automationTransaction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: "ordinary_visit_pipeline_mutation",
+        visitId: "visit-ordinary-1",
+        userId: "doctor-ordinary-1",
+        practiceId: "practice-ordinary-1",
+      }),
+    );
     expect(mocks.rootUpdate).toHaveBeenCalledWith({
       where: { id: "visit-ordinary-1" },
       data: { status: TranscribeVisitStatus.DRAFTING },
     });
+  });
+
+  it("does not commit an ordinary result after the visit leaves processing", async () => {
+    mocks.automationTransaction.mockImplementation(
+      async (input: {
+        transaction: (
+          client: { transcribeVisit: { update: typeof mocks.rootUpdate } },
+          visit: { status: TranscribeVisitStatus },
+        ) => Promise<unknown>;
+      }) =>
+        input.transaction(
+          { transcribeVisit: { update: mocks.rootUpdate } },
+          { status: TranscribeVisitStatus.READY },
+        ),
+    );
+
+    await expect(
+      updateTemplateTwinSyntheticQaClaimBoundVisit({
+        visitId: "visit-ordinary-1",
+        userId: "doctor-ordinary-1",
+        practiceId: "practice-ordinary-1",
+        data: { soapDraft: "synthetic stale result" },
+      }),
+    ).rejects.toBeInstanceOf(TemplateTwinSyntheticQaMutationFenceError);
+    expect(mocks.rootUpdate).not.toHaveBeenCalled();
   });
 
   it("lets replacement B complete and prevents stale A from regressing status or derived fields", async () => {

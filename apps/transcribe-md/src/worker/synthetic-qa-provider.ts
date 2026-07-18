@@ -31,14 +31,12 @@ import {
 import {
   lockAndAssertTemplateTwinStagingQaAttempt,
   lockAndAssertTemplateTwinStagingQaOperation,
-  TemplateTwinStagingQaVisitGuardError,
 } from "@/lib/template-twin/staging-qa-visit-guard";
-import {
-  isTemplateTwinStagingQaRequested,
-  TemplateTwinStagingQaDisabledError,
-} from "@/lib/template-twin/staging-qa-gate";
+import { isTemplateTwinStagingQaRequested } from "@/lib/template-twin/staging-qa-gate";
 import { templateTwinStagingQaPayloadSha256 } from "@/lib/template-twin/staging-qa-digest";
 import { downloadAudio } from "@/lib/minio";
+import { runSerializableTransactionWithRetry } from "@/lib/db/transaction-retry";
+import { markVisitAutomationManifestFailed } from "@/worker/automation-manifest";
 
 export type TemplateTwinSyntheticQaWorkerAdmissionCode =
   | "TEMPLATE_TWIN_SYNTHETIC_QA_RUN_INVALID"
@@ -423,8 +421,15 @@ export async function claimTemplateTwinSyntheticQaWorkerAttempt(input: {
       "Synthetic QA worker claim identifier is invalid.",
     );
   }
-  await prisma.$transaction(
-    async (tx: Prisma.TransactionClient) => {
+  await runSerializableTransactionWithRetry({
+    prisma,
+    operation: "claim_template_twin_synthetic_qa_worker_attempt",
+    context: {
+      visitId: input.visit.id,
+      practiceId: input.visit.practiceId,
+      runId: input.run.id,
+    },
+    transaction: async (tx: Prisma.TransactionClient) => {
       const rollout = await lockTemplateTwinRolloutForFinalClaim({
         tx,
         practiceId: input.visit.practiceId,
@@ -528,8 +533,7 @@ export async function claimTemplateTwinSyntheticQaWorkerAttempt(input: {
         });
       }
     },
-    { isolationLevel: "Serializable" },
-  );
+  });
 }
 
 /** Extend only the currently-owned attempt lease under the normal lock order. */
@@ -545,8 +549,15 @@ export async function renewTemplateTwinSyntheticQaWorkerLease(input: {
   pinnedGlobalGeneration: bigint;
   pinnedPracticeGeneration: bigint;
 }): Promise<void> {
-  await prisma.$transaction(
-    async (tx: Prisma.TransactionClient) => {
+  await runSerializableTransactionWithRetry({
+    prisma,
+    operation: "renew_template_twin_synthetic_qa_worker_lease",
+    context: {
+      visitId: input.visitId,
+      practiceId: input.practiceId,
+      runId: input.runId,
+    },
+    transaction: async (tx: Prisma.TransactionClient) => {
       const rollout = await lockTemplateTwinRolloutForFinalClaim({
         tx,
         practiceId: input.practiceId,
@@ -604,8 +615,7 @@ export async function renewTemplateTwinSyntheticQaWorkerLease(input: {
         );
       }
     },
-    { isolationLevel: "Serializable" },
-  );
+  });
 }
 
 async function runWithTemplateTwinSyntheticQaLeaseHeartbeat<T>(
@@ -789,8 +799,15 @@ export async function reconcileExpiredTemplateTwinSyntheticQaWorkerClaim(input: 
     },
   });
   if (!snapshot) return false;
-  return prisma.$transaction(
-    async (tx: Prisma.TransactionClient) => {
+  return runSerializableTransactionWithRetry({
+    prisma,
+    operation: "reconcile_expired_template_twin_worker_claim",
+    context: {
+      visitId: input.visitId,
+      practiceId: snapshot.practiceId,
+      runId: input.runId,
+    },
+    transaction: async (tx: Prisma.TransactionClient) => {
       // Acquire global then practice even when the old token is revoked. This
       // transition only removes authority; it never exposes an output.
       await lockTemplateTwinRolloutForFinalClaim({
@@ -869,6 +886,11 @@ export async function reconcileExpiredTemplateTwinSyntheticQaWorkerClaim(input: 
           "Synthetic QA crash reconciliation found an incompatible visit state.",
         );
       }
+      await markVisitAutomationManifestFailed(tx, {
+        visitId: input.visitId,
+        failureCode: "WORKER_LEASE_EXPIRED",
+        completedAt: now,
+      });
       await tx.transcribeVisit.update({
         where: { id: input.visitId },
         data: {
@@ -895,8 +917,7 @@ export async function reconcileExpiredTemplateTwinSyntheticQaWorkerClaim(input: 
       });
       return true;
     },
-    { isolationLevel: "Serializable" },
-  );
+  });
 }
 
 /**
@@ -925,8 +946,15 @@ export async function failTemplateTwinSyntheticQaProcessing(input: {
     );
   }
   assertTemplateTwinSyntheticQaWorkerLeaseHealthy();
-  await prisma.$transaction(
-    async (tx: Prisma.TransactionClient) => {
+  await runSerializableTransactionWithRetry({
+    prisma,
+    operation: "fail_template_twin_synthetic_qa_processing",
+    context: {
+      visitId: input.visitId,
+      practiceId: input.practiceId,
+      runId: context.runId,
+    },
+    transaction: async (tx: Prisma.TransactionClient) => {
       // This acquires global then practice rollout locks. Failure publication
       // is permitted after revocation because FAILED/PROCESSING_FAILED cannot
       // expose or authorize an output, but it still serializes with disable.
@@ -1018,11 +1046,17 @@ export async function failTemplateTwinSyntheticQaProcessing(input: {
           "Synthetic QA visit reached an incompatible terminal state.",
         );
       }
+      const failedAt = new Date();
+      await markVisitAutomationManifestFailed(tx, {
+        visitId: input.visitId,
+        failureCode: "WORKER_ATTEMPT_FAILED",
+        completedAt: failedAt,
+      });
       await tx.transcribeVisit.update({
         where: { id: input.visitId },
         data: {
           status: TranscribeVisitStatus.FAILED,
-          processingFinishedAt: new Date(),
+          processingFinishedAt: failedAt,
           needsReview: true,
           reviewReason: input.reviewReason,
           failureCategory: input.failureCategory,
@@ -1043,8 +1077,7 @@ export async function failTemplateTwinSyntheticQaProcessing(input: {
         },
       });
     },
-    { isolationLevel: "Serializable" },
-  );
+  });
   return true;
 }
 
@@ -1070,242 +1103,6 @@ export function assertSyntheticQaResolvedRolloutToken(
   }
 }
 
-/**
- * Atomically publishes the worker's terminal READY state for a synthetic QA
- * visit. Rendering and object storage happen earlier, but READY is a separate
- * externally visible claim and therefore repeats the linearizable rollout and
- * attempt checks under the shared lock order:
- * global -> practice -> staging run -> visit -> fill.
- *
- * Returns false for ordinary visits so their existing finalization path stays
- * unchanged. An audit-outbox failure rolls back READY with the transaction.
- */
-export async function finalizeTemplateTwinSyntheticQaReady(input: {
-  visitId: string;
-  userId: string;
-  practiceId: string;
-  processingFinishedAt: Date;
-  processingCostCents: number;
-  confidenceScores: Prisma.InputJsonValue | null;
-}): Promise<boolean> {
-  const context = getTemplateTwinSyntheticQaProviderContext();
-  if (!context) return false;
-  if (
-    context.visitId !== input.visitId ||
-    context.practiceId !== input.practiceId
-  ) {
-    fail(
-      "TEMPLATE_TWIN_SYNTHETIC_QA_TENANT_MISMATCH",
-      "Synthetic QA finalization does not match the admitted visit and practice.",
-    );
-  }
-  assertTemplateTwinSyntheticQaWorkerLeaseHealthy();
-
-  const pinnedToken: TemplateTwinRolloutToken = {
-    practiceId: context.practiceId,
-    globalGeneration: context.pinnedGlobalGeneration,
-    practiceGeneration: context.pinnedPracticeGeneration,
-  };
-  const decision = await prisma.$transaction(
-    async (tx: Prisma.TransactionClient) => {
-      const rollout = await lockTemplateTwinRolloutForFinalClaim({
-        tx,
-        practiceId: input.practiceId,
-        pinnedToken,
-      });
-      if (!rollout.allowed) {
-        await enqueueTemplateTwinAudit(tx, {
-          eventKey: `template-twin:staging-ready-blocked:${context.runId}:${context.attempt}:${rollout.code}`,
-          practiceId: input.practiceId,
-          actorId: input.userId,
-          action: "TEMPLATE_TWIN_SAFETY_GATE_BLOCKED",
-          targetType: "TranscribeVisit",
-          targetId: input.visitId,
-          metadata: {
-            reasonCode: rollout.code,
-            operation: "staging_visit_ready_final_claim",
-            stagingQaRunId: context.runId,
-            stagingQaAttempt: context.attempt,
-          },
-        });
-        return {
-          allowed: false as const,
-          code: rollout.code,
-          reason: rollout.reason,
-        };
-      }
-
-      try {
-        await lockAndAssertTemplateTwinStagingQaAttempt({
-          tx,
-          currentRolloutToken: rollout.token,
-          claim: {
-            runId: context.runId,
-            visitId: context.visitId,
-            practiceId: context.practiceId,
-            doctorId: input.userId,
-            fixtureVersion: context.fixtureVersion,
-            requestSha256: context.requestSha256,
-            attempt: context.attempt,
-            workerClaimId: context.workerClaimId,
-            pinnedGlobalGeneration: context.pinnedGlobalGeneration,
-            pinnedPracticeGeneration: context.pinnedPracticeGeneration,
-          },
-          allowedStatuses: ["PROCESSING"],
-          allowedAdmissionPhases: ["PROCESSING"],
-          requireLiveWorkerLease: true,
-        });
-      } catch (error) {
-        if (
-          !(error instanceof TemplateTwinStagingQaDisabledError) &&
-          !(error instanceof TemplateTwinStagingQaVisitGuardError)
-        ) {
-          throw error;
-        }
-        await enqueueTemplateTwinAudit(tx, {
-          eventKey: `template-twin:staging-ready-blocked:${context.runId}:${context.attempt}:${error.code}`,
-          practiceId: input.practiceId,
-          actorId: input.userId,
-          action: "TEMPLATE_TWIN_SAFETY_GATE_BLOCKED",
-          targetType: "TranscribeVisit",
-          targetId: input.visitId,
-          metadata: {
-            reasonCode: error.code,
-            operation: "staging_visit_ready_final_claim",
-            stagingQaRunId: context.runId,
-            stagingQaAttempt: context.attempt,
-          },
-        });
-        return {
-          allowed: false as const,
-          code: error.code,
-          reason:
-            "Synthetic QA authorization changed before the visit became ready.",
-        };
-      }
-
-      const visit = await lockCurrentTemplateTwinVisit(tx, input.visitId);
-      if (
-        !visit ||
-        visit.userId !== input.userId ||
-        visit.deletedAt !== null ||
-        visit.archivedAt !== null ||
-        visit.status === TranscribeVisitStatus.SIGNED ||
-        visit.status === TranscribeVisitStatus.READY
-      ) {
-        return {
-          allowed: false as const,
-          code: "TEMPLATE_TWIN_SYNTHETIC_QA_RUN_INVALID",
-          reason: "Synthetic QA visit state changed before finalization.",
-        };
-      }
-      const fill = await tx.templateTwinFillManifest.findUnique({
-        where: { visitId: input.visitId },
-        select: {
-          id: true,
-          status: true,
-          signedDecisionAt: true,
-          manifestVersion: true,
-          pinnedGlobalRolloutGeneration: true,
-          pinnedPracticeRolloutGeneration: true,
-        },
-      });
-      if (
-        !fill ||
-        (fill.status !== "VERIFIED" && fill.status !== "NEEDS_REVIEW") ||
-        fill.signedDecisionAt !== null ||
-        fill.pinnedGlobalRolloutGeneration !== context.pinnedGlobalGeneration ||
-        fill.pinnedPracticeRolloutGeneration !==
-          context.pinnedPracticeGeneration
-      ) {
-        return {
-          allowed: false as const,
-          code: "TEMPLATE_TWIN_SYNTHETIC_QA_RUN_INVALID",
-          reason: "Synthetic QA fill proof is unavailable for finalization.",
-        };
-      }
-      const updated = await tx.transcribeVisit.updateMany({
-        where: {
-          id: input.visitId,
-          userId: input.userId,
-          status: visit.status as TranscribeVisitStatus,
-          deletedAt: null,
-          archivedAt: null,
-        },
-        data: {
-          status: TranscribeVisitStatus.READY,
-          processingFinishedAt: input.processingFinishedAt,
-          processingCostCents: input.processingCostCents,
-          confidenceScores:
-            input.confidenceScores === null
-              ? Prisma.JsonNull
-              : input.confidenceScores,
-        },
-      });
-      if (updated.count !== 1) {
-        fail(
-          "TEMPLATE_TWIN_SYNTHETIC_QA_FINAL_CLAIM_REJECTED",
-          "Synthetic QA visit state changed before finalization.",
-        );
-      }
-      const completed = await tx.templateTwinSyntheticQaRun.updateMany({
-        where: {
-          id: context.runId,
-          visitId: input.visitId,
-          doctorId: input.userId,
-          practiceId: input.practiceId,
-          attempt: context.attempt,
-          status: "PROCESSING",
-          workerClaimId: context.workerClaimId,
-        },
-        data: { status: "COMPLETED" },
-      });
-      if (completed.count !== 1) {
-        fail(
-          "TEMPLATE_TWIN_SYNTHETIC_QA_FINAL_CLAIM_REJECTED",
-          "Synthetic QA worker attempt was replaced before finalization.",
-        );
-      }
-      const readyAdmission =
-        await tx.templateTwinSyntheticQaAdmission.updateMany({
-          where: {
-            id: context.admissionId,
-            practiceId: input.practiceId,
-            actorId: input.userId,
-            visitId: input.visitId,
-            attempt: context.attempt,
-            phase: "PROCESSING",
-          },
-          data: { phase: "REVIEW_READY" },
-        });
-      if (readyAdmission.count !== 1) {
-        fail(
-          "TEMPLATE_TWIN_SYNTHETIC_QA_FINAL_CLAIM_REJECTED",
-          "Synthetic QA output could not enter durable review.",
-        );
-      }
-      await enqueueTemplateTwinAudit(tx, {
-        eventKey: `template-twin:staging-ready:${context.runId}:${context.attempt}:${fill.manifestVersion}`,
-        practiceId: input.practiceId,
-        actorId: input.userId,
-        action: "TEMPLATE_TWIN_RENDER_VERIFIED",
-        targetType: "TranscribeVisit",
-        targetId: input.visitId,
-        metadata: {
-          operation: "staging_visit_ready_final_claim",
-          stagingQaRunId: context.runId,
-          stagingQaAttempt: context.attempt,
-          fillManifestId: fill.id,
-          manifestVersion: fill.manifestVersion,
-          fillStatus: fill.status,
-        },
-      });
-      return { allowed: true as const };
-    },
-    { isolationLevel: "Serializable" },
-  );
-  if (!decision.allowed) {
-    fail("TEMPLATE_TWIN_SYNTHETIC_QA_FINAL_CLAIM_REJECTED", decision.reason);
-  }
-  return true;
-}
+// READY finalization is intentionally owned by automation-finalization.ts.
+// Keeping a second staging-only finalizer made it possible to publish READY
+// without proving every required automation layer. Do not add a fallback here.

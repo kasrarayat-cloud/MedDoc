@@ -363,6 +363,35 @@ const MOCK_COMPLETE_FIXTURES: Partial<Record<ModelCallPurpose, unknown>> = {
   tm_template_phi_scan: { phiFields: [], anyUncertain: false },
 };
 
+const MOCK_TEMPLATE_TWIN_STAGING_ICD = {
+  codes: [
+    {
+      code: "M25.50",
+      description: "Pain in unspecified joint",
+      evidence_quote: "synthetic wrist discomfort",
+      confidence: 1,
+      confidenceLevel: "high",
+    },
+  ],
+} as const;
+
+const MOCK_TEMPLATE_TWIN_STAGING_CPT = {
+  em: {
+    code: "99212",
+    description: "Synthetic established follow-up",
+    reasoning: {
+      problems: [
+        { description: "Synthetic wrist discomfort", status: "minor" },
+      ],
+      data: "No synthetic data reviewed.",
+      risk: "minimal",
+    },
+    evidence_quote: "Encounter category is Follow-up.",
+  },
+  procedures: [],
+  modifiers: [],
+} as const;
+
 // Note-format PHI gate — the FLAGGED counterpart to the clean
 // `tm_template_phi_scan` fixture above. `anyUncertain: true` forces the
 // fail-safe gate to reject/scrub even though it also names a field. Exported
@@ -624,6 +653,12 @@ export function mockComplete<T>(args: {
   const templateTwinFixture = explicitStagingFixture || legacyFixture;
   if (args.purpose === "tm_entities" && templateTwinFixture) {
     return args.schema.parse(evidenceBoundTemplateTwinEntities(legacyFixture));
+  }
+  if (explicitStagingFixture && args.purpose === "tm_icd_coding") {
+    return args.schema.parse(MOCK_TEMPLATE_TWIN_STAGING_ICD);
+  }
+  if (explicitStagingFixture && args.purpose === "tm_cpt_coding") {
+    return args.schema.parse(MOCK_TEMPLATE_TWIN_STAGING_CPT);
   }
   // Note-format PHI gate: opt into the FLAGGED scan result (the reject path)
   // via env. The mock keys on `purpose` only and can't see the input, so a

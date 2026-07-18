@@ -19,7 +19,7 @@
 // All model calls mocked — runs in the CI unit gate.
 // ============================================================================
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   modelCompleteText: vi.fn(),
@@ -27,8 +27,9 @@ const mocks = vi.hoisted(() => ({
   logAudit: vi.fn(),
 }));
 
-vi.mock('@meddoc/ai', async () => {
-  const actual = await vi.importActual<typeof import('@meddoc/ai')>('@meddoc/ai');
+vi.mock("@meddoc/ai", async () => {
+  const actual =
+    await vi.importActual<typeof import("@meddoc/ai")>("@meddoc/ai");
   return {
     ...actual,
     modelClient: {
@@ -38,20 +39,27 @@ vi.mock('@meddoc/ai', async () => {
   };
 });
 
-vi.mock('@meddoc/db', () => ({
+vi.mock("@meddoc/db", () => ({
   default: {
     transcribeVisit: { update: mocks.prismaUpdate },
   },
 }));
 
-vi.mock('@/lib/audit', () => ({ logAudit: mocks.logAudit }));
-vi.mock('@/worker/finalize-review-state', () => ({
+vi.mock("@/lib/audit", () => ({ logAudit: mocks.logAudit }));
+vi.mock("@/worker/worker-audit", () => ({ logWorkerAudit: mocks.logAudit }));
+vi.mock("@/worker/staging-qa-mutation-fence", () => ({
+  updateTemplateTwinSyntheticQaClaimBoundVisit: (input: {
+    visitId: string;
+    data: unknown;
+  }) => mocks.prismaUpdate({ where: { id: input.visitId }, data: input.data }),
+}));
+vi.mock("@/worker/finalize-review-state", () => ({
   applyAdditiveReviewState: vi.fn(async () => {}),
 }));
 
-import { runLayer6Polish, type Layer6Input } from '../06-polish';
-import { findNovelContentTerms } from '../06b-polish-fidelity-gate';
-import type { CritiqueReport } from '../05-self-critique';
+import { runLayer6Polish, type Layer6Input } from "../06-polish";
+import { findNovelContentTerms } from "../06b-polish-fidelity-gate";
+import type { CritiqueReport } from "../05-self-critique";
 
 const DRAFT = `## Subjective
 Patient reports headache for 3 days. No visual changes.
@@ -99,21 +107,21 @@ Tension-type headache.
 const FIXABLE_CRITIQUE: CritiqueReport = {
   issues: [
     {
-      severity: 'minor',
-      location: 'Plan',
-      description: 'tighten wording',
-      suggested_fix: 'reword for clarity',
+      severity: "minor",
+      location: "Plan",
+      description: "tighten wording",
+      suggested_fix: "reword for clarity",
     },
   ],
-  overall_quality: 'high',
+  overall_quality: "high",
   safe_to_sign_without_review: true,
 };
 
 function makeInput(overrides: Partial<Layer6Input> = {}): Layer6Input {
   return {
-    visitId: 'vis-gate',
-    practiceId: 'p1',
-    userId: 'u1',
+    visitId: "vis-gate",
+    practiceId: "p1",
+    userId: "u1",
     soapDraft: DRAFT,
     critique: FIXABLE_CRITIQUE,
     ...overrides,
@@ -125,31 +133,31 @@ function makeInput(overrides: Partial<Layer6Input> = {}): Layer6Input {
 function mockPolishAndGate(polishText: string, gateText: string | Error) {
   mocks.modelCompleteText.mockImplementation(
     async (args: { purpose?: string }) => {
-      if (args?.purpose === 'tm_polish_gate') {
+      if (args?.purpose === "tm_polish_gate") {
         if (gateText instanceof Error) throw gateText;
         return { text: gateText };
       }
       return { text: polishText };
-    }
+    },
   );
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.prismaUpdate.mockResolvedValue({ id: 'vis-gate' });
+  mocks.prismaUpdate.mockResolvedValue({ id: "vis-gate" });
   mocks.logAudit.mockResolvedValue(undefined);
 });
 
-describe('L6b gate — injected fabrication is rejected (the RED-finding case)', () => {
-  it('verifier violation → soapFinal falls back to the pre-L6 draft', async () => {
+describe("L6b gate — injected fabrication is rejected (the RED-finding case)", () => {
+  it("verifier violation → soapFinal falls back to the pre-L6 draft", async () => {
     mockPolishAndGate(
       FABRICATED_POLISH,
       JSON.stringify({
         violations: [
-          { kind: 'addition', summary: 'new contraindication/risk reasoning' },
-          { kind: 'addition', summary: 'new neurology referral' },
+          { kind: "addition", summary: "new contraindication/risk reasoning" },
+          { kind: "addition", summary: "new neurology referral" },
         ],
-      })
+      }),
     );
 
     const result = await runLayer6Polish(makeInput());
@@ -162,32 +170,32 @@ describe('L6b gate — injected fabrication is rejected (the RED-finding case)',
     expect(updateArgs.data.soapL6Original).toBe(DRAFT);
   });
 
-  it('rejection emits ONE L6_FABRICATION_REJECTED audit row with countable metadata', async () => {
+  it("rejection emits ONE L6_FABRICATION_REJECTED audit row with countable metadata", async () => {
     mockPolishAndGate(
       FABRICATED_POLISH,
       JSON.stringify({
-        violations: [{ kind: 'addition', summary: 'new referral' }],
-      })
+        violations: [{ kind: "addition", summary: "new referral" }],
+      }),
     );
 
     await runLayer6Polish(makeInput());
 
     expect(mocks.logAudit).toHaveBeenCalledTimes(1);
     const audit = mocks.logAudit.mock.calls[0][0];
-    expect(audit.action).toBe('L6_FABRICATION_REJECTED');
+    expect(audit.action).toBe("L6_FABRICATION_REJECTED");
     expect(audit.success).toBe(false);
-    expect(audit.metadata.layer).toBe('L6');
+    expect(audit.metadata.layer).toBe("L6");
     expect(audit.metadata.violationCount).toBe(1);
-    expect(audit.metadata.kinds).toEqual(['addition']);
+    expect(audit.metadata.kinds).toEqual(["addition"]);
     expect(audit.metadata.fellBackToDraft).toBe(true);
     expect(audit.metadata.gateError).toBe(null);
-    expect(typeof audit.metadata.novelTermCount).toBe('number');
+    expect(typeof audit.metadata.novelTermCount).toBe("number");
   });
 
-  it('rejection flips needsReview with the fixes-not-applied reason', async () => {
+  it("rejection flips needsReview with the fixes-not-applied reason", async () => {
     mockPolishAndGate(
       FABRICATED_POLISH,
-      JSON.stringify({ violations: [{ kind: 'addition', summary: 'x' }] })
+      JSON.stringify({ violations: [{ kind: "addition", summary: "x" }] }),
     );
 
     const result = await runLayer6Polish(makeInput());
@@ -197,12 +205,12 @@ describe('L6b gate — injected fabrication is rejected (the RED-finding case)',
     expect(result.reviewReason).toMatch(/fixes remain unapplied/);
   });
 
-  it('meaning_change (negation flip) violations also reject', async () => {
+  it("meaning_change (negation flip) violations also reject", async () => {
     mockPolishAndGate(
       CLEAN_POLISH, // text looks clean — the verifier verdict is what counts
       JSON.stringify({
-        violations: [{ kind: 'meaning_change', summary: 'negation flipped' }],
-      })
+        violations: [{ kind: "meaning_change", summary: "negation flipped" }],
+      }),
     );
 
     const result = await runLayer6Polish(makeInput());
@@ -210,13 +218,13 @@ describe('L6b gate — injected fabrication is rejected (the RED-finding case)',
     expect(result.polishRejected).toBe(true);
     expect(result.soapFinal).toBe(DRAFT);
     expect(mocks.logAudit.mock.calls[0][0].metadata.kinds).toEqual([
-      'meaning_change',
+      "meaning_change",
     ]);
   });
 });
 
-describe('L6b gate — clean polish passes through', () => {
-  it('empty violations → polished text kept, no audit, no review flag', async () => {
+describe("L6b gate — clean polish passes through", () => {
+  it("empty violations → polished text kept, no audit, no review flag", async () => {
     mockPolishAndGate(CLEAN_POLISH, '{"violations":[]}');
 
     const result = await runLayer6Polish(makeInput());
@@ -227,10 +235,10 @@ describe('L6b gate — clean polish passes through', () => {
     expect(mocks.logAudit).not.toHaveBeenCalled();
   });
 
-  it('tolerates verifier prose AROUND a valid JSON verdict (judge-parse lesson)', async () => {
+  it("tolerates verifier prose AROUND a valid JSON verdict (judge-parse lesson)", async () => {
     mockPolishAndGate(
       CLEAN_POLISH,
-      'Here is my analysis:\n```json\n{"violations":[]}\n```\nThe edit is faithful.'
+      'Here is my analysis:\n```json\n{"violations":[]}\n```\nThe edit is faithful.',
     );
 
     const result = await runLayer6Polish(makeInput());
@@ -240,33 +248,33 @@ describe('L6b gate — clean polish passes through', () => {
   });
 });
 
-describe('L6b gate — FAIL-CLOSED on every gate failure', () => {
-  it('verifier API error → fallback to draft + audit with gateError class', async () => {
-    mockPolishAndGate(CLEAN_POLISH, new Error('Anthropic 529 overloaded'));
+describe("L6b gate — FAIL-CLOSED on every gate failure", () => {
+  it("verifier API error → fallback to draft + audit with gateError class", async () => {
+    mockPolishAndGate(CLEAN_POLISH, new Error("Anthropic 529 overloaded"));
 
     const result = await runLayer6Polish(makeInput());
 
     expect(result.polishRejected).toBe(true);
     expect(result.soapFinal).toBe(DRAFT);
     const audit = mocks.logAudit.mock.calls[0][0];
-    expect(audit.action).toBe('L6_FABRICATION_REJECTED');
-    expect(audit.metadata.gateError).toBe('verifier_call_failed');
+    expect(audit.action).toBe("L6_FABRICATION_REJECTED");
+    expect(audit.metadata.gateError).toBe("verifier_call_failed");
     expect(audit.metadata.violationCount).toBe(0);
   });
 
-  it('verifier output with NO JSON at all → fallback (verifier_output_not_json)', async () => {
-    mockPolishAndGate(CLEAN_POLISH, 'I could not analyze this note.');
+  it("verifier output with NO JSON at all → fallback (verifier_output_not_json)", async () => {
+    mockPolishAndGate(CLEAN_POLISH, "I could not analyze this note.");
 
     const result = await runLayer6Polish(makeInput());
 
     expect(result.polishRejected).toBe(true);
     expect(result.soapFinal).toBe(DRAFT);
     expect(mocks.logAudit.mock.calls[0][0].metadata.gateError).toBe(
-      'verifier_output_not_json'
+      "verifier_output_not_json",
     );
   });
 
-  it('verifier JSON with the wrong shape → fallback (verifier_verdict_malformed)', async () => {
+  it("verifier JSON with the wrong shape → fallback (verifier_verdict_malformed)", async () => {
     mockPolishAndGate(CLEAN_POLISH, '{"violations": "none found"}');
 
     const result = await runLayer6Polish(makeInput());
@@ -274,21 +282,21 @@ describe('L6b gate — FAIL-CLOSED on every gate failure', () => {
     expect(result.polishRejected).toBe(true);
     expect(result.soapFinal).toBe(DRAFT);
     expect(mocks.logAudit.mock.calls[0][0].metadata.gateError).toBe(
-      'verifier_verdict_malformed'
+      "verifier_verdict_malformed",
     );
   });
 
-  it('AUDIT BLOCK-1: missing-violations-key verdict ({}) must NOT pass as clean', async () => {
+  it("AUDIT BLOCK-1: missing-violations-key verdict ({}) must NOT pass as clean", async () => {
     // A `.default([])` on the Zod schema would turn `{}` into an approval —
     // fail-open. Pinned: missing key = malformed = fallback.
-    mockPolishAndGate(FABRICATED_POLISH, '{}');
+    mockPolishAndGate(FABRICATED_POLISH, "{}");
 
     const result = await runLayer6Polish(makeInput());
 
     expect(result.polishRejected).toBe(true);
     expect(result.soapFinal).toBe(DRAFT);
     expect(mocks.logAudit.mock.calls[0][0].metadata.gateError).toBe(
-      'verifier_verdict_malformed'
+      "verifier_verdict_malformed",
     );
   });
 
@@ -299,7 +307,7 @@ describe('L6b gate — FAIL-CLOSED on every gate failure', () => {
     // shipping — non-conforming shape never approves.)
     mockPolishAndGate(
       FABRICATED_POLISH,
-      '{"verdict":{"violations":[{"kind":"addition","summary":"new referral"}]}}'
+      '{"verdict":{"violations":[{"kind":"addition","summary":"new referral"}]}}',
     );
 
     const result = await runLayer6Polish(makeInput());
@@ -307,15 +315,15 @@ describe('L6b gate — FAIL-CLOSED on every gate failure', () => {
     expect(result.polishRejected).toBe(true);
     expect(result.soapFinal).toBe(DRAFT);
     expect(mocks.logAudit.mock.calls[0][0].metadata.gateError).toBe(
-      'verifier_verdict_malformed'
+      "verifier_verdict_malformed",
     );
   });
 
-  it('AUDIT WARN-1: prose with an example CLEAN verdict before the REAL violating one → rejects', async () => {
+  it("AUDIT WARN-1: prose with an example CLEAN verdict before the REAL violating one → rejects", async () => {
     mockPolishAndGate(
       FABRICATED_POLISH,
       'A faithful edit looks like {"violations":[]} but here I found: ' +
-        '{"violations":[{"kind":"addition","summary":"invented contraindication"}]}'
+        '{"violations":[{"kind":"addition","summary":"invented contraindication"}]}',
     );
 
     const result = await runLayer6Polish(makeInput());
@@ -325,10 +333,10 @@ describe('L6b gate — FAIL-CLOSED on every gate failure', () => {
     expect(mocks.logAudit.mock.calls[0][0].metadata.violationCount).toBe(1);
   });
 
-  it('AUDIT WARN-1: MULTIPLE all-clean verdicts are ambiguous → fail-closed fallback', async () => {
+  it("AUDIT WARN-1: MULTIPLE all-clean verdicts are ambiguous → fail-closed fallback", async () => {
     mockPolishAndGate(
       CLEAN_POLISH,
-      'Example: {"violations":[]} — and my verdict: {"violations":[]}'
+      'Example: {"violations":[]} — and my verdict: {"violations":[]}',
     );
 
     const result = await runLayer6Polish(makeInput());
@@ -336,28 +344,30 @@ describe('L6b gate — FAIL-CLOSED on every gate failure', () => {
     expect(result.polishRejected).toBe(true);
     expect(result.soapFinal).toBe(DRAFT);
     expect(mocks.logAudit.mock.calls[0][0].metadata.gateError).toBe(
-      'verifier_output_ambiguous'
+      "verifier_output_ambiguous",
     );
   });
 
-  it('whitespace-only polish output skips the gate (no verifier call); structure validator owns it', async () => {
-    mockPolishAndGate('   \n  ', '{"violations":[]}');
+  it("whitespace-only polish output skips the gate (no verifier call); structure validator owns it", async () => {
+    mockPolishAndGate("   \n  ", '{"violations":[]}');
 
     const result = await runLayer6Polish(makeInput());
 
     // Gate not invoked — only ONE completeText call (the polish itself).
     const gateCalls = mocks.modelCompleteText.mock.calls.filter(
-      (c) => c[0]?.purpose === 'tm_polish_gate'
+      (c) => c[0]?.purpose === "tm_polish_gate",
     );
     expect(gateCalls).toHaveLength(0);
     expect(result.polishRejected).toBe(false);
     // FIND-P1-016 policy: raw output persisted + flagged for review.
     expect(result.needsReview).toBe(true);
-    expect(result.reviewReason).toMatch(/didn't match expected markdown structure/);
+    expect(result.reviewReason).toMatch(
+      /didn't match expected markdown structure/,
+    );
   });
 
-  it('gate fallback SKIPS structure validation (draft already L4-validated) — single audit row', async () => {
-    mockPolishAndGate(CLEAN_POLISH, new Error('boom'));
+  it("gate fallback SKIPS structure validation (draft already L4-validated) — single audit row", async () => {
+    mockPolishAndGate(CLEAN_POLISH, new Error("boom"));
 
     await runLayer6Polish(makeInput());
 
@@ -365,21 +375,21 @@ describe('L6b gate — FAIL-CLOSED on every gate failure', () => {
     // for the fallback draft.
     expect(mocks.logAudit).toHaveBeenCalledTimes(1);
     expect(mocks.logAudit.mock.calls[0][0].action).toBe(
-      'L6_FABRICATION_REJECTED'
+      "L6_FABRICATION_REJECTED",
     );
   });
 });
 
-describe('L6b gate — scope', () => {
-  it('passthrough branch (no fixable issues) never invokes the gate', async () => {
+describe("L6b gate — scope", () => {
+  it("passthrough branch (no fixable issues) never invokes the gate", async () => {
     const result = await runLayer6Polish(
       makeInput({
         critique: {
           issues: [],
-          overall_quality: 'high',
+          overall_quality: "high",
           safe_to_sign_without_review: true,
         },
-      })
+      }),
     );
 
     expect(mocks.modelCompleteText).not.toHaveBeenCalled();
@@ -387,12 +397,14 @@ describe('L6b gate — scope', () => {
     expect(result.soapFinal).toBe(DRAFT);
   });
 
-  it('audit metadata never carries note content (PHI guard, key-set pinned)', async () => {
+  it("audit metadata never carries note content (PHI guard, key-set pinned)", async () => {
     mockPolishAndGate(
       FABRICATED_POLISH,
       JSON.stringify({
-        violations: [{ kind: 'addition', summary: 'invented referral to Dr Jane Doe' }],
-      })
+        violations: [
+          { kind: "addition", summary: "invented referral to Dr Jane Doe" },
+        ],
+      }),
     );
 
     await runLayer6Polish(makeInput());
@@ -401,40 +413,45 @@ describe('L6b gate — scope', () => {
     const metaString = JSON.stringify(meta);
     // Neither the draft, the polish, nor the verifier's free-text summary
     // may reach the audit row.
-    expect(metaString).not.toContain('headache');
-    expect(metaString).not.toContain('ibuprofen');
-    expect(metaString).not.toContain('Jane Doe');
+    expect(metaString).not.toContain("headache");
+    expect(metaString).not.toContain("ibuprofen");
+    expect(metaString).not.toContain("Jane Doe");
     expect(Object.keys(meta).sort()).toEqual([
-      'fellBackToDraft',
-      'gateError',
-      'kinds',
-      'layer',
-      'novelTermCount',
-      'violationCount',
+      "fellBackToDraft",
+      "gateError",
+      "kinds",
+      "layer",
+      "novelTermCount",
+      "violationCount",
     ]);
   });
 });
 
-describe('findNovelContentTerms (pure telemetry helper)', () => {
-  it('detects novel clinical terms absent from the base texts', () => {
+describe("findNovelContentTerms (pure telemetry helper)", () => {
+  it("detects novel clinical terms absent from the base texts", () => {
     const novel = findNovelContentTerms(
-      [DRAFT, 'reword for clarity'],
-      FABRICATED_POLISH
+      [DRAFT, "reword for clarity"],
+      FABRICATED_POLISH,
     );
     // The fabrication's distinctive vocabulary shows up as novel terms.
     expect(novel).toEqual(
-      expect.arrayContaining(['contraindicated', 'ischaemic', 'stroke', 'neurology'])
+      expect.arrayContaining([
+        "contraindicated",
+        "ischaemic",
+        "stroke",
+        "neurology",
+      ]),
     );
   });
 
-  it('a faithful reword has few/no novel terms', () => {
-    const novel = findNovelContentTerms([DRAFT, 'reword for clarity'], DRAFT);
+  it("a faithful reword has few/no novel terms", () => {
+    const novel = findNovelContentTerms([DRAFT, "reword for clarity"], DRAFT);
     expect(novel).toEqual([]);
   });
 
-  it('a NEGATION FLIP adds zero novel terms — documents why the scan is not an acceptor', () => {
-    const base = '## Subjective\nNo chest pain. Patient denies fever.';
-    const flipped = '## Subjective\nChest pain. Patient denies fever.';
+  it("a NEGATION FLIP adds zero novel terms — documents why the scan is not an acceptor", () => {
+    const base = "## Subjective\nNo chest pain. Patient denies fever.";
+    const flipped = "## Subjective\nChest pain. Patient denies fever.";
     expect(findNovelContentTerms([base], flipped)).toEqual([]);
   });
 });

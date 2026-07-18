@@ -19,25 +19,45 @@
 // stuck-in-non-terminal is the worse failure mode.
 // ============================================================================
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   update: vi.fn(),
+  enqueueAudit: vi.fn(),
+  markManifestFailed: vi.fn(),
   captureWorkerException: vi.fn(),
   logError: vi.fn(),
 }));
 
-vi.mock('@meddoc/db', () => ({
+vi.mock("@meddoc/db", () => ({
   default: { transcribeVisit: { update: mocks.update } },
 }));
 
-vi.mock('@meddoc/ai', () => ({
+vi.mock("@meddoc/ai", () => ({
   // Identity redactor for tests — we don't care about PHI scrubbing
   // shape here; that's covered by worker-redact-phi.test.ts.
-  redactPhi: (s: unknown) => (typeof s === 'string' ? s : String(s ?? '')),
+  redactPhi: (s: unknown) => (typeof s === "string" ? s : String(s ?? "")),
+  getTemplateTwinSyntheticQaProviderContext: () => null,
 }));
 
-vi.mock('@/lib/log', () => ({
+vi.mock("@/worker/automation-locks", () => ({
+  runVisitAutomationTransaction: async (input: {
+    transaction: (tx: unknown) => Promise<unknown>;
+  }) =>
+    input.transaction({
+      transcribeVisit: { update: mocks.update },
+    }),
+}));
+
+vi.mock("@/worker/automation-manifest", () => ({
+  markVisitAutomationManifestFailed: mocks.markManifestFailed,
+}));
+
+vi.mock("@/lib/template-twin/audit-outbox", () => ({
+  enqueueTemplateTwinAudit: mocks.enqueueAudit,
+}));
+
+vi.mock("@/lib/log", () => ({
   log: {
     info: vi.fn(),
     warn: vi.fn(),
@@ -47,30 +67,32 @@ vi.mock('@/lib/log', () => ({
 
 // The worker-sentry module exposes captureWorkerException; we mock it
 // to assert the helper captures the SECONDARY (persist) failure.
-vi.mock('../../src/worker-sentry', () => ({
+vi.mock("../../src/worker-sentry", () => ({
   captureWorkerException: mocks.captureWorkerException,
 }));
 
-import { persistFailedState } from '@/worker/persist-failed';
+import { persistFailedState } from "@/worker/persist-failed";
 
-const VISIT_ID = 'vis-1';
-const USER_ID = 'u1';
-const PRACTICE_ID = 'p1';
+const VISIT_ID = "vis-1";
+const USER_ID = "u1";
+const PRACTICE_ID = "p1";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.markManifestFailed.mockResolvedValue(null);
+  mocks.enqueueAudit.mockResolvedValue(undefined);
 });
 
-describe('persistFailedState — happy path', () => {
-  it('returns persistOk=true when the update succeeds', async () => {
+describe("persistFailedState — happy path", () => {
+  it("returns persistOk=true when the update succeeds", async () => {
     mocks.update.mockResolvedValue({ id: VISIT_ID });
 
     const result = await persistFailedState({
       visitId: VISIT_ID,
-      category: 'transient',
-      layer: 'L1',
-      originalErr: new Error('upstream timeout'),
-      reviewReason: 'Transcription failed during transcription.',
+      category: "transient",
+      layer: "L1",
+      originalErr: new Error("upstream timeout"),
+      reviewReason: "Transcription failed during transcription.",
       userId: USER_ID,
       practiceId: PRACTICE_ID,
     });
@@ -80,12 +102,12 @@ describe('persistFailedState — happy path', () => {
 
     const updateArgs = mocks.update.mock.calls[0][0];
     expect(updateArgs.where).toEqual({ id: VISIT_ID });
-    expect(updateArgs.data.status).toBe('FAILED');
+    expect(updateArgs.data.status).toBe("FAILED");
     expect(updateArgs.data.needsReview).toBe(true);
     expect(updateArgs.data.reviewReason).toBe(
-      'Transcription failed during transcription.'
+      "Transcription failed during transcription.",
     );
-    expect(updateArgs.data.failureCategory).toBe('transient');
+    expect(updateArgs.data.failureCategory).toBe("transient");
     expect(updateArgs.data.processingFinishedAt).toBeInstanceOf(Date);
 
     // Happy path → no secondary Sentry event, no error-level log.
@@ -93,35 +115,35 @@ describe('persistFailedState — happy path', () => {
     expect(mocks.logError).not.toHaveBeenCalled();
   });
 
-  it('does NOT throw on success (return-value contract)', async () => {
+  it("does NOT throw on success (return-value contract)", async () => {
     mocks.update.mockResolvedValue({ id: VISIT_ID });
 
     await expect(
       persistFailedState({
         visitId: VISIT_ID,
-        category: 'permanent',
-        layer: 'L4',
-        originalErr: new Error('zod validation failed'),
-        reviewReason: 'SOAP generation failed.',
+        category: "permanent",
+        layer: "L4",
+        originalErr: new Error("zod validation failed"),
+        reviewReason: "SOAP generation failed.",
         userId: USER_ID,
         practiceId: PRACTICE_ID,
-      })
+      }),
     ).resolves.toMatchObject({ persistOk: true });
   });
 });
 
-describe('persistFailedState — persist failure (FIND-P1-014)', () => {
-  it('returns persistOk=false + persistErr when update rejects', async () => {
-    const writeErr = new Error('postgres connection refused');
+describe("persistFailedState — persist failure (FIND-P1-014)", () => {
+  it("returns persistOk=false + persistErr when update rejects", async () => {
+    const writeErr = new Error("postgres connection refused");
     mocks.update.mockRejectedValue(writeErr);
 
-    const originalErr = new Error('L4 model output malformed');
+    const originalErr = new Error("L4 model output malformed");
     const result = await persistFailedState({
       visitId: VISIT_ID,
-      category: 'permanent',
-      layer: 'L4',
+      category: "permanent",
+      layer: "L4",
       originalErr,
-      reviewReason: 'SOAP generation failed.',
+      reviewReason: "SOAP generation failed.",
       userId: USER_ID,
       practiceId: PRACTICE_ID,
     });
@@ -130,8 +152,8 @@ describe('persistFailedState — persist failure (FIND-P1-014)', () => {
     expect(result.persistErr).toBe(writeErr);
   });
 
-  it('does NOT throw on persist failure — caller decides via persistOk', async () => {
-    mocks.update.mockRejectedValue(new Error('db down'));
+  it("does NOT throw on persist failure — caller decides via persistOk", async () => {
+    mocks.update.mockRejectedValue(new Error("db down"));
 
     // The contract: this function never throws. The caller (worker
     // outer catch) inspects persistOk and re-throws persistErr to
@@ -140,54 +162,54 @@ describe('persistFailedState — persist failure (FIND-P1-014)', () => {
     await expect(
       persistFailedState({
         visitId: VISIT_ID,
-        category: 'transient',
-        layer: 'L1',
-        originalErr: new Error('upstream 503'),
-        reviewReason: 'Transcription failed.',
+        category: "transient",
+        layer: "L1",
+        originalErr: new Error("upstream 503"),
+        reviewReason: "Transcription failed.",
         userId: USER_ID,
         practiceId: PRACTICE_ID,
-      })
+      }),
     ).resolves.toMatchObject({ persistOk: false });
   });
 
-  it('logs the double-failure with both error messages', async () => {
-    const writeErr = new Error('postgres connection refused');
+  it("logs the double-failure with both error messages", async () => {
+    const writeErr = new Error("postgres connection refused");
     mocks.update.mockRejectedValue(writeErr);
 
-    const originalErr = new Error('L4 model output malformed');
+    const originalErr = new Error("L4 model output malformed");
     await persistFailedState({
       visitId: VISIT_ID,
-      category: 'permanent',
-      layer: 'L4',
+      category: "permanent",
+      layer: "L4",
       originalErr,
-      reviewReason: 'SOAP generation failed.',
+      reviewReason: "SOAP generation failed.",
       userId: USER_ID,
       practiceId: PRACTICE_ID,
     });
 
     expect(mocks.logError).toHaveBeenCalledTimes(1);
     const [scope, msg, ctx] = mocks.logError.mock.calls[0];
-    expect(scope).toBe('transcribe-md-worker');
-    expect(msg).toBe('FAILED-state persist also failed');
+    expect(scope).toBe("transcribe-md-worker");
+    expect(msg).toBe("FAILED-state persist also failed");
     expect(ctx).toMatchObject({
       visitId: VISIT_ID,
-      layer: 'L4',
-      category: 'permanent',
-      originalErrMessage: 'L4 model output malformed',
-      persistErrMessage: 'postgres connection refused',
+      layer: "L4",
+      category: "permanent",
+      originalErrMessage: "L4 model output malformed",
+      persistErrMessage: "postgres connection refused",
     });
   });
 
-  it('captures the SECONDARY (persist) failure to Sentry with finalize tag', async () => {
-    const writeErr = new Error('postgres connection refused');
+  it("captures the SECONDARY (persist) failure to Sentry with finalize tag", async () => {
+    const writeErr = new Error("postgres connection refused");
     mocks.update.mockRejectedValue(writeErr);
 
     await persistFailedState({
       visitId: VISIT_ID,
-      category: 'transient',
-      layer: 'L1',
-      originalErr: new Error('upstream 503'),
-      reviewReason: 'Transcription failed.',
+      category: "transient",
+      layer: "L1",
+      originalErr: new Error("upstream 503"),
+      reviewReason: "Transcription failed.",
       userId: USER_ID,
       practiceId: PRACTICE_ID,
     });
@@ -200,30 +222,30 @@ describe('persistFailedState — persist failure (FIND-P1-014)', () => {
     // with the pipeline layer tag.
     expect(tags).toEqual({
       visitId: VISIT_ID,
-      layer: 'finalize',
+      layer: "finalize",
       userId: USER_ID,
       practiceId: PRACTICE_ID,
     });
   });
 
-  it('handles non-Error throws (string, undefined) without crashing', async () => {
-    mocks.update.mockRejectedValue('postgres unavailable');
+  it("handles non-Error throws (string, undefined) without crashing", async () => {
+    mocks.update.mockRejectedValue("postgres unavailable");
 
     const result = await persistFailedState({
       visitId: VISIT_ID,
-      category: 'transient',
-      layer: 'L1',
+      category: "transient",
+      layer: "L1",
       originalErr: undefined,
-      reviewReason: 'Transcription failed.',
+      reviewReason: "Transcription failed.",
       userId: USER_ID,
-      practiceId: null,
+      practiceId: "practice-synthetic.test",
     });
 
     expect(result.persistOk).toBe(false);
-    expect(result.persistErr).toBe('postgres unavailable');
+    expect(result.persistErr).toBe("postgres unavailable");
     expect(mocks.logError).toHaveBeenCalledTimes(1);
     const ctx = mocks.logError.mock.calls[0][2];
-    expect(ctx.persistErrMessage).toBe('postgres unavailable');
-    expect(ctx.originalErrMessage).toBe('');
+    expect(ctx.persistErrMessage).toBe("postgres unavailable");
+    expect(ctx.originalErrMessage).toBe("");
   });
 });

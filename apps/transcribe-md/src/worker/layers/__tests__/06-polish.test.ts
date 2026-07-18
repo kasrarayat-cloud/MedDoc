@@ -18,7 +18,7 @@
 //     T-M14.1 snapshot for sign-time DoctorEditPattern capture.
 // ============================================================================
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   modelCompleteText: vi.fn(),
@@ -27,9 +27,9 @@ const mocks = vi.hoisted(() => ({
   logAudit: vi.fn(),
 }));
 
-vi.mock('@meddoc/ai', async () => {
+vi.mock("@meddoc/ai", async () => {
   const actual =
-    await vi.importActual<typeof import('@meddoc/ai')>('@meddoc/ai');
+    await vi.importActual<typeof import("@meddoc/ai")>("@meddoc/ai");
   return {
     ...actual,
     modelClient: {
@@ -39,24 +39,31 @@ vi.mock('@meddoc/ai', async () => {
   };
 });
 
-vi.mock('@meddoc/db', () => ({
+vi.mock("@meddoc/db", () => ({
   default: {
     transcribeVisit: { update: mocks.prismaUpdate },
   },
 }));
 
-vi.mock('@/lib/audit', () => ({ logAudit: mocks.logAudit }));
-vi.mock('@/worker/finalize-review-state', () => ({
+vi.mock("@/lib/audit", () => ({ logAudit: mocks.logAudit }));
+vi.mock("@/worker/worker-audit", () => ({ logWorkerAudit: mocks.logAudit }));
+vi.mock("@/worker/staging-qa-mutation-fence", () => ({
+  updateTemplateTwinSyntheticQaClaimBoundVisit: (input: {
+    visitId: string;
+    data: unknown;
+  }) => mocks.prismaUpdate({ where: { id: input.visitId }, data: input.data }),
+}));
+vi.mock("@/worker/finalize-review-state", () => ({
   applyAdditiveReviewState: mocks.applyAdditiveReviewState,
 }));
 
-import { runLayer6Polish, type Layer6Input } from '../06-polish';
-import type { ResolvedNoteTemplate } from '../../note-templates/build-soap-prompt';
-import type { CritiqueReport, CritiqueIssue } from '../05-self-critique';
+import { runLayer6Polish, type Layer6Input } from "../06-polish";
+import type { ResolvedNoteTemplate } from "../../note-templates/build-soap-prompt";
+import type { CritiqueReport, CritiqueIssue } from "../05-self-critique";
 
-const FAKE_VISIT = 'vis-6';
-const FAKE_USER = 'u1';
-const FAKE_PRACTICE = 'p1';
+const FAKE_VISIT = "vis-6";
+const FAKE_USER = "u1";
+const FAKE_PRACTICE = "p1";
 
 const DRAFT_SOAP = `## Subjective
 Patient reports headache for 3 days.
@@ -86,22 +93,22 @@ Tension-type headache, primary care manageable.
 3. RTC if worsens or new neuro symptoms emerge.`;
 
 function issue(
-  severity: CritiqueIssue['severity'],
+  severity: CritiqueIssue["severity"],
   description: string,
-  location = 'Subjective',
+  location = "Subjective",
 ): CritiqueIssue {
   return {
     severity,
     location,
     description,
-    suggested_fix: 'apply the fix described above',
+    suggested_fix: "apply the fix described above",
   };
 }
 
 function makeCleanReport(): CritiqueReport {
   return {
     issues: [],
-    overall_quality: 'high',
+    overall_quality: "high",
     safe_to_sign_without_review: true,
   };
 }
@@ -132,7 +139,7 @@ beforeEach(() => {
   // falls through to this implementation.
   mocks.modelCompleteText.mockImplementation(
     async (args: { purpose?: string }) =>
-      args?.purpose === 'tm_polish_gate'
+      args?.purpose === "tm_polish_gate"
         ? { text: '{"violations":[]}' }
         : { text: POLISHED_SOAP },
   );
@@ -142,8 +149,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('runLayer6Polish — passthrough branch (no fixable issues)', () => {
-  it('skips the model call entirely when critique has zero issues', async () => {
+describe("runLayer6Polish — passthrough branch (no fixable issues)", () => {
+  it("skips the model call entirely when critique has zero issues", async () => {
     const result = await runLayer6Polish(makeInput());
 
     expect(mocks.modelCompleteText).not.toHaveBeenCalled();
@@ -156,7 +163,7 @@ describe('runLayer6Polish — passthrough branch (no fixable issues)', () => {
     expect(result.unfixable).toEqual([]);
   });
 
-  it('passthrough still writes both soapFinal + soapL6Original (T-M14.1 invariant)', async () => {
+  it("passthrough still writes both soapFinal + soapL6Original (T-M14.1 invariant)", async () => {
     await runLayer6Polish(makeInput());
 
     expect(mocks.prismaUpdate).toHaveBeenCalledTimes(1);
@@ -166,14 +173,14 @@ describe('runLayer6Polish — passthrough branch (no fixable issues)', () => {
     expect(updateArgs.data.soapL6Original).toBe(DRAFT_SOAP);
   });
 
-  it('passthrough with only unfixable critical issues flips needsReview', async () => {
+  it("passthrough with only unfixable critical issues flips needsReview", async () => {
     // No fixable issues but one unfixable critical (red-flag missing).
     // Model call still skipped; review banner still triggered.
     const report: CritiqueReport = {
       issues: [
-        issue('critical', 'No red-flag screening for headache documented'),
+        issue("critical", "No red-flag screening for headache documented"),
       ],
-      overall_quality: 'low',
+      overall_quality: "low",
       safe_to_sign_without_review: false,
     };
 
@@ -187,10 +194,10 @@ describe('runLayer6Polish — passthrough branch (no fixable issues)', () => {
     expect(result.unfixable).toHaveLength(1);
   });
 
-  it('passthrough with safe_to_sign=false but no issues at all → needsReview=true', async () => {
+  it("passthrough with safe_to_sign=false but no issues at all → needsReview=true", async () => {
     const report: CritiqueReport = {
       issues: [],
-      overall_quality: 'medium',
+      overall_quality: "medium",
       safe_to_sign_without_review: false,
     };
 
@@ -203,16 +210,16 @@ describe('runLayer6Polish — passthrough branch (no fixable issues)', () => {
   });
 });
 
-describe('runLayer6Polish — model-call branch contract', () => {
+describe("runLayer6Polish — model-call branch contract", () => {
   function reportWithFixable(): CritiqueReport {
     return {
-      issues: [issue('major', 'Plan does not address assessment')],
-      overall_quality: 'medium',
+      issues: [issue("major", "Plan does not address assessment")],
+      overall_quality: "medium",
       safe_to_sign_without_review: false,
     };
   }
 
-  it('calls completeText with sonnet model, temperature 0.1, purpose tm_polish', async () => {
+  it("calls completeText with sonnet model, temperature 0.1, purpose tm_polish", async () => {
     mocks.modelCompleteText.mockResolvedValueOnce({ text: POLISHED_SOAP });
 
     await runLayer6Polish(makeInput({ critique: reportWithFixable() }));
@@ -220,13 +227,13 @@ describe('runLayer6Polish — model-call branch contract', () => {
     // 2 calls since the fabrication gate: [0] = polish, [1] = tm_polish_gate.
     expect(mocks.modelCompleteText).toHaveBeenCalledTimes(2);
     expect(mocks.modelCompleteText.mock.calls[1][0].purpose).toBe(
-      'tm_polish_gate',
+      "tm_polish_gate",
     );
     const callArgs = mocks.modelCompleteText.mock.calls[0][0];
 
-    expect(callArgs.provider).toBe('anthropic');
-    expect(callArgs.purpose).toBe('tm_polish');
-    expect(callArgs.model).toBe('claude-sonnet-4-6');
+    expect(callArgs.provider).toBe("anthropic");
+    expect(callArgs.purpose).toBe("tm_polish");
+    expect(callArgs.model).toBe("claude-sonnet-4-6");
     expect(callArgs.temperature).toBe(0.1);
     expect(callArgs.maxTokens).toBe(8192);
     expect(callArgs.useToolUse).toBeUndefined();
@@ -245,15 +252,15 @@ describe('runLayer6Polish — model-call branch contract', () => {
     expect(system).toMatch(/Output ONLY the revised SOAP markdown/i);
   });
 
-  it('user message carries the draft + fixable issues numbered', async () => {
+  it("user message carries the draft + fixable issues numbered", async () => {
     mocks.modelCompleteText.mockResolvedValueOnce({ text: POLISHED_SOAP });
 
     const report: CritiqueReport = {
       issues: [
-        issue('major', 'plan missing'),
-        issue('minor', 'unclear phrasing in HPI'),
+        issue("major", "plan missing"),
+        issue("minor", "unclear phrasing in HPI"),
       ],
-      overall_quality: 'medium',
+      overall_quality: "medium",
       safe_to_sign_without_review: false,
     };
 
@@ -266,14 +273,14 @@ describe('runLayer6Polish — model-call branch contract', () => {
     expect(user).toMatch(/2\. \[minor\]/);
   });
 
-  it('happy path writes soapFinal + soapL6Original, no needsReview, no audit', async () => {
+  it("happy path writes soapFinal + soapL6Original, no needsReview, no audit", async () => {
     mocks.modelCompleteText.mockResolvedValueOnce({ text: POLISHED_SOAP });
 
     const result = await runLayer6Polish(
       makeInput({
         critique: {
-          issues: [issue('minor', 'redundant wording')],
-          overall_quality: 'high',
+          issues: [issue("minor", "redundant wording")],
+          overall_quality: "high",
           safe_to_sign_without_review: true,
         },
       }),
@@ -296,22 +303,22 @@ describe('runLayer6Polish — model-call branch contract', () => {
         needsReview: false,
         reviewReason: null,
       },
-      { userId: 'u1', practiceId: 'p1' },
+      { userId: "u1", practiceId: "p1" },
     );
   });
 });
 
-describe('runLayer6Polish — FIND-P1-016 validator-fail path', () => {
+describe("runLayer6Polish — FIND-P1-016 validator-fail path", () => {
   function reportWithFixable(): CritiqueReport {
     return {
-      issues: [issue('major', 'plan missing')],
-      overall_quality: 'medium',
+      issues: [issue("major", "plan missing")],
+      overall_quality: "medium",
       safe_to_sign_without_review: false,
     };
   }
 
-  it('validator empty-output → raw write + needsReview + audit row', async () => {
-    mocks.modelCompleteText.mockResolvedValueOnce({ text: '' });
+  it("validator empty-output → raw write + needsReview + audit row", async () => {
+    mocks.modelCompleteText.mockResolvedValueOnce({ text: "" });
 
     const result = await runLayer6Polish(
       makeInput({ critique: reportWithFixable() }),
@@ -319,19 +326,19 @@ describe('runLayer6Polish — FIND-P1-016 validator-fail path', () => {
 
     expect(mocks.logAudit).toHaveBeenCalledTimes(1);
     const auditArgs = mocks.logAudit.mock.calls[0][0];
-    expect(auditArgs.action).toBe('MODEL_OUTPUT_VALIDATION_FAIL');
+    expect(auditArgs.action).toBe("MODEL_OUTPUT_VALIDATION_FAIL");
     expect(auditArgs.success).toBe(false);
-    expect(auditArgs.metadata.layer).toBe('L6');
-    expect(auditArgs.metadata.reason).toBe('empty output');
+    expect(auditArgs.metadata.layer).toBe("L6");
+    expect(auditArgs.metadata.reason).toBe("empty output");
 
     // Raw output still persisted by the direct update ...
     const updateArgs = mocks.prismaUpdate.mock.calls[0][0];
-    expect(updateArgs.data.soapFinal).toBe('');
-    expect(updateArgs.data.soapL6Original).toBe('');
+    expect(updateArgs.data.soapFinal).toBe("");
+    expect(updateArgs.data.soapL6Original).toBe("");
     // ... but review state is now ADDITIVE (composes with any earlier reason),
     // never a direct overwrite (#315 obs#1).
-    expect('needsReview' in updateArgs.data).toBe(false);
-    expect('reviewReason' in updateArgs.data).toBe(false);
+    expect("needsReview" in updateArgs.data).toBe(false);
+    expect("reviewReason" in updateArgs.data).toBe(false);
     const addArgs = mocks.applyAdditiveReviewState.mock.calls[0];
     expect(addArgs[0]).toBe(FAKE_VISIT);
     expect(addArgs[1].needsReview).toBe(true);
@@ -343,13 +350,13 @@ describe('runLayer6Polish — FIND-P1-016 validator-fail path', () => {
     expect(result.reviewReason).toMatch(/Polish output didn't match/);
   });
 
-  it('validator + unfixable critical → BOTH reasons compose in reviewReason', async () => {
+  it("validator + unfixable critical → BOTH reasons compose in reviewReason", async () => {
     const report: CritiqueReport = {
       issues: [
-        issue('major', 'plan missing'),
-        issue('critical', 'No red-flag screening documented'), // unfixable
+        issue("major", "plan missing"),
+        issue("critical", "No red-flag screening documented"), // unfixable
       ],
-      overall_quality: 'low',
+      overall_quality: "low",
       safe_to_sign_without_review: false,
     };
     // Model returns garbage (JSON-shape rejection).
@@ -366,43 +373,43 @@ describe('runLayer6Polish — FIND-P1-016 validator-fail path', () => {
     expect(result.needsReview).toBe(true);
   });
 
-  it('validator missing-sections → metadata includes the section list', async () => {
+  it("validator missing-sections → metadata includes the section list", async () => {
     const truncated = `## Subjective\nLong narrative here to clear the min-length gate.\n\n## Objective\nExam findings.`;
     mocks.modelCompleteText.mockResolvedValueOnce({ text: truncated });
 
     await runLayer6Polish(makeInput({ critique: reportWithFixable() }));
 
     const auditArgs = mocks.logAudit.mock.calls[0][0];
-    expect(auditArgs.metadata.missingSections).toEqual(['Assessment', 'Plan']);
+    expect(auditArgs.metadata.missingSections).toEqual(["Assessment", "Plan"]);
     expect(auditArgs.metadata.reason).toMatch(
       /missing SOAP sections: Assessment, Plan/,
     );
   });
 
-  it('audit metadata never carries raw output content (PHI guard)', async () => {
+  it("audit metadata never carries raw output content (PHI guard)", async () => {
     const phiOutput =
       `## Subjective\nPatient Jane Doe MRN 88888 reports chest pain. ` +
-      'A'.repeat(200); // missing other sections → validator fails
+      "A".repeat(200); // missing other sections → validator fails
     mocks.modelCompleteText.mockResolvedValueOnce({ text: phiOutput });
 
     await runLayer6Polish(makeInput({ critique: reportWithFixable() }));
 
     const auditArgs = mocks.logAudit.mock.calls[0][0];
     const metaString = JSON.stringify(auditArgs.metadata);
-    expect(metaString).not.toContain('Jane Doe');
-    expect(metaString).not.toContain('88888');
-    expect(metaString).not.toContain('chest pain');
+    expect(metaString).not.toContain("Jane Doe");
+    expect(metaString).not.toContain("88888");
+    expect(metaString).not.toContain("chest pain");
     // Pin the exact metadata key set so a future refactor can't
     // accidentally add a `rawOutput` field.
     expect(Object.keys(auditArgs.metadata).sort()).toEqual([
-      'layer',
-      'missingSections',
-      'outputLength',
-      'reason',
+      "layer",
+      "missingSections",
+      "outputLength",
+      "reason",
     ]);
   });
 
-  it('passthrough branch does NOT re-validate (soapDraft already validated by L4)', async () => {
+  it("passthrough branch does NOT re-validate (soapDraft already validated by L4)", async () => {
     // Passthrough fires when fixable.length === 0. Even if soapDraft
     // would FAIL the validator, the passthrough branch must not run
     // L6's validator — that's L4's responsibility upstream. Pin
@@ -422,29 +429,29 @@ describe('runLayer6Polish — FIND-P1-016 validator-fail path', () => {
   });
 });
 
-describe('runLayer6Polish — error propagation', () => {
+describe("runLayer6Polish — error propagation", () => {
   function reportWithFixable(): CritiqueReport {
     return {
-      issues: [issue('major', 'plan missing')],
-      overall_quality: 'medium',
+      issues: [issue("major", "plan missing")],
+      overall_quality: "medium",
       safe_to_sign_without_review: false,
     };
   }
 
-  it('SCHEMA_FAIL from completeText propagates; NO DB write on failure', async () => {
-    mocks.modelCompleteText.mockRejectedValueOnce(new Error('SCHEMA_FAIL'));
+  it("SCHEMA_FAIL from completeText propagates; NO DB write on failure", async () => {
+    mocks.modelCompleteText.mockRejectedValueOnce(new Error("SCHEMA_FAIL"));
 
     await expect(
       runLayer6Polish(makeInput({ critique: reportWithFixable() })),
-    ).rejects.toThrow('SCHEMA_FAIL');
+    ).rejects.toThrow("SCHEMA_FAIL");
     expect(mocks.prismaUpdate).not.toHaveBeenCalled();
   });
 
-  it('ModelOutputMalformedError (FIND-P1-010) propagates without DB write', async () => {
+  it("ModelOutputMalformedError (FIND-P1-010) propagates without DB write", async () => {
     class FakeMalformed extends Error {
       constructor() {
-        super('Anthropic response was not valid JSON: garbage');
-        this.name = 'ModelOutputMalformedError';
+        super("Anthropic response was not valid JSON: garbage");
+        this.name = "ModelOutputMalformedError";
       }
     }
     mocks.modelCompleteText.mockRejectedValueOnce(new FakeMalformed());
@@ -460,44 +467,44 @@ describe('runLayer6Polish — error propagation', () => {
 // Phase 1 — L6 polishes in (and validates against) the TEMPLATE's structure,
 // not the fixed 4 SOAP headers. System default → unchanged (covered above).
 // ============================================================================
-describe('runLayer6Polish — custom template structure validation', () => {
+describe("runLayer6Polish — custom template structure validation", () => {
   function reportWithFixable(): CritiqueReport {
     return {
-      issues: [issue('major', 'plan missing')],
-      overall_quality: 'medium',
+      issues: [issue("major", "plan missing")],
+      overall_quality: "medium",
       safe_to_sign_without_review: false,
     };
   }
 
   const CUSTOM_TEMPLATE: ResolvedNoteTemplate = {
-    id: 'tmpl_custom_psych',
+    id: "tmpl_custom_psych",
     version: 2,
     isSystemDefault: false,
     styleProfile: {
       tense: null,
-      tone: 'concise',
+      tone: "concise",
       abbreviations: null,
-      preamble: 'ignored',
-      globalRules: ['ignored'],
+      preamble: "ignored",
+      globalRules: ["ignored"],
     },
     sections: [
       {
-        key: 'pc',
-        label: 'Presenting Concern',
+        key: "pc",
+        label: "Presenting Concern",
         order: 1,
-        formatHint: 'prose',
-        styleInstructions: 'x',
+        formatHint: "prose",
+        styleInstructions: "x",
         defaultText: null,
-        defaultTextMode: 'omit_unless_supported',
+        defaultTextMode: "omit_unless_supported",
       },
       {
-        key: 'mse',
-        label: 'Mental Status Exam',
+        key: "mse",
+        label: "Mental Status Exam",
         order: 2,
-        formatHint: 'bullets',
-        styleInstructions: 'x',
+        formatHint: "bullets",
+        styleInstructions: "x",
         defaultText: null,
-        defaultTextMode: 'omit_unless_supported',
+        defaultTextMode: "omit_unless_supported",
       },
     ],
   };
@@ -508,7 +515,7 @@ Patient reports low mood for two weeks.
 ## Mental Status Exam
 Appearance appropriate; mood depressed; no SI/HI.`;
 
-  it('a custom-structured polished note PASSES validation against its template', async () => {
+  it("a custom-structured polished note PASSES validation against its template", async () => {
     mocks.modelCompleteText.mockResolvedValueOnce({ text: CUSTOM_POLISHED });
 
     // Clean-but-fixable critique (minor issue → model-call branch fires,
@@ -516,8 +523,8 @@ Appearance appropriate; mood depressed; no SI/HI.`;
     const result = await runLayer6Polish(
       makeInput({
         critique: {
-          issues: [issue('minor', 'tighten wording')],
-          overall_quality: 'high',
+          issues: [issue("minor", "tighten wording")],
+          overall_quality: "high",
           safe_to_sign_without_review: true,
         },
         noteTemplate: CUSTOM_TEMPLATE,
@@ -530,7 +537,7 @@ Appearance appropriate; mood depressed; no SI/HI.`;
     expect(updateArgs.data.needsReview).toBeUndefined();
   });
 
-  it('a DEFAULT SOAP-shaped note FAILS validation against a custom template', async () => {
+  it("a DEFAULT SOAP-shaped note FAILS validation against a custom template", async () => {
     // POLISHED_SOAP has Subjective/Objective/Assessment/Plan, NOT the
     // custom template's sections → must fail + flag for review.
     mocks.modelCompleteText.mockResolvedValueOnce({ text: POLISHED_SOAP });
@@ -544,21 +551,21 @@ Appearance appropriate; mood depressed; no SI/HI.`;
 
     expect(mocks.logAudit).toHaveBeenCalledTimes(1);
     const auditArgs = mocks.logAudit.mock.calls[0][0];
-    expect(auditArgs.metadata.layer).toBe('L6');
+    expect(auditArgs.metadata.layer).toBe("L6");
     expect(auditArgs.metadata.missingSections).toEqual([
-      'Presenting Concern',
-      'Mental Status Exam',
+      "Presenting Concern",
+      "Mental Status Exam",
     ]);
     expect(result.needsReview).toBe(true);
   });
 });
 
-describe('review-reason composition (#315 obs#1) — L6 never overwrites an earlier reason', () => {
-  it('L6 routes its review state through applyAdditiveReviewState (so an L4 anchor-set-aside reason composes, not clobbered)', async () => {
+describe("review-reason composition (#315 obs#1) — L6 never overwrites an earlier reason", () => {
+  it("L6 routes its review state through applyAdditiveReviewState (so an L4 anchor-set-aside reason composes, not clobbered)", async () => {
     // Unfixable critical → L6 needs review with its own reason.
     const report: CritiqueReport = {
-      issues: [issue('critical', 'No red-flag screening documented')],
-      overall_quality: 'low',
+      issues: [issue("critical", "No red-flag screening documented")],
+      overall_quality: "low",
       safe_to_sign_without_review: false,
     };
     mocks.modelCompleteText.mockResolvedValueOnce({ text: '{"oops":"x"}' });
@@ -567,8 +574,8 @@ describe('review-reason composition (#315 obs#1) — L6 never overwrites an earl
 
     // The DIRECT update writes only soapFinal/soapL6Original — no review fields.
     const updateArgs = mocks.prismaUpdate.mock.calls[0][0];
-    expect('needsReview' in updateArgs.data).toBe(false);
-    expect('reviewReason' in updateArgs.data).toBe(false);
+    expect("needsReview" in updateArgs.data).toBe(false);
+    expect("reviewReason" in updateArgs.data).toBe(false);
     // L6's reason goes through the ADDITIVE writer (which SQL-side composes
     // with whatever the row already holds — e.g. the L4 set-aside reason),
     // so the doctor sees EVERY reason, not just L6's.

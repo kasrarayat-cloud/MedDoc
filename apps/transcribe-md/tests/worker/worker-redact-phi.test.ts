@@ -15,23 +15,27 @@
 // and tests/lib/audit-worker-context.test.ts (worker-context audit).
 // ============================================================================
 
-import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 const WORKER_SRC = readFileSync(
-  resolve(__dirname, '..', '..', 'src', 'worker.ts'),
-  'utf-8',
+  resolve(__dirname, "..", "..", "src", "worker.ts"),
+  "utf-8",
+);
+const AUTOMATION_FANOUT_SRC = readFileSync(
+  resolve(__dirname, "..", "..", "src", "worker", "run-automation-fanout.ts"),
+  "utf-8",
 );
 
-describe('worker.ts — redactPhi posture', () => {
-  it('imports redactPhi from @meddoc/ai (helper available)', () => {
+describe("worker.ts — redactPhi posture", () => {
+  it("imports redactPhi from @meddoc/ai (helper available)", () => {
     expect(WORKER_SRC).toMatch(
       /import\s+\{[\s\S]*?redactPhi[\s\S]*?\}\s+from\s+['"]@meddoc\/ai['"]/,
     );
   });
 
-  it('DLQ enqueue payload `lastError` is wrapped in redactPhi (P0-A)', () => {
+  it("DLQ enqueue payload `lastError` is wrapped in redactPhi (P0-A)", () => {
     // The DLQ payload is durable + admin-visible. err.message can
     // quote Prisma column values + Anthropic 400 prompt fragments,
     // both of which are PHI.
@@ -49,7 +53,10 @@ describe('worker.ts — redactPhi posture', () => {
   it("synthetic QA global failures use stable codes instead of err.message", () => {
     const failedHandler = WORKER_SRC.slice(
       WORKER_SRC.indexOf('worker.on("failed"'),
-      WORKER_SRC.indexOf("// F6 (full-qa", WORKER_SRC.indexOf('worker.on("failed"')),
+      WORKER_SRC.indexOf(
+        "// F6 (full-qa",
+        WORKER_SRC.indexOf('worker.on("failed"'),
+      ),
     );
     expect(failedHandler).toContain("templateTwinSyntheticQaWorkerFailureCode");
     expect(failedHandler).toContain("syntheticQaFailureCode ??");
@@ -61,15 +68,20 @@ describe('worker.ts — redactPhi posture', () => {
     expect(syntheticLogBranch).not.toContain("err.message");
   });
 
-  it('DLQ-enqueue-catch stdout log scrubs dlqErr (P1-F-2)', () => {
+  it("DLQ-enqueue-catch stdout log scrubs dlqErr (P1-F-2)", () => {
     expect(WORKER_SRC).toMatch(
       /DLQ enqueue failed for job \$\{job\.id\}:[\s\S]*?redactPhi\(/,
     );
   });
 
-  it('em-judge prewarm error log scrubs err (P1-F-3)', () => {
-    expect(WORKER_SRC).toMatch(
-      /em-judge prewarm failed:[\s\S]*?redactPhi\(/,
+  it("automation fanout persists only stable failure classifications (P1-F-3)", () => {
+    expect(AUTOMATION_FANOUT_SRC).toContain(
+      "recordVisitAutomationLayerFailure",
+    );
+    expect(AUTOMATION_FANOUT_SRC).toContain('reason: "layer_failed"');
+    expect(AUTOMATION_FANOUT_SRC).not.toMatch(/console\.(?:error|warn)\s*\(/);
+    expect(AUTOMATION_FANOUT_SRC).not.toMatch(
+      /failure(?:Reason|Metadata):\s*(?:err|error)(?:\.message)?/,
     );
   });
 
@@ -79,13 +91,11 @@ describe('worker.ts — redactPhi posture', () => {
     );
   });
 
-  it('heartbeat write error log scrubs err (P1-F-5)', () => {
-    expect(WORKER_SRC).toMatch(
-      /heartbeat write failed:[\s\S]*?redactPhi\(/,
-    );
+  it("heartbeat write error log scrubs err (P1-F-5)", () => {
+    expect(WORKER_SRC).toMatch(/heartbeat write failed:[\s\S]*?redactPhi\(/);
   });
 
-  it('no `console.error(...err)` invocations remain (regression guard)', () => {
+  it("no `console.error(...err)` invocations remain (regression guard)", () => {
     // Catch the exact anti-pattern: `console.error(..., err)` where
     // err is the bare Error object (which stringifies to the
     // unscrubbed `message: stack`). Every err that reaches a log
@@ -100,6 +110,9 @@ describe('worker.ts — redactPhi posture', () => {
     const matches = WORKER_SRC.match(
       /console\.error\([^)]*,\s*(?:err|writeErr|dlqErr|notifyErr)\s*\)/g,
     );
-    expect(matches, `bare-err console.error survivors: ${JSON.stringify(matches)}`).toBeNull();
+    expect(
+      matches,
+      `bare-err console.error survivors: ${JSON.stringify(matches)}`,
+    ).toBeNull();
   });
 });

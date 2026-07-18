@@ -10,9 +10,9 @@
 // so the clinician sees why (bad content type, corrupt file, etc).
 // ============================================================================
 
-import { Readable } from 'node:stream';
+import { Readable } from "node:stream";
 
-import { updateTemplateTwinSyntheticQaClaimBoundVisit } from '@/worker/staging-qa-mutation-fence';
+import { updateTemplateTwinSyntheticQaClaimBoundVisit } from "@/worker/staging-qa-mutation-fence";
 // PR-L follow-up: swap direct Deepgram call → transcribe() orchestrator.
 // transcribe() = Deepgram primary + Whisper fallback on transient
 // failures. Result tagged provider='deepgram-batch' or 'whisper-fallback'
@@ -25,23 +25,23 @@ import {
   CrossProviderFallbackDisabledError,
   type TranscribeResult,
   type RetryAttemptInfo,
-} from '@meddoc/ai';
-import { statAudio, streamAudio } from '@/lib/minio';
+} from "@meddoc/ai";
+import { statAudio, streamAudio } from "@/lib/minio";
 import {
   isWhisperFallbackEnabled,
   WHISPER_FALLBACK_FLAG,
-} from '@/worker/transcription-fallback-flag';
+} from "@/worker/transcription-fallback-flag";
 // 2026-05-13 Issues #202 + #206 — keyterms are now scoped per-visit
 // via the builder rather than a single global list. See
 // `buildKeytermsForVisit` for the composition rules.
-import { buildKeytermsForVisit } from '@/lib/deepgram-keyterm-builder';
-import { CONFUSED_DRUG_NAMES_FLAT } from '@/lib/confused-drug-names';
-import { logAudit } from '@/lib/audit';
+import { buildKeytermsForVisit } from "@/lib/deepgram-keyterm-builder";
+import { CONFUSED_DRUG_NAMES_FLAT } from "@/lib/confused-drug-names";
+import { logWorkerAudit } from "@/worker/worker-audit";
 import {
   computeAudioConfidenceStats,
   shouldFlagForReview,
   LOW_CONFIDENCE_THRESHOLD,
-} from './audio-confidence';
+} from "./audio-confidence";
 
 export interface Layer1Input {
   visitId: string;
@@ -81,7 +81,7 @@ export async function runLayer1Transcribe(
   input: Layer1Input,
 ): Promise<Layer1Output> {
   if (!input.audioMimeType) {
-    throw new Error('[L1] audioMimeType is missing — cannot contact Deepgram.');
+    throw new Error("[L1] audioMimeType is missing — cannot contact Deepgram.");
   }
 
   // T-M18.2 A7 + PR-L: open the audio source once. The orchestrator
@@ -91,7 +91,7 @@ export async function runLayer1Transcribe(
   // primary). Streaming on the happy path; ~30 MB peak RAM only on
   // the rare fallback case.
   const stat = await statAudio(input.audioKey);
-  if (!stat || typeof stat.size !== 'number') {
+  if (!stat || typeof stat.size !== "number") {
     throw new Error(
       `[L1] audio object missing or has no size: ${input.audioKey}`,
     );
@@ -127,7 +127,7 @@ export async function runLayer1Transcribe(
       practiceId: input.practiceId,
       visitId: input.visitId,
       userId: input.userId,
-      purpose: 'tm_transcribe',
+      purpose: "tm_transcribe",
       allowCrossProviderFallback,
       audio: {
         stream: webStream,
@@ -157,7 +157,7 @@ export async function runLayer1Transcribe(
             // since we'd rather have the full transcript with weaker
             // drug-name handling than a half-conversation with strong
             // medical bias.
-            model: 'nova-3',
+            model: "nova-3",
             options: {
               detectLanguage: true,
               // The 2-speaker hint is wrong for interpreter visits
@@ -195,7 +195,7 @@ export async function runLayer1Transcribe(
       onRetry: (info: RetryAttemptInfo) => {
         const err = info.error as { status?: number; code?: string };
         console.warn(
-          '[layer-01-transcribe] retrying',
+          "[layer-01-transcribe] retrying",
           JSON.stringify({
             attempt: info.attempt,
             maxAttempts: info.maxAttempts,
@@ -215,21 +215,21 @@ export async function runLayer1Transcribe(
     // (retryable). Raw audio never leaves to OpenAI. Fire-and-forget,
     // matching the success-fallback audit below.
     if (err instanceof CrossProviderFallbackDisabledError) {
-      void logAudit({
-        action: 'TRANSCRIPTION_PROVIDER_FALLBACK',
-        targetType: 'TranscribeVisit',
+      await logWorkerAudit({
+        action: "TRANSCRIPTION_PROVIDER_FALLBACK",
+        targetType: "TranscribeVisit",
         targetId: input.visitId,
         userId: input.userId,
         practiceId: input.practiceId,
         success: false,
-        errorCode: 'CROSS_PROVIDER_FALLBACK_DISABLED',
+        errorCode: "CROSS_PROVIDER_FALLBACK_DISABLED",
         metadata: {
-          layer: 'L1',
+          layer: "L1",
           suppressed: true,
-          reason: 'fallback_disabled',
+          reason: "fallback_disabled",
           flag: WHISPER_FALLBACK_FLAG,
-          primaryProvider: 'deepgram-batch',
-          wouldHaveUsed: 'whisper-fallback',
+          primaryProvider: "deepgram-batch",
+          wouldHaveUsed: "whisper-fallback",
           primaryError: err.primaryError.message ?? null,
           primaryStatus: err.primaryError.status ?? null,
         },
@@ -243,10 +243,10 @@ export async function runLayer1Transcribe(
   // segments + no diarization. Layer 2 reads `result.raw.kind` to
   // decide which extraction path to run.
   const utterances =
-    result.raw.kind === 'deepgram' ? result.raw.data.utterances : [];
+    result.raw.kind === "deepgram" ? result.raw.data.utterances : [];
   const speakerIds = new Set<number>();
   for (const u of utterances) {
-    if (typeof u.speaker === 'number') speakerIds.add(u.speaker);
+    if (typeof u.speaker === "number") speakerIds.add(u.speaker);
   }
 
   // Round 3 quality fix-pack Q0-5 (audit Findings 02.5 + 07.3) —
@@ -270,9 +270,9 @@ export async function runLayer1Transcribe(
   // verbose_json shape (segments + duration). The column is JSON,
   // so the discriminator is preserved end-to-end.
   const transcriptRaw =
-    result.raw.kind === 'deepgram'
+    result.raw.kind === "deepgram"
       ? result.raw.data.raw
-      : { kind: 'whisper', segments: result.raw.data.segments };
+      : { kind: "whisper", segments: result.raw.data.segments };
 
   // PR-L: when Whisper fallback fired, auto-flag the visit for
   // review (Whisper doesn't diarize, so Layer 2 can't assign
@@ -280,12 +280,12 @@ export async function runLayer1Transcribe(
   // pass). The lowConfFlag branch above already handles a separate
   // signal; both can apply.
   const fallbackReviewReason = result.fallbackUsed
-    ? `Transcription fell back to ${result.provider} (Whisper) — primary Deepgram failed${result.primaryError?.message ? ` with: ${result.primaryError.message.slice(0, 120)}` : ''}. Speaker diarization is unavailable; please review the transcript before signing.`
+    ? `Transcription fell back to ${result.provider} (Whisper) — primary Deepgram failed${result.primaryError?.message ? ` with: ${result.primaryError.message.slice(0, 120)}` : ""}. Speaker diarization is unavailable; please review the transcript before signing.`
     : null;
 
   await updateTemplateTwinSyntheticQaClaimBoundVisit({
     visitId: input.visitId,
-    userId: input.userId ?? '',
+    userId: input.userId ?? "",
     practiceId: input.practiceId,
     data: {
       transcriptRaw: transcriptRaw as unknown as object,
@@ -321,15 +321,15 @@ export async function runLayer1Transcribe(
     // userId + practiceId explicitly (otherwise logAudit's session
     // resolution returns null + the row gets the 'clinic_main'
     // sentinel practice).
-    void logAudit({
-      action: 'TRANSCRIPTION_PROVIDER_FALLBACK',
-      targetType: 'TranscribeVisit',
+    await logWorkerAudit({
+      action: "TRANSCRIPTION_PROVIDER_FALLBACK",
+      targetType: "TranscribeVisit",
       targetId: input.visitId,
       userId: input.userId,
       practiceId: input.practiceId,
       metadata: {
-        layer: 'L1',
-        primaryProvider: 'deepgram-batch',
+        layer: "L1",
+        primaryProvider: "deepgram-batch",
         fallbackProvider: result.provider,
         primaryError: result.primaryError?.message ?? null,
         primaryStatus: result.primaryError?.status ?? null,
@@ -346,7 +346,7 @@ export async function runLayer1Transcribe(
     try {
       await updateTemplateTwinSyntheticQaClaimBoundVisit({
         visitId: input.visitId,
-        userId: input.userId ?? '',
+        userId: input.userId ?? "",
         practiceId: input.practiceId,
         data: {
           keytermsApplied: built.metadata as unknown as object,
@@ -368,7 +368,7 @@ export async function runLayer1Transcribe(
     // .detectedLanguage so the soft-banner reprocess flow can surface
     // misclassified English-only-mode visits as needing interpreter mode.
     detectedLanguage:
-      input.interpreterMode && result.language && result.language !== 'en'
+      input.interpreterMode && result.language && result.language !== "en"
         ? result.language
         : input.interpreterMode
           ? (result.language ?? undefined)

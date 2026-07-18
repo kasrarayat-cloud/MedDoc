@@ -6,6 +6,8 @@ import prisma from "@meddoc/db";
 import { Prisma, TranscribeVisitStatus } from "@prisma/client";
 
 import { lockTemplateTwinRolloutForFinalClaim } from "@/lib/template-twin/rollout";
+import { runSerializableTransactionWithRetry } from "@/lib/db/transaction-retry";
+import { runVisitAutomationTransaction } from "@/worker/automation-locks";
 import {
   lockAndAssertTemplateTwinStagingQaAttempt,
   TemplateTwinStagingQaVisitGuardError,
@@ -47,18 +49,39 @@ export class TemplateTwinSyntheticQaMutationFenceError extends Error {
  * transaction holds the run/visit locks, and an old delivery cannot write once
  * the replacement claim commits.
  *
- * Ordinary visits have no synthetic provider context and retain their existing
- * single-write behavior without consulting staging infrastructure.
+ * Ordinary visits have no synthetic provider context, but their provider
+ * result commits use the same canonical practice -> actor -> visit lock order
+ * and bounded whole-transaction retry. The provider call remains outside this
+ * helper, so a 40P01/40001 retry cannot duplicate an external call.
  */
 export async function runTemplateTwinSyntheticQaClaimBoundMutation<T>(input: {
   visitId: string;
   userId: string;
   practiceId: string;
+  /** Ordinary worker result commits must still own a processing-state visit.
+   * The Template Twin render runs after automation finalization and supplies
+   * its own exact READY-safe provenance predicate, so it opts out explicitly.
+   * Synthetic QA always remains PROCESSING-fenced by its durable claim. */
+  requireOrdinaryProcessingStatus?: boolean;
   mutate(client: Prisma.TransactionClient): Promise<T>;
 }): Promise<T> {
   const context = getTemplateTwinSyntheticQaProviderContext();
   if (!context) {
-    return input.mutate(prisma as Prisma.TransactionClient);
+    return runVisitAutomationTransaction({
+      operation: "ordinary_visit_pipeline_mutation",
+      visitId: input.visitId,
+      userId: input.userId,
+      practiceId: input.practiceId,
+      transaction: async (tx, visit) => {
+        if (
+          input.requireOrdinaryProcessingStatus !== false &&
+          !MUTABLE_PROCESSING_STATUSES.has(visit.status)
+        ) {
+          throw new TemplateTwinSyntheticQaMutationFenceError();
+        }
+        return input.mutate(tx);
+      },
+    });
   }
   if (
     context.visitId !== input.visitId ||
@@ -68,8 +91,15 @@ export async function runTemplateTwinSyntheticQaClaimBoundMutation<T>(input: {
   }
   assertTemplateTwinSyntheticQaWorkerLeaseHealthy();
 
-  return prisma.$transaction(
-    async (tx: Prisma.TransactionClient) => {
+  return runSerializableTransactionWithRetry({
+    prisma,
+    operation: "template_twin_staging_claim_bound_mutation",
+    context: {
+      visitId: input.visitId,
+      practiceId: input.practiceId,
+      runId: context.runId,
+    },
+    transaction: async (tx: Prisma.TransactionClient) => {
       const rollout = await lockTemplateTwinRolloutForFinalClaim({
         tx,
         practiceId: input.practiceId,
@@ -127,8 +157,7 @@ export async function runTemplateTwinSyntheticQaClaimBoundMutation<T>(input: {
       }
       return input.mutate(tx);
     },
-    { isolationLevel: "Serializable" },
-  );
+  });
 }
 
 export async function updateTemplateTwinSyntheticQaClaimBoundVisit(input: {
