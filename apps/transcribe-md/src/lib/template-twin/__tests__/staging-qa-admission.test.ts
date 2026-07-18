@@ -35,6 +35,7 @@ vi.mock("../audit-outbox", () => ({
 }));
 
 import {
+  beginTemplateTwinStagingQaVisitAdmission,
   beginTemplateTwinStagingQaUploadAdmission,
   markTemplateTwinStagingQaAdmissionFailed,
   runWithVerifiedTemplateTwinStagingQaAdmissionProvider,
@@ -117,6 +118,76 @@ beforeEach(() => {
 });
 
 describe("durable synthetic QA admission provider capability", () => {
+  it("retries the complete idempotent visit-admission transaction after serialization abort", async () => {
+    const parent = admission({
+      phase: "CERTIFIED",
+      sourceArtifactId: "artifact-admission-synthetic",
+      noteTemplateId: "template-admission-synthetic",
+      noteTemplateVersion: 1,
+      certificationId: "certification-admission-synthetic",
+      mappingSha256: "b".repeat(64),
+    });
+    const certified = admission({
+      id: "admission-visit-synthetic",
+      parentAdmissionId: parent.id,
+      providerMode: "SYNTHETIC_TYPED",
+      purpose: "VISIT",
+      phase: "CERTIFIED",
+      requestSha256: "c".repeat(64),
+      payloadSha256: "d".repeat(64),
+      sourceArtifactId: parent.sourceArtifactId,
+      noteTemplateId: parent.noteTemplateId,
+      noteTemplateVersion: parent.noteTemplateVersion,
+      certificationId: parent.certificationId,
+      mappingSha256: parent.mappingSha256,
+    });
+    const findFirst = vi
+      .fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(parent);
+    const create = vi.fn().mockResolvedValue({
+      ...certified,
+      phase: "ADMITTED",
+    });
+    const update = vi
+      .fn()
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(certified);
+    const tx = {
+      templateTwinSyntheticQaAdmission: { findFirst, create, update },
+    };
+    let attempts = 0;
+    mocks.transaction.mockImplementation(async (callback) => {
+      attempts += 1;
+      if (attempts === 1) {
+        throw Object.assign(new Error("synthetic serialization abort"), {
+          code: "P2034",
+        });
+      }
+      return callback(tx);
+    });
+
+    await expect(
+      beginTemplateTwinStagingQaVisitAdmission({
+        actor: ACTOR,
+        idempotencyKey: "visit-admission-synthetic-0001",
+        noteTemplateId: "template-admission-synthetic",
+        noteTemplateVersion: 1,
+        mode: "typed",
+        payloadSha256: "d".repeat(64),
+        env: SAFE_ENV,
+      }),
+    ).resolves.toMatchObject({
+      id: certified.id,
+      phase: "CERTIFIED",
+      providerMode: "SYNTHETIC_TYPED",
+    });
+    expect(attempts).toBe(2);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(mocks.enqueueAudit).toHaveBeenCalledTimes(1);
+  });
+
   it("commits and rereads the admission before the first provider callback", async () => {
     const order: string[] = [];
     let committed: ReturnType<typeof admission> | null = null;

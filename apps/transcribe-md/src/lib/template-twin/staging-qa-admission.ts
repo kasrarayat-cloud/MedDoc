@@ -13,6 +13,8 @@ import { runWithTemplateTwinSyntheticQaProviderContext } from "@meddoc/ai/intern
 import prisma from "@meddoc/db";
 import { Prisma } from "@prisma/client";
 
+import { runSerializableTransactionWithRetry } from "@/lib/db/transaction-retry";
+
 import { enqueueTemplateTwinAudit } from "./audit-outbox";
 import { canonicalSha256 } from "./canonical";
 import {
@@ -794,8 +796,11 @@ export async function beginTemplateTwinStagingQaVisitAdmission(input: {
     input.mode === "typed" ? "SYNTHETIC_TYPED" : "SYNTHETIC_MOCK_VOICE";
   const now = new Date();
 
-  return prisma.$transaction(
-    async (tx: Prisma.TransactionClient) => {
+  return runSerializableTransactionWithRetry({
+    prisma,
+    operation: "begin_template_twin_staging_qa_visit_admission",
+    context: { practiceId: input.actor.practiceId },
+    transaction: async (tx: Prisma.TransactionClient) => {
       const rollout = await lockTemplateTwinRolloutForFinalClaim({
         tx,
         practiceId: input.actor.practiceId,
@@ -926,8 +931,7 @@ export async function beginTemplateTwinStagingQaVisitAdmission(input: {
       });
       return certified;
     },
-    { isolationLevel: "Serializable" },
-  );
+  });
 }
 
 export async function markTemplateTwinStagingQaAdmissionFailed(input: {
