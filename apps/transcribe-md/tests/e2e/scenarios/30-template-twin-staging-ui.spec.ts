@@ -424,7 +424,10 @@ test("Template Twin staging UI drives the real synthetic pipeline fail closed", 
     })
     .check();
   await page.getByRole("button", { name: "Certify & activate" }).click();
-  await expect(page.getByText(/^Certified$/).first()).toBeVisible({
+  // Field badges can already say "Certified" while the template-level
+  // certification request is still committing. Anchor this wait to the page
+  // header so the following independent database read cannot race the API.
+  await expect(page.locator("header").getByText(/^Certified$/)).toBeVisible({
     timeout: 30_000,
   });
   await expect(

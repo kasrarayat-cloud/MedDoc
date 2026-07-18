@@ -100,6 +100,8 @@ export function cleanupTestUsers(): void {
     ORDER BY v.id
     FOR UPDATE OF v;
 
+    DELETE FROM template_twin_audit_outbox
+    WHERE "practiceId" IN (SELECT id FROM e2e_target_practices);
     DELETE FROM audit_logs
     WHERE "practiceId" IN (SELECT id FROM e2e_target_practices);
     DELETE FROM rx_warning_overrides
