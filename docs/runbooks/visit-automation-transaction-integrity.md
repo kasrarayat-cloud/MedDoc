@@ -92,6 +92,15 @@ idempotency key. The state machine is:
 `RESERVED -> IN_FLIGHT -> SUCCEEDED | FAILED | UNKNOWN_OUTCOME`
 
 - `RESERVED` is committed and independently reread before the call.
+- `RESERVED -> IN_FLIGHT` is one atomic compare-and-set. The winning worker
+  writes a unique, server-only internal concurrency token; only the typed
+  `CLAIMED_BY_CALLER` result returned to that worker permits provider
+  invocation. A competing worker receives `ALREADY_IN_PROGRESS`, never learns
+  the token, waits for a terminal row, and reuses `SUCCEEDED` when available.
+- Every application terminal write matches the same internal concurrency
+  token. A non-matching worker cannot mark success, failure, or unknown. Claim
+  tokens are excluded from audit metadata, logs, browser responses, and public
+  return types.
 - `SUCCEEDED` stores the bounded private result envelope, result SHA-256, and
   capture contract version. A job retry reuses that result and cannot invoke
   the provider again.
@@ -175,6 +184,25 @@ Rollback is operational: disable the feature and preserve immutable evidence.
 A known failed disposable/development attempt must be marked rolled back before
 retrying; production operators must not edit migration checksums or drop
 evidence ad hoc.
+
+Migration `20260718180000_visit_automation_provider_claim_ownership_v1` adds
+the nullable unique `claimId` internal concurrency token and `claimedAt`
+timestamp, then tightens provider state-shape and transition constraints. It
+uses transaction-local 5-second lock and 60-second statement timeouts. Existing
+terminal rows retain their outcome and receive a deterministic private legacy
+marker solely to satisfy the immutable state contract. An execution that is
+`IN_FLIGHT` during upgrade becomes terminal `UNKNOWN_OUTCOME`; the migration
+never assumes that an ambiguous provider call failed or succeeded, and it
+never schedules a replay. Reserved or historical failed-before-invocation rows
+remain unclaimed. The migration recreates both lineage and transition triggers
+inside the same transaction, so timeout or constraint failure restores the
+pre-migration schema and data completely.
+
+Operational rollback is disable-only: stop new provider work through the
+existing rollout controls and retain the additive columns and immutable
+evidence. Do not drop claim data or reinterpret unknown outcomes. A failed
+deployment can be retried after the blocking transaction is released; do not
+edit the migration checksum.
 
 ## Disposable PostgreSQL verification
 
