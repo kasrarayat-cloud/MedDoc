@@ -1,4 +1,5 @@
 import { getTemplateTwinSyntheticQaProviderContext } from "@meddoc/ai";
+import type { Prisma } from "@prisma/client";
 
 import { type AuditLogInput } from "@/lib/audit";
 import {
@@ -6,6 +7,10 @@ import {
   type TemplateTwinAuditMetadata,
 } from "@/lib/template-twin/audit-outbox";
 import { canonicalSha256 } from "@/lib/template-twin/canonical";
+import {
+  captureAutomationLayerAudit,
+  type CapturedWorkerAudit,
+} from "@/worker/automation-layer-effects";
 import { runVisitAutomationTransaction } from "@/worker/automation-locks";
 
 function jsonSafeMetadata(
@@ -22,7 +27,7 @@ function jsonSafeMetadata(
  * the independently reproduced practice/user deadlock, and prevents the
  * legacy swallow-on-error logger from hiding a failed worker audit.
  */
-export async function logWorkerAudit(input: AuditLogInput): Promise<void> {
+function prepareWorkerAudit(input: AuditLogInput): CapturedWorkerAudit {
   const context = getTemplateTwinSyntheticQaProviderContext();
   if (!input.targetId || !input.practiceId || !input.userId) {
     throw new Error(
@@ -49,21 +54,42 @@ export async function logWorkerAudit(input: AuditLogInput): Promise<void> {
     errorCode: input.errorCode ?? null,
     metadata: metadata ?? null,
   });
+  return {
+    eventKey: `visit-worker-audit:${discriminator}`,
+    practiceId: input.practiceId,
+    actorId: input.userId,
+    action: input.action,
+    targetId: input.targetId,
+    targetType: input.targetType ?? null,
+    metadata,
+  };
+}
+
+export async function enqueuePreparedWorkerAuditInTransaction(
+  tx: Prisma.TransactionClient,
+  audit: CapturedWorkerAudit,
+): Promise<void> {
+  await enqueueIdempotentTemplateTwinAudit(tx, {
+    eventKey: audit.eventKey,
+    practiceId: audit.practiceId,
+    actorId: audit.actorId,
+    action: audit.action,
+    targetId: audit.targetId,
+    targetType: audit.targetType,
+    metadata: audit.metadata,
+  });
+}
+
+export async function logWorkerAudit(input: AuditLogInput): Promise<void> {
+  const audit = prepareWorkerAudit(input);
+  if (captureAutomationLayerAudit(audit)) return;
   await runVisitAutomationTransaction({
     operation: "enqueue_visit_worker_audit",
-    visitId: input.targetId,
-    userId: input.userId,
-    practiceId: input.practiceId,
+    visitId: audit.targetId,
+    userId: audit.actorId,
+    practiceId: audit.practiceId,
     transaction: async (tx) => {
-      await enqueueIdempotentTemplateTwinAudit(tx, {
-        eventKey: `visit-worker-audit:${discriminator}`,
-        practiceId: input.practiceId!,
-        actorId: input.userId,
-        action: input.action,
-        targetId: input.targetId,
-        targetType: input.targetType,
-        metadata,
-      });
+      await enqueuePreparedWorkerAuditInTransaction(tx, audit);
     },
   });
 }

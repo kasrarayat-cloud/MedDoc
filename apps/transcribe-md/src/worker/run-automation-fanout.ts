@@ -5,6 +5,10 @@ import {
   type VisitAutomationAttempt,
 } from "@/worker/automation-manifest";
 import type { VisitAutomationLayerId } from "@/worker/automation-policy";
+import {
+  runDurableVisitAutomationProvider,
+  type VisitAutomationProviderDescriptor,
+} from "@/worker/provider-execution";
 
 export type AutomationFanoutLayerStatus =
   | { status: "ok"; metadata?: unknown }
@@ -14,8 +18,8 @@ export type AutomationFanoutLayerStatus =
 export interface AutomationFanoutTask {
   key: VisitAutomationLayerId;
   enabled: boolean;
-  resumedOutput?: unknown;
-  run: () => Promise<unknown>;
+  provider: VisitAutomationProviderDescriptor;
+  run: (providerIdempotencyKey: string) => Promise<unknown>;
   validate?: (output: unknown) => void;
   metadata?: (output: unknown) => unknown;
 }
@@ -30,13 +34,13 @@ export class AutomationFanoutPersistenceError extends Error {
 }
 
 /**
- * Controlled automation: every configured layer produces a durable terminal
- * row. L7 task functions currently own their visit-output commit after the
- * provider returns, so they execute in deterministic layer order rather than
- * racing six SERIALIZABLE transactions over the same practice/user/visit.
- * Provider work still runs once outside the retryable manifest transaction;
- * only idempotent database commits retry. Every configured failure is
- * inspected and persisted before finalization.
+ * Controlled automation: every configured layer produces durable terminal
+ * evidence. L7 tasks execute in deterministic order rather than racing six
+ * SERIALIZABLE transactions over the same practice/user/visit. Their database
+ * effects are captured while provider work runs once outside retryable
+ * transactions, then projected atomically with layer state and audit outbox.
+ * Only idempotent database commits retry; every failure is inspected and
+ * persisted before finalization.
  */
 export async function runAutomationFanout(input: {
   attempt: VisitAutomationAttempt;
@@ -65,37 +69,20 @@ export async function runAutomationFanout(input: {
         outcomes[task.key] = { status: "ok" };
         continue;
       }
-      if (task.resumedOutput !== undefined) {
-        try {
-          task.validate?.(task.resumedOutput);
-          await recordVisitAutomationLayerSuccess({
-            attempt: input.attempt,
-            visitId: input.visitId,
-            userId: input.userId,
-            practiceId: input.practiceId,
-            layerId: task.key,
-            output: task.resumedOutput,
-          });
-          outcomes[task.key] = { status: "ok" };
-          continue;
-        } catch (error) {
-          await recordVisitAutomationLayerFailure({
-            attempt: input.attempt,
-            visitId: input.visitId,
-            userId: input.userId,
-            practiceId: input.practiceId,
-            layerId: task.key,
-            error,
-          });
-          outcomes[task.key] = { status: "failed", reason: "layer_failed" };
-          continue;
-        }
-      }
-
-      let output: unknown;
+      let execution: Awaited<
+        ReturnType<typeof runDurableVisitAutomationProvider>
+      >;
       try {
-        output = await task.run();
-        task.validate?.(output);
+        execution = await runDurableVisitAutomationProvider({
+          attempt: input.attempt,
+          visitId: input.visitId,
+          userId: input.userId,
+          practiceId: input.practiceId,
+          layerId: task.key,
+          descriptor: task.provider,
+          invoke: task.run,
+          validate: task.validate,
+        });
       } catch (error) {
         await recordVisitAutomationLayerFailure({
           attempt: input.attempt,
@@ -114,9 +101,11 @@ export async function runAutomationFanout(input: {
         userId: input.userId,
         practiceId: input.practiceId,
         layerId: task.key,
-        output,
+        output: execution.output,
+        providerExecutionId: execution.executionId,
+        effects: execution.effects,
       });
-      const metadata = task.metadata?.(output);
+      const metadata = task.metadata?.(execution.output);
       outcomes[task.key] =
         metadata === undefined ? { status: "ok" } : { status: "ok", metadata };
     } catch {

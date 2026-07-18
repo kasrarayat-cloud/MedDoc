@@ -32,6 +32,7 @@ export interface Layer7dInput {
   userId: string | null;
   soapFinal: string;
   entitiesJson: string;
+  providerIdempotencyKey?: string;
 }
 
 export async function runLayer7dReferrals(
@@ -86,6 +87,8 @@ export async function runLayer7dReferrals(
     user,
     schema: ReferralsResult,
     maxTokens: 2048,
+    idempotencyKey: input.providerIdempotencyKey,
+    retryOnSchemaFail: false,
     // Q2 fix-pack §01.11 + §08.3 — referral letters are billing-adjacent
     // (some payers gate specialty visits on a structured referral).
     // Tightened from 0.3 to 0.1 so re-runs on the same SOAP produce

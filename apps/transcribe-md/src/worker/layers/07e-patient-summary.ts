@@ -32,6 +32,7 @@ export interface Layer7eInput {
   specialty: string;
   soapFinal: string;
   entitiesJson: string;
+  providerIdempotencyKey?: string;
 }
 
 export interface Layer7eOutput {
@@ -103,6 +104,8 @@ export async function runLayer7ePatientSummary(
     schema: PatientSummaryResult,
     maxTokens: 2048,
     temperature: 0.3,
+    idempotencyKey: input.providerIdempotencyKey,
+    retryOnSchemaFail: false,
   });
 
   const grade = fleschKincaidGrade(result.summary);

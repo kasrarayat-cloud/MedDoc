@@ -18,6 +18,7 @@ export const VISIT_AUTOMATION_CANONICAL_LOCK_ORDER = [
   "visit",
   "automation_manifest",
   "automation_layers",
+  "provider_execution",
   "audit_outbox",
 ] as const;
 

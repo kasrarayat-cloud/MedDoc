@@ -45,6 +45,12 @@ function proof(
       idempotencyKey: "d".repeat(64),
       startedAt: new Date("2026-07-17T22:59:00.000Z"),
       completedAt: new Date("2026-07-17T23:00:00.000Z"),
+      providerExecution: {
+        id: `execution-${layerId}`,
+        status: "SUCCEEDED",
+        resultSha256: "e".repeat(64),
+        resultVersion: "visit-automation-provider-result-v1",
+      },
     })),
     ...overrides,
   };
@@ -72,6 +78,14 @@ describe("visit automation completion proof", () => {
     manifest.layers.find(
       (layer) => layer.layerId === "referrals",
     )!.failureCode = "PROVIDER_FAILURE";
+    manifest.layers.find(
+      (layer) => layer.layerId === "referrals",
+    )!.providerExecution = {
+      id: "execution-referrals",
+      status: "FAILED",
+      resultSha256: null,
+      resultVersion: null,
+    };
 
     expect(assess(manifest)).toEqual({ ready: true, blockerCodes: [] });
   });
@@ -91,6 +105,47 @@ describe("visit automation completion proof", () => {
       expect(assess(manifest).ready).toBe(false);
     },
   );
+
+  it("blocks a layer whose provider outcome is unknown even if its layer row was tampered successful", () => {
+    const manifest = proof();
+    const layer = manifest.layers.find(
+      (entry) => entry.layerId === "icd_coding",
+    )!;
+    layer.requirement = "REQUIRED";
+    layer.providerExecution = {
+      id: "execution-unknown-synthetic-1",
+      status: "UNKNOWN_OUTCOME",
+      resultSha256: null,
+      resultVersion: null,
+    };
+
+    expect(assess(manifest)).toEqual({
+      ready: false,
+      blockerCodes: ["VISIT_AUTOMATION_PROOF_STALE"],
+    });
+  });
+
+  it("blocks an optional failed layer while its provider outcome remains unknown", () => {
+    const manifest = proof();
+    const layer = manifest.layers.find(
+      (entry) => entry.layerId === "referrals",
+    )!;
+    layer.requirement = "OPTIONAL";
+    layer.status = "FAILED";
+    layer.outputSha256 = null;
+    layer.failureCode = "PROVIDER_FAILURE";
+    layer.providerExecution = {
+      id: "execution-unknown-referrals",
+      status: "UNKNOWN_OUTCOME",
+      resultSha256: null,
+      resultVersion: null,
+    };
+
+    expect(assess(manifest)).toEqual({
+      ready: false,
+      blockerCodes: ["VISIT_AUTOMATION_PROOF_STALE"],
+    });
+  });
 
   it("blocks missing, duplicated, version-shifted, and stale SOAP proof", () => {
     expect(assess(null).blockerCodes).toContain(

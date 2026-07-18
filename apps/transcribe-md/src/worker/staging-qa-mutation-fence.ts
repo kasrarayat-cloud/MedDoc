@@ -12,6 +12,7 @@ import {
   lockAndAssertTemplateTwinStagingQaAttempt,
   TemplateTwinStagingQaVisitGuardError,
 } from "@/lib/template-twin/staging-qa-visit-guard";
+import { captureAutomationLayerVisitMutation } from "@/worker/automation-layer-effects";
 
 interface LockedVisitMutationRow {
   id: string;
@@ -168,6 +169,7 @@ export async function updateTemplateTwinSyntheticQaClaimBoundVisit(input: {
     | Prisma.TranscribeVisitUpdateInput
     | Prisma.TranscribeVisitUncheckedUpdateInput;
 }): Promise<void> {
+  if (captureAutomationLayerVisitMutation(input)) return;
   await runTemplateTwinSyntheticQaClaimBoundMutation({
     visitId: input.visitId,
     userId: input.userId,

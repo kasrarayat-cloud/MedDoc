@@ -131,10 +131,7 @@ import {
   runTemplateTwinSyntheticQaClaimBoundMutation,
   updateTemplateTwinSyntheticQaClaimBoundVisit,
 } from "@/worker/staging-qa-mutation-fence";
-import {
-  initializeVisitAutomationManifest,
-  persistedAutomationOutput,
-} from "@/worker/automation-manifest";
+import { initializeVisitAutomationManifest } from "@/worker/automation-manifest";
 import { buildVisitAutomationPolicy } from "@/worker/automation-policy";
 import {
   runAutomationFanout,
@@ -1031,7 +1028,12 @@ async function processVisitPipeline(
       {
         key: "icd_coding",
         enabled: flags.icd,
-        run: () =>
+        provider: {
+          provider: "anthropic",
+          model: "claude-sonnet-4-6",
+          operationVersion: "l7a-v1",
+        },
+        run: (providerIdempotencyKey) =>
           runLayer7aIcdCoding({
             visitId,
             practiceId,
@@ -1039,6 +1041,7 @@ async function processVisitPipeline(
             specialty: visit.specialty,
             soapFinal: soapFinalForFanout,
             entitiesJson,
+            providerIdempotencyKey,
           }),
         validate: (output) => {
           const codes = (output as { codes?: Array<{ code?: string }> }).codes;
@@ -1056,7 +1059,12 @@ async function processVisitPipeline(
       {
         key: "cpt_coding",
         enabled: flags.cpt,
-        run: () =>
+        provider: {
+          provider: "anthropic",
+          model: "claude-sonnet-4-6",
+          operationVersion: "l7b-v1",
+        },
+        run: (providerIdempotencyKey) =>
           runLayer7bCptCoding({
             visitId,
             practiceId,
@@ -1064,6 +1072,7 @@ async function processVisitPipeline(
             specialty: visit.specialty,
             soapFinal: soapFinalForFanout,
             entitiesJson,
+            providerIdempotencyKey,
           }),
         validate: (output) => {
           const result = output as {
@@ -1084,13 +1093,19 @@ async function processVisitPipeline(
       {
         key: "rx_drafting",
         enabled: flags.rx,
-        run: () =>
+        provider: {
+          provider: "anthropic",
+          model: process.env.TRANSCRIBE_MD_CLINICAL_MODEL || "claude-opus-4-8",
+          operationVersion: "l7c-v1",
+        },
+        run: (providerIdempotencyKey) =>
           runLayer7cRxDrafting({
             visitId,
             practiceId,
             userId: visit.userId,
             soapFinal: soapFinalForFanout,
             entitiesJson,
+            providerIdempotencyKey,
             // Fix-Pack 1 Q0-2 / audit Finding 01.1 — patient context
             // for pediatric mg/kg/day framing. `patient` is non-null
             // because TranscribeVisit.patientId is NOT NULL since
@@ -1106,19 +1121,30 @@ async function processVisitPipeline(
       {
         key: "referrals",
         enabled: flags.referrals,
-        run: () =>
+        provider: {
+          provider: "anthropic",
+          model: "claude-sonnet-4-6",
+          operationVersion: "l7d-v1",
+        },
+        run: (providerIdempotencyKey) =>
           runLayer7dReferrals({
             visitId,
             practiceId,
             userId: visit.userId,
             soapFinal: soapFinalForFanout,
             entitiesJson,
+            providerIdempotencyKey,
           }),
       },
       {
         key: "patient_summary",
         enabled: flags.summary,
-        run: () =>
+        provider: {
+          provider: "anthropic",
+          model: "claude-sonnet-4-6",
+          operationVersion: "l7e-v1",
+        },
+        run: (providerIdempotencyKey) =>
           runLayer7ePatientSummary({
             visitId,
             practiceId,
@@ -1126,6 +1152,7 @@ async function processVisitPipeline(
             specialty: visit.specialty,
             soapFinal: soapFinalForFanout,
             entitiesJson,
+            providerIdempotencyKey,
           }),
         metadata: (output) => {
           const result = output as {
@@ -1140,53 +1167,24 @@ async function processVisitPipeline(
       },
     ];
 
-    // T-M13 — per-task resumability. A persisted output is reconciled into
-    // the durable manifest without another provider call. The output hash and
-    // current input binding are still recorded before finalization.
-    const TASK_KEY_TO_LAYER: Partial<
-      Record<AutomationFanoutTask["key"], PipelineLayer>
-    > = {
-      icd_coding: "L7a",
-      cpt_coding: "L7b",
-      rx_drafting: "L7c",
-      referrals: "L7d",
-      patient_summary: "L7e",
-    };
-    for (const t of tasks) {
-      if (!t.enabled) continue;
-      const layer = TASK_KEY_TO_LAYER[t.key];
-      if (!layer) continue;
-      if (isLayerComplete(resumeState, layer)) {
-        logSkippedLayer(visitId, layer, attempt);
-        skipped.push(layer);
-        t.resumedOutput = persistedAutomationOutput({
-          layerId: t.key,
-          resumeState,
-        });
-      }
-    }
     const stagingAutomation = Boolean(
       getTemplateTwinSyntheticQaProviderContext(),
     );
-    // The legacy E/M cache path is not wired through modelClient's deterministic
-    // fixture. Never let an isolated MOCK_AI_CALLS run make a network request;
-    // production retains the existing opt-out default.
-    const emMdmPrewarmEnabled =
-      !stagingAutomation &&
-      process.env.MOCK_AI_CALLS !== "true" &&
-      process.env.TM_ENABLE_EM_MDM_PREWARM !== "false";
+    // E/M scoring remains available on demand, but cache prewarm is explicitly
+    // NOT_APPLICABLE in this durable fanout. The legacy direct SDK helper has
+    // an internal parse retry and Redis write that cannot satisfy the provider
+    // execution ledger's at-most-once projection contract.
+    const emMdmPrewarmEnabled = false;
     tasks.push({
       key: "em_mdm_prewarm",
       enabled: emMdmPrewarmEnabled,
+      provider: {
+        provider: "anthropic",
+        model: "claude-sonnet-4-6",
+        operationVersion: "em-mdm-prewarm-v1-disabled",
+      },
       run: async () => {
-        const { judgeMdm } = await import("@/lib/em-coding/llm-mdm");
-        await judgeMdm({
-          soap: soapFinalForFanout,
-          practiceId,
-          visitId,
-          userId: visit.userId,
-        });
-        return { cacheWarm: true };
+        throw new Error("E/M prewarm is not applicable to durable fanout.");
       },
     });
 

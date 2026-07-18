@@ -50,8 +50,9 @@ export interface VisitAutomationLayerPolicy {
  *   manifest must not silently redefine those product semantics.
  * - Synthetic staging exercises the complete five-layer worker boundary, so
  *   all enabled L7 layers are required there.
- * - The E/M cache prewarm is always optional and is explicitly N/A in staging,
- *   where live E/M provider selection is prohibited.
+ * - The durable worker fanout marks E/M cache prewarm N/A in both workflows.
+ *   On-demand E/M remains available, but the legacy prewarm's internal retry
+ *   and Redis side effect cannot satisfy the provider-execution contract.
  * - A disabled or specialty-inapplicable layer is explicit NOT_APPLICABLE;
  *   it never disappears from the manifest.
  */

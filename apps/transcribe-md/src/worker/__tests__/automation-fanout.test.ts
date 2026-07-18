@@ -4,12 +4,17 @@ const mocks = vi.hoisted(() => ({
   markRunning: vi.fn(),
   recordSuccess: vi.fn(),
   recordFailure: vi.fn(),
+  runProvider: vi.fn(),
 }));
 
 vi.mock("../automation-manifest", () => ({
   markVisitAutomationLayerRunning: mocks.markRunning,
   recordVisitAutomationLayerSuccess: mocks.recordSuccess,
   recordVisitAutomationLayerFailure: mocks.recordFailure,
+}));
+
+vi.mock("../provider-execution", () => ({
+  runDurableVisitAutomationProvider: mocks.runProvider,
 }));
 
 import {
@@ -25,6 +30,11 @@ const ATTEMPT = {
   sourceSha256: "b".repeat(64),
   policy: [],
 };
+const PROVIDER = {
+  provider: "anthropic" as const,
+  model: "synthetic-model-v1",
+  operationVersion: "synthetic-layer-v1",
+};
 
 describe("controlled automation fanout", () => {
   beforeEach(() => {
@@ -32,6 +42,16 @@ describe("controlled automation fanout", () => {
     mocks.markRunning.mockResolvedValue({ alreadySucceeded: false });
     mocks.recordSuccess.mockResolvedValue(undefined);
     mocks.recordFailure.mockResolvedValue(undefined);
+    mocks.runProvider.mockImplementation(async (input) => {
+      const output = await input.invoke("e".repeat(64));
+      input.validate?.(output);
+      return {
+        executionId: "execution-synthetic-1",
+        output,
+        effects: { visitMutations: [], audits: [] },
+        reused: false,
+      };
+    });
   });
 
   it("records every configured provider rejection", async () => {
@@ -46,11 +66,13 @@ describe("controlled automation fanout", () => {
         {
           key: "icd_coding",
           enabled: true,
+          provider: PROVIDER,
           run: async () => Promise.reject(first),
         },
         {
           key: "rx_drafting",
           enabled: true,
+          provider: PROVIDER,
           run: async () => Promise.reject(second),
         },
       ],
@@ -76,6 +98,7 @@ describe("controlled automation fanout", () => {
     const task = (key: "icd_coding" | "cpt_coding") => ({
       key,
       enabled: true,
+      provider: PROVIDER,
       run: async () => {
         active += 1;
         maximumActive = Math.max(maximumActive, active);
@@ -110,6 +133,7 @@ describe("controlled automation fanout", () => {
           {
             key: "icd_coding",
             enabled: true,
+            provider: PROVIDER,
             run: async () => ({ codes: [{ code: "Z00.00" }] }),
           },
         ],
@@ -122,6 +146,47 @@ describe("controlled automation fanout", () => {
     );
   });
 
+  it("reuses a committed provider result after clinical projection exhaustion", async () => {
+    const provider = vi.fn().mockResolvedValue({ codes: [{ code: "Z00.00" }] });
+    let committed: unknown;
+    mocks.runProvider.mockImplementation(async (input) => {
+      if (committed === undefined)
+        committed = await input.invoke("e".repeat(64));
+      return {
+        executionId: "execution-synthetic-retry",
+        output: committed,
+        effects: { visitMutations: [], audits: [] },
+        reused: provider.mock.calls.length === 1,
+      };
+    });
+    mocks.recordSuccess.mockRejectedValueOnce(
+      new Error("synthetic projection commit exhausted"),
+    );
+    const request = {
+      attempt: ATTEMPT,
+      visitId: "visit-synthetic-1",
+      userId: "doctor-synthetic-1",
+      practiceId: "practice-synthetic-1",
+      tasks: [
+        {
+          key: "icd_coding" as const,
+          enabled: true,
+          provider: PROVIDER,
+          run: provider,
+        },
+      ],
+    };
+
+    await expect(runAutomationFanout(request)).rejects.toBeInstanceOf(
+      AutomationFanoutPersistenceError,
+    );
+    await expect(runAutomationFanout(request)).resolves.toMatchObject({
+      icd_coding: { status: "ok" },
+    });
+    expect(provider).toHaveBeenCalledTimes(1);
+    expect(mocks.recordSuccess).toHaveBeenCalledTimes(2);
+  });
+
   it("does not invoke a provider for an already committed result", async () => {
     mocks.markRunning.mockResolvedValue({ alreadySucceeded: true });
     const provider = vi.fn();
@@ -130,7 +195,14 @@ describe("controlled automation fanout", () => {
       visitId: "visit-synthetic-1",
       userId: "doctor-synthetic-1",
       practiceId: "practice-synthetic-1",
-      tasks: [{ key: "icd_coding", enabled: true, run: provider }],
+      tasks: [
+        {
+          key: "icd_coding",
+          enabled: true,
+          provider: PROVIDER,
+          run: provider,
+        },
+      ],
     });
     expect(provider).not.toHaveBeenCalled();
     expect(mocks.recordSuccess).not.toHaveBeenCalled();
@@ -146,6 +218,7 @@ describe("controlled automation fanout", () => {
         {
           key: "cpt_coding",
           enabled: true,
+          provider: PROVIDER,
           run: async () => ({ procedures: [] }),
           validate: () => {
             throw new Error("synthetic required output missing");

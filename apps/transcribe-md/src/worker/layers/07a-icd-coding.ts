@@ -43,6 +43,7 @@ export interface Layer7aInput {
   specialty: string;
   soapFinal: string;
   entitiesJson: string;
+  providerIdempotencyKey?: string;
 }
 
 /** L7a system prompt — exported for regression-guard tests. The
@@ -214,6 +215,8 @@ export async function runLayer7aIcdCoding(
     // Q2 fix-pack — billing codes are deterministic; tightened from
     // 0.1 to 0 so the same SOAP produces the same code list every time.
     temperature: 0,
+    idempotencyKey: input.providerIdempotencyKey,
+    retryOnSchemaFail: false,
     // 2026-05-13 SCHEMA_FAIL hardening (cross-input-mode-audit Finding 1):
     // Force Anthropic to return structured output via tool_use instead
     // of free-form text + JSON.parse. PED1 in the cross-input-mode-audit

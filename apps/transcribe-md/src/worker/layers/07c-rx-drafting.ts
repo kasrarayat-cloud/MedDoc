@@ -140,6 +140,7 @@ export interface Layer7cInput {
   userId: string | null;
   soapFinal: string;
   entitiesJson: string;
+  providerIdempotencyKey?: string;
   /** Fix-Pack 1 Q0-2 — patient demographic + safety context. Required so
    *  the prompt can frame mg/kg/day correctly for pediatrics and (in a
    *  follow-on Sub-Agent 1 PR) so validateRxDose can run. `allergies` is
@@ -368,6 +369,8 @@ export async function runLayer7cRxDrafting(
     schema: RxResult,
     maxTokens: 3072,
     temperature: 0.1,
+    idempotencyKey: input.providerIdempotencyKey,
+    retryOnSchemaFail: false,
   });
 
   // Fix-Pack 1 Q0-1 (audit Finding 06.1) — deterministic safety floor.

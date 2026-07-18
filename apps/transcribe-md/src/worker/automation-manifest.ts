@@ -3,7 +3,10 @@ import { Prisma, type VisitAutomationLayerStatus } from "@prisma/client";
 
 import { canonicalSha256 } from "@/lib/template-twin/canonical";
 import { canonicalSoapSha256 } from "@/lib/template-twin/soap-binding";
+import { enqueueIdempotentTemplateTwinAudit } from "@/lib/template-twin/audit-outbox";
+import type { CapturedAutomationLayerEffects } from "@/worker/automation-layer-effects";
 import { runVisitAutomationTransaction } from "@/worker/automation-locks";
+import { enqueuePreparedWorkerAuditInTransaction } from "@/worker/worker-audit";
 import {
   classifyVisitAutomationFailure,
   type VisitAutomationFailureCode,
@@ -14,7 +17,7 @@ import {
 } from "@/worker/automation-policy";
 
 export const VISIT_AUTOMATION_PROOF_VERSION =
-  "visit-automation-proof-v1" as const;
+  "visit-automation-proof-v2" as const;
 
 export const VISIT_AUTOMATION_MANIFEST_SELECT = {
   id: true,
@@ -47,6 +50,14 @@ export const VISIT_AUTOMATION_MANIFEST_SELECT = {
       idempotencyKey: true,
       startedAt: true,
       completedAt: true,
+      providerExecution: {
+        select: {
+          id: true,
+          status: true,
+          resultSha256: true,
+          resultVersion: true,
+        },
+      },
     },
   },
 } as const;
@@ -80,6 +91,12 @@ export interface VisitAutomationManifestProof {
     idempotencyKey: string;
     startedAt: Date | null;
     completedAt: Date | null;
+    providerExecution: {
+      id: string;
+      status: string;
+      resultSha256: string | null;
+      resultVersion: string | null;
+    } | null;
   }>;
 }
 
@@ -134,15 +151,17 @@ async function lockLayer(
   id: string;
   status: VisitAutomationLayerStatus;
   outputSha256: string | null;
+  attemptCount: number;
 } | null> {
   const rows = await tx.$queryRaw<
     Array<{
       id: string;
       status: VisitAutomationLayerStatus;
       outputSha256: string | null;
+      attemptCount: number;
     }>
   >(Prisma.sql`
-    SELECT "id", "status", "outputSha256"
+    SELECT "id", "status", "outputSha256", "attemptCount"
     FROM "visit_automation_layers"
     WHERE "manifestId" = ${manifestId}
       AND "layerId" = ${layerId}
@@ -223,6 +242,33 @@ export async function markVisitAutomationManifestFailed(
     WHERE "manifestId" = ${manifest.id}
     ORDER BY "layerId"
     FOR UPDATE
+  `);
+  await tx.$queryRaw(Prisma.sql`
+    SELECT "id"
+    FROM "visit_automation_provider_executions"
+    WHERE "manifestId" = ${manifest.id}
+    ORDER BY "id"
+    FOR UPDATE
+  `);
+  await tx.$executeRaw(Prisma.sql`
+    UPDATE "visit_automation_provider_executions"
+    SET "status" = CASE
+          WHEN "status" = 'IN_FLIGHT'::"VisitAutomationProviderExecutionStatus"
+            THEN 'UNKNOWN_OUTCOME'::"VisitAutomationProviderExecutionStatus"
+          ELSE 'FAILED'::"VisitAutomationProviderExecutionStatus"
+        END,
+        "failureCode" = CASE
+          WHEN "status" = 'IN_FLIGHT'::"VisitAutomationProviderExecutionStatus"
+            THEN 'PROVIDER_OUTCOME_AMBIGUOUS'
+          ELSE ${input.failureCode}
+        END,
+        "completedAt" = ${input.completedAt},
+        "updatedAt" = ${input.completedAt}
+    WHERE "manifestId" = ${manifest.id}
+      AND "status" IN (
+        'RESERVED'::"VisitAutomationProviderExecutionStatus",
+        'IN_FLIGHT'::"VisitAutomationProviderExecutionStatus"
+      )
   `);
   await tx.$executeRaw(Prisma.sql`
     UPDATE "visit_automation_layers"
@@ -570,6 +616,8 @@ export async function recordVisitAutomationLayerSuccess(input: {
   practiceId: string;
   layerId: VisitAutomationLayerId;
   output: unknown;
+  providerExecutionId?: string;
+  effects?: CapturedAutomationLayerEffects;
 }): Promise<void> {
   const outputSha256 = canonicalSha256(input.output);
   await runVisitAutomationTransaction({
@@ -609,6 +657,68 @@ export async function recordVisitAutomationLayerSuccess(input: {
         throw new VisitAutomationManifestError(
           "VISIT_AUTOMATION_LAYER_STATE_INVALID",
         );
+      }
+      if (
+        (input.providerExecutionId === undefined) !==
+        (input.effects === undefined)
+      ) {
+        throw new VisitAutomationManifestError(
+          "VISIT_AUTOMATION_LAYER_STATE_INVALID",
+        );
+      }
+      if (input.providerExecutionId && input.effects) {
+        const executions = await tx.$queryRaw<
+          Array<{
+            id: string;
+            automationLayerId: string;
+            manifestId: string;
+            practiceId: string;
+            visitId: string;
+            status: string;
+          }>
+        >(Prisma.sql`
+          SELECT
+            "id", "automationLayerId", "manifestId", "practiceId",
+            "visitId", "status"
+          FROM "visit_automation_provider_executions"
+          WHERE "id" = ${input.providerExecutionId}
+          FOR UPDATE
+        `);
+        const execution = executions[0];
+        if (
+          !execution ||
+          execution.automationLayerId !== layer.id ||
+          execution.manifestId !== manifest.id ||
+          execution.practiceId !== input.practiceId ||
+          execution.visitId !== input.visitId ||
+          execution.status !== "SUCCEEDED"
+        ) {
+          throw new VisitAutomationManifestError(
+            "VISIT_AUTOMATION_LAYER_STATE_INVALID",
+          );
+        }
+        for (const mutation of input.effects.visitMutations) {
+          await tx.transcribeVisit.update({
+            where: { id: input.visitId },
+            data: mutation.data as Prisma.TranscribeVisitUpdateInput,
+          });
+        }
+        for (const audit of input.effects.audits) {
+          await enqueuePreparedWorkerAuditInTransaction(tx, audit);
+        }
+        await enqueueIdempotentTemplateTwinAudit(tx, {
+          eventKey: `visit-automation-layer-completed:${execution.id}`,
+          practiceId: input.practiceId,
+          actorId: input.userId,
+          action: "VISIT_AUTOMATION_COMPLETED",
+          targetId: input.visitId,
+          targetType: "VisitAutomationLayer",
+          metadata: {
+            layerId: input.layerId,
+            manifestVersion: input.attempt.manifestVersion,
+            providerExecutionId: execution.id,
+          },
+        });
       }
       await tx.visitAutomationLayer.update({
         where: { id: layer.id },
@@ -691,6 +801,22 @@ export async function recordVisitAutomationLayerFailure(input: {
           failureCode,
           startedAt: layer.status === "PENDING" ? new Date() : undefined,
           completedAt: new Date(),
+        },
+      });
+      await enqueueIdempotentTemplateTwinAudit(tx, {
+        eventKey: `visit-automation-layer-failed:${manifest.id}:${input.layerId}:${layer.attemptCount + (layer.status === "PENDING" ? 1 : 0)}`,
+        practiceId: input.practiceId,
+        actorId: input.userId,
+        action: "VISIT_AUTOMATION_INCOMPLETE",
+        targetId: input.visitId,
+        targetType: "VisitAutomationLayer",
+        metadata: {
+          layerId: input.layerId,
+          manifestVersion: input.attempt.manifestVersion,
+          failureCode,
+          requirement:
+            input.attempt.policy.find((item) => item.layerId === input.layerId)
+              ?.requirement ?? "UNKNOWN",
         },
       });
     },

@@ -82,6 +82,7 @@ export interface Layer7bInput {
   specialty: string;
   soapFinal: string;
   entitiesJson: string;
+  providerIdempotencyKey?: string;
 }
 
 export async function runLayer7bCptCoding(
@@ -173,6 +174,8 @@ export async function runLayer7bCptCoding(
     maxTokens: 3072,
     // Q2 fix-pack — same rationale as L7a: billing codes deterministic.
     temperature: 0,
+    idempotencyKey: input.providerIdempotencyKey,
+    retryOnSchemaFail: false,
   });
 
   // Round 3 PR-D — A06-P0-002 deterministic CPT allowlist floor.

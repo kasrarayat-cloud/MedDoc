@@ -26,6 +26,9 @@ interface LockedLayerProof {
   failureCode: string | null;
   inputSha256: string;
   outputSha256: string | null;
+  providerExecutionStatus: string | null;
+  providerResultSha256: string | null;
+  providerResultVersion: string | null;
 }
 
 export type VisitAutomationProofCode =
@@ -49,6 +52,15 @@ function exactLayerInventory(
     layerVersion: string;
     inputSha256: string;
     requirement?: string;
+    status?: string;
+    providerExecution?: {
+      status: string;
+      resultSha256: string | null;
+      resultVersion: string | null;
+    } | null;
+    providerExecutionStatus?: string | null;
+    providerResultSha256?: string | null;
+    providerResultVersion?: string | null;
   }>,
   expectedPolicy?: VisitAutomationAttempt["policy"],
 ): boolean {
@@ -56,12 +68,34 @@ function exactLayerInventory(
     layers.length === VISIT_AUTOMATION_LAYER_IDS.length &&
     VISIT_AUTOMATION_LAYER_IDS.every((layerId) => {
       const matches = layers.filter((layer) => layer.layerId === layerId);
+      const layer = matches[0];
+      const executionStatus =
+        layer?.providerExecution?.status ??
+        layer?.providerExecutionStatus ??
+        null;
+      const terminalExecutionMatchesLayer =
+        layer?.status === "SUCCEEDED"
+          ? executionStatus === "SUCCEEDED" &&
+            /^[a-f0-9]{64}$/u.test(
+              layer.providerExecution?.resultSha256 ??
+                layer.providerResultSha256 ??
+                "",
+            ) &&
+            (layer.providerExecution?.resultVersion ??
+              layer.providerResultVersion) ===
+              "visit-automation-provider-result-v1"
+          : layer?.status === "FAILED"
+            ? executionStatus === null || executionStatus === "FAILED"
+            : layer?.status === "NOT_APPLICABLE"
+              ? executionStatus === null
+              : true;
       return (
         matches.length === 1 &&
-        matches[0]?.layerVersion === VISIT_AUTOMATION_LAYER_VERSION[layerId] &&
-        /^[a-f0-9]{64}$/u.test(matches[0]?.inputSha256 ?? "") &&
+        layer?.layerVersion === VISIT_AUTOMATION_LAYER_VERSION[layerId] &&
+        /^[a-f0-9]{64}$/u.test(layer?.inputSha256 ?? "") &&
+        terminalExecutionMatchesLayer &&
         (!expectedPolicy ||
-          matches[0]?.requirement ===
+          layer?.requirement ===
             expectedPolicy.find((entry) => entry.layerId === layerId)
               ?.requirement)
       );
@@ -188,6 +222,13 @@ export async function lockAndAssertVisitAutomationProof(input: {
     ORDER BY "layerId"
     FOR UPDATE
   `);
+  await input.tx.$queryRaw(Prisma.sql`
+    SELECT "id"
+    FROM "visit_automation_provider_executions"
+    WHERE "visitId" = ${input.visitId}
+    ORDER BY "id"
+    FOR UPDATE
+  `);
   const manifest = await input.tx.visitAutomationManifest.findUnique({
     where: { visitId: input.visitId },
     select: VISIT_AUTOMATION_MANIFEST_SELECT,
@@ -258,19 +299,41 @@ export async function finalizeVisitAutomationReady(input: {
         FOR UPDATE
       `);
       const manifest = manifests[0];
-      const layers = manifest
-        ? await tx.$queryRaw<LockedLayerProof[]>(Prisma.sql`
+      let layers: LockedLayerProof[] = [];
+      if (manifest) {
+        await tx.$queryRaw(Prisma.sql`
+          SELECT "id"
+          FROM "visit_automation_layers"
+          WHERE "manifestId" = ${manifest.id}
+          ORDER BY "layerId"
+          FOR UPDATE
+        `);
+        await tx.$queryRaw(Prisma.sql`
+          SELECT "id"
+          FROM "visit_automation_provider_executions"
+          WHERE "manifestId" = ${manifest.id}
+          ORDER BY "id"
+          FOR UPDATE
+        `);
+        layers = await tx.$queryRaw<LockedLayerProof[]>(Prisma.sql`
             SELECT
-              "layerId", "layerVersion",
-              "requirement"::text AS "requirement",
-              "status"::text AS "status", "failureCode",
-              "inputSha256", "outputSha256"
-            FROM "visit_automation_layers"
-            WHERE "manifestId" = ${manifest.id}
-            ORDER BY "layerId"
-            FOR UPDATE
-          `)
-        : [];
+              layer."layerId", layer."layerVersion",
+              layer."requirement"::text AS "requirement",
+              layer."status"::text AS "status", layer."failureCode",
+              layer."inputSha256", layer."outputSha256",
+              execution."status"::text AS "providerExecutionStatus",
+              execution."resultSha256" AS "providerResultSha256",
+              execution."resultVersion" AS "providerResultVersion"
+            FROM "visit_automation_layers" layer
+            LEFT JOIN "visit_automation_provider_executions" execution
+              ON execution."automationLayerId" = layer."id"
+              AND execution."manifestId" = layer."manifestId"
+              AND execution."practiceId" = layer."practiceId"
+              AND execution."visitId" = layer."visitId"
+            WHERE layer."manifestId" = ${manifest.id}
+            ORDER BY layer."layerId"
+          `);
+      }
       const bindingStale = Boolean(
         !manifest ||
         manifest.id !== input.attempt.manifestId ||
