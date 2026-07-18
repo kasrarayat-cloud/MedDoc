@@ -588,6 +588,7 @@ model Practice {
   templateTwinSyntheticQaAdmissions     TemplateTwinSyntheticQaAdmission[]
   templateTwinSyntheticQaRuns           TemplateTwinSyntheticQaRun[]
   visitAutomationManifests              VisitAutomationManifest[]
+  visitAutomationProviderExecutions     VisitAutomationProviderExecution[]
 
   @@index([slug])
   @@map("practices")
@@ -1670,6 +1671,16 @@ enum VisitAutomationLayerRequirement {
   NOT_APPLICABLE
 }
 
+/// Durable boundary around a provider invocation. A crash after IN_FLIGHT
+/// has an ambiguous provider outcome and is never blindly replayed.
+enum VisitAutomationProviderExecutionStatus {
+  RESERVED
+  IN_FLIGHT
+  SUCCEEDED
+  FAILED
+  UNKNOWN_OUTCOME
+}
+
 // ============================================================================
 // TRANSCRIBE-MD PATIENT — standalone patient record for TranscribeMD
 // ----------------------------------------------------------------------------
@@ -2035,11 +2046,12 @@ model TranscribeVisit {
   /// keeps the default-off QA marker, request idempotency, and rollout epoch
   /// out of the large clinical visit row while giving the worker a durable,
   /// fail-closed relation to inspect.
-  templateTwinSyntheticQaRun       TemplateTwinSyntheticQaRun?
-  templateTwinSyntheticQaAdmission TemplateTwinSyntheticQaAdmission?
+  templateTwinSyntheticQaRun        TemplateTwinSyntheticQaRun?
+  templateTwinSyntheticQaAdmission  TemplateTwinSyntheticQaAdmission?
   /// Current durable automation proof. Absence on a historical visit is a
   /// fail-closed LEGACY_UNKNOWN state, never implied success.
-  automationManifest               VisitAutomationManifest?
+  automationManifest                VisitAutomationManifest?
+  visitAutomationProviderExecutions VisitAutomationProviderExecution[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2305,9 +2317,10 @@ model TemplateTwinSyntheticQaRun {
   /// Durable pre-provider capability. Nullable only for retained rows created
   /// by the earlier staging prototype; all current application and database
   /// admission paths reject a run without this one-to-one relation.
-  admissionId        String?                           @unique(map: "template_twin_qa_run_admission_unique")
-  admission          TemplateTwinSyntheticQaAdmission? @relation(fields: [admissionId], references: [id], onDelete: Restrict, map: "template_twin_qa_run_admission_fkey")
-  automationManifest VisitAutomationManifest?          @relation("VisitAutomationStagingRun")
+  admissionId        String?                            @unique(map: "template_twin_qa_run_admission_unique")
+  admission          TemplateTwinSyntheticQaAdmission?  @relation(fields: [admissionId], references: [id], onDelete: Restrict, map: "template_twin_qa_run_admission_fkey")
+  automationManifest VisitAutomationManifest?           @relation("VisitAutomationStagingRun")
+  providerExecutions VisitAutomationProviderExecution[]
 
   /// Versioned, tenant/doctor-scoped hash of the caller's idempotency token.
   /// The raw browser token is never persisted or logged.
@@ -2397,10 +2410,11 @@ model TemplateTwinSyntheticQaAdmission {
   certification   TemplateTwinCertification? @relation(fields: [certificationId], references: [id], onDelete: Restrict, map: "template_twin_qa_admission_certification_fkey")
   mappingSha256   String?                    @db.Char(64)
 
-  visitId            String?                     @unique(map: "template_twin_qa_admission_visit_unique")
-  visit              TranscribeVisit?            @relation(fields: [visitId], references: [id], onDelete: Restrict, map: "template_twin_qa_admission_visit_fkey")
+  visitId            String?                            @unique(map: "template_twin_qa_admission_visit_unique")
+  visit              TranscribeVisit?                   @relation(fields: [visitId], references: [id], onDelete: Restrict, map: "template_twin_qa_admission_visit_fkey")
   run                TemplateTwinSyntheticQaRun?
-  automationManifest VisitAutomationManifest?    @relation("VisitAutomationStagingAdmission")
+  automationManifest VisitAutomationManifest?           @relation("VisitAutomationStagingAdmission")
+  providerExecutions VisitAutomationProviderExecution[]
 
   attempt          Int       @default(1)
   expiresAt        DateTime  @db.Timestamptz(6)
@@ -2465,7 +2479,8 @@ model VisitAutomationManifest {
   createdAt   DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
 
-  layers VisitAutomationLayer[]
+  layers             VisitAutomationLayer[]
+  providerExecutions VisitAutomationProviderExecution[]
 
   @@unique([id, practiceId, visitId], map: "visit_automation_manifest_tenant_identity_key")
   @@index([practiceId, status, updatedAt], map: "visit_automation_manifest_practice_status_idx")
@@ -2476,10 +2491,11 @@ model VisitAutomationManifest {
 model VisitAutomationLayer {
   id String @id @default(cuid())
 
-  manifestId String
-  practiceId String
-  visitId    String
-  manifest   VisitAutomationManifest @relation(fields: [manifestId, practiceId, visitId], references: [id, practiceId, visitId], onDelete: Cascade, map: "visit_automation_layer_manifest_tenant_fkey")
+  manifestId        String
+  practiceId        String
+  visitId           String
+  manifest          VisitAutomationManifest           @relation(fields: [manifestId, practiceId, visitId], references: [id, practiceId, visitId], onDelete: Cascade, map: "visit_automation_layer_manifest_tenant_fkey")
+  providerExecution VisitAutomationProviderExecution?
 
   layerId      String                          @db.VarChar(80)
   layerVersion String                          @db.VarChar(80)
@@ -2498,9 +2514,62 @@ model VisitAutomationLayer {
   updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
 
   @@unique([manifestId, layerId], map: "visit_automation_layer_manifest_layer_key")
+  @@unique([id, manifestId, practiceId, visitId], map: "visit_automation_layer_tenant_identity_key")
   @@index([practiceId, visitId, status], map: "visit_automation_layer_tenant_visit_status_idx")
   @@index([manifestId, requirement, status], map: "visit_automation_layer_completion_idx")
   @@map("visit_automation_layers")
+}
+
+/// One provider invocation ledger per automation layer. resultPayload is
+/// private clinical state retained only so a failed database projection can
+/// be retried without a second provider call. It must never enter logs, audit
+/// metadata, or browser responses.
+model VisitAutomationProviderExecution {
+  id String @id @default(cuid())
+
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict, map: "visit_automation_provider_execution_practice_fkey")
+
+  visitId String
+  visit   TranscribeVisit @relation(fields: [visitId], references: [id], onDelete: Cascade, map: "visit_automation_provider_execution_visit_fkey")
+
+  manifestId String
+  manifest   VisitAutomationManifest @relation(fields: [manifestId, practiceId, visitId], references: [id, practiceId, visitId], onDelete: Cascade, map: "visit_automation_provider_execution_manifest_fkey")
+
+  automationLayerId String
+  automationLayer   VisitAutomationLayer @relation(fields: [automationLayerId, manifestId, practiceId, visitId], references: [id, manifestId, practiceId, visitId], onDelete: Cascade, map: "visit_automation_provider_execution_layer_fkey")
+
+  stagingAdmissionId String?
+  stagingAdmission   TemplateTwinSyntheticQaAdmission? @relation(fields: [stagingAdmissionId], references: [id], onDelete: Restrict, map: "visit_automation_provider_execution_admission_fkey")
+
+  stagingRunId String?
+  stagingRun   TemplateTwinSyntheticQaRun? @relation(fields: [stagingRunId], references: [id], onDelete: Restrict, map: "visit_automation_provider_execution_run_fkey")
+
+  inputSha256      String                                 @db.Char(64)
+  provider         String                                 @db.VarChar(40)
+  providerMode     String                                 @db.VarChar(40)
+  model            String                                 @db.VarChar(100)
+  operationVersion String                                 @db.VarChar(80)
+  idempotencyKey   String                                 @unique(map: "visit_automation_provider_execution_idempotency_key") @db.Char(64)
+  status           VisitAutomationProviderExecutionStatus @default(RESERVED)
+  invocationCount  Int                                    @default(0)
+
+  resultPayload Json?
+  resultSha256  String? @db.Char(64)
+  resultVersion String? @db.VarChar(80)
+  failureCode   String? @db.VarChar(80)
+
+  reservedAt  DateTime  @default(now()) @db.Timestamptz(6)
+  invokedAt   DateTime? @db.Timestamptz(6)
+  completedAt DateTime? @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@unique([automationLayerId, manifestId, practiceId, visitId], map: "visit_automation_provider_execution_layer_key")
+  @@index([practiceId, visitId, status], map: "visit_automation_provider_execution_tenant_status_idx")
+  @@index([manifestId, status], map: "visit_automation_provider_execution_manifest_status_idx")
+  @@index([stagingRunId, status], map: "visit_automation_provider_execution_run_status_idx")
+  @@map("visit_automation_provider_executions")
 }
 
 // ============================================================================

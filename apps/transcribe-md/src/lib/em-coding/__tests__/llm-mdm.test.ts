@@ -32,14 +32,12 @@ import {
   charDistanceRatio,
   normalizeSoap,
   validateMdmJudgement,
-  judgeMdm,
 } from '../llm-mdm';
 import type { MdmJudgement } from '../types';
 
 describe('normalizeSoap', () => {
   it('collapses whitespace, lowercases, strips line numbers', () => {
     const a = '## Subjective\n1.  Patient reports COUGH';
-    const b = 'Patient reports cough';
     expect(normalizeSoap(a).includes('patient reports cough')).toBe(true);
   });
 
@@ -93,7 +91,7 @@ describe('validateMdmJudgement', () => {
   });
 
   it('rejects missing tier', () => {
-    const bad: any = { ...valid };
+    const bad: Partial<MdmJudgement> = { ...valid };
     delete bad.tier;
     expect(validateMdmJudgement(bad)).toBeNull();
   });
@@ -109,8 +107,13 @@ describe('validateMdmJudgement', () => {
   });
 
   it('rejects element with non-string summary', () => {
-    const bad: any = { ...valid };
-    bad.elements = { ...valid.elements, problems: { level: 'low', summary: 42 } };
+    const bad = {
+      ...valid,
+      elements: {
+        ...valid.elements,
+        problems: { level: 'low', summary: 42 },
+      },
+    };
     expect(validateMdmJudgement(bad)).toBeNull();
   });
 });

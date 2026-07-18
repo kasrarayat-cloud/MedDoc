@@ -106,6 +106,29 @@ describe('anthropicComplete with useToolUse — SDK call shape', () => {
     expect(call.tool_choice).toEqual({ type: 'tool', name: 'submit_icd_codes' });
   });
 
+  it('passes the durable server-generated idempotency key at the provider boundary', async () => {
+    mocks.createCall.mockResolvedValueOnce({
+      content: [
+        {
+          type: 'tool_use',
+          id: 'tu_idempotent',
+          name: 'submit_icd_codes',
+          input: { codes: [] },
+        },
+      ],
+      usage: mockUsage(),
+    });
+
+    await anthropicComplete({
+      ...baseArgs,
+      idempotencyKey: 'a'.repeat(64),
+    });
+
+    expect(mocks.createCall).toHaveBeenCalledWith(expect.any(Object), {
+      headers: { 'Idempotency-Key': 'a'.repeat(64) },
+    });
+  });
+
   it('does NOT pass `tools` to the SDK when useToolUse is omitted (backwards-compat)', async () => {
     mocks.createCall.mockResolvedValueOnce({
       content: [

@@ -40,6 +40,10 @@ export interface CompleteArgs<T> extends AiLogContext {
   /** Sampling temperature 0-1. Medical layers pin this low for
    *  determinism; undefined = provider default. */
   temperature?: number;
+  /** Durable automation execution key. It is generated server-side and is
+   * never accepted from a browser request. Provider support is best-effort;
+   * the application ledger remains authoritative for replay safety. */
+  idempotencyKey?: string;
   /** Retry on schema-fail or JSON-parse-fail with the prior output + error
    *  appended. Default true. Up to MAX_RETRIES attempts after the initial. */
   retryOnSchemaFail?: boolean;

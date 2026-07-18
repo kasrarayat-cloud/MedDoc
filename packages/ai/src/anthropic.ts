@@ -27,6 +27,17 @@ function getClient(): Anthropic {
   return clientSingleton;
 }
 
+function createAnthropicMessage(
+  client: Anthropic,
+  params: Anthropic.Messages.MessageCreateParamsNonStreaming,
+  idempotencyKey?: string,
+): Promise<Anthropic.Messages.Message> {
+  if (!idempotencyKey) return client.messages.create(params);
+  return client.messages.create(params, {
+    headers: { 'Idempotency-Key': idempotencyKey },
+  });
+}
+
 /** T-M17.1: cap persisted response bodies so a pathological 100 KB
  *  Claude stream doesn't bloat ai_calls rows. ~10 KB is ample for a
  *  failing JSON payload + Zod errors. */
@@ -150,6 +161,7 @@ export interface AnthropicCompleteArgs<T> extends AiLogContext {
   /** Sampling temperature 0-1. Undefined = SDK/provider default (≈1).
    *  Medical layers should pass low values for determinism. */
   temperature?: number;
+  idempotencyKey?: string;
   /** Extra messages appended for retry — e.g. the prior invalid response + error. */
   retryContext?: string;
   /** 2026-05-13 (cross-input-mode-audit Finding 1 hardening): when set,
@@ -203,14 +215,14 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
       // is a more general JSONSchema7-ish shape.
       const jsonSchema = z.toJSONSchema(args.schema) as unknown as Anthropic.Messages.Tool.InputSchema;
 
-      const response = await client.messages.create({
+      const request = {
         model: args.model,
         max_tokens: args.maxTokens ?? 4096,
         ...(args.temperature !== undefined && !shouldOmitTemperature(args.model)
           ? { temperature: args.temperature }
           : {}),
         system: args.system,
-        messages: [{ role: 'user', content: userContent }],
+        messages: [{ role: 'user' as const, content: userContent }],
         tools: [
           {
             name: useToolUse.name,
@@ -218,8 +230,9 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
             input_schema: jsonSchema,
           },
         ],
-        tool_choice: { type: 'tool', name: useToolUse.name },
-      });
+        tool_choice: { type: 'tool' as const, name: useToolUse.name },
+      };
+      const response = await createAnthropicMessage(client, request, args.idempotencyKey);
 
       latencyMs = Date.now() - started;
       usage = extractUsage(response.usage);
@@ -290,15 +303,16 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
       // downstream gets a useful payload (the tool input as JSON).
       unfenced = JSON.stringify(parsed);
     } else {
-      const response = await client.messages.create({
+      const request = {
         model: args.model,
         max_tokens: args.maxTokens ?? 4096,
         ...(args.temperature !== undefined && !shouldOmitTemperature(args.model)
           ? { temperature: args.temperature }
           : {}),
         system: args.system,
-        messages: [{ role: 'user', content: userContent }],
-      });
+        messages: [{ role: 'user' as const, content: userContent }],
+      };
+      const response = await createAnthropicMessage(client, request, args.idempotencyKey);
 
       latencyMs = Date.now() - started;
 

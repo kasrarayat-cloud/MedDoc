@@ -43,7 +43,9 @@ describe("visit automation migration and lock contract", () => {
     expect(migration).toContain("VISIT_AUTOMATION_COMPLETE_LAYER_IMMUTABLE");
     expect(migration).toContain("VISIT_AUTOMATION_LAYER_RESULT_IMMUTABLE");
     expect(migration).toContain("VISIT_AUTOMATION_MANIFEST_REBIND_INVALID");
-    expect(migration).toContain("OLD.\"status\" = 'COMPLETE' AND complete_reprocess");
+    expect(migration).toContain(
+      "OLD.\"status\" = 'COMPLETE' AND complete_reprocess",
+    );
     expect(migration).toContain('visit."signedAt" IS NULL');
     for (const layerId of [
       "icd_coding",
@@ -67,6 +69,7 @@ describe("visit automation migration and lock contract", () => {
       '"visit"',
       '"automation_manifest"',
       '"automation_layers"',
+      '"provider_execution"',
       '"audit_outbox"',
     ];
     let cursor = -1;
