@@ -76,6 +76,9 @@ export interface TemplateTwinProviderAtomicityInventory {
   notApplicableLayers: number;
   providerExecutions: number;
   providerInvocations: number;
+  claimedProviderExecutions: number;
+  unclaimedNonReservedExecutions: number;
+  duplicateProviderClaimIds: number;
   nonSucceededProviderExecutions: number;
   duplicateProviderIdempotencyKeys: number;
   fillManifests: number;
@@ -900,6 +903,12 @@ export function readTemplateTwinProviderAtomicityInventory(
       FROM selected_executions
       GROUP BY "idempotencyKey"
       HAVING count(*) > 1
+    ), duplicate_claims AS (
+      SELECT "claimId"
+      FROM selected_executions
+      WHERE "claimId" IS NOT NULL
+      GROUP BY "claimId"
+      HAVING count(*) > 1
     )
     SELECT json_build_object(
       'visits', (SELECT count(*)::int FROM selected_visits),
@@ -910,6 +919,9 @@ export function readTemplateTwinProviderAtomicityInventory(
       'notApplicableLayers', (SELECT count(*)::int FROM selected_layers WHERE status = 'NOT_APPLICABLE'),
       'providerExecutions', (SELECT count(*)::int FROM selected_executions),
       'providerInvocations', (SELECT COALESCE(sum("invocationCount"), 0)::int FROM selected_executions),
+      'claimedProviderExecutions', (SELECT count(*)::int FROM selected_executions WHERE "claimId" IS NOT NULL),
+      'unclaimedNonReservedExecutions', (SELECT count(*)::int FROM selected_executions WHERE status <> 'RESERVED' AND "claimId" IS NULL),
+      'duplicateProviderClaimIds', (SELECT count(*)::int FROM duplicate_claims),
       'nonSucceededProviderExecutions', (SELECT count(*)::int FROM selected_executions WHERE status <> 'SUCCEEDED'),
       'duplicateProviderIdempotencyKeys', (SELECT count(*)::int FROM duplicate_keys),
       'fillManifests', (SELECT count(*)::int FROM template_twin_fill_manifests fill JOIN selected_visits visit ON visit.id = fill."visitId"),
@@ -951,7 +963,9 @@ export function installTemplateTwinProviderProjectionRetryFault(
   visitId: string,
 ): void {
   if (!/^[A-Za-z0-9_-]{8,128}$/u.test(visitId)) {
-    throw new Error("Projection fault injection requires a synthetic visit ID.");
+    throw new Error(
+      "Projection fault injection requires a synthetic visit ID.",
+    );
   }
   psql(`
     DROP TRIGGER IF EXISTS qa_tt_provider_projection_retry_fault
@@ -983,7 +997,9 @@ export function readTemplateTwinProviderProjectionRetryInventory(
   visitId: string,
 ): TemplateTwinProviderProjectionRetryInventory {
   if (!/^[A-Za-z0-9_-]{8,128}$/u.test(visitId)) {
-    throw new Error("Projection retry inventory requires a synthetic visit ID.");
+    throw new Error(
+      "Projection retry inventory requires a synthetic visit ID.",
+    );
   }
   return psqlJson<TemplateTwinProviderProjectionRetryInventory>(`
     WITH target_manifest AS (

@@ -204,24 +204,34 @@ async function runCompleteProviderAtomicityJourney(input: {
   };
   index: number;
 }): Promise<string> {
-  const response = await input.page.request.post(
-    "/api/note-templates/template-twin/staging-qa/runs",
-    {
-      headers: {
-        ...sameOriginHeaders(input.page),
-        "Content-Type": "application/json",
+  const idempotencyKey = crypto.randomUUID();
+  let response: Awaited<ReturnType<typeof input.page.request.post>> | null =
+    null;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    response = await input.page.request.post(
+      "/api/note-templates/template-twin/staging-qa/runs",
+      {
+        headers: {
+          ...sameOriginHeaders(input.page),
+          "Content-Type": "application/json",
+        },
+        data: {
+          ...input.admission,
+          idempotencyKey,
+          encounterText: SYNTHETIC_ENCOUNTER,
+        },
       },
-      data: {
-        ...input.admission,
-        idempotencyKey: crypto.randomUUID(),
-        encounterText: SYNTHETIC_ENCOUNTER,
-      },
-    },
-  );
+    );
+    if (response.status() !== 503 || attempt === 3) break;
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, attempt * 100);
+    });
+  }
+  if (!response) throw new Error("Synthetic journey admission was not sent.");
   expect(
-    response.status(),
+    [200, 202],
     `Atomicity journey ${input.index} admission failed: ${await response.text()}`,
-  ).toBe(202);
+  ).toContain(response.status());
   const admitted = (await response.json()) as {
     visitId: string;
     runId: string;
@@ -1044,19 +1054,41 @@ test("Template Twin staging UI drives the real synthetic pipeline fail closed", 
   });
 
   const atomicityVisitIds: string[] = [];
-  for (let index = 1; index <= PROVIDER_ATOMICITY_JOURNEY_COUNT; index += 1) {
+  // Two simultaneous end-to-end journeys exercise real queue/worker overlap
+  // without turning the rollout/run SERIALIZABLE transaction's deliberate
+  // three-attempt bound into a load-test gate. The separate PostgreSQL claim
+  // harness races twenty callers against one provider execution.
+  const journeyConcurrency = Math.min(2, PROVIDER_ATOMICITY_JOURNEY_COUNT);
+  for (
+    let offset = 0;
+    offset < PROVIDER_ATOMICITY_JOURNEY_COUNT;
+    offset += Math.max(journeyConcurrency, 1)
+  ) {
+    const batch = Array.from(
+      {
+        length: Math.min(
+          journeyConcurrency,
+          PROVIDER_ATOMICITY_JOURNEY_COUNT - offset,
+        ),
+      },
+      (_, batchIndex) => offset + batchIndex + 1,
+    );
     atomicityVisitIds.push(
-      await runCompleteProviderAtomicityJourney({
-        page,
-        admission: {
-          templateId: typedAdmissionPayload.templateId,
-          mode: typedAdmissionPayload.mode,
-          expectedTemplateVersion:
-            typedAdmissionPayload.expectedTemplateVersion,
-          encounterText: typedAdmissionPayload.encounterText,
-        },
-        index,
-      }),
+      ...(await Promise.all(
+        batch.map((index) =>
+          runCompleteProviderAtomicityJourney({
+            page,
+            admission: {
+              templateId: typedAdmissionPayload.templateId,
+              mode: typedAdmissionPayload.mode,
+              expectedTemplateVersion:
+                typedAdmissionPayload.expectedTemplateVersion,
+              encounterText: typedAdmissionPayload.encounterText,
+            },
+            index,
+          }),
+        ),
+      )),
     );
   }
   const projectionRetryEvidence =
@@ -1084,6 +1116,9 @@ test("Template Twin staging UI drives the real synthetic pipeline fail closed", 
       notApplicableLayers: PROVIDER_ATOMICITY_JOURNEY_COUNT,
       providerExecutions: PROVIDER_ATOMICITY_JOURNEY_COUNT * 5,
       providerInvocations: PROVIDER_ATOMICITY_JOURNEY_COUNT * 5,
+      claimedProviderExecutions: PROVIDER_ATOMICITY_JOURNEY_COUNT * 5,
+      unclaimedNonReservedExecutions: 0,
+      duplicateProviderClaimIds: 0,
       nonSucceededProviderExecutions: 0,
       duplicateProviderIdempotencyKeys: 0,
       fillManifests: PROVIDER_ATOMICITY_JOURNEY_COUNT,
@@ -1101,6 +1136,7 @@ test("Template Twin staging UI drives the real synthetic pipeline fail closed", 
           }).trim(),
           syntheticOnly: true,
           journeyCount: atomicityVisitIds.length,
+          journeyConcurrency,
           inventory,
           projectionRetryEvidence,
         },
