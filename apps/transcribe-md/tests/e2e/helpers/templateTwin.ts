@@ -84,6 +84,16 @@ export interface TemplateTwinProviderAtomicityInventory {
   completionAudits: number;
 }
 
+export interface TemplateTwinProviderProjectionRetryInventory {
+  projectionAttemptCount: number;
+  manifestAttemptCount: number;
+  providerExecutionStatus: string;
+  providerInvocationCount: number;
+  layerStatus: string;
+  layerCompletionAudits: number;
+  completionAudits: number;
+}
+
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'"'"'`)}'`;
 }
@@ -926,6 +936,111 @@ export function readTemplateTwinProviderAtomicityInventory(
           AND audit."eventKey" LIKE 'visit-automation:completed:%'
       )
     );
+  `);
+}
+
+/**
+ * Installs a disposable, visit-scoped fault at the atomic layer audit insert.
+ * A PostgreSQL sequence is intentionally used as the test latch because
+ * nextval() is not rolled back: the first three complete projection
+ * transactions receive 40001, exhausting the hard retry ceiling, while the
+ * BullMQ job retry's fourth projection can commit. The provider result was
+ * already committed before this boundary and therefore must be reused.
+ */
+export function installTemplateTwinProviderProjectionRetryFault(
+  visitId: string,
+): void {
+  if (!/^[A-Za-z0-9_-]{8,128}$/u.test(visitId)) {
+    throw new Error("Projection fault injection requires a synthetic visit ID.");
+  }
+  psql(`
+    DROP TRIGGER IF EXISTS qa_tt_provider_projection_retry_fault
+      ON template_twin_audit_outbox;
+    DROP FUNCTION IF EXISTS qa_tt_provider_projection_retry_fault();
+    DROP SEQUENCE IF EXISTS qa_tt_provider_projection_retry_fault_seq;
+    CREATE SEQUENCE qa_tt_provider_projection_retry_fault_seq START 1;
+    CREATE FUNCTION qa_tt_provider_projection_retry_fault()
+    RETURNS trigger AS $body$
+    BEGIN
+      IF NEW."targetId" = ${sqlLiteral(visitId)}
+        AND NEW."targetType" = 'VisitAutomationLayer'
+        AND NEW.action = 'VISIT_AUTOMATION_COMPLETED'
+        AND NEW.metadata->>'layerId' = 'icd_coding'
+        AND nextval('qa_tt_provider_projection_retry_fault_seq') <= 3 THEN
+        RAISE EXCEPTION 'synthetic provider projection retry fault'
+          USING ERRCODE = '40001';
+      END IF;
+      RETURN NEW;
+    END;
+    $body$ LANGUAGE plpgsql;
+    CREATE TRIGGER qa_tt_provider_projection_retry_fault
+      BEFORE INSERT ON template_twin_audit_outbox
+      FOR EACH ROW EXECUTE FUNCTION qa_tt_provider_projection_retry_fault();
+  `);
+}
+
+export function readTemplateTwinProviderProjectionRetryInventory(
+  visitId: string,
+): TemplateTwinProviderProjectionRetryInventory {
+  if (!/^[A-Za-z0-9_-]{8,128}$/u.test(visitId)) {
+    throw new Error("Projection retry inventory requires a synthetic visit ID.");
+  }
+  return psqlJson<TemplateTwinProviderProjectionRetryInventory>(`
+    WITH target_manifest AS (
+      SELECT * FROM visit_automation_manifests WHERE "visitId" = ${sqlLiteral(visitId)}
+    ), target_layer AS (
+      SELECT layer.*
+      FROM visit_automation_layers layer
+      JOIN target_manifest manifest ON manifest.id = layer."manifestId"
+      WHERE layer."layerId" = 'icd_coding'
+    ), target_execution AS (
+      SELECT execution.*
+      FROM visit_automation_provider_executions execution
+      JOIN target_layer layer ON layer.id = execution."automationLayerId"
+    )
+    SELECT json_build_object(
+      'projectionAttemptCount', (
+        SELECT last_value::int
+        FROM qa_tt_provider_projection_retry_fault_seq
+      ),
+      'manifestAttemptCount', (
+        SELECT "attemptCount" FROM target_manifest
+      ),
+      'providerExecutionStatus', (
+        SELECT status::text FROM target_execution
+      ),
+      'providerInvocationCount', (
+        SELECT "invocationCount" FROM target_execution
+      ),
+      'layerStatus', (
+        SELECT status::text FROM target_layer
+      ),
+      'layerCompletionAudits', (
+        SELECT count(*)::int
+        FROM template_twin_audit_outbox
+        WHERE "targetId" = ${sqlLiteral(visitId)}
+          AND "targetType" = 'VisitAutomationLayer'
+          AND action = 'VISIT_AUTOMATION_COMPLETED'
+          AND metadata->>'layerId' = 'icd_coding'
+      ),
+      'completionAudits', (
+        SELECT count(*)::int
+        FROM template_twin_audit_outbox
+        WHERE "targetId" = ${sqlLiteral(visitId)}
+          AND "targetType" = 'TranscribeVisit'
+          AND action = 'VISIT_AUTOMATION_COMPLETED'
+          AND "eventKey" LIKE 'visit-automation:completed:%'
+      )
+    );
+  `);
+}
+
+export function removeTemplateTwinProviderProjectionRetryFault(): void {
+  psql(`
+    DROP TRIGGER IF EXISTS qa_tt_provider_projection_retry_fault
+      ON template_twin_audit_outbox;
+    DROP FUNCTION IF EXISTS qa_tt_provider_projection_retry_fault();
+    DROP SEQUENCE IF EXISTS qa_tt_provider_projection_retry_fault_seq;
   `);
 }
 

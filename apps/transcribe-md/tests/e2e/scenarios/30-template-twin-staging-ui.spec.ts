@@ -21,11 +21,14 @@ import { loginUser } from "../helpers/auth";
 import { QA_COMPOSE } from "../helpers/qa-compose";
 import {
   assertTemplateTwinStagingQaDatabaseTamperGuards,
+  installTemplateTwinProviderProjectionRetryFault,
   readTemplateTwinQaApprovedMappingsSha256,
   readTemplateTwinQaFill,
   readTemplateTwinStagingQaIdempotencyInventory,
   readTemplateTwinProviderAtomicityInventory,
+  readTemplateTwinProviderProjectionRetryInventory,
   readTemplateTwinStagingQaRunByVisit,
+  removeTemplateTwinProviderProjectionRetryFault,
   setTemplateTwinQaPractice,
 } from "../helpers/templateTwin";
 import { TEST_PASSWORD } from "../helpers/test-utils";
@@ -264,6 +267,106 @@ async function runCompleteProviderAtomicityJourney(input: {
   expect(bytes.byteLength).toBe(fill.outputSizeBytes);
   inspectDocxPackage(bytes);
   return admitted.visitId;
+}
+
+async function runPostProviderProjectionRetryJourney(input: {
+  page: Page;
+  admission: {
+    templateId: string;
+    mode: "typed";
+    expectedTemplateVersion: number;
+    encounterText: string;
+  };
+}): Promise<{
+  visitId: string;
+  inventory: ReturnType<
+    typeof readTemplateTwinProviderProjectionRetryInventory
+  >;
+}> {
+  let workerPaused = false;
+  let faultInstalled = false;
+  let visitId: string | null = null;
+  try {
+    execSync(`${QA_COMPOSE} pause transcribe-md-worker`, { stdio: "pipe" });
+    workerPaused = true;
+    const response = await input.page.request.post(
+      "/api/note-templates/template-twin/staging-qa/runs",
+      {
+        headers: {
+          ...sameOriginHeaders(input.page),
+          "Content-Type": "application/json",
+        },
+        data: {
+          ...input.admission,
+          idempotencyKey: crypto.randomUUID(),
+          encounterText: SYNTHETIC_ENCOUNTER,
+        },
+      },
+    );
+    expect(
+      response.status(),
+      `Projection-retry admission failed: ${await response.text()}`,
+    ).toBe(202);
+    const admitted = (await response.json()) as { visitId: string };
+    visitId = admitted.visitId;
+    installTemplateTwinProviderProjectionRetryFault(visitId);
+    faultInstalled = true;
+    execSync(`${QA_COMPOSE} unpause transcribe-md-worker`, { stdio: "pipe" });
+    workerPaused = false;
+
+    const fill = await waitForVerifiedFill(input.page, visitId);
+    const review = await input.page.request.post(
+      `/api/visits/${encodeURIComponent(visitId)}/template-twin/review`,
+      {
+        headers: {
+          ...sameOriginHeaders(input.page),
+          "Content-Type": "application/json",
+        },
+        data: {
+          expectedManifestVersion: fill.fillManifest.manifestVersion,
+          expectedManifestSha256: fill.manifestSha256,
+        },
+      },
+    );
+    expect(review.status()).toBe(200);
+    const sign = await input.page.request.post(
+      `/api/visits/${encodeURIComponent(visitId)}/sign`,
+      {
+        headers: sameOriginHeaders(input.page),
+        data: { destinations: [] },
+      },
+    );
+    expect(sign.status()).toBe(200);
+    await waitForVisitStatus(input.page, visitId, "SIGNED", {
+      timeoutMs: 30_000,
+    });
+    const output = await input.page.request.get(
+      `/api/visits/${encodeURIComponent(visitId)}/export/original-template-docx`,
+    );
+    expect(output.status()).toBe(200);
+    const bytes = await output.body();
+    expect(sha256(bytes)).toBe(fill.outputSha256);
+    inspectDocxPackage(bytes);
+
+    const inventory = readTemplateTwinProviderProjectionRetryInventory(visitId);
+    expect(inventory).toEqual({
+      projectionAttemptCount: 4,
+      manifestAttemptCount: 2,
+      providerExecutionStatus: "SUCCEEDED",
+      providerInvocationCount: 1,
+      layerStatus: "SUCCEEDED",
+      layerCompletionAudits: 1,
+      completionAudits: 1,
+    });
+    return { visitId, inventory };
+  } finally {
+    if (workerPaused) {
+      execSync(`${QA_COMPOSE} unpause transcribe-md-worker`, {
+        stdio: "pipe",
+      });
+    }
+    if (faultInstalled) removeTemplateTwinProviderProjectionRetryFault();
+  }
 }
 
 async function signupCrossTenantDoctor(
@@ -956,6 +1059,19 @@ test("Template Twin staging UI drives the real synthetic pipeline fail closed", 
       }),
     );
   }
+  const projectionRetryEvidence =
+    PROVIDER_ATOMICITY_JOURNEY_COUNT > 0
+      ? await runPostProviderProjectionRetryJourney({
+          page,
+          admission: {
+            templateId: typedAdmissionPayload.templateId,
+            mode: typedAdmissionPayload.mode,
+            expectedTemplateVersion:
+              typedAdmissionPayload.expectedTemplateVersion,
+            encounterText: typedAdmissionPayload.encounterText,
+          },
+        })
+      : null;
   if (atomicityVisitIds.length > 0) {
     const inventory =
       readTemplateTwinProviderAtomicityInventory(atomicityVisitIds);
@@ -986,6 +1102,7 @@ test("Template Twin staging UI drives the real synthetic pipeline fail closed", 
           syntheticOnly: true,
           journeyCount: atomicityVisitIds.length,
           inventory,
+          projectionRetryEvidence,
         },
         null,
         2,
