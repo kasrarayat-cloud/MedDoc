@@ -34,7 +34,11 @@ import {
   VISIT_AUTOMATION_LAYER_IDS,
 } from "../../../apps/transcribe-md/src/worker/automation-policy";
 import { runAutomationFanout } from "../../../apps/transcribe-md/src/worker/run-automation-fanout";
-import { runDurableVisitAutomationProvider } from "../../../apps/transcribe-md/src/worker/provider-execution";
+import {
+  getVisitAutomationProviderClaimMetrics,
+  resetVisitAutomationProviderClaimMetricsForTest,
+  runDurableVisitAutomationProvider,
+} from "../../../apps/transcribe-md/src/worker/provider-execution";
 import { assertNonProdDatabase } from "../src/db-guard";
 
 const databaseUrl =
@@ -373,6 +377,136 @@ async function provePostProviderProjectionRollbackAndReuse(): Promise<void> {
   if (committed.status !== "SUCCEEDED") {
     throw new Error("Reused provider result did not commit exactly once.");
   }
+}
+
+async function proveProviderClaimOwnershipRace(): Promise<{
+  contenders: number;
+  claimWinners: number;
+  nonWinners: number;
+  providerInvocations: number;
+  databaseRetryMetrics: ReturnType<typeof getDatabaseTransactionRetryMetrics>;
+}> {
+  const contenders = 20;
+  const visitId = await createVisit("provider-claim-race");
+  const attempt = await initializeVisitAutomationManifest({
+    visitId,
+    userId,
+    practiceId,
+    soapVersion: 1,
+    soapFinal: soap,
+    sourceFacts: { synthetic: true, case: "provider-claim-race" },
+    policy: buildVisitAutomationPolicy({
+      staging: false,
+      enabled: Object.fromEntries(
+        VISIT_AUTOMATION_LAYER_IDS.map((layerId) => [
+          layerId,
+          layerId === "icd_coding",
+        ]),
+      ) as Record<(typeof VISIT_AUTOMATION_LAYER_IDS)[number], boolean>,
+    }),
+  });
+  await markVisitAutomationLayerRunning({
+    attempt,
+    visitId,
+    userId,
+    practiceId,
+    layerId: "icd_coding",
+  });
+  resetVisitAutomationProviderClaimMetricsForTest();
+  resetDatabaseTransactionRetryMetricsForTest();
+  const providerEntered = latch();
+  const releaseProvider = latch();
+  let providerInvocations = 0;
+  const providerInput = {
+    attempt,
+    visitId,
+    userId,
+    practiceId,
+    layerId: "icd_coding" as const,
+    descriptor: {
+      provider: "anthropic" as const,
+      model: "synthetic-automation-model-v1",
+      operationVersion: "icd-provider-claim-race-v1",
+    },
+    invoke: async (_providerIdempotencyKey: string) => {
+      providerInvocations += 1;
+      providerEntered.release();
+      await releaseProvider.promise;
+      return { codes: [{ code: "Z00.00" }] };
+    },
+  };
+  const runs = Array.from({ length: contenders }, () =>
+    runDurableVisitAutomationProvider(providerInput),
+  );
+  await providerEntered.promise;
+  const claimDeadline = Date.now() + 4_000;
+  while (Date.now() < claimDeadline) {
+    const metrics = getVisitAutomationProviderClaimMetrics();
+    if (metrics.claimedByCaller + metrics.alreadyInProgress === contenders) {
+      break;
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, 5));
+  }
+  const observed = getVisitAutomationProviderClaimMetrics();
+  if (observed.claimedByCaller + observed.alreadyInProgress !== contenders) {
+    releaseProvider.release();
+    await Promise.allSettled(runs);
+    throw new Error("The provider claim race did not reach every contender.");
+  }
+  const active =
+    await observer.visitAutomationProviderExecution.findFirstOrThrow({
+      where: { visitId, automationLayer: { layerId: "icd_coding" } },
+      select: { id: true, status: true },
+    });
+  const nonOwnerMutationCount = await observer.$executeRaw`
+    UPDATE "visit_automation_provider_executions"
+    SET "status" = 'FAILED'::"VisitAutomationProviderExecutionStatus",
+        "completedAt" = clock_timestamp(),
+        "failureCode" = 'PROVIDER_EXECUTION_FAILED',
+        "updatedAt" = clock_timestamp()
+    WHERE "id" = ${active.id}
+      AND "status" = 'IN_FLIGHT'::"VisitAutomationProviderExecutionStatus"
+      AND "claimId" = ${"f".repeat(64)}
+  `;
+  if (active.status !== "IN_FLIGHT" || nonOwnerMutationCount !== 0) {
+    releaseProvider.release();
+    await Promise.allSettled(runs);
+    throw new Error("A non-owner altered the active provider execution.");
+  }
+  releaseProvider.release();
+  const results = await Promise.all(runs);
+  const execution =
+    await observer.visitAutomationProviderExecution.findFirstOrThrow({
+      where: { visitId, automationLayer: { layerId: "icd_coding" } },
+      select: {
+        status: true,
+        invocationCount: true,
+        claimId: true,
+      claimedAt: true,
+    },
+  });
+  const databaseRetryMetrics = getDatabaseTransactionRetryMetrics();
+  if (
+    providerInvocations !== 1 ||
+    observed.claimedByCaller !== 1 ||
+    observed.alreadyInProgress !== contenders - 1 ||
+    results.filter((result) => !result.reused).length !== 1 ||
+    results.filter((result) => result.reused).length !== contenders - 1 ||
+    execution.status !== "SUCCEEDED" ||
+    execution.invocationCount !== 1 ||
+    execution.claimId === null ||
+    execution.claimedAt === null ||
+    databaseRetryMetrics.exhausted !== 0
+  ) {
+    throw new Error("Provider execution ownership was not single-winner.");
+  }
+  return {
+    contenders,
+    claimWinners: observed.claimedByCaller,
+    nonWinners: observed.alreadyInProgress,
+    providerInvocations,
+    databaseRetryMetrics,
+  };
 }
 
 async function proveRequiredFailuresPersist(): Promise<void> {
@@ -967,6 +1101,7 @@ async function main(): Promise<void> {
     await proveDatabaseConstraints();
     const canonicalLockOrder = await proveCanonicalLockOrder();
     await proveRequiredFailuresPersist();
+    const providerClaimRace = await proveProviderClaimOwnershipRace();
     await provePostProviderProjectionRollbackAndReuse();
     await proveAuditRollbackAndRetry();
     await proveUnsignedReprocessAndSignedImmutability();
@@ -1006,6 +1141,7 @@ async function main(): Promise<void> {
             (sum, journey) => sum + journey.providerCalls,
             0,
           ),
+          providerClaimRace,
           forcedDeadlock,
           forcedSerialization,
           canonicalLockOrder,

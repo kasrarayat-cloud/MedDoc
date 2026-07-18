@@ -52,6 +52,8 @@ interface MemoryExecution {
   idempotencyKey: string;
   status: string;
   invocationCount: number;
+  claimId: string | null;
+  claimedAt: Date | null;
   resultPayload: unknown;
   resultSha256: string | null;
   resultVersion: string | null;
@@ -73,17 +75,98 @@ function harness() {
     stagingRunId: null,
   };
   const tx = {
-    $queryRaw: vi.fn(async (query: { strings?: readonly string[] }) => {
-      const sql = query.strings?.join("?") ?? "";
-      if (sql.includes("visit_automation_provider_executions")) {
-        return execution ? [{ ...execution }] : [];
-      }
-      return [layer];
-    }),
+    $queryRaw: vi.fn(
+      async (query: {
+        strings?: readonly string[];
+        values?: readonly unknown[];
+      }) => {
+        const sql = query.strings?.join("?") ?? "";
+        if (
+          sql.includes('INSERT INTO "visit_automation_provider_executions"')
+        ) {
+          if (execution) return [];
+          trace.push("reservation-created");
+          execution = {
+            id: String(query.values?.[0]),
+            practiceId: String(query.values?.[1]),
+            visitId: String(query.values?.[2]),
+            manifestId: String(query.values?.[3]),
+            automationLayerId: String(query.values?.[4]),
+            stagingAdmissionId: (query.values?.[5] as null | undefined) ?? null,
+            stagingRunId: (query.values?.[6] as null | undefined) ?? null,
+            inputSha256: String(query.values?.[7]),
+            provider: String(query.values?.[8]),
+            providerMode: String(query.values?.[9]),
+            model: String(query.values?.[10]),
+            operationVersion: String(query.values?.[11]),
+            idempotencyKey: String(query.values?.[12]),
+            status: "RESERVED",
+            invocationCount: 0,
+            claimId: null,
+            claimedAt: null,
+            resultPayload: null,
+            resultSha256: null,
+            resultVersion: null,
+          };
+          return [{ ...execution }];
+        }
+        if (
+          sql.includes('UPDATE "visit_automation_provider_executions"') &&
+          sql.includes('"claimId" IS NULL')
+        ) {
+          const claimId = String(query.values?.[0]);
+          const executionId = String(query.values?.[1]);
+          if (
+            !execution ||
+            execution.id !== executionId ||
+            execution.status !== "RESERVED" ||
+            execution.claimId !== null
+          ) {
+            return [];
+          }
+          execution = {
+            ...execution,
+            status: "IN_FLIGHT",
+            claimId,
+            claimedAt: new Date(),
+            invocationCount: 1,
+          };
+          return [
+            {
+              id: execution.id,
+              idempotencyKey: execution.idempotencyKey,
+              claimId,
+            },
+          ];
+        }
+        if (
+          sql.includes('SELECT "id", "idempotencyKey"') &&
+          sql.includes('"claimId" =')
+        ) {
+          const executionId = String(query.values?.[0]);
+          const claimId = String(query.values?.[1]);
+          return execution?.id === executionId &&
+            execution.status === "IN_FLIGHT" &&
+            execution.claimId === claimId
+            ? [{ id: execution.id, idempotencyKey: execution.idempotencyKey }]
+            : [];
+        }
+        if (sql.includes("visit_automation_provider_executions")) {
+          return execution ? [{ ...execution }] : [];
+        }
+        return [layer];
+      },
+    ),
     visitAutomationProviderExecution: {
-      findFirst: vi.fn(async () => (execution ? { ...execution } : null)),
+      findFirst: vi.fn(
+        async ({ where }: { where: { id?: string; claimId?: string } }) =>
+          execution &&
+          (where.id === undefined || execution.id === where.id) &&
+          (where.claimId === undefined || execution.claimId === where.claimId)
+            ? { ...execution }
+            : null,
+      ),
       create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
-        trace.push("reservation-created");
         execution = {
           id: "execution-synthetic-1",
           practiceId: String(data.practiceId),
@@ -100,6 +183,8 @@ function harness() {
           idempotencyKey: String(data.idempotencyKey),
           status: "RESERVED",
           invocationCount: 0,
+          claimId: null,
+          claimedAt: null,
           resultPayload: null,
           resultSha256: null,
           resultVersion: null,
@@ -111,12 +196,40 @@ function harness() {
         execution = { ...execution, ...data } as MemoryExecution;
         return { ...execution };
       }),
+      updateMany: vi.fn(
+        async ({
+          where,
+          data,
+        }: {
+          where: { id: string; status?: string; claimId?: string | null };
+          data: Record<string, unknown>;
+        }) => {
+          if (
+            !execution ||
+            execution.id !== where.id ||
+            (where.status !== undefined && execution.status !== where.status) ||
+            (where.claimId !== undefined && execution.claimId !== where.claimId)
+          ) {
+            return { count: 0 };
+          }
+          execution = { ...execution, ...data } as MemoryExecution;
+          return { count: 1 };
+        },
+      ),
     },
   };
-  mocks.rootFind.mockImplementation(async () => {
-    trace.push("committed-reread");
-    return execution ? { ...execution } : null;
-  });
+  mocks.rootFind.mockImplementation(
+    async (args?: { where?: { id?: string; claimId?: string } }) => {
+      trace.push("committed-reread");
+      if (
+        args?.where?.claimId !== undefined &&
+        execution?.claimId !== args.where.claimId
+      ) {
+        return null;
+      }
+      return execution ? { ...execution } : null;
+    },
+  );
   mocks.transaction.mockImplementation(async (input) => {
     trace.push(`transaction:${input.operation}`);
     if (
