@@ -20,6 +20,7 @@ import { templateTwinStagingQaPayloadSha256 } from "../../lib/template-twin/stag
 import {
   assertSyntheticQaResolvedRolloutToken,
   claimTemplateTwinSyntheticQaWorkerAttempt,
+  prepareTemplateTwinSyntheticQaDeliveryRetry,
   reconcileExpiredTemplateTwinSyntheticQaWorkerClaim,
   renewTemplateTwinSyntheticQaWorkerLease,
   runWithWorkerSyntheticQaProviderSelection,
@@ -40,13 +41,17 @@ const dependencyMocks = vi.hoisted(() => ({
   enqueueAudit: vi.fn(),
   claimWorkerAttempt: vi.fn(),
   rootRunFindFirst: vi.fn(),
+  runUpdateMany: vi.fn(),
   markManifestFailed: vi.fn(),
 }));
 
 vi.mock("@meddoc/db", () => ({
   default: {
     $transaction: dependencyMocks.transaction,
-    templateTwinSyntheticQaRun: { findFirst: dependencyMocks.rootRunFindFirst },
+    templateTwinSyntheticQaRun: {
+      findFirst: dependencyMocks.rootRunFindFirst,
+      updateMany: dependencyMocks.runUpdateMany,
+    },
   },
   prisma: {},
 }));
@@ -179,6 +184,8 @@ function visit(
       workerClaimedAt: null,
       workerHeartbeatAt: null,
       workerLeaseExpiresAt: null,
+      workerDeliveryCount: 0,
+      workerRetryReadyAt: null,
       admission: {
         id: "admission-visit-synthetic-1",
         practiceId: "practice-synthetic-1",
@@ -277,6 +284,7 @@ function matchingJob(
     userId?: string;
     syntheticQaRunId?: string;
     syntheticQaAttempt?: number;
+    workerDeliveryNumber?: number;
   } = {},
 ) {
   return {
@@ -284,6 +292,7 @@ function matchingJob(
     syntheticQaRunId: "run-synthetic-1",
     syntheticQaAttempt: 1,
     workerClaimId: "11111111-1111-4111-8111-111111111111",
+    workerDeliveryNumber: 1,
     ...overrides,
   };
 }
@@ -644,6 +653,127 @@ describe("worker synthetic QA provider selection", () => {
 });
 
 describe("worker synthetic QA attempt ownership", () => {
+  it("durably relinquishes a claimed delivery before BullMQ retries it", async () => {
+    const tx = {
+      templateTwinSyntheticQaRun: {
+        updateMany: dependencyMocks.runUpdateMany,
+      },
+    };
+    dependencyMocks.transaction.mockImplementation(
+      async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),
+    );
+    dependencyMocks.lockRollout.mockResolvedValue({
+      allowed: true,
+      token: matchingToken(),
+    });
+    dependencyMocks.lockAttempt.mockResolvedValue(undefined);
+    dependencyMocks.lockVisit.mockResolvedValue({
+      userId: "doctor-synthetic-1",
+      status: TranscribeVisitStatus.AUTOMATING,
+      deletedAt: null,
+      archivedAt: null,
+    });
+    dependencyMocks.runUpdateMany.mockResolvedValue({ count: 1 });
+    dependencyMocks.enqueueAudit.mockResolvedValue(undefined);
+
+    const result = await runWithWorkerSyntheticQaProviderSelection(
+      visit(),
+      matchingJob(),
+      () =>
+        prepareTemplateTwinSyntheticQaDeliveryRetry({
+          visitId: "visit-synthetic-1",
+          userId: "doctor-synthetic-1",
+          practiceId: "practice-synthetic-1",
+          nextWorkerDeliveryNumber: 2,
+        }),
+      admittedDependencies(),
+    );
+
+    expect(result).toBe(true);
+    expect(dependencyMocks.runUpdateMany).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        status: "PROCESSING",
+        workerClaimId: "11111111-1111-4111-8111-111111111111",
+        workerDeliveryCount: 1,
+        workerRetryReadyAt: null,
+      }),
+      data: expect.objectContaining({
+        status: "RETRY_ENQUEUED",
+        workerClaimId: null,
+        workerRetryReadyAt: expect.any(Date),
+      }),
+    });
+    expect(dependencyMocks.enqueueAudit).toHaveBeenCalledTimes(1);
+  });
+
+  it("claims only the next numbered delivery from RETRY_ENQUEUED", async () => {
+    const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([{ id: "run-synthetic-1" }]),
+    };
+    dependencyMocks.transaction.mockImplementation(
+      async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),
+    );
+    dependencyMocks.lockRollout.mockResolvedValue({
+      allowed: true,
+      token: matchingToken(),
+    });
+    dependencyMocks.lockOperation.mockResolvedValue({
+      status: "RETRY_ENQUEUED",
+    });
+    dependencyMocks.lockVisit.mockResolvedValue({
+      userId: "doctor-synthetic-1",
+      status: TranscribeVisitStatus.AUTOMATING,
+      deletedAt: null,
+      archivedAt: null,
+    });
+    dependencyMocks.enqueueAudit.mockResolvedValue(undefined);
+    const snapshot = visit();
+
+    await expect(
+      claimTemplateTwinSyntheticQaWorkerAttempt({
+        visit: snapshot,
+        run: {
+          ...snapshot.syntheticQaRun!,
+          status: "RETRY_ENQUEUED",
+          workerDeliveryCount: 1,
+          workerRetryReadyAt: new Date("2026-07-17T00:00:30.000Z"),
+          admission: {
+            ...snapshot.syntheticQaRun!.admission!,
+            phase: "PROCESSING",
+          },
+        },
+        currentToken: matchingToken(),
+        workerClaimId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        workerDeliveryNumber: 2,
+      }),
+    ).resolves.toBeUndefined();
+    expect(dependencyMocks.enqueueAudit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          operation: "bounded_worker_delivery_retry",
+          workerDeliveryNumber: 2,
+        }),
+      }),
+    );
+  });
+
+  it("rejects a fourth worker delivery before opening a transaction", async () => {
+    const snapshot = visit();
+    await expect(
+      claimTemplateTwinSyntheticQaWorkerAttempt({
+        visit: snapshot,
+        run: snapshot.syntheticQaRun!,
+        currentToken: matchingToken(),
+        workerClaimId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        workerDeliveryNumber: 4,
+      }),
+    ).rejects.toMatchObject({
+      code: "TEMPLATE_TWIN_SYNTHETIC_QA_RUN_INVALID",
+    });
+    expect(dependencyMocks.transaction).not.toHaveBeenCalled();
+  });
+
   it("allows exactly one delivery to claim an ENQUEUED attempt", async () => {
     let available = true;
     const tx = {
@@ -687,6 +817,7 @@ describe("worker synthetic QA attempt ownership", () => {
         practiceGeneration: BigInt(19),
       },
       workerClaimId: "11111111-1111-4111-8111-111111111111",
+      workerDeliveryNumber: 1,
     };
 
     const results = await Promise.allSettled([
@@ -733,9 +864,11 @@ describe("worker synthetic QA attempt ownership", () => {
           workerClaimedAt: new Date("2026-07-17T00:00:00.000Z"),
           workerHeartbeatAt: new Date("2026-07-17T00:00:05.000Z"),
           workerLeaseExpiresAt: new Date("2026-07-17T00:00:25.000Z"),
+          workerDeliveryCount: 1,
         },
         currentToken: matchingToken(),
         workerClaimId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        workerDeliveryNumber: 2,
       }),
     ).resolves.toBeUndefined();
 
@@ -781,6 +914,7 @@ describe("worker synthetic QA attempt ownership", () => {
         run: snapshot.syntheticQaRun!,
         currentToken: matchingToken(),
         workerClaimId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        workerDeliveryNumber: 1,
       }),
     ).rejects.toMatchObject({
       code: "TEMPLATE_TWIN_SYNTHETIC_QA_NOT_ENQUEUED",
@@ -806,6 +940,7 @@ describe("worker synthetic QA attempt ownership", () => {
         run: snapshot.syntheticQaRun!,
         currentToken: matchingToken(),
         workerClaimId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        workerDeliveryNumber: 1,
       }),
     ).rejects.toMatchObject({
       code: "TEMPLATE_TWIN_SYNTHETIC_QA_ROLLOUT_GENERATION_STALE",

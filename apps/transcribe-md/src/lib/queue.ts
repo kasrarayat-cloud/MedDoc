@@ -180,11 +180,12 @@ export async function enqueueTemplateTwinSyntheticQaVisit(input: {
     },
     {
       jobId,
-      // Application-error retries remain disabled. BullMQ may redeliver this
-      // same stable job after a hard-crash stall; the database worker lease
-      // admits that delivery only after expiry and replaces the final-claim
-      // owner without incrementing the clinical attempt.
-      attempts: 1,
+      // Three bounded deliveries share one immutable clinical attempt. A
+      // failed delivery must first commit RETRY_ENQUEUED in PostgreSQL; the
+      // next delivery cannot claim from process-local or Redis state alone.
+      // Provider results are reused from the durable execution ledger.
+      attempts: 3,
+      backoff: { type: "exponential", delay: 5_000 },
     },
   );
 }

@@ -547,6 +547,8 @@ export async function enqueueOwnedRun(input: {
           workerClaimedAt: null,
           workerHeartbeatAt: null,
           workerLeaseExpiresAt: null,
+          workerDeliveryCount: 0,
+          workerRetryReadyAt: null,
           ...(incrementsAttempt && run.attempt > 0
             ? { lastRetriedAt: new Date() }
             : {}),

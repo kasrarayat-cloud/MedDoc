@@ -62,6 +62,7 @@ export const TEMPLATE_TWIN_SYNTHETIC_QA_JOB_FAILURE_CODE =
   "TEMPLATE_TWIN_SYNTHETIC_QA_JOB_FAILED" as const;
 export const TEMPLATE_TWIN_SYNTHETIC_QA_WORKER_LEASE_MS = 20_000;
 export const TEMPLATE_TWIN_SYNTHETIC_QA_WORKER_HEARTBEAT_MS = 5_000;
+export const TEMPLATE_TWIN_SYNTHETIC_QA_MAX_WORKER_DELIVERIES = 3;
 
 /**
  * Closed-set code for global worker failure telemetry. Provider, validation,
@@ -100,6 +101,8 @@ export interface TemplateTwinSyntheticQaRunSnapshot {
   readonly workerClaimedAt: Date | null;
   readonly workerHeartbeatAt: Date | null;
   readonly workerLeaseExpiresAt: Date | null;
+  readonly workerDeliveryCount: number;
+  readonly workerRetryReadyAt: Date | null;
   readonly admission: {
     readonly id: string;
     readonly practiceId: string;
@@ -153,6 +156,7 @@ export interface TemplateTwinSyntheticQaJobAdmission {
   readonly syntheticQaRunId?: string;
   readonly syntheticQaAttempt?: number;
   readonly workerClaimId?: string;
+  readonly workerDeliveryNumber?: number;
 }
 
 interface SyntheticQaWorkerProviderDependencies {
@@ -164,6 +168,7 @@ interface SyntheticQaWorkerProviderDependencies {
     run: TemplateTwinSyntheticQaRunSnapshot;
     currentToken: TemplateTwinRolloutToken;
     workerClaimId: string;
+    workerDeliveryNumber: number;
   }) => Promise<void>;
   readonly verifyEvidence: (input: {
     visit: TemplateTwinSyntheticQaVisitSnapshot;
@@ -257,7 +262,9 @@ function assertRunMatchesVisit(
   const expectedProviderMode =
     run.mode === "typed" ? "SYNTHETIC_TYPED" : "SYNTHETIC_MOCK_VOICE";
   const expectedAdmissionPhase =
-    run.status === "PROCESSING" ? "PROCESSING" : "VISIT_LINKED";
+    run.status === "PROCESSING" || run.status === "RETRY_ENQUEUED"
+      ? "PROCESSING"
+      : "VISIT_LINKED";
   if (
     !admission ||
     admission.id !== run.admissionId ||
@@ -308,10 +315,29 @@ function assertRunMatchesVisit(
     run.workerLeaseExpiresAt !== null &&
     run.workerLeaseExpiresAt > run.workerHeartbeatAt &&
     run.workerHeartbeatAt >= run.workerClaimedAt;
+  const hasNoWorkerLease =
+    run.workerClaimId === null &&
+    run.workerClaimedAt === null &&
+    run.workerHeartbeatAt === null &&
+    run.workerLeaseExpiresAt === null;
   if (
-    (run.status !== "ENQUEUED" && run.status !== "PROCESSING") ||
-    (run.status === "ENQUEUED" && run.workerClaimId !== null) ||
-    (run.status === "PROCESSING" && !hasValidWorkerLease) ||
+    !["ENQUEUED", "RETRY_ENQUEUED", "PROCESSING"].includes(run.status) ||
+    (run.status === "ENQUEUED" &&
+      (!hasNoWorkerLease ||
+        run.workerDeliveryCount !== 0 ||
+        run.workerRetryReadyAt !== null)) ||
+    (run.status === "RETRY_ENQUEUED" &&
+      (!hasNoWorkerLease ||
+        run.workerDeliveryCount < 1 ||
+        run.workerDeliveryCount >=
+          TEMPLATE_TWIN_SYNTHETIC_QA_MAX_WORKER_DELIVERIES ||
+        run.workerRetryReadyAt === null)) ||
+    (run.status === "PROCESSING" &&
+      (!hasValidWorkerLease ||
+        run.workerDeliveryCount < 1 ||
+        run.workerDeliveryCount >
+          TEMPLATE_TWIN_SYNTHETIC_QA_MAX_WORKER_DELIVERIES ||
+        run.workerRetryReadyAt !== null)) ||
     run.enqueuedAt === null ||
     !Number.isSafeInteger(run.attempt) ||
     run.attempt < 1
@@ -411,6 +437,7 @@ export async function claimTemplateTwinSyntheticQaWorkerAttempt(input: {
   run: TemplateTwinSyntheticQaRunSnapshot;
   currentToken: TemplateTwinRolloutToken;
   workerClaimId: string;
+  workerDeliveryNumber: number;
 }): Promise<void> {
   if (
     !/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u.test(
@@ -420,6 +447,17 @@ export async function claimTemplateTwinSyntheticQaWorkerAttempt(input: {
     fail(
       "TEMPLATE_TWIN_SYNTHETIC_QA_RUN_INVALID",
       "Synthetic QA worker claim identifier is invalid.",
+    );
+  }
+  if (
+    !Number.isSafeInteger(input.workerDeliveryNumber) ||
+    input.workerDeliveryNumber < 1 ||
+    input.workerDeliveryNumber >
+      TEMPLATE_TWIN_SYNTHETIC_QA_MAX_WORKER_DELIVERIES
+  ) {
+    fail(
+      "TEMPLATE_TWIN_SYNTHETIC_QA_RUN_INVALID",
+      "Synthetic QA worker delivery number is invalid.",
     );
   }
   await runSerializableTransactionWithRetry({
@@ -451,7 +489,7 @@ export async function claimTemplateTwinSyntheticQaWorkerAttempt(input: {
           userId: input.visit.userId,
           practiceId: input.visit.practiceId,
         },
-        allowedStatuses: ["ENQUEUED", "PROCESSING"],
+        allowedStatuses: ["ENQUEUED", "RETRY_ENQUEUED", "PROCESSING"],
       });
       const visit = await lockCurrentTemplateTwinVisit(tx, input.visit.id);
       if (
@@ -459,6 +497,10 @@ export async function claimTemplateTwinSyntheticQaWorkerAttempt(input: {
         visit.userId !== input.visit.userId ||
         (lockedRun.status === "ENQUEUED" &&
           visit.status !== TranscribeVisitStatus.QUEUED) ||
+        (lockedRun.status === "RETRY_ENQUEUED" &&
+          (visit.status === TranscribeVisitStatus.READY ||
+            visit.status === TranscribeVisitStatus.SIGNED ||
+            visit.status === TranscribeVisitStatus.FAILED)) ||
         (lockedRun.status === "PROCESSING" &&
           (visit.status === TranscribeVisitStatus.READY ||
             visit.status === TranscribeVisitStatus.SIGNED ||
@@ -479,6 +521,8 @@ export async function claimTemplateTwinSyntheticQaWorkerAttempt(input: {
             "workerHeartbeatAt" = clock_timestamp(),
             "workerLeaseExpiresAt" = clock_timestamp()
               + ${TEMPLATE_TWIN_SYNTHETIC_QA_WORKER_LEASE_MS} * INTERVAL '1 millisecond',
+            "workerDeliveryCount" = "workerDeliveryCount" + 1,
+            "workerRetryReadyAt" = NULL,
             "updatedAt" = clock_timestamp()
         WHERE "id" = ${input.run.id}
           AND "visitId" = ${input.visit.id}
@@ -486,10 +530,19 @@ export async function claimTemplateTwinSyntheticQaWorkerAttempt(input: {
           AND "practiceId" = ${input.visit.practiceId}
           AND "attempt" = ${input.run.attempt}
           AND (
-            ("status" = 'ENQUEUED' AND "workerClaimId" IS NULL)
+            ("status" = 'ENQUEUED'
+              AND "workerClaimId" IS NULL
+              AND "workerDeliveryCount" = 0
+              AND ${input.workerDeliveryNumber} = 1)
+            OR
+            ("status" = 'RETRY_ENQUEUED'
+              AND "workerClaimId" IS NULL
+              AND "workerRetryReadyAt" IS NOT NULL
+              AND "workerDeliveryCount" + 1 = ${input.workerDeliveryNumber})
             OR
             ("status" = 'PROCESSING'
-              AND "workerLeaseExpiresAt" <= clock_timestamp())
+              AND "workerLeaseExpiresAt" <= clock_timestamp()
+              AND "workerDeliveryCount" + 1 = ${input.workerDeliveryNumber})
           )
         RETURNING "id"
       `);
@@ -499,7 +552,7 @@ export async function claimTemplateTwinSyntheticQaWorkerAttempt(input: {
           "Synthetic QA worker attempt was already claimed or replaced.",
         );
       }
-      if (lockedRun.status !== "PROCESSING") {
+      if (lockedRun.status === "ENQUEUED") {
         const advancedAdmission =
           await tx.templateTwinSyntheticQaAdmission.updateMany({
             where: {
@@ -530,11 +583,156 @@ export async function claimTemplateTwinSyntheticQaWorkerAttempt(input: {
           metadata: {
             operation: "stalled_worker_lease_reclaim",
             stagingQaAttempt: input.run.attempt,
+            workerDeliveryNumber: input.workerDeliveryNumber,
+          },
+        });
+      } else if (lockedRun.status === "RETRY_ENQUEUED") {
+        await enqueueTemplateTwinAudit(tx, {
+          eventKey: `template-twin:staging-worker-delivery-retried:${input.run.id}:${input.run.attempt}:${input.workerDeliveryNumber}`,
+          practiceId: input.visit.practiceId,
+          actorId: input.visit.userId,
+          action: "TEMPLATE_TWIN_STAGING_QA_RUN_RETRIED",
+          targetType: "TemplateTwinSyntheticQaRun",
+          targetId: input.run.id,
+          metadata: {
+            operation: "bounded_worker_delivery_retry",
+            stagingQaAttempt: input.run.attempt,
+            workerDeliveryNumber: input.workerDeliveryNumber,
           },
         });
       }
     },
   });
+}
+
+/**
+ * Relinquish one failed BullMQ delivery without retiring its immutable
+ * clinical attempt. This is the only PROCESSING -> RETRY_ENQUEUED transition.
+ * It consumes the current claim under the canonical lock order and leaves the
+ * admission in PROCESSING, so the next bounded delivery must acquire a fresh
+ * claim before it can reuse a committed provider result.
+ */
+export async function prepareTemplateTwinSyntheticQaDeliveryRetry(input: {
+  visitId: string;
+  userId: string;
+  practiceId: string;
+  nextWorkerDeliveryNumber: number;
+}): Promise<boolean> {
+  const context = getTemplateTwinSyntheticQaProviderContext();
+  if (!context) return false;
+  if (
+    context.visitId !== input.visitId ||
+    context.practiceId !== input.practiceId ||
+    !Number.isSafeInteger(input.nextWorkerDeliveryNumber) ||
+    input.nextWorkerDeliveryNumber < 2 ||
+    input.nextWorkerDeliveryNumber >
+      TEMPLATE_TWIN_SYNTHETIC_QA_MAX_WORKER_DELIVERIES
+  ) {
+    fail(
+      "TEMPLATE_TWIN_SYNTHETIC_QA_RUN_INVALID",
+      "Synthetic QA retry delivery does not match its durable admission.",
+    );
+  }
+  await runSerializableTransactionWithRetry({
+    prisma,
+    operation: "prepare_template_twin_synthetic_qa_delivery_retry",
+    context: {
+      visitId: input.visitId,
+      practiceId: input.practiceId,
+      runId: context.runId,
+    },
+    transaction: async (tx: Prisma.TransactionClient) => {
+      const rollout = await lockTemplateTwinRolloutForFinalClaim({
+        tx,
+        practiceId: input.practiceId,
+        pinnedToken: {
+          practiceId: input.practiceId,
+          globalGeneration: context.pinnedGlobalGeneration,
+          practiceGeneration: context.pinnedPracticeGeneration,
+        },
+      });
+      if (!rollout.allowed) {
+        fail(
+          "TEMPLATE_TWIN_SYNTHETIC_QA_ROLLOUT_GENERATION_STALE",
+          rollout.reason,
+        );
+      }
+      await lockAndAssertTemplateTwinStagingQaAttempt({
+        tx,
+        currentRolloutToken: rollout.token,
+        claim: {
+          runId: context.runId,
+          visitId: context.visitId,
+          practiceId: context.practiceId,
+          doctorId: input.userId,
+          fixtureVersion: context.fixtureVersion,
+          requestSha256: context.requestSha256,
+          attempt: context.attempt,
+          workerClaimId: context.workerClaimId,
+          pinnedGlobalGeneration: context.pinnedGlobalGeneration,
+          pinnedPracticeGeneration: context.pinnedPracticeGeneration,
+        },
+        allowedStatuses: ["PROCESSING"],
+        allowedAdmissionPhases: ["PROCESSING"],
+        requireLiveWorkerLease: true,
+      });
+      const visit = await lockCurrentTemplateTwinVisit(tx, input.visitId);
+      if (
+        !visit ||
+        visit.userId !== input.userId ||
+        visit.status === TranscribeVisitStatus.READY ||
+        visit.status === TranscribeVisitStatus.SIGNED ||
+        visit.status === TranscribeVisitStatus.FAILED
+      ) {
+        fail(
+          "TEMPLATE_TWIN_SYNTHETIC_QA_FINAL_CLAIM_REJECTED",
+          "Synthetic QA retry found an incompatible visit state.",
+        );
+      }
+      const retryReadyAt = new Date();
+      const released = await tx.templateTwinSyntheticQaRun.updateMany({
+        where: {
+          id: context.runId,
+          visitId: context.visitId,
+          doctorId: input.userId,
+          practiceId: input.practiceId,
+          attempt: context.attempt,
+          status: "PROCESSING",
+          workerClaimId: context.workerClaimId,
+          workerDeliveryCount: input.nextWorkerDeliveryNumber - 1,
+          workerRetryReadyAt: null,
+        },
+        data: {
+          status: "RETRY_ENQUEUED",
+          workerClaimId: null,
+          workerClaimedAt: null,
+          workerHeartbeatAt: null,
+          workerLeaseExpiresAt: null,
+          workerRetryReadyAt: retryReadyAt,
+        },
+      });
+      if (released.count !== 1) {
+        fail(
+          "TEMPLATE_TWIN_SYNTHETIC_QA_FINAL_CLAIM_REJECTED",
+          "Synthetic QA delivery was replaced before retry handoff.",
+        );
+      }
+      await enqueueTemplateTwinAudit(tx, {
+        eventKey: `template-twin:staging-worker-delivery-retry-ready:${context.runId}:${context.attempt}:${input.nextWorkerDeliveryNumber}`,
+        practiceId: input.practiceId,
+        actorId: input.userId,
+        action: "TEMPLATE_TWIN_STAGING_QA_RUN_RETRIED",
+        targetType: "TemplateTwinSyntheticQaRun",
+        targetId: context.runId,
+        metadata: {
+          operation: "bounded_worker_delivery_retry_ready",
+          stagingQaAttempt: context.attempt,
+          nextWorkerDeliveryNumber: input.nextWorkerDeliveryNumber,
+        },
+      });
+    },
+  });
+  return true;
 }
 
 /** Extend only the currently-owned attempt lease under the normal lock order. */
@@ -670,7 +868,8 @@ export async function runWithWorkerSyntheticQaProviderSelection<T>(
     if (
       job.syntheticQaRunId !== undefined ||
       job.syntheticQaAttempt !== undefined ||
-      job.workerClaimId !== undefined
+      job.workerClaimId !== undefined ||
+      job.workerDeliveryNumber !== undefined
     ) {
       fail(
         "TEMPLATE_TWIN_SYNTHETIC_QA_RUN_INVALID",
@@ -699,10 +898,12 @@ export async function runWithWorkerSyntheticQaProviderSelection<T>(
   }
 
   const workerClaimId = job.workerClaimId;
+  const workerDeliveryNumber = job.workerDeliveryNumber;
   if (
     job.syntheticQaRunId !== run.id ||
     job.syntheticQaAttempt !== run.attempt ||
-    !workerClaimId
+    !workerClaimId ||
+    !Number.isSafeInteger(workerDeliveryNumber)
   ) {
     fail(
       "TEMPLATE_TWIN_SYNTHETIC_QA_RUN_INVALID",
@@ -730,6 +931,7 @@ export async function runWithWorkerSyntheticQaProviderSelection<T>(
     run,
     currentToken,
     workerClaimId,
+    workerDeliveryNumber: workerDeliveryNumber!,
   });
 
   const providerContext = {

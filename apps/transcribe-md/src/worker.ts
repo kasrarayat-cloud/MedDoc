@@ -121,6 +121,7 @@ import type { TemplateTwinRolloutToken } from "@/lib/template-twin/rollout";
 import {
   assertSyntheticQaResolvedRolloutToken,
   failTemplateTwinSyntheticQaProcessing,
+  prepareTemplateTwinSyntheticQaDeliveryRetry,
   reconcileExpiredTemplateTwinSyntheticQaWorkerClaim,
   runWithWorkerSyntheticQaProviderSelection,
   templateTwinSyntheticQaWorkerFailureCode,
@@ -248,6 +249,7 @@ function withTimeout<T>(p: Promise<T>, ms: number, tag: string): Promise<T> {
 async function processVisit(
   job: Job<ProcessVisitPayload>,
   workerClaimId?: string,
+  workerDeliveryNumber?: number,
 ): Promise<void> {
   const admission = await prisma.transcribeVisit.findUnique({
     where: { id: job.data.visitId },
@@ -304,6 +306,8 @@ async function processVisit(
           workerClaimedAt: true,
           workerHeartbeatAt: true,
           workerLeaseExpiresAt: true,
+          workerDeliveryCount: true,
+          workerRetryReadyAt: true,
           admission: {
             select: {
               id: true,
@@ -422,6 +426,7 @@ async function processVisit(
       syntheticQaRunId: job.data.syntheticQaRunId,
       syntheticQaAttempt: job.data.syntheticQaAttempt,
       workerClaimId,
+      workerDeliveryNumber,
     },
     () => processVisitPipeline(job),
   );
@@ -1281,6 +1286,49 @@ async function processVisitPipeline(
       return;
     }
 
+    const category = categorizeError(err);
+    const attemptsMade = job.attemptsMade ?? 0;
+    const attempts = job.opts.attempts ?? 1;
+    const isFinalAttempt = shouldMarkVisitFailed(attemptsMade, attempts);
+    const stagingContext = getTemplateTwinSyntheticQaProviderContext();
+    if (stagingContext && !isFinalAttempt && category !== "permanent") {
+      try {
+        await prepareTemplateTwinSyntheticQaDeliveryRetry({
+          visitId,
+          userId: visit.userId,
+          practiceId: visit.user?.practiceId ?? "",
+          nextWorkerDeliveryNumber: attemptsMade + 2,
+        });
+      } catch (handoffError) {
+        // A retry without a committed lease handoff is forbidden. Retire the
+        // attempt under the same canonical locks; if that also fails, the
+        // original handoff error remains visible to BullMQ and finalization
+        // stays blocked by the nonterminal manifest.
+        await failTemplateTwinSyntheticQaProcessing({
+          visitId,
+          userId: visit.userId,
+          practiceId: visit.user?.practiceId ?? "",
+          reviewReason: buildUserFacingFailureReason(
+            currentLayer,
+            categorizeError(handoffError),
+            handoffError,
+          ),
+          failureCategory: categorizeError(handoffError),
+        });
+        throw handoffError;
+      }
+      log.warn(
+        "transcribe-md-worker",
+        "synthetic QA delivery failed; durable retry handoff committed",
+        {
+          visitId,
+          layer: currentLayer,
+          nextWorkerDeliveryNumber: attemptsMade + 2,
+        },
+      );
+      throw err;
+    }
+
     // T-M16.3: Deepgram/Anthropic errors can quote audio/file metadata
     // or URLs — scrub before emitting to container stdout. Sentry path
     // (captureWorkerException below) does its own redactPhi via the
@@ -1291,10 +1339,10 @@ async function processVisitPipeline(
       practiceId: visit.user?.practiceId ?? "",
       reviewReason: buildUserFacingFailureReason(
         currentLayer,
-        categorizeError(err),
+        category,
         err,
       ),
-      failureCategory: categorizeError(err),
+      failureCategory: category,
     });
     if (stagingFailure) {
       log.warn(
@@ -1327,7 +1375,7 @@ async function processVisitPipeline(
     // BullMQ attempts is just two more Anthropic / Deepgram calls
     // for the same outcome. Fail-fast in that case so the doctor
     // sees the actionable banner ~5s instead of ~25s after submit.
-    const category: ErrorCategory = categorizeError(err);
+    const categoryForOrdinaryVisit: ErrorCategory = category;
     // Q1 #09.1: surface Anthropic content-policy refusals as a distinct,
     // countable audit action (categorizeError maps them permanent → the
     // fail-fast path below fires on the first attempt, so this emits once).
@@ -1350,10 +1398,8 @@ async function processVisitPipeline(
         },
       });
     }
-    const attemptsMade = job.attemptsMade ?? 0;
-    const attempts = job.opts.attempts ?? 1;
-    const isFinalAttempt = shouldMarkVisitFailed(attemptsMade, attempts);
-    const shouldFailNow = isFinalAttempt || category === "permanent";
+    const shouldFailNow =
+      isFinalAttempt || categoryForOrdinaryVisit === "permanent";
     if (!shouldFailNow) {
       log.info(
         "transcribe-md-worker",
@@ -1361,14 +1407,14 @@ async function processVisitPipeline(
         {
           visitId,
           layer: currentLayer,
-          category,
+          category: categoryForOrdinaryVisit,
           attemptsMade,
           attempts,
         },
       );
       throw err;
     }
-    if (category === "permanent" && !isFinalAttempt) {
+    if (categoryForOrdinaryVisit === "permanent" && !isFinalAttempt) {
       log.info(
         "transcribe-md-worker",
         "permanent failure, fail-fast (skipping BullMQ retries)",
@@ -1386,10 +1432,14 @@ async function processVisitPipeline(
     // silent stuck-in-non-terminal is the worse failure mode.
     const { persistOk, persistErr } = await persistFailedState({
       visitId,
-      category,
+      category: categoryForOrdinaryVisit,
       layer: currentLayer,
       originalErr: err,
-      reviewReason: buildUserFacingFailureReason(currentLayer, category, err),
+      reviewReason: buildUserFacingFailureReason(
+        currentLayer,
+        categoryForOrdinaryVisit,
+        err,
+      ),
       userId: visit.userId,
       practiceId,
     });
@@ -1853,7 +1903,7 @@ async function main() {
         // attempts use a DB-exclusive, heartbeating delivery lease instead.
         // BullMQ may redeliver a stalled job only after that lease expires;
         // every output/READY claim also matches the replacement claim id.
-        await processVisit(job, randomUUID());
+        await processVisit(job, randomUUID(), (job.attemptsMade ?? 0) + 1);
       } else {
         await withTimeout(
           processVisit(job),

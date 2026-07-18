@@ -155,6 +155,8 @@ export interface LockedStagingQaRunRow extends TemplateTwinStagingQaRunGuardRow 
   workerClaimedAt: Date | null;
   workerHeartbeatAt: Date | null;
   workerLeaseExpiresAt: Date | null;
+  workerDeliveryCount: number;
+  workerRetryReadyAt: Date | null;
 }
 
 /**
@@ -208,7 +210,7 @@ export async function lockTemplateTwinStagingQaAdmissionThenRun(input: {
       "noteTemplateId", "noteTemplateVersion", "requestSha256",
       "payloadSha256", "mode", "fixtureVersion", "status", "attempt", "enqueuedAt",
       "workerClaimId", "workerClaimedAt", "workerHeartbeatAt",
-      "workerLeaseExpiresAt",
+      "workerLeaseExpiresAt", "workerDeliveryCount", "workerRetryReadyAt",
       "pinnedGlobalRolloutGeneration", "pinnedPracticeRolloutGeneration"
     FROM "template_twin_synthetic_qa_runs"
     WHERE "id" = ${input.runId}

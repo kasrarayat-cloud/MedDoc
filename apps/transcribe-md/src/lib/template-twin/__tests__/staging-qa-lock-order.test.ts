@@ -21,6 +21,8 @@ const RUN = {
   workerClaimedAt: new Date(),
   workerHeartbeatAt: new Date(),
   workerLeaseExpiresAt: new Date(Date.now() + 60_000),
+  workerDeliveryCount: 1,
+  workerRetryReadyAt: null,
   pinnedGlobalRolloutGeneration: BigInt(2),
   pinnedPracticeRolloutGeneration: BigInt(3),
 };

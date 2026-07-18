@@ -39,4 +39,19 @@ describe("provider execution migration 76 contract", () => {
     expect(migration).toContain("UNKNOWN_OUTCOME");
     expect(migration).toContain('"invocationCount" = 1');
   });
+
+  it("adds a durable, three-delivery staging retry handoff", () => {
+    expect(migration).toContain('ADD COLUMN "workerDeliveryCount" INTEGER');
+    expect(migration).toContain('ADD COLUMN "workerRetryReadyAt"');
+    expect(migration).toContain('"status" = \'RETRY_ENQUEUED\'');
+    expect(migration).toContain(
+      '"workerDeliveryCount" BETWEEN 0 AND 3',
+    );
+    expect(migration).toContain(
+      "OLD.\"status\" = 'PROCESSING' AND NEW.\"status\" = 'RETRY_ENQUEUED'",
+    );
+    expect(migration).toContain(
+      "OLD.\"status\" = 'RETRY_ENQUEUED' AND NEW.\"status\" = 'PROCESSING'",
+    );
+  });
 });

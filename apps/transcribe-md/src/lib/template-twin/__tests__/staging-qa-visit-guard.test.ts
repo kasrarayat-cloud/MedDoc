@@ -107,12 +107,15 @@ function lockedClient(input: {
     workerClaimedAt: Date | null;
     workerHeartbeatAt: Date | null;
     workerLeaseExpiresAt: Date | null;
+    workerDeliveryCount: number;
+    workerRetryReadyAt: Date | null;
   };
   databaseNow?: Date;
   beforeRunLock?: () => Promise<void>;
 }) {
   const admissionPhase =
-    input.lockedRun.status === "PROCESSING"
+    input.lockedRun.status === "PROCESSING" ||
+    input.lockedRun.status === "RETRY_ENQUEUED"
       ? "PROCESSING"
       : input.lockedRun.status === "ENQUEUED"
         ? "VISIT_LINKED"
@@ -167,6 +170,8 @@ function lockedRun(
     workerClaimedAt?: Date | null;
     workerHeartbeatAt?: Date | null;
     workerLeaseExpiresAt?: Date | null;
+    workerDeliveryCount?: number;
+    workerRetryReadyAt?: Date | null;
   } = {},
 ) {
   return {
@@ -177,6 +182,8 @@ function lockedRun(
     workerClaimedAt: null,
     workerHeartbeatAt: null,
     workerLeaseExpiresAt: null,
+    workerDeliveryCount: 0,
+    workerRetryReadyAt: null,
     ...overrides,
   };
 }

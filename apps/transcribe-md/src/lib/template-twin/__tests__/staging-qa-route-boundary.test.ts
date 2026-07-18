@@ -141,7 +141,7 @@ describe("synthetic QA server-boundary architecture", () => {
     expect(fillEngine).toContain("TEMPLATE_TWIN_STAGING_QA_ATTEMPT_STALE");
   });
 
-  it("keeps staging attempts out of uncancellable retries and live side channels", () => {
+  it("keeps staging attempts inside durable bounded retries and out of live side channels", () => {
     const worker = source("worker.ts");
     expect(worker).toContain("if (job.data.syntheticQaRunId)");
     expect(worker).toContain("failTemplateTwinSyntheticQaProcessing");
@@ -153,7 +153,9 @@ describe("synthetic QA server-boundary architecture", () => {
     expect(sign).toContain("captureEditPattern");
 
     const queue = source("lib/queue.ts");
-    expect(queue).toMatch(/enqueueTemplateTwinSyntheticQaVisit[\s\S]*attempts: 1/u);
+    expect(queue).toMatch(
+      /enqueueTemplateTwinSyntheticQaVisit[\s\S]*attempts: 3[\s\S]*backoff:/u,
+    );
     expect(source("worker/cleanup/stuck-visit-watchdog.ts")).toContain(
       "templateTwinSyntheticQaRun: { is: null }",
     );

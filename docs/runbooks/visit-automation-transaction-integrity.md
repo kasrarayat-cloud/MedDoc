@@ -68,6 +68,15 @@ does not prevent that cleanup from recording `ENQUEUE_FAILED`, but the cleanup
 may only remove authority: it cannot advance admission, visit, manifest, or
 output state.
 
+A transient synthetic worker delivery uses the same lock order to move
+`PROCESSING -> RETRY_ENQUEUED`. That transaction clears the expiring delivery
+lease, preserves the admission in `PROCESSING`, and records the retry outbox
+event atomically. Only the next numbered BullMQ delivery may consume the
+handoff and return the run to `PROCESSING`; the database caps the delivery
+counter at three. The expired-lease reconciler ignores `RETRY_ENQUEUED`, so it
+cannot race a legitimate bounded retry. A rollout generation change still
+rejects the replacement claim.
+
 Database-owning L7 tasks execute in deterministic layer order. A committed
 provider reservation is independently reread before the provider boundary is
 invoked. The provider call occurs outside every retryable database transaction.
@@ -154,13 +163,18 @@ a reviewed forward migration; do not drop proof tables or triggers ad hoc.
 Migration `20260718090000_visit_automation_provider_execution_v1` is also
 additive. It creates the private provider-execution ledger, tenant/lineage
 foreign keys, unique layer and idempotency identities, transition guards, and
-the provider-execution lock-order index. It performs no historical insert or
-update and never infers a successful execution for an existing visit. It uses
-the same transaction-local 5-second lock timeout and 60-second statement
-timeout. Rollback is operational: disable the feature and preserve immutable
-evidence. A known failed disposable/development attempt must be marked rolled
-back before retrying; production operators must not edit migration checksums or
-drop evidence ad hoc.
+the provider-execution lock-order index. It also adds the bounded
+`workerDeliveryCount` and `workerRetryReadyAt` columns plus the
+`RETRY_ENQUEUED` transition to the pre-existing synthetic run table. Existing
+runs default to zero deliveries and are not inferred complete; existing
+generic visits receive neither an execution nor a synthetic admission. The
+migration performs no historical insert or clinical-table update and never
+infers a successful execution for an existing visit. It uses the same
+transaction-local 5-second lock timeout and 60-second statement timeout.
+Rollback is operational: disable the feature and preserve immutable evidence.
+A known failed disposable/development attempt must be marked rolled back before
+retrying; production operators must not edit migration checksums or drop
+evidence ad hoc.
 
 ## Disposable PostgreSQL verification
 

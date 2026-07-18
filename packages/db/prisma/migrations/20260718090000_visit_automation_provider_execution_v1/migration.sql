@@ -8,6 +8,145 @@ BEGIN;
 SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '60s';
 
+-- A transient BullMQ delivery may hand its immutable clinical attempt to one
+-- replacement delivery without waiting for the crash-reconciliation lease
+-- scanner. The handoff is durable, bounded to three deliveries, and contains
+-- no clinical content.
+ALTER TABLE "template_twin_synthetic_qa_runs"
+  ADD COLUMN "workerDeliveryCount" INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN "workerRetryReadyAt" TIMESTAMPTZ(6);
+
+ALTER TABLE "template_twin_synthetic_qa_runs"
+  DROP CONSTRAINT "template_twin_qa_queue_state",
+  ADD CONSTRAINT "template_twin_qa_queue_state" CHECK (
+    ("status" = 'PENDING_ENQUEUE' AND "enqueuedAt" IS NULL
+      AND "workerClaimId" IS NULL)
+    OR
+    ("status" = 'ENQUEUE_FAILED' AND "attempt" > 0 AND "enqueuedAt" IS NULL
+      AND "workerClaimId" IS NULL)
+    OR
+    ("status" = 'ENQUEUED' AND "attempt" > 0 AND "enqueuedAt" IS NOT NULL
+      AND "workerClaimId" IS NULL)
+    OR
+    ("status" = 'RETRY_ENQUEUED' AND "attempt" > 0
+      AND "enqueuedAt" IS NOT NULL AND "workerClaimId" IS NULL)
+    OR
+    ("status" IN ('PROCESSING', 'PROCESSING_FAILED', 'COMPLETED')
+      AND "attempt" > 0 AND "enqueuedAt" IS NOT NULL
+      AND "workerClaimId" IS NOT NULL)
+  ),
+  ADD CONSTRAINT "template_twin_qa_worker_delivery_state" CHECK (
+    "workerDeliveryCount" BETWEEN 0 AND 3
+    AND (
+      ("status" IN ('PENDING_ENQUEUE', 'ENQUEUE_FAILED', 'ENQUEUED')
+        AND "workerDeliveryCount" = 0
+        AND "workerRetryReadyAt" IS NULL)
+      OR
+      ("status" = 'RETRY_ENQUEUED'
+        AND "workerDeliveryCount" BETWEEN 1 AND 2
+        AND "workerRetryReadyAt" IS NOT NULL)
+      OR
+      ("status" IN ('PROCESSING', 'PROCESSING_FAILED', 'COMPLETED')
+        AND "workerRetryReadyAt" IS NULL)
+    )
+  );
+
+CREATE OR REPLACE FUNCTION template_twin_guard_synthetic_qa_run_transition()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF ROW(
+    NEW."practiceId", NEW."doctorId", NEW."visitId", NEW."noteTemplateId",
+    NEW."noteTemplateVersion", NEW."requestSha256", NEW."payloadSha256",
+    NEW."mode", NEW."fixtureVersion", NEW."pinnedGlobalRolloutGeneration",
+    NEW."pinnedPracticeRolloutGeneration", NEW."createdAt"
+  ) IS DISTINCT FROM ROW(
+    OLD."practiceId", OLD."doctorId", OLD."visitId", OLD."noteTemplateId",
+    OLD."noteTemplateVersion", OLD."requestSha256", OLD."payloadSha256",
+    OLD."mode", OLD."fixtureVersion", OLD."pinnedGlobalRolloutGeneration",
+    OLD."pinnedPracticeRolloutGeneration", OLD."createdAt"
+  ) THEN
+    RAISE EXCEPTION 'Template Twin synthetic QA admission identity is immutable';
+  END IF;
+
+  IF NEW."attempt" < OLD."attempt" OR NEW."attempt" > OLD."attempt" + 1 THEN
+    RAISE EXCEPTION 'Template Twin synthetic QA attempt is not monotonic';
+  END IF;
+
+  IF NOT (
+    (NEW."status" = OLD."status" AND NEW."attempt" = OLD."attempt")
+    OR (OLD."status" = 'PENDING_ENQUEUE' AND NEW."status" = 'ENQUEUED'
+        AND NEW."attempt" = 1)
+    OR (OLD."status" = 'ENQUEUED' AND NEW."status" IN ('PROCESSING', 'ENQUEUE_FAILED')
+        AND NEW."attempt" = OLD."attempt")
+    OR (OLD."status" = 'ENQUEUED' AND NEW."status" = 'ENQUEUED'
+        AND NEW."attempt" = OLD."attempt" + 1)
+    OR (OLD."status" = 'PROCESSING' AND NEW."status" = 'RETRY_ENQUEUED'
+        AND NEW."attempt" = OLD."attempt")
+    OR (OLD."status" = 'RETRY_ENQUEUED' AND NEW."status" = 'PROCESSING'
+        AND NEW."attempt" = OLD."attempt")
+    OR (OLD."status" = 'PROCESSING' AND NEW."status" IN ('COMPLETED', 'PROCESSING_FAILED')
+        AND NEW."attempt" = OLD."attempt")
+    OR (OLD."status" IN ('ENQUEUE_FAILED', 'PROCESSING_FAILED', 'COMPLETED')
+        AND NEW."status" = 'ENQUEUED'
+        AND NEW."attempt" = OLD."attempt" + 1)
+  ) THEN
+    RAISE EXCEPTION 'Template Twin synthetic QA queue transition is invalid';
+  END IF;
+
+  IF OLD."status" = 'PROCESSING' AND NEW."status" = 'PROCESSING' THEN
+    IF NEW."workerClaimId" = OLD."workerClaimId" THEN
+      IF NEW."workerClaimedAt" IS DISTINCT FROM OLD."workerClaimedAt"
+        OR NEW."workerHeartbeatAt" < OLD."workerHeartbeatAt"
+        OR NEW."workerLeaseExpiresAt" <= OLD."workerLeaseExpiresAt"
+        OR NEW."workerDeliveryCount" <> OLD."workerDeliveryCount"
+        OR NEW."workerRetryReadyAt" IS DISTINCT FROM OLD."workerRetryReadyAt"
+      THEN
+        RAISE EXCEPTION 'Template Twin synthetic QA worker heartbeat is invalid';
+      END IF;
+    ELSIF OLD."workerLeaseExpiresAt" > clock_timestamp()
+      OR NEW."workerDeliveryCount" <> OLD."workerDeliveryCount" + 1
+      OR NEW."workerRetryReadyAt" IS NOT NULL THEN
+      RAISE EXCEPTION 'Template Twin synthetic QA worker lease is still active';
+    END IF;
+  ELSIF OLD."status" = 'PROCESSING' AND NEW."status" = 'RETRY_ENQUEUED' THEN
+    IF OLD."workerDeliveryCount" NOT BETWEEN 1 AND 2
+      OR NEW."workerDeliveryCount" <> OLD."workerDeliveryCount"
+      OR NEW."workerRetryReadyAt" IS NULL
+      OR NEW."workerClaimId" IS NOT NULL
+      OR NEW."workerClaimedAt" IS NOT NULL
+      OR NEW."workerHeartbeatAt" IS NOT NULL
+      OR NEW."workerLeaseExpiresAt" IS NOT NULL THEN
+      RAISE EXCEPTION 'Template Twin synthetic QA retry handoff is invalid';
+    END IF;
+  ELSIF OLD."status" = 'RETRY_ENQUEUED' AND NEW."status" = 'PROCESSING' THEN
+    IF NEW."workerDeliveryCount" <> OLD."workerDeliveryCount" + 1
+      OR NEW."workerRetryReadyAt" IS NOT NULL
+      OR NEW."workerClaimId" IS NULL THEN
+      RAISE EXCEPTION 'Template Twin synthetic QA retry claim is invalid';
+    END IF;
+  ELSIF NEW."status" IN ('PROCESSING_FAILED', 'COMPLETED') THEN
+    IF NEW."workerClaimId" IS DISTINCT FROM OLD."workerClaimId"
+      OR NEW."workerClaimedAt" IS DISTINCT FROM OLD."workerClaimedAt"
+      OR NEW."workerHeartbeatAt" IS DISTINCT FROM OLD."workerHeartbeatAt"
+      OR NEW."workerLeaseExpiresAt" IS DISTINCT FROM OLD."workerLeaseExpiresAt"
+      OR NEW."workerDeliveryCount" <> OLD."workerDeliveryCount"
+      OR NEW."workerRetryReadyAt" IS NOT NULL THEN
+      RAISE EXCEPTION 'Template Twin synthetic QA terminal worker claim changed';
+    END IF;
+  ELSIF NEW."status" = 'ENQUEUED' THEN
+    IF NEW."workerClaimId" IS NOT NULL
+      OR NEW."workerClaimedAt" IS NOT NULL
+      OR NEW."workerHeartbeatAt" IS NOT NULL
+      OR NEW."workerLeaseExpiresAt" IS NOT NULL
+      OR NEW."workerDeliveryCount" <> 0
+      OR NEW."workerRetryReadyAt" IS NOT NULL THEN
+      RAISE EXCEPTION 'Template Twin synthetic QA enqueued attempt has a worker claim';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
 CREATE TYPE "VisitAutomationProviderExecutionStatus" AS ENUM (
   'RESERVED', 'IN_FLIGHT', 'SUCCEEDED', 'FAILED', 'UNKNOWN_OUTCOME'
 );

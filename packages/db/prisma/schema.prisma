@@ -2351,6 +2351,13 @@ model TemplateTwinSyntheticQaRun {
   workerClaimedAt      DateTime? @db.Timestamptz(6)
   workerHeartbeatAt    DateTime? @db.Timestamptz(6)
   workerLeaseExpiresAt DateTime? @db.Timestamptz(6)
+  /// Counts BullMQ deliveries inside one immutable clinical attempt. A
+  /// transient delivery may hand off at most twice, giving three total
+  /// deliveries without incrementing or replacing the clinical attempt.
+  workerDeliveryCount  Int       @default(0)
+  /// Durable handoff fence. Only PROCESSING -> RETRY_ENQUEUED sets this;
+  /// the next claim consumes it while incrementing workerDeliveryCount.
+  workerRetryReadyAt   DateTime? @db.Timestamptz(6)
   createdAt            DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt            DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
 
