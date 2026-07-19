@@ -193,7 +193,44 @@ describe("human release-gate contracts", () => {
     expect(workflow).toContain(
       "^release/template-twin-ga-[0-9]{8}(-[a-z0-9][a-z0-9._-]{0,62})?$",
     );
+    const libreOffice = workflow.indexOf("run-libreoffice-evidence.ts");
+    const postLibreOffice = workflow.indexOf(
+      "run-post-libreoffice-openxml-evidence.ts",
+    );
+    const packageHumanGate = workflow.indexOf("package-human-gate.ts");
+    expect(libreOffice).toBeGreaterThan(0);
+    expect(postLibreOffice).toBeGreaterThan(libreOffice);
+    expect(packageHumanGate).toBeGreaterThan(postLibreOffice);
+    expect(workflow).toContain(
+      "Post-LibreOffice evidence is not schema-valid, signing-eligible, reimport-eligible, independently approved, or release-authorizing.",
+    );
     expect(workflow).not.toMatch(/if:\s*(?:true|\$\{\{\s*always\(\))/u);
+  });
+
+  it("makes exact post-LibreOffice classification a mandatory package input", async () => {
+    const packager = await readFile(
+      path.join(
+        process.cwd(),
+        "scripts/template-twin-human-gate/package-human-gate.ts",
+      ),
+      "utf8",
+    );
+
+    expect(packager).toContain("buildPostLibreOfficeEvidenceManifest");
+    expect(packager).toContain("assertPostLibreOfficeEvidenceManifest");
+    expect(packager).toContain('"openxml-post-libreoffice"');
+    expect(packager).toContain(
+      'openXmlPostLibreOfficeStatus: "external_tool_pending_word"',
+    );
+    expect(packager).toContain("openXmlPostLibreOfficeSchemaValid: false");
+    expect(packager).toContain("openXmlPostLibreOfficeSigningEligible: false");
+    expect(packager).toContain("openXmlPostLibreOfficeReimportEligible: false");
+    expect(packager).toContain(
+      "openXmlPostLibreOfficeCompatibilityEngineeringEligible: false",
+    );
+    expect(packager).toContain(
+      "openXmlPostLibreOfficeSyntheticReviewerPackageGenerationEligible: true",
+    );
   });
 });
 

@@ -12,6 +12,7 @@ import path from "node:path";
 
 import JSZip from "jszip";
 
+import { canonicalSha256 } from "../../src/lib/template-twin/canonical";
 import {
   EVIDENCE_FILE_HASH_MANIFEST_JSON_SCHEMA,
   HUMAN_GATE_PACKAGE_VERSION,
@@ -29,6 +30,18 @@ import {
   scanHumanGateDirectory,
   sha256,
 } from "../../src/lib/template-twin/human-release-gate/artifact-hygiene";
+import {
+  POST_LIBREOFFICE_ARTIFACTS,
+  POST_LIBREOFFICE_OBSERVATION_REGISTRY,
+  POST_LIBREOFFICE_OBSERVATION_REGISTRY_SHA256,
+  POST_LIBREOFFICE_TARGETS,
+} from "../../src/lib/note-template-docx/office-libreoffice-reviewed-registry";
+import {
+  assertPostLibreOfficeEvidenceManifest,
+  buildPostLibreOfficeEvidenceManifest,
+  POST_LIBREOFFICE_VALIDATOR_EXECUTABLE_SHA256,
+  POST_LIBREOFFICE_WINDOWS_VALIDATOR_EXECUTABLE_SHA256,
+} from "../../src/lib/note-template-docx/office-post-libreoffice-evidence";
 
 const FIXED_ZIP_DATE = new Date("2000-01-01T00:00:00.000Z");
 
@@ -183,6 +196,21 @@ async function main(): Promise<void> {
   await copy(validatorSource, validatorDestination);
   const validatorBytes = await readFile(validatorDestination);
   const validatorSha256 = sha256(validatorBytes);
+  const linuxValidatorSha256 = sha256(
+    await readFile(
+      path.join(
+        options.inputRoot,
+        "openxml-build",
+        "publish-linux",
+        "OpenXmlValidator",
+      ),
+    ),
+  );
+  invariant(
+    linuxValidatorSha256 === POST_LIBREOFFICE_VALIDATOR_EXECUTABLE_SHA256 &&
+      validatorSha256 === POST_LIBREOFFICE_WINDOWS_VALIDATOR_EXECUTABLE_SHA256,
+    "Pinned Open XML validator executable identity drifted.",
+  );
 
   const corpusRoot = path.join(options.inputRoot, "corpus");
   const corpusManifest = (await readJson(
@@ -528,6 +556,91 @@ async function main(): Promise<void> {
     );
   }
 
+  const postLibreOfficeRoot = path.join(officeRoot, "openxml-post-libreoffice");
+  const rawPostLibreOfficeReports = await Promise.all(
+    POST_LIBREOFFICE_TARGETS.map(async (target) => {
+      const relativePath = `post-libreoffice-${target}.json`;
+      return {
+        relativePath,
+        bytes: await readFile(path.join(postLibreOfficeRoot, relativePath)),
+      };
+    }),
+  );
+  const savedPostLibreOfficeArtifacts = await Promise.all(
+    POST_LIBREOFFICE_ARTIFACTS.map(async (artifact) => {
+      const bytes = await readFile(
+        path.join(
+          officeRoot,
+          "cases",
+          artifact.caseId,
+          "saved",
+          artifact.filename,
+        ),
+      );
+      return {
+        caseId: artifact.caseId,
+        filename: artifact.filename,
+        sha256: sha256(bytes),
+        sizeBytes: bytes.length,
+      };
+    }),
+  );
+  const expectedPostLibreOfficeManifest = buildPostLibreOfficeEvidenceManifest({
+    sourceCommit: options.sourceCommit,
+    generatedAtIso: options.generatedAtIso,
+    validatorExecutableSha256: linuxValidatorSha256,
+    windowsValidatorExecutableSha256: validatorSha256,
+    libreOfficeResults: {
+      relativePath: "libreoffice-results.json",
+      bytes: await readFile(path.join(officeRoot, "libreoffice-results.json")),
+    },
+    rawReports: rawPostLibreOfficeReports,
+    savedArtifacts: savedPostLibreOfficeArtifacts,
+  });
+  const observedPostLibreOfficeManifest = await readJson(
+    path.join(postLibreOfficeRoot, "canonical-manifest.json"),
+  );
+  assertPostLibreOfficeEvidenceManifest(
+    observedPostLibreOfficeManifest,
+    expectedPostLibreOfficeManifest,
+  );
+  const observedRegistry = await readJson(
+    path.join(postLibreOfficeRoot, "observation-registry.json"),
+  );
+  invariant(
+    canonicalSha256(observedRegistry) ===
+      canonicalSha256({
+        ...POST_LIBREOFFICE_OBSERVATION_REGISTRY,
+        registrySha256: POST_LIBREOFFICE_OBSERVATION_REGISTRY_SHA256,
+      }),
+    "Post-LibreOffice observation registry drifted.",
+  );
+  const postLibreOfficeFiles = [
+    ...rawPostLibreOfficeReports.map((report) => report.relativePath),
+    "canonical-manifest.json",
+    "observation-registry.json",
+  ].sort();
+  const expectedPostLibreOfficeSums = (
+    await Promise.all(
+      postLibreOfficeFiles.map(
+        async (name) =>
+          `${sha256(await readFile(path.join(postLibreOfficeRoot, name)))}  ${name}`,
+      ),
+    )
+  ).join("\n");
+  invariant(
+    (
+      await readFile(path.join(postLibreOfficeRoot, "SHA256SUMS.txt"), "ascii")
+    ).trim() === expectedPostLibreOfficeSums,
+    "Post-LibreOffice evidence checksum manifest drifted.",
+  );
+  for (const name of [...postLibreOfficeFiles, "SHA256SUMS.txt"]) {
+    await copy(
+      path.join(postLibreOfficeRoot, name),
+      path.join(stage, "evidence", "office", "openxml-post-libreoffice", name),
+    );
+  }
+
   const documentManifest = WordQaDocumentManifestSchema.parse({
     contractVersion: WORD_DOCUMENT_MANIFEST_VERSION,
     sourceCommit: options.sourceCommit,
@@ -616,6 +729,18 @@ async function main(): Promise<void> {
     wordStatus: "PENDING_RETURNED_DESKTOP_WORD_EVIDENCE",
     libreOfficeStatus: "passed",
     openXmlPreDeliveryStatus: "passed",
+    openXmlPostLibreOfficeStatus: "external_tool_pending_word",
+    openXmlPostLibreOfficeSchemaValid: false,
+    openXmlPostLibreOfficeSigningEligible: false,
+    openXmlPostLibreOfficeReimportEligible: false,
+    openXmlPostLibreOfficeCompatibilityEngineeringStatus:
+      expectedPostLibreOfficeManifest.compatibilityEngineeringStatus,
+    openXmlPostLibreOfficeCompatibilityEngineeringEligible: false,
+    openXmlPostLibreOfficeSyntheticReviewerPackageGenerationEligible: true,
+    openXmlPostLibreOfficeIndependentReviewStatus:
+      expectedPostLibreOfficeManifest.reviewProvenance.independentReviewStatus,
+    openXmlPostLibreOfficeEvidenceSha256:
+      expectedPostLibreOfficeManifest.evidenceSha256,
     documentCount: documents.length,
     corpusSummary: corpusManifest.totals,
   });
@@ -677,6 +802,22 @@ async function main(): Promise<void> {
         relativePath: "manifests/WORD-QA-DOCUMENTS.json",
         sizeBytes: manifestBytes.length,
         sha256: sha256(manifestBytes),
+      },
+      postLibreOfficeOpenXmlEvidence: {
+        relativePath:
+          "evidence/office/openxml-post-libreoffice/canonical-manifest.json",
+        status: expectedPostLibreOfficeManifest.schemaStatus,
+        schemaValid: false,
+        signingEligible: false,
+        reimportEligible: false,
+        compatibilityEngineeringStatus:
+          expectedPostLibreOfficeManifest.compatibilityEngineeringStatus,
+        compatibilityEngineeringEligible: false,
+        syntheticReviewerPackageGenerationEligible: true,
+        independentReviewStatus:
+          expectedPostLibreOfficeManifest.reviewProvenance
+            .independentReviewStatus,
+        evidenceSha256: expectedPostLibreOfficeManifest.evidenceSha256,
       },
       hygiene,
       wordStatus: "PENDING_RETURNED_DESKTOP_WORD_EVIDENCE",

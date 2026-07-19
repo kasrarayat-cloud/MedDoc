@@ -18,6 +18,7 @@ import {
 import { compileTemplateDocx } from "./compiler";
 import { readbackTemplateDocxOutput } from "./output-readback";
 import { renderTemplateDocx } from "./renderer";
+import { POST_LIBREOFFICE_REVIEWED_FINDINGS } from "./office-libreoffice-reviewed-registry";
 import {
   OFFICE_PDF_VISUAL_METRICS_CONTRACT_VERSION,
   OFFICE_EXECUTION_EVIDENCE_CONTRACT_VERSION,
@@ -681,47 +682,24 @@ function validInput(
 }
 
 function classifiedExternalDiagnostics(
-  count = 42,
+  count = 32,
 ): OfficeSchemaDiagnosticEvidence[] {
-  return Array.from({ length: count }, (_, index) => {
-    const common = {
+  return POST_LIBREOFFICE_REVIEWED_FINDINGS.slice(0, count).map(
+    (finding, index) => ({
       diagnosticId: `diagnostic-${index + 1}`,
-      validatorErrorId: "Sch_AttributeValueDataTypeDetailed",
+      validatorErrorId: finding.validatorErrorId,
       severity: "error" as const,
+      familyCode: finding.familyCode,
       disposition: "external_tool_pending_word" as const,
-      descriptionSha256: sha(`description-${index}`),
-      classificationRationaleSha256: sha(`rationale-${index}`),
-      pathSha256: sha(`path-${index}`),
-    };
-    if (index < 20) {
-      return {
-        ...common,
-        familyCode: "FONT_CHARACTER_SET_EXTENSION",
-        partName: "/word/fontTable.xml",
-        elementQName: "w:charset",
-        attributeQName: "w:characterSet",
-        observedValue: index < 12 ? "utf-8" : "windows-1252",
-      };
-    }
-    if (index < 39) {
-      return {
-        ...common,
-        familyCode: "LOGICAL_ALIGNMENT_ENUM",
-        partName: index < 38 ? "/word/numbering.xml" : "/word/document.xml",
-        elementQName: index < 38 ? "w:lvlJc" : "w:jc",
-        attributeQName: "w:val",
-        observedValue: "start",
-      };
-    }
-    return {
-      ...common,
-      familyCode: "TABLE_ROW_ON_OFF_LEXICAL_VALUE",
-      partName: "/word/document.xml",
-      elementQName: index === 41 ? "w:tblHeader" : "w:cantSplit",
-      attributeQName: "w:val",
-      observedValue: "true",
-    };
-  });
+      descriptionSha256: finding.descriptionSha256,
+      classificationRationaleSha256: finding.classificationRationaleSha256,
+      partName: finding.partName,
+      pathSha256: finding.pathSha256,
+      elementQName: finding.elementQName,
+      attributeQName: finding.attributeQName,
+      observedValue: finding.observedValue,
+    }),
+  );
 }
 
 describe("completed-byte Office QA readback", () => {
@@ -1426,7 +1404,7 @@ describe("schema, security, static, and visual provenance gates", () => {
     ).toContain("OFFICE_QA_PRE_OFFICE_READBACK_FAILED");
   });
 
-  it("retains all 42 exact reviewed LibreOffice errors per target as external/Word-pending only", () => {
+  it("retains all 32 exact current-corpus LibreOffice findings per target as external/Word-pending only", () => {
     const schema = schemaFor(
       fixture.officeSaved,
       classifiedExternalDiagnostics(),
@@ -1434,7 +1412,7 @@ describe("schema, security, static, and visual provenance gates", () => {
     expect(schema.status).toBe("external_tool_pending_word");
     expect(schema.compatibilityEngineeringEligible).toBe(true);
     expect(schema.stages).toHaveLength(6);
-    expect(schema.matrix).toHaveLength(84);
+    expect(schema.matrix).toHaveLength(64);
     expect(new Set(schema.matrix.map((row) => row.targetFormat))).toEqual(
       new Set(["Office2013", "Microsoft365"]),
     );
@@ -1457,20 +1435,11 @@ describe("schema, security, static, and visual provenance gates", () => {
   });
 
   it("classifies only the exact pinned LibreOffice docGrid Int32 wrap as Word-pending", () => {
-    const diagnostic: OfficeSchemaDiagnosticEvidence = {
-      diagnosticId: "diagnostic-docgrid",
-      validatorErrorId: "Sch_AttributeValueDataTypeDetailed",
-      severity: "error",
-      familyCode: "LIBREOFFICE_DOCGRID_CHARSPACE_UINT32_OVERFLOW",
-      disposition: "external_tool_pending_word",
-      descriptionSha256: sha("docgrid-description"),
-      classificationRationaleSha256: sha("docgrid-rationale"),
-      partName: "/word/document.xml",
-      pathSha256: sha("docgrid-path"),
-      elementQName: "w:docGrid",
-      attributeQName: "w:charSpace",
-      observedValue: "4294963199",
-    };
+    const diagnostic = classifiedExternalDiagnostics().find(
+      (candidate) =>
+        candidate.familyCode ===
+        "LIBREOFFICE_DOCGRID_CHARSPACE_UINT32_OVERFLOW",
+    )!;
     const schema = schemaFor(fixture.officeSaved, [diagnostic]);
     expect(schema).toMatchObject({
       status: "external_tool_pending_word",
@@ -1492,6 +1461,26 @@ describe("schema, security, static, and visual provenance gates", () => {
     ]);
     expect(changedValue.status).toBe("failed");
     expect(changedValue.compatibilityEngineeringEligible).toBe(false);
+  });
+
+  it.each([
+    ["description", { descriptionSha256: "f".repeat(64) }],
+    ["path", { pathSha256: "e".repeat(64) }],
+    [
+      "classification rationale",
+      { classificationRationaleSha256: "d".repeat(64) },
+    ],
+  ])("rejects reviewed-registry %s digest drift", (_label, change) => {
+    const diagnostic = classifiedExternalDiagnostics()[0]!;
+    const changed = schemaFor(fixture.officeSaved, [
+      { ...diagnostic, ...change },
+    ]);
+
+    expect(changed.status).toBe("failed");
+    expect(changed.compatibilityEngineeringEligible).toBe(false);
+    expect(changed.blockerCodes).toContain(
+      "OFFICE_SCHEMA_EXTERNAL_CLASSIFICATION_NOT_REVIEWED",
+    );
   });
 
   it("rejects unknown error values, validator versions, targets, and source-stage downgrades", () => {
