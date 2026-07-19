@@ -24,6 +24,7 @@ const enabledEnv = {
 
 const drainAudit = vi.fn();
 const reconcileObjects = vi.fn();
+const reconcileQuarantines = vi.fn();
 const upsertJobScheduler = vi.fn();
 
 beforeEach(() => {
@@ -34,6 +35,11 @@ beforeEach(() => {
     scheduled: 1,
     purged: 0,
     failed: 0,
+  });
+  reconcileQuarantines.mockResolvedValue({
+    quarantinedRejected: 0,
+    malwareCleanRejected: 1,
+    contended: 0,
   });
   upsertJobScheduler.mockResolvedValue(undefined);
 });
@@ -47,6 +53,8 @@ describe('Template Twin maintenance configuration', () => {
       purgeApproved: false,
       auditLimit: 100,
       objectLimit: 100,
+      quarantineLimit: 100,
+      quarantineStaleMs: null,
     });
   });
 
@@ -117,6 +125,18 @@ describe('Template Twin maintenance configuration', () => {
       resolveTemplateTwinMaintenanceConfig({
         ...enabledEnv,
         TEMPLATE_TWIN_MAINTENANCE_OBJECT_LIMIT: '501',
+      }),
+    ).toThrow(TemplateTwinMaintenanceConfigurationError);
+    expect(() =>
+      resolveTemplateTwinMaintenanceConfig({
+        ...enabledEnv,
+        TEMPLATE_TWIN_MAINTENANCE_QUARANTINE_LIMIT: '501',
+      }),
+    ).toThrow(TemplateTwinMaintenanceConfigurationError);
+    expect(() =>
+      resolveTemplateTwinMaintenanceConfig({
+        ...enabledEnv,
+        TEMPLATE_TWIN_QUARANTINE_STALE_HOURS: '721',
       }),
     ).toThrow(TemplateTwinMaintenanceConfigurationError);
   });
@@ -205,16 +225,22 @@ describe('Template Twin maintenance execution and scheduling', () => {
       runTemplateTwinMaintenance({
         env: {},
         prisma: {} as never,
-        dependencies: { drainAudit, reconcileObjects },
+        dependencies: { drainAudit, reconcileObjects, reconcileQuarantines },
       }),
     ).resolves.toEqual({
       enabled: false,
       purgeApproved: false,
       audit: { delivered: 0, failed: 0, contended: 0 },
       objects: { recovered: 0, scheduled: 0, purged: 0, failed: 0 },
+      quarantines: {
+        quarantinedRejected: 0,
+        malwareCleanRejected: 0,
+        contended: 0,
+      },
     });
     expect(drainAudit).not.toHaveBeenCalled();
     expect(reconcileObjects).not.toHaveBeenCalled();
+    expect(reconcileQuarantines).not.toHaveBeenCalled();
   });
 
   it('drains the outbox and reconciles orphans with purge disabled by default', async () => {
@@ -231,13 +257,24 @@ describe('Template Twin maintenance execution and scheduling', () => {
         prisma: db,
         objectAdmin,
         now,
-        dependencies: { drainAudit, reconcileObjects },
+        dependencies: { drainAudit, reconcileObjects, reconcileQuarantines },
       }),
     ).resolves.toEqual({
       enabled: true,
       purgeApproved: false,
       audit: { delivered: 2, failed: 0, contended: 1 },
       objects: { recovered: 1, scheduled: 1, purged: 0, failed: 0 },
+      quarantines: {
+        quarantinedRejected: 0,
+        malwareCleanRejected: 1,
+        contended: 0,
+      },
+    });
+    expect(reconcileQuarantines).toHaveBeenCalledWith({
+      prisma: db,
+      now,
+      staleAfterMs: DAY_MS,
+      limit: 100,
     });
     expect(drainAudit).toHaveBeenCalledWith({
       prisma: db,
@@ -265,7 +302,7 @@ describe('Template Twin maintenance execution and scheduling', () => {
       },
       prisma: {} as never,
       objectAdmin: { statObject: vi.fn(), deleteObject: vi.fn() },
-      dependencies: { drainAudit, reconcileObjects },
+      dependencies: { drainAudit, reconcileObjects, reconcileQuarantines },
     });
     expect(reconcileObjects).toHaveBeenCalledWith(
       expect.objectContaining({ purgeApproved: true }),
@@ -307,6 +344,7 @@ describe('Template Twin maintenance execution and scheduling', () => {
         dependencies: {
           drainAudit,
           reconcileObjects: reconcileTemplateTwinObjectLedgers,
+          reconcileQuarantines,
         },
       }),
     ).resolves.toMatchObject({
@@ -330,7 +368,7 @@ describe('Template Twin maintenance execution and scheduling', () => {
       env: enabledEnv,
       prisma: {} as never,
       objectAdmin: { statObject: vi.fn(), deleteObject: vi.fn() },
-      dependencies: { drainAudit, reconcileObjects },
+      dependencies: { drainAudit, reconcileObjects, reconcileQuarantines },
     });
 
     await expect(promise).rejects.toEqual(

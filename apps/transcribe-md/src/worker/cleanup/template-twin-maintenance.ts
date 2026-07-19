@@ -12,6 +12,10 @@ import {
 } from '@/lib/template-twin/storage/object-ledger';
 import { getMinio } from '@/lib/minio';
 import { JOB_TEMPLATE_TWIN_MAINTENANCE } from '@/lib/queue';
+import {
+  reconcileStaleTemplateTwinQuarantines,
+  type TemplateTwinQuarantineReconciliationClient,
+} from './template-twin-quarantine-reconciliation';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_CRON = '*/5 * * * *';
@@ -23,7 +27,8 @@ type AuditOutboxClient = Parameters<
 >[0]['prisma'];
 
 export type TemplateTwinMaintenancePrisma = AuditOutboxClient &
-  TemplateTwinObjectLedgerClient;
+  TemplateTwinObjectLedgerClient &
+  TemplateTwinQuarantineReconciliationClient;
 
 export interface TemplateTwinMaintenanceConfig {
   enabled: boolean;
@@ -32,6 +37,8 @@ export interface TemplateTwinMaintenanceConfig {
   purgeApproved: boolean;
   auditLimit: number;
   objectLimit: number;
+  quarantineLimit: number;
+  quarantineStaleMs: number | null;
 }
 
 export interface TemplateTwinMaintenanceResult {
@@ -47,6 +54,11 @@ export interface TemplateTwinMaintenanceResult {
     scheduled: number;
     purged: number;
     failed: number;
+  };
+  quarantines: {
+    quarantinedRejected: number;
+    malwareCleanRejected: number;
+    contended: number;
   };
 }
 
@@ -108,6 +120,8 @@ export function resolveTemplateTwinMaintenanceConfig(
       purgeApproved: false,
       auditLimit: DEFAULT_AUDIT_LIMIT,
       objectLimit: DEFAULT_OBJECT_LIMIT,
+      quarantineLimit: DEFAULT_OBJECT_LIMIT,
+      quarantineStaleMs: null,
     };
   }
 
@@ -120,6 +134,16 @@ export function resolveTemplateTwinMaintenanceConfig(
     env.TEMPLATE_TWIN_MAINTENANCE_OBJECT_LIMIT,
     DEFAULT_OBJECT_LIMIT,
     500,
+  );
+  const quarantineLimit = positiveBoundedInteger(
+    env.TEMPLATE_TWIN_MAINTENANCE_QUARANTINE_LIMIT,
+    DEFAULT_OBJECT_LIMIT,
+    500,
+  );
+  const quarantineStaleHours = positiveBoundedInteger(
+    env.TEMPLATE_TWIN_QUARANTINE_STALE_HOURS,
+    24,
+    24 * 30,
   );
 
   const retentionDays = positiveBoundedInteger(
@@ -138,6 +162,8 @@ export function resolveTemplateTwinMaintenanceConfig(
     purgeApproved: exactTrue(env.TEMPLATE_TWIN_ORPHAN_PURGE_APPROVED),
     auditLimit,
     objectLimit,
+    quarantineLimit,
+    quarantineStaleMs: quarantineStaleHours * 60 * 60 * 1000,
   };
 }
 
@@ -172,7 +198,9 @@ function metadataValue(
 function isMissingObject(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
   const code = String((error as { code?: unknown }).code ?? '');
-  return ['NotFound', 'NoSuchKey', 'NoSuchObject', 'NoSuchVersion'].includes(code);
+  return ['NotFound', 'NoSuchKey', 'NoSuchObject', 'NoSuchVersion'].includes(
+    code,
+  );
 }
 
 function assertManagedObjectKey(objectKey: string): void {
@@ -229,11 +257,13 @@ export function createTemplateTwinMinioObjectAdmin(
 interface MaintenanceDependencies {
   drainAudit: typeof drainTemplateTwinAuditOutbox;
   reconcileObjects: typeof reconcileTemplateTwinObjectLedgers;
+  reconcileQuarantines: typeof reconcileStaleTemplateTwinQuarantines;
 }
 
 const defaultDependencies: MaintenanceDependencies = {
   drainAudit: drainTemplateTwinAuditOutbox,
   reconcileObjects: reconcileTemplateTwinObjectLedgers,
+  reconcileQuarantines: reconcileStaleTemplateTwinQuarantines,
 };
 
 function purgeGuardedObjectAdmin(
@@ -271,6 +301,11 @@ export async function runTemplateTwinMaintenance(
       purgeApproved: false,
       audit: { delivered: 0, failed: 0, contended: 0 },
       objects: { recovered: 0, scheduled: 0, purged: 0, failed: 0 },
+      quarantines: {
+        quarantinedRejected: 0,
+        malwareCleanRejected: 0,
+        contended: 0,
+      },
     };
   }
 
@@ -279,6 +314,12 @@ export async function runTemplateTwinMaintenance(
   const dependencies = input.dependencies ?? defaultDependencies;
 
   try {
+    const quarantines = await dependencies.reconcileQuarantines({
+      prisma: db,
+      now: input.now,
+      staleAfterMs: config.quarantineStaleMs!,
+      limit: config.quarantineLimit,
+    });
     const audit = await dependencies.drainAudit({
       prisma: db,
       now: input.now,
@@ -288,10 +329,7 @@ export async function runTemplateTwinMaintenance(
       input.objectAdmin ?? createTemplateTwinMinioObjectAdmin({ env });
     const objects = await dependencies.reconcileObjects({
       prisma: db,
-      objectAdmin: purgeGuardedObjectAdmin(
-        objectAdmin,
-        config.purgeApproved,
-      ),
+      objectAdmin: purgeGuardedObjectAdmin(objectAdmin, config.purgeApproved),
       now: input.now,
       orphanRetentionMs: config.orphanRetentionMs!,
       purgeApproved: config.purgeApproved,
@@ -302,6 +340,7 @@ export async function runTemplateTwinMaintenance(
       purgeApproved: config.purgeApproved,
       audit,
       objects,
+      quarantines,
     };
   } catch {
     throw new TemplateTwinMaintenanceExecutionError();
