@@ -55,6 +55,18 @@ const exactEvidence = {
   migrationRestoreEvidenceSha256: "4".repeat(64),
   officeWordEvidenceSha256: "5".repeat(64),
 };
+const runtimeInstances = [
+  {
+    instanceId: "app-1",
+    component: "APP",
+    imageDigest: exactEvidence.appImageDigest,
+  },
+  {
+    instanceId: "worker-1",
+    component: "WORKER",
+    imageDigest: exactEvidence.workerImageDigest,
+  },
+] as const;
 
 function request(
   body: unknown,
@@ -104,6 +116,7 @@ describe("Template Twin release admin API", () => {
       guardrailPolicy: {},
       authorizedPracticeIds: ["synthetic-practice-1"],
       canaryPracticeIds: ["synthetic-practice-1"],
+      runtimeInstances,
     };
     const topLevel = (await POST(
       request({ ...base, unsupported: "reject" }),
@@ -141,6 +154,7 @@ describe("Template Twin release admin API", () => {
         guardrailPolicy: {},
         authorizedPracticeIds: ["synthetic-practice-1"],
         canaryPracticeIds: ["synthetic-practice-1"],
+        runtimeInstances,
       }),
     )) as NextResponse;
 
@@ -154,6 +168,7 @@ describe("Template Twin release admin API", () => {
         },
         confirmation: "CREATE EXACT RELEASE",
         evidence: exactEvidence,
+        runtimeInstances,
       }),
     );
   });

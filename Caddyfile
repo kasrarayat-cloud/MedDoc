@@ -177,6 +177,20 @@ admin.quillmd.com {
         }
     }
 
+    # Template Twin release mutations run in the isolated control-plane
+    # process. The ordinary physician/admin application does not receive the
+    # release-control database credential. Keep these exact routes ahead of
+    # the broad /api/admin/* and /admin/* handlers below.
+    @templateTwinControlApi path /api/admin/template-twin/releases /api/admin/template-twin/releases/* /api/admin/template-twin/release-metrics /api/admin/template-twin/release-metrics/*
+    handle @templateTwinControlApi {
+        reverse_proxy template-twin-admin-control:3011 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
     # Admin REST + SSE
     @adminApi path /api/admin/*
     handle @adminApi {
@@ -216,6 +230,16 @@ admin.quillmd.com {
     @mfaPage path /settings/security/mfa
     handle @mfaPage {
         reverse_proxy transcribe-md:3011 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    @templateTwinControlPage path /admin/template-twin-release /admin/template-twin-release/*
+    handle @templateTwinControlPage {
+        reverse_proxy template-twin-admin-control:3011 {
             header_up Host {host}
             header_up X-Real-IP {remote_host}
             header_up X-Forwarded-For {remote_host}

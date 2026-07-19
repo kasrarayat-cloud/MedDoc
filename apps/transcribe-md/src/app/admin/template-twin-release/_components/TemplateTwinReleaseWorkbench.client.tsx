@@ -241,7 +241,7 @@ export default function TemplateTwinReleaseWorkbench({ initial }: Props) {
                 icon={Gauge}
                 eyebrow="3 · Controlled exposure"
                 title="Fixed checkpoint rail"
-                detail="Practices are indivisible. Target and actual physician counts remain visible at every checkpoint."
+                detail="Practices are indivisible. PASS comes only from the signed monitoring channel; operators can inspect but cannot type metric values here. Every pinned APP/WORKER replica must remain freshly attested."
                 status={
                   <StateBadge
                     value={control.global.enabled ? "ACTIVE" : "DISABLED"}
@@ -313,7 +313,8 @@ function CreateReleaseControl({
         !record.evidence ||
         !record.guardrailPolicy ||
         !Array.isArray(record.authorizedPracticeIds) ||
-        !Array.isArray(record.canaryPracticeIds)
+        !Array.isArray(record.canaryPracticeIds) ||
+        !Array.isArray(record.runtimeInstances)
       ) {
         return null;
       }
@@ -345,7 +346,7 @@ function CreateReleaseControl({
             rows={18}
             spellCheck={false}
             autoComplete="off"
-            placeholder='{"evidence": {…}, "guardrailPolicy": {…}, "authorizedPracticeIds": […], "canaryPracticeIds": […]}'
+            placeholder='{"evidence": {…}, "guardrailPolicy": {…}, "authorizedPracticeIds": […], "canaryPracticeIds": […], "runtimeInstances": [{"instanceId":"app-1","component":"APP","imageDigest":"sha256:…"}, …]}'
             className="min-h-[320px] resize-y rounded-md border border-linear-border-strong bg-linear-surface-2 px-3 py-3 font-mono text-[11px] leading-5 text-linear-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-linear-sage"
           />
         </label>
@@ -353,8 +354,8 @@ function CreateReleaseControl({
           <div className="rounded-md border border-amber-400/25 bg-amber-400/[0.06] px-3 py-3 text-[11px] leading-5 text-amber-200/80">
             The manifest may contain only exact commit/image/evidence hashes,
             the versioned aggregate guardrail policy, and authorized practice
-            identifiers. Do not paste credentials, documents, patient data, or
-            free-text clinical content.
+            identifiers plus the exact APP/WORKER replica manifest. Do not paste
+            credentials, documents, patient data, or free-text clinical content.
           </div>
           <dl className="space-y-2 text-[11px] text-linear-text-3">
             <div className="flex items-center justify-between gap-3">
@@ -364,6 +365,14 @@ function CreateReleaseControl({
                   value={parsed ? "READY TO VALIDATE" : "HUMAN PENDING"}
                   compact
                 />
+              </dd>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <dt>Pinned runtime replicas</dt>
+              <dd className="font-mono text-linear-text-2">
+                {parsed && Array.isArray(parsed.runtimeInstances)
+                  ? parsed.runtimeInstances.length
+                  : "—"}
               </dd>
             </div>
             <div className="flex items-center justify-between gap-3">
@@ -400,6 +409,7 @@ function CreateReleaseControl({
                   guardrailPolicy: parsed!.guardrailPolicy,
                   authorizedPracticeIds: parsed!.authorizedPracticeIds,
                   canaryPracticeIds: parsed!.canaryPracticeIds,
+                  runtimeInstances: parsed!.runtimeInstances,
                 })
               }
               className="qm-lin-btn-primary min-h-11 disabled:cursor-not-allowed disabled:opacity-40"
@@ -475,6 +485,7 @@ function IdentityGrid({ release }: { release: ReleaseView }) {
     ["Desktop Word", release.evidence.officeWordEvidenceSha256],
     ["Guardrail policy", release.evidence.guardrailPolicySha256],
     ["Practice manifest", release.evidence.authorizedPracticeManifestSha256],
+    ["Runtime manifest", release.evidence.runtimeManifestSha256],
   ];
   return (
     <dl className="grid grid-cols-1 divide-y divide-linear-border sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-3">
@@ -577,6 +588,31 @@ function GateLedger({ release }: { release: ReleaseView }) {
           </li>
         );
       })}
+      {release.runtimeRequirements.map((runtime) => (
+        <li
+          key={runtime.instanceId}
+          className="grid gap-2 px-4 py-3 sm:grid-cols-[minmax(180px,1fr)_auto_minmax(220px,1.2fr)] sm:items-center sm:px-5"
+        >
+          <div>
+            <div className="text-[13px] font-medium text-linear-text">
+              {runtime.component} · {runtime.instanceId}
+            </div>
+            <div className="mt-0.5 text-[11px] text-linear-text-3">
+              Deployment-authority heartbeat required
+            </div>
+          </div>
+          <StateBadge value={runtime.ready ? "PASS" : "FAIL"} />
+          <div className="min-w-0 text-left font-mono text-[11px] text-linear-text-3 sm:text-right">
+            <div className="truncate">{runtime.imageDigest}</div>
+            <div className="mt-0.5">
+              last seen{" "}
+              {runtime.lastSeenAt
+                ? formatTimestamp(runtime.lastSeenAt)
+                : "never"}
+            </div>
+          </div>
+        </li>
+      ))}
     </ul>
   );
 }
@@ -1175,8 +1211,13 @@ function summarizeGates(release: ReleaseView) {
     return decision.decision === "APPROVE" ? "PASS" : "FAIL";
   });
   return {
-    allPass: statuses.every((status) => status === "PASS"),
-    hasFail: statuses.some((status) => status === "FAIL"),
+    allPass:
+      statuses.every((status) => status === "PASS") &&
+      release.runtimeRequirements.length >= 2 &&
+      release.runtimeRequirements.every(({ ready }) => ready),
+    hasFail:
+      statuses.some((status) => status === "FAIL") ||
+      release.runtimeRequirements.some(({ ready }) => !ready),
   };
 }
 

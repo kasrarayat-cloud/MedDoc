@@ -9,12 +9,12 @@ import {
   inspectTemplateTwinReleaseControl,
   passTemplateTwinReleaseCheckpoint,
   recordTemplateTwinReleaseApproval,
-  recordTemplateTwinReleaseMetricSnapshot,
   revokeTemplateTwinRelease,
   TemplateTwinReleaseControlError,
   type TemplateTwinReleaseActor,
 } from "@/lib/template-twin/release-control";
 import { TemplateTwinReleaseContractError } from "@/lib/template-twin/release-control-contracts";
+import { templateTwinReleaseControlProcessEnabled } from "@/lib/template-twin/release-control-db";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -63,6 +63,18 @@ const CreateBody = z
       .min(1)
       .max(10_000),
     canaryPracticeIds: z.array(z.string().min(2).max(128)).min(1).max(1_000),
+    runtimeInstances: z
+      .array(
+        z
+          .object({
+            instanceId: z.string().regex(/^[a-z0-9][a-z0-9._-]{1,127}$/u),
+            component: z.enum(["APP", "WORKER"]),
+            imageDigest: ImageDigest,
+          })
+          .strict(),
+      )
+      .min(2)
+      .max(256),
   })
   .strict();
 const FreezeBody = z
@@ -94,19 +106,6 @@ const ActivateBody = z
     confirmation: z.string().min(1).max(160),
   })
   .strict();
-const MetricsBody = z
-  .object({
-    action: z.literal("record_metrics"),
-    releaseId: Uuid,
-    stage: Stage,
-    expectedReleaseGeneration: Generation,
-    expectedGlobalGeneration: Generation,
-    sampleCount: z.number().int().min(0).max(1_000_000_000),
-    observationStartedAt: z.iso.datetime({ offset: true }),
-    observationEndedAt: z.iso.datetime({ offset: true }),
-    metrics: z.record(z.string(), z.number()),
-  })
-  .strict();
 const PassBody = z
   .object({
     action: z.literal("pass_checkpoint"),
@@ -132,7 +131,6 @@ const Body = z.discriminatedUnion("action", [
   FreezeBody,
   ApprovalBody,
   ActivateBody,
-  MetricsBody,
   PassBody,
   RevokeBody,
 ]);
@@ -235,6 +233,9 @@ function errorResponse(error: unknown): NextResponse {
 export const GET = adminApi(
   "template-twin:releases:inspect",
   async (request, ctx) => {
+    if (!templateTwinReleaseControlProcessEnabled()) {
+      return json({ ok: false, error: "Not found." }, 404);
+    }
     const releaseId =
       new URL(request.url).searchParams.get("releaseId") ?? undefined;
     try {
@@ -254,6 +255,9 @@ export const GET = adminApi(
 export const POST = adminApi(
   "template-twin:releases:mutate",
   async (request, ctx) => {
+    if (!templateTwinReleaseControlProcessEnabled()) {
+      return json({ ok: false, error: "Not found." }, 404);
+    }
     if (!isSameOriginAdminMutation(request)) {
       return json(
         {
@@ -297,6 +301,7 @@ export const POST = adminApi(
               guardrailPolicy: parsedBody.guardrailPolicy,
               authorizedPracticeIds: parsedBody.authorizedPracticeIds,
               canaryPracticeIds: parsedBody.canaryPracticeIds,
+              runtimeInstances: parsedBody.runtimeInstances,
             }),
           });
         case "freeze":
@@ -321,16 +326,6 @@ export const POST = adminApi(
             result: await activateTemplateTwinReleaseCheckpoint({
               actor: releaseActor,
               ...parsedBody,
-            }),
-          });
-        case "record_metrics":
-          return json({
-            ok: true,
-            result: await recordTemplateTwinReleaseMetricSnapshot({
-              actor: releaseActor,
-              ...parsedBody,
-              observationStartedAt: new Date(parsedBody.observationStartedAt),
-              observationEndedAt: new Date(parsedBody.observationEndedAt),
             }),
           });
         case "pass_checkpoint":

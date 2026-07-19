@@ -58,29 +58,60 @@ TEMPLATE_TWIN_RUNTIME_MODE=standard
 TEMPLATE_TWIN_KILL_SWITCH=true
 ```
 
-The release service compares all four identities before every activate/pass
-operation. Missing or mismatched values fail closed. Switch the process kill
-switch to `false` only inside the approved Canary window; a database gate still
-remains required.
+The deployment authority must also issue a short-lived, signed runtime envelope
+for every APP and WORKER instance. Each envelope binds the exact release
+identity, component, instance ID, commit, image digest, issuance/expiry time,
+and a unique nonce. Put only that instance's envelope in
+`TEMPLATE_TWIN_RUNTIME_ATTESTATION`; never reuse an APP envelope for a worker or
+share a nonce between replicas. Register the public verification key through a
+reviewed migration-owner change. Keys are append-only, may only be revoked, and
+must not be deleted or rewritten.
+
+The release service verifies the signatures and compares all four identities
+before every activate/pass operation. Missing, expired, revoked, replayed, or
+mismatched attestations fail closed. Switch the process kill switch to `false`
+only inside the approved Canary window; a database gate still remains required.
+
+## Process and ingress isolation
+
+- `transcribe-md` and the worker connect only as `meddoc_runtime`; explicitly
+  blank the control and dispatcher DSNs in those containers.
+- `template-twin-admin-control` is the only HTTP process receiving the
+  `meddoc_release_control` DSN. Caddy routes only the release workbench page and
+  its exact release/metric endpoints to it. It remains loopback-only on the
+  host and requires the normal fresh SUPER_ADMIN + MFA gate.
+- `template-twin-audit-dispatcher` connects only as
+  `meddoc_audit_dispatcher`, receives no provider credential or control DSN,
+  and is the only process allowed to claim and deliver release outbox rows.
+- The broad admin and physician routes continue to use the ordinary app
+  process. Validate both Caddy and Compose before every deployment.
 
 ## Database privileges
 
-The migration creates the capability issuer as `SECURITY DEFINER` and revokes
-public execution. A database administrator must grant only the production app
-runtime role permission to execute that exact signature. Substitute the actual
-role using the approved secret-free infrastructure inventory; do not paste
-credentials into evidence.
+The hardening migration deliberately refuses to run unless these exact
+principals already exist with the expected attributes and memberships:
 
-```sql
-GRANT EXECUTE ON FUNCTION template_twin_issue_release_capability(
-  UUID, CHAR(64), UUID, BIGINT, BIGINT
-) TO <production_app_runtime_role>;
-```
+- NOLOGIN/NOINHERIT groups: `quillmd_runtime`,
+  `quillmd_release_control`, `quillmd_release_security`, and
+  `quillmd_audit_dispatcher`;
+- LOGIN/INHERIT principals with exactly one membership each:
+  `meddoc_runtime` → `quillmd_runtime`, `meddoc_release_control` →
+  `quillmd_release_control`, and `meddoc_audit_dispatcher` →
+  `quillmd_audit_dispatcher`.
 
-The app runtime role must not receive direct INSERT/UPDATE/DELETE/TRUNCATE on
-`template_twin_release_capabilities`. Capability receipts are immutable and
-transaction/backend-bound. The migration owner retains emergency database
-administration authority under the production change-control process.
+For a brand-new database, supply three distinct generated credentials to
+`infra/postgres/init-template-twin-roles.sh` through the container secret
+environment before first initialization. An existing production data volume
+does not rerun entrypoint initialization: a database administrator must apply
+the same reviewed role-provisioning block before `prisma migrate deploy`, then
+verify attributes and exact membership without recording credential values.
+
+The migration itself installs the least-privilege grants. Runtime cannot read
+control receipts or mutate immutable evidence. Release control cannot read
+attestation keys/session secrets or dispatch audit rows. The dispatcher cannot
+mutate rollout state. Capability, action, coupling, and metric receipts are
+transaction/backend-bound and immutable. Do not add application grants in an
+operations hotfix; any privilege change requires a new reviewed migration.
 
 ## Human authority assignment
 
@@ -186,3 +217,31 @@ direct/forged/replayed enable capability rejection, immutable evidence,
 ordered 100% advancement, post-100% revoke, critical automatic revoke, and
 two-session advance/advance, global-kill/advance, approval-revoke/advance,
 operational-revoke/advance, and critical-guardrail/pass races.
+
+Repeat the proof on a separate fresh database at the maximum supported cohort:
+
+```bash
+TEMPLATE_TWIN_RELEASE_CONTROL_SCALE_PRACTICES=10000 \
+TEMPLATE_TWIN_RELEASE_CONTROL_TEST_DATABASE_URL='<disposable-test-url>' \
+npm run release-control:pg-test -w @meddoc/db
+```
+
+Before accepting the result, run the audit dispatcher through its actual
+database role and call `template_twin_assert_release_audit_delivery()`. Every
+delivered release outbox row must pair with exactly one database-generated
+`audit_logs.timestamp`; pending or duplicate pairs block rollout.
+
+## Emergency disable and credential boundary rollback
+
+1. Set `TEMPLATE_TWIN_KILL_SWITCH=true` on APP and WORKER instances and restart
+   them from the last accepted immutable image.
+2. Use the fresh-session workbench revoke action for the exact release. If the
+   control process is unavailable, Operations uses the separately reviewed
+   database emergency procedure; never issue a direct enabling update.
+3. Verify the global gate and every exposed practice are disabled, the release
+   is terminal, and audit outbox delivery is complete.
+4. Keep the isolated control and dispatcher credentials active long enough to
+   preserve evidence. Rotate them after containment; do not fall back to the
+   migration-owner DSN in an application container.
+5. Follow the audited rollback-fence runbooks before rolling back application
+   images or schemas. No destructive schema rollback is permitted.

@@ -4,12 +4,28 @@ import {
   QUILLMD_RUNTIME_PROTOCOL_EPOCH,
   RuntimeProtocolConfigurationError,
   assertQuillmdRuntimeProtocol,
+  isTemplateTwinKillSwitchExplicitlyOff,
   isTemplateTwinRollbackCompatRuntime,
   resolveTemplateTwinRuntimeMode,
   templateTwinRuntimeEnabled,
 } from "./runtime-protocol";
 
 describe("QuillMD runtime protocol", () => {
+  it("uses one canonical fail-closed kill-switch parser", () => {
+    expect(
+      isTemplateTwinKillSwitchExplicitlyOff({
+        TEMPLATE_TWIN_KILL_SWITCH: "  FaLsE  ",
+      }),
+    ).toBe(true);
+    for (const value of [undefined, "", "0", "true", "off", "no"]) {
+      expect(
+        isTemplateTwinKillSwitchExplicitlyOff({
+          TEMPLATE_TWIN_KILL_SWITCH: value,
+        }),
+      ).toBe(false);
+    }
+  });
+
   it("uses the standard runtime when no explicit bridge is requested", () => {
     expect(resolveTemplateTwinRuntimeMode({})).toBe("standard");
     expect(templateTwinRuntimeEnabled({})).toBe(true);

@@ -44,6 +44,9 @@ services:
       POSTGRES_DB: meddoc
       POSTGRES_USER: meddoc
       POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme_in_production}
+      DB_RUNTIME_PASSWORD: ${DB_RUNTIME_PASSWORD:-changeme_runtime_in_production}
+      DB_RELEASE_CONTROL_PASSWORD: ${DB_RELEASE_CONTROL_PASSWORD:-changeme_release_control_in_production}
+      DB_AUDIT_DISPATCHER_PASSWORD: ${DB_AUDIT_DISPATCHER_PASSWORD:-changeme_audit_dispatcher_in_production}
       # Phase 6.1 (h8): PGDATA points at a subdir of the LUKS-encrypted
       # mount because ext4's `lost+found` at the mount root blocks
       # initdb. Standard postgres-image pattern when bind-mounting an
@@ -60,6 +63,7 @@ services:
     # operator-owned per docs/RUNBOOK_ENCRYPTED_VOLUME.md.
     volumes:
       - /mnt/pgdata-encrypted:/var/lib/postgresql/data
+      - ./infra/postgres/init-template-twin-roles.sh:/docker-entrypoint-initdb.d/20-template-twin-roles.sh:ro
     ports:
       - "127.0.0.1:5432:5432"   # only accessible from localhost
     healthcheck:
@@ -110,7 +114,10 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql://meddoc:${DB_PASSWORD:-changeme_in_production}@postgres:5432/meddoc?schema=public
+      DATABASE_URL: postgresql://meddoc_runtime:${DB_RUNTIME_PASSWORD:-changeme_runtime_in_production}@postgres:5432/meddoc?schema=public
+      DB_RELEASE_CONTROL_PASSWORD: ""
+      TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL: ""
+      DB_AUDIT_DISPATCHER_PASSWORD: ""
       # Phase 1B v2 — explicit Redis URL for the audit-stream publish
       # path and the /api/admin/stream/activity subscriber. Same value
       # the singleton in lib/redis.ts defaults to, but spelled out so
@@ -319,6 +326,7 @@ services:
       - meddoc-pro
       - marketing
       - transcribe-md
+      - template-twin-admin-control
     ports:
       # 2026-06-03 site-down recovery: a host-level nginx now owns :80/:443 on
       # this box (shared with LeatherERP / dealmason / dealhunter). Caddy can no
@@ -437,7 +445,10 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql://meddoc:${DB_PASSWORD:-changeme_in_production}@postgres:5432/meddoc?schema=public
+      DATABASE_URL: postgresql://meddoc_runtime:${DB_RUNTIME_PASSWORD:-changeme_runtime_in_production}@postgres:5432/meddoc?schema=public
+      DB_RELEASE_CONTROL_PASSWORD: ""
+      TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL: ""
+      DB_AUDIT_DISPATCHER_PASSWORD: ""
       REDIS_URL: redis://redis:6379
       QUILLMD_REQUIRED_RUNTIME_PROTOCOL_EPOCH: template-twin-final-schema-v2
       TEMPLATE_TWIN_RUNTIME_MODE: ${TEMPLATE_TWIN_RUNTIME_MODE:-standard}
@@ -446,6 +457,7 @@ services:
       TEMPLATE_TWIN_APP_IMAGE_DIGEST: ${TEMPLATE_TWIN_APP_IMAGE_DIGEST:-}
       TEMPLATE_TWIN_WORKER_IMAGE_DIGEST: ${TEMPLATE_TWIN_WORKER_IMAGE_DIGEST:-}
       TEMPLATE_TWIN_MIGRATOR_IMAGE_DIGEST: ${TEMPLATE_TWIN_MIGRATOR_IMAGE_DIGEST:-}
+      TEMPLATE_TWIN_RUNTIME_ATTESTATION: ${TEMPLATE_TWIN_WORKER_RUNTIME_ATTESTATION:-}
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-meddoc}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-changeme_in_production}
@@ -497,13 +509,46 @@ services:
       retries: 3
       start_period: 60s
 
+  # Dedicated audit delivery trust boundary. It receives neither physician
+  # provider credentials nor release-control authority; its DB role can only
+  # claim/deliver the durable outbox and append audit receipts.
+  template-twin-audit-dispatcher:
+    image: ${TRANSCRIBE_MD_WORKER_IMAGE:-meddoc-pro-transcribe-md-worker:latest}
+    build:
+      context: .
+      dockerfile: apps/transcribe-md/Dockerfile.worker
+      args:
+        QUILLMD_RELEASE_SHA: ${QUILLMD_RELEASE_SHA:-development}
+    command: ["npx", "tsx", "src/audit-dispatcher.ts"]
+    restart: unless-stopped
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    mem_limit: 192m
+    cpus: '0.25'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://meddoc_audit_dispatcher:${DB_AUDIT_DISPATCHER_PASSWORD:-changeme_audit_dispatcher_in_production}@postgres:5432/meddoc?schema=public
+      DB_AUDIT_DISPATCHER_PASSWORD: ""
+      DB_RELEASE_CONTROL_PASSWORD: ""
+      TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL: ""
+      QUILLMD_SERVICE_ROLE: template-twin-audit-dispatcher
+      TEMPLATE_TWIN_AUDIT_DISPATCH_INTERVAL_MS: ${TEMPLATE_TWIN_AUDIT_DISPATCH_INTERVAL_MS:-5000}
+      NODE_ENV: production
+
   # ── TranscribeMD Solo App (T-M2) ──
   # The real product surface — sign up, log in, create visits. Shares
   # Postgres with meddoc-pro + scribe (same User/Practice tables via
   # @meddoc/db). Redis is a dependency so BullMQ-based features in later
   # milestones have somewhere to enqueue work; today's shell doesn't use
   # it at runtime but we wire it now to avoid a compose edit later.
-  transcribe-md:
+  transcribe-md: &transcribe_md_app
     # Phase 19 — h16-cap-drop. Next app, binds 3011 inside the
     # container, runs as uid 1001. No default cap required.
     image: ${TRANSCRIBE_MD_IMAGE:-meddoc-pro-transcribe-md:latest}
@@ -579,8 +624,12 @@ services:
       - .env
     volumes:
       - clamav_socket:/var/run/quillmd-clamav:ro
-    environment:
-      DATABASE_URL: postgresql://meddoc:${DB_PASSWORD:-changeme_in_production}@postgres:5432/meddoc?schema=public
+    environment: &transcribe_md_app_environment
+      DATABASE_URL: postgresql://meddoc_runtime:${DB_RUNTIME_PASSWORD:-changeme_runtime_in_production}@postgres:5432/meddoc?schema=public
+      QUILLMD_SERVICE_ROLE: physician-app
+      DB_RELEASE_CONTROL_PASSWORD: ""
+      TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL: ""
+      DB_AUDIT_DISPATCHER_PASSWORD: ""
       AUTH_URL: ${TRANSCRIBE_MD_AUTH_URL:-http://5.231.107.93:9020}
       NEXTAUTH_URL: ${TRANSCRIBE_MD_AUTH_URL:-http://5.231.107.93:9020}
       AUTH_COOKIE_DOMAIN: ${AUTH_COOKIE_DOMAIN:-}
@@ -602,6 +651,7 @@ services:
       TEMPLATE_TWIN_APP_IMAGE_DIGEST: ${TEMPLATE_TWIN_APP_IMAGE_DIGEST:-}
       TEMPLATE_TWIN_WORKER_IMAGE_DIGEST: ${TEMPLATE_TWIN_WORKER_IMAGE_DIGEST:-}
       TEMPLATE_TWIN_MIGRATOR_IMAGE_DIGEST: ${TEMPLATE_TWIN_MIGRATOR_IMAGE_DIGEST:-}
+      TEMPLATE_TWIN_RUNTIME_ATTESTATION: ${TEMPLATE_TWIN_APP_RUNTIME_ATTESTATION:-}
       TEMPLATE_TWIN_MALWARE_SCANNER_SOCKET: /var/run/quillmd-clamav/clamd.sock
       TEMPLATE_TWIN_MALWARE_SCANNER_READINESS_FILE: /var/run/quillmd-clamav/readiness.json
       NODE_ENV: production
@@ -630,6 +680,21 @@ services:
     ports:
       # Loopback only — public traffic arrives via Caddy on :9020.
       - "127.0.0.1:3011:3011"
+
+  # Isolated control-plane process. The physician-facing app above never
+  # receives the release-control credential. Route only the Template Twin
+  # admin page/API paths on admin.quillmd.com to this loopback listener.
+  template-twin-admin-control:
+    <<: *transcribe_md_app
+    environment:
+      <<: *transcribe_md_app_environment
+      QUILLMD_SERVICE_ROLE: template-twin-admin-control
+      TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL: postgresql://meddoc_release_control:${DB_RELEASE_CONTROL_PASSWORD:-changeme_release_control_in_production}@postgres:5432/meddoc?schema=public
+      AUTH_URL: ${TEMPLATE_TWIN_ADMIN_CONTROL_AUTH_URL:-https://admin.quillmd.com}
+      NEXTAUTH_URL: ${TEMPLATE_TWIN_ADMIN_CONTROL_AUTH_URL:-https://admin.quillmd.com}
+      TEMPLATE_TWIN_RUNTIME_ATTESTATION: ${TEMPLATE_TWIN_ADMIN_CONTROL_RUNTIME_ATTESTATION:-}
+    ports:
+      - "127.0.0.1:${TEMPLATE_TWIN_ADMIN_CONTROL_PORT:-3012}:3011"
 
   # ── DB Migrator (one-shot) ──
   # Targets the transcribe-md builder stage because it already runs

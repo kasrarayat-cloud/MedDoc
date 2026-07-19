@@ -1,9 +1,17 @@
 import { canonicalSha256 } from "./canonical";
 
 export const TEMPLATE_TWIN_RELEASE_IDENTITY_VERSION =
-  "template-twin-production-release-v1" as const;
+  "template-twin-production-release-v2" as const;
 export const TEMPLATE_TWIN_GUARDRAIL_SCHEMA_VERSION =
   "template-twin-guardrails-v1" as const;
+export const TEMPLATE_TWIN_RUNTIME_ATTESTATION_VERSION =
+  "template-twin-runtime-attestation-v1" as const;
+export const TEMPLATE_TWIN_METRIC_ATTESTATION_VERSION =
+  "template-twin-metric-attestation-v1" as const;
+
+export const TEMPLATE_TWIN_RUNTIME_COMPONENTS = ["APP", "WORKER"] as const;
+export type TemplateTwinRuntimeComponent =
+  (typeof TEMPLATE_TWIN_RUNTIME_COMPONENTS)[number];
 
 export const TEMPLATE_TWIN_RELEASE_DISCIPLINES = [
   "DESKTOP_WORD",
@@ -48,6 +56,10 @@ const SHA256 = /^[0-9a-f]{64}$/u;
 const COMMIT_SHA = /^[0-9a-f]{40}$/u;
 const IMAGE_DIGEST = /^sha256:[0-9a-f]{64}$/u;
 
+function ordinalCompare(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 export interface TemplateTwinReleaseIdentityEvidence {
   readonly sourceCommitSha: string;
   readonly baseCommitSha: string;
@@ -64,6 +76,7 @@ export interface TemplateTwinReleaseIdentityEvidence {
 export interface TemplateTwinReleaseIdentityInput extends TemplateTwinReleaseIdentityEvidence {
   readonly guardrailPolicySha256: string;
   readonly authorizedPracticeManifestSha256: string;
+  readonly runtimeManifestSha256: string;
 }
 
 export function assertTemplateTwinReleaseIdentityInput(
@@ -96,6 +109,7 @@ export function assertTemplateTwinReleaseIdentityInput(
     input.officeWordEvidenceSha256,
     input.guardrailPolicySha256,
     input.authorizedPracticeManifestSha256,
+    input.runtimeManifestSha256,
   ]) {
     if (!SHA256.test(digest)) {
       throw new TemplateTwinReleaseContractError(
@@ -128,7 +142,91 @@ export function templateTwinReleaseIdentitySha256(
     },
     guardrailPolicySha256: input.guardrailPolicySha256,
     authorizedPracticeManifestSha256: input.authorizedPracticeManifestSha256,
+    runtimeManifestSha256: input.runtimeManifestSha256,
   });
+}
+
+export interface TemplateTwinRuntimeRequirementInput {
+  readonly instanceId: string;
+  readonly component: TemplateTwinRuntimeComponent;
+  readonly imageDigest: string;
+}
+
+export interface TemplateTwinRuntimeManifest {
+  readonly instances: readonly TemplateTwinRuntimeRequirementInput[];
+  readonly runtimeManifestSha256: string;
+}
+
+export function buildTemplateTwinRuntimeManifest(input: {
+  readonly sourceCommitSha: string;
+  readonly appImageDigest: string;
+  readonly workerImageDigest: string;
+  readonly instances: readonly TemplateTwinRuntimeRequirementInput[];
+}): TemplateTwinRuntimeManifest {
+  if (
+    !COMMIT_SHA.test(input.sourceCommitSha) ||
+    !IMAGE_DIGEST.test(input.appImageDigest) ||
+    !IMAGE_DIGEST.test(input.workerImageDigest) ||
+    input.instances.length < 2 ||
+    input.instances.length > 256
+  ) {
+    throw new TemplateTwinReleaseContractError(
+      "TEMPLATE_TWIN_RUNTIME_MANIFEST_INVALID",
+      "The runtime manifest requires bounded APP and WORKER instances pinned to exact image digests.",
+    );
+  }
+
+  const instanceIds = new Set<string>();
+  const instances = input.instances
+    .map((instance) => {
+      const expectedDigest =
+        instance.component === "APP"
+          ? input.appImageDigest
+          : instance.component === "WORKER"
+            ? input.workerImageDigest
+            : null;
+      if (
+        !expectedDigest ||
+        instance.imageDigest !== expectedDigest ||
+        !/^[a-z0-9][a-z0-9._-]{1,127}$/u.test(instance.instanceId) ||
+        instanceIds.has(instance.instanceId)
+      ) {
+        throw new TemplateTwinReleaseContractError(
+          "TEMPLATE_TWIN_RUNTIME_MANIFEST_INVALID",
+          "Runtime instance identifiers must be unique and every instance must use its release-pinned component digest.",
+        );
+      }
+      instanceIds.add(instance.instanceId);
+      return {
+        instanceId: instance.instanceId,
+        component: instance.component,
+        imageDigest: instance.imageDigest,
+      };
+    })
+    .sort(
+      (left, right) =>
+        ordinalCompare(left.component, right.component) ||
+        ordinalCompare(left.instanceId, right.instanceId),
+    );
+
+  if (
+    !instances.some(({ component }) => component === "APP") ||
+    !instances.some(({ component }) => component === "WORKER")
+  ) {
+    throw new TemplateTwinReleaseContractError(
+      "TEMPLATE_TWIN_RUNTIME_MANIFEST_INVALID",
+      "The runtime manifest must include at least one application and one worker replica.",
+    );
+  }
+
+  return {
+    instances,
+    runtimeManifestSha256: canonicalSha256({
+      version: "template-twin-runtime-manifest-v1",
+      sourceCommitSha: input.sourceCommitSha,
+      instances,
+    }),
+  };
 }
 
 export const TEMPLATE_TWIN_METRIC_DEFINITIONS = {
@@ -291,6 +389,7 @@ export function parseTemplateTwinGuardrailPolicy(
       !Number.isFinite(rawRule.threshold) ||
       rawRule.threshold < definition.min ||
       rawRule.threshold > definition.max ||
+      !Number.isSafeInteger(rawRule.threshold * 1_000_000) ||
       typeof rawRule.critical !== "boolean" ||
       (REQUIRED_CRITICAL_METRICS.has(key) && !rawRule.critical)
     ) {
@@ -400,8 +499,8 @@ export function buildTemplateTwinCohortPlan(input: {
     .sort((left, right) => {
       if (left.isCanary !== right.isCanary) return left.isCanary ? -1 : 1;
       return (
-        left.cohortHashSha256.localeCompare(right.cohortHashSha256) ||
-        left.practiceId.localeCompare(right.practiceId)
+        ordinalCompare(left.cohortHashSha256, right.cohortHashSha256) ||
+        ordinalCompare(left.practiceId, right.practiceId)
       );
     });
 
@@ -682,6 +781,7 @@ export class TemplateTwinReleaseContractError extends Error {
     readonly code:
       | "TEMPLATE_TWIN_RELEASE_IDENTITY_INVALID"
       | "TEMPLATE_TWIN_RELEASE_MANIFEST_INVALID"
+      | "TEMPLATE_TWIN_RUNTIME_MANIFEST_INVALID"
       | "TEMPLATE_TWIN_GUARDRAIL_POLICY_INVALID"
       | "TEMPLATE_TWIN_METRIC_SNAPSHOT_INVALID"
       | "TEMPLATE_TWIN_METRIC_SNAPSHOT_PHI_RISK",

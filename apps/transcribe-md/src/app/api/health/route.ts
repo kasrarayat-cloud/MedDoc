@@ -21,19 +21,20 @@
 // never stretches the probe past 3 seconds total.
 // ============================================================================
 
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
 
-import prisma from '@meddoc/db';
-import { getSharedRedisConnection } from '@/lib/queue';
-import { getMinio, TRANSCRIBE_MD_BUCKET } from '@/lib/minio';
-import { readCleanupHeartbeats } from '@/lib/cleanup-heartbeat';
+import prisma from "@meddoc/db";
+import { getSharedRedisConnection } from "@/lib/queue";
+import { getMinio, TRANSCRIBE_MD_BUCKET } from "@/lib/minio";
+import { readCleanupHeartbeats } from "@/lib/cleanup-heartbeat";
 import {
   QUILLMD_RUNTIME_PROTOCOL_EPOCH,
   resolveTemplateTwinRuntimeMode,
-} from '@/lib/runtime-protocol';
+} from "@/lib/runtime-protocol";
+import { refreshTemplateTwinRuntimeAttestation } from "@/lib/template-twin/runtime-attestation";
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 // Skip Next's caching for this route so monitors see live state.
 export const revalidate = 0;
 
@@ -52,7 +53,7 @@ const CHECK_TIMEOUT_MS = 2_000;
 // the host var is unset. Empty string is a defined value — `??` would
 // propagate it through and we'd report `"version":""` instead of the
 // fallback. `||` treats empty string as falsy and falls back correctly.
-const VERSION = process.env.APP_VERSION || 'T-M19.1';
+const VERSION = process.env.APP_VERSION || "T-M19.1";
 
 interface CheckResult {
   ok: boolean | null;
@@ -64,7 +65,7 @@ async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
     promise,
     new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(`timeout after ${ms}ms`)), ms)
+      setTimeout(() => reject(new Error(`timeout after ${ms}ms`)), ms),
     ),
   ]);
 }
@@ -78,7 +79,7 @@ async function checkPostgres(): Promise<CheckResult> {
     return {
       ok: false,
       latency_ms: Date.now() - started,
-      error: err instanceof Error ? err.message : 'unknown',
+      error: err instanceof Error ? err.message : "unknown",
     };
   }
 }
@@ -89,14 +90,14 @@ async function checkRedis(): Promise<CheckResult> {
     const redis = getSharedRedisConnection();
     const reply = await withTimeout(redis.ping(), CHECK_TIMEOUT_MS);
     return {
-      ok: reply === 'PONG',
+      ok: reply === "PONG",
       latency_ms: Date.now() - started,
     };
   } catch (err) {
     return {
       ok: false,
       latency_ms: Date.now() - started,
-      error: err instanceof Error ? err.message : 'unknown',
+      error: err instanceof Error ? err.message : "unknown",
     };
   }
 }
@@ -109,35 +110,70 @@ async function checkMinio(): Promise<CheckResult> {
     const client = getMinio();
     const exists = await withTimeout(
       client.bucketExists(TRANSCRIBE_MD_BUCKET),
-      CHECK_TIMEOUT_MS
+      CHECK_TIMEOUT_MS,
     );
     return { ok: exists === true, latency_ms: Date.now() - started };
   } catch (err) {
     return {
       ok: false,
       latency_ms: Date.now() - started,
-      error: err instanceof Error ? err.message : 'unknown',
+      error: err instanceof Error ? err.message : "unknown",
+    };
+  }
+}
+
+async function checkTemplateTwinRuntimeIdentity(): Promise<CheckResult> {
+  const started = Date.now();
+  try {
+    const state = await withTimeout(
+      refreshTemplateTwinRuntimeAttestation({ tx: prisma }),
+      CHECK_TIMEOUT_MS,
+    );
+    return {
+      ok: state === "READY" ? true : null,
+      latency_ms: Date.now() - started,
+    };
+  } catch {
+    return {
+      ok: false,
+      latency_ms: Date.now() - started,
+      error: "runtime deployment attestation unavailable",
     };
   }
 }
 
 export async function GET(): Promise<NextResponse> {
-  const [postgres, redis, minio, cleanupHeartbeats] = await Promise.all([
+  const [
+    postgres,
+    redis,
+    minio,
+    templateTwinRuntimeIdentity,
+    cleanupHeartbeats,
+  ] = await Promise.all([
     checkPostgres(),
     checkRedis(),
     checkMinio(),
+    checkTemplateTwinRuntimeIdentity(),
     // T-M18.2 A13 — best-effort; a Redis hiccup here should NOT
     // fail the health check (Redis itself has its own check line).
     readCleanupHeartbeats().catch(() => []),
   ]);
 
   const allOk =
-    postgres.ok === true && redis.ok === true && minio.ok === true;
+    postgres.ok === true &&
+    redis.ok === true &&
+    minio.ok === true &&
+    templateTwinRuntimeIdentity.ok !== false;
 
   const body = {
-    status: allOk ? 'healthy' : 'unhealthy',
+    status: allOk ? "healthy" : "unhealthy",
     uptime_seconds: Math.floor((Date.now() - PROCESS_START_AT) / 1000),
-    checks: { postgres, redis, minio },
+    checks: {
+      postgres,
+      redis,
+      minio,
+      template_twin_runtime_identity: templateTwinRuntimeIdentity,
+    },
     // Each cron reports `ageSeconds: null` until its first run. An
     // external monitor can alert on `ageSeconds > 26 * 3600` (24h
     // expected cadence + 2h grace) — but this probe stays 200 even
@@ -152,7 +188,7 @@ export async function GET(): Promise<NextResponse> {
   return NextResponse.json(body, {
     status: allOk ? 200 : 503,
     headers: {
-      'Cache-Control': 'no-store, no-cache, must-revalidate',
+      "Cache-Control": "no-store, no-cache, must-revalidate",
     },
   });
 }

@@ -45,8 +45,10 @@ import { sanitizeConfidenceScores } from "./worker/confidence-scores";
 import { notifyAdminOnFailure } from "./lib/admin-notifications";
 import {
   assertQuillmdRuntimeProtocol,
+  isTemplateTwinKillSwitchExplicitlyOff,
   templateTwinRuntimeEnabled,
 } from "@/lib/runtime-protocol";
+import { refreshTemplateTwinRuntimeAttestation } from "@/lib/template-twin/runtime-attestation";
 
 import {
   QUEUE_NAME,
@@ -1348,11 +1350,7 @@ async function processVisitPipeline(
       visitId,
       userId: visit.userId,
       practiceId: visit.user?.practiceId ?? "",
-      reviewReason: buildUserFacingFailureReason(
-        currentLayer,
-        category,
-        err,
-      ),
+      reviewReason: buildUserFacingFailureReason(currentLayer, category, err),
       failureCategory: category,
     });
     if (stagingFailure) {
@@ -2039,11 +2037,26 @@ async function main() {
   // (Was: startHeartbeat ran before the Worker connected, so a boot/Redis
   // failure still looked healthy.)
   await worker.waitUntilReady();
+  await refreshTemplateTwinRuntimeAttestation({ tx: prisma });
   log.info("transcribe-md-worker", "ready — listening on queue", {
     queue: QUEUE_NAME,
     concurrency: CONCURRENCY,
   });
   const heartbeat = await startHeartbeat(getSharedRedisConnection());
+  const runtimeAttestationHeartbeat = setInterval(() => {
+    void refreshTemplateTwinRuntimeAttestation({ tx: prisma }).catch(() => {
+      log.error(
+        "transcribe-md-worker",
+        "deployment runtime attestation refresh failed",
+        { code: "TEMPLATE_TWIN_RUNTIME_ATTESTATION_INVALID" },
+      );
+      if (isTemplateTwinKillSwitchExplicitlyOff(process.env)) {
+        process.exitCode = 1;
+        void worker.close();
+      }
+    });
+  }, 30_000);
+  runtimeAttestationHeartbeat.unref();
   const stagingQaLeaseReconciler =
     startTemplateTwinSyntheticQaExpiredLeaseReconciler({
       // rollback-compat-v2 keeps ordinary maintenance/outbox reconciliation
@@ -2077,6 +2090,7 @@ async function main() {
   // Redis disconnect is handled inside the tick (skips the write while down).
   worker.on("closed", () => {
     heartbeat.stop();
+    clearInterval(runtimeAttestationHeartbeat);
     stagingQaLeaseReconciler.stop();
   });
 

@@ -21,6 +21,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_CRON = '*/5 * * * *';
 const DEFAULT_AUDIT_LIMIT = 100;
 const DEFAULT_OBJECT_LIMIT = 100;
+const AUDIT_DISPATCHER_SERVICE_ROLE = 'template-twin-audit-dispatcher';
 
 type AuditOutboxClient = Parameters<
   typeof drainTemplateTwinAuditOutbox
@@ -320,11 +321,15 @@ export async function runTemplateTwinMaintenance(
       staleAfterMs: config.quarantineStaleMs!,
       limit: config.quarantineLimit,
     });
-    const audit = await dependencies.drainAudit({
-      prisma: db,
-      now: input.now,
-      limit: config.auditLimit,
-    });
+    const audit =
+      env.NODE_ENV !== 'production' ||
+      env.QUILLMD_SERVICE_ROLE === AUDIT_DISPATCHER_SERVICE_ROLE
+        ? await dependencies.drainAudit({
+            prisma: db,
+            now: input.now,
+            limit: config.auditLimit,
+          })
+        : { delivered: 0, failed: 0, contended: 0 };
     const objectAdmin =
       input.objectAdmin ?? createTemplateTwinMinioObjectAdmin({ env });
     const objects = await dependencies.reconcileObjects({

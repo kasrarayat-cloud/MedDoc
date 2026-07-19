@@ -18,6 +18,10 @@ export default defineConfig({
     dedupe: ['react', 'react-dom'],
     alias: {
       '@': path.resolve(__dirname, './src'),
+      'server-only': path.resolve(
+        __dirname,
+        '../../node_modules/next/dist/compiled/server-only/empty.js'
+      ),
       react: path.resolve(__dirname, '../../node_modules/react'),
       'react-dom': path.resolve(__dirname, '../../node_modules/react-dom'),
       'react/jsx-runtime': path.resolve(

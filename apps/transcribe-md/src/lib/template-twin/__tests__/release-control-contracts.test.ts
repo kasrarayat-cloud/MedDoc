@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildTemplateTwinCohortPlan,
+  buildTemplateTwinRuntimeManifest,
   evaluateTemplateTwinMetricSnapshot,
   parseTemplateTwinGuardrailPolicy,
   templateTwinApprovalConfirmation,
@@ -88,6 +89,7 @@ describe("Template Twin production release identity", () => {
       officeWordEvidenceSha256: sha("5"),
       guardrailPolicySha256: sha("6"),
       authorizedPracticeManifestSha256: sha("7"),
+      runtimeManifestSha256: sha("8"),
     };
     const identity = templateTwinReleaseIdentitySha256(input);
     expect(identity).toMatch(/^[0-9a-f]{64}$/u);
@@ -103,6 +105,50 @@ describe("Template Twin production release identity", () => {
         sourceCommitSha: "main",
       }),
     ).toThrow(/exact lowercase 40-character SHAs/u);
+  });
+
+  it("pins a deterministic APP/WORKER replica topology into the identity", () => {
+    const manifest = buildTemplateTwinRuntimeManifest({
+      sourceCommitSha: commit("a"),
+      appImageDigest: image("b"),
+      workerImageDigest: image("c"),
+      instances: [
+        {
+          instanceId: "worker-1",
+          component: "WORKER",
+          imageDigest: image("c"),
+        },
+        {
+          instanceId: "app-1",
+          component: "APP",
+          imageDigest: image("b"),
+        },
+      ],
+    });
+    expect(manifest.instances.map(({ instanceId }) => instanceId)).toEqual([
+      "app-1",
+      "worker-1",
+    ]);
+    expect(manifest.runtimeManifestSha256).toMatch(/^[0-9a-f]{64}$/u);
+    expect(() =>
+      buildTemplateTwinRuntimeManifest({
+        sourceCommitSha: commit("a"),
+        appImageDigest: image("b"),
+        workerImageDigest: image("c"),
+        instances: [
+          {
+            instanceId: "app-1",
+            component: "APP",
+            imageDigest: image("b"),
+          },
+          {
+            instanceId: "app-2",
+            component: "APP",
+            imageDigest: image("b"),
+          },
+        ],
+      }),
+    ).toThrow(/at least one application and one worker/u);
   });
 
   it("uses exact typed human confirmation bound to discipline and identity", () => {

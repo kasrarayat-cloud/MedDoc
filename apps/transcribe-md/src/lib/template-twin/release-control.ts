@@ -2,10 +2,8 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 
-import prisma from "@meddoc/db";
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import { ADMIN_SESSION_MAX_AGE_HOURS } from "@/lib/admin-session-freshness";
 import { runSerializableTransactionWithRetry } from "@/lib/db/transaction-retry";
 import {
   TEMPLATE_TWIN_ROLLBACK_COMPAT_RUNTIME_MODE,
@@ -13,18 +11,16 @@ import {
 } from "@/lib/runtime-protocol";
 import {
   assertTemplateTwinAuditMetadata,
-  enqueueTemplateTwinAudit,
+  type EnqueueTemplateTwinAuditInput,
 } from "./audit-outbox";
-import { canonicalSha256 } from "./canonical";
 import {
-  applyTemplateTwinGlobalRolloutMutation,
   TEMPLATE_TWIN_GLOBAL_ROLLOUT_ID,
   TEMPLATE_TWIN_RELEASE_CONTROL_LOCK_KEY,
   TEMPLATE_TWIN_RELEASE_CONTROL_LOCK_NAMESPACE,
 } from "./rollout";
 import {
   buildTemplateTwinCohortPlan,
-  evaluateTemplateTwinMetricSnapshot,
+  buildTemplateTwinRuntimeManifest,
   parseTemplateTwinGuardrailPolicy,
   templateTwinApprovalConfirmation,
   templateTwinCheckpointConfirmation,
@@ -36,12 +32,13 @@ import {
   type TemplateTwinApprovalDecision,
   type TemplateTwinReleaseDiscipline,
   type TemplateTwinReleaseIdentityEvidence,
+  type TemplateTwinRuntimeRequirementInput,
   type TemplateTwinReleaseStage,
   type TemplateTwinReleaseStatus,
 } from "./release-control-contracts";
+import releaseControlDatabase from "./release-control-db";
 
-const ADMIN_SESSION_MAX_AGE_MS = ADMIN_SESSION_MAX_AGE_HOURS * 60 * 60 * 1000;
-const database = prisma as PrismaClient;
+const database = releaseControlDatabase as PrismaClient;
 
 export const TEMPLATE_TWIN_RELEASE_RUNTIME_ENV = {
   sourceCommitSha: "TEMPLATE_TWIN_RELEASE_COMMIT_SHA",
@@ -55,12 +52,22 @@ export interface TemplateTwinReleaseActor {
   readonly sessionId: string;
 }
 
-interface VerifiedReleaseActor {
+interface VerifiedControlPrincipal {
   readonly userId: string;
   readonly email: string;
   readonly practiceId: string;
+}
+
+interface VerifiedReleaseActor extends VerifiedControlPrincipal {
   readonly sessionSha256: string;
 }
+
+interface VerifiedReleaseAction extends VerifiedReleaseActor {
+  readonly nonce: string;
+  readonly issuedAt: Date;
+}
+
+type VerifiedMonitoringPrincipal = VerifiedControlPrincipal;
 
 interface GlobalControlRow {
   readonly enabled: boolean;
@@ -75,6 +82,7 @@ interface ReleaseRow extends TemplateTwinReleaseIdentityEvidence {
   readonly releaseIdentitySha256: string;
   readonly guardrailPolicySha256: string;
   readonly authorizedPracticeManifestSha256: string;
+  readonly runtimeManifestSha256: string;
   readonly guardrailPolicy: unknown;
   readonly status: string;
   readonly generation: bigint | number | string;
@@ -97,6 +105,15 @@ interface ManifestRow {
   readonly activationStageOrdinal: number;
   readonly templateTwinEnabled?: boolean;
   readonly templateTwinRolloutGeneration?: bigint | number | string;
+  readonly isActive?: boolean;
+}
+
+interface RuntimeRequirementRow {
+  readonly id: string;
+  readonly instanceId: string;
+  readonly component: "APP" | "WORKER";
+  readonly sourceCommitSha: string;
+  readonly imageDigest: string;
 }
 
 interface CheckpointRow {
@@ -125,6 +142,8 @@ interface CheckpointRow {
 interface MetricRow {
   readonly id: string;
   readonly checkpointId: string;
+  readonly releaseGeneration: bigint | number | string;
+  readonly globalGeneration: bigint | number | string;
   readonly schemaVersion: string;
   readonly sampleCount: number;
   readonly observationStartedAt: Date;
@@ -135,6 +154,10 @@ interface MetricRow {
   readonly missingMetrics: string[];
   readonly breachedMetrics: string[];
   readonly blockingReasons: string[];
+  readonly attestationKeyId: string;
+  readonly attestationNonceSha256: string;
+  readonly attestationSignatureSha256: string;
+  readonly receiptVerified?: boolean;
   readonly createdAt: Date;
 }
 
@@ -157,6 +180,40 @@ interface ApprovalSummaryRow {
 }
 
 type ControlTransaction = Prisma.TransactionClient;
+
+function releaseAuditValue(input: EnqueueTemplateTwinAuditInput): Prisma.Sql {
+  assertTemplateTwinAuditMetadata(input.metadata);
+  return Prisma.sql`(
+    ${randomUUID()}, ${input.practiceId}, ${input.actorId ?? null},
+    ${input.actorEmailSnapshot ?? null}, ${input.ipAddress ?? null}::INET,
+    ${input.userAgent ?? null}, ${input.eventKey},
+    ${input.action}::"AuditAction", ${input.targetId ?? null},
+    ${input.targetType ?? null},
+    ${JSON.stringify(input.metadata ?? null)}::JSONB,
+    'PENDING'::"TemplateTwinAuditOutboxStatus", 0, CURRENT_TIMESTAMP
+  )`;
+}
+
+async function enqueueReleaseAuditBatch(
+  tx: ControlTransaction,
+  inputs: readonly EnqueueTemplateTwinAuditInput[],
+): Promise<void> {
+  if (inputs.length === 0) return;
+  await tx.$executeRaw(Prisma.sql`
+    INSERT INTO "template_twin_audit_outbox" (
+      "id", "practiceId", "actorId", "actorEmailSnapshot", "ipAddress",
+      "userAgent", "eventKey", "action", "targetId", "targetType",
+      "metadata", "status", "attemptCount", "updatedAt"
+    ) VALUES ${Prisma.join(inputs.map(releaseAuditValue))}
+  `);
+}
+
+async function enqueueReleaseAudit(
+  tx: ControlTransaction,
+  input: EnqueueTemplateTwinAuditInput,
+): Promise<void> {
+  await enqueueReleaseAuditBatch(tx, [input]);
+}
 
 export type TemplateTwinReleaseControlErrorCode =
   | "TEMPLATE_TWIN_RELEASE_INVALID_REQUEST"
@@ -301,22 +358,66 @@ async function lockManifest(
   tx: ControlTransaction,
   releaseId: string,
 ): Promise<ManifestRow[]> {
+  // Manifest rows are immutable and every mutation of the joined practice
+  // state takes the release advisory lock.  A row lock here would require the
+  // least-privilege control role to have UPDATE on both tables even though this
+  // path only reads them.
   return tx.$queryRaw<ManifestRow[]>(Prisma.sql`
     SELECT manifest.*,
       practice."templateTwinEnabled",
-      practice."templateTwinRolloutGeneration"
+      practice."templateTwinRolloutGeneration", practice."isActive"
     FROM "template_twin_release_practices" manifest
     JOIN "practices" practice ON practice."id" = manifest."practiceId"
     WHERE manifest."releaseId" = ${releaseId}::UUID
     ORDER BY manifest."cohortRank" ASC
-    FOR UPDATE OF manifest, practice
+  `);
+}
+
+function assertManifestPracticesActive(manifest: readonly ManifestRow[]): void {
+  if (manifest.length === 0 || manifest.some(({ isActive }) => !isActive)) {
+    throw new TemplateTwinReleaseControlError(
+      "TEMPLATE_TWIN_RELEASE_STATE_CONFLICT",
+      "Every release practice must remain active; remove deactivated tenants in a new exact release candidate.",
+    );
+  }
+}
+
+async function assertRuntimeReplicaReadiness(input: {
+  readonly tx: ControlTransaction;
+  readonly release: ReleaseRow;
+}): Promise<void> {
+  const rows = await input.tx.$queryRaw<Array<{ ready: boolean }>>(Prisma.sql`
+    SELECT template_twin_release_runtime_ready(
+      ${input.release.id}::UUID,
+      ${input.release.releaseIdentitySha256}::CHAR(64)
+    ) AS "ready"
+  `);
+  if (rows[0]?.ready !== true) {
+    throw new TemplateTwinReleaseControlError(
+      "TEMPLATE_TWIN_RELEASE_RUNTIME_MISMATCH",
+      "Every pinned application and worker replica must have a fresh deployment-authority attestation.",
+    );
+  }
+}
+
+async function lockRuntimeRequirements(
+  tx: ControlTransaction,
+  releaseId: string,
+): Promise<RuntimeRequirementRow[]> {
+  // Runtime requirements are append-only while the candidate is DRAFT and
+  // immutable afterward.  The release advisory lock provides serialization;
+  // no write-capable table privilege is needed for this read.
+  return tx.$queryRaw<RuntimeRequirementRow[]>(Prisma.sql`
+    SELECT "id", "instanceId", "component", "sourceCommitSha", "imageDigest"
+    FROM "template_twin_release_runtime_requirements"
+    WHERE "releaseId" = ${releaseId}::UUID
+    ORDER BY "component", "instanceId"
   `);
 }
 
 async function verifyReleaseActor(
   tx: ControlTransaction,
   actor: TemplateTwinReleaseActor,
-  now = new Date(),
 ): Promise<VerifiedReleaseActor> {
   if (!actor.userId || !actor.sessionId) {
     throw new TemplateTwinReleaseControlError(
@@ -324,75 +425,75 @@ async function verifyReleaseActor(
       "A live, MFA-verified platform administrator session is required.",
     );
   }
-  const rows = await tx.$queryRaw<
-    Array<{
-      userId: string;
-      email: string;
-      practiceId: string;
-      products: string[];
-      isActive: boolean;
-      deactivatedAt: Date | null;
-      suspendedAt: Date | null;
-      softDeletedAt: Date | null;
-      forceLogoutAt: Date | null;
-      mfaEnabled: boolean;
-      mfaVerifiedAt: Date | null;
-      sessionCreatedAt: Date;
-      sessionExpiresAt: Date;
-    }>
-  >(Prisma.sql`
-    SELECT
-      account."id" AS "userId", account."email", account."practiceId",
-      account."products", account."isActive", account."deactivatedAt",
-      account."suspendedAt", account."softDeletedAt", account."forceLogoutAt",
-      account."mfaEnabled", account."mfaVerifiedAt",
-      session."createdAt" AS "sessionCreatedAt",
-      session."expiresAt" AS "sessionExpiresAt"
-    FROM "users" account
-    JOIN "user_sessions" session ON session."userId" = account."id"
-    WHERE account."id" = ${actor.userId}
-      AND session."sessionToken" = ${actor.sessionId}
-    FOR SHARE OF account, session
+  const rows = await tx.$queryRaw<VerifiedReleaseActor[]>(Prisma.sql`
+    SELECT * FROM template_twin_verify_release_actor(
+      ${actor.userId}, ${actor.sessionId}
+    )
   `);
   const row = rows[0];
-  const nowMs = now.getTime();
-  if (
-    !row ||
-    !row.isActive ||
-    row.deactivatedAt !== null ||
-    row.suspendedAt !== null ||
-    row.softDeletedAt !== null ||
-    !row.products.includes("SUPER_ADMIN") ||
-    !row.mfaEnabled ||
-    row.mfaVerifiedAt === null ||
-    row.sessionCreatedAt.getTime() > nowMs ||
-    nowMs - row.sessionCreatedAt.getTime() >= ADMIN_SESSION_MAX_AGE_MS ||
-    row.sessionExpiresAt.getTime() <= nowMs ||
-    (row.forceLogoutAt !== null &&
-      row.forceLogoutAt.getTime() >= row.sessionCreatedAt.getTime())
-  ) {
+  if (!row) {
     throw new TemplateTwinReleaseControlError(
       "TEMPLATE_TWIN_RELEASE_UNAUTHORIZED",
       "A live, MFA-verified platform administrator session is required.",
     );
   }
-  return {
-    userId: row.userId,
-    email: row.email,
-    practiceId: row.practiceId,
-    sessionSha256: canonicalSha256({
-      version: "template-twin-release-actor-session-v1",
-      sessionId: actor.sessionId,
-    }),
-  };
+  return row;
 }
 
-function rolloutActor(actor: VerifiedReleaseActor) {
-  return {
-    userId: actor.userId,
-    userEmail: actor.email,
-    practiceId: actor.practiceId,
-  };
+async function issueReleaseActionReceipt(input: {
+  readonly tx: ControlTransaction;
+  readonly actor: TemplateTwinReleaseActor;
+  readonly releaseId: string;
+  readonly checkpointId?: string;
+  readonly action: "FREEZE" | "APPROVAL" | "ACTIVATE" | "PASS";
+  readonly discipline?: TemplateTwinReleaseDiscipline;
+  readonly decision?: TemplateTwinApprovalDecision;
+  readonly confirmation: string;
+}): Promise<VerifiedReleaseAction> {
+  if (!input.actor.userId || !input.actor.sessionId) {
+    throw new TemplateTwinReleaseControlError(
+      "TEMPLATE_TWIN_RELEASE_UNAUTHORIZED",
+      "A live, MFA-verified platform administrator session is required.",
+    );
+  }
+  const rows = await input.tx.$queryRaw<VerifiedReleaseAction[]>(Prisma.sql`
+    SELECT * FROM template_twin_issue_release_action_receipt(
+      ${input.actor.userId}, ${input.actor.sessionId}, ${input.releaseId}::UUID,
+      ${input.checkpointId ?? null}::UUID, ${input.action},
+      ${input.discipline ?? null}, ${input.decision ?? null},
+      ${input.confirmation}
+    )
+  `);
+  const receipt = rows[0];
+  if (!receipt) {
+    throw new TemplateTwinReleaseControlError(
+      "TEMPLATE_TWIN_RELEASE_UNAUTHORIZED",
+      "A transaction-bound release action receipt could not be issued.",
+    );
+  }
+  return receipt;
+}
+
+async function loadMonitoringPrincipal(
+  tx: ControlTransaction,
+  userId: string,
+): Promise<VerifiedMonitoringPrincipal> {
+  const rows = await tx.$queryRaw<VerifiedMonitoringPrincipal[]>(Prisma.sql`
+    SELECT "id" AS "userId", "email", "practiceId"
+    FROM "users"
+    WHERE "id" = ${userId}
+      AND "isActive" = TRUE
+      AND "deactivatedAt" IS NULL
+      AND "suspendedAt" IS NULL
+      AND "softDeletedAt" IS NULL
+  `);
+  if (!rows[0]) {
+    throw new TemplateTwinReleaseControlError(
+      "TEMPLATE_TWIN_RELEASE_UNAUTHORIZED",
+      "The signed monitoring principal is inactive or unavailable.",
+    );
+  }
+  return rows[0];
 }
 
 async function approvalsAreCurrent(
@@ -496,7 +597,6 @@ async function assertLineageContracted(tx: ControlTransaction): Promise<void> {
   const rows = await tx.$queryRaw<Array<{ phase: string }>>(Prisma.sql`
     SELECT "phase" FROM "template_twin_lineage_migration_progress"
     WHERE "operationKey" = 'note_templates_lineage_v1'
-    FOR SHARE
   `);
   if (rows[0]?.phase !== "CONTRACTED") {
     throw new TemplateTwinReleaseControlError(
@@ -536,14 +636,15 @@ async function censusAuthorizedPhysicians(
 
 async function disableReleaseExposure(input: {
   tx: ControlTransaction;
-  actor: VerifiedReleaseActor;
+  actor: VerifiedControlPrincipal;
   global: GlobalControlRow;
   manifest: readonly ManifestRow[];
 }): Promise<bigint> {
-  const generation = await applyTemplateTwinGlobalRolloutMutation({
+  const generation = await applyReleaseGlobalExposure({
     tx: input.tx,
     enabled: false,
-    actor: rolloutActor(input.actor),
+    actor: input.actor,
+    current: input.global,
   });
   await applyReleasePracticeExposureBatch({
     tx: input.tx,
@@ -556,11 +657,56 @@ async function disableReleaseExposure(input: {
   return generation;
 }
 
+async function applyReleaseGlobalExposure(input: {
+  readonly tx: ControlTransaction;
+  readonly enabled: boolean;
+  readonly actor: VerifiedControlPrincipal;
+  readonly current: GlobalControlRow;
+}): Promise<bigint> {
+  const currentGeneration = exactGeneration(input.current.generation);
+  const rows = await input.tx.$queryRaw<
+    Array<{ generation: bigint | number | string }>
+  >(Prisma.sql`
+    UPDATE "template_twin_rollout_controls"
+    SET "enabled" = ${input.enabled}, "generation" = "generation" + 1,
+        "updatedAt" = CURRENT_TIMESTAMP
+    WHERE "id" = ${TEMPLATE_TWIN_GLOBAL_ROLLOUT_ID}
+      AND "generation" = ${currentGeneration}
+    RETURNING "generation"
+  `);
+  const updated = rows[0];
+  if (!updated) {
+    throw new TemplateTwinReleaseControlError(
+      "TEMPLATE_TWIN_RELEASE_STALE_GENERATION",
+      "The global rollout generation changed before the release mutation.",
+    );
+  }
+  const nextGeneration = exactGeneration(updated.generation);
+  await enqueueReleaseAudit(input.tx, {
+    eventKey: `template-twin:global-rollout:${nextGeneration.toString()}`,
+    practiceId: input.actor.practiceId,
+    actorId: input.actor.userId,
+    actorEmailSnapshot: input.actor.email,
+    action: input.enabled
+      ? "TEMPLATE_TWIN_ACTIVATED"
+      : "TEMPLATE_TWIN_DEACTIVATED",
+    targetType: "TemplateTwinRolloutControl",
+    targetId: TEMPLATE_TWIN_GLOBAL_ROLLOUT_ID,
+    metadata: {
+      scope: "global",
+      enabled: input.enabled,
+      previousGeneration: currentGeneration.toString(),
+      generation: nextGeneration.toString(),
+    },
+  });
+  return nextGeneration;
+}
+
 async function applyReleasePracticeExposureBatch(input: {
   readonly tx: ControlTransaction;
   readonly practices: readonly ManifestRow[];
   readonly enabled: boolean;
-  readonly actor: VerifiedReleaseActor;
+  readonly actor: VerifiedControlPrincipal;
 }): Promise<void> {
   if (input.practices.length === 0) return;
   const practiceIds = input.practices.map(({ practiceId }) => practiceId);
@@ -613,9 +759,10 @@ async function applyReleasePracticeExposureBatch(input: {
     };
   });
   for (let offset = 0; offset < auditRows.length; offset += 500) {
-    await input.tx.templateTwinAuditOutbox.createMany({
-      data: auditRows.slice(offset, offset + 500),
-    });
+    await enqueueReleaseAuditBatch(
+      input.tx,
+      auditRows.slice(offset, offset + 500),
+    );
   }
 }
 
@@ -633,6 +780,7 @@ function releaseIdentityInput(release: ReleaseRow) {
     officeWordEvidenceSha256: release.officeWordEvidenceSha256,
     guardrailPolicySha256: release.guardrailPolicySha256,
     authorizedPracticeManifestSha256: release.authorizedPracticeManifestSha256,
+    runtimeManifestSha256: release.runtimeManifestSha256,
   };
 }
 
@@ -643,6 +791,7 @@ export async function createTemplateTwinReleaseCandidate(input: {
   readonly guardrailPolicy: unknown;
   readonly authorizedPracticeIds: readonly string[];
   readonly canaryPracticeIds: readonly string[];
+  readonly runtimeInstances: readonly TemplateTwinRuntimeRequirementInput[];
 }): Promise<{
   readonly releaseId: string;
   readonly releaseIdentitySha256: string;
@@ -732,10 +881,17 @@ export async function createTemplateTwinReleaseCandidate(input: {
         })),
         canaryPracticeIds: input.canaryPracticeIds,
       });
+      const runtimeManifest = buildTemplateTwinRuntimeManifest({
+        sourceCommitSha: input.evidence.sourceCommitSha,
+        appImageDigest: input.evidence.appImageDigest,
+        workerImageDigest: input.evidence.workerImageDigest,
+        instances: input.runtimeInstances,
+      });
       const identityInput = {
         ...input.evidence,
         guardrailPolicySha256: policySha256,
         authorizedPracticeManifestSha256: plan.authorizedPracticeManifestSha256,
+        runtimeManifestSha256: runtimeManifest.runtimeManifestSha256,
       };
       const releaseIdentitySha256 =
         templateTwinReleaseIdentitySha256(identityInput);
@@ -751,6 +907,7 @@ export async function createTemplateTwinReleaseCandidate(input: {
           "securityEvidenceSha256", "migrationRestoreEvidenceSha256",
           "officeWordEvidenceSha256", "guardrailPolicySha256",
           "authorizedPracticeManifestSha256", "guardrailPolicy",
+          "runtimeManifestSha256",
           "status", "generation", "createdById"
         ) VALUES (
           ${releaseId}::UUID, ${TEMPLATE_TWIN_RELEASE_IDENTITY_VERSION},
@@ -763,8 +920,23 @@ export async function createTemplateTwinReleaseCandidate(input: {
           ${input.evidence.migrationRestoreEvidenceSha256},
           ${input.evidence.officeWordEvidenceSha256}, ${policySha256},
           ${plan.authorizedPracticeManifestSha256},
-          ${JSON.stringify(policy)}::JSONB, 'DRAFT', 1, ${actor.userId}
+          ${JSON.stringify(policy)}::JSONB,
+          ${runtimeManifest.runtimeManifestSha256}, 'DRAFT', 1, ${actor.userId}
         )
+      `);
+
+      const runtimeRows = runtimeManifest.instances.map(
+        (instance) => Prisma.sql`(
+          ${randomUUID()}::UUID, ${releaseId}::UUID, ${releaseIdentitySha256},
+          ${instance.instanceId}, ${instance.component},
+          ${input.evidence.sourceCommitSha}, ${instance.imageDigest}
+        )`,
+      );
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO "template_twin_release_runtime_requirements" (
+          "id", "releaseId", "releaseIdentitySha256", "instanceId",
+          "component", "sourceCommitSha", "imageDigest"
+        ) VALUES ${Prisma.join(runtimeRows)}
       `);
 
       const manifestRows = plan.practices.map(
@@ -805,7 +977,7 @@ export async function createTemplateTwinReleaseCandidate(input: {
           )
         `);
       }
-      await enqueueTemplateTwinAudit(tx, {
+      await enqueueReleaseAudit(tx, {
         eventKey,
         practiceId: actor.practiceId,
         actorId: actor.userId,
@@ -821,6 +993,8 @@ export async function createTemplateTwinReleaseCandidate(input: {
             plan.checkpoints.at(-1)!.assignedPhysicianCount,
           guardrailPolicySha256: policySha256,
           manifestSha256: plan.authorizedPracticeManifestSha256,
+          runtimeManifestSha256: runtimeManifest.runtimeManifestSha256,
+          runtimeInstanceCount: runtimeManifest.instances.length,
         },
       });
       return {
@@ -828,6 +1002,7 @@ export async function createTemplateTwinReleaseCandidate(input: {
         releaseIdentitySha256,
         authorizedPracticeManifestSha256: plan.authorizedPracticeManifestSha256,
         guardrailPolicySha256: policySha256,
+        runtimeManifestSha256: runtimeManifest.runtimeManifestSha256,
         generation: "1",
       };
     },
@@ -848,9 +1023,10 @@ export async function freezeTemplateTwinReleaseCandidate(input: {
       await acquireControlPlaneLock(tx);
       const global = await lockGlobalControl(tx);
       const release = await lockRelease(tx, releaseId);
-      const actor = await verifyReleaseActor(tx, input.actor);
       const manifest = await lockManifest(tx, releaseId);
+      const runtimeRequirements = await lockRuntimeRequirements(tx, releaseId);
       await lockCheckpoints(tx, releaseId);
+      assertManifestPracticesActive(manifest);
       assertExpectedReleaseGeneration(release, expected);
       assertRollbackFenceOpen(global);
       if (release.status !== "DRAFT" || global.enabled) {
@@ -876,11 +1052,19 @@ export async function freezeTemplateTwinReleaseCandidate(input: {
           .filter(({ isCanary }) => isCanary)
           .map(({ practiceId }) => practiceId),
       });
+      const runtimeManifest = buildTemplateTwinRuntimeManifest({
+        sourceCommitSha: release.sourceCommitSha,
+        appImageDigest: release.appImageDigest,
+        workerImageDigest: release.workerImageDigest,
+        instances: runtimeRequirements,
+      });
       if (
         templateTwinGuardrailPolicySha256(policy) !==
           release.guardrailPolicySha256 ||
         plan.authorizedPracticeManifestSha256 !==
           release.authorizedPracticeManifestSha256 ||
+        runtimeManifest.runtimeManifestSha256 !==
+          release.runtimeManifestSha256 ||
         templateTwinReleaseIdentitySha256(releaseIdentityInput(release)) !==
           release.releaseIdentitySha256 ||
         plan.practices.some((planned, index) => {
@@ -901,8 +1085,16 @@ export async function freezeTemplateTwinReleaseCandidate(input: {
         );
       }
 
+      const actor = await issueReleaseActionReceipt({
+        tx,
+        actor: input.actor,
+        releaseId,
+        action: "FREEZE",
+        confirmation: input.confirmation,
+      });
+
       const eventKey = `template-twin:release:${releaseId}:frozen`;
-      await enqueueTemplateTwinAudit(tx, {
+      await enqueueReleaseAudit(tx, {
         eventKey,
         practiceId: actor.practiceId,
         actorId: actor.userId,
@@ -914,12 +1106,15 @@ export async function freezeTemplateTwinReleaseCandidate(input: {
           releaseIdentitySha256: release.releaseIdentitySha256,
           previousGeneration: expected.toString(),
           generation: (expected + BigInt(1)).toString(),
+          actionReceiptNonce: actor.nonce,
         },
       });
       await tx.$executeRaw(Prisma.sql`
         UPDATE "template_twin_release_candidates"
         SET "status" = 'FROZEN', "generation" = "generation" + 1,
-            "frozenById" = ${actor.userId}, "frozenAt" = CURRENT_TIMESTAMP,
+            "frozenById" = ${actor.userId},
+            "frozenAt" = CURRENT_TIMESTAMP,
+            "freezeActionReceiptNonce" = ${actor.nonce}::UUID,
             "updatedAt" = CURRENT_TIMESTAMP
         WHERE "id" = ${releaseId}::UUID
       `);
@@ -963,7 +1158,15 @@ export async function recordTemplateTwinReleaseApproval(input: {
     const release = await lockRelease(tx, releaseId);
     const checkpoints = await lockCheckpoints(tx, releaseId);
     const manifest = await lockManifest(tx, releaseId);
-    const actor = await verifyReleaseActor(tx, input.actor);
+    const actor = await issueReleaseActionReceipt({
+      tx,
+      actor: input.actor,
+      releaseId,
+      action: "APPROVAL",
+      discipline: input.discipline,
+      decision: input.decision,
+      confirmation: input.confirmation,
+    });
     const observedGeneration =
       input.decision === "APPROVE"
         ? (assertExpectedReleaseGeneration(release, expected), expected)
@@ -1014,7 +1217,6 @@ export async function recordTemplateTwinReleaseApproval(input: {
           AND "revokedAt" IS NULL
         ORDER BY "effectiveAt" DESC, "id" DESC
         LIMIT 1
-        FOR SHARE
       `);
     const authority = authorities[0];
     if (!authority) {
@@ -1025,7 +1227,7 @@ export async function recordTemplateTwinReleaseApproval(input: {
     }
     const decisionId = randomUUID();
     const eventKey = `template-twin:release:${releaseId}:approval:${decisionId}`;
-    await enqueueTemplateTwinAudit(tx, {
+    await enqueueReleaseAudit(tx, {
       eventKey,
       practiceId: actor.practiceId,
       actorId: actor.userId,
@@ -1040,6 +1242,7 @@ export async function recordTemplateTwinReleaseApproval(input: {
         decision: input.decision,
         evidenceSha256: input.evidenceSha256,
         authorityAssignmentId: authority.id,
+        actionReceiptNonce: actor.nonce,
         requestedReleaseGeneration: expected.toString(),
         previousReleaseGeneration: observedGeneration.toString(),
       },
@@ -1049,13 +1252,15 @@ export async function recordTemplateTwinReleaseApproval(input: {
           "id", "releaseId", "releaseIdentitySha256", "discipline",
           "decision", "evidenceSha256", "confirmation", "actorId",
           "actorEmailSnapshot", "actorSessionSha256",
-          "authorityAssignmentId", "auditOutboxEventKey"
+          "authorityAssignmentId", "auditOutboxEventKey",
+          "actionReceiptNonce", "decidedAt"
         ) VALUES (
           ${decisionId}::UUID, ${releaseId}::UUID,
           ${release.releaseIdentitySha256}, ${input.discipline},
           ${input.decision}, ${input.evidenceSha256}, ${input.confirmation},
           ${actor.userId}, ${actor.email}, ${actor.sessionSha256},
-          ${authority.id}::UUID, ${eventKey}
+          ${authority.id}::UUID, ${eventKey}, ${actor.nonce}::UUID,
+          CURRENT_TIMESTAMP
         )
       `);
 
@@ -1141,11 +1346,15 @@ export async function activateTemplateTwinReleaseCheckpoint(input: {
       const release = await lockRelease(tx, releaseId);
       const checkpoints = await lockCheckpoints(tx, releaseId);
       const manifest = await lockManifest(tx, releaseId);
-      const actor = await verifyReleaseActor(tx, input.actor);
       assertExpectedReleaseGeneration(release, expectedRelease);
       assertExpectedGlobalGeneration(global, expectedGlobal);
       assertRollbackFenceOpen(global);
       assertRuntimeIdentity(release, input.env);
+      assertManifestPracticesActive(manifest);
+      await assertRuntimeReplicaReadiness({
+        tx,
+        release,
+      });
       await assertLineageContracted(tx);
       if (!(await approvalsAreCurrent(tx, release))) {
         throw new TemplateTwinReleaseControlError(
@@ -1185,6 +1394,14 @@ export async function activateTemplateTwinReleaseCheckpoint(input: {
           releaseIdentitySha256: release.releaseIdentitySha256,
         }),
       );
+      const actor = await issueReleaseActionReceipt({
+        tx,
+        actor: input.actor,
+        releaseId,
+        checkpointId: checkpoint.id,
+        action: "ACTIVATE",
+        confirmation: input.confirmation,
+      });
 
       const inScope = manifest.filter(
         ({ activationStageOrdinal }) =>
@@ -1204,11 +1421,10 @@ export async function activateTemplateTwinReleaseCheckpoint(input: {
         tx,
         inScope.map(({ practiceId }) => practiceId),
       );
-      const now = new Date();
       const eventKey =
         `template-twin:release:${releaseId}:checkpoint:` +
         `${input.stage}:activated`;
-      await enqueueTemplateTwinAudit(tx, {
+      await enqueueReleaseAudit(tx, {
         eventKey,
         practiceId: actor.practiceId,
         actorId: actor.userId,
@@ -1226,17 +1442,18 @@ export async function activateTemplateTwinReleaseCheckpoint(input: {
           activatedPhysicianCount,
           previousReleaseGeneration: expectedRelease.toString(),
           previousGlobalGeneration: expectedGlobal.toString(),
+          actionReceiptNonce: actor.nonce,
         },
       });
       await tx.$executeRaw(Prisma.sql`
         UPDATE "template_twin_release_checkpoints"
         SET "status" = 'ACTIVE', "activatedPhysicianCount" = ${activatedPhysicianCount},
-            "activatedAt" = ${now},
-            "earliestPassAt" = ${new Date(
-              now.getTime() + checkpoint.minimumBakeSeconds * 1000,
-            )},
+            "activatedAt" = CURRENT_TIMESTAMP,
+            "earliestPassAt" = CURRENT_TIMESTAMP +
+              ${checkpoint.minimumBakeSeconds} * INTERVAL '1 second',
             "activatedById" = ${actor.userId},
             "activationOutboxEventKey" = ${eventKey},
+            "activationActionReceiptNonce" = ${actor.nonce}::UUID,
             "updatedAt" = CURRENT_TIMESTAMP
         WHERE "id" = ${checkpoint.id}::UUID
       `);
@@ -1254,13 +1471,12 @@ export async function activateTemplateTwinReleaseCheckpoint(input: {
         )
       `);
 
-      const nextGlobalGeneration = await applyTemplateTwinGlobalRolloutMutation(
-        {
-          tx,
-          enabled: true,
-          actor: rolloutActor(actor),
-        },
-      );
+      const nextGlobalGeneration = await applyReleaseGlobalExposure({
+        tx,
+        enabled: true,
+        actor,
+        current: global,
+      });
       await applyReleasePracticeExposureBatch({
         tx,
         practices: newlyInScope,
@@ -1281,7 +1497,6 @@ export async function activateTemplateTwinReleaseCheckpoint(input: {
 }
 
 export async function recordTemplateTwinReleaseMetricSnapshot(input: {
-  readonly actor: TemplateTwinReleaseActor;
   readonly releaseId: string;
   readonly stage: TemplateTwinReleaseStage;
   readonly expectedReleaseGeneration: string;
@@ -1289,8 +1504,14 @@ export async function recordTemplateTwinReleaseMetricSnapshot(input: {
   readonly sampleCount: number;
   readonly observationStartedAt: Date;
   readonly observationEndedAt: Date;
-  readonly metrics: unknown;
-  readonly now?: Date;
+  readonly metrics: Readonly<Record<string, string>>;
+  readonly attestation: {
+    readonly version: "template-twin-metric-attestation-v1";
+    readonly keyId: string;
+    readonly nonce: string;
+    readonly issuedAtEpochSeconds: number;
+    readonly signature: string;
+  };
 }): Promise<{
   readonly snapshotId: string;
   readonly canonicalSha256: string;
@@ -1305,7 +1526,20 @@ export async function recordTemplateTwinReleaseMetricSnapshot(input: {
   const releaseId = uuid(input.releaseId);
   const expectedRelease = expectedGeneration(input.expectedReleaseGeneration);
   const expectedGlobal = expectedGeneration(input.expectedGlobalGeneration);
-  const evaluationNow = input.now ?? new Date();
+  if (
+    input.attestation.version !== "template-twin-metric-attestation-v1" ||
+    !/^[A-Za-z0-9][A-Za-z0-9._:-]{2,79}$/u.test(input.attestation.keyId) ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(
+      input.attestation.nonce,
+    ) ||
+    !Number.isSafeInteger(input.attestation.issuedAtEpochSeconds) ||
+    !/^[0-9a-f]{64}$/u.test(input.attestation.signature)
+  ) {
+    throw new TemplateTwinReleaseControlError(
+      "TEMPLATE_TWIN_RELEASE_INVALID_REQUEST",
+      "The monitoring attestation shape is invalid.",
+    );
+  }
   return runSerializableTransactionWithRetry({
     prisma: database,
     operation: "template_twin_release_metric_snapshot",
@@ -1317,7 +1551,6 @@ export async function recordTemplateTwinReleaseMetricSnapshot(input: {
       const release = await lockRelease(tx, releaseId);
       const checkpoints = await lockCheckpoints(tx, releaseId);
       const manifest = await lockManifest(tx, releaseId);
-      const actor = await verifyReleaseActor(tx, input.actor, evaluationNow);
       const checkpoint = checkpoints.find(({ stage }) => stage === input.stage);
       if (!checkpoint?.activatedAt) {
         throw new TemplateTwinReleaseControlError(
@@ -1325,19 +1558,43 @@ export async function recordTemplateTwinReleaseMetricSnapshot(input: {
           "Metrics can be attached only to an activated checkpoint.",
         );
       }
-      const policy = parseTemplateTwinGuardrailPolicy(release.guardrailPolicy);
-      const evaluation = evaluateTemplateTwinMetricSnapshot({
-        releaseIdentitySha256: release.releaseIdentitySha256,
-        policy,
-        policySha256: release.guardrailPolicySha256,
-        stage: input.stage,
-        checkpointActivatedAt: checkpoint.activatedAt,
-        sampleCount: input.sampleCount,
-        observationStartedAt: input.observationStartedAt,
-        observationEndedAt: input.observationEndedAt,
-        metrics: input.metrics,
-        now: evaluationNow,
-      });
+      const receiptRows = await tx.$queryRaw<
+        Array<{
+          receiptNonce: string;
+          principalUserId: string;
+          schemaVersion: string;
+          canonicalSha256: string;
+          evaluation: "PASS" | "BLOCK" | "CRITICAL_REVOKE";
+          metrics: unknown;
+          missingMetrics: string[];
+          breachedMetrics: string[];
+          blockingReasons: string[];
+          attestationNonceSha256: string;
+          attestationSignatureSha256: string;
+        }>
+      >(Prisma.sql`
+        SELECT * FROM template_twin_issue_metric_receipt(
+          ${input.attestation.version}, ${input.attestation.keyId},
+          ${input.attestation.nonce}::UUID, ${releaseId}::UUID,
+          ${input.stage}, ${expectedRelease}, ${expectedGlobal},
+          ${input.sampleCount}, ${input.observationStartedAt.getTime()}::BIGINT,
+          ${input.observationEndedAt.getTime()}::BIGINT,
+          ${JSON.stringify(input.metrics)}::JSONB,
+          ${input.attestation.issuedAtEpochSeconds}::BIGINT,
+          ${input.attestation.signature}::CHAR(64)
+        )
+      `);
+      const evaluation = receiptRows[0];
+      if (!evaluation) {
+        throw new TemplateTwinReleaseControlError(
+          "TEMPLATE_TWIN_RELEASE_CONTROL_UNAVAILABLE",
+          "The database did not issue a signed monitoring receipt.",
+        );
+      }
+      const actor = await loadMonitoringPrincipal(
+        tx,
+        evaluation.principalUserId,
+      );
       const isCritical = evaluation.evaluation === "CRITICAL_REVOKE";
       let releaseGeneration: bigint;
       let globalGeneration: bigint;
@@ -1379,7 +1636,7 @@ export async function recordTemplateTwinReleaseMetricSnapshot(input: {
         ? `template-twin:release:${releaseId}:metric:${snapshotId}:critical-revoke`
         : null;
       if (criticalEventKey) {
-        await enqueueTemplateTwinAudit(tx, {
+        await enqueueReleaseAudit(tx, {
           eventKey: criticalEventKey,
           practiceId: actor.practiceId,
           actorId: actor.userId,
@@ -1403,22 +1660,27 @@ export async function recordTemplateTwinReleaseMetricSnapshot(input: {
       await tx.$executeRaw(Prisma.sql`
         INSERT INTO "template_twin_release_metric_snapshots" (
           "id", "releaseId", "checkpointId", "releaseIdentitySha256",
+          "releaseGeneration", "globalGeneration",
           "policySha256", "schemaVersion", "sampleCount",
           "observationStartedAt", "observationEndedAt", "metrics",
           "canonicalSha256", "evaluation", "missingMetrics",
           "breachedMetrics", "blockingReasons", "recordedById",
-          "criticalOutboxEventKey"
+          "criticalOutboxEventKey", "attestationKeyId",
+          "attestationNonceSha256", "attestationSignatureSha256"
         ) VALUES (
           ${snapshotId}::UUID, ${releaseId}::UUID, ${checkpoint.id}::UUID,
-          ${release.releaseIdentitySha256}, ${release.guardrailPolicySha256},
-          ${policy.schemaVersion}, ${input.sampleCount},
+          ${release.releaseIdentitySha256}, ${expectedRelease}, ${expectedGlobal},
+          ${release.guardrailPolicySha256},
+          ${evaluation.schemaVersion}, ${input.sampleCount},
           ${input.observationStartedAt}, ${input.observationEndedAt},
           ${JSON.stringify(evaluation.metrics)}::JSONB,
           ${evaluation.canonicalSha256}, ${evaluation.evaluation},
           ${evaluation.missingMetrics}::TEXT[],
           ${evaluation.breachedMetrics}::TEXT[],
           ${evaluation.blockingReasons}::TEXT[], ${actor.userId},
-          ${criticalEventKey}
+          ${criticalEventKey}, ${input.attestation.keyId},
+          ${evaluation.attestationNonceSha256},
+          ${evaluation.attestationSignatureSha256}
         )
       `);
 
@@ -1491,11 +1753,15 @@ export async function passTemplateTwinReleaseCheckpoint(input: {
       const release = await lockRelease(tx, releaseId);
       const checkpoints = await lockCheckpoints(tx, releaseId);
       const manifest = await lockManifest(tx, releaseId);
-      const actor = await verifyReleaseActor(tx, input.actor, input.now);
       assertExpectedReleaseGeneration(release, expectedRelease);
       assertExpectedGlobalGeneration(global, expectedGlobal);
       assertRollbackFenceOpen(global);
       assertRuntimeIdentity(release, input.env);
+      assertManifestPracticesActive(manifest);
+      await assertRuntimeReplicaReadiness({
+        tx,
+        release,
+      });
       if (!(await approvalsAreCurrent(tx, release))) {
         throw new TemplateTwinReleaseControlError(
           "TEMPLATE_TWIN_RELEASE_APPROVAL_INCOMPLETE",
@@ -1525,18 +1791,49 @@ export async function passTemplateTwinReleaseCheckpoint(input: {
           releaseIdentitySha256: release.releaseIdentitySha256,
         }),
       );
+      // Metric snapshots and their signed receipts are append-only. The
+      // advisory release lock serializes checkpoint transitions, so this read
+      // must not request a row lock (which would require UPDATE privilege on
+      // immutable evidence).
       const metricRows = await tx.$queryRaw<MetricRow[]>(Prisma.sql`
-        SELECT * FROM "template_twin_release_metric_snapshots"
-        WHERE "checkpointId" = ${checkpoint.id}::UUID
-        ORDER BY "createdAt" DESC, "id" DESC
+        SELECT metric.*, EXISTS (
+          SELECT 1 FROM "template_twin_release_metric_receipts" receipt
+          WHERE receipt."releaseId" = metric."releaseId"
+            AND receipt."checkpointId" = metric."checkpointId"
+            AND receipt."releaseGeneration" = metric."releaseGeneration"
+            AND receipt."globalGeneration" = metric."globalGeneration"
+            AND receipt."releaseIdentitySha256" = metric."releaseIdentitySha256"
+            AND receipt."policySha256" = metric."policySha256"
+            AND receipt."schemaVersion" = metric."schemaVersion"
+            AND receipt."sampleCount" = metric."sampleCount"
+            AND receipt."observationStartedAt" = metric."observationStartedAt"
+            AND receipt."observationEndedAt" = metric."observationEndedAt"
+            AND receipt."metrics" = metric."metrics"
+            AND receipt."canonicalSha256" = metric."canonicalSha256"
+            AND receipt."evaluation" = metric."evaluation"
+            AND receipt."missingMetrics" = metric."missingMetrics"
+            AND receipt."breachedMetrics" = metric."breachedMetrics"
+            AND receipt."blockingReasons" = metric."blockingReasons"
+            AND receipt."principalUserId" = metric."recordedById"
+            AND receipt."attestationKeyId" = metric."attestationKeyId"
+            AND receipt."attestationNonceSha256" = metric."attestationNonceSha256"
+            AND receipt."attestationSignatureSha256" = metric."attestationSignatureSha256"
+        ) AS "receiptVerified"
+        FROM "template_twin_release_metric_snapshots" metric
+        WHERE metric."checkpointId" = ${checkpoint.id}::UUID
+        ORDER BY metric."createdAt" DESC, metric."id" DESC
         LIMIT 1
-        FOR SHARE
       `);
       const metric = metricRows[0];
       const policy = parseTemplateTwinGuardrailPolicy(release.guardrailPolicy);
       if (
         !metric ||
+        metric.receiptVerified !== true ||
         metric.evaluation !== "PASS" ||
+        metric.schemaVersion !== "template-twin-guardrails-v1" ||
+        metric.missingMetrics.length !== 0 ||
+        metric.breachedMetrics.length !== 0 ||
+        metric.blockingReasons.length !== 0 ||
         metric.observationStartedAt < checkpoint.activatedAt ||
         now.getTime() - metric.observationEndedAt.getTime() >
           policy.maxObservationAgeSeconds * 1000
@@ -1569,10 +1866,18 @@ export async function passTemplateTwinReleaseCheckpoint(input: {
         tx,
         inScope.map(({ practiceId }) => practiceId),
       );
+      const actor = await issueReleaseActionReceipt({
+        tx,
+        actor: input.actor,
+        releaseId,
+        checkpointId: checkpoint.id,
+        action: "PASS",
+        confirmation: input.confirmation,
+      });
       const eventKey =
         `template-twin:release:${releaseId}:checkpoint:` +
         `${input.stage}:passed`;
-      await enqueueTemplateTwinAudit(tx, {
+      await enqueueReleaseAudit(tx, {
         eventKey,
         practiceId: actor.practiceId,
         actorId: actor.userId,
@@ -1588,13 +1893,16 @@ export async function passTemplateTwinReleaseCheckpoint(input: {
           targetPhysicianCount: checkpoint.targetPhysicianCount,
           assignedPhysicianCount: checkpoint.assignedPhysicianCount,
           passedPhysicianCount,
+          actionReceiptNonce: actor.nonce,
         },
       });
       await tx.$executeRaw(Prisma.sql`
         UPDATE "template_twin_release_checkpoints"
         SET "status" = 'PASSED', "passedPhysicianCount" = ${passedPhysicianCount},
-            "passedAt" = ${now}, "passedById" = ${actor.userId},
+            "passedAt" = CURRENT_TIMESTAMP,
+            "passedById" = ${actor.userId},
             "passOutboxEventKey" = ${eventKey},
+            "passActionReceiptNonce" = ${actor.nonce}::UUID,
             "updatedAt" = CURRENT_TIMESTAMP
         WHERE "id" = ${checkpoint.id}::UUID
       `);
@@ -1669,7 +1977,7 @@ export async function revokeTemplateTwinRelease(input: {
         `REVOKE ${release.releaseIdentitySha256.slice(0, 12)}`,
       );
       const eventKey = `template-twin:release:${releaseId}:revoked:${expectedRelease.toString()}`;
-      await enqueueTemplateTwinAudit(tx, {
+      await enqueueReleaseAudit(tx, {
         eventKey,
         practiceId: actor.practiceId,
         actorId: actor.userId,
@@ -1738,6 +2046,7 @@ export interface TemplateTwinReleaseControlView {
       readonly officeWordEvidenceSha256: string;
       readonly guardrailPolicySha256: string;
       readonly authorizedPracticeManifestSha256: string;
+      readonly runtimeManifestSha256: string;
     };
     readonly status: string;
     readonly generation: string;
@@ -1747,6 +2056,7 @@ export interface TemplateTwinReleaseControlView {
     readonly approvals: readonly ApprovalSummaryView[];
     readonly checkpoints: readonly CheckpointView[];
     readonly practices: readonly PracticeView[];
+    readonly runtimeRequirements: readonly RuntimeRequirementView[];
     readonly operatorAuthorities: readonly string[];
   };
 }
@@ -1802,6 +2112,16 @@ interface PracticeView {
   readonly rolloutGeneration: string;
 }
 
+interface RuntimeRequirementView {
+  readonly instanceId: string;
+  readonly component: string;
+  readonly sourceCommitSha: string;
+  readonly imageDigest: string;
+  readonly ready: boolean;
+  readonly lastSeenAt: string | null;
+  readonly expiresAt: string | null;
+}
+
 export async function inspectTemplateTwinReleaseControl(
   input: {
     readonly releaseId?: string;
@@ -1845,9 +2165,15 @@ export async function inspectTemplateTwinReleaseControl(
       release: null,
     };
   }
-  const [approvals, checkpoints, practices, metrics, authorities] =
-    await Promise.all([
-      database.$queryRaw<ApprovalSummaryRow[]>(Prisma.sql`
+  const [
+    approvals,
+    checkpoints,
+    practices,
+    metrics,
+    runtimeRequirements,
+    authorities,
+  ] = await Promise.all([
+    database.$queryRaw<ApprovalSummaryRow[]>(Prisma.sql`
         SELECT DISTINCT ON (decision."discipline")
           decision."id", decision."discipline", decision."decision",
           decision."evidenceSha256", decision."actorId",
@@ -1860,12 +2186,12 @@ export async function inspectTemplateTwinReleaseControl(
         WHERE decision."releaseId" = ${release.id}::UUID
         ORDER BY decision."discipline", decision."decidedAt" DESC, decision."id" DESC
       `),
-      database.$queryRaw<CheckpointRow[]>(Prisma.sql`
+    database.$queryRaw<CheckpointRow[]>(Prisma.sql`
         SELECT * FROM "template_twin_release_checkpoints"
         WHERE "releaseId" = ${release.id}::UUID
         ORDER BY "ordinal" ASC
       `),
-      database.$queryRaw<ManifestRow[]>(Prisma.sql`
+    database.$queryRaw<ManifestRow[]>(Prisma.sql`
         SELECT manifest.*, practice."templateTwinEnabled",
           practice."templateTwinRolloutGeneration"
         FROM "template_twin_release_practices" manifest
@@ -1873,14 +2199,41 @@ export async function inspectTemplateTwinReleaseControl(
         WHERE manifest."releaseId" = ${release.id}::UUID
         ORDER BY manifest."cohortRank" ASC
       `),
-      database.$queryRaw<MetricRow[]>(Prisma.sql`
+    database.$queryRaw<MetricRow[]>(Prisma.sql`
         SELECT DISTINCT ON (metric."checkpointId") metric.*
         FROM "template_twin_release_metric_snapshots" metric
         WHERE metric."releaseId" = ${release.id}::UUID
         ORDER BY metric."checkpointId", metric."createdAt" DESC, metric."id" DESC
       `),
-      input.operatorUserId
-        ? database.$queryRaw<AuthorityRow[]>(Prisma.sql`
+    database.$queryRaw<
+      Array<{
+        instanceId: string;
+        component: string;
+        sourceCommitSha: string;
+        imageDigest: string;
+        ready: boolean;
+        lastSeenAt: Date | null;
+        expiresAt: Date | null;
+      }>
+    >(Prisma.sql`
+        SELECT requirement."instanceId", requirement."component",
+          requirement."sourceCommitSha", requirement."imageDigest",
+          (latest."expiresAt" > clock_timestamp() + INTERVAL '30 seconds'
+            AND latest."lastSeenAt" > clock_timestamp() - INTERVAL '75 seconds') AS "ready",
+          latest."lastSeenAt", latest."expiresAt"
+        FROM "template_twin_release_runtime_requirements" requirement
+        LEFT JOIN LATERAL (
+          SELECT attestation."lastSeenAt", attestation."expiresAt"
+          FROM "template_twin_release_runtime_attestations" attestation
+          WHERE attestation."requirementId" = requirement."id"
+          ORDER BY attestation."lastSeenAt" DESC, attestation."id" DESC
+          LIMIT 1
+        ) latest ON TRUE
+        WHERE requirement."releaseId" = ${release.id}::UUID
+        ORDER BY requirement."component", requirement."instanceId"
+      `),
+    input.operatorUserId
+      ? database.$queryRaw<AuthorityRow[]>(Prisma.sql`
             SELECT "id", "discipline"
             FROM "template_twin_release_authorities"
             WHERE "userId" = ${input.operatorUserId}
@@ -1888,8 +2241,8 @@ export async function inspectTemplateTwinReleaseControl(
               AND "revokedAt" IS NULL
             ORDER BY "discipline" ASC
           `)
-        : Promise.resolve([] as AuthorityRow[]),
-    ]);
+      : Promise.resolve([] as AuthorityRow[]),
+  ]);
   const metricByCheckpoint = new Map(
     metrics.map((metric) => [metric.checkpointId, metric]),
   );
@@ -1917,6 +2270,7 @@ export async function inspectTemplateTwinReleaseControl(
         guardrailPolicySha256: release.guardrailPolicySha256,
         authorizedPracticeManifestSha256:
           release.authorizedPracticeManifestSha256,
+        runtimeManifestSha256: release.runtimeManifestSha256,
       },
       status: release.status,
       generation: exactGeneration(release.generation).toString(),
@@ -1969,6 +2323,12 @@ export async function inspectTemplateTwinReleaseControl(
         rolloutGeneration: exactGeneration(
           practice.templateTwinRolloutGeneration ?? 1,
         ).toString(),
+      })),
+      runtimeRequirements: runtimeRequirements.map((requirement) => ({
+        ...requirement,
+        ready: requirement.ready === true,
+        lastSeenAt: requirement.lastSeenAt?.toISOString() ?? null,
+        expiresAt: requirement.expiresAt?.toISOString() ?? null,
       })),
       operatorAuthorities: authorities.map(({ discipline }) => discipline),
     },
