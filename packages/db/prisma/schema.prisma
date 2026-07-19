@@ -175,6 +175,13 @@ enum AuditAction {
   TEMPLATE_TWIN_ROLLBACK_PREPARED
   TEMPLATE_TWIN_ROLLBACK_CANCELLED
   TEMPLATE_TWIN_ROLLOUT_REVOKED
+  TEMPLATE_TWIN_RELEASE_CREATED
+  TEMPLATE_TWIN_RELEASE_FROZEN
+  TEMPLATE_TWIN_RELEASE_APPROVAL_RECORDED
+  TEMPLATE_TWIN_ROLLOUT_CHECKPOINT_ACTIVATED
+  TEMPLATE_TWIN_ROLLOUT_CHECKPOINT_PASSED
+  TEMPLATE_TWIN_RELEASE_REVOKED
+  TEMPLATE_TWIN_ROLLOUT_GUARDRAIL_REVOKED
 
   // transcribe-md — patient CRUD (TranscribeMdPatient; CRM patient
   // events use CREATED_PATIENT / UPDATED_PATIENT / ARCHIVED_PATIENT
@@ -600,6 +607,7 @@ model Practice {
   templateTwinSyntheticQaAdmissions            TemplateTwinSyntheticQaAdmission[]
   templateTwinSyntheticQaRuns                  TemplateTwinSyntheticQaRun[]
   templateTwinRollbackOperations               TemplateTwinRollbackOperation[]
+  templateTwinReleasePractices                 TemplateTwinReleasePractice[]
   visitAutomationManifests                     VisitAutomationManifest[]
   visitAutomationProviderExecutions            VisitAutomationProviderExecution[]
 
@@ -769,6 +777,16 @@ model User {
   templateTwinSyntheticQaAdmissions      TemplateTwinSyntheticQaAdmission[]            @relation("TemplateTwinSyntheticQaAdmissionActor")
   templateTwinSyntheticQaRuns            TemplateTwinSyntheticQaRun[]                  @relation("TemplateTwinSyntheticQaDoctor")
   templateTwinRollbackOperations         TemplateTwinRollbackOperation[]
+  templateTwinReleaseCandidatesCreated   TemplateTwinReleaseCandidate[]                @relation("TemplateTwinReleaseCreator")
+  templateTwinReleaseCandidatesFrozen    TemplateTwinReleaseCandidate[]                @relation("TemplateTwinReleaseFinalizer")
+  templateTwinReleaseAttestationKeys     TemplateTwinReleaseAttestationKey[]           @relation("TemplateTwinReleaseAttestationKeyPrincipal") @ignore
+  templateTwinReleaseActionReceipts      TemplateTwinReleaseActionReceipt[]            @relation("TemplateTwinReleaseActionReceiptActor") @ignore
+  templateTwinReleaseAuthorities         TemplateTwinReleaseAuthority[]                @relation("TemplateTwinReleaseAuthorityUser")
+  templateTwinReleaseApprovals           TemplateTwinReleaseApprovalDecision[]         @relation("TemplateTwinReleaseApprovalActor")
+  templateTwinCheckpointsActivated       TemplateTwinReleaseCheckpoint[]               @relation("TemplateTwinCheckpointActivator")
+  templateTwinCheckpointsPassed          TemplateTwinReleaseCheckpoint[]               @relation("TemplateTwinCheckpointPasser")
+  templateTwinMetricReceiptPrincipals    TemplateTwinReleaseMetricReceipt[]            @relation("TemplateTwinMetricReceiptPrincipal")
+  templateTwinMetricSnapshotsRecorded    TemplateTwinReleaseMetricSnapshot[]           @relation("TemplateTwinMetricRecorder")
   // T-M16.2: one-time tokens for password reset, email verification,
   // email change. All cascade-deleted with the user.
   authTokens                             AuthToken[]
@@ -3383,8 +3401,12 @@ model TemplateTwinAuditOutbox {
   createdAt     DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
 
-  staticAssetDecision TemplateTwinStaticAssetDecision? @relation("TemplateTwinStaticAssetDecisionAudit")
-  auditLog            AuditLog?                        @relation("TemplateTwinAuditDelivery")
+  staticAssetDecision  TemplateTwinStaticAssetDecision?     @relation("TemplateTwinStaticAssetDecisionAudit")
+  auditLog             AuditLog?                            @relation("TemplateTwinAuditDelivery")
+  releaseApproval      TemplateTwinReleaseApprovalDecision? @relation("TemplateTwinReleaseApprovalAudit")
+  checkpointActivation TemplateTwinReleaseCheckpoint?       @relation("TemplateTwinCheckpointActivationAudit")
+  checkpointPass       TemplateTwinReleaseCheckpoint?       @relation("TemplateTwinCheckpointPassAudit")
+  criticalMetric       TemplateTwinReleaseMetricSnapshot?   @relation("TemplateTwinMetricCriticalAudit")
 
   @@index([status, availableAt], map: "template_twin_outbox_status_availableAt_idx")
   @@index([practiceId, createdAt], map: "template_twin_outbox_practice_createdAt_idx")
@@ -3409,6 +3431,395 @@ model TemplateTwinRolloutControl {
   rollbackOperation TemplateTwinRollbackOperation? @relation("ActiveTemplateTwinRollbackOperation", fields: [rollbackOperationId], references: [id], onDelete: Restrict, map: "template_twin_rollback_operation_fkey")
 
   @@map("template_twin_rollout_controls")
+}
+
+/// One exact production release candidate. Identity-bearing fields are
+/// immutable in PostgreSQL; only the guarded state/generation transition
+/// columns can change after insertion.
+model TemplateTwinReleaseCandidate {
+  id                    String @id @db.Uuid
+  identityVersion       String @db.VarChar(64)
+  releaseIdentitySha256 String @unique(map: "template_twin_release_identity_key") @db.Char(64)
+
+  sourceCommitSha String @db.Char(40)
+  baseCommitSha   String @db.Char(40)
+
+  appImageDigest      String @db.VarChar(71)
+  workerImageDigest   String @db.VarChar(71)
+  migratorImageDigest String @db.VarChar(71)
+
+  testCensusEvidenceSha256         String @db.Char(64)
+  independentReviewEvidenceSha256  String @db.Char(64)
+  securityEvidenceSha256           String @db.Char(64)
+  migrationRestoreEvidenceSha256   String @db.Char(64)
+  officeWordEvidenceSha256         String @db.Char(64)
+  guardrailPolicySha256            String @db.Char(64)
+  authorizedPracticeManifestSha256 String @db.Char(64)
+  runtimeManifestSha256            String @db.Char(64)
+
+  guardrailPolicy Json
+  status          String @default("DRAFT") @db.VarChar(32)
+  generation      BigInt @default(1)
+
+  createdById String
+  createdBy   User   @relation("TemplateTwinReleaseCreator", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_creator_fkey")
+
+  frozenById               String?
+  frozenBy                 User?                             @relation("TemplateTwinReleaseFinalizer", fields: [frozenById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_finalizer_fkey")
+  frozenAt                 DateTime?                         @db.Timestamptz(6)
+  freezeActionReceiptNonce String?                           @unique(map: "template_twin_release_freeze_action_receipt_key") @db.Uuid
+  freezeActionReceipt      TemplateTwinReleaseActionReceipt? @relation("TemplateTwinReleaseFreezeActionReceipt", fields: [freezeActionReceiptNonce], references: [nonce], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_freeze_action_receipt_fkey") @ignore
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  practices           TemplateTwinReleasePractice[]
+  runtimeRequirements TemplateTwinReleaseRuntimeRequirement[]
+  runtimeAttestations TemplateTwinReleaseRuntimeAttestation[]
+  capabilities        TemplateTwinReleaseCapability[]
+  metricReceipts      TemplateTwinReleaseMetricReceipt[]
+  approvals           TemplateTwinReleaseApprovalDecision[]
+  checkpoints         TemplateTwinReleaseCheckpoint[]
+  metrics             TemplateTwinReleaseMetricSnapshot[]
+  actionReceipts      TemplateTwinReleaseActionReceipt[]      @relation("TemplateTwinReleaseActionReceiptCandidate") @ignore
+
+  @@index([status, createdAt], map: "template_twin_release_candidates_status_created_idx")
+  @@map("template_twin_release_candidates")
+}
+
+/// Immutable replica topology pinned into the release identity. A production
+/// checkpoint cannot activate unless every required APP/WORKER replica has a
+/// fresh deployment-signed attestation for this exact row.
+model TemplateTwinReleaseRuntimeRequirement {
+  id                    String                       @id @db.Uuid
+  releaseId             String                       @db.Uuid
+  release               TemplateTwinReleaseCandidate @relation(fields: [releaseId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_runtime_requirement_release_fkey")
+  releaseIdentitySha256 String                       @db.Char(64)
+  instanceId            String                       @db.VarChar(128)
+  component             String                       @db.VarChar(16)
+  sourceCommitSha       String                       @db.Char(40)
+  imageDigest           String                       @db.VarChar(71)
+  createdAt             DateTime                     @default(now()) @db.Timestamptz(6)
+
+  attestations TemplateTwinReleaseRuntimeAttestation[]
+
+  @@unique([releaseId, instanceId], map: "template_twin_release_runtime_requirement_instance_key")
+  @@index([releaseId, component, instanceId], map: "template_twin_release_runtime_requirement_component_idx")
+  @@map("template_twin_release_runtime_requirements")
+}
+
+/// Append-only deployment-authority receipt. The signed envelope contains no
+/// clinical or tenant data and expires quickly; final claims require the
+/// current process receipt plus a complete fresh replica barrier.
+model TemplateTwinReleaseRuntimeAttestation {
+  id                    String                                @id @db.Uuid
+  releaseId             String                                @db.Uuid
+  release               TemplateTwinReleaseCandidate          @relation(fields: [releaseId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_runtime_attestation_release_fkey")
+  requirementId         String                                @db.Uuid
+  requirement           TemplateTwinReleaseRuntimeRequirement @relation(fields: [requirementId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_runtime_attestation_requirement_fkey")
+  releaseIdentitySha256 String                                @db.Char(64)
+  keyId                 String                                @db.VarChar(80)
+  nonceSha256           String                                @unique(map: "template_twin_release_runtime_attestation_nonce_key") @db.Char(64)
+  instanceId            String                                @db.VarChar(128)
+  component             String                                @db.VarChar(16)
+  sourceCommitSha       String                                @db.Char(40)
+  imageDigest           String                                @db.VarChar(71)
+  signatureSha256       String                                @db.Char(64)
+  issuedAt              DateTime                              @db.Timestamptz(6)
+  expiresAt             DateTime                              @db.Timestamptz(6)
+  lastSeenAt            DateTime                              @default(now()) @db.Timestamptz(6)
+  createdAt             DateTime                              @default(now()) @db.Timestamptz(6)
+
+  attestationKey TemplateTwinReleaseAttestationKey @relation("TemplateTwinRuntimeAttestationKey", fields: [keyId], references: [keyId], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_runtime_attestation_key_fkey") @ignore
+
+  @@index([releaseId, instanceId, expiresAt], map: "template_twin_release_runtime_attestation_readiness_idx")
+  @@map("template_twin_release_runtime_attestations")
+}
+
+/// Migrator-owned HMAC key material. This raw-migration model is intentionally
+/// ignored so Prisma Client cannot read secrets; database functions expose only
+/// verified, transaction-bound receipts to the runtime roles.
+model TemplateTwinReleaseAttestationKey {
+  keyId           String    @id @db.VarChar(80)
+  purpose         String    @db.VarChar(16)
+  secret          Bytes
+  principalUserId String?
+  effectiveAt     DateTime  @db.Timestamptz(6)
+  expiresAt       DateTime  @db.Timestamptz(6)
+  revokedAt       DateTime? @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
+
+  principal           User?                                   @relation("TemplateTwinReleaseAttestationKeyPrincipal", fields: [principalUserId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_attestation_key_principal_fkey")
+  runtimeAttestations TemplateTwinReleaseRuntimeAttestation[] @relation("TemplateTwinRuntimeAttestationKey")
+  metricReceipts      TemplateTwinReleaseMetricReceipt[]      @relation("TemplateTwinMetricReceiptKey")
+  metricSnapshots     TemplateTwinReleaseMetricSnapshot[]     @relation("TemplateTwinMetricSnapshotKey")
+
+  @@map("template_twin_release_attestation_keys")
+  @@ignore
+}
+
+/// Out-of-band human authority assignment. There is deliberately no
+/// self-service application API for these rows.
+model TemplateTwinReleaseAuthority {
+  id          String    @id @db.Uuid
+  userId      String
+  user        User      @relation("TemplateTwinReleaseAuthorityUser", fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_authority_user_fkey")
+  discipline  String    @db.VarChar(32)
+  sourceRef   String    @db.VarChar(160)
+  effectiveAt DateTime  @default(now()) @db.Timestamptz(6)
+  revokedAt   DateTime? @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+
+  approvals TemplateTwinReleaseApprovalDecision[]
+
+  @@index([userId, discipline, revokedAt], map: "template_twin_release_authorities_user_discipline_idx")
+  @@map("template_twin_release_authorities")
+}
+
+/// Frozen, PHI-free authorized-practice manifest with deterministic cohort
+/// rank and an indivisible practice-to-checkpoint assignment.
+model TemplateTwinReleasePractice {
+  id                    String                       @id @db.Uuid
+  releaseId             String                       @db.Uuid
+  release               TemplateTwinReleaseCandidate @relation(fields: [releaseId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_practice_release_fkey")
+  releaseIdentitySha256 String                       @db.Char(64)
+
+  practiceId             String
+  practice               Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_practice_practice_fkey")
+  practiceSlugSnapshot   String   @db.VarChar(160)
+  physicianCountSnapshot Int
+  cohortRank             Int
+  cohortHashSha256       String   @db.Char(64)
+  isCanary               Boolean  @default(false)
+  activationStage        String   @db.VarChar(24)
+  activationStageOrdinal Int
+  createdAt              DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([releaseId, practiceId], map: "template_twin_release_practice_key")
+  @@unique([releaseId, cohortRank], map: "template_twin_release_cohort_rank_key")
+  @@index([releaseId, activationStageOrdinal, cohortRank], map: "template_twin_release_practices_stage_rank_idx")
+  @@map("template_twin_release_practices")
+}
+
+/// Append-only APPROVE/REJECT/REVOKE decision. The actor's authority,
+/// session, release identity, evidence digest, and audit event are captured
+/// at the decision boundary and cannot be edited later.
+model TemplateTwinReleaseApprovalDecision {
+  id                    String                       @id @db.Uuid
+  releaseId             String                       @db.Uuid
+  release               TemplateTwinReleaseCandidate @relation(fields: [releaseId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_approval_release_fkey")
+  releaseIdentitySha256 String                       @db.Char(64)
+  discipline            String                       @db.VarChar(32)
+  decision              String                       @db.VarChar(16)
+  evidenceSha256        String                       @db.Char(64)
+  confirmation          String                       @db.VarChar(160)
+
+  actorId               String
+  actor                 User                             @relation("TemplateTwinReleaseApprovalActor", fields: [actorId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_approval_actor_fkey")
+  actorEmailSnapshot    String?
+  actorSessionSha256    String                           @db.Char(64)
+  actionReceiptNonce    String                           @unique(map: "template_twin_release_approval_action_receipt_key") @db.Uuid
+  actionReceipt         TemplateTwinReleaseActionReceipt @relation("TemplateTwinReleaseApprovalActionReceipt", fields: [actionReceiptNonce], references: [nonce], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_approval_action_receipt_fkey") @ignore
+  authorityAssignmentId String                           @db.Uuid
+  authorityAssignment   TemplateTwinReleaseAuthority     @relation(fields: [authorityAssignmentId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_approval_authority_fkey")
+  auditOutboxEventKey   String                           @unique(map: "template_twin_release_approval_audit_key")
+  auditOutbox           TemplateTwinAuditOutbox          @relation("TemplateTwinReleaseApprovalAudit", fields: [auditOutboxEventKey], references: [eventKey], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_approval_audit_fkey")
+  decidedAt             DateTime                         @default(now()) @db.Timestamptz(6)
+
+  @@index([releaseId, discipline, decidedAt], map: "template_twin_release_approval_release_discipline_idx")
+  @@index([actorId, decidedAt], map: "template_twin_release_approval_actor_idx")
+  @@map("template_twin_release_approval_decisions")
+}
+
+/// Fixed CANARY/10/25/50/100 checkpoint rail. Stage rows are inserted with
+/// the release and only move through the database-enforced state machine.
+model TemplateTwinReleaseCheckpoint {
+  id                     String                       @id @db.Uuid
+  releaseId              String                       @db.Uuid
+  release                TemplateTwinReleaseCandidate @relation(fields: [releaseId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_checkpoint_release_fkey")
+  releaseIdentitySha256  String                       @db.Char(64)
+  stage                  String                       @db.VarChar(24)
+  ordinal                Int
+  targetPercent          Int
+  targetPhysicianCount   Int
+  assignedPhysicianCount Int
+  status                 String                       @default("PENDING") @db.VarChar(16)
+  minimumBakeSeconds     Int
+
+  activatedPhysicianCount Int?
+  passedPhysicianCount    Int?
+  activatedAt             DateTime? @db.Timestamptz(6)
+  earliestPassAt          DateTime? @db.Timestamptz(6)
+  passedAt                DateTime? @db.Timestamptz(6)
+  revokedAt               DateTime? @db.Timestamptz(6)
+
+  activatedById String?
+  activatedBy   User?   @relation("TemplateTwinCheckpointActivator", fields: [activatedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_checkpoint_activator_fkey")
+  passedById    String?
+  passedBy      User?   @relation("TemplateTwinCheckpointPasser", fields: [passedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_checkpoint_passer_fkey")
+
+  activationOutboxEventKey     String?                           @unique(map: "template_twin_release_checkpoint_activation_audit_key")
+  activationOutbox             TemplateTwinAuditOutbox?          @relation("TemplateTwinCheckpointActivationAudit", fields: [activationOutboxEventKey], references: [eventKey], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_checkpoint_activation_audit_fkey")
+  passOutboxEventKey           String?                           @unique(map: "template_twin_release_checkpoint_pass_audit_key")
+  passOutbox                   TemplateTwinAuditOutbox?          @relation("TemplateTwinCheckpointPassAudit", fields: [passOutboxEventKey], references: [eventKey], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_checkpoint_pass_audit_fkey")
+  activationActionReceiptNonce String?                           @unique(map: "template_twin_release_checkpoint_activation_receipt_key") @db.Uuid
+  activationActionReceipt      TemplateTwinReleaseActionReceipt? @relation("TemplateTwinReleaseCheckpointActivationReceipt", fields: [activationActionReceiptNonce], references: [nonce], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_checkpoint_activation_receipt_fkey") @ignore
+  passActionReceiptNonce       String?                           @unique(map: "template_twin_release_checkpoint_pass_receipt_key") @db.Uuid
+  passActionReceipt            TemplateTwinReleaseActionReceipt? @relation("TemplateTwinReleaseCheckpointPassReceipt", fields: [passActionReceiptNonce], references: [nonce], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_checkpoint_pass_receipt_fkey") @ignore
+  createdAt                    DateTime                          @default(now()) @db.Timestamptz(6)
+  updatedAt                    DateTime                          @default(now()) @updatedAt @db.Timestamptz(6)
+
+  metrics        TemplateTwinReleaseMetricSnapshot[]
+  capabilities   TemplateTwinReleaseCapability[]
+  metricReceipts TemplateTwinReleaseMetricReceipt[]
+  actionReceipts TemplateTwinReleaseActionReceipt[]  @relation("TemplateTwinReleaseActionReceiptCheckpoint") @ignore
+
+  @@unique([releaseId, stage], map: "template_twin_release_checkpoint_stage_key")
+  @@unique([releaseId, ordinal], map: "template_twin_release_checkpoint_ordinal_key")
+  @@index([releaseId, status, ordinal], map: "template_twin_release_checkpoints_status_idx")
+  @@map("template_twin_release_checkpoints")
+}
+
+/// Owner-only transaction receipt proving that an exact live MFA session
+/// confirmed a release action. Prisma Client cannot read or forge it.
+model TemplateTwinReleaseActionReceipt {
+  nonce              String   @id @db.Uuid
+  transactionId      BigInt
+  backendPid         Int
+  releaseId          String   @db.Uuid
+  checkpointId       String?  @db.Uuid
+  action             String   @db.VarChar(16)
+  discipline         String?  @db.VarChar(32)
+  decision           String?  @db.VarChar(16)
+  actorId            String
+  actorSessionSha256 String   @db.Char(64)
+  confirmationSha256 String   @db.Char(64)
+  issuedAt           DateTime @db.Timestamptz(6)
+  expiresAt          DateTime @db.Timestamptz(6)
+
+  release    TemplateTwinReleaseCandidate   @relation("TemplateTwinReleaseActionReceiptCandidate", fields: [releaseId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_action_receipt_release_fkey")
+  checkpoint TemplateTwinReleaseCheckpoint? @relation("TemplateTwinReleaseActionReceiptCheckpoint", fields: [checkpointId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_action_receipt_checkpoint_fkey")
+  actor      User                           @relation("TemplateTwinReleaseActionReceiptActor", fields: [actorId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_action_receipt_actor_fkey")
+
+  frozenCandidate     TemplateTwinReleaseCandidate?        @relation("TemplateTwinReleaseFreezeActionReceipt")
+  approvalDecision    TemplateTwinReleaseApprovalDecision? @relation("TemplateTwinReleaseApprovalActionReceipt")
+  activatedCheckpoint TemplateTwinReleaseCheckpoint?       @relation("TemplateTwinReleaseCheckpointActivationReceipt")
+  passedCheckpoint    TemplateTwinReleaseCheckpoint?       @relation("TemplateTwinReleaseCheckpointPassReceipt")
+
+  @@unique([transactionId, backendPid, releaseId, action, checkpointId], map: "template_twin_release_action_receipt_scope_key")
+  @@map("template_twin_release_action_receipts")
+  @@ignore
+}
+
+/// Owner-only bounded memo for deferred invariant verification. One row per
+/// PostgreSQL backend is overwritten as transactions advance.
+model TemplateTwinReleaseCouplingReceipt {
+  backendPid    Int      @id
+  transactionId BigInt
+  dirtyEpoch    BigInt
+  verifiedEpoch BigInt
+  updatedAt     DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("template_twin_release_coupling_receipts")
+  @@ignore
+}
+
+/// Transaction/backend-bound enable receipt issued only by the guarded
+/// SECURITY DEFINER capability procedure.
+model TemplateTwinReleaseCapability {
+  nonce                    String                        @id @db.Uuid
+  transactionId            BigInt
+  backendPid               Int
+  releaseId                String                        @db.Uuid
+  release                  TemplateTwinReleaseCandidate  @relation(fields: [releaseId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "template_twin_release_capability_release_fkey")
+  releaseIdentitySha256    String                        @db.Char(64)
+  checkpointId             String                        @db.Uuid
+  checkpoint               TemplateTwinReleaseCheckpoint @relation(fields: [checkpointId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "template_twin_release_capability_checkpoint_fkey")
+  stageOrdinal             Int
+  releaseGeneration        BigInt
+  expectedGlobalGeneration BigInt
+  issuedAt                 DateTime                      @default(now()) @db.Timestamptz(6)
+  expiresAt                DateTime                      @db.Timestamptz(6)
+
+  @@index([expiresAt], map: "template_twin_release_capability_expiry_idx")
+  @@map("template_twin_release_capabilities")
+}
+
+/// Immutable transaction receipt produced by the database after validating a
+/// monitoring HMAC and recomputing the aggregate-only guardrail decision.
+model TemplateTwinReleaseMetricReceipt {
+  nonce                      String                            @id @db.Uuid
+  transactionId              BigInt
+  backendPid                 Int
+  releaseId                  String                            @db.Uuid
+  release                    TemplateTwinReleaseCandidate      @relation(fields: [releaseId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_metric_receipt_release_fkey")
+  checkpointId               String                            @db.Uuid
+  checkpoint                 TemplateTwinReleaseCheckpoint     @relation(fields: [checkpointId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_metric_receipt_checkpoint_fkey")
+  releaseGeneration          BigInt
+  globalGeneration           BigInt
+  releaseIdentitySha256      String                            @db.Char(64)
+  policySha256               String                            @db.Char(64)
+  stage                      String                            @db.VarChar(24)
+  schemaVersion              String                            @db.VarChar(64)
+  sampleCount                Int
+  observationStartedAt       DateTime                          @db.Timestamptz(6)
+  observationEndedAt         DateTime                          @db.Timestamptz(6)
+  metrics                    Json
+  canonicalSha256            String                            @db.Char(64)
+  evaluation                 String                            @db.VarChar(24)
+  missingMetrics             String[]
+  breachedMetrics            String[]
+  blockingReasons            String[]
+  principalUserId            String
+  principal                  User                              @relation("TemplateTwinMetricReceiptPrincipal", fields: [principalUserId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_metric_receipt_principal_fkey")
+  attestationKeyId           String                            @db.VarChar(80)
+  attestationKey             TemplateTwinReleaseAttestationKey @relation("TemplateTwinMetricReceiptKey", fields: [attestationKeyId], references: [keyId], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_metric_receipt_key_fkey") @ignore
+  attestationNonceSha256     String                            @unique(map: "template_twin_release_metric_receipt_nonce_key") @db.Char(64)
+  attestationSignatureSha256 String                            @db.Char(64)
+  issuedAt                   DateTime                          @db.Timestamptz(6)
+  expiresAt                  DateTime                          @db.Timestamptz(6)
+
+  @@index([releaseId, checkpointId, expiresAt], map: "template_twin_release_metric_receipt_lookup_idx")
+  @@map("template_twin_release_metric_receipts")
+}
+
+/// Immutable aggregate-only observation used to pass or automatically revoke
+/// one checkpoint. Clinical/patient/document identifiers and free text are
+/// not accepted by the application contract or database shape.
+model TemplateTwinReleaseMetricSnapshot {
+  id                         String                            @id @db.Uuid
+  releaseId                  String                            @db.Uuid
+  release                    TemplateTwinReleaseCandidate      @relation(fields: [releaseId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_metric_release_fkey")
+  checkpointId               String                            @db.Uuid
+  checkpoint                 TemplateTwinReleaseCheckpoint     @relation(fields: [checkpointId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_metric_checkpoint_fkey")
+  releaseGeneration          BigInt
+  globalGeneration           BigInt
+  releaseIdentitySha256      String                            @db.Char(64)
+  policySha256               String                            @db.Char(64)
+  schemaVersion              String                            @db.VarChar(64)
+  sampleCount                Int
+  observationStartedAt       DateTime                          @db.Timestamptz(6)
+  observationEndedAt         DateTime                          @db.Timestamptz(6)
+  metrics                    Json
+  canonicalSha256            String                            @unique(map: "template_twin_release_metric_canonical_key") @db.Char(64)
+  attestationKeyId           String                            @db.VarChar(80)
+  attestationKey             TemplateTwinReleaseAttestationKey @relation("TemplateTwinMetricSnapshotKey", fields: [attestationKeyId], references: [keyId], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_metric_attestation_key_fkey") @ignore
+  attestationNonceSha256     String                            @unique(map: "template_twin_release_metric_attestation_nonce_key") @db.Char(64)
+  attestationSignatureSha256 String                            @db.Char(64)
+  evaluation                 String                            @db.VarChar(24)
+  missingMetrics             String[]                          @default([])
+  breachedMetrics            String[]                          @default([])
+  blockingReasons            String[]                          @default([])
+
+  recordedById           String?
+  recordedBy             User?                    @relation("TemplateTwinMetricRecorder", fields: [recordedById], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_metric_recorder_fkey")
+  criticalOutboxEventKey String?                  @unique(map: "template_twin_release_metric_critical_audit_key")
+  criticalOutbox         TemplateTwinAuditOutbox? @relation("TemplateTwinMetricCriticalAudit", fields: [criticalOutboxEventKey], references: [eventKey], onDelete: Restrict, onUpdate: Restrict, map: "template_twin_release_metric_critical_audit_fkey")
+  createdAt              DateTime                 @default(now()) @db.Timestamptz(6)
+
+  @@index([checkpointId, createdAt], map: "template_twin_release_metric_checkpoint_idx")
+  @@index([releaseId, evaluation, createdAt], map: "template_twin_release_metric_evaluation_idx")
+  @@map("template_twin_release_metric_snapshots")
 }
 
 /// Immutable operator identity plus PHI-free before/after census for one

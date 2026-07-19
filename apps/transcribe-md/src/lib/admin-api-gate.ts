@@ -30,6 +30,8 @@ import { auth } from "@/lib/nextauth";
 import { logRequiredAdminAudit } from "@/lib/audit";
 import { isAdminRequestHost } from "@/lib/admin-host";
 import { verifyFreshPlatformAdminSession } from "@/lib/admin-session-freshness";
+import { recordTemplateTwinControlAccess } from "@/lib/template-twin/release-control-access-audit";
+import { TEMPLATE_TWIN_RELEASE_CONTROL_SERVICE_ROLE } from "@/lib/template-twin/release-control-db";
 
 /** What admin handlers actually need — slim subset of the next-auth
  *  session. The full app `Session` from @meddoc/auth requires
@@ -46,6 +48,10 @@ export interface AdminSession {
 
 export interface AdminContext {
   session: AdminSession;
+  /** Opaque live-session claim for server-only authorization services.
+   * Keep it out of `session.user` so generic response serializers cannot
+   * accidentally echo it. */
+  verifiedSessionId: string;
   /** The route key passed to adminApi(); used in audit logs and
    *  error messages. */
   routeKey: string;
@@ -88,20 +94,33 @@ export function adminApi(
     };
 
     try {
-      await logRequiredAdminAudit({
-        action: "ADMIN_API_ACCESS",
-        userId: verified.userId,
-        userEmail: verified.email,
-        practiceId: verified.practiceId,
-        targetType: "AdminAPI",
-        targetId: routeKey,
-        metadata: {
+      if (
+        process.env.QUILLMD_SERVICE_ROLE ===
+        TEMPLATE_TWIN_RELEASE_CONTROL_SERVICE_ROLE
+      ) {
+        await recordTemplateTwinControlAccess({
+          actorId: verified.userId,
+          actorEmail: verified.email,
+          practiceId: verified.practiceId,
           routeKey,
-          method: req.method,
-          path: new URL(req.url).pathname,
-          sessionCreatedAt: verified.sessionCreatedAt.toISOString(),
-        },
-      });
+          request: req,
+        });
+      } else {
+        await logRequiredAdminAudit({
+          action: "ADMIN_API_ACCESS",
+          userId: verified.userId,
+          userEmail: verified.email,
+          practiceId: verified.practiceId,
+          targetType: "AdminAPI",
+          targetId: routeKey,
+          metadata: {
+            routeKey,
+            method: req.method,
+            path: new URL(req.url).pathname,
+            sessionCreatedAt: verified.sessionCreatedAt.toISOString(),
+          },
+        });
+      }
     } catch {
       console.error(
         `[admin-api:${routeKey}] required access audit failed; request denied`,
@@ -110,11 +129,13 @@ export function adminApi(
     }
 
     try {
-      return await handler(req, { session, routeKey });
-    } catch (err) {
-      console.error(`[admin-api:${routeKey}] handler failed`, {
-        errorType: err instanceof Error ? err.name : "UnknownError",
+      return await handler(req, {
+        session,
+        verifiedSessionId: verified.sessionId,
+        routeKey,
       });
+    } catch {
+      console.error(`[admin-api:${routeKey}] handler failed closed`);
       // Generic 500 — don't expose stack traces.
       return NextResponse.json(
         { error: "Internal server error" },

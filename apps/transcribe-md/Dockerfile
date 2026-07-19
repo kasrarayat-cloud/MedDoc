@@ -109,6 +109,8 @@ LABEL org.opencontainers.image.revision="${QUILLMD_RELEASE_SHA}" \
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV QUILLMD_RUNTIME_PROTOCOL_EPOCH=template-twin-final-schema-v2
+ENV QUILLMD_IMAGE_REVISION=${QUILLMD_RELEASE_SHA}
+ENV QUILLMD_RUNTIME_COMPONENT=APP
 
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs

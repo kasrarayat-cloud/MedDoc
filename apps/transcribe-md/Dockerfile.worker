@@ -63,6 +63,8 @@ LABEL org.opencontainers.image.revision="${QUILLMD_RELEASE_SHA}" \
 
 ENV NODE_ENV=production
 ENV QUILLMD_RUNTIME_PROTOCOL_EPOCH=template-twin-final-schema-v2
+ENV QUILLMD_IMAGE_REVISION=${QUILLMD_RELEASE_SHA}
+ENV QUILLMD_RUNTIME_COMPONENT=WORKER
 
 # Prod-only node_modules.
 COPY --from=prod-deps /app/node_modules ./node_modules

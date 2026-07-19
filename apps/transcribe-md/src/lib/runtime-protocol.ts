@@ -36,6 +36,12 @@ function normalized(value: string | undefined): string {
   return value?.trim().toLowerCase() ?? "";
 }
 
+export function isTemplateTwinKillSwitchExplicitlyOff(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): boolean {
+  return normalized(env.TEMPLATE_TWIN_KILL_SWITCH) === "false";
+}
+
 export function resolveTemplateTwinRuntimeMode(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): TemplateTwinRuntimeMode {
@@ -127,7 +133,7 @@ export function assertQuillmdRuntimeProtocol(
   const mode = resolveTemplateTwinRuntimeMode(env);
   if (
     mode === TEMPLATE_TWIN_ROLLBACK_COMPAT_RUNTIME_MODE &&
-    normalized(env.TEMPLATE_TWIN_KILL_SWITCH) === "false"
+    isTemplateTwinKillSwitchExplicitlyOff(env)
   ) {
     throw new RuntimeProtocolConfigurationError(
       "Rollback compatibility mode requires the Template Twin process kill switch to remain active.",

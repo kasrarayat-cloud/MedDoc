@@ -2,15 +2,22 @@ import { Prisma } from "@prisma/client";
 import prisma from "@meddoc/db";
 
 import {
+  isTemplateTwinKillSwitchExplicitlyOff,
   TEMPLATE_TWIN_ROLLBACK_COMPAT_RUNTIME_MODE,
   resolveTemplateTwinRuntimeMode,
 } from "@/lib/runtime-protocol";
 import { enqueueTemplateTwinAudit } from "./audit-outbox";
+import {
+  registerTemplateTwinRuntimeAttestation,
+  TemplateTwinRuntimeAttestationError,
+} from "./runtime-attestation";
 
 export const TEMPLATE_TWIN_KILL_SWITCH_ENV =
   "TEMPLATE_TWIN_KILL_SWITCH" as const;
 export const TEMPLATE_TWIN_GLOBAL_ROLLOUT_ID = "global" as const;
 export const TEMPLATE_TWIN_ROLLBACK_FENCE_OPEN = "OPEN" as const;
+export const TEMPLATE_TWIN_RELEASE_CONTROL_LOCK_NAMESPACE = 73119 as const;
+export const TEMPLATE_TWIN_RELEASE_CONTROL_LOCK_KEY = 20260719 as const;
 
 export type TemplateTwinRolloutCode =
   | "TEMPLATE_TWIN_ROLLBACK_COMPAT_ACTIVE"
@@ -21,6 +28,9 @@ export type TemplateTwinRolloutCode =
   | "TEMPLATE_TWIN_PRACTICE_DISABLED"
   | "TEMPLATE_TWIN_GLOBAL_GENERATION_STALE"
   | "TEMPLATE_TWIN_PRACTICE_GENERATION_STALE"
+  | "TEMPLATE_TWIN_RELEASE_IDENTITY_STALE"
+  | "TEMPLATE_TWIN_RUNTIME_ATTESTATION_INVALID"
+  | "TEMPLATE_TWIN_REPLICA_READINESS_INCOMPLETE"
   | "TEMPLATE_TWIN_LINEAGE_MIGRATION_INCOMPLETE"
   | "TEMPLATE_TWIN_ROLLOUT_CONTROL_UNAVAILABLE";
 
@@ -37,12 +47,35 @@ export interface TemplateTwinRolloutInput {
   env?: Readonly<Record<string, string | undefined>>;
 }
 
-/** The exact persisted rollout epoch under which clinical work was admitted. */
-export interface TemplateTwinRolloutToken {
+/**
+ * The persisted rollout epoch used by pre-production synthetic workflows.
+ * A legacy token can never pass a production final claim because the release
+ * identity fields are explicitly absent and are compared fail-closed there.
+ */
+export interface TemplateTwinLegacyRolloutToken {
   practiceId: string;
   globalGeneration: bigint;
   practiceGeneration: bigint;
+  releaseId?: never;
+  releaseIdentitySha256?: never;
+  runtimeManifestSha256?: never;
+  runtimeInstanceId?: never;
 }
+
+/** The exact production release and replica epoch under which work began. */
+export interface TemplateTwinProductionRolloutToken {
+  practiceId: string;
+  globalGeneration: bigint;
+  practiceGeneration: bigint;
+  releaseId: string;
+  releaseIdentitySha256: string;
+  runtimeManifestSha256: string;
+  runtimeInstanceId: string;
+}
+
+export type TemplateTwinRolloutToken =
+  | TemplateTwinLegacyRolloutToken
+  | TemplateTwinProductionRolloutToken;
 
 export type LockedTemplateTwinRolloutDecision =
   | { allowed: true; token: TemplateTwinRolloutToken }
@@ -74,9 +107,34 @@ interface GlobalRolloutRow {
   rollbackOperationId: string | null;
 }
 
+/**
+ * Every operation that can mutate the global/practice rollout epoch takes the
+ * release-control advisory lock before row locks. The database update trigger
+ * takes the same lock as defense in depth, but taking a rollout row first
+ * would invert the release transaction's advisory -> global -> practice order.
+ */
+async function acquireTemplateTwinReleaseControlMutationLock(
+  tx: Pick<Prisma.TransactionClient, "$executeRaw">,
+): Promise<void> {
+  await tx.$executeRaw(Prisma.sql`
+    SELECT pg_advisory_xact_lock(
+      ${TEMPLATE_TWIN_RELEASE_CONTROL_LOCK_NAMESPACE},
+      ${TEMPLATE_TWIN_RELEASE_CONTROL_LOCK_KEY}
+    )
+  `);
+}
+
 interface PracticeRolloutRow {
   templateTwinEnabled: boolean;
   templateTwinRolloutGeneration: bigint | number | string;
+  isActive: boolean;
+}
+
+interface LiveReleaseRow {
+  id: string;
+  releaseIdentitySha256: string;
+  runtimeManifestSha256: string;
+  runtimeReady: boolean;
 }
 
 async function assertTemplateTwinLineageContracted(
@@ -105,10 +163,6 @@ function blocked(
   currentToken: TemplateTwinRolloutToken | null = null,
 ): LockedTemplateTwinRolloutDecision {
   return { allowed: false, code, reason, currentToken };
-}
-
-function killSwitchIsExplicitlyOff(value: string | undefined): boolean {
-  return value?.trim().toLowerCase() === "false";
 }
 
 function rollbackFenceIsOpen(row: GlobalRolloutRow): boolean {
@@ -170,7 +224,7 @@ export function evaluateTemplateTwinRollout({
 }: TemplateTwinRolloutInput): TemplateTwinRolloutDecision {
   const runtimeDecision = evaluateRuntimeMode(env);
   if (runtimeDecision) return runtimeDecision;
-  if (!killSwitchIsExplicitlyOff(env[TEMPLATE_TWIN_KILL_SWITCH_ENV])) {
+  if (!isTemplateTwinKillSwitchExplicitlyOff(env)) {
     return {
       allowed: false,
       code: "TEMPLATE_TWIN_KILL_SWITCH_ACTIVE",
@@ -214,7 +268,7 @@ export async function lockTemplateTwinRolloutForFinalClaim(input: {
   if (runtimeDecision && !runtimeDecision.allowed) {
     return blocked(runtimeDecision.code, runtimeDecision.reason);
   }
-  if (!killSwitchIsExplicitlyOff(env[TEMPLATE_TWIN_KILL_SWITCH_ENV])) {
+  if (!isTemplateTwinKillSwitchExplicitlyOff(env)) {
     return blocked(
       "TEMPLATE_TWIN_KILL_SWITCH_ACTIVE",
       "Template Twin was disabled while this work was in progress. Retry after it is re-enabled.",
@@ -239,7 +293,7 @@ export async function lockTemplateTwinRolloutForFinalClaim(input: {
   const practiceRows = await input.tx.$queryRaw<
     PracticeRolloutRow[]
   >(Prisma.sql`
-    SELECT "templateTwinEnabled", "templateTwinRolloutGeneration"
+    SELECT "templateTwinEnabled", "templateTwinRolloutGeneration", "isActive"
     FROM "practices"
     WHERE "id" = ${input.practiceId}
     FOR UPDATE
@@ -252,29 +306,65 @@ export async function lockTemplateTwinRolloutForFinalClaim(input: {
     );
   }
 
-  const currentToken: TemplateTwinRolloutToken = {
-    practiceId: input.practiceId,
-    globalGeneration: generation(global.generation),
-    practiceGeneration: generation(practice.templateTwinRolloutGeneration),
-  };
   if (!rollbackFenceIsOpen(global)) {
     return blocked(
       "TEMPLATE_TWIN_ROLLBACK_FENCE_ACTIVE",
       "Template Twin is temporarily unavailable while an operational rollback is in progress.",
-      currentToken,
+      null,
     );
   }
   if (!global.enabled) {
     return blocked(
       "TEMPLATE_TWIN_GLOBAL_DISABLED",
       "Template Twin is temporarily unavailable.",
-      currentToken,
+      null,
     );
   }
-  if (!practice.templateTwinEnabled) {
+  if (!practice.templateTwinEnabled || !practice.isActive) {
     return blocked(
       "TEMPLATE_TWIN_PRACTICE_DISABLED",
       "Template Twin is not enabled for this practice.",
+      null,
+    );
+  }
+
+  let runtimeInstanceId: string;
+  try {
+    runtimeInstanceId = (
+      await registerTemplateTwinRuntimeAttestation({ tx: input.tx, env })
+    ).instanceId;
+  } catch (error) {
+    if (error instanceof TemplateTwinRuntimeAttestationError) {
+      return blocked(
+        "TEMPLATE_TWIN_RUNTIME_ATTESTATION_INVALID",
+        "This application or worker replica lacks a valid deployment-authority attestation.",
+      );
+    }
+    throw error;
+  }
+  const releaseRows = await input.tx.$queryRaw<LiveReleaseRow[]>(Prisma.sql`
+    SELECT * FROM template_twin_current_runtime_release()
+  `);
+  const liveRelease = releaseRows[0];
+  if (!liveRelease) {
+    return blocked(
+      "TEMPLATE_TWIN_RELEASE_IDENTITY_STALE",
+      "No fully approved exact release identity currently owns production exposure.",
+    );
+  }
+  const currentToken: TemplateTwinProductionRolloutToken = {
+    practiceId: input.practiceId,
+    globalGeneration: generation(global.generation),
+    practiceGeneration: generation(practice.templateTwinRolloutGeneration),
+    releaseId: liveRelease.id,
+    releaseIdentitySha256: liveRelease.releaseIdentitySha256,
+    runtimeManifestSha256: liveRelease.runtimeManifestSha256,
+    runtimeInstanceId,
+  };
+  if (!liveRelease.runtimeReady) {
+    return blocked(
+      "TEMPLATE_TWIN_REPLICA_READINESS_INCOMPLETE",
+      "Every release-pinned application and worker replica must hold a fresh deployment attestation.",
       currentToken,
     );
   }
@@ -292,7 +382,12 @@ export async function lockTemplateTwinRolloutForFinalClaim(input: {
   if (input.pinnedToken) {
     if (
       input.pinnedToken.practiceId !== input.practiceId ||
-      input.pinnedToken.globalGeneration !== currentToken.globalGeneration
+      input.pinnedToken.globalGeneration !== currentToken.globalGeneration ||
+      input.pinnedToken.releaseId !== currentToken.releaseId ||
+      input.pinnedToken.releaseIdentitySha256 !==
+        currentToken.releaseIdentitySha256 ||
+      input.pinnedToken.runtimeManifestSha256 !==
+        currentToken.runtimeManifestSha256
     ) {
       return blocked(
         "TEMPLATE_TWIN_GLOBAL_GENERATION_STALE",
@@ -349,6 +444,14 @@ export function templateTwinRolloutAuditMetadata(
     pinnedPracticeGeneration: pinned.practiceGeneration.toString(),
     currentGlobalGeneration: current?.globalGeneration.toString() ?? null,
     currentPracticeGeneration: current?.practiceGeneration.toString() ?? null,
+    pinnedReleaseId: pinned.releaseId ?? null,
+    pinnedReleaseIdentitySha256: pinned.releaseIdentitySha256 ?? null,
+    pinnedRuntimeManifestSha256: pinned.runtimeManifestSha256 ?? null,
+    pinnedRuntimeInstanceId: pinned.runtimeInstanceId ?? null,
+    currentReleaseId: current?.releaseId ?? null,
+    currentReleaseIdentitySha256: current?.releaseIdentitySha256 ?? null,
+    currentRuntimeManifestSha256: current?.runtimeManifestSha256 ?? null,
+    currentRuntimeInstanceId: current?.runtimeInstanceId ?? null,
   };
 }
 
@@ -385,6 +488,7 @@ export async function applyTemplateTwinGlobalRolloutMutation(input: {
 }): Promise<bigint> {
   if (input.enabled) assertRuntimeModeAllowsEnable();
   const tx = input.tx;
+  await acquireTemplateTwinReleaseControlMutationLock(tx);
   const rows = await tx.$queryRaw<GlobalRolloutRow[]>(Prisma.sql`
     SELECT "enabled", "generation", "rollbackFenceState", "rollbackOperationId"
     FROM "template_twin_rollout_controls"
@@ -454,6 +558,7 @@ export async function applyTemplateTwinPracticeRolloutMutation(input: {
 }): Promise<bigint> {
   if (input.enabled) assertRuntimeModeAllowsEnable();
   const tx = input.tx;
+  await acquireTemplateTwinReleaseControlMutationLock(tx);
   const globalRows = await tx.$queryRaw<GlobalRolloutRow[]>(Prisma.sql`
     SELECT "enabled", "generation", "rollbackFenceState", "rollbackOperationId"
     FROM "template_twin_rollout_controls"

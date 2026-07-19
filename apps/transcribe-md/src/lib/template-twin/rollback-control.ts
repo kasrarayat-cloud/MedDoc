@@ -7,6 +7,8 @@ import {
 } from "./audit-outbox";
 import {
   TEMPLATE_TWIN_GLOBAL_ROLLOUT_ID,
+  TEMPLATE_TWIN_RELEASE_CONTROL_LOCK_KEY,
+  TEMPLATE_TWIN_RELEASE_CONTROL_LOCK_NAMESPACE,
   TEMPLATE_TWIN_ROLLBACK_FENCE_OPEN,
 } from "./rollout";
 
@@ -947,9 +949,7 @@ async function readInventory(
     providerExecutionsInFlight: exactCount(row.providerExecutionsInFlight),
     providerExecutionsUnknown: exactCount(row.providerExecutionsUnknown),
     pendingAuditOutboxEvents: exactCount(row.pendingAuditOutboxEvents),
-    missingRollbackAuditReceipts: exactCount(
-      row.missingRollbackAuditReceipts,
-    ),
+    missingRollbackAuditReceipts: exactCount(row.missingRollbackAuditReceipts),
     objectMaintenanceBacklog: exactCount(row.objectMaintenanceBacklog),
   };
 }
@@ -1174,8 +1174,18 @@ function prismaTransaction(client: PrismaRollbackClient): RollbackTransaction {
 const defaultDependencies: TemplateTwinRollbackDependencies = {
   transaction: (callback) =>
     prisma.$transaction(
-      (tx: Prisma.TransactionClient) =>
-        callback(prismaTransaction(tx as PrismaRollbackClient)),
+      async (tx: Prisma.TransactionClient) => {
+        // The release service uses advisory -> global -> practice. Acquire the
+        // same advisory lock before rollback's global row lock so rollback and
+        // enablement cannot deadlock with an inverted lock order.
+        await tx.$executeRaw(Prisma.sql`
+          SELECT pg_advisory_xact_lock(
+            ${TEMPLATE_TWIN_RELEASE_CONTROL_LOCK_NAMESPACE},
+            ${TEMPLATE_TWIN_RELEASE_CONTROL_LOCK_KEY}
+          )
+        `);
+        return callback(prismaTransaction(tx as PrismaRollbackClient));
+      },
       { isolationLevel: "Serializable" },
     ),
   inspect: async () => {

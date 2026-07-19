@@ -23,7 +23,11 @@
 // ============================================================================
 
 import prisma from '@meddoc/db';
-import { Product, type UserRole } from '@prisma/client';
+import { Prisma, Product, type UserRole } from '@prisma/client';
+
+import releaseControlDatabase, {
+  TEMPLATE_TWIN_RELEASE_CONTROL_SERVICE_ROLE,
+} from '@/lib/template-twin/release-control-db';
 
 /** Maximum age of an admin session, in hours. JWT row in user_sessions
  *  older than this is rejected for /admin/* (the cookie itself stays
@@ -66,6 +70,42 @@ export async function verifyFreshPlatformAdminSession(
   const now = input.now ?? new Date();
 
   try {
+    if (
+      process.env.NODE_ENV === 'production' &&
+      process.env.QUILLMD_SERVICE_ROLE ===
+        TEMPLATE_TWIN_RELEASE_CONTROL_SERVICE_ROLE
+    ) {
+      const rows = await releaseControlDatabase.$queryRaw<
+        Array<{
+          userId: string;
+          email: string;
+          practiceId: string;
+          role: UserRole;
+          sessionCreatedAt: Date;
+          sessionExpiresAt: Date;
+          mfaVerifiedAt: Date;
+          sessionSha256: string;
+        }>
+      >(Prisma.sql`
+        SELECT * FROM template_twin_verify_release_admin_session(
+          ${input.claimedUserId}, ${input.sessionId}
+        )
+      `);
+      const row = rows.length === 1 ? rows[0] : null;
+      if (!row) return null;
+      return {
+        userId: row.userId,
+        email: row.email,
+        role: row.role,
+        practiceId: row.practiceId,
+        sessionId: input.sessionId,
+        sessionCreatedAt: row.sessionCreatedAt,
+        sessionExpiresAt: row.sessionExpiresAt,
+        mfaEnabled: true,
+        mfaVerifiedAt: row.mfaVerifiedAt,
+      };
+    }
+
     const row = await prisma.userSession.findFirst({
       where: {
         sessionToken: input.sessionId,

@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 // ============================================================================
 // Top-bar nav for the /admin/* surface
@@ -11,39 +11,30 @@
 // Lightweight client component — only `usePathname` makes it client-only.
 //
 // Phase 5 (Linear V1 Faithful) — Phase 4's `theme` prop has been retired
-// because every surface now renders against the same dark canvas. The
-// prop is preserved as an optional no-op for caller-site compatibility.
+// because every surface now renders against the same dark canvas.
 // ============================================================================
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 const ITEMS = [
-  { href: '/admin', label: 'Overview' },
-  { href: '/admin/users', label: 'Users' },
-  { href: '/admin/usage', label: 'API Usage' },
-  { href: '/admin/threats', label: 'Threats' },
-  { href: '/admin/hipaa', label: 'HIPAA' },
+  { href: "/admin", label: "Overview" },
+  { href: "/admin/users", label: "Users" },
+  { href: "/admin/usage", label: "API Usage" },
+  { href: "/admin/threats", label: "Threats" },
+  { href: "/admin/hipaa", label: "HIPAA" },
+  { href: "/admin/template-twin-release", label: "Template Twin release" },
 ] as const;
 
-interface AdminNavProps {
-  /**
-   * Retained for caller-site compatibility from Phase 2's dual-theme
-   * Strategy A. In Phase 5 every admin surface uses the Linear V1 dark
-   * chrome; the prop is accepted but ignored.
-   */
-  theme?: string;
-}
-
-export default function AdminNav(_props: AdminNavProps = {}) {
+export default function AdminNav() {
   const pathname = usePathname();
   return <LinearAdminNav pathname={pathname} />;
 }
 
 function isActive(href: string, pathname: string): boolean {
   // Match exact (/admin) or prefix (/admin/users → matches /admin/users/anything)
-  return href === '/admin'
-    ? pathname === '/admin'
+  return href === "/admin"
+    ? pathname === "/admin"
     : pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -61,10 +52,10 @@ function LinearAdminNav({ pathname }: { pathname: string }) {
                 <Link
                   href={item.href}
                   className={
-                    'inline-flex h-10 items-center border-b-2 px-3 text-[13px] font-medium transition-colors ' +
+                    "inline-flex h-11 items-center border-b-2 px-3 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-linear-sage " +
                     (active
-                      ? 'border-linear-sage text-linear-text'
-                      : 'border-transparent text-linear-text-3 hover:text-linear-text-2')
+                      ? "border-linear-sage text-linear-text"
+                      : "border-transparent text-linear-text-3 hover:text-linear-text-2")
                   }
                 >
                   {item.label}

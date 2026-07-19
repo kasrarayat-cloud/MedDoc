@@ -16,6 +16,7 @@
     "lineage:online": "tsx scripts/template-twin-lineage-online.ts",
     "lineage:scale-test": "tsx scripts/template-twin-lineage-scale-test.ts",
     "rollout:pg-test": "tsx scripts/template-twin-rollout-pg-test.ts",
+    "release-control:pg-test": "NODE_OPTIONS=--conditions=react-server tsx --tsconfig ../../apps/transcribe-md/tsconfig.json scripts/template-twin-release-control-pg-test.ts",
     "rollback-fence:pg-test": "tsx --tsconfig ../../apps/transcribe-md/tsconfig.json scripts/template-twin-rollback-fence-pg-test.ts",
     "visit-automation:pg-test": "tsx --tsconfig ../../apps/transcribe-md/tsconfig.json scripts/visit-automation-transaction-integrity-pg-test.ts",
     "static-asset:pg-test": "tsx --tsconfig ../../apps/transcribe-md/tsconfig.json scripts/template-twin-static-asset-revocation-pg-test.ts",

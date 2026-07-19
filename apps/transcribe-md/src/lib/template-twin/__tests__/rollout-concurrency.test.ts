@@ -6,6 +6,13 @@ vi.mock("@meddoc/db", () => ({
   default: { $transaction: database.transaction },
 }));
 
+vi.mock("../runtime-attestation", () => ({
+  registerTemplateTwinRuntimeAttestation: vi.fn().mockResolvedValue({
+    instanceId: "app-1",
+  }),
+  TemplateTwinRuntimeAttestationError: class extends Error {},
+}));
+
 import {
   lockTemplateTwinRolloutForFinalClaim,
   setTemplateTwinGlobalRollout,
@@ -37,7 +44,7 @@ class DeterministicRolloutDatabase {
     rollbackFenceState: "OPEN",
     rollbackOperationId: null as string | null,
   };
-  practice = { enabled: true, generation: BigInt(1) };
+  practice = { enabled: true, generation: BigInt(1), isActive: true };
   lineagePhase = "CONTRACTED";
   auditEvents: unknown[] = [];
   queryOrder: string[] = [];
@@ -92,6 +99,15 @@ class DeterministicRolloutDatabase {
   async transaction<T>(callback: (tx: unknown) => Promise<T>): Promise<T> {
     const transactionId = ++this.nextTransaction;
     const tx = {
+      $executeRaw: async (query: unknown) => {
+        const text = sqlText(query);
+        if (text.includes("pg_advisory_xact_lock")) {
+          await this.acquire(transactionId, "release-control");
+          this.queryOrder.push(`${transactionId}:advisory`);
+          return 1;
+        }
+        throw new Error(`Unexpected synthetic SQL: ${text}`);
+      },
       $queryRaw: async (query: unknown) => {
         const text = sqlText(query);
         if (
@@ -113,6 +129,17 @@ class DeterministicRolloutDatabase {
             {
               templateTwinEnabled: this.practice.enabled,
               templateTwinRolloutGeneration: this.practice.generation,
+              isActive: this.practice.isActive,
+            },
+          ];
+        }
+        if (text.includes("template_twin_current_runtime_release")) {
+          return [
+            {
+              id: "0eb13c1b-0893-4cb0-bbd6-68b3e544baac",
+              releaseIdentitySha256: "a".repeat(64),
+              runtimeManifestSha256: "b".repeat(64),
+              runtimeReady: true,
             },
           ];
         }
@@ -179,6 +206,10 @@ describe("Template Twin rollout transaction protocol", () => {
           practiceId: actor.practiceId,
           globalGeneration: BigInt(1),
           practiceGeneration: BigInt(1),
+          releaseId: "0eb13c1b-0893-4cb0-bbd6-68b3e544baac",
+          releaseIdentitySha256: "a".repeat(64),
+          runtimeManifestSha256: "b".repeat(64),
+          runtimeInstanceId: "app-1",
         },
       }),
     );
@@ -199,6 +230,10 @@ describe("Template Twin rollout transaction protocol", () => {
           practiceId: actor.practiceId,
           globalGeneration: BigInt(1),
           practiceGeneration: BigInt(1),
+          releaseId: "0eb13c1b-0893-4cb0-bbd6-68b3e544baac",
+          releaseIdentitySha256: "a".repeat(64),
+          runtimeManifestSha256: "b".repeat(64),
+          runtimeInstanceId: "app-1",
         },
       }),
     );
@@ -221,6 +256,10 @@ describe("Template Twin rollout transaction protocol", () => {
           practiceId: actor.practiceId,
           globalGeneration: BigInt(1),
           practiceGeneration: BigInt(1),
+          releaseId: "0eb13c1b-0893-4cb0-bbd6-68b3e544baac",
+          releaseIdentitySha256: "a".repeat(64),
+          runtimeManifestSha256: "b".repeat(64),
+          runtimeInstanceId: "app-1",
         },
       }),
     );
@@ -237,6 +276,7 @@ describe("Template Twin rollout transaction protocol", () => {
     await expect(disable).resolves.toBe(BigInt(2));
     expect(syntheticDb.queryOrder).toEqual([
       "1:global",
+      "2:advisory",
       "1:practice",
       "2:global",
       "2:practice",
@@ -244,6 +284,7 @@ describe("Template Twin rollout transaction protocol", () => {
     expect(syntheticDb.practice).toEqual({
       enabled: false,
       generation: BigInt(2),
+      isActive: true,
     });
   });
 
