@@ -108,6 +108,7 @@ function fact(
   value: string | number | boolean,
   overrides: Partial<EncounterFact> = {},
 ): EncounterFact {
+  const evidenceQuote = 'Synthetic test evidence only.';
   return {
     factId: `ttfact_${seed.repeat(24).slice(0, 24)}`,
     sourceType: 'encounter_evidence',
@@ -120,10 +121,10 @@ function fact(
     number: typeof value === 'number' ? value : null,
     unit: null,
     speaker: 'Synthetic physician',
-    sourceTranscriptOffsets: { start: 0, end: 20 },
+    sourceTranscriptOffsets: { start: 0, end: evidenceQuote.length },
     audioTimestampSeconds: null,
     evidenceAnchorIds: [`synthetic-anchor-${seed}`],
-    evidenceQuote: 'Synthetic test evidence only.',
+    evidenceQuote,
     quality: { asr: 'high', evidence: 'direct' },
     ...overrides,
   };

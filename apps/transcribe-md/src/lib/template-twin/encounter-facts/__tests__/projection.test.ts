@@ -70,6 +70,14 @@ describe('projectEncounterFacts', () => {
     expect(medicationFacts).toHaveLength(4);
     expect(new Set(medicationFacts.flatMap((fact) => fact.evidenceAnchorIds)).size).toBe(1);
     expect(
+      new Set(
+        medicationFacts.map((fact) =>
+          JSON.stringify(fact.sourceTranscriptOffsets),
+        ),
+      ).size,
+    ).toBe(1);
+    expect(medicationFacts[0]?.sourceTranscriptOffsets).not.toBeNull();
+    expect(
       medicationFacts.find((fact) => fact.concept === 'medication.dose'),
     ).toMatchObject({ number: 10, unit: 'mg' });
 
@@ -95,6 +103,69 @@ describe('projectEncounterFacts', () => {
     });
     expect(fact.sourceTranscriptOffsets).toBeNull();
     expect(fact.quality).toEqual({ asr: 'review', evidence: 'unclear' });
+  });
+
+  it.each([
+    {
+      case: 'absent',
+      contextText: 'The canonical source contains a different statement.',
+      evidenceQuote: 'Synthetic concern is present.',
+    },
+    {
+      case: 'non-exact',
+      contextText: 'Synthetic concern is present.',
+      evidenceQuote: 'synthetic concern is present.',
+    },
+    {
+      case: 'ambiguous duplicate',
+      contextText:
+        'Synthetic concern is present. Synthetic concern is present.',
+      evidenceQuote: 'Synthetic concern is present.',
+    },
+  ])('keeps $case core evidence unanchored and non-direct', ({
+    contextText,
+    evidenceQuote,
+  }) => {
+    const [fact] = projectEncounterFacts({
+      mode: 'text',
+      contextText,
+      entities: {
+        chief_complaint: {
+          statement: 'Synthetic concern',
+          evidence_quote: evidenceQuote,
+        },
+      },
+    });
+
+    expect(fact).toMatchObject({
+      concept: 'chief_complaint',
+      sourceTranscriptOffsets: null,
+      quality: { asr: 'unknown', evidence: 'unclear' },
+    });
+  });
+
+  it('binds an exact anchor identity to the complete canonical source', () => {
+    const project = (contextText: string) =>
+      projectEncounterFacts({
+        mode: 'text',
+        contextText,
+        entities: {
+          chief_complaint: {
+            statement: 'Synthetic concern',
+            evidence_quote: 'Synthetic concern is present.',
+          },
+        },
+      })[0]!;
+
+    const first = project('Synthetic concern is present.\nSynthetic tail A.');
+    const second = project('Synthetic concern is present.\nSynthetic tail B.');
+
+    expect(first.sourceTranscriptOffsets).toEqual({
+      start: 0,
+      end: 'Synthetic concern is present.'.length,
+    });
+    expect(first.factId).toBe(second.factId);
+    expect(first.evidenceAnchorIds).not.toEqual(second.evidenceAnchorIds);
   });
 
   it('parses only explicit standalone numbers and units', () => {

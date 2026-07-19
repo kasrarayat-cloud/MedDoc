@@ -197,19 +197,42 @@ export function parseExplicitNumberAndUnit(
   return { number: parsed, unit: match[2]?.trim() || null };
 }
 
-function nthExactOffset(
+function uniqueExactOffset(
   contextText: string,
   quote: string,
-  occurrence: number,
 ): { start: number; end: number } | null {
   let cursor = 0;
-  let found = -1;
-  for (let index = 0; index <= occurrence; index += 1) {
-    found = contextText.indexOf(quote, cursor);
-    if (found < 0) return null;
-    cursor = found + quote.length;
+  let onlyMatch = -1;
+  let matchCount = 0;
+  while (cursor <= contextText.length - quote.length) {
+    const found = contextText.indexOf(quote, cursor);
+    if (found < 0) break;
+    matchCount += 1;
+    if (matchCount > 1) return null;
+    onlyMatch = found;
+    // Advance one UTF-16 code unit so overlapping duplicate quotes are also
+    // treated as ambiguous. Layer 3 does not provide a source span that could
+    // safely distinguish either occurrence.
+    cursor = found + 1;
   }
-  return { start: found, end: found + quote.length };
+  return matchCount === 1
+    ? { start: onlyMatch, end: onlyMatch + quote.length }
+    : null;
+}
+
+/**
+ * Structural proof available after projection has discarded the source text.
+ * Exact quote equality is established by `uniqueExactOffset`; downstream
+ * consumers can still reject null, empty, or quote-length-inconsistent spans
+ * without trusting resolver status.
+ */
+export function hasExactEncounterEvidenceSpan(fact: EncounterFact): boolean {
+  const offsets = fact.sourceTranscriptOffsets;
+  return Boolean(
+    offsets &&
+      offsets.start < offsets.end &&
+      offsets.end - offsets.start === fact.evidenceQuote.length,
+  );
 }
 
 /**
@@ -218,11 +241,11 @@ function nthExactOffset(
  */
 export function projectEncounterFacts(input: ProjectEncounterFactsInput): EncounterFact[] {
   const facts: EncounterFact[] = [];
-  const quoteOccurrences = new Map<string, number>();
   const evidenceLocations = new Map<
     string,
-    { occurrence: number; offsets: { start: number; end: number } | null }
+    { offsets: { start: number; end: number } | null }
   >();
+  const sourceEvidenceSha256 = digest(input.contextText);
 
   const add = (options: AddFactOptions): void => {
     // Layer 3 may contain specialty detail outside the bounded safe-alpha
@@ -236,30 +259,26 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
     const evidenceGroup = options.evidenceGroup ?? options.path;
     let evidenceLocation = evidenceLocations.get(evidenceGroup);
     if (!evidenceLocation) {
-      const occurrence = quoteOccurrences.get(quote) ?? 0;
-      quoteOccurrences.set(quote, occurrence + 1);
-      const preferredOffsets = nthExactOffset(
-        input.contextText,
-        quote,
-        occurrence,
-      );
       evidenceLocation = {
-        occurrence,
-        // A single exact source span can legitimately support multiple L3
-        // entities (for example, two medications in one sentence). Reuse that
-        // real span when there is no nth occurrence; never synthesize offsets.
-        offsets:
-          preferredOffsets ?? nthExactOffset(input.contextText, quote, 0),
+        // Core L3 output does not carry source offsets. A quote therefore has
+        // an exact usable anchor only when it occurs verbatim exactly once in
+        // the canonical source. Compound facts may share that one real span.
+        // Missing, non-exact, and duplicate quotes remain unanchored so the
+        // resolver and independent validator can fail closed.
+        offsets: uniqueExactOffset(input.contextText, quote),
       };
       evidenceLocations.set(evidenceGroup, evidenceLocation);
     }
-    const { occurrence, offsets } = evidenceLocation;
+    const { offsets } = evidenceLocation;
     const numberAndUnit = parseExplicitNumberAndUnit(options.value);
     const polarity = inferPolarity(options.value, quote);
     const evidenceQuality: EncounterFact['quality']['evidence'] =
       options.conflicting
         ? 'conflicting'
-        : polarity === 'uncertain' || polarity === 'conditional' || UNCLEAR_EVIDENCE.test(quote)
+        : offsets === null ||
+            polarity === 'uncertain' ||
+            polarity === 'conditional' ||
+            UNCLEAR_EVIDENCE.test(quote)
           ? 'unclear'
           : 'direct';
     const asr: EncounterFact['quality']['asr'] = UNCLEAR_EVIDENCE.test(quote)
@@ -273,10 +292,11 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
       concept: options.concept,
       value: options.value,
       quote,
-      occurrence,
+      offsets,
     });
     const anchorIdentity = JSON.stringify({
       mode: input.mode,
+      sourceEvidenceSha256,
       quote,
       offsets,
       timestamp: options.evidence.timestamp ?? null,

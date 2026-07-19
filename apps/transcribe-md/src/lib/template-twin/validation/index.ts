@@ -24,7 +24,10 @@ import {
   type UnsupportedElement,
   type TemplateTwinValidationResult,
 } from "../ir";
-import { parseExplicitNumberAndUnit } from "../encounter-facts";
+import {
+  hasExactEncounterEvidenceSpan,
+  parseExplicitNumberAndUnit,
+} from "../encounter-facts";
 import { isMappingTypeCompatible } from "../semantic-mapping";
 import {
   approvedPracticeDefaultAnchorId,
@@ -469,6 +472,17 @@ export function validateTemplateTwin(
       );
     } else {
       factById.set(fact.factId, fact);
+    }
+    if (
+      fact.sourceType === "encounter_evidence" &&
+      isSupportedTemplateTwinConcept(fact.concept) &&
+      !hasExactEncounterEvidenceSpan(fact)
+    ) {
+      add(
+        "CORE_EVIDENCE_SOURCE_SPAN_UNRESOLVED",
+        "blocking",
+        "A core encounter fact does not retain one exact canonical source span.",
+      );
     }
   }
   const tableById = new Map(tables.map((table) => [table.tableId, table]));

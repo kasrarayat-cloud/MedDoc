@@ -110,6 +110,7 @@ function fact(
   value: string | number | boolean,
   overrides: Partial<EncounterFact> = {},
 ): EncounterFact {
+  const evidenceQuote = `Synthetic evidence ${seed}`;
   return {
     factId: `ttfact_${seed.repeat(24).slice(0, 24)}`,
     sourceType: 'encounter_evidence',
@@ -122,10 +123,10 @@ function fact(
     number: typeof value === 'number' ? value : null,
     unit: null,
     speaker: 'Doctor',
-    sourceTranscriptOffsets: { start: 0, end: 20 },
+    sourceTranscriptOffsets: { start: 0, end: evidenceQuote.length },
     audioTimestampSeconds: null,
     evidenceAnchorIds: [`anchor-${seed}`],
-    evidenceQuote: `Synthetic evidence ${seed}`,
+    evidenceQuote,
     quality: { asr: 'high', evidence: 'direct' },
     ...overrides,
   };
@@ -266,6 +267,35 @@ describe('validateTemplateTwin', () => {
         'ASSERTION_NOT_SUPPORTED',
         'DROPDOWN_NOT_EXACT_OPTION',
       ]),
+    );
+  });
+
+  it('independently blocks a populated core fact without an exact source span', () => {
+    const definition = field('0', 'narrative_text');
+    const semantic = mapping(definition, 'chief_complaint');
+    const source = fact('0', 'chief_complaint', 'Synthetic concern', {
+      sourceTranscriptOffsets: null,
+      quality: { asr: 'high', evidence: 'direct' },
+    });
+    const forged: FieldResolution = {
+      fieldId: definition.fieldId,
+      status: 'supported',
+      value: source.value,
+      sourceFactIds: [source.factId],
+      evidenceAnchorIds: source.evidenceAnchorIds,
+      selectedOptionOrdinal: null,
+      reasonCode: 'synthetic_anchor_bypass',
+      clinicianReviewed: false,
+    };
+
+    const result = validateOne(definition, semantic, [source], [forged]);
+
+    expect(result.valid).toBe(false);
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({
+        code: 'CORE_EVIDENCE_SOURCE_SPAN_UNRESOLVED',
+        severity: 'blocking',
+      }),
     );
   });
 

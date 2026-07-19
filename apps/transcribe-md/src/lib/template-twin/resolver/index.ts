@@ -18,7 +18,10 @@ import {
   type SemanticMapping,
   type TemplateField,
 } from '../ir';
-import { parseExplicitNumberAndUnit } from '../encounter-facts';
+import {
+  hasExactEncounterEvidenceSpan,
+  parseExplicitNumberAndUnit,
+} from '../encounter-facts';
 import { isMappingTypeCompatible } from '../semantic-mapping';
 import {
   approvedPracticeDefaultAnchorId,
@@ -471,6 +474,28 @@ function resolveOne(
       null,
       conceptCandidates,
       'temporality_not_approved',
+    );
+  }
+
+  // Core L3 facts are projected from an evidence quote rather than a
+  // provider-supplied span. They may populate a field only when projection
+  // found one unique, exact span in the canonical encounter source. Custom
+  // concept facts use their independently validated multi-anchor proof and
+  // clinician corrections/defaults have separate provenance contracts.
+  if (
+    temporalCandidates.some(
+      (fact) =>
+        fact.sourceType === 'encounter_evidence' &&
+        isSupportedTemplateTwinConcept(fact.concept) &&
+        !hasExactEncounterEvidenceSpan(fact),
+    )
+  ) {
+    return makeResolution(
+      field.fieldId,
+      'ambiguous',
+      null,
+      temporalCandidates,
+      'source_evidence_span_unresolved',
     );
   }
 

@@ -106,6 +106,7 @@ function fact(
   value: string | number | boolean,
   overrides: Partial<EncounterFact> = {},
 ): EncounterFact {
+  const evidenceQuote = `Synthetic evidence ${seed}`;
   return {
     factId: `ttfact_${seed.repeat(24).slice(0, 24)}`,
     sourceType: 'encounter_evidence',
@@ -118,10 +119,10 @@ function fact(
     number: typeof value === 'number' ? value : null,
     unit: null,
     speaker: 'Doctor',
-    sourceTranscriptOffsets: { start: 0, end: 10 },
+    sourceTranscriptOffsets: { start: 0, end: evidenceQuote.length },
     audioTimestampSeconds: null,
     evidenceAnchorIds: [`anchor-${seed}`],
-    evidenceQuote: `Synthetic evidence ${seed}`,
+    evidenceQuote,
     quality: { asr: 'high', evidence: 'direct' },
     ...overrides,
   };
@@ -154,6 +155,46 @@ describe('resolveTemplateFields', () => {
       status: 'needs_clinician_input',
       value: null,
       reasonCode: 'select_value_not_exact_option',
+    });
+  });
+
+  it.each([
+    {
+      case: 'missing',
+      sourceTranscriptOffsets: null,
+    },
+    {
+      case: 'empty',
+      sourceTranscriptOffsets: { start: 7, end: 7 },
+    },
+    {
+      case: 'quote-length-inconsistent',
+      sourceTranscriptOffsets: { start: 0, end: 3 },
+    },
+  ])('refuses to populate core evidence with a $case source span', ({
+    sourceTranscriptOffsets,
+  }) => {
+    const definition = field('0', 'narrative_text');
+    const semantic = mapping(definition, 'chief_complaint');
+    const unanchored = fact('0', 'chief_complaint', 'Synthetic concern', {
+      sourceTranscriptOffsets,
+      // Resolver must not trust a provider/model quality label when the
+      // independently checkable span contract is absent.
+      quality: { asr: 'high', evidence: 'direct' },
+    });
+
+    const [resolved] = resolveTemplateFields({
+      fields: [definition],
+      mappings: [semantic],
+      facts: [unanchored],
+    });
+
+    expect(resolved).toMatchObject({
+      status: 'ambiguous',
+      value: null,
+      sourceFactIds: [unanchored.factId],
+      evidenceAnchorIds: unanchored.evidenceAnchorIds,
+      reasonCode: 'source_evidence_span_unresolved',
     });
   });
 
