@@ -8,11 +8,17 @@ export async function register(): Promise<void> {
   // `next build` can load instrumentation while producing standalone output;
   // the actual production-server process is the startup boundary.
   if (process.env.NEXT_PHASE === "phase-production-build") return;
-  const { assertQuillmdRuntimeProtocol } =
-    await import("./lib/runtime-protocol");
-  assertQuillmdRuntimeProtocol(process.env);
-  const { assertAdminSurfaceRuntimeConfiguration } =
-    await import("./lib/admin-host");
-  assertAdminSurfaceRuntimeConfiguration(process.env);
+  try {
+    const { assertQuillmdRuntimeProtocol } =
+      await import("./lib/runtime-protocol");
+    assertQuillmdRuntimeProtocol(process.env);
+    const { assertAdminSurfaceRuntimeConfiguration } =
+      await import("./lib/admin-host");
+    assertAdminSurfaceRuntimeConfiguration(process.env);
+  } catch (error) {
+    const { terminateForFatalStartupConfiguration } =
+      await import("./lib/fatal-startup");
+    terminateForFatalStartupConfiguration(error);
+  }
   await import("../sentry.server.config");
 }
