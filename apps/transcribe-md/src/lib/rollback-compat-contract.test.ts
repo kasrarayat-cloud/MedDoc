@@ -59,22 +59,22 @@ describe("rollback compatibility deployment contract", () => {
     );
   });
 
-  it("passes an explicit required epoch, runtime mode, and kill switch to app and worker", () => {
+  it("passes an explicit required epoch, runtime mode, and kill switch to every production app, worker, and control runtime", () => {
     expect(
       compose.match(
         /QUILLMD_REQUIRED_RUNTIME_PROTOCOL_EPOCH: template-twin-final-schema-v2/g,
       ),
-    ).toHaveLength(2);
+    ).toHaveLength(3);
     expect(
       compose.match(
         /TEMPLATE_TWIN_RUNTIME_MODE: \$\{TEMPLATE_TWIN_RUNTIME_MODE:-standard\}/g,
       ),
-    ).toHaveLength(2);
+    ).toHaveLength(3);
     expect(
       compose.match(
         /TEMPLATE_TWIN_KILL_SWITCH: \$\{TEMPLATE_TWIN_KILL_SWITCH:-true\}/g,
       ),
-    ).toHaveLength(2);
+    ).toHaveLength(3);
     expect(
       qaCompose.match(
         /QUILLMD_REQUIRED_RUNTIME_PROTOCOL_EPOCH: template-twin-final-schema-v2/g,

@@ -15,6 +15,12 @@ vi.mock("@meddoc/ai", () => ({
   }),
   modelClient: { complete: aiMocks.complete },
 }));
+vi.mock("../runtime-attestation", () => ({
+  registerTemplateTwinRuntimeAttestation: vi.fn().mockResolvedValue({
+    instanceId: "app-1",
+  }),
+  TemplateTwinRuntimeAttestationError: class extends Error {},
+}));
 
 import {
   TemplateTwinStaticAssetError,
@@ -32,6 +38,11 @@ import {
   type TemplateTwinStaticAssetClaimDb,
 } from "../static-assets";
 
+const RELEASE_ID = "0eb13c1b-0893-4cb0-bbd6-68b3e544baac";
+const RELEASE_IDENTITY_SHA256 = "1".repeat(64);
+const RUNTIME_MANIFEST_SHA256 = "2".repeat(64);
+const RUNTIME_INSTANCE_ID = "app-1";
+
 const ACTOR: TemplateTwinStaticAssetActor = {
   userId: "admin_synthetic",
   userEmail: "admin@synthetic.test",
@@ -41,6 +52,10 @@ const ACTOR: TemplateTwinStaticAssetActor = {
     practiceId: "practice_synthetic",
     globalGeneration: BigInt(1),
     practiceGeneration: BigInt(1),
+    releaseId: RELEASE_ID,
+    releaseIdentitySha256: RELEASE_IDENTITY_SHA256,
+    runtimeManifestSha256: RUNTIME_MANIFEST_SHA256,
+    runtimeInstanceId: RUNTIME_INSTANCE_ID,
   },
 };
 
@@ -307,6 +322,17 @@ function memoryDb() {
           {
             templateTwinEnabled: rollout.practiceEnabled,
             templateTwinRolloutGeneration: rollout.practiceGeneration,
+            isActive: true,
+          },
+        ] as T;
+      }
+      if (sql.includes("template_twin_current_runtime_release")) {
+        return [
+          {
+            id: RELEASE_ID,
+            releaseIdentitySha256: RELEASE_IDENTITY_SHA256,
+            runtimeManifestSha256: RUNTIME_MANIFEST_SHA256,
+            runtimeReady: true,
           },
         ] as T;
       }
@@ -717,9 +743,10 @@ describe("practice-scoped static image approval", () => {
       (query) =>
         (query as { strings?: readonly string[] }).strings?.join(" ") ?? "",
     );
-    expect(lockSql.slice(0, 6)).toEqual([
+    expect(lockSql.slice(0, 7)).toEqual([
       expect.stringContaining('template_twin_rollout_controls'),
       expect.stringContaining('FROM "practices"'),
+      expect.stringContaining("template_twin_current_runtime_release"),
       expect.stringContaining('template_twin_lineage_migration_progress'),
       expect.stringContaining('template_twin_static_asset_review_receipts'),
       expect.stringContaining('UPDATE "template_twin_static_asset_review_receipts"'),

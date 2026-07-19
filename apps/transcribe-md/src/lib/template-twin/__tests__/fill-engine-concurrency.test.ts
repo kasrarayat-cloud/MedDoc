@@ -30,6 +30,12 @@ vi.mock("@meddoc/db", () => ({
     practice: { findFirst: mocks.findPractice },
   },
 }));
+vi.mock("../runtime-attestation", () => ({
+  registerTemplateTwinRuntimeAttestation: vi.fn().mockResolvedValue({
+    instanceId: "app-1",
+  }),
+  TemplateTwinRuntimeAttestationError: class extends Error {},
+}));
 
 import { templateTwinMappingsSha256 } from "../mapping-hash";
 import { templateTwinFieldIntentsSha256 } from "../field-intent";
@@ -49,6 +55,10 @@ const DOCTOR_ID = "doctor-fill-concurrency";
 const VISIT_ID = "visit-fill-concurrency";
 const TEMPLATE_ID = "template-fill-concurrency";
 const COMPILED_ID = "compiled-fill-concurrency";
+const RELEASE_ID = "0eb13c1b-0893-4cb0-bbd6-68b3e544baac";
+const RELEASE_IDENTITY_SHA256 = "1".repeat(64);
+const RUNTIME_MANIFEST_SHA256 = "2".repeat(64);
+const RUNTIME_INSTANCE_ID = "app-1";
 const OLD_MANIFEST_SHA = "b".repeat(64);
 const CURRENT_SOAP = "Synthetic current SOAP for concurrency verification.";
 const SOURCE_PRIVACY_SCAN_EVIDENCE = {
@@ -164,6 +174,17 @@ function mockRolloutAndVisitLocks(visit = lockedVisitRow()) {
         {
           templateTwinEnabled: practiceRolloutEnabled,
           templateTwinRolloutGeneration: practiceRolloutGeneration,
+          isActive: true,
+        },
+      ];
+    }
+    if (text.includes("template_twin_current_runtime_release")) {
+      return [
+        {
+          id: RELEASE_ID,
+          releaseIdentitySha256: RELEASE_IDENTITY_SHA256,
+          runtimeManifestSha256: RUNTIME_MANIFEST_SHA256,
+          runtimeReady: true,
         },
       ];
     }
@@ -257,6 +278,10 @@ function processInput(artifactStorage = storage()) {
       practiceId: PRACTICE_ID,
       globalGeneration: BigInt(1),
       practiceGeneration: BigInt(1),
+      releaseId: RELEASE_ID,
+      releaseIdentitySha256: RELEASE_IDENTITY_SHA256,
+      runtimeManifestSha256: RUNTIME_MANIFEST_SHA256,
+      runtimeInstanceId: RUNTIME_INSTANCE_ID,
     },
     storage: artifactStorage,
   };
@@ -473,6 +498,10 @@ describe("Template Twin worker provenance and manifest concurrency", () => {
           practiceId: PRACTICE_ID,
           globalGeneration: BigInt(3),
           practiceGeneration: BigInt(3),
+          releaseId: RELEASE_ID,
+          releaseIdentitySha256: RELEASE_IDENTITY_SHA256,
+          runtimeManifestSha256: RUNTIME_MANIFEST_SHA256,
+          runtimeInstanceId: RUNTIME_INSTANCE_ID,
         },
       }),
     ).resolves.toBeDefined();
@@ -790,9 +819,10 @@ describe("Template Twin worker provenance and manifest concurrency", () => {
 
     expect(outputWrites).toBe(1);
     // practice + actor + visit protect the initial provenance pin, followed
-    // by global + practice + lineage + visit in the final output transaction.
+    // by global + practice + exact runtime release + lineage + visit in the
+    // final output transaction.
     // Neither transaction replaces the selection admission token.
-    expect(mocks.lockVisit).toHaveBeenCalledTimes(7);
+    expect(mocks.lockVisit).toHaveBeenCalledTimes(8);
     expect(mocks.createFill).not.toHaveBeenCalled();
     expect(mocks.updateFill).not.toHaveBeenCalled();
     expect(mocks.ledgerUpdate).toHaveBeenCalledWith({

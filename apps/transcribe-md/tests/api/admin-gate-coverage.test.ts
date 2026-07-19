@@ -20,6 +20,28 @@ import path from 'node:path';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 // tests/api/ -> apps/transcribe-md/src/app/api/admin
 const ADMIN_API_DIR = path.resolve(HERE, '../../src/app/api/admin');
+const CADDYFILE = path.resolve(HERE, '../../../../Caddyfile');
+
+const ALTERNATE_MACHINE_GATE_CONTRACTS = new Map<string, readonly string[]>([
+  [
+    'template-twin/control-health/route.ts',
+    [
+      'export async function GET()',
+      'templateTwinReleaseControlProcessEnabled()',
+      'releaseControlDatabase.$queryRawUnsafe("SELECT 1")',
+    ],
+  ],
+  [
+    'template-twin/release-metrics/route.ts',
+    [
+      'export async function POST(request: NextRequest)',
+      'templateTwinReleaseControlProcessEnabled()',
+      'isAdminHost(request)',
+      'recordTemplateTwinReleaseMetricSnapshot({',
+      'attestation: z',
+    ],
+  ],
+]);
 
 function adminRouteFiles(): string[] {
   return readdirSync(ADMIN_API_DIR, { recursive: true, encoding: 'utf8' })
@@ -28,7 +50,7 @@ function adminRouteFiles(): string[] {
     .sort();
 }
 
-describe('admin API gate coverage (server-side SUPER_ADMIN enforcement)', () => {
+describe('admin API gate coverage (server-side authority enforcement)', () => {
   const files = adminRouteFiles();
 
   it('discovers the admin route handlers', () => {
@@ -38,10 +60,20 @@ describe('admin API gate coverage (server-side SUPER_ADMIN enforcement)', () => 
   });
 
   it.each(files)(
-    'gates its handler with adminApi(): %s',
+    'gates its handler with an approved server-side contract: %s',
     (file) => {
       const src = readFileSync(file, 'utf8');
-      const rel = path.relative(ADMIN_API_DIR, file);
+      const rel = path.relative(ADMIN_API_DIR, file).replace(/\\/gu, '/');
+      const alternateContract = ALTERNATE_MACHINE_GATE_CONTRACTS.get(rel);
+      if (alternateContract) {
+        for (const requiredSource of alternateContract) {
+          expect(
+            src.includes(requiredSource),
+            `/api/admin/${rel} no longer satisfies its exact machine-only gate contract: ${requiredSource}`,
+          ).toBe(true);
+        }
+        return;
+      }
       expect(
         src.includes('adminApi('),
         `/api/admin/${rel} exports an admin handler without the adminApi() gate — ` +
@@ -49,4 +81,15 @@ describe('admin API gate coverage (server-side SUPER_ADMIN enforcement)', () => 
       ).toBe(true);
     },
   );
+
+  it('keeps the unauthenticated control-process health check off the public Caddy route matcher', () => {
+    const caddy = readFileSync(CADDYFILE, 'utf8');
+    const publicControlMatcher = caddy
+      .split(/\r?\n/gu)
+      .find((line) => line.includes('@templateTwinControlApi path'));
+    expect(publicControlMatcher).toBeDefined();
+    expect(publicControlMatcher).not.toContain(
+      '/api/admin/template-twin/control-health',
+    );
+  });
 });

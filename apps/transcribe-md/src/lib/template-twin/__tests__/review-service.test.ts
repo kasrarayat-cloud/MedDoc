@@ -37,6 +37,12 @@ vi.mock("@meddoc/db", () => {
     __tx: tx,
   };
 });
+vi.mock("../runtime-attestation", () => ({
+  registerTemplateTwinRuntimeAttestation: vi.fn().mockResolvedValue({
+    instanceId: "app-1",
+  }),
+  TemplateTwinRuntimeAttestationError: class extends Error {},
+}));
 vi.mock("../staging-qa-visit-guard", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../staging-qa-visit-guard")>()),
   lockAndAssertTemplateTwinStagingQaActor: database.lockActor,
@@ -88,6 +94,10 @@ import {
 
 const SHA = "a".repeat(64);
 const OUTPUT_SHA = "b".repeat(64);
+const RELEASE_ID = "0eb13c1b-0893-4cb0-bbd6-68b3e544baac";
+const RELEASE_IDENTITY_SHA256 = "1".repeat(64);
+const RUNTIME_MANIFEST_SHA256 = "2".repeat(64);
+const RUNTIME_INSTANCE_ID = "app-1";
 const FIELD_ID = `ttf_${"c".repeat(24)}`;
 const NOW = "2026-07-15T17:00:00.000Z";
 const REVIEWED_SOAP =
@@ -476,6 +486,17 @@ function mockRolloutAndVisitLocks(visit = lockedVisitRow()) {
         {
           templateTwinEnabled: practiceRolloutEnabled,
           templateTwinRolloutGeneration: practiceRolloutGeneration,
+          isActive: true,
+        },
+      ];
+    }
+    if (text.includes("template_twin_current_runtime_release")) {
+      return [
+        {
+          id: RELEASE_ID,
+          releaseIdentitySha256: RELEASE_IDENTITY_SHA256,
+          runtimeManifestSha256: RUNTIME_MANIFEST_SHA256,
+          runtimeReady: true,
         },
       ];
     }
@@ -498,6 +519,10 @@ function repository(
       practiceId,
       globalGeneration: BigInt(1),
       practiceGeneration: BigInt(1),
+      releaseId: RELEASE_ID,
+      releaseIdentitySha256: RELEASE_IDENTITY_SHA256,
+      runtimeManifestSha256: RUNTIME_MANIFEST_SHA256,
+      runtimeInstanceId: RUNTIME_INSTANCE_ID,
     })),
     loadOwned: vi.fn(async () => loaded),
     commit: vi.fn(async (plan) => {
@@ -1098,7 +1123,7 @@ describe("reviewTemplateTwinField lifecycle", () => {
       });
 
       expect(artifacts.storeOutputArtifact).toHaveBeenCalledTimes(1);
-      expect(database.lockVisit).toHaveBeenCalledTimes(7);
+      expect(database.lockVisit).toHaveBeenCalledTimes(9);
       expect(database.manifestUpdateMany).toHaveBeenCalledTimes(1);
       expect(database.manifestUpdateMany).toHaveBeenCalledWith({
         where: {
