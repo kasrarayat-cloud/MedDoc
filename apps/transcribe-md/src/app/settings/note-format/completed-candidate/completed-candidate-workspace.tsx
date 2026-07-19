@@ -3,7 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import type { CompletedCandidateReviewDto } from "@/lib/template-twin/completed-candidate-contract";
+import {
+  COMPLETED_CANDIDATE_REVIEW_RECEIPT,
+  CompletedCandidateReviewProjectionSchema,
+  type CompletedCandidateReviewDto,
+  type CompletedCandidateReviewProjection,
+} from "@/lib/template-twin/completed-candidate-contract";
 
 import styles from "./completed-candidate.module.css";
 
@@ -17,6 +22,9 @@ interface ApiPayload {
   error?: string;
   reviewUrl?: string;
   status?: "APPROVED" | "REJECTED";
+  projection?: unknown;
+  reviewReceipt?: string;
+  expiresAtIso?: string;
 }
 
 async function readPayload(response: Response): Promise<ApiPayload> {
@@ -35,6 +43,102 @@ function decisionLabel(value: Decision | undefined): string {
   if (value === "APPROVED") return "approved";
   if (value === "REJECTED") return "rejected";
   return "needs decision";
+}
+
+type ProjectionTable = Extract<
+  CompletedCandidateReviewProjection["blocks"][number],
+  { kind: "table" }
+>;
+
+function projectionCellText(
+  role: ProjectionTable["rows"][number]["cells"][number]["role"],
+  side: "source" | "candidate",
+): string {
+  if (role.kind === "stable_label") return role.label;
+  if (role.kind === "candidate_region") {
+    return side === "source" ? "Example value withheld" : "Blank text control";
+  }
+  return side === "source"
+    ? "Static content withheld"
+    : "Static content preserved";
+}
+
+function projectionMatchesInventory(
+  projection: CompletedCandidateReviewProjection,
+  regions: CompletedCandidateReviewDto["regions"],
+): boolean {
+  const candidateTags = new Map<string, string>();
+  const labels = new Map<string, string>();
+  for (const block of projection.blocks) {
+    if (block.kind !== "table") continue;
+    for (const row of block.rows) {
+      for (const cell of row.cells) {
+        if (cell.role.kind === "candidate_region") {
+          candidateTags.set(cell.role.regionId, cell.role.candidateTag);
+        } else if (cell.role.kind === "stable_label") {
+          labels.set(cell.role.forRegionId, cell.role.label);
+        }
+      }
+    }
+  }
+  return (
+    candidateTags.size === regions.length &&
+    labels.size === regions.length &&
+    regions.every(
+      (region) =>
+        candidateTags.get(region.regionId) === region.candidateTag &&
+        labels.get(region.regionId) === region.label,
+    )
+  );
+}
+
+function StructuralTable({
+  block,
+  side,
+}: {
+  block: ProjectionTable;
+  side: "source" | "candidate";
+}) {
+  return (
+    <table className={styles.structuralTable}>
+      <caption className={styles.visuallyHidden}>
+        Table {block.tableIndex + 1},{" "}
+        {side === "source" ? "isolated source" : "blank candidate"} structure
+      </caption>
+      <colgroup>
+        {block.gridColumnBasisPoints.map((width, index) => (
+          <col
+            key={`${block.blockKey}:column:${index}`}
+            style={{ width: `${width / 100}%` }}
+          />
+        ))}
+      </colgroup>
+      <tbody>
+        {block.rows.map((row) => (
+          <tr key={`${block.blockKey}:row:${row.rowIndex}`}>
+            {row.cells.map((cell) => {
+              const dynamic = cell.role.kind === "candidate_region";
+              return (
+                <td
+                  key={cell.cellKey}
+                  colSpan={cell.columnSpan}
+                  className={dynamic ? styles.structuralDynamicCell : undefined}
+                  data-structural-role={cell.role.kind}
+                >
+                  <span>{projectionCellText(cell.role, side)}</span>
+                  {dynamic && (
+                    <small>
+                      {side === "source" ? "redacted" : "stable binding"}
+                    </small>
+                  )}
+                </td>
+              );
+            })}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
 }
 
 export function CompletedCandidateUploadWorkspace() {
@@ -314,6 +418,15 @@ export function CompletedCandidateReviewWorkspace({
   );
   const [attested, setAttested] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [previewBusy, setPreviewBusy] = useState(false);
+  const [preview, setPreview] = useState<{
+    projection: CompletedCandidateReviewProjection;
+    expiresAtIso: string;
+  } | null>(null);
+  const reviewReceiptRef = useRef<string | null>(null);
+  const [bulkUndo, setBulkUndo] = useState<Record<string, Decision> | null>(
+    null,
+  );
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -327,6 +440,35 @@ export function CompletedCandidateReviewWorkspace({
     window.addEventListener("beforeunload", guard);
     return () => window.removeEventListener("beforeunload", guard);
   }, [dirty, status]);
+
+  useEffect(() => {
+    if (!preview) return;
+    const expiresAt = Date.parse(preview.expiresAtIso);
+    const delay = Math.max(0, expiresAt - Date.now());
+    const timer = window.setTimeout(
+      () => {
+        reviewReceiptRef.current = null;
+        setPreview(null);
+        setDecisions({});
+        setBulkUndo(null);
+        setAttested(false);
+        setDirty(false);
+        setMessage("");
+        setError(
+          "The protected comparison expired. Open it again before making the final decision.",
+        );
+      },
+      Math.min(delay, 2_147_483_647),
+    );
+    return () => window.clearTimeout(timer);
+  }, [preview]);
+
+  useEffect(
+    () => () => {
+      reviewReceiptRef.current = null;
+    },
+    [],
+  );
 
   const selected =
     initial.regions.find((region) => region.regionId === selectedId) ??
@@ -342,15 +484,97 @@ export function CompletedCandidateReviewWorkspace({
     [initial.regions],
   );
 
+  function clearPreviewForRetry(message: string) {
+    reviewReceiptRef.current = null;
+    setPreview(null);
+    setDecisions({});
+    setBulkUndo(null);
+    setAttested(false);
+    setDirty(false);
+    setMessage("");
+    setError(message);
+  }
+
+  async function openProtectedComparison() {
+    if (terminal || previewBusy || busy) return;
+    setPreviewBusy(true);
+    setError("");
+    setMessage(
+      "Loading the hash-bound redacted source and candidate topology…",
+    );
+    reviewReceiptRef.current = null;
+    try {
+      const response = await fetch(
+        `${CREATE_ENDPOINT}/${encodeURIComponent(initial.id)}/review-preview`,
+        {
+          method: "POST",
+          credentials: "same-origin",
+          cache: "no-store",
+        },
+      );
+      const payload = await readPayload(response);
+      const expiresAt =
+        typeof payload.expiresAtIso === "string"
+          ? Date.parse(payload.expiresAtIso)
+          : Number.NaN;
+      const parsed = CompletedCandidateReviewProjectionSchema.safeParse(
+        payload.projection,
+      );
+      if (
+        !response.ok ||
+        payload.ok !== true ||
+        !parsed.success ||
+        typeof payload.reviewReceipt !== "string" ||
+        !COMPLETED_CANDIDATE_REVIEW_RECEIPT.test(payload.reviewReceipt) ||
+        typeof payload.expiresAtIso !== "string" ||
+        !Number.isFinite(expiresAt) ||
+        expiresAt <= Date.now() ||
+        expiresAt > Date.now() + 15 * 60 * 1000 + 5_000 ||
+        parsed.data.candidateSha256 !== initial.candidateSha256 ||
+        parsed.data.inventorySha256 !== initial.inventorySha256 ||
+        parsed.data.regionCount !== initial.regions.length ||
+        !projectionMatchesInventory(parsed.data, initial.regions)
+      ) {
+        throw new Error(
+          payload.error ||
+            "The protected comparison was incomplete. Open it again.",
+        );
+      }
+      reviewReceiptRef.current = payload.reviewReceipt;
+      setPreview({
+        projection: parsed.data,
+        expiresAtIso: payload.expiresAtIso,
+      });
+      setDecisions({});
+      setBulkUndo(null);
+      setAttested(false);
+      setDirty(false);
+      setError("");
+      setMessage(
+        "Exact redacted topology loaded. Decisions remain reversible until you save the terminal review.",
+      );
+    } catch (caught) {
+      clearPreviewForRetry(
+        caught instanceof Error
+          ? caught.message
+          : "The protected comparison could not be opened.",
+      );
+    } finally {
+      setPreviewBusy(false);
+    }
+  }
+
   function decide(regionId: string, decision: Decision) {
-    if (status !== "PENDING_REVIEW") return;
+    if (status !== "PENDING_REVIEW" || !preview || previewBusy) return;
     setDecisions((current) => ({ ...current, [regionId]: decision }));
+    setBulkUndo(null);
     setDirty(true);
     setError("");
   }
 
   function approveAllVisible() {
-    if (status !== "PENDING_REVIEW") return;
+    if (status !== "PENDING_REVIEW" || !preview || previewBusy) return;
+    setBulkUndo(decisions);
     setDecisions(
       Object.fromEntries(regionIds.map((regionId) => [regionId, "APPROVED"])),
     );
@@ -358,8 +582,26 @@ export function CompletedCandidateReviewWorkspace({
     setError("");
   }
 
+  function undoBulkApproval() {
+    if (!bulkUndo || status !== "PENDING_REVIEW" || !preview || previewBusy)
+      return;
+    setDecisions(bulkUndo);
+    setBulkUndo(null);
+    setDirty(true);
+    setError("");
+  }
+
   async function saveReview() {
-    if (!allDecided || !attested || status !== "PENDING_REVIEW") return;
+    const reviewReceipt = reviewReceiptRef.current;
+    if (
+      !preview ||
+      !reviewReceipt ||
+      !allDecided ||
+      !attested ||
+      previewBusy ||
+      status !== "PENDING_REVIEW"
+    )
+      return;
     setBusy(true);
     setError("");
     setMessage("Saving the terminal physician decision…");
@@ -376,10 +618,18 @@ export function CompletedCandidateReviewWorkspace({
               decision: decisions[region.regionId],
             })),
             physicianAttestation: true,
+            reviewReceipt,
           }),
         },
       );
       const payload = await readPayload(response);
+      if (response.status === 409) {
+        clearPreviewForRetry(
+          payload.error ||
+            "The protected comparison is stale. Open it again before saving.",
+        );
+        return;
+      }
       if (
         !response.ok ||
         payload.ok !== true ||
@@ -388,6 +638,9 @@ export function CompletedCandidateReviewWorkspace({
         throw new Error(payload.error || "The physician review was not saved.");
       }
       setStatus(payload.status);
+      reviewReceiptRef.current = null;
+      setPreview(null);
+      setBulkUndo(null);
       setDirty(false);
       setMessage(
         payload.status === "APPROVED"
@@ -456,6 +709,93 @@ export function CompletedCandidateReviewWorkspace({
             </p>
           </div>
         </div>
+        {!terminal && !preview && (
+          <div className={styles.previewGate}>
+            <div>
+              <strong>Open the exact redacted structure before deciding</strong>
+              <p>
+                QuillMD will disclose one synchronized, value-free projection of
+                every source and candidate block. The proof is bound to this
+                candidate and expires after 15 minutes.
+              </p>
+            </div>
+            <button
+              className={styles.secondaryButton}
+              type="button"
+              onClick={openProtectedComparison}
+              disabled={previewBusy || busy}
+            >
+              {previewBusy ? "Opening comparison…" : "Open redacted comparison"}
+            </button>
+          </div>
+        )}
+        {preview && (
+          <div className={styles.structuralPreview}>
+            <div className={styles.previewSession} role="status">
+              <span>
+                Exact projection verified · values withheld · no provider egress
+              </span>
+              <span>
+                Review proof expires at{" "}
+                {new Intl.DateTimeFormat(undefined, {
+                  hour: "numeric",
+                  minute: "2-digit",
+                  second: "2-digit",
+                }).format(new Date(preview.expiresAtIso))}
+              </span>
+              <button
+                type="button"
+                onClick={openProtectedComparison}
+                disabled={previewBusy || busy}
+              >
+                Refresh 15-minute proof
+              </button>
+            </div>
+            <div className={styles.structuralColumnLabels} aria-hidden="true">
+              <span>Isolated source structure</span>
+              <span>Generated blank candidate</span>
+            </div>
+            <div className={styles.structuralBlocks}>
+              {preview.projection.blocks.map((block) => (
+                <section
+                  className={styles.structuralPair}
+                  key={block.blockKey}
+                  data-topology-key={block.blockKey}
+                >
+                  <div className={styles.structuralPane}>
+                    <span className={styles.compareLabel}>
+                      Source block {block.displayOrder + 1}
+                    </span>
+                    {block.kind === "table" ? (
+                      <StructuralTable block={block} side="source" />
+                    ) : (
+                      <div className={styles.redactedParagraph}>
+                        Static paragraph withheld
+                      </div>
+                    )}
+                  </div>
+                  <div className={styles.structuralPane}>
+                    <span className={styles.compareLabel}>
+                      Candidate block {block.displayOrder + 1}
+                    </span>
+                    {block.kind === "table" ? (
+                      <StructuralTable block={block} side="candidate" />
+                    ) : (
+                      <div className={styles.redactedParagraph}>
+                        Static paragraph preserved
+                      </div>
+                    )}
+                  </div>
+                </section>
+              ))}
+            </div>
+            <p className={styles.previewFootnote}>
+              This is a complete structural projection, not a rendered Word
+              page. Pagination is intentionally not represented; desktop Word
+              inspection remains a separate gate after download.
+            </p>
+          </div>
+        )}
         <dl className={styles.hashes}>
           <div>
             <dt>Candidate SHA-256</dt>
@@ -503,12 +843,28 @@ export function CompletedCandidateReviewWorkspace({
         {!terminal && (
           <div className={styles.bulkBar}>
             <span>
-              All {initial.regions.length} suggestions are visible in this
-              inventory.
+              {preview
+                ? `All ${initial.regions.length} suggestions are visible in both the protected comparison and this inventory.`
+                : "Open the protected comparison to enable physician decisions."}
             </span>
-            <button type="button" onClick={approveAllVisible} disabled={busy}>
-              Approve all {initial.regions.length} visible regions
-            </button>
+            <div className={styles.bulkActions}>
+              {bulkUndo && (
+                <button
+                  type="button"
+                  onClick={undoBulkApproval}
+                  disabled={busy || previewBusy || !preview}
+                >
+                  Undo bulk approval
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={approveAllVisible}
+                disabled={busy || previewBusy || !preview}
+              >
+                Approve all {initial.regions.length} visible regions
+              </button>
+            </div>
           </div>
         )}
 
@@ -585,7 +941,7 @@ export function CompletedCandidateReviewWorkspace({
               </dl>
               <fieldset
                 className={styles.decisionSet}
-                disabled={terminal || busy}
+                disabled={terminal || busy || previewBusy || !preview}
               >
                 <legend>Physician decision</legend>
                 <label>
@@ -623,9 +979,11 @@ export function CompletedCandidateReviewWorkspace({
           <div>
             <div className={styles.step}>Terminal decision</div>
             <h2 className={styles.sectionTitle}>
-              {allDecided
-                ? `Saving will mark this candidate ${expectedResult.toLowerCase()}`
-                : `Decide ${initial.regions.length - decidedCount} remaining region${initial.regions.length - decidedCount === 1 ? "" : "s"}`}
+              {!preview
+                ? "Open the protected structural comparison first"
+                : allDecided
+                  ? `Saving will mark this candidate ${expectedResult.toLowerCase()}`
+                  : `Decide ${initial.regions.length - decidedCount} remaining region${initial.regions.length - decidedCount === 1 ? "" : "s"}`}
             </h2>
           </div>
           <label className={styles.attestation}>
@@ -636,10 +994,11 @@ export function CompletedCandidateReviewWorkspace({
                 setAttested(event.target.checked);
                 setDirty(true);
               }}
-              disabled={!allDecided || busy}
+              disabled={!preview || !allDecided || busy || previewBusy}
             />
             <span>
-              I reviewed every visible region and understand that this decision
+              I compared the exact redacted source and candidate structure,
+              reviewed every visible region, and understand that this decision
               is final. Approval permits candidate download only.
             </span>
           </label>
@@ -648,7 +1007,9 @@ export function CompletedCandidateReviewWorkspace({
               className={styles.primaryButton}
               type="button"
               onClick={saveReview}
-              disabled={!allDecided || !attested || busy}
+              disabled={
+                !preview || !allDecided || !attested || busy || previewBusy
+              }
             >
               {busy ? "Saving review…" : "Save final physician decision"}
             </button>

@@ -298,6 +298,7 @@
 }
 
 .primaryButton,
+.secondaryButton,
 .bulkBar button {
   display: inline-flex;
   min-height: 44px;
@@ -318,7 +319,18 @@
   text-decoration: none;
 }
 
+.secondaryButton {
+  flex: none;
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid var(--color-linear-border-strong);
+  border-radius: 6px;
+  background: var(--color-linear-surface-2);
+  color: var(--color-linear-text);
+}
+
 .primaryButton:disabled,
+.secondaryButton:disabled,
 .bulkBar button:disabled {
   cursor: not-allowed;
   opacity: 0.48;
@@ -390,6 +402,183 @@
   color: var(--color-linear-text-3);
 }
 
+.previewGate {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin: 16px 0 0;
+  padding: 14px;
+  border: 1px solid rgba(212, 165, 116, 0.4);
+  border-radius: 6px;
+  background: rgba(212, 165, 116, 0.05);
+}
+
+.previewGate strong {
+  color: var(--color-linear-text);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.previewGate p,
+.previewFootnote {
+  margin: 5px 0 0;
+  color: var(--color-linear-text-2);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.structuralPreview {
+  margin-top: 16px;
+  border: 1px solid var(--color-linear-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.previewSession {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-linear-border);
+  background: var(--color-linear-surface-2);
+  color: var(--color-linear-text-2);
+  font-size: 10.5px;
+}
+
+.previewSession span:first-child {
+  color: var(--color-linear-sage-bright);
+}
+
+.previewSession span:nth-child(2) {
+  font-family: var(--font-mono);
+}
+
+.previewSession button {
+  min-height: 34px;
+  padding: 5px 9px;
+  border: 1px solid var(--color-linear-border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--color-linear-text-2);
+  font: inherit;
+  cursor: pointer;
+}
+
+.previewSession button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.structuralColumnLabels,
+.structuralPair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.structuralColumnLabels {
+  border-bottom: 1px solid var(--color-linear-border);
+  background: var(--color-linear-surface-1);
+  color: var(--color-linear-text-3);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.structuralColumnLabels span {
+  padding: 9px 12px;
+}
+
+.structuralColumnLabels span + span,
+.structuralPane + .structuralPane {
+  border-left: 1px solid var(--color-linear-border);
+}
+
+.structuralBlocks {
+  max-height: min(620px, 70vh);
+  overflow: auto;
+}
+
+.structuralPair {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 120px;
+}
+
+.structuralPair + .structuralPair {
+  border-top: 1px solid var(--color-linear-border);
+}
+
+.structuralPane {
+  min-width: 0;
+  padding: 12px;
+  background: var(--color-linear-surface-1);
+}
+
+.structuralTable {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  color: var(--color-linear-text-2);
+  font-size: 10.5px;
+}
+
+.structuralTable td {
+  min-height: 38px;
+  padding: 8px;
+  border: 1px solid var(--color-linear-border);
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+
+.structuralTable td span,
+.structuralTable td small {
+  display: block;
+}
+
+.structuralTable td small {
+  margin-top: 3px;
+  color: var(--color-linear-text-3);
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.structuralDynamicCell {
+  background: rgba(122, 166, 140, 0.09);
+  box-shadow: inset 0 0 0 1px rgba(122, 166, 140, 0.32);
+  color: var(--color-linear-text);
+}
+
+.redactedParagraph {
+  min-height: 38px;
+  padding: 10px;
+  border: 1px dashed var(--color-linear-border);
+  color: var(--color-linear-text-3);
+  font-size: 10.5px;
+}
+
+.previewFootnote {
+  margin: 0;
+  padding: 10px 12px;
+  border-top: 1px solid var(--color-linear-border);
+  background: var(--color-linear-surface-2);
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .hashes {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -453,6 +642,13 @@
   border: 1px solid var(--color-linear-border);
   background: transparent;
   color: var(--color-linear-text-2);
+}
+
+.bulkActions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .reviewGrid {
@@ -642,6 +838,8 @@
 .fileInput:focus-visible,
 .attestation input:focus-visible,
 .primaryButton:focus-visible,
+.secondaryButton:focus-visible,
+.previewSession button:focus-visible,
 .bulkBar button:focus-visible,
 .regionRail button:focus-visible,
 .decisionSet input:focus-visible {
@@ -661,16 +859,34 @@
   .panelHeading,
   .compareHeading,
   .inventoryHeader,
-  .bulkBar {
+  .bulkBar,
+  .previewGate,
+  .previewSession {
     flex-direction: column;
+  }
+
+  .previewSession {
+    display: flex;
+    align-items: flex-start;
   }
 
   .formGrid,
   .matrix,
   .compareGrid,
   .hashes,
-  .reviewGrid {
+  .reviewGrid,
+  .structuralColumnLabels,
+  .structuralPair {
     grid-template-columns: 1fr;
+  }
+
+  .structuralColumnLabels {
+    display: none;
+  }
+
+  .structuralPane + .structuralPane {
+    border-top: 1px solid var(--color-linear-border);
+    border-left: 0;
   }
 
   .matrix > div + div,

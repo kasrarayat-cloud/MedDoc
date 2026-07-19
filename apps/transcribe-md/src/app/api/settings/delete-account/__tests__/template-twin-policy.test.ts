@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   staticAssetReviewReceiptCount: vi.fn(),
   customExampleExecutionCount: vi.fn(),
   syntheticQaRunCount: vi.fn(),
+  completedCandidateCount: vi.fn(),
+  completedCandidateReviewReceiptCount: vi.fn(),
   noteTemplateCount: vi.fn(),
   fillCount: vi.fn(),
   objectLedgerCount: vi.fn(),
@@ -80,6 +82,12 @@ vi.mock("@meddoc/db", () => ({
       count: mocks.customExampleExecutionCount,
     },
     templateTwinSyntheticQaRun: { count: mocks.syntheticQaRunCount },
+    templateTwinCompletedCandidate: {
+      count: mocks.completedCandidateCount,
+    },
+    templateTwinCompletedCandidateReviewReceipt: {
+      count: mocks.completedCandidateReviewReceiptCount,
+    },
     noteTemplate: { count: mocks.noteTemplateCount },
     templateTwinFillManifest: { count: mocks.fillCount },
     templateTwinObjectLedger: { count: mocks.objectLedgerCount },
@@ -127,6 +135,8 @@ beforeEach(() => {
   mocks.staticAssetReviewReceiptCount.mockResolvedValue(0);
   mocks.customExampleExecutionCount.mockResolvedValue(0);
   mocks.syntheticQaRunCount.mockResolvedValue(0);
+  mocks.completedCandidateCount.mockResolvedValue(0);
+  mocks.completedCandidateReviewReceiptCount.mockResolvedValue(0);
   mocks.noteTemplateCount.mockResolvedValue(0);
   mocks.fillCount.mockResolvedValue(0);
   mocks.objectLedgerCount.mockResolvedValue(0);
@@ -161,6 +171,12 @@ beforeEach(() => {
           count: mocks.customExampleExecutionCount,
         },
         templateTwinSyntheticQaRun: { count: mocks.syntheticQaRunCount },
+        templateTwinCompletedCandidate: {
+          count: mocks.completedCandidateCount,
+        },
+        templateTwinCompletedCandidateReviewReceipt: {
+          count: mocks.completedCandidateReviewReceiptCount,
+        },
         noteTemplate: { count: mocks.noteTemplateCount },
         templateTwinFillManifest: { count: mocks.fillCount },
         templateTwinObjectLedger: { count: mocks.objectLedgerCount },
@@ -248,6 +264,11 @@ describe("delete account with retained Template Twin records", () => {
     ["static-asset preview-review receipt", "staticAssetReviewReceiptCount"],
     ["custom-example execution", "customExampleExecutionCount"],
     ["synthetic staging QA run", "syntheticQaRunCount"],
+    ["completed-document candidate", "completedCandidateCount"],
+    [
+      "completed-candidate review receipt",
+      "completedCandidateReviewReceiptCount",
+    ],
   ] as const)(
     "blocks deletion for a retained %s without entering the transaction",
     async (_label, counter) => {

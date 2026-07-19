@@ -20,6 +20,8 @@ function response(body: unknown, status: number) {
     status,
     headers: {
       "Cache-Control": "no-store, private",
+      Pragma: "no-cache",
+      "Referrer-Policy": "no-referrer",
       "X-Content-Type-Options": "nosniff",
     },
   });
@@ -124,7 +126,9 @@ export async function PATCH(
       const status =
         error.code === "NOT_FOUND"
           ? 404
-          : error.code === "REVIEW_CONFLICT" || error.code === "ROLLOUT_CHANGED"
+          : error.code === "REVIEW_CONFLICT" ||
+              error.code === "ROLLOUT_CHANGED" ||
+              error.code === "REVIEW_PREVIEW_REQUIRED"
             ? 409
             : error.code === "INVALID_INPUT"
               ? 400

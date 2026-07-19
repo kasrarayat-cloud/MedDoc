@@ -2,6 +2,9 @@ import { z } from "zod";
 
 const SHA256 = /^[a-f0-9]{64}$/u;
 const REGION_ID = /^tccr_[a-f0-9]{24}$/u;
+const CANDIDATE_TAG = /^qmd:candidate:[a-f0-9]{24}$/u;
+export const COMPLETED_CANDIDATE_REVIEW_RECEIPT =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.[A-Za-z0-9_-]{43}$/u;
 
 const CompletedCandidateProjectionRoleSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("static_redacted") }).strict(),
@@ -16,7 +19,7 @@ const CompletedCandidateProjectionRoleSchema = z.discriminatedUnion("kind", [
     .object({
       kind: z.literal("candidate_region"),
       regionId: z.string().regex(REGION_ID),
-      candidateTag: z.string().min(1).max(200),
+      candidateTag: z.string().regex(CANDIDATE_TAG),
       controlKind: z.literal("plain_text"),
       sourceState: z.literal("VALUE_WITHHELD"),
       candidateState: z.literal("BLANK_CONTROL"),
@@ -91,16 +94,42 @@ export const CompletedCandidateReviewProjectionSchema = z
   .strict()
   .superRefine((projection, context) => {
     const blockKeys = new Set<string>();
-    const regionIds = new Set<string>();
-    const labelRegionIds = new Set<string>();
+    const cellKeys = new Set<string>();
+    const candidateTags = new Set<string>();
+    const candidateRegionCounts = new Map<string, number>();
+    const labelRegionCounts = new Map<string, number>();
     let totalRows = 0;
     let totalCells = 0;
-    for (const block of projection.blocks) {
+    let expectedTableIndex = 0;
+    if (
+      new Set(projection.sourceExampleSha256s).size !==
+      projection.sourceExampleSha256s.length
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["sourceExampleSha256s"],
+        message: "Source example identities must be distinct.",
+      });
+    }
+    for (const [blockIndex, block] of projection.blocks.entries()) {
       if (blockKeys.has(block.blockKey)) {
         context.addIssue({ code: "custom", message: "Duplicate block key." });
       }
       blockKeys.add(block.blockKey);
+      if (block.displayOrder !== blockIndex) {
+        context.addIssue({
+          code: "custom",
+          message: "Block display order must be unique and contiguous.",
+        });
+      }
       if (block.kind !== "table") continue;
+      if (block.tableIndex !== expectedTableIndex) {
+        context.addIssue({
+          code: "custom",
+          message: "Table indexes must be unique and contiguous.",
+        });
+      }
+      expectedTableIndex += 1;
       totalRows += block.rows.length;
       const gridSize = block.gridColumnBasisPoints.length;
       if (
@@ -109,10 +138,28 @@ export const CompletedCandidateReviewProjectionSchema = z
       ) {
         context.addIssue({ code: "custom", message: "Invalid table grid." });
       }
-      for (const row of block.rows) {
+      for (const [rowIndex, row] of block.rows.entries()) {
+        if (row.rowIndex !== rowIndex) {
+          context.addIssue({
+            code: "custom",
+            message: "Table row indexes must be unique and contiguous.",
+          });
+        }
         totalCells += row.cells.length;
         let expectedColumn = 0;
-        for (const cell of row.cells) {
+        for (const [cellIndex, cell] of row.cells.entries()) {
+          const expectedCellKey = `table:${block.tableIndex}:row:${row.rowIndex}:cell:${cell.cellIndex}`;
+          if (
+            cell.cellIndex !== cellIndex ||
+            cell.cellKey !== expectedCellKey ||
+            cellKeys.has(cell.cellKey)
+          ) {
+            context.addIssue({
+              code: "custom",
+              message: "Table cell identities must be unique and contiguous.",
+            });
+          }
+          cellKeys.add(cell.cellKey);
           if (
             cell.columnStart !== expectedColumn ||
             cell.columnStart + cell.columnSpan > gridSize
@@ -124,15 +171,22 @@ export const CompletedCandidateReviewProjectionSchema = z
           }
           expectedColumn = cell.columnStart + cell.columnSpan;
           if (cell.role.kind === "candidate_region") {
-            if (regionIds.has(cell.role.regionId)) {
+            candidateRegionCounts.set(
+              cell.role.regionId,
+              (candidateRegionCounts.get(cell.role.regionId) ?? 0) + 1,
+            );
+            if (candidateTags.has(cell.role.candidateTag)) {
               context.addIssue({
                 code: "custom",
-                message: "Duplicate candidate region.",
+                message: "Duplicate candidate binding tag.",
               });
             }
-            regionIds.add(cell.role.regionId);
+            candidateTags.add(cell.role.candidateTag);
           } else if (cell.role.kind === "stable_label") {
-            labelRegionIds.add(cell.role.forRegionId);
+            labelRegionCounts.set(
+              cell.role.forRegionId,
+              (labelRegionCounts.get(cell.role.forRegionId) ?? 0) + 1,
+            );
           }
         }
         if (expectedColumn !== gridSize) {
@@ -146,9 +200,17 @@ export const CompletedCandidateReviewProjectionSchema = z
     if (
       totalRows > 500 ||
       totalCells > 2000 ||
-      regionIds.size !== projection.regionCount ||
-      labelRegionIds.size !== projection.regionCount ||
-      [...regionIds].some((regionId) => !labelRegionIds.has(regionId))
+      expectedTableIndex < 1 ||
+      candidateRegionCounts.size !== projection.regionCount ||
+      labelRegionCounts.size !== projection.regionCount ||
+      [...candidateRegionCounts].some(
+        ([regionId, count]) =>
+          count !== 1 || labelRegionCounts.get(regionId) !== 1,
+      ) ||
+      [...labelRegionCounts].some(
+        ([regionId, count]) =>
+          count !== 1 || candidateRegionCounts.get(regionId) !== 1,
+      )
     ) {
       context.addIssue({
         code: "custom",
@@ -224,6 +286,7 @@ export const CompletedCandidateReviewPayloadSchema = z
   .object({
     decisions: z.array(CompletedCandidateReviewDecisionSchema).min(1).max(2000),
     physicianAttestation: z.literal(true),
+    reviewReceipt: z.string().regex(COMPLETED_CANDIDATE_REVIEW_RECEIPT),
   })
   .strict();
 
@@ -251,6 +314,13 @@ export interface CompletedCandidateReviewDto {
   readonly comparison: z.infer<typeof CompletedCandidateComparisonSchema>;
   readonly privacy: z.infer<typeof CompletedCandidatePrivacyEvidenceSchema>;
   readonly regions: readonly CompletedCandidateReviewRegionDto[];
+}
+
+export interface CompletedCandidateReviewPreviewDto {
+  readonly projection: CompletedCandidateReviewProjection;
+  /** Opaque bearer proof. Keep in memory only; never render or persist it. */
+  readonly reviewReceipt: string;
+  readonly expiresAtIso: string;
 }
 
 export type CompletedCandidateReviewProjection = z.infer<

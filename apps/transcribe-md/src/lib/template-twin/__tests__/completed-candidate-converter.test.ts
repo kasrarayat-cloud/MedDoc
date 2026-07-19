@@ -245,6 +245,80 @@ describe("completed document to blank candidate conversion", () => {
     ).toBe(false);
   });
 
+  it("rejects duplicate or incomplete structural identities in the review projection", async () => {
+    const result = await convertCompletedDocumentsToCandidate([
+      await example({
+        finding: "Synthetic finding alpha",
+        plan: "Synthetic plan alpha",
+      }),
+      await example({
+        finding: "Synthetic finding beta",
+        plan: "Synthetic plan beta",
+      }),
+    ]);
+
+    const duplicateSource = structuredClone(result.reviewProjection);
+    duplicateSource.sourceExampleSha256s[1] =
+      duplicateSource.sourceExampleSha256s[0]!;
+
+    const duplicateBlockOrder = structuredClone(result.reviewProjection);
+    duplicateBlockOrder.blocks.at(-1)!.displayOrder = 0;
+
+    const duplicateCell = structuredClone(result.reviewProjection);
+    const duplicateCellTable = duplicateCell.blocks.find(
+      (block) => block.kind === "table",
+    );
+    if (!duplicateCellTable || duplicateCellTable.kind !== "table") {
+      throw new Error("Expected the synthetic table projection.");
+    }
+    duplicateCellTable.rows[0]!.cells[1]!.cellKey =
+      duplicateCellTable.rows[0]!.cells[0]!.cellKey;
+
+    const duplicateTag = structuredClone(result.reviewProjection);
+    const duplicateTagTable = duplicateTag.blocks.find(
+      (block) => block.kind === "table",
+    );
+    if (!duplicateTagTable || duplicateTagTable.kind !== "table") {
+      throw new Error("Expected the synthetic table projection.");
+    }
+    const candidateCells = duplicateTagTable.rows.flatMap((row) =>
+      row.cells.filter((cell) => cell.role.kind === "candidate_region"),
+    );
+    if (
+      candidateCells.length !== 2 ||
+      candidateCells[0]!.role.kind !== "candidate_region" ||
+      candidateCells[1]!.role.kind !== "candidate_region"
+    ) {
+      throw new Error("Expected two candidate cells.");
+    }
+    candidateCells[1]!.role.candidateTag = candidateCells[0]!.role.candidateTag;
+
+    const missingLabel = structuredClone(result.reviewProjection);
+    const missingLabelTable = missingLabel.blocks.find(
+      (block) => block.kind === "table",
+    );
+    if (!missingLabelTable || missingLabelTable.kind !== "table") {
+      throw new Error("Expected the synthetic table projection.");
+    }
+    const stableLabel = missingLabelTable.rows
+      .flatMap((row) => row.cells)
+      .find((cell) => cell.role.kind === "stable_label");
+    if (!stableLabel) throw new Error("Expected a stable label cell.");
+    stableLabel.role = { kind: "static_redacted" };
+
+    for (const projection of [
+      duplicateSource,
+      duplicateBlockOrder,
+      duplicateCell,
+      duplicateTag,
+      missingLabel,
+    ]) {
+      expect(
+        CompletedCandidateReviewProjectionSchema.safeParse(projection).success,
+      ).toBe(false);
+    }
+  });
+
   it.each([
     [
       "ordinary narrative changes",

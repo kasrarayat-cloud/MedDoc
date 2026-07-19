@@ -1,6 +1,9 @@
+import { createHash } from "node:crypto";
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { TemplateTwinArtifactStore } from "../storage";
+import { canonicalSha256 } from "../canonical";
 
 const mocks = vi.hoisted(() => ({
   transaction: vi.fn(),
@@ -8,7 +11,9 @@ const mocks = vi.hoisted(() => ({
   candidateFindFirst: vi.fn(),
   candidateUpdateMany: vi.fn(),
   regionUpdateMany: vi.fn(),
+  receiptCreate: vi.fn(),
   queryRaw: vi.fn(),
+  compile: vi.fn(),
   begin: vi.fn(),
   scan: vi.fn(),
   isolate: vi.fn(),
@@ -30,6 +35,9 @@ const tx = {
   },
   templateTwinCompletedCandidateRegion: {
     updateMany: mocks.regionUpdateMany,
+  },
+  templateTwinCompletedCandidateReviewReceipt: {
+    create: mocks.receiptCreate,
   },
 };
 
@@ -65,6 +73,12 @@ vi.mock("../completed-candidate-converter", async (importOriginal) => {
   return { ...actual, convertCompletedDocumentsToCandidate: mocks.convert };
 });
 
+vi.mock("@/lib/note-template-docx", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/note-template-docx")>();
+  return { ...actual, compileTemplateDocx: mocks.compile };
+});
+
 vi.mock("../rollout", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../rollout")>();
   return {
@@ -88,6 +102,7 @@ vi.mock("../storage", async (importOriginal) => {
 
 import {
   createCompletedCandidate,
+  issueCompletedCandidateReviewPreview,
   readApprovedCompletedCandidate,
   reviewCompletedCandidate,
 } from "../completed-candidate-service";
@@ -102,10 +117,137 @@ const ACTOR = {
     practiceGeneration: BigInt(7),
   },
 };
-const CANDIDATE_SHA = "a".repeat(64);
-const INVENTORY_SHA = "b".repeat(64);
+const CANDIDATE_BYTES = Buffer.from("new blank candidate");
+const CANDIDATE_SHA = createHash("sha256")
+  .update(CANDIDATE_BYTES)
+  .digest("hex");
 const REGION_ONE = "tccr_111111111111111111111111";
-const REGION_TWO = "tccr_222222222222222222222222";
+const REVIEW_RECEIPT_ID = "123e4567-e89b-42d3-a456-426614174001";
+const REVIEW_RECEIPT = `${REVIEW_RECEIPT_ID}.${"R".repeat(43)}`;
+const CANDIDATE_STRUCTURE_SHA = "c".repeat(64);
+const EXAMPLE_STRUCTURE_SHA = "d".repeat(64);
+const REGION = {
+  regionId: REGION_ONE,
+  displayOrder: 0,
+  label: "Finding",
+  evidenceType: "stable_label_changed_scalar_cell" as const,
+  partName: "word/document.xml" as const,
+  tableIndex: 0,
+  rowIndex: 0,
+  cellIndex: 1,
+  candidateTag: "qmd:candidate:111111111111111111111111",
+  candidateSdtId: "123",
+  sourceEvidenceSha256: "f".repeat(64),
+  sourceDescription: "Synthetic values differed.",
+  candidateDescription: "Blank text control.",
+};
+const INVENTORY_SHA = canonicalSha256([REGION]);
+const PROJECTION = {
+  profileVersion:
+    "completed-candidate-redacted-structural-review/1.0.0" as const,
+  valuesRedacted: true as const,
+  sourceBytesReturned: false as const,
+  providerEgress: false as const,
+  paginationRepresented: false as const,
+  sourceExampleSha256s: ["1".repeat(64), "2".repeat(64)],
+  sourceStructureSha256: EXAMPLE_STRUCTURE_SHA,
+  candidateStructureSha256: CANDIDATE_STRUCTURE_SHA,
+  inventorySha256: INVENTORY_SHA,
+  candidateSha256: CANDIDATE_SHA,
+  blocks: [
+    {
+      kind: "table" as const,
+      blockKey: "table:0:/w:document[1]/w:body[1]/w:tbl[1]",
+      displayOrder: 0,
+      tableIndex: 0,
+      gridColumnBasisPoints: [4000, 6000],
+      rows: [
+        {
+          rowIndex: 0,
+          cells: [
+            {
+              cellKey: "table:0:row:0:cell:0",
+              cellIndex: 0,
+              columnStart: 0,
+              columnSpan: 1,
+              rowSpan: 1 as const,
+              role: {
+                kind: "stable_label" as const,
+                label: "Finding",
+                forRegionId: REGION_ONE,
+              },
+            },
+            {
+              cellKey: "table:0:row:0:cell:1",
+              cellIndex: 1,
+              columnStart: 1,
+              columnSpan: 1,
+              rowSpan: 1 as const,
+              role: {
+                kind: "candidate_region" as const,
+                regionId: REGION_ONE,
+                candidateTag: REGION.candidateTag,
+                controlKind: "plain_text" as const,
+                sourceState: "VALUE_WITHHELD" as const,
+                candidateState: "BLANK_CONTROL" as const,
+              },
+            },
+          ],
+        },
+      ],
+    },
+  ],
+  regionCount: 1,
+};
+const PROJECTION_SHA = canonicalSha256(PROJECTION);
+
+function pendingCandidate() {
+  return {
+    id: "candidate_synthetic",
+    practiceId: ACTOR.practiceId,
+    createdById: ACTOR.userId,
+    status: "PENDING_REVIEW",
+    candidateSha256: CANDIDATE_SHA,
+    candidateStructureSha256: CANDIDATE_STRUCTURE_SHA,
+    inventorySha256: INVENTORY_SHA,
+    converterVersion: "completed-document-candidate/1.1.0",
+    reviewProjection: PROJECTION,
+    reviewProjectionSha256: PROJECTION_SHA,
+    examples: [
+      {
+        ordinal: 1,
+        minimizedSha256: "1".repeat(64),
+        documentStructureSha256: EXAMPLE_STRUCTURE_SHA,
+      },
+      {
+        ordinal: 2,
+        minimizedSha256: "2".repeat(64),
+        documentStructureSha256: EXAMPLE_STRUCTURE_SHA,
+      },
+    ],
+    regions: [{ id: "row_one", ...REGION, decision: "PENDING" }],
+  };
+}
+
+function receipt(notExpired = true) {
+  return {
+    id: REVIEW_RECEIPT_ID,
+    candidateId: "candidate_synthetic",
+    practiceId: ACTOR.practiceId,
+    reviewedById: ACTOR.userId,
+    tokenSha256: createHash("sha256").update(REVIEW_RECEIPT).digest("hex"),
+    candidateSha256: CANDIDATE_SHA,
+    candidateStructureSha256: CANDIDATE_STRUCTURE_SHA,
+    inventorySha256: INVENTORY_SHA,
+    reviewProjectionSha256: PROJECTION_SHA,
+    converterVersion: "completed-document-candidate/1.1.0",
+    globalRolloutGeneration: ACTOR.rolloutToken.globalGeneration,
+    practiceRolloutGeneration: ACTOR.rolloutToken.practiceGeneration,
+    expiresAt: new Date(Date.now() + 60_000),
+    consumedAt: null,
+    notExpired,
+  };
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -114,6 +256,7 @@ beforeEach(() => {
   );
   mocks.queryRaw.mockResolvedValue([]);
   mocks.candidateCreate.mockResolvedValue({ id: "candidate_synthetic" });
+  mocks.receiptCreate.mockResolvedValue({ id: REVIEW_RECEIPT_ID });
   mocks.candidateUpdateMany.mockResolvedValue({ count: 1 });
   mocks.regionUpdateMany.mockResolvedValue({ count: 1 });
   mocks.finalRollout.mockResolvedValue({ allowed: true, code: "ALLOWED" });
@@ -121,6 +264,19 @@ beforeEach(() => {
   mocks.audit.mockResolvedValue(undefined);
   mocks.isolate.mockResolvedValue(undefined);
   mocks.reject.mockResolvedValue(undefined);
+  mocks.compile.mockReturnValue({
+    structureSha256: CANDIDATE_STRUCTURE_SHA,
+    stats: { blockingUnsupported: 0 },
+    fields: [
+      {
+        rendererBinding: {
+          bindingType: "content_control",
+          tag: REGION.candidateTag,
+          sdtId: REGION.candidateSdtId,
+        },
+      },
+    ],
+  });
 });
 
 describe("completed candidate service", () => {
@@ -140,13 +296,24 @@ describe("completed candidate service", () => {
         document: Buffer.from("minimized two"),
         evidence: { minimizedSha256: "2".repeat(64) },
       });
+    const privacyReceipt = {
+      profileVersion:
+        "completed-candidate-local-synthetic-privacy/1.1.0" as const,
+      providerEgress: false as const,
+      exampleCount: 2,
+      sentinelVerified: true as const,
+      structuredIdentifierClasses: [] as const,
+      sourceBinding:
+        "minimized-package-structure-visible-text-digests" as const,
+      exampleEvidenceSha256s: ["8".repeat(64), "9".repeat(64)],
+    };
     mocks.convert.mockResolvedValue({
-      document: Buffer.from("new blank candidate"),
+      document: CANDIDATE_BYTES,
       candidateSha256: CANDIDATE_SHA,
-      candidateStructureSha256: "c".repeat(64),
+      candidateStructureSha256: CANDIDATE_STRUCTURE_SHA,
       inventorySha256: INVENTORY_SHA,
-      converterVersion: "completed-document-candidate/1.0.0",
-      exampleStructureSha256: "d".repeat(64),
+      converterVersion: "completed-document-candidate/1.1.0",
+      exampleStructureSha256: EXAMPLE_STRUCTURE_SHA,
       comparison: {
         exampleCount: 2,
         identicalStructure: true,
@@ -157,30 +324,12 @@ describe("completed candidate service", () => {
         candidateSummary: "safe",
       },
       privacyEvidence: {
-        profileVersion: "completed-candidate-local-synthetic-privacy/1.1.0",
-        providerEgress: false,
-        exampleCount: 2,
-        sentinelVerified: true,
-        structuredIdentifierClasses: [],
-        sourceBinding: "minimized-package-structure-visible-text-digests",
-        exampleEvidenceSha256s: ["8".repeat(64), "9".repeat(64)],
-        evidenceSha256: "e".repeat(64),
+        ...privacyReceipt,
+        evidenceSha256: canonicalSha256(privacyReceipt),
       },
-      regions: [
-        {
-          regionId: REGION_ONE,
-          displayOrder: 0,
-          label: "Finding",
-          evidenceType: "stable_label_changed_scalar_cell",
-          partName: "word/document.xml",
-          tableIndex: 0,
-          rowIndex: 0,
-          cellIndex: 1,
-          candidateTag: "qmd:candidate:111111111111111111111111",
-          candidateSdtId: "123",
-          sourceEvidenceSha256: "f".repeat(64),
-        },
-      ],
+      reviewProjection: PROJECTION,
+      reviewProjectionSha256: PROJECTION_SHA,
+      regions: [REGION],
     });
     const storeCandidateArtifact = vi.fn().mockResolvedValue({
       bucket: "synthetic-private-bucket",
@@ -243,6 +392,9 @@ describe("completed candidate service", () => {
         data: expect.objectContaining({
           status: "PENDING_REVIEW",
           privacyEvidence: expect.objectContaining({ providerEgress: false }),
+          converterVersion: "completed-document-candidate/1.1.0",
+          reviewProjection: PROJECTION,
+          reviewProjectionSha256: PROJECTION_SHA,
           examples: expect.any(Object),
           regions: expect.any(Object),
         }),
@@ -255,44 +407,135 @@ describe("completed candidate service", () => {
     ).toEqual(["8".repeat(64), "9".repeat(64)]);
   });
 
-  it("requires every pending region exactly once and records a terminal rejection", async () => {
-    mocks.candidateFindFirst.mockResolvedValue({
-      id: "candidate_synthetic",
-      practiceId: ACTOR.practiceId,
-      createdById: ACTOR.userId,
-      status: "PENDING_REVIEW",
-      inventorySha256: INVENTORY_SHA,
-      regions: [
-        { id: "row_one", regionId: REGION_ONE, decision: "PENDING" },
-        { id: "row_two", regionId: REGION_TWO, decision: "PENDING" },
-      ],
+  it("issues a hashed 15-minute receipt only after rollout and candidate locks", async () => {
+    mocks.candidateFindFirst.mockResolvedValue(pendingCandidate());
+
+    const result = await issueCompletedCandidateReviewPreview({
+      candidateId: "candidate_synthetic",
+      actor: ACTOR,
     });
+
+    expect(result.projection).toEqual(PROJECTION);
+    expect(result.reviewReceipt).toMatch(/^[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/u);
+    expect(mocks.finalRollout.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.queryRaw.mock.invocationCallOrder[0]!,
+    );
+    const receiptData = mocks.receiptCreate.mock.calls[0]![0].data;
+    expect(receiptData).toMatchObject({
+      candidateId: "candidate_synthetic",
+      reviewProjectionSha256: PROJECTION_SHA,
+      converterVersion: "completed-document-candidate/1.1.0",
+    });
+    expect(receiptData.tokenSha256).toMatch(/^[a-f0-9]{64}$/u);
+    expect(receiptData.tokenSha256).not.toBe(result.reviewReceipt);
+    expect(
+      receiptData.expiresAt.getTime() - receiptData.createdAt.getTime(),
+    ).toBe(15 * 60 * 1000);
+    expect(JSON.stringify(mocks.audit.mock.calls)).not.toContain(
+      result.reviewReceipt,
+    );
+  });
+
+  it("treats the stored projection as untrusted and issues no receipt when its binding is tampered", async () => {
+    const tamperedProjection = {
+      ...PROJECTION,
+      blocks: [
+        {
+          ...PROJECTION.blocks[0],
+          rows: [
+            {
+              ...PROJECTION.blocks[0].rows[0],
+              cells: PROJECTION.blocks[0].rows[0].cells.map((cell) =>
+                cell.role.kind === "candidate_region"
+                  ? {
+                      ...cell,
+                      role: {
+                        ...cell.role,
+                        candidateTag: "qmd:candidate:222222222222222222222222",
+                      },
+                    }
+                  : cell,
+              ),
+            },
+          ],
+        },
+      ],
+    };
+    mocks.candidateFindFirst.mockResolvedValue({
+      ...pendingCandidate(),
+      reviewProjection: tamperedProjection,
+      reviewProjectionSha256: canonicalSha256(tamperedProjection),
+    });
+
+    await expect(
+      issueCompletedCandidateReviewPreview({
+        candidateId: "candidate_synthetic",
+        actor: ACTOR,
+      }),
+    ).rejects.toMatchObject({ code: "PERSISTENCE_FAILED" });
+
+    expect(mocks.receiptCreate).not.toHaveBeenCalled();
+    expect(mocks.audit).not.toHaveBeenCalled();
+  });
+
+  it("binds the projection to the candidate structure digest before issuing a receipt", async () => {
+    const tamperedProjection = {
+      ...PROJECTION,
+      candidateStructureSha256: "a".repeat(64),
+    };
+    mocks.candidateFindFirst.mockResolvedValue({
+      ...pendingCandidate(),
+      reviewProjection: tamperedProjection,
+      reviewProjectionSha256: canonicalSha256(tamperedProjection),
+    });
+
+    await expect(
+      issueCompletedCandidateReviewPreview({
+        candidateId: "candidate_synthetic",
+        actor: ACTOR,
+      }),
+    ).rejects.toMatchObject({ code: "PERSISTENCE_FAILED" });
+
+    expect(mocks.receiptCreate).not.toHaveBeenCalled();
+    expect(mocks.audit).not.toHaveBeenCalled();
+  });
+
+  it("consumes the exact preview receipt and records a terminal rejection atomically", async () => {
+    mocks.candidateFindFirst.mockResolvedValue(pendingCandidate());
+    mocks.queryRaw
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([receipt()])
+      .mockResolvedValueOnce([{ id: REVIEW_RECEIPT_ID }]);
 
     const result = await reviewCompletedCandidate({
       candidateId: "candidate_synthetic",
       payload: {
-        decisions: [
-          { regionId: REGION_ONE, decision: "APPROVED" },
-          { regionId: REGION_TWO, decision: "REJECTED" },
-        ],
+        decisions: [{ regionId: REGION_ONE, decision: "REJECTED" }],
         physicianAttestation: true,
+        reviewReceipt: REVIEW_RECEIPT,
       },
       actor: ACTOR,
     });
 
     expect(result).toEqual({ status: "REJECTED" });
-    expect(mocks.regionUpdateMany).toHaveBeenCalledTimes(2);
+    expect(mocks.regionUpdateMany).toHaveBeenCalledTimes(1);
     expect(mocks.candidateUpdateMany).toHaveBeenCalledWith({
       where: { id: "candidate_synthetic", status: "PENDING_REVIEW" },
-      data: { status: "REJECTED", reviewedAt: expect.any(Date) },
+      data: {
+        status: "REJECTED",
+        reviewedAt: expect.any(Date),
+        reviewReceiptId: REVIEW_RECEIPT_ID,
+      },
     });
     expect(mocks.audit).toHaveBeenCalledWith(
       tx,
       expect.objectContaining({
         action: "TEMPLATE_TWIN_COMPLETED_CANDIDATE_REVIEWED",
         metadata: expect.objectContaining({
-          regionCount: 2,
-          approvedCount: 1,
+          reviewReceiptId: REVIEW_RECEIPT_ID,
+          reviewProjectionSha256: PROJECTION_SHA,
+          regionCount: 1,
+          approvedCount: 0,
           rejectedCount: 1,
           gateOutcome: "rejected",
         }),
@@ -301,24 +544,13 @@ describe("completed candidate service", () => {
   });
 
   it("fails closed before persistence when a region decision is missing", async () => {
-    mocks.candidateFindFirst.mockResolvedValue({
-      id: "candidate_synthetic",
-      practiceId: ACTOR.practiceId,
-      createdById: ACTOR.userId,
-      status: "PENDING_REVIEW",
-      inventorySha256: INVENTORY_SHA,
-      regions: [
-        { id: "row_one", regionId: REGION_ONE, decision: "PENDING" },
-        { id: "row_two", regionId: REGION_TWO, decision: "PENDING" },
-      ],
-    });
-
     await expect(
       reviewCompletedCandidate({
         candidateId: "candidate_synthetic",
         payload: {
-          decisions: [{ regionId: REGION_ONE, decision: "APPROVED" }],
+          decisions: [],
           physicianAttestation: true,
+          reviewReceipt: REVIEW_RECEIPT,
         },
         actor: ACTOR,
       }),
@@ -327,6 +559,52 @@ describe("completed candidate service", () => {
     });
     expect(mocks.regionUpdateMany).not.toHaveBeenCalled();
     expect(mocks.candidateUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("fails closed on an expired receipt before any decision is written", async () => {
+    mocks.candidateFindFirst.mockResolvedValue(pendingCandidate());
+    mocks.queryRaw
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([receipt(false)]);
+
+    await expect(
+      reviewCompletedCandidate({
+        candidateId: "candidate_synthetic",
+        payload: {
+          decisions: [{ regionId: REGION_ONE, decision: "APPROVED" }],
+          physicianAttestation: true,
+          reviewReceipt: REVIEW_RECEIPT,
+        },
+        actor: ACTOR,
+      }),
+    ).rejects.toMatchObject({ code: "REVIEW_PREVIEW_REQUIRED" });
+
+    expect(mocks.regionUpdateMany).not.toHaveBeenCalled();
+    expect(mocks.candidateUpdateMany).not.toHaveBeenCalled();
+    expect(mocks.audit).not.toHaveBeenCalled();
+  });
+
+  it("fails closed on a consumed receipt before any decision is written", async () => {
+    mocks.candidateFindFirst.mockResolvedValue(pendingCandidate());
+    mocks.queryRaw
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ ...receipt(), consumedAt: new Date() }]);
+
+    await expect(
+      reviewCompletedCandidate({
+        candidateId: "candidate_synthetic",
+        payload: {
+          decisions: [{ regionId: REGION_ONE, decision: "APPROVED" }],
+          physicianAttestation: true,
+          reviewReceipt: REVIEW_RECEIPT,
+        },
+        actor: ACTOR,
+      }),
+    ).rejects.toMatchObject({ code: "REVIEW_PREVIEW_REQUIRED" });
+
+    expect(mocks.regionUpdateMany).not.toHaveBeenCalled();
+    expect(mocks.candidateUpdateMany).not.toHaveBeenCalled();
+    expect(mocks.audit).not.toHaveBeenCalled();
   });
 
   it("rechecks rollout under final locks after reading approved candidate bytes", async () => {

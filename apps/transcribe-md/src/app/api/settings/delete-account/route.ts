@@ -84,7 +84,11 @@ const RETAINED_TEMPLATE_TWIN_AUDIT_ACTIONS: readonly AuditAction[] = [
   AuditAction.TEMPLATE_TWIN_STATIC_ASSET_REJECTED,
   AuditAction.TEMPLATE_TWIN_STATIC_ASSET_REVOKED,
   AuditAction.TEMPLATE_TWIN_STATIC_ASSET_USED,
+  AuditAction.TEMPLATE_TWIN_COMPLETED_CANDIDATE_CREATED,
+  AuditAction.TEMPLATE_TWIN_COMPLETED_CANDIDATE_REVIEW_PREVIEWED,
+  AuditAction.TEMPLATE_TWIN_COMPLETED_CANDIDATE_REVIEWED,
   AuditAction.EXPORT_TEMPLATE_TWIN_DOCX_DOWNLOADED,
+  AuditAction.EXPORT_TEMPLATE_TWIN_CANDIDATE_DOCX_DOWNLOADED,
 ];
 
 type RetainedTemplateTwinClient = Pick<
@@ -98,6 +102,8 @@ type RetainedTemplateTwinClient = Pick<
   | "templateTwinStaticAssetReviewReceipt"
   | "templateTwinCustomExampleExecution"
   | "templateTwinSyntheticQaRun"
+  | "templateTwinCompletedCandidate"
+  | "templateTwinCompletedCandidateReviewReceipt"
   | "noteTemplate"
   | "templateTwinFillManifest"
   | "templateTwinObjectLedger"
@@ -144,6 +150,12 @@ async function countRetainedTemplateTwinRecords(
       where: {
         OR: [{ practiceId: user.practiceId }, { doctorId: user.id }],
       },
+    }),
+    client.templateTwinCompletedCandidate.count({
+      where: { practiceId: user.practiceId },
+    }),
+    client.templateTwinCompletedCandidateReviewReceipt.count({
+      where: { practiceId: user.practiceId },
     }),
     client.noteTemplate.count({
       where: { doctorId: user.id, templateKind: "template_twin_docx" },

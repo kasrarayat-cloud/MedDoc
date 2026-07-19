@@ -1,9 +1,17 @@
-import { randomUUID } from "node:crypto";
+import {
+  createHash,
+  randomBytes,
+  randomUUID,
+  timingSafeEqual,
+} from "node:crypto";
 
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import prisma from "@meddoc/db";
 
-import { TemplateDocxError } from "@/lib/note-template-docx";
+import {
+  compileTemplateDocx,
+  TemplateDocxError,
+} from "@/lib/note-template-docx";
 
 import { enqueueTemplateTwinAudit } from "./audit-outbox";
 import { canonicalSha256 } from "./canonical";
@@ -11,10 +19,14 @@ import {
   CompletedCandidateComparisonSchema,
   CompletedCandidateIdentitySchema,
   CompletedCandidatePrivacyEvidenceSchema,
+  CompletedCandidateReviewProjectionSchema,
   CompletedCandidateReviewPayloadSchema,
+  type CompletedCandidateReviewPreviewDto,
   type CompletedCandidateReviewDto,
+  type CompletedCandidateReviewProjection,
 } from "./completed-candidate-contract";
 import {
+  COMPLETED_CANDIDATE_CONVERTER_VERSION,
   CompletedCandidateConversionError,
   convertCompletedDocumentsToCandidate,
 } from "./completed-candidate-converter";
@@ -44,6 +56,7 @@ export type CompletedCandidateServiceErrorCode =
   | "INVALID_INPUT"
   | "NOT_FOUND"
   | "REVIEW_CONFLICT"
+  | "REVIEW_PREVIEW_REQUIRED"
   | "ROLLOUT_CHANGED"
   | "PERSISTENCE_FAILED";
 
@@ -74,12 +87,38 @@ interface CompletedCandidateRegionRow {
   readonly displayOrder: number;
   readonly label: string;
   readonly evidenceType: string;
+  readonly partName: string;
   readonly tableIndex: number;
   readonly rowIndex: number;
   readonly cellIndex: number;
   readonly candidateTag: string;
+  readonly candidateSdtId: string;
   readonly sourceEvidenceSha256: string;
   readonly decision: string;
+}
+
+interface CompletedCandidateExampleRow {
+  readonly ordinal: number;
+  readonly minimizedSha256: string;
+  readonly documentStructureSha256: string;
+}
+
+interface CompletedCandidateReviewReceiptRow {
+  readonly id: string;
+  readonly candidateId: string;
+  readonly practiceId: string;
+  readonly reviewedById: string;
+  readonly tokenSha256: string;
+  readonly candidateSha256: string;
+  readonly candidateStructureSha256: string;
+  readonly inventorySha256: string;
+  readonly reviewProjectionSha256: string;
+  readonly converterVersion: string;
+  readonly globalRolloutGeneration: bigint | number | string;
+  readonly practiceRolloutGeneration: bigint | number | string;
+  readonly expiresAt: Date;
+  readonly consumedAt: Date | null;
+  readonly notExpired: boolean;
 }
 
 export interface CompletedCandidateActor extends TemplateTwinIntakeActor {
@@ -101,6 +140,188 @@ export interface CreateCompletedCandidateInput {
 
 function asJson(value: unknown): Prisma.InputJsonValue {
   return value as Prisma.InputJsonValue;
+}
+
+const REVIEW_RECEIPT_TTL_MS = 15 * 60 * 1000;
+
+function sha256(value: Uint8Array | string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function secureDigestEqual(left: string, right: string): boolean {
+  return (
+    /^[a-f0-9]{64}$/u.test(left) &&
+    /^[a-f0-9]{64}$/u.test(right) &&
+    timingSafeEqual(Buffer.from(left, "hex"), Buffer.from(right, "hex"))
+  );
+}
+
+function invalidProjection(): never {
+  throw new CompletedCandidateServiceError(
+    "PERSISTENCE_FAILED",
+    "The candidate structural comparison evidence is invalid. Recreate the candidate from synthetic examples.",
+  );
+}
+
+function requireProjectionBinding(input: {
+  projection: unknown;
+  projectionSha256: string | null;
+  converterVersion: string;
+  candidateSha256: string;
+  candidateStructureSha256: string;
+  inventorySha256: string;
+  examples: readonly CompletedCandidateExampleRow[];
+  regions: readonly CompletedCandidateRegionRow[];
+  candidateDocument?: Uint8Array;
+}): CompletedCandidateReviewProjection {
+  const parsed = CompletedCandidateReviewProjectionSchema.safeParse(
+    input.projection,
+  );
+  if (
+    !parsed.success ||
+    input.converterVersion !== COMPLETED_CANDIDATE_CONVERTER_VERSION ||
+    !input.projectionSha256 ||
+    canonicalSha256(parsed.data) !== input.projectionSha256 ||
+    parsed.data.candidateSha256 !== input.candidateSha256 ||
+    parsed.data.candidateStructureSha256 !== input.candidateStructureSha256 ||
+    parsed.data.inventorySha256 !== input.inventorySha256 ||
+    parsed.data.regionCount !== input.regions.length
+  ) {
+    invalidProjection();
+  }
+  const examples = [...input.examples].sort(
+    (left, right) => left.ordinal - right.ordinal,
+  );
+  if (
+    examples.length < 2 ||
+    examples.length > 3 ||
+    examples.some((example, index) => example.ordinal !== index + 1) ||
+    new Set(examples.map((example) => example.documentStructureSha256)).size !==
+      1 ||
+    parsed.data.sourceStructureSha256 !==
+      examples[0]?.documentStructureSha256 ||
+    parsed.data.sourceExampleSha256s.length !== examples.length ||
+    parsed.data.sourceExampleSha256s.some(
+      (digest, index) => digest !== examples[index]?.minimizedSha256,
+    )
+  ) {
+    invalidProjection();
+  }
+
+  const candidateCells = new Map<
+    string,
+    {
+      tag: string;
+      tableIndex: number;
+      rowIndex: number;
+      cellIndex: number;
+      displayOrder: number;
+    }
+  >();
+  const labelCells = new Map<
+    string,
+    { label: string; tableIndex: number; rowIndex: number; cellIndex: number }
+  >();
+  let displayOrder = 0;
+  for (const block of parsed.data.blocks) {
+    if (block.kind !== "table") continue;
+    for (const row of block.rows) {
+      for (const cell of row.cells) {
+        if (cell.role.kind === "candidate_region") {
+          if (candidateCells.has(cell.role.regionId)) invalidProjection();
+          candidateCells.set(cell.role.regionId, {
+            tag: cell.role.candidateTag,
+            tableIndex: block.tableIndex,
+            rowIndex: row.rowIndex,
+            cellIndex: cell.cellIndex,
+            displayOrder,
+          });
+          displayOrder += 1;
+        } else if (cell.role.kind === "stable_label") {
+          if (labelCells.has(cell.role.forRegionId)) invalidProjection();
+          labelCells.set(cell.role.forRegionId, {
+            label: cell.role.label,
+            tableIndex: block.tableIndex,
+            rowIndex: row.rowIndex,
+            cellIndex: cell.cellIndex,
+          });
+        }
+      }
+    }
+  }
+  if (
+    candidateCells.size !== input.regions.length ||
+    labelCells.size !== input.regions.length
+  ) {
+    invalidProjection();
+  }
+  const relationalRegionIds = new Set(input.regions.map((row) => row.regionId));
+  for (const region of input.regions) {
+    const candidate = candidateCells.get(region.regionId);
+    const label = labelCells.get(region.regionId);
+    if (
+      region.partName !== "word/document.xml" ||
+      !candidate ||
+      !label ||
+      candidate.tag !== region.candidateTag ||
+      candidate.tableIndex !== region.tableIndex ||
+      candidate.rowIndex !== region.rowIndex ||
+      candidate.cellIndex !== region.cellIndex ||
+      candidate.displayOrder !== region.displayOrder ||
+      label.label !== region.label ||
+      label.tableIndex !== region.tableIndex ||
+      label.rowIndex !== region.rowIndex ||
+      label.cellIndex !== region.cellIndex - 1
+    ) {
+      invalidProjection();
+    }
+  }
+  if (
+    [...candidateCells.keys()].some(
+      (regionId) => !relationalRegionIds.has(regionId),
+    ) ||
+    [...labelCells.keys()].some(
+      (regionId) => !relationalRegionIds.has(regionId),
+    )
+  ) {
+    invalidProjection();
+  }
+
+  if (input.candidateDocument) {
+    if (sha256(input.candidateDocument) !== input.candidateSha256) {
+      invalidProjection();
+    }
+    let compiled: ReturnType<typeof compileTemplateDocx>;
+    try {
+      compiled = compileTemplateDocx(input.candidateDocument);
+    } catch {
+      invalidProjection();
+    }
+    const regionByTag = new Map(
+      input.regions.map((region) => [region.candidateTag, region]),
+    );
+    const compiledTags = compiled.fields.map(
+      (field) => field.rendererBinding.tag,
+    );
+    if (
+      compiled.structureSha256 !== input.candidateStructureSha256 ||
+      compiled.stats.blockingUnsupported !== 0 ||
+      compiled.fields.length !== input.regions.length ||
+      new Set(compiledTags).size !== input.regions.length ||
+      compiled.fields.some((field) => {
+        const tag = field.rendererBinding.tag;
+        const region = tag ? regionByTag.get(tag) : undefined;
+        return (
+          field.rendererBinding.bindingType !== "content_control" ||
+          !region ||
+          field.rendererBinding.sdtId !== region.candidateSdtId
+        );
+      })
+    ) {
+      invalidProjection();
+    }
+  }
+  return parsed.data;
 }
 
 async function rejectPrepared(
@@ -208,6 +429,47 @@ export async function createCompletedCandidate(
     throw error;
   }
 
+  let comparison: ReturnType<typeof requireComparison>;
+  let privacyEvidence: ReturnType<typeof requirePrivacy>;
+  let reviewProjection: CompletedCandidateReviewProjection;
+  try {
+    comparison = requireComparison(converted.comparison);
+    privacyEvidence = requirePrivacy(converted.privacyEvidence);
+    if (
+      comparison.exampleCount !== prepared.length ||
+      comparison.candidateFieldCount !== converted.regions.length ||
+      privacyEvidence.exampleCount !== prepared.length ||
+      converted.inventorySha256 !== canonicalSha256(converted.regions)
+    ) {
+      invalidProjection();
+    }
+    reviewProjection = requireProjectionBinding({
+      projection: converted.reviewProjection,
+      projectionSha256: converted.reviewProjectionSha256,
+      converterVersion: converted.converterVersion,
+      candidateSha256: converted.candidateSha256,
+      candidateStructureSha256: converted.candidateStructureSha256,
+      inventorySha256: converted.inventorySha256,
+      examples: prepared.map((example, index) => ({
+        ordinal: index + 1,
+        minimizedSha256: example.metadataEvidence.minimizedSha256,
+        documentStructureSha256: converted.exampleStructureSha256,
+      })),
+      regions: converted.regions.map((region) => ({
+        ...region,
+        decision: "PENDING",
+      })),
+      candidateDocument: converted.document,
+    });
+  } catch (error) {
+    await rejectPrepared(
+      prepared,
+      input.actor,
+      "COMPLETED_CANDIDATE_PROJECTION_INVALID",
+    );
+    throw error;
+  }
+
   let stored: StoredTemplateTwinArtifact;
   try {
     stored = await storage.storeCandidateArtifact({
@@ -266,8 +528,10 @@ export async function createCompletedCandidate(
           candidateStructureSha256: converted.candidateStructureSha256,
           inventorySha256: converted.inventorySha256,
           converterVersion: converted.converterVersion,
-          comparisonEvidence: asJson(converted.comparison),
-          privacyEvidence: asJson(converted.privacyEvidence),
+          comparisonEvidence: asJson(comparison),
+          privacyEvidence: asJson(privacyEvidence),
+          reviewProjection: asJson(reviewProjection),
+          reviewProjectionSha256: converted.reviewProjectionSha256,
           examples: {
             create: prepared.map((example, index) => ({
               quarantineArtifactId: example.receipt.id,
@@ -323,6 +587,8 @@ export async function createCompletedCandidate(
           candidateSha256: converted.candidateSha256,
           candidateStructureSha256: converted.candidateStructureSha256,
           inventorySha256: converted.inventorySha256,
+          reviewProjectionSha256: converted.reviewProjectionSha256,
+          reviewProjectionProfileVersion: reviewProjection.profileVersion,
           exampleCount: prepared.length,
           regionCount: converted.regions.length,
           converterVersion: converted.converterVersion,
@@ -401,9 +667,21 @@ export async function getCompletedCandidateReview(input: {
       versionDescription: true,
       status: true,
       candidateSha256: true,
+      candidateStructureSha256: true,
       inventorySha256: true,
+      converterVersion: true,
       comparisonEvidence: true,
       privacyEvidence: true,
+      reviewProjection: true,
+      reviewProjectionSha256: true,
+      examples: {
+        orderBy: { ordinal: "asc" },
+        select: {
+          ordinal: true,
+          minimizedSha256: true,
+          documentStructureSha256: true,
+        },
+      },
       regions: {
         orderBy: { displayOrder: "asc" },
         select: {
@@ -411,10 +689,12 @@ export async function getCompletedCandidateReview(input: {
           displayOrder: true,
           label: true,
           evidenceType: true,
+          partName: true,
           tableIndex: true,
           rowIndex: true,
           cellIndex: true,
           candidateTag: true,
+          candidateSdtId: true,
           sourceEvidenceSha256: true,
           decision: true,
         },
@@ -445,6 +725,16 @@ export async function getCompletedCandidateReview(input: {
       "The candidate field inventory is invalid.",
     );
   }
+  requireProjectionBinding({
+    projection: row.reviewProjection,
+    projectionSha256: row.reviewProjectionSha256,
+    converterVersion: row.converterVersion,
+    candidateSha256: row.candidateSha256,
+    candidateStructureSha256: row.candidateStructureSha256,
+    inventorySha256: row.inventorySha256,
+    examples: row.examples,
+    regions: row.regions,
+  });
   return {
     id: row.id,
     name: row.name,
@@ -470,6 +760,156 @@ export async function getCompletedCandidateReview(input: {
       decision: region.decision as "PENDING" | "APPROVED" | "REJECTED",
     })),
   };
+}
+
+export async function issueCompletedCandidateReviewPreview(input: {
+  candidateId: string;
+  actor: CompletedCandidateActor;
+}): Promise<CompletedCandidateReviewPreviewDto> {
+  const receiptId = randomUUID();
+  const receiptSecret = randomBytes(32).toString("base64url");
+  const reviewReceipt = `${receiptId}.${receiptSecret}`;
+
+  return prisma.$transaction(
+    async (tx: Prisma.TransactionClient) => {
+      // Load-bearing order: global rollout, practice rollout, candidate, then
+      // the newly created receipt. Terminal review repeats this order and
+      // locks the receipt before consuming it.
+      const rollout = await lockTemplateTwinRolloutForFinalClaim({
+        tx,
+        practiceId: input.actor.practiceId,
+        pinnedToken: input.actor.rolloutToken,
+      });
+      if (!rollout.allowed) {
+        throw new CompletedCandidateServiceError(
+          "ROLLOUT_CHANGED",
+          `${rollout.code}: Template Twin availability changed before the comparison was opened.`,
+        );
+      }
+      await tx.$queryRaw`SELECT "id" FROM "template_twin_completed_candidates" WHERE "id" = ${input.candidateId} FOR UPDATE`;
+      const candidate = await tx.templateTwinCompletedCandidate.findFirst({
+        where: {
+          id: input.candidateId,
+          practiceId: input.actor.practiceId,
+          createdById: input.actor.userId,
+        },
+        select: {
+          id: true,
+          practiceId: true,
+          createdById: true,
+          status: true,
+          candidateSha256: true,
+          candidateStructureSha256: true,
+          inventorySha256: true,
+          converterVersion: true,
+          reviewProjection: true,
+          reviewProjectionSha256: true,
+          examples: {
+            orderBy: { ordinal: "asc" },
+            select: {
+              ordinal: true,
+              minimizedSha256: true,
+              documentStructureSha256: true,
+            },
+          },
+          regions: {
+            orderBy: { displayOrder: "asc" },
+            select: {
+              regionId: true,
+              displayOrder: true,
+              label: true,
+              evidenceType: true,
+              partName: true,
+              tableIndex: true,
+              rowIndex: true,
+              cellIndex: true,
+              candidateTag: true,
+              candidateSdtId: true,
+              sourceEvidenceSha256: true,
+              decision: true,
+            },
+          },
+        },
+      });
+      if (!candidate) {
+        throw new CompletedCandidateServiceError(
+          "NOT_FOUND",
+          "Candidate not found.",
+        );
+      }
+      assertTemplateTwinRecordOwner(input.actor, {
+        practiceId: candidate.practiceId,
+        uploadedById: candidate.createdById,
+      });
+      if (
+        candidate.status !== "PENDING_REVIEW" ||
+        candidate.regions.some((region) => region.decision !== "PENDING")
+      ) {
+        throw new CompletedCandidateServiceError(
+          "REVIEW_CONFLICT",
+          "This candidate no longer has a pending physician review.",
+        );
+      }
+      const projection = requireProjectionBinding({
+        projection: candidate.reviewProjection,
+        projectionSha256: candidate.reviewProjectionSha256,
+        converterVersion: candidate.converterVersion,
+        candidateSha256: candidate.candidateSha256,
+        candidateStructureSha256: candidate.candidateStructureSha256,
+        inventorySha256: candidate.inventorySha256,
+        examples: candidate.examples,
+        regions: candidate.regions,
+      });
+      const createdAt = new Date();
+      const expiresAt = new Date(createdAt.getTime() + REVIEW_RECEIPT_TTL_MS);
+      await tx.templateTwinCompletedCandidateReviewReceipt.create({
+        data: {
+          id: receiptId,
+          candidateId: candidate.id,
+          practiceId: candidate.practiceId,
+          reviewedById: input.actor.userId,
+          tokenSha256: sha256(reviewReceipt),
+          candidateSha256: candidate.candidateSha256,
+          candidateStructureSha256: candidate.candidateStructureSha256,
+          inventorySha256: candidate.inventorySha256,
+          reviewProjectionSha256: candidate.reviewProjectionSha256!,
+          converterVersion: candidate.converterVersion,
+          globalRolloutGeneration: input.actor.rolloutToken.globalGeneration,
+          practiceRolloutGeneration:
+            input.actor.rolloutToken.practiceGeneration,
+          createdAt,
+          expiresAt,
+        },
+      });
+      await enqueueTemplateTwinAudit(tx, {
+        eventKey: `template-twin:completed-candidate-review-previewed:${candidate.id}:${receiptId}`,
+        practiceId: input.actor.practiceId,
+        actorId: input.actor.userId,
+        actorEmailSnapshot: input.actor.userEmail,
+        action: "TEMPLATE_TWIN_COMPLETED_CANDIDATE_REVIEW_PREVIEWED",
+        targetType: "TemplateTwinCompletedCandidate",
+        targetId: candidate.id,
+        metadata: {
+          receiptId,
+          candidateSha256: candidate.candidateSha256,
+          inventorySha256: candidate.inventorySha256,
+          reviewProjectionSha256: candidate.reviewProjectionSha256,
+          projectionProfileVersion: projection.profileVersion,
+          regionCount: projection.regionCount,
+          valuesRedacted: true,
+          providerEgress: false,
+          expiresAtIso: expiresAt.toISOString(),
+          gateOutcome: "terminal_review_receipt_issued",
+        },
+      });
+      return {
+        projection,
+        reviewReceipt,
+        expiresAtIso: expiresAt.toISOString(),
+      };
+    },
+    { isolationLevel: "Serializable" },
+  );
 }
 
 export async function reviewCompletedCandidate(input: {
@@ -499,80 +939,198 @@ export async function reviewCompletedCandidate(input: {
     );
   }
 
-  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    await tx.$queryRaw`SELECT "id" FROM "template_twin_completed_candidates" WHERE "id" = ${input.candidateId} FOR UPDATE`;
-    const candidate = await tx.templateTwinCompletedCandidate.findFirst({
-      where: {
-        id: input.candidateId,
+  return prisma.$transaction(
+    async (tx: Prisma.TransactionClient) => {
+      const rollout = await lockTemplateTwinRolloutForFinalClaim({
+        tx,
         practiceId: input.actor.practiceId,
-        createdById: input.actor.userId,
-      },
-      select: {
-        id: true,
-        practiceId: true,
-        createdById: true,
-        status: true,
-        inventorySha256: true,
-        regions: {
-          orderBy: { displayOrder: "asc" },
-          select: { id: true, regionId: true, decision: true },
-        },
-      },
-    });
-    if (!candidate) {
-      throw new CompletedCandidateServiceError(
-        "NOT_FOUND",
-        "Candidate not found.",
-      );
-    }
-    assertTemplateTwinRecordOwner(input.actor, {
-      practiceId: candidate.practiceId,
-      uploadedById: candidate.createdById,
-    });
-    if (candidate.status !== "PENDING_REVIEW") {
-      throw new CompletedCandidateServiceError(
-        "REVIEW_CONFLICT",
-        "This candidate already has a terminal physician review.",
-      );
-    }
-    if (
-      candidate.regions.length < 1 ||
-      candidate.regions.some(
-        (region) =>
-          region.decision !== "PENDING" || !decisionById.has(region.regionId),
-      ) ||
-      decisionById.size !== candidate.regions.length
-    ) {
-      throw new CompletedCandidateServiceError(
-        "INVALID_INPUT",
-        "Review every visible candidate region exactly once.",
-      );
-    }
-    const rollout = await lockTemplateTwinRolloutForFinalClaim({
-      tx,
-      practiceId: input.actor.practiceId,
-      pinnedToken: input.actor.rolloutToken,
-    });
-    if (!rollout.allowed) {
-      throw new CompletedCandidateServiceError(
-        "ROLLOUT_CHANGED",
-        `${rollout.code}: Template Twin availability changed before review was saved.`,
-      );
-    }
-    const reviewedAt = new Date();
-    for (const region of candidate.regions) {
-      const decision = decisionById.get(region.regionId)!;
-      const updated = await tx.templateTwinCompletedCandidateRegion.updateMany({
+        pinnedToken: input.actor.rolloutToken,
+      });
+      if (!rollout.allowed) {
+        throw new CompletedCandidateServiceError(
+          "ROLLOUT_CHANGED",
+          `${rollout.code}: Template Twin availability changed before review was saved.`,
+        );
+      }
+      await tx.$queryRaw`SELECT "id" FROM "template_twin_completed_candidates" WHERE "id" = ${input.candidateId} FOR UPDATE`;
+      const candidate = await tx.templateTwinCompletedCandidate.findFirst({
         where: {
-          id: region.id,
-          candidateId: candidate.id,
-          decision: "PENDING",
+          id: input.candidateId,
+          practiceId: input.actor.practiceId,
+          createdById: input.actor.userId,
         },
-        data: {
-          decision,
-          decidedById: input.actor.userId,
-          decidedAt: reviewedAt,
+        select: {
+          id: true,
+          practiceId: true,
+          createdById: true,
+          status: true,
+          candidateSha256: true,
+          candidateStructureSha256: true,
+          inventorySha256: true,
+          converterVersion: true,
+          reviewProjection: true,
+          reviewProjectionSha256: true,
+          examples: {
+            orderBy: { ordinal: "asc" },
+            select: {
+              ordinal: true,
+              minimizedSha256: true,
+              documentStructureSha256: true,
+            },
+          },
+          regions: {
+            orderBy: { displayOrder: "asc" },
+            select: {
+              id: true,
+              regionId: true,
+              displayOrder: true,
+              label: true,
+              evidenceType: true,
+              partName: true,
+              tableIndex: true,
+              rowIndex: true,
+              cellIndex: true,
+              candidateTag: true,
+              candidateSdtId: true,
+              sourceEvidenceSha256: true,
+              decision: true,
+            },
+          },
         },
+      });
+      if (!candidate) {
+        throw new CompletedCandidateServiceError(
+          "NOT_FOUND",
+          "Candidate not found.",
+        );
+      }
+      assertTemplateTwinRecordOwner(input.actor, {
+        practiceId: candidate.practiceId,
+        uploadedById: candidate.createdById,
+      });
+      if (candidate.status !== "PENDING_REVIEW") {
+        throw new CompletedCandidateServiceError(
+          "REVIEW_CONFLICT",
+          "This candidate already has a terminal physician review.",
+        );
+      }
+      if (
+        candidate.regions.length < 1 ||
+        candidate.regions.some(
+          (region) =>
+            region.decision !== "PENDING" || !decisionById.has(region.regionId),
+        ) ||
+        decisionById.size !== candidate.regions.length
+      ) {
+        throw new CompletedCandidateServiceError(
+          "INVALID_INPUT",
+          "Review every visible candidate region exactly once.",
+        );
+      }
+      requireProjectionBinding({
+        projection: candidate.reviewProjection,
+        projectionSha256: candidate.reviewProjectionSha256,
+        converterVersion: candidate.converterVersion,
+        candidateSha256: candidate.candidateSha256,
+        candidateStructureSha256: candidate.candidateStructureSha256,
+        inventorySha256: candidate.inventorySha256,
+        examples: candidate.examples,
+        regions: candidate.regions,
+      });
+
+      const receiptId = payload.data.reviewReceipt.slice(
+        0,
+        payload.data.reviewReceipt.indexOf("."),
+      );
+      const receiptRows = await tx.$queryRaw<
+        CompletedCandidateReviewReceiptRow[]
+      >(Prisma.sql`
+        SELECT receipt."id", receipt."candidateId", receipt."practiceId",
+          receipt."reviewedById", receipt."tokenSha256",
+          receipt."candidateSha256", receipt."candidateStructureSha256",
+          receipt."inventorySha256", receipt."reviewProjectionSha256",
+          receipt."converterVersion", receipt."globalRolloutGeneration",
+          receipt."practiceRolloutGeneration", receipt."expiresAt",
+          receipt."consumedAt",
+          receipt."expiresAt" > clock_timestamp() AS "notExpired"
+        FROM "template_twin_completed_candidate_review_receipts" receipt
+        WHERE receipt."id" = ${receiptId}
+        FOR UPDATE
+      `);
+      const receipt = receiptRows[0];
+      if (
+        !receipt ||
+        receipt.candidateId !== candidate.id ||
+        receipt.practiceId !== input.actor.practiceId ||
+        receipt.reviewedById !== input.actor.userId ||
+        !secureDigestEqual(
+          receipt.tokenSha256,
+          sha256(payload.data.reviewReceipt),
+        ) ||
+        receipt.candidateSha256 !== candidate.candidateSha256 ||
+        receipt.candidateStructureSha256 !==
+          candidate.candidateStructureSha256 ||
+        receipt.inventorySha256 !== candidate.inventorySha256 ||
+        receipt.reviewProjectionSha256 !== candidate.reviewProjectionSha256 ||
+        receipt.converterVersion !== COMPLETED_CANDIDATE_CONVERTER_VERSION ||
+        BigInt(receipt.globalRolloutGeneration) !==
+          input.actor.rolloutToken.globalGeneration ||
+        BigInt(receipt.practiceRolloutGeneration) !==
+          input.actor.rolloutToken.practiceGeneration ||
+        receipt.consumedAt !== null ||
+        receipt.notExpired !== true
+      ) {
+        throw new CompletedCandidateServiceError(
+          "REVIEW_PREVIEW_REQUIRED",
+          "The protected comparison expired, was already used, or no longer matches. Review the exact redacted structure again.",
+        );
+      }
+
+      const reviewedAt = new Date();
+      const consumed = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        UPDATE "template_twin_completed_candidate_review_receipts"
+        SET "consumedAt" = ${reviewedAt}
+        WHERE "id" = ${receipt.id}
+          AND "consumedAt" IS NULL
+          AND "expiresAt" > clock_timestamp()
+        RETURNING "id"
+      `);
+      if (consumed.length !== 1) {
+        throw new CompletedCandidateServiceError(
+          "REVIEW_PREVIEW_REQUIRED",
+          "The protected comparison expired or was already used. Review the exact redacted structure again.",
+        );
+      }
+      for (const region of candidate.regions) {
+        const decision = decisionById.get(region.regionId)!;
+        const updated =
+          await tx.templateTwinCompletedCandidateRegion.updateMany({
+            where: {
+              id: region.id,
+              candidateId: candidate.id,
+              decision: "PENDING",
+            },
+            data: {
+              decision,
+              decidedById: input.actor.userId,
+              decidedAt: reviewedAt,
+            },
+          });
+        if (updated.count !== 1) {
+          throw new CompletedCandidateServiceError(
+            "REVIEW_CONFLICT",
+            "The candidate changed while it was being reviewed.",
+          );
+        }
+      }
+      const status = [...decisionById.values()].every(
+        (decision) => decision === "APPROVED",
+      )
+        ? "APPROVED"
+        : "REJECTED";
+      const updated = await tx.templateTwinCompletedCandidate.updateMany({
+        where: { id: candidate.id, status: "PENDING_REVIEW" },
+        data: { status, reviewedAt, reviewReceiptId: receipt.id },
       });
       if (updated.count !== 1) {
         throw new CompletedCandidateServiceError(
@@ -580,44 +1138,32 @@ export async function reviewCompletedCandidate(input: {
           "The candidate changed while it was being reviewed.",
         );
       }
-    }
-    const status = [...decisionById.values()].every(
-      (decision) => decision === "APPROVED",
-    )
-      ? "APPROVED"
-      : "REJECTED";
-    const updated = await tx.templateTwinCompletedCandidate.updateMany({
-      where: { id: candidate.id, status: "PENDING_REVIEW" },
-      data: { status, reviewedAt },
-    });
-    if (updated.count !== 1) {
-      throw new CompletedCandidateServiceError(
-        "REVIEW_CONFLICT",
-        "The candidate changed while it was being reviewed.",
-      );
-    }
-    await enqueueTemplateTwinAudit(tx, {
-      eventKey: `template-twin:completed-candidate-reviewed:${candidate.id}:${candidate.inventorySha256}:${status}`,
-      practiceId: input.actor.practiceId,
-      actorId: input.actor.userId,
-      actorEmailSnapshot: input.actor.userEmail,
-      action: "TEMPLATE_TWIN_COMPLETED_CANDIDATE_REVIEWED",
-      targetType: "TemplateTwinCompletedCandidate",
-      targetId: candidate.id,
-      metadata: {
-        inventorySha256: candidate.inventorySha256,
-        regionCount: candidate.regions.length,
-        approvedCount: [...decisionById.values()].filter(
-          (decision) => decision === "APPROVED",
-        ).length,
-        rejectedCount: [...decisionById.values()].filter(
-          (decision) => decision === "REJECTED",
-        ).length,
-        gateOutcome: status.toLowerCase(),
-      },
-    });
-    return { status };
-  });
+      await enqueueTemplateTwinAudit(tx, {
+        eventKey: `template-twin:completed-candidate-reviewed:${candidate.id}:${receipt.id}:${status}`,
+        practiceId: input.actor.practiceId,
+        actorId: input.actor.userId,
+        actorEmailSnapshot: input.actor.userEmail,
+        action: "TEMPLATE_TWIN_COMPLETED_CANDIDATE_REVIEWED",
+        targetType: "TemplateTwinCompletedCandidate",
+        targetId: candidate.id,
+        metadata: {
+          reviewReceiptId: receipt.id,
+          inventorySha256: candidate.inventorySha256,
+          reviewProjectionSha256: candidate.reviewProjectionSha256,
+          regionCount: candidate.regions.length,
+          approvedCount: [...decisionById.values()].filter(
+            (decision) => decision === "APPROVED",
+          ).length,
+          rejectedCount: [...decisionById.values()].filter(
+            (decision) => decision === "REJECTED",
+          ).length,
+          gateOutcome: status.toLowerCase(),
+        },
+      });
+      return { status };
+    },
+    { isolationLevel: "Serializable" },
+  );
 }
 
 export async function readApprovedCompletedCandidate(input: {

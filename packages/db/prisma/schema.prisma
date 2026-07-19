@@ -144,6 +144,7 @@ enum AuditAction {
   TEMPLATE_TWIN_MALWARE_SCANNED
   TEMPLATE_TWIN_METADATA_MINIMIZED
   TEMPLATE_TWIN_COMPLETED_CANDIDATE_CREATED
+  TEMPLATE_TWIN_COMPLETED_CANDIDATE_REVIEW_PREVIEWED
   TEMPLATE_TWIN_COMPLETED_CANDIDATE_REVIEWED
   TEMPLATE_TWIN_MAPPING_UPDATED
   TEMPLATE_TWIN_CERTIFIED
@@ -565,41 +566,42 @@ model Practice {
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   // Reverse relations — every tenant-scoped table points back here.
-  users                                 User[]
-  patients                              Patient[]
-  auditLogs                             AuditLog[]
-  apiUsage                              ApiUsage[]
-  sessionLogs                           SessionLog[]
-  allergies                             Allergy[]
-  medications                           Medication[]
+  users                                        User[]
+  patients                                     Patient[]
+  auditLogs                                    AuditLog[]
+  apiUsage                                     ApiUsage[]
+  sessionLogs                                  SessionLog[]
+  allergies                                    Allergy[]
+  medications                                  Medication[]
   // M6 — CRM loop-closing
-  tasks                                 Task[]
-  billingEvents                         BillingEvent[]
-  aiCalls                               AiCall[]
+  tasks                                        Task[]
+  billingEvents                                BillingEvent[]
+  aiCalls                                      AiCall[]
   // T-M17.2 — TranscribeMD-scoped patients. Kept separate from the
   // CRM `Patient` model so the two products can diverge on schema +
   // privacy posture (TranscribeMdPatient stores full DOB; CRM Patient
   // stores birthYear only per Safe Harbor).
-  transcribeMdPatients                  TranscribeMdPatient[]
+  transcribeMdPatients                         TranscribeMdPatient[]
   // Phase 6 — per-call external API spend; rolled up in the admin
   // usage endpoints.
-  apiUsageEvents                        ApiUsageEvent[]
+  apiUsageEvents                               ApiUsageEvent[]
   // Template Twin source artifacts remain practice-scoped even if their
   // creating user later leaves the practice.
-  templateTwinSources                   TemplateTwinSourceArtifact[]
-  templateTwinQuarantineArtifacts       TemplateTwinQuarantineArtifact[]
-  templateTwinCompletedCandidates       TemplateTwinCompletedCandidate[]
-  templateTwinFills                     TemplateTwinFillManifest[]
-  templateTwinObjects                   TemplateTwinObjectLedger[]
-  templateTwinOutbox                    TemplateTwinAuditOutbox[]
-  templateTwinStaticAssets              TemplateTwinStaticAsset[]
-  templateTwinStaticAssetReviewReceipts TemplateTwinStaticAssetReviewReceipt[]
-  templateTwinCustomExampleExecutions   TemplateTwinCustomExampleExecution[]
-  templateTwinSyntheticQaAdmissions     TemplateTwinSyntheticQaAdmission[]
-  templateTwinSyntheticQaRuns           TemplateTwinSyntheticQaRun[]
-  templateTwinRollbackOperations        TemplateTwinRollbackOperation[]
-  visitAutomationManifests              VisitAutomationManifest[]
-  visitAutomationProviderExecutions     VisitAutomationProviderExecution[]
+  templateTwinSources                          TemplateTwinSourceArtifact[]
+  templateTwinQuarantineArtifacts              TemplateTwinQuarantineArtifact[]
+  templateTwinCompletedCandidates              TemplateTwinCompletedCandidate[]
+  templateTwinCompletedCandidateReviewReceipts TemplateTwinCompletedCandidateReviewReceipt[]
+  templateTwinFills                            TemplateTwinFillManifest[]
+  templateTwinObjects                          TemplateTwinObjectLedger[]
+  templateTwinOutbox                           TemplateTwinAuditOutbox[]
+  templateTwinStaticAssets                     TemplateTwinStaticAsset[]
+  templateTwinStaticAssetReviewReceipts        TemplateTwinStaticAssetReviewReceipt[]
+  templateTwinCustomExampleExecutions          TemplateTwinCustomExampleExecution[]
+  templateTwinSyntheticQaAdmissions            TemplateTwinSyntheticQaAdmission[]
+  templateTwinSyntheticQaRuns                  TemplateTwinSyntheticQaRun[]
+  templateTwinRollbackOperations               TemplateTwinRollbackOperation[]
+  visitAutomationManifests                     VisitAutomationManifest[]
+  visitAutomationProviderExecutions            VisitAutomationProviderExecution[]
 
   @@index([slug])
   @@map("practices")
@@ -719,24 +721,24 @@ model User {
   accounts                               Account[]
   sessions                               Session[]
   // App relations
-  documentsCreated                       Document[]                             @relation("DocumentCreator")
-  documentsUpdated                       Document[]                             @relation("DocumentUpdater")
+  documentsCreated                       Document[]                                    @relation("DocumentCreator")
+  documentsUpdated                       Document[]                                    @relation("DocumentUpdater")
   auditLogs                              AuditLog[]
-  patientsCreated                        Patient[]                              @relation("PatientCreator")
-  patientsAssigned                       Patient[]                              @relation("AssignedDoctor")
+  patientsCreated                        Patient[]                                     @relation("PatientCreator")
+  patientsAssigned                       Patient[]                                     @relation("AssignedDoctor")
   appointments                           Appointment[]
   sessionLogs                            SessionLog[]
   apiUsageLogs                           ApiUsageLog[]
-  allergiesCreated                       Allergy[]                              @relation("AllergyCreator")
-  allergiesUpdated                       Allergy[]                              @relation("AllergyUpdater")
-  medicationsCreated                     Medication[]                           @relation("MedicationCreator")
-  medicationsUpdated                     Medication[]                           @relation("MedicationUpdater")
+  allergiesCreated                       Allergy[]                                     @relation("AllergyCreator")
+  allergiesUpdated                       Allergy[]                                     @relation("AllergyUpdater")
+  medicationsCreated                     Medication[]                                  @relation("MedicationCreator")
+  medicationsUpdated                     Medication[]                                  @relation("MedicationUpdater")
   apiUsage                               ApiUsage[]
   // M6 — CRM loop-closing
-  tasksAssigned                          Task[]                                 @relation("TaskAssignee")
-  tasksCreated                           Task[]                                 @relation("TaskCreator")
-  billingEventsOwned                     BillingEvent[]                         @relation("BillingClinician")
-  billingEventsSubmitted                 BillingEvent[]                         @relation("BillingSubmitter")
+  tasksAssigned                          Task[]                                        @relation("TaskAssignee")
+  tasksCreated                           Task[]                                        @relation("TaskCreator")
+  billingEventsOwned                     BillingEvent[]                                @relation("BillingClinician")
+  billingEventsSubmitted                 BillingEvent[]                                @relation("BillingSubmitter")
   // TranscribeMD (T-M2)
   transcribeVisits                       TranscribeVisit[]
   userSessions                           UserSession[]
@@ -747,24 +749,25 @@ model User {
   // when they customize in Phase 2+); the resolve-logic falls back to the
   // system-default NoteTemplate (doctorId = null) until then.
   noteTemplates                          NoteTemplate[]
-  templateTwinSourcesCreated             TemplateTwinSourceArtifact[]           @relation("TemplateTwinSourceCreator")
-  templateTwinQuarantineArtifactsCreated TemplateTwinQuarantineArtifact[]       @relation("TemplateTwinQuarantineCreator")
-  templateTwinCompletedCandidatesCreated TemplateTwinCompletedCandidate[]       @relation("TemplateTwinCompletedCandidateCreator")
-  templateTwinCandidateRegionDecisions   TemplateTwinCompletedCandidateRegion[] @relation("TemplateTwinCompletedCandidateDecider")
-  templateTwinMappingsApproved           TemplateTwinSemanticMapping[]          @relation("TemplateTwinMappingApprover")
-  templateTwinCertifications             TemplateTwinCertification[]            @relation("TemplateTwinCertifier")
-  templateTwinReviews                    TemplateTwinReviewDecision[]           @relation("TemplateTwinReviewer")
-  templateTwinManifestReviews            TemplateTwinFillManifest[]             @relation("TemplateTwinManifestReviewer")
-  templateTwinTestWaivers                TemplateTwinFieldTestWaiver[]          @relation("TemplateTwinWaiverPhysician")
-  templateTwinOutboxEvents               TemplateTwinAuditOutbox[]              @relation("TemplateTwinOutboxActor")
-  templateTwinFieldIntents               TemplateTwinFieldIntentDecision[]      @relation("TemplateTwinFieldIntentDecider")
-  templateTwinStaticAssetsCreated        TemplateTwinStaticAsset[]              @relation("TemplateTwinStaticAssetCreator")
-  templateTwinStaticAssetDecisions       TemplateTwinStaticAssetDecision[]      @relation("TemplateTwinStaticAssetDecider")
-  templateTwinStaticAssetReviews         TemplateTwinStaticAssetReviewReceipt[] @relation("TemplateTwinStaticAssetReviewer")
-  templateTwinCustomExamplesRun          TemplateTwinCustomExampleExecution[]   @relation("TemplateTwinCustomExampleExecutor")
-  templateTwinCustomExamplesAcknowledged TemplateTwinCustomExampleExecution[]   @relation("TemplateTwinCustomExampleAcknowledger")
-  templateTwinSyntheticQaAdmissions      TemplateTwinSyntheticQaAdmission[]     @relation("TemplateTwinSyntheticQaAdmissionActor")
-  templateTwinSyntheticQaRuns            TemplateTwinSyntheticQaRun[]           @relation("TemplateTwinSyntheticQaDoctor")
+  templateTwinSourcesCreated             TemplateTwinSourceArtifact[]                  @relation("TemplateTwinSourceCreator")
+  templateTwinQuarantineArtifactsCreated TemplateTwinQuarantineArtifact[]              @relation("TemplateTwinQuarantineCreator")
+  templateTwinCompletedCandidatesCreated TemplateTwinCompletedCandidate[]              @relation("TemplateTwinCompletedCandidateCreator")
+  templateTwinCompletedCandidateReviews  TemplateTwinCompletedCandidateReviewReceipt[] @relation("TemplateTwinCompletedCandidateReviewer")
+  templateTwinCandidateRegionDecisions   TemplateTwinCompletedCandidateRegion[]        @relation("TemplateTwinCompletedCandidateDecider")
+  templateTwinMappingsApproved           TemplateTwinSemanticMapping[]                 @relation("TemplateTwinMappingApprover")
+  templateTwinCertifications             TemplateTwinCertification[]                   @relation("TemplateTwinCertifier")
+  templateTwinReviews                    TemplateTwinReviewDecision[]                  @relation("TemplateTwinReviewer")
+  templateTwinManifestReviews            TemplateTwinFillManifest[]                    @relation("TemplateTwinManifestReviewer")
+  templateTwinTestWaivers                TemplateTwinFieldTestWaiver[]                 @relation("TemplateTwinWaiverPhysician")
+  templateTwinOutboxEvents               TemplateTwinAuditOutbox[]                     @relation("TemplateTwinOutboxActor")
+  templateTwinFieldIntents               TemplateTwinFieldIntentDecision[]             @relation("TemplateTwinFieldIntentDecider")
+  templateTwinStaticAssetsCreated        TemplateTwinStaticAsset[]                     @relation("TemplateTwinStaticAssetCreator")
+  templateTwinStaticAssetDecisions       TemplateTwinStaticAssetDecision[]             @relation("TemplateTwinStaticAssetDecider")
+  templateTwinStaticAssetReviews         TemplateTwinStaticAssetReviewReceipt[]        @relation("TemplateTwinStaticAssetReviewer")
+  templateTwinCustomExamplesRun          TemplateTwinCustomExampleExecution[]          @relation("TemplateTwinCustomExampleExecutor")
+  templateTwinCustomExamplesAcknowledged TemplateTwinCustomExampleExecution[]          @relation("TemplateTwinCustomExampleAcknowledger")
+  templateTwinSyntheticQaAdmissions      TemplateTwinSyntheticQaAdmission[]            @relation("TemplateTwinSyntheticQaAdmissionActor")
+  templateTwinSyntheticQaRuns            TemplateTwinSyntheticQaRun[]                  @relation("TemplateTwinSyntheticQaDoctor")
   templateTwinRollbackOperations         TemplateTwinRollbackOperation[]
   // T-M16.2: one-time tokens for password reset, email verification,
   // email change. All cascade-deleted with the user.
@@ -2674,26 +2677,69 @@ model TemplateTwinCompletedCandidate {
   versionDescription String
   status             String @default("PENDING_REVIEW")
 
-  candidateObjectKey       String @unique
+  candidateObjectKey       String                                       @unique
   candidateObjectVersionId String
   candidateObjectEtag      String
-  candidateSha256          String @db.Char(64)
+  candidateSha256          String                                       @db.Char(64)
   candidateSizeBytes       Int
-  candidateStructureSha256 String @db.Char(64)
-  inventorySha256          String @db.Char(64)
+  candidateStructureSha256 String                                       @db.Char(64)
+  inventorySha256          String                                       @db.Char(64)
   converterVersion         String
   comparisonEvidence       Json
   privacyEvidence          Json
+  /// Strict PHI-free topology generated by converter 1.1. Existing 1.0 rows
+  /// remain nullable and fail closed; every newly admitted row requires both.
+  reviewProjection         Json?
+  reviewProjectionSha256   String?                                      @db.Char(64)
+  reviewReceiptId          String?                                      @unique
+  reviewReceipt            TemplateTwinCompletedCandidateReviewReceipt? @relation("TemplateTwinCompletedCandidateFinalReceipt", fields: [reviewReceiptId], references: [id], onDelete: Restrict)
 
   createdAt  DateTime  @default(now()) @db.Timestamptz(6)
   reviewedAt DateTime? @db.Timestamptz(6)
 
-  examples TemplateTwinCompletedCandidateExample[]
-  regions  TemplateTwinCompletedCandidateRegion[]
+  examples       TemplateTwinCompletedCandidateExample[]
+  regions        TemplateTwinCompletedCandidateRegion[]
+  reviewReceipts TemplateTwinCompletedCandidateReviewReceipt[] @relation("TemplateTwinCompletedCandidatePreviewReceipts")
 
   @@index([practiceId, createdById, status, createdAt])
   @@index([candidateSha256])
   @@map("template_twin_completed_candidates")
+}
+
+/// Fifteen-minute, single-use proof that the owning physician was shown the
+/// exact persisted redacted source/candidate topology. Only the SHA-256 of the
+/// 256-bit bearer secret is stored. Every terminal review consumes one row in
+/// the same transaction as its region decisions, candidate state, and audit.
+model TemplateTwinCompletedCandidateReviewReceipt {
+  id String @id
+
+  candidateId String
+  candidate   TemplateTwinCompletedCandidate @relation("TemplateTwinCompletedCandidatePreviewReceipts", fields: [candidateId], references: [id], onDelete: Restrict)
+
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict)
+
+  reviewedById String
+  reviewedBy   User   @relation("TemplateTwinCompletedCandidateReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
+
+  tokenSha256               String @unique @db.Char(64)
+  candidateSha256           String @db.Char(64)
+  candidateStructureSha256  String @db.Char(64)
+  inventorySha256           String @db.Char(64)
+  reviewProjectionSha256    String @db.Char(64)
+  converterVersion          String
+  globalRolloutGeneration   BigInt
+  practiceRolloutGeneration BigInt
+
+  createdAt  DateTime  @db.Timestamptz(6)
+  expiresAt  DateTime  @db.Timestamptz(6)
+  consumedAt DateTime? @db.Timestamptz(6)
+
+  terminalCandidate TemplateTwinCompletedCandidate? @relation("TemplateTwinCompletedCandidateFinalReceipt")
+
+  @@index([candidateId, reviewedById, expiresAt], map: "tt_completed_candidate_receipt_candidate_reviewer_expiry_idx")
+  @@index([expiresAt], map: "tt_completed_candidate_receipt_expiry_idx")
+  @@map("template_twin_completed_candidate_review_receipts")
 }
 
 model TemplateTwinCompletedCandidateExample {
