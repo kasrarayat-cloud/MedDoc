@@ -474,7 +474,7 @@ function cases(): readonly CorpusCase[] {
       minimumExpectedPages: 1,
     },
     {
-      id: "unsupported-legacy-date",
+      id: "legacy-date-rejection",
       source: unsupportedLegacyDateSource,
       conceptForField: () => "hpi.timing",
       entities: {},
