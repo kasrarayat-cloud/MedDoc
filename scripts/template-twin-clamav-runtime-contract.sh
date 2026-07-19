@@ -58,6 +58,9 @@ socket_volume="${project}_qa_clamav_socket"
 docker run --rm --network none --user 1001:1001 --group-add 101 \
   --volume "$socket_volume:/scanner:ro" --entrypoint /bin/sh "$image" -ec '
     test -S /scanner/clamd.sock
+    test -r /scanner/readiness.json
+    grep -q "\"profileVersion\":\"quillmd-clamav-readiness-v1\"" /scanner/readiness.json
+    grep -Eq "\"signatureVersion\":\"[0-9]+\"" /scanner/readiness.json
     printf "%s\n" "LocalSocket /scanner/clamd.sock" > /tmp/clamd-client.conf
     clamdscan --config-file=/tmp/clamd-client.conf --ping=1 >/dev/null
   '

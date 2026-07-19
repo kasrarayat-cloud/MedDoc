@@ -594,6 +594,7 @@ services:
       TEMPLATE_TWIN_RUNTIME_MODE: ${TEMPLATE_TWIN_RUNTIME_MODE:-standard}
       TEMPLATE_TWIN_KILL_SWITCH: ${TEMPLATE_TWIN_KILL_SWITCH:-true}
       TEMPLATE_TWIN_MALWARE_SCANNER_SOCKET: /var/run/quillmd-clamav/clamd.sock
+      TEMPLATE_TWIN_MALWARE_SCANNER_READINESS_FILE: /var/run/quillmd-clamav/readiness.json
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
       # T-M18.3 A15: surface the deployed milestone through /api/health.

@@ -189,6 +189,7 @@ services:
       TEMPLATE_TWIN_RUNTIME_MODE: standard
       TEMPLATE_TWIN_KILL_SWITCH: "false"
       TEMPLATE_TWIN_MALWARE_SCANNER_SOCKET: /var/run/quillmd-clamav/clamd.sock
+      TEMPLATE_TWIN_MALWARE_SCANNER_READINESS_FILE: /var/run/quillmd-clamav/readiness.json
       # Authenticated synthetic staging UI. Both values default empty, so the
       # UI and every server mutation remain unavailable unless a QA operator
       # deliberately enables the dedicated Playwright profile.

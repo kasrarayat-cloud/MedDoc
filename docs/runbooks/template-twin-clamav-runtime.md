@@ -40,6 +40,14 @@ older than 48 hours; readiness requires both a responsive private socket and a
 daily signature file no older than 48 hours. `FailIfCvdOlderThan 2` provides an
 additional engine-side stale-database refusal.
 
+Every successful health check atomically publishes a group-readable readiness
+lease beside the socket. The application mount is read-only. Admission checks
+that lease before and after each scan, requires a recent health check, verifies
+the signature-file age against the configured limit, and binds the lease's
+signature version to clamd's own version response. A failed health check removes
+the lease; a stopped health-check loop leaves a lease that expires locally in
+the application. A responsive socket alone is therefore not admission-ready.
+
 The admission route accepts at most 10 MiB. clamd permits a 12 MiB input stream
 and separately bounds expanded scan bytes, individual file size, recursion,
 file count, partitions, regular-expression work, queue depth, threads, and scan
