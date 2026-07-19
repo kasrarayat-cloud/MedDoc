@@ -173,6 +173,8 @@ const OWNED_VERSION_SELECT = {
           mimeType: true,
           quarantineArtifact: {
             select: {
+              practiceId: true,
+              lineageId: true,
               sha256: true,
               sizeBytes: true,
               status: true,

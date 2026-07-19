@@ -541,12 +541,21 @@ describe("Template Twin status transitions", () => {
   });
 
   it("refuses activation of a legacy certified version without current source admission", async () => {
-    const legacy = certifiedVersion({
+    const admitted = certifiedVersion({
       id: "template-legacy",
       status: "inactive",
       version: 2,
     });
-    legacy.templateTwinCompiledVersion.sourceArtifact.quarantineArtifact = null;
+    const legacy = {
+      ...admitted,
+      templateTwinCompiledVersion: {
+        ...admitted.templateTwinCompiledVersion,
+        sourceArtifact: {
+          ...admitted.templateTwinCompiledVersion.sourceArtifact,
+          quarantineArtifact: null,
+        },
+      },
+    };
     mocks.noteTemplateFindFirst.mockResolvedValueOnce(legacy);
 
     await expect(

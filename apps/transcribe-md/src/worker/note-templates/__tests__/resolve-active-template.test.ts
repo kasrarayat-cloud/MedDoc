@@ -436,12 +436,21 @@ describe('resolveVisitTemplate — immutable retry provenance', () => {
   });
 
   it('excludes a legacy active Twin without current source admission', async () => {
-    const legacy = admittedTwin({
+    const admitted = admittedTwin({
       id: 'twin-legacy-active',
       doctorId: 'doc1',
       encounterType: 'cardiology',
     });
-    legacy.templateTwinCompiledVersion.sourceArtifact.quarantineArtifact = null;
+    const legacy = {
+      ...admitted,
+      templateTwinCompiledVersion: {
+        ...admitted.templateTwinCompiledVersion,
+        sourceArtifact: {
+          ...admitted.templateTwinCompiledVersion.sourceArtifact,
+          quarantineArtifact: null,
+        },
+      },
+    };
     vi.mocked(prisma.noteTemplate.findMany).mockResolvedValueOnce([
       systemDefault,
       legacy,
@@ -455,12 +464,21 @@ describe('resolveVisitTemplate — immutable retry provenance', () => {
   });
 
   it('rejects a pinned legacy Twin without current source admission', async () => {
-    const legacy = admittedTwin({
+    const admitted = admittedTwin({
       id: 'twin-legacy-pinned',
       doctorId: 'doc1',
       encounterType: 'cardiology',
     });
-    legacy.templateTwinCompiledVersion.sourceArtifact.quarantineArtifact = null;
+    const legacy = {
+      ...admitted,
+      templateTwinCompiledVersion: {
+        ...admitted.templateTwinCompiledVersion,
+        sourceArtifact: {
+          ...admitted.templateTwinCompiledVersion.sourceArtifact,
+          quarantineArtifact: null,
+        },
+      },
+    };
     vi.mocked(prisma.noteTemplate.findFirst).mockResolvedValueOnce(legacy as never);
 
     await expect(

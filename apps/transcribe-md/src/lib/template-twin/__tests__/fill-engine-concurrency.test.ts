@@ -511,8 +511,17 @@ describe("Template Twin worker provenance and manifest concurrency", () => {
   });
 
   it("rejects a legacy certified source before object access or rendering", async () => {
-    const legacy = templateRow();
-    legacy.templateTwinCompiledVersion.sourceArtifact.quarantineArtifact = null;
+    const admitted = templateRow();
+    const legacy = {
+      ...admitted,
+      templateTwinCompiledVersion: {
+        ...admitted.templateTwinCompiledVersion,
+        sourceArtifact: {
+          ...admitted.templateTwinCompiledVersion.sourceArtifact,
+          quarantineArtifact: null,
+        },
+      },
+    };
     mocks.findTemplate.mockResolvedValueOnce(legacy);
     const artifacts = storage();
 

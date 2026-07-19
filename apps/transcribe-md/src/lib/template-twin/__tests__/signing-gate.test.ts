@@ -398,8 +398,11 @@ describe('Template Twin server-side signing gate', () => {
   it('blocks signing and re-delivery for a legacy source without current admission', () => {
     for (const status of ['READY', 'SIGNED'] as const) {
       const input = validContext(status);
-      input.noteTemplate!.templateTwinCompiledVersion!.sourceArtifact.quarantineArtifact =
-        null;
+      const compiled = input.noteTemplate!.templateTwinCompiledVersion!;
+      compiled.sourceArtifact = {
+        ...compiled.sourceArtifact,
+        quarantineArtifact: null,
+      };
 
       const result = assessTemplateTwinSigning(input);
 
@@ -428,7 +431,10 @@ describe('Template Twin server-side signing gate', () => {
         compiled.structureSha256 = '0'.repeat(64);
         break;
       case 'source':
-        compiled.sourceArtifact.sha256 = '0'.repeat(64);
+        compiled.sourceArtifact = {
+          ...compiled.sourceArtifact,
+          sha256: '0'.repeat(64),
+        };
         break;
       case 'source privacy evidence':
         compiled.sourceArtifact.privacyScanEvidence = null;

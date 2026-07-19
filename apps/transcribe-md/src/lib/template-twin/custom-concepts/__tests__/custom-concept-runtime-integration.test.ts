@@ -26,6 +26,7 @@ import {
   type TemplateTwinSigningContext,
 } from "../../signing-gate";
 import { DOCX_MIME_TYPE, createOutputArtifactKey } from "../../storage/keys";
+import { syntheticSourceAdmission } from "../../__tests__/source-admission-fixture";
 import { validateTemplateTwin } from "../../validation";
 import {
   buildClinicianCorrection,
@@ -500,13 +501,13 @@ async function buildCustomSigningContext(): Promise<TemplateTwinSigningContext> 
         latestTestOutputSha256: prepared.render.outputSha256,
         certificationStatus: "CERTIFIED",
         sourceArtifact: {
-          practiceId: "synthetic-practice",
-          objectVersionId: "synthetic-source-version",
-          objectEtag: "synthetic-source-etag",
-          sha256: ir.source.sha256,
+          ...syntheticSourceAdmission({
+            practiceId: "synthetic-practice",
+            lineageId: LINEAGE_ID,
+            minimizedSha256: ir.source.sha256,
+            minimizedSizeBytes: ir.source.sizeBytes,
+          }),
           mimeType: ir.source.mimeType,
-          sizeBytes: ir.source.sizeBytes,
-          validationStatus: "accepted",
           privacyScanEvidence: SOURCE_PRIVACY_SCAN_EVIDENCE,
         },
         fields: [
