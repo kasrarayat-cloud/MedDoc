@@ -18,7 +18,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 
-const captured: Array<{ model: string; payload: Record<string, unknown> }> = [];
+const captured: Array<{
+  model: string;
+  payload: Record<string, unknown>;
+  options?: Record<string, unknown>;
+}> = [];
 
 // Reset between tests so each case sees its own captured list.
 beforeEach(() => {
@@ -32,15 +36,20 @@ beforeEach(() => {
 vi.mock('@anthropic-ai/sdk', () => {
   class MockAnthropic {
     public messages = {
-      create: vi.fn(async (payload: Record<string, unknown>) => {
-        captured.push({ model: payload.model as string, payload });
-        // Return a minimal response. JSON path: include valid JSON.
-        // Text path: any non-empty text is fine.
-        return {
-          content: [{ type: 'text', text: '{"ok": true}' }],
-          usage: { input_tokens: 1, output_tokens: 1 },
-        };
-      }),
+      create: vi.fn(
+        async (
+          payload: Record<string, unknown>,
+          options?: Record<string, unknown>,
+        ) => {
+          captured.push({ model: payload.model as string, payload, options });
+          // Return a minimal response. JSON path: include valid JSON.
+          // Text path: any non-empty text is fine.
+          return {
+            content: [{ type: 'text', text: '{"ok": true}' }],
+            usage: { input_tokens: 1, output_tokens: 1 },
+          };
+        },
+      ),
     };
   }
   return { default: MockAnthropic };
@@ -143,5 +152,16 @@ describe('anthropicCompleteText — Opus 4.x temperature stripping', () => {
       temperature: 0.2,
     });
     expect(captured[0]!.payload.temperature).toBe(0.2);
+  });
+
+  it('forwards the durable text-completion idempotency key at the provider boundary', async () => {
+    await anthropicCompleteText({
+      ...baseArgs,
+      model: 'claude-sonnet-4-6',
+      idempotencyKey: 'b'.repeat(64),
+    });
+    expect(captured[0]!.options).toEqual({
+      headers: { 'Idempotency-Key': 'b'.repeat(64) },
+    });
   });
 });

@@ -69,6 +69,9 @@ export interface CompleteTextArgs extends AiLogContext {
   maxTokens?: number;
   /** Sampling temperature 0-1. Undefined = provider default. */
   temperature?: number;
+  /** Durable server-generated execution key. Provider support is
+   * best-effort; the application ownership ledger remains authoritative. */
+  idempotencyKey?: string;
 }
 
 export const modelClient = {
@@ -177,6 +180,7 @@ export const modelClient = {
       user: args.user,
       maxTokens: args.maxTokens,
       temperature: args.temperature,
+      idempotencyKey: args.idempotencyKey,
     });
   },
 };

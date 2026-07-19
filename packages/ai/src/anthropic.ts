@@ -510,6 +510,9 @@ export interface AnthropicCompleteTextArgs extends AiLogContext {
   maxTokens?: number;
   /** Sampling temperature 0-1. Undefined = SDK/provider default (≈1). */
   temperature?: number;
+  /** Durable server-generated execution key. The application ledger remains
+   * authoritative when the provider does not honor the header. */
+  idempotencyKey?: string;
   /** How many text tokens we want the model to be willing to produce.
    *  SOAP notes can run long — default 8192 rather than 4096. */
 }
@@ -528,15 +531,19 @@ export async function anthropicCompleteText(
   const started = Date.now();
 
   try {
-    const response = await client.messages.create({
-      model: args.model,
-      max_tokens: args.maxTokens ?? 8192,
-      ...(args.temperature !== undefined && !shouldOmitTemperature(args.model)
-        ? { temperature: args.temperature }
-        : {}),
-      system: args.system,
-      messages: [{ role: 'user', content: args.user }],
-    });
+    const response = await createAnthropicMessage(
+      client,
+      {
+        model: args.model,
+        max_tokens: args.maxTokens ?? 8192,
+        ...(args.temperature !== undefined && !shouldOmitTemperature(args.model)
+          ? { temperature: args.temperature }
+          : {}),
+        system: args.system,
+        messages: [{ role: 'user', content: args.user }],
+      },
+      args.idempotencyKey,
+    );
 
     const latencyMs = Date.now() - started;
 
