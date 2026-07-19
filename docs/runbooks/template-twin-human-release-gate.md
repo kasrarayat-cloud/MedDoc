@@ -75,6 +75,23 @@ expected values, page expectations, hashes, Open XML evidence, and
 LibreOffice evidence. LibreOffice results do not count as Microsoft Word
 approval.
 
+Package generation is ordered and fail-closed: zero-error Open XML validation
+of every source and renderer output runs first, pinned isolated LibreOffice
+open/save/PDF evidence runs second, and a second pinned Open XML validation
+runs over the exact five LibreOffice-saved artifacts before the package can be
+built. That post-LibreOffice stage must reproduce the exact 32 physical
+schema-invalid findings across both Office targets (64 observations), exact
+artifact hashes/sizes, validator executable identity, descriptions, and paths.
+Its raw reports and canonical observation manifest are packaged as
+`external_tool_pending_word`; they are explicitly not schema-valid,
+signing-eligible, reimport-eligible, independently approved, or
+release-authorizing. Compatibility-engineering acceptance remains pending and
+ineligible until a separate independent exact-head review record is bound by a
+later additive commit and the resulting new head receives a fresh independent
+review. Package generation itself is permitted solely to collect that review
+and desktop Word evidence. Any drift or missing stage prevents package
+creation.
+
 The reviewer needs no coding knowledge and no administrator privileges:
 
 1. Extract the package on a Windows computer with installed desktop Microsoft

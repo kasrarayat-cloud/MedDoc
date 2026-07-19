@@ -139,20 +139,32 @@ Every synthetic source and every immutable QuillMD renderer output must have
 zero Open XML schema errors for each declared target. No allowlist can turn a
 source or renderer error into a pass.
 
-The independent stage matrix is
+The checked-in observation stage matrix is
 `docs/qa/template-twin-office-schema-error-matrix.json`. It records that the
-current schema-valid corpus and renderer outputs have zero errors. The original
-four-case corpus records 42 LibreOffice 25.8.7.3 save diagnostics, the tab-only
-case adds seven, and the ordinary-placeholder case adds six, for 55 per target:
+current seven-source/five-renderer corpus has zero errors before LibreOffice.
+The exact five pinned LibreOffice-saved artifacts have 32 physical findings,
+observed identically for Office 2013 and Microsoft 365 (64 target
+observations):
 
-- 30 font-character-set extension values;
-- 20 logical-alignment enumeration values; and
-- 4 table-row on/off lexical values; and
-- one exact ordinary-placeholder `w:docGrid/@w:charSpace="4294963199"`
-  Int32-wrap serialization.
+- 25 font-character-set extension values;
+- 2 logical-alignment enumeration values;
+- 1 table-row on/off lexical value; and
+- 4 exact `w:docGrid/@w:charSpace="4294963199"` Int32-overflow
+  serializations.
 
-The QA schema contract recognizes only those exact reviewed LibreOffice-stage
-patterns under its versioned registry. They remain
+The mandatory post-LibreOffice harness reruns the source-built pinned Open XML
+SDK validator over the exact five saved byte sequences before packaging. It
+binds the source SHA, Linux and packaged Windows validator executable digests,
+artifact names/hashes/sizes, both raw target reports, all descriptions and
+paths, the 32-finding/64-observation census, and the checked-in observation
+registry digest into a canonical manifest. Missing evidence or count, hash,
+validator, target, artifact, path, description, or unknown-diagnostic drift
+fails closed. The raw reports, canonical manifest, observation registry, and
+relative SHA-256 manifest are all included in the synthetic human-gate
+package.
+
+The QA schema contract recognizes only those exact current LibreOffice-stage
+signatures under its versioned closed registry. They remain
 `external_tool_pending_word`: the files are not declared schema-valid, the
 errors are never accepted for signing or reimport, and desktop Microsoft Word
 evidence remains mandatory. An unknown diagnostic, tool/version, part,
@@ -161,6 +173,30 @@ The `docGrid` classification is limited to that exact part, element, attribute,
 value, validator, version, LibreOffice stage, and Office target. It remains a
 LibreOffice-only external-tool finding pending desktop Word; it is never
 accepted for pre-delivery signing or reimport.
+
+The checked-in observation provenance has `approvalEffect: none` and
+`independentReviewStatus: PENDING`. It records the exact technical observation
+without fabricating an approval. `compatibilityEngineeringEligible` remains
+`false`; only generation of the non-authorizing synthetic reviewer package is
+eligible. Desktop Word remains an independent human gate.
+
+Independent acceptance uses a separate additive binding path so the
+implementation cannot approve itself:
+
+1. A fresh detached reviewer reproduces the exact pending head and issues an
+   immutable review record that binds the reviewed source commit, observation
+   registry digest, canonical evidence digest, both raw-report digests,
+   reviewer identity/role, and explicit verdict.
+2. A release-integration actor other than the implementation author records
+   that accepted review-record digest in a separate additive commit; the
+   author must not create, sign, or mark their own review record accepted.
+3. Every evidence gate and package is regenerated at the new exact head, and a
+   fresh detached reviewer must return `ACCEPT` for that exact head. The prior
+   record is evidence of the reviewed predecessor, not a waiver of final-head
+   review.
+
+Until those steps complete, compatibility-engineering acceptance remains
+pending even when reviewer-package generation succeeds.
 
 When token replacement exposes certified static leading or trailing whitespace
 inside a Word text node, the renderer adds only the required

@@ -1,9 +1,13 @@
 import { canonicalSha256 } from "../template-twin/canonical";
+import {
+  findReviewedLibreOfficeSignature,
+  OFFICE_SCHEMA_REVIEW_REGISTRY_VERSION,
+} from "./office-libreoffice-reviewed-registry";
+
+export { OFFICE_SCHEMA_REVIEW_REGISTRY_VERSION } from "./office-libreoffice-reviewed-registry";
 
 export const OFFICE_SCHEMA_QA_CONTRACT_VERSION =
-  "template-twin-office-schema-qa/2.0.0" as const;
-export const OFFICE_SCHEMA_REVIEW_REGISTRY_VERSION =
-  "template-twin-libreoffice-schema-review/1.0.0" as const;
+  "template-twin-office-schema-qa/2.1.0" as const;
 export const OFFICE_QA_EVIDENCE_CLASS =
   "QA_ONLY_OFFICE_COMPATIBILITY_EVIDENCE" as const;
 
@@ -230,44 +234,19 @@ function matchesReviewedLibreOfficeRegistry(
   ) {
     return false;
   }
-  if (diagnostic.familyCode === "FONT_CHARACTER_SET_EXTENSION") {
-    return Boolean(
-      diagnostic.partName === "/word/fontTable.xml" &&
-      diagnostic.elementQName === "w:charset" &&
-      diagnostic.attributeQName === "w:characterSet" &&
-      ["utf-8", "windows-1252"].includes(diagnostic.observedValue),
-    );
-  }
-  if (diagnostic.familyCode === "LOGICAL_ALIGNMENT_ENUM") {
-    return Boolean(
-      ["/word/document.xml", "/word/numbering.xml"].includes(
-        diagnostic.partName,
-      ) &&
-      ["w:jc", "w:lvlJc"].includes(diagnostic.elementQName) &&
-      diagnostic.attributeQName === "w:val" &&
-      diagnostic.observedValue === "start",
-    );
-  }
-  if (diagnostic.familyCode === "TABLE_ROW_ON_OFF_LEXICAL_VALUE") {
-    return Boolean(
-      diagnostic.partName === "/word/document.xml" &&
-      ["w:cantSplit", "w:tblHeader"].includes(diagnostic.elementQName) &&
-      diagnostic.attributeQName === "w:val" &&
-      diagnostic.observedValue === "true",
-    );
-  }
-  if (
-    diagnostic.familyCode ===
-    "LIBREOFFICE_DOCGRID_CHARSPACE_UINT32_OVERFLOW"
-  ) {
-    return Boolean(
-      diagnostic.partName === "/word/document.xml" &&
-      diagnostic.elementQName === "w:docGrid" &&
-      diagnostic.attributeQName === "w:charSpace" &&
-      diagnostic.observedValue === "4294963199",
-    );
-  }
-  return false;
+  return (
+    findReviewedLibreOfficeSignature({
+      validatorErrorId: diagnostic.validatorErrorId,
+      descriptionSha256: diagnostic.descriptionSha256,
+      classificationRationaleSha256: diagnostic.classificationRationaleSha256,
+      partName: diagnostic.partName,
+      pathSha256: diagnostic.pathSha256,
+      elementQName: diagnostic.elementQName,
+      attributeQName: diagnostic.attributeQName,
+      observedValue: diagnostic.observedValue,
+      familyCode: diagnostic.familyCode,
+    }) !== null
+  );
 }
 
 function matrixRow(

@@ -101,6 +101,13 @@ jobs:
           --source-commit "${{ steps.source.outputs.sha }}"
           --generated-at "${{ steps.source.outputs.generated_at }}"
 
+      - name: Validate and classify exact LibreOffice-saved bytes with pinned Open XML SDK
+        run: >-
+          npx tsx apps/transcribe-md/scripts/template-twin-human-gate/run-post-libreoffice-openxml-evidence.ts
+          --input-root "${{ steps.source.outputs.root }}"
+          --source-commit "${{ steps.source.outputs.sha }}"
+          --generated-at "${{ steps.source.outputs.generated_at }}"
+
       - name: Run human-gate contract and hygiene regression tests
         run: >-
           npx vitest run
@@ -132,6 +139,9 @@ jobs:
             echo "- Size: \`$(stat -c '%s' "$delivery/$artifact.zip") bytes\`"
             echo "- Synthetic corpus only; tracked source-template bytes/text/media are excluded."
             echo "- LibreOffice: passed pinned isolated round trip."
+            echo "- Post-LibreOffice Open XML: exact 5-artifact corpus classified as 32 schema-invalid physical findings / 64 target observations; external-tool pending Word only."
+            echo "- Post-LibreOffice evidence is not schema-valid, signing-eligible, reimport-eligible, independently approved, or release-authorizing."
+            echo "- Compatibility-engineering acceptance: **PENDING independent exact-head review**; generating this reviewer package does not grant acceptance."
             echo "- Desktop Microsoft Word: **PENDING returned human evidence**."
             echo "- This artifact cannot activate, certify, sign, import, approve media, or deploy."
           } >> "$GITHUB_STEP_SUMMARY"
