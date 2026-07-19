@@ -249,6 +249,32 @@ function receipt(notExpired = true) {
   };
 }
 
+function approvedCandidate(bytes: Buffer) {
+  const reviewedAt = new Date("2026-07-19T10:05:00.000Z");
+  const createdAt = new Date("2026-07-19T10:00:00.000Z");
+  const expiresAt = new Date("2026-07-19T10:15:00.000Z");
+  return {
+    ...pendingCandidate(),
+    status: "APPROVED",
+    candidateObjectKey: "private/candidate.docx",
+    candidateObjectVersionId: "version-1",
+    candidateObjectEtag: "etag-1",
+    candidateSizeBytes: bytes.byteLength,
+    reviewedAt,
+    reviewReceiptId: REVIEW_RECEIPT_ID,
+    regions: pendingCandidate().regions.map((region) => ({
+      ...region,
+      decision: "APPROVED",
+    })),
+    reviewReceipt: {
+      ...receipt(),
+      createdAt,
+      expiresAt,
+      consumedAt: reviewedAt,
+    },
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.transaction.mockImplementation(
@@ -608,20 +634,9 @@ describe("completed candidate service", () => {
   });
 
   it("rechecks rollout under final locks after reading approved candidate bytes", async () => {
-    const bytes = Buffer.from("approved blank synthetic candidate");
+    const bytes = CANDIDATE_BYTES;
     mocks.candidateFindFirst
-      .mockResolvedValueOnce({
-        id: "candidate_synthetic",
-        practiceId: ACTOR.practiceId,
-        createdById: ACTOR.userId,
-        candidateObjectKey: "private/candidate.docx",
-        candidateObjectVersionId: "version-1",
-        candidateObjectEtag: "etag-1",
-        candidateSha256: CANDIDATE_SHA,
-        candidateSizeBytes: bytes.byteLength,
-        inventorySha256: INVENTORY_SHA,
-        _count: { regions: 1 },
-      })
+      .mockResolvedValueOnce(approvedCandidate(bytes))
       .mockResolvedValueOnce({ id: "candidate_synthetic" });
     const readCandidateArtifact = vi.fn().mockResolvedValue(bytes);
     const storage = {
@@ -653,19 +668,8 @@ describe("completed candidate service", () => {
   });
 
   it("returns no approved bytes when rollout changed during the object read", async () => {
-    const bytes = Buffer.from("approved blank synthetic candidate");
-    mocks.candidateFindFirst.mockResolvedValueOnce({
-      id: "candidate_synthetic",
-      practiceId: ACTOR.practiceId,
-      createdById: ACTOR.userId,
-      candidateObjectKey: "private/candidate.docx",
-      candidateObjectVersionId: "version-1",
-      candidateObjectEtag: "etag-1",
-      candidateSha256: CANDIDATE_SHA,
-      candidateSizeBytes: bytes.byteLength,
-      inventorySha256: INVENTORY_SHA,
-      _count: { regions: 1 },
-    });
+    const bytes = CANDIDATE_BYTES;
+    mocks.candidateFindFirst.mockResolvedValueOnce(approvedCandidate(bytes));
     const readCandidateArtifact = vi.fn().mockResolvedValue(bytes);
     mocks.finalRollout.mockResolvedValueOnce({
       allowed: false,
@@ -685,5 +689,59 @@ describe("completed candidate service", () => {
     expect(readCandidateArtifact).toHaveBeenCalledTimes(1);
     expect(mocks.audit).not.toHaveBeenCalled();
     expect(mocks.candidateFindFirst).toHaveBeenCalledTimes(1);
+  });
+
+  it("recompiles and rejects candidate bytes that no longer match the approved projection", async () => {
+    mocks.candidateFindFirst.mockResolvedValueOnce(
+      approvedCandidate(CANDIDATE_BYTES),
+    );
+    mocks.compile.mockReturnValueOnce({
+      structureSha256: "a".repeat(64),
+      stats: { blockingUnsupported: 0 },
+      fields: [],
+    });
+    const readCandidateArtifact = vi.fn().mockResolvedValue(CANDIDATE_BYTES);
+
+    await expect(
+      readApprovedCompletedCandidate({
+        candidateId: "candidate_synthetic",
+        actor: ACTOR,
+        storage: {
+          readCandidateArtifact,
+        } as unknown as TemplateTwinArtifactStore,
+      }),
+    ).rejects.toMatchObject({ code: "PERSISTENCE_FAILED" });
+
+    expect(readCandidateArtifact).toHaveBeenCalledTimes(1);
+    expect(mocks.compile).toHaveBeenCalledWith(CANDIDATE_BYTES);
+    expect(mocks.finalRollout).not.toHaveBeenCalled();
+    expect(mocks.audit).not.toHaveBeenCalled();
+  });
+
+  it("blocks a legacy approved candidate with no redacted comparison proof before object read", async () => {
+    const bytes = Buffer.from("legacy approved synthetic candidate");
+    mocks.candidateFindFirst.mockResolvedValueOnce({
+      ...approvedCandidate(bytes),
+      converterVersion: "completed-document-candidate/1.0.0",
+      reviewProjection: null,
+      reviewProjectionSha256: null,
+      reviewReceiptId: null,
+      reviewReceipt: null,
+    });
+    const readCandidateArtifact = vi.fn();
+
+    await expect(
+      readApprovedCompletedCandidate({
+        candidateId: "candidate_synthetic",
+        actor: ACTOR,
+        storage: {
+          readCandidateArtifact,
+        } as unknown as TemplateTwinArtifactStore,
+      }),
+    ).rejects.toMatchObject({ code: "PERSISTENCE_FAILED" });
+
+    expect(readCandidateArtifact).not.toHaveBeenCalled();
+    expect(mocks.finalRollout).not.toHaveBeenCalled();
+    expect(mocks.audit).not.toHaveBeenCalled();
   });
 });

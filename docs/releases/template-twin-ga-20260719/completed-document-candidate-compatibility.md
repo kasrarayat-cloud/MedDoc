@@ -132,6 +132,14 @@ validation, service validation, database constraints, deferred projection
 triggers, immutable receipt triggers, and terminal review triggers are
 independent fail-closed layers.
 
+Rows created by converter `completed-document-candidate/1.0.0` remain only as
+immutable historical evidence after the additive migration. They cannot open a
+protected preview, receive a new decision, or return candidate bytes, even if a
+pre-migration row already says `APPROVED`. Download requires converter 1.1, a
+canonical projection that matches the relational inventory and the downloaded
+DOCX bytes, and the exact consumed terminal receipt. There is no in-place
+upgrade: an owner must create a new candidate from permitted synthetic examples.
+
 Terminal review uses serializable transactions and the lock order global
 rollout → practice rollout → candidate → receipt. The receipt is tied to the
 same physician, practice, candidate hashes, projection hash, converter version,

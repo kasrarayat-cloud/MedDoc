@@ -110,6 +110,9 @@ describe("completed document to blank candidate conversion", () => {
     expect(result.reviewProjectionSha256).toBe(
       canonicalSha256(result.reviewProjection),
     );
+    expect(result.reviewProjection.candidateStructureSha256).toBe(
+      result.candidateStructureSha256,
+    );
     const serializedProjection = JSON.stringify(result.reviewProjection);
     expect(serializedProjection).not.toContain(
       COMPLETED_CANDIDATE_SYNTHETIC_SENTINEL,

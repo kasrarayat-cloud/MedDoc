@@ -1177,7 +1177,17 @@ export async function readApprovedCompletedCandidate(input: {
       practiceId: input.actor.practiceId,
       createdById: input.actor.userId,
       status: "APPROVED",
+      converterVersion: COMPLETED_CANDIDATE_CONVERTER_VERSION,
+      reviewProjectionSha256: { not: null },
+      reviewReceiptId: { not: null },
       regions: { every: { decision: "APPROVED" } },
+      reviewReceipt: {
+        is: {
+          practiceId: input.actor.practiceId,
+          reviewedById: input.actor.userId,
+          consumedAt: { not: null },
+        },
+      },
     },
     select: {
       id: true,
@@ -1188,11 +1198,60 @@ export async function readApprovedCompletedCandidate(input: {
       candidateObjectEtag: true,
       candidateSha256: true,
       candidateSizeBytes: true,
+      candidateStructureSha256: true,
       inventorySha256: true,
-      _count: { select: { regions: true } },
+      converterVersion: true,
+      reviewProjection: true,
+      reviewProjectionSha256: true,
+      reviewReceiptId: true,
+      reviewedAt: true,
+      examples: {
+        orderBy: { ordinal: "asc" },
+        select: {
+          ordinal: true,
+          minimizedSha256: true,
+          documentStructureSha256: true,
+        },
+      },
+      regions: {
+        orderBy: { displayOrder: "asc" },
+        select: {
+          regionId: true,
+          displayOrder: true,
+          label: true,
+          evidenceType: true,
+          partName: true,
+          tableIndex: true,
+          rowIndex: true,
+          cellIndex: true,
+          candidateTag: true,
+          candidateSdtId: true,
+          sourceEvidenceSha256: true,
+          decision: true,
+        },
+      },
+      reviewReceipt: {
+        select: {
+          id: true,
+          candidateId: true,
+          practiceId: true,
+          reviewedById: true,
+          tokenSha256: true,
+          candidateSha256: true,
+          candidateStructureSha256: true,
+          inventorySha256: true,
+          reviewProjectionSha256: true,
+          converterVersion: true,
+          globalRolloutGeneration: true,
+          practiceRolloutGeneration: true,
+          createdAt: true,
+          expiresAt: true,
+          consumedAt: true,
+        },
+      },
     },
   });
-  if (!candidate || candidate._count.regions < 1) {
+  if (!candidate || candidate.regions.length < 1) {
     throw new CompletedCandidateServiceError(
       "NOT_FOUND",
       "Candidate not found.",
@@ -1202,6 +1261,48 @@ export async function readApprovedCompletedCandidate(input: {
     practiceId: candidate.practiceId,
     uploadedById: candidate.createdById,
   });
+  requireProjectionBinding({
+    projection: candidate.reviewProjection,
+    projectionSha256: candidate.reviewProjectionSha256,
+    converterVersion: candidate.converterVersion,
+    candidateSha256: candidate.candidateSha256,
+    candidateStructureSha256: candidate.candidateStructureSha256,
+    inventorySha256: candidate.inventorySha256,
+    examples: candidate.examples,
+    regions: candidate.regions,
+  });
+  const receipt = candidate.reviewReceipt;
+  const consumedAtMs = receipt?.consumedAt?.getTime();
+  if (
+    candidate.converterVersion !== COMPLETED_CANDIDATE_CONVERTER_VERSION ||
+    !candidate.reviewProjectionSha256 ||
+    !candidate.reviewReceiptId ||
+    !candidate.reviewedAt ||
+    !receipt ||
+    receipt.id !== candidate.reviewReceiptId ||
+    receipt.candidateId !== candidate.id ||
+    receipt.practiceId !== candidate.practiceId ||
+    receipt.reviewedById !== input.actor.userId ||
+    !/^[a-f0-9]{64}$/u.test(receipt.tokenSha256) ||
+    receipt.candidateSha256 !== candidate.candidateSha256 ||
+    receipt.candidateStructureSha256 !== candidate.candidateStructureSha256 ||
+    receipt.inventorySha256 !== candidate.inventorySha256 ||
+    receipt.reviewProjectionSha256 !== candidate.reviewProjectionSha256 ||
+    receipt.converterVersion !== COMPLETED_CANDIDATE_CONVERTER_VERSION ||
+    receipt.globalRolloutGeneration < BigInt(1) ||
+    receipt.practiceRolloutGeneration < BigInt(1) ||
+    receipt.expiresAt.getTime() - receipt.createdAt.getTime() !==
+      REVIEW_RECEIPT_TTL_MS ||
+    consumedAtMs === undefined ||
+    consumedAtMs !== candidate.reviewedAt.getTime() ||
+    consumedAtMs < receipt.createdAt.getTime() ||
+    consumedAtMs > receipt.expiresAt.getTime()
+  ) {
+    throw new CompletedCandidateServiceError(
+      "PERSISTENCE_FAILED",
+      "The approved candidate has no valid redacted comparison proof. Recreate it from synthetic examples.",
+    );
+  }
   const storage = input.storage ?? createTemplateTwinArtifactStore();
   const bytes = await storage.readCandidateArtifact({
     practiceId: candidate.practiceId,
@@ -1210,6 +1311,17 @@ export async function readApprovedCompletedCandidate(input: {
     expectedObjectEtag: candidate.candidateObjectEtag,
     expectedSha256: candidate.candidateSha256,
     expectedSizeBytes: candidate.candidateSizeBytes,
+  });
+  requireProjectionBinding({
+    projection: candidate.reviewProjection,
+    projectionSha256: candidate.reviewProjectionSha256,
+    converterVersion: candidate.converterVersion,
+    candidateSha256: candidate.candidateSha256,
+    candidateStructureSha256: candidate.candidateStructureSha256,
+    inventorySha256: candidate.inventorySha256,
+    examples: candidate.examples,
+    regions: candidate.regions,
+    candidateDocument: bytes,
   });
   await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     // The object read is deliberately outside the transaction. Take the same
@@ -1235,6 +1347,19 @@ export async function readApprovedCompletedCandidate(input: {
         createdById: input.actor.userId,
         status: "APPROVED",
         candidateSha256: candidate.candidateSha256,
+        converterVersion: COMPLETED_CANDIDATE_CONVERTER_VERSION,
+        reviewProjectionSha256: candidate.reviewProjectionSha256,
+        reviewReceiptId: candidate.reviewReceiptId,
+        reviewedAt: candidate.reviewedAt,
+        regions: { every: { decision: "APPROVED" } },
+        reviewReceipt: {
+          is: {
+            id: receipt.id,
+            practiceId: input.actor.practiceId,
+            reviewedById: input.actor.userId,
+            consumedAt: receipt.consumedAt,
+          },
+        },
       },
       select: { id: true },
     });

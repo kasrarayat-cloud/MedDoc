@@ -484,6 +484,7 @@ function buildReviewProjection(input: {
   candidateScan: ScannedXmlPart;
   sourceExampleSha256s: readonly string[];
   candidateSha256: string;
+  candidateStructureSha256: string;
   inventorySha256: string;
   regions: readonly CompletedCandidateRegion[];
 }): CompletedCandidateReviewProjection {
@@ -657,7 +658,7 @@ function buildReviewProjection(input: {
     paginationRepresented: false as const,
     sourceExampleSha256s: [...input.sourceExampleSha256s],
     sourceStructureSha256: documentStructureSha256(input.sourceScan),
-    candidateStructureSha256: documentStructureSha256(input.candidateScan),
+    candidateStructureSha256: input.candidateStructureSha256,
     inventorySha256: input.inventorySha256,
     candidateSha256: input.candidateSha256,
     blocks,
@@ -990,6 +991,7 @@ export async function convertCompletedDocumentsToCandidate(
       candidateScan,
       sourceExampleSha256s: inputs.map((input) => input.minimizedSha256),
       candidateSha256,
+      candidateStructureSha256: compiled.structureSha256,
       inventorySha256,
       regions,
     });
