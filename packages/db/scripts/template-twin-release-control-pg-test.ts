@@ -468,11 +468,7 @@ async function proveDatabaseRoleBoundaries(): Promise<void> {
   assert.equal(roleAttributes.length, 4);
   for (const role of roleAttributes) {
     assert.equal(role.rolsuper, false, `${role.rolname} must not be superuser`);
-    assert.equal(
-      role.rolcreatedb,
-      false,
-      `${role.rolname} must not create DBs`,
-    );
+    assert.equal(role.rolcreatedb, false, `${role.rolname} must not create DBs`);
     assert.equal(
       role.rolcreaterole,
       false,
@@ -502,14 +498,19 @@ async function proveDatabaseRoleBoundaries(): Promise<void> {
       rolinherit, rolreplication, rolbypassrls
     FROM pg_roles
     WHERE rolname IN (
-      'meddoc_runtime', 'meddoc_release_control', 'meddoc_audit_dispatcher'
+      'meddoc_runtime', 'meddoc_release_control', 'meddoc_release_security',
+      'meddoc_audit_dispatcher'
     )
     ORDER BY rolname
   `);
-  assert.equal(loginAttributes.length, 3);
+  assert.equal(loginAttributes.length, 4);
   for (const role of loginAttributes) {
     assert.equal(role.rolsuper, false, `${role.rolname} must not be superuser`);
-    assert.equal(role.rolcreatedb, false, `${role.rolname} must not create DBs`);
+    assert.equal(
+      role.rolcreatedb,
+      false,
+      `${role.rolname} must not create DBs`,
+    );
     assert.equal(
       role.rolcreaterole,
       false,
@@ -536,7 +537,8 @@ async function proveDatabaseRoleBoundaries(): Promise<void> {
     JOIN pg_roles member ON member.oid = membership.member
     JOIN pg_roles granted ON granted.oid = membership.roleid
     WHERE member.rolname IN (
-      'meddoc_runtime', 'meddoc_release_control', 'meddoc_audit_dispatcher'
+      'meddoc_runtime', 'meddoc_release_control', 'meddoc_release_security',
+      'meddoc_audit_dispatcher'
     )
     ORDER BY member.rolname, granted.rolname
   `);
@@ -549,8 +551,28 @@ async function proveDatabaseRoleBoundaries(): Promise<void> {
       loginRole: "meddoc_release_control",
       boundaryRole: "quillmd_release_control",
     },
+    {
+      loginRole: "meddoc_release_security",
+      boundaryRole: "quillmd_release_security",
+    },
     { loginRole: "meddoc_runtime", boundaryRole: "quillmd_runtime" },
   ]);
+  const authorityProcedurePrivileges = await attacker.$queryRaw<
+    Array<{ controlAllowed: boolean; securityAllowed: boolean }>
+  >(Prisma.sql`
+    SELECT has_function_privilege(
+      'meddoc_release_control',
+      'template_twin_revoke_release_authority(uuid,text,text,text,text)',
+      'EXECUTE'
+    ) AS "controlAllowed",
+    has_function_privilege(
+      'meddoc_release_security',
+      'template_twin_revoke_release_authority(uuid,text,text,text,text)',
+      'EXECUTE'
+    ) AS "securityAllowed"
+  `);
+  assert.equal(authorityProcedurePrivileges[0]!.controlAllowed, false);
+  assert.equal(authorityProcedurePrivileges[0]!.securityAllowed, true);
   const forbiddenMembership = await attacker.$queryRaw<
     Array<{ count: bigint }>
   >(Prisma.sql`
@@ -562,6 +584,33 @@ async function proveDatabaseRoleBoundaries(): Promise<void> {
       AND member.rolname = 'quillmd_release_control'
   `);
   assert.equal(forbiddenMembership[0]!.count, BigInt(0));
+  const unsafeDefiners = await attacker.$queryRaw<Array<{ count: bigint }>>(
+    Prisma.sql`
+      SELECT COUNT(*)::BIGINT AS "count"
+      FROM pg_proc procedure
+      JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace
+      WHERE namespace.nspname = 'public'
+        AND procedure.proname LIKE 'template_twin_%'
+        AND procedure.prokind = 'f'
+        AND NOT (
+          COALESCE(procedure.proconfig, ARRAY[]::TEXT[])
+            @> ARRAY['search_path=pg_catalog, public, pg_temp']::TEXT[]
+        )
+    `,
+  );
+  assert.equal(
+    unsafeDefiners[0]!.count,
+    BigInt(0),
+    "every Template Twin guard must resolve caller temp schemas last",
+  );
+  const runtimeCanCreatePublic = await attacker.$queryRaw<
+    Array<{ allowed: boolean }>
+  >(Prisma.sql`
+    SELECT has_schema_privilege(
+      'quillmd_runtime', 'public', 'CREATE'
+    ) AS "allowed"
+  `);
+  assert.equal(runtimeCanCreatePublic[0]!.allowed, false);
 
   await expectRejected("runtime direct global mutation", () =>
     attacker.$transaction(async (tx) => {
@@ -622,6 +671,29 @@ async function proveDatabaseRoleBoundaries(): Promise<void> {
       );
     }),
   );
+  await expectRejected("release-control session mutation", () =>
+    attacker.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe("SET LOCAL ROLE quillmd_release_control");
+      await tx.$executeRawUnsafe(
+        `UPDATE "user_sessions" SET "lastActiveAt" = "lastActiveAt" WHERE FALSE`,
+      );
+    }),
+  );
+  await attacker.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe("SET LOCAL ROLE quillmd_release_control");
+    const rows = await tx.$queryRaw<Array<{ userId: string }>>(Prisma.sql`
+      SELECT "userId" FROM template_twin_verify_release_admin_session(
+        ${creatorId}, ${creatorSession}
+      )
+    `);
+    assert.deepEqual(rows, [{ userId: creatorId }]);
+    const mismatch = await tx.$queryRaw<Array<{ userId: string }>>(Prisma.sql`
+      SELECT "userId" FROM template_twin_verify_release_admin_session(
+        ${creatorId}, ${`${creatorSession}-wrong`}
+      )
+    `);
+    assert.equal(mismatch.length, 0);
+  });
   await expectRejected("release-control audit outbox read", () =>
     attacker.$transaction(async (tx) => {
       await tx.$executeRawUnsafe("SET LOCAL ROLE quillmd_release_control");
@@ -695,6 +767,18 @@ async function proveDatabaseRoleBoundaries(): Promise<void> {
       );
     }),
   );
+  for (const [label, table] of [
+    ["human authority", "template_twin_release_authorities"],
+    ["metric evidence", "template_twin_release_metric_snapshots"],
+    ["capability evidence", "template_twin_release_capabilities"],
+  ] as const) {
+    await expectRejected(`runtime raw ${label} read`, () =>
+      attacker.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe("SET LOCAL ROLE quillmd_runtime");
+        await tx.$queryRawUnsafe(`SELECT * FROM "${table}" LIMIT 1`);
+      }),
+    );
+  }
   await attacker.$transaction(async (tx) => {
     await tx.$executeRawUnsafe("SET LOCAL ROLE quillmd_runtime");
     const rows = await tx.$queryRaw<Array<{ count: bigint }>>(Prisma.sql`
@@ -1741,41 +1825,22 @@ async function proveLiveUserLifecycleRevocation(): Promise<void> {
   const active = await readControlState(release.releaseId);
   assert.equal(active.releaseStatus, "ROLLING_OUT");
   assert.equal(active.enabled, true);
-  await observer.$executeRaw(Prisma.sql`
-    UPDATE "template_twin_release_attestation_keys"
-    SET "revokedAt" = CURRENT_TIMESTAMP
-    WHERE "keyId" = ${runtimeKeyId} AND "revokedAt" IS NULL
-  `);
-  assert(unconfiguredRuntimeEnv, "unconfigured runtime proof must run first");
-  await expectRejected(
-    "revoked runtime key cannot masquerade as an unconfigured release",
-    () => submitRuntimeEnvelope(unconfiguredRuntimeEnv!),
+  await expectRejected("live runtime key revocation without disable", () =>
+    observer.$executeRaw(Prisma.sql`
+      UPDATE "template_twin_release_attestation_keys"
+      SET "revokedAt" = CURRENT_TIMESTAMP
+      WHERE "keyId" = ${runtimeKeyId} AND "revokedAt" IS NULL
+    `),
   );
-  const runtimeFailure = await expectRejected(
-    "revoked runtime key final checkpoint claim",
-    () =>
-      passTemplateTwinReleaseCheckpoint({
-        actor: creator,
-        releaseId: release.releaseId,
-        stage: "CANARY",
-        expectedReleaseGeneration: active.releaseGeneration.toString(),
-        expectedGlobalGeneration: active.globalGeneration.toString(),
-        confirmation: templateTwinCheckpointConfirmation({
-          verb: "PASS",
-          stage: "CANARY",
-          releaseIdentitySha256: release.identity,
-        }),
-        env: release.env,
-      }),
-  );
-  assert.match(runtimeFailure, /runtime|attestation/u);
   const updated = await observer.$executeRaw(Prisma.sql`
     UPDATE "users"
-    SET "suspendedAt" = CURRENT_TIMESTAMP
+    SET "products" = array_remove(
+      "products", 'SUPER_ADMIN'::"Product"
+    )
     WHERE "id" = ${reviewerIds.get("OPERATIONS")!}
-      AND "suspendedAt" IS NULL
+      AND 'SUPER_ADMIN'::"Product" = ANY("products")
   `);
-  assert.equal(updated, 1, "reviewer lifecycle transition must commit");
+  assert.equal(updated, 1, "reviewer entitlement transition must commit");
   const revoked = await readControlState(release.releaseId);
   assert.equal(revoked.releaseStatus, "REVOKED");
   assert.equal(revoked.enabled, false);
@@ -1787,6 +1852,16 @@ async function proveLiveUserLifecycleRevocation(): Promise<void> {
     `,
   );
   assert(authority[0]!.revokedAt, "lifecycle transition must revoke authority");
+  await observer.$executeRaw(Prisma.sql`
+    UPDATE "template_twin_release_attestation_keys"
+    SET "revokedAt" = CURRENT_TIMESTAMP
+    WHERE "keyId" = ${runtimeKeyId} AND "revokedAt" IS NULL
+  `);
+  assert(unconfiguredRuntimeEnv, "unconfigured runtime proof must run first");
+  await expectRejected(
+    "revoked runtime key cannot masquerade as an unconfigured release",
+    () => submitRuntimeEnvelope(unconfiguredRuntimeEnv!),
+  );
   await expectRejected("authority revocation replay", () =>
     attacker.$executeRaw(Prisma.sql`
       UPDATE "template_twin_release_authorities"
@@ -1802,6 +1877,13 @@ async function main(): Promise<void> {
     process.stderr.write(`[template-twin-control-plane] ${name}\n`);
     await proof();
   };
+  const auditBaseline = await observer.$queryRaw<Array<{ count: bigint }>>(
+    Prisma.sql`
+      SELECT COUNT(*)::BIGINT AS "count"
+      FROM "template_twin_audit_outbox"
+      WHERE "eventKey" LIKE 'template-twin:release:%'
+    `,
+  );
   await runProof("seed-synthetic-authorities", seedSyntheticAuthorities);
   await runProof(
     "unconfigured-runtime-attestation",
@@ -1816,13 +1898,19 @@ async function main(): Promise<void> {
   await runProof("critical-guardrail-pass-race", proveCriticalGuardrailPassRace);
   await runProof("live-user-lifecycle-revocation", proveLiveUserLifecycleRevocation);
   await runProof("isolated-audit-dispatcher", proveAuditDispatcherBoundary);
-  const releaseAuditEventCount = await assertAuditCensus();
+  const releaseAuditEventTotal = await assertAuditCensus();
+  const releaseAuditEventCount =
+    releaseAuditEventTotal - Number(auditBaseline[0]!.count);
+  assert(
+    releaseAuditEventCount >= 46,
+    "this proof run must append complete release audit evidence",
+  );
   const global = await readGlobal();
   assert.equal(global.enabled, false);
 
   process.stdout.write(
     `${JSON.stringify({
-      profile: "template-twin-production-release-control-postgres-v2",
+      profile: "template-twin-production-release-control-postgres-v3",
       synthetic: true,
       databaseGuard: "passed",
       migrations: "fresh-deploy-required",
@@ -1831,7 +1919,7 @@ async function main(): Promise<void> {
       signedRuntimeReplicaBarrier: true,
       signedMonitoringReceipts: true,
       isolatedAuditDispatcher: true,
-      revokedRuntimeKeyFinalClaimRejected: true,
+      liveRuntimeKeyRevocationWithoutDisableRejected: true,
       forgedCapabilityRejected: true,
       capabilityReplayRejected: true,
       capabilityReceiptsImmutable: true,

@@ -18,6 +18,13 @@ const hardeningMigration = readFileSync(
   ),
   "utf8",
 );
+const finalHardeningMigration = readFileSync(
+  resolve(
+    repositoryRoot,
+    "packages/db/prisma/migrations/20260719164000_template_twin_production_control_plane_hardening_v3/migration.sql",
+  ),
+  "utf8",
+);
 const route = readFileSync(
   resolve(
     repositoryRoot,
@@ -36,6 +43,24 @@ const compose = readFileSync(
 const caddy = readFileSync(resolve(repositoryRoot, "Caddyfile"), "utf8");
 const roleBootstrap = readFileSync(
   resolve(repositoryRoot, "infra/postgres/init-template-twin-roles.sh"),
+  "utf8",
+);
+const releaseSecurityBootstrap = readFileSync(
+  resolve(
+    repositoryRoot,
+    "infra/postgres/provision-template-twin-release-security.sh",
+  ),
+  "utf8",
+);
+const adminFreshness = readFileSync(
+  resolve(
+    repositoryRoot,
+    "apps/transcribe-md/src/lib/admin-session-freshness.ts",
+  ),
+  "utf8",
+);
+const sharedAuth = readFileSync(
+  resolve(repositoryRoot, "packages/auth/src/index.ts"),
   "utf8",
 );
 
@@ -239,6 +264,12 @@ describe("Template Twin production control-plane migration contract", () => {
     expect(hardeningMigration).toContain(
       "template_twin_one_active_release_authority_per_human_key",
     );
+    expect(finalHardeningMigration).toContain(
+      'NOT (\'SUPER_ADMIN\'::public."Product" = ANY(NEW."products"))',
+    );
+    expect(finalHardeningMigration).toContain(
+      '"mfaEnabled", "mfaVerifiedAt", "products", "forceLogoutAt"',
+    );
   });
 
   it("freezes exact manifests and enforces monitoring, epoch, and terminal state in PostgreSQL", () => {
@@ -262,6 +293,54 @@ describe("Template Twin production control-plane migration contract", () => {
     ]) {
       expect(hardeningMigration).toContain(fragment);
     }
+  });
+
+  it("puts caller temporary schemas last and keeps raw evidence unreadable to runtime", () => {
+    expect(finalHardeningMigration).toContain(
+      "SET search_path TO pg_catalog, public, pg_temp",
+    );
+    expect(finalHardeningMigration).toContain(
+      "SET search_path = pg_catalog, public, pg_temp",
+    );
+    expect(finalHardeningMigration).toContain(
+      "procedure.proname LIKE 'template_twin_%'",
+    );
+    expect(finalHardeningMigration).toContain(
+      "ALTER FUNCTION %I.%I(%s) SET search_path TO pg_catalog, public, pg_temp",
+    );
+    expect(finalHardeningMigration).toContain(
+      "@> ARRAY['search_path=pg_catalog, public, pg_temp']::TEXT[]",
+    );
+    expect(finalHardeningMigration).toContain(
+      '"template_twin_release_authorities",',
+    );
+    expect(finalHardeningMigration).toContain(
+      '"template_twin_release_metric_snapshots",',
+    );
+    expect(finalHardeningMigration).toContain(
+      '"template_twin_release_capabilities",',
+    );
+    expect(finalHardeningMigration).toContain("FROM quillmd_runtime");
+    expect(finalHardeningMigration).toContain(
+      "REVOKE CREATE ON SCHEMA public FROM PUBLIC",
+    );
+  });
+
+  it("couples key revocation and verifies control sessions without raw session access", () => {
+    expect(finalHardeningMigration).toContain(
+      "template_twin_release_attestation_key_coupling_guard",
+    );
+    expect(finalHardeningMigration).toContain(
+      'ON "template_twin_release_attestation_keys"',
+    );
+    expect(finalHardeningMigration).toContain(
+      "template_twin_verify_release_admin_session",
+    );
+    expect(finalHardeningMigration).toContain("TO quillmd_release_control");
+    expect(adminFreshness).toContain(
+      "template_twin_verify_release_admin_session",
+    );
+    expect(sharedAuth).toContain("usesDedicatedTemplateTwinSessionVerifier");
   });
 });
 
@@ -298,11 +377,47 @@ describe("Template Twin release admin route boundary", () => {
       'QUILLMD_SERVICE_ROLE: template-twin-audit-dispatcher',
     );
     expect(compose).toContain('TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL: ""');
+    expect(compose.match(/^\s+DB_PASSWORD: ""$/gmu)).toHaveLength(4);
+    expect(compose.match(/^\s+DB_RUNTIME_PASSWORD: ""$/gmu)).toHaveLength(4);
+    expect(
+      compose.match(/^\s+DB_RELEASE_SECURITY_PASSWORD: ""$/gmu),
+    ).toHaveLength(5);
+    for (const variable of [
+      "TEMPLATE_TWIN_APP_RUNTIME_ATTESTATION",
+      "TEMPLATE_TWIN_ADMIN_CONTROL_RUNTIME_ATTESTATION",
+      "TEMPLATE_TWIN_WORKER_RUNTIME_ATTESTATION",
+    ]) {
+      expect(
+        compose.match(new RegExp(`^\\s+${variable}: ""$`, "gmu")),
+      ).toHaveLength(4);
+    }
+    const adminBlock = compose.slice(
+      compose.indexOf("  template-twin-admin-control:"),
+      compose.indexOf(
+        "  # ── DB Migrator",
+        compose.indexOf("  template-twin-admin-control:"),
+      ),
+    );
+    expect(adminBlock).toContain("env_file: []");
+    expect(adminBlock).not.toContain("<<: *transcribe_md_app_environment");
+    expect(adminBlock).toContain(
+      "DATABASE_URL: postgresql://meddoc_release_control:",
+    );
+    expect(adminBlock).not.toContain("postgresql://meddoc_runtime:");
+    expect(adminBlock).not.toContain("${ANTHROPIC_API_KEY}");
+    expect(adminBlock).not.toContain("${DEEPGRAM_API_KEY}");
+    expect(adminBlock).toContain("/api/admin/template-twin/control-health");
     expect(roleBootstrap).toContain(
       "DB_RELEASE_CONTROL_PASSWORD is required",
     );
     expect(roleBootstrap).toContain(
       "DB_AUDIT_DISPATCHER_PASSWORD is required",
+    );
+    expect(releaseSecurityBootstrap).toContain(
+      "DB_RELEASE_SECURITY_PASSWORD is required",
+    );
+    expect(releaseSecurityBootstrap).toContain(
+      "GRANT quillmd_release_security TO meddoc_release_security",
     );
   });
 });

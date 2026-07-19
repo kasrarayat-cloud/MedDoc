@@ -30,6 +30,8 @@ import { auth } from "@/lib/nextauth";
 import { logAudit } from "@/lib/audit";
 import { isAdminRequestHost } from "@/lib/admin-host";
 import { verifyFreshPlatformAdminSession } from "@/lib/admin-session-freshness";
+import { recordTemplateTwinControlAccess } from "@/lib/template-twin/release-control-access-audit";
+import { TEMPLATE_TWIN_RELEASE_CONTROL_SERVICE_ROLE } from "@/lib/template-twin/release-control-db";
 
 /** What admin handlers actually need — slim subset of the next-auth
  *  session. The full app `Session` from @meddoc/auth requires
@@ -91,19 +93,40 @@ export function adminApi(
       },
     };
 
-    await logAudit({
-      action: "ADMIN_API_ACCESS",
-      targetType: "AdminAPI",
-      targetId: routeKey,
-      metadata: {
-        routeKey,
-        method: req.method,
-        path: new URL(req.url).pathname,
-      },
-      userId: verified.userId,
-      userEmail: verified.email,
-      practiceId: verified.practiceId,
-    });
+    try {
+      if (
+        process.env.QUILLMD_SERVICE_ROLE ===
+        TEMPLATE_TWIN_RELEASE_CONTROL_SERVICE_ROLE
+      ) {
+        await recordTemplateTwinControlAccess({
+          actorId: verified.userId,
+          actorEmail: verified.email,
+          practiceId: verified.practiceId,
+          routeKey,
+          request: req,
+        });
+      } else {
+        await logAudit({
+          action: "ADMIN_API_ACCESS",
+          targetType: "AdminAPI",
+          targetId: routeKey,
+          metadata: {
+            routeKey,
+            method: req.method,
+            path: new URL(req.url).pathname,
+          },
+          userId: verified.userId,
+          userEmail: verified.email,
+          practiceId: verified.practiceId,
+        });
+      }
+    } catch {
+      console.error(`[admin-api:${routeKey}] access audit failed closed`);
+      return NextResponse.json(
+        { error: "Internal server error" },
+        { status: 500 },
+      );
+    }
 
     try {
       return await handler(req, {

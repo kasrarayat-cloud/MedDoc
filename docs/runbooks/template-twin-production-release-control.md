@@ -78,8 +78,11 @@ only inside the approved Canary window; a database gate still remains required.
   blank the control and dispatcher DSNs in those containers.
 - `template-twin-admin-control` is the only HTTP process receiving the
   `meddoc_release_control` DSN. Caddy routes only the release workbench page and
-  its exact release/metric endpoints to it. It remains loopback-only on the
-  host and requires the normal fresh SUPER_ADMIN + MFA gate.
+  its exact release/metric endpoints to it. It does not load the application
+  `.env`, ordinary runtime DSN, provider keys, object-storage credentials, or
+  any APP/WORKER attestation envelope. It remains loopback-only on the host and
+  requires a signed cookie plus the narrow database-backed fresh SUPER_ADMIN +
+  MFA verifier; that verifier cannot enumerate or mutate session rows.
 - `template-twin-audit-dispatcher` connects only as
   `meddoc_audit_dispatcher`, receives no provider credential or control DSN,
   and is the only process allowed to claim and deliver release outbox rows.
@@ -96,7 +99,8 @@ principals already exist with the expected attributes and memberships:
   `quillmd_audit_dispatcher`;
 - LOGIN/INHERIT principals with exactly one membership each:
   `meddoc_runtime` → `quillmd_runtime`, `meddoc_release_control` →
-  `quillmd_release_control`, and `meddoc_audit_dispatcher` →
+  `quillmd_release_control`, `meddoc_release_security` →
+  `quillmd_release_security`, and `meddoc_audit_dispatcher` →
   `quillmd_audit_dispatcher`.
 
 For a brand-new database, supply three distinct generated credentials to
@@ -105,6 +109,16 @@ environment before first initialization. An existing production data volume
 does not rerun entrypoint initialization: a database administrator must apply
 the same reviewed role-provisioning block before `prisma migrate deploy`, then
 verify attributes and exact membership without recording credential values.
+
+After all production-control migrations have committed, provision the fourth,
+procedure-only security login with
+`infra/postgres/provision-template-twin-release-security.sh`. Supply its unique
+credential through `DB_RELEASE_SECURITY_PASSWORD` and the normal protected
+`PG*` connection environment; never put either password on a command line or
+in evidence. This step intentionally follows migration v2, whose precondition
+verifies the original three-login boundary before v3 makes authority revocation
+operational. The release-control PostgreSQL proof must pass only after the
+fourth login and its exact single membership exist.
 
 The migration itself installs the least-privilege grants. Runtime cannot read
 control receipts or mutate immutable evidence. Release control cannot read
@@ -128,11 +142,20 @@ Under the global release-control advisory lock, insert a UUID assignment with a
 non-secret change-ticket reference in `sourceRef`. The database permits one
 active assignment per user/discipline and preserves assignment history.
 
-To revoke authority, first revoke/reject any APPROVED, ROLLING_OUT, or
-STABLE_100 release whose latest decision uses that assignment. The database
-rejects authority revocation while such a release is live. Then set
-`revokedAt=CURRENT_TIMESTAMP` in a reviewed change. A revoked assignment cannot
-be restored or deleted.
+To revoke authority, connect only as `meddoc_release_security` and invoke
+`template_twin_revoke_release_authority(...)` in a reviewed, parameterized
+change with a unique non-secret change ID and reason code. Never update
+`revokedAt` directly. The procedure takes the advisory/global/practice lock
+order and, if the assignment supports a live release, atomically revokes that
+release, disables global and practice exposure, appends audit-outbox evidence,
+and revokes the assignment. A revoked assignment cannot be restored or
+deleted.
+
+Runtime or metric attestation keys are also monotonic. A live runtime key
+cannot be revoked while its release remains exposed: first use the release
+revoke path (or perform disable and key revocation in one reviewed transaction),
+verify global and all manifest practices are disabled, then set the key's
+`revokedAt`. Never delete, rewrite, or silently replace key material.
 
 ## Create and freeze
 
@@ -213,10 +236,12 @@ npm run release-control:pg-test -w @meddoc/db
 ```
 
 The database-name guard rejects production-like targets. The proof covers
-direct/forged/replayed enable capability rejection, immutable evidence,
-ordered 100% advancement, post-100% revoke, critical automatic revoke, and
-two-session advance/advance, global-kill/advance, approval-revoke/advance,
-operational-revoke/advance, and critical-guardrail/pass races.
+the exact four-login role boundary, narrow non-enumerable control-session
+verification, live-key-revoke/enable coupling, direct/forged/replayed enable
+capability rejection, immutable evidence, ordered 100% advancement,
+post-100% revoke, critical automatic revoke, and two-session advance/advance,
+global-kill/advance, approval-revoke/advance, operational-revoke/advance, and
+critical-guardrail/pass races.
 
 Repeat the proof on a separate fresh database at the maximum supported cohort:
 

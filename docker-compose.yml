@@ -115,9 +115,16 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql://meddoc_runtime:${DB_RUNTIME_PASSWORD:-changeme_runtime_in_production}@postgres:5432/meddoc?schema=public
+      DB_PASSWORD: ""
+      DB_RUNTIME_PASSWORD: ""
       DB_RELEASE_CONTROL_PASSWORD: ""
+      DB_RELEASE_SECURITY_PASSWORD: ""
       TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL: ""
       DB_AUDIT_DISPATCHER_PASSWORD: ""
+      TEMPLATE_TWIN_APP_RUNTIME_ATTESTATION: ""
+      TEMPLATE_TWIN_ADMIN_CONTROL_RUNTIME_ATTESTATION: ""
+      TEMPLATE_TWIN_WORKER_RUNTIME_ATTESTATION: ""
+      TEMPLATE_TWIN_RUNTIME_ATTESTATION: ""
       # Phase 1B v2 — explicit Redis URL for the audit-stream publish
       # path and the /api/admin/stream/activity subscriber. Same value
       # the singleton in lib/redis.ts defaults to, but spelled out so
@@ -446,7 +453,10 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql://meddoc_runtime:${DB_RUNTIME_PASSWORD:-changeme_runtime_in_production}@postgres:5432/meddoc?schema=public
+      DB_PASSWORD: ""
+      DB_RUNTIME_PASSWORD: ""
       DB_RELEASE_CONTROL_PASSWORD: ""
+      DB_RELEASE_SECURITY_PASSWORD: ""
       TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL: ""
       DB_AUDIT_DISPATCHER_PASSWORD: ""
       REDIS_URL: redis://redis:6379
@@ -457,6 +467,9 @@ services:
       TEMPLATE_TWIN_APP_IMAGE_DIGEST: ${TEMPLATE_TWIN_APP_IMAGE_DIGEST:-}
       TEMPLATE_TWIN_WORKER_IMAGE_DIGEST: ${TEMPLATE_TWIN_WORKER_IMAGE_DIGEST:-}
       TEMPLATE_TWIN_MIGRATOR_IMAGE_DIGEST: ${TEMPLATE_TWIN_MIGRATOR_IMAGE_DIGEST:-}
+      TEMPLATE_TWIN_APP_RUNTIME_ATTESTATION: ""
+      TEMPLATE_TWIN_ADMIN_CONTROL_RUNTIME_ATTESTATION: ""
+      TEMPLATE_TWIN_WORKER_RUNTIME_ATTESTATION: ""
       TEMPLATE_TWIN_RUNTIME_ATTESTATION: ${TEMPLATE_TWIN_WORKER_RUNTIME_ATTESTATION:-}
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-meddoc}
@@ -537,6 +550,7 @@ services:
       DATABASE_URL: postgresql://meddoc_audit_dispatcher:${DB_AUDIT_DISPATCHER_PASSWORD:-changeme_audit_dispatcher_in_production}@postgres:5432/meddoc?schema=public
       DB_AUDIT_DISPATCHER_PASSWORD: ""
       DB_RELEASE_CONTROL_PASSWORD: ""
+      DB_RELEASE_SECURITY_PASSWORD: ""
       TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL: ""
       QUILLMD_SERVICE_ROLE: template-twin-audit-dispatcher
       TEMPLATE_TWIN_AUDIT_DISPATCH_INTERVAL_MS: ${TEMPLATE_TWIN_AUDIT_DISPATCH_INTERVAL_MS:-5000}
@@ -627,7 +641,10 @@ services:
     environment: &transcribe_md_app_environment
       DATABASE_URL: postgresql://meddoc_runtime:${DB_RUNTIME_PASSWORD:-changeme_runtime_in_production}@postgres:5432/meddoc?schema=public
       QUILLMD_SERVICE_ROLE: physician-app
+      DB_PASSWORD: ""
+      DB_RUNTIME_PASSWORD: ""
       DB_RELEASE_CONTROL_PASSWORD: ""
+      DB_RELEASE_SECURITY_PASSWORD: ""
       TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL: ""
       DB_AUDIT_DISPATCHER_PASSWORD: ""
       AUTH_URL: ${TRANSCRIBE_MD_AUTH_URL:-http://5.231.107.93:9020}
@@ -651,6 +668,9 @@ services:
       TEMPLATE_TWIN_APP_IMAGE_DIGEST: ${TEMPLATE_TWIN_APP_IMAGE_DIGEST:-}
       TEMPLATE_TWIN_WORKER_IMAGE_DIGEST: ${TEMPLATE_TWIN_WORKER_IMAGE_DIGEST:-}
       TEMPLATE_TWIN_MIGRATOR_IMAGE_DIGEST: ${TEMPLATE_TWIN_MIGRATOR_IMAGE_DIGEST:-}
+      TEMPLATE_TWIN_APP_RUNTIME_ATTESTATION: ""
+      TEMPLATE_TWIN_ADMIN_CONTROL_RUNTIME_ATTESTATION: ""
+      TEMPLATE_TWIN_WORKER_RUNTIME_ATTESTATION: ""
       TEMPLATE_TWIN_RUNTIME_ATTESTATION: ${TEMPLATE_TWIN_APP_RUNTIME_ATTESTATION:-}
       TEMPLATE_TWIN_MALWARE_SCANNER_SOCKET: /var/run/quillmd-clamav/clamd.sock
       TEMPLATE_TWIN_MALWARE_SCANNER_READINESS_FILE: /var/run/quillmd-clamav/readiness.json
@@ -686,13 +706,57 @@ services:
   # admin page/API paths on admin.quillmd.com to this loopback listener.
   template-twin-admin-control:
     <<: *transcribe_md_app
+    # Do not import the application .env wholesale. This process receives
+    # neither the ordinary runtime principal nor provider/storage credentials.
+    env_file: []
+    group_add: []
+    volumes: []
     environment:
-      <<: *transcribe_md_app_environment
+      DATABASE_URL: postgresql://meddoc_release_control:${DB_RELEASE_CONTROL_PASSWORD:-changeme_release_control_in_production}@postgres:5432/meddoc?schema=public
       QUILLMD_SERVICE_ROLE: template-twin-admin-control
       TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL: postgresql://meddoc_release_control:${DB_RELEASE_CONTROL_PASSWORD:-changeme_release_control_in_production}@postgres:5432/meddoc?schema=public
+      DB_PASSWORD: ""
+      DB_RUNTIME_PASSWORD: ""
+      DB_RELEASE_CONTROL_PASSWORD: ""
+      DB_RELEASE_SECURITY_PASSWORD: ""
+      DB_AUDIT_DISPATCHER_PASSWORD: ""
       AUTH_URL: ${TEMPLATE_TWIN_ADMIN_CONTROL_AUTH_URL:-https://admin.quillmd.com}
       NEXTAUTH_URL: ${TEMPLATE_TWIN_ADMIN_CONTROL_AUTH_URL:-https://admin.quillmd.com}
-      TEMPLATE_TWIN_RUNTIME_ATTESTATION: ${TEMPLATE_TWIN_ADMIN_CONTROL_RUNTIME_ATTESTATION:-}
+      AUTH_SECRET: ${AUTH_SECRET:-}
+      AUTH_COOKIE_DOMAIN: ${AUTH_COOKIE_DOMAIN:-}
+      AUTH_TRUST_HOST: "true"
+      ADMIN_PUBLIC_HOST: ${ADMIN_PUBLIC_HOST:-admin.quillmd.com}
+      REDIS_URL: redis://redis:6379
+      QUILLMD_REQUIRED_RUNTIME_PROTOCOL_EPOCH: template-twin-final-schema-v2
+      TEMPLATE_TWIN_RUNTIME_MODE: ${TEMPLATE_TWIN_RUNTIME_MODE:-standard}
+      TEMPLATE_TWIN_KILL_SWITCH: ${TEMPLATE_TWIN_KILL_SWITCH:-true}
+      TEMPLATE_TWIN_RELEASE_COMMIT_SHA: ${TEMPLATE_TWIN_RELEASE_COMMIT_SHA:-}
+      TEMPLATE_TWIN_APP_IMAGE_DIGEST: ${TEMPLATE_TWIN_APP_IMAGE_DIGEST:-}
+      TEMPLATE_TWIN_WORKER_IMAGE_DIGEST: ${TEMPLATE_TWIN_WORKER_IMAGE_DIGEST:-}
+      TEMPLATE_TWIN_MIGRATOR_IMAGE_DIGEST: ${TEMPLATE_TWIN_MIGRATOR_IMAGE_DIGEST:-}
+      TEMPLATE_TWIN_APP_RUNTIME_ATTESTATION: ""
+      TEMPLATE_TWIN_ADMIN_CONTROL_RUNTIME_ATTESTATION: ""
+      TEMPLATE_TWIN_WORKER_RUNTIME_ATTESTATION: ""
+      TEMPLATE_TWIN_RUNTIME_ATTESTATION: ""
+      ANTHROPIC_API_KEY: ""
+      DEEPGRAM_API_KEY: ""
+      MINIO_ACCESS_KEY: ""
+      MINIO_SECRET_KEY: ""
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "-qO-",
+          "--spider",
+          "http://127.0.0.1:3011/api/admin/template-twin/control-health",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     ports:
       - "127.0.0.1:${TEMPLATE_TWIN_ADMIN_CONTROL_PORT:-3012}:3011"
 

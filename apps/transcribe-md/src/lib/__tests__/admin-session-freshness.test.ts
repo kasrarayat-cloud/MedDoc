@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   findSession: vi.fn(),
+  releaseQuery: vi.fn(),
 }));
 
 vi.mock('@meddoc/db', () => ({
@@ -11,6 +12,10 @@ vi.mock('@meddoc/db', () => ({
       findUnique: vi.fn(),
     },
   },
+}));
+vi.mock('@/lib/template-twin/release-control-db', () => ({
+  default: { $queryRaw: mocks.releaseQuery },
+  TEMPLATE_TWIN_RELEASE_CONTROL_SERVICE_ROLE: 'template-twin-admin-control',
 }));
 
 import { verifyFreshPlatformAdminSession } from '../admin-session-freshness';
@@ -54,6 +59,10 @@ beforeEach(() => {
   mocks.findSession.mockResolvedValue(validRow());
 });
 
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 describe('fresh platform-admin session verification', () => {
   it('returns only current database-confirmed identity fields', async () => {
     await expect(verify()).resolves.toEqual({
@@ -75,6 +84,30 @@ describe('fresh platform-admin session verification', () => {
         },
       }),
     );
+  });
+
+  it('uses only the narrow session verifier in the isolated control process', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('QUILLMD_SERVICE_ROLE', 'template-twin-admin-control');
+    mocks.releaseQuery.mockResolvedValue([
+      {
+        userId: 'admin_synthetic',
+        email: 'admin@synthetic.invalid',
+        role: 'SUPER_ADMIN',
+        practiceId: 'practice_synthetic',
+        sessionCreatedAt: new Date('2026-07-19T08:00:00.000Z'),
+        sessionExpiresAt: new Date('2026-07-20T08:00:00.000Z'),
+        mfaVerifiedAt: new Date('2026-07-19T07:59:00.000Z'),
+        sessionSha256: 'a'.repeat(64),
+      },
+    ]);
+    await expect(verify()).resolves.toMatchObject({
+      userId: 'admin_synthetic',
+      sessionId: 'session_synthetic',
+      mfaEnabled: true,
+    });
+    expect(mocks.releaseQuery).toHaveBeenCalledTimes(1);
+    expect(mocks.findSession).not.toHaveBeenCalled();
   });
 
   it('rejects missing and mismatched current-session ownership', async () => {

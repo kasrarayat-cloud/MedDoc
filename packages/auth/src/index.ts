@@ -78,6 +78,12 @@ export class AuthError extends Error {
 // ---------------------------------------------------------------------------
 
 const cookieDomain = process.env.AUTH_COOKIE_DOMAIN?.trim();
+function usesDedicatedTemplateTwinSessionVerifier(): boolean {
+  return (
+    process.env.NODE_ENV === 'production' &&
+    process.env.QUILLMD_SERVICE_ROLE === 'template-twin-admin-control'
+  );
+}
 
 export const authConfig: NextAuthConfig = {
   providers: [],
@@ -229,7 +235,12 @@ export const authConfig: NextAuthConfig = {
       // ── Subsequent-request path — validate the existing sessionId ──
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const sessionId = (token as any).sessionId as string | undefined;
-      if (sessionId) {
+      // The isolated Template Twin control process deliberately has no raw
+      // user_sessions privilege. Its route gate immediately re-verifies this
+      // claim through a narrow SECURITY DEFINER function that cannot enumerate
+      // or mutate sessions. Do not make the shared callback request the broad
+      // runtime database credential merely to duplicate that closed check.
+      if (sessionId && !usesDedicatedTemplateTwinSessionVerifier()) {
         try {
           const { validateSession } = await import('./user-session');
           const valid = await validateSession(sessionId);

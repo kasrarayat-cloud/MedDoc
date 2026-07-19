@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest, NextResponse } from 'next/server';
 
 const mocks = vi.hoisted(() => ({
@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   hostAllowed: vi.fn(),
   verify: vi.fn(),
   logAudit: vi.fn(),
+  recordControlAccess: vi.fn(),
 }));
 
 vi.mock('@/lib/nextauth', () => ({ auth: mocks.auth }));
@@ -16,6 +17,12 @@ vi.mock('@/lib/admin-session-freshness', () => ({
   verifyFreshPlatformAdminSession: mocks.verify,
 }));
 vi.mock('@/lib/audit', () => ({ logAudit: mocks.logAudit }));
+vi.mock('@/lib/template-twin/release-control-access-audit', () => ({
+  recordTemplateTwinControlAccess: mocks.recordControlAccess,
+}));
+vi.mock('@/lib/template-twin/release-control-db', () => ({
+  TEMPLATE_TWIN_RELEASE_CONTROL_SERVICE_ROLE: 'template-twin-admin-control',
+}));
 
 import { adminApi, type AdminContext } from '../admin-api-gate';
 
@@ -43,6 +50,11 @@ beforeEach(() => {
     mfaVerifiedAt: new Date('2026-07-19T07:00:00.000Z'),
   });
   mocks.logAudit.mockResolvedValue(undefined);
+  mocks.recordControlAccess.mockResolvedValue(undefined);
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 describe('admin API gate', () => {
@@ -101,5 +113,38 @@ describe('admin API gate', () => {
     expect(await response.text()).toBe('Not Found');
     expect(handler).not.toHaveBeenCalled();
     expect(mocks.logAudit).not.toHaveBeenCalled();
+  });
+
+  it('uses the isolated outbox audit and fails closed if it cannot persist', async () => {
+    vi.stubEnv('QUILLMD_SERVICE_ROLE', 'template-twin-admin-control');
+    const handler = vi.fn(async () => NextResponse.json({ ok: true }));
+    const request = new NextRequest(
+      'https://admin.quillmd.com/api/admin/template-twin/releases',
+    );
+    const response = await adminApi(
+      'template-twin:releases:inspect',
+      handler,
+    )(request);
+    expect(response.status).toBe(200);
+    expect(mocks.recordControlAccess).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId: 'admin_synthetic',
+        routeKey: 'template-twin:releases:inspect',
+        request,
+      }),
+    );
+    expect(mocks.logAudit).not.toHaveBeenCalled();
+
+    mocks.recordControlAccess.mockRejectedValueOnce(new Error('unavailable'));
+    const blocked = await adminApi(
+      'template-twin:releases:inspect',
+      handler,
+    )(
+      new NextRequest(
+        'https://admin.quillmd.com/api/admin/template-twin/releases',
+      ),
+    );
+    expect(blocked.status).toBe(500);
+    expect(handler).toHaveBeenCalledTimes(1);
   });
 });
