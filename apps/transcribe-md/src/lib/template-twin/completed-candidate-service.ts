@@ -6,6 +6,7 @@ import prisma from "@meddoc/db";
 import { TemplateDocxError } from "@/lib/note-template-docx";
 
 import { enqueueTemplateTwinAudit } from "./audit-outbox";
+import { canonicalSha256 } from "./canonical";
 import {
   CompletedCandidateComparisonSchema,
   CompletedCandidateIdentitySchema,
@@ -274,7 +275,7 @@ export async function createCompletedCandidate(
               minimizedSha256: example.metadataEvidence.minimizedSha256,
               documentStructureSha256: converted.exampleStructureSha256,
               localPrivacyEvidenceSha256:
-                converted.privacyEvidence.evidenceSha256,
+                converted.privacyEvidence.exampleEvidenceSha256s[index]!,
             })),
           },
           regions: {
@@ -369,6 +370,13 @@ function requirePrivacy(value: unknown) {
     throw new CompletedCandidateServiceError(
       "PERSISTENCE_FAILED",
       "The candidate privacy evidence is invalid.",
+    );
+  }
+  const { evidenceSha256, ...receipt } = parsed.data;
+  if (canonicalSha256(receipt) !== evidenceSha256) {
+    throw new CompletedCandidateServiceError(
+      "PERSISTENCE_FAILED",
+      "The candidate privacy evidence digest is invalid.",
     );
   }
   return parsed.data;
@@ -614,7 +622,7 @@ export async function reviewCompletedCandidate(input: {
 
 export async function readApprovedCompletedCandidate(input: {
   candidateId: string;
-  actor: { userId: string; userEmail: string; practiceId: string };
+  actor: CompletedCandidateActor;
   storage?: TemplateTwinArtifactStore;
 }): Promise<Buffer> {
   const candidate = await prisma.templateTwinCompletedCandidate.findFirst({
@@ -658,6 +666,22 @@ export async function readApprovedCompletedCandidate(input: {
     expectedSizeBytes: candidate.candidateSizeBytes,
   });
   await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    // The object read is deliberately outside the transaction. Take the same
+    // global -> practice rollout locks used by other final claims afterwards,
+    // then re-check the candidate while those locks remain held. A disable can
+    // therefore never commit before this response is authorized and still let
+    // the bytes escape under a stale session token.
+    const rollout = await lockTemplateTwinRolloutForFinalClaim({
+      tx,
+      practiceId: input.actor.practiceId,
+      pinnedToken: input.actor.rolloutToken,
+    });
+    if (!rollout.allowed) {
+      throw new CompletedCandidateServiceError(
+        "ROLLOUT_CHANGED",
+        `${rollout.code}: Template Twin availability changed before the candidate download was authorized.`,
+      );
+    }
     const current = await tx.templateTwinCompletedCandidate.findFirst({
       where: {
         id: candidate.id,

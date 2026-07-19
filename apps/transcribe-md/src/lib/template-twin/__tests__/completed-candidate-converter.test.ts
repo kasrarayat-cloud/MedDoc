@@ -13,6 +13,8 @@ import {
   CompletedCandidateConversionError,
   convertCompletedDocumentsToCandidate,
 } from "../completed-candidate-converter";
+import { canonicalSha256 } from "../canonical";
+import { CompletedCandidatePrivacyEvidenceSchema } from "../completed-candidate-contract";
 
 const CONTENT_TYPES = `<?xml version="1.0" encoding="UTF-8"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -30,13 +32,15 @@ function documentXml(input: {
   plan: string;
   extraParagraph?: string;
   extraRow?: string;
+  findingRunProperties?: string;
+  findingRunsXml?: string;
 }): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
   <w:p><w:r><w:t>${COMPLETED_CANDIDATE_SYNTHETIC_SENTINEL}</w:t></w:r></w:p>
   ${input.extraParagraph ? `<w:p><w:r><w:t>${input.extraParagraph}</w:t></w:r></w:p>` : ""}
   <w:tbl><w:tblGrid><w:gridCol w:w="2400"/><w:gridCol w:w="4800"/></w:tblGrid>
-    <w:tr><w:tc><w:p><w:r><w:t>Finding</w:t></w:r></w:p></w:tc><w:tc><w:p><w:pPr><w:spacing w:after="0"/></w:pPr><w:r><w:t>${input.finding}</w:t></w:r></w:p></w:tc></w:tr>
+    <w:tr><w:tc><w:p><w:r><w:t>Finding</w:t></w:r></w:p></w:tc><w:tc><w:p><w:pPr><w:spacing w:after="0"/></w:pPr>${input.findingRunsXml ?? `<w:r>${input.findingRunProperties ?? ""}<w:t>${input.finding}</w:t></w:r>`}</w:p></w:tc></w:tr>
     <w:tr><w:tc><w:p><w:r><w:t>Plan</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>${input.plan}</w:t></w:r></w:p></w:tc></w:tr>
     ${input.extraRow ?? ""}
   </w:tbl><w:sectPr/>
@@ -82,6 +86,18 @@ describe("completed document to blank candidate conversion", () => {
       candidateFieldCount: 2,
     });
     expect(result.privacyEvidence.providerEgress).toBe(false);
+    expect(result.privacyEvidence).toMatchObject({
+      profileVersion: "completed-candidate-local-synthetic-privacy/1.1.0",
+      sourceBinding: "minimized-package-structure-visible-text-digests",
+    });
+    expect(result.privacyEvidence.exampleEvidenceSha256s).toHaveLength(2);
+    expect(new Set(result.privacyEvidence.exampleEvidenceSha256s).size).toBe(2);
+    expect(
+      CompletedCandidatePrivacyEvidenceSchema.safeParse(result.privacyEvidence)
+        .success,
+    ).toBe(true);
+    const { evidenceSha256, ...privacyReceipt } = result.privacyEvidence;
+    expect(evidenceSha256).toBe(canonicalSha256(privacyReceipt));
     expect(result.document.equals(first.document)).toBe(false);
     const candidateZip = await JSZip.loadAsync(result.document);
     const candidateXml = await candidateZip
@@ -117,6 +133,46 @@ describe("completed document to blank candidate conversion", () => {
     expect(second.candidateSha256).toBe(first.candidateSha256);
     expect(second.inventorySha256).toBe(first.inventorySha256);
     expect(second.regions).toEqual(first.regions);
+  });
+
+  it("preserves the exact unambiguous source run formatting in the blank control", async () => {
+    const runProperties = '<w:rPr><w:b/><w:sz w:val="56"/></w:rPr>';
+    const result = await convertCompletedDocumentsToCandidate([
+      await example({
+        finding: "Synthetic finding alpha",
+        plan: "Synthetic plan alpha",
+        findingRunProperties: runProperties,
+      }),
+      await example({
+        finding: "Synthetic finding beta",
+        plan: "Synthetic plan beta",
+        findingRunProperties: runProperties,
+      }),
+    ]);
+    const zip = await JSZip.loadAsync(result.document);
+    const xml = await zip.file("word/document.xml")!.async("string");
+
+    expect(xml).toContain(`<w:r>${runProperties}<w:t></w:t></w:r>`);
+    expect(xml).not.toContain("Synthetic finding alpha");
+  });
+
+  it("fails closed instead of merging differently formatted source runs", async () => {
+    await expect(
+      convertCompletedDocumentsToCandidate([
+        await example({
+          finding: "unused",
+          plan: "Synthetic plan",
+          findingRunsXml:
+            "<w:r><w:rPr><w:b/></w:rPr><w:t>Synthetic finding </w:t></w:r><w:r><w:t>alpha</w:t></w:r>",
+        }),
+        await example({
+          finding: "unused",
+          plan: "Synthetic plan",
+          findingRunsXml:
+            "<w:r><w:rPr><w:b/></w:rPr><w:t>Synthetic finding </w:t></w:r><w:r><w:t>beta</w:t></w:r>",
+        }),
+      ]),
+    ).rejects.toMatchObject({ code: "AMBIGUOUS_TABLE_CHANGE" });
   });
 
   it.each([

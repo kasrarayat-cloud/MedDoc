@@ -41,11 +41,13 @@ function review(
       candidateSummary: "New blank DOCX with two stable bindings",
     },
     privacy: {
-      profileVersion: "completed-candidate-local-synthetic-privacy/1.0.0",
+      profileVersion: "completed-candidate-local-synthetic-privacy/1.1.0",
       providerEgress: false,
       exampleCount: 2,
       sentinelVerified: true,
       structuredIdentifierClasses: [],
+      sourceBinding: "minimized-package-structure-visible-text-digests",
+      exampleEvidenceSha256s: ["f".repeat(64), "1".repeat(64)],
       evidenceSha256: "c".repeat(64),
     },
     regions: [

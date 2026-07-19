@@ -15,15 +15,41 @@ export const CompletedCandidateComparisonSchema = z
 export const CompletedCandidatePrivacyEvidenceSchema = z
   .object({
     profileVersion: z.literal(
-      "completed-candidate-local-synthetic-privacy/1.0.0",
+      "completed-candidate-local-synthetic-privacy/1.1.0",
     ),
     providerEgress: z.literal(false),
     exampleCount: z.number().int().min(2).max(3),
     sentinelVerified: z.literal(true),
     structuredIdentifierClasses: z.tuple([]),
+    sourceBinding: z.literal(
+      "minimized-package-structure-visible-text-digests",
+    ),
+    exampleEvidenceSha256s: z
+      .array(z.string().regex(/^[a-f0-9]{64}$/u))
+      .min(2)
+      .max(3),
     evidenceSha256: z.string().regex(/^[a-f0-9]{64}$/u),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if (value.exampleEvidenceSha256s.length !== value.exampleCount) {
+      context.addIssue({
+        code: "custom",
+        path: ["exampleEvidenceSha256s"],
+        message: "Every isolated example requires one privacy evidence hash.",
+      });
+    }
+    if (
+      new Set(value.exampleEvidenceSha256s).size !==
+      value.exampleEvidenceSha256s.length
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["exampleEvidenceSha256s"],
+        message: "Example privacy evidence hashes must be distinct.",
+      });
+    }
+  });
 
 export const CompletedCandidateIdentitySchema = z
   .object({

@@ -88,6 +88,7 @@ vi.mock("../storage", async (importOriginal) => {
 
 import {
   createCompletedCandidate,
+  readApprovedCompletedCandidate,
   reviewCompletedCandidate,
 } from "../completed-candidate-service";
 
@@ -156,11 +157,13 @@ describe("completed candidate service", () => {
         candidateSummary: "safe",
       },
       privacyEvidence: {
-        profileVersion: "completed-candidate-local-synthetic-privacy/1.0.0",
+        profileVersion: "completed-candidate-local-synthetic-privacy/1.1.0",
         providerEgress: false,
         exampleCount: 2,
         sentinelVerified: true,
         structuredIdentifierClasses: [],
+        sourceBinding: "minimized-package-structure-visible-text-digests",
+        exampleEvidenceSha256s: ["8".repeat(64), "9".repeat(64)],
         evidenceSha256: "e".repeat(64),
       },
       regions: [
@@ -245,6 +248,11 @@ describe("completed candidate service", () => {
         }),
       }),
     );
+    const createdExamples = mocks.candidateCreate.mock.calls[0]![0].data
+      .examples.create as Array<{ localPrivacyEvidenceSha256: string }>;
+    expect(
+      createdExamples.map((example) => example.localPrivacyEvidenceSha256),
+    ).toEqual(["8".repeat(64), "9".repeat(64)]);
   });
 
   it("requires every pending region exactly once and records a terminal rejection", async () => {
@@ -319,5 +327,85 @@ describe("completed candidate service", () => {
     });
     expect(mocks.regionUpdateMany).not.toHaveBeenCalled();
     expect(mocks.candidateUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("rechecks rollout under final locks after reading approved candidate bytes", async () => {
+    const bytes = Buffer.from("approved blank synthetic candidate");
+    mocks.candidateFindFirst
+      .mockResolvedValueOnce({
+        id: "candidate_synthetic",
+        practiceId: ACTOR.practiceId,
+        createdById: ACTOR.userId,
+        candidateObjectKey: "private/candidate.docx",
+        candidateObjectVersionId: "version-1",
+        candidateObjectEtag: "etag-1",
+        candidateSha256: CANDIDATE_SHA,
+        candidateSizeBytes: bytes.byteLength,
+        inventorySha256: INVENTORY_SHA,
+        _count: { regions: 1 },
+      })
+      .mockResolvedValueOnce({ id: "candidate_synthetic" });
+    const readCandidateArtifact = vi.fn().mockResolvedValue(bytes);
+    const storage = {
+      readCandidateArtifact,
+    } as unknown as TemplateTwinArtifactStore;
+
+    await expect(
+      readApprovedCompletedCandidate({
+        candidateId: "candidate_synthetic",
+        actor: ACTOR,
+        storage,
+      }),
+    ).resolves.toEqual(bytes);
+
+    expect(readCandidateArtifact.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.finalRollout.mock.invocationCallOrder.at(-1)!,
+    );
+    expect(mocks.finalRollout).toHaveBeenLastCalledWith({
+      tx,
+      practiceId: ACTOR.practiceId,
+      pinnedToken: ACTOR.rolloutToken,
+    });
+    expect(mocks.audit).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        action: "EXPORT_TEMPLATE_TWIN_CANDIDATE_DOCX_DOWNLOADED",
+      }),
+    );
+  });
+
+  it("returns no approved bytes when rollout changed during the object read", async () => {
+    const bytes = Buffer.from("approved blank synthetic candidate");
+    mocks.candidateFindFirst.mockResolvedValueOnce({
+      id: "candidate_synthetic",
+      practiceId: ACTOR.practiceId,
+      createdById: ACTOR.userId,
+      candidateObjectKey: "private/candidate.docx",
+      candidateObjectVersionId: "version-1",
+      candidateObjectEtag: "etag-1",
+      candidateSha256: CANDIDATE_SHA,
+      candidateSizeBytes: bytes.byteLength,
+      inventorySha256: INVENTORY_SHA,
+      _count: { regions: 1 },
+    });
+    const readCandidateArtifact = vi.fn().mockResolvedValue(bytes);
+    mocks.finalRollout.mockResolvedValueOnce({
+      allowed: false,
+      code: "GLOBAL_DISABLED",
+    });
+
+    await expect(
+      readApprovedCompletedCandidate({
+        candidateId: "candidate_synthetic",
+        actor: ACTOR,
+        storage: {
+          readCandidateArtifact,
+        } as unknown as TemplateTwinArtifactStore,
+      }),
+    ).rejects.toMatchObject({ code: "ROLLOUT_CHANGED" });
+
+    expect(readCandidateArtifact).toHaveBeenCalledTimes(1);
+    expect(mocks.audit).not.toHaveBeenCalled();
+    expect(mocks.candidateFindFirst).toHaveBeenCalledTimes(1);
   });
 });

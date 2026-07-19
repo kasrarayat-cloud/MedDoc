@@ -50,6 +50,7 @@ export async function GET(
         userId: session.user.id,
         userEmail: session.user.email,
         practiceId: session.user.practiceId,
+        rolloutToken: session.templateTwinRolloutToken,
       },
     });
     return new NextResponse(new Uint8Array(bytes), {
@@ -74,7 +75,14 @@ export async function GET(
       );
     }
     if (error instanceof CompletedCandidateServiceError) {
-      return failure(error.message, error.code === "NOT_FOUND" ? 404 : 503);
+      return failure(
+        error.message,
+        error.code === "NOT_FOUND"
+          ? 404
+          : error.code === "ROLLOUT_CHANGED"
+            ? 409
+            : 503,
+      );
     }
     return failure("The approved candidate could not be downloaded.", 500);
   }

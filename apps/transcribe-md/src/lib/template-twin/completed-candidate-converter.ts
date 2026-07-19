@@ -121,11 +121,13 @@ export interface CompletedCandidateComparison {
 }
 
 export interface CompletedCandidatePrivacyEvidence {
-  readonly profileVersion: "completed-candidate-local-synthetic-privacy/1.0.0";
+  readonly profileVersion: "completed-candidate-local-synthetic-privacy/1.1.0";
   readonly providerEgress: false;
   readonly exampleCount: number;
   readonly sentinelVerified: true;
   readonly structuredIdentifierClasses: readonly [];
+  readonly sourceBinding: "minimized-package-structure-visible-text-digests";
+  readonly exampleEvidenceSha256s: readonly string[];
   readonly evidenceSha256: string;
 }
 
@@ -158,6 +160,7 @@ interface InspectedExample {
   readonly blocks: readonly TextBlock[];
   readonly scan: ScannedXmlPart;
   readonly tableShape: readonly (readonly number[])[];
+  readonly localPrivacyEvidenceSha256: string;
 }
 
 function sha256(value: Uint8Array | string): string {
@@ -272,6 +275,7 @@ function assertSyntheticVisibleText(blocks: readonly TextBlock[]): void {
 
 function inspectExample(
   input: CompletedCandidateExampleInput,
+  ordinal: number,
 ): InspectedExample {
   const inspected = inspectDocxPackage(input.document);
   assertSupportedPackage(inspected);
@@ -328,22 +332,57 @@ function inspectExample(
   });
   assertSyntheticVisibleText(blocks);
 
+  const minimizedSha256 = inspected.sourceSha256;
+  const partsSha256 = packagePartsSha256(inspected);
+  const structureSha256 = documentStructureSha256(scan);
+  const privacyReceipt = {
+    profileVersion: "completed-candidate-local-synthetic-privacy/1.1.0",
+    ordinal,
+    providerEgress: false,
+    minimizedSha256,
+    packagePartsSha256: partsSha256,
+    documentStructureSha256: structureSha256,
+    visibleTextSha256: sha256(
+      blocks
+        .map((block) => block.text)
+        .filter(Boolean)
+        .join("\n"),
+    ),
+    sentinelVerified: true,
+    structuredIdentifierClasses: [] as const,
+  } as const;
+
   return {
     document: Buffer.from(input.document),
-    packagePartsSha256: packagePartsSha256(inspected),
-    documentStructureSha256: documentStructureSha256(scan),
+    packagePartsSha256: partsSha256,
+    documentStructureSha256: structureSha256,
     blocks,
     scan,
     tableShape,
+    localPrivacyEvidenceSha256: canonicalSha256(privacyReceipt),
   };
 }
 
-function assertScalarCellShape(cell: XmlElementSpan): XmlElementSpan {
+interface ScalarCellShape {
+  readonly paragraph: XmlElementSpan;
+  readonly runPropertiesXml: string;
+}
+
+function assertScalarCellShape(
+  cell: XmlElementSpan,
+  scan: ScannedXmlPart,
+): ScalarCellShape {
   const paragraphs = directWordChildren(cell, "p");
   if (paragraphs.length !== 1) {
     throw new CompletedCandidateConversionError("AMBIGUOUS_TABLE_CHANGE");
   }
   const paragraph = paragraphs[0]!;
+  const runs = directWordChildren(paragraph, "r");
+  if (runs.length !== 1) {
+    // Joining multiple runs would require a judgment about formatting and
+    // field boundaries. Completed-document conversion never makes it.
+    throw new CompletedCandidateConversionError("AMBIGUOUS_TABLE_CHANGE");
+  }
   for (const child of paragraph.children) {
     const local = xmlLocalName(child.name);
     if (child.namespaceUri === paragraph.namespaceUri && local === "pPr") {
@@ -362,7 +401,31 @@ function assertScalarCellShape(cell: XmlElementSpan): XmlElementSpan {
       }
     }
   }
-  return paragraph;
+  const run = runs[0]!;
+  const runChildren = run.children.filter(
+    (child) => child.namespaceUri === paragraph.namespaceUri,
+  );
+  const textNodes = runChildren.filter(
+    (child) => xmlLocalName(child.name) === "t",
+  );
+  const runProperties = runChildren.filter(
+    (child) => xmlLocalName(child.name) === "rPr",
+  );
+  if (
+    textNodes.length !== 1 ||
+    textNodes[0]!.children.length !== 0 ||
+    runProperties.length > 1 ||
+    (runProperties.length === 1 && runChildren[0] !== runProperties[0]) ||
+    runChildren.at(-1) !== textNodes[0]
+  ) {
+    throw new CompletedCandidateConversionError("AMBIGUOUS_TABLE_CHANGE");
+  }
+  return Object.freeze({
+    paragraph,
+    runPropertiesXml: runProperties[0]
+      ? scan.text.slice(runProperties[0].start, runProperties[0].end)
+      : "",
+  });
 }
 
 function stableRegion(input: {
@@ -410,7 +473,7 @@ function stableRegion(input: {
 
 function detectRegions(examples: readonly InspectedExample[]): {
   regions: CompletedCandidateRegion[];
-  paragraphs: Map<string, XmlElementSpan>;
+  scalarShapes: Map<string, ScalarCellShape>;
 } {
   const primary = examples[0]!;
   const blocksByExample = examples.map(
@@ -425,7 +488,7 @@ function detectRegions(examples: readonly InspectedExample[]): {
       ]),
   );
   const regions: CompletedCandidateRegion[] = [];
-  const paragraphs = new Map<string, XmlElementSpan>();
+  const scalarShapes = new Map<string, ScalarCellShape>();
   const labels = new Set<string>();
 
   for (const block of primary.blocks) {
@@ -476,7 +539,7 @@ function detectRegions(examples: readonly InspectedExample[]): {
     if (!primaryCell) {
       throw new CompletedCandidateConversionError("STRUCTURE_MISMATCH");
     }
-    const paragraph = assertScalarCellShape(primaryCell.span);
+    const scalarShape = assertScalarCellShape(primaryCell.span, primary.scan);
     const region = stableRegion({
       label,
       block: primaryCell,
@@ -484,12 +547,12 @@ function detectRegions(examples: readonly InspectedExample[]): {
       displayOrder: regions.length,
     });
     regions.push(region);
-    paragraphs.set(region.regionId, paragraph);
+    scalarShapes.set(region.regionId, scalarShape);
   }
   if (regions.length === 0) {
     throw new CompletedCandidateConversionError("NO_DETERMINISTIC_REGIONS");
   }
-  return { regions, paragraphs };
+  return { regions, scalarShapes };
 }
 
 function escapeXmlAttribute(value: string): string {
@@ -503,6 +566,7 @@ function escapeXmlAttribute(value: string): string {
 function contentControlXml(
   paragraph: XmlElementSpan,
   region: CompletedCandidateRegion,
+  runPropertiesXml: string,
 ): string {
   const prefix = paragraph.name.includes(":")
     ? `${paragraph.name.slice(0, paragraph.name.indexOf(":"))}:`
@@ -510,26 +574,27 @@ function contentControlXml(
   const w = (name: string) => `${prefix}${name}`;
   const alias = escapeXmlAttribute(region.label);
   const tag = escapeXmlAttribute(region.candidateTag);
-  return `<${w("sdt")}><${w("sdtPr")}><${w("alias")} ${w("val")}="${alias}"/><${w("tag")} ${w("val")}="${tag}"/><${w("id")} ${w("val")}="${region.candidateSdtId}"/><${w("text")}/></${w("sdtPr")}><${w("sdtContent")}><${w("r")}><${w("t")}></${w("t")}></${w("r")}></${w("sdtContent")}></${w("sdt")}>`;
+  return `<${w("sdt")}><${w("sdtPr")}><${w("alias")} ${w("val")}="${alias}"/><${w("tag")} ${w("val")}="${tag}"/><${w("id")} ${w("val")}="${region.candidateSdtId}"/><${w("text")}/></${w("sdtPr")}><${w("sdtContent")}><${w("r")}>${runPropertiesXml}<${w("t")}></${w("t")}></${w("r")}></${w("sdtContent")}></${w("sdt")}>`;
 }
 
 async function generateCandidate(input: {
   primary: InspectedExample;
   regions: readonly CompletedCandidateRegion[];
-  paragraphs: ReadonlyMap<string, XmlElementSpan>;
+  scalarShapes: ReadonlyMap<string, ScalarCellShape>;
 }): Promise<Buffer> {
   const patches: ApprovedXmlPatch[] = input.regions.map((region) => {
-    const paragraph = input.paragraphs.get(region.regionId);
-    if (!paragraph) {
+    const scalarShape = input.scalarShapes.get(region.regionId);
+    if (!scalarShape) {
       throw new CompletedCandidateConversionError(
         "CANDIDATE_GENERATION_FAILED",
       );
     }
+    const { paragraph, runPropertiesXml } = scalarShape;
     const properties = directWordChild(paragraph, "pPr");
     return {
       start: properties?.end ?? paragraph.startTagEnd,
       end: paragraph.endTagStart,
-      replacement: contentControlXml(paragraph, region),
+      replacement: contentControlXml(paragraph, region, runPropertiesXml),
       fieldIds: [region.regionId],
       kind: "field_content" as const,
     };
@@ -571,7 +636,9 @@ export async function convertCompletedDocumentsToCandidate(
   if (inputs.length < 2 || inputs.length > 3) {
     throw new CompletedCandidateConversionError("EXAMPLE_COUNT_UNSUPPORTED");
   }
-  const examples = inputs.map(inspectExample);
+  const examples = inputs.map((input, index) =>
+    inspectExample(input, index + 1),
+  );
   const primary = examples[0]!;
   for (const example of examples.slice(1)) {
     if (
@@ -590,10 +657,10 @@ export async function convertCompletedDocumentsToCandidate(
     }
   }
 
-  const { regions, paragraphs } = detectRegions(examples);
+  const { regions, scalarShapes } = detectRegions(examples);
   let document: Buffer;
   try {
-    document = await generateCandidate({ primary, regions, paragraphs });
+    document = await generateCandidate({ primary, regions, scalarShapes });
     const compiled = compileTemplateDocx(document);
     const tags = new Set(regions.map((region) => region.candidateTag));
     if (
@@ -623,11 +690,16 @@ export async function convertCompletedDocumentsToCandidate(
     });
     const privacyReceipt = {
       profileVersion:
-        "completed-candidate-local-synthetic-privacy/1.0.0" as const,
+        "completed-candidate-local-synthetic-privacy/1.1.0" as const,
       providerEgress: false as const,
       exampleCount: examples.length,
       sentinelVerified: true as const,
       structuredIdentifierClasses: [] as const,
+      sourceBinding:
+        "minimized-package-structure-visible-text-digests" as const,
+      exampleEvidenceSha256s: examples.map(
+        (example) => example.localPrivacyEvidenceSha256,
+      ),
     };
     return Object.freeze({
       document,
