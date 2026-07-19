@@ -41,8 +41,12 @@ Compose project; that stack and its volumes were removed after validation.
 ```mermaid
 flowchart TD
     A[Physician uploads named, scoped blank DOCX] --> R0[Global and practice rollout gates]
-    R0 --> B[Bounded multipart and deterministic package/security compiler]
-    B -->|rejected| Q[Metadata-only quarantine record]
+    R0 --> Q0[Bounded raw-byte capture in private immutable quarantine]
+    Q0 --> M0[Local ClamAV scan with current readiness lease]
+    M0 -->|unavailable or infected| Q[Terminal rejected quarantine record; raw object retained by policy]
+    M0 -->|clean| M1[Deterministic identifying-metadata minimization]
+    M1 --> B[Bounded package/security inspection and compiler]
+    B -->|rejected| Q
     B -->|accepted| C[TemplateDocIR + exact renderer bindings + unsupported register]
     C --> D[Fail-closed template PHI gate]
     D -->|rejected| Q
@@ -155,7 +159,7 @@ This is application and database immutability. Storage administrators remain a p
 
 ## Untrusted-document defenses
 
-Every uploaded file is treated as an untrusted ZIP/OOXML package. The upload route first enforces same-origin mutation, authenticated physician ownership, `.docx` extension, allowed MIME, non-empty bytes, and a 10 MiB source limit. It reads the request stream through a hard multipart byte ceiling before calling `formData()`, so missing, false, or chunked `Content-Length` cannot bypass the limit. The compiler then performs its own byte-level checks and does not trust the filename or browser MIME.
+Every uploaded file is treated as an untrusted ZIP/OOXML package. The upload route first enforces same-origin mutation, authenticated physician ownership, `.docx` extension, allowed MIME, non-empty bytes, and a 10 MiB source limit. It reads the request stream through a hard multipart byte ceiling before calling `formData()`, so missing, false, or chunked `Content-Length` cannot bypass the limit. The exact raw bytes are captured under a private tenant-scoped quarantine key and claimed by the object ledger before any parsing, model use, compilation, or source admission. A current local ClamAV scan receipt and deterministic metadata-minimization receipt are then required. Only the minimized bytes can proceed to package inspection and compilation; the compiler still performs its own byte-level checks and does not trust the filename or browser MIME.
 
 Default compiler limits include 512 entries, 16 MiB per expanded entry, 64 MiB total expanded content, a 100:1 maximum compression ratio, 12 MiB per parsed XML part, XML depth 128, 2,000 fields, 500 tables, and 10,000 structural nodes. Artifact reads/writes have a separate 25 MiB ceiling; source uploads remain subject to the stricter 10 MiB limit.
 
@@ -182,7 +186,7 @@ instructions (`DATE`, page/section counters, time, and Word form-field
 instructions); DDE/DDEAUTO, INCLUDETEXT, INCLUDEPICTURE, DATABASE, LINK, and
 every other unapproved instruction fail package inspection.
 
-Rejected bytes are not stored. A metadata-only quarantine row may retain the digest, size, tenant/uploader, and a safe rejection code. Quarantine failures do not make an unsafe document acceptable.
+Rejected raw bytes remain in the private immutable quarantine namespace with their exact object-provider identity, digest, size, tenant/uploader lineage, terminal rejection codes, and PHI-free audit intent. Request paths cannot read them back, compile them, admit them as a source, activate them, or delete them. Retention, legal hold, account-deletion treatment, and eventual privileged deletion remain Privacy/Legal and Operations decisions; until those are approved, the object ledger retains the bytes. A quarantine failure never makes an unsafe document acceptable.
 
 Before source storage, the privacy inventory includes text nodes (including
 tracked-deleted `w:delText`), every bounded non-namespace XML attribute,
@@ -238,9 +242,11 @@ privacy-relevant part text to the configured Anthropic clinical model;
 therefore the appropriate vendor agreement, approved data handling, and
 zero/limited-retention configuration are prerequisites. Provider failure,
 uncertainty, over-limit text, suspected prompt injection, unscannable content,
-or possible patient-specific content rejects the upload before immutable
-storage. Rejected bytes are discarded; only digest, size, tenant/uploader,
-safe rejection code, and durable audit intent may be retained.
+or possible patient-specific content rejects the upload before admitted-source
+storage, certification, or activation. The already captured raw quarantine
+object remains isolated and cannot be returned through a request path; its
+retention or deletion follows the separately approved object-ledger, legal-hold,
+and account-deletion policy rather than an implicit discard.
 An accepted immutable source also stores strict, PHI-safe scan provenance:
 scanner profile, provider/model identifier, scan timestamp, scanned-part
 count, and canonical hashes/counts for the exact practice approval set and
