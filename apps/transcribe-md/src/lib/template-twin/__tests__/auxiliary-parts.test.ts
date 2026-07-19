@@ -308,7 +308,7 @@ describe('safe standard Word glossary/auxiliary inspection', () => {
   it('rejects unknown Word elements and non-text-element character data', async () => {
     const unknownWordElement = await glossaryDocx({
       extraEntries: {
-        'word/glossary/settings.xml': `<w:settings xmlns:w="${W}"><w:mailMerge/></w:settings>`,
+        'word/glossary/settings.xml': `<w:settings xmlns:w="${W}"><w:syntheticUnknown/></w:settings>`,
       },
     });
     expect(() =>

@@ -67,7 +67,7 @@ describe("Template Twin audit-gate schema contract", () => {
     expect(waiver).toMatch(/waivedById\s+String/);
     expect(waiver).toMatch(/reason\s+String/);
     expect(waiver).toMatch(
-      /@@unique\(\[compiledVersionId, fieldId, mappingsSha256\]\)/,
+      /@@unique\(\[compiledVersionId, fieldId, mappingsSha256\](?:,\s*map:\s*"template_twin_waiver_compiled_field_mapping_key")?\)/,
     );
   });
 
