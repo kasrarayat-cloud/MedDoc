@@ -87,6 +87,15 @@ app.quillmd.com {
 
     import security_headers_mode_b
 
+    # The physician host and platform-admin host share one Next.js process,
+    # but not one authorization surface. Refuse admin pages and APIs before a
+    # request can reach the application. The app repeats this check using the
+    # accepted Host value for direct-container defense.
+    @appAdminSurface path /admin /admin/* /api/admin /api/admin/*
+    handle @appAdminSurface {
+        respond "Not Found" 404
+    }
+
     # Temporary design-review preview. Serves /opt/meddoc-pro/_design-
     # references/ at /_preview/*. `handle` is exclusive — these requests
     # never hit the reverse_proxy below. Remove with the matching volume
@@ -97,11 +106,13 @@ app.quillmd.com {
         file_server browse
     }
 
-    reverse_proxy transcribe-md:3011 {
-        header_up Host {host}
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
-        header_up X-Forwarded-Proto {scheme}
+    handle {
+        reverse_proxy transcribe-md:3011 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
     }
 }
 
@@ -153,6 +164,19 @@ admin.quillmd.com {
         }
     }
 
+    # MFA recovery/enrollment is the sole physician-settings capability on the
+    # admin host. A valid SUPER_ADMIN without MFA is routed here before any
+    # administrative page can render.
+    @mfaApi path /api/mfa/enroll /api/mfa/verify-enrollment /api/mfa/disable
+    handle @mfaApi {
+        reverse_proxy transcribe-md:3011 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
     # Admin REST + SSE
     @adminApi path /api/admin/*
     handle @adminApi {
@@ -181,6 +205,16 @@ admin.quillmd.com {
     # super-admins are provisioned out-of-band, never via self-service.
     @authPages path /login /forgot-password /reset-password /check-email
     handle @authPages {
+        reverse_proxy transcribe-md:3011 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    @mfaPage path /settings/security/mfa
+    handle @mfaPage {
         reverse_proxy transcribe-md:3011 {
             header_up Host {host}
             header_up X-Real-IP {remote_host}

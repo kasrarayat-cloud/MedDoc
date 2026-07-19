@@ -164,6 +164,7 @@ services:
       AUTH_URL: http://localhost:9020
       NEXTAUTH_URL: http://localhost:9020
       AUTH_TRUST_HOST: "true"
+      ADMIN_PUBLIC_HOST: localhost
       AUTH_SECRET: *qa-secret
       NEXTAUTH_SECRET: *qa-secret
       MINIO_ENDPOINT: minio:9000

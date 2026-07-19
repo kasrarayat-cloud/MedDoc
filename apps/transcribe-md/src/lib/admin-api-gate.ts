@@ -3,13 +3,15 @@
 // ----------------------------------------------------------------------------
 // Common contract for the new admin endpoints:
 //
-//   1. Read the session via auth(). Look up `Product.SUPER_ADMIN` in
-//      the user's products[] (falling back to a Prisma read when
-//      the JWT doesn't carry products).
-//   2. If absent — return a 404 with an empty body. We deliberately
+//   1. Require the dedicated admin host and read the cookie session via auth().
+//   2. Re-check the matching database session, account lifecycle, current
+//      SUPER_ADMIN product entitlement, expiry/freshness, force-logout marker,
+//      and verified MFA. The ordinary JWT callback may fail open for clinician
+//      availability; this gate never does.
+//   3. If any check fails — return a 404. We deliberately
 //      don't 401/403, to avoid revealing the route exists. Same
 //      posture as /admin/* page rendering (notFound() in layout.tsx).
-//   3. If present — write an ADMIN_API_ACCESS audit row tagged with
+//   4. If present — write an ADMIN_API_ACCESS audit row tagged with
 //      the route name + method, then call the handler.
 //
 // The handler runs with the verified session and a reference to the
@@ -24,12 +26,10 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-import prisma from '@meddoc/db';
-import { Product } from '@prisma/client';
-
 import { auth } from '@/lib/nextauth';
 import { logAudit } from '@/lib/audit';
-import { isAdminSessionStale } from '@/lib/admin-session-freshness';
+import { isAdminRequestHost } from '@/lib/admin-host';
+import { verifyFreshPlatformAdminSession } from '@/lib/admin-session-freshness';
 
 /** What admin handlers actually need — slim subset of the next-auth
  *  session. The full app `Session` from @meddoc/auth requires
@@ -53,7 +53,7 @@ export interface AdminContext {
 
 type AdminHandler = (
   req: NextRequest,
-  ctx: AdminContext
+  ctx: AdminContext,
 ) => Promise<NextResponse | Response> | NextResponse | Response;
 
 /** 404 response, identical body across all admin routes so a probing
@@ -65,39 +65,25 @@ function notFoundResponse(): NextResponse {
 
 export function adminApi(
   routeKey: string,
-  handler: AdminHandler
+  handler: AdminHandler,
 ): (req: NextRequest) => Promise<NextResponse | Response> {
   return async (req: NextRequest) => {
+    if (!isAdminRequestHost(req.headers)) return notFoundResponse();
+
     const sessionOrNull = await auth().catch(() => null);
     if (!sessionOrNull?.user?.id) return notFoundResponse();
-
-    // Re-check products from DB so a stale JWT can't grant access
-    // after a SUPER_ADMIN revocation. Cheap (indexed PK lookup).
-    const userRow = await prisma.user.findUnique({
-      where: { id: sessionOrNull.user.id },
-      select: { products: true, isActive: true },
+    const verified = await verifyFreshPlatformAdminSession({
+      claimedUserId: sessionOrNull.user.id,
+      sessionId: sessionOrNull.user.sessionId,
     });
-    if (!userRow || !userRow.isActive) return notFoundResponse();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const products = (userRow.products as any[] | undefined) ?? [];
-    if (!products.includes(Product.SUPER_ADMIN)) return notFoundResponse();
+    if (!verified) return notFoundResponse();
 
-    // Phase 19 — h16-admin-session-7day. Reject admin API calls on
-    // sessions older than 12 h even though the cookie stays valid
-    // for the consumer-doctor flow. Forces a fresh re-auth on this
-    // surface specifically.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sessionId = (sessionOrNull.user as any).sessionId as string | undefined;
-    if (await isAdminSessionStale(sessionId)) return notFoundResponse();
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const u = sessionOrNull.user as any;
     const session: AdminSession = {
       user: {
-        id: u.id,
-        email: u.email ?? null,
-        role: u.role ?? null,
-        practiceId: u.practiceId ?? null,
+        id: verified.userId,
+        email: verified.email,
+        role: verified.role,
+        practiceId: verified.practiceId,
       },
     };
 
@@ -117,12 +103,12 @@ export function adminApi(
     } catch (err) {
       console.error(
         `[admin-api:${routeKey}] handler threw:`,
-        err instanceof Error ? err.message : err
+        err instanceof Error ? err.message : err,
       );
       // Generic 500 — don't expose stack traces.
       return NextResponse.json(
         { error: 'Internal server error' },
-        { status: 500 }
+        { status: 500 },
       );
     }
   };

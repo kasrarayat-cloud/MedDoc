@@ -581,6 +581,7 @@ services:
       NEXTAUTH_URL: ${TRANSCRIBE_MD_AUTH_URL:-http://5.231.107.93:9020}
       AUTH_COOKIE_DOMAIN: ${AUTH_COOKIE_DOMAIN:-}
       AUTH_TRUST_HOST: "true"
+      ADMIN_PUBLIC_HOST: ${ADMIN_PUBLIC_HOST:-admin.quillmd.com}
       NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL: ${TRANSCRIBE_MD_AUTH_URL:-http://5.231.107.93:9020}
       NEXT_PUBLIC_MARKETING_URL: ${MARKETING_URL:-http://5.231.107.93:9010}
       # T-M4 — web container enqueues jobs + stores uploaded audio.

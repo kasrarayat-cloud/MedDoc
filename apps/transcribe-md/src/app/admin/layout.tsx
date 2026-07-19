@@ -13,18 +13,19 @@
 // Product-level entitlement; the intersection is not empty but the
 // permissions aren't identical — a practice ADMIN is not a SUPER_ADMIN.
 //
-// Defense-in-depth: the auth() call below is a server-side read of the
-// JWT cookie; the Product.SUPER_ADMIN presence is re-checked on every
-// request. No cached-layout bypass is possible.
+// Defense-in-depth: the dedicated Host, current database session ownership,
+// account lifecycle, Product.SUPER_ADMIN presence, freshness/expiry,
+// force-logout marker, and MFA state are re-checked on every request. No
+// cached-layout or ordinary-JWT availability fallback grants admin access.
 // ============================================================================
 
 import { headers } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 
-import { Product } from '@prisma/client';
 import { auth } from '@/lib/nextauth';
 import { logAudit } from '@/lib/audit';
-import { isAdminSessionStale } from '@/lib/admin-session-freshness';
+import { isAdminRequestHost } from '@/lib/admin-host';
+import { verifyFreshPlatformAdminSession } from '@/lib/admin-session-freshness';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -41,30 +42,16 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const session = await auth();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const products = (session?.user as any)?.products as string[] | undefined;
+  const h = await headers();
+  if (!isAdminRequestHost(h)) notFound();
 
-  // `products` isn't in the NextAuth session shape today — fall back to
-  // a DB read when the JWT doesn't carry it. Same strategy as Phase 1B
-  // admin APIs will use; kept local to the layout so we don't leak the
-  // Prisma dependency into every admin page.
-  let hasSuperAdmin = products?.includes(Product.SUPER_ADMIN) ?? false;
-  if (!hasSuperAdmin && session?.user?.id) {
-    const prisma = (await import('@meddoc/db')).default;
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { products: true },
-    });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    hasSuperAdmin = (user?.products as any[] | undefined)?.includes(
-      Product.SUPER_ADMIN
-    ) ?? false;
-  }
-
-  if (!hasSuperAdmin) {
-    notFound();
-  }
+  const session = await auth().catch(() => null);
+  const verified = await verifyFreshPlatformAdminSession({
+    claimedUserId: session?.user?.id,
+    sessionId: session?.user?.sessionId,
+    requireMfa: false,
+  });
+  if (!verified) notFound();
 
   // SUPER_ADMIN MFA gate (closes shadow-audit HIPAA_FINDING_001).
   // SUPER_ADMINs MUST have MFA enrolled before reaching any /admin/*
@@ -74,33 +61,19 @@ export default async function AdminLayout({
   // point + already known to be SUPER_ADMIN). DB read is fresh — we
   // don't trust a JWT-cached mfaEnabled flag because enrollment
   // happens in-session.
-  if (session?.user?.id) {
-    const prismaForMfa = (await import('@meddoc/db')).default;
-    const mfaUser = await prismaForMfa.user.findUnique({
-      where: { id: session.user.id },
-      select: { mfaEnabled: true },
-    });
-    if (!mfaUser?.mfaEnabled) {
-      redirect('/settings/security/mfa?reason=super_admin_required');
-    }
+  if (!verified.mfaEnabled || !verified.mfaVerifiedAt) {
+    redirect('/settings/security/mfa?reason=super_admin_required');
   }
 
   // Phase 19 — h16-admin-session-7day. Cookie itself stays 7 days
   // (so app.quillmd.com doesn't bounce doctors hourly), but admin
   // pages enforce a 12-h freshness ceiling on top of the SUPER_ADMIN
   // gate. Stale → notFound (same disclosure-minimising posture).
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sessionId = (session?.user as any)?.sessionId as string | undefined;
-  if (await isAdminSessionStale(sessionId)) {
-    notFound();
-  }
-
   // "Who watched the watcher" audit — every /admin/* render by a
   // SUPER_ADMIN gets a row. Path resolves from the Next-URL header
   // (populated by the Next.js runtime on every RSC request); falls
   // back to the bare `/admin` when that header isn't set (shouldn't
   // happen in production but keeps the audit call best-effort).
-  const h = await headers();
   const nextUrlHeader =
     h.get('next-url') ??
     h.get('x-invoke-path') ??
