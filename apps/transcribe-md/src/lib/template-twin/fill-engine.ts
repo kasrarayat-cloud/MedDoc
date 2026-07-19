@@ -1448,7 +1448,11 @@ export async function processTemplateTwinVisit(
             stagingAttemptRejected: null,
           } as const;
         },
-        { isolationLevel: "Serializable" },
+        // The database's cross-table physician/tenant lineage guard uses a
+        // shared advisory gate and a post-wait READ COMMITTED snapshot. Row
+        // locks plus the unique visit fill and optimistic manifest claims
+        // retain the transaction's existing concurrency boundaries.
+        { isolationLevel: "ReadCommitted" },
       );
       if (createdResult.soapBindingStale) {
         throw new TemplateTwinFillError(

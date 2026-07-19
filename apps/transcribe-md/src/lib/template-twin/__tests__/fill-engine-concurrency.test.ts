@@ -345,6 +345,9 @@ describe("Template Twin worker provenance and manifest concurrency", () => {
         }),
       }),
     );
+    expect(mocks.transaction).toHaveBeenLastCalledWith(expect.any(Function), {
+      isolationLevel: "ReadCommitted",
+    });
     expect(outputWrites).toBe(0);
   });
 

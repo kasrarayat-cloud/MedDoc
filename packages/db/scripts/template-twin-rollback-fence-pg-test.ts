@@ -11,7 +11,14 @@ import { drainTemplateTwinAuditOutbox } from "../../../apps/transcribe-md/src/li
 import { lockTemplateTwinRolloutForFinalClaim } from "../../../apps/transcribe-md/src/lib/template-twin/rollout";
 
 const PRACTICE_ID = "synthetic-rollback-fence-practice";
+const OTHER_PRACTICE_ID = "synthetic-rollback-fence-other-practice";
 const ACTOR_ID = "synthetic-rollback-fence-admin";
+const PHYSICIAN_ID = "synthetic-rollback-fence-physician";
+const RACE_PHYSICIAN_ID = "synthetic-rollback-fence-race-physician";
+const SAME_PRACTICE_PHYSICIAN_ID =
+  "synthetic-rollback-fence-same-practice-physician";
+const OTHER_PRACTICE_PHYSICIAN_ID =
+  "synthetic-rollback-fence-other-practice-physician";
 const ORDINARY_TEMPLATE_ID = "synthetic-ordinary-template";
 const INACTIVE_TWIN_TEMPLATE_ID = "synthetic-inactive-twin-template";
 const TWIN_SOURCE_ID = "synthetic-rollback-fence-twin-source";
@@ -20,6 +27,10 @@ const TWIN_FILL_ID = "synthetic-rollback-fence-twin-fill";
 const PATIENT_ID = "synthetic-rollback-fence-patient";
 const VISIT_ID = "synthetic-rollback-fence-visit";
 const TWIN_VISIT_ID = "synthetic-rollback-fence-twin-visit";
+const SIGNED_TWIN_VISIT_ID = "synthetic-rollback-fence-signed-twin-visit";
+const SIGNED_TWIN_FILL_ID = "synthetic-rollback-fence-signed-twin-fill";
+const RACE_TWIN_VISIT_ID = "synthetic-rollback-fence-race-twin-visit";
+const RACE_TWIN_FILL_ID = "synthetic-rollback-fence-race-twin-fill";
 const SYNTHETIC_SHA256 = "a".repeat(64);
 const PREPARE_CANCEL_ID = "573250ae-77b6-4dc7-920d-82f82ac8887c";
 const REVOKE_ID = "bd5c7de8-3490-4aee-a16e-3bb74e3dd072";
@@ -80,6 +91,50 @@ async function expectAnyDatabaseRejection(
   );
 }
 
+async function waitForAdvisoryWaiter(
+  observer: Client,
+  blockedClient: Client,
+  description: string,
+): Promise<void> {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    const result = await observer.query<{ waiting: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1 FROM pg_locks
+         WHERE pid = $1 AND locktype = 'advisory' AND NOT granted
+       ) AS waiting`,
+      [blockedClient.processID],
+    );
+    if (result.rows[0]?.waiting) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`Timed out waiting for ${description}.`);
+}
+
+async function insertRaceFill(client: Client): Promise<void> {
+  await client.query(
+    `INSERT INTO "template_twin_fill_manifests" (
+       "id", "practiceId", "visitId", "compiledVersionId",
+       "noteTemplateId", "noteTemplateVersion", "compilerVersion",
+       "resolverVersion", "rendererVersion", "status", "fillManifest",
+       "manifestSha256", "factSetSha256", "validationResult",
+       "createdAt", "updatedAt"
+     ) VALUES (
+       $1, $2, $3, $4, $5, 1, 'synthetic-compiler-v1',
+       'synthetic-resolver-v1', 'synthetic-renderer-v1', 'FAILED',
+       '{"synthetic":true}'::jsonb, $6, $6,
+       '{"synthetic":true}'::jsonb, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+     )`,
+    [
+      RACE_TWIN_FILL_ID,
+      PRACTICE_ID,
+      RACE_TWIN_VISIT_ID,
+      TWIN_COMPILED_ID,
+      INACTIVE_TWIN_TEMPLATE_ID,
+      SYNTHETIC_SHA256,
+    ],
+  );
+}
+
 async function main(): Promise<void> {
   assertDisposableDatabase();
   const existing = await prisma.$queryRaw<Array<{ count: bigint }>>`
@@ -103,6 +158,16 @@ async function main(): Promise<void> {
       )
     `;
     await tx.$executeRaw`
+      INSERT INTO "practices" (
+        "id", "name", "slug", "templateTwinEnabled",
+        "templateTwinRolloutGeneration", "createdAt", "updatedAt"
+      ) VALUES (
+        ${OTHER_PRACTICE_ID}, 'Synthetic Other Practice',
+        'synthetic-rollback-fence-other-practice', false, 1,
+        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      )
+    `;
+    await tx.$executeRaw`
       INSERT INTO "users" (
         "id", "email", "name", "passwordHash", "role", "isActive",
         "practiceId", "products", "createdAt", "updatedAt"
@@ -113,6 +178,28 @@ async function main(): Promise<void> {
         ARRAY['TRANSCRIBE_MD', 'SUPER_ADMIN']::"Product"[],
         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
       )
+    `;
+    await tx.$executeRaw`
+      INSERT INTO "users" (
+        "id", "email", "name", "passwordHash", "role", "isActive",
+        "practiceId", "products", "createdAt", "updatedAt"
+      ) VALUES
+        (${PHYSICIAN_ID}, 'rollback-physician@synthetic.test',
+         'Synthetic Rollback Physician', 'INVALID_SYNTHETIC_PASSWORD_HASH',
+         'DOCTOR', true, ${PRACTICE_ID}, ARRAY['TRANSCRIBE_MD']::"Product"[],
+         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+        (${RACE_PHYSICIAN_ID}, 'rollback-race@synthetic.test',
+         'Synthetic Rollback Race Physician', 'INVALID_SYNTHETIC_PASSWORD_HASH',
+         'DOCTOR', true, ${PRACTICE_ID}, ARRAY['TRANSCRIBE_MD']::"Product"[],
+         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+        (${SAME_PRACTICE_PHYSICIAN_ID}, 'rollback-peer@synthetic.test',
+         'Synthetic Same Practice Physician', 'INVALID_SYNTHETIC_PASSWORD_HASH',
+         'DOCTOR', true, ${PRACTICE_ID}, ARRAY['TRANSCRIBE_MD']::"Product"[],
+         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+        (${OTHER_PRACTICE_PHYSICIAN_ID}, 'rollback-other@synthetic.test',
+         'Synthetic Other Practice Physician', 'INVALID_SYNTHETIC_PASSWORD_HASH',
+         'DOCTOR', true, ${OTHER_PRACTICE_ID}, ARRAY['TRANSCRIBE_MD']::"Product"[],
+         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `;
     await tx.$executeRaw`
       INSERT INTO "note_templates" (
@@ -188,10 +275,22 @@ async function main(): Promise<void> {
         "id", "userId", "patientId", "specialty", "inputMode", "status",
         "noteTemplateId", "noteTemplateVersion", "createdAt", "updatedAt"
       ) VALUES (
-        ${TWIN_VISIT_ID}, ${ACTOR_ID}, ${PATIENT_ID}, 'synthetic', 'text_notes',
+        ${TWIN_VISIT_ID}, ${PHYSICIAN_ID}, ${PATIENT_ID}, 'synthetic', 'text_notes',
         'QUEUED', ${INACTIVE_TWIN_TEMPLATE_ID}, 1,
         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
       )
+    `;
+    await tx.$executeRaw`
+      INSERT INTO "transcribe_visits" (
+        "id", "userId", "patientId", "specialty", "inputMode", "status",
+        "noteTemplateId", "noteTemplateVersion", "createdAt", "updatedAt"
+      ) VALUES
+        (${SIGNED_TWIN_VISIT_ID}, ${PHYSICIAN_ID}, ${PATIENT_ID}, 'synthetic',
+         'text_notes', 'FAILED', ${INACTIVE_TWIN_TEMPLATE_ID}, 1,
+         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+        (${RACE_TWIN_VISIT_ID}, ${RACE_PHYSICIAN_ID}, ${PATIENT_ID}, 'synthetic',
+         'text_notes', 'FAILED', ${INACTIVE_TWIN_TEMPLATE_ID}, 1,
+         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `;
     // A terminal-but-unsigned fill hides its nonterminal Twin visit from the
     // pinned-without-fill inventory. Reassigning it after PREPARE used to
@@ -212,12 +311,119 @@ async function main(): Promise<void> {
       )
     `;
     await tx.$executeRaw`
+      INSERT INTO "template_twin_fill_manifests" (
+        "id", "practiceId", "visitId", "compiledVersionId",
+        "noteTemplateId", "noteTemplateVersion", "compilerVersion",
+        "resolverVersion", "rendererVersion", "status", "fillManifest",
+        "manifestSha256", "factSetSha256", "soapVersion", "soapSha256",
+        "validationResult", "pinnedGlobalRolloutGeneration",
+        "pinnedPracticeRolloutGeneration", "signedGlobalRolloutGeneration",
+        "signedPracticeRolloutGeneration", "signedDecisionAt",
+        "createdAt", "updatedAt"
+      ) VALUES (
+        ${SIGNED_TWIN_FILL_ID}, ${PRACTICE_ID}, ${SIGNED_TWIN_VISIT_ID},
+        ${TWIN_COMPILED_ID}, ${INACTIVE_TWIN_TEMPLATE_ID}, 1,
+        'synthetic-compiler-v1', 'synthetic-resolver-v1',
+        'synthetic-renderer-v1', 'SIGNED', '{"synthetic":true}'::jsonb,
+        ${SYNTHETIC_SHA256}, ${SYNTHETIC_SHA256}, 1, ${SYNTHETIC_SHA256},
+        '{"synthetic":true}'::jsonb, 11, 7, 11, 7, CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      )
+    `;
+    await tx.$executeRaw`
       UPDATE "template_twin_rollout_controls"
       SET "enabled" = true, "generation" = 11,
           "updatedAt" = CURRENT_TIMESTAMP
       WHERE "id" = 'global'
     `;
   });
+
+  // Owner-first race: a fill INSERT waiting on the shared lineage gate must
+  // re-read the physician's committed tenant and fail closed.
+  const databaseUrl = process.env.DATABASE_URL!;
+  const observerClient = new Client({ connectionString: databaseUrl });
+  const ownerClient = new Client({ connectionString: databaseUrl });
+  const fillClient = new Client({ connectionString: databaseUrl });
+  await Promise.all([
+    observerClient.connect(),
+    ownerClient.connect(),
+    fillClient.connect(),
+  ]);
+  await fillClient.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
+  await expectDatabaseRejection(
+    () => insertRaceFill(fillClient),
+    "Template Twin tenant lineage writes require READ COMMITTED isolation",
+  );
+  await fillClient.query("ROLLBACK");
+
+  await ownerClient.query("BEGIN");
+  await ownerClient.query(
+    `SELECT pg_advisory_xact_lock(
+       hashtextextended('template_twin_fill_visit_owner_lineage_v5', 0)
+     )`,
+  );
+  await ownerClient.query(
+    `UPDATE "users" SET "practiceId" = $1, "updatedAt" = CURRENT_TIMESTAMP
+     WHERE "id" = $2`,
+    [OTHER_PRACTICE_ID, RACE_PHYSICIAN_ID],
+  );
+  await fillClient.query("BEGIN ISOLATION LEVEL READ COMMITTED");
+  const staleFillAttempt = insertRaceFill(fillClient);
+  void staleFillAttempt.catch(() => undefined);
+  await waitForAdvisoryWaiter(
+    observerClient,
+    fillClient,
+    "owner-first fill lineage gate",
+  );
+  await ownerClient.query("COMMIT");
+  await expectDatabaseRejection(
+    () => staleFillAttempt,
+    "Template Twin fill physician tenant lineage mismatch",
+  );
+  await fillClient.query("ROLLBACK");
+  await prisma.$executeRaw`
+    UPDATE "users"
+    SET "practiceId" = ${PRACTICE_ID}, "updatedAt" = CURRENT_TIMESTAMP
+    WHERE "id" = ${RACE_PHYSICIAN_ID}
+  `;
+
+  // Fill-first race: once a fill commits, a waiting visit reassignment must
+  // observe it and reject the ownership change, including before signing.
+  await fillClient.query("BEGIN ISOLATION LEVEL READ COMMITTED");
+  await fillClient.query(
+    `SELECT pg_advisory_xact_lock(
+       hashtextextended('template_twin_fill_visit_owner_lineage_v5', 0)
+     )`,
+  );
+  await insertRaceFill(fillClient);
+  await ownerClient.query("BEGIN ISOLATION LEVEL READ COMMITTED");
+  const staleVisitAttempt = ownerClient.query(
+    `UPDATE "transcribe_visits"
+     SET "userId" = $1, "updatedAt" = CURRENT_TIMESTAMP
+     WHERE "id" = $2`,
+    [OTHER_PRACTICE_PHYSICIAN_ID, RACE_TWIN_VISIT_ID],
+  );
+  void staleVisitAttempt.catch(() => undefined);
+  await waitForAdvisoryWaiter(
+    observerClient,
+    ownerClient,
+    "fill-first visit lineage gate",
+  );
+  await fillClient.query("COMMIT");
+  await expectDatabaseRejection(
+    () => staleVisitAttempt,
+    "Template Twin visit physician ownership is immutable",
+  );
+  await ownerClient.query("ROLLBACK");
+  await prisma.$executeRaw`
+    DELETE FROM "template_twin_fill_manifests"
+    WHERE "id" = ${RACE_TWIN_FILL_ID}
+  `;
+  await Promise.all([
+    observerClient.end(),
+    ownerClient.end(),
+    fillClient.end(),
+  ]);
 
   const actor = {
     userId: ACTOR_ID,
@@ -379,6 +585,47 @@ async function main(): Promise<void> {
       `,
     "Template Twin fill identity is immutable",
   );
+  await expectDatabaseRejection(
+    () =>
+      prisma.$executeRaw`
+        UPDATE "template_twin_fill_manifests"
+        SET "id" = ${`${TWIN_FILL_ID}-tampered`}
+        WHERE "id" = ${TWIN_FILL_ID}
+      `,
+    "Template Twin fill primary identity is immutable",
+  );
+  for (const visitId of [TWIN_VISIT_ID, SIGNED_TWIN_VISIT_ID]) {
+    await expectDatabaseRejection(
+      () =>
+        prisma.$executeRaw`
+          UPDATE "transcribe_visits"
+          SET "userId" = ${SAME_PRACTICE_PHYSICIAN_ID},
+              "updatedAt" = CURRENT_TIMESTAMP
+          WHERE "id" = ${visitId}
+        `,
+      "Template Twin visit physician ownership is immutable",
+    );
+    await expectDatabaseRejection(
+      () =>
+        prisma.$executeRaw`
+          UPDATE "transcribe_visits"
+          SET "userId" = ${OTHER_PRACTICE_PHYSICIAN_ID},
+              "updatedAt" = CURRENT_TIMESTAMP
+          WHERE "id" = ${visitId}
+        `,
+      "Template Twin visit physician ownership is immutable",
+    );
+  }
+  await expectDatabaseRejection(
+    () =>
+      prisma.$executeRaw`
+        UPDATE "users"
+        SET "practiceId" = ${OTHER_PRACTICE_ID},
+            "updatedAt" = CURRENT_TIMESTAMP
+        WHERE "id" = ${PHYSICIAN_ID}
+      `,
+    "Template Twin physician practice ownership is immutable",
+  );
 
   const preparedEventKey = `template-twin:rollback:${REVOKE_ID}:prepared`;
   await expectDatabaseRejection(
@@ -410,7 +657,6 @@ async function main(): Promise<void> {
     "Template Twin delivered rollback audit receipt is missing",
   );
 
-  const databaseUrl = process.env.DATABASE_URL!;
   const concurrentClient = new Client({ connectionString: databaseUrl });
   await concurrentClient.connect();
   const [revocationRace, pinnedVisitRace] = await Promise.allSettled([
@@ -490,9 +736,13 @@ async function main(): Promise<void> {
     "Template Twin rollback operation history cannot be deleted",
   );
 
+  const databaseClock = await prisma.$queryRaw<Array<{ drainAt: Date }>>`
+    SELECT clock_timestamp() + INTERVAL '1 minute' AS "drainAt"
+  `;
+  assert(databaseClock[0], "Synthetic database clock was unavailable.");
   const delivered = await drainTemplateTwinAuditOutbox({
     prisma: prisma as never,
-    now: new Date("2026-07-19T13:30:00.000Z"),
+    now: databaseClock[0].drainAt,
     limit: 100,
   });
   assert(
@@ -597,6 +847,12 @@ async function main(): Promise<void> {
       auditDeliveryComplete: true,
       exactAuditReceiptsImmutable: true,
       unsignedFillIdentityImmutable: true,
+      fillPrimaryIdentityImmutable: true,
+      fillPhysicianOwnershipImmutable: true,
+      signedFillPhysicianOwnershipImmutable: true,
+      fillOwnershipLineageRacesBlocked: true,
+      staleSnapshotLineageWritesBlocked: true,
+      databaseRelativeAuditClock: true,
       concurrentPinnedVisitBlocked: true,
       finalClaimBlocked: true,
       directEnableBlocked: true,

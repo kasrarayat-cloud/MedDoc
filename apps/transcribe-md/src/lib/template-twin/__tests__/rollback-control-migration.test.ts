@@ -32,6 +32,13 @@ const fillIdentityMigration = readFileSync(
   ),
   "utf8",
 );
+const fillOwnerLineageMigration = readFileSync(
+  path.join(
+    ROOT,
+    "packages/db/prisma/migrations/20260719164500_template_twin_fill_owner_lineage_immutability_v5/migration.sql",
+  ),
+  "utf8",
+);
 const route = readFileSync(
   path.join(
     ROOT,
@@ -167,6 +174,46 @@ describe("Template Twin rollback-control migration contract", () => {
     }
     expect(fillIdentityMigration).toMatch(
       /BEFORE UPDATE OF[\s\S]*"practiceId"[\s\S]*"visitId"[\s\S]*"compiledVersionId"[\s\S]*"noteTemplateId"[\s\S]*"noteTemplateVersion"/u,
+    );
+  });
+
+  it("freezes transitive physician ownership and the fill primary identity", () => {
+    expect(fillOwnerLineageMigration).toMatch(
+      /\bBEGIN;[\s\S]*SET LOCAL lock_timeout = '2s'[\s\S]*\bCOMMIT;\s*$/u,
+    );
+    for (const evidence of [
+      "Existing Template Twin fill physician tenant lineage mismatch",
+      "template_twin_fill_visit_owner_lineage_v5",
+      "template_twin_assert_fill_visit_owner_lineage_v5",
+      "aaa_template_twin_fill_visit_owner_lineage_v5",
+      "template_twin_guard_visit_fill_owner_lineage_v5",
+      "aaa_template_twin_visit_fill_owner_lineage_v5",
+      "Template Twin visit physician ownership is immutable",
+      "template_twin_guard_physician_fill_practice_v5",
+      "aaa_template_twin_physician_fill_practice_v5",
+      "Template Twin physician practice ownership is immutable",
+      "template_twin_guard_fill_primary_identity_v5",
+      "aaa_template_twin_fill_primary_identity_v5",
+      "Template Twin fill primary identity is immutable",
+      "template_twin_require_read_committed_lineage",
+      "pg_advisory_xact_lock",
+    ]) {
+      expect(fillOwnerLineageMigration).toContain(evidence);
+    }
+    expect(fillOwnerLineageMigration).toMatch(
+      /LOCK TABLE[\s\S]*"template_twin_fill_manifests"[\s\S]*"transcribe_visits"[\s\S]*"users"[\s\S]*IN SHARE ROW EXCLUSIVE MODE/u,
+    );
+    expect(fillOwnerLineageMigration).toMatch(
+      /BEFORE INSERT ON "template_twin_fill_manifests"/u,
+    );
+    expect(fillOwnerLineageMigration).toMatch(
+      /BEFORE UPDATE OF "userId" ON "transcribe_visits"/u,
+    );
+    expect(fillOwnerLineageMigration).toMatch(
+      /BEFORE UPDATE OF "practiceId" ON "users"/u,
+    );
+    expect(fillOwnerLineageMigration).toMatch(
+      /BEFORE UPDATE OF "id" ON "template_twin_fill_manifests"/u,
     );
   });
 
