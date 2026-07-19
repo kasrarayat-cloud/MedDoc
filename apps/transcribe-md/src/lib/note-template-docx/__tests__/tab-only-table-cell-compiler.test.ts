@@ -318,11 +318,6 @@ describe(TAB_ONLY_BLANK_TABLE_CELL_PROFILE, () => {
       "",
     ],
     [
-      "a tracked insertion",
-      `${TAB_STOP_PROPERTIES}<w:ins w:id="1"><w:r/></w:ins>`,
-      "",
-    ],
-    [
       "compatibility fallback content",
       `${TAB_STOP_PROPERTIES}<mc:AlternateContent><mc:Choice Requires="w14"><w:r/></mc:Choice><mc:Fallback><w:r/></mc:Fallback></mc:AlternateContent>`,
       "",
@@ -345,6 +340,14 @@ describe(TAB_ONLY_BLANK_TABLE_CELL_PROFILE, () => {
       });
     },
   );
+
+  it("rejects a tracked insertion at package admission", async () => {
+    await expect(
+      compileTarget(
+        targetCell(`${TAB_STOP_PROPERTIES}<w:ins w:id="1"><w:r/></w:ins>`),
+      ),
+    ).rejects.toMatchObject({ code: "XML_HIDDEN_CONTENT_UNSUPPORTED" });
+  });
 
   it("keeps multiple paragraphs certification-blocked", async () => {
     const ir = await compileTarget(

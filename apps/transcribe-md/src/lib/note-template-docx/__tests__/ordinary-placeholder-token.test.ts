@@ -308,10 +308,6 @@ describe(ORDINARY_PLACEHOLDER_TOKEN_PROFILE, () => {
       '<w:p><w:r><w:drawing/><w:t>[[detail]]</w:t></w:r></w:p>',
     ],
     [
-      'tracked revision',
-      '<w:p><w:ins w:id="1" w:author="Synthetic"><w:r><w:t>[[detail]]</w:t></w:r></w:ins></w:p>',
-    ],
-    [
       'raw character data outside Word text',
       '<w:p>unexpected<w:r><w:t>[[detail]]</w:t></w:r></w:p>',
     ],
@@ -327,6 +323,16 @@ describe(ORDINARY_PLACEHOLDER_TOKEN_PROFILE, () => {
         code: 'UNBOUND_ORDINARY_PLACEHOLDER',
         blocksCertification: true,
       }),
+    );
+  });
+
+  it('rejects unresolved tracked revisions at package admission', async () => {
+    const source = await sourceDocx(
+      '<w:p><w:ins w:id="1" w:author="Synthetic"><w:r><w:t>[[detail]]</w:t></w:r></w:ins></w:p>',
+    );
+
+    expect(() => compileTemplateDocx(source)).toThrowError(
+      expect.objectContaining({ code: 'XML_HIDDEN_CONTENT_UNSUPPORTED' }),
     );
   });
 
