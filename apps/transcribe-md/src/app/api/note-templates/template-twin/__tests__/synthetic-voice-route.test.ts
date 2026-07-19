@@ -103,6 +103,7 @@ vi.mock("@/lib/template-twin/synthetic-test", () => ({
 
 import { POST } from "../[id]/synthetic-test-voice/route";
 import { AuthError } from "@/lib/auth";
+import { TemplateTwinSyntheticTestError } from "@/lib/template-twin/synthetic-test";
 const HASH = "a".repeat(64);
 const SESSION = {
   templateTwinRolloutToken: {
@@ -251,6 +252,19 @@ describe("Template Twin synthetic voice certification route", () => {
         mappingsSha256: HASH,
       },
     });
+    const guardInput = mocks.lifecycleGuard.mock.calls[0]?.[0] as unknown as {
+      isExpectedBusinessError?: (error: unknown) => boolean;
+    };
+    expect(
+      guardInput.isExpectedBusinessError?.(
+        new TemplateTwinSyntheticTestError("CONFLICT", "conflict"),
+      ),
+    ).toBe(true);
+    expect(
+      guardInput.isExpectedBusinessError?.(
+        new Error("transcription provider failure"),
+      ),
+    ).toBe(false);
   });
 
   it("passes the provider-bound visit identity to transcription before any exact-fixture provider call", async () => {

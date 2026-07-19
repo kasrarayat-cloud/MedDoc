@@ -64,6 +64,10 @@ interface GuardDependencies {
   readonly confirmMappings: typeof confirmTemplateTwinStagingQaMappings;
 }
 
+export type TemplateTwinStagingQaExpectedBusinessError = (
+  error: unknown,
+) => boolean;
+
 function sameRolloutGeneration(
   pinned: TemplateTwinRolloutToken,
   current: TemplateTwinRolloutToken,
@@ -138,6 +142,12 @@ export async function runWithTemplateTwinStagingQaLifecycleGuard<T>(input: {
   evidenceText?: string;
   requireConfirmedMappings?: boolean;
   expectedMappingConfirmation?: TemplateTwinStagingQaExpectedMappingConfirmation;
+  /**
+   * Route-owned predicate for recoverable domain errors thrown by `operation`.
+   * Admission and provider-capability failures are handled before this
+   * predicate and can never be classified as recoverable.
+   */
+  isExpectedBusinessError?: TemplateTwinStagingQaExpectedBusinessError;
   dependencies?: Partial<GuardDependencies>;
 }): Promise<T> {
   const inspect =
@@ -192,31 +202,79 @@ export async function runWithTemplateTwinStagingQaLifecycleGuard<T>(input: {
     throw new TemplateTwinStagingQaLifecycleGuardError();
   }
 
+  let result: T;
+  const operationFailure: { occurred: boolean; error: unknown } = {
+    occurred: false,
+    error: undefined,
+  };
   try {
-    const result =
-      await runWithVerifiedTemplateTwinStagingQaAdmissionProvider({
-        admissionId: provenance.admission.id,
-        actor: input.actor,
-        allowedPhases:
-          input.purpose === "certification-activation"
-            ? ["TEMPLATE_LINKED"]
-            : ["TEMPLATE_LINKED", "CERTIFIED"],
-        expectedProviderMode: "SYNTHETIC_LIFECYCLE",
-        expectedSource: provenance.source,
-        expectedTemplate: { id: input.noteTemplateId },
-        evidenceText,
-        operation: input.operation,
-        env,
-      });
-    if (input.purpose === "certification-activation") {
-      await certifyTemplateTwinStagingQaAdmission({
-        admissionId: provenance.admission.id,
-        actor: input.actor,
-        noteTemplateId: input.noteTemplateId,
-        env,
-      });
+    result = await runWithVerifiedTemplateTwinStagingQaAdmissionProvider({
+      admissionId: provenance.admission.id,
+      actor: input.actor,
+      allowedPhases:
+        input.purpose === "certification-activation"
+          ? ["TEMPLATE_LINKED"]
+          : ["TEMPLATE_LINKED", "CERTIFIED"],
+      expectedProviderMode: "SYNTHETIC_LIFECYCLE",
+      expectedSource: provenance.source,
+      expectedTemplate: { id: input.noteTemplateId },
+      evidenceText,
+      operation: async (providerVisitId) => {
+        try {
+          return await input.operation(providerVisitId);
+        } catch (error) {
+          operationFailure.occurred = true;
+          operationFailure.error = error;
+          throw error;
+        }
+      },
+      env,
+    });
+  } catch (error) {
+    if (error instanceof TemplateTwinStagingQaAdmissionError) {
+      throw new TemplateTwinStagingQaLifecycleGuardError();
     }
-    return result;
+    let expectedBusinessError = false;
+    if (
+      operationFailure.occurred &&
+      Object.is(operationFailure.error, error)
+    ) {
+      try {
+        expectedBusinessError =
+          input.isExpectedBusinessError?.(error) === true;
+      } catch {
+        // A faulty classifier must fail closed and preserve the admission's
+        // terminal failure semantics.
+      }
+    }
+    if (expectedBusinessError) throw error;
+    try {
+      await markTemplateTwinStagingQaAdmissionFailed({
+        admissionId: provenance.admission.id,
+        actor: {
+          userId: input.actor.userId,
+          practiceId: input.actor.practiceId,
+        },
+        failureCode: "TEMPLATE_TWIN_STAGING_QA_LIFECYCLE_PROVIDER_FAILED",
+      });
+    } catch {
+      throw new TemplateTwinStagingQaLifecycleGuardError();
+    }
+    throw error;
+  }
+
+  if (input.purpose !== "certification-activation") return result;
+
+  // Certification admission advances only after the business operation has
+  // completed successfully. Errors from this admission phase are never
+  // eligible for route-level business-error classification.
+  try {
+    await certifyTemplateTwinStagingQaAdmission({
+      admissionId: provenance.admission.id,
+      actor: input.actor,
+      noteTemplateId: input.noteTemplateId,
+      env,
+    });
   } catch (error) {
     if (error instanceof TemplateTwinStagingQaAdmissionError) {
       throw new TemplateTwinStagingQaLifecycleGuardError();
@@ -235,6 +293,7 @@ export async function runWithTemplateTwinStagingQaLifecycleGuard<T>(input: {
     }
     throw error;
   }
+  return result;
 }
 
 /**

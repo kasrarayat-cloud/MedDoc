@@ -91,6 +91,8 @@ import {
   buildTemplateTwinIntegrationFixture,
   factsForMode,
 } from './integration-fixture';
+import { TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256 } from '../staging-qa-fixtures';
+import { TemplateTwinSyntheticEvidenceScanUnavailableError } from '../synthetic-evidence-gate';
 
 const ACTOR = {
   userId: 'doctor-synthetic-lifecycle',
@@ -655,6 +657,60 @@ describe('Template Twin certification lifecycle service', () => {
     });
   });
 
+  it('does not fan out or blame a field when the authored-corpus privacy scan is unavailable', async () => {
+    const fixture = await ordinaryPlaceholderLifecycleFixture();
+    const unresolvedHash = templateTwinFieldIntentsSha256([
+      { fieldId: fixture.field.fieldId, intent: unresolvedFieldIntent() },
+    ]);
+    const staticMappings = fixture.initialMappings.map((mapping) =>
+      mapping.fieldId === fixture.field.fieldId
+        ? SemanticMappingSchema.parse({
+            ...mapping,
+            clinicalConcept: null,
+            required: false,
+            practiceDefault: null,
+            status: 'certified',
+          })
+        : mapping,
+    );
+    mocks.findTemplate.mockResolvedValue(
+      ownedRow(fixture.ir, fixture.initialMappings, {
+        includeSyntheticProof: false,
+      }),
+    );
+    const privacyClient = {
+      complete: vi.fn().mockRejectedValue(new Error('provider unavailable')),
+    };
+
+    await expect(
+      updateTemplateTwinMappings({
+        noteTemplateId: TEMPLATE_ID,
+        actor: ACTOR,
+        expectedMappingsSha256: templateTwinMappingsSha256(
+          fixture.initialMappings,
+        ),
+        expectedFieldIntentsSha256: unresolvedHash,
+        mappings: staticMappings,
+        fieldIntents: [
+          {
+            fieldId: fixture.field.fieldId,
+            intentKind: 'static',
+            reason:
+              'Synthetic fixed wording remains unchanged in this template.',
+          },
+        ],
+        privacyClient,
+      }),
+    ).rejects.toBeInstanceOf(
+      TemplateTwinSyntheticEvidenceScanUnavailableError,
+    );
+
+    expect(privacyClient.complete).toHaveBeenCalledTimes(1);
+    expect(mocks.intentCreate).not.toHaveBeenCalled();
+    expect(mocks.mappingUpdate).not.toHaveBeenCalled();
+    expect(mocks.compiledUpdate).not.toHaveBeenCalled();
+  });
+
   it('fails closed when a placeholder-bearing mapping request omits its intent generation hash', async () => {
     const fixture = await ordinaryPlaceholderLifecycleFixture();
     mocks.findTemplate.mockResolvedValue(
@@ -783,6 +839,43 @@ describe('Template Twin certification lifecycle service', () => {
       expect(mocks.compiledUpdate).not.toHaveBeenCalled();
     },
   );
+
+  it('identifies the exact reviewed-fixture field and synonym setting before persistence', async () => {
+    const fixture = await buildTemplateTwinIntegrationFixture();
+    const row = ownedRow(fixture.ir, fixture.mappings);
+    row.templateTwinCompiledVersion.sourceArtifact.sha256 =
+      TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256;
+    mocks.findTemplate.mockResolvedValue(row);
+    const changed = fixture.mappings.map((mapping, index) =>
+      index === 0
+        ? SemanticMappingSchema.parse({
+            ...mapping,
+            approvedSynonyms: ['synthetic alias'],
+          })
+        : mapping,
+    );
+
+    await expect(
+      updateTemplateTwinMappings({
+        noteTemplateId: TEMPLATE_ID,
+        actor: ACTOR,
+        expectedMappingsSha256: templateTwinMappingsSha256(fixture.mappings),
+        mappings: changed,
+      }),
+    ).rejects.toMatchObject({
+      code: 'MAPPING_INVALID',
+      fieldErrors: [
+        {
+          fieldId: fixture.ir.fields[0]!.fieldId,
+          fieldLabel: fixture.ir.fields[0]!.originalLabel,
+          setting: 'approvedSynonyms',
+          message: expect.stringMatching(/does not allow additional synonyms/u),
+        },
+      ],
+    });
+    expect(mocks.mappingUpdate).not.toHaveBeenCalled();
+    expect(mocks.compiledUpdate).not.toHaveBeenCalled();
+  });
 
   it('updates the exact field set and invalidates the prior synthetic proof', async () => {
     const fixture = await buildTemplateTwinIntegrationFixture();

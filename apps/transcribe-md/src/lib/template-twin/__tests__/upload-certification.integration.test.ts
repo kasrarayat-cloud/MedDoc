@@ -92,6 +92,7 @@ import {
   type TemplateTwinObjectClient,
 } from '../storage';
 import { runTemplateTwinSyntheticTest } from '../synthetic-test';
+import { TemplateTwinSyntheticEvidenceScanUnavailableError } from '../synthetic-evidence-gate';
 import { readTemplateTwinWorkspace } from '../workspace-read';
 import { TEMPLATE_TWIN_QA_STORAGE_EXCEPTION_ATTESTATION } from '../storage/readiness';
 import {
@@ -693,6 +694,28 @@ describe('Template Twin stateful upload-to-certification integration', () => {
     );
     expect(confirmed.fields.every((item) => item.mapping.status === 'certified')).toBe(true);
 
+    mocks.modelComplete.mockRejectedValueOnce(
+      new Error('synthetic privacy provider unavailable'),
+    );
+    await expect(
+      runTemplateTwinSyntheticTest({
+        noteTemplateId: draft.noteTemplateId,
+        actor: ACTOR,
+        expectedMappingsSha256: confirmed.mappingsSha256,
+        expectedFieldIntentsSha256: confirmed.fieldIntentsSha256,
+        encounterText: SYNTHETIC_CONTEXT,
+        encounterMode: 'text',
+        storage,
+      }),
+    ).rejects.toBeInstanceOf(
+      TemplateTwinSyntheticEvidenceScanUnavailableError,
+    );
+    expect(compiledForTemplate(draft.noteTemplateId)).toMatchObject({
+      latestSyntheticTestManifest: null,
+      latestTestOutputObjectKey: null,
+      latestTestOutputSha256: null,
+    });
+
     await expect(
       certifyAndActivateTemplateTwin({
         noteTemplateId: draft.noteTemplateId,
@@ -864,6 +887,7 @@ describe('Template Twin stateful upload-to-certification integration', () => {
     expect(mocks.modelComplete.mock.calls.map((call) => call[0].purpose)).toEqual([
       'tm_template_phi_scan',
       'tm_template_parse',
+      'tm_template_synthetic_phi_scan',
       'tm_template_synthetic_phi_scan',
       'tm_template_synthetic_phi_scan',
       'tm_template_synthetic_phi_scan',

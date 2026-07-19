@@ -26,6 +26,7 @@ import { readTemplateTwinWorkspace } from './workspace-read';
 import {
   assertTemplateTwinStagingQaEvidencePhiFree,
   assertTemplateTwinSyntheticEvidencePhiFree,
+  TemplateTwinSyntheticEvidenceRejectedError,
 } from './synthetic-evidence-gate';
 import { isTemplateTwinStagingQaFixtureSource } from './staging-qa-fixtures';
 import { runWithTemplateTwinStagingQaCertificationProvider } from './staging-qa-certification-provider';
@@ -212,7 +213,10 @@ export async function runTemplateTwinSyntheticTest(input: {
     !compiled.sourceArtifact.objectVersionId ||
     !compiled.sourceArtifact.objectEtag
   ) {
-    throw new TemplateTwinSyntheticTestError('NOT_FOUND', 'Template Twin version not found.');
+    throw new TemplateTwinSyntheticTestError(
+      'NOT_FOUND',
+      'This Template Twin version is stale or unavailable. Refresh the certification workspace.',
+    );
   }
   let sourceProvenance;
   try {
@@ -368,7 +372,10 @@ export async function runTemplateTwinSyntheticTest(input: {
             userId: input.actor.userId,
             providerVisitId,
           });
-        } catch {
+        } catch (error) {
+          if (!(error instanceof TemplateTwinSyntheticEvidenceRejectedError)) {
+            throw error;
+          }
           throw new TemplateTwinSyntheticTestError(
             'SYNTHETIC_EVIDENCE_REJECTED',
             'Use clearly labeled synthetic test evidence without patient identifiers.',
@@ -632,7 +639,10 @@ export async function runTemplateTwinSyntheticTest(input: {
     practiceId: input.actor.practiceId,
   });
   if (!workspace) {
-    throw new TemplateTwinSyntheticTestError('NOT_FOUND', 'Template Twin version not found.');
+    throw new TemplateTwinSyntheticTestError(
+      'NOT_FOUND',
+      'This Template Twin version is stale or unavailable. Refresh the certification workspace.',
+    );
   }
   return workspace;
 }

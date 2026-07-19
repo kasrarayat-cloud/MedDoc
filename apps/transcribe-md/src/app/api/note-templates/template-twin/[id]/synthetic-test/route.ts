@@ -72,6 +72,8 @@ export async function POST(
         mappingsSha256: parsed.data.expectedMappingsSha256,
         fieldIntentsSha256: parsed.data.expectedFieldIntentsSha256,
       },
+      isExpectedBusinessError: (error) =>
+        error instanceof TemplateTwinSyntheticTestError,
       operation: () =>
         runTemplateTwinSyntheticTest({
           noteTemplateId: id,
@@ -120,8 +122,14 @@ export async function POST(
     }
     if (error instanceof TemplateTwinStagingQaLifecycleGuardError) {
       return response(
-        { ok: false, error: "Template Twin version not found." },
-        404,
+        {
+          ok: false,
+          code: "VERSION_STALE",
+          recoverable: true,
+          error:
+            "This Template Twin version is stale or unavailable. Refresh the certification workspace to continue.",
+        },
+        409,
       );
     }
     return response(

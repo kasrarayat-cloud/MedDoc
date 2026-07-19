@@ -60,6 +60,8 @@ export async function POST(
       noteTemplateId: id,
       actor,
       purpose: "certification-activation",
+      isExpectedBusinessError: (error) =>
+        error instanceof TemplateTwinLifecycleError,
       operation: () =>
         certifyAndActivateTemplateTwin({
           noteTemplateId: id,
@@ -86,15 +88,30 @@ export async function POST(
       );
     }
     if (error instanceof TemplateTwinLifecycleError) {
-      return response(
-        { ok: false, error: error.message },
-        error.code === "NOT_FOUND" ? 404 : 409,
-      );
+      if (error.code === "NOT_FOUND" || error.code === "IMMUTABLE") {
+        return response(
+          {
+            ok: false,
+            code: "VERSION_STALE",
+            recoverable: true,
+            error:
+              "This Template Twin version is stale or immutable. Refresh the certification workspace to continue.",
+          },
+          409,
+        );
+      }
+      return response({ ok: false, error: error.message }, 409);
     }
     if (error instanceof TemplateTwinStagingQaLifecycleGuardError) {
       return response(
-        { ok: false, error: "Template Twin version not found." },
-        404,
+        {
+          ok: false,
+          code: "VERSION_STALE",
+          recoverable: true,
+          error:
+            "This Template Twin version is stale or unavailable. Refresh the certification workspace to continue.",
+        },
+        409,
       );
     }
     return response(

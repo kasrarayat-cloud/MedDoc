@@ -172,7 +172,7 @@ async function loadCurrentCustomExampleState(input: {
   if (!row || !compiled || compiled.sourceArtifact.practiceId !== input.actor.practiceId) {
     throw new TemplateTwinCustomExampleError(
       "NOT_FOUND",
-      "Template Twin version not found.",
+      "This Template Twin version is stale or unavailable. Refresh the certification workspace.",
     );
   }
   if (

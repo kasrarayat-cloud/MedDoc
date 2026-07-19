@@ -66,6 +66,7 @@ import {
   assertTemplateTwinSourceProvenance,
   TEMPLATE_TWIN_SOURCE_PROVENANCE_GATE_MESSAGE,
 } from "./source-phi-evidence";
+import { createTemplateTwinStagingQaVersionAdmission } from "./staging-qa-version-admission";
 import {
   TEMPLATE_TWIN_UNSUPPORTED_CONCEPT_CODE,
   isSupportedTemplateTwinConcept,
@@ -1309,6 +1310,25 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
             });
             draftTemplateId = draft.id;
             draftTemplateVersion = draft.version;
+            await createTemplateTwinStagingQaVersionAdmission({
+              tx,
+              actor: {
+                userId: plan.decision.reviewerId,
+                userEmail: plan.reviewerEmail,
+                practiceId: plan.practiceId,
+                rolloutToken: plan.rolloutToken,
+              },
+              source: {
+                noteTemplateId: template.id,
+                sourceArtifactId: source.sourceArtifactId,
+                sha256: source.sourceArtifact.sha256,
+                sizeBytes: source.sourceArtifact.sizeBytes,
+              },
+              target: {
+                noteTemplateId: draft.id,
+                version: draft.version,
+              },
+            });
           }
 
           if (plan.storedOutput) {

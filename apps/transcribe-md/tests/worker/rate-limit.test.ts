@@ -7,7 +7,7 @@
 // semantics), and the rateLimitOr429 route-handler shortcut.
 // ============================================================================
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   RATE_LIMITS,
@@ -21,6 +21,7 @@ import {
 } from '@/lib/rate-limit';
 
 afterEach(() => {
+  vi.useRealTimers();
   __resetForTests();
 });
 
@@ -152,6 +153,13 @@ describe('RATE_LIMITS presets', () => {
     expect(limits).toContainEqual({ limit: 20, windowMs: 5 * 60 * 1000 });
     expect(limits).toContainEqual({ limit: 60, windowMs: 60 * 60 * 1000 });
   });
+
+  it('preserves the unrelated SETTINGS protection at 10/hour', () => {
+    expect(RATE_LIMITS.SETTINGS).toEqual({
+      bucket: 'settings',
+      windows: [{ label: 'hourly', limit: 10, windowMs: 60 * 60 * 1000 }],
+    });
+  });
 });
 
 describe('checkRateLimit — multi-window semantics', () => {
@@ -212,6 +220,29 @@ describe('checkRateLimit — multi-window semantics', () => {
     expect(r.allowed).toBe(false);
     expect(r.limitType).toBe('long');
     expect(r.retryAfterSec).toBeGreaterThan(30);
+  });
+
+  it('selects the latest exact reset when rejecting windows round to the same retry second', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-19T02:03:04.250Z'));
+    const rule: RateLimitRule = {
+      bucket: 'exact-reset-test',
+      windows: [
+        { limit: 1, windowMs: 1_000, label: 'earlier' },
+        { limit: 1, windowMs: 1_500, label: 'later' },
+      ],
+    };
+    expect(checkRateLimit(rule, 'id-exact-reset').allowed).toBe(true);
+    vi.advanceTimersByTime(600);
+
+    const result = checkRateLimit(rule, 'id-exact-reset');
+
+    expect(result).toMatchObject({
+      allowed: false,
+      retryAfterSec: 1,
+      resetAtMs: Date.parse('2026-07-19T02:03:05.750Z'),
+      limitType: 'later',
+    });
   });
 
   it('PATIENT_READ tolerates the patient-picker bursty-search workflow (30 calls in 30s)', () => {
@@ -287,8 +318,11 @@ describe('rateLimitOr429', () => {
     expect(res?.headers.get('Retry-After')).toMatch(/^\d+$/);
     const body = await res?.json();
     expect(body).toMatchObject({
+      ok: false,
+      code: 'RATE_LIMITED',
       error: expect.stringContaining('faster than the system allows'),
       retryAfterSec: expect.any(Number),
+      resetAtIso: expect.any(String),
     });
     // limitType is set when a window has a label (all our presets do)
     expect(body.limitType).toBe('hourly');

@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   requireDoctorSession: vi.fn(),
   createDraft: vi.fn(),
   updateMappings: vi.fn(),
+  mappingRateLimit: vi.fn(),
   runSyntheticTest: vi.fn(),
   certify: vi.fn(),
   sameOrigin: vi.fn(),
@@ -74,6 +75,9 @@ vi.mock("@/lib/template-twin/certification-lifecycle", () => ({
   updateTemplateTwinMappings: mocks.updateMappings,
   certifyAndActivateTemplateTwin: mocks.certify,
 }));
+vi.mock("@/lib/template-twin/mapping-save-rate-limit", () => ({
+  templateTwinMappingSaveRateLimitOrError: mocks.mappingRateLimit,
+}));
 vi.mock("@/lib/template-twin/synthetic-test", () => ({
   TemplateTwinSyntheticTestError: class TemplateTwinSyntheticTestError extends Error {
     code = "CONFLICT";
@@ -108,6 +112,8 @@ import { PATCH as updateMappings } from "../[id]/mappings/route";
 import { POST as runSyntheticTest } from "../[id]/synthetic-test/route";
 import { AuthError } from "@/lib/auth";
 import { canonicalSha256 } from "@/lib/template-twin/canonical";
+import { TemplateTwinLifecycleError } from "@/lib/template-twin/certification-lifecycle";
+import { TemplateTwinSyntheticTestError } from "@/lib/template-twin/synthetic-test";
 
 const HASH = "a".repeat(64);
 const EMPTY_FIELD_INTENTS_SHA256 = canonicalSha256([]);
@@ -150,6 +156,7 @@ beforeEach(() => {
     request.formData(),
   );
   mocks.requireDoctorSession.mockResolvedValue(SESSION);
+  mocks.mappingRateLimit.mockResolvedValue(null);
   mocks.createDraft.mockResolvedValue({
     noteTemplateId: "template-synthetic-1",
   });
@@ -327,6 +334,35 @@ describe("Template Twin route orchestration", () => {
     );
     expect(mocks.runSyntheticTest.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.certify.mock.invocationCallOrder[0]!,
+    );
+
+    const lifecycleCalls = mocks.lifecycleGuard.mock.calls as unknown as Array<
+      [
+        {
+          purpose: string;
+          isExpectedBusinessError?: (error: unknown) => boolean;
+        },
+      ]
+    >;
+    const syntheticClassifier = lifecycleCalls.find(
+      ([input]) => input.purpose === "synthetic-test-text",
+    )?.[0].isExpectedBusinessError;
+    const certificationClassifier = lifecycleCalls.find(
+      ([input]) => input.purpose === "certification-activation",
+    )?.[0].isExpectedBusinessError;
+    expect(
+      syntheticClassifier?.(
+        new TemplateTwinSyntheticTestError("CONFLICT", "conflict"),
+      ),
+    ).toBe(true);
+    expect(syntheticClassifier?.(new Error("provider failure"))).toBe(false);
+    expect(
+      certificationClassifier?.(
+        new TemplateTwinLifecycleError("CONFLICT", "conflict"),
+      ),
+    ).toBe(true);
+    expect(certificationClassifier?.(new Error("database failure"))).toBe(
+      false,
     );
   });
 

@@ -25,11 +25,16 @@ import {
   TEMPLATE_TWIN_SUPPORTED_CONCEPTS,
   isSupportedTemplateTwinConcept,
 } from "@/lib/template-twin/supported-concepts";
+import { validateTemplateTwinClinicalDetail } from "@/lib/template-twin/mapping-validation";
 import { TemplateTwinSyntheticQaBanner } from "@/components/template-twin-synthetic-qa-banner";
 import {
   TEMPLATE_TWIN_STAGING_QA_STATIC_INTENT_REASON,
   TEMPLATE_TWIN_STAGING_QA_TYPED_STARTER,
 } from "@/lib/template-twin/staging-qa-ui-contract";
+import type {
+  TemplateTwinStagingQaPhysicianReviewSummary,
+  TemplateTwinStagingQaReviewedMappingsResponse,
+} from "@/lib/template-twin/staging-qa-reviewed-mapping-contract";
 
 import styles from "./template-twin-certification.module.css";
 
@@ -43,6 +48,262 @@ type FieldIntentDraft =
       intentKind: "custom_concept";
       customSpec: TemplateFieldSpecificationContent;
     };
+
+type MappingFieldError = {
+  fieldId: string;
+  fieldLabel: string;
+  setting: string;
+  message: string;
+};
+
+type MappingErrorPayload = {
+  ok: false;
+  code?: string;
+  error: string;
+  recoverable?: boolean;
+  latestWorkspace?: TemplateTwinWorkspace;
+  latestTemplateId?: string;
+  fieldErrors?: MappingFieldError[];
+  retryAfterSec?: number;
+  limitType?: string;
+  resetAtIso?: string;
+};
+
+type StoredMappingDraft = {
+  version: 1;
+  templateLineageId: string;
+  sourceSha256: string;
+  baseTemplateId: string;
+  baseTemplateVersion: number;
+  baseMappingsSha256: string;
+  baseFieldIntentsSha256: string;
+  baseMappings: SemanticMapping[];
+  baseFieldIntents: Record<string, FieldIntentDraft>;
+  selectedFieldId: string;
+  savedAtIso: string;
+  mappings: SemanticMapping[];
+  fieldIntents: Record<string, FieldIntentDraft>;
+};
+
+type DraftMergeConflict = {
+  fieldId: string;
+  fieldLabel: string;
+  localMapping: SemanticMapping;
+  localIntent: FieldIntentDraft | null;
+};
+
+type VersionRecoveryState = {
+  message: string;
+  latestWorkspace?: TemplateTwinWorkspace;
+  latestTemplateId?: string;
+};
+
+const MAPPING_DRAFT_STORAGE_VERSION = 1;
+
+function mappingDraftStorageKey(templateLineageId: string): string {
+  return `template-twin:certification-draft:v${MAPPING_DRAFT_STORAGE_VERSION}:${encodeURIComponent(templateLineageId)}`;
+}
+
+function mappingDraftFor(input: {
+  workspace: TemplateTwinWorkspace;
+  fields: TemplateTwinWorkspaceField[];
+  intentDrafts: Record<string, FieldIntentDraft>;
+  selectedFieldId: string;
+}): StoredMappingDraft {
+  return {
+    version: MAPPING_DRAFT_STORAGE_VERSION,
+    templateLineageId: input.workspace.template.lineageId,
+    sourceSha256: input.workspace.source.sha256,
+    baseTemplateId: input.workspace.template.id,
+    baseTemplateVersion: input.workspace.template.version,
+    baseMappingsSha256: input.workspace.mappingsSha256,
+    baseFieldIntentsSha256: input.workspace.fieldIntentsSha256,
+    baseMappings: input.workspace.fields.map((item) => item.mapping),
+    baseFieldIntents: intentDraftsFor(input.workspace.fields),
+    selectedFieldId: input.selectedFieldId,
+    savedAtIso: new Date().toISOString(),
+    mappings: input.fields.map((item) => item.mapping),
+    fieldIntents: input.intentDrafts,
+  };
+}
+
+function storeMappingDraft(draft: StoredMappingDraft): void {
+  try {
+    window.sessionStorage.setItem(
+      mappingDraftStorageKey(draft.templateLineageId),
+      JSON.stringify(draft),
+    );
+  } catch {
+    // Storage can be unavailable in a hardened/private browser. The live React
+    // state remains intact and the save request still behaves safely.
+  }
+}
+
+function clearStoredMappingDraft(templateLineageId: string): void {
+  try {
+    window.sessionStorage.removeItem(mappingDraftStorageKey(templateLineageId));
+  } catch {
+    // See storeMappingDraft. A failed cleanup must not turn a successful save
+    // into a user-visible failure.
+  }
+}
+
+function readStoredMappingDraft(
+  workspace: TemplateTwinWorkspace,
+): StoredMappingDraft | null {
+  try {
+    const raw = window.sessionStorage.getItem(
+      mappingDraftStorageKey(workspace.template.lineageId),
+    );
+    if (!raw) return null;
+    const candidate = JSON.parse(raw) as Partial<StoredMappingDraft>;
+    if (
+      candidate.version !== MAPPING_DRAFT_STORAGE_VERSION ||
+      candidate.templateLineageId !== workspace.template.lineageId ||
+      candidate.sourceSha256 !== workspace.source.sha256 ||
+      !Array.isArray(candidate.mappings) ||
+      !candidate.fieldIntents ||
+      typeof candidate.fieldIntents !== "object" ||
+      (candidate.baseMappings !== undefined &&
+        !Array.isArray(candidate.baseMappings)) ||
+      (candidate.baseFieldIntents !== undefined &&
+        (!candidate.baseFieldIntents ||
+          typeof candidate.baseFieldIntents !== "object" ||
+          Array.isArray(candidate.baseFieldIntents)))
+    ) {
+      return null;
+    }
+    const currentFieldIds = new Set(
+      workspace.fields.map((item) => item.field.fieldId),
+    );
+    const storedFieldIds = new Set(
+      candidate.mappings
+        .filter(
+          (mapping): mapping is SemanticMapping =>
+            Boolean(mapping) && typeof mapping.fieldId === "string",
+        )
+        .map((mapping) => mapping.fieldId),
+    );
+    if (
+      storedFieldIds.size !== currentFieldIds.size ||
+      [...storedFieldIds].some((fieldId) => !currentFieldIds.has(fieldId)) ||
+      (candidate.baseMappings !== undefined &&
+        (candidate.baseMappings.length !== currentFieldIds.size ||
+          candidate.baseMappings.some(
+            (mapping) =>
+              !mapping ||
+              typeof mapping.fieldId !== "string" ||
+              !currentFieldIds.has(mapping.fieldId),
+          )))
+    ) {
+      return null;
+    }
+    return candidate as StoredMappingDraft;
+  } catch {
+    return null;
+  }
+}
+
+function rebaseMappingDraft(
+  workspace: TemplateTwinWorkspace,
+  draft: Pick<
+    StoredMappingDraft,
+    | "baseMappingsSha256"
+    | "baseFieldIntentsSha256"
+    | "baseMappings"
+    | "baseFieldIntents"
+    | "mappings"
+    | "fieldIntents"
+  >,
+): {
+  fields: TemplateTwinWorkspaceField[];
+  intentDrafts: Record<string, FieldIntentDraft>;
+  conflicts: DraftMergeConflict[];
+} {
+  const baseMappingByFieldId = new Map(
+    (draft.baseMappings ?? []).map((mapping) => [mapping.fieldId, mapping]),
+  );
+  const localMappingByFieldId = new Map(
+    draft.mappings.map((mapping) => [mapping.fieldId, mapping]),
+  );
+  const intentDrafts = { ...intentDraftsFor(workspace.fields) };
+  const conflicts: DraftMergeConflict[] = [];
+  const hasBaseSnapshot =
+    Array.isArray(draft.baseMappings) &&
+    draft.baseMappings.length === workspace.fields.length &&
+    draft.baseFieldIntents !== null &&
+    typeof draft.baseFieldIntents === "object";
+  const legacyDraftMatchesCurrentRevision =
+    draft.baseMappingsSha256 === workspace.mappingsSha256 &&
+    draft.baseFieldIntentsSha256 === workspace.fieldIntentsSha256;
+  const fields = workspace.fields.map((item) => {
+    const fieldId = item.field.fieldId;
+    const remoteIntent = intentDrafts[fieldId] ?? null;
+    const localIntent = draft.fieldIntents[fieldId] ?? null;
+    const localMapping = localMappingByFieldId.get(fieldId) ?? item.mapping;
+    const baseMapping = baseMappingByFieldId.get(fieldId) ?? item.mapping;
+    const baseIntent = draft.baseFieldIntents?.[fieldId] ?? null;
+    const localChanged =
+      !draftValuesEqual(localMapping, baseMapping) ||
+      !draftValuesEqual(localIntent, baseIntent);
+    const remoteChanged = hasBaseSnapshot
+      ? !draftValuesEqual(item.mapping, baseMapping) ||
+        !draftValuesEqual(remoteIntent, baseIntent)
+      : !legacyDraftMatchesCurrentRevision;
+    const localMatchesRemote =
+      draftValuesEqual(localMapping, item.mapping) &&
+      draftValuesEqual(localIntent, remoteIntent);
+
+    if (localChanged && remoteChanged && !localMatchesRemote) {
+      conflicts.push({
+        fieldId,
+        fieldLabel: item.field.originalLabel,
+        localMapping,
+        localIntent,
+      });
+      return item;
+    }
+
+    if (!localChanged) return item;
+
+    let nextIntent = localIntent;
+    let nextMapping = localMapping;
+    if (
+      localIntent?.intentKind === "custom_concept" &&
+      item.customConceptScaffold
+    ) {
+      nextIntent = {
+        intentKind: "custom_concept",
+        customSpec: {
+          ...localIntent.customSpec,
+          ...item.customConceptScaffold,
+        },
+      };
+      nextMapping = {
+        ...nextMapping,
+        clinicalConcept: item.customConceptScaffold.conceptId,
+      };
+    }
+    if (nextIntent) intentDrafts[fieldId] = nextIntent;
+    return { ...item, mapping: nextMapping };
+  });
+  return { fields, intentDrafts, conflicts };
+}
+
+function draftValuesEqual(left: unknown, right: unknown): boolean {
+  const canonicalize = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(canonicalize);
+    if (!value || typeof value !== "object") return value;
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+        .map(([key, nestedValue]) => [key, canonicalize(nestedValue)]),
+    );
+  };
+  return (
+    JSON.stringify(canonicalize(left)) === JSON.stringify(canonicalize(right))
+  );
+}
 
 const EXPECTED_TYPES: SemanticMapping["expectedDataType"][] = [
   "text",
@@ -237,6 +498,147 @@ const UNKNOWN_LABELS = {
   requires_input: "Require physician review",
 } as const;
 
+function mappingSettingLabel(setting: string): string {
+  const labels: Record<string, string> = {
+    clinicalDetail: "Clinical detail to fill",
+    supportedConcept: "Clinical detail to fill",
+    fieldIntent: "Field intent",
+    intentKind: "Field intent",
+    mappingStatus: "Confirmation status",
+    status: "Confirmation status",
+    expectedDataType: "Expected data type",
+    approvedSynonyms: "Approved synonyms",
+    practiceDefault: "Practice default",
+    customConcept: "Custom clinical detail",
+    staticField: "Why this remains static",
+    reason: "Why this remains static",
+    fieldSet: "Detected field set",
+  };
+  return labels[setting] ?? setting;
+}
+
+function fieldDraftError(
+  item: TemplateTwinWorkspaceField,
+  intentDraft?: FieldIntentDraft,
+): MappingFieldError | null {
+  const fieldId = item.field.fieldId;
+  const fieldLabel = item.field.originalLabel;
+  const requiresIntent =
+    item.field.rendererBinding.bindingType === "ordinary_placeholder";
+  const sharedClinicalDetailError = validateTemplateTwinClinicalDetail({
+    field: item.field,
+    mapping: item.mapping,
+    ...(intentDraft ? { intent: { fieldId, ...intentDraft } } : {}),
+  });
+  if (sharedClinicalDetailError) {
+    return {
+      fieldId,
+      fieldLabel,
+      setting: mappingSettingLabel(sharedClinicalDetailError.setting),
+      message: sharedClinicalDetailError.message,
+    };
+  }
+
+  if (requiresIntent) {
+    if (!intentDraft || intentDraft.intentKind === "unresolved") {
+      return item.mapping.status === "certified"
+        ? {
+            fieldId,
+            fieldLabel,
+            setting: "Field intent",
+            message: "Choose what belongs in this field before confirming it.",
+          }
+        : null;
+    }
+    if (intentDraft.intentKind === "supported_concept") {
+      const concept = intentDraft.supportedConcept.trim();
+      if (!concept) {
+        return {
+          fieldId,
+          fieldLabel,
+          setting: "Clinical detail to fill",
+          message:
+            "Choose a supported clinical detail before confirming this field.",
+        };
+      }
+      if (!isSupportedTemplateTwinConcept(concept)) {
+        return {
+          fieldId,
+          fieldLabel,
+          setting: "Clinical detail to fill",
+          message: `“${concept}” is not supported by this Template Twin version.`,
+        };
+      }
+      if (
+        item.mapping.status === "certified" &&
+        item.mapping.clinicalConcept !== concept
+      ) {
+        return {
+          fieldId,
+          fieldLabel,
+          setting: "Clinical detail to fill",
+          message:
+            "The confirmed mapping does not match the selected clinical detail.",
+        };
+      }
+    }
+    if (
+      intentDraft.intentKind === "static" &&
+      intentDraft.reason.trim().length < 10
+    ) {
+      return {
+        fieldId,
+        fieldLabel,
+        setting: "Why this remains static",
+        message: "Give a reason of at least 10 characters.",
+      };
+    }
+  } else if (!item.mapping.clinicalConcept) {
+    return {
+      fieldId,
+      fieldLabel,
+      setting: "Clinical detail to fill",
+      message:
+        "Choose a supported clinical detail before confirming this field.",
+    };
+  }
+
+  return null;
+}
+
+function fieldIsConfirmed(
+  item: TemplateTwinWorkspaceField,
+  intentDraft?: FieldIntentDraft,
+): boolean {
+  return (
+    item.mapping.status === "certified" && !fieldDraftError(item, intentDraft)
+  );
+}
+
+function clientMappingErrors(
+  fields: TemplateTwinWorkspaceField[],
+  intentDrafts: Record<string, FieldIntentDraft>,
+): MappingFieldError[] {
+  return fields.flatMap((item) => {
+    const error = fieldDraftError(item, intentDrafts[item.field.fieldId]);
+    if (
+      error?.setting === "Clinical detail to fill" &&
+      item.field.rendererBinding.bindingType !== "ordinary_placeholder" &&
+      item.mapping.status !== "certified"
+    ) {
+      return [];
+    }
+    return error ? [error] : [];
+  });
+}
+
+function formatRetryDuration(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  if (minutes === 0) return `${remainingSeconds}s`;
+  return `${minutes}m ${String(remainingSeconds).padStart(2, "0")}s`;
+}
+
 function fieldStatus(
   item: TemplateTwinWorkspaceField,
   intentDraft?: FieldIntentDraft,
@@ -244,13 +646,25 @@ function fieldStatus(
   label: string;
   tone: "safe" | "review" | "block";
 } {
+  const draftError = fieldDraftError(item, intentDraft);
+  if (draftError) {
+    return {
+      label:
+        draftError.setting === "Clinical detail to fill"
+          ? "Needs clinical detail"
+          : draftError.setting === "Field intent"
+            ? "Needs intent"
+            : "Needs confirmation",
+      tone: "review",
+    };
+  }
   if (
     item.field.rendererBinding.bindingType === "ordinary_placeholder" &&
     (!intentDraft || intentDraft.intentKind === "unresolved")
   ) {
     return { label: "Needs intent", tone: "review" };
   }
-  if (item.mapping.status === "certified") {
+  if (fieldIsConfirmed(item, intentDraft)) {
     return { label: "Certified", tone: "safe" };
   }
   if (item.field.detectionStatus === "unsupported") {
@@ -308,6 +722,7 @@ export function TemplateTwinCertificationWorkspace({
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState<
     | "save"
+    | "load-reviewed"
     | "test"
     | "custom-examples"
     | "ack-custom-examples"
@@ -316,6 +731,23 @@ export function TemplateTwinCertificationWorkspace({
     | null
   >(null);
   const [announcement, setAnnouncement] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<MappingFieldError[]>([]);
+  const [draftMergeConflicts, setDraftMergeConflicts] = useState<
+    DraftMergeConflict[]
+  >([]);
+  const [versionRecovery, setVersionRecovery] =
+    useState<VersionRecoveryState | null>(null);
+  const [draftRecoveryNotice, setDraftRecoveryNotice] = useState<string | null>(
+    null,
+  );
+  const [retryState, setRetryState] = useState<{
+    resetAtMs: number;
+    limitType: string;
+    serverResetAtIso?: string;
+  } | null>(null);
+  const [retryNowMs, setRetryNowMs] = useState(0);
+  const [reviewedMappingSummary, setReviewedMappingSummary] =
+    useState<TemplateTwinStagingQaPhysicianReviewSummary | null>(null);
   const [syntheticText, setSyntheticText] = useState(() =>
     initial.stagingQaFixtureSource
       ? TEMPLATE_TWIN_STAGING_QA_TYPED_STARTER
@@ -337,6 +769,114 @@ export function TemplateTwinCertificationWorkspace({
       : "",
   );
   const stagingRunKeyRef = useRef<string | null>(null);
+  const storageReadyRef = useRef(false);
+  const mountedWorkspaceRef = useRef(initial);
+  const initialRevisionRef = useRef(
+    `${initial.template.id}:${initial.mappingsSha256}:${initial.fieldIntentsSha256}`,
+  );
+
+  useEffect(() => {
+    const mountedWorkspace = mountedWorkspaceRef.current;
+    const stored = readStoredMappingDraft(mountedWorkspace);
+    storageReadyRef.current = true;
+    if (!stored) return;
+    const rebased = rebaseMappingDraft(mountedWorkspace, stored);
+    setFields(rebased.fields);
+    setIntentDrafts(rebased.intentDrafts);
+    setDraftMergeConflicts(rebased.conflicts);
+    if (
+      mountedWorkspace.fields.some(
+        (item) => item.field.fieldId === stored.selectedFieldId,
+      )
+    ) {
+      setSelectedId(stored.selectedFieldId);
+    }
+    setDirty(true);
+    setDraftRecoveryNotice(
+      rebased.conflicts.length > 0
+        ? "Recovered your unsaved mapping draft, but a newer edit changed the same field. Resolve the listed field before saving."
+        : "Recovered unsaved mapping changes from this browser tab. Review and save when ready.",
+    );
+    setAnnouncement("Unsaved mapping changes were recovered.");
+  }, []);
+
+  useEffect(() => {
+    const revision = `${initial.template.id}:${initial.mappingsSha256}:${initial.fieldIntentsSha256}`;
+    if (revision === initialRevisionRef.current) return;
+    initialRevisionRef.current = revision;
+    if (dirty) {
+      const localDraft = mappingDraftFor({
+        workspace,
+        fields,
+        intentDrafts,
+        selectedFieldId: selectedId,
+      });
+      storeMappingDraft(localDraft);
+      const rebased = rebaseMappingDraft(initial, localDraft);
+      const timeout = window.setTimeout(() => {
+        setWorkspace(initial);
+        setFields(rebased.fields);
+        setIntentDrafts(rebased.intentDrafts);
+        setDraftMergeConflicts(rebased.conflicts);
+        setDraftRecoveryNotice(
+          rebased.conflicts.length > 0
+            ? `Version ${initial.template.version} changed the same field as your draft. The current version is shown until you choose which value to keep.`
+            : `Rebased your unsaved changes onto version ${initial.template.version}.`,
+        );
+        setVersionRecovery(null);
+        setAnnouncement(
+          rebased.conflicts.length > 0
+            ? `${rebased.conflicts[0]!.fieldLabel} changed in both versions and needs an explicit choice.`
+            : `Unsaved mapping changes were rebased onto version ${initial.template.version}.`,
+        );
+      }, 0);
+      return () => window.clearTimeout(timeout);
+    }
+    const timeout = window.setTimeout(() => {
+      setWorkspace(initial);
+      setFields(initial.fields);
+      setIntentDrafts(intentDraftsFor(initial.fields));
+      setDraftMergeConflicts([]);
+      setSelectedId((current) =>
+        initial.fields.some((item) => item.field.fieldId === current)
+          ? current
+          : (initial.fields[0]?.field.fieldId ?? ""),
+      );
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [dirty, fields, initial, intentDrafts, selectedId, workspace]);
+
+  useEffect(() => {
+    if (!dirty || !storageReadyRef.current || draftMergeConflicts.length > 0)
+      return;
+    storeMappingDraft(
+      mappingDraftFor({
+        workspace,
+        fields,
+        intentDrafts,
+        selectedFieldId: selectedId,
+      }),
+    );
+  }, [
+    dirty,
+    draftMergeConflicts.length,
+    fields,
+    intentDrafts,
+    selectedId,
+    workspace,
+  ]);
+
+  useEffect(() => {
+    if (!retryState) return;
+    const update = () => {
+      const now = Date.now();
+      setRetryNowMs(now);
+      if (now >= retryState.resetAtMs) setRetryState(null);
+    };
+    update();
+    const interval = window.setInterval(update, 1_000);
+    return () => window.clearInterval(interval);
+  }, [retryState]);
 
   useEffect(
     () => () => {
@@ -362,13 +902,13 @@ export function TemplateTwinCertificationWorkspace({
           ),
     [fields, filter, intentDrafts],
   );
-  const confirmedCount = fields.filter(
-    (item) =>
-      item.mapping.status === "certified" &&
-      (item.field.rendererBinding.bindingType !== "ordinary_placeholder" ||
-        intentDrafts[item.field.fieldId]?.intentKind !== "unresolved"),
+  const confirmedCount = fields.filter((item) =>
+    fieldIsConfirmed(item, intentDrafts[item.field.fieldId]),
   ).length;
   const allConfirmed = fields.length > 0 && confirmedCount === fields.length;
+  const retrySecondsRemaining = retryState
+    ? Math.max(0, Math.ceil((retryState.resetAtMs - retryNowMs) / 1_000))
+    : 0;
   const testMatches = Boolean(
     workspace.latestSyntheticTest?.roundTripVerified &&
     workspace.latestSyntheticTest.mappingsSha256 === workspace.mappingsSha256,
@@ -460,6 +1000,12 @@ export function TemplateTwinCertificationWorkspace({
       ),
     );
     setDirty(true);
+    setFieldErrors((current) =>
+      current.filter((error) => error.fieldId !== fieldId),
+    );
+    setDraftMergeConflicts((current) =>
+      current.filter((conflict) => conflict.fieldId !== fieldId),
+    );
     setAckStructure(false);
     setAckTest(false);
     setWaiverReasons({});
@@ -469,6 +1015,12 @@ export function TemplateTwinCertificationWorkspace({
   function updateIntent(fieldId: string, intent: FieldIntentDraft) {
     setIntentDrafts((current) => ({ ...current, [fieldId]: intent }));
     setDirty(true);
+    setFieldErrors((current) =>
+      current.filter((error) => error.fieldId !== fieldId),
+    );
+    setDraftMergeConflicts((current) =>
+      current.filter((conflict) => conflict.fieldId !== fieldId),
+    );
     setAckStructure(false);
     setAckTest(false);
     setWaiverReasons({});
@@ -479,7 +1031,46 @@ export function TemplateTwinCertificationWorkspace({
 
   async function saveMappings(): Promise<boolean> {
     if (!workspace.canEdit) return true;
+    const currentDraft = mappingDraftFor({
+      workspace,
+      fields,
+      intentDrafts,
+      selectedFieldId: selectedId,
+    });
+    if (draftMergeConflicts.length > 0) {
+      setFilter("all");
+      setSelectedId(draftMergeConflicts[0]!.fieldId);
+      setAnnouncement(
+        `${draftMergeConflicts[0]!.fieldLabel} changed in both versions and needs an explicit choice.`,
+      );
+      toast.error("Resolve the concurrent field change", {
+        description: `${draftMergeConflicts[0]!.fieldLabel} changed in both your draft and the current version. Choose which value to keep before saving.`,
+      });
+      return false;
+    }
+    storeMappingDraft(currentDraft);
+    const localErrors = clientMappingErrors(fields, intentDrafts);
+    if (localErrors.length > 0) {
+      setFieldErrors(localErrors);
+      setFilter("all");
+      setSelectedId(localErrors[0]!.fieldId);
+      setAnnouncement(
+        `${localErrors[0]!.fieldLabel}: ${localErrors[0]!.setting} needs attention.`,
+      );
+      toast.error("Mapping draft needs attention", {
+        description: `${localErrors[0]!.fieldLabel} — ${localErrors[0]!.setting}: ${localErrors[0]!.message}`,
+      });
+      return false;
+    }
+    if (retrySecondsRemaining > 0) {
+      toast.error("Mapping save is temporarily paused", {
+        description: `Retry in ${formatRetryDuration(retrySecondsRemaining)}. Your unsaved draft is safe in this browser tab.`,
+      });
+      return false;
+    }
     setBusy("save");
+    setFieldErrors([]);
+    setVersionRecovery(null);
     setAnnouncement("Saving semantic mappings.");
     try {
       const response = await fetch(
@@ -520,21 +1111,120 @@ export function TemplateTwinCertificationWorkspace({
       );
       const payload = (await response.json().catch(() => null)) as
         | { ok: true; workspace: TemplateTwinWorkspace }
-        | { ok: false; error: string }
+        | MappingErrorPayload
         | null;
       if (!response.ok || !payload?.ok) {
+        const errorPayload = payload && !payload.ok ? payload : null;
+        const responseFieldErrors = (errorPayload?.fieldErrors ?? []).map(
+          (error) => ({
+            ...error,
+            fieldLabel:
+              fields.find((item) => item.field.fieldId === error.fieldId)?.field
+                .originalLabel ?? error.fieldLabel,
+            setting: mappingSettingLabel(error.setting),
+          }),
+        );
+        if (responseFieldErrors.length > 0) {
+          setFieldErrors(responseFieldErrors);
+          setFilter("all");
+          setSelectedId(responseFieldErrors[0]!.fieldId);
+          setAnnouncement(
+            `${responseFieldErrors[0]!.fieldLabel}: ${responseFieldErrors[0]!.setting} needs attention.`,
+          );
+        }
+        if (
+          response.status === 429 ||
+          errorPayload?.code === "RATE_LIMITED" ||
+          (response.status === 503 &&
+            errorPayload?.code === "RATE_LIMIT_UNAVAILABLE")
+        ) {
+          const retryAfterHeader = Number(
+            response.headers?.get("Retry-After") ?? Number.NaN,
+          );
+          const retryAfterSec =
+            errorPayload?.retryAfterSec ??
+            (Number.isFinite(retryAfterHeader) ? retryAfterHeader : 60);
+          const now = Date.now();
+          // Retry-After is a server-derived duration from Redis TIME. Anchor
+          // the countdown to receipt time instead of comparing the server's
+          // wall-clock timestamp with a potentially skewed workstation clock.
+          const resetAtMs = now + Math.max(1, retryAfterSec) * 1_000;
+          setRetryNowMs(now);
+          setRetryState({
+            resetAtMs,
+            limitType:
+              errorPayload?.limitType ??
+              (errorPayload?.code === "RATE_LIMIT_UNAVAILABLE"
+                ? "safety_check"
+                : "mapping-save"),
+            ...(errorPayload?.resetAtIso
+              ? { serverResetAtIso: errorPayload.resetAtIso }
+              : {}),
+          });
+          const retryIn = Math.max(1, Math.ceil((resetAtMs - now) / 1_000));
+          setAnnouncement(
+            `Mapping save is available again in ${formatRetryDuration(retryIn)}.`,
+          );
+          toast.error(
+            errorPayload?.code === "RATE_LIMIT_UNAVAILABLE"
+              ? "Mapping safety check is temporarily unavailable"
+              : "Mappings were not saved",
+            {
+              description: `Retry in ${formatRetryDuration(retryIn)}. Your unsaved draft is safe in this browser tab.`,
+            },
+          );
+          return false;
+        }
+        const recoverableVersionFailure =
+          errorPayload?.recoverable === true ||
+          ["VERSION_CONFLICT", "VERSION_IMMUTABLE", "VERSION_STALE"].includes(
+            errorPayload?.code ?? "",
+          );
+        if (recoverableVersionFailure) {
+          setVersionRecovery({
+            message:
+              errorPayload?.error ??
+              "A newer immutable template version is available.",
+            ...(errorPayload?.latestWorkspace
+              ? { latestWorkspace: errorPayload.latestWorkspace }
+              : {}),
+            ...(errorPayload?.latestTemplateId
+              ? { latestTemplateId: errorPayload.latestTemplateId }
+              : {}),
+          });
+          setAnnouncement(
+            "A newer version is available. Your unsaved changes are safe and can be rebased.",
+          );
+          toast.error("A newer template version is available", {
+            description:
+              "Your unsaved draft is safe. Refresh and rebase it onto the current version.",
+          });
+          return false;
+        }
         toast.error("Mappings were not saved", {
-          description:
-            payload && !payload.ok
-              ? payload.error
-              : "Reload the workspace and try again.",
+          description: errorPayload
+            ? responseFieldErrors.length > 0
+              ? `${responseFieldErrors[0]!.fieldLabel} — ${responseFieldErrors[0]!.setting}: ${responseFieldErrors[0]!.message}`
+              : errorPayload.error
+            : "Reload the workspace and try again.",
         });
         return false;
+      }
+      clearStoredMappingDraft(workspace.template.lineageId);
+      if (payload.workspace.template.id !== workspace.template.id) {
+        router.replace(
+          `/settings/note-format/${encodeURIComponent(payload.workspace.template.id)}/certify`,
+          { scroll: false },
+        );
       }
       setWorkspace(payload.workspace);
       setFields(payload.workspace.fields);
       setIntentDrafts(intentDraftsFor(payload.workspace.fields));
       setDirty(false);
+      setDraftRecoveryNotice(null);
+      setVersionRecovery(null);
+      setFieldErrors([]);
+      setRetryState(null);
       setAckStructure(false);
       setAckTest(false);
       setWaiverReasons({});
@@ -546,6 +1236,288 @@ export function TemplateTwinCertificationWorkspace({
         description: "Check your connection and try again.",
       });
       return false;
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function recoverAndRebaseDraft() {
+    const currentDraft = mappingDraftFor({
+      workspace,
+      fields,
+      intentDrafts,
+      selectedFieldId: selectedId,
+    });
+    storeMappingDraft(currentDraft);
+    const latest = versionRecovery?.latestWorkspace;
+    const latestTemplateId = versionRecovery?.latestTemplateId;
+    const latestWorkspaceIsAuthoritative = Boolean(
+      latest &&
+      latestTemplateId &&
+      latest.template.id === latestTemplateId &&
+      latest.canEdit,
+    );
+    if (latest && latestWorkspaceIsAuthoritative) {
+      if (
+        latest.template.lineageId !== workspace.template.lineageId ||
+        latest.source.sha256 !== workspace.source.sha256
+      ) {
+        toast.error("Draft cannot be rebased automatically", {
+          description:
+            "The current version has a different source document. Your tab-scoped draft remains preserved.",
+        });
+        return;
+      }
+      const rebased = rebaseMappingDraft(latest, currentDraft);
+      setWorkspace(latest);
+      setFields(rebased.fields);
+      setIntentDrafts(rebased.intentDrafts);
+      setDraftMergeConflicts(rebased.conflicts);
+      setSelectedId((current) =>
+        latest.fields.some((item) => item.field.fieldId === current)
+          ? current
+          : (latest.fields[0]?.field.fieldId ?? ""),
+      );
+      setDirty(true);
+      setVersionRecovery(null);
+      setFieldErrors([]);
+      setDraftRecoveryNotice(
+        rebased.conflicts.length > 0
+          ? `Version ${latest.template.version} changed the same field as your draft. The current value is shown until you choose which value to keep.`
+          : `Rebased your unsaved changes onto version ${latest.template.version}.`,
+      );
+      if (rebased.conflicts.length === 0) {
+        storeMappingDraft(
+          mappingDraftFor({
+            workspace: latest,
+            fields: rebased.fields,
+            intentDrafts: rebased.intentDrafts,
+            selectedFieldId: selectedId,
+          }),
+        );
+      }
+      if (latest.template.id !== workspace.template.id) {
+        router.replace(
+          `/settings/note-format/${encodeURIComponent(latest.template.id)}/certify`,
+          { scroll: false },
+        );
+      }
+      setAnnouncement(
+        rebased.conflicts.length > 0
+          ? `${rebased.conflicts[0]!.fieldLabel} changed in both versions and needs an explicit choice.`
+          : `Unsaved changes were rebased onto version ${latest.template.version}.`,
+      );
+      return;
+    }
+
+    if (latestTemplateId && latestTemplateId !== workspace.template.id) {
+      router.replace(
+        `/settings/note-format/${encodeURIComponent(latestTemplateId)}/certify`,
+        { scroll: false },
+      );
+      setAnnouncement(
+        "Opening the current immutable version. Your unsaved changes remain preserved for rebase.",
+      );
+      return;
+    }
+    router.refresh();
+    setAnnouncement(
+      "Refreshing the current immutable version. Your unsaved changes remain preserved for rebase.",
+    );
+  }
+
+  function resolveDraftMergeConflict(
+    fieldId: string,
+    resolution: "latest" | "local",
+  ) {
+    const conflict = draftMergeConflicts.find(
+      (candidate) => candidate.fieldId === fieldId,
+    );
+    if (!conflict) return;
+
+    if (resolution === "local") {
+      setFields((current) =>
+        current.map((item) => {
+          if (item.field.fieldId !== fieldId) return item;
+          if (
+            conflict.localIntent?.intentKind === "custom_concept" &&
+            item.customConceptScaffold
+          ) {
+            return {
+              ...item,
+              mapping: {
+                ...conflict.localMapping,
+                clinicalConcept: item.customConceptScaffold.conceptId,
+              },
+            };
+          }
+          return { ...item, mapping: conflict.localMapping };
+        }),
+      );
+      const localIntent = conflict.localIntent;
+      if (localIntent) {
+        setIntentDrafts((current) => ({
+          ...current,
+          [fieldId]:
+            localIntent.intentKind === "custom_concept"
+              ? {
+                  intentKind: "custom_concept",
+                  customSpec: {
+                    ...localIntent.customSpec,
+                    ...(fields.find((item) => item.field.fieldId === fieldId)
+                      ?.customConceptScaffold ?? {}),
+                  },
+                }
+              : localIntent,
+        }));
+      }
+    }
+
+    const remainingConflicts = draftMergeConflicts.filter(
+      (candidate) => candidate.fieldId !== fieldId,
+    );
+    setDraftMergeConflicts(remainingConflicts);
+    setFieldErrors((current) =>
+      current.filter((error) => error.fieldId !== fieldId),
+    );
+    setSelectedId(fieldId);
+    setFilter("all");
+
+    let remainsDirtyAfterResolution = true;
+    if (resolution === "latest") {
+      const remoteIntentDrafts = intentDraftsFor(workspace.fields);
+      const hasOtherLocalChanges = fields.some((item) => {
+        const remote = workspace.fields.find(
+          (candidate) => candidate.field.fieldId === item.field.fieldId,
+        );
+        return (
+          !remote ||
+          !draftValuesEqual(item.mapping, remote.mapping) ||
+          !draftValuesEqual(
+            intentDrafts[item.field.fieldId] ?? null,
+            remoteIntentDrafts[item.field.fieldId] ?? null,
+          )
+        );
+      });
+      const remainsDirty =
+        hasOtherLocalChanges || remainingConflicts.length > 0;
+      remainsDirtyAfterResolution = remainsDirty;
+      setDirty(remainsDirty);
+      if (!remainsDirty) {
+        clearStoredMappingDraft(workspace.template.lineageId);
+      }
+    } else {
+      setDirty(true);
+    }
+
+    setDraftRecoveryNotice(
+      remainingConflicts.length > 0
+        ? `${remainingConflicts.length} concurrent field change${remainingConflicts.length === 1 ? " remains" : "s remain"} to resolve.`
+        : resolution === "local"
+          ? "Your unsaved value is now applied on top of the current version. Review and save when ready."
+          : remainsDirtyAfterResolution
+            ? "The current version's value was kept. Other unsaved changes remain available."
+            : "The current version's value was kept. There are no unsaved mapping changes.",
+    );
+    setAnnouncement(
+      `${conflict.fieldLabel}: ${resolution === "local" ? "your unsaved value" : "the current version"} was kept.`,
+    );
+  }
+
+  async function loadReviewedSyntheticMappings() {
+    if (!stagingQaEnabled || !workspace.canEdit) return;
+    setBusy("load-reviewed");
+    setAnnouncement("Loading the reviewed synthetic mapping contract.");
+    try {
+      const response = await fetch(
+        `/api/note-templates/template-twin/${encodeURIComponent(workspace.template.id)}/staging-qa/reviewed-mappings`,
+        {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { Accept: "application/json" },
+        },
+      );
+      const payload = (await response.json().catch(() => null)) as
+        | TemplateTwinStagingQaReviewedMappingsResponse
+        | MappingErrorPayload
+        | null;
+      if (!response.ok || !payload?.ok) {
+        toast.error("Reviewed synthetic mappings were not loaded", {
+          description:
+            payload && !payload.ok
+              ? payload.error
+              : "The current draft was left unchanged. Reload and try again.",
+        });
+        return;
+      }
+      const reviewed = payload.reviewed;
+      const expectedFieldIds = new Set(
+        fields.map((item) => item.field.fieldId),
+      );
+      const reviewedFieldIds = new Set(
+        reviewed.mappings.map((mapping) => mapping.fieldId),
+      );
+      if (
+        reviewed.fixture.sha256 !== workspace.source.sha256 ||
+        reviewed.template.id !== workspace.template.id ||
+        reviewed.expectedMappingsSha256 !== workspace.mappingsSha256 ||
+        reviewed.expectedFieldIntentsSha256 !== workspace.fieldIntentsSha256 ||
+        reviewedFieldIds.size !== expectedFieldIds.size ||
+        [...reviewedFieldIds].some((fieldId) => !expectedFieldIds.has(fieldId))
+      ) {
+        toast.error("Reviewed synthetic mappings do not match this version", {
+          description:
+            "Nothing was loaded. Refresh the exact allowlisted fixture version and try again.",
+        });
+        return;
+      }
+      const mappingByFieldId = new Map(
+        reviewed.mappings.map((mapping) => [mapping.fieldId, mapping]),
+      );
+      const nextFields = fields.map((item) => ({
+        ...item,
+        mapping: mappingByFieldId.get(item.field.fieldId) ?? item.mapping,
+      }));
+      const nextIntentDrafts = { ...intentDrafts };
+      for (const fieldIntent of reviewed.fieldIntents) {
+        const { fieldId, ...intent } = fieldIntent;
+        if (!expectedFieldIds.has(fieldId)) {
+          toast.error("Reviewed synthetic intent does not match this version", {
+            description: "Nothing was loaded. Refresh and try again.",
+          });
+          return;
+        }
+        nextIntentDrafts[fieldId] = intent;
+      }
+      setFields(nextFields);
+      setIntentDrafts(nextIntentDrafts);
+      setReviewedMappingSummary(reviewed.physicianReviewSummary);
+      setDirty(true);
+      setFieldErrors([]);
+      setVersionRecovery(null);
+      setDraftRecoveryNotice(
+        "The reviewed synthetic mapping set is loaded as an unsaved draft. Activation has not occurred.",
+      );
+      setAckStructure(false);
+      setAckTest(false);
+      setWaiverReasons({});
+      storeMappingDraft(
+        mappingDraftFor({
+          workspace,
+          fields: nextFields,
+          intentDrafts: nextIntentDrafts,
+          selectedFieldId: selectedId,
+        }),
+      );
+      setAnnouncement(
+        "Eight reviewed synthetic mappings were loaded as an unsaved draft. Physician review and explicit activation are still required.",
+      );
+      toast.success("Reviewed synthetic mappings loaded");
+    } catch {
+      toast.error("Reviewed synthetic mappings were not loaded", {
+        description:
+          "The current draft was left unchanged. Check your connection and try again.",
+      });
     } finally {
       setBusy(null);
     }
@@ -1017,6 +1989,120 @@ export function TemplateTwinCertificationWorkspace({
         </div>
       </header>
 
+      {draftRecoveryNotice && (
+        <section className={styles.callout} role="status">
+          <strong>Unsaved mapping draft preserved</strong>
+          <div style={{ marginTop: 4 }}>{draftRecoveryNotice}</div>
+        </section>
+      )}
+
+      {versionRecovery && (
+        <section className={styles.callout} data-tone="block" role="alert">
+          <strong>A newer immutable version is available</strong>
+          <div style={{ marginTop: 4 }}>{versionRecovery.message}</div>
+          <div style={{ marginTop: 4 }}>
+            Your unsaved changes are safe in this browser tab. Refresh and
+            rebase them onto the current version; no field-by-field work will be
+            discarded.
+          </div>
+          <button
+            type="button"
+            className={styles.button}
+            style={{ marginTop: 10 }}
+            onClick={recoverAndRebaseDraft}
+            disabled={busy !== null}
+          >
+            Refresh and rebase unsaved draft
+          </button>
+        </section>
+      )}
+
+      {draftMergeConflicts.length > 0 && (
+        <section className={styles.callout} data-tone="block" role="alert">
+          <strong>Resolve concurrent field changes</strong>
+          <div style={{ marginTop: 4 }}>
+            The current version and your unsaved draft changed the same field.
+            The current version is shown and neither value will be overwritten
+            until you choose explicitly.
+          </div>
+          <ul style={{ margin: "8px 0 0", paddingLeft: 20 }}>
+            {draftMergeConflicts.map((conflict) => (
+              <li key={conflict.fieldId}>
+                <strong>{conflict.fieldLabel}</strong>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                    flexWrap: "wrap",
+                    marginTop: 6,
+                  }}
+                >
+                  <button
+                    type="button"
+                    className={styles.button}
+                    onClick={() =>
+                      resolveDraftMergeConflict(conflict.fieldId, "latest")
+                    }
+                  >
+                    Keep current version for {conflict.fieldLabel}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.button}
+                    onClick={() =>
+                      resolveDraftMergeConflict(conflict.fieldId, "local")
+                    }
+                  >
+                    Use my unsaved draft for {conflict.fieldLabel}
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {retryState && retrySecondsRemaining > 0 && (
+        <section className={styles.callout} role="status">
+          <strong>
+            Mapping save available in{" "}
+            {formatRetryDuration(retrySecondsRemaining)}
+          </strong>
+          <div style={{ marginTop: 4 }}>
+            This {retryState.limitType.replaceAll("_", " ")} retry state resets
+            at{" "}
+            {new Date(
+              retryState.serverResetAtIso ?? retryState.resetAtMs,
+            ).toLocaleTimeString()}
+            . Your unsaved draft remains safe in this browser tab.
+          </div>
+        </section>
+      )}
+
+      {fieldErrors.length > 0 && (
+        <section className={styles.callout} data-tone="block" role="alert">
+          <strong>Review these exact mapping settings</strong>
+          <ul style={{ margin: "8px 0 0", paddingLeft: 20 }}>
+            {fieldErrors.map((error) => (
+              <li key={`${error.fieldId}:${error.setting}`}>
+                <button
+                  type="button"
+                  className={styles.button}
+                  style={{ margin: "3px 0" }}
+                  onClick={() => {
+                    setFilter("all");
+                    setSelectedId(error.fieldId);
+                  }}
+                >
+                  {error.fieldLabel} — {error.setting}
+                </button>{" "}
+                {error.message}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {stagingQaEnabled && (
         <section
           className={styles.guidedIntro}
@@ -1061,6 +2147,71 @@ export function TemplateTwinCertificationWorkspace({
               </div>
             ))}
           </dl>
+        </section>
+      )}
+
+      {stagingQaEnabled && workspace.canEdit && (
+        <section className={styles.guidedIntro} aria-label="Reviewed mappings">
+          <div>
+            <h2 className={styles.sectionTitle}>
+              Reviewed synthetic mapping set
+            </h2>
+            <p className={styles.fieldMeta}>
+              Available only for this exact byte-allowlisted synthetic fixture.
+              Loading creates an unsaved local draft; it never saves, tests,
+              certifies, or activates a template.
+            </p>
+            <button
+              type="button"
+              className={styles.button}
+              onClick={() => void loadReviewedSyntheticMappings()}
+              disabled={busy !== null}
+            >
+              {busy === "load-reviewed"
+                ? "Loading reviewed mappings…"
+                : "Load reviewed synthetic mappings"}
+            </button>
+          </div>
+          {reviewedMappingSummary ? (
+            <div className={styles.callout} role="status">
+              <strong>{reviewedMappingSummary.title}</strong>
+              <div style={{ marginTop: 4 }}>
+                {reviewedMappingSummary.fixtureLabel} ·{" "}
+                {reviewedMappingSummary.fieldCount} reviewed fields
+              </div>
+              <ul style={{ margin: "8px 0 0", paddingLeft: 20 }}>
+                {reviewedMappingSummary.fields.map((field) => (
+                  <li key={field.fieldId}>
+                    {field.fieldLabel} → {field.clinicalDetailLabel} ·{" "}
+                    {titleCase(field.settings.expectedDataType)} ·{" "}
+                    {field.settings.requiredBeforeSigning
+                      ? "required before signing"
+                      : "optional"}
+                  </li>
+                ))}
+              </ul>
+              <div className={styles.fieldMeta} style={{ marginTop: 8 }}>
+                Approved synonyms:{" "}
+                {reviewedMappingSummary.settings.approvedSynonyms}
+                {" · "}Practice defaults:{" "}
+                {reviewedMappingSummary.settings.practiceDefaults}
+                {" · "}When missing:{" "}
+                {titleCase(
+                  reviewedMappingSummary.settings.missingClinicalDetail,
+                )}
+              </div>
+              <p className={styles.warningText} role="alert">
+                Activation has not occurred. Save and test this draft, inspect
+                the synthetic output, complete both physician acknowledgements,
+                and explicitly choose Certify &amp; activate.
+              </p>
+            </div>
+          ) : (
+            <div className={styles.callout}>
+              No reviewed mappings are loaded. Current field decisions are
+              unchanged.
+            </div>
+          )}
         </section>
       )}
 
@@ -1760,9 +2911,18 @@ export function TemplateTwinCertificationWorkspace({
                 type="button"
                 className={styles.button}
                 onClick={() => void saveMappings()}
-                disabled={!dirty || busy !== null}
+                disabled={
+                  !dirty ||
+                  busy !== null ||
+                  retrySecondsRemaining > 0 ||
+                  draftMergeConflicts.length > 0
+                }
               >
-                {busy === "save" ? "Saving…" : "Save draft"}
+                {busy === "save"
+                  ? "Saving…"
+                  : retrySecondsRemaining > 0
+                    ? `Retry save in ${formatRetryDuration(retrySecondsRemaining)}`
+                    : "Save draft"}
               </button>
               <button
                 type="button"
@@ -1834,6 +2994,7 @@ function FieldInspector({
     (requiresIntent &&
       (intentDraft.intentKind === "custom_concept" ||
         intentDraft.intentKind === "static"));
+  const confirmationError = fieldDraftError(item, intentDraft);
 
   function changeIntent(next: FieldIntentDraft) {
     if (stagingQaMode && next.intentKind === "custom_concept") return;
@@ -1873,6 +3034,7 @@ function FieldInspector({
   }
 
   function confirmField() {
+    if (confirmationError) return;
     if (requiresIntent) {
       if (intentDraft.intentKind === "unresolved") return;
       if (intentDraft.intentKind === "static") {
@@ -2230,25 +3392,27 @@ function FieldInspector({
           </label>
         </div>
         {canEdit && (
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "flex-end",
-              marginTop: 14,
-            }}
-          >
+          <div style={{ marginTop: 14 }}>
+            {confirmationError && (
+              <p className={styles.warningText} role="alert">
+                {confirmationError.fieldLabel} — {confirmationError.setting}:{" "}
+                {confirmationError.message}
+              </p>
+            )}
             <button
               type="button"
               className={styles.primaryButton}
+              style={{ display: "block", marginLeft: "auto" }}
               onClick={confirmField}
               disabled={
                 busy ||
                 mapping.status === "certified" ||
+                Boolean(confirmationError) ||
                 (requiresIntent && intentDraft.intentKind === "unresolved") ||
                 (stagingQaMode && intentDraft.intentKind === "custom_concept")
               }
             >
-              {mapping.status === "certified"
+              {fieldIsConfirmed(item, intentDraft)
                 ? "Field confirmed"
                 : "Confirm this field"}
             </button>

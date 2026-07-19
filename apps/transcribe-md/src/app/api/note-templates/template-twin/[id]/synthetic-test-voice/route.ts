@@ -125,7 +125,10 @@ export async function POST(
         session.user.practiceId
     ) {
       return response(
-        { ok: false, error: "Template Twin version not found." },
+        {
+          ok: false,
+          error: "This Template Twin version is stale or unavailable.",
+        },
         404,
       );
     }
@@ -185,6 +188,8 @@ export async function POST(
           ? { fieldIntentsSha256: expectedFieldIntentsSha256 }
           : {}),
       },
+      isExpectedBusinessError: (error) =>
+        error instanceof TemplateTwinSyntheticTestError,
       operation: async () => {
         const transcription =
           await runWithTemplateTwinStagingQaCertificationProvider({
@@ -266,8 +271,14 @@ export async function POST(
     }
     if (error instanceof TemplateTwinStagingQaLifecycleGuardError) {
       return response(
-        { ok: false, error: "Template Twin version not found." },
-        404,
+        {
+          ok: false,
+          code: "VERSION_STALE",
+          recoverable: true,
+          error:
+            "This Template Twin version is stale or unavailable. Refresh the certification workspace to continue.",
+        },
+        409,
       );
     }
     if (error instanceof TemplateTwinMultipartError) {

@@ -70,6 +70,8 @@ export async function POST(
         parsed.data.action === "run"
           ? "custom-example-run"
           : "custom-example-acknowledgement",
+      isExpectedBusinessError: (error) =>
+        error instanceof TemplateTwinCustomExampleError,
       operation: () =>
         parsed.data.action === "run"
           ? runTemplateTwinCustomExamples({
@@ -108,8 +110,14 @@ export async function POST(
     }
     if (error instanceof TemplateTwinStagingQaLifecycleGuardError) {
       return response(
-        { ok: false, error: "Template Twin version not found." },
-        404,
+        {
+          ok: false,
+          code: "VERSION_STALE",
+          recoverable: true,
+          error:
+            "This Template Twin version is stale or unavailable. Refresh the certification workspace to continue.",
+        },
+        409,
       );
     }
     return response(

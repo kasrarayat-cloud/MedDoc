@@ -61,20 +61,6 @@ if (
   );
 }
 
-const CONCEPT_BY_LABEL: ReadonlyArray<{
-  matches: RegExp;
-  value: string;
-}> = [
-  { matches: /chief concern/i, value: "chief_complaint" },
-  { matches: /smoking status/i, value: "social_history.smoking" },
-  { matches: /encounter category/i, value: "assessment" },
-  { matches: /encounter date/i, value: "hpi.onset" },
-  { matches: /respiratory symptom/i, value: "ros.respiratory" },
-  { matches: /plan item/i, value: "plan" },
-  { matches: /plan detail/i, value: "plan" },
-  { matches: /synthetic detail|insert synthetic/i, value: "hpi.context" },
-];
-
 test.setTimeout(Math.max(420_000, PROVIDER_ATOMICITY_JOURNEY_COUNT * 60_000));
 
 function sha256(bytes: Uint8Array): string {
@@ -86,6 +72,55 @@ function sameOriginHeaders(page: Page): Record<string, string> {
     Origin: new URL(page.url()).origin,
     "Sec-Fetch-Site": "same-origin",
   };
+}
+
+async function humanReviewPause(page: Page): Promise<void> {
+  await page.waitForTimeout(150);
+}
+
+async function selectDetectedField(page: Page, fieldLabel: string) {
+  const fieldButton = page
+    .getByRole("navigation", { name: "Detected fields" })
+    .getByRole("button")
+    .filter({ hasText: fieldLabel });
+  await expect(fieldButton).toHaveCount(1);
+  await fieldButton.click();
+  await humanReviewPause(page);
+  return fieldButton;
+}
+
+async function reviewAndConfirmSupportedField(input: {
+  page: Page;
+  fieldLabel: string;
+  clinicalConcept: string;
+}): Promise<void> {
+  const fieldButton = await selectDetectedField(input.page, input.fieldLabel);
+  const clinicalDetail = input.page.getByLabel("Clinical detail to fill");
+  await clinicalDetail.selectOption(input.clinicalConcept);
+  await expect(clinicalDetail).toHaveValue(input.clinicalConcept);
+  await humanReviewPause(input.page);
+  await input.page.getByRole("button", { name: "Confirm this field" }).click();
+  await expect(fieldButton).toContainText("Certified");
+}
+
+async function expectSupportedField(input: {
+  page: Page;
+  fieldLabel: string;
+  clinicalConcept: string;
+}): Promise<void> {
+  await selectDetectedField(input.page, input.fieldLabel);
+  await expect(input.page.getByLabel("Clinical detail to fill")).toHaveValue(
+    input.clinicalConcept,
+  );
+}
+
+async function expectConfirmedFieldCount(
+  page: Page,
+  confirmed: number,
+): Promise<void> {
+  await expect(page.getByLabel("Detected structure summary")).toContainText(
+    new RegExp(`Confirmed\\s*${confirmed}/8`, "u"),
+  );
 }
 
 async function revealNoteFormatSettings(page: Page): Promise<void> {
@@ -565,36 +600,169 @@ test("Template Twin staging UI drives the real synthetic pipeline fail closed", 
     .getByRole("navigation", { name: "Detected fields" })
     .getByRole("button");
   expect(await fieldButtons.count()).toBe(8);
-  for (let index = 0; index < 8; index += 1) {
-    const button = fieldButtons.nth(index);
-    const label = (await button.textContent()) ?? "";
-    const mapping = CONCEPT_BY_LABEL.find((candidate) =>
-      candidate.matches.test(label),
-    );
-    expect(
-      mapping,
-      `no synthetic mapping fixture for field ${label}`,
-    ).toBeDefined();
-    await button.click();
-    const intent = page.getByLabel("Field intent");
-    if (await intent.isVisible().catch(() => false)) {
-      await intent.selectOption("supported_concept");
-    }
-    await page
-      .getByLabel("Clinical detail to fill")
-      .selectOption(mapping!.value);
-    await page.getByLabel("When this detail applies").selectOption("any");
-    await page.getByLabel("Left or right").selectOption("not_applicable");
-    await page
-      .getByLabel("When this detail was not stated")
-      .selectOption("requires_input");
-    const required = page.getByRole("checkbox", {
-      name: "Required before signing",
-    });
-    if (!(await required.isChecked())) await required.check();
-    await page.getByRole("button", { name: "Confirm this field" }).click();
-  }
+
+  // Open an authenticated stale tab before either physician changes a field.
+  // Each tab then makes a distinct, human-paced decision through the normal
+  // field inspector. This proves recovery merges real disjoint work instead of
+  // replaying the same prebuilt payload in both tabs.
+  const stalePage = await page.context().newPage();
+  await stalePage.goto(certificationUrl);
+  await expect(stalePage.getByText("One-time physician setup")).toBeVisible();
+  await reviewAndConfirmSupportedField({
+    page,
+    fieldLabel: "Synthetic chief concern",
+    clinicalConcept: "chief_complaint",
+  });
+  await expectConfirmedFieldCount(page, 1);
+  await reviewAndConfirmSupportedField({
+    page: stalePage,
+    fieldLabel: "Synthetic smoking status",
+    clinicalConcept: "social_history.smoking",
+  });
+  await expectConfirmedFieldCount(stalePage, 1);
+
+  await humanReviewPause(page);
+  const firstSaveResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" &&
+      /\/api\/note-templates\/template-twin\/[^/]+\/mappings$/u.test(
+        new URL(response.url()).pathname,
+      ),
+  );
   await page.getByRole("button", { name: "Save draft" }).click();
+  expect((await firstSaveResponsePromise).status()).toBe(200);
+  await expect(page.getByText("1 of 8 fields confirmed")).toBeVisible({
+    timeout: 20_000,
+  });
+
+  await humanReviewPause(stalePage);
+  const conflictResponsePromise = stalePage.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" &&
+      /\/api\/note-templates\/template-twin\/[^/]+\/mappings$/u.test(
+        new URL(response.url()).pathname,
+      ),
+  );
+  await stalePage.getByRole("button", { name: "Save draft" }).click();
+  expect((await conflictResponsePromise).status()).toBe(409);
+  const recoverableConflict = stalePage
+    .getByText("A newer immutable version is available")
+    .locator("..");
+  await expect(recoverableConflict).toBeVisible();
+  await expect(recoverableConflict).toContainText(
+    "Your unsaved changes are safe in this browser tab",
+  );
+  await stalePage
+    .getByRole("button", { name: "Refresh and rebase unsaved draft" })
+    .click();
+  await expect(
+    stalePage.getByText(/Rebased your unsaved changes onto version/i),
+  ).toBeVisible();
+  await expect(
+    stalePage.getByText("Resolve concurrent field changes"),
+  ).toHaveCount(0);
+  await expect(
+    stalePage.getByText("Template Twin version not found"),
+  ).toHaveCount(0);
+  await expectConfirmedFieldCount(stalePage, 2);
+  await expectSupportedField({
+    page: stalePage,
+    fieldLabel: "Synthetic chief concern",
+    clinicalConcept: "chief_complaint",
+  });
+  await expectSupportedField({
+    page: stalePage,
+    fieldLabel: "Synthetic smoking status",
+    clinicalConcept: "social_history.smoking",
+  });
+  const rebasedSaveResponsePromise = stalePage.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" &&
+      /\/api\/note-templates\/template-twin\/[^/]+\/mappings$/u.test(
+        new URL(response.url()).pathname,
+      ),
+  );
+  await stalePage.getByRole("button", { name: "Save draft" }).click();
+  expect((await rebasedSaveResponsePromise).status()).toBe(200);
+  await expect(stalePage.getByText("2 of 8 fields confirmed")).toBeVisible({
+    timeout: 20_000,
+  });
+  await stalePage.close();
+
+  // Bring the primary tab onto the authoritative two-field revision before
+  // requesting an exact-hash reviewed contract from the server.
+  await page.reload();
+  await expectConfirmedFieldCount(page, 2);
+  await expectSupportedField({
+    page,
+    fieldLabel: "Synthetic chief concern",
+    clinicalConcept: "chief_complaint",
+  });
+  await expectSupportedField({
+    page,
+    fieldLabel: "Synthetic smoking status",
+    clinicalConcept: "social_history.smoking",
+  });
+
+  // The reviewed loader is production UI restricted to this one exact
+  // byte-allowlisted fixture. It produces an unsaved draft, presents the full
+  // physician review summary, and cannot activate the template by itself.
+  await humanReviewPause(page);
+  const reviewedMappingsResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname.endsWith(
+        "/staging-qa/reviewed-mappings",
+      ),
+  );
+  await page
+    .getByRole("button", { name: "Load reviewed synthetic mappings" })
+    .click();
+  expect((await reviewedMappingsResponsePromise).status()).toBe(200);
+  await expect(
+    page.getByText("Physician review of the synthetic mapping set"),
+  ).toBeVisible();
+  await expect(page.getByText("8 reviewed fields")).toBeVisible();
+  await expect(
+    page
+      .getByRole("alert")
+      .filter({ hasText: /^Activation has not occurred\./u }),
+  ).toBeVisible();
+  await expectConfirmedFieldCount(page, 8);
+  await expect(
+    page.locator("header").getByText("Needs Confirmation", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Certify & activate" }),
+  ).toBeDisabled();
+
+  // Refresh before saving to prove the tab-scoped reviewed draft survives a
+  // real navigation and rebases over the second tab's authoritative partial
+  // save without any field-by-field reconstruction.
+  await humanReviewPause(page);
+  await page.reload();
+  await expect(page.getByText("Unsaved mapping draft preserved")).toBeVisible();
+  await expectConfirmedFieldCount(page, 8);
+  await expectSupportedField({
+    page,
+    fieldLabel: "Synthetic chief concern",
+    clinicalConcept: "chief_complaint",
+  });
+  await expectSupportedField({
+    page,
+    fieldLabel: "Synthetic smoking status",
+    clinicalConcept: "social_history.smoking",
+  });
+
+  const reviewedSaveResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" &&
+      /\/api\/note-templates\/template-twin\/[^/]+\/mappings$/u.test(
+        new URL(response.url()).pathname,
+      ),
+  );
+  await page.getByRole("button", { name: "Save draft" }).click();
+  expect((await reviewedSaveResponsePromise).status()).toBe(200);
   await expect(page.getByText("8 of 8 fields confirmed")).toBeVisible({
     timeout: 20_000,
   });
@@ -1244,6 +1412,93 @@ test("Template Twin staging UI drives the real synthetic pipeline fail closed", 
   } finally {
     await foreign.close();
   }
+
+  // Fork the certified exact-fixture version through the founder-facing
+  // Settings UI. This reaches the real migrated PostgreSQL transition chain
+  // (ADMITTED -> SOURCE_VERIFIED -> TEMPLATE_LINKED), lands atomically on the
+  // new immutable version URL, and leaves a saved but deliberately uncertified
+  // reviewed draft for further manual inspection.
+  await page.goto("/settings");
+  await revealNoteFormatSettings(page);
+  const certifiedTemplateName = page
+    .getByText(TEMPLATE_NAME, { exact: true })
+    .first();
+  const certifiedTemplateRow = certifiedTemplateName.locator(
+    "xpath=ancestor::div[.//button[normalize-space()='New version']][1]",
+  );
+  await expect(certifiedTemplateRow).toContainText("Active");
+  await certifiedTemplateRow
+    .getByRole("button", { name: "New version" })
+    .click();
+  const versionDialog = page.getByRole("dialog", {
+    name: "Create a new Template Twin version",
+  });
+  await expect(versionDialog).toBeVisible();
+  await expect(versionDialog.getByLabel("Template name")).toHaveValue(
+    TEMPLATE_NAME,
+  );
+  await versionDialog
+    .getByLabel("What changed in this version?")
+    .fill("Synthetic reviewed version-fork recovery validation");
+  await humanReviewPause(page);
+  await versionDialog
+    .getByRole("button", { name: "Create draft version" })
+    .click();
+  await page.waitForURL(/\/settings\/note-format\/[^/]+\/certify$/u, {
+    timeout: 30_000,
+  });
+  const versionTwoUrl = new URL(page.url()).pathname;
+  const versionTwoTemplateId = versionTwoUrl.split("/").at(-2)!;
+  expect(versionTwoTemplateId).not.toBe(templateId);
+  await expect(
+    page.getByText(/Version 2 · Original Word layout/u),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Load reviewed synthetic mappings" }),
+  ).toBeVisible();
+
+  const versionTwoLoaderResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname.endsWith(
+        "/staging-qa/reviewed-mappings",
+      ),
+  );
+  await page
+    .getByRole("button", { name: "Load reviewed synthetic mappings" })
+    .click();
+  expect((await versionTwoLoaderResponsePromise).status()).toBe(200);
+  await expect(
+    page.getByText("Physician review of the synthetic mapping set"),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("alert")
+      .filter({ hasText: /^Activation has not occurred\./u }),
+  ).toBeVisible();
+  await expectConfirmedFieldCount(page, 8);
+  await expect(
+    page.getByRole("button", { name: "Certify & activate" }),
+  ).toBeDisabled();
+
+  const versionTwoSaveResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" &&
+      new URL(response.url()).pathname ===
+        `/api/note-templates/template-twin/${versionTwoTemplateId}/mappings`,
+  );
+  await humanReviewPause(page);
+  await page.getByRole("button", { name: "Save draft" }).click();
+  expect((await versionTwoSaveResponsePromise).status()).toBe(200);
+  await expect(page.getByText("8 of 8 fields confirmed")).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(
+    page.locator("header").getByText("Needs Confirmation", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Certify & activate" }),
+  ).toBeDisabled();
 
   // A disable commit advances both rollout epochs. Re-enabling admits only a
   // new run under the new epochs; it can never revive the isolated old run.

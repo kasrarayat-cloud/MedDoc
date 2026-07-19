@@ -19,6 +19,8 @@ import {
 const mocks = vi.hoisted(() => ({
   findAdmission: vi.fn(),
   pinRollout: vi.fn(),
+  certifyAdmission: vi.fn(),
+  markAdmissionFailed: vi.fn(),
 }));
 
 vi.mock("@meddoc/db", () => ({
@@ -29,6 +31,11 @@ vi.mock("@meddoc/db", () => ({
 vi.mock("../rollout", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../rollout")>()),
   pinTemplateTwinRollout: mocks.pinRollout,
+}));
+vi.mock("../staging-qa-admission", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../staging-qa-admission")>()),
+  certifyTemplateTwinStagingQaAdmission: mocks.certifyAdmission,
+  markTemplateTwinStagingQaAdmissionFailed: mocks.markAdmissionFailed,
 }));
 
 const SAFE_ENV: SyntheticQaProviderEnvironment = {
@@ -111,6 +118,8 @@ function matchingPin() {
 beforeEach(() => {
   mocks.findAdmission.mockReset().mockResolvedValue(admission());
   mocks.pinRollout.mockReset().mockResolvedValue(TOKEN);
+  mocks.certifyAdmission.mockReset().mockResolvedValue(undefined);
+  mocks.markAdmissionFailed.mockReset().mockResolvedValue(undefined);
 });
 
 describe("generic staging lifecycle guard", () => {
@@ -164,6 +173,7 @@ describe("generic staging lifecycle guard", () => {
       expect(context?.practiceId).toBe(ACTOR.practiceId);
       return context?.visitId;
     });
+    const overbroadClassifier = vi.fn(() => true);
 
     await expect(
       runWithTemplateTwinStagingQaLifecycleGuard({
@@ -171,6 +181,7 @@ describe("generic staging lifecycle guard", () => {
         actor: ACTOR,
         purpose: "workspace-read",
         operation,
+        isExpectedBusinessError: overbroadClassifier,
         dependencies: {
           inspect: stagingInspect({
             sha256: "f".repeat(64),
@@ -182,6 +193,8 @@ describe("generic staging lifecycle guard", () => {
       }),
     ).rejects.toBeInstanceOf(TemplateTwinStagingQaLifecycleGuardError);
     expect(operation).not.toHaveBeenCalled();
+    expect(overbroadClassifier).not.toHaveBeenCalled();
+    expect(mocks.markAdmissionFailed).not.toHaveBeenCalled();
   });
 
   it("keeps the deterministic provider context active if flags are revoked during an admitted callback", async () => {
@@ -230,6 +243,99 @@ describe("generic staging lifecycle guard", () => {
       }),
     ).rejects.toBeInstanceOf(TemplateTwinStagingQaLifecycleGuardError);
     expect(operation).not.toHaveBeenCalled();
+  });
+
+  it("preserves an expected certification conflict without failing or certifying the admission", async () => {
+    class ExpectedCertificationConflict extends Error {}
+    const conflict = new ExpectedCertificationConflict(
+      "The mapping version changed before certification.",
+    );
+    const isExpectedBusinessError = vi.fn(
+      (error: unknown) => error instanceof ExpectedCertificationConflict,
+    );
+
+    await expect(
+      runWithTemplateTwinStagingQaLifecycleGuard({
+        noteTemplateId: "template-lifecycle-synthetic",
+        actor: ACTOR,
+        purpose: "certification-activation",
+        operation: () => {
+          throw conflict;
+        },
+        isExpectedBusinessError,
+        dependencies: {
+          inspect: stagingInspect(),
+          pinRollout: matchingPin(),
+          env: SAFE_ENV,
+        },
+      }),
+    ).rejects.toBe(conflict);
+
+    expect(isExpectedBusinessError).toHaveBeenCalledOnce();
+    expect(isExpectedBusinessError).toHaveBeenCalledWith(conflict);
+    expect(mocks.markAdmissionFailed).not.toHaveBeenCalled();
+    expect(mocks.certifyAdmission).not.toHaveBeenCalled();
+  });
+
+  it("fails the admission for an unexpected certification operation error", async () => {
+    const failure = new Error("Unexpected persistence failure.");
+
+    await expect(
+      runWithTemplateTwinStagingQaLifecycleGuard({
+        noteTemplateId: "template-lifecycle-synthetic",
+        actor: ACTOR,
+        purpose: "certification-activation",
+        operation: () => {
+          throw failure;
+        },
+        isExpectedBusinessError: () => false,
+        dependencies: {
+          inspect: stagingInspect(),
+          pinRollout: matchingPin(),
+          env: SAFE_ENV,
+        },
+      }),
+    ).rejects.toBe(failure);
+
+    expect(mocks.markAdmissionFailed).toHaveBeenCalledWith({
+      admissionId: admission().id,
+      actor: {
+        userId: ACTOR.userId,
+        practiceId: ACTOR.practiceId,
+      },
+      failureCode: "TEMPLATE_TWIN_STAGING_QA_LIFECYCLE_PROVIDER_FAILED",
+    });
+    expect(mocks.certifyAdmission).not.toHaveBeenCalled();
+  });
+
+  it("advances certification admission only after the operation succeeds", async () => {
+    const operation = vi.fn().mockResolvedValue("certified-workspace");
+
+    await expect(
+      runWithTemplateTwinStagingQaLifecycleGuard({
+        noteTemplateId: "template-lifecycle-synthetic",
+        actor: ACTOR,
+        purpose: "certification-activation",
+        operation,
+        isExpectedBusinessError: () => false,
+        dependencies: {
+          inspect: stagingInspect(),
+          pinRollout: matchingPin(),
+          env: SAFE_ENV,
+        },
+      }),
+    ).resolves.toBe("certified-workspace");
+
+    expect(mocks.certifyAdmission).toHaveBeenCalledWith({
+      admissionId: admission().id,
+      actor: ACTOR,
+      noteTemplateId: "template-lifecycle-synthetic",
+      env: SAFE_ENV,
+    });
+    expect(operation.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.certifyAdmission.mock.invocationCallOrder[0]!,
+    );
+    expect(mocks.markAdmissionFailed).not.toHaveBeenCalled();
   });
 
   it("preserves the ordinary Template Twin lifecycle path without a synthetic provider context", async () => {

@@ -17,6 +17,7 @@ import {
   TemplateTwinStagingQaLifecycleGuardError,
   runWithTemplateTwinStagingQaLifecycleGuard,
 } from "@/lib/template-twin/staging-qa-lifecycle-guard";
+import { createTemplateTwinStagingQaVersionAdmission } from "@/lib/template-twin/staging-qa-version-admission";
 
 type TemplateTwinManagementCode =
   | "INVALID_INPUT"
@@ -271,6 +272,10 @@ async function runManagementStagingGuard<T>(input: {
     noteTemplateId: input.noteTemplateId,
     actor: input.actor,
     purpose: input.purpose,
+    isExpectedBusinessError: (error) =>
+      error instanceof TemplateTwinManagementError ||
+      (error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"),
     operation: input.operation,
   });
 }
@@ -563,6 +568,23 @@ export async function createTemplateTwinVersionAction(
                 fields: { create: fieldCreates },
               },
               select: { id: true },
+            });
+
+            await createTemplateTwinStagingQaVersionAdmission({
+              tx,
+              actor: {
+                userId: actor.userId,
+                userEmail: actor.userEmail,
+                practiceId: actor.practiceId,
+                rolloutToken: actor.rolloutToken,
+              },
+              source: {
+                noteTemplateId: source.id,
+                sourceArtifactId: sourceCompiled.sourceArtifactId,
+                sha256: sourceCompiled.sourceArtifact.sha256,
+                sizeBytes: sourceCompiled.sourceArtifact.sizeBytes,
+              },
+              target: { noteTemplateId, version: nextVersion },
             });
 
             await enqueueTemplateTwinAudit(tx, {

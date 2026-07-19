@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   lifecycleGuard: vi.fn(async (input: { operation: () => unknown }) =>
     input.operation(),
   ),
+  versionAdmission: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -44,6 +45,10 @@ vi.mock("@/lib/template-twin/rollout", async (importOriginal) => {
 vi.mock("@/lib/template-twin/staging-qa-lifecycle-guard", () => ({
   TemplateTwinStagingQaLifecycleGuardError: class TemplateTwinStagingQaLifecycleGuardError extends Error {},
   runWithTemplateTwinStagingQaLifecycleGuard: mocks.lifecycleGuard,
+}));
+
+vi.mock("@/lib/template-twin/staging-qa-version-admission", () => ({
+  createTemplateTwinStagingQaVersionAdmission: mocks.versionAdmission,
 }));
 
 vi.mock("@meddoc/db", () => {
@@ -296,12 +301,101 @@ describe("createTemplateTwinVersionAction", () => {
     });
     expect(compiledData.certification).toBeUndefined();
     expect(compiledData.latestSyntheticTestManifest).toBeUndefined();
+    expect(mocks.versionAdmission).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actor: expect.objectContaining({
+          userId: DOCTOR_ID,
+          practiceId: PRACTICE_ID,
+        }),
+        source: expect.objectContaining({
+          noteTemplateId: "template-v1",
+          sourceArtifactId: "source-v1",
+        }),
+        target: expect.objectContaining({ version: 2 }),
+      }),
+    );
     expect(mocks.outboxCreate.mock.calls[0][0].data).toMatchObject({
       action: "TEMPLATE_TWIN_COMPILED",
       practiceId: PRACTICE_ID,
       actorId: DOCTOR_ID,
       targetType: "TemplateTwinCompiledVersion",
     });
+  });
+
+  it("returns a recoverable conflict to the losing concurrent immutable fork", async () => {
+    const { Prisma } = await import("@prisma/client");
+    const releaseLosingCreate = latch<void>();
+    let createAttempt = 0;
+
+    mocks.noteTemplateFindFirst.mockImplementation(
+      async (query: { where: { id?: string } }) =>
+        query.where.id ? certifiedVersion() : { version: 1 },
+    );
+    mocks.noteTemplateCreate.mockImplementation(async () => {
+      createAttempt += 1;
+      if (createAttempt === 1) {
+        await releaseLosingCreate.promise;
+        throw new Prisma.PrismaClientKnownRequestError(
+          "Unique constraint failed on the lineage version",
+          {
+            code: "P2002",
+            clientVersion: "test",
+            meta: { target: ["doctorId", "lineageId", "version"] },
+          },
+        );
+      }
+      releaseLosingCreate.resolve();
+      return { id: "template-winning-fork" };
+    });
+
+    const input = {
+      sourceNoteTemplateId: "template-v1",
+      name: "Synthetic primary care template",
+      encounterType: "primary-care",
+      versionDescription: "Concurrent synthetic mapping save",
+    };
+    const results = await Promise.all([
+      createTemplateTwinVersionAction(input),
+      createTemplateTwinVersionAction(input),
+    ]);
+
+    expect(results).toEqual(
+      expect.arrayContaining([
+        {
+          ok: false,
+          code: "CONFLICT",
+          error:
+            "This template lineage changed in another request. Reload and try again.",
+        },
+        expect.objectContaining({ ok: true, version: 2, status: "draft" }),
+      ]),
+    );
+    expect(mocks.noteTemplateCreate).toHaveBeenCalledTimes(2);
+    expect(mocks.compiledCreate).toHaveBeenCalledTimes(1);
+    expect(mocks.versionAdmission).toHaveBeenCalledTimes(1);
+    expect(mocks.outboxCreate).toHaveBeenCalledTimes(1);
+    const guardInput = mocks.lifecycleGuard.mock.calls[0]?.[0] as unknown as {
+      isExpectedBusinessError?: (error: unknown) => boolean;
+    };
+    const p2002 = new Prisma.PrismaClientKnownRequestError(
+      "Unique constraint failed on the lineage version",
+      {
+        code: "P2002",
+        clientVersion: "test",
+      },
+    );
+    expect(guardInput.isExpectedBusinessError?.(p2002)).toBe(true);
+    expect(
+      guardInput.isExpectedBusinessError?.(
+        new Prisma.PrismaClientKnownRequestError("Database unavailable", {
+          code: "P1001",
+          clientVersion: "test",
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      guardInput.isExpectedBusinessError?.(new Error("unknown failure")),
+    ).toBe(false);
   });
 
   it("requires physician-readable name, scope, and version description", async () => {

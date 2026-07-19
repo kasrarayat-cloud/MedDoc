@@ -41,6 +41,7 @@ vi.mock("@/lib/template-twin/staging-qa-lifecycle-guard", () => ({
 }));
 
 import { POST } from "../[id]/custom-examples/route";
+import { TemplateTwinCustomExampleError } from "@/lib/template-twin/custom-example-service";
 
 const COVERAGE = {
   requiredCount: 3,
@@ -100,6 +101,17 @@ describe("custom-concept example route", () => {
         }),
       }),
     );
+    const guardInput = mocks.lifecycleGuard.mock.calls[0]?.[0] as unknown as {
+      isExpectedBusinessError?: (error: unknown) => boolean;
+    };
+    expect(
+      guardInput.isExpectedBusinessError?.(
+        new TemplateTwinCustomExampleError("IMMUTABLE", "conflict"),
+      ),
+    ).toBe(true);
+    expect(
+      guardInput.isExpectedBusinessError?.(new Error("provider failure")),
+    ).toBe(false);
   });
 
   it("records one-time physician acknowledgement for the exact batch", async () => {
