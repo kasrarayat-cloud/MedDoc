@@ -43,6 +43,7 @@ interface CorpusCase {
   readonly entities: EncounterEntitySnapshot;
   readonly quotes: readonly string[];
   readonly expected: "rendered_verified" | "blocked_as_expected";
+  readonly expectedCompilerBlockerCodes?: readonly string[];
   readonly expectedBlockerCodes?: readonly string[];
   readonly expectedPageCount: number | null;
   readonly minimumExpectedPages: number;
@@ -193,10 +194,19 @@ async function legacyControlsSource(): Promise<Buffer> {
   const body = [
     legacyTextField("Legacy note", "text"),
     legacyDropdownField("Legacy severity"),
-    legacyTextField("Legacy date", "date"),
     legacyCheckboxField("Legacy checkbox"),
   ].join("");
   const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="${W}" xmlns:r="${R}"><w:body><w:p><w:r><w:t>Synthetic legacy controls</w:t></w:r></w:p>${body}<w:sectPr><w:headerReference w:type="default" r:id="rIdHeader"/><w:footerReference w:type="default" r:id="rIdFooter"/></w:sectPr></w:body></w:document>`;
+  return normalizeDocx(
+    await buildSyntheticDocx({
+      documentXml,
+      extraEntries: staticHeaderFooter(),
+    }),
+  );
+}
+
+async function unsupportedLegacyDateSource(): Promise<Buffer> {
+  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="${W}" xmlns:r="${R}"><w:body><w:p><w:r><w:t>Synthetic unsupported legacy date</w:t></w:r></w:p>${legacyTextField("Legacy date", "date")}<w:sectPr><w:headerReference w:type="default" r:id="rIdHeader"/><w:footerReference w:type="default" r:id="rIdFooter"/></w:sectPr></w:body></w:document>`;
   return normalizeDocx(
     await buildSyntheticDocx({
       documentXml,
@@ -428,7 +438,6 @@ function cases(): readonly CorpusCase[] {
         const name = field.rendererBinding.legacyName;
         if (name === "Legacy note") return "past_medical_history";
         if (name === "Legacy severity") return "hpi.duration";
-        if (name === "Legacy date") return "hpi.timing";
         if (name === "Legacy checkbox") return "test.name";
         throw new Error(
           `No synthetic legacy mapping for ${name ?? field.fieldId}.`,
@@ -437,9 +446,7 @@ function cases(): readonly CorpusCase[] {
       entities: {
         hpi: {
           duration: "Medium",
-          timing: "2026-07-16",
-          evidence_quote:
-            "Synthetic duration is Medium and timing is 2026-07-16.",
+          evidence_quote: "Synthetic duration is Medium.",
           speaker: "Clinician",
         },
         past_medical_history: [
@@ -458,11 +465,24 @@ function cases(): readonly CorpusCase[] {
         ],
       },
       quotes: [
-        "Synthetic duration is Medium and timing is 2026-07-16.",
+        "Synthetic duration is Medium.",
         "History of Synthetic prior condition.",
         "Synthetic local test was reviewed.",
       ],
       expected: "rendered_verified",
+      expectedPageCount: 1,
+      minimumExpectedPages: 1,
+    },
+    {
+      id: "unsupported-legacy-date",
+      source: unsupportedLegacyDateSource,
+      conceptForField: () => "hpi.timing",
+      entities: {},
+      quotes: [],
+      expected: "blocked_as_expected",
+      expectedCompilerBlockerCodes: [
+        "LEGACY_FORM_FIELD_PROFILE_UNSUPPORTED",
+      ],
       expectedPageCount: 1,
       minimumExpectedPages: 1,
     },
@@ -534,8 +554,42 @@ async function generateCase(
     `${testCase.id}: source reopen mismatch.`,
   );
   const ir = compileTemplateDocx(reopenedSource);
+  const compilerBlockerCodes = ir.unsupported.map((item) => item.code).sort();
+  const expectedCompilerBlockerCodes = [
+    ...(testCase.expectedCompilerBlockerCodes ?? []),
+  ].sort();
+  if (expectedCompilerBlockerCodes.length > 0) {
+    invariant(
+      testCase.expected === "blocked_as_expected",
+      `${testCase.id}: compiler-blocked cases must be marked blocked_as_expected.`,
+    );
+    invariant(
+      JSON.stringify(compilerBlockerCodes) ===
+        JSON.stringify(expectedCompilerBlockerCodes),
+      `${testCase.id}: compiler blocker census changed: ${compilerBlockerCodes.join(",")}.`,
+    );
+    await writeJson(path.join(caseRoot, "compiler-blockers.json"), {
+      expectedCompilerBlockerCodes,
+      blockers: ir.unsupported,
+    });
+    return {
+      id: testCase.id,
+      status: testCase.expected,
+      sourcePath,
+      outputPath: null,
+      fieldCount: ir.fields.length,
+      compilerBlockerCodes,
+      validationCodes: [],
+      sourceSha256: sha256(reopenedSource),
+      outputSha256: null,
+      sourceSizeBytes: reopenedSource.length,
+      outputSizeBytes: null,
+      expectedPageCount: testCase.expectedPageCount,
+      minimumExpectedPages: testCase.minimumExpectedPages,
+    };
+  }
   invariant(
-    ir.unsupported.length === 0,
+    compilerBlockerCodes.length === 0,
     `${testCase.id}: unexpected compiler blockers.`,
   );
   const mappings = mappingsFor(ir, testCase.conceptForField);
