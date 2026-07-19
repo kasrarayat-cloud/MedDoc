@@ -6,18 +6,17 @@
 //   - transcribe-md-cleanup (MinIO orphan / stale visit / retention sweeps)
 //   - dlq-permanent-failures (PR-L — exhausted-retry sink; no consumer)
 //
-// Auth gate inherits from apps/transcribe-md/src/app/admin/layout.tsx
-// (SUPER_ADMIN product entitlement + ≤12-hour session freshness).
-// Non-SUPER_ADMIN users see notFound() — same posture as the rest of
-// /admin/*.
+// A fresh page/RSC gate enforces the dedicated host, current session,
+// Product.SUPER_ADMIN, MFA, and required access audit before Redis reads.
 //
 // PR-L scope: dashboard is READ-ONLY this PR. Re-enqueue / clear /
 // drop actions on DLQ jobs are a v2 concern (write paths need their
 // own audit-row instrumentation + confirmation UX).
 // ============================================================================
 
-import type { Metadata } from 'next';
+import type { Metadata } from "next";
 
+import { requireFreshPlatformAdminPage } from "@/lib/admin-page-gate";
 import {
   QUEUE_NAME,
   CLEANUP_QUEUE_NAME,
@@ -25,11 +24,11 @@ import {
   getCleanupQueue,
   getDlqQueue,
   getTranscribeMdQueue,
-} from '@/lib/queue';
-import type { Queue } from 'bullmq';
+} from "@/lib/queue";
+import type { Queue } from "bullmq";
 
-export const metadata: Metadata = { title: 'Queues · Admin · QuillMD' };
-export const dynamic = 'force-dynamic';
+export const metadata: Metadata = { title: "Queues · Admin · QuillMD" };
+export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 interface QueueRow {
@@ -54,16 +53,16 @@ interface QueueRow {
  *  visible warning rather than crashing the page. */
 async function readQueueRow(
   queue: Queue,
-  description: string
+  description: string,
 ): Promise<QueueRow & { error?: string }> {
   try {
     const counts = await queue.getJobCounts(
-      'waiting',
-      'active',
-      'completed',
-      'failed',
-      'delayed',
-      'paused'
+      "waiting",
+      "active",
+      "completed",
+      "failed",
+      "delayed",
+      "paused",
     );
     const c = {
       waiting: counts.waiting ?? 0,
@@ -117,10 +116,10 @@ async function readDlqJobs(): Promise<DlqJobPreview[] | { error: string }> {
     // BullMQ's getJobs returns arrays of Job<TPayload>; the DLQ uses
     // DlqJobPayload so each .data carries the structured failure info.
     const jobs = await queue.getJobs(
-      ['waiting', 'completed', 'failed', 'delayed'],
+      ["waiting", "completed", "failed", "delayed"],
       0,
       24, // 25 most recent
-      false
+      false,
     );
     return jobs.map((job) => {
       const data = job.data as {
@@ -133,12 +132,12 @@ async function readDlqJobs(): Promise<DlqJobPreview[] | { error: string }> {
         originalPayload?: { visitId?: string };
       };
       return {
-        id: job.id ?? '?',
-        originalQueue: data.originalQueue ?? '?',
+        id: job.id ?? "?",
+        originalQueue: data.originalQueue ?? "?",
         originalJobId: data.originalJobId ?? null,
-        originalJobName: data.originalJobName ?? '?',
-        lastError: (data.lastError ?? '?').slice(0, 240),
-        exhaustedAt: data.exhaustedAt ?? '?',
+        originalJobName: data.originalJobName ?? "?",
+        lastError: (data.lastError ?? "?").slice(0, 240),
+        exhaustedAt: data.exhaustedAt ?? "?",
         totalAttempts: data.totalAttempts ?? 0,
         visitId: data.originalPayload?.visitId ?? null,
       };
@@ -149,20 +148,19 @@ async function readDlqJobs(): Promise<DlqJobPreview[] | { error: string }> {
 }
 
 export default async function AdminQueuesPage() {
-  // The auth/SUPER_ADMIN gate is the parent layout's responsibility.
-  // Reaching here means the request already passed those checks.
+  await requireFreshPlatformAdminPage({ routeKey: "/admin/queues" });
   const [pipelineRow, cleanupRow, dlqRow, dlqJobs] = await Promise.all([
     readQueueRow(
       getTranscribeMdQueue(),
-      'Visit pipeline (Layer 1-8). 3 attempts with exponential backoff; exhausted jobs go to DLQ.'
+      "Visit pipeline (Layer 1-8). 3 attempts with exponential backoff; exhausted jobs go to DLQ.",
     ),
     readQueueRow(
       getCleanupQueue(),
-      'MinIO orphan sweep + stale-visit cleanup + audio retention sweep. 1 attempt; failures retry on next schedule.'
+      "MinIO orphan sweep + stale-visit cleanup + audio retention sweep. 1 attempt; failures retry on next schedule.",
     ),
     readQueueRow(
       getDlqQueue(),
-      'PR-L dead-letter queue. No consumer — accumulates exhausted jobs for operator review.'
+      "PR-L dead-letter queue. No consumer — accumulates exhausted jobs for operator review.",
     ),
     readDlqJobs(),
   ]);
@@ -170,19 +168,19 @@ export default async function AdminQueuesPage() {
   return (
     <main
       style={{
-        padding: '32px 24px 80px',
-        minHeight: '60vh',
-        background: 'var(--color-linear-bg)',
-        color: 'var(--color-linear-text)',
+        padding: "32px 24px 80px",
+        minHeight: "60vh",
+        background: "var(--color-linear-bg)",
+        color: "var(--color-linear-text)",
       }}
     >
       <h1
         style={{
           margin: 0,
-          fontFamily: 'var(--font-sans)',
+          fontFamily: "var(--font-sans)",
           fontSize: 22,
           fontWeight: 500,
-          letterSpacing: '-0.012em',
+          letterSpacing: "-0.012em",
           marginBottom: 6,
         }}
       >
@@ -192,23 +190,24 @@ export default async function AdminQueuesPage() {
         style={{
           margin: 0,
           fontSize: 13,
-          color: 'var(--color-linear-text-3)',
+          color: "var(--color-linear-text-3)",
           marginBottom: 28,
         }}
       >
-        BullMQ queue depth + dead-letter contents. Read-only view (PR-L). Retry / clear actions land in a follow-up.
+        BullMQ queue depth + dead-letter contents. Read-only view (PR-L). Retry
+        / clear actions land in a follow-up.
       </p>
 
       <section style={{ marginBottom: 32 }}>
         <h2
           style={{
             margin: 0,
-            fontFamily: 'var(--font-mono)',
+            fontFamily: "var(--font-mono)",
             fontSize: 11,
             fontWeight: 500,
-            letterSpacing: '0.07em',
-            textTransform: 'uppercase',
-            color: 'var(--color-linear-text-3)',
+            letterSpacing: "0.07em",
+            textTransform: "uppercase",
+            color: "var(--color-linear-text-3)",
             marginBottom: 10,
           }}
         >
@@ -216,49 +215,149 @@ export default async function AdminQueuesPage() {
         </h2>
         <table
           style={{
-            width: '100%',
-            borderCollapse: 'collapse',
-            fontFamily: 'var(--font-mono)',
+            width: "100%",
+            borderCollapse: "collapse",
+            fontFamily: "var(--font-mono)",
             fontSize: 12,
           }}
         >
           <thead>
-            <tr style={{ textAlign: 'left', color: 'var(--color-linear-text-3)' }}>
-              <th style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-linear-hairline)' }}>queue</th>
-              <th style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-linear-hairline)' }}>waiting</th>
-              <th style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-linear-hairline)' }}>active</th>
-              <th style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-linear-hairline)' }}>delayed</th>
-              <th style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-linear-hairline)' }}>failed</th>
-              <th style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-linear-hairline)' }}>completed (rolling)</th>
+            <tr
+              style={{ textAlign: "left", color: "var(--color-linear-text-3)" }}
+            >
+              <th
+                style={{
+                  padding: "8px 10px",
+                  borderBottom: "1px solid var(--color-linear-hairline)",
+                }}
+              >
+                queue
+              </th>
+              <th
+                style={{
+                  padding: "8px 10px",
+                  borderBottom: "1px solid var(--color-linear-hairline)",
+                }}
+              >
+                waiting
+              </th>
+              <th
+                style={{
+                  padding: "8px 10px",
+                  borderBottom: "1px solid var(--color-linear-hairline)",
+                }}
+              >
+                active
+              </th>
+              <th
+                style={{
+                  padding: "8px 10px",
+                  borderBottom: "1px solid var(--color-linear-hairline)",
+                }}
+              >
+                delayed
+              </th>
+              <th
+                style={{
+                  padding: "8px 10px",
+                  borderBottom: "1px solid var(--color-linear-hairline)",
+                }}
+              >
+                failed
+              </th>
+              <th
+                style={{
+                  padding: "8px 10px",
+                  borderBottom: "1px solid var(--color-linear-hairline)",
+                }}
+              >
+                completed (rolling)
+              </th>
             </tr>
           </thead>
           <tbody>
             {[pipelineRow, cleanupRow, dlqRow].map((row) => (
               <tr key={row.name}>
-                <td style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-linear-hairline)' }}>
-                  <div style={{ color: 'var(--color-linear-text)', fontWeight: 500 }}>{row.name}</div>
-                  <div style={{ color: 'var(--color-linear-text-3)', fontSize: 11, fontFamily: 'var(--font-sans)', marginTop: 2 }}>
+                <td
+                  style={{
+                    padding: "8px 10px",
+                    borderBottom: "1px solid var(--color-linear-hairline)",
+                  }}
+                >
+                  <div
+                    style={{
+                      color: "var(--color-linear-text)",
+                      fontWeight: 500,
+                    }}
+                  >
+                    {row.name}
+                  </div>
+                  <div
+                    style={{
+                      color: "var(--color-linear-text-3)",
+                      fontSize: 11,
+                      fontFamily: "var(--font-sans)",
+                      marginTop: 2,
+                    }}
+                  >
                     {row.description}
                   </div>
                   {row.error && (
-                    <div style={{ color: 'var(--color-linear-danger)', fontSize: 11, marginTop: 4 }}>
+                    <div
+                      style={{
+                        color: "var(--color-linear-danger)",
+                        fontSize: 11,
+                        marginTop: 4,
+                      }}
+                    >
                       read-error: {row.error.slice(0, 140)}
                     </div>
                   )}
                 </td>
-                <td style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-linear-hairline)' }}>{row.counts.waiting}</td>
-                <td style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-linear-hairline)' }}>{row.counts.active}</td>
-                <td style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-linear-hairline)' }}>{row.counts.delayed}</td>
                 <td
                   style={{
-                    padding: '8px 10px',
-                    borderBottom: '1px solid var(--color-linear-hairline)',
-                    color: row.counts.failed > 0 ? 'var(--color-linear-warning)' : undefined,
+                    padding: "8px 10px",
+                    borderBottom: "1px solid var(--color-linear-hairline)",
+                  }}
+                >
+                  {row.counts.waiting}
+                </td>
+                <td
+                  style={{
+                    padding: "8px 10px",
+                    borderBottom: "1px solid var(--color-linear-hairline)",
+                  }}
+                >
+                  {row.counts.active}
+                </td>
+                <td
+                  style={{
+                    padding: "8px 10px",
+                    borderBottom: "1px solid var(--color-linear-hairline)",
+                  }}
+                >
+                  {row.counts.delayed}
+                </td>
+                <td
+                  style={{
+                    padding: "8px 10px",
+                    borderBottom: "1px solid var(--color-linear-hairline)",
+                    color:
+                      row.counts.failed > 0
+                        ? "var(--color-linear-warning)"
+                        : undefined,
                   }}
                 >
                   {row.counts.failed}
                 </td>
-                <td style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-linear-hairline)' }}>{row.counts.completed}</td>
+                <td
+                  style={{
+                    padding: "8px 10px",
+                    borderBottom: "1px solid var(--color-linear-hairline)",
+                  }}
+                >
+                  {row.counts.completed}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -269,12 +368,12 @@ export default async function AdminQueuesPage() {
         <h2
           style={{
             margin: 0,
-            fontFamily: 'var(--font-mono)',
+            fontFamily: "var(--font-mono)",
             fontSize: 11,
             fontWeight: 500,
-            letterSpacing: '0.07em',
-            textTransform: 'uppercase',
-            color: 'var(--color-linear-text-3)',
+            letterSpacing: "0.07em",
+            textTransform: "uppercase",
+            color: "var(--color-linear-text-3)",
             marginBottom: 10,
           }}
         >
@@ -284,11 +383,11 @@ export default async function AdminQueuesPage() {
           dlqJobs.length === 0 ? (
             <div
               style={{
-                padding: '24px 20px',
-                border: '1px solid var(--color-linear-hairline)',
+                padding: "24px 20px",
+                border: "1px solid var(--color-linear-hairline)",
                 borderRadius: 8,
-                background: 'var(--color-linear-surface-1)',
-                color: 'var(--color-linear-text-3)',
+                background: "var(--color-linear-surface-1)",
+                color: "var(--color-linear-text-3)",
                 fontSize: 13,
               }}
             >
@@ -297,45 +396,101 @@ export default async function AdminQueuesPage() {
           ) : (
             <table
               style={{
-                width: '100%',
-                borderCollapse: 'collapse',
-                fontFamily: 'var(--font-mono)',
+                width: "100%",
+                borderCollapse: "collapse",
+                fontFamily: "var(--font-mono)",
                 fontSize: 12,
               }}
             >
               <thead>
-                <tr style={{ textAlign: 'left', color: 'var(--color-linear-text-3)' }}>
-                  <th style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-linear-hairline)' }}>exhausted at</th>
-                  <th style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-linear-hairline)' }}>visit / job</th>
-                  <th style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-linear-hairline)' }}>attempts</th>
-                  <th style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-linear-hairline)' }}>last error</th>
+                <tr
+                  style={{
+                    textAlign: "left",
+                    color: "var(--color-linear-text-3)",
+                  }}
+                >
+                  <th
+                    style={{
+                      padding: "8px 10px",
+                      borderBottom: "1px solid var(--color-linear-hairline)",
+                    }}
+                  >
+                    exhausted at
+                  </th>
+                  <th
+                    style={{
+                      padding: "8px 10px",
+                      borderBottom: "1px solid var(--color-linear-hairline)",
+                    }}
+                  >
+                    visit / job
+                  </th>
+                  <th
+                    style={{
+                      padding: "8px 10px",
+                      borderBottom: "1px solid var(--color-linear-hairline)",
+                    }}
+                  >
+                    attempts
+                  </th>
+                  <th
+                    style={{
+                      padding: "8px 10px",
+                      borderBottom: "1px solid var(--color-linear-hairline)",
+                    }}
+                  >
+                    last error
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {dlqJobs.map((j) => (
                   <tr key={j.id}>
-                    <td style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-linear-hairline)', whiteSpace: 'nowrap' }}>
+                    <td
+                      style={{
+                        padding: "8px 10px",
+                        borderBottom: "1px solid var(--color-linear-hairline)",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
                       {j.exhaustedAt}
                     </td>
-                    <td style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-linear-hairline)' }}>
-                      <div style={{ color: 'var(--color-linear-text)' }}>
-                        {j.visitId ? `visit ${j.visitId}` : `job ${j.originalJobId ?? '?'}`}
+                    <td
+                      style={{
+                        padding: "8px 10px",
+                        borderBottom: "1px solid var(--color-linear-hairline)",
+                      }}
+                    >
+                      <div style={{ color: "var(--color-linear-text)" }}>
+                        {j.visitId
+                          ? `visit ${j.visitId}`
+                          : `job ${j.originalJobId ?? "?"}`}
                       </div>
-                      <div style={{ color: 'var(--color-linear-text-3)', fontSize: 11 }}>
+                      <div
+                        style={{
+                          color: "var(--color-linear-text-3)",
+                          fontSize: 11,
+                        }}
+                      >
                         {j.originalQueue} · {j.originalJobName}
                       </div>
                     </td>
-                    <td style={{ padding: '8px 10px', borderBottom: '1px solid var(--color-linear-hairline)' }}>
+                    <td
+                      style={{
+                        padding: "8px 10px",
+                        borderBottom: "1px solid var(--color-linear-hairline)",
+                      }}
+                    >
                       {j.totalAttempts}/{j.totalAttempts}
                     </td>
                     <td
                       style={{
-                        padding: '8px 10px',
-                        borderBottom: '1px solid var(--color-linear-hairline)',
-                        color: 'var(--color-linear-warning)',
+                        padding: "8px 10px",
+                        borderBottom: "1px solid var(--color-linear-hairline)",
+                        color: "var(--color-linear-warning)",
                         maxWidth: 480,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
                       }}
                     >
                       {j.lastError}
@@ -346,7 +501,7 @@ export default async function AdminQueuesPage() {
             </table>
           )
         ) : (
-          <div style={{ color: 'var(--color-linear-danger)', fontSize: 12 }}>
+          <div style={{ color: "var(--color-linear-danger)", fontSize: 12 }}>
             DLQ read failed: {dlqJobs.error}
           </div>
         )}
@@ -356,11 +511,12 @@ export default async function AdminQueuesPage() {
         style={{
           marginTop: 32,
           fontSize: 11,
-          color: 'var(--color-linear-text-3)',
+          color: "var(--color-linear-text-3)",
         }}
       >
-        v1 read-only view. Retry / clear actions are v2. Names: <code>{QUEUE_NAME}</code>,{' '}
-        <code>{CLEANUP_QUEUE_NAME}</code>, <code>{DLQ_QUEUE_NAME}</code>.
+        v1 read-only view. Retry / clear actions are v2. Names:{" "}
+        <code>{QUEUE_NAME}</code>, <code>{CLEANUP_QUEUE_NAME}</code>,{" "}
+        <code>{DLQ_QUEUE_NAME}</code>.
       </p>
     </main>
   );

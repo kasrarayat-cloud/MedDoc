@@ -35,12 +35,9 @@ describe('verify-enrollment — JWT rotation (P1-J)', () => {
     );
   });
 
-  it('reads sessionId from the current session for the KEEP-current branch', () => {
-    // Reads (session?.user as any)?.sessionId — the JWT->session
-    // wiring in packages/auth/src/index.ts:259 exposes sessionId
-    // there. Cast to string|undefined for the deleteMany branch.
+  it('uses the authorization-bound actor session for the KEEP-current branch', () => {
     expect(SRC).toMatch(
-      /\.sessionId\s+as\s+[\s\S]*?string\s*\|\s*undefined/,
+      /resolveMfaRequestActor\(req\.headers\)[\s\S]*?currentSessionId\s*=\s*actor\.sessionId\s*\?\?\s*undefined/,
     );
   });
 

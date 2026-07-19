@@ -165,6 +165,8 @@ services:
       NEXTAUTH_URL: http://localhost:9020
       AUTH_TRUST_HOST: "true"
       ADMIN_PUBLIC_HOST: localhost
+      PHYSICIAN_PUBLIC_HOST: localhost
+      ADMIN_SYNTHETIC_QA_SHARED_HOST_ATTESTATION: accepted-isolated-synthetic-qa-shared-host
       AUTH_SECRET: *qa-secret
       NEXTAUTH_SECRET: *qa-secret
       MINIO_ENDPOINT: minio:9000

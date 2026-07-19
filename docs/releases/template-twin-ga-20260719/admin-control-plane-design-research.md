@@ -1,6 +1,6 @@
 # Template Twin administration control-plane design lock
 
-Date: 2026-07-19 UTC  
+Date: 2026-07-19 UTC
 Status: REFERENCE LOCKED — implementation and independent review pending
 
 ## Brief
@@ -125,4 +125,3 @@ simulating a client-side toggle.
 | Sage/amber/red remain semantic | QuillMD tokens + Refero color | Status only | Prevents false green and color-role drift. |
 | 44 px labeled controls and visible focus | Refero craft/icons | Interaction | Supports touch and keyboard without enlarging the visual glyphs. |
 | Manual advance, automatic revoke | User mandate + Microsoft SDP | Authority boundary | Automation may reduce harm, never fabricate release approval. |
-

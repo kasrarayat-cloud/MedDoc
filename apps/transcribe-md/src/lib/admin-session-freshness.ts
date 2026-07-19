@@ -89,6 +89,7 @@ export async function verifyFreshPlatformAdminSession(
             softDeletedAt: true,
             forceLogoutAt: true,
             mfaEnabled: true,
+            mfaSecret: true,
             mfaVerifiedAt: true,
           },
         },
@@ -123,7 +124,7 @@ export async function verifyFreshPlatformAdminSession(
 
     if (
       input.requireMfa !== false &&
-      (!user.mfaEnabled || user.mfaVerifiedAt === null)
+      (!user.mfaEnabled || !user.mfaSecret || user.mfaVerifiedAt === null)
     ) {
       return null;
     }

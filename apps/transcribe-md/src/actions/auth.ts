@@ -1,30 +1,31 @@
-'use server';
+"use server";
 
-import { z } from 'zod';
-import bcrypt from 'bcryptjs';
-import { headers } from 'next/headers';
+import { z } from "zod";
+import bcrypt from "bcryptjs";
+import { headers } from "next/headers";
 
-import prisma from '@meddoc/db';
-import { AuthTokenPurpose, Product, UserRole } from '@prisma/client';
-import { signIn as nextAuthSignIn } from '@/lib/nextauth';
-import { createAuthToken } from '@/lib/auth-tokens';
-import { isEmailDeliveryEnabled } from '@/lib/email-enabled';
-import { isAutoConfirmDomain } from '@/lib/email-auto-confirm';
-import { sendEmailVerification, sendAccountExistsEmail } from '@/lib/email';
-import { APP_URL } from '@/lib/constants';
+import prisma from "@meddoc/db";
+import { AuthTokenPurpose, Product, UserRole } from "@prisma/client";
+import { signIn as nextAuthSignIn } from "@/lib/nextauth";
+import { isAdminRequestHost } from "@/lib/admin-host";
+import { createAuthToken } from "@/lib/auth-tokens";
+import { isEmailDeliveryEnabled } from "@/lib/email-enabled";
+import { isAutoConfirmDomain } from "@/lib/email-auto-confirm";
+import { sendEmailVerification, sendAccountExistsEmail } from "@/lib/email";
+import { APP_URL } from "@/lib/constants";
 import {
   RATE_LIMITS,
   checkRateLimit,
   clientIpFromHeaders,
   type RateLimitRule,
-} from '@/lib/rate-limit';
+} from "@/lib/rate-limit";
 
 /** T-M18.3 A20: pre-computed dummy bcrypt hash, used to equalize the
  *  wall-clock time of loginAction paths that would otherwise skip the
  *  pre-check bcrypt.compare. Computed once at module load. */
 const DUMMY_PASSWORD_HASH = bcrypt.hashSync(
-  'timing-equalizer-never-matches',
-  12
+  "timing-equalizer-never-matches",
+  12,
 );
 
 /** Server-action rate-limit helper. Unlike route handlers this can't
@@ -32,7 +33,7 @@ const DUMMY_PASSWORD_HASH = bcrypt.hashSync(
  *  the existing useActionState wiring shows it cleanly. */
 async function actionRateLimitOrError(
   rule: RateLimitRule,
-  values?: Record<string, string>
+  values?: Record<string, string>,
 ): Promise<FormErrorState | null> {
   const h = await headers();
   const ip = clientIpFromHeaders(h);
@@ -42,7 +43,7 @@ async function actionRateLimitOrError(
   return {
     ok: false,
     errors: {
-      _form: `Too many attempts. Try again in ${mins} minute${mins === 1 ? '' : 's'}.`,
+      _form: `Too many attempts. Try again in ${mins} minute${mins === 1 ? "" : "s"}.`,
     },
     values,
   };
@@ -53,7 +54,7 @@ async function actionRateLimitOrError(
 // next-auth chain. Importable directly from '@/actions/auth-schemas'
 // — not re-exported here because Next's "use server" boundary only
 // allows async-function exports from a server-actions file.
-import { LoginSchema, SignupSchema } from './auth-schemas';
+import { LoginSchema, SignupSchema } from "./auth-schemas";
 
 export interface FormErrorState {
   ok: false;
@@ -98,7 +99,7 @@ export type AuthActionState = FormOkState | FormErrorState | null;
 function flattenZodErrors(err: z.ZodError): Record<string, string> {
   const out: Record<string, string> = {};
   for (const issue of err.issues) {
-    const key = issue.path.join('.') || '_form';
+    const key = issue.path.join(".") || "_form";
     if (!out[key]) out[key] = issue.message;
   }
   return out;
@@ -110,10 +111,10 @@ function flattenZodErrors(err: z.ZodError): Record<string, string> {
  *  useActionState cycle in Next 16. */
 export async function loginAction(
   _prev: AuthActionState,
-  formData: FormData
+  formData: FormData,
 ): Promise<AuthActionState> {
   const raw = Object.fromEntries(formData.entries());
-  const email = String(raw.email ?? '');
+  const email = String(raw.email ?? "");
 
   const blocked = await actionRateLimitOrError(RATE_LIMITS.LOGIN, { email });
   if (blocked) return blocked;
@@ -153,7 +154,7 @@ export async function loginAction(
     if (isUnverifiedCandidate && preCheckUser) {
       const pwOk = await bcrypt.compare(
         parsed.data.password,
-        preCheckUser.passwordHash
+        preCheckUser.passwordHash,
       );
       if (pwOk) {
         // Password correct, email not verified — block and surface
@@ -161,7 +162,7 @@ export async function loginAction(
         return {
           ok: false,
           errors: {
-            _form: 'Please verify your email before signing in.',
+            _form: "Please verify your email before signing in.",
           },
           values: { email: parsed.data.email },
           needsVerificationFor: parsed.data.email,
@@ -210,7 +211,7 @@ export async function loginAction(
   if (isEntitlementCandidate && entitlementUser) {
     const pwOk = await bcrypt.compare(
       parsed.data.password,
-      entitlementUser.passwordHash
+      entitlementUser.passwordHash,
     );
     if (pwOk) {
       // Cross-app: if the user has MEDDOC_PRO but is missing
@@ -219,19 +220,19 @@ export async function loginAction(
       if (entitlementUser.products.includes(Product.MEDDOC_PRO)) {
         const meddocProUrl =
           process.env.NEXT_PUBLIC_MEDDOC_PRO_APP_URL ??
-          'https://pro.quillmd.com';
+          "https://pro.quillmd.com";
         return {
           ok: false,
           errors: {
             _form:
-              'This account is for MedDoc Pro, not TranscribeMD. Continue to the right app:',
+              "This account is for MedDoc Pro, not TranscribeMD. Continue to the right app:",
           },
           values: { email: parsed.data.email },
           crossAppRedirect: {
             message:
-              'This account is for MedDoc Pro, not TranscribeMD. Continue to the right app:',
+              "This account is for MedDoc Pro, not TranscribeMD. Continue to the right app:",
             url: `${meddocProUrl}/login`,
-            buttonLabel: 'Go to MedDoc Pro',
+            buttonLabel: "Go to MedDoc Pro",
           },
         };
       }
@@ -239,7 +240,7 @@ export async function loginAction(
         ok: false,
         errors: {
           _form:
-            'Your account does not have access to TranscribeMD. Contact your practice admin to enable it.',
+            "Your account does not have access to TranscribeMD. Contact your practice admin to enable it.",
         },
         values: { email: parsed.data.email },
       };
@@ -292,12 +293,12 @@ export async function loginAction(
   }
 
   try {
-    await nextAuthSignIn('credentials', {
+    await nextAuthSignIn("credentials", {
       redirect: false,
       email: parsed.data.email,
       password: parsed.data.password,
-      totpToken: parsed.data.totpToken ?? '',
-      recoveryCode: parsed.data.recoveryCode ?? '',
+      totpToken: parsed.data.totpToken ?? "",
+      recoveryCode: parsed.data.recoveryCode ?? "",
     });
   } catch {
     // If MFA was required and we got here, the second factor is
@@ -307,8 +308,8 @@ export async function loginAction(
         ok: false,
         errors: {
           _form: parsed.data.recoveryCode
-            ? 'Invalid recovery code.'
-            : 'Invalid 6-digit code. Try again.',
+            ? "Invalid recovery code."
+            : "Invalid 6-digit code. Try again.",
         },
         values: { email: parsed.data.email },
         mfaRequired: true,
@@ -316,7 +317,7 @@ export async function loginAction(
     }
     return {
       ok: false,
-      errors: { _form: 'Invalid email or password.' },
+      errors: { _form: "Invalid email or password." },
       values: { email: parsed.data.email },
     };
   }
@@ -334,27 +335,24 @@ export async function loginAction(
 async function postLoginRedirectFor(): Promise<string> {
   try {
     const h = await headers();
-    const host = (h.get('x-forwarded-host') ?? h.get('host') ?? '')
-      .toLowerCase()
-      .split(':')[0];
-    if (host === 'admin.quillmd.com' || host?.startsWith('admin.')) {
-      return '/admin';
+    if (isAdminRequestHost(h)) {
+      return "/admin";
     }
   } catch {
     // headers() outside a request context — fall through to the default
   }
-  return '/dashboard';
+  return "/dashboard";
 }
 
 /** Signup: creates a synthetic Practice + User atomically, grants
  *  TRANSCRIBE_MD product, then signs in. */
 export async function signupAction(
   _prev: AuthActionState,
-  formData: FormData
+  formData: FormData,
 ): Promise<AuthActionState> {
   const raw = Object.fromEntries(formData.entries());
-  const emailField = String(raw.email ?? '');
-  const nameField = String(raw.name ?? '');
+  const emailField = String(raw.email ?? "");
+  const nameField = String(raw.name ?? "");
 
   const blocked = await actionRateLimitOrError(RATE_LIMITS.SIGNUP, {
     email: emailField,
@@ -368,8 +366,8 @@ export async function signupAction(
       ok: false,
       errors: flattenZodErrors(parsed.error),
       values: {
-        email: String(raw.email ?? ''),
-        name: String(raw.name ?? ''),
+        email: String(raw.email ?? ""),
+        name: String(raw.name ?? ""),
       },
     };
   }
@@ -412,7 +410,7 @@ export async function signupAction(
       userName: existing.name ?? null,
       signInUrl: `${APP_URL}/login`,
     }).catch((err: unknown) => {
-      console.error('[signup] account-exists email failed:', err);
+      console.error("[signup] account-exists email failed:", err);
     });
 
     return {
@@ -440,7 +438,7 @@ export async function signupAction(
   const autoConfirm = isAutoConfirmDomain(emailLower);
   if (autoConfirm) {
     console.warn(
-      `[QA-BYPASS] auto-confirmed email for ${emailLower} (domain on EMAIL_AUTO_CONFIRM_DOMAINS allowlist)`
+      `[QA-BYPASS] auto-confirmed email for ${emailLower} (domain on EMAIL_AUTO_CONFIRM_DOMAINS allowlist)`,
     );
   }
   const verifyEnabled = isEmailDeliveryEnabled() && !autoConfirm;
@@ -475,11 +473,11 @@ export async function signupAction(
       createdUserId = user.id;
     });
   } catch (err) {
-    console.error('[signup] create failed:', err);
+    console.error("[signup] create failed:", err);
     return {
       ok: false,
       errors: {
-        _form: 'Could not create your account. Please try again.',
+        _form: "Could not create your account. Please try again.",
       },
       values: {
         email: emailLower,
@@ -506,7 +504,7 @@ export async function signupAction(
     } catch (err) {
       // Verification email failed — account exists, user can request
       // a resend from /check-email. Don't roll back.
-      console.error('[signup] verification email failed:', err);
+      console.error("[signup] verification email failed:", err);
     }
     return {
       ok: true,
@@ -516,19 +514,19 @@ export async function signupAction(
 
   // No verification gate — original auto-login path.
   try {
-    await nextAuthSignIn('credentials', {
+    await nextAuthSignIn("credentials", {
       redirect: false,
       email: emailLower,
       password: parsed.data.password,
     });
   } catch (err) {
-    console.error('[signup] auto-login failed:', err);
+    console.error("[signup] auto-login failed:", err);
     return {
       ok: true,
-      redirect: '/login',
-      warning: 'Account created — please sign in to continue.',
+      redirect: "/login",
+      warning: "Account created — please sign in to continue.",
     };
   }
 
-  return { ok: true, redirect: '/dashboard' };
+  return { ok: true, redirect: "/dashboard" };
 }

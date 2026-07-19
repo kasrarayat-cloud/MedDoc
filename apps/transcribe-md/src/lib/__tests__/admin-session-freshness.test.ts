@@ -35,6 +35,7 @@ function validRow() {
       softDeletedAt: null,
       forceLogoutAt: null as Date | null,
       mfaEnabled: true,
+      mfaSecret: 'synthetic-encrypted-secret',
       mfaVerifiedAt: new Date('2026-07-19T07:59:00.000Z') as Date | null,
     },
   };
@@ -135,6 +136,17 @@ describe('fresh platform-admin session verification', () => {
       userId: 'admin_synthetic',
       mfaEnabled: false,
       mfaVerifiedAt: null,
+    });
+  });
+
+  it('rejects an inconsistent MFA-enabled account with no enrolled secret', async () => {
+    const row = validRow();
+    row.user.mfaSecret = '';
+    mocks.findSession.mockResolvedValue(row);
+    await expect(verify()).resolves.toBeNull();
+    await expect(verify(false)).resolves.toMatchObject({
+      userId: 'admin_synthetic',
+      mfaEnabled: true,
     });
   });
 

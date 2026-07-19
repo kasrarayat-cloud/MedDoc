@@ -23,13 +23,13 @@
 //   });
 // ============================================================================
 
-import type { NextRequest } from 'next/server';
-import { NextResponse } from 'next/server';
+import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 
-import { auth } from '@/lib/nextauth';
-import { logAudit } from '@/lib/audit';
-import { isAdminRequestHost } from '@/lib/admin-host';
-import { verifyFreshPlatformAdminSession } from '@/lib/admin-session-freshness';
+import { auth } from "@/lib/nextauth";
+import { logRequiredAdminAudit } from "@/lib/audit";
+import { isAdminRequestHost } from "@/lib/admin-host";
+import { verifyFreshPlatformAdminSession } from "@/lib/admin-session-freshness";
 
 /** What admin handlers actually need — slim subset of the next-auth
  *  session. The full app `Session` from @meddoc/auth requires
@@ -60,7 +60,7 @@ type AdminHandler = (
  *  attacker can't distinguish "wrong-method" from "not-admin" from
  *  "route-doesn't-exist". */
 function notFoundResponse(): NextResponse {
-  return new NextResponse('Not Found', { status: 404 });
+  return new NextResponse("Not Found", { status: 404 });
 }
 
 export function adminApi(
@@ -87,27 +87,37 @@ export function adminApi(
       },
     };
 
-    void logAudit({
-      action: 'ADMIN_API_ACCESS',
-      targetType: 'AdminAPI',
-      targetId: routeKey,
-      metadata: {
-        routeKey,
-        method: req.method,
-        path: new URL(req.url).pathname,
-      },
-    });
+    try {
+      await logRequiredAdminAudit({
+        action: "ADMIN_API_ACCESS",
+        userId: verified.userId,
+        userEmail: verified.email,
+        practiceId: verified.practiceId,
+        targetType: "AdminAPI",
+        targetId: routeKey,
+        metadata: {
+          routeKey,
+          method: req.method,
+          path: new URL(req.url).pathname,
+          sessionCreatedAt: verified.sessionCreatedAt.toISOString(),
+        },
+      });
+    } catch {
+      console.error(
+        `[admin-api:${routeKey}] required access audit failed; request denied`,
+      );
+      return notFoundResponse();
+    }
 
     try {
       return await handler(req, { session, routeKey });
     } catch (err) {
-      console.error(
-        `[admin-api:${routeKey}] handler threw:`,
-        err instanceof Error ? err.message : err,
-      );
+      console.error(`[admin-api:${routeKey}] handler failed`, {
+        errorType: err instanceof Error ? err.name : "UnknownError",
+      });
       // Generic 500 — don't expose stack traces.
       return NextResponse.json(
-        { error: 'Internal server error' },
+        { error: "Internal server error" },
         { status: 500 },
       );
     }

@@ -399,6 +399,71 @@ export async function logRequiredAudit(input: AuditLogInput): Promise<void> {
   publishAuditEntry(entry);
 }
 
+/**
+ * Release-critical platform-admin audit. The caller must supply the exact
+ * database-verified actor identity and await completion before reading or
+ * mutating administrative data. Unlike logAudit(), this fails closed and
+ * re-checks current lifecycle plus Product.SUPER_ADMIN inside the audit
+ * transaction; no availability-oriented auth() fallback is consulted.
+ */
+export async function logRequiredAdminAudit(
+  input: AuditLogInput,
+): Promise<void> {
+  if (
+    !input.userId ||
+    !input.practiceId ||
+    !input.targetId ||
+    !input.targetType ||
+    (input.action !== "ADMIN_DASHBOARD_ACCESS" &&
+      input.action !== "ADMIN_API_ACCESS")
+  ) {
+    throw new Error("Required admin audit identity is incomplete.");
+  }
+
+  try {
+    const entry = await resolveAuditEntry(input);
+    await runSerializableTransactionWithRetry({
+      prisma,
+      operation: "required_admin_audit_log_create",
+      isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+      context: { practiceId: entry.practiceId },
+      transaction: async (tx) => {
+        const practices = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+          SELECT "id"
+          FROM "practices"
+          WHERE "id" = ${entry.practiceId}
+          FOR KEY SHARE
+        `);
+        const actors = await tx.$queryRaw<
+          Array<{ id: string; practiceId: string }>
+        >(Prisma.sql`
+          SELECT "id", "practiceId"
+          FROM "users"
+          WHERE "id" = ${entry.userId}
+            AND "practiceId" = ${entry.practiceId}
+            AND "isActive" = TRUE
+            AND "deactivatedAt" IS NULL
+            AND "suspendedAt" IS NULL
+            AND "softDeletedAt" IS NULL
+            AND 'SUPER_ADMIN'::"Product" = ANY("products")
+          FOR KEY SHARE
+        `);
+        if (practices.length !== 1 || actors.length !== 1) {
+          throw new Error("Required admin audit authority is unavailable.");
+        }
+        // Prisma's shared barrel exports `any` (see note above).
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await tx.auditLog.create({ data: entry as any });
+      },
+    });
+    publishAuditEntry(entry);
+  } catch {
+    // Never rethrow a provider/Prisma message: it can include connection
+    // details or values. Callers receive a fixed fail-closed signal.
+    throw new Error("Required admin audit persistence failed.");
+  }
+}
+
 /** Write a single audit row. Never throws. */
 export async function logAudit(input: AuditLogInput): Promise<void> {
   try {

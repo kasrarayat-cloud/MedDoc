@@ -1,8 +1,8 @@
 // ============================================================================
 // Platform-admin overview — server entry
 // ----------------------------------------------------------------------------
-// SUPER_ADMIN gate + access audit log live in `layout.tsx` (defense-in-
-// depth). This page assumes both have already run.
+// This page performs its own fresh host/session/authority/audit gate before
+// any cross-practice read. The parent layout is not an authorization boundary.
 //
 // Initial data is fetched server-side in parallel via the helpers in
 // `_lib/dashboard-data.ts` so the page renders fully populated on first
@@ -11,11 +11,11 @@
 // `/api/admin/stream/activity`.
 // ============================================================================
 
-import type { Metadata } from 'next';
+import type { Metadata } from "next";
 
-import { auth } from '@/lib/nextauth';
+import { requireFreshPlatformAdminPage } from "@/lib/admin-page-gate";
 
-import AdminOverview from './_components/AdminOverview.client';
+import AdminOverview from "./_components/AdminOverview.client";
 import {
   getSystemHealth,
   getRecentActivity,
@@ -23,33 +23,32 @@ import {
   getTimeline,
   getPipelineMetrics,
   getHipaaState,
-} from './_lib/dashboard-data';
+} from "./_lib/dashboard-data";
 
-export const metadata: Metadata = { title: 'Admin · QuillMD' };
+export const metadata: Metadata = { title: "Admin · QuillMD" };
 
 // Inherit force-dynamic from the layout. Repeating it here is belt-and-
 // braces — a future refactor that drops it from the layout shouldn't
 // silently turn this page into a stale static one.
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default async function AdminHomePage() {
-  const [session, systemHealth, activity, threats, timeline, pipeline, hipaa] = await Promise.all([
-    auth().catch(() => null),
-    getSystemHealth(),
-    getRecentActivity(30),
-    getThreats(),
-    getTimeline(),
-    getPipelineMetrics(),
-    getHipaaState(),
-  ]);
-
-  const userEmail = session?.user?.email ?? 'admin';
+  const verified = await requireFreshPlatformAdminPage({ routeKey: "/admin" });
+  const [systemHealth, activity, threats, timeline, pipeline, hipaa] =
+    await Promise.all([
+      getSystemHealth(),
+      getRecentActivity(30),
+      getThreats(),
+      getTimeline(),
+      getPipelineMetrics(),
+      getHipaaState(),
+    ]);
 
   return (
     <AdminOverview
       initial={{ systemHealth, activity, threats, timeline, pipeline, hipaa }}
-      userEmail={userEmail}
+      userEmail={verified.email ?? "admin"}
       theme="clinician"
     />
   );

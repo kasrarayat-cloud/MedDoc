@@ -15,20 +15,25 @@
 // explaining why they're here.
 // ============================================================================
 
-import type { Metadata } from 'next';
-import { redirect } from 'next/navigation';
+import type { Metadata } from "next";
+import Link from "next/link";
+import { headers } from "next/headers";
+import { notFound, redirect } from "next/navigation";
 
-import prisma from '@meddoc/db';
-import { auth } from '@/lib/nextauth';
-import { AppFrame } from '@/components/ui/app-frame';
-import { MfaEnrollmentPanel } from './mfa-enrollment-panel';
-import { MfaManagementPanel } from './mfa-management-panel';
+import prisma from "@meddoc/db";
+import { Product } from "@prisma/client";
+import { auth } from "@/lib/nextauth";
+import { isAdminRequestHost } from "@/lib/admin-host";
+import { requireFreshPlatformAdminPage } from "@/lib/admin-page-gate";
+import { AppFrame } from "@/components/ui/app-frame";
+import { MfaEnrollmentPanel } from "./mfa-enrollment-panel";
+import { MfaManagementPanel } from "./mfa-management-panel";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export const metadata: Metadata = {
-  title: 'Two-factor authentication · QuillMD',
+  title: "Two-factor authentication · QuillMD",
 };
 
 export default async function MfaSettingsPage({
@@ -36,94 +41,143 @@ export default async function MfaSettingsPage({
 }: {
   searchParams: Promise<{ reason?: string }>;
 }) {
-  const session = await auth();
-  if (!session?.user?.id) redirect('/login');
+  const requestHeaders = await headers();
+  const isAdminHost = isAdminRequestHost(requestHeaders);
+  let userId: string;
+  if (isAdminHost) {
+    const verified = await requireFreshPlatformAdminPage({
+      routeKey: "/settings/security/mfa",
+      requireMfa: false,
+    });
+    userId = verified.userId;
+  } else {
+    const session = await auth();
+    if (!session?.user?.id) redirect("/login");
+    userId = session.user.id;
+  }
 
   const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
+    where: { id: userId },
     select: {
       id: true,
       email: true,
-      role: true,
+      products: true,
       mfaEnabled: true,
       mfaVerifiedAt: true,
     },
   });
-  if (!user) redirect('/login');
+  if (!user) {
+    if (isAdminHost) notFound();
+    redirect("/login");
+  }
 
   const params = await searchParams;
   const isSuperAdminGated =
-    params.reason === 'super_admin_required' && !user.mfaEnabled;
+    isAdminHost ||
+    (params.reason === "super_admin_required" && !user.mfaEnabled);
 
-  return (
-    <AppFrame>
-      <div
-        style={{
-          maxWidth: 640,
-          margin: '0 auto',
-          padding: '24px 24px 80px',
-        }}
-      >
-        {isSuperAdminGated && (
-          <div
-            role="alert"
-            style={{
-              marginBottom: 20,
-              padding: '12px 14px',
-              border: '1px solid rgba(212, 165, 116, 0.36)',
-              background: 'rgba(212, 165, 116, 0.08)',
-              borderRadius: 8,
-              fontFamily: 'var(--font-sans)',
-              fontSize: 13,
-              lineHeight: 1.5,
-              color: 'var(--color-linear-text)',
-            }}
-          >
-            <strong style={{ display: 'block', marginBottom: 4 }}>
-              Two-factor authentication required
-            </strong>
-            <span style={{ color: 'var(--color-linear-text-2)' }}>
-              SUPER_ADMIN accounts must enroll a TOTP factor before accessing
-              the platform-admin surface. Complete enrollment below to
-              continue.
-            </span>
-          </div>
-        )}
+  const content = (
+    <div
+      style={{
+        maxWidth: 640,
+        margin: "0 auto",
+        padding: "24px 24px 80px",
+      }}
+    >
+      {isSuperAdminGated && !user.mfaEnabled && (
+        <div
+          role="alert"
+          style={{
+            marginBottom: 20,
+            padding: "12px 14px",
+            border: "1px solid rgba(212, 165, 116, 0.36)",
+            background: "rgba(212, 165, 116, 0.08)",
+            borderRadius: 8,
+            fontFamily: "var(--font-sans)",
+            fontSize: 13,
+            lineHeight: 1.5,
+            color: "var(--color-linear-text)",
+          }}
+        >
+          <strong style={{ display: "block", marginBottom: 4 }}>
+            Two-factor authentication required
+          </strong>
+          <span style={{ color: "var(--color-linear-text-2)" }}>
+            Platform administrators must enroll a TOTP factor before accessing
+            administrative data. Complete enrollment below to continue.
+          </span>
+        </div>
+      )}
 
-        <header style={{ marginBottom: 20 }}>
-          <h1
-            style={{
-              margin: 0,
-              fontSize: 22,
-              fontWeight: 600,
-              color: 'var(--color-linear-text)',
-              fontFamily: 'var(--font-sans)',
-            }}
-          >
-            Two-factor authentication
-          </h1>
+      <header style={{ marginBottom: 20 }}>
+        <h1
+          style={{
+            margin: 0,
+            fontSize: 22,
+            fontWeight: 600,
+            color: "var(--color-linear-text)",
+            fontFamily: "var(--font-sans)",
+          }}
+        >
+          Two-factor authentication
+        </h1>
+        <p
+          style={{
+            margin: "6px 0 0",
+            fontSize: 13,
+            color: "var(--color-linear-text-2)",
+            fontFamily: "var(--font-sans)",
+          }}
+        >
+          Adds a 6-digit code from your authenticator app to every sign-in.
+          HIPAA §164.312(d) authentication factor.
+        </p>
+      </header>
+
+      {isAdminHost && user.mfaEnabled ? (
+        <section
+          style={{
+            background: "var(--color-linear-surface-1)",
+            border: "1px solid var(--color-linear-border)",
+            borderRadius: 10,
+            padding: 22,
+          }}
+        >
           <p
             style={{
-              margin: '6px 0 0',
+              margin: "0 0 16px",
+              color: "var(--color-linear-text-2)",
+              fontFamily: "var(--font-sans)",
               fontSize: 13,
-              color: 'var(--color-linear-text-2)',
-              fontFamily: 'var(--font-sans)',
             }}
           >
-            Adds a 6-digit code from your authenticator app to every sign-in.
-            HIPAA §164.312(d) authentication factor.
+            MFA is enrolled. Administrative MFA cannot be disabled from this
+            recovery surface.
           </p>
-        </header>
-
-        {user.mfaEnabled ? (
-          <MfaManagementPanel
-            userRole={user.role}
-            verifiedAt={user.mfaVerifiedAt?.toISOString() ?? null}
-          />
-        ) : (
-          <MfaEnrollmentPanel userEmail={user.email} />
-        )}
-      </div>
-    </AppFrame>
+          <Link href="/admin" className="qm-lin-btn-primary">
+            Continue to admin
+          </Link>
+        </section>
+      ) : user.mfaEnabled ? (
+        <MfaManagementPanel
+          isPlatformAdmin={user.products.includes(Product.SUPER_ADMIN)}
+          verifiedAt={user.mfaVerifiedAt?.toISOString() ?? null}
+        />
+      ) : (
+        <MfaEnrollmentPanel
+          userEmail={user.email}
+          completionHref={isAdminHost ? "/admin" : "/settings"}
+        />
+      )}
+    </div>
   );
+
+  if (isAdminHost) {
+    return (
+      <main className="min-h-screen bg-linear-bg text-linear-text">
+        {content}
+      </main>
+    );
+  }
+  return <AppFrame>{content}</AppFrame>;
 }

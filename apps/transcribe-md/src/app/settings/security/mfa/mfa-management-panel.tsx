@@ -1,44 +1,42 @@
-'use client';
+"use client";
 
 // ============================================================================
 // MfaManagementPanel — shown when the user has MFA already enabled
 // ----------------------------------------------------------------------------
 //   - "MFA is on" status pill + verifiedAt date
 //   - Disable button → opens dialog requiring password + TOTP/recovery
-//   - SUPER_ADMIN gets a "MFA cannot be disabled (admin role)" message
+//   - Product.SUPER_ADMIN gets a mandatory-MFA message
 //     instead of the disable button
 // ============================================================================
 
-import { useState } from 'react';
-import { toast } from 'sonner';
-import { useRouter } from 'next/navigation';
+import { useState } from "react";
+import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
-import { Ic } from '@/components/ui/icon';
+import { Ic } from "@/components/ui/icon";
 
 interface Props {
-  userRole: string;
+  isPlatformAdmin: boolean;
   verifiedAt: string | null;
 }
 
-export function MfaManagementPanel({ userRole, verifiedAt }: Props) {
+export function MfaManagementPanel({ isPlatformAdmin, verifiedAt }: Props) {
   const router = useRouter();
   const [isDialogOpen, setDialogOpen] = useState(false);
-  const [password, setPassword] = useState('');
-  const [token, setToken] = useState('');
-  const [recoveryCode, setRecoveryCode] = useState('');
+  const [password, setPassword] = useState("");
+  const [token, setToken] = useState("");
+  const [recoveryCode, setRecoveryCode] = useState("");
   const [useRecovery, setUseRecovery] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-
-  const isSuperAdmin = userRole === 'SUPER_ADMIN';
 
   async function disableMfa() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/mfa/disable', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/mfa/disable", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           password,
           token: useRecovery ? undefined : token,
@@ -47,14 +45,14 @@ export function MfaManagementPanel({ userRole, verifiedAt }: Props) {
       });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        setError(json.error ?? 'Could not disable MFA');
+        setError(json.error ?? "Could not disable MFA");
         return;
       }
-      toast.success('MFA disabled');
+      toast.success("MFA disabled");
       setDialogOpen(false);
       router.refresh();
     } catch {
-      setError('Network error');
+      setError("Network error");
     } finally {
       setLoading(false);
     }
@@ -63,33 +61,33 @@ export function MfaManagementPanel({ userRole, verifiedAt }: Props) {
   return (
     <section
       style={{
-        background: 'var(--color-linear-surface-1)',
-        border: '1px solid var(--color-linear-border)',
+        background: "var(--color-linear-surface-1)",
+        border: "1px solid var(--color-linear-border)",
         borderRadius: 10,
         padding: 22,
       }}
     >
       <div
         style={{
-          display: 'flex',
-          alignItems: 'center',
+          display: "flex",
+          alignItems: "center",
           gap: 12,
           marginBottom: 16,
         }}
       >
         <span
           style={{
-            display: 'inline-flex',
-            alignItems: 'center',
+            display: "inline-flex",
+            alignItems: "center",
             gap: 6,
-            padding: '4px 10px',
-            background: 'rgba(122, 166, 140, 0.13)',
-            border: '1px solid rgba(122, 166, 140, 0.32)',
+            padding: "4px 10px",
+            background: "rgba(122, 166, 140, 0.13)",
+            border: "1px solid rgba(122, 166, 140, 0.32)",
             borderRadius: 999,
             fontSize: 12,
             fontWeight: 500,
-            color: 'var(--color-linear-sage-bright)',
-            fontFamily: 'var(--font-sans)',
+            color: "var(--color-linear-sage-bright)",
+            fontFamily: "var(--font-sans)",
           }}
         >
           <Ic.check width={11} height={11} aria-hidden /> MFA enabled
@@ -98,8 +96,8 @@ export function MfaManagementPanel({ userRole, verifiedAt }: Props) {
           <span
             style={{
               fontSize: 12,
-              color: 'var(--color-linear-text-3)',
-              fontFamily: 'var(--font-sans)',
+              color: "var(--color-linear-text-3)",
+              fontFamily: "var(--font-sans)",
             }}
           >
             since {new Date(verifiedAt).toLocaleDateString()}
@@ -111,30 +109,31 @@ export function MfaManagementPanel({ userRole, verifiedAt }: Props) {
         style={{
           margin: 0,
           fontSize: 13,
-          color: 'var(--color-linear-text-2)',
-          fontFamily: 'var(--font-sans)',
+          color: "var(--color-linear-text-2)",
+          fontFamily: "var(--font-sans)",
           lineHeight: 1.55,
         }}
       >
-        You&apos;ll be prompted for a 6-digit code on every sign-in. If you
-        lose your authenticator app, use one of your saved recovery codes.
+        You&apos;ll be prompted for a 6-digit code on every sign-in. If you lose
+        your authenticator app, use one of your saved recovery codes.
       </p>
 
-      {isSuperAdmin ? (
+      {isPlatformAdmin ? (
         <div
           style={{
             marginTop: 14,
-            padding: '10px 12px',
-            background: 'var(--color-linear-surface-2)',
-            border: '1px solid var(--color-linear-border)',
+            padding: "10px 12px",
+            background: "var(--color-linear-surface-2)",
+            border: "1px solid var(--color-linear-border)",
             borderRadius: 8,
             fontSize: 12.5,
-            color: 'var(--color-linear-text-2)',
-            fontFamily: 'var(--font-sans)',
+            color: "var(--color-linear-text-2)",
+            fontFamily: "var(--font-sans)",
           }}
         >
-          MFA cannot be disabled on SUPER_ADMIN accounts. To remove the
-          factor, demote the role first.
+          MFA cannot be disabled while this account has the platform-admin
+          product entitlement. Revoke that entitlement through the controlled
+          admin workflow first.
         </div>
       ) : (
         <button
@@ -152,12 +151,12 @@ export function MfaManagementPanel({ userRole, verifiedAt }: Props) {
           role="dialog"
           aria-label="Disable MFA"
           style={{
-            position: 'fixed',
+            position: "fixed",
             inset: 0,
-            background: 'rgba(0, 0, 0, 0.55)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+            background: "rgba(0, 0, 0, 0.55)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
             zIndex: 1000,
           }}
           onClick={(e) => {
@@ -166,21 +165,21 @@ export function MfaManagementPanel({ userRole, verifiedAt }: Props) {
         >
           <div
             style={{
-              background: 'var(--color-linear-surface-1)',
-              border: '1px solid var(--color-linear-border)',
+              background: "var(--color-linear-surface-1)",
+              border: "1px solid var(--color-linear-border)",
               borderRadius: 12,
               padding: 22,
-              width: 'min(420px, 100%)',
-              boxShadow: '0 24px 60px rgba(0, 0, 0, 0.45)',
+              width: "min(420px, 100%)",
+              boxShadow: "0 24px 60px rgba(0, 0, 0, 0.45)",
             }}
           >
             <h3
               style={{
-                margin: '0 0 4px',
+                margin: "0 0 4px",
                 fontSize: 16,
                 fontWeight: 600,
-                color: 'var(--color-linear-text)',
-                fontFamily: 'var(--font-sans)',
+                color: "var(--color-linear-text)",
+                fontFamily: "var(--font-sans)",
               }}
             >
               Disable two-factor authentication
@@ -189,8 +188,8 @@ export function MfaManagementPanel({ userRole, verifiedAt }: Props) {
               style={{
                 margin: 0,
                 fontSize: 12.5,
-                color: 'var(--color-linear-text-2)',
-                fontFamily: 'var(--font-sans)',
+                color: "var(--color-linear-text-2)",
+                fontFamily: "var(--font-sans)",
                 lineHeight: 1.5,
               }}
             >
@@ -222,7 +221,7 @@ export function MfaManagementPanel({ userRole, verifiedAt }: Props) {
                   maxLength={7}
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
-                  style={{ ...inputStyle, fontFamily: 'var(--font-mono)' }}
+                  style={{ ...inputStyle, fontFamily: "var(--font-mono)" }}
                 />
               </>
             ) : (
@@ -236,7 +235,7 @@ export function MfaManagementPanel({ userRole, verifiedAt }: Props) {
                   maxLength={20}
                   value={recoveryCode}
                   onChange={(e) => setRecoveryCode(e.target.value)}
-                  style={{ ...inputStyle, fontFamily: 'var(--font-mono)' }}
+                  style={{ ...inputStyle, fontFamily: "var(--font-mono)" }}
                   placeholder="ABCD-1234"
                 />
               </>
@@ -247,17 +246,17 @@ export function MfaManagementPanel({ userRole, verifiedAt }: Props) {
               onClick={() => setUseRecovery((v) => !v)}
               style={{
                 marginTop: 8,
-                background: 'none',
-                border: 'none',
+                background: "none",
+                border: "none",
                 padding: 0,
                 fontSize: 12,
-                color: 'var(--color-linear-sage-bright)',
-                cursor: 'pointer',
-                fontFamily: 'var(--font-sans)',
+                color: "var(--color-linear-sage-bright)",
+                cursor: "pointer",
+                fontFamily: "var(--font-sans)",
                 fontWeight: 500,
               }}
             >
-              {useRecovery ? 'Use 6-digit code instead' : 'Use a recovery code'}
+              {useRecovery ? "Use 6-digit code instead" : "Use a recovery code"}
             </button>
 
             {error && (
@@ -266,8 +265,8 @@ export function MfaManagementPanel({ userRole, verifiedAt }: Props) {
                 style={{
                   marginTop: 10,
                   fontSize: 12,
-                  color: 'var(--color-linear-amber)',
-                  fontFamily: 'var(--font-sans)',
+                  color: "var(--color-linear-amber)",
+                  fontFamily: "var(--font-sans)",
                 }}
               >
                 {error}
@@ -276,8 +275,8 @@ export function MfaManagementPanel({ userRole, verifiedAt }: Props) {
 
             <div
               style={{
-                display: 'flex',
-                justifyContent: 'flex-end',
+                display: "flex",
+                justifyContent: "flex-end",
                 gap: 10,
                 marginTop: 18,
               }}
@@ -295,7 +294,7 @@ export function MfaManagementPanel({ userRole, verifiedAt }: Props) {
                 onClick={disableMfa}
                 className="qm-lin-btn-primary"
               >
-                {loading ? 'Disabling…' : 'Disable MFA'}
+                {loading ? "Disabling…" : "Disable MFA"}
               </button>
             </div>
           </div>
@@ -306,24 +305,24 @@ export function MfaManagementPanel({ userRole, verifiedAt }: Props) {
 }
 
 const fieldLabel: React.CSSProperties = {
-  display: 'block',
+  display: "block",
   marginTop: 12,
   marginBottom: 6,
   fontSize: 12,
   fontWeight: 500,
-  color: 'var(--color-linear-text-2)',
-  fontFamily: 'var(--font-sans)',
+  color: "var(--color-linear-text-2)",
+  fontFamily: "var(--font-sans)",
 };
 
 const inputStyle: React.CSSProperties = {
-  width: '100%',
+  width: "100%",
   height: 36,
-  padding: '0 12px',
-  background: 'var(--color-linear-surface-2)',
-  border: '1px solid var(--color-linear-border)',
+  padding: "0 12px",
+  background: "var(--color-linear-surface-2)",
+  border: "1px solid var(--color-linear-border)",
   borderRadius: 6,
-  color: 'var(--color-linear-text)',
-  fontFamily: 'var(--font-sans)',
+  color: "var(--color-linear-text)",
+  fontFamily: "var(--font-sans)",
   fontSize: 13.5,
-  outline: 'none',
+  outline: "none",
 };

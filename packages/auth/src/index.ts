@@ -9,8 +9,8 @@ export {
   getUserSessions,
   randomSessionToken,
   computeDeviceFingerprint,
-} from './user-session';
-export type { RecordSessionLoginInput } from './user-session';
+} from "./user-session";
+export type { RecordSessionLoginInput } from "./user-session";
 
 // ============================================================================
 // @meddoc/auth — shared auth surface for apps/meddoc-pro and apps/scribe
@@ -22,19 +22,19 @@ export type { RecordSessionLoginInput } from './user-session';
 // reuses this config to read the same JWT sessions without a sign-in flow.
 // ============================================================================
 
-import type { NextAuthConfig } from 'next-auth';
+import type { NextAuthConfig } from "next-auth";
 // Bring the jwt submodule into this compilation unit so the
 // `declare module 'next-auth/jwt'` augmentation at the bottom of this file
 // can resolve it. Without this, tsc (NodeNext/bundler resolution) reports
 // TS2664 on the augmentation in downstream apps.
-import type {} from 'next-auth/jwt';
-import prisma from '@meddoc/db';
+import type {} from "next-auth/jwt";
+import prisma from "@meddoc/db";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export type UserRole = 'DOCTOR' | 'ADMIN' | 'STAFF' | 'SUPER_ADMIN';
+export type UserRole = "DOCTOR" | "ADMIN" | "STAFF" | "SUPER_ADMIN";
 
 export interface Session {
   user: {
@@ -50,11 +50,11 @@ export interface Session {
 }
 
 export class AuthError extends Error {
-  code: 'UNAUTHENTICATED' | 'FORBIDDEN';
+  code: "UNAUTHENTICATED" | "FORBIDDEN";
 
-  constructor(code: 'UNAUTHENTICATED' | 'FORBIDDEN', message: string) {
+  constructor(code: "UNAUTHENTICATED" | "FORBIDDEN", message: string) {
     super(message);
-    this.name = 'AuthError';
+    this.name = "AuthError";
     this.code = code;
   }
 }
@@ -71,23 +71,36 @@ export class AuthError extends Error {
 //   ✗ no bcryptjs
 //   ✗ no next/headers
 //
-// New in M1: `cookies.sessionToken.options.domain` is driven by
-// AUTH_COOKIE_DOMAIN env var so both apps on different subdomains
-// (meddoc-pro.domain + scribe.domain) share the same session cookie.
-// Leave AUTH_COOKIE_DOMAIN unset to keep the current host-only behavior.
+// AUTH_COOKIE_DOMAIN remains a local/non-production compatibility option.
+// QuillMD production sessions are deliberately host-only so the physician
+// and platform-admin origins never inherit one another's session cookie.
 // ---------------------------------------------------------------------------
 
 const cookieDomain = process.env.AUTH_COOKIE_DOMAIN?.trim();
+
+// app.quillmd.com and admin.quillmd.com intentionally use separate host-only
+// sessions. A parent-domain cookie collapses that origin boundary and
+// contradicts the platform-admin Caddy allowlist. Fail during production
+// server initialization instead of accepting a warning-only configuration.
+if (
+  process.env.NODE_ENV === "production" &&
+  process.env.NEXT_PHASE !== "phase-production-build" &&
+  cookieDomain
+) {
+  throw new Error(
+    "AUTH_COOKIE_DOMAIN must be unset in production; QuillMD sessions are host-only.",
+  );
+}
 
 export const authConfig: NextAuthConfig = {
   providers: [],
 
   pages: {
-    signIn: '/login',
+    signIn: "/login",
   },
 
   session: {
-    strategy: 'jwt',
+    strategy: "jwt",
     maxAge: 60 * 60 * 8, // 8 hours — short for HIPAA
   },
 
@@ -104,15 +117,16 @@ export const authConfig: NextAuthConfig = {
   // the throw during the build phase — we only want to fail at
   // container-start time, not at build time.
   secret:
-    process.env.NODE_ENV === 'production' &&
-    process.env.NEXT_PHASE !== 'phase-production-build' &&
+    process.env.NODE_ENV === "production" &&
+    process.env.NEXT_PHASE !== "phase-production-build" &&
     !process.env.AUTH_SECRET
       ? (() => {
           throw new Error(
-            'AUTH_SECRET is required in production. Set it in /opt/meddoc-pro/.env (openssl rand -base64 32) and recreate the app containers.'
+            "AUTH_SECRET is required in production. Set it in /opt/meddoc-pro/.env (openssl rand -base64 32) and recreate the app containers.",
           );
         })()
-      : process.env.AUTH_SECRET || 'dev_secret_change_in_production_min_32_chars_xyz',
+      : process.env.AUTH_SECRET ||
+        "dev_secret_change_in_production_min_32_chars_xyz",
 
   trustHost: true,
 
@@ -129,14 +143,14 @@ export const authConfig: NextAuthConfig = {
   cookies: {
     sessionToken: {
       name:
-        process.env.NODE_ENV === 'production'
-          ? '__Secure-authjs.session-token'
-          : 'authjs.session-token',
+        process.env.NODE_ENV === "production"
+          ? "__Secure-authjs.session-token"
+          : "authjs.session-token",
       options: {
         httpOnly: true,
-        sameSite: 'lax' as const,
-        path: '/',
-        secure: process.env.NODE_ENV === 'production',
+        sameSite: "lax" as const,
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
         ...(cookieDomain ? { domain: cookieDomain } : {}),
       },
     },
@@ -149,27 +163,28 @@ export const authConfig: NextAuthConfig = {
      * triggers an automatic redirect to `pages.signIn`.
      */
     authorized({ auth, request: { nextUrl } }) {
-      if (process.env.AUTH_USE_MOCK === 'true') return true;
+      if (process.env.AUTH_USE_MOCK === "true") return true;
 
       const isLoggedIn = !!auth?.user;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const role = (auth?.user as any)?.role as string | undefined;
       const path = nextUrl.pathname;
-      const isOnDashboard = path.startsWith('/dashboard');
-      const isOnAdmin = path.startsWith('/system-admin');
-      const isOnVisits = path.startsWith('/visits');
+      const isOnDashboard = path.startsWith("/dashboard");
+      const isOnAdmin = path.startsWith("/system-admin");
+      const isOnVisits = path.startsWith("/visits");
 
       // Require login for protected areas (meddoc-pro + scribe both).
-      if ((isOnDashboard || isOnAdmin || isOnVisits) && !isLoggedIn) return false;
+      if ((isOnDashboard || isOnAdmin || isOnVisits) && !isLoggedIn)
+        return false;
 
       if (isLoggedIn && role) {
-        const isAdminRole = role === 'ADMIN' || role === 'SUPER_ADMIN';
+        const isAdminRole = role === "ADMIN" || role === "SUPER_ADMIN";
         if (isOnAdmin && !isAdminRole) {
           return new Response(null, {
             status: 302,
             headers: {
-              Location: new URL('/dashboard', nextUrl).toString(),
-              'Cache-Control': 'no-store, no-cache, must-revalidate',
+              Location: new URL("/dashboard", nextUrl).toString(),
+              "Cache-Control": "no-store, no-cache, must-revalidate",
             },
           });
         }
@@ -194,16 +209,16 @@ export const authConfig: NextAuthConfig = {
         // @meddoc/db for this callback's body.
         try {
           const [headersMod, sessionMod] = await Promise.all([
-            import('next/headers'),
-            import('./user-session'),
+            import("next/headers"),
+            import("./user-session"),
           ]);
           const h = await headersMod.headers();
           const ipAddress =
-            h.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-            h.get('x-real-ip') ??
+            h.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+            h.get("x-real-ip") ??
             null;
-          const userAgent = h.get('user-agent') ?? null;
-          const acceptLanguage = h.get('accept-language') ?? null;
+          const userAgent = h.get("user-agent") ?? null;
+          const acceptLanguage = h.get("accept-language") ?? null;
           const sessionToken = sessionMod.randomSessionToken();
           await sessionMod.recordSessionLogin({
             userId: user.id as string,
@@ -212,7 +227,7 @@ export const authConfig: NextAuthConfig = {
             userAgent,
             deviceFingerprint: sessionMod.computeDeviceFingerprint(
               userAgent,
-              acceptLanguage
+              acceptLanguage,
             ),
           });
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -221,7 +236,7 @@ export const authConfig: NextAuthConfig = {
           // Fail OPEN: login succeeds even if session tracking fails.
           // The alternative (blocking login on a DB hiccup) would be a
           // worse UX than a temporarily-unenforced single-session rule.
-          console.error('[auth] UserSession record on sign-in failed:', err);
+          console.error("[auth] UserSession record on sign-in failed:", err);
         }
         return token;
       }
@@ -231,7 +246,7 @@ export const authConfig: NextAuthConfig = {
       const sessionId = (token as any).sessionId as string | undefined;
       if (sessionId) {
         try {
-          const { validateSession } = await import('./user-session');
+          const { validateSession } = await import("./user-session");
           const valid = await validateSession(sessionId);
           if (!valid) {
             // Row is gone (revoked by a newer login on another device)
@@ -244,7 +259,7 @@ export const authConfig: NextAuthConfig = {
         } catch (err) {
           // Fail OPEN on DB errors — don't kick users off for a transient
           // outage; the row will be re-validated on the next request.
-          console.error('[auth] UserSession validate failed:', err);
+          console.error("[auth] UserSession validate failed:", err);
         }
       }
       // Legacy tokens (minted before T-M2) have no sessionId — they pass
@@ -267,7 +282,7 @@ export const authConfig: NextAuthConfig = {
 
     async redirect({ url, baseUrl }) {
       if (url.startsWith(baseUrl)) return url;
-      if (url.startsWith('/')) return `${baseUrl}${url}`;
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
       return baseUrl;
     },
   },
@@ -285,7 +300,7 @@ export const authConfig: NextAuthConfig = {
 // ---------------------------------------------------------------------------
 
 export function canBypassTenantScope(session: Session): boolean {
-  return session.user.role === 'SUPER_ADMIN';
+  return session.user.role === "SUPER_ADMIN";
 }
 
 export function tenantScope(session: Session): { practiceId?: string } {
@@ -296,13 +311,13 @@ export function tenantScope(session: Session): { practiceId?: string } {
 export class TenantScopeError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'TenantScopeError';
+    this.name = "TenantScopeError";
   }
 }
 
 export async function assertSamePracticeUser(
   session: Session,
-  targetUserId: string
+  targetUserId: string,
 ): Promise<void> {
   if (canBypassTenantScope(session)) return;
   const target = await prisma.user.findUnique({
@@ -310,10 +325,10 @@ export async function assertSamePracticeUser(
     select: { practiceId: true },
   });
   if (!target) {
-    throw new TenantScopeError('User not found.');
+    throw new TenantScopeError("User not found.");
   }
   if (target.practiceId !== session.user.practiceId) {
-    throw new TenantScopeError('User not found.');
+    throw new TenantScopeError("User not found.");
   }
 }
 
@@ -327,7 +342,7 @@ export async function assertSamePracticeUser(
 // file is removed now — this block is the single source of truth.
 // ---------------------------------------------------------------------------
 
-declare module 'next-auth' {
+declare module "next-auth" {
   interface Session {
     user: {
       id: string;
@@ -337,7 +352,7 @@ declare module 'next-auth' {
        *  pre-T-M2 JWTs (those ride out their original TTL and re-enter
        *  the single-session regime on the next login). */
       sessionId?: string;
-    } & import('next-auth').DefaultSession['user'];
+    } & import("next-auth").DefaultSession["user"];
   }
 
   interface User {
@@ -349,7 +364,7 @@ declare module 'next-auth' {
   }
 }
 
-declare module 'next-auth/jwt' {
+declare module "next-auth/jwt" {
   interface JWT {
     id: string;
     role: UserRole;
@@ -376,13 +391,13 @@ declare module 'next-auth/jwt' {
 export function patientAccessWhere(session: Session): any {
   const base: Record<string, unknown> = { deletedAt: null };
 
-  if (session.user.role === 'SUPER_ADMIN') {
+  if (session.user.role === "SUPER_ADMIN") {
     return base;
   }
 
   base.practiceId = session.user.practiceId;
 
-  if (session.user.role === 'ADMIN') {
+  if (session.user.role === "ADMIN") {
     return base;
   }
 

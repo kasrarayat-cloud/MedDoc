@@ -13,21 +13,19 @@
 // Product-level entitlement; the intersection is not empty but the
 // permissions aren't identical — a practice ADMIN is not a SUPER_ADMIN.
 //
-// Defense-in-depth: the dedicated Host, current database session ownership,
-// account lifecycle, Product.SUPER_ADMIN presence, freshness/expiry,
-// force-logout marker, and MFA state are re-checked on every request. No
-// cached-layout or ordinary-JWT availability fallback grants admin access.
+// This layout is an outer-shell and MFA-routing defense only. Next can reuse a
+// mounted layout during client navigation, so every page invokes the fresh
+// database-backed gate again before reading protected data.
 // ============================================================================
 
-import { headers } from 'next/headers';
-import { notFound, redirect } from 'next/navigation';
+import { headers } from "next/headers";
+import { notFound, redirect } from "next/navigation";
 
-import { auth } from '@/lib/nextauth';
-import { logAudit } from '@/lib/audit';
-import { isAdminRequestHost } from '@/lib/admin-host';
-import { verifyFreshPlatformAdminSession } from '@/lib/admin-session-freshness';
+import { auth } from "@/lib/nextauth";
+import { isAdminRequestHost } from "@/lib/admin-host";
+import { verifyFreshPlatformAdminSession } from "@/lib/admin-session-freshness";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 // Phase 5 (Linear V1 Faithful) — admin chrome inherits the same dark
@@ -62,34 +60,13 @@ export default async function AdminLayout({
   // don't trust a JWT-cached mfaEnabled flag because enrollment
   // happens in-session.
   if (!verified.mfaEnabled || !verified.mfaVerifiedAt) {
-    redirect('/settings/security/mfa?reason=super_admin_required');
+    redirect("/settings/security/mfa?reason=super_admin_required");
   }
 
   // Phase 19 — h16-admin-session-7day. Cookie itself stays 7 days
   // (so app.quillmd.com doesn't bounce doctors hourly), but admin
   // pages enforce a 12-h freshness ceiling on top of the SUPER_ADMIN
   // gate. Stale → notFound (same disclosure-minimising posture).
-  // "Who watched the watcher" audit — every /admin/* render by a
-  // SUPER_ADMIN gets a row. Path resolves from the Next-URL header
-  // (populated by the Next.js runtime on every RSC request); falls
-  // back to the bare `/admin` when that header isn't set (shouldn't
-  // happen in production but keeps the audit call best-effort).
-  const nextUrlHeader =
-    h.get('next-url') ??
-    h.get('x-invoke-path') ??
-    h.get('x-pathname') ??
-    '/admin';
-  // Some Next.js versions embed query string + segment trees in the
-  // `next-url` header. Slice to the first space / newline / query
-  // marker so we record only the path.
-  const path = nextUrlHeader.split(/[\s?#]/)[0];
-  void logAudit({
-    action: 'ADMIN_DASHBOARD_ACCESS',
-    targetType: 'AdminDashboard',
-    targetId: path,
-    metadata: { path },
-  });
-
   // Phase 5 — Linear V1 chrome lives at the layout boundary so every
   // admin page renders against the dark canvas without each page
   // wrapping itself. The SUPER_ADMIN gate, freshness check, and

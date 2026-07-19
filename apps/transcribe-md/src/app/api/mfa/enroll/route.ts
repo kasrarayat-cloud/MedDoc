@@ -17,62 +17,74 @@
 // are NOT regenerated here — that happens at verify-enrollment.
 // ============================================================================
 
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
 
-import prisma from '@meddoc/db';
-import { auth } from '@/lib/nextauth';
-import { apiError, withApiHandler } from '@/lib/api-error';
-import { generateMfaEnrollment } from '@/lib/mfa';
-import { logAudit } from '@/lib/audit';
+import prisma from "@meddoc/db";
+import { Product } from "@prisma/client";
+import { apiError, withApiHandler } from "@/lib/api-error";
+import { generateMfaEnrollment } from "@/lib/mfa";
+import { logAudit } from "@/lib/audit";
+import { resolveMfaRequestActor } from "@/lib/mfa-request-actor";
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-export const POST = withApiHandler(
-  'api:mfa:enroll',
-  async () => {
-    const session = await auth();
-    const userId = session?.user?.id;
-    if (!userId) return apiError('unauthorized', 401);
+export const POST = withApiHandler("api:mfa:enroll", async (req) => {
+  const actor = await resolveMfaRequestActor(req.headers);
+  if (!actor) return apiError("not found", 404);
+  const userId = actor.userId;
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true, email: true, practiceId: true },
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      email: true,
+      practiceId: true,
+      mfaEnabled: true,
+      products: true,
+    },
+  });
+  if (!user) return apiError("not found", 404);
+  if (
+    user.mfaEnabled &&
+    (actor.isAdminHost || user.products.includes(Product.SUPER_ADMIN))
+  ) {
+    return apiError("MFA is already enrolled.", 409, {
+      code: "MFA_ALREADY_ENABLED",
     });
-    if (!user) return apiError('not found', 404);
+  }
 
-    const enrollment = await generateMfaEnrollment(user.email);
+  const enrollment = await generateMfaEnrollment(user.email);
 
-    // Stage the secret. mfaEnabled stays false — only verify-enrollment
-    // flips it. If the user abandons enrollment (closes the tab), the
-    // staged secret stays in mfaSecret but mfaEnabled remains false; a
-    // future re-enrollment overwrites the stale secret cleanly.
-    await prisma.user.update({
-      where: { id: userId },
-      data: {
-        mfaSecret: enrollment.secret,
-        // Defensive: ensure these are reset in case of re-enrollment
-        // mid-stream. mfaEnabled stays false until verify-enrollment.
-        mfaVerifiedAt: null,
-      },
-    });
+  // Stage the secret. mfaEnabled stays false — only verify-enrollment
+  // flips it. If the user abandons enrollment (closes the tab), the
+  // staged secret stays in mfaSecret but mfaEnabled remains false; a
+  // future re-enrollment overwrites the stale secret cleanly.
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      mfaSecret: enrollment.secret,
+      // Defensive: ensure these are reset in case of re-enrollment
+      // mid-stream. mfaEnabled stays false until verify-enrollment.
+      mfaVerifiedAt: null,
+    },
+  });
 
-    void logAudit({
-      action: 'MFA_ENABLED',
-      userId: user.id,
-      userEmail: user.email,
-      practiceId: user.practiceId,
-      success: true,
-      metadata: { stage: 'enrollment_started' },
-    });
+  void logAudit({
+    action: "MFA_ENABLED",
+    userId: user.id,
+    userEmail: user.email,
+    practiceId: user.practiceId,
+    success: true,
+    metadata: { stage: "enrollment_started" },
+  });
 
-    return NextResponse.json(
-      {
-        ok: true,
-        otpauthUri: enrollment.otpauthUri,
-        qrPngDataUrl: enrollment.qrPngDataUrl,
-      },
-      { status: 200 },
-    );
-  },
-);
+  return NextResponse.json(
+    {
+      ok: true,
+      otpauthUri: enrollment.otpauthUri,
+      qrPngDataUrl: enrollment.qrPngDataUrl,
+    },
+    { status: 200 },
+  );
+});
