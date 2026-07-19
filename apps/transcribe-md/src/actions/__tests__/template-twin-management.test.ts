@@ -82,6 +82,7 @@ import {
   rollbackTemplateTwinVersionAction,
 } from "@/actions/template-twin-management";
 import { TemplateTwinStagingQaLifecycleGuardError } from "@/lib/template-twin/staging-qa-lifecycle-guard";
+import { syntheticSourceAdmission } from "@/lib/template-twin/__tests__/source-admission-fixture";
 
 const DOCTOR_ID = "doctor-synthetic";
 const PRACTICE_ID = "practice-synthetic";
@@ -126,10 +127,12 @@ function certifiedVersion(overrides: Record<string, unknown> = {}) {
         certifiedAt: new Date("2026-07-02T00:00:00.000Z"),
       },
       sourceArtifact: {
-        practiceId: PRACTICE_ID,
-        validationStatus: "accepted",
-        sha256: "c".repeat(64),
-        sizeBytes: 4096,
+        ...syntheticSourceAdmission({
+          practiceId: PRACTICE_ID,
+          lineageId: "lineage-synthetic",
+          minimizedSha256: "c".repeat(64),
+          minimizedSizeBytes: 4096,
+        }),
         mimeType:
           "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       },
@@ -535,6 +538,25 @@ describe("Template Twin status transitions", () => {
     expect(mocks.outboxCreate.mock.calls[0][0].data.action).toBe(
       "TEMPLATE_TWIN_ACTIVATED",
     );
+  });
+
+  it("refuses activation of a legacy certified version without current source admission", async () => {
+    const legacy = certifiedVersion({
+      id: "template-legacy",
+      status: "inactive",
+      version: 2,
+    });
+    legacy.templateTwinCompiledVersion.sourceArtifact.quarantineArtifact = null;
+    mocks.noteTemplateFindFirst.mockResolvedValueOnce(legacy);
+
+    await expect(
+      activateTemplateTwinVersionAction("template-legacy"),
+    ).resolves.toMatchObject({
+      ok: false,
+      code: "SOURCE_UNSAFE",
+    });
+    expect(mocks.noteTemplateUpdateMany).not.toHaveBeenCalled();
+    expect(mocks.outboxCreate).not.toHaveBeenCalled();
   });
 
   it("deactivates without mutating template content or certification", async () => {

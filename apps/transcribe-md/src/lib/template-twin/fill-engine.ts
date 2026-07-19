@@ -86,6 +86,7 @@ import {
   templateTwinRuntimeEnabled,
 } from "@/lib/runtime-protocol";
 import { createTemplateTwinEncounterSourceReceipt } from "./canonical-encounter-source";
+import { isTemplateTwinSourceAdmissionCurrent } from "./source-admission";
 
 /** The worker-owned review marker for an unresolved Template Twin fill.
  * Correction code may clear it only by exact equality after a fully verified
@@ -649,6 +650,7 @@ export async function processTemplateTwinVisit(
           sourceArtifact: {
             select: {
               practiceId: true,
+              lineageId: true,
               objectKey: true,
               objectVersionId: true,
               objectEtag: true,
@@ -656,6 +658,21 @@ export async function processTemplateTwinVisit(
               sizeBytes: true,
               validationStatus: true,
               privacyScanEvidence: true,
+              quarantineArtifact: {
+                select: {
+                  practiceId: true,
+                  lineageId: true,
+                  intakeMode: true,
+                  sha256: true,
+                  sizeBytes: true,
+                  status: true,
+                  malwareScanEvidence: true,
+                  metadataMinimizationEvidence: true,
+                  rejectionCodes: true,
+                  scannedAt: true,
+                  admittedAt: true,
+                },
+              },
             },
           },
           fields: {
@@ -728,7 +745,7 @@ export async function processTemplateTwinVisit(
   if (
     row.version !== input.noteTemplateVersion ||
     compiled.sourceArtifact.practiceId !== input.practiceId ||
-    compiled.sourceArtifact.validationStatus !== "accepted" ||
+    !isTemplateTwinSourceAdmissionCurrent(compiled.sourceArtifact) ||
     !sourceProvenanceValid ||
     !compiled.sourceArtifact.objectKey ||
     !compiled.sourceArtifact.objectVersionId ||

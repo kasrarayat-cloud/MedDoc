@@ -42,6 +42,7 @@ import {
   SYNTHETIC_CONTEXT,
   SYNTHETIC_ENTITIES,
 } from "./integration-fixture";
+import { syntheticSourceAdmission } from "./source-admission-fixture";
 
 const PRACTICE_ID = "practice-fill-concurrency";
 const DOCTOR_ID = "doctor-fill-concurrency";
@@ -90,13 +91,13 @@ function templateRow() {
         ),
       },
       sourceArtifact: {
-        practiceId: PRACTICE_ID,
+        ...syntheticSourceAdmission({
+          practiceId: PRACTICE_ID,
+          lineageId: "lineage-fill-concurrency",
+          minimizedSha256: fixture.ir.source.sha256,
+          minimizedSizeBytes: fixture.source.byteLength,
+        }),
         objectKey: `practices/${PRACTICE_ID}/template-twin/sources/lineage/v1/source/${fixture.ir.source.sha256}.docx`,
-        objectVersionId: "provider-source-version-synthetic",
-        objectEtag: "provider-source-etag-synthetic",
-        sha256: fixture.ir.source.sha256,
-        sizeBytes: fixture.source.byteLength,
-        validationStatus: "accepted",
         privacyScanEvidence: SOURCE_PRIVACY_SCAN_EVIDENCE,
       },
       fields: fixture.mappings.map((mapping) => ({
@@ -507,6 +508,22 @@ describe("Template Twin worker provenance and manifest concurrency", () => {
     );
     expect(mocks.findTemplate).not.toHaveBeenCalled();
     expect(artifacts.readSourceArtifact).not.toHaveBeenCalled();
+  });
+
+  it("rejects a legacy certified source before object access or rendering", async () => {
+    const legacy = templateRow();
+    legacy.templateTwinCompiledVersion.sourceArtifact.quarantineArtifact = null;
+    mocks.findTemplate.mockResolvedValueOnce(legacy);
+    const artifacts = storage();
+
+    await expect(
+      processTemplateTwinVisit(processInput(artifacts)),
+    ).rejects.toMatchObject({ code: "TEMPLATE_PROVENANCE_MISMATCH" });
+
+    expect(artifacts.readSourceArtifact).not.toHaveBeenCalled();
+    expect(outputWrites).toBe(0);
+    expect(mocks.createFill).not.toHaveBeenCalled();
+    expect(mocks.updateFill).not.toHaveBeenCalled();
   });
 
   it("cannot overwrite a manifest that is signed while rendering is in flight", async () => {

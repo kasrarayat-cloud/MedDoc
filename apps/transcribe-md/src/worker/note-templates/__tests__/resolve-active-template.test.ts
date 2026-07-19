@@ -40,6 +40,7 @@ import {
   resolveActiveTemplateAdmission,
   resolveVisitTemplate,
 } from '../resolve-active-template';
+import { syntheticSourceAdmission } from '@/lib/template-twin/__tests__/source-admission-fixture';
 
 /** Build a NoteTemplate row with sane Phase-0 defaults. */
 function tmpl(overrides: Partial<NoteTemplate> = {}): NoteTemplate {
@@ -58,6 +59,26 @@ function tmpl(overrides: Partial<NoteTemplate> = {}): NoteTemplate {
     updatedAt: new Date('2026-06-03T00:00:00Z'),
     ...overrides,
   } as NoteTemplate;
+}
+
+function admittedTwin(
+  overrides: Partial<NoteTemplate> = {},
+  source: { sha256?: string; sizeBytes?: number } = {},
+) {
+  const row = tmpl({ templateKind: 'template_twin_docx', ...overrides });
+  const sha256 = source.sha256 ?? 'c'.repeat(64);
+  const sizeBytes = source.sizeBytes ?? 4096;
+  return {
+    ...row,
+    templateTwinCompiledVersion: {
+      sourceArtifact: syntheticSourceAdmission({
+        practiceId: 'practice-1',
+        lineageId: `lineage-${row.id}`,
+        minimizedSha256: sha256,
+        minimizedSizeBytes: sizeBytes,
+      }),
+    },
+  };
 }
 
 const systemDefault = tmpl({
@@ -224,7 +245,13 @@ describe('resolveVisitTemplate — immutable retry provenance', () => {
       include: {
         templateTwinCompiledVersion: {
           select: {
-            sourceArtifact: { select: { sha256: true, sizeBytes: true } },
+            sourceArtifact: {
+              select: expect.objectContaining({
+                sha256: true,
+                sizeBytes: true,
+                quarantineArtifact: expect.any(Object),
+              }),
+            },
           },
         },
       },
@@ -232,21 +259,18 @@ describe('resolveVisitTemplate — immutable retry provenance', () => {
   });
 
   it('excludes an exact staging source from ordinary active resolution even after rename', async () => {
-    const renamedStaging = {
-      ...tmpl({
+    const renamedStaging = admittedTwin(
+      {
         id: 'renamed-staging',
         doctorId: 'doc1',
         name: 'Ordinary looking name',
         encounterType: 'cardiology',
-        templateKind: 'template_twin_docx',
-      }),
-      templateTwinCompiledVersion: {
-        sourceArtifact: {
-          sha256: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256,
-          sizeBytes: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES,
-        },
       },
-    };
+      {
+        sha256: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256,
+        sizeBytes: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES,
+      },
+    );
     vi.mocked(prisma.noteTemplate.findMany).mockResolvedValueOnce([
       systemDefault,
       renamedStaging,
@@ -260,19 +284,16 @@ describe('resolveVisitTemplate — immutable retry provenance', () => {
 
   it('requires a matching durable run for a pinned exact staging source', async () => {
     process.env.TEMPLATE_TWIN_STAGING_QA_ENABLED = 'true';
-    const pinnedStaging = {
-      ...tmpl({
+    const pinnedStaging = admittedTwin(
+      {
         id: 'staging-pinned',
         doctorId: 'doc1',
-        templateKind: 'template_twin_docx',
-      }),
-      templateTwinCompiledVersion: {
-        sourceArtifact: {
-          sha256: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256,
-          sizeBytes: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES,
-        },
       },
-    };
+      {
+        sha256: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256,
+        sizeBytes: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES,
+      },
+    );
     vi.mocked(prisma.noteTemplate.findFirst).mockResolvedValue(pinnedStaging as never);
     vi.mocked(prisma.templateTwinSyntheticQaRun.findFirst).mockResolvedValueOnce(
       null,
@@ -308,10 +329,9 @@ describe('resolveVisitTemplate — immutable retry provenance', () => {
 
   it('rejects a pinned Template Twin when the practice rollout flag is off', async () => {
     process.env.TEMPLATE_TWIN_KILL_SWITCH = 'false';
-    const pinned = tmpl({
+    const pinned = admittedTwin({
       id: 'twin-disabled',
       doctorId: 'doc1',
-      templateKind: 'template_twin_docx',
     });
     vi.mocked(prisma.noteTemplate.findFirst).mockResolvedValueOnce(pinned);
     vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({
@@ -331,11 +351,10 @@ describe('resolveVisitTemplate — immutable retry provenance', () => {
 
   it('excludes an active Template Twin from first-pass selection while rollout is disabled', async () => {
     process.env.TEMPLATE_TWIN_KILL_SWITCH = 'false';
-    const twin = tmpl({
+    const twin = admittedTwin({
       id: 'twin-disabled-active',
       doctorId: 'doc1',
       encounterType: 'cardiology',
-      templateKind: 'template_twin_docx',
     });
     vi.mocked(prisma.noteTemplate.findMany).mockResolvedValueOnce([
       systemDefault,
@@ -354,11 +373,10 @@ describe('resolveVisitTemplate — immutable retry provenance', () => {
 
   it('excludes every generic active Template Twin when synthetic-only staging is requested', async () => {
     process.env.TEMPLATE_TWIN_STAGING_QA_ENABLED = 'true';
-    const twin = tmpl({
+    const twin = admittedTwin({
       id: 'twin-staging-bypass-active',
       doctorId: 'doc1',
       encounterType: 'cardiology',
-      templateKind: 'template_twin_docx',
     });
     vi.mocked(prisma.noteTemplate.findMany).mockResolvedValueOnce([
       systemDefault,
@@ -374,10 +392,9 @@ describe('resolveVisitTemplate — immutable retry provenance', () => {
 
   it('rejects a pinned non-fixture Template Twin when synthetic-only staging is requested', async () => {
     process.env.TEMPLATE_TWIN_STAGING_QA_ENABLED = 'true';
-    const pinned = tmpl({
+    const pinned = admittedTwin({
       id: 'twin-staging-bypass-pinned',
       doctorId: 'doc1',
-      templateKind: 'template_twin_docx',
     });
     vi.mocked(prisma.noteTemplate.findFirst).mockResolvedValueOnce(pinned);
 
@@ -394,11 +411,10 @@ describe('resolveVisitTemplate — immutable retry provenance', () => {
   });
 
   it('uses persisted global and lineage admission before selecting an active Twin', async () => {
-    const twin = tmpl({
+    const twin = admittedTwin({
       id: 'twin-enabled-active',
       doctorId: 'doc1',
       encounterType: 'cardiology',
-      templateKind: 'template_twin_docx',
     });
     vi.mocked(prisma.noteTemplate.findMany).mockResolvedValueOnce([
       systemDefault,
@@ -419,12 +435,50 @@ describe('resolveVisitTemplate — immutable retry provenance', () => {
     });
   });
 
+  it('excludes a legacy active Twin without current source admission', async () => {
+    const legacy = admittedTwin({
+      id: 'twin-legacy-active',
+      doctorId: 'doc1',
+      encounterType: 'cardiology',
+    });
+    legacy.templateTwinCompiledVersion.sourceArtifact.quarantineArtifact = null;
+    vi.mocked(prisma.noteTemplate.findMany).mockResolvedValueOnce([
+      systemDefault,
+      legacy,
+    ] as never);
+
+    await expect(
+      resolveActiveTemplate({ doctorId: 'doc1', encounterType: 'cardiology' }),
+    ).resolves.toBe(systemDefault);
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    expect(rolloutMocks.pin).not.toHaveBeenCalled();
+  });
+
+  it('rejects a pinned legacy Twin without current source admission', async () => {
+    const legacy = admittedTwin({
+      id: 'twin-legacy-pinned',
+      doctorId: 'doc1',
+      encounterType: 'cardiology',
+    });
+    legacy.templateTwinCompiledVersion.sourceArtifact.quarantineArtifact = null;
+    vi.mocked(prisma.noteTemplate.findFirst).mockResolvedValueOnce(legacy as never);
+
+    await expect(
+      resolveVisitTemplate({
+        doctorId: 'doc1',
+        pinnedTemplateId: legacy.id,
+        pinnedTemplateVersion: legacy.version,
+      }),
+    ).rejects.toBeInstanceOf(PinnedTemplateUnavailableError);
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    expect(rolloutMocks.pin).not.toHaveBeenCalled();
+  });
+
   it('returns the exact persisted rollout token with a worker Twin selection', async () => {
-    const twin = tmpl({
+    const twin = admittedTwin({
       id: 'twin-admission-token',
       doctorId: 'doc1',
       encounterType: 'cardiology',
-      templateKind: 'template_twin_docx',
     });
     const token = {
       practiceId: 'practice-1',
@@ -455,11 +509,10 @@ describe('resolveVisitTemplate — immutable retry provenance', () => {
   });
 
   it('falls back to the structured default when persisted admission fails closed', async () => {
-    const twin = tmpl({
+    const twin = admittedTwin({
       id: 'twin-db-disabled-active',
       doctorId: 'doc1',
       encounterType: 'cardiology',
-      templateKind: 'template_twin_docx',
     });
     vi.mocked(prisma.noteTemplate.findMany).mockResolvedValueOnce([
       systemDefault,
@@ -488,11 +541,10 @@ describe('resolveVisitTemplate — immutable retry provenance', () => {
       encounterType: null,
       templateKind: 'structured',
     });
-    const twin = tmpl({
+    const twin = admittedTwin({
       id: 'twin-disabled-active',
       doctorId: 'doc1',
       encounterType: 'cardiology',
-      templateKind: 'template_twin_docx',
     });
     vi.mocked(prisma.noteTemplate.findMany).mockResolvedValueOnce([
       systemDefault,

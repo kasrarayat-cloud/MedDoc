@@ -36,6 +36,10 @@ import {
   TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES,
 } from '@/lib/template-twin/staging-qa-fixtures';
 import { isTemplateTwinStagingQaRequested } from '@/lib/template-twin/staging-qa-gate';
+import {
+  isTemplateTwinSourceAdmissionCurrent,
+  type TemplateTwinSourceAdmissionRecord,
+} from '@/lib/template-twin/source-admission';
 
 export interface ResolveTemplateInput {
   /** The signing/owning doctor (User.id). */
@@ -57,9 +61,34 @@ export interface ResolveVisitTemplateInput extends ResolveTemplateInput {
 
 type TemplateWithSourceProvenance = NoteTemplate & {
   templateTwinCompiledVersion?: {
-    sourceArtifact: { sha256: string; sizeBytes: number };
+    sourceArtifact: TemplateTwinSourceAdmissionRecord;
   } | null;
 };
+
+const TEMPLATE_TWIN_SOURCE_ADMISSION_SELECT = {
+  practiceId: true,
+  lineageId: true,
+  objectVersionId: true,
+  objectEtag: true,
+  sha256: true,
+  sizeBytes: true,
+  validationStatus: true,
+  quarantineArtifact: {
+    select: {
+      practiceId: true,
+      lineageId: true,
+      intakeMode: true,
+      sha256: true,
+      sizeBytes: true,
+      status: true,
+      malwareScanEvidence: true,
+      metadataMinimizationEvidence: true,
+      rejectionCodes: true,
+      scannedAt: true,
+      admittedAt: true,
+    },
+  },
+} as const;
 
 function isStagingFixtureTemplate(
   template: TemplateWithSourceProvenance,
@@ -69,6 +98,14 @@ function isStagingFixtureTemplate(
     source?.sha256 === TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256 &&
     source.sizeBytes === TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES
   );
+}
+
+function hasCurrentTemplateTwinSourceAdmission(
+  template: TemplateWithSourceProvenance,
+): boolean {
+  if (template.templateKind !== 'template_twin_docx') return true;
+  const source = template.templateTwinCompiledVersion?.sourceArtifact;
+  return Boolean(source && isTemplateTwinSourceAdmissionCurrent(source));
 }
 
 /** Worker admission result. A Twin selection always carries the exact
@@ -226,7 +263,7 @@ export async function resolveActiveTemplateAdmission(
     include: {
       templateTwinCompiledVersion: {
         select: {
-          sourceArtifact: { select: { sha256: true, sizeBytes: true } },
+          sourceArtifact: { select: TEMPLATE_TWIN_SOURCE_ADMISSION_SELECT },
         },
       },
     },
@@ -235,6 +272,7 @@ export async function resolveActiveTemplateAdmission(
   const ordinaryCandidates = candidates.filter(
     (template) =>
       (twinRuntimeEnabled || template.templateKind !== 'template_twin_docx') &&
+      hasCurrentTemplateTwinSourceAdmission(template) &&
       !isStagingFixtureTemplate(template) &&
       (!stagingQaRequested || template.templateKind !== 'template_twin_docx'),
   );
@@ -288,13 +326,16 @@ export async function resolveVisitTemplateAdmission(
     include: {
       templateTwinCompiledVersion: {
         select: {
-          sourceArtifact: { select: { sha256: true, sizeBytes: true } },
+          sourceArtifact: { select: TEMPLATE_TWIN_SOURCE_ADMISSION_SELECT },
         },
       },
     },
   })) as TemplateWithSourceProvenance | null;
   if (!pinned) throw new PinnedTemplateUnavailableError();
   if (!twinRuntimeEnabled && pinned.templateKind === 'template_twin_docx') {
+    throw new PinnedTemplateUnavailableError();
+  }
+  if (!hasCurrentTemplateTwinSourceAdmission(pinned)) {
     throw new PinnedTemplateUnavailableError();
   }
   const stagingFixture = isStagingFixtureTemplate(pinned);

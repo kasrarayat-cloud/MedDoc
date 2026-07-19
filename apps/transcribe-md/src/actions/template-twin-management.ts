@@ -18,6 +18,10 @@ import {
   runWithTemplateTwinStagingQaLifecycleGuard,
 } from "@/lib/template-twin/staging-qa-lifecycle-guard";
 import { createTemplateTwinStagingQaVersionAdmission } from "@/lib/template-twin/staging-qa-version-admission";
+import {
+  isTemplateTwinSourceAdmissionCurrent,
+  TEMPLATE_TWIN_SOURCE_ADMISSION_GATE_MESSAGE,
+} from "@/lib/template-twin/source-admission";
 
 type TemplateTwinManagementCode =
   | "INVALID_INPUT"
@@ -160,6 +164,9 @@ const OWNED_VERSION_SELECT = {
       sourceArtifact: {
         select: {
           practiceId: true,
+          lineageId: true,
+          objectVersionId: true,
+          objectEtag: true,
           validationStatus: true,
           sha256: true,
           sizeBytes: true,
@@ -170,6 +177,11 @@ const OWNED_VERSION_SELECT = {
               sizeBytes: true,
               status: true,
               intakeMode: true,
+              malwareScanEvidence: true,
+              metadataMinimizationEvidence: true,
+              rejectionCodes: true,
+              scannedAt: true,
+              admittedAt: true,
             },
           },
         },
@@ -344,10 +356,10 @@ function compiled(row: OwnedVersion) {
 }
 
 function assertAcceptedSource(row: OwnedVersion): void {
-  if (compiled(row).sourceArtifact.validationStatus !== "accepted") {
+  if (!isTemplateTwinSourceAdmissionCurrent(compiled(row).sourceArtifact)) {
     throw new TemplateTwinManagementError(
       "SOURCE_UNSAFE",
-      "This source document is quarantined and cannot be activated.",
+      TEMPLATE_TWIN_SOURCE_ADMISSION_GATE_MESSAGE,
     );
   }
 }
@@ -1014,7 +1026,9 @@ export async function inspectTemplateTwinLineageAction(
                   row.status === "inactive" &&
                   rowCompiled.certificationStatus === "CERTIFIED" &&
                   rowCompiled.certification &&
-                  rowCompiled.sourceArtifact.validationStatus === "accepted" &&
+                  isTemplateTwinSourceAdmissionCurrent(
+                    rowCompiled.sourceArtifact,
+                  ) &&
                   hasIdentity,
                 ),
               };

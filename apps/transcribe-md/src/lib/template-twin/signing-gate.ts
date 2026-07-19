@@ -42,6 +42,10 @@ import { verifyCustomExtractionOutcomeProof } from "./custom-outcome-proof";
 import { TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT } from "./staging-qa-visit-guard";
 import { VISIT_AUTOMATION_MANIFEST_SELECT } from "@/worker/automation-manifest";
 import { assessTemplateTwinEncounterEvidence } from "./encounter-evidence-verification";
+import {
+  isTemplateTwinSourceAdmissionCurrent,
+  type TemplateTwinSourceAdmissionRecord,
+} from "./source-admission";
 
 const SHA256 = /^[a-f0-9]{64}$/;
 
@@ -81,6 +85,7 @@ export const TEMPLATE_TWIN_SIGNING_VISIT_SELECT = {
           sourceArtifact: {
             select: {
               practiceId: true,
+              lineageId: true,
               objectVersionId: true,
               objectEtag: true,
               sha256: true,
@@ -88,6 +93,21 @@ export const TEMPLATE_TWIN_SIGNING_VISIT_SELECT = {
               sizeBytes: true,
               validationStatus: true,
               privacyScanEvidence: true,
+              quarantineArtifact: {
+                select: {
+                  practiceId: true,
+                  lineageId: true,
+                  intakeMode: true,
+                  sha256: true,
+                  sizeBytes: true,
+                  status: true,
+                  malwareScanEvidence: true,
+                  metadataMinimizationEvidence: true,
+                  rejectionCodes: true,
+                  scannedAt: true,
+                  admittedAt: true,
+                },
+              },
             },
           },
           fields: {
@@ -198,6 +218,7 @@ export const TEMPLATE_TWIN_SIGNING_VISIT_SELECT = {
 
 export type TemplateTwinSignBlockerCode =
   | "TEMPLATE_PROVENANCE_UNAVAILABLE"
+  | "SOURCE_ADMISSION_INVALID"
   | "TENANT_MISMATCH"
   | "TEMPLATE_VERSION_MISMATCH"
   | "TEMPLATE_NOT_CERTIFIED"
@@ -249,14 +270,8 @@ export interface TemplateTwinSigningContext {
       latestTestOutputEtag: string | null;
       latestTestOutputSha256: string | null;
       certificationStatus: string;
-      sourceArtifact: {
-        practiceId: string;
-        objectVersionId: string | null;
-        objectEtag: string | null;
-        sha256: string;
+      sourceArtifact: TemplateTwinSourceAdmissionRecord & {
         mimeType: string;
-        sizeBytes: number;
-        validationStatus: string;
         privacyScanEvidence: unknown;
       };
       fields: Array<{
@@ -589,7 +604,7 @@ function certifiedCompilationIntegrity(
     certification &&
     compiled.irSchemaVersion === ir.irSchemaVersion &&
     compiled.compilerVersion === ir.compilerVersion &&
-    compiled.sourceArtifact.validationStatus === "accepted" &&
+    isTemplateTwinSourceAdmissionCurrent(compiled.sourceArtifact) &&
     certification.sourcePrivacyScanEvidenceSha256 ===
       sourcePrivacyScanEvidenceSha256 &&
     compiled.sourceArtifact.sha256 === ir.source.sha256 &&
@@ -844,6 +859,9 @@ export function assessTemplateTwinSigning(
       !compiled.sourceArtifact.objectEtag?.trim()
     ) {
       add("TEMPLATE_PROVENANCE_UNAVAILABLE");
+    }
+    if (!isTemplateTwinSourceAdmissionCurrent(compiled.sourceArtifact)) {
+      add("SOURCE_ADMISSION_INVALID");
     }
     if (
       template.id !== context.noteTemplateId ||

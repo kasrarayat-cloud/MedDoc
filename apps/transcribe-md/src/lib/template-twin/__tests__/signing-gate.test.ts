@@ -24,6 +24,7 @@ import {
   SYNTHETIC_CONTEXT,
 } from './integration-fixture';
 import { createTemplateTwinEncounterSourceReceipt } from '../canonical-encounter-source';
+import { syntheticSourceAdmission } from './source-admission-fixture';
 
 const VALIDATION_NOW = '2026-07-15T12:00:00.000Z';
 const REVIEWED_SOAP = [
@@ -135,13 +136,13 @@ beforeAll(async () => {
         latestTestOutputSha256: outputSha256,
         certificationStatus: 'CERTIFIED',
         sourceArtifact: {
-          practiceId: 'practice-1',
-          objectVersionId: 'provider-source-version-synthetic',
-          objectEtag: 'provider-source-etag-synthetic',
-          sha256: fixture.ir.source.sha256,
+          ...syntheticSourceAdmission({
+            practiceId: 'practice-1',
+            lineageId: 'lineage-signing-gate',
+            minimizedSha256: fixture.ir.source.sha256,
+            minimizedSizeBytes: fixture.ir.source.sizeBytes,
+          }),
           mimeType: fixture.ir.source.mimeType,
-          sizeBytes: fixture.ir.source.sizeBytes,
-          validationStatus: 'accepted',
           privacyScanEvidence: SOURCE_PRIVACY_SCAN_EVIDENCE,
         },
         fields: fixture.ir.fields.map((field) => {
@@ -392,6 +393,20 @@ describe('Template Twin server-side signing gate', () => {
       ]),
     );
     expect(result.claim).toBeNull();
+  });
+
+  it('blocks signing and re-delivery for a legacy source without current admission', () => {
+    for (const status of ['READY', 'SIGNED'] as const) {
+      const input = validContext(status);
+      input.noteTemplate!.templateTwinCompiledVersion!.sourceArtifact.quarantineArtifact =
+        null;
+
+      const result = assessTemplateTwinSigning(input);
+
+      expect(result.ready).toBe(false);
+      expect(result.blockerCodes).toContain('SOURCE_ADMISSION_INVALID');
+      expect(result.claim).toBeNull();
+    }
   });
 
   it.each([
