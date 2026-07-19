@@ -1164,7 +1164,7 @@ model AuditLog {
   /// Exact durable Template Twin outbox event delivered into this immutable
   /// receipt. Nullable for direct and pre-v3 audit rows.
   templateTwinOutboxEventKey String?                  @unique(map: "audit_logs_template_twin_outbox_event_key")
-  templateTwinOutbox         TemplateTwinAuditOutbox? @relation("TemplateTwinAuditDelivery", fields: [templateTwinOutboxEventKey], references: [eventKey], onDelete: Restrict, onUpdate: Restrict)
+  templateTwinOutbox         TemplateTwinAuditOutbox? @relation("TemplateTwinAuditDelivery", fields: [templateTwinOutboxEventKey], references: [eventKey], onDelete: Restrict, onUpdate: Restrict, map: "audit_logs_template_twin_outbox_event_fkey")
 
   // WHO — nullable because auth-failure events have no authenticated user yet
   userId            String?
@@ -2317,6 +2317,26 @@ model NoteTemplate {
   @@map("note_templates")
 }
 
+/// Durable, PHI-free state for the separately reviewed online lineage
+/// operator. Application and operator code intentionally use bounded raw SQL;
+/// @@ignore keeps this evidence table out of Prisma Client while retaining it
+/// in the declarative database contract so schema tooling cannot drop it.
+model TemplateTwinLineageMigrationProgress {
+  operationKey    String    @id
+  phase           String    @default("EXPANDED")
+  lastProcessedId String?
+  rowsProcessed   BigInt    @default(0)
+  batchCount      BigInt    @default(0)
+  lastBatchRows   Int       @default(0)
+  lastErrorCode   String?
+  startedAt       DateTime? @db.Timestamptz(6)
+  updatedAt       DateTime  @default(now()) @db.Timestamptz(6)
+  completedAt     DateTime? @db.Timestamptz(6)
+
+  @@map("template_twin_lineage_migration_progress")
+  @@ignore
+}
+
 /// Default-off, synthetic-only browser QA admission. This row is never a
 /// substitute for the normal Template Twin fill manifest or signing proof. It
 /// only proves that an authenticated doctor admitted an allowlisted synthetic
@@ -2624,10 +2644,10 @@ model TemplateTwinQuarantineArtifact {
   id String @id @default(cuid())
 
   practiceId String
-  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict)
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict, map: "template_twin_quarantine_practice_fkey")
 
   createdById String?
-  createdBy   User?   @relation("TemplateTwinQuarantineCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy   User?   @relation("TemplateTwinQuarantineCreator", fields: [createdById], references: [id], onDelete: SetNull, map: "template_twin_quarantine_creator_fkey")
 
   lineageId      String
   lineageVersion Int
@@ -2653,10 +2673,10 @@ model TemplateTwinQuarantineArtifact {
   admittedSourceArtifact    TemplateTwinSourceArtifact?
   completedCandidateExample TemplateTwinCompletedCandidateExample?
 
-  @@index([practiceId, createdAt])
-  @@index([lineageId, lineageVersion])
-  @@index([sha256])
-  @@index([practiceId, status, createdAt])
+  @@index([practiceId, createdAt], map: "template_twin_quarantine_practice_created_idx")
+  @@index([lineageId, lineageVersion], map: "template_twin_quarantine_lineage_version_idx")
+  @@index([sha256], map: "template_twin_quarantine_sha256_idx")
+  @@index([practiceId, status, createdAt], map: "template_twin_quarantine_practice_status_created_idx")
   @@map("template_twin_quarantine_artifacts")
 }
 
@@ -2667,17 +2687,17 @@ model TemplateTwinCompletedCandidate {
   id String @id
 
   practiceId String
-  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict)
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict, map: "template_twin_completed_candidate_practice_fkey")
 
   createdById String?
-  createdBy   User?   @relation("TemplateTwinCompletedCandidateCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdBy   User?   @relation("TemplateTwinCompletedCandidateCreator", fields: [createdById], references: [id], onDelete: Restrict, map: "template_twin_completed_candidate_creator_fkey")
 
   name               String
   encounterScope     String
   versionDescription String
   status             String @default("PENDING_REVIEW")
 
-  candidateObjectKey       String                                       @unique
+  candidateObjectKey       String                                       @unique(map: "template_twin_completed_candidates_object_key")
   candidateObjectVersionId String
   candidateObjectEtag      String
   candidateSha256          String                                       @db.Char(64)
@@ -2692,7 +2712,7 @@ model TemplateTwinCompletedCandidate {
   reviewProjection         Json?
   reviewProjectionSha256   String?                                      @db.Char(64)
   reviewReceiptId          String?                                      @unique
-  reviewReceipt            TemplateTwinCompletedCandidateReviewReceipt? @relation("TemplateTwinCompletedCandidateFinalReceipt", fields: [reviewReceiptId], references: [id], onDelete: Restrict)
+  reviewReceipt            TemplateTwinCompletedCandidateReviewReceipt? @relation("TemplateTwinCompletedCandidateFinalReceipt", fields: [reviewReceiptId], references: [id], onDelete: Restrict, map: "tt_completed_candidate_review_receipt_fkey")
 
   createdAt  DateTime  @default(now()) @db.Timestamptz(6)
   reviewedAt DateTime? @db.Timestamptz(6)
@@ -2701,8 +2721,8 @@ model TemplateTwinCompletedCandidate {
   regions        TemplateTwinCompletedCandidateRegion[]
   reviewReceipts TemplateTwinCompletedCandidateReviewReceipt[] @relation("TemplateTwinCompletedCandidatePreviewReceipts")
 
-  @@index([practiceId, createdById, status, createdAt])
-  @@index([candidateSha256])
+  @@index([practiceId, createdById, status, createdAt], map: "template_twin_completed_candidates_owner_status_idx")
+  @@index([candidateSha256], map: "template_twin_completed_candidates_sha_idx")
   @@map("template_twin_completed_candidates")
 }
 
@@ -2714,15 +2734,15 @@ model TemplateTwinCompletedCandidateReviewReceipt {
   id String @id
 
   candidateId String
-  candidate   TemplateTwinCompletedCandidate @relation("TemplateTwinCompletedCandidatePreviewReceipts", fields: [candidateId], references: [id], onDelete: Restrict)
+  candidate   TemplateTwinCompletedCandidate @relation("TemplateTwinCompletedCandidatePreviewReceipts", fields: [candidateId], references: [id], onDelete: Restrict, map: "tt_completed_candidate_receipt_candidate_fkey")
 
   practiceId String
-  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict)
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict, map: "tt_completed_candidate_receipt_practice_fkey")
 
   reviewedById String
-  reviewedBy   User   @relation("TemplateTwinCompletedCandidateReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
+  reviewedBy   User   @relation("TemplateTwinCompletedCandidateReviewer", fields: [reviewedById], references: [id], onDelete: Restrict, map: "tt_completed_candidate_receipt_reviewer_fkey")
 
-  tokenSha256               String @unique @db.Char(64)
+  tokenSha256               String @unique(map: "tt_completed_candidate_receipt_token_key") @db.Char(64)
   candidateSha256           String @db.Char(64)
   candidateStructureSha256  String @db.Char(64)
   inventorySha256           String @db.Char(64)
@@ -2746,10 +2766,10 @@ model TemplateTwinCompletedCandidateExample {
   id String @id @default(cuid())
 
   candidateId String
-  candidate   TemplateTwinCompletedCandidate @relation(fields: [candidateId], references: [id], onDelete: Restrict)
+  candidate   TemplateTwinCompletedCandidate @relation(fields: [candidateId], references: [id], onDelete: Restrict, map: "template_twin_completed_candidate_example_candidate_fkey")
 
-  quarantineArtifactId String                         @unique
-  quarantineArtifact   TemplateTwinQuarantineArtifact @relation(fields: [quarantineArtifactId], references: [id], onDelete: Restrict)
+  quarantineArtifactId String                         @unique(map: "template_twin_completed_candidate_example_quarantine_key")
+  quarantineArtifact   TemplateTwinQuarantineArtifact @relation(fields: [quarantineArtifactId], references: [id], onDelete: Restrict, map: "template_twin_completed_candidate_example_quarantine_fkey")
 
   ordinal                    Int
   minimizedSha256            String @db.Char(64)
@@ -2758,8 +2778,8 @@ model TemplateTwinCompletedCandidateExample {
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
 
-  @@unique([candidateId, ordinal])
-  @@index([candidateId])
+  @@unique([candidateId, ordinal], map: "template_twin_completed_candidate_example_ordinal_key")
+  @@index([candidateId], map: "template_twin_completed_candidate_examples_candidate_idx")
   @@map("template_twin_completed_candidate_examples")
 }
 
@@ -2767,7 +2787,7 @@ model TemplateTwinCompletedCandidateRegion {
   id String @id @default(cuid())
 
   candidateId String
-  candidate   TemplateTwinCompletedCandidate @relation(fields: [candidateId], references: [id], onDelete: Restrict)
+  candidate   TemplateTwinCompletedCandidate @relation(fields: [candidateId], references: [id], onDelete: Restrict, map: "template_twin_completed_candidate_region_candidate_fkey")
 
   regionId             String
   displayOrder         Int
@@ -2783,15 +2803,15 @@ model TemplateTwinCompletedCandidateRegion {
 
   decision    String    @default("PENDING")
   decidedById String?
-  decidedBy   User?     @relation("TemplateTwinCompletedCandidateDecider", fields: [decidedById], references: [id], onDelete: Restrict)
+  decidedBy   User?     @relation("TemplateTwinCompletedCandidateDecider", fields: [decidedById], references: [id], onDelete: Restrict, map: "template_twin_completed_candidate_region_decider_fkey")
   decidedAt   DateTime? @db.Timestamptz(6)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
 
-  @@unique([candidateId, regionId])
-  @@unique([candidateId, displayOrder])
-  @@unique([candidateId, candidateTag])
-  @@index([candidateId, decision])
+  @@unique([candidateId, regionId], map: "template_twin_completed_candidate_region_id_key")
+  @@unique([candidateId, displayOrder], map: "template_twin_completed_candidate_region_order_key")
+  @@unique([candidateId, candidateTag], map: "template_twin_completed_candidate_region_tag_key")
+  @@index([candidateId, decision], map: "template_twin_completed_candidate_region_decision_idx")
   @@map("template_twin_completed_candidate_regions")
 }
 
@@ -2799,10 +2819,10 @@ model TemplateTwinSourceArtifact {
   id String @id @default(cuid())
 
   practiceId String
-  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict)
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict, map: "template_twin_source_practice_fkey")
 
   createdById String?
-  createdBy   User?   @relation("TemplateTwinSourceCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy   User?   @relation("TemplateTwinSourceCreator", fields: [createdById], references: [id], onDelete: SetNull, map: "template_twin_source_createdBy_fkey")
 
   lineageId           String
   lineageVersion      Int
@@ -2823,8 +2843,8 @@ model TemplateTwinSourceArtifact {
   /// Every new GA admission points to the immutable raw quarantine capture.
   /// Nullable only for pre-GA/synthetic-history rows, which certification
   /// rejects through the v2 admission evidence gate.
-  quarantineArtifactId String?                         @unique
-  quarantineArtifact   TemplateTwinQuarantineArtifact? @relation(fields: [quarantineArtifactId], references: [id], onDelete: Restrict)
+  quarantineArtifactId String?                         @unique(map: "template_twin_source_quarantineArtifactId_key")
+  quarantineArtifact   TemplateTwinQuarantineArtifact? @relation(fields: [quarantineArtifactId], references: [id], onDelete: Restrict, map: "template_twin_source_quarantine_fkey")
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
 
@@ -2841,10 +2861,10 @@ model TemplateTwinCompiledVersion {
   id String @id @default(cuid())
 
   sourceArtifactId String
-  sourceArtifact   TemplateTwinSourceArtifact @relation(fields: [sourceArtifactId], references: [id], onDelete: Restrict)
+  sourceArtifact   TemplateTwinSourceArtifact @relation(fields: [sourceArtifactId], references: [id], onDelete: Restrict, map: "template_twin_compiled_source_fkey")
 
   noteTemplateId String       @unique
-  noteTemplate   NoteTemplate @relation(fields: [noteTemplateId], references: [id], onDelete: Restrict)
+  noteTemplate   NoteTemplate @relation(fields: [noteTemplateId], references: [id], onDelete: Restrict, map: "template_twin_compiled_noteTemplate_fkey")
 
   compilerVersion          String
   irSchemaVersion          Int
@@ -2881,8 +2901,8 @@ model TemplateTwinCompiledVersion {
   /// Multiple immutable NoteTemplate versions may reuse the same immutable
   /// source package when a physician explicitly forks only the semantic
   /// mapping. noteTemplateId remains the one-to-one version boundary.
-  @@index([sourceArtifactId, compilerVersion])
-  @@index([certificationStatus, compiledAt])
+  @@index([sourceArtifactId, compilerVersion], map: "template_twin_compiled_versions_sourceArtifactId_compilerVersio")
+  @@index([certificationStatus, compiledAt], map: "template_twin_compiled_status_compiledAt_idx")
   @@map("template_twin_compiled_versions")
 }
 
@@ -2890,7 +2910,7 @@ model TemplateTwinFieldDefinition {
   id String @id @default(cuid())
 
   compiledVersionId String
-  compiledVersion   TemplateTwinCompiledVersion @relation(fields: [compiledVersionId], references: [id], onDelete: Cascade)
+  compiledVersion   TemplateTwinCompiledVersion @relation(fields: [compiledVersionId], references: [id], onDelete: Cascade, map: "template_twin_field_compiled_fkey")
 
   fieldId            String
   displayOrder       Int
@@ -2911,9 +2931,9 @@ model TemplateTwinFieldDefinition {
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
 
-  @@unique([compiledVersionId, fieldId])
-  @@index([compiledVersionId, displayOrder])
-  @@index([compiledVersionId, detectionStatus])
+  @@unique([compiledVersionId, fieldId], map: "template_twin_field_compiledVersionId_fieldId_key")
+  @@index([compiledVersionId, displayOrder], map: "template_twin_field_compiledVersionId_displayOrder_idx")
+  @@index([compiledVersionId, detectionStatus], map: "template_twin_field_compiledVersionId_detectionStatus_idx")
   @@map("template_twin_field_definitions")
 }
 
@@ -2921,7 +2941,7 @@ model TemplateTwinSemanticMapping {
   id String @id @default(cuid())
 
   fieldDefinitionId String                      @unique
-  fieldDefinition   TemplateTwinFieldDefinition @relation(fields: [fieldDefinitionId], references: [id], onDelete: Cascade)
+  fieldDefinition   TemplateTwinFieldDefinition @relation(fields: [fieldDefinitionId], references: [id], onDelete: Cascade, map: "template_twin_mapping_field_fkey")
 
   clinicalConcept  String?
   expectedDataType String
@@ -2938,12 +2958,12 @@ model TemplateTwinSemanticMapping {
   proposedByModel  String?
 
   approvedById String?
-  approvedBy   User?     @relation("TemplateTwinMappingApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedBy   User?     @relation("TemplateTwinMappingApprover", fields: [approvedById], references: [id], onDelete: SetNull, map: "template_twin_mapping_approver_fkey")
   approvedAt   DateTime? @db.Timestamptz(6)
   createdAt    DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt    DateTime  @updatedAt @db.Timestamptz(6)
 
-  @@index([mappingStatus, updatedAt])
+  @@index([mappingStatus, updatedAt], map: "template_twin_semantic_mappings_status_updatedAt_idx")
   @@map("template_twin_semantic_mappings")
 }
 
@@ -2981,10 +3001,10 @@ model TemplateTwinCertification {
   id String @id @default(cuid())
 
   compiledVersionId String                      @unique
-  compiledVersion   TemplateTwinCompiledVersion @relation(fields: [compiledVersionId], references: [id], onDelete: Restrict)
+  compiledVersion   TemplateTwinCompiledVersion @relation(fields: [compiledVersionId], references: [id], onDelete: Restrict, map: "template_twin_certification_compiled_fkey")
 
   certifiedById String
-  certifiedBy   User   @relation("TemplateTwinCertifier", fields: [certifiedById], references: [id], onDelete: Restrict)
+  certifiedBy   User   @relation("TemplateTwinCertifier", fields: [certifiedById], references: [id], onDelete: Restrict, map: "template_twin_certification_certifier_fkey")
 
   compiledStructureSha256          String   @db.Char(64)
   approvedMappingsSha256           String   @db.Char(64)
@@ -3077,13 +3097,13 @@ model TemplateTwinFillManifest {
   id String @id @default(cuid())
 
   practiceId String
-  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict)
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict, map: "template_twin_fill_practice_fkey")
 
   visitId String          @unique
-  visit   TranscribeVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  visit   TranscribeVisit @relation(fields: [visitId], references: [id], onDelete: Cascade, map: "template_twin_fill_visit_fkey")
 
   compiledVersionId String
-  compiledVersion   TemplateTwinCompiledVersion @relation(fields: [compiledVersionId], references: [id], onDelete: Restrict)
+  compiledVersion   TemplateTwinCompiledVersion @relation(fields: [compiledVersionId], references: [id], onDelete: Restrict, map: "template_twin_fill_compiled_fkey")
 
   noteTemplateId       String
   noteTemplateVersion  Int
@@ -3133,7 +3153,7 @@ model TemplateTwinFillManifest {
   /// are cleared whenever regeneration or a field correction changes it.
   reviewedAt              DateTime? @db.Timestamptz(6)
   reviewedById            String?
-  reviewedBy              User?     @relation("TemplateTwinManifestReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
+  reviewedBy              User?     @relation("TemplateTwinManifestReviewer", fields: [reviewedById], references: [id], onDelete: Restrict, map: "template_twin_fill_reviewer_fkey")
   reviewedManifestVersion Int?
   reviewedManifestSha256  String?   @db.Char(64)
   signedDecisionAt        DateTime? @db.Timestamptz(6)
@@ -3142,10 +3162,10 @@ model TemplateTwinFillManifest {
 
   reviewDecisions TemplateTwinReviewDecision[]
 
-  @@index([practiceId, status, updatedAt])
-  @@index([compiledVersionId, status])
-  @@index([status, criticalUnresolvedCount])
-  @@index([reviewedById, reviewedAt])
+  @@index([practiceId, status, updatedAt], map: "template_twin_fill_practice_status_updatedAt_idx")
+  @@index([compiledVersionId, status], map: "template_twin_fill_compiledVersionId_status_idx")
+  @@index([status, criticalUnresolvedCount], map: "template_twin_fill_status_criticalUnresolvedCount_idx")
+  @@index([reviewedById, reviewedAt], map: "template_twin_fill_reviewedById_reviewedAt_idx")
   @@map("template_twin_fill_manifests")
 }
 
@@ -3153,11 +3173,11 @@ model TemplateTwinReviewDecision {
   id String @id @default(cuid())
 
   fillManifestId String
-  fillManifest   TemplateTwinFillManifest @relation(fields: [fillManifestId], references: [id], onDelete: Cascade)
+  fillManifest   TemplateTwinFillManifest @relation(fields: [fillManifestId], references: [id], onDelete: Cascade, map: "template_twin_review_fill_fkey")
 
   fieldId                 String
   fieldDefinitionId       String
-  fieldDefinition         TemplateTwinFieldDefinition  @relation(fields: [fieldDefinitionId], references: [id], onDelete: Restrict)
+  fieldDefinition         TemplateTwinFieldDefinition  @relation(fields: [fieldDefinitionId], references: [id], onDelete: Restrict, map: "template_twin_review_field_fkey")
   resolutionStatus        TemplateTwinResolutionStatus
   decisionKind            String
   previousValue           Json?
@@ -3168,12 +3188,12 @@ model TemplateTwinReviewDecision {
   expectedManifestVersion Int
 
   reviewerId String?
-  reviewer   User?    @relation("TemplateTwinReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  reviewer   User?    @relation("TemplateTwinReviewer", fields: [reviewerId], references: [id], onDelete: SetNull, map: "template_twin_review_reviewer_fkey")
   createdAt  DateTime @default(now()) @db.Timestamptz(6)
 
-  @@index([fillManifestId, fieldId, createdAt])
-  @@index([fieldDefinitionId, createdAt])
-  @@index([reviewerId, createdAt])
+  @@index([fillManifestId, fieldId, createdAt], map: "template_twin_review_fillManifestId_fieldId_createdAt_idx")
+  @@index([fieldDefinitionId, createdAt], map: "template_twin_review_fieldDefinitionId_createdAt_idx")
+  @@index([reviewerId, createdAt], map: "template_twin_review_reviewerId_createdAt_idx")
   @@map("template_twin_review_decisions")
 }
 
@@ -3184,21 +3204,21 @@ model TemplateTwinFieldTestWaiver {
   id String @id @default(cuid())
 
   compiledVersionId String
-  compiledVersion   TemplateTwinCompiledVersion @relation(fields: [compiledVersionId], references: [id], onDelete: Restrict)
+  compiledVersion   TemplateTwinCompiledVersion @relation(fields: [compiledVersionId], references: [id], onDelete: Restrict, map: "template_twin_waiver_compiled_fkey")
 
   fieldDefinitionId String
-  fieldDefinition   TemplateTwinFieldDefinition @relation(fields: [fieldDefinitionId], references: [id], onDelete: Restrict)
+  fieldDefinition   TemplateTwinFieldDefinition @relation(fields: [fieldDefinitionId], references: [id], onDelete: Restrict, map: "template_twin_waiver_field_fkey")
   fieldId           String
   mappingsSha256    String                      @db.Char(64)
 
   waivedById String
-  waivedBy   User     @relation("TemplateTwinWaiverPhysician", fields: [waivedById], references: [id], onDelete: Restrict)
+  waivedBy   User     @relation("TemplateTwinWaiverPhysician", fields: [waivedById], references: [id], onDelete: Restrict, map: "template_twin_waiver_physician_fkey")
   reason     String   @db.Text
   waivedAt   DateTime @default(now()) @db.Timestamptz(6)
 
-  @@unique([compiledVersionId, fieldId, mappingsSha256])
-  @@index([fieldDefinitionId, waivedAt])
-  @@index([waivedById, waivedAt])
+  @@unique([compiledVersionId, fieldId, mappingsSha256], map: "template_twin_waiver_compiled_field_mapping_key")
+  @@index([fieldDefinitionId, waivedAt], map: "template_twin_waiver_fieldDefinitionId_waivedAt_idx")
+  @@index([waivedById, waivedAt], map: "template_twin_waiver_waivedById_waivedAt_idx")
   @@map("template_twin_field_test_waivers")
 }
 
@@ -3307,7 +3327,7 @@ model TemplateTwinObjectLedger {
   id String @id @default(cuid())
 
   practiceId String
-  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict)
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict, map: "template_twin_object_practice_fkey")
 
   objectKey       String                        @unique
   /// Set only after the provider confirms a successful immutable write.
@@ -3328,8 +3348,8 @@ model TemplateTwinObjectLedger {
   createdAt      DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime  @updatedAt @db.Timestamptz(6)
 
-  @@index([practiceId, state, nextAttemptAt])
-  @@index([claimType, claimId])
+  @@index([practiceId, state, nextAttemptAt], map: "template_twin_object_practice_state_nextAttemptAt_idx")
+  @@index([claimType, claimId], map: "template_twin_object_claimType_claimId_idx")
   @@map("template_twin_object_ledgers")
 }
 
@@ -3340,10 +3360,10 @@ model TemplateTwinAuditOutbox {
   id String @id @default(cuid())
 
   practiceId String
-  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict)
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict, map: "template_twin_outbox_practice_fkey")
 
   actorId String?
-  actor   User?   @relation("TemplateTwinOutboxActor", fields: [actorId], references: [id], onDelete: SetNull)
+  actor   User?   @relation("TemplateTwinOutboxActor", fields: [actorId], references: [id], onDelete: SetNull, map: "template_twin_outbox_actor_fkey")
 
   actorEmailSnapshot String?
   ipAddress          String? @db.Inet
@@ -3366,8 +3386,8 @@ model TemplateTwinAuditOutbox {
   staticAssetDecision TemplateTwinStaticAssetDecision? @relation("TemplateTwinStaticAssetDecisionAudit")
   auditLog            AuditLog?                        @relation("TemplateTwinAuditDelivery")
 
-  @@index([status, availableAt])
-  @@index([practiceId, createdAt])
+  @@index([status, availableAt], map: "template_twin_outbox_status_availableAt_idx")
+  @@index([practiceId, createdAt], map: "template_twin_outbox_practice_createdAt_idx")
   @@map("template_twin_audit_outbox")
 }
 
@@ -3380,13 +3400,13 @@ model TemplateTwinRolloutControl {
   generation              BigInt    @default(1)
   rollbackFenceState      String    @default("OPEN")
   rollbackFenceGeneration BigInt    @default(1)
-  rollbackOperationId     String?   @unique @db.Uuid
+  rollbackOperationId     String?   @unique(map: "template_twin_rollout_active_rollback_operation_key") @db.Uuid
   rollbackPreparedAt      DateTime? @db.Timestamptz(6)
   rollbackRevokedAt       DateTime? @db.Timestamptz(6)
   createdAt               DateTime  @default(now()) @db.Timestamptz(6)
-  updatedAt               DateTime  @updatedAt @db.Timestamptz(6)
+  updatedAt               DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
 
-  rollbackOperation TemplateTwinRollbackOperation? @relation("ActiveTemplateTwinRollbackOperation", fields: [rollbackOperationId], references: [id], onDelete: Restrict)
+  rollbackOperation TemplateTwinRollbackOperation? @relation("ActiveTemplateTwinRollbackOperation", fields: [rollbackOperationId], references: [id], onDelete: Restrict, map: "template_twin_rollback_operation_fkey")
 
   @@map("template_twin_rollout_controls")
 }
@@ -3402,10 +3422,10 @@ model TemplateTwinRollbackOperation {
   changeId   String @db.VarChar(80)
 
   requestedById String
-  requestedBy   User   @relation(fields: [requestedById], references: [id], onDelete: Restrict)
+  requestedBy   User   @relation(fields: [requestedById], references: [id], onDelete: Restrict, map: "template_twin_rollback_operation_actor_fkey")
 
   actorPracticeId String
-  actorPractice   Practice @relation(fields: [actorPracticeId], references: [id], onDelete: Restrict)
+  actorPractice   Practice @relation(fields: [actorPracticeId], references: [id], onDelete: Restrict, map: "template_twin_rollback_operation_practice_fkey")
 
   actorEmailSnapshot String?
   preparedSnapshot   Json
@@ -3415,12 +3435,12 @@ model TemplateTwinRollbackOperation {
   revokedAt   DateTime? @db.Timestamptz(6)
   cancelledAt DateTime? @db.Timestamptz(6)
   createdAt   DateTime  @default(now()) @db.Timestamptz(6)
-  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
 
   rolloutControl TemplateTwinRolloutControl? @relation("ActiveTemplateTwinRollbackOperation")
 
-  @@index([state, createdAt])
-  @@index([actorPracticeId, createdAt])
+  @@index([state, createdAt], map: "template_twin_rollback_operations_state_created_idx")
+  @@index([actorPracticeId, createdAt], map: "template_twin_rollback_operations_practice_created_idx")
   @@map("template_twin_rollback_operations")
 }
 
@@ -3527,7 +3547,7 @@ model RxWarningOverride {
   /// recordOverride() does NOT upsert — it catches P2002 and returns the
   /// original row, preserving the first overriddenAt/reason for the audit
   /// trail (lib/rx-warning-audit.ts).
-  @@unique([visitId, warningId], name: "rx_warning_overrides_visit_warning_unique", map: "rx_warning_overrides_visitId_warningId_key")
+  @@unique([visitId, warningId], name: "rx_warning_overrides_visit_warning_unique", map: "rx_warning_overrides_visitid_warningid_key")
   @@index([visitId])
   @@index([overriddenBy])
   @@map("rx_warning_overrides")

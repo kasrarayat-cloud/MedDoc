@@ -20,7 +20,8 @@
     "visit-automation:pg-test": "tsx --tsconfig ../../apps/transcribe-md/tsconfig.json scripts/visit-automation-transaction-integrity-pg-test.ts",
     "static-asset:pg-test": "tsx --tsconfig ../../apps/transcribe-md/tsconfig.json scripts/template-twin-static-asset-revocation-pg-test.ts",
     "completed-candidate-review:pg-test": "tsx --tsconfig ../../apps/transcribe-md/tsconfig.json scripts/template-twin-completed-candidate-review-concurrency-pg-test.ts",
-    "placeholder-schema:pg-test": "tsx scripts/template-twin-placeholder-schema-drift-test.ts"
+    "placeholder-schema:pg-test": "tsx scripts/template-twin-placeholder-schema-drift-test.ts",
+    "schema-contract:pg-test": "tsx scripts/template-twin-schema-contract-drift-test.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.7.0",
