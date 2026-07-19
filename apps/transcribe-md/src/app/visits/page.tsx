@@ -15,6 +15,7 @@ import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
 import { auth } from '@/lib/nextauth';
 import { logAudit } from '@/lib/audit';
+import { ordinaryClinicalVisitWhere } from '@/lib/template-twin/synthetic-qa-patient';
 import { AppFrame } from '@/components/ui/app-frame';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Ic } from '@/components/ui/icon';
@@ -101,12 +102,12 @@ export default async function VisitsPage({
 
   const [rows, totalCount] = (await Promise.all([
     prisma.transcribeVisit.findMany({
-      where: {
+      where: ordinaryClinicalVisitWhere({
         userId: session.user.id,
         deletedAt: null,
         archivedAt: null,
         ...statusFilter,
-      },
+      }),
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: PAGE_SIZE,
       select: {
@@ -122,11 +123,11 @@ export default async function VisitsPage({
       },
     }),
     prisma.transcribeVisit.count({
-      where: {
+      where: ordinaryClinicalVisitWhere({
         userId: session.user.id,
         deletedAt: null,
         archivedAt: null,
-      },
+      }),
     }),
   ])) as [VisitRow[], number];
 

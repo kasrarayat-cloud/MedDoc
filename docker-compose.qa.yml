@@ -28,14 +28,14 @@ services:
     image: pgvector/pgvector:pg16
     restart: "no"
     mem_limit: 512m
-    cpus: '1.0'
+    cpus: "1.0"
     environment:
-      POSTGRES_DB: meddoc_qa_test        # qa/test marker → db-guard allows mutation
+      POSTGRES_DB: meddoc_qa_test # qa/test marker → db-guard allows mutation
       POSTGRES_USER: meddoc
       POSTGRES_PASSWORD: qa_test_pw
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
-      - qa_pgdata:/var/lib/postgresql/data   # FRESH isolated volume (NOT prod)
+      - qa_pgdata:/var/lib/postgresql/data # FRESH isolated volume (NOT prod)
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U meddoc"]
       interval: 5s
@@ -46,7 +46,7 @@ services:
     image: redis:7-alpine
     restart: "no"
     mem_limit: 128m
-    cpus: '0.5'
+    cpus: "0.5"
     command: ["redis-server", "--appendonly", "no"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -58,7 +58,7 @@ services:
     image: minio/minio:latest
     restart: "no"
     mem_limit: 256m
-    cpus: '0.5'
+    cpus: "0.5"
     command: ["server", "/data", "--console-address", ":9001"]
     environment:
       MINIO_ROOT_USER: qa_minio
@@ -71,10 +71,30 @@ services:
       timeout: 5s
       retries: 10
 
+  # One-shot, QA-only bucket provisioning. The Template Twin bucket is
+  # distinct from transient audio storage, private, object-lock capable, and
+  # versioned. This is synthetic infrastructure evidence only; it is not a
+  # production compliance attestation.
+  minio-template-init:
+    image: minio/mc:latest
+    restart: "no"
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        mc alias set qa http://minio:9000 qa_minio qa_minio_pw
+        mc mb --ignore-existing qa/transcribe-md-audio-qa
+        mc mb --ignore-existing --with-lock qa/transcribe-md-template-artifacts-qa
+        mc anonymous set none qa/transcribe-md-template-artifacts-qa
+        mc version enable qa/transcribe-md-template-artifacts-qa
+
   # One-shot schema apply (cached builder image — has the prisma CLI; no build).
   # Invoke: docker compose -f docker-compose.qa.yml run --rm db-migrate
   db-migrate:
-    image: meddoc-pro-db-migrate:latest
+    image: ${QA_DB_MIGRATE_IMAGE:-meddoc-pro-db-migrate:latest}
     restart: "no"
     depends_on:
       postgres:
@@ -86,18 +106,20 @@ services:
     command: ["migrate", "deploy"]
 
   transcribe-md:
-    image: meddoc-pro-transcribe-md:latest
+    image: ${QA_TRANSCRIBE_MD_IMAGE:-meddoc-pro-transcribe-md:latest}
     restart: "no"
     mem_limit: 512m
-    cpus: '1.0'
+    cpus: "1.0"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      minio-template-init:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: *qa-db-url
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://redis:6379/15
       AUTH_URL: http://localhost:9020
       NEXTAUTH_URL: http://localhost:9020
       AUTH_TRUST_HOST: "true"
@@ -106,15 +128,36 @@ services:
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: qa_minio
       MINIO_SECRET_KEY: qa_minio_pw
-      TRANSCRIBE_MD_MINIO_BUCKET: transcribe-md-audio
+      TRANSCRIBE_MD_MINIO_BUCKET: transcribe-md-audio-qa
+      TRANSCRIBE_MD_TEMPLATE_BUCKET: transcribe-md-template-artifacts-qa
       MINIO_USE_SSL: "false"
+      TEMPLATE_TWIN_STORAGE_PROFILE: qa
+      # These are explicit, named exceptions for this isolated synthetic QA
+      # stack. They acknowledge controls local MinIO does not prove; they are
+      # not production attestations and readiness remains productionReady=false.
+      TEMPLATE_TWIN_QA_STORAGE_ENCRYPTION_AT_REST_ATTESTATION: accepted-isolated-synthetic-qa-gap
+      TEMPLATE_TWIN_QA_STORAGE_TLS_EXPECTATION_ATTESTATION: accepted-isolated-synthetic-qa-gap
+      TEMPLATE_TWIN_QA_STORAGE_LEAST_PRIVILEGE_ATTESTATION: accepted-isolated-synthetic-qa-gap
+      TEMPLATE_TWIN_QA_STORAGE_LIFECYCLE_RETENTION_ATTESTATION: accepted-isolated-synthetic-qa-gap
+      TEMPLATE_TWIN_QA_STORAGE_BACKUP_RESTORE_ATTESTATION: accepted-isolated-synthetic-qa-gap
+      TEMPLATE_TWIN_ORPHAN_RETENTION_DAYS: "7"
+      # No media is approved in the synthetic QA profile. Real byte digests
+      # require practice-scoped Privacy/Legal + Operations change control.
+      TEMPLATE_TWIN_APPROVED_STATIC_ASSETS_BY_PRACTICE_JSON: "{}"
+      TEMPLATE_TWIN_KILL_SWITCH: "false"
+      # Authenticated synthetic staging UI. Both values default empty, so the
+      # UI and every server mutation remain unavailable unless a QA operator
+      # deliberately enables the dedicated Playwright profile.
+      TEMPLATE_TWIN_STAGING_QA_ENABLED: "${TEMPLATE_TWIN_STAGING_QA_ENABLED:-}"
+      TEMPLATE_TWIN_STAGING_QA_ENVIRONMENT: "${TEMPLATE_TWIN_STAGING_QA_ENVIRONMENT:-}"
+      TEMPLATE_TWIN_STAGING_QA_RESOURCE_ATTESTATION: "${TEMPLATE_TWIN_STAGING_QA_RESOURCE_ATTESTATION:-}"
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
-      # E2E signups use @test.dev; auto-confirm needs BOTH the allowlist and
+      # E2E signups use reserved synthetic-only domains; auto-confirm needs BOTH the allowlist and
       # the prod-gate flag (the image runs NODE_ENV=production). SAFE ONLY in
       # this throwaway :9020 stack — these two vars must NEVER appear in the
       # real production compose env (they would bypass email verification).
-      EMAIL_AUTO_CONFIRM_DOMAINS: "test.dev,quillmd-test.local"
+      EMAIL_AUTO_CONFIRM_DOMAINS: "synthetic.test,example.test"
       EMAIL_AUTO_CONFIRM_ALLOW_IN_PROD: "true"
       # TEST-ONLY: the E2E suite drives ~6 signups from one runner IP and would
       # trip the per-IP SIGNUP limit (5/hour), making the gate flaky. Disable
@@ -127,6 +170,7 @@ services:
       RATE_LIMIT_DISABLE_ALLOW_IN_PROD: "true"
       # No real API calls anywhere in this stack.
       MOCK_AI_CALLS: "${MOCK_AI_CALLS:-true}"
+      MOCK_TEMPLATE_TWIN_E2E: "${MOCK_TEMPLATE_TWIN_E2E:-}"
       # Note-format PHI-gate reject path (E2E scenario 23). Default empty (off)
       # so the normal suite's parses succeed; the e2e workflow recreates this
       # app with MOCK_TEMPLATE_PHI_FLAG=true for the dedicated phi-reject pass,
@@ -148,7 +192,8 @@ services:
       # the app/worker keep their hardcoded per-layer models (prod behaviour).
       TRANSCRIBE_MD_CLINICAL_MODEL: "${TRANSCRIBE_MD_CLINICAL_MODEL:-}"
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "--spider", "http://127.0.0.1:3011/api/health"]
+      test:
+        ["CMD", "wget", "-qO-", "--spider", "http://127.0.0.1:3011/api/health"]
       interval: 15s
       timeout: 5s
       retries: 10
@@ -157,10 +202,10 @@ services:
       - "127.0.0.1:9020:3011"
 
   transcribe-md-worker:
-    image: meddoc-pro-transcribe-md-worker:latest
+    image: ${QA_TRANSCRIBE_MD_WORKER_IMAGE:-meddoc-pro-transcribe-md-worker:latest}
     restart: "no"
     mem_limit: 1g
-    cpus: '1.0'
+    cpus: "1.0"
     depends_on:
       postgres:
         condition: service_healthy
@@ -168,18 +213,37 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      minio-template-init:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: *qa-db-url
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://redis:6379/15
       AUTH_SECRET: *qa-secret
       NEXTAUTH_SECRET: *qa-secret
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: qa_minio
       MINIO_SECRET_KEY: qa_minio_pw
-      TRANSCRIBE_MD_MINIO_BUCKET: transcribe-md-audio
+      TRANSCRIBE_MD_MINIO_BUCKET: transcribe-md-audio-qa
+      TRANSCRIBE_MD_TEMPLATE_BUCKET: transcribe-md-template-artifacts-qa
       MINIO_USE_SSL: "false"
+      TEMPLATE_TWIN_STORAGE_PROFILE: qa
+      # Keep worker evidence identical to the app. Private access plus
+      # versioning/object lock are provider-verified at runtime; these named
+      # values acknowledge only the remaining isolated synthetic-QA gaps.
+      TEMPLATE_TWIN_QA_STORAGE_ENCRYPTION_AT_REST_ATTESTATION: accepted-isolated-synthetic-qa-gap
+      TEMPLATE_TWIN_QA_STORAGE_TLS_EXPECTATION_ATTESTATION: accepted-isolated-synthetic-qa-gap
+      TEMPLATE_TWIN_QA_STORAGE_LEAST_PRIVILEGE_ATTESTATION: accepted-isolated-synthetic-qa-gap
+      TEMPLATE_TWIN_QA_STORAGE_LIFECYCLE_RETENTION_ATTESTATION: accepted-isolated-synthetic-qa-gap
+      TEMPLATE_TWIN_QA_STORAGE_BACKUP_RESTORE_ATTESTATION: accepted-isolated-synthetic-qa-gap
+      TEMPLATE_TWIN_ORPHAN_RETENTION_DAYS: "7"
+      TEMPLATE_TWIN_MAINTENANCE_ENABLED: "true"
+      TEMPLATE_TWIN_KILL_SWITCH: "false"
+      TEMPLATE_TWIN_STAGING_QA_ENABLED: "${TEMPLATE_TWIN_STAGING_QA_ENABLED:-}"
+      TEMPLATE_TWIN_STAGING_QA_ENVIRONMENT: "${TEMPLATE_TWIN_STAGING_QA_ENVIRONMENT:-}"
+      TEMPLATE_TWIN_STAGING_QA_RESOURCE_ATTESTATION: "${TEMPLATE_TWIN_STAGING_QA_RESOURCE_ATTESTATION:-}"
       TRANSCRIBE_MD_WORKER_CONCURRENCY: "2"
       MOCK_AI_CALLS: "${MOCK_AI_CALLS:-true}"
+      MOCK_TEMPLATE_TWIN_E2E: "${MOCK_TEMPLATE_TWIN_E2E:-}"
       # Rx clinical-safety (E2E scenario 24): L7c rx-drafting runs HERE. Default
       # empty (off); the e2e workflow recreates this worker with
       # MOCK_RX_WARNINGS=true for the rx-safety pass so new visits get the
@@ -204,7 +268,7 @@ services:
     profiles: ["marketing"]
     restart: "no"
     mem_limit: 256m
-    cpus: '0.5'
+    cpus: "0.5"
     environment:
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"

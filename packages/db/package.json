@@ -12,13 +12,21 @@
     "generate": "prisma generate",
     "migrate:deploy": "prisma migrate deploy",
     "migrate:status": "prisma migrate status",
-    "migrate:dev": "prisma migrate dev"
+    "migrate:dev": "prisma migrate dev",
+    "lineage:online": "tsx scripts/template-twin-lineage-online.ts",
+    "lineage:scale-test": "tsx scripts/template-twin-lineage-scale-test.ts",
+    "rollout:pg-test": "tsx scripts/template-twin-rollout-pg-test.ts",
+    "visit-automation:pg-test": "tsx --tsconfig ../../apps/transcribe-md/tsconfig.json scripts/visit-automation-transaction-integrity-pg-test.ts",
+    "static-asset:pg-test": "tsx --tsconfig ../../apps/transcribe-md/tsconfig.json scripts/template-twin-static-asset-revocation-pg-test.ts",
+    "placeholder-schema:pg-test": "tsx scripts/template-twin-placeholder-schema-drift-test.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.7.0",
-    "@prisma/client": "^7.7.0"
+    "@prisma/client": "^7.7.0",
+    "pg": "^8.20.0"
   },
   "devDependencies": {
+    "@types/pg": "^8.15.6",
     "prisma": "^7.7.0"
   }
 }

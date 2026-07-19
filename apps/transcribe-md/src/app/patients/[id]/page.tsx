@@ -18,45 +18,49 @@
 // fetches (auth, prisma queries, redirects, RBAC scope) are unchanged.
 // ============================================================================
 
-import type { Metadata } from 'next';
-import Link from 'next/link';
-import { notFound, redirect } from 'next/navigation';
+import type { Metadata } from "next";
+import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
 
-import prisma from '@meddoc/db';
-import { auth } from '@/lib/nextauth';
-import { logAudit } from '@/lib/audit';
-import { isSkinBeta } from '@/config/skin-beta';
-import { AppFrame } from '@/components/ui/app-frame';
-import { Avatar } from '@/components/ui/avatar';
-import { Ic } from '@/components/ui/icon';
-import { StatCard } from '@/components/dashboard/stat-card';
+import prisma from "@meddoc/db";
+import { auth } from "@/lib/nextauth";
+import { logAudit } from "@/lib/audit";
+import { isSkinBeta } from "@/config/skin-beta";
+import { AppFrame } from "@/components/ui/app-frame";
+import { Avatar } from "@/components/ui/avatar";
+import { Ic } from "@/components/ui/icon";
+import { StatCard } from "@/components/dashboard/stat-card";
 import {
   VisitList,
   type DashboardVisit,
-} from '@/components/dashboard/visit-list';
+} from "@/components/dashboard/visit-list";
 import {
   parseProblemList,
   statusLabel,
   type ProblemStatus,
-} from '@/lib/problem-list';
-import { EditPatientDialog } from './edit-patient-dialog';
-import { DeletePatientDialog } from './delete-patient-dialog';
-import { ProblemListDialog } from './problem-list-dialog';
+} from "@/lib/problem-list";
+import {
+  isTemplateTwinSyntheticQaPatient,
+  ordinaryClinicalVisitWhere,
+} from "@/lib/template-twin/synthetic-qa-patient";
+import { EditPatientDialog } from "./edit-patient-dialog";
+import { DeletePatientDialog } from "./delete-patient-dialog";
+import { ProblemListDialog } from "./problem-list-dialog";
 import {
   TrashedVisitCard,
   type TrashedVisitCardData,
-} from './trashed-visit-card';
+} from "./trashed-visit-card";
 
-export const metadata: Metadata = { title: 'Patient' };
+export const metadata: Metadata = { title: "Patient" };
 
 type SearchParams = Record<string, string | string[] | undefined>;
-type ActiveTab = 'visits' | 'notes' | 'files' | 'trash';
+type ActiveTab = "visits" | "notes" | "files" | "trash";
 
 function resolveTab(raw: string | undefined, trashCount: number): ActiveTab {
-  if (raw === 'notes') return 'notes';
-  if (raw === 'files') return 'files';
-  if (raw === 'trash' && trashCount > 0) return 'trash';
-  return 'visits';
+  if (raw === "notes") return "notes";
+  if (raw === "files") return "files";
+  if (raw === "trash" && trashCount > 0) return "trash";
+  return "visits";
 }
 
 function formatDob(d: Date | null): string | null {
@@ -75,15 +79,15 @@ function yearsFrom(d: Date): number {
 function relTime(d: Date): string {
   const diffMs = Date.now() - d.getTime();
   const diffMin = diffMs / 60000;
-  if (diffMin < 1) return 'just now';
+  if (diffMin < 1) return "just now";
   if (diffMin < 60) return `${Math.round(diffMin)}m ago`;
   const diffH = diffMin / 60;
   if (diffH < 24) return `${Math.round(diffH)}h ago`;
-  if (diffH < 48) return 'yesterday';
+  if (diffH < 48) return "yesterday";
   const diffD = diffH / 24;
   if (diffD < 7) return `${Math.round(diffD)}d ago`;
   if (diffD < 30) return `${Math.round(diffD / 7)}w ago`;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 /** Map the canonical problem-list status onto Linear V1 chip tones. */
@@ -93,23 +97,23 @@ function problemTone(status: ProblemStatus): {
   dot: string;
 } {
   switch (status) {
-    case 'active':
+    case "active":
       return {
-        bg: 'rgba(212, 164, 55, 0.15)',
-        fg: 'var(--color-linear-warning)',
-        dot: 'var(--color-linear-warning)',
+        bg: "rgba(212, 164, 55, 0.15)",
+        fg: "var(--color-linear-warning)",
+        dot: "var(--color-linear-warning)",
       };
-    case 'resolved':
+    case "resolved":
       return {
-        bg: 'var(--color-linear-sage-tint)',
-        fg: 'var(--color-linear-sage-bright)',
-        dot: 'var(--color-linear-sage)',
+        bg: "var(--color-linear-sage-tint)",
+        fg: "var(--color-linear-sage-bright)",
+        dot: "var(--color-linear-sage)",
       };
-    case 'chronic':
+    case "chronic":
       return {
-        bg: 'var(--color-linear-surface-2)',
-        fg: 'var(--color-linear-text-2)',
-        dot: 'var(--color-linear-text-3)',
+        bg: "var(--color-linear-surface-2)",
+        fg: "var(--color-linear-text-2)",
+        dot: "var(--color-linear-text-3)",
       };
   }
 }
@@ -126,13 +130,13 @@ export default async function PatientPage({
   const tabParam = Array.isArray(spRaw.tab) ? spRaw.tab[0] : spRaw.tab;
 
   const session = await auth();
-  if (!session?.user?.id) redirect('/login');
+  if (!session?.user?.id) redirect("/login");
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: { id: true, practiceId: true },
   });
-  if (!user) redirect('/login');
+  if (!user) redirect("/login");
 
   type PatientRow = {
     id: string;
@@ -148,31 +152,38 @@ export default async function PatientPage({
     updatedAt: Date;
   };
 
-  const patient: PatientRow | null = await prisma.transcribeMdPatient.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      practiceId: true,
-      name: true,
-      dateOfBirth: true,
-      externalId: true,
-      mrn: true,
-      insurance: true,
-      problemList: true,
-      deletedAt: true,
-      createdAt: true,
-      updatedAt: true,
-    },
-  });
-  if (!patient || patient.practiceId !== user.practiceId) notFound();
+  const patient: PatientRow | null =
+    await prisma.transcribeMdPatient.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        practiceId: true,
+        name: true,
+        dateOfBirth: true,
+        externalId: true,
+        mrn: true,
+        insurance: true,
+        problemList: true,
+        deletedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+  if (
+    !patient ||
+    patient.practiceId !== user.practiceId ||
+    isTemplateTwinSyntheticQaPatient(patient)
+  ) {
+    notFound();
+  }
 
   // Round 3 PR-C — §164.312(b) PHI-read audit (A05-P0-004). Single
   // patient detail RSC. Audited at the page-level fetch boundary.
   void logAudit({
-    action: 'VIEWED_PATIENT_FILE',
+    action: "VIEWED_PATIENT_FILE",
     targetId: patient.id,
-    targetType: 'TranscribeMdPatient',
-    metadata: { source: 'rsc:/patients/[id]' },
+    targetType: "TranscribeMdPatient",
+    metadata: { source: "rsc:/patients/[id]" },
   });
 
   const now = new Date();
@@ -181,43 +192,43 @@ export default async function PatientPage({
   const [activeCount, trashCount, signedCount, visitsThisMonth, latestVisit] =
     await Promise.all([
       prisma.transcribeVisit.count({
-        where: {
+        where: ordinaryClinicalVisitWhere({
           patientId: id,
           userId: user.id,
           deletedAt: null,
           archivedAt: null,
-        },
+        }),
       }),
       prisma.transcribeVisit.count({
-        where: {
+        where: ordinaryClinicalVisitWhere({
           patientId: id,
           userId: user.id,
           deletedAt: { not: null },
-        },
+        }),
       }),
       prisma.transcribeVisit.count({
-        where: {
+        where: ordinaryClinicalVisitWhere({
           patientId: id,
           userId: user.id,
-          status: 'SIGNED',
-        },
+          status: "SIGNED",
+        }),
       }),
       prisma.transcribeVisit.count({
-        where: {
+        where: ordinaryClinicalVisitWhere({
           patientId: id,
           userId: user.id,
           deletedAt: null,
           createdAt: { gte: startOfMonth },
-        },
+        }),
       }),
       prisma.transcribeVisit.findFirst({
-        where: {
+        where: ordinaryClinicalVisitWhere({
           patientId: id,
           userId: user.id,
           deletedAt: null,
           archivedAt: null,
-        },
-        orderBy: { createdAt: 'desc' },
+        }),
+        orderBy: { createdAt: "desc" },
         select: { id: true, createdAt: true, specialty: true },
       }),
     ]);
@@ -238,7 +249,7 @@ export default async function PatientPage({
   if (isSkinBeta()) {
     const age = dob ? yearsFrom(dob) : null;
     const metaBits = [
-      dobIso ? `DOB ${dobIso}${age != null ? ` (${age})` : ''}` : null,
+      dobIso ? `DOB ${dobIso}${age != null ? ` (${age})` : ""}` : null,
       patient.mrn ? `MRN ${patient.mrn}` : null,
       patient.externalId ? `ID ${patient.externalId}` : null,
       patient.insurance ?? null,
@@ -269,7 +280,7 @@ export default async function PatientPage({
               </h1>
               {metaBits.length > 0 ? (
                 <p className="mt-2 font-mono text-[12.5px] text-linear-text-3">
-                  {metaBits.join('  ·  ')}
+                  {metaBits.join("  ·  ")}
                 </p>
               ) : (
                 <p className="mt-2 font-mono text-[12.5px] italic text-linear-text-3">
@@ -284,7 +295,7 @@ export default async function PatientPage({
                       key={`${p.condition}-${i}`}
                       className="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.05em]"
                       style={{ background: tone.bg, color: tone.fg }}
-                      title={`${statusLabel(p.status)}${p.icd10 ? ` · ${p.icd10}` : ''}`}
+                      title={`${statusLabel(p.status)}${p.icd10 ? ` · ${p.icd10}` : ""}`}
                     >
                       <span
                         className="h-1.5 w-1.5 rounded-full"
@@ -312,7 +323,7 @@ export default async function PatientPage({
               <Link
                 href={`/visits/new?patientId=${patient.id}`}
                 className="qm-lin-btn-primary"
-                style={{ textDecoration: 'none' }}
+                style={{ textDecoration: "none" }}
               >
                 <Ic.plus width={14} height={14} />
                 New visit
@@ -322,7 +333,7 @@ export default async function PatientPage({
               <Link
                 href={`/visits/${latestVisit.id}`}
                 className="qm-lin-btn"
-                style={{ textDecoration: 'none' }}
+                style={{ textDecoration: "none" }}
               >
                 Open last note
               </Link>
@@ -339,7 +350,7 @@ export default async function PatientPage({
               <a
                 href={`/api/patients/${patient.id}/export`}
                 className="qm-lin-btn"
-                style={{ textDecoration: 'none' }}
+                style={{ textDecoration: "none" }}
               >
                 <Ic.download width={13} height={13} />
                 Export
@@ -355,16 +366,17 @@ export default async function PatientPage({
 
         {/* Quiet one-line summary — replaces the 4 vanity stat cards. */}
         <div className="px-6 pt-4 font-mono text-[12px] text-linear-text-3 sm:px-10">
-          {activeCount} visit{activeCount === 1 ? '' : 's'}
-          {' · '}
+          {activeCount} visit{activeCount === 1 ? "" : "s"}
+          {" · "}
           {signedCount} signed
           {latestVisit && (
             <>
-              {' · '}last {relTime(latestVisit.createdAt)}
+              {" · "}last {relTime(latestVisit.createdAt)}
             </>
           )}
-          {' · '}
-          {visitsThisMonth} this {now.toLocaleString('en-US', { month: 'short' })}
+          {" · "}
+          {visitsThisMonth} this{" "}
+          {now.toLocaleString("en-US", { month: "short" })}
         </div>
 
         {/* Visits — the calm primary list. */}
@@ -411,7 +423,10 @@ export default async function PatientPage({
   return (
     <AppFrame>
       <div className="flex items-center gap-2 px-10 pt-5 text-[13px] text-linear-text-3">
-        <Link href="/patients" className="text-linear-text-3 no-underline hover:text-linear-text-2">
+        <Link
+          href="/patients"
+          className="text-linear-text-3 no-underline hover:text-linear-text-2"
+        >
           Patients
         </Link>
         <Ic.chevRight width={12} height={12} />
@@ -433,13 +448,13 @@ export default async function PatientPage({
           theme="clinician"
           label="Total visits"
           value={activeCount}
-          unit={activeCount === 1 ? 'visit' : 'visits'}
+          unit={activeCount === 1 ? "visit" : "visits"}
         />
         <StatCard
           theme="clinician"
           label="Last visit"
-          value={latestVisit ? relTime(latestVisit.createdAt) : '—'}
-          unit={latestVisit ? '' : 'none yet'}
+          value={latestVisit ? relTime(latestVisit.createdAt) : "—"}
+          unit={latestVisit ? "" : "none yet"}
           delta={
             latestVisit ? (
               <span className="capitalize">{latestVisit.specialty}</span>
@@ -449,7 +464,7 @@ export default async function PatientPage({
         />
         <StatCard
           theme="clinician"
-          label={`Visits / ${now.toLocaleString('en-US', { month: 'short' })}`}
+          label={`Visits / ${now.toLocaleString("en-US", { month: "short" })}`}
           value={visitsThisMonth}
           unit="this month"
         />
@@ -457,7 +472,7 @@ export default async function PatientPage({
           theme="clinician"
           label="Signed"
           value={signedCount}
-          unit={signedCount === 1 ? 'note' : 'notes'}
+          unit={signedCount === 1 ? "note" : "notes"}
         />
       </div>
 
@@ -468,25 +483,25 @@ export default async function PatientPage({
         trashCount={trashCount}
       />
 
-      {activeTab === 'visits' &&
+      {activeTab === "visits" &&
         (activeCount === 0 ? (
           <VisitsEmpty deleted={isDeleted} patientId={patient.id} />
         ) : (
           <VisitsTab patientId={patient.id} userId={user.id} />
         ))}
 
-      {activeTab === 'trash' && (
+      {activeTab === "trash" && (
         <TrashTab patientId={patient.id} userId={user.id} />
       )}
 
-      {activeTab === 'notes' && (
+      {activeTab === "notes" && (
         <StubTab
           title="Notes"
           body="A freeform clinical notepad for this patient lands later. Scoped out of the app-redesign scope."
         />
       )}
 
-      {activeTab === 'files' && (
+      {activeTab === "files" && (
         <StubTab
           title="Files"
           body="Patient-attached files (imaging, referrals, consent forms). Not ported yet."
@@ -546,17 +561,20 @@ function PatientHeaderCard({
           {dobIso && (
             <span>
               DOB {dobIso}
-              {age != null ? ` (${age})` : ''}
+              {age != null ? ` (${age})` : ""}
             </span>
           )}
           {patient.mrn && <span>MRN {patient.mrn}</span>}
           {patient.externalId && <span>ID {patient.externalId}</span>}
           {patient.insurance && <span>{patient.insurance}</span>}
-          {!dobIso && !patient.mrn && !patient.externalId && !patient.insurance && (
-            <span className="italic text-linear-text-3">
-              No MRN / DOB / insurance on file — edit to add
-            </span>
-          )}
+          {!dobIso &&
+            !patient.mrn &&
+            !patient.externalId &&
+            !patient.insurance && (
+              <span className="italic text-linear-text-3">
+                No MRN / DOB / insurance on file — edit to add
+              </span>
+            )}
         </div>
 
         <div className="mt-3.5 flex flex-wrap items-center gap-2">
@@ -567,7 +585,7 @@ function PatientHeaderCard({
                 key={`${p.condition}-${i}`}
                 className="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.05em]"
                 style={{ background: tone.bg, color: tone.fg }}
-                title={`${statusLabel(p.status)}${p.icd10 ? ` · ${p.icd10}` : ''}`}
+                title={`${statusLabel(p.status)}${p.icd10 ? ` · ${p.icd10}` : ""}`}
               >
                 <span
                   className="h-1.5 w-1.5 rounded-full"
@@ -594,7 +612,7 @@ function PatientHeaderCard({
           <Link
             href={`/visits/new?patientId=${patient.id}`}
             className="qm-lin-btn-primary"
-            style={{ textDecoration: 'none' }}
+            style={{ textDecoration: "none" }}
           >
             <Ic.plus width={14} height={14} />
             New visit
@@ -604,7 +622,7 @@ function PatientHeaderCard({
           <a
             href={`/api/patients/${patient.id}/export`}
             className="qm-lin-btn"
-            style={{ textDecoration: 'none' }}
+            style={{ textDecoration: "none" }}
           >
             <Ic.download width={13} height={13} />
             Export
@@ -647,12 +665,12 @@ function TabBar({
     href: string;
     hidden?: boolean;
   }[] = [
-    { id: 'visits', label: 'Visits', count: visitCount, href: base },
-    { id: 'notes', label: 'Notes', href: `${base}?tab=notes` },
-    { id: 'files', label: 'Files', href: `${base}?tab=files` },
+    { id: "visits", label: "Visits", count: visitCount, href: base },
+    { id: "notes", label: "Notes", href: `${base}?tab=notes` },
+    { id: "files", label: "Files", href: `${base}?tab=files` },
     {
-      id: 'trash',
-      label: 'Trash',
+      id: "trash",
+      label: "Trash",
       count: trashCount,
       href: `${base}?tab=trash`,
       hidden: trashCount === 0,
@@ -669,20 +687,20 @@ function TabBar({
               key={t.id}
               href={t.href}
               scroll={false}
-              aria-current={active ? 'page' : undefined}
+              aria-current={active ? "page" : undefined}
               className={
-                '-mb-px inline-flex items-center gap-2 border-b-2 px-3 py-2.5 text-[13px] font-medium no-underline transition-colors ' +
+                "-mb-px inline-flex items-center gap-2 border-b-2 px-3 py-2.5 text-[13px] font-medium no-underline transition-colors " +
                 (active
-                  ? 'border-linear-sage text-linear-text'
-                  : 'border-transparent text-linear-text-3 hover:text-linear-text-2')
+                  ? "border-linear-sage text-linear-text"
+                  : "border-transparent text-linear-text-3 hover:text-linear-text-2")
               }
             >
               {t.label}
               {t.count != null && (
                 <span
                   className={
-                    'font-mono text-[11px] tabular-nums ' +
-                    (active ? 'text-linear-sage-bright' : 'text-linear-text-3')
+                    "font-mono text-[11px] tabular-nums " +
+                    (active ? "text-linear-sage-bright" : "text-linear-text-3")
                   }
                 >
                   {t.count}
@@ -706,20 +724,20 @@ async function VisitsTab({
     id: string;
     patientName: string | null;
     specialty: string;
-    status: import('@prisma/client').TranscribeVisitStatus;
+    status: import("@prisma/client").TranscribeVisitStatus;
     needsReview: boolean;
     createdAt: Date;
     signedAt: Date | null;
     audioDurationSec: number | null;
   };
   const rows: Row[] = await prisma.transcribeVisit.findMany({
-    where: {
+    where: ordinaryClinicalVisitWhere({
       patientId,
       userId,
       deletedAt: null,
       archivedAt: null,
-    },
-    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    }),
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     select: {
       id: true,
       patientName: true,
@@ -742,7 +760,7 @@ async function VisitsTab({
       createdAt: v.createdAt.toISOString(),
       signedAt: v.signedAt ? v.signedAt.toISOString() : null,
       audioDurationSec: v.audioDurationSec,
-    })
+    }),
   );
   return <VisitList visits={visits} theme="clinician" />;
 }
@@ -758,17 +776,17 @@ async function TrashTab({
     id: string;
     patientName: string | null;
     specialty: string;
-    status: import('@prisma/client').TranscribeVisitStatus;
+    status: import("@prisma/client").TranscribeVisitStatus;
     createdAt: Date;
     deletedAt: Date | null;
   };
   const rows: Row[] = await prisma.transcribeVisit.findMany({
-    where: {
+    where: ordinaryClinicalVisitWhere({
       patientId,
       userId,
       deletedAt: { not: null },
-    },
-    orderBy: [{ deletedAt: 'desc' }, { id: 'desc' }],
+    }),
+    orderBy: [{ deletedAt: "desc" }, { id: "desc" }],
     select: {
       id: true,
       patientName: true,
@@ -788,7 +806,7 @@ async function TrashTab({
   return (
     <div
       className="grid gap-3.5 px-10 pb-10 pt-6"
-      style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}
+      style={{ gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))" }}
     >
       {rows.map((v: Row) => (
         <TrashedVisitCard

@@ -46,6 +46,10 @@ export interface RateLimitResult {
   /** Seconds until the bucket resets. Safe to use directly as the
    *  Retry-After header value when allowed=false. */
   retryAfterSec: number;
+  /** Exact fixed-window reset instant. Present when allowed=false so
+   *  clients can render an accurate countdown even after transit/render
+   *  delay. Never exposed for an allowed request. */
+  resetAtMs?: number;
   /** When allowed=false, which window tripped — useful for client
    *  diagnostics and the 429 body. `undefined` when allowed=true. */
   limitType?: string;
@@ -218,6 +222,7 @@ export function tryConsume(
     return {
       allowed: false,
       retryAfterSec: Math.max(1, Math.ceil((existing.resetAt - now) / 1000)),
+      resetAtMs: existing.resetAt,
     };
   }
 
@@ -241,6 +246,7 @@ function peekConsume(key: string, limit: number): RateLimitResult {
     return {
       allowed: false,
       retryAfterSec: Math.max(1, Math.ceil((existing.resetAt - now) / 1000)),
+      resetAtMs: existing.resetAt,
     };
   }
   return { allowed: true, retryAfterSec: 0 };
@@ -270,9 +276,9 @@ export function __resetForTests(): void {
  *  rejection by ANY window doesn't accidentally consume slots in the
  *  windows that would have allowed it.
  *
- *  When multiple windows would reject, we return the LONGEST
- *  retryAfterSec — the client must wait that long for the rule as a
- *  whole to clear.
+ *  When multiple windows would reject, we return the latest exact reset
+ *  instant and its rounded-up retryAfterSec — the client must wait that
+ *  long for the rule as a whole to clear.
  */
 export function checkRateLimit(
   rule: RateLimitRule,
@@ -298,8 +304,10 @@ export function checkRateLimit(
   }
 
   let worstRejection: RateLimitResult | null = null;
-  // Phase 1 — peek every window. Track the LONGEST retryAfterSec
-  // across all rejecting windows.
+  // Phase 1 — peek every window. Track the LATEST exact reset instant
+  // across all rejecting windows. Comparing only rounded-up seconds can
+  // select an earlier window when two resets fall within the same second,
+  // making resetAtIso claim the rule is ready before every window clears.
   for (const win of rule.windows) {
     const key = `${rule.bucket}:${win.windowMs}:${identifier}`;
     const r = peekConsume(key, win.limit);
@@ -307,11 +315,12 @@ export function checkRateLimit(
     const label = win.label ?? `${win.windowMs}ms`;
     if (
       !worstRejection ||
-      r.retryAfterSec > worstRejection.retryAfterSec
+      (r.resetAtMs ?? 0) > (worstRejection.resetAtMs ?? 0)
     ) {
       worstRejection = {
         allowed: false,
         retryAfterSec: r.retryAfterSec,
+        resetAtMs: r.resetAtMs,
         limitType: label,
       };
     }
@@ -334,8 +343,9 @@ export function checkRateLimit(
  *    if (blocked) return blocked;
  *    // ... continue request handling ...
  *
- *  2026-05-13: the 429 body now carries `retryAfterSec` + `limitType`
- *  so the client can render a countdown without parsing the header.
+ *  The 429 body carries an additive structured contract including the
+ *  exact `resetAtIso`, rounded-up `retryAfterSec`, and `limitType`, so a
+ *  client can render an accurate countdown without parsing only the header.
  */
 export function rateLimitOr429(
   rule: RateLimitRule,
@@ -343,15 +353,24 @@ export function rateLimitOr429(
 ): NextResponse | null {
   const rl = checkRateLimit(rule, identifier);
   if (rl.allowed) return null;
+  const resetAtIso = new Date(
+    rl.resetAtMs ?? Date.now() + rl.retryAfterSec * SEC,
+  ).toISOString();
   return NextResponse.json(
     {
+      ok: false,
+      code: 'RATE_LIMITED',
       error: "You're working faster than the system allows — please pause briefly and retry.",
       retryAfterSec: rl.retryAfterSec,
       limitType: rl.limitType ?? null,
+      resetAtIso,
     },
     {
       status: 429,
-      headers: { 'Retry-After': String(rl.retryAfterSec) },
+      headers: {
+        'Cache-Control': 'no-store, private',
+        'Retry-After': String(rl.retryAfterSec),
+      },
     }
   );
 }

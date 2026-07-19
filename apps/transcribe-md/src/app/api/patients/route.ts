@@ -13,18 +13,19 @@
 //      contract.
 // ============================================================================
 
-import { z } from 'zod';
-import { NextResponse } from 'next/server';
+import { z } from "zod";
+import { NextResponse } from "next/server";
 
-import prisma from '@meddoc/db';
+import prisma from "@meddoc/db";
 
-import { apiError, withApiHandler } from '@/lib/api-error';
-import { getSession } from '@/lib/auth';
-import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
-import { logAudit } from '@/lib/audit';
+import { apiError, withApiHandler } from "@/lib/api-error";
+import { getSession } from "@/lib/auth";
+import { RATE_LIMITS, rateLimitOr429 } from "@/lib/rate-limit";
+import { logAudit } from "@/lib/audit";
+import { TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID } from "@/lib/template-twin/synthetic-qa-patient";
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 // Trigram similarity threshold — matches the fuzzy-match endpoint's
 // default. Only used for the list-search path; exact externalId
@@ -47,15 +48,15 @@ interface PatientListRow {
   lastVisitAt: Date | null;
 }
 
-export const GET = withApiHandler('api:patients:list', async (req) => {
+export const GET = withApiHandler("api:patients:list", async (req) => {
   const session = await getSession();
-  if (!session) return apiError('unauthorized', 401);
+  if (!session) return apiError("unauthorized", 401);
 
   const blocked = rateLimitOr429(RATE_LIMITS.PATIENT_READ, session.user.id);
   if (blocked) return blocked;
 
   const url = new URL(req.url);
-  const rawSearch = url.searchParams.get('search');
+  const rawSearch = url.searchParams.get("search");
   const search =
     rawSearch && rawSearch.trim().length > 0 ? rawSearch.trim() : null;
 
@@ -77,11 +78,17 @@ export const GET = withApiHandler('api:patients:list', async (req) => {
         LEFT JOIN transcribe_visits v ON v."patientId" = p.id
           AND v."deletedAt" IS NULL
           AND v."archivedAt" IS NULL
+          AND NOT EXISTS (
+            SELECT 1
+            FROM template_twin_synthetic_qa_runs qa
+            WHERE qa."visitId" = v.id
+          )
         WHERE p."practiceId" = ${session.user.practiceId}
           AND p."deletedAt" IS NULL
+          AND p."externalId" IS DISTINCT FROM ${TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID}
           AND (
             similarity(LOWER(p.name), LOWER(${search})) > ${SEARCH_SIMILARITY_THRESHOLD}
-            OR p."externalId" ILIKE ${'%' + search + '%'}
+            OR p."externalId" ILIKE ${"%" + search + "%"}
           )
         GROUP BY p.id
         ORDER BY MAX(v."createdAt") DESC NULLS LAST, p.id DESC
@@ -100,8 +107,14 @@ export const GET = withApiHandler('api:patients:list', async (req) => {
         LEFT JOIN transcribe_visits v ON v."patientId" = p.id
           AND v."deletedAt" IS NULL
           AND v."archivedAt" IS NULL
+          AND NOT EXISTS (
+            SELECT 1
+            FROM template_twin_synthetic_qa_runs qa
+            WHERE qa."visitId" = v.id
+          )
         WHERE p."practiceId" = ${session.user.practiceId}
           AND p."deletedAt" IS NULL
+          AND p."externalId" IS DISTINCT FROM ${TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID}
         GROUP BY p.id
         ORDER BY MAX(v."createdAt") DESC NULLS LAST, p.id DESC
         LIMIT ${LIST_LIMIT}
@@ -113,10 +126,10 @@ export const GET = withApiHandler('api:patients:list', async (req) => {
   // captures count + search-term presence (NOT the search-term value
   // itself, which could embed identifying info).
   void logAudit({
-    action: 'VIEWED_PATIENT_LIST',
-    targetType: 'TranscribeMdPatient',
+    action: "VIEWED_PATIENT_LIST",
+    targetType: "TranscribeMdPatient",
     metadata: {
-      source: 'api:GET /api/patients',
+      source: "api:GET /api/patients",
       count: rows.length,
       hasSearch: search !== null,
     },
@@ -126,15 +139,15 @@ export const GET = withApiHandler('api:patients:list', async (req) => {
 });
 
 const CreateBodySchema = z.object({
-  name: z.string().trim().min(1, 'Name is required').max(200),
+  name: z.string().trim().min(1, "Name is required").max(200),
   /** Accept an ISO-8601 date (YYYY-MM-DD) or a full datetime. Either
    *  way we coerce through `new Date()` and store at midnight — the DB
    *  column is DATE, so any time portion is truncated server-side. */
   dateOfBirth: z
     .string()
-    .min(1, 'Date of birth is required')
+    .min(1, "Date of birth is required")
     .refine((s) => !Number.isNaN(Date.parse(s)), {
-      message: 'Invalid date',
+      message: "Invalid date",
     }),
   externalId: z
     .string()
@@ -145,9 +158,9 @@ const CreateBodySchema = z.object({
     .nullable(),
 });
 
-export const POST = withApiHandler('api:patients:create', async (req) => {
+export const POST = withApiHandler("api:patients:create", async (req) => {
   const session = await getSession();
-  if (!session) return apiError('unauthorized', 401);
+  if (!session) return apiError("unauthorized", 401);
 
   const blocked = rateLimitOr429(RATE_LIMITS.PATIENT_CREATE, session.user.id);
   if (blocked) return blocked;
@@ -156,16 +169,21 @@ export const POST = withApiHandler('api:patients:create', async (req) => {
   try {
     body = await req.json();
   } catch {
-    return apiError('invalid JSON body', 400);
+    return apiError("invalid JSON body", 400);
   }
   const parsed = CreateBodySchema.safeParse(body);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
-    const field = first?.path.join('.') || '_form';
+    const field = first?.path.join(".") || "_form";
     return NextResponse.json(
-      { error: first?.message || 'invalid payload', field },
-      { status: 400 }
+      { error: first?.message || "invalid payload", field },
+      { status: 400 },
     );
+  }
+  if (
+    parsed.data.externalId === TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID
+  ) {
+    return apiError("invalid external ID", 400);
   }
 
   const patient = await prisma.transcribeMdPatient.create({
@@ -185,8 +203,8 @@ export const POST = withApiHandler('api:patients:create', async (req) => {
   });
 
   void logAudit({
-    action: 'TM_PATIENT_CREATED',
-    targetType: 'TranscribeMdPatient',
+    action: "TM_PATIENT_CREATED",
+    targetType: "TranscribeMdPatient",
     targetId: patient.id,
     metadata: {
       hasDob: patient.dateOfBirth !== null,

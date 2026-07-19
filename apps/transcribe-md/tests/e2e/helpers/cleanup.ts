@@ -4,7 +4,8 @@
 // Called by globalTeardown and by each test's afterEach so a failed run
 // doesn't leave orphaned qa-e2e-* users behind.
 //
-// Uses `docker compose exec postgres psql` instead of the Prisma client:
+// Uses the CI `PSQL_BIN` channel or `docker compose exec postgres psql`
+// instead of the Prisma client:
 //   - Avoids loading /opt/meddoc-pro/.env from the Playwright process.
 //   - No dependency on @meddoc/db compiling cleanly.
 //   - Same database connection the live app uses; no risk of drift.
@@ -26,14 +27,35 @@ import { QA_COMPOSE as COMPOSE, QA_DB as CLEANUP_DB } from './qa-compose';
 // /opt/meddoc-pro path made this a silent no-op on the CI runner.
 
 function psql(sql: string): void {
+  const direct = process.env.PSQL_BIN;
+  if (direct) {
+    const database = execSync(
+      `${direct} -v ON_ERROR_STOP=1 -A -t -c "SELECT current_database();"`,
+      {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    ).trim();
+    assertNonProdDbName(database);
+    execSync(`${direct} -v ON_ERROR_STOP=1 -A -t -f -`, {
+      input: sql,
+      stdio: ['pipe', 'pipe', 'inherit'],
+    });
+    return;
+  }
+
   // FAIL-CLOSED: never run a DELETE against a prod (or unconfirmable) DB.
   assertNonProdDbName(CLEANUP_DB);
-  // -A -t trims psql formatting so stderr output is actually diagnostic
-  // when something goes wrong. Each call uses its own connection; the
-  // volume is small enough that it doesn't matter.
-  execSync(`${COMPOSE} exec -T postgres psql -U meddoc -d ${CLEANUP_DB} -A -t -c "${sql.replace(/"/g, '\\"')}"`, {
-    stdio: ['ignore', 'pipe', 'inherit'],
-  });
+  // Feed SQL over stdin so quoting stays literal. ON_ERROR_STOP makes schema
+  // drift or an FK-order regression fail the test instead of returning a
+  // misleading successful psql exit code.
+  execSync(
+    `${COMPOSE} exec -T postgres psql -v ON_ERROR_STOP=1 -U meddoc -d ${CLEANUP_DB} -A -t -f -`,
+    {
+      input: sql,
+      stdio: ['pipe', 'pipe', 'inherit'],
+    },
+  );
 }
 
 /** Wipe every qa-e2e-* user and their cascaded state. Idempotent —
@@ -41,79 +63,64 @@ function psql(sql: string): void {
  *  anything. Logs how many users were deleted so the test output
  *  shows whether cleanup is actually running. */
 export function cleanupTestUsers(): void {
-  // audit_logs.practiceId has an IMMEDIATE FK to practices, so the practices
-  // DELETE in the cascade below cannot proceed while audit rows reference the
-  // practice — and a single multi-CTE statement can't fix that (data-modifying
-  // CTE order is undefined and each CTE sees the statement-start snapshot, so
-  // the practices DELETE still sees the un-deleted audit rows → the whole
-  // statement rolls back). The page surfaces (VIEWED_PATIENT_LIST / _FILE /
-  // VISIT_LIST) write these rows, so Phase 2's patient/visit specs trip it.
-  // Delete the test practices' audit rows FIRST, in their own guarded
-  // statement (test data only — the db-guard still forbids prod).
-  const auditSql = `
-    DELETE FROM audit_logs
-    WHERE "practiceId" IN (
-      SELECT "practiceId" FROM users WHERE email LIKE '${TEST_EMAIL_PREFIX}%'
-    );
-  `;
-  // rx_warning_overrides.visitId is an FK to transcribe_visits with onDelete
-  // RESTRICT (verified: confdeltype='r'), checked IMMEDIATELY — so the
-  // transcribe_visits DELETE in the cascade below fails if any override rows
-  // still reference a test visit. CTE order can't be relied on (same reason as
-  // audit_logs above), so delete the test visits' override rows FIRST, in their
-  // own guarded statement. The Batch-4 Rx clinical-safety specs write these rows.
-  const rxOverrideSql = `
-    DELETE FROM rx_warning_overrides
-    WHERE "visitId" IN (
-      SELECT id FROM transcribe_visits WHERE "userId" IN (
-        SELECT id FROM users WHERE email LIKE '${TEST_EMAIL_PREFIX}%'
-      )
-    );
-  `;
+  // Materialize the exact synthetic tenant set, lock its practice/user/visit
+  // rows in deterministic order, then delete in FK order inside one
+  // transaction. The locks wait for in-flight child inserts and block new FK
+  // KEY SHARE writers until cleanup commits.
   const sql = `
-    WITH target AS (
+    BEGIN;
+
+    CREATE TEMP TABLE e2e_target_users ON COMMIT DROP AS
       SELECT id, "practiceId"
       FROM users
-      WHERE email LIKE '${TEST_EMAIL_PREFIX}%'
-    ),
-    target_visits AS (
-      SELECT id FROM transcribe_visits WHERE "userId" IN (SELECT id FROM target)
-    ),
-    deleted_deliveries AS (
-      DELETE FROM visit_deliveries WHERE "visitId" IN (SELECT id FROM target_visits)
-      RETURNING 1
-    ),
-    deleted_aicalls AS (
-      DELETE FROM ai_calls WHERE "practiceId" IN (SELECT "practiceId" FROM target)
-      RETURNING 1
-    ),
-    deleted_visits AS (
-      DELETE FROM transcribe_visits WHERE id IN (SELECT id FROM target_visits)
-      RETURNING 1
-    ),
-    deleted_sessions AS (
-      DELETE FROM user_sessions WHERE "userId" IN (SELECT id FROM target)
-      RETURNING 1
-    ),
-    deleted_users AS (
-      DELETE FROM users WHERE id IN (SELECT id FROM target)
-      RETURNING "practiceId"
-    ),
-    deleted_practices AS (
-      DELETE FROM practices
-      WHERE id IN (SELECT "practiceId" FROM deleted_users)
-        AND name LIKE 'Solo — %'
-      RETURNING 1
-    )
-    SELECT COUNT(*) FROM deleted_users;
+      WHERE email LIKE '${TEST_EMAIL_PREFIX}%';
+
+    CREATE TEMP TABLE e2e_target_practices ON COMMIT DROP AS
+      SELECT DISTINCT "practiceId" AS id FROM e2e_target_users;
+
+    SELECT p.id
+    FROM practices p
+    JOIN e2e_target_practices target ON target.id = p.id
+    ORDER BY p.id
+    FOR UPDATE OF p;
+
+    SELECT u.id
+    FROM users u
+    JOIN e2e_target_users target ON target.id = u.id
+    ORDER BY u.id
+    FOR UPDATE OF u;
+
+    CREATE TEMP TABLE e2e_target_visits ON COMMIT DROP AS
+      SELECT id FROM transcribe_visits
+      WHERE "userId" IN (SELECT id FROM e2e_target_users);
+
+    SELECT v.id
+    FROM transcribe_visits v
+    JOIN e2e_target_visits target ON target.id = v.id
+    ORDER BY v.id
+    FOR UPDATE OF v;
+
+    DELETE FROM template_twin_audit_outbox
+    WHERE "practiceId" IN (SELECT id FROM e2e_target_practices);
+    DELETE FROM audit_logs
+    WHERE "practiceId" IN (SELECT id FROM e2e_target_practices);
+    DELETE FROM rx_warning_overrides
+    WHERE "visitId" IN (SELECT id FROM e2e_target_visits);
+    DELETE FROM visit_deliveries
+    WHERE "visitId" IN (SELECT id FROM e2e_target_visits);
+    DELETE FROM ai_calls
+    WHERE "practiceId" IN (SELECT id FROM e2e_target_practices);
+    DELETE FROM transcribe_visits
+    WHERE id IN (SELECT id FROM e2e_target_visits);
+    DELETE FROM user_sessions
+    WHERE "userId" IN (SELECT id FROM e2e_target_users);
+    DELETE FROM users
+    WHERE id IN (SELECT id FROM e2e_target_users);
+    DELETE FROM practices
+    WHERE id IN (SELECT id FROM e2e_target_practices)
+      AND name LIKE 'Solo — %';
+
+    COMMIT;
   `;
-  try {
-    psql(auditSql);
-    psql(rxOverrideSql);
-    psql(sql);
-  } catch (err) {
-    // Don't fail the whole suite if cleanup hits a transient DB
-    // snag — the next run will retry.
-    console.error('[e2e cleanup] failed (non-fatal):', (err as Error).message);
-  }
+  psql(sql);
 }

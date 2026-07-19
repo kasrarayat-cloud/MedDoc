@@ -131,7 +131,41 @@ enum AuditAction {
   EXPORT_EMAIL_BLOCKED_DESTINATION
   EXPORT_PDF_DOWNLOADED
   EXPORT_DOCX_DOWNLOADED
+  EXPORT_TEMPLATE_TWIN_DOCX_DOWNLOADED
   EXPORT_CLIPBOARD_COPIED
+
+  // Template Twin — structure-preserving DOCX lifecycle. Metadata on these
+  // events is identifiers, hashes, counts, statuses, and error classes only;
+  // never document text, field values, or evidence quotes.
+  TEMPLATE_TWIN_SOURCE_UPLOADED
+  TEMPLATE_TWIN_COMPILED
+  TEMPLATE_TWIN_QUARANTINED
+  TEMPLATE_TWIN_MAPPING_UPDATED
+  TEMPLATE_TWIN_CERTIFIED
+  TEMPLATE_TWIN_ACTIVATED
+  TEMPLATE_TWIN_SYNTHETIC_TESTED
+  TEMPLATE_TWIN_FIELD_REVIEWED
+  TEMPLATE_TWIN_SIGN_BLOCKED
+  TEMPLATE_TWIN_RENDER_VERIFIED
+  TEMPLATE_TWIN_FIELD_TEST_WAIVED
+  TEMPLATE_TWIN_DEACTIVATED
+  TEMPLATE_TWIN_RETIRED
+  TEMPLATE_TWIN_ROLLED_BACK
+  TEMPLATE_TWIN_SAFETY_GATE_BLOCKED
+  TEMPLATE_TWIN_OBJECT_RECONCILED
+  TEMPLATE_TWIN_STATIC_ASSET_APPROVED
+  TEMPLATE_TWIN_STATIC_ASSET_REJECTED
+  TEMPLATE_TWIN_STATIC_ASSET_REVOKED
+  TEMPLATE_TWIN_STATIC_ASSET_USED
+  TEMPLATE_TWIN_FIELD_INTENT_RECORDED
+  TEMPLATE_TWIN_CUSTOM_EXAMPLE_EXECUTED
+  TEMPLATE_TWIN_CUSTOM_EXAMPLE_ACKNOWLEDGED
+  TEMPLATE_TWIN_STAGING_QA_RUN_CREATED
+  TEMPLATE_TWIN_STAGING_QA_RUN_RETRIED
+  TEMPLATE_TWIN_STAGING_QA_SOAP_EDITED
+  TEMPLATE_TWIN_STAGING_QA_ADMISSION_CREATED
+  TEMPLATE_TWIN_STAGING_QA_ADMISSION_ADVANCED
+  TEMPLATE_TWIN_STAGING_QA_ADMISSION_FAILED
 
   // transcribe-md — patient CRUD (TranscribeMdPatient; CRM patient
   // events use CREATED_PATIENT / UPDATED_PATIENT / ARCHIVED_PATIENT
@@ -281,6 +315,10 @@ enum AuditAction {
   // exhaustion or transient API error in L7 left visits silently marked
   // READY with empty codes/Rx columns.
   VISIT_AUTOMATION_INCOMPLETE
+  /// Durable terminal proof that every required automation layer completed
+  /// against the exact current SOAP/admission epoch. Emitted transactionally
+  /// with READY; one idempotent event exists per manifest version.
+  VISIT_AUTOMATION_COMPLETED
 
   // 2026-05-12 stuck-visit watchdog. Emitted by the per-minute sweep when
   // a visit's status has been in an in-flight state (TRANSCRIBING /
@@ -426,6 +464,58 @@ enum AuthTokenPurpose {
   EMAIL_CHANGE
 }
 
+/// Template Twin lifecycle values are enums because every transition is a
+/// clinical-safety boundary. UI labels render these as title case.
+enum TemplateTwinCertificationStatus {
+  RECOGNIZED
+  NEEDS_CONFIRMATION
+  UNSUPPORTED
+  CERTIFIED
+  QUARANTINED
+}
+
+enum TemplateTwinDetectionStatus {
+  RECOGNIZED
+  NEEDS_CONFIRMATION
+  UNSUPPORTED
+  CERTIFIED
+}
+
+enum TemplateTwinResolutionStatus {
+  SUPPORTED
+  EXPLICITLY_DENIED
+  NOT_MENTIONED
+  AMBIGUOUS
+  CONFLICT
+  NEEDS_CLINICIAN_INPUT
+  APPROVED_PRACTICE_DEFAULT
+}
+
+enum TemplateTwinFillStatus {
+  RESOLVING
+  NEEDS_REVIEW
+  VERIFIED
+  SIGNED
+  FAILED
+}
+
+enum TemplateTwinObjectLedgerState {
+  INTENT
+  WRITTEN_UNCLAIMED
+  CLAIMED
+  RETAINED
+  PURGE_PENDING
+  PURGED
+  FAILED
+}
+
+enum TemplateTwinAuditOutboxStatus {
+  PENDING
+  PROCESSING
+  DELIVERED
+  FAILED
+}
+
 // ============================================================================
 // PRACTICE — tenant boundary
 // ----------------------------------------------------------------------------
@@ -456,29 +546,49 @@ model Practice {
   /// 2555 = 7 years (HIPAA's 6-year minimum + a year of buffer).
   transcriptRetentionDays Int @default(2555)
 
+  /// Safe-alpha rollout gate. A second global kill switch must also be
+  /// explicitly disabled before any Template Twin server path may run.
+  templateTwinEnabled           Boolean @default(false)
+  /// Monotonic epoch for linearizable Template Twin practice revocation.
+  /// Every controlled enable/disable operation increments this value.
+  templateTwinRolloutGeneration BigInt  @default(1)
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   // Reverse relations — every tenant-scoped table points back here.
-  users                User[]
-  patients             Patient[]
-  auditLogs            AuditLog[]
-  apiUsage             ApiUsage[]
-  sessionLogs          SessionLog[]
-  allergies            Allergy[]
-  medications          Medication[]
+  users                                 User[]
+  patients                              Patient[]
+  auditLogs                             AuditLog[]
+  apiUsage                              ApiUsage[]
+  sessionLogs                           SessionLog[]
+  allergies                             Allergy[]
+  medications                           Medication[]
   // M6 — CRM loop-closing
-  tasks                Task[]
-  billingEvents        BillingEvent[]
-  aiCalls              AiCall[]
+  tasks                                 Task[]
+  billingEvents                         BillingEvent[]
+  aiCalls                               AiCall[]
   // T-M17.2 — TranscribeMD-scoped patients. Kept separate from the
   // CRM `Patient` model so the two products can diverge on schema +
   // privacy posture (TranscribeMdPatient stores full DOB; CRM Patient
   // stores birthYear only per Safe Harbor).
-  transcribeMdPatients TranscribeMdPatient[]
+  transcribeMdPatients                  TranscribeMdPatient[]
   // Phase 6 — per-call external API spend; rolled up in the admin
   // usage endpoints.
-  apiUsageEvents       ApiUsageEvent[]
+  apiUsageEvents                        ApiUsageEvent[]
+  // Template Twin source artifacts remain practice-scoped even if their
+  // creating user later leaves the practice.
+  templateTwinSources                   TemplateTwinSourceArtifact[]
+  templateTwinFills                     TemplateTwinFillManifest[]
+  templateTwinObjects                   TemplateTwinObjectLedger[]
+  templateTwinOutbox                    TemplateTwinAuditOutbox[]
+  templateTwinStaticAssets              TemplateTwinStaticAsset[]
+  templateTwinStaticAssetReviewReceipts TemplateTwinStaticAssetReviewReceipt[]
+  templateTwinCustomExampleExecutions   TemplateTwinCustomExampleExecution[]
+  templateTwinSyntheticQaAdmissions     TemplateTwinSyntheticQaAdmission[]
+  templateTwinSyntheticQaRuns           TemplateTwinSyntheticQaRun[]
+  visitAutomationManifests              VisitAutomationManifest[]
+  visitAutomationProviderExecutions     VisitAutomationProviderExecution[]
 
   @@index([slug])
   @@map("practices")
@@ -595,54 +705,69 @@ model User {
 
   // === Relations ===
   // NextAuth adapter relations
-  accounts               Account[]
-  sessions               Session[]
+  accounts                               Account[]
+  sessions                               Session[]
   // App relations
-  documentsCreated       Document[]          @relation("DocumentCreator")
-  documentsUpdated       Document[]          @relation("DocumentUpdater")
-  auditLogs              AuditLog[]
-  patientsCreated        Patient[]           @relation("PatientCreator")
-  patientsAssigned       Patient[]           @relation("AssignedDoctor")
-  appointments           Appointment[]
-  sessionLogs            SessionLog[]
-  apiUsageLogs           ApiUsageLog[]
-  allergiesCreated       Allergy[]           @relation("AllergyCreator")
-  allergiesUpdated       Allergy[]           @relation("AllergyUpdater")
-  medicationsCreated     Medication[]        @relation("MedicationCreator")
-  medicationsUpdated     Medication[]        @relation("MedicationUpdater")
-  apiUsage               ApiUsage[]
+  documentsCreated                       Document[]                             @relation("DocumentCreator")
+  documentsUpdated                       Document[]                             @relation("DocumentUpdater")
+  auditLogs                              AuditLog[]
+  patientsCreated                        Patient[]                              @relation("PatientCreator")
+  patientsAssigned                       Patient[]                              @relation("AssignedDoctor")
+  appointments                           Appointment[]
+  sessionLogs                            SessionLog[]
+  apiUsageLogs                           ApiUsageLog[]
+  allergiesCreated                       Allergy[]                              @relation("AllergyCreator")
+  allergiesUpdated                       Allergy[]                              @relation("AllergyUpdater")
+  medicationsCreated                     Medication[]                           @relation("MedicationCreator")
+  medicationsUpdated                     Medication[]                           @relation("MedicationUpdater")
+  apiUsage                               ApiUsage[]
   // M6 — CRM loop-closing
-  tasksAssigned          Task[]              @relation("TaskAssignee")
-  tasksCreated           Task[]              @relation("TaskCreator")
-  billingEventsOwned     BillingEvent[]      @relation("BillingClinician")
-  billingEventsSubmitted BillingEvent[]      @relation("BillingSubmitter")
+  tasksAssigned                          Task[]                                 @relation("TaskAssignee")
+  tasksCreated                           Task[]                                 @relation("TaskCreator")
+  billingEventsOwned                     BillingEvent[]                         @relation("BillingClinician")
+  billingEventsSubmitted                 BillingEvent[]                         @relation("BillingSubmitter")
   // TranscribeMD (T-M2)
-  transcribeVisits       TranscribeVisit[]
-  userSessions           UserSession[]
+  transcribeVisits                       TranscribeVisit[]
+  userSessions                           UserSession[]
   // T-M14.1: per-doctor edit tracking (one row per signed visit).
-  doctorEditPatterns     DoctorEditPattern[]
+  doctorEditPatterns                     DoctorEditPattern[]
   // Note-format customization (Phase 0) — a doctor's custom note-format
   // templates. Empty for every doctor in Phase 0 (they only get a row
   // when they customize in Phase 2+); the resolve-logic falls back to the
   // system-default NoteTemplate (doctorId = null) until then.
-  noteTemplates          NoteTemplate[]
+  noteTemplates                          NoteTemplate[]
+  templateTwinSourcesCreated             TemplateTwinSourceArtifact[]           @relation("TemplateTwinSourceCreator")
+  templateTwinMappingsApproved           TemplateTwinSemanticMapping[]          @relation("TemplateTwinMappingApprover")
+  templateTwinCertifications             TemplateTwinCertification[]            @relation("TemplateTwinCertifier")
+  templateTwinReviews                    TemplateTwinReviewDecision[]           @relation("TemplateTwinReviewer")
+  templateTwinManifestReviews            TemplateTwinFillManifest[]             @relation("TemplateTwinManifestReviewer")
+  templateTwinTestWaivers                TemplateTwinFieldTestWaiver[]          @relation("TemplateTwinWaiverPhysician")
+  templateTwinOutboxEvents               TemplateTwinAuditOutbox[]              @relation("TemplateTwinOutboxActor")
+  templateTwinFieldIntents               TemplateTwinFieldIntentDecision[]      @relation("TemplateTwinFieldIntentDecider")
+  templateTwinStaticAssetsCreated        TemplateTwinStaticAsset[]              @relation("TemplateTwinStaticAssetCreator")
+  templateTwinStaticAssetDecisions       TemplateTwinStaticAssetDecision[]      @relation("TemplateTwinStaticAssetDecider")
+  templateTwinStaticAssetReviews         TemplateTwinStaticAssetReviewReceipt[] @relation("TemplateTwinStaticAssetReviewer")
+  templateTwinCustomExamplesRun          TemplateTwinCustomExampleExecution[]   @relation("TemplateTwinCustomExampleExecutor")
+  templateTwinCustomExamplesAcknowledged TemplateTwinCustomExampleExecution[]   @relation("TemplateTwinCustomExampleAcknowledger")
+  templateTwinSyntheticQaAdmissions      TemplateTwinSyntheticQaAdmission[]     @relation("TemplateTwinSyntheticQaAdmissionActor")
+  templateTwinSyntheticQaRuns            TemplateTwinSyntheticQaRun[]           @relation("TemplateTwinSyntheticQaDoctor")
   // T-M16.2: one-time tokens for password reset, email verification,
   // email change. All cascade-deleted with the user.
-  authTokens             AuthToken[]
+  authTokens                             AuthToken[]
   // Rx warning overrides authored by this user. Every time the
   // doctor overrides a critical Rx warning, one row is inserted in
   // `rx_warning_overrides` with the reason. Audit trail for sign-
   // anyway decisions.
-  rxWarningOverrides     RxWarningOverride[]
+  rxWarningOverrides                     RxWarningOverride[]
   // Phase 6 — per-user external-API spend events (one row per
   // call to Deepgram / Anthropic / Whisper / OpenAI / Resend).
-  apiUsageEvents         ApiUsageEvent[]
+  apiUsageEvents                         ApiUsageEvent[]
   // Phase 6H — threats this user resolved/dismissed via the admin
   // dashboard. Reverse side of ThreatResolution.resolvedBy.
-  threatResolutions      ThreatResolution[]
+  threatResolutions                      ThreatResolution[]
   // Phase 7B — HIPAA findings this user closed via /admin/hipaa.
   // Reverse side of HipaaFinding.resolvedBy.
-  hipaaFindings          HipaaFinding[]
+  hipaaFindings                          HipaaFinding[]
 
   @@index([practiceId])
   @@index([role])
@@ -1521,6 +1646,41 @@ enum TranscribeVisitStatus {
   SIGNED
 }
 
+/// Durable visit-level automation state. Historical visits intentionally have
+/// no manifest and are therefore treated as LEGACY_UNKNOWN by application
+/// gates; the migration never labels old output successful without proof.
+enum VisitAutomationManifestStatus {
+  PENDING
+  RUNNING
+  INCOMPLETE
+  COMPLETE
+  FAILED
+}
+
+enum VisitAutomationLayerStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  NOT_APPLICABLE
+}
+
+enum VisitAutomationLayerRequirement {
+  REQUIRED
+  OPTIONAL
+  NOT_APPLICABLE
+}
+
+/// Durable boundary around a provider invocation. A crash after IN_FLIGHT
+/// has an ambiguous provider outcome and is never blindly replayed.
+enum VisitAutomationProviderExecutionStatus {
+  RESERVED
+  IN_FLIGHT
+  SUCCEEDED
+  FAILED
+  UNKNOWN_OUTCOME
+}
+
 // ============================================================================
 // TRANSCRIBE-MD PATIENT — standalone patient record for TranscribeMD
 // ----------------------------------------------------------------------------
@@ -1737,7 +1897,7 @@ model TranscribeVisit {
   /// regression appears, the row says which keyterms ran.
   /// Null on interpreter-mode visits (model swap; no keyterm
   /// bias). Never includes PHI.
-  keytermsApplied      Json?
+  keytermsApplied Json?
 
   // ── T-M5: dictation + text inputs ──
   /// MinIO object key for a voice dictation recording (inputMode
@@ -1876,6 +2036,22 @@ model TranscribeVisit {
   noteTemplateId      String?
   noteTemplate        NoteTemplate? @relation(fields: [noteTemplateId], references: [id], onDelete: SetNull)
   noteTemplateVersion Int?
+
+  /// Template Twin v1: one current evidence-backed fill manifest per visit.
+  /// The manifest pins the exact compiled template/resolver/renderer versions
+  /// and output digest used for review and signing.
+  templateTwinFill TemplateTwinFillManifest?
+
+  /// One synthetic-only staging admission record at most. The separate table
+  /// keeps the default-off QA marker, request idempotency, and rollout epoch
+  /// out of the large clinical visit row while giving the worker a durable,
+  /// fail-closed relation to inspect.
+  templateTwinSyntheticQaRun        TemplateTwinSyntheticQaRun?
+  templateTwinSyntheticQaAdmission  TemplateTwinSyntheticQaAdmission?
+  /// Current durable automation proof. Absence on a historical visit is a
+  /// fail-closed LEGACY_UNKNOWN state, never implied success.
+  automationManifest                VisitAutomationManifest?
+  visitAutomationProviderExecutions VisitAutomationProviderExecution[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2071,6 +2247,10 @@ model NoteTemplate {
   /// TranscribeVisit.noteTemplateVersion at generation time (Phase 1).
   version Int @default(1)
 
+  /// Physician-authored explanation of what changed in this immutable
+  /// version. Required by Template Twin upload/version-management routes.
+  versionDescription String?
+
   /// Lifecycle: "draft" | "active" | "inactive". TEXT (not enum) per
   /// convention; resolveActiveTemplate() only considers "active" rows.
   /// Phase 2b: a partial-unique index (note_templates_one_active_per_doctor_
@@ -2085,15 +2265,915 @@ model NoteTemplate {
   /// fallback chain terminates here.
   isSystemDefault Boolean @default(false)
 
+  /// Stable lineage shared by every immutable version. Existing rows are
+  /// backfilled to their own id; new lineages receive a generated id.
+  lineageId       String  @default(cuid())
+  /// Prior NoteTemplate row when this version was forked. Kept as an opaque
+  /// identifier so historical versions remain readable even if a legacy
+  /// non-Twin template is deleted.
+  parentVersionId String?
+  /// "structured" for the existing note-format product; "template_twin_docx"
+  /// for an exact-source DOCX version.
+  templateKind    String  @default("structured")
+
+  templateTwinCompiledVersion TemplateTwinCompiledVersion?
+
+  templateTwinSyntheticQaRuns       TemplateTwinSyntheticQaRun[]
+  templateTwinSyntheticQaAdmissions TemplateTwinSyntheticQaAdmission[]
+
   /// Phase-1 provenance back-reference — visits generated with this template.
   visits TranscribeVisit[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([lineageId, version])
   @@index([doctorId, status])
   @@index([isSystemDefault])
+  @@index([doctorId, templateKind, status])
   @@map("note_templates")
+}
+
+/// Default-off, synthetic-only browser QA admission. This row is never a
+/// substitute for the normal Template Twin fill manifest or signing proof. It
+/// only proves that an authenticated doctor admitted an allowlisted synthetic
+/// run under one exact template version and rollout generation.
+model TemplateTwinSyntheticQaRun {
+  id String @id @default(cuid())
+
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict, map: "template_twin_qa_practice_fkey")
+
+  doctorId String
+  doctor   User   @relation("TemplateTwinSyntheticQaDoctor", fields: [doctorId], references: [id], onDelete: Restrict, map: "template_twin_qa_doctor_fkey")
+
+  visitId String          @unique(map: "template_twin_qa_visit_unique")
+  visit   TranscribeVisit @relation(fields: [visitId], references: [id], onDelete: Cascade, map: "template_twin_qa_visit_fkey")
+
+  noteTemplateId      String
+  noteTemplate        NoteTemplate @relation(fields: [noteTemplateId], references: [id], onDelete: Restrict, map: "template_twin_qa_template_fkey")
+  noteTemplateVersion Int
+
+  /// Durable pre-provider capability. Nullable only for retained rows created
+  /// by the earlier staging prototype; all current application and database
+  /// admission paths reject a run without this one-to-one relation.
+  admissionId        String?                            @unique(map: "template_twin_qa_run_admission_unique")
+  admission          TemplateTwinSyntheticQaAdmission?  @relation(fields: [admissionId], references: [id], onDelete: Restrict, map: "template_twin_qa_run_admission_fkey")
+  automationManifest VisitAutomationManifest?           @relation("VisitAutomationStagingRun")
+  providerExecutions VisitAutomationProviderExecution[]
+
+  /// Versioned, tenant/doctor-scoped hash of the caller's idempotency token.
+  /// The raw browser token is never persisted or logged.
+  requestSha256 String @db.Char(64)
+  /// Canonical hash of template, mode, fixture, and evidence digest. Reusing
+  /// one idempotency token with a different payload is rejected.
+  payloadSha256 String @db.Char(64)
+
+  /// "typed" or "mock_voice". A database CHECK constrains this open-text
+  /// field so adding a future mode requires an explicit reviewed migration.
+  mode           String
+  fixtureVersion String
+
+  pinnedGlobalRolloutGeneration   BigInt
+  pinnedPracticeRolloutGeneration BigInt
+
+  /// Admission/queue state only; clinical processing state remains the visit's
+  /// authoritative TranscribeVisitStatus and the fill manifest remains the
+  /// authoritative Template Twin state.
+  status               String    @default("PENDING_ENQUEUE")
+  attempt              Int       @default(0)
+  enqueuedAt           DateTime? @db.Timestamptz(6)
+  lastRetriedAt        DateTime? @db.Timestamptz(6)
+  /// Per-delivery ownership for BullMQ stalled-job recovery. A replacement
+  /// worker may claim the same attempt only after this lease expires; final
+  /// output and READY claims must match workerClaimId.
+  workerClaimId        String?   @db.VarChar(64)
+  workerClaimedAt      DateTime? @db.Timestamptz(6)
+  workerHeartbeatAt    DateTime? @db.Timestamptz(6)
+  workerLeaseExpiresAt DateTime? @db.Timestamptz(6)
+  /// Counts BullMQ deliveries inside one immutable clinical attempt. A
+  /// transient delivery may hand off at most twice, giving three total
+  /// deliveries without incrementing or replacing the clinical attempt.
+  workerDeliveryCount  Int       @default(0)
+  /// Durable handoff fence. Only PROCESSING -> RETRY_ENQUEUED sets this;
+  /// the next claim consumes it while incrementing workerDeliveryCount.
+  workerRetryReadyAt   DateTime? @db.Timestamptz(6)
+  createdAt            DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([practiceId, doctorId, requestSha256], map: "template_twin_qa_request_unique")
+  @@index([practiceId, createdAt], map: "template_twin_qa_practice_created_idx")
+  @@index([doctorId, status], map: "template_twin_qa_doctor_status_idx")
+  @@index([noteTemplateId, noteTemplateVersion], map: "template_twin_qa_template_version_idx")
+  @@map("template_twin_synthetic_qa_runs")
+}
+
+/// Database-backed capability for synthetic-only Template Twin work. A root
+/// admission is committed before upload inspection or any provider boundary;
+/// each visit receives a separate child admission so a capability cannot be
+/// reused across visits. No document or encounter text is stored here.
+model TemplateTwinSyntheticQaAdmission {
+  id String @id @default(cuid())
+
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict, map: "template_twin_qa_admission_practice_fkey")
+
+  actorId String
+  actor   User   @relation("TemplateTwinSyntheticQaAdmissionActor", fields: [actorId], references: [id], onDelete: Restrict, map: "template_twin_qa_admission_actor_fkey")
+
+  parentAdmissionId String?
+  parentAdmission   TemplateTwinSyntheticQaAdmission?  @relation("TemplateTwinSyntheticQaAdmissionParent", fields: [parentAdmissionId], references: [id], onDelete: Restrict, map: "template_twin_qa_admission_parent_fkey")
+  childAdmissions   TemplateTwinSyntheticQaAdmission[] @relation("TemplateTwinSyntheticQaAdmissionParent")
+
+  sourceSha256    String @db.Char(64)
+  sourceSizeBytes Int
+  fixtureVersion  String
+
+  /// `SYNTHETIC_LIFECYCLE`, `SYNTHETIC_TYPED`, or
+  /// `SYNTHETIC_MOCK_VOICE`; constrained by the migration.
+  providerMode String
+  /// `UPLOAD` for the root source/template capability and `VISIT` for a
+  /// one-run child capability.
+  purpose      String
+  /// Monotonic reviewed lifecycle state constrained by a transition trigger.
+  phase        String @default("ADMITTED")
+
+  /// Hash of the browser idempotency token; the raw token is never retained.
+  requestSha256 String  @db.Char(64)
+  /// Hash of the bounded run request/evidence identity for visit admissions.
+  payloadSha256 String? @db.Char(64)
+
+  pinnedGlobalRolloutGeneration   BigInt
+  pinnedPracticeRolloutGeneration BigInt
+
+  sourceArtifactId String?
+  sourceArtifact   TemplateTwinSourceArtifact? @relation(fields: [sourceArtifactId], references: [id], onDelete: Restrict, map: "template_twin_qa_admission_source_fkey")
+
+  noteTemplateId      String?
+  noteTemplate        NoteTemplate? @relation(fields: [noteTemplateId], references: [id], onDelete: Restrict, map: "template_twin_qa_admission_template_fkey")
+  noteTemplateVersion Int?
+
+  certificationId String?
+  certification   TemplateTwinCertification? @relation(fields: [certificationId], references: [id], onDelete: Restrict, map: "template_twin_qa_admission_certification_fkey")
+  mappingSha256   String?                    @db.Char(64)
+
+  visitId            String?                            @unique(map: "template_twin_qa_admission_visit_unique")
+  visit              TranscribeVisit?                   @relation(fields: [visitId], references: [id], onDelete: Restrict, map: "template_twin_qa_admission_visit_fkey")
+  run                TemplateTwinSyntheticQaRun?
+  automationManifest VisitAutomationManifest?           @relation("VisitAutomationStagingAdmission")
+  providerExecutions VisitAutomationProviderExecution[]
+
+  attempt          Int       @default(1)
+  expiresAt        DateTime  @db.Timestamptz(6)
+  sourceVerifiedAt DateTime? @db.Timestamptz(6)
+  templateLinkedAt DateTime? @db.Timestamptz(6)
+  certifiedAt      DateTime? @db.Timestamptz(6)
+  visitLinkedAt    DateTime? @db.Timestamptz(6)
+  failedAt         DateTime? @db.Timestamptz(6)
+  revokedAt        DateTime? @db.Timestamptz(6)
+  consumedAt       DateTime? @db.Timestamptz(6)
+  failureCode      String?   @db.VarChar(80)
+  createdAt        DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@unique([practiceId, actorId, requestSha256], map: "template_twin_qa_admission_request_unique")
+  @@index([practiceId, phase, createdAt], map: "template_twin_qa_admission_practice_phase_idx")
+  @@index([actorId, phase, expiresAt], map: "template_twin_qa_admission_actor_phase_idx")
+  @@index([noteTemplateId, noteTemplateVersion, phase], map: "template_twin_qa_admission_template_phase_idx")
+  @@index([parentAdmissionId, phase], map: "template_twin_qa_admission_parent_phase_idx")
+  @@map("template_twin_synthetic_qa_admissions")
+}
+
+// ============================================================================
+// VISIT AUTOMATION COMPLETION PROOF
+// ----------------------------------------------------------------------------
+// One current manifest per visit records every configured fan-out layer. A
+// missing row is deliberately LEGACY_UNKNOWN: historical visits must be
+// reprocessed before a new sign/export decision can claim automation proof.
+// Clinical/provider content is represented only by hashes; failure metadata is
+// a bounded classification code.
+// ============================================================================
+
+model VisitAutomationManifest {
+  id String @id @default(cuid())
+
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict, map: "visit_automation_manifest_practice_fkey")
+
+  visitId String          @unique(map: "visit_automation_manifest_visit_key")
+  visit   TranscribeVisit @relation(fields: [visitId], references: [id], onDelete: Cascade, map: "visit_automation_manifest_visit_fkey")
+
+  stagingAdmissionId String?                           @unique(map: "visit_automation_manifest_admission_key")
+  stagingAdmission   TemplateTwinSyntheticQaAdmission? @relation("VisitAutomationStagingAdmission", fields: [stagingAdmissionId], references: [id], onDelete: Restrict, map: "visit_automation_manifest_admission_fkey")
+  stagingRunId       String?                           @unique(map: "visit_automation_manifest_run_key")
+  stagingRun         TemplateTwinSyntheticQaRun?       @relation("VisitAutomationStagingRun", fields: [stagingRunId], references: [id], onDelete: Restrict, map: "visit_automation_manifest_run_fkey")
+
+  soapVersion   Int
+  soapSha256    String @db.Char(64)
+  sourceVersion String @db.VarChar(80)
+  sourceSha256  String @db.Char(64)
+
+  policyVersion   String                        @db.VarChar(80)
+  manifestVersion Int                           @default(1)
+  status          VisitAutomationManifestStatus @default(PENDING)
+  attemptCount    Int                           @default(1)
+
+  pinnedGlobalRolloutGeneration   BigInt?
+  pinnedPracticeRolloutGeneration BigInt?
+
+  startedAt   DateTime  @default(now()) @db.Timestamptz(6)
+  completedAt DateTime? @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+
+  layers             VisitAutomationLayer[]
+  providerExecutions VisitAutomationProviderExecution[]
+
+  @@unique([id, practiceId, visitId], map: "visit_automation_manifest_tenant_identity_key")
+  @@index([practiceId, status, updatedAt], map: "visit_automation_manifest_practice_status_idx")
+  @@index([stagingRunId, status], map: "visit_automation_manifest_run_status_idx")
+  @@map("visit_automation_manifests")
+}
+
+model VisitAutomationLayer {
+  id String @id @default(cuid())
+
+  manifestId        String
+  practiceId        String
+  visitId           String
+  manifest          VisitAutomationManifest           @relation(fields: [manifestId, practiceId, visitId], references: [id, practiceId, visitId], onDelete: Cascade, map: "visit_automation_layer_manifest_tenant_fkey")
+  providerExecution VisitAutomationProviderExecution?
+
+  layerId      String                          @db.VarChar(80)
+  layerVersion String                          @db.VarChar(80)
+  requirement  VisitAutomationLayerRequirement
+  status       VisitAutomationLayerStatus      @default(PENDING)
+  attemptCount Int                             @default(0)
+
+  inputSha256    String  @db.Char(64)
+  outputSha256   String? @db.Char(64)
+  failureCode    String? @db.VarChar(80)
+  idempotencyKey String  @unique(map: "visit_automation_layer_idempotency_key") @db.Char(64)
+
+  startedAt   DateTime? @db.Timestamptz(6)
+  completedAt DateTime? @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@unique([manifestId, layerId], map: "visit_automation_layer_manifest_layer_key")
+  @@unique([id, manifestId, practiceId, visitId], map: "visit_automation_layer_tenant_identity_key")
+  @@index([practiceId, visitId, status], map: "visit_automation_layer_tenant_visit_status_idx")
+  @@index([manifestId, requirement, status], map: "visit_automation_layer_completion_idx")
+  @@map("visit_automation_layers")
+}
+
+/// One provider invocation ledger per automation layer. resultPayload is
+/// private clinical state retained only so a failed database projection can
+/// be retried without a second provider call. It must never enter logs, audit
+/// metadata, or browser responses.
+model VisitAutomationProviderExecution {
+  id String @id @default(cuid())
+
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict, map: "visit_automation_provider_execution_practice_fkey")
+
+  visitId String
+  visit   TranscribeVisit @relation(fields: [visitId], references: [id], onDelete: Cascade, map: "visit_automation_provider_execution_visit_fkey")
+
+  manifestId String
+  manifest   VisitAutomationManifest @relation(fields: [manifestId, practiceId, visitId], references: [id, practiceId, visitId], onDelete: Cascade, map: "visit_automation_provider_execution_manifest_fkey")
+
+  automationLayerId String
+  automationLayer   VisitAutomationLayer @relation(fields: [automationLayerId, manifestId, practiceId, visitId], references: [id, manifestId, practiceId, visitId], onDelete: Cascade, map: "visit_automation_provider_execution_layer_fkey")
+
+  stagingAdmissionId String?
+  stagingAdmission   TemplateTwinSyntheticQaAdmission? @relation(fields: [stagingAdmissionId], references: [id], onDelete: Restrict, map: "visit_automation_provider_execution_admission_fkey")
+
+  stagingRunId String?
+  stagingRun   TemplateTwinSyntheticQaRun? @relation(fields: [stagingRunId], references: [id], onDelete: Restrict, map: "visit_automation_provider_execution_run_fkey")
+
+  inputSha256      String                                 @db.Char(64)
+  provider         String                                 @db.VarChar(40)
+  providerMode     String                                 @db.VarChar(40)
+  model            String                                 @db.VarChar(100)
+  operationVersion String                                 @db.VarChar(80)
+  idempotencyKey   String                                 @unique(map: "visit_automation_provider_execution_idempotency_key") @db.Char(64)
+  status           VisitAutomationProviderExecutionStatus @default(RESERVED)
+  invocationCount  Int                                    @default(0)
+
+  /// Opaque, server-only internal concurrency token written atomically when one
+  /// RESERVED execution becomes IN_FLIGHT. It is never exposed to clients,
+  /// logs, screenshots, or audit metadata.
+  claimId   String?   @unique(map: "visit_automation_provider_execution_claim_key") @db.Char(64)
+  claimedAt DateTime? @db.Timestamptz(6)
+
+  resultPayload Json?
+  resultSha256  String? @db.Char(64)
+  resultVersion String? @db.VarChar(80)
+  failureCode   String? @db.VarChar(80)
+
+  reservedAt  DateTime  @default(now()) @db.Timestamptz(6)
+  invokedAt   DateTime? @db.Timestamptz(6)
+  completedAt DateTime? @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@unique([automationLayerId, manifestId, practiceId, visitId], map: "visit_automation_provider_execution_layer_key")
+  @@index([practiceId, visitId, status], map: "visit_automation_provider_execution_tenant_status_idx")
+  @@index([manifestId, status], map: "visit_automation_provider_execution_manifest_status_idx")
+  @@index([stagingRunId, status], map: "visit_automation_provider_execution_run_status_idx")
+  @@map("visit_automation_provider_executions")
+}
+
+// ============================================================================
+// TEMPLATE TWIN — structure-preserving DOCX v1
+// ----------------------------------------------------------------------------
+// The original OOXML package is immutable in object storage. Compilation,
+// mapping, certification, encounter resolution, rendering, and review are
+// separate records so a signed visit can always be reproduced from the exact
+// source/template/compiler/resolver/renderer versions it used.
+// ============================================================================
+
+model TemplateTwinSourceArtifact {
+  id String @id @default(cuid())
+
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict)
+
+  createdById String?
+  createdBy   User?   @relation("TemplateTwinSourceCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  lineageId           String
+  lineageVersion      Int
+  objectKey           String?  @unique
+  /// Immutable provider identity. Nullable only for quarantined or
+  /// pre-safe-alpha rows; every accepted source gate fails closed without it.
+  objectVersionId     String?
+  objectEtag          String?
+  sha256              String   @db.Char(64)
+  mimeType            String
+  sizeBytes           Int
+  validationStatus    String   @default("accepted")
+  rejectionCodes      String[] @default([])
+  /// PHI-safe provenance for the deterministic/model privacy scan and the
+  /// exact practice-scoped static-asset approval set used before storage.
+  privacyScanEvidence Json?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  compiledVersions      TemplateTwinCompiledVersion[]
+  syntheticQaAdmissions TemplateTwinSyntheticQaAdmission[]
+
+  @@index([practiceId, createdAt])
+  @@index([lineageId, lineageVersion])
+  @@index([sha256])
+  @@map("template_twin_source_artifacts")
+}
+
+model TemplateTwinCompiledVersion {
+  id String @id @default(cuid())
+
+  sourceArtifactId String
+  sourceArtifact   TemplateTwinSourceArtifact @relation(fields: [sourceArtifactId], references: [id], onDelete: Restrict)
+
+  noteTemplateId String       @unique
+  noteTemplate   NoteTemplate @relation(fields: [noteTemplateId], references: [id], onDelete: Restrict)
+
+  compilerVersion          String
+  irSchemaVersion          Int
+  compiledAt               DateTime                        @default(now()) @db.Timestamptz(6)
+  compiledDocumentIr       Json
+  unsupportedElements      Json
+  structureSha256          String                          @db.Char(64)
+  staticContentSha256      String                          @db.Char(64)
+  certificationStatus      TemplateTwinCertificationStatus @default(NEEDS_CONFIRMATION)
+  blockingUnsupportedCount Int                             @default(0)
+
+  /// Latest verified synthetic run for this mutable draft. Certification
+  /// copies this evidence into its append-only record and requires the saved
+  /// mapping hash to still match, preventing test-then-edit activation.
+  latestSyntheticTestManifest   Json?
+  latestTestMappingsSha256      String?   @db.Char(64)
+  /// Exact append-only physician field-intent/specification state exercised
+  /// by the latest synthetic run. New contracts fail closed when absent.
+  latestTestFieldIntentsSha256  String?   @db.Char(64)
+  latestTestOutputObjectKey     String?   @unique
+  latestTestOutputVersionId     String?
+  latestTestOutputEtag          String?
+  latestTestOutputSha256        String?   @db.Char(64)
+  latestTestStaticContentSha256 String?   @db.Char(64)
+  latestTestRoundTrip           Json?
+  latestTestVerifiedAt          DateTime? @db.Timestamptz(6)
+
+  fields                  TemplateTwinFieldDefinition[]
+  certification           TemplateTwinCertification?
+  fills                   TemplateTwinFillManifest[]
+  testWaivers             TemplateTwinFieldTestWaiver[]
+  customExampleExecutions TemplateTwinCustomExampleExecution[]
+
+  /// Multiple immutable NoteTemplate versions may reuse the same immutable
+  /// source package when a physician explicitly forks only the semantic
+  /// mapping. noteTemplateId remains the one-to-one version boundary.
+  @@index([sourceArtifactId, compilerVersion])
+  @@index([certificationStatus, compiledAt])
+  @@map("template_twin_compiled_versions")
+}
+
+model TemplateTwinFieldDefinition {
+  id String @id @default(cuid())
+
+  compiledVersionId String
+  compiledVersion   TemplateTwinCompiledVersion @relation(fields: [compiledVersionId], references: [id], onDelete: Cascade)
+
+  fieldId            String
+  displayOrder       Int
+  originalLabel      String
+  fieldKind          String
+  allowedOptions     Json?
+  rendererBinding    Json
+  detectionStatus    TemplateTwinDetectionStatus
+  clinicallyMaterial Boolean                     @default(true)
+  criticality        String                      @default("routine")
+  required           Boolean                     @default(false)
+
+  mapping                 TemplateTwinSemanticMapping?
+  intentDecisions         TemplateTwinFieldIntentDecision[]
+  reviewDecisions         TemplateTwinReviewDecision[]
+  testWaivers             TemplateTwinFieldTestWaiver[]
+  customExampleExecutions TemplateTwinCustomExampleExecution[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([compiledVersionId, fieldId])
+  @@index([compiledVersionId, displayOrder])
+  @@index([compiledVersionId, detectionStatus])
+  @@map("template_twin_field_definitions")
+}
+
+model TemplateTwinSemanticMapping {
+  id String @id @default(cuid())
+
+  fieldDefinitionId String                      @unique
+  fieldDefinition   TemplateTwinFieldDefinition @relation(fields: [fieldDefinitionId], references: [id], onDelete: Cascade)
+
+  clinicalConcept  String?
+  expectedDataType String
+  polarityBehavior String
+  temporality      String?
+  laterality       String?
+  unitPolicy       String?
+  approvedSynonyms Json
+  required         Boolean                     @default(false)
+  blankPolicy      String
+  unknownPolicy    String
+  practiceDefault  String?
+  mappingStatus    TemplateTwinDetectionStatus @default(NEEDS_CONFIRMATION)
+  proposedByModel  String?
+
+  approvedById String?
+  approvedBy   User?     @relation("TemplateTwinMappingApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt   DateTime? @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@index([mappingStatus, updatedAt])
+  @@map("template_twin_semantic_mappings")
+}
+
+/// Append-only physician decision describing whether a deterministically
+/// detected field is static, uses an existing supported concept, or carries a
+/// bounded template-specific scalar concept specification. A field definition
+/// receives exactly one decision. Changing intent requires a newly forked,
+/// uncertified template version with new field definitions; certification
+/// binds that version's canonical decision-set hash.
+model TemplateTwinFieldIntentDecision {
+  id String @id @default(cuid())
+
+  fieldDefinitionId String                      @unique
+  fieldDefinition   TemplateTwinFieldDefinition @relation(fields: [fieldDefinitionId], references: [id], onDelete: Restrict)
+  version           Int
+  intentKind        String
+  supportedConcept  String?
+  customConceptId   String?
+  customSpec        Json?
+  customSpecSha256  String?                     @db.Char(64)
+  reason            String?                     @db.Text
+
+  decidedById String
+  decidedBy   User     @relation("TemplateTwinFieldIntentDecider", fields: [decidedById], references: [id], onDelete: Restrict)
+  decidedAt   DateTime @default(now()) @db.Timestamptz(6)
+
+  customExampleExecutions TemplateTwinCustomExampleExecution[]
+
+  @@index([fieldDefinitionId, decidedAt])
+  @@index([decidedById, decidedAt])
+  @@map("template_twin_field_intent_decisions")
+}
+
+model TemplateTwinCertification {
+  id String @id @default(cuid())
+
+  compiledVersionId String                      @unique
+  compiledVersion   TemplateTwinCompiledVersion @relation(fields: [compiledVersionId], references: [id], onDelete: Restrict)
+
+  certifiedById String
+  certifiedBy   User   @relation("TemplateTwinCertifier", fields: [certifiedById], references: [id], onDelete: Restrict)
+
+  compiledStructureSha256          String   @db.Char(64)
+  approvedMappingsSha256           String   @db.Char(64)
+  /// Canonical hash of the exact append-only field-intent/specification set
+  /// approved by the physician and exercised by the synthetic proof.
+  approvedFieldIntentsSha256       String?  @db.Char(64)
+  /// Immutable proof over every current custom-concept example execution and
+  /// its one-time physician acknowledgement. Required when custom fields exist.
+  approvedCustomExampleProofSha256 String?  @db.Char(64)
+  /// Canonical hash of the exact accepted source privacy/media scan evidence.
+  /// Nullable only for pre-safe-alpha rows; all current gates fail closed.
+  sourcePrivacyScanEvidenceSha256  String?  @db.Char(64)
+  syntheticTestManifest            Json
+  testOutputObjectKey              String   @unique
+  /// Nullable only for pre-safe-alpha certifications. Certification and
+  /// signing reject rows that are not bound to an immutable provider version.
+  testOutputVersionId              String?
+  testOutputEtag                   String?
+  testOutputSha256                 String   @db.Char(64)
+  certifiedAt                      DateTime @default(now()) @db.Timestamptz(6)
+
+  syntheticQaAdmissions TemplateTwinSyntheticQaAdmission[]
+
+  @@index([certifiedById, certifiedAt])
+  @@map("template_twin_certifications")
+}
+
+/// One immutable result for one exact physician-authored custom-concept
+/// example. Result identity/provenance cannot change; acknowledgement is a
+/// one-way physician action guarded by the database trigger in the migration.
+model TemplateTwinCustomExampleExecution {
+  id      String @id @default(cuid())
+  batchId String
+
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict, map: "template_twin_custom_example_practiceId_fkey")
+
+  compiledVersionId String
+  compiledVersion   TemplateTwinCompiledVersion @relation(fields: [compiledVersionId], references: [id], onDelete: Restrict, map: "template_twin_custom_example_compiledVersionId_fkey")
+
+  fieldDefinitionId String
+  fieldDefinition   TemplateTwinFieldDefinition @relation(fields: [fieldDefinitionId], references: [id], onDelete: Restrict, map: "template_twin_custom_example_fieldDefinitionId_fkey")
+
+  fieldIntentDecisionId String
+  fieldIntentDecision   TemplateTwinFieldIntentDecision @relation(fields: [fieldIntentDecisionId], references: [id], onDelete: Restrict, map: "template_twin_custom_example_fieldIntentDecisionId_fkey")
+
+  fieldId                 String
+  conceptId               String
+  exampleKind             String
+  exampleId               String
+  exampleDefinitionSha256 String @db.Char(64)
+  exampleEvidenceSha256   String @db.Char(64)
+  specificationSha256     String @db.Char(64)
+  specificationSetSha256  String @db.Char(64)
+  mappingsSha256          String @db.Char(64)
+  fieldIntentsSha256      String @db.Char(64)
+  contractVersion         String
+  extractionSchemaSha256  String @db.Char(64)
+  extractorVersion        String
+  extractionSchemaVersion String
+  provider                String
+  providerSha256          String @db.Char(64)
+  model                   String
+  modelSha256             String @db.Char(64)
+
+  resultStatus    String
+  resultValue     Json
+  resultFactCount Int
+  resultSummary   Json
+  resultSha256    String  @db.Char(64)
+  passed          Boolean
+  failureCode     String?
+
+  executedById String
+  executedBy   User     @relation("TemplateTwinCustomExampleExecutor", fields: [executedById], references: [id], onDelete: Restrict, map: "template_twin_custom_example_executedById_fkey")
+  executedAt   DateTime @default(now()) @db.Timestamptz(6)
+
+  acknowledgedById String?
+  acknowledgedBy   User?     @relation("TemplateTwinCustomExampleAcknowledger", fields: [acknowledgedById], references: [id], onDelete: Restrict, map: "template_twin_custom_example_acknowledgedById_fkey")
+  acknowledgedAt   DateTime? @db.Timestamptz(6)
+
+  @@unique([batchId, fieldId, exampleKind, exampleId], map: "template_twin_custom_example_batch_field_kind_id_key")
+  @@index([compiledVersionId, executedAt], map: "template_twin_custom_example_compiled_executed_idx")
+  @@index([fieldIntentDecisionId, executedAt], map: "template_twin_custom_example_intent_executed_idx")
+  @@index([practiceId, executedAt], map: "template_twin_custom_example_practice_executed_idx")
+  @@map("template_twin_custom_example_executions")
+}
+
+model TemplateTwinFillManifest {
+  id String @id @default(cuid())
+
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict)
+
+  visitId String          @unique
+  visit   TranscribeVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+
+  compiledVersionId String
+  compiledVersion   TemplateTwinCompiledVersion @relation(fields: [compiledVersionId], references: [id], onDelete: Restrict)
+
+  noteTemplateId       String
+  noteTemplateVersion  Int
+  compilerVersion      String
+  resolverVersion      String
+  resolverModelVersion String?
+  rendererVersion      String
+  status               TemplateTwinFillStatus @default(RESOLVING)
+
+  fillManifest            Json
+  manifestVersion         Int     @default(1)
+  manifestSha256          String  @db.Char(64)
+  factSetSha256           String  @db.Char(64)
+  /// Exact field-intent/specification set used by this immutable fill.
+  fieldIntentsSha256      String? @db.Char(64)
+  /// Exact physician-reviewed SOAP revision used to resolve this manifest.
+  /// Nullable only for pre-alpha rows; signing fails closed when absent.
+  soapVersion             Int?
+  soapSha256              String? @db.Char(64)
+  validationResult        Json
+  filledCount             Int     @default(0)
+  needsReviewCount        Int     @default(0)
+  notMentionedCount       Int     @default(0)
+  conflictCount           Int     @default(0)
+  criticalUnresolvedCount Int     @default(0)
+
+  outputObjectKey       String? @unique
+  outputVersionId       String?
+  outputEtag            String?
+  outputSha256          String? @db.Char(64)
+  outputMimeType        String?
+  outputSizeBytes       Int?
+  staticContentSha256   String? @db.Char(64)
+  roundTripVerified     Boolean @default(false)
+  roundTripVerification Json?
+
+  /// Persisted rollout epoch that admitted the current output. Nullable only
+  /// for pre-remediation rows, which fail closed until regenerated.
+  pinnedGlobalRolloutGeneration   BigInt?
+  pinnedPracticeRolloutGeneration BigInt?
+  /// Exact rollout epoch revalidated at the atomic SIGNED transition.
+  signedGlobalRolloutGeneration   BigInt?
+  signedPracticeRolloutGeneration BigInt?
+
+  /// Whole-document physician acknowledgement. The three provenance fields
+  /// are set together only after the current manifest has been reviewed and
+  /// are cleared whenever regeneration or a field correction changes it.
+  reviewedAt              DateTime? @db.Timestamptz(6)
+  reviewedById            String?
+  reviewedBy              User?     @relation("TemplateTwinManifestReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
+  reviewedManifestVersion Int?
+  reviewedManifestSha256  String?   @db.Char(64)
+  signedDecisionAt        DateTime? @db.Timestamptz(6)
+  createdAt               DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt               DateTime  @updatedAt @db.Timestamptz(6)
+
+  reviewDecisions TemplateTwinReviewDecision[]
+
+  @@index([practiceId, status, updatedAt])
+  @@index([compiledVersionId, status])
+  @@index([status, criticalUnresolvedCount])
+  @@index([reviewedById, reviewedAt])
+  @@map("template_twin_fill_manifests")
+}
+
+model TemplateTwinReviewDecision {
+  id String @id @default(cuid())
+
+  fillManifestId String
+  fillManifest   TemplateTwinFillManifest @relation(fields: [fillManifestId], references: [id], onDelete: Cascade)
+
+  fieldId                 String
+  fieldDefinitionId       String
+  fieldDefinition         TemplateTwinFieldDefinition  @relation(fields: [fieldDefinitionId], references: [id], onDelete: Restrict)
+  resolutionStatus        TemplateTwinResolutionStatus
+  decisionKind            String
+  previousValue           Json?
+  correctedValue          Json?
+  sourceFactIds           Json
+  reasonCode              String?
+  createMappingRule       Boolean                      @default(false)
+  expectedManifestVersion Int
+
+  reviewerId String?
+  reviewer   User?    @relation("TemplateTwinReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([fillManifestId, fieldId, createdAt])
+  @@index([fieldDefinitionId, createdAt])
+  @@index([reviewerId, createdAt])
+  @@map("template_twin_review_decisions")
+}
+
+/// Explicit physician waiver for an optional field that was not exercised by
+/// the current synthetic certification manifest. Required/material fields can
+/// never use this table as a substitute for test evidence.
+model TemplateTwinFieldTestWaiver {
+  id String @id @default(cuid())
+
+  compiledVersionId String
+  compiledVersion   TemplateTwinCompiledVersion @relation(fields: [compiledVersionId], references: [id], onDelete: Restrict)
+
+  fieldDefinitionId String
+  fieldDefinition   TemplateTwinFieldDefinition @relation(fields: [fieldDefinitionId], references: [id], onDelete: Restrict)
+  fieldId           String
+  mappingsSha256    String                      @db.Char(64)
+
+  waivedById String
+  waivedBy   User     @relation("TemplateTwinWaiverPhysician", fields: [waivedById], references: [id], onDelete: Restrict)
+  reason     String   @db.Text
+  waivedAt   DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([compiledVersionId, fieldId, mappingsSha256])
+  @@index([fieldDefinitionId, waivedAt])
+  @@index([waivedById, waivedAt])
+  @@map("template_twin_field_test_waivers")
+}
+
+/// Immutable inspection identity for a reusable blank practice image. Image
+/// bytes are never stored in PostgreSQL; future source uploads are authorized
+/// only by the exact tenant-scoped digest and latest append-only decision.
+model TemplateTwinStaticAsset {
+  id String @id @default(cuid())
+
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict)
+
+  sha256                   String @db.Char(64)
+  mimeType                 String
+  width                    Int
+  height                   Int
+  sizeBytes                Int
+  scannerVersion           String
+  ocrEngineVersion         String
+  ocrTextSha256            String @db.Char(64)
+  metadataEvidenceSha256   String @db.Char(64)
+  privacyEvidenceSha256    String @db.Char(64)
+  privacyScanProvider      String
+  privacyScanModel         String
+  inspectionEvidenceSha256 String @db.Char(64)
+  inspectionEvidence       Json
+
+  createdById String
+  createdBy   User   @relation("TemplateTwinStaticAssetCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  currentStatus          String   @default("PENDING_REVIEW")
+  currentDecisionVersion Int      @default(0)
+  createdAt              DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt              DateTime @updatedAt @db.Timestamptz(6)
+
+  decisions TemplateTwinStaticAssetDecision[]
+
+  @@unique([practiceId, sha256])
+  @@index([practiceId, currentStatus, updatedAt])
+  @@map("template_twin_static_assets")
+}
+
+/// Append-only approval, rejection, or revocation decision. Mutations and
+/// deletions are rejected by database triggers installed with the migration.
+model TemplateTwinStaticAssetDecision {
+  id String @id @default(cuid())
+
+  assetId                    String
+  asset                      TemplateTwinStaticAsset               @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  version                    Int
+  decision                   String
+  reason                     String                                @db.Text
+  attestedReusableBlankAsset Boolean                               @default(false)
+  inspectionEvidenceSha256   String                                @db.Char(64)
+  reviewReceiptId            String?                               @unique
+  reviewReceipt              TemplateTwinStaticAssetReviewReceipt? @relation(fields: [reviewReceiptId], references: [id], onDelete: Restrict)
+  auditEventKey              String                                @unique(map: "template_twin_static_asset_decisions_auditEventKey_key")
+  auditEvent                 TemplateTwinAuditOutbox               @relation("TemplateTwinStaticAssetDecisionAudit", fields: [auditEventKey], references: [eventKey], onDelete: Restrict, onUpdate: Cascade, map: "template_twin_static_asset_decisions_auditEventKey_fkey")
+
+  decidedById String
+  decidedBy   User     @relation("TemplateTwinStaticAssetDecider", fields: [decidedById], references: [id], onDelete: Restrict)
+  decidedAt   DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([assetId, version])
+  @@index([assetId, decidedAt])
+  @@index([decidedById, decidedAt])
+  @@map("template_twin_static_asset_decisions")
+}
+
+/// Short-lived, single-use proof that an authorized practice administrator was
+/// shown the exact byte identity after bounded OCR/privacy inspection. Only a
+/// SHA-256 of the 256-bit bearer secret is stored. Approval consumes the row in
+/// the same transaction as the append-only decision and audit outbox event.
+model TemplateTwinStaticAssetReviewReceipt {
+  id String @id
+
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict)
+
+  reviewedById String
+  reviewedBy   User   @relation("TemplateTwinStaticAssetReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
+
+  tokenSha256               String @unique @db.Char(64)
+  assetSha256               String @db.Char(64)
+  inspectionEvidenceSha256  String @db.Char(64)
+  scannerVersion            String
+  ocrEngineVersion          String
+  privacyEvidenceSha256     String @db.Char(64)
+  globalRolloutGeneration   BigInt
+  practiceRolloutGeneration BigInt
+
+  createdAt  DateTime  @default(now()) @db.Timestamptz(6)
+  expiresAt  DateTime  @db.Timestamptz(6)
+  consumedAt DateTime? @db.Timestamptz(6)
+
+  approvalDecision TemplateTwinStaticAssetDecision?
+
+  @@index([practiceId, reviewedById, expiresAt], map: "tt_static_asset_receipt_practice_reviewer_expiry_idx")
+  @@map("template_twin_static_asset_review_receipts")
+}
+
+/// Durable two-phase ledger around object-store writes. INTENT is persisted
+/// before the PUT; CLAIMED is written only after the owning relational row is
+/// committed. Reconciliation can safely resume every intermediate state.
+model TemplateTwinObjectLedger {
+  id String @id @default(cuid())
+
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict)
+
+  objectKey       String                        @unique
+  /// Set only after the provider confirms a successful immutable write.
+  /// INTENT rows may be null; every later state requires both values.
+  objectVersionId String?
+  objectEtag      String?
+  sha256          String                        @db.Char(64)
+  sizeBytes       Int
+  kind            String
+  state           TemplateTwinObjectLedgerState @default(INTENT)
+
+  claimType      String?
+  claimId        String?
+  attemptCount   Int       @default(0)
+  nextAttemptAt  DateTime? @db.Timestamptz(6)
+  retentionUntil DateTime? @db.Timestamptz(6)
+  lastErrorCode  String?
+  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@index([practiceId, state, nextAttemptAt])
+  @@index([claimType, claimId])
+  @@map("template_twin_object_ledgers")
+}
+
+/// Transactional outbox for clinical/audit-critical Template Twin events.
+/// Request paths enqueue in the same database transaction as the state change;
+/// delivery into the immutable audit log can be retried without losing intent.
+model TemplateTwinAuditOutbox {
+  id String @id @default(cuid())
+
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict)
+
+  actorId String?
+  actor   User?   @relation("TemplateTwinOutboxActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  actorEmailSnapshot String?
+  ipAddress          String? @db.Inet
+  userAgent          String?
+
+  eventKey   String                        @unique
+  action     AuditAction
+  targetId   String?
+  targetType String?
+  metadata   Json?
+  status     TemplateTwinAuditOutboxStatus @default(PENDING)
+
+  attemptCount  Int       @default(0)
+  availableAt   DateTime  @default(now()) @db.Timestamptz(6)
+  deliveredAt   DateTime? @db.Timestamptz(6)
+  lastErrorCode String?
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
+
+  staticAssetDecision TemplateTwinStaticAssetDecision? @relation("TemplateTwinStaticAssetDecisionAudit")
+
+  @@index([status, availableAt])
+  @@index([practiceId, createdAt])
+  @@map("template_twin_audit_outbox")
+}
+
+/// Singleton database-backed global rollout gate. The environment kill switch
+/// remains an additional process boundary; this row supplies the monotonic,
+/// transactionally lockable generation used for linearizable revocation.
+model TemplateTwinRolloutControl {
+  id         String   @id
+  enabled    Boolean  @default(false)
+  generation BigInt   @default(1)
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("template_twin_rollout_controls")
 }
 
 // ============================================================================

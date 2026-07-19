@@ -11,24 +11,29 @@
 // so a hard drop while visits exist would fail anyway.
 // ============================================================================
 
-import { z } from 'zod';
-import { NextResponse } from 'next/server';
+import { z } from "zod";
+import { NextResponse } from "next/server";
 
-import prisma from '@meddoc/db';
+import prisma from "@meddoc/db";
 
-import { apiError, withApiHandler } from '@/lib/api-error';
-import { getSession } from '@/lib/auth';
-import { ProblemListSchema } from '@/lib/problem-list';
-import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
-import { logAudit } from '@/lib/audit';
+import { apiError, withApiHandler } from "@/lib/api-error";
+import { getSession } from "@/lib/auth";
+import { ProblemListSchema } from "@/lib/problem-list";
+import { RATE_LIMITS, rateLimitOr429 } from "@/lib/rate-limit";
+import { logAudit } from "@/lib/audit";
+import {
+  isTemplateTwinSyntheticQaPatient,
+  ordinaryClinicalVisitWhere,
+  TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID,
+} from "@/lib/template-twin/synthetic-qa-patient";
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 async function loadPatientForSession(
   id: string,
   practiceId: string,
-  { includeDeleted = false }: { includeDeleted?: boolean } = {}
+  { includeDeleted = false }: { includeDeleted?: boolean } = {},
 ) {
   const patient = await prisma.transcribeMdPatient.findUnique({
     where: { id },
@@ -46,42 +51,48 @@ async function loadPatientForSession(
       updatedAt: true,
     },
   });
-  if (!patient || patient.practiceId !== practiceId) return null;
+  if (
+    !patient ||
+    patient.practiceId !== practiceId ||
+    isTemplateTwinSyntheticQaPatient(patient)
+  ) {
+    return null;
+  }
   if (!includeDeleted && patient.deletedAt !== null) return null;
   return patient;
 }
 
 export const GET = withApiHandler<{ id: string }>(
-  'api:patients:get',
+  "api:patients:get",
   async (_req, { params }) => {
     const session = await getSession();
-    if (!session) return apiError('unauthorized', 401);
+    if (!session) return apiError("unauthorized", 401);
 
     const blocked = rateLimitOr429(RATE_LIMITS.PATIENT_READ, session.user.id);
     if (blocked) return blocked;
 
     const { id } = await params;
     const patient = await loadPatientForSession(id, session.user.practiceId);
-    if (!patient) return apiError('not found', 404);
+    if (!patient) return apiError("not found", 404);
 
     // Attach visit count + last-visit-at so the detail page doesn't
     // need a second round-trip.
     const aggregate = await prisma.transcribeVisit.aggregate({
-      where: {
+      where: ordinaryClinicalVisitWhere({
         patientId: patient.id,
         deletedAt: null,
         archivedAt: null,
-      },
+      }),
       _count: { _all: true },
       _max: { createdAt: true },
     });
 
     // Round 3 PR-C — §164.312(b) PHI-read audit (A05-P0-004).
     void logAudit({
-      action: 'VIEWED_PATIENT_FILE',
+      action: "VIEWED_PATIENT_FILE",
       targetId: patient.id,
-      targetType: 'TranscribeMdPatient',
-      metadata: { source: 'api:GET /api/patients/[id]' },
+      targetType: "TranscribeMdPatient",
+      metadata: { source: "api:GET /api/patients/[id]" },
     });
 
     return NextResponse.json({
@@ -99,7 +110,7 @@ export const GET = withApiHandler<{ id: string }>(
         lastVisitAt: aggregate._max.createdAt,
       },
     });
-  }
+  },
 );
 
 const UpdateBodySchema = z.object({
@@ -112,7 +123,7 @@ const UpdateBodySchema = z.object({
         .string()
         .min(1)
         .refine((s) => !Number.isNaN(Date.parse(s)), {
-          message: 'Invalid date',
+          message: "Invalid date",
         }),
       z.null(),
     ])
@@ -147,32 +158,37 @@ const UpdateBodySchema = z.object({
 });
 
 export const PATCH = withApiHandler<{ id: string }>(
-  'api:patients:update',
+  "api:patients:update",
   async (req, { params }) => {
     const session = await getSession();
-    if (!session) return apiError('unauthorized', 401);
+    if (!session) return apiError("unauthorized", 401);
 
     const blocked = rateLimitOr429(RATE_LIMITS.PATIENT_OPS, session.user.id);
     if (blocked) return blocked;
 
     const { id } = await params;
     const existing = await loadPatientForSession(id, session.user.practiceId);
-    if (!existing) return apiError('not found', 404);
+    if (!existing) return apiError("not found", 404);
 
     let body: unknown;
     try {
       body = await req.json();
     } catch {
-      return apiError('invalid JSON body', 400);
+      return apiError("invalid JSON body", 400);
     }
     const parsed = UpdateBodySchema.safeParse(body);
     if (!parsed.success) {
       const first = parsed.error.issues[0];
-      const field = first?.path.join('.') || '_form';
+      const field = first?.path.join(".") || "_form";
       return NextResponse.json(
-        { error: first?.message || 'invalid payload', field },
-        { status: 400 }
+        { error: first?.message || "invalid payload", field },
+        { status: 400 },
       );
+    }
+    if (
+      parsed.data.externalId === TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID
+    ) {
+      return apiError("invalid external ID", 400);
     }
 
     // Build the update payload from only the fields the caller sent.
@@ -206,8 +222,8 @@ export const PATCH = withApiHandler<{ id: string }>(
 
     if (Object.keys(data).length === 0) {
       return NextResponse.json(
-        { error: 'No fields to update.', field: '_form' },
-        { status: 400 }
+        { error: "No fields to update.", field: "_form" },
+        { status: 400 },
       );
     }
 
@@ -227,8 +243,8 @@ export const PATCH = withApiHandler<{ id: string }>(
     });
 
     void logAudit({
-      action: 'TM_PATIENT_UPDATED',
-      targetType: 'TranscribeMdPatient',
+      action: "TM_PATIENT_UPDATED",
+      targetType: "TranscribeMdPatient",
       targetId: updated.id,
       metadata: {
         changedFields: Object.keys(data),
@@ -236,14 +252,14 @@ export const PATCH = withApiHandler<{ id: string }>(
     });
 
     return NextResponse.json({ patient: updated });
-  }
+  },
 );
 
 export const DELETE = withApiHandler<{ id: string }>(
-  'api:patients:delete',
+  "api:patients:delete",
   async (_req, { params }) => {
     const session = await getSession();
-    if (!session) return apiError('unauthorized', 401);
+    if (!session) return apiError("unauthorized", 401);
 
     const blocked = rateLimitOr429(RATE_LIMITS.PATIENT_OPS, session.user.id);
     if (blocked) return blocked;
@@ -254,7 +270,7 @@ export const DELETE = withApiHandler<{ id: string }>(
     const existing = await loadPatientForSession(id, session.user.practiceId, {
       includeDeleted: true,
     });
-    if (!existing) return apiError('not found', 404);
+    if (!existing) return apiError("not found", 404);
 
     if (existing.deletedAt !== null) {
       return NextResponse.json({ ok: true, alreadyDeleted: true });
@@ -266,12 +282,12 @@ export const DELETE = withApiHandler<{ id: string }>(
     });
 
     void logAudit({
-      action: 'TM_PATIENT_DELETED',
-      targetType: 'TranscribeMdPatient',
+      action: "TM_PATIENT_DELETED",
+      targetType: "TranscribeMdPatient",
       targetId: existing.id,
-      metadata: { mode: 'soft' },
+      metadata: { mode: "soft" },
     });
 
     return NextResponse.json({ ok: true });
-  }
+  },
 );

@@ -9,9 +9,16 @@
 import type {
   NoteTemplateSection,
   ParsedStyleProfile,
-} from '@/lib/note-template-parse/note-template-schema';
+} from "@/lib/note-template-parse/note-template-schema";
 
-export type TemplateStatus = 'draft' | 'active' | 'inactive';
+export type TemplateStatus = "draft" | "active" | "inactive" | "retired";
+export type TemplateKind = "structured" | "template_twin_docx";
+export type TemplateTwinCertificationStatus =
+  | "recognized"
+  | "needs_confirmation"
+  | "unsupported"
+  | "certified"
+  | "quarantined";
 
 /** The shape the review editor loads (a parse result OR an existing row). */
 export interface TemplateReviewModel {
@@ -31,6 +38,10 @@ export interface TemplateListItem {
   version: number;
   sectionCount: number;
   defaultCount: number;
+  templateKind: TemplateKind;
+  twinCertificationStatus: TemplateTwinCertificationStatus | null;
+  twinFieldCount: number;
+  twinBlockingUnsupportedCount: number;
   updatedAt: Date;
 }
 
@@ -44,5 +55,9 @@ export interface ClientTemplateListItem {
   version: number;
   sectionCount: number;
   defaultCount: number;
+  templateKind: TemplateKind;
+  twinCertificationStatus: TemplateTwinCertificationStatus | null;
+  twinFieldCount: number;
+  twinBlockingUnsupportedCount: number;
   updatedAtIso: string;
 }

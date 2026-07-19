@@ -23,9 +23,11 @@
 // ============================================================================
 
 import { execSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 
 import { assertNonProdDbName } from '@meddoc/db/guard';
 
+import { canonicalSoapSha256 } from '../../../src/lib/template-twin/soap-binding';
 import { QA_COMPOSE as COMPOSE, QA_DB as SEED_DB } from './qa-compose';
 
 // Safe-by-default: the compose path targets the ISOLATED meddoc-qa stack +
@@ -35,9 +37,9 @@ import { QA_COMPOSE as COMPOSE, QA_DB as SEED_DB } from './qa-compose';
 // the fail-closed db-guard live in ./qa-compose.
 
 /** PSQL_BIN, when set by CI, is a full prefix like
- *  `psql "postgresql://meddoc:meddoc@localhost:5432/meddoc"`. The a11y workflow
+ *  `psql "postgresql://meddoc:meddoc@localhost:5432/meddoc_qa_test"`. The a11y workflow
  *  sets this so the spec doesn't need a docker daemon — a trusted CI channel
- *  pointed at that workflow's own throwaway Postgres sidecar (named `meddoc`),
+ *  pointed at that workflow's own marker-named throwaway Postgres sidecar,
  *  so it bypasses the compose path + the qa-stack db-guard. */
 function psql(sql: string): string {
   const psqlBin = process.env.PSQL_BIN;
@@ -58,6 +60,112 @@ export interface SeededVisitIds {
   READY: string;
   SIGNED: string;
   PROCESSING: string;
+}
+
+const AUTOMATION_LAYERS = [
+  ['icd_coding', 'l7a-v1'],
+  ['cpt_coding', 'l7b-v1'],
+  ['rx_drafting', 'l7c-v1'],
+  ['referrals', 'l7d-v1'],
+  ['patient_summary', 'l7e-v1'],
+  ['em_mdm_prewarm', 'em-mdm-prewarm-v1'],
+] as const;
+
+function sha256(value: string): string {
+  return createHash('sha256').update(value, 'utf8').digest('hex');
+}
+
+function sqlLiteral(value: string | null): string {
+  return value === null ? 'NULL' : `'${value.replaceAll("'", "''")}'`;
+}
+
+/**
+ * Seed a terminal visit through the production database invariant:
+ * AUTOMATING first, then an exact six-layer proof and its audit outbox event,
+ * then the terminal transition. Provider automation is deliberately absent
+ * from this synthetic accessibility fixture, so every layer is explicit N/A.
+ */
+function seedTerminalVisit(input: {
+  visitId: string;
+  userId: string;
+  practiceId: string;
+  patientId: string;
+  transcript: string;
+  soapFinal: string;
+  finalStatus: 'READY' | 'SIGNED';
+}): void {
+  const manifestId = `${input.visitId}-automation`;
+  const soapSha256 = canonicalSoapSha256(input.soapFinal);
+  const sourceSha256 = sha256(`synthetic-a11y-source:${input.visitId}`);
+  const layerRows = AUTOMATION_LAYERS.map(([layerId, layerVersion], index) => {
+    const inputSha256 = sha256(`${manifestId}:${layerId}:input`);
+    const idempotencyKey = sha256(`${manifestId}:${layerId}:idempotency`);
+    return `(
+      '${manifestId}-layer-${index + 1}', '${manifestId}', '${input.practiceId}',
+      '${input.visitId}', '${layerId}', '${layerVersion}', 'NOT_APPLICABLE',
+      'NOT_APPLICABLE', 0, '${inputSha256}', NULL, NULL,
+      '${idempotencyKey}', NULL, NOW(), NOW(), NOW()
+    )`;
+  }).join(',');
+  const signedSoap =
+    input.finalStatus === 'SIGNED' ? sqlLiteral(input.soapFinal) : 'NULL';
+  const signedAt = input.finalStatus === 'SIGNED' ? 'NOW()' : 'NULL';
+  const eventKey = `synthetic-a11y-automation:${sha256(input.visitId)}`;
+
+  psql(`
+    BEGIN;
+
+    INSERT INTO transcribe_visits
+      (id, "userId", "patientId", "patientName", specialty, "inputMode", status,
+       "transcriptText", "soapFinal", "signedSoap", "signedAt",
+       "createdAt", "updatedAt")
+    VALUES
+      ('${input.visitId}', '${input.userId}', '${input.patientId}',
+       'A11y Test Patient', 'Family Medicine', 'audio_upload', 'AUTOMATING',
+       ${sqlLiteral(input.transcript)}, ${sqlLiteral(input.soapFinal)},
+       ${signedSoap}, ${signedAt}, NOW(), NOW())
+    ON CONFLICT (id) DO NOTHING;
+
+    INSERT INTO visit_automation_manifests
+      (id, "practiceId", "visitId", "soapVersion", "soapSha256",
+       "sourceVersion", "sourceSha256", "policyVersion", "manifestVersion",
+       status, "attemptCount", "startedAt", "createdAt", "updatedAt")
+    VALUES
+      ('${manifestId}', '${input.practiceId}', '${input.visitId}', 1,
+       '${soapSha256}', 'soap-final-v1', '${sourceSha256}',
+       'visit-automation-policy-v1', 1, 'RUNNING', 1, NOW(), NOW(), NOW())
+    ON CONFLICT ("visitId") DO NOTHING;
+
+    INSERT INTO visit_automation_layers
+      (id, "manifestId", "practiceId", "visitId", "layerId", "layerVersion",
+       requirement, status, "attemptCount", "inputSha256", "outputSha256",
+       "failureCode", "idempotencyKey", "startedAt", "completedAt",
+       "createdAt", "updatedAt")
+    VALUES ${layerRows}
+    ON CONFLICT ("manifestId", "layerId") DO NOTHING;
+
+    UPDATE visit_automation_manifests
+    SET status = 'COMPLETE', "completedAt" = NOW(), "updatedAt" = NOW()
+    WHERE id = '${manifestId}' AND status = 'RUNNING';
+
+    INSERT INTO template_twin_audit_outbox
+      (id, "practiceId", "actorId", "eventKey", action, "targetId",
+       "targetType", metadata, status, "attemptCount", "availableAt",
+       "createdAt", "updatedAt")
+    VALUES
+      ('${manifestId}-audit', '${input.practiceId}', '${input.userId}',
+       '${eventKey}', 'VISIT_AUTOMATION_COMPLETED', '${input.visitId}',
+       'TranscribeVisit',
+       '{"proofVersion":"visit-automation-proof-v1","syntheticFixture":true}'::jsonb,
+       'PENDING', 0, NOW(), NOW(), NOW())
+    ON CONFLICT ("eventKey") DO NOTHING;
+
+    UPDATE transcribe_visits
+    SET status = '${input.finalStatus}', "updatedAt" = NOW()
+    WHERE id = '${input.visitId}' AND status = 'AUTOMATING';
+
+    COMMIT;
+  `);
 }
 
 /** Look up the seeded user (by email), seed a Patient + three Visits in
@@ -109,34 +217,29 @@ export function seedVisitStates(email: string): SeededVisitIds | null {
 
   // READY visit — has soapFinal but isn't yet signed. Visit-detail view
   // renders the editable SOAP, "Sign & Send" CTA, and the export bar.
-  psql(`
-    INSERT INTO transcribe_visits
-      (id, "userId", "patientId", "patientName", specialty, "inputMode", status,
-       "transcriptText", "soapFinal", "createdAt", "updatedAt")
-    VALUES
-      ('${ids.READY}', '${userId}', '${patientId}', 'A11y Test Patient',
-       'Family Medicine', 'audio_upload', 'READY',
-       'Synthetic transcript for accessibility QA.',
-       E'## Subjective\\nPatient seen for routine follow-up.\\n\\n## Objective\\nVitals stable.\\n\\n## Assessment\\nWell.\\n\\n## Plan\\nReturn in 6 months.',
-       NOW(), NOW())
-    ON CONFLICT (id) DO NOTHING;
-  `);
+  seedTerminalVisit({
+    visitId: ids.READY,
+    userId,
+    practiceId,
+    patientId,
+    transcript: 'Synthetic transcript for accessibility QA.',
+    soapFinal:
+      '## Subjective\nPatient seen for routine follow-up.\n\n## Objective\nVitals stable.\n\n## Assessment\nWell.\n\n## Plan\nReturn in 6 months.',
+    finalStatus: 'READY',
+  });
 
   // SIGNED visit — soapFinal + signedSoap + signedAt. Visit-detail view
   // renders the read-only signed SOAP and the "delivered" status banner.
-  psql(`
-    INSERT INTO transcribe_visits
-      (id, "userId", "patientId", "patientName", specialty, "inputMode", status,
-       "transcriptText", "soapFinal", "signedSoap", "signedAt", "createdAt", "updatedAt")
-    VALUES
-      ('${ids.SIGNED}', '${userId}', '${patientId}', 'A11y Test Patient',
-       'Family Medicine', 'audio_upload', 'READY',
-       'Synthetic transcript (signed).',
-       E'## Subjective\\nPost-op week 2 follow-up.\\n\\n## Plan\\nDischarge.',
-       E'## Subjective\\nPost-op week 2 follow-up.\\n\\n## Plan\\nDischarge.',
-       NOW(), NOW(), NOW())
-    ON CONFLICT (id) DO NOTHING;
-  `);
+  seedTerminalVisit({
+    visitId: ids.SIGNED,
+    userId,
+    practiceId,
+    patientId,
+    transcript: 'Synthetic transcript for signed accessibility QA.',
+    soapFinal:
+      '## Subjective\nSynthetic follow-up.\n\n## Plan\nSynthetic discharge.',
+    finalStatus: 'SIGNED',
+  });
 
   // PROCESSING visit — status mid-pipeline (TRANSCRIBING). Visit-detail
   // view renders the progress UI / pending state with no SOAP yet.

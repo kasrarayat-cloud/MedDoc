@@ -7,28 +7,28 @@
 // with needsReview=true so the clinician sees the gap.
 // ============================================================================
 
-import { modelClient } from '@meddoc/ai';
-import prisma from '@meddoc/db';
-import { logAudit } from '@/lib/audit';
-import { applyAdditiveReviewState } from '@/worker/finalize-review-state';
+import { modelClient } from "@meddoc/ai";
+import { updateTemplateTwinSyntheticQaClaimBoundVisit } from "@/worker/staging-qa-mutation-fence";
+import { logWorkerAudit } from "@/worker/worker-audit";
+import { applyAdditiveReviewState } from "@/worker/finalize-review-state";
 import {
   findNovelContentTerms,
   runPolishFidelityGate,
-} from './06b-polish-fidelity-gate';
+} from "./06b-polish-fidelity-gate";
 import {
   classifyCritique,
   type CritiqueReport,
   type CritiqueIssue,
-} from './05-self-critique';
-import { validateSoapStructure } from './soap-structure-validator';
+} from "./05-self-critique";
+import { validateSoapStructure } from "./soap-structure-validator";
 import {
   requiredSectionLabels,
   type ResolvedNoteTemplate,
-} from '../note-templates/build-soap-prompt';
-import { SYSTEM_DEFAULT_NOTE_TEMPLATE } from '../note-templates/system-default-template';
+} from "../note-templates/build-soap-prompt";
+import { SYSTEM_DEFAULT_NOTE_TEMPLATE } from "../note-templates/system-default-template";
 
 // TRANSCRIBE_MD_CLINICAL_MODEL — eval override (feat/fable5-eval); unset → default unchanged.
-const MODEL = process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-sonnet-4-6';
+const MODEL = process.env.TRANSCRIBE_MD_CLINICAL_MODEL || "claude-sonnet-4-6";
 
 export interface Layer6Input {
   visitId: string;
@@ -76,26 +76,76 @@ export interface Layer6Output {
 // novel-term fallback misses them. Caution-first: a wrongly deferred fix
 // costs one cosmetic edit; a checkbox flip that slips through is an
 // unanchored clinical claim the deterministic L6b screen cannot see.
-const ADD_VERB_RE = /\b(add|adds|adding|insert|include|includes|populate|append|restore|introduce|state|document|check|checks|checked|mark|marks|marked|tick|ticks|fill|fills|filled|select|selects)\b/i;
-const REMOVAL_VERB_RE = /\b(remove|removes|delete|deletes|strike|drop|omit the|take out)\b/i;
+const ADD_VERB_RE =
+  /\b(add|adds|adding|insert|include|includes|populate|append|restore|introduce|state|document|check|checks|checked|mark|marks|marked|tick|ticks|fill|fills|filled|select|selects)\b/i;
+const REMOVAL_VERB_RE =
+  /\b(remove|removes|delete|deletes|strike|drop|omit the|take out)\b/i;
 // Instruction/editorial vocabulary that is "novel vs the draft" for nearly
 // any fix text but carries no clinical payload — excluded before counting.
 const EDITORIAL_TERMS = new Set([
-  'apply', 'applied', 'described', 'above', 'below', 'fix', 'fixes', 'issue',
-  'issues', 'auditor', 'consolidate', 'consolidated', 'reword', 'reworded',
-  'rephrase', 'rephrased', 'merge', 'merged', 'reorder', 'reordered',
-  'shorten', 'clarify', 'clarified', 'combine', 'combined', 'tighten',
-  'deduplicate', 'duplicate', 'duplicated', 'redundant', 'repeated',
-  'overlapping', 'formatting', 'format', 'wording', 'phrasing', 'sentence',
-  'sentences', 'paragraph', 'section', 'sections', 'heading', 'headings',
-  'bullet', 'bullets', 'line', 'lines', 'item', 'items', 'move', 'moved',
-  'single', 'instead', 'statement', 'statements', 'draft', 'note',
+  "apply",
+  "applied",
+  "described",
+  "above",
+  "below",
+  "fix",
+  "fixes",
+  "issue",
+  "issues",
+  "auditor",
+  "consolidate",
+  "consolidated",
+  "reword",
+  "reworded",
+  "rephrase",
+  "rephrased",
+  "merge",
+  "merged",
+  "reorder",
+  "reordered",
+  "shorten",
+  "clarify",
+  "clarified",
+  "combine",
+  "combined",
+  "tighten",
+  "deduplicate",
+  "duplicate",
+  "duplicated",
+  "redundant",
+  "repeated",
+  "overlapping",
+  "formatting",
+  "format",
+  "wording",
+  "phrasing",
+  "sentence",
+  "sentences",
+  "paragraph",
+  "section",
+  "sections",
+  "heading",
+  "headings",
+  "bullet",
+  "bullets",
+  "line",
+  "lines",
+  "item",
+  "items",
+  "move",
+  "moved",
+  "single",
+  "instead",
+  "statement",
+  "statements",
+  "draft",
+  "note",
 ]);
 
 /** True when applying this fix would require content the draft lacks —
  *  the class the L6b gate rejects unconditionally. */
 export function isAdditiveFix(draft: string, issue: CritiqueIssue): boolean {
-  const fix = issue.suggested_fix ?? '';
+  const fix = issue.suggested_fix ?? "";
   // Deletion fixes are gate-passable (deletions are explicitly allowed) and
   // safety-relevant (they REMOVE unsupported content) — never defer them,
   // even when the sentence also contains an add-verb ("remove X and add a
@@ -103,14 +153,18 @@ export function isAdditiveFix(draft: string, issue: CritiqueIssue): boolean {
   if (REMOVAL_VERB_RE.test(fix)) return false;
   if (ADD_VERB_RE.test(fix)) return true;
   const novel = findNovelContentTerms([draft], fix).filter(
-    (t) => !EDITORIAL_TERMS.has(t)
+    (t) => !EDITORIAL_TERMS.has(t),
   );
   return novel.length >= 3;
 }
 
-export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output> {
+export async function runLayer6Polish(
+  input: Layer6Input,
+): Promise<Layer6Output> {
   const { fixable: fixableAll, unfixable } = classifyCritique(input.critique);
-  const deferredAdditive = fixableAll.filter((i) => isAdditiveFix(input.soapDraft, i));
+  const deferredAdditive = fixableAll.filter((i) =>
+    isAdditiveFix(input.soapDraft, i),
+  );
   const fixable = fixableAll.filter((i) => !isAdditiveFix(input.soapDraft, i));
   // Phase 1: validate the polished note against the resolved template's
   // required sections. System default → the 4 SOAP headers → unchanged.
@@ -141,55 +195,55 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
     // fixes — these rules override that, and the L6b gate below catches
     // whatever slips through anyway.
     const system = [
-      'IMMUTABLE RULES — these override every other instruction below:',
-      '1. You are a copy editor, not a clinician author. You may reword,',
-      '   reorganize, and reformat ONLY content already present in the',
-      '   draft.',
-      '2. Do NOT introduce new clinical facts. Do NOT add, infer, or',
-      '   expand clinical content of any kind — no new findings, symptoms,',
-      '   exam results, diagnoses, differentials, contraindication or risk',
-      '   reasoning, referrals, screenings or red-flag statements,',
-      '   follow-up instructions, patient education, medications, or doses',
-      '   — even if a suggested fix appears to call for them.',
-      '3. If a fix requires information that is not in the draft, leave',
-      '   the flagged area as-is and keep moving.',
-      '4. Never flip a negation or change the clinical meaning of a',
-      '   statement.',
-      '',
-      'You are editing a clinical SOAP note. A separate auditor has',
-      'flagged specific issues; apply ONLY those fixes and return the',
-      'complete revised SOAP note in the same markdown structure as the',
-      'draft.',
-      '',
-      'Rules:',
-      '- Preserve all clinical content that the auditor did not flag.',
+      "IMMUTABLE RULES — these override every other instruction below:",
+      "1. You are a copy editor, not a clinician author. You may reword,",
+      "   reorganize, and reformat ONLY content already present in the",
+      "   draft.",
+      "2. Do NOT introduce new clinical facts. Do NOT add, infer, or",
+      "   expand clinical content of any kind — no new findings, symptoms,",
+      "   exam results, diagnoses, differentials, contraindication or risk",
+      "   reasoning, referrals, screenings or red-flag statements,",
+      "   follow-up instructions, patient education, medications, or doses",
+      "   — even if a suggested fix appears to call for them.",
+      "3. If a fix requires information that is not in the draft, leave",
+      "   the flagged area as-is and keep moving.",
+      "4. Never flip a negation or change the clinical meaning of a",
+      "   statement.",
+      "",
+      "You are editing a clinical SOAP note. A separate auditor has",
+      "flagged specific issues; apply ONLY those fixes and return the",
+      "complete revised SOAP note in the same markdown structure as the",
+      "draft.",
+      "",
+      "Rules:",
+      "- Preserve all clinical content that the auditor did not flag.",
       '- Apply each "suggested_fix" as closely as possible, using only',
-      '  information already present in the draft.',
-      '- Output ONLY the revised SOAP markdown. No preamble, no summary',
-      '  of changes.',
-    ].join('\n');
+      "  information already present in the draft.",
+      "- Output ONLY the revised SOAP markdown. No preamble, no summary",
+      "  of changes.",
+    ].join("\n");
 
     const fixesText = fixable
       .map(
         (i, idx) =>
-          `${idx + 1}. [${i.severity}] ${i.location}: ${i.description}\n    Fix: ${i.suggested_fix}`
+          `${idx + 1}. [${i.severity}] ${i.location}: ${i.description}\n    Fix: ${i.suggested_fix}`,
       )
-      .join('\n');
+      .join("\n");
 
     const user = [
-      'Draft:',
+      "Draft:",
       input.soapDraft,
-      '',
-      'Issues to apply (apply in order):',
+      "",
+      "Issues to apply (apply in order):",
       fixesText,
-    ].join('\n');
+    ].join("\n");
 
     const { text } = await modelClient.completeText({
       practiceId: input.practiceId,
       visitId: input.visitId,
       userId: input.userId,
-      purpose: 'tm_polish',
-      provider: 'anthropic',
+      purpose: "tm_polish",
+      provider: "anthropic",
       model: MODEL,
       system,
       user,
@@ -223,15 +277,15 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
       if (!gate.ok) {
         polishRejected = true;
         soapFinal = input.soapDraft;
-        void logAudit({
-          action: 'L6_FABRICATION_REJECTED',
-          targetType: 'transcribe_visit',
+        await logWorkerAudit({
+          action: "L6_FABRICATION_REJECTED",
+          targetType: "transcribe_visit",
           targetId: input.visitId,
           userId: input.userId,
           practiceId: input.practiceId,
           success: false,
           metadata: {
-            layer: 'L6',
+            layer: "L6",
             violationCount: gate.violationCount,
             kinds: gate.kinds,
             novelTermCount: gate.novelTermCount,
@@ -251,15 +305,15 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
     if (!polishRejected) {
       const validation = validateSoapStructure(soapFinal, requiredSections);
       if (!validation.ok) {
-        void logAudit({
-          action: 'MODEL_OUTPUT_VALIDATION_FAIL',
-          targetType: 'transcribe_visit',
+        await logWorkerAudit({
+          action: "MODEL_OUTPUT_VALIDATION_FAIL",
+          targetType: "transcribe_visit",
           targetId: input.visitId,
           userId: input.userId,
           practiceId: input.practiceId,
           success: false,
           metadata: {
-            layer: 'L6',
+            layer: "L6",
             reason: validation.reason,
             outputLength: validation.outputLength,
             missingSections: validation.missingSections,
@@ -277,7 +331,7 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
   // most urgent issue first. (Rejection and validation-fail are mutually
   // exclusive — validation is skipped on the gate-fallback path.)
   const polishRejectedReason = polishRejected
-    ? 'Auto-polish was rejected by the fabrication gate and not applied — the auditor-flagged fixes remain unapplied; review the draft.'
+    ? "Auto-polish was rejected by the fabrication gate and not applied — the auditor-flagged fixes remain unapplied; review the draft."
     : null;
   const prefixReason = polishRejectedReason ?? polishValidationFailReason;
   // Survival tuning: deferred additive fixes still reach the doctor — their
@@ -285,19 +339,20 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
   const deferredReason =
     deferredAdditive.length > 0
       ? `Auto-polish deferred ${deferredAdditive.length} auditor fix${
-          deferredAdditive.length === 1 ? '' : 'es'
+          deferredAdditive.length === 1 ? "" : "es"
         } that would add content not in the draft — review the suggestions and draft before signing.`
       : null;
   const baseReason =
     unfixable.length > 0
       ? `Auto-polish could not fix ${unfixable.length} critical issue${
-          unfixable.length === 1 ? '' : 's'
-        }: ${unfixable.map((i) => i.description).join('; ')}`
+          unfixable.length === 1 ? "" : "s"
+        }: ${unfixable.map((i) => i.description).join("; ")}`
       : !input.critique.safe_to_sign_without_review
-        ? 'Auditor flagged issues worth a quick review before signing.'
+        ? "Auditor flagged issues worth a quick review before signing."
         : null;
   const reviewReason =
-    [prefixReason, deferredReason, baseReason].filter(Boolean).join(' ') || null;
+    [prefixReason, deferredReason, baseReason].filter(Boolean).join(" ") ||
+    null;
 
   const needsReview =
     unfixable.length > 0 ||
@@ -306,8 +361,10 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
     polishValidationFailReason !== null ||
     polishRejected;
 
-  await prisma.transcribeVisit.update({
-    where: { id: input.visitId },
+  await updateTemplateTwinSyntheticQaClaimBoundVisit({
+    visitId: input.visitId,
+    userId: input.userId ?? "",
+    practiceId: input.practiceId,
     data: {
       soapFinal,
       // T-M14.1: immutable snapshot of the AI's final output. soapFinal
@@ -327,7 +384,11 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
   // the L6 reason. Compose instead, so the banner shows EVERY reason the note
   // needs review (existing reason first — it's usually the more safety-
   // relevant one; applyAdditiveReviewState concatenates SQL-side, atomic).
-  await applyAdditiveReviewState(input.visitId, { needsReview, reviewReason });
+  await applyAdditiveReviewState(
+    input.visitId,
+    { needsReview, reviewReason },
+    { userId: input.userId ?? "", practiceId: input.practiceId },
+  );
 
   return { soapFinal, needsReview, reviewReason, unfixable, polishRejected };
 }

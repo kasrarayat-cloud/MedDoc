@@ -20,18 +20,19 @@
 // CRUD endpoints since this is called right next to them in the UI.
 // ============================================================================
 
-import { z } from 'zod';
-import { NextResponse } from 'next/server';
+import { z } from "zod";
+import { NextResponse } from "next/server";
 
-import prisma from '@meddoc/db';
+import prisma from "@meddoc/db";
 
-import { apiError, withApiHandler } from '@/lib/api-error';
-import { getSession } from '@/lib/auth';
-import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
-import { logAudit } from '@/lib/audit';
+import { apiError, withApiHandler } from "@/lib/api-error";
+import { getSession } from "@/lib/auth";
+import { RATE_LIMITS, rateLimitOr429 } from "@/lib/rate-limit";
+import { logAudit } from "@/lib/audit";
+import { TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID } from "@/lib/template-twin/synthetic-qa-patient";
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 // Minimum similarity to surface a candidate. Picked by eyeball against
 // the backfill data — 0.4 catches "Kasra" / "kAsra" / "Kasratest" as
@@ -46,11 +47,11 @@ const MIN_SIMILARITY = 0.4;
 const MAX_RESULTS = 5;
 
 const BodySchema = z.object({
-  name: z.string().trim().min(1, 'Name is required').max(200),
+  name: z.string().trim().min(1, "Name is required").max(200),
   dateOfBirth: z
     .string()
     .min(1)
-    .refine((s) => !Number.isNaN(Date.parse(s)), { message: 'Invalid date' })
+    .refine((s) => !Number.isNaN(Date.parse(s)), { message: "Invalid date" })
     .optional(),
 });
 
@@ -62,9 +63,9 @@ interface MatchRow {
   score: number;
 }
 
-export const POST = withApiHandler('api:patients:fuzzy-match', async (req) => {
+export const POST = withApiHandler("api:patients:fuzzy-match", async (req) => {
   const session = await getSession();
-  if (!session) return apiError('unauthorized', 401);
+  if (!session) return apiError("unauthorized", 401);
 
   const blocked = rateLimitOr429(RATE_LIMITS.PATIENT_READ, session.user.id);
   if (blocked) return blocked;
@@ -73,15 +74,15 @@ export const POST = withApiHandler('api:patients:fuzzy-match', async (req) => {
   try {
     body = await req.json();
   } catch {
-    return apiError('invalid JSON body', 400);
+    return apiError("invalid JSON body", 400);
   }
   const parsed = BodySchema.safeParse(body);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
-    const field = first?.path.join('.') || '_form';
+    const field = first?.path.join(".") || "_form";
     return NextResponse.json(
-      { error: first?.message || 'invalid payload', field },
-      { status: 400 }
+      { error: first?.message || "invalid payload", field },
+      { status: 400 },
     );
   }
 
@@ -95,6 +96,7 @@ export const POST = withApiHandler('api:patients:fuzzy-match', async (req) => {
     FROM transcribe_md_patients
     WHERE "practiceId" = ${session.user.practiceId}
       AND "deletedAt" IS NULL
+      AND "externalId" IS DISTINCT FROM ${TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID}
       AND similarity(LOWER(name), LOWER(${parsed.data.name})) > ${MIN_SIMILARITY}
     ORDER BY score DESC, name ASC
     LIMIT ${MAX_RESULTS}
@@ -134,10 +136,10 @@ export const POST = withApiHandler('api:patients:fuzzy-match', async (req) => {
   // patients per call; audited as a list view. Search-term value is
   // NOT logged (could itself embed identifying info).
   void logAudit({
-    action: 'VIEWED_PATIENT_LIST',
-    targetType: 'TranscribeMdPatient',
+    action: "VIEWED_PATIENT_LIST",
+    targetType: "TranscribeMdPatient",
     metadata: {
-      source: 'api:POST /api/patients/fuzzy-match',
+      source: "api:POST /api/patients/fuzzy-match",
       count: matches.length,
       hasDob: dobInput !== null,
     },

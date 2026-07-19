@@ -1,31 +1,36 @@
-'use server';
+"use server";
 
-import { redirect } from 'next/navigation';
-import { revalidatePath } from 'next/cache';
-import { z } from 'zod';
+import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
 
-import prisma from '@meddoc/db';
-import { Prisma, type TranscribeVisitStatus } from '@prisma/client';
-import { SPECIALTY_IDS } from '@meddoc/shared/specialties';
-import { requireSession } from '@/lib/auth';
-import { logAudit } from '@/lib/audit';
+import prisma from "@meddoc/db";
+import { Prisma, type TranscribeVisitStatus } from "@prisma/client";
+import { SPECIALTY_IDS } from "@meddoc/shared/specialties";
+import { requireSession } from "@/lib/auth";
+import { logAudit } from "@/lib/audit";
 import {
   DASHBOARD_PAGE_SIZE,
   type DashboardCursor,
   type LoadMoreVisitsResult,
-} from '@/lib/dashboard-pagination';
+} from "@/lib/dashboard-pagination";
 import {
   C3_INBOX_PAGE_SIZE,
   type C3InboxPageResult,
-} from '@/lib/c3-list-pagination';
+} from "@/lib/c3-list-pagination";
+import {
+  isTemplateTwinSyntheticQaPatient,
+  ordinaryClinicalVisitWhere,
+  TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID,
+} from "@/lib/template-twin/synthetic-qa-patient";
 
-const INPUT_MODES = ['audio_upload', 'voice_dictation', 'text_notes'] as const;
+const INPUT_MODES = ["audio_upload", "voice_dictation", "text_notes"] as const;
 
 // Placeholder name used when the form submits neither a patientId nor a
 // patientName (legacy free-form flow where the doctor skipped the
 // field). Matches the label used by the Phase 1 backfill so a practice
 // never grows two different "Unknown patient" rows.
-const UNKNOWN_PATIENT_NAME = 'Unknown patient';
+const UNKNOWN_PATIENT_NAME = "Unknown patient";
 
 const CreateVisitSchema = z.object({
   /** T-M17.2: new picker-driven path. When set, `patientName` is
@@ -36,7 +41,7 @@ const CreateVisitSchema = z.object({
     .trim()
     .min(1)
     .optional()
-    .transform((v) => (v === '' || v === undefined ? null : v))
+    .transform((v) => (v === "" || v === undefined ? null : v))
     .nullable(),
   /** Legacy free-text path. Kept for backward compat — the Phase 3
    *  Commit 9 UI replaces it with the picker. */
@@ -44,18 +49,18 @@ const CreateVisitSchema = z.object({
     .string()
     .trim()
     .max(120)
-    .transform((v) => (v === '' ? null : v))
+    .transform((v) => (v === "" ? null : v))
     .nullable()
     .optional(),
   // Bound to the canonical catalog so the column can only ever hold
   // an enum value. New writes are normalized at the source — legacy
   // display-name rows are mapped at read time via findSpecialty().
-  specialty: z.enum(SPECIALTY_IDS, { message: 'Pick a specialty' }),
+  specialty: z.enum(SPECIALTY_IDS, { message: "Pick a specialty" }),
   chiefComplaint: z
     .string()
     .trim()
     .max(500)
-    .transform((v) => (v === '' ? null : v))
+    .transform((v) => (v === "" ? null : v))
     .nullable()
     .optional(),
   inputMode: z.enum(INPUT_MODES),
@@ -65,7 +70,7 @@ const CreateVisitSchema = z.object({
   // and 'true' (the explicit JSON-form value future API callers may use).
   interpreterMode: z
     .preprocess(
-      (v) => (v === 'on' || v === 'true' || v === true ? true : false),
+      (v) => (v === "on" || v === "true" || v === true ? true : false),
       z.boolean(),
     )
     .default(false),
@@ -84,7 +89,7 @@ const CreateVisitSchema = z.object({
 async function resolvePatient(
   practiceId: string,
   patientId: string | null,
-  patientName: string | null
+  patientName: string | null,
 ): Promise<{ id: string; name: string }> {
   if (patientId) {
     const patient = await prisma.transcribeMdPatient.findUnique({
@@ -94,14 +99,16 @@ async function resolvePatient(
         name: true,
         practiceId: true,
         deletedAt: true,
+        externalId: true,
       },
     });
     if (
       !patient ||
       patient.practiceId !== practiceId ||
-      patient.deletedAt !== null
+      patient.deletedAt !== null ||
+      isTemplateTwinSyntheticQaPatient(patient)
     ) {
-      throw new Error('Invalid patient');
+      throw new Error("Invalid patient");
     }
     return { id: patient.id, name: patient.name };
   }
@@ -112,7 +119,15 @@ async function resolvePatient(
     where: {
       practiceId,
       deletedAt: null,
-      name: { equals: canonicalName, mode: 'insensitive' },
+      OR: [
+        { externalId: null },
+        {
+          externalId: {
+            not: TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID,
+          },
+        },
+      ],
+      name: { equals: canonicalName, mode: "insensitive" },
     },
     select: { id: true, name: true },
   });
@@ -146,13 +161,13 @@ export async function createVisitAction(formData: FormData): Promise<void> {
     // The form's client component re-renders and shows the error. With
     // a 1-field reason (usually invalid inputMode via query tamper) we
     // just throw — this path shouldn't be reached from the legit UI.
-    throw new Error('Invalid visit input');
+    throw new Error("Invalid visit input");
   }
 
   const patient = await resolvePatient(
     session.user.practiceId,
     parsed.data.patientId ?? null,
-    parsed.data.patientName ?? null
+    parsed.data.patientName ?? null,
   );
 
   const visit = await prisma.transcribeVisit.create({
@@ -181,11 +196,11 @@ export async function createVisitAction(formData: FormData): Promise<void> {
   // PHI: only the patient FK + non-clinical metadata go into the row;
   // the patient's name + chiefComplaint stay out.
   void logAudit({
-    action: 'VISIT_CREATED',
-    targetType: 'TranscribeVisit',
+    action: "VISIT_CREATED",
+    targetType: "TranscribeVisit",
     targetId: visit.id,
     metadata: {
-      source: 'action:createVisitAction',
+      source: "action:createVisitAction",
       inputMode: parsed.data.inputMode,
       specialty: parsed.data.specialty,
       patientId: patient.id,
@@ -193,7 +208,7 @@ export async function createVisitAction(formData: FormData): Promise<void> {
     },
   });
 
-  revalidatePath('/dashboard');
+  revalidatePath("/dashboard");
   redirect(`/visits/${visit.id}`);
 }
 
@@ -210,14 +225,14 @@ export async function createVisitAction(formData: FormData): Promise<void> {
 
 export async function loadMoreVisitsAction(
   cursor: DashboardCursor,
-  opts?: { includeArchived?: boolean }
+  opts?: { includeArchived?: boolean },
 ): Promise<LoadMoreVisitsResult> {
   const session = await requireSession();
   const includeArchived = opts?.includeArchived ?? false;
 
   const cursorDate = new Date(cursor.createdAt);
   if (Number.isNaN(cursorDate.getTime())) {
-    throw new Error('Invalid cursor');
+    throw new Error("Invalid cursor");
   }
 
   // Fetch one extra so we can set nextCursor without a second query.
@@ -229,7 +244,7 @@ export async function loadMoreVisitsAction(
   // the first page keeps the same filter as the SSR'd initial
   // render.
   const rows = await prisma.transcribeVisit.findMany({
-    where: {
+    where: ordinaryClinicalVisitWhere({
       userId: session.user.id,
       deletedAt: null,
       ...(includeArchived ? {} : { archivedAt: null }),
@@ -240,8 +255,8 @@ export async function loadMoreVisitsAction(
           id: { lt: cursor.id },
         },
       ],
-    },
-    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    }),
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: DASHBOARD_PAGE_SIZE + 1,
     select: {
       id: true,
@@ -277,27 +292,27 @@ export async function loadMoreVisitsAction(
 // `page` can widen it (page is clamped to [1, totalPages] server-side).
 export async function searchInboxAction(
   query: string,
-  page: number
+  page: number,
 ): Promise<C3InboxPageResult> {
   const session = await requireSession();
   const q = query.trim().slice(0, 100);
 
-  const where: Prisma.TranscribeVisitWhereInput = {
+  const where: Prisma.TranscribeVisitWhereInput = ordinaryClinicalVisitWhere({
     userId: session.user.id,
     deletedAt: null,
     archivedAt: null,
-    status: 'READY',
+    status: "READY",
     signedAt: null,
     ...(q
       ? {
           OR: [
-            { patient: { is: { name: { contains: q, mode: 'insensitive' } } } },
-            { patientName: { contains: q, mode: 'insensitive' } },
-            { chiefComplaint: { contains: q, mode: 'insensitive' } },
+            { patient: { is: { name: { contains: q, mode: "insensitive" } } } },
+            { patientName: { contains: q, mode: "insensitive" } },
+            { chiefComplaint: { contains: q, mode: "insensitive" } },
           ],
         }
       : {}),
-  };
+  });
 
   const total = await prisma.transcribeVisit.count({ where });
   const pageSize = C3_INBOX_PAGE_SIZE;
@@ -320,7 +335,7 @@ export async function searchInboxAction(
   };
   const rows = (await prisma.transcribeVisit.findMany({
     where,
-    orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+    orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
     skip: (safePage - 1) * pageSize,
     take: pageSize,
     select: {

@@ -27,7 +27,7 @@ import { QA_COMPOSE as COMPOSE, QA_DB as DB } from './qa-compose';
 function psql(sql: string): string {
   const bin = process.env.PSQL_BIN; // CI: full prefix incl. connection string
   if (bin) {
-    return execSync(`${bin} -A -t -f -`, {
+    return execSync(`${bin} -v ON_ERROR_STOP=1 -A -t -f -`, {
       input: sql,
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -37,7 +37,7 @@ function psql(sql: string): string {
   // (same guard the cleanup/seedVisitStates helpers make — resolution alone
   // isn't trusted; this helper both reads AND inserts).
   assertNonProdDbName(DB);
-  return execSync(`${COMPOSE} exec -T postgres psql -U meddoc -d ${DB} -A -t -f -`, {
+  return execSync(`${COMPOSE} exec -T postgres psql -v ON_ERROR_STOP=1 -U meddoc -d ${DB} -A -t -f -`, {
     input: sql,
     encoding: 'utf8',
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -176,9 +176,10 @@ export function seedActiveTemplate(
   // psql via stdin so the shell never sees it either.
   psql(
     `INSERT INTO note_templates ` +
-      `(id, "doctorId", name, "encounterType", sections, "styleProfile", version, status, "isSystemDefault", "createdAt", "updatedAt") ` +
+      `(id, "doctorId", name, "encounterType", sections, "styleProfile", version, status, "isSystemDefault", "lineageId", "templateKind", "createdAt", "updatedAt") ` +
       `VALUES (${lit(id)}, ${lit(doctorId)}, ${lit(opts.name)}, ${enc}, ` +
-      `$json$${sections}$json$::jsonb, $json$${style}$json$::jsonb, ${opts.version ?? 1}, 'active', false, now(), now());`,
+      `$json$${sections}$json$::jsonb, $json$${style}$json$::jsonb, ${opts.version ?? 1}, ` +
+      `'active', false, ${lit(id)}, 'structured', now(), now());`,
   );
   return id;
 }

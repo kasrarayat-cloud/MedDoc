@@ -37,7 +37,10 @@ jobs:
   e2e:
     name: Playwright E2E (transcribe-md)
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    # The dedicated staging journey adds a second real worker render plus
+    # pinned Open XML validation. Keep a bounded cushion without weakening any
+    # individual test timeout or turning a stalled job into a pass.
+    timeout-minutes: 55
 
     env:
       # Build args: point the client bundle + auth URL at the CI app (:9020)
@@ -52,7 +55,11 @@ jobs:
       # `name: meddoc-qa` project (images are global, looked up by name).
 
     steps:
+      # PR evidence must identify the exact authored commit, not GitHub's
+      # ephemeral pull_request merge ref. Main pushes retain github.sha.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - uses: actions/setup-node@v4
         with:
@@ -83,6 +90,22 @@ jobs:
       - name: Migrate schema → meddoc_qa_test
         run: docker compose -f docker-compose.qa.yml run --rm db-migrate
 
+      # Prisma deploy performs only the online lineage EXPAND. Template Twin
+      # admission fails closed until the versioned operator has built its
+      # concurrent guard/final indexes, completed bounded batches, validated
+      # the proof constraint, and committed the short contract. This database
+      # is isolated/synthetic and is destroyed with `down -v` below.
+      - name: Contract NoteTemplate lineage in disposable QA
+        run: >
+          docker compose -f docker-compose.qa.yml run --rm
+          --entrypoint sh db-migrate
+          -c 'npm run lineage:online -w @meddoc/db -- --phase guard-index &&
+          npm run lineage:online -w @meddoc/db -- --phase backfill --batch-size 1000 --batch-delay-ms 0 &&
+          npm run lineage:online -w @meddoc/db -- --phase indexes &&
+          npm run lineage:online -w @meddoc/db -- --phase validate &&
+          TEMPLATE_TWIN_LINEAGE_CONTRACT_ACK=note_templates_lineage_v1:meddoc_qa_test
+          npm run lineage:online -w @meddoc/db -- --phase contract'
+
       # The #278 fail-closed db-guard (assertNonProdDatabase) refuses to seed
       # unless DATABASE_URL is a positively non-prod DB. meddoc_qa_test carries
       # the qa/test marker, so it proceeds; a prod URL here would abort.
@@ -99,7 +122,7 @@ jobs:
 
       # MUST run BEFORE the app starts. /api/health (the app's docker
       # healthcheck, docker-compose.qa.yml) gates on
-      # `bucketExists(transcribe-md-audio)` as a REQUIRED check — so with no
+      # `bucketExists(transcribe-md-audio-qa)` as a REQUIRED check — so with no
       # bucket the app returns 503 and never goes healthy, and the
       # `up --wait transcribe-md` step below fails with "container
       # meddoc-qa-transcribe-md-1 is unhealthy". (Previously this step ran
@@ -109,7 +132,7 @@ jobs:
       - name: Create the audio bucket in minio
         run: >
           docker compose -f docker-compose.qa.yml exec -T minio sh -c
-          'export MC_CONFIG_DIR=/tmp/mc; mc alias set local http://127.0.0.1:9000 qa_minio qa_minio_pw && mc mb --ignore-existing local/transcribe-md-audio'
+          'export MC_CONFIG_DIR=/tmp/mc; mc alias set local http://127.0.0.1:9000 qa_minio qa_minio_pw && mc mb --ignore-existing local/transcribe-md-audio-qa'
 
       - name: Start app + worker
         run: docker compose -f docker-compose.qa.yml up -d --wait transcribe-md transcribe-md-worker
@@ -127,6 +150,82 @@ jobs:
           NOTE_FORMAT_E2E: "1"
           CI: "true"
         run: npx playwright test --project=chromium
+
+      # Template Twin has a richer Layer-3 fixture than the generic MOCK path.
+      # It is triply gated in packages/ai: MOCK_AI_CALLS, this dedicated flag,
+      # and a database name containing qa/test/synthetic. Recreate only the app
+      # and worker; the isolated Postgres/Redis/versioned MinIO volumes remain.
+      - name: Recreate app + worker with the Template Twin synthetic fixture
+        run: >
+          MOCK_TEMPLATE_TWIN_E2E=true
+          docker compose -f docker-compose.qa.yml up -d --wait transcribe-md transcribe-md-worker
+
+      - name: Run E2E (Template Twin infrastructure path)
+        working-directory: apps/transcribe-md
+        env:
+          PW_BASE_URL: http://localhost:9020
+          CI: "true"
+        run: npx playwright test --project=template-twin
+
+      # The authenticated staging workflow is an additional fail-closed
+      # profile. Both the app and worker must see the explicit synthetic-QA
+      # admission variables; leaving either empty keeps every route hidden or
+      # denied. The same real Postgres, Redis/BullMQ and versioned MinIO stack
+      # remains in use, with deterministic local provider fixtures only.
+      - name: Recreate app + worker with Template Twin staging QA enabled
+        run: >
+          MOCK_TEMPLATE_TWIN_E2E=true
+          TEMPLATE_TWIN_STAGING_QA_ENABLED=true
+          TEMPLATE_TWIN_STAGING_QA_ENVIRONMENT=qa
+          TEMPLATE_TWIN_STAGING_QA_RESOURCE_ATTESTATION=isolated-disposable-qa-v1
+          docker compose -f docker-compose.qa.yml up -d --wait transcribe-md transcribe-md-worker
+
+      - name: Run E2E (authenticated Template Twin staging UI)
+        working-directory: apps/transcribe-md
+        env:
+          PW_BASE_URL: http://localhost:9020
+          CI: "true"
+          TEMPLATE_TWIN_STAGING_ARTIFACT_DIR: template-twin-staging-artifacts
+        run: npx playwright test --project=template-twin-staging-ui
+
+      - name: Validate staging source and output with Open XML SDK
+        env:
+          TEMPLATE_TWIN_STAGING_ARTIFACT_DIR: apps/transcribe-md/template-twin-staging-artifacts
+          QA_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: >
+          QA_GENERATED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          bash apps/transcribe-md/scripts/template-twin-staging-ui/validate-openxml.sh
+
+      - name: Finalize synthetic staging artifact hashes
+        id: staging_artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact_dir="apps/transcribe-md/template-twin-staging-artifacts"
+          test -d "$artifact_dir"
+          short_sha="$(git rev-parse --short=12 HEAD)"
+          full_sha="$(git rev-parse HEAD)"
+          printf 'sha=%s\n' "$short_sha" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "$full_sha" > "$artifact_dir/GENERATING-COMMIT.txt"
+          find "$artifact_dir" -type f ! -name SHA256SUMS -print0 \
+            | sort -z \
+            | xargs -0 sha256sum > "$artifact_dir/SHA256SUMS"
+          {
+            printf '### Template Twin synthetic staging evidence\n\n'
+            printf -- '- Commit: `%s`\n' "$full_sha"
+            printf -- '- Artifact: `template-twin-staging-ui-%s`\n\n' "$short_sha"
+            printf '```text\n'
+            cat "$artifact_dir/SHA256SUMS"
+            printf '```\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload synthetic Template Twin staging evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: template-twin-staging-ui-${{ steps.staging_artifact.outputs.sha }}
+          path: apps/transcribe-md/template-twin-staging-artifacts/
+          retention-days: 7
+          if-no-files-found: error
 
       # ── Flag-gated MOCK fixtures that can't share the main suite's app env:
       #    • MOCK_TEMPLATE_PHI_FLAG=true → every note-format parse rejects

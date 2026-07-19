@@ -1,4 +1,4 @@
-'use server';
+"use server";
 
 // ============================================================================
 // Rx warning override audit (DESIGN_SPEC §4.1 critical · override audit).
@@ -17,10 +17,10 @@
 // action short-circuits for that sentinel.
 // ============================================================================
 
-import prisma from '@meddoc/db';
-import { getSession } from '@/lib/auth';
-import { logAudit } from '@/lib/audit';
-import { resolveWarning, mapWorkerSeverity } from '@/lib/rx-warnings';
+import prisma from "@meddoc/db";
+import { getSession } from "@/lib/auth";
+import { logAudit } from "@/lib/audit";
+import { resolveWarning, mapWorkerSeverity } from "@/lib/rx-warnings";
 
 export interface RecordOverrideInput {
   visitId: string;
@@ -37,14 +37,14 @@ export type RecordOverrideResult =
 
 const REASON_MIN = 10;
 const REASON_MAX = 500;
-const DEV_PREVIEW_VISIT_ID = 'dev-preview';
+const DEV_PREVIEW_VISIT_ID = "dev-preview";
 
 export async function recordOverride(
-  input: RecordOverrideInput
+  input: RecordOverrideInput,
 ): Promise<RecordOverrideResult> {
   try {
     // ── 0. Validate input shape before any auth/DB work ──
-    const trimmedReason = (input.reason ?? '').trim();
+    const trimmedReason = (input.reason ?? "").trim();
     if (trimmedReason.length < REASON_MIN) {
       return {
         ok: false,
@@ -58,33 +58,47 @@ export async function recordOverride(
       };
     }
     if (!input.warningId || !input.headline || !input.severity) {
-      return { ok: false, error: 'Missing warning metadata.' };
+      return { ok: false, error: "Missing warning metadata." };
     }
     if (
-      typeof input.rxLineNumber !== 'number' ||
+      typeof input.rxLineNumber !== "number" ||
       !Number.isFinite(input.rxLineNumber)
     ) {
-      return { ok: false, error: 'Invalid Rx line number.' };
+      return { ok: false, error: "Invalid Rx line number." };
     }
 
     // ── 1. Dev preview short-circuit (no auth, no DB write) ──
     if (input.visitId === DEV_PREVIEW_VISIT_ID) {
-      return { ok: true, auditId: 'dev-preview-audit' };
+      return { ok: true, auditId: "dev-preview-audit" };
     }
 
     // ── 2. Auth + visit ownership check ──
     const session = await getSession();
     if (!session) {
-      return { ok: false, error: 'Not signed in.' };
+      return { ok: false, error: "Not signed in." };
     }
 
-    type VisitRow = { userId: string; rxDrafts: unknown } | null;
+    type VisitRow = {
+      userId: string;
+      rxDrafts: unknown;
+      templateTwinSyntheticQaRun?: { id: string } | null;
+    } | null;
     const visit: VisitRow = await prisma.transcribeVisit.findUnique({
       where: { id: input.visitId },
-      select: { userId: true, rxDrafts: true },
+      select: {
+        userId: true,
+        rxDrafts: true,
+        templateTwinSyntheticQaRun: { select: { id: true } },
+      },
     });
     if (!visit || visit.userId !== session.user.id) {
-      return { ok: false, error: 'Visit not found.' };
+      return { ok: false, error: "Visit not found." };
+    }
+    // Staging facts and warnings are immutable outputs of the bounded mock
+    // pipeline. A generic override would create an unpinned clinical mutation
+    // outside the synthetic run's rollout/attempt contract.
+    if (visit.templateTwinSyntheticQaRun) {
+      return { ok: false, error: "Visit not found." };
     }
 
     // ── 2.5 Correlate the override to a REAL warning ──
@@ -99,13 +113,13 @@ export async function recordOverride(
     if (!warning) {
       return {
         ok: false,
-        error: 'That warning is not on this visit.',
+        error: "That warning is not on this visit.",
       };
     }
     if (input.severity !== mapWorkerSeverity(warning.severity)) {
       return {
         ok: false,
-        error: 'Warning severity does not match this visit.',
+        error: "Warning severity does not match this visit.",
       };
     }
 
@@ -140,7 +154,7 @@ export async function recordOverride(
       // other error re-throws into the outer try/catch.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const code = (err as any)?.code;
-      if (code !== 'P2002') throw err;
+      if (code !== "P2002") throw err;
       const existing = await prisma.rxWarningOverride.findUnique({
         where: {
           rx_warning_overrides_visit_warning_unique: {
@@ -153,7 +167,7 @@ export async function recordOverride(
       if (!existing) {
         return {
           ok: false,
-          error: 'Override write conflicted; please retry.',
+          error: "Override write conflicted; please retry.",
         };
       }
       created = existing;
@@ -164,8 +178,8 @@ export async function recordOverride(
     // platform-wide record. Both are written — compliance tooling
     // can query either.
     void logAudit({
-      action: 'RX_OVERRIDE_RECORDED',
-      targetType: 'TranscribeVisit',
+      action: "RX_OVERRIDE_RECORDED",
+      targetType: "TranscribeVisit",
       targetId: input.visitId,
       metadata: {
         warningId: input.warningId,
@@ -181,10 +195,10 @@ export async function recordOverride(
 
     return { ok: true, auditId: created.id };
   } catch (err) {
-    console.error('[rx-warning-audit] recordOverride failed:', err);
+    console.error("[rx-warning-audit] recordOverride failed:", err);
     return {
       ok: false,
-      error: 'Could not record override. Please try again.',
+      error: "Could not record override. Please try again.",
     };
   }
 }

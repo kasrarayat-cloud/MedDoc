@@ -16,6 +16,7 @@ import Link from 'next/link';
 import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
 import { logAudit } from '@/lib/audit';
+import { ordinaryClinicalVisitWhere } from '@/lib/template-twin/synthetic-qa-patient';
 import { Greeting } from './greeting';
 import { c3Status } from '@/lib/visit-status-c3';
 import { DashboardInboxC3 } from './dashboard-inbox-c3';
@@ -77,13 +78,13 @@ export async function DashboardC3Body({
     return d;
   })();
 
-  const inboxWhere = {
+  const inboxWhere = ordinaryClinicalVisitWhere({
     userId,
     deletedAt: null,
     archivedAt: null,
     status: TranscribeVisitStatus.READY,
     signedAt: null,
-  };
+  });
 
   const [inboxRaw, inboxTotal, inProgress, visitsThisMonth, signedThisWeek] =
     await Promise.all([
@@ -97,13 +98,30 @@ export async function DashboardC3Body({
       }) as Promise<Row[]>,
       prisma.transcribeVisit.count({ where: inboxWhere }),
       prisma.transcribeVisit.findMany({
-        where: { userId, deletedAt: null, archivedAt: null, status: { in: PROCESSING_STATUSES } },
+        where: ordinaryClinicalVisitWhere({
+          userId,
+          deletedAt: null,
+          archivedAt: null,
+          status: { in: PROCESSING_STATUSES },
+        }),
         orderBy: { updatedAt: 'desc' },
         take: INPROGRESS_LIMIT,
         select: ROW_SELECT,
       }) as Promise<Row[]>,
-      prisma.transcribeVisit.count({ where: { userId, deletedAt: null, createdAt: { gte: startOfMonth } } }),
-      prisma.transcribeVisit.count({ where: { userId, status: TranscribeVisitStatus.SIGNED, signedAt: { gte: startOfWeek } } }),
+      prisma.transcribeVisit.count({
+        where: ordinaryClinicalVisitWhere({
+          userId,
+          deletedAt: null,
+          createdAt: { gte: startOfMonth },
+        }),
+      }),
+      prisma.transcribeVisit.count({
+        where: ordinaryClinicalVisitWhere({
+          userId,
+          status: TranscribeVisitStatus.SIGNED,
+          signedAt: { gte: startOfWeek },
+        }),
+      }),
     ]);
 
   const inboxRows: C3InboxRow[] = inboxRaw.map((v) => ({

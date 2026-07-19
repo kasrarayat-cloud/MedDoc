@@ -12,28 +12,29 @@
 // the worker.
 // ============================================================================
 
-import { NextResponse } from 'next/server';
-import { Readable } from 'node:stream';
+import { NextResponse } from "next/server";
+import { Readable } from "node:stream";
 
-import { auth } from '@/lib/nextauth';
-import prisma from '@meddoc/db';
-import { TranscribeVisitStatus } from '@prisma/client';
-import { putAudioStream } from '@/lib/minio';
-import { enqueueProcessVisit } from '@/lib/queue';
+import { auth } from "@/lib/nextauth";
+import prisma from "@meddoc/db";
+import { TranscribeVisitStatus } from "@prisma/client";
+import { putAudioStream } from "@/lib/minio";
+import { enqueueProcessVisit } from "@/lib/queue";
 
-import { apiError, withApiHandler } from '@/lib/api-error';
-import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
-import { redactPhi } from '@meddoc/ai';
-import { logAudit } from '@/lib/audit';
+import { apiError, withApiHandler } from "@/lib/api-error";
+import { RATE_LIMITS, rateLimitOr429 } from "@/lib/rate-limit";
+import { redactPhi } from "@meddoc/ai";
+import { logAudit } from "@/lib/audit";
+import { isOwnedTemplateTwinStagingQaVisit } from "@/lib/template-twin/staging-qa-access";
 import {
   sniffAudioMagicBytes,
   magicBytesMatchClaimedMime,
   SNIFF_MIN_BYTES,
-} from '@/lib/audio-sniff';
+} from "@/lib/audio-sniff";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 export const maxDuration = 120;
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 /** Dictation is short-form — 50 MB is generous for 10 min of webm/opus
  *  at the default ~32 kbps MediaRecorder bitrate (~2.4 MB). The cap is
@@ -41,23 +42,26 @@ export const dynamic = 'force-dynamic';
 const MAX_BYTES = 50 * 1024 * 1024;
 
 const ALLOWED_MIME = new Set([
-  'audio/webm',
-  'audio/ogg',
-  'audio/wav',
-  'audio/x-wav',
-  'audio/mp4',
-  'audio/mpeg',
-  'audio/mp3',
+  "audio/webm",
+  "audio/ogg",
+  "audio/wav",
+  "audio/x-wav",
+  "audio/mp4",
+  "audio/mpeg",
+  "audio/mp3",
 ]);
 
 export const POST = withApiHandler<{ id: string }>(
-  'api:visits:dictation:upload',
+  "api:visits:dictation:upload",
   async (req, { params }) => {
     const { id: visitId } = await params;
 
     const session = await auth();
     const userId = session?.user?.id;
-    if (!userId) return apiError('unauthorized', 401);
+    if (!userId) return apiError("unauthorized", 401);
+    if (await isOwnedTemplateTwinStagingQaVisit({ visitId, userId })) {
+      return apiError("not found", 404);
+    }
 
     const blocked = rateLimitOr429(RATE_LIMITS.UPLOAD, userId);
     if (blocked) return blocked;
@@ -74,59 +78,56 @@ export const POST = withApiHandler<{ id: string }>(
         archivedAt: true,
       },
     });
-    if (!visit || visit.userId !== userId) return apiError('not found', 404);
+    if (!visit || visit.userId !== userId) return apiError("not found", 404);
     if (visit.deletedAt !== null || visit.archivedAt !== null) {
-      return apiError(
-        'Visit is no longer active. Restore it first.',
-        400,
-        { code: 'VISIT_NOT_ACTIVE' }
-      );
+      return apiError("Visit is no longer active. Restore it first.", 400, {
+        code: "VISIT_NOT_ACTIVE",
+      });
     }
-    if (visit.inputMode !== 'voice_dictation') {
-      return apiError('this visit is not a voice-dictation visit', 400);
+    if (visit.inputMode !== "voice_dictation") {
+      return apiError("this visit is not a voice-dictation visit", 400);
     }
     if (visit.dictationAudioKey) {
       return apiError(
-        'a dictation has already been recorded for this visit',
-        409
+        "a dictation has already been recorded for this visit",
+        409,
       );
     }
     if (visit.status !== TranscribeVisitStatus.QUEUED) {
-      return apiError('visit is already processing or finalized', 409);
+      return apiError("visit is already processing or finalized", 409);
     }
 
-    const contentLengthHeader = req.headers.get('content-length');
+    const contentLengthHeader = req.headers.get("content-length");
     const contentLength = contentLengthHeader
       ? Number.parseInt(contentLengthHeader, 10)
       : NaN;
     if (!Number.isFinite(contentLength) || contentLength <= 0) {
-      return apiError(
-        'Content-length header missing or invalid.',
-        400,
-        { code: 'INVALID_REQUEST', retry: false }
-      );
+      return apiError("Content-length header missing or invalid.", 400, {
+        code: "INVALID_REQUEST",
+        retry: false,
+      });
     }
     if (contentLength > MAX_BYTES) {
       return apiError(
         `Dictation too large: ${contentLength} bytes exceeds the ${Math.round(MAX_BYTES / 1024 / 1024)} MB limit.`,
         413,
-        { code: 'FILE_TOO_LARGE', retry: false }
+        { code: "FILE_TOO_LARGE", retry: false },
       );
     }
 
-    const mimeHeader = req.headers.get('content-type')?.trim() ?? '';
-    const mimeType = mimeHeader.split(';')[0]!.trim();
+    const mimeHeader = req.headers.get("content-type")?.trim() ?? "";
+    const mimeType = mimeHeader.split(";")[0]!.trim();
     if (!ALLOWED_MIME.has(mimeType)) {
       return apiError(
-        `Unsupported dictation format: ${mimeHeader || '(missing)'}. WebM/Opus is expected.`,
+        `Unsupported dictation format: ${mimeHeader || "(missing)"}. WebM/Opus is expected.`,
         415,
-        { code: 'UNSUPPORTED_FORMAT', retry: false }
+        { code: "UNSUPPORTED_FORMAT", retry: false },
       );
     }
 
     if (!req.body) {
-      return apiError('Empty body.', 400, {
-        code: 'INVALID_REQUEST',
+      return apiError("Empty body.", 400, {
+        code: "INVALID_REQUEST",
         retry: false,
       });
     }
@@ -139,51 +140,51 @@ export const POST = withApiHandler<{ id: string }>(
     // that ceiling rises this becomes a streaming PassThrough pattern.
     const bodyBuffer = Buffer.from(await req.arrayBuffer());
     if (bodyBuffer.byteLength === 0) {
-      return apiError('Empty body.', 400, {
-        code: 'INVALID_REQUEST',
+      return apiError("Empty body.", 400, {
+        code: "INVALID_REQUEST",
         retry: false,
       });
     }
     if (bodyBuffer.byteLength > MAX_BYTES) {
       // Defensive — content-length lied about size. Audit + reject.
       void logAudit({
-        action: 'AUDIO_REJECTED_FILE_TOO_LARGE',
-        targetType: 'transcribe_visit',
+        action: "AUDIO_REJECTED_FILE_TOO_LARGE",
+        targetType: "transcribe_visit",
         targetId: visitId,
         userId,
         success: false,
-        errorCode: 'FILE_TOO_LARGE_BODY',
+        errorCode: "FILE_TOO_LARGE_BODY",
         metadata: {
           claimedSizeBytes: contentLength,
           actualSizeBytes: bodyBuffer.byteLength,
           maxBytes: MAX_BYTES,
-          source: 'dictation',
+          source: "dictation",
         },
       });
       return apiError(
         `Dictation too large: actual body size exceeds the ${Math.round(MAX_BYTES / 1024 / 1024)} MB limit.`,
         413,
-        { code: 'FILE_TOO_LARGE', retry: false }
+        { code: "FILE_TOO_LARGE", retry: false },
       );
     }
 
     const sniff = sniffAudioMagicBytes(
-      bodyBuffer.subarray(0, Math.max(SNIFF_MIN_BYTES, 32))
+      bodyBuffer.subarray(0, Math.max(SNIFF_MIN_BYTES, 32)),
     );
     if (!magicBytesMatchClaimedMime(sniff.detected, mimeType)) {
       void logAudit({
-        action: 'AUDIO_REJECTED_INVALID_MAGIC_BYTES',
-        targetType: 'transcribe_visit',
+        action: "AUDIO_REJECTED_INVALID_MAGIC_BYTES",
+        targetType: "transcribe_visit",
         targetId: visitId,
         userId,
         success: false,
-        errorCode: 'INVALID_MAGIC_BYTES',
+        errorCode: "INVALID_MAGIC_BYTES",
         metadata: {
           claimedMime: mimeType,
           detectedMime: sniff.detected,
           detectedFormat: sniff.format,
           sizeBytes: bodyBuffer.byteLength,
-          source: 'dictation',
+          source: "dictation",
         },
       });
       return apiError(
@@ -191,7 +192,7 @@ export const POST = withApiHandler<{ id: string }>(
           ? `Dictation contents (${sniff.format}) don't match the declared format (${mimeType}). Re-record and retry.`
           : `Unrecognised dictation format. The browser should produce WebM/Opus.`,
         415,
-        { code: 'INVALID_MAGIC_BYTES', retry: false }
+        { code: "INVALID_MAGIC_BYTES", retry: false },
       );
     }
 
@@ -210,24 +211,24 @@ export const POST = withApiHandler<{ id: string }>(
         mimeType,
       );
     } catch (err) {
-      const msg = err instanceof Error ? err.message.toLowerCase() : '';
+      const msg = err instanceof Error ? err.message.toLowerCase() : "";
       const permanent =
         /access denied|invalid accesskey|invalid signature|not found.*bucket/.test(
-          msg
+          msg,
         );
       console.error(
-        '[api:visits:dictation:upload] MinIO put failed:',
-        redactPhi(err instanceof Error ? err.message : err)
+        "[api:visits:dictation:upload] MinIO put failed:",
+        redactPhi(err instanceof Error ? err.message : err),
       );
       return apiError(
         permanent
-          ? 'Storage is misconfigured; please contact support.'
-          : 'Storage write failed. Please try again in a moment.',
+          ? "Storage is misconfigured; please contact support."
+          : "Storage write failed. Please try again in a moment.",
         502,
         {
-          code: permanent ? 'STORAGE_PERMANENT' : 'STORAGE_TEMPORARY',
+          code: permanent ? "STORAGE_PERMANENT" : "STORAGE_TEMPORARY",
           retry: !permanent,
-        }
+        },
       );
     }
 
@@ -247,13 +248,13 @@ export const POST = withApiHandler<{ id: string }>(
     });
 
     void logAudit({
-      action: 'AUDIO_UPLOADED',
-      targetType: 'transcribe_visit',
+      action: "AUDIO_UPLOADED",
+      targetType: "transcribe_visit",
       targetId: visitId,
       metadata: {
         sizeBytes: contentLength,
         mimeType,
-        inputMode: 'voice_dictation',
+        inputMode: "voice_dictation",
       },
     });
 
@@ -261,16 +262,16 @@ export const POST = withApiHandler<{ id: string }>(
       await enqueueProcessVisit(visitId, userId);
     } catch (err) {
       console.error(
-        '[api:visits:dictation:upload] queue enqueue failed:',
-        redactPhi(err instanceof Error ? err.message : err)
+        "[api:visits:dictation:upload] queue enqueue failed:",
+        redactPhi(err instanceof Error ? err.message : err),
       );
       return apiError(
-        'Dictation stored, but the worker queue is unreachable. Please refresh and try again.',
+        "Dictation stored, but the worker queue is unreachable. Please refresh and try again.",
         502,
-        { code: 'QUEUE_TEMPORARY', retry: true }
+        { code: "QUEUE_TEMPORARY", retry: true },
       );
     }
 
-    return NextResponse.json({ visitId, status: 'QUEUED' }, { status: 202 });
-  }
+    return NextResponse.json({ visitId, status: "QUEUED" }, { status: 202 });
+  },
 );

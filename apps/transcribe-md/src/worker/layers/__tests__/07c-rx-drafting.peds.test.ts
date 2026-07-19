@@ -10,13 +10,13 @@
 // can assert on the exact prompt the model would have seen.
 // ============================================================================
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // We capture the modelClient.complete args here so each test can inspect
 // what the layer actually built. Reset between tests via beforeEach below.
 const captured: { system?: string; user?: string }[] = [];
 
-vi.mock('@meddoc/ai', async (importOriginal) => ({
+vi.mock("@meddoc/ai", async (importOriginal) => ({
   // F-8: the layer now also calls the real (pure) drug-pair checker +
   // validateRxDose — pass the actual implementations through.
   ...(await importOriginal<Record<string, unknown>>()),
@@ -32,7 +32,7 @@ vi.mock('@meddoc/ai', async (importOriginal) => ({
   },
 }));
 
-vi.mock('@meddoc/db', () => ({
+vi.mock("@meddoc/db", () => ({
   default: {
     transcribeVisit: {
       // The layer writes its draft to TranscribeVisit.rxDrafts after
@@ -47,17 +47,23 @@ vi.mock('@meddoc/db', () => ({
 // validator integration can emit audit rows. That module pulls in
 // next-auth → next/server which jsdom can't resolve in this unit test.
 // Stub it out — the peds-framing tests don't assert on audit emits.
-vi.mock('@/lib/audit', () => ({
+vi.mock("@/lib/audit", () => ({
   logAudit: vi.fn(async () => undefined),
 }));
+vi.mock("@/worker/worker-audit", () => ({
+  logWorkerAudit: vi.fn(async () => undefined),
+}));
+vi.mock("@/worker/staging-qa-mutation-fence", () => ({
+  updateTemplateTwinSyntheticQaClaimBoundVisit: vi.fn(async () => undefined),
+}));
 
-import { runLayer7cRxDrafting } from '../07c-rx-drafting';
+import { runLayer7cRxDrafting } from "../07c-rx-drafting";
 
 const baseInput = {
-  visitId: 'visit-test',
-  practiceId: 'practice-test',
-  userId: 'user-test',
-  soapFinal: '## Subjective\nFever × 2 days.\n## Plan\nibuprofen 200 mg q6h.',
+  visitId: "visit-test",
+  practiceId: "practice-test",
+  userId: "user-test",
+  soapFinal: "## Subjective\nFever × 2 days.\n## Plan\nibuprofen 200 mg q6h.",
   entitiesJson: '{"medications":[],"allergies":[]}',
 };
 
@@ -67,14 +73,14 @@ const baseInput = {
 function dobForAgeYears(ageYears: number): string {
   const now = new Date();
   const y = now.getFullYear() - ageYears;
-  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const m = String(now.getMonth() + 1).padStart(2, "0");
   // Shift the day back by 1 so a same-month boundary case never flips
   // the computed age between the test setup and the validator's read.
-  const d = String(Math.max(1, now.getDate() - 1)).padStart(2, '0');
+  const d = String(Math.max(1, now.getDate() - 1)).padStart(2, "0");
   return `${y}-${m}-${d}`;
 }
 
-describe('runLayer7cRxDrafting — pediatric framing (Finding 01.1)', () => {
+describe("runLayer7cRxDrafting — pediatric framing (Finding 01.1)", () => {
   beforeEach(() => {
     captured.length = 0;
   });
@@ -97,12 +103,12 @@ describe('runLayer7cRxDrafting — pediatric framing (Finding 01.1)', () => {
     // Header substring is the contract — keep stable across copy edits.
     expect(userMsg).toMatch(/PEDIATRIC PATIENT, age 6 years, weight 22 kg\./);
     // The mg/kg/day instruction is the load-bearing part of the block.
-    expect(userMsg).toContain('mg/kg/day');
+    expect(userMsg).toContain("mg/kg/day");
     // Adult-only header MUST NOT appear in this branch.
     expect(userMsg).not.toMatch(/^ADULT PATIENT/m);
     // System prompt should include the few-shot examples for peds.
     const systemMsg = captured[0].system!;
-    expect(systemMsg).toContain('PEDIATRIC FEW-SHOT EXAMPLES');
+    expect(systemMsg).toContain("PEDIATRIC FEW-SHOT EXAMPLES");
   });
 
   it('emits "weight required" critical-warning header when peds with null weight', async () => {
@@ -117,14 +123,14 @@ describe('runLayer7cRxDrafting — pediatric framing (Finding 01.1)', () => {
 
     expect(captured).toHaveLength(1);
     const userMsg = captured[0].user!;
-    expect(userMsg).toContain('PEDIATRIC PATIENT WITH UNKNOWN WEIGHT');
+    expect(userMsg).toContain("PEDIATRIC PATIENT WITH UNKNOWN WEIGHT");
     expect(userMsg).toMatch(/weight required for pediatric dosing/i);
     // The refuse-numeric-dose instruction is the safety contract.
     expect(userMsg).toMatch(/action="unclear"/);
     // Few-shot examples still load (still pediatric) — anchor on the
     // refuse-mode behavior is intentional, not a regression.
     const systemMsg = captured[0].system!;
-    expect(systemMsg).toContain('PEDIATRIC FEW-SHOT EXAMPLES');
+    expect(systemMsg).toContain("PEDIATRIC FEW-SHOT EXAMPLES");
   });
 
   it('emits "ADULT PATIENT" header when age >= 18 OR DOB is null', async () => {
@@ -139,11 +145,13 @@ describe('runLayer7cRxDrafting — pediatric framing (Finding 01.1)', () => {
     });
 
     expect(captured).toHaveLength(1);
-    expect(captured[0].user).toContain('ADULT PATIENT. Use adult dose ceilings.');
-    expect(captured[0].user).not.toContain('PEDIATRIC PATIENT');
+    expect(captured[0].user).toContain(
+      "ADULT PATIENT. Use adult dose ceilings.",
+    );
+    expect(captured[0].user).not.toContain("PEDIATRIC PATIENT");
     // No few-shot examples for adults — token saving + avoids anchoring
     // the model on weight-based dosing inappropriately.
-    expect(captured[0].system).not.toContain('PEDIATRIC FEW-SHOT EXAMPLES');
+    expect(captured[0].system).not.toContain("PEDIATRIC FEW-SHOT EXAMPLES");
 
     captured.length = 0;
 
@@ -157,8 +165,10 @@ describe('runLayer7cRxDrafting — pediatric framing (Finding 01.1)', () => {
       },
     });
     expect(captured).toHaveLength(1);
-    expect(captured[0].user).toContain('ADULT PATIENT. Use adult dose ceilings.');
-    expect(captured[0].user).not.toContain('PEDIATRIC PATIENT');
-    expect(captured[0].system).not.toContain('PEDIATRIC FEW-SHOT EXAMPLES');
+    expect(captured[0].user).toContain(
+      "ADULT PATIENT. Use adult dose ceilings.",
+    );
+    expect(captured[0].user).not.toContain("PEDIATRIC PATIENT");
+    expect(captured[0].system).not.toContain("PEDIATRIC FEW-SHOT EXAMPLES");
   });
 });

@@ -7,54 +7,62 @@
 // pipeline, not the PDF render.
 // ============================================================================
 
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
 
-import { auth } from '@/lib/nextauth';
-import { filenameSlug, formatVisitDate } from '@/lib/visit-export';
-import { loadVisitExportData } from '@/lib/visit-export-server';
-import { generateVisitPdf } from '@/lib/pdf-generator';
-import { logDelivery } from '@/lib/deliveries';
+import { auth } from "@/lib/nextauth";
+import { filenameSlug, formatVisitDate } from "@/lib/visit-export";
+import { loadVisitExportData } from "@/lib/visit-export-server";
+import { generateVisitPdf } from "@/lib/pdf-generator";
+import { logDelivery } from "@/lib/deliveries";
 
-import { apiError, withApiHandler } from '@/lib/api-error';
-import { redactPhi } from '@meddoc/ai';
-import { logAudit } from '@/lib/audit';
+import { apiError, withApiHandler } from "@/lib/api-error";
+import { redactPhi } from "@meddoc/ai";
+import { logAudit } from "@/lib/audit";
+import { isOwnedTemplateTwinStagingQaVisit } from "@/lib/template-twin/staging-qa-access";
+import { isTemplateTwinStagingQaRequested } from "@/lib/template-twin/staging-qa-gate";
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 export const GET = withApiHandler<{ id: string }>(
-  'api:visits:export:pdf',
+  "api:visits:export:pdf",
   async (_req, { params }) => {
     const { id: visitId } = await params;
 
     const session = await auth();
     const userId = session?.user?.id;
-    if (!userId) return apiError('unauthorized', 401);
+    if (!userId) return apiError("unauthorized", 401);
+    if (
+      isTemplateTwinStagingQaRequested() ||
+      (await isOwnedTemplateTwinStagingQaVisit({ visitId, userId }))
+    ) {
+      return apiError("not found", 404);
+    }
 
     const data = await loadVisitExportData(visitId, userId);
     // 404 covers both "missing" and "not yours" — anti-enumeration.
-    if (!data) return apiError('not found', 404);
+    if (!data) return apiError("not found", 404);
 
     let pdf: Buffer;
     try {
       pdf = await generateVisitPdf(data);
     } catch (err) {
       console.error(
-        '[api:visits:export:pdf] generation failed:',
-        redactPhi(err instanceof Error ? err.message : err)
+        "[api:visits:export:pdf] generation failed:",
+        redactPhi(err instanceof Error ? err.message : err),
       );
-      return apiError('pdf generation failed', 500);
+      return apiError("pdf generation failed", 500);
     }
 
     logDelivery({
       visitId,
-      channel: 'pdf',
+      channel: "pdf",
       sizeBytes: pdf.byteLength,
     });
     void logAudit({
-      action: 'EXPORT_PDF_DOWNLOADED',
-      targetType: 'TranscribeVisit',
+      action: "EXPORT_PDF_DOWNLOADED",
+      targetType: "TranscribeVisit",
       targetId: visitId,
       metadata: {
         sizeBytes: pdf.byteLength,
@@ -63,17 +71,17 @@ export const GET = withApiHandler<{ id: string }>(
     });
 
     const filename = `visit-${filenameSlug(data.patientName)}-${formatVisitDate(
-      data.signedAt ?? data.createdAt
+      data.signedAt ?? data.createdAt,
     )}.pdf`;
 
     return new NextResponse(pdf as unknown as BodyInit, {
       status: 200,
       headers: {
-        'Content-Type': 'application/pdf',
-        'Content-Length': String(pdf.byteLength),
-        'Content-Disposition': `attachment; filename="${filename}"`,
-        'Cache-Control': 'no-store, private',
+        "Content-Type": "application/pdf",
+        "Content-Length": String(pdf.byteLength),
+        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Cache-Control": "no-store, private",
       },
     });
-  }
+  },
 );

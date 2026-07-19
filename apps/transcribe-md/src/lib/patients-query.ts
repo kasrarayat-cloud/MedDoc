@@ -11,13 +11,14 @@
 // calls it after its own requireSession() gate.
 // ============================================================================
 
-import prisma from '@meddoc/db';
+import prisma from "@meddoc/db";
 import {
   PATIENTS_PAGE_SIZE,
   type PatientsCursor,
   type PatientListItem,
   type LoadMorePatientsResult,
-} from '@/lib/patients-pagination';
+} from "@/lib/patients-pagination";
+import { TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID } from "@/lib/template-twin/synthetic-qa-patient";
 
 interface RawRow {
   id: string;
@@ -31,7 +32,7 @@ interface RawRow {
 
 async function fetchRows(
   practiceId: string,
-  cursor: PatientsCursor | null
+  cursor: PatientsCursor | null,
 ): Promise<RawRow[]> {
   const take = PATIENTS_PAGE_SIZE + 1;
 
@@ -50,6 +51,11 @@ async function fetchRows(
           WHERE v2."patientId" = p.id
             AND v2."deletedAt" IS NULL
             AND v2."archivedAt" IS NULL
+            AND NOT EXISTS (
+              SELECT 1
+              FROM template_twin_synthetic_qa_runs qa2
+              WHERE qa2."visitId" = v2.id
+            )
           ORDER BY v2."createdAt" DESC
           LIMIT 1
         ) AS "lastVisitSpecialty"
@@ -57,8 +63,14 @@ async function fetchRows(
       LEFT JOIN transcribe_visits v ON v."patientId" = p.id
         AND v."deletedAt" IS NULL
         AND v."archivedAt" IS NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM template_twin_synthetic_qa_runs qa
+          WHERE qa."visitId" = v.id
+        )
       WHERE p."practiceId" = ${practiceId}
         AND p."deletedAt" IS NULL
+        AND p."externalId" IS DISTINCT FROM ${TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID}
       GROUP BY p.id
       ORDER BY MAX(v."createdAt") DESC NULLS LAST, p.id DESC
       LIMIT ${take}
@@ -82,6 +94,11 @@ async function fetchRows(
           WHERE v2."patientId" = p.id
             AND v2."deletedAt" IS NULL
             AND v2."archivedAt" IS NULL
+            AND NOT EXISTS (
+              SELECT 1
+              FROM template_twin_synthetic_qa_runs qa2
+              WHERE qa2."visitId" = v2.id
+            )
           ORDER BY v2."createdAt" DESC
           LIMIT 1
         ) AS "lastVisitSpecialty"
@@ -89,8 +106,14 @@ async function fetchRows(
       LEFT JOIN transcribe_visits v ON v."patientId" = p.id
         AND v."deletedAt" IS NULL
         AND v."archivedAt" IS NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM template_twin_synthetic_qa_runs qa
+          WHERE qa."visitId" = v.id
+        )
       WHERE p."practiceId" = ${practiceId}
         AND p."deletedAt" IS NULL
+        AND p."externalId" IS DISTINCT FROM ${TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID}
         AND p.id < ${cursor.id}
       GROUP BY p.id
       HAVING MAX(v."createdAt") IS NULL
@@ -118,13 +141,24 @@ async function fetchRows(
         WHERE v2."patientId" = p.id
           AND v2."deletedAt" IS NULL
           AND v2."archivedAt" IS NULL
+          AND NOT EXISTS (
+            SELECT 1
+            FROM template_twin_synthetic_qa_runs qa2
+            WHERE qa2."visitId" = v2.id
+          )
         ORDER BY v2."createdAt" DESC
         LIMIT 1
       ) AS "lastVisitSpecialty"
     FROM transcribe_md_patients p
     LEFT JOIN transcribe_visits v ON v."patientId" = p.id
+      AND NOT EXISTS (
+        SELECT 1
+        FROM template_twin_synthetic_qa_runs qa
+        WHERE qa."visitId" = v.id
+      )
     WHERE p."practiceId" = ${practiceId}
       AND p."deletedAt" IS NULL
+      AND p."externalId" IS DISTINCT FROM ${TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID}
     GROUP BY p.id
     HAVING
       MAX(v."createdAt") IS NULL
@@ -137,7 +171,7 @@ async function fetchRows(
 
 export async function fetchPatientsPage(
   practiceId: string,
-  cursor: PatientsCursor | null
+  cursor: PatientsCursor | null,
 ): Promise<LoadMorePatientsResult> {
   const rows = await fetchRows(practiceId, cursor);
   const hasMore = rows.length > PATIENTS_PAGE_SIZE;

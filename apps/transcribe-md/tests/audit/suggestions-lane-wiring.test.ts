@@ -52,7 +52,7 @@ describe('Suggestions-lane wiring', () => {
     // Hidden when signed / readonly / empty — the lane is a READY-only,
     // unsigned-only surface.
     expect(readyView).toMatch(
-      /\{!props\.readonly &&\s*!props\.signedAt &&\s*\(props\.suggestedClaims\?\.length \?\? 0\) > 0 &&/
+      /\{!syntheticQaMode &&\s*!props\.readonly &&\s*!props\.signedAt &&\s*\(props\.suggestedClaims\?\.length \?\? 0\) > 0 &&/
     );
   });
 
@@ -78,7 +78,7 @@ describe('Suggestions-lane wiring', () => {
     // claim text (PHI). The unit test asserts the exact runtime key-set;
     // this pins the source shape.
     expect(actions).toMatch(
-      /metadata: \{ section: claim\.section, reason: claim\.reason, remaining: remaining\.length \}/
+      /metadata: \{\s*section: claim\.section,\s*reason: claim\.reason,\s*remaining: remaining\.length,?\s*\}/
     );
     expect(actions).not.toMatch(/metadata:[^}]*claim\.text/);
   });

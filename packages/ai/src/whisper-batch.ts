@@ -27,6 +27,10 @@ import { PRICING } from './api-usage';
 import { withRetry, type RetryAttemptInfo } from './retry';
 import type { AiLogContext } from './types';
 import { logApiUsage, buildWhisperUsage } from './api-usage';
+import {
+  TEMPLATE_TWIN_SYNTHETIC_QA_TRANSCRIPT,
+  syntheticQaFixtureForProviderCall,
+} from './synthetic-qa-context';
 
 export const DEFAULT_WHISPER_MODEL = 'whisper-1';
 
@@ -156,6 +160,21 @@ export function isPermanent4xxError(err: unknown): boolean {
 export async function whisperBatchTranscribe(
   args: WhisperBatchArgs
 ): Promise<WhisperBatchResult> {
+  // A staging visit may reach this function when the ordinary Deepgram
+  // orchestrator evaluates its fallback branch. Keep the provider boundary
+  // closed here as defense in depth: exact visit/practice context returns the
+  // reviewed transcript without reading audio or constructing an OpenAI
+  // client; mismatched context throws instead of falling through live.
+  if (syntheticQaFixtureForProviderCall(args)) {
+    return {
+      provider: 'whisper',
+      transcript: TEMPLATE_TWIN_SYNTHETIC_QA_TRANSCRIPT,
+      durationSec: 0,
+      segments: [],
+      language: args.language ?? 'en',
+      costCents: 0,
+    };
+  }
   return withRetry(() => whisperBatchTranscribeOnce(args), {
     maxAttempts: 2,
     baseDelayMs: 1000,

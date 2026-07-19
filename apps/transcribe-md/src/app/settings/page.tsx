@@ -12,48 +12,57 @@
 // per PROTECTED_CONTRACTS.
 // ============================================================================
 
-import type { Metadata } from 'next';
-import { Suspense } from 'react';
-import { redirect } from 'next/navigation';
+import type { Metadata } from "next";
+import Link from "next/link";
+import { Suspense } from "react";
+import { redirect } from "next/navigation";
 
-import prisma from '@meddoc/db';
-import { auth } from '@/lib/nextauth';
-import { getCurrentSessionId } from '@/lib/auth';
-import { logAudit } from '@/lib/audit';
-import { isSkinBeta } from '@/config/skin-beta';
+import prisma from "@meddoc/db";
+import { auth } from "@/lib/nextauth";
+import { getCurrentSessionId } from "@/lib/auth";
+import { logAudit } from "@/lib/audit";
+import { isSkinBeta } from "@/config/skin-beta";
 import {
   SettingsSectionsC3,
   type SettingsSectionC3,
-} from './settings-sections-c3';
+} from "./settings-sections-c3";
+import { describeIpLocation, parseUserAgent } from "@/lib/fingerprint";
+import { AppFrame } from "@/components/ui/app-frame";
+import { Ic } from "@/components/ui/icon";
+import { LocalTime } from "@/components/ui/local-time";
+import { ProfileForm } from "./profile-form";
+import { SessionPanel } from "./session-panel";
+import { DeleteAccountDialog } from "./delete-account-dialog";
+import { ChangePasswordForm } from "./change-password-form";
+import { ChangeEmailDialog } from "./change-email-dialog";
+import { EmailChangeToast } from "./email-change-toast";
+import { isDataExportEnabled } from "@/lib/data-export-feature";
+import { NoteFormatManager } from "./note-format/note-format-manager";
 import {
-  describeIpLocation,
-  parseUserAgent,
-} from '@/lib/fingerprint';
-import { AppFrame } from '@/components/ui/app-frame';
-import { Ic } from '@/components/ui/icon';
-import { LocalTime } from '@/components/ui/local-time';
-import { ProfileForm } from './profile-form';
-import { SessionPanel } from './session-panel';
-import { DeleteAccountDialog } from './delete-account-dialog';
-import { ChangePasswordForm } from './change-password-form';
-import { ChangeEmailDialog } from './change-email-dialog';
-import { EmailChangeToast } from './email-change-toast';
-import { isDataExportEnabled } from '../api/settings/export-data/route';
-import { NoteFormatManager } from './note-format/note-format-manager';
-import { listDoctorTemplates } from '@/lib/note-template-persist/read';
-import { findSpecialty } from '@meddoc/shared/specialties';
-import type { ClientTemplateListItem } from '@/lib/note-template-persist/types';
+  listDoctorStagingQaTemplates,
+  listDoctorTemplates,
+} from "@/lib/note-template-persist/read";
+import { findSpecialty } from "@meddoc/shared/specialties";
+import type { ClientTemplateListItem } from "@/lib/note-template-persist/types";
+import {
+  evaluateTemplateTwinRollout,
+  pinTemplateTwinRollout,
+} from "@/lib/template-twin/rollout";
+import {
+  evaluateTemplateTwinStagingQaGate,
+  isTemplateTwinStagingQaRequested,
+} from "@/lib/template-twin/staging-qa-gate";
 
-export const metadata: Metadata = { title: 'Settings' };
+export const metadata: Metadata = { title: "Settings" };
 
 const SECTIONS = [
-  { id: 'profile', label: 'Profile' },
-  { id: 'note-format', label: 'My Note Format' },
-  { id: 'security', label: 'Security' },
-  { id: 'sessions', label: 'Active sessions' },
-  { id: 'data', label: 'Your data' },
-  { id: 'billing', label: 'Billing' },
-  { id: 'danger', label: 'Danger zone' },
+  { id: "profile", label: "Profile" },
+  { id: "note-format", label: "My Note Format" },
+  { id: "security", label: "Security" },
+  { id: "sessions", label: "Active sessions" },
+  { id: "data", label: "Your data" },
+  { id: "billing", label: "Billing" },
+  { id: "danger", label: "Danger zone" },
 ] as const;
 
 // Runtime upload-capability probe (incident 2026-06-04 defense-in-depth). A
@@ -67,8 +76,12 @@ let uploadCapsCache: { pdf: boolean; docx: boolean } | null = null;
 async function getUploadCaps(): Promise<{ pdf: boolean; docx: boolean }> {
   if (uploadCapsCache) return uploadCapsCache;
   const [pdf, docx] = await Promise.all([
-    import('@/lib/note-template-parse/pdf-to-text').then(() => true).catch(() => false),
-    import('@/lib/note-template-parse/docx-to-text').then(() => true).catch(() => false),
+    import("@/lib/note-template-parse/pdf-to-text")
+      .then(() => true)
+      .catch(() => false),
+    import("@/lib/note-template-parse/docx-to-text")
+      .then(() => true)
+      .catch(() => false),
   ]);
   uploadCapsCache = { pdf, docx };
   return uploadCapsCache;
@@ -76,7 +89,7 @@ async function getUploadCaps(): Promise<{ pdf: boolean; docx: boolean }> {
 
 export default async function SettingsPage() {
   const session = await auth();
-  if (!session?.user?.id) redirect('/login');
+  if (!session?.user?.id) redirect("/login");
 
   type UserRow = {
     name: string | null;
@@ -87,6 +100,8 @@ export default async function SettingsPage() {
     clinicName: string | null;
     timeZone: string | null;
     mfaEnabled: boolean;
+    role: string;
+    practice: { id: string; templateTwinEnabled: boolean } | null;
   };
 
   const [user, sessionId] = (await Promise.all([
@@ -101,11 +116,13 @@ export default async function SettingsPage() {
         clinicName: true,
         timeZone: true,
         mfaEnabled: true,
+        role: true,
+        practice: { select: { id: true, templateTwinEnabled: true } },
       },
     }),
     getCurrentSessionId(),
   ])) as [UserRow | null, string | null];
-  if (!user) redirect('/login');
+  if (!user) redirect("/login");
 
   const activeSession = sessionId
     ? await prisma.userSession.findUnique({
@@ -123,33 +140,71 @@ export default async function SettingsPage() {
   // per the file's audit precedents — `logAudit` is internally try/
   // wrapped so failures never break the render.
   void logAudit({
-    action: 'VIEWED_SETTINGS',
-    targetType: 'User',
+    action: "VIEWED_SETTINGS",
+    targetType: "User",
     targetId: session.user.id,
     metadata: {
-      source: 'rsc:/settings',
+      source: "rsc:/settings",
       hasActiveSession: activeSession !== null,
     },
   });
 
-  // Phase 2b — the doctor's own note-format templates (scoped to session.user.id;
-  // a doctor never sees another's). Date → ISO + display labels for the client.
-  const noteTemplates: ClientTemplateListItem[] = (
-    await listDoctorTemplates(session.user.id)
-  ).map((t) => ({
+  // Which upload formats can this image actually extract (see getUploadCaps).
+  const uploadCaps = await getUploadCaps();
+  const templateTwinStagingQaRequested = isTemplateTwinStagingQaRequested(
+    process.env,
+  );
+  const canManageTemplateTwinStaticAssets =
+    !templateTwinStagingQaRequested &&
+    (user.role === "ADMIN" || user.role === "SUPER_ADMIN") &&
+    user.practice !== null &&
+    evaluateTemplateTwinRollout({
+      practiceEnabled: user.practice.templateTwinEnabled,
+    }).allowed;
+  const templateTwinSyntheticQaState: "enabled" | "unavailable" | "hidden" =
+    user.role !== "DOCTOR"
+      ? "hidden"
+      : user.practice !== null &&
+          evaluateTemplateTwinRollout({
+            practiceEnabled: user.practice.templateTwinEnabled,
+          }).allowed &&
+          evaluateTemplateTwinStagingQaGate(process.env).allowed
+        ? "enabled"
+        : "unavailable";
+
+  // Phase 2b — the doctor's own templates. Synthetic QA receives a separate
+  // server-filtered collection backed by a current durable PostgreSQL
+  // admission; it never receives ordinary generic Template Twin rows.
+  const templateRows = templateTwinStagingQaRequested
+    ? templateTwinSyntheticQaState === "enabled" && user.practice
+      ? await pinTemplateTwinRollout({ practiceId: user.practice.id }).then(
+          (token) =>
+            listDoctorStagingQaTemplates({
+              doctorId: session.user.id,
+              practiceId: user.practice!.id,
+              globalGeneration: token.globalGeneration,
+              practiceGeneration: token.practiceGeneration,
+            }),
+        )
+      : []
+    : await listDoctorTemplates(session.user.id);
+  const noteTemplates: ClientTemplateListItem[] = templateRows.map((t) => ({
     id: t.id,
     name: t.name,
     encounterType: t.encounterType,
-    encounterLabel: t.encounterType ? findSpecialty(t.encounterType).label : 'All my visits',
+    encounterLabel: t.encounterType
+      ? findSpecialty(t.encounterType).label
+      : "All my visits",
     status: t.status,
     version: t.version,
     sectionCount: t.sectionCount,
     defaultCount: t.defaultCount,
+    templateKind: t.templateKind,
+    twinCertificationStatus: t.twinCertificationStatus,
+    twinFieldCount: t.twinFieldCount,
+    twinBlockingUnsupportedCount: t.twinBlockingUnsupportedCount,
     updatedAtIso: t.updatedAt.toISOString(),
   }));
-
-  // Which upload formats can this image actually extract (see getUploadCaps).
-  const uploadCaps = await getUploadCaps();
 
   // ── C3 calm-skin settings (Stage 3, flag-gated) ───────────────────────────
   // SKIN-ONLY: identical auth + Prisma reads + VIEWED_SETTINGS audit row + the
@@ -162,26 +217,26 @@ export default async function SettingsPage() {
   if (isSkinBeta()) {
     const c3Sections: SettingsSectionC3[] = [
       {
-        id: 'profile',
-        label: 'Profile',
-        title: 'Profile',
+        id: "profile",
+        label: "Profile",
+        title: "Profile",
         content: (
           <>
             <ProfileForm
-              defaultName={user.name ?? ''}
-              defaultSpecialty={user.specialty ?? ''}
-              defaultNpi={user.npi ?? ''}
-              defaultClinicName={user.clinicName ?? ''}
-              defaultTimeZone={user.timeZone ?? ''}
+              defaultName={user.name ?? ""}
+              defaultSpecialty={user.specialty ?? ""}
+              defaultNpi={user.npi ?? ""}
+              defaultClinicName={user.clinicName ?? ""}
+              defaultTimeZone={user.timeZone ?? ""}
             />
             <div
               style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
                 gap: 14,
                 marginTop: 18,
                 paddingTop: 16,
-                borderTop: '1px solid var(--color-linear-hairline)',
+                borderTop: "1px solid var(--color-linear-hairline)",
               }}
             >
               <EmailWithChangeButton email={user.email} />
@@ -199,37 +254,45 @@ export default async function SettingsPage() {
         ),
       },
       {
-        id: 'note-format',
-        label: 'Note format',
-        title: 'My Note Format',
+        id: "note-format",
+        label: "Note format",
+        title: "My Note Format",
         subtitle:
-          'QuillMD writes in a standard SOAP format. Most doctors leave this as-is — teaching it your own template is an explicit, opt-in step below.',
+          "QuillMD writes in a standard SOAP format. Most doctors leave this as-is — teaching it your own template is an explicit, opt-in step below.",
         content: (
-          <NoteFormatManager templates={noteTemplates} uploadCaps={uploadCaps} />
+          <>
+            {canManageTemplateTwinStaticAssets && <StaticAssetSettingsLink />}
+            <NoteFormatManager
+              templates={noteTemplates}
+              uploadCaps={uploadCaps}
+              templateTwinSyntheticQaState={templateTwinSyntheticQaState}
+              templateTwinStagingQaRequested={templateTwinStagingQaRequested}
+            />
+          </>
         ),
       },
       {
-        id: 'security',
-        label: 'Security',
-        title: 'Security',
+        id: "security",
+        label: "Security",
+        title: "Security",
         subtitle:
-          'Change your password. Other devices are signed out; this one stays.',
+          "Change your password. Other devices are signed out; this one stays.",
         content: (
           <>
             <ChangePasswordForm />
             <div style={{ marginTop: 20 }}>
               <div
                 style={{
-                  padding: '14px 16px',
+                  padding: "14px 16px",
                   borderRadius: 8,
-                  border: '1px dashed var(--color-linear-border-strong)',
-                  background: 'var(--color-linear-row-hover)',
+                  border: "1px dashed var(--color-linear-border-strong)",
+                  background: "var(--color-linear-row-hover)",
                 }}
               >
                 <div
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
+                    display: "flex",
+                    alignItems: "center",
                     gap: 10,
                     marginBottom: 6,
                   }}
@@ -237,14 +300,14 @@ export default async function SettingsPage() {
                   <Ic.shield
                     width={14}
                     height={14}
-                    style={{ color: 'var(--color-linear-sage-bright)' }}
+                    style={{ color: "var(--color-linear-sage-bright)" }}
                   />
                   <span
                     style={{
-                      fontFamily: 'var(--font-sans)',
+                      fontFamily: "var(--font-sans)",
                       fontSize: 13,
                       fontWeight: 500,
-                      color: 'var(--color-linear-text)',
+                      color: "var(--color-linear-text)",
                     }}
                   >
                     Two-factor authentication
@@ -252,19 +315,19 @@ export default async function SettingsPage() {
                   <span
                     className={
                       user.mfaEnabled
-                        ? 'qm-lin-pill qm-lin-pill--ready'
-                        : 'qm-lin-pill qm-lin-pill--review'
+                        ? "qm-lin-pill qm-lin-pill--ready"
+                        : "qm-lin-pill qm-lin-pill--review"
                     }
                   >
-                    {user.mfaEnabled ? 'Enabled' : 'Off'}
+                    {user.mfaEnabled ? "Enabled" : "Off"}
                   </span>
                 </div>
                 <p
                   style={{
                     margin: 0,
-                    fontFamily: 'var(--font-sans)',
+                    fontFamily: "var(--font-sans)",
                     fontSize: 12.5,
-                    color: 'var(--color-linear-text-2)',
+                    color: "var(--color-linear-text-2)",
                     lineHeight: 1.55,
                   }}
                 >
@@ -278,11 +341,11 @@ export default async function SettingsPage() {
         ),
       },
       {
-        id: 'sessions',
-        label: 'Active session',
-        title: 'Active session',
+        id: "sessions",
+        label: "Active session",
+        title: "Active session",
         subtitle:
-          'One device at a time. Signing in elsewhere revokes this session automatically.',
+          "One device at a time. Signing in elsewhere revokes this session automatically.",
         content: activeSession ? (
           <SessionPanel
             ipAddress={activeSession.ipAddress}
@@ -296,40 +359,40 @@ export default async function SettingsPage() {
         ) : (
           <p
             style={{
-              fontFamily: 'var(--font-sans)',
+              fontFamily: "var(--font-sans)",
               fontSize: 13,
-              color: 'var(--color-linear-text-2)',
+              color: "var(--color-linear-text-2)",
             }}
           >
-            Your current session predates the single-device enforcement
-            rollout. Sign out and back in to enable it.
+            Your current session predates the single-device enforcement rollout.
+            Sign out and back in to enable it.
           </p>
         ),
       },
       ...(isDataExportEnabled()
         ? [
             {
-              id: 'data',
-              label: 'Your data',
-              title: 'Your data',
+              id: "data",
+              label: "Your data",
+              title: "Your data",
               subtitle:
-                'Download a ZIP containing every visit, transcript, SOAP note, audio file, and signed PDF.',
+                "Download a ZIP containing every visit, transcript, SOAP note, audio file, and signed PDF.",
               content: (
                 <div
                   style={{
-                    display: 'flex',
+                    display: "flex",
                     gap: 16,
-                    flexWrap: 'wrap',
-                    alignItems: 'flex-start',
-                    justifyContent: 'space-between',
+                    flexWrap: "wrap",
+                    alignItems: "flex-start",
+                    justifyContent: "space-between",
                   }}
                 >
                   <p
                     style={{
                       margin: 0,
-                      fontFamily: 'var(--font-sans)',
+                      fontFamily: "var(--font-sans)",
                       fontSize: 13,
-                      color: 'var(--color-linear-text-2)',
+                      color: "var(--color-linear-text-2)",
                       lineHeight: 1.55,
                       flex: 1,
                       minWidth: 220,
@@ -342,7 +405,7 @@ export default async function SettingsPage() {
                   <a
                     href="/api/settings/export-data"
                     className="qm-lin-btn"
-                    style={{ textDecoration: 'none' }}
+                    style={{ textDecoration: "none" }}
                   >
                     <Ic.download width={13} height={13} />
                     Export my data
@@ -353,26 +416,26 @@ export default async function SettingsPage() {
           ]
         : []),
       {
-        id: 'billing',
-        label: 'Billing',
-        title: 'Billing',
-        subtitle: 'Manage your subscription and payment method.',
+        id: "billing",
+        label: "Billing",
+        title: "Billing",
+        subtitle: "Manage your subscription and payment method.",
         content: (
           <div
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
               gap: 16,
-              flexWrap: 'wrap',
+              flexWrap: "wrap",
             }}
           >
             <p
               style={{
                 margin: 0,
-                fontFamily: 'var(--font-sans)',
+                fontFamily: "var(--font-sans)",
                 fontSize: 13,
-                color: 'var(--color-linear-text-2)',
+                color: "var(--color-linear-text-2)",
                 maxWidth: 400,
               }}
             >
@@ -384,7 +447,7 @@ export default async function SettingsPage() {
               disabled
               className="qm-lin-btn"
               title="Coming soon"
-              style={{ opacity: 0.45, cursor: 'not-allowed' }}
+              style={{ opacity: 0.45, cursor: "not-allowed" }}
             >
               Manage billing
             </button>
@@ -392,28 +455,28 @@ export default async function SettingsPage() {
         ),
       },
       {
-        id: 'danger',
-        label: 'Danger zone',
-        title: 'Danger zone',
+        id: "danger",
+        label: "Danger zone",
+        title: "Danger zone",
         subtitle:
-          'Delete your account. Every visit, transcript, and exported file gets erased.',
+          "Delete your account. Every visit, transcript, and exported file gets erased.",
         danger: true,
         content: (
           <div
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
               gap: 16,
-              flexWrap: 'wrap',
+              flexWrap: "wrap",
             }}
           >
             <p
               style={{
                 margin: 0,
-                fontFamily: 'var(--font-sans)',
+                fontFamily: "var(--font-sans)",
                 fontSize: 13,
-                color: 'var(--color-linear-text-2)',
+                color: "var(--color-linear-text-2)",
                 lineHeight: 1.55,
                 maxWidth: 440,
               }}
@@ -433,15 +496,15 @@ export default async function SettingsPage() {
         <Suspense fallback={null}>
           <EmailChangeToast />
         </Suspense>
-        <div style={{ padding: '18px 24px 0' }}>
+        <div style={{ padding: "18px 24px 0" }}>
           <div
             style={{
-              fontFamily: 'var(--font-mono)',
+              fontFamily: "var(--font-mono)",
               fontSize: 10.5,
               fontWeight: 500,
-              color: 'var(--color-linear-text-3)',
-              letterSpacing: '0.07em',
-              textTransform: 'uppercase',
+              color: "var(--color-linear-text-3)",
+              letterSpacing: "0.07em",
+              textTransform: "uppercase",
               marginBottom: 8,
             }}
           >
@@ -450,18 +513,18 @@ export default async function SettingsPage() {
           <h1
             style={{
               margin: 0,
-              fontFamily: 'var(--font-sans)',
+              fontFamily: "var(--font-sans)",
               fontSize: 22,
               fontWeight: 500,
-              color: 'var(--color-linear-text)',
-              letterSpacing: '-0.012em',
+              color: "var(--color-linear-text)",
+              letterSpacing: "-0.012em",
               lineHeight: 1.2,
             }}
           >
             Settings
           </h1>
         </div>
-        <div style={{ padding: '20px 24px 48px', maxWidth: 1100 }}>
+        <div style={{ padding: "20px 24px 48px", maxWidth: 1100 }}>
           <SettingsSectionsC3 sections={c3Sections} />
         </div>
       </AppFrame>
@@ -474,15 +537,15 @@ export default async function SettingsPage() {
         <EmailChangeToast />
       </Suspense>
 
-      <div style={{ padding: '18px 24px 0' }}>
+      <div style={{ padding: "18px 24px 0" }}>
         <div
           style={{
-            fontFamily: 'var(--font-mono)',
+            fontFamily: "var(--font-mono)",
             fontSize: 10.5,
             fontWeight: 500,
-            color: 'var(--color-linear-text-3)',
-            letterSpacing: '0.07em',
-            textTransform: 'uppercase',
+            color: "var(--color-linear-text-3)",
+            letterSpacing: "0.07em",
+            textTransform: "uppercase",
             marginBottom: 8,
           }}
         >
@@ -491,11 +554,11 @@ export default async function SettingsPage() {
         <h1
           style={{
             margin: 0,
-            fontFamily: 'var(--font-sans)',
+            fontFamily: "var(--font-sans)",
             fontSize: 22,
             fontWeight: 500,
-            color: 'var(--color-linear-text)',
-            letterSpacing: '-0.012em',
+            color: "var(--color-linear-text)",
+            letterSpacing: "-0.012em",
             lineHeight: 1.2,
           }}
         >
@@ -503,10 +566,10 @@ export default async function SettingsPage() {
         </h1>
         <p
           style={{
-            margin: '6px 0 0',
-            fontFamily: 'var(--font-sans)',
+            margin: "6px 0 0",
+            fontFamily: "var(--font-sans)",
             fontSize: 13,
-            color: 'var(--color-linear-text-2)',
+            color: "var(--color-linear-text-2)",
             lineHeight: 1.5,
           }}
         >
@@ -516,38 +579,38 @@ export default async function SettingsPage() {
 
       <div
         style={{
-          display: 'grid',
-          gridTemplateColumns: '200px 1fr',
+          display: "grid",
+          gridTemplateColumns: "200px 1fr",
           gap: 32,
-          padding: '24px 24px 48px',
-          alignItems: 'flex-start',
+          padding: "24px 24px 48px",
+          alignItems: "flex-start",
           maxWidth: 1200,
         }}
       >
         <aside
           style={{
-            position: 'sticky',
+            position: "sticky",
             top: 64,
-            alignSelf: 'flex-start',
+            alignSelf: "flex-start",
           }}
         >
           <div
             style={{
-              fontFamily: 'var(--font-mono)',
+              fontFamily: "var(--font-mono)",
               fontSize: 10.5,
               fontWeight: 500,
-              color: 'var(--color-linear-text-3)',
-              letterSpacing: '0.07em',
-              textTransform: 'uppercase',
+              color: "var(--color-linear-text-3)",
+              letterSpacing: "0.07em",
+              textTransform: "uppercase",
               marginBottom: 10,
-              padding: '0 8px',
+              padding: "0 8px",
             }}
           >
             On this page
           </div>
           <nav
             aria-label="Settings sections"
-            style={{ display: 'flex', flexDirection: 'column', gap: 1 }}
+            style={{ display: "flex", flexDirection: "column", gap: 1 }}
           >
             {SECTIONS.map((s) => (
               <a
@@ -555,17 +618,16 @@ export default async function SettingsPage() {
                 href={`#${s.id}`}
                 className="qm-tap-44"
                 style={{
-                  padding: '6px 8px',
+                  padding: "6px 8px",
                   height: 28,
-                  display: 'flex',
-                  alignItems: 'center',
-                  fontFamily: 'var(--font-sans)',
+                  display: "flex",
+                  alignItems: "center",
+                  fontFamily: "var(--font-sans)",
                   fontSize: 13,
-                  color: 'var(--color-linear-text-2)',
+                  color: "var(--color-linear-text-2)",
                   borderRadius: 5,
-                  textDecoration: 'none',
-                  transition:
-                    'background-color 80ms ease, color 80ms ease',
+                  textDecoration: "none",
+                  transition: "background-color 80ms ease, color 80ms ease",
                 }}
               >
                 {s.label}
@@ -574,23 +636,23 @@ export default async function SettingsPage() {
           </nav>
         </aside>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
           <Section id="profile" eyebrow="01 / Profile" title="Profile">
             <ProfileForm
-              defaultName={user.name ?? ''}
-              defaultSpecialty={user.specialty ?? ''}
-              defaultNpi={user.npi ?? ''}
-              defaultClinicName={user.clinicName ?? ''}
-              defaultTimeZone={user.timeZone ?? ''}
+              defaultName={user.name ?? ""}
+              defaultSpecialty={user.specialty ?? ""}
+              defaultNpi={user.npi ?? ""}
+              defaultClinicName={user.clinicName ?? ""}
+              defaultTimeZone={user.timeZone ?? ""}
             />
             <div
               style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
                 gap: 14,
                 marginTop: 18,
                 paddingTop: 16,
-                borderTop: '1px solid var(--color-linear-hairline)',
+                borderTop: "1px solid var(--color-linear-hairline)",
               }}
             >
               <EmailWithChangeButton email={user.email} />
@@ -611,7 +673,13 @@ export default async function SettingsPage() {
             eyebrow="02 / Note format"
             title="My Note Format"
           >
-            <NoteFormatManager templates={noteTemplates} uploadCaps={uploadCaps} />
+            {canManageTemplateTwinStaticAssets && <StaticAssetSettingsLink />}
+            <NoteFormatManager
+              templates={noteTemplates}
+              uploadCaps={uploadCaps}
+              templateTwinSyntheticQaState={templateTwinSyntheticQaState}
+              templateTwinStagingQaRequested={templateTwinStagingQaRequested}
+            />
           </Section>
 
           <Section
@@ -624,16 +692,16 @@ export default async function SettingsPage() {
             <div style={{ marginTop: 20 }}>
               <div
                 style={{
-                  padding: '14px 16px',
+                  padding: "14px 16px",
                   borderRadius: 8,
-                  border: '1px dashed var(--color-linear-border-strong)',
-                  background: 'var(--color-linear-row-hover)',
+                  border: "1px dashed var(--color-linear-border-strong)",
+                  background: "var(--color-linear-row-hover)",
                 }}
               >
                 <div
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
+                    display: "flex",
+                    alignItems: "center",
                     gap: 10,
                     marginBottom: 6,
                   }}
@@ -641,14 +709,14 @@ export default async function SettingsPage() {
                   <Ic.shield
                     width={14}
                     height={14}
-                    style={{ color: 'var(--color-linear-sage-bright)' }}
+                    style={{ color: "var(--color-linear-sage-bright)" }}
                   />
                   <span
                     style={{
-                      fontFamily: 'var(--font-sans)',
+                      fontFamily: "var(--font-sans)",
                       fontSize: 13,
                       fontWeight: 500,
-                      color: 'var(--color-linear-text)',
+                      color: "var(--color-linear-text)",
                     }}
                   >
                     Two-factor authentication
@@ -656,19 +724,19 @@ export default async function SettingsPage() {
                   <span
                     className={
                       user.mfaEnabled
-                        ? 'qm-lin-pill qm-lin-pill--ready'
-                        : 'qm-lin-pill qm-lin-pill--review'
+                        ? "qm-lin-pill qm-lin-pill--ready"
+                        : "qm-lin-pill qm-lin-pill--review"
                     }
                   >
-                    {user.mfaEnabled ? 'Enabled' : 'Off'}
+                    {user.mfaEnabled ? "Enabled" : "Off"}
                   </span>
                 </div>
                 <p
                   style={{
                     margin: 0,
-                    fontFamily: 'var(--font-sans)',
+                    fontFamily: "var(--font-sans)",
                     fontSize: 12.5,
-                    color: 'var(--color-linear-text-2)',
+                    color: "var(--color-linear-text-2)",
                     lineHeight: 1.55,
                   }}
                 >
@@ -699,9 +767,9 @@ export default async function SettingsPage() {
             ) : (
               <p
                 style={{
-                  fontFamily: 'var(--font-sans)',
+                  fontFamily: "var(--font-sans)",
                   fontSize: 13,
-                  color: 'var(--color-linear-text-2)',
+                  color: "var(--color-linear-text-2)",
                 }}
               >
                 Your current session predates the single-device enforcement
@@ -719,19 +787,19 @@ export default async function SettingsPage() {
             >
               <div
                 style={{
-                  display: 'flex',
+                  display: "flex",
                   gap: 16,
-                  flexWrap: 'wrap',
-                  alignItems: 'flex-start',
-                  justifyContent: 'space-between',
+                  flexWrap: "wrap",
+                  alignItems: "flex-start",
+                  justifyContent: "space-between",
                 }}
               >
                 <p
                   style={{
                     margin: 0,
-                    fontFamily: 'var(--font-sans)',
+                    fontFamily: "var(--font-sans)",
                     fontSize: 13,
-                    color: 'var(--color-linear-text-2)',
+                    color: "var(--color-linear-text-2)",
                     lineHeight: 1.55,
                     flex: 1,
                     minWidth: 220,
@@ -744,7 +812,7 @@ export default async function SettingsPage() {
                 <a
                   href="/api/settings/export-data"
                   className="qm-lin-btn"
-                  style={{ textDecoration: 'none' }}
+                  style={{ textDecoration: "none" }}
                 >
                   <Ic.download width={13} height={13} />
                   Export my data
@@ -761,19 +829,19 @@ export default async function SettingsPage() {
           >
             <div
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
                 gap: 16,
-                flexWrap: 'wrap',
+                flexWrap: "wrap",
               }}
             >
               <p
                 style={{
                   margin: 0,
-                  fontFamily: 'var(--font-sans)',
+                  fontFamily: "var(--font-sans)",
                   fontSize: 13,
-                  color: 'var(--color-linear-text-2)',
+                  color: "var(--color-linear-text-2)",
                   maxWidth: 400,
                 }}
               >
@@ -787,7 +855,7 @@ export default async function SettingsPage() {
                 title="Coming soon"
                 style={{
                   opacity: 0.45,
-                  cursor: 'not-allowed',
+                  cursor: "not-allowed",
                 }}
               >
                 Manage billing
@@ -804,26 +872,26 @@ export default async function SettingsPage() {
           >
             <div
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
                 gap: 16,
-                flexWrap: 'wrap',
+                flexWrap: "wrap",
               }}
             >
               <p
                 style={{
                   margin: 0,
-                  fontFamily: 'var(--font-sans)',
+                  fontFamily: "var(--font-sans)",
                   fontSize: 13,
-                  color: 'var(--color-linear-text-2)',
+                  color: "var(--color-linear-text-2)",
                   lineHeight: 1.55,
                   maxWidth: 440,
                 }}
               >
-                A compliance record (email, deletion date, visit count) is
-                kept for 90 days and then purged. You&apos;ll be asked to
-                re-enter your password and type DELETE to confirm.
+                A compliance record (email, deletion date, visit count) is kept
+                for 90 days and then purged. You&apos;ll be asked to re-enter
+                your password and type DELETE to confirm.
               </p>
               <DeleteAccountDialog />
             </div>
@@ -831,6 +899,57 @@ export default async function SettingsPage() {
         </div>
       </div>
     </AppFrame>
+  );
+}
+
+function StaticAssetSettingsLink() {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 16,
+        flexWrap: "wrap",
+        marginBottom: 16,
+        padding: "13px 14px",
+        border: "1px solid rgba(122,166,140,0.32)",
+        borderRadius: 8,
+        background: "var(--color-linear-sage-tint)",
+      }}
+    >
+      <div style={{ minWidth: 220, flex: 1 }}>
+        <div
+          style={{
+            color: "var(--color-linear-text)",
+            fontFamily: "var(--font-sans)",
+            fontSize: 13,
+            fontWeight: 560,
+          }}
+        >
+          Reusable Word-template images
+        </div>
+        <p
+          style={{
+            margin: "4px 0 0",
+            color: "var(--color-linear-text-2)",
+            fontFamily: "var(--font-sans)",
+            fontSize: 12,
+            lineHeight: 1.5,
+          }}
+        >
+          Practice administrators can inspect and approve an exact blank logo or
+          mark before it appears in a new Template Twin version.
+        </p>
+      </div>
+      <Link
+        className="qm-lin-btn qm-tap-44"
+        href="/settings/note-format/static-assets"
+        style={{ textDecoration: "none" }}
+      >
+        Review practice images
+      </Link>
+    </div>
   );
 }
 
@@ -853,26 +972,24 @@ function Section({
     <section
       id={id}
       style={{
-        padding: '20px 22px',
-        background: 'var(--color-linear-surface-1)',
+        padding: "20px 22px",
+        background: "var(--color-linear-surface-1)",
         border: `1px solid ${
-          danger
-            ? 'rgba(212, 87, 74, 0.30)'
-            : 'var(--color-linear-border)'
+          danger ? "rgba(212, 87, 74, 0.30)" : "var(--color-linear-border)"
         }`,
         borderRadius: 10,
       }}
     >
       <div
         style={{
-          fontFamily: 'var(--font-mono)',
+          fontFamily: "var(--font-mono)",
           fontSize: 10.5,
           fontWeight: 500,
-          letterSpacing: '0.07em',
-          textTransform: 'uppercase',
+          letterSpacing: "0.07em",
+          textTransform: "uppercase",
           color: danger
-            ? 'var(--color-linear-coral)'
-            : 'var(--color-linear-text-3)',
+            ? "var(--color-linear-coral)"
+            : "var(--color-linear-text-3)",
           marginBottom: 8,
         }}
       >
@@ -881,11 +998,11 @@ function Section({
       <h3
         style={{
           margin: 0,
-          fontFamily: 'var(--font-sans)',
+          fontFamily: "var(--font-sans)",
           fontSize: 18,
           fontWeight: 500,
-          color: 'var(--color-linear-text)',
-          letterSpacing: '-0.012em',
+          color: "var(--color-linear-text)",
+          letterSpacing: "-0.012em",
         }}
       >
         {title}
@@ -893,10 +1010,10 @@ function Section({
       {subtitle && (
         <p
           style={{
-            margin: '6px 0 18px',
-            fontFamily: 'var(--font-sans)',
+            margin: "6px 0 18px",
+            fontFamily: "var(--font-sans)",
             fontSize: 12.5,
-            color: 'var(--color-linear-text-2)',
+            color: "var(--color-linear-text-2)",
             lineHeight: 1.55,
           }}
         >
@@ -920,11 +1037,11 @@ function ReadOnlyRow({
     <div>
       <div
         style={{
-          fontFamily: 'var(--font-mono)',
+          fontFamily: "var(--font-mono)",
           fontSize: 10.5,
-          letterSpacing: '0.06em',
-          textTransform: 'uppercase',
-          color: 'var(--color-linear-text-3)',
+          letterSpacing: "0.06em",
+          textTransform: "uppercase",
+          color: "var(--color-linear-text-3)",
           marginBottom: 4,
         }}
       >
@@ -932,9 +1049,9 @@ function ReadOnlyRow({
       </div>
       <div
         style={{
-          fontFamily: 'var(--font-sans)',
+          fontFamily: "var(--font-sans)",
           fontSize: 13,
-          color: 'var(--color-linear-text)',
+          color: "var(--color-linear-text)",
         }}
       >
         {value}
@@ -948,19 +1065,19 @@ function EmailWithChangeButton({ email }: { email: string }) {
     <div>
       <div
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
           marginBottom: 4,
         }}
       >
         <div
           style={{
-            fontFamily: 'var(--font-mono)',
+            fontFamily: "var(--font-mono)",
             fontSize: 10.5,
-            letterSpacing: '0.06em',
-            textTransform: 'uppercase',
-            color: 'var(--color-linear-text-3)',
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+            color: "var(--color-linear-text-3)",
           }}
         >
           Email
@@ -969,10 +1086,10 @@ function EmailWithChangeButton({ email }: { email: string }) {
       </div>
       <div
         style={{
-          fontFamily: 'var(--font-sans)',
+          fontFamily: "var(--font-sans)",
           fontSize: 13,
-          color: 'var(--color-linear-text)',
-          wordBreak: 'break-all',
+          color: "var(--color-linear-text)",
+          wordBreak: "break-all",
         }}
       >
         {email}

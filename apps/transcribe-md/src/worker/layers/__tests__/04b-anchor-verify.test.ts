@@ -20,7 +20,7 @@
 // behavior is measured by the pre-registered n=30 protocol run.
 // ============================================================================
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   modelCompleteText: vi.fn(),
@@ -28,49 +28,61 @@ const mocks = vi.hoisted(() => ({
   logAudit: vi.fn(),
 }));
 
-vi.mock('@meddoc/ai', async () => {
-  const actual = await vi.importActual<typeof import('@meddoc/ai')>('@meddoc/ai');
+vi.mock("@meddoc/ai", async () => {
+  const actual =
+    await vi.importActual<typeof import("@meddoc/ai")>("@meddoc/ai");
   return {
     ...actual,
     modelClient: { complete: vi.fn(), completeText: mocks.modelCompleteText },
   };
 });
-vi.mock('@meddoc/db', () => ({
+vi.mock("@meddoc/db", () => ({
   default: { transcribeVisit: { update: mocks.prismaUpdate } },
 }));
-vi.mock('@/lib/audit', () => ({ logAudit: mocks.logAudit }));
+vi.mock("@/lib/audit", () => ({ logAudit: mocks.logAudit }));
+vi.mock("@/worker/worker-audit", () => ({ logWorkerAudit: mocks.logAudit }));
+vi.mock("@/worker/staging-qa-mutation-fence", () => ({
+  updateTemplateTwinSyntheticQaClaimBoundVisit: (input: {
+    visitId: string;
+    data: unknown;
+  }) => mocks.prismaUpdate({ where: { id: input.visitId }, data: input.data }),
+}));
 
-import { runAnchorVerify } from '../04b-anchor-verify';
-import { runLayer4GenerateSoap } from '../04-generate-soap';
-import { buildSoapSystemPrompt } from '../../note-templates/build-soap-prompt';
-import { SYSTEM_DEFAULT_NOTE_TEMPLATE } from '../../note-templates/system-default-template';
-import { specialtyGuidance } from '../../prompts/specialty-guidance';
+import { runAnchorVerify } from "../04b-anchor-verify";
+import { runLayer4GenerateSoap } from "../04-generate-soap";
+import { buildSoapSystemPrompt } from "../../note-templates/build-soap-prompt";
+import { SYSTEM_DEFAULT_NOTE_TEMPLATE } from "../../note-templates/system-default-template";
+import { specialtyGuidance } from "../../prompts/specialty-guidance";
 
 const TRANSCRIPT = [
-  '[Doctor #0, 0:10]: have I told you you have had migraines in the past? No. No.',
-  '[Patient #1, 0:20]: I take the pill Microgynon. For contraception.',
-  '[Doctor #0, 0:30]: take 500 milligrams twice daily for three days.',
-  '[Patient #1, 0:40]: my elbow is swollen and it hurts when I lean on it.',
+  "[Doctor #0, 0:10]: have I told you you have had migraines in the past? No. No.",
+  "[Patient #1, 0:20]: I take the pill Microgynon. For contraception.",
+  "[Doctor #0, 0:30]: take 500 milligrams twice daily for three days.",
+  "[Patient #1, 0:40]: my elbow is swollen and it hurts when I lean on it.",
   `[Doctor #0, 0:50]: the medication is called [unclear in recording] one tablet daily.`,
-].join('\n');
+].join("\n");
 
-const IDS = { visitId: 'vis-anchor', practiceId: 'p1', userId: 'u1' };
+const IDS = { visitId: "vis-anchor", practiceId: "p1", userId: "u1" };
 
 /** Mock ONLY the entailment call (purpose tm_anchor_entailment). */
 function mockEntailment(responder: (user: string) => string | Error) {
-  mocks.modelCompleteText.mockImplementation(async (args: { purpose?: string; user?: string }) => {
-    if (args?.purpose === 'tm_anchor_entailment') {
-      const r = responder(args.user ?? '');
-      if (r instanceof Error) throw r;
-      return { text: r };
-    }
-    throw new Error(`unexpected purpose ${args?.purpose}`);
-  });
+  mocks.modelCompleteText.mockImplementation(
+    async (args: { purpose?: string; user?: string }) => {
+      if (args?.purpose === "tm_anchor_entailment") {
+        const r = responder(args.user ?? "");
+        if (r instanceof Error) throw r;
+        return { text: r };
+      }
+      throw new Error(`unexpected purpose ${args?.purpose}`);
+    },
+  );
 }
 const entailAll = () =>
   mockEntailment((user) => {
     const n = (user.match(/^CLAIM \d+:/gm) ?? []).length;
-    return JSON.stringify({ verdicts: Array.from({ length: n }, (_, i) => ({ i, entailed: true })) });
+    return JSON.stringify({
+      verdicts: Array.from({ length: n }, (_, i) => ({ i, entailed: true })),
+    });
   });
 
 beforeEach(() => {
@@ -81,18 +93,21 @@ beforeEach(() => {
   mocks.logAudit.mockResolvedValue(undefined);
 });
 
-describe('canaries — the historical offenders MUST demote', () => {
-  it('olecranon-bursitis class: a diagnosis with NO anchor → suggestions lane', async () => {
+describe("canaries — the historical offenders MUST demote", () => {
+  it("olecranon-bursitis class: a diagnosis with NO anchor → suggestions lane", async () => {
     entailAll();
     const r = await runAnchorVerify({
       ...IDS,
-      anchoredDraft: '## Assessment\nLikely olecranon bursitis.',
+      anchoredDraft: "## Assessment\nLikely olecranon bursitis.",
       roleLabeledTranscript: TRANSCRIPT,
     });
-    expect(r.body).not.toContain('bursitis');
+    expect(r.body).not.toContain("bursitis");
     expect(r.suggestions).toHaveLength(1);
-    expect(r.suggestions[0]).toMatchObject({ reason: 'no_anchor', anchor: 'no anchor' });
-    expect(r.suggestions[0].text).toContain('olecranon bursitis');
+    expect(r.suggestions[0]).toMatchObject({
+      reason: "no_anchor",
+      anchor: "no anchor",
+    });
+    expect(r.suggestions[0].text).toContain("olecranon bursitis");
   });
 
   it('COC/aura chain: demoted DETERMINISTICALLY since iteration 5 — "oral contraceptive" is form/class specification the span never states (an approving mock cannot save it)', async () => {
@@ -103,12 +118,14 @@ describe('canaries — the historical offenders MUST demote', () => {
         '## Assessment\nCombined oral contraceptive use carries increased ischaemic stroke risk; urgent review. ⟦A:"I take the pill Microgynon."⟧',
       roleLabeledTranscript: TRANSCRIPT,
     });
-    expect(r.body).not.toContain('stroke');
-    expect(r.suggestions[0]).toMatchObject({ reason: 'form_route_unsupported' });
-    expect(r.suggestions[0].anchor).toContain('Microgynon');
+    expect(r.body).not.toContain("stroke");
+    expect(r.suggestions[0]).toMatchObject({
+      reason: "form_route_unsupported",
+    });
+    expect(r.suggestions[0].anchor).toContain("Microgynon");
   });
 
-  it('sphenitol class: anchor overlapping [unclear in recording] anchors nothing → demoted', async () => {
+  it("sphenitol class: anchor overlapping [unclear in recording] anchors nothing → demoted", async () => {
     entailAll();
     const r = await runAnchorVerify({
       ...IDS,
@@ -116,45 +133,46 @@ describe('canaries — the historical offenders MUST demote', () => {
         '## Plan\n1. Sphenitol one tablet daily. ⟦A:"the medication is called [unclear in recording] one tablet daily."⟧',
       roleLabeledTranscript: TRANSCRIPT,
     });
-    expect(r.body).not.toContain('Sphenitol');
-    expect(r.suggestions[0].reason).toBe('anchor_overlaps_unclear');
+    expect(r.body).not.toContain("Sphenitol");
+    expect(r.suggestions[0].reason).toBe("anchor_overlaps_unclear");
   });
 
   it('unstated negative: "No vomiting." anchored to a span WITHOUT negation → negation_mismatch (deterministic)', async () => {
     entailAll();
     const r = await runAnchorVerify({
       ...IDS,
-      anchoredDraft: '## Subjective\nNo vomiting. ⟦A:"my elbow is swollen and it hurts when I lean on it."⟧',
+      anchoredDraft:
+        '## Subjective\nNo vomiting. ⟦A:"my elbow is swollen and it hurts when I lean on it."⟧',
       roleLabeledTranscript: TRANSCRIPT,
     });
-    expect(r.body).not.toContain('vomiting');
-    expect(r.suggestions[0].reason).toBe('negation_mismatch');
+    expect(r.body).not.toContain("vomiting");
+    expect(r.suggestions[0].reason).toBe("negation_mismatch");
   });
 
   it('process boilerplate with no anchor ("Shared decision-making discussion conducted.") → demoted', async () => {
     entailAll();
     const r = await runAnchorVerify({
       ...IDS,
-      anchoredDraft: '## Plan\nShared decision-making discussion conducted.',
+      anchoredDraft: "## Plan\nShared decision-making discussion conducted.",
       roleLabeledTranscript: TRANSCRIPT,
     });
-    expect(r.body).not.toContain('Shared decision-making');
-    expect(r.suggestions[0].reason).toBe('no_anchor');
+    expect(r.body).not.toContain("Shared decision-making");
+    expect(r.suggestions[0].reason).toBe("no_anchor");
   });
 
-  it('model-proposed ⟦S⟧ suggestions route to the lane as model_suggested', async () => {
+  it("model-proposed ⟦S⟧ suggestions route to the lane as model_suggested", async () => {
     entailAll();
     const r = await runAnchorVerify({
       ...IDS,
-      anchoredDraft: '## Plan\nConsider urine dipstick testing. ⟦S⟧',
+      anchoredDraft: "## Plan\nConsider urine dipstick testing. ⟦S⟧",
       roleLabeledTranscript: TRANSCRIPT,
     });
-    expect(r.body).not.toContain('dipstick');
-    expect(r.suggestions[0].reason).toBe('model_suggested');
+    expect(r.body).not.toContain("dipstick");
+    expect(r.suggestions[0].reason).toBe("model_suggested");
   });
 });
 
-describe('canaries — supported claims MUST pass', () => {
+describe("canaries — supported claims MUST pass", () => {
   it('register translation: "No prior diagnosis of migraines." anchored to "No. No." span, entailed → BODY', async () => {
     entailAll();
     const r = await runAnchorVerify({
@@ -163,174 +181,238 @@ describe('canaries — supported claims MUST pass', () => {
         '## Subjective\nNo prior diagnosis of migraines. ⟦A:"have I told you you have had migraines in the past? No. No."⟧',
       roleLabeledTranscript: TRANSCRIPT,
     });
-    expect(r.body).toContain('No prior diagnosis of migraines.');
-    expect(r.body).not.toContain('⟦'); // anchors stripped
+    expect(r.body).toContain("No prior diagnosis of migraines.");
+    expect(r.body).not.toContain("⟦"); // anchors stripped
     expect(r.suggestions).toHaveLength(0);
   });
 
-  it('anchored dose with matching digits passes; both anchor grammars accepted', async () => {
+  it("anchored dose with matching digits passes; both anchor grammars accepted", async () => {
     entailAll();
     const r = await runAnchorVerify({
       ...IDS,
       anchoredDraft: [
-        '## Plan',
+        "## Plan",
         '1. Take 500 milligrams twice daily for three days. ⟦A:"take 500 milligrams twice daily" ... "for three days."⟧',
-      ].join('\n'),
+      ].join("\n"),
       roleLabeledTranscript: TRANSCRIPT,
     });
-    expect(r.body).toContain('500 milligrams');
+    expect(r.body).toContain("500 milligrams");
     expect(r.suggestions).toHaveLength(0);
   });
 
-  it('headers + [not documented] placeholders are exempt (no anchor needed)', async () => {
+  it("headers + [not documented] placeholders are exempt (no anchor needed)", async () => {
     entailAll();
     const r = await runAnchorVerify({
       ...IDS,
-      anchoredDraft: '## Subjective\n**Allergies:** [not documented]\n\n## Objective\nFormal exam not documented in this encounter.',
+      anchoredDraft:
+        "## Subjective\n**Allergies:** [not documented]\n\n## Objective\nFormal exam not documented in this encounter.",
       roleLabeledTranscript: TRANSCRIPT,
     });
-    expect(r.body).toContain('**Allergies:** [not documented]');
+    expect(r.body).toContain("**Allergies:** [not documented]");
     expect(r.suggestions).toHaveLength(0);
     // exempt-only note → zero entailment calls
     expect(mocks.modelCompleteText).not.toHaveBeenCalled();
   });
 });
 
-describe('deterministic overrides CANNOT be overruled by the model', () => {
-  it('digits not in the anchored span demote EVEN with an approving entailment mock', async () => {
+describe("deterministic overrides CANNOT be overruled by the model", () => {
+  it("digits not in the anchored span demote EVEN with an approving entailment mock", async () => {
     entailAll(); // approves everything it is asked
     const r = await runAnchorVerify({
       ...IDS,
-      anchoredDraft: '## Plan\n1. Take 800 milligrams daily. ⟦A:"take 500 milligrams twice daily"⟧',
+      anchoredDraft:
+        '## Plan\n1. Take 800 milligrams daily. ⟦A:"take 500 milligrams twice daily"⟧',
       roleLabeledTranscript: TRANSCRIPT,
     });
-    expect(r.suggestions[0].reason).toBe('digits_unsupported');
+    expect(r.suggestions[0].reason).toBe("digits_unsupported");
     // the demoted claim never reached the entailment call
     expect(mocks.modelCompleteText).not.toHaveBeenCalled();
   });
 
-  it('fabricated quote (not in transcript) demotes before entailment', async () => {
+  it("fabricated quote (not in transcript) demotes before entailment", async () => {
     entailAll();
     const r = await runAnchorVerify({
       ...IDS,
-      anchoredDraft: '## Subjective\nChest pain radiating to the arm. ⟦A:"crushing chest pain radiating down the left arm"⟧',
+      anchoredDraft:
+        '## Subjective\nChest pain radiating to the arm. ⟦A:"crushing chest pain radiating down the left arm"⟧',
       roleLabeledTranscript: TRANSCRIPT,
     });
-    expect(r.suggestions[0].reason).toBe('anchor_not_in_transcript');
+    expect(r.suggestions[0].reason).toBe("anchor_not_in_transcript");
     expect(mocks.modelCompleteText).not.toHaveBeenCalled();
   });
 });
 
-describe('FAIL-CLOSED — every verifier failure demotes', () => {
-  const ANCHORED = '## Subjective\nNo prior diagnosis of migraines. ⟦A:"have I told you you have had migraines in the past? No. No."⟧';
+describe("FAIL-CLOSED — every verifier failure demotes", () => {
+  const ANCHORED =
+    '## Subjective\nNo prior diagnosis of migraines. ⟦A:"have I told you you have had migraines in the past? No. No."⟧';
 
-  it('entailment API throw → verifier_failed, claim demoted', async () => {
-    mockEntailment(() => new Error('529 overloaded'));
-    const r = await runAnchorVerify({ ...IDS, anchoredDraft: ANCHORED, roleLabeledTranscript: TRANSCRIPT });
-    expect(r.body).not.toContain('migraines');
-    expect(r.suggestions[0].reason).toBe('verifier_failed');
+  it("entailment API throw → verifier_failed, claim demoted", async () => {
+    mockEntailment(() => new Error("529 overloaded"));
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft: ANCHORED,
+      roleLabeledTranscript: TRANSCRIPT,
+    });
+    expect(r.body).not.toContain("migraines");
+    expect(r.suggestions[0].reason).toBe("verifier_failed");
     expect(r.stats.verifierErrored).toBe(true);
   });
 
-  it('malformed verdict JSON → demote (no .default() rescue — the L6b BLOCK-1 class)', async () => {
+  it("malformed verdict JSON → demote (no .default() rescue — the L6b BLOCK-1 class)", async () => {
     mockEntailment(() => '{"something":"else"}');
-    const r = await runAnchorVerify({ ...IDS, anchoredDraft: ANCHORED, roleLabeledTranscript: TRANSCRIPT });
-    expect(r.suggestions[0].reason).toBe('verifier_failed');
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft: ANCHORED,
+      roleLabeledTranscript: TRANSCRIPT,
+    });
+    expect(r.suggestions[0].reason).toBe("verifier_failed");
   });
 
-  it('missing per-claim verdict → that claim demotes', async () => {
+  it("missing per-claim verdict → that claim demotes", async () => {
     mockEntailment(() => JSON.stringify({ verdicts: [] }));
-    const r = await runAnchorVerify({ ...IDS, anchoredDraft: ANCHORED, roleLabeledTranscript: TRANSCRIPT });
-    expect(r.suggestions[0].reason).toBe('not_entailed');
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft: ANCHORED,
+      roleLabeledTranscript: TRANSCRIPT,
+    });
+    expect(r.suggestions[0].reason).toBe("not_entailed");
   });
 
-  it('duplicate verdicts for one claim → demote (ambiguity resolves against passing)', async () => {
+  it("duplicate verdicts for one claim → demote (ambiguity resolves against passing)", async () => {
     mockEntailment(() =>
-      JSON.stringify({ verdicts: [{ i: 0, entailed: true }, { i: 0, entailed: false }] })
+      JSON.stringify({
+        verdicts: [
+          { i: 0, entailed: true },
+          { i: 0, entailed: false },
+        ],
+      }),
     );
-    const r = await runAnchorVerify({ ...IDS, anchoredDraft: ANCHORED, roleLabeledTranscript: TRANSCRIPT });
-    expect(r.suggestions[0].reason).toBe('not_entailed');
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft: ANCHORED,
+      roleLabeledTranscript: TRANSCRIPT,
+    });
+    expect(r.suggestions[0].reason).toBe("not_entailed");
   });
 
-  it('multiple valid verdict objects in the output → ambiguous → demote all', async () => {
-    mockEntailment(() => '{"verdicts":[{"i":0,"entailed":true}]} and again {"verdicts":[{"i":0,"entailed":true}]}');
-    const r = await runAnchorVerify({ ...IDS, anchoredDraft: ANCHORED, roleLabeledTranscript: TRANSCRIPT });
-    expect(r.suggestions[0].reason).toBe('verifier_failed');
+  it("multiple valid verdict objects in the output → ambiguous → demote all", async () => {
+    mockEntailment(
+      () =>
+        '{"verdicts":[{"i":0,"entailed":true}]} and again {"verdicts":[{"i":0,"entailed":true}]}',
+    );
+    const r = await runAnchorVerify({
+      ...IDS,
+      anchoredDraft: ANCHORED,
+      roleLabeledTranscript: TRANSCRIPT,
+    });
+    expect(r.suggestions[0].reason).toBe("verifier_failed");
   });
 
-  it('runAnchorVerify never throws on hostile input', async () => {
+  it("runAnchorVerify never throws on hostile input", async () => {
     entailAll();
     const r = await runAnchorVerify({
       ...IDS,
       anchoredDraft: '⟦A:"unterminated\n## ⟦S⟧⟦A:⟧',
-      roleLabeledTranscript: '',
+      roleLabeledTranscript: "",
     });
     expect(r).toBeDefined();
   });
 });
 
-describe('flag-off byte-identity (the rollout guarantee)', () => {
+describe("flag-off byte-identity (the rollout guarantee)", () => {
   const L4_INPUT = {
-    visitId: 'vis-flag', practiceId: 'p1', userId: 'u1', specialty: 'primary-care',
+    visitId: "vis-flag",
+    practiceId: "p1",
+    userId: "u1",
+    specialty: "primary-care",
     roleLabeledTranscript: TRANSCRIPT,
     entities: {
-      chief_complaint: null, hpi: null, past_medical_history: [], medications: [],
-      allergies: [], family_history: [], social_history: {}, ros: [],
-      exam_findings: [], tests_mentioned: [], assessment_discussed: [], plan_discussed: [],
+      chief_complaint: null,
+      hpi: null,
+      past_medical_history: [],
+      medications: [],
+      allergies: [],
+      family_history: [],
+      social_history: {},
+      ros: [],
+      exam_findings: [],
+      tests_mentioned: [],
+      assessment_discussed: [],
+      plan_discussed: [],
     },
-    audioConfidenceStats: null, interpreterMode: false,
+    audioConfidenceStats: null,
+    interpreterMode: false,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any;
 
-  const SOAP = '## Subjective\nx\n\n## Objective\ny\n\n## Assessment\nz\n\n## Plan\n1. w';
+  const SOAP =
+    "## Subjective\nx\n\n## Objective\ny\n\n## Assessment\nz\n\n## Plan\n1. w";
 
-  it('flag OFF: L4 system prompt has NO anchor addendum; output persists unmodified; no verify call', async () => {
+  it("flag OFF: L4 system prompt has NO anchor addendum; output persists unmodified; no verify call", async () => {
     mocks.modelCompleteText.mockResolvedValueOnce({ text: SOAP });
     const out = await runLayer4GenerateSoap(L4_INPUT);
     const { system, purpose } = mocks.modelCompleteText.mock.calls[0][0];
-    expect(purpose).toBe('tm_soap_draft');
-    expect(system).not.toContain('EVIDENCE ANCHORS');
+    expect(purpose).toBe("tm_soap_draft");
+    expect(system).not.toContain("EVIDENCE ANCHORS");
     // byte-identical to the builder output — the addendum string is absent.
     // (mirror the layer exactly: it passes the specialty's real guidance)
     const expected = buildSoapSystemPrompt(SYSTEM_DEFAULT_NOTE_TEMPLATE, {
-      specialty: 'primary-care',
-      specialtyGuidanceText: specialtyGuidance('primary-care') || null,
-      audioQualityAlert: null, interpreterAlert: null,
+      specialty: "primary-care",
+      specialtyGuidanceText: specialtyGuidance("primary-care") || null,
+      audioQualityAlert: null,
+      interpreterAlert: null,
     });
     expect(system).toBe(expected);
     expect(out).toBe(SOAP);
     expect(mocks.modelCompleteText).toHaveBeenCalledTimes(1); // no entailment call
-    expect(mocks.prismaUpdate.mock.calls[0][0].data.suggestedClaims).toBeUndefined();
+    expect(
+      mocks.prismaUpdate.mock.calls[0][0].data.suggestedClaims,
+    ).toBeUndefined();
   });
 
-  it('flag ON: addendum present; verified body persisted; suggestions stored', async () => {
-    process.env.TRANSCRIBE_MD_EVIDENCE_ANCHORS = 'true';
+  it("flag ON: addendum present; verified body persisted; suggestions stored", async () => {
+    process.env.TRANSCRIBE_MD_EVIDENCE_ANCHORS = "true";
     const anchoredOut = [
-      '## Subjective',
+      "## Subjective",
       'No prior diagnosis of migraines. ⟦A:"have I told you you have had migraines in the past? No. No."⟧',
-      'Likely olecranon bursitis.',
-      '', '## Objective', 'Formal exam not documented in this encounter.',
-      '', '## Assessment', '[not documented]',
-      '', '## Plan', '1. Take 500 milligrams twice daily for three days. ⟦A:"take 500 milligrams twice daily for three days."⟧',
-    ].join('\n');
-    mocks.modelCompleteText.mockImplementation(async (args: { purpose?: string; user?: string }) => {
-      if (args?.purpose === 'tm_soap_draft') return { text: anchoredOut };
-      if (args?.purpose === 'tm_anchor_entailment') {
-        const n = ((args.user ?? '').match(/^CLAIM \d+:/gm) ?? []).length;
-        return { text: JSON.stringify({ verdicts: Array.from({ length: n }, (_, i) => ({ i, entailed: true })) }) };
-      }
-      throw new Error('unexpected');
-    });
+      "Likely olecranon bursitis.",
+      "",
+      "## Objective",
+      "Formal exam not documented in this encounter.",
+      "",
+      "## Assessment",
+      "[not documented]",
+      "",
+      "## Plan",
+      '1. Take 500 milligrams twice daily for three days. ⟦A:"take 500 milligrams twice daily for three days."⟧',
+    ].join("\n");
+    mocks.modelCompleteText.mockImplementation(
+      async (args: { purpose?: string; user?: string }) => {
+        if (args?.purpose === "tm_soap_draft") return { text: anchoredOut };
+        if (args?.purpose === "tm_anchor_entailment") {
+          const n = ((args.user ?? "").match(/^CLAIM \d+:/gm) ?? []).length;
+          return {
+            text: JSON.stringify({
+              verdicts: Array.from({ length: n }, (_, i) => ({
+                i,
+                entailed: true,
+              })),
+            }),
+          };
+        }
+        throw new Error("unexpected");
+      },
+    );
     const out = await runLayer4GenerateSoap(L4_INPUT);
     const { system } = mocks.modelCompleteText.mock.calls[0][0];
-    expect(system).toContain('EVIDENCE ANCHORS');
-    expect(out).toContain('No prior diagnosis of migraines.');
-    expect(out).not.toContain('bursitis'); // demoted
-    expect(out).not.toContain('⟦'); // stripped
+    expect(system).toContain("EVIDENCE ANCHORS");
+    expect(out).toContain("No prior diagnosis of migraines.");
+    expect(out).not.toContain("bursitis"); // demoted
+    expect(out).not.toContain("⟦"); // stripped
     const data = mocks.prismaUpdate.mock.calls[0][0].data;
     expect(data.soapDraft).toBe(out);
     expect(Array.isArray(data.suggestedClaims)).toBe(true);
-    expect(data.suggestedClaims[0].text).toContain('olecranon bursitis');
+    expect(data.suggestedClaims[0].text).toContain("olecranon bursitis");
   });
 });
 
@@ -340,31 +422,31 @@ describe('flag-off byte-identity (the rollout guarantee)', () => {
 // spelled quantification are now DETERMINISTIC (an approving model cannot
 // resurrect them); cross-site negation + causal attribution are pinned at
 // the k=3 ensemble level (majority ≥2-of-3, errored pass votes no).
-describe('iteration 3 — run-3 residual classes + ensemble majority', () => {
+describe("iteration 3 — run-3 residual classes + ensemble majority", () => {
   /** Route per-pass verdicts by lens posture in the system prompt. */
   function mockEnsemble(votes: {
-    base: boolean | 'error';
-    hunter: boolean | 'error';
-    skeptic: boolean | 'error';
+    base: boolean | "error";
+    hunter: boolean | "error";
+    skeptic: boolean | "error";
   }) {
     mocks.modelCompleteText.mockImplementation(
       async (args: { purpose?: string; system?: string; user?: string }) => {
-        if (args?.purpose !== 'tm_anchor_entailment')
+        if (args?.purpose !== "tm_anchor_entailment")
           throw new Error(`unexpected purpose ${args?.purpose}`);
-        const sys = args.system ?? '';
-        const v = sys.includes('ELABORATION HUNTER')
+        const sys = args.system ?? "";
+        const v = sys.includes("ELABORATION HUNTER")
           ? votes.hunter
-          : sys.includes('CLINICAL SKEPTIC')
+          : sys.includes("CLINICAL SKEPTIC")
             ? votes.skeptic
             : votes.base;
-        if (v === 'error') throw new Error('pass down');
+        if (v === "error") throw new Error("pass down");
         const n = (args.user?.match(/^CLAIM \d+:/gm) ?? []).length;
         return {
           text: JSON.stringify({
             verdicts: Array.from({ length: n }, (_, i) => ({ i, entailed: v })),
           }),
         };
-      }
+      },
     );
   }
 
@@ -375,23 +457,23 @@ describe('iteration 3 — run-3 residual classes + ensemble majority', () => {
       anchoredDraft:
         '## Plan\nFundoscopy (examination of the back of the eyes) to be arranged. ⟦A:"we will arrange fundoscopy for you"⟧',
       roleLabeledTranscript:
-        '[Doctor #0, 0:10]: we will arrange fundoscopy for you.',
+        "[Doctor #0, 0:10]: we will arrange fundoscopy for you.",
     });
-    expect(r.body).not.toContain('Fundoscopy');
+    expect(r.body).not.toContain("Fundoscopy");
     expect(r.suggestions).toHaveLength(1);
-    expect(r.suggestions[0].reason).toBe('gloss_unsupported');
+    expect(r.suggestions[0].reason).toBe("gloss_unsupported");
   });
 
-  it('span-supported gloss survives (explanation present in the span)', async () => {
+  it("span-supported gloss survives (explanation present in the span)", async () => {
     entailAll();
     const r = await runAnchorVerify({
       ...IDS,
       anchoredDraft:
         '## Plan\nFundoscopy (examination of the back of the eyes). ⟦A:"fundoscopy, that is an examination of the back of the eyes"⟧',
       roleLabeledTranscript:
-        '[Doctor #0, 0:10]: fundoscopy, that is an examination of the back of the eyes.',
+        "[Doctor #0, 0:10]: fundoscopy, that is an examination of the back of the eyes.",
     });
-    expect(r.body).toContain('Fundoscopy');
+    expect(r.body).toContain("Fundoscopy");
     expect(r.suggestions).toHaveLength(0);
   });
 
@@ -402,10 +484,10 @@ describe('iteration 3 — run-3 residual classes + ensemble majority', () => {
       anchoredDraft:
         '## Plan\nCut down to two glasses of wine per week initially. ⟦A:"you should try and cut down on the drinking"⟧',
       roleLabeledTranscript:
-        '[Doctor #0, 0:10]: you should try and cut down on the drinking.',
+        "[Doctor #0, 0:10]: you should try and cut down on the drinking.",
     });
-    expect(r.body).not.toContain('two glasses');
-    expect(r.suggestions[0].reason).toBe('digits_unsupported');
+    expect(r.body).not.toContain("two glasses");
+    expect(r.suggestions[0].reason).toBe("digits_unsupported");
   });
 
   it('spelled quantification stated in the span survives ("twice daily" ↔ "twice daily")', async () => {
@@ -415,9 +497,9 @@ describe('iteration 3 — run-3 residual classes + ensemble majority', () => {
       anchoredDraft:
         '## Plan\nTake amoxicillin twice daily. ⟦A:"take the amoxicillin twice daily"⟧',
       roleLabeledTranscript:
-        '[Doctor #0, 0:10]: take the amoxicillin twice daily.',
+        "[Doctor #0, 0:10]: take the amoxicillin twice daily.",
     });
-    expect(r.body).toContain('twice daily');
+    expect(r.body).toContain("twice daily");
     expect(r.suggestions).toHaveLength(0);
   });
 
@@ -428,9 +510,9 @@ describe('iteration 3 — run-3 residual classes + ensemble majority', () => {
       anchoredDraft:
         '## Subjective\nDrinks 2 glasses of wine nightly. ⟦A:"I have two glasses of wine most nights"⟧',
       roleLabeledTranscript:
-        '[Patient #1, 0:10]: I have two glasses of wine most nights.',
+        "[Patient #1, 0:10]: I have two glasses of wine most nights.",
     });
-    expect(r.body).toContain('2 glasses');
+    expect(r.body).toContain("2 glasses");
     expect(r.suggestions).toHaveLength(0);
   });
 
@@ -444,10 +526,10 @@ describe('iteration 3 — run-3 residual classes + ensemble majority', () => {
       anchoredDraft:
         '## Subjective\nEars feel okay with no pain or blockage. ⟦A:"no, my nose just feels blocked all the time"⟧',
       roleLabeledTranscript:
-        '[Patient #1, 0:10]: no, my nose just feels blocked all the time.',
+        "[Patient #1, 0:10]: no, my nose just feels blocked all the time.",
     });
-    expect(r.body).not.toContain('Ears feel okay');
-    expect(r.suggestions[0].reason).toBe('not_entailed');
+    expect(r.body).not.toContain("Ears feel okay");
+    expect(r.suggestions[0].reason).toBe("not_entailed");
   });
 
   it('causal attribution ("screen-related eye strain") with 2-of-3 entailed SURVIVES (majority keeps)', async () => {
@@ -457,70 +539,70 @@ describe('iteration 3 — run-3 residual classes + ensemble majority', () => {
       anchoredDraft:
         '## Assessment\nLikely screen-related eye strain. ⟦A:"my eyes get tired when I work at the computer all day"⟧',
       roleLabeledTranscript:
-        '[Patient #1, 0:10]: my eyes get tired when I work at the computer all day.',
+        "[Patient #1, 0:10]: my eyes get tired when I work at the computer all day.",
     });
-    expect(r.body).toContain('screen-related eye strain');
+    expect(r.body).toContain("screen-related eye strain");
     expect(r.suggestions).toHaveLength(0);
   });
 
-  it('causal attribution with 1-of-3 entailed demotes (majority rejects)', async () => {
+  it("causal attribution with 1-of-3 entailed demotes (majority rejects)", async () => {
     mockEnsemble({ base: false, hunter: true, skeptic: false });
     const r = await runAnchorVerify({
       ...IDS,
       anchoredDraft:
         '## Assessment\nLikely screen-related eye strain. ⟦A:"my eyes get tired when I work at the computer all day"⟧',
       roleLabeledTranscript:
-        '[Patient #1, 0:10]: my eyes get tired when I work at the computer all day.',
+        "[Patient #1, 0:10]: my eyes get tired when I work at the computer all day.",
     });
-    expect(r.body).not.toContain('eye strain');
-    expect(r.suggestions[0].reason).toBe('not_entailed');
+    expect(r.body).not.toContain("eye strain");
+    expect(r.suggestions[0].reason).toBe("not_entailed");
   });
 
-  it('one errored pass + both remaining entailed → survives (error votes no, 2 yes ≥ majority)', async () => {
-    mockEnsemble({ base: 'error', hunter: true, skeptic: true });
+  it("one errored pass + both remaining entailed → survives (error votes no, 2 yes ≥ majority)", async () => {
+    mockEnsemble({ base: "error", hunter: true, skeptic: true });
     const r = await runAnchorVerify({
       ...IDS,
       anchoredDraft:
         '## Subjective\nReports tiredness. ⟦A:"I have been feeling tired"⟧',
-      roleLabeledTranscript: '[Patient #1, 0:10]: I have been feeling tired.',
+      roleLabeledTranscript: "[Patient #1, 0:10]: I have been feeling tired.",
     });
-    expect(r.body).toContain('Reports tiredness');
+    expect(r.body).toContain("Reports tiredness");
     expect(r.suggestions).toHaveLength(0);
     expect(r.stats.entailmentPassErrors).toBe(1);
   });
 
-  it('one errored pass + split remaining → demotes (1 yes < majority)', async () => {
-    mockEnsemble({ base: 'error', hunter: true, skeptic: false });
+  it("one errored pass + split remaining → demotes (1 yes < majority)", async () => {
+    mockEnsemble({ base: "error", hunter: true, skeptic: false });
     const r = await runAnchorVerify({
       ...IDS,
       anchoredDraft:
         '## Subjective\nReports tiredness. ⟦A:"I have been feeling tired"⟧',
-      roleLabeledTranscript: '[Patient #1, 0:10]: I have been feeling tired.',
+      roleLabeledTranscript: "[Patient #1, 0:10]: I have been feeling tired.",
     });
-    expect(r.body).not.toContain('Reports tiredness');
-    expect(r.suggestions[0].reason).toBe('not_entailed');
+    expect(r.body).not.toContain("Reports tiredness");
+    expect(r.suggestions[0].reason).toBe("not_entailed");
   });
 
-  it('two errored passes → whole stage fails closed (verifier_failed)', async () => {
-    mockEnsemble({ base: 'error', hunter: 'error', skeptic: true });
+  it("two errored passes → whole stage fails closed (verifier_failed)", async () => {
+    mockEnsemble({ base: "error", hunter: "error", skeptic: true });
     const r = await runAnchorVerify({
       ...IDS,
       anchoredDraft:
         '## Subjective\nReports tiredness. ⟦A:"I have been feeling tired"⟧',
-      roleLabeledTranscript: '[Patient #1, 0:10]: I have been feeling tired.',
+      roleLabeledTranscript: "[Patient #1, 0:10]: I have been feeling tired.",
     });
-    expect(r.body).not.toContain('Reports tiredness');
-    expect(r.suggestions[0].reason).toBe('verifier_failed');
+    expect(r.body).not.toContain("Reports tiredness");
+    expect(r.suggestions[0].reason).toBe("verifier_failed");
     expect(r.stats.verifierErrored).toBe(true);
   });
 
-  it('ensemble fires exactly 3 entailment calls per verify', async () => {
+  it("ensemble fires exactly 3 entailment calls per verify", async () => {
     entailAll();
     await runAnchorVerify({
       ...IDS,
       anchoredDraft:
         '## Subjective\nReports tiredness. ⟦A:"I have been feeling tired"⟧',
-      roleLabeledTranscript: '[Patient #1, 0:10]: I have been feeling tired.',
+      roleLabeledTranscript: "[Patient #1, 0:10]: I have been feeling tired.",
     });
     expect(mocks.modelCompleteText).toHaveBeenCalledTimes(3);
   });
@@ -529,7 +611,7 @@ describe('iteration 3 — run-3 residual classes + ensemble majority', () => {
 // ─── Iteration 4 — decisive-run residual class: clinical-reasoning verbs ────
 // The three unanimous class-(c) of run 20260612T153417Z, pinned as the
 // deterministic process-verb override (approving ensemble cannot overrule).
-describe('iteration 4 — clinical-reasoning verb override', () => {
+describe("iteration 4 — clinical-reasoning verb override", () => {
   it('"if migraine with aura is confirmed" (contingency plan) demotes when the span never speaks the act', async () => {
     entailAll();
     const r = await runAnchorVerify({
@@ -537,10 +619,10 @@ describe('iteration 4 — clinical-reasoning verb override', () => {
       anchoredDraft:
         '## Plan\nMay need to change the pill if migraine with aura is confirmed. ⟦A:"I get a flashing in my eyes before the headache starts"⟧',
       roleLabeledTranscript:
-        '[Patient #1, 0:10]: I get a flashing in my eyes before the headache starts.',
+        "[Patient #1, 0:10]: I get a flashing in my eyes before the headache starts.",
     });
-    expect(r.body).not.toContain('is confirmed');
-    expect(r.suggestions[0].reason).toBe('process_assertion_unsupported');
+    expect(r.body).not.toContain("is confirmed");
+    expect(r.suggestions[0].reason).toBe("process_assertion_unsupported");
   });
 
   it('"mother confirmed antihistamines are available at home" demotes against a span that merely mentions them', async () => {
@@ -550,10 +632,10 @@ describe('iteration 4 — clinical-reasoning verb override', () => {
       anchoredDraft:
         '## Plan\nMother confirmed antihistamines are available at home. ⟦A:"we have antihistamines at home"⟧',
       roleLabeledTranscript:
-        '[Patient #1, 0:10]: we have antihistamines at home.',
+        "[Patient #1, 0:10]: we have antihistamines at home.",
     });
-    expect(r.body).not.toContain('confirmed');
-    expect(r.suggestions[0].reason).toBe('process_assertion_unsupported');
+    expect(r.body).not.toContain("confirmed");
+    expect(r.suggestions[0].reason).toBe("process_assertion_unsupported");
   });
 
   it('"PE was considered and partially addressed by history" demotes (process assertion never spoken)', async () => {
@@ -563,10 +645,10 @@ describe('iteration 4 — clinical-reasoning verb override', () => {
       anchoredDraft:
         '## Assessment\nPulmonary embolism was considered and partially addressed by history. ⟦A:"have you been on any long flights recently? No."⟧',
       roleLabeledTranscript:
-        '[Doctor #0, 0:10]: have you been on any long flights recently? No.',
+        "[Doctor #0, 0:10]: have you been on any long flights recently? No.",
     });
-    expect(r.body).not.toContain('considered');
-    expect(r.suggestions[0].reason).toBe('process_assertion_unsupported');
+    expect(r.body).not.toContain("considered");
+    expect(r.suggestions[0].reason).toBe("process_assertion_unsupported");
   });
 
   it('a span that SPEAKS the act legitimately supports it ("can you confirm…? I confirm")', async () => {
@@ -576,9 +658,9 @@ describe('iteration 4 — clinical-reasoning verb override', () => {
       anchoredDraft:
         '## Subjective\nPatient confirmed she takes the medication daily. ⟦A:"can you confirm you take it every day? yes, I confirm"⟧',
       roleLabeledTranscript:
-        '[Doctor #0, 0:10]: can you confirm you take it every day? yes, I confirm.',
+        "[Doctor #0, 0:10]: can you confirm you take it every day? yes, I confirm.",
     });
-    expect(r.body).toContain('Patient confirmed');
+    expect(r.body).toContain("Patient confirmed");
     expect(r.suggestions).toHaveLength(0);
   });
 
@@ -589,54 +671,54 @@ describe('iteration 4 — clinical-reasoning verb override', () => {
       anchoredDraft:
         '## Assessment\nSerious causes ruled out. ⟦A:"your blood tests came back normal"⟧',
       roleLabeledTranscript:
-        '[Doctor #0, 0:10]: your blood tests came back normal.',
+        "[Doctor #0, 0:10]: your blood tests came back normal.",
     });
-    expect(demoted.suggestions[0].reason).toBe('process_assertion_unsupported');
+    expect(demoted.suggestions[0].reason).toBe("process_assertion_unsupported");
     const kept = await runAnchorVerify({
       ...IDS,
       anchoredDraft:
         '## Assessment\nSerious causes ruled out. ⟦A:"the tests were normal so we can rule that out"⟧',
       roleLabeledTranscript:
-        '[Doctor #0, 0:10]: the tests were normal so we can rule that out.',
+        "[Doctor #0, 0:10]: the tests were normal so we can rule that out.",
     });
-    expect(kept.body).toContain('ruled out');
+    expect(kept.body).toContain("ruled out");
     expect(kept.suggestions).toHaveLength(0);
   });
 });
 
-describe('iteration 4 — noun homonyms stay exempt; boilerplate verb forms demote', () => {
+describe("iteration 4 — noun homonyms stay exempt; boilerplate verb forms demote", () => {
   it('"screened and denied" boilerplate demotes; noun "screen-related" does not trip the override', async () => {
     entailAll();
     const demoted = await runAnchorVerify({
       ...IDS,
       anchoredDraft:
         '## Subjective\nSuicidal ideation screened and denied. ⟦A:"I have been feeling tired"⟧',
-      roleLabeledTranscript: '[Patient #1, 0:10]: I have been feeling tired.',
+      roleLabeledTranscript: "[Patient #1, 0:10]: I have been feeling tired.",
     });
-    expect(demoted.suggestions[0].reason).toBe('process_assertion_unsupported');
+    expect(demoted.suggestions[0].reason).toBe("process_assertion_unsupported");
     const kept = await runAnchorVerify({
       ...IDS,
       anchoredDraft:
         '## Assessment\nLikely screen-related eye strain. ⟦A:"my eyes get tired when I work at the computer all day"⟧',
       roleLabeledTranscript:
-        '[Patient #1, 0:10]: my eyes get tired when I work at the computer all day.',
+        "[Patient #1, 0:10]: my eyes get tired when I work at the computer all day.",
     });
-    expect(kept.body).toContain('screen-related');
+    expect(kept.body).toContain("screen-related");
   });
 });
 
 // ─── Iteration 5 — gate re-run #1 residual class: form/route specification ──
-describe('iteration 5 — drug form/route/class specification override', () => {
+describe("iteration 5 — drug form/route/class specification override", () => {
   it('"oral contraceptive pill" demotes against a span that only says "the pill"', async () => {
     entailAll();
     const r = await runAnchorVerify({
       ...IDS,
       anchoredDraft:
         '## Medications\nOral contraceptive pill, ongoing. ⟦A:"I take the pill every day"⟧',
-      roleLabeledTranscript: '[Patient #1, 0:10]: I take the pill every day.',
+      roleLabeledTranscript: "[Patient #1, 0:10]: I take the pill every day.",
     });
-    expect(r.body).not.toContain('Oral contraceptive');
-    expect(r.suggestions[0].reason).toBe('form_route_unsupported');
+    expect(r.body).not.toContain("Oral contraceptive");
+    expect(r.suggestions[0].reason).toBe("form_route_unsupported");
   });
 
   it('"topical steroid cream" demotes against a span that only says "steroid cream"', async () => {
@@ -646,10 +728,10 @@ describe('iteration 5 — drug form/route/class specification override', () => {
       anchoredDraft:
         '## Medications\nTopical steroid cream applied last night. ⟦A:"I put some steroid cream on it last night"⟧',
       roleLabeledTranscript:
-        '[Patient #1, 0:10]: I put some steroid cream on it last night.',
+        "[Patient #1, 0:10]: I put some steroid cream on it last night.",
     });
-    expect(r.body).not.toContain('Topical');
-    expect(r.suggestions[0].reason).toBe('form_route_unsupported');
+    expect(r.body).not.toContain("Topical");
+    expect(r.suggestions[0].reason).toBe("form_route_unsupported");
   });
 
   it('a span that states the form supports it ("oral antibiotics" ↔ "oral antibiotics")', async () => {
@@ -659,9 +741,9 @@ describe('iteration 5 — drug form/route/class specification override', () => {
       anchoredDraft:
         '## Plan\nStart oral antibiotics. ⟦A:"I will start you on some oral antibiotics"⟧',
       roleLabeledTranscript:
-        '[Doctor #0, 0:10]: I will start you on some oral antibiotics.',
+        "[Doctor #0, 0:10]: I will start you on some oral antibiotics.",
     });
-    expect(r.body).toContain('oral antibiotics');
+    expect(r.body).toContain("oral antibiotics");
     expect(r.suggestions).toHaveLength(0);
   });
 
@@ -671,10 +753,10 @@ describe('iteration 5 — drug form/route/class specification override', () => {
       ...IDS,
       anchoredDraft:
         '## Medications\nContraceptive pill, ongoing. ⟦A:"I take the pill every day"⟧',
-      roleLabeledTranscript: '[Patient #1, 0:10]: I take the pill every day.',
+      roleLabeledTranscript: "[Patient #1, 0:10]: I take the pill every day.",
     });
-    expect(r.body).not.toContain('Contraceptive');
-    expect(r.suggestions[0].reason).toBe('form_route_unsupported');
+    expect(r.body).not.toContain("Contraceptive");
+    expect(r.suggestions[0].reason).toBe("form_route_unsupported");
   });
 });
 
@@ -682,74 +764,83 @@ describe('iteration 5 — drug form/route/class specification override', () => {
 // Phase 1: an Assessment whose every narrative line demotes must NOT render
 // empty — it back-fills with the visible review placeholder + flags the
 // section. Phase 2: surviving Plan items renumber contiguously.
-import { EMPTY_SECTION_PLACEHOLDER } from '@/lib/soap-format';
+import { EMPTY_SECTION_PLACEHOLDER } from "@/lib/soap-format";
 
-describe('empty-section back-fill (Phase 1 blocker) + plan renumber (Phase 2)', () => {
-  it('an Assessment with EVERY line demoted renders the placeholder, never blank; the section is flagged', async () => {
+describe("empty-section back-fill (Phase 1 blocker) + plan renumber (Phase 2)", () => {
+  it("an Assessment with EVERY line demoted renders the placeholder, never blank; the section is flagged", async () => {
     // Both Assessment sentences are unanchored boilerplate → no_anchor demote.
     // Plan keeps anchored items; Subjective keeps one.
     entailAll();
     const r = await runAnchorVerify({
       ...IDS,
       anchoredDraft: [
-        '## Subjective',
+        "## Subjective",
         'Patient reports blood pressure has been high at home. ⟦A:"my blood pressure has been running high at home"⟧',
-        '## Assessment',
-        'Hypertension, uncontrolled, likely requiring intensification.',
-        'Hyperlipidemia, stable on current therapy.',
-        '## Plan',
+        "## Assessment",
+        "Hypertension, uncontrolled, likely requiring intensification.",
+        "Hyperlipidemia, stable on current therapy.",
+        "## Plan",
         '1. Continue lisinopril. ⟦A:"keep taking the lisinopril"⟧',
         '2. Start amlodipine. ⟦A:"I am going to start you on amlodipine"⟧',
-      ].join('\n'),
+      ].join("\n"),
       roleLabeledTranscript: [
-        '[Patient #1, 0:10]: my blood pressure has been running high at home.',
-        '[Doctor #0, 0:20]: keep taking the lisinopril.',
-        '[Doctor #0, 0:30]: I am going to start you on amlodipine.',
-      ].join('\n'),
+        "[Patient #1, 0:10]: my blood pressure has been running high at home.",
+        "[Doctor #0, 0:20]: keep taking the lisinopril.",
+        "[Doctor #0, 0:30]: I am going to start you on amlodipine.",
+      ].join("\n"),
     });
     // Assessment is NOT blank — it carries the placeholder.
-    const assessmentBlock = r.body.split('## Assessment')[1].split('##')[0];
+    const assessmentBlock = r.body.split("## Assessment")[1].split("##")[0];
     expect(assessmentBlock).toContain(EMPTY_SECTION_PLACEHOLDER);
-    expect(assessmentBlock.replace(EMPTY_SECTION_PLACEHOLDER, '').trim().length).toBe(0);
+    expect(
+      assessmentBlock.replace(EMPTY_SECTION_PLACEHOLDER, "").trim().length,
+    ).toBe(0);
     // The demoted assessment content is in the lane, not the body.
-    expect(r.body).not.toContain('uncontrolled, likely requiring');
-    expect(r.suggestions.some((s) => s.text.includes('Hypertension, uncontrolled'))).toBe(true);
+    expect(r.body).not.toContain("uncontrolled, likely requiring");
+    expect(
+      r.suggestions.some((s) => s.text.includes("Hypertension, uncontrolled")),
+    ).toBe(true);
     // Flagged for the review banner.
-    expect(r.stats.filledEmptySections).toContain('Assessment');
+    expect(r.stats.filledEmptySections).toContain("Assessment");
   });
 
-  it('a section that legitimately holds [not documented] is NOT back-filled', async () => {
+  it("a section that legitimately holds [not documented] is NOT back-filled", async () => {
     entailAll();
     const r = await runAnchorVerify({
       ...IDS,
-      anchoredDraft: ['## Objective', '[not documented]', '## Plan', '1. Continue meds. ⟦A:"keep taking your meds"⟧'].join('\n'),
-      roleLabeledTranscript: '[Doctor #0, 0:10]: keep taking your meds.',
+      anchoredDraft: [
+        "## Objective",
+        "[not documented]",
+        "## Plan",
+        '1. Continue meds. ⟦A:"keep taking your meds"⟧',
+      ].join("\n"),
+      roleLabeledTranscript: "[Doctor #0, 0:10]: keep taking your meds.",
     });
     expect(r.body).not.toContain(EMPTY_SECTION_PLACEHOLDER);
     expect(r.stats.filledEmptySections ?? []).toHaveLength(0);
   });
 
-  it('surviving Plan items renumber contiguously when middle items demote', async () => {
+  it("surviving Plan items renumber contiguously when middle items demote", async () => {
     // Items 1 and 3 anchored+kept; item 2 unanchored → demoted → body should
     // renumber the two survivors to 1,2 (not 1,3).
     entailAll();
     const r = await runAnchorVerify({
       ...IDS,
       anchoredDraft: [
-        '## Plan',
+        "## Plan",
         '1. Continue lisinopril 20 mg daily. ⟦A:"continue the lisinopril twenty milligrams"⟧',
-        '2. Refer to bariatric surgery for evaluation.',
+        "2. Refer to bariatric surgery for evaluation.",
         '3. Recheck in four weeks. ⟦A:"come back in four weeks"⟧',
-      ].join('\n'),
+      ].join("\n"),
       roleLabeledTranscript: [
-        '[Doctor #0, 0:10]: continue the lisinopril twenty milligrams.',
-        '[Doctor #0, 0:20]: come back in four weeks.',
-      ].join('\n'),
+        "[Doctor #0, 0:10]: continue the lisinopril twenty milligrams.",
+        "[Doctor #0, 0:20]: come back in four weeks.",
+      ].join("\n"),
     });
-    expect(r.body).toContain('1. Continue lisinopril 20 mg daily.');
-    expect(r.body).toContain('2. Recheck in four weeks.');
+    expect(r.body).toContain("1. Continue lisinopril 20 mg daily.");
+    expect(r.body).toContain("2. Recheck in four weeks.");
     expect(r.body).not.toMatch(/^3\./m);
-    expect(r.body).not.toContain('bariatric surgery');
+    expect(r.body).not.toContain("bariatric surgery");
   });
 });
 
@@ -762,13 +853,13 @@ describe('empty-section back-fill (Phase 1 blocker) + plan renumber (Phase 2)', 
 // claim. The fabrication-catch guarantees (verbatim substring + every
 // deterministic override + entailment) are UNCHANGED — proven by the safety
 // canaries below, which still demote a degenerate and a fabricated anchor.
-describe('FIX 1 — short content-token anchors are recovered to the body', () => {
+describe("FIX 1 — short content-token anchors are recovered to the body", () => {
   // Transcript carries each short span VERBATIM so the (unchanged) substring
   // check passes; the OLD ≥3-token floor would have demoted all three.
   const SHORT_TRANSCRIPT = [
-    '[Doctor #0, 0:10]: blood pressure is fine, lungs clear, no edema today.',
-    '[Doctor #0, 0:20]: continue lisinopril and recheck in four weeks.',
-  ].join('\n');
+    "[Doctor #0, 0:10]: blood pressure is fine, lungs clear, no edema today.",
+    "[Doctor #0, 0:20]: continue lisinopril and recheck in four weeks.",
+  ].join("\n");
 
   it('"lungs clear" (2 content tokens, verbatim) survives — body, not lane', async () => {
     entailAll();
@@ -777,8 +868,8 @@ describe('FIX 1 — short content-token anchors are recovered to the body', () =
       anchoredDraft: '## Objective\nLungs clear. ⟦A:"lungs clear"⟧',
       roleLabeledTranscript: SHORT_TRANSCRIPT,
     });
-    expect(r.body).toContain('Lungs clear.');
-    expect(r.body).not.toContain('⟦');
+    expect(r.body).toContain("Lungs clear.");
+    expect(r.body).not.toContain("⟦");
     expect(r.suggestions).toHaveLength(0);
   });
 
@@ -789,7 +880,7 @@ describe('FIX 1 — short content-token anchors are recovered to the body', () =
       anchoredDraft: '## Objective\nNo edema. ⟦A:"no edema"⟧',
       roleLabeledTranscript: SHORT_TRANSCRIPT,
     });
-    expect(r.body).toContain('No edema.');
+    expect(r.body).toContain("No edema.");
     expect(r.suggestions).toHaveLength(0);
   });
 
@@ -797,15 +888,16 @@ describe('FIX 1 — short content-token anchors are recovered to the body', () =
     entailAll();
     const r = await runAnchorVerify({
       ...IDS,
-      anchoredDraft: '## Plan\n1. Continue lisinopril. ⟦A:"continue lisinopril"⟧',
+      anchoredDraft:
+        '## Plan\n1. Continue lisinopril. ⟦A:"continue lisinopril"⟧',
       roleLabeledTranscript: SHORT_TRANSCRIPT,
     });
-    expect(r.body).toContain('Continue lisinopril.');
+    expect(r.body).toContain("Continue lisinopril.");
     expect(r.suggestions).toHaveLength(0);
   });
 });
 
-describe('FIX 1 safety — the content-token floor still rejects degenerate + fabricated anchors', () => {
+describe("FIX 1 safety — the content-token floor still rejects degenerate + fabricated anchors", () => {
   it('an all-stopword anchor ("of the") anchors nothing → demoted, NOT smuggled to the body', async () => {
     entailAll();
     const r = await runAnchorVerify({
@@ -813,59 +905,61 @@ describe('FIX 1 safety — the content-token floor still rejects degenerate + fa
       // "of the" IS a literal substring of the transcript — the verbatim check
       // alone would let it through; the content-token floor is what blocks it.
       anchoredDraft: '## Assessment\nLikely olecranon bursitis. ⟦A:"of the"⟧',
-      roleLabeledTranscript: '[Doctor #0, 0:10]: it is on the side of the elbow.',
+      roleLabeledTranscript:
+        "[Doctor #0, 0:10]: it is on the side of the elbow.",
     });
-    expect(r.body).not.toContain('bursitis');
-    expect(r.suggestions[0].reason).toBe('anchor_not_in_transcript');
+    expect(r.body).not.toContain("bursitis");
+    expect(r.suggestions[0].reason).toBe("anchor_not_in_transcript");
     expect(mocks.modelCompleteText).not.toHaveBeenCalled();
   });
 
-  it('a short FABRICATED anchor (2 content tokens, NOT in transcript) still demotes via the unchanged substring check', async () => {
+  it("a short FABRICATED anchor (2 content tokens, NOT in transcript) still demotes via the unchanged substring check", async () => {
     entailAll();
     const r = await runAnchorVerify({
       ...IDS,
       anchoredDraft: '## Assessment\nSevere sepsis. ⟦A:"severe sepsis"⟧',
-      roleLabeledTranscript: '[Patient #1, 0:10]: my elbow is swollen.',
+      roleLabeledTranscript: "[Patient #1, 0:10]: my elbow is swollen.",
     });
-    expect(r.body).not.toContain('Severe sepsis');
-    expect(r.suggestions[0].reason).toBe('anchor_not_in_transcript');
+    expect(r.body).not.toContain("Severe sepsis");
+    expect(r.suggestions[0].reason).toBe("anchor_not_in_transcript");
     expect(mocks.modelCompleteText).not.toHaveBeenCalled();
   });
 });
 
-describe('FIX 2 — [not documented] after a PLAIN label + the Comparison-negative are exempt scaffolding', () => {
+describe("FIX 2 — [not documented] after a PLAIN label + the Comparison-negative are exempt scaffolding", () => {
   it('a plain "Label: [not documented]" line (no bold) is exempt — body, no entailment call', async () => {
     entailAll();
     const r = await runAnchorVerify({
       ...IDS,
-      anchoredDraft: '## Subjective\nFamily History: [not documented]\n\n## Objective\nComparison: [not documented]',
+      anchoredDraft:
+        "## Subjective\nFamily History: [not documented]\n\n## Objective\nComparison: [not documented]",
       roleLabeledTranscript: TRANSCRIPT,
     });
-    expect(r.body).toContain('Family History: [not documented]');
-    expect(r.body).toContain('Comparison: [not documented]');
+    expect(r.body).toContain("Family History: [not documented]");
+    expect(r.body).toContain("Comparison: [not documented]");
     expect(r.suggestions).toHaveLength(0);
     expect(mocks.modelCompleteText).not.toHaveBeenCalled();
   });
 
-  it('the bold form still works (no regression of the existing exemption)', async () => {
+  it("the bold form still works (no regression of the existing exemption)", async () => {
     entailAll();
     const r = await runAnchorVerify({
       ...IDS,
-      anchoredDraft: '## Subjective\n**Allergies:** [not documented]',
+      anchoredDraft: "## Subjective\n**Allergies:** [not documented]",
       roleLabeledTranscript: TRANSCRIPT,
     });
-    expect(r.body).toContain('**Allergies:** [not documented]');
+    expect(r.body).toContain("**Allergies:** [not documented]");
     expect(r.suggestions).toHaveLength(0);
   });
 
-  it('the canonical ultrasound Comparison-negative needs no anchor — body, no entailment call', async () => {
+  it("the canonical ultrasound Comparison-negative needs no anchor — body, no entailment call", async () => {
     entailAll();
     const r = await runAnchorVerify({
       ...IDS,
-      anchoredDraft: '## Comparison\nNo prior study available for comparison.',
+      anchoredDraft: "## Comparison\nNo prior study available for comparison.",
       roleLabeledTranscript: TRANSCRIPT,
     });
-    expect(r.body).toContain('No prior study available for comparison.');
+    expect(r.body).toContain("No prior study available for comparison.");
     expect(r.suggestions).toHaveLength(0);
     expect(mocks.modelCompleteText).not.toHaveBeenCalled();
   });
@@ -877,11 +971,12 @@ describe('FIX 2 — [not documented] after a PLAIN label + the Comparison-negati
     entailAll();
     const r = await runAnchorVerify({
       ...IDS,
-      anchoredDraft: '## Assessment\nPatient has crushing chest pain [not documented]',
+      anchoredDraft:
+        "## Assessment\nPatient has crushing chest pain [not documented]",
       roleLabeledTranscript: TRANSCRIPT,
     });
-    expect(r.body).not.toContain('crushing chest pain');
-    expect(r.suggestions[0].reason).toBe('no_anchor');
+    expect(r.body).not.toContain("crushing chest pain");
+    expect(r.suggestions[0].reason).toBe("no_anchor");
   });
 });
 
@@ -892,42 +987,44 @@ describe('FIX 2 — [not documented] after a PLAIN label + the Comparison-negati
 // rows, unchecked options) is exempt; CLAIMS (checked options, filled cells)
 // still anchor + verify — a fabricated selection must ALWAYS demote.
 // ─────────────────────────────────────────────────────────────────────────────
-describe('structure-aware exemptions — tables + option-sets (pre-registered pass)', () => {
-  it('(a) an UNCHECKED option line is exempt scaffolding — body, no lane row, no entailment call', async () => {
+describe("structure-aware exemptions — tables + option-sets (pre-registered pass)", () => {
+  it("(a) an UNCHECKED option line is exempt scaffolding — body, no lane row, no entailment call", async () => {
     const r = await runAnchorVerify({
       ...IDS,
-      anchoredDraft: '## Lungs\n- [ ] Clear to auscultation\n- [ ] Wheezes\n- [ ] Crackles',
+      anchoredDraft:
+        "## Lungs\n- [ ] Clear to auscultation\n- [ ] Wheezes\n- [ ] Crackles",
       roleLabeledTranscript: TRANSCRIPT,
     });
-    expect(r.body).toContain('- [ ] Clear to auscultation');
-    expect(r.body).toContain('- [ ] Crackles');
+    expect(r.body).toContain("- [ ] Clear to auscultation");
+    expect(r.body).toContain("- [ ] Crackles");
     expect(r.suggestions).toHaveLength(0);
     expect(mocks.modelCompleteText).not.toHaveBeenCalled();
   });
 
-  it('(b1) FABRICATED-OPTION canary: a checked option with NO anchor demotes no_anchor', async () => {
+  it("(b1) FABRICATED-OPTION canary: a checked option with NO anchor demotes no_anchor", async () => {
     entailAll();
     const r = await runAnchorVerify({
       ...IDS,
-      anchoredDraft: '## Lungs\n- [x] Wheezes present',
+      anchoredDraft: "## Lungs\n- [x] Wheezes present",
       roleLabeledTranscript: TRANSCRIPT,
     });
-    expect(r.body).not.toContain('[x] Wheezes');
-    expect(r.suggestions[0].reason).toBe('no_anchor');
+    expect(r.body).not.toContain("[x] Wheezes");
+    expect(r.suggestions[0].reason).toBe("no_anchor");
   });
 
-  it('(b2) FABRICATED-OPTION canary: a checked option with a NON-TRANSCRIPT anchor demotes anchor_not_in_transcript', async () => {
+  it("(b2) FABRICATED-OPTION canary: a checked option with a NON-TRANSCRIPT anchor demotes anchor_not_in_transcript", async () => {
     entailAll();
     const r = await runAnchorVerify({
       ...IDS,
-      anchoredDraft: '## Lungs\n- [x] Wheezes present ⟦A:"diffuse expiratory wheezes heard"⟧',
+      anchoredDraft:
+        '## Lungs\n- [x] Wheezes present ⟦A:"diffuse expiratory wheezes heard"⟧',
       roleLabeledTranscript: TRANSCRIPT,
     });
-    expect(r.body).not.toContain('[x] Wheezes');
-    expect(r.suggestions[0].reason).toBe('anchor_not_in_transcript');
+    expect(r.body).not.toContain("[x] Wheezes");
+    expect(r.suggestions[0].reason).toBe("anchor_not_in_transcript");
   });
 
-  it('(c1) an anchored table DATA row with dictated digits survives to the body', async () => {
+  it("(c1) an anchored table DATA row with dictated digits survives to the body", async () => {
     entailAll();
     const r = await runAnchorVerify({
       ...IDS,
@@ -935,42 +1032,43 @@ describe('structure-aware exemptions — tables + option-sets (pre-registered pa
         '## Medications\n| Medication | Dose |\n| --- | --- |\n| The pill | 500 milligrams twice daily | ⟦A:"take 500 milligrams twice daily"⟧',
       roleLabeledTranscript: TRANSCRIPT,
     });
-    expect(r.body).toContain('| The pill | 500 milligrams twice daily |');
+    expect(r.body).toContain("| The pill | 500 milligrams twice daily |");
     expect(r.suggestions).toHaveLength(0);
   });
 
-  it('(c2) an UNANCHORED table data row still demotes — table shape is not a free pass', async () => {
+  it("(c2) an UNANCHORED table data row still demotes — table shape is not a free pass", async () => {
     entailAll();
     const r = await runAnchorVerify({
       ...IDS,
-      anchoredDraft: '## Medications\n| Medication | Dose |\n| --- | --- |\n| Amoxicillin | 875 mg |',
+      anchoredDraft:
+        "## Medications\n| Medication | Dose |\n| --- | --- |\n| Amoxicillin | 875 mg |",
       roleLabeledTranscript: TRANSCRIPT,
     });
-    expect(r.body).not.toContain('Amoxicillin');
-    expect(r.suggestions[0].reason).toBe('no_anchor');
+    expect(r.body).not.toContain("Amoxicillin");
+    expect(r.suggestions[0].reason).toBe("no_anchor");
   });
 
-  it('(d) header + separator rows are exempt scaffolding — no lane rows, no entailment call', async () => {
+  it("(d) header + separator rows are exempt scaffolding — no lane rows, no entailment call", async () => {
     const r = await runAnchorVerify({
       ...IDS,
-      anchoredDraft: '## Vitals\n| Vital | Value |\n| --- | --- |',
+      anchoredDraft: "## Vitals\n| Vital | Value |\n| --- | --- |",
       roleLabeledTranscript: TRANSCRIPT,
     });
-    expect(r.body).toContain('| Vital | Value |');
-    expect(r.body).toContain('| --- | --- |');
+    expect(r.body).toContain("| Vital | Value |");
+    expect(r.body).toContain("| --- | --- |");
     expect(r.suggestions).toHaveLength(0);
     expect(mocks.modelCompleteText).not.toHaveBeenCalled();
   });
 
-  it('(e) unfilled fixed-row + empty-cell rows are exempt scaffolding', async () => {
+  it("(e) unfilled fixed-row + empty-cell rows are exempt scaffolding", async () => {
     const r = await runAnchorVerify({
       ...IDS,
       anchoredDraft:
-        '## Vitals\n| Vital | Value |\n| --- | --- |\n| BP | [not documented] |\n| Allergies |  |\n| Comparison | — |',
+        "## Vitals\n| Vital | Value |\n| --- | --- |\n| BP | [not documented] |\n| Allergies |  |\n| Comparison | — |",
       roleLabeledTranscript: TRANSCRIPT,
     });
-    expect(r.body).toContain('| BP | [not documented] |');
-    expect(r.body).toContain('| Allergies |  |');
+    expect(r.body).toContain("| BP | [not documented] |");
+    expect(r.body).toContain("| Allergies |  |");
     expect(r.suggestions).toHaveLength(0);
     expect(mocks.modelCompleteText).not.toHaveBeenCalled();
   });
@@ -978,10 +1076,10 @@ describe('structure-aware exemptions — tables + option-sets (pre-registered pa
   it('(f) "Label: [not addressed]" is exempt like [not documented]', async () => {
     const r = await runAnchorVerify({
       ...IDS,
-      anchoredDraft: '## ROS\nSmoking status: [not addressed]',
+      anchoredDraft: "## ROS\nSmoking status: [not addressed]",
       roleLabeledTranscript: TRANSCRIPT,
     });
-    expect(r.body).toContain('Smoking status: [not addressed]');
+    expect(r.body).toContain("Smoking status: [not addressed]");
     expect(r.suggestions).toHaveLength(0);
     expect(mocks.modelCompleteText).not.toHaveBeenCalled();
   });
@@ -990,10 +1088,10 @@ describe('structure-aware exemptions — tables + option-sets (pre-registered pa
     entailAll();
     const r = await runAnchorVerify({
       ...IDS,
-      anchoredDraft: '## Assessment\nPatient has severe sepsis [not addressed]',
+      anchoredDraft: "## Assessment\nPatient has severe sepsis [not addressed]",
       roleLabeledTranscript: TRANSCRIPT,
     });
-    expect(r.body).not.toContain('severe sepsis');
-    expect(r.suggestions[0].reason).toBe('no_anchor');
+    expect(r.body).not.toContain("severe sepsis");
+    expect(r.suggestions[0].reason).toBe("no_anchor");
   });
 });

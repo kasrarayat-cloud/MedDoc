@@ -37,18 +37,14 @@ import { loadVisitExportData } from '@/lib/visit-export-server';
 import { generateVisitPdf } from '@/lib/pdf-generator';
 import { redactPhi } from '@meddoc/ai';
 import { log } from '@/lib/log';
+import { isDataExportEnabled } from '@/lib/data-export-feature';
+import { ordinaryClinicalVisitWhere } from '@/lib/template-twin/synthetic-qa-patient';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 // Heavy users with lots of visits + audio can push past the default
 // 60s. Cap at 300s which matches Playwright's own job timeout.
 export const maxDuration = 300;
-
-export function isDataExportEnabled(): boolean {
-  const raw = process.env.ENABLE_DATA_EXPORT?.trim().toLowerCase();
-  // Default true — absence or unset = feature on.
-  return raw !== 'false' && raw !== '0';
-}
 
 export const GET = withApiHandler('api:settings:export-data', async () => {
   if (!isDataExportEnabled()) {
@@ -80,7 +76,12 @@ export const GET = withApiHandler('api:settings:export-data', async () => {
 
   // Light visit list — we fetch full bytes per-visit as we stream.
   const visits = await prisma.transcribeVisit.findMany({
-    where: { userId },
+    where: ordinaryClinicalVisitWhere({
+      userId,
+      // Synthetic staging visits have one narrow, verified Original Template
+      // DOCX delivery path. They must never leak through the generic account
+      // archive as JSON, audio, or a newly generated PDF.
+    }),
     select: {
       id: true,
       audioKey: true,

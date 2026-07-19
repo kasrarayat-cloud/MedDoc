@@ -20,33 +20,36 @@
 // Returns 404 on ownership mismatch (consistent with rest of /api/visits).
 // ============================================================================
 
-import { NextResponse } from 'next/server';
-import { z } from 'zod';
+import { NextResponse } from "next/server";
+import { z } from "zod";
 
-import prisma from '@meddoc/db';
-import { TranscribeVisitStatus } from '@prisma/client';
-import { auth } from '@/lib/nextauth';
-import { apiError, withApiHandler } from '@/lib/api-error';
-import { computeEmScore } from '@/lib/em-coding/score';
-import { engineToUiScore } from '@/lib/em-coding/to-ui-score';
-import { extractIcdRows, extractRxRows } from '@/lib/em-coding/displayed-level';
-import { logAudit } from '@/lib/audit';
+import prisma from "@meddoc/db";
+import { TranscribeVisitStatus } from "@prisma/client";
+import { auth } from "@/lib/nextauth";
+import { apiError, withApiHandler } from "@/lib/api-error";
+import { computeEmScore } from "@/lib/em-coding/score";
+import { engineToUiScore } from "@/lib/em-coding/to-ui-score";
+import { extractIcdRows, extractRxRows } from "@/lib/em-coding/displayed-level";
+import { logAudit } from "@/lib/audit";
+import { isSameOriginTemplateTwinMutation } from "@/lib/template-twin/request-security";
+import { pinTemplateTwinStagingQaMutation } from "@/lib/template-twin/staging-qa-mutation";
+import { TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT } from "@/lib/template-twin/staging-qa-visit-guard";
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 // AMA 2021 Office E&M code surface (mirrors the rail's union literal).
 const EM_CODES = [
-  '99202',
-  '99203',
-  '99204',
-  '99205',
-  '99211',
-  '99212',
-  '99213',
-  '99214',
-  '99215',
+  "99202",
+  "99203",
+  "99204",
+  "99205",
+  "99211",
+  "99212",
+  "99213",
+  "99214",
+  "99215",
 ] as const;
 
 // Reason is optional + length-capped so a fat-fingered payload can't
@@ -59,7 +62,7 @@ const BodySchema = z.object({
 });
 
 export const POST = withApiHandler<{ id: string }>(
-  'api:visits:em-score:override',
+  "api:visits:em-score:override",
   async (req, { params }) => {
     const { id: visitId } = await params;
 
@@ -67,18 +70,23 @@ export const POST = withApiHandler<{ id: string }>(
     const userId = session?.user?.id;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const practiceId = (session?.user as any)?.practiceId as string | undefined;
-    if (!userId || !practiceId) return apiError('unauthorized', 401);
+    if (!userId || !practiceId) return apiError("unauthorized", 401);
+    if (!isSameOriginTemplateTwinMutation(req)) {
+      return apiError("The override request was not same-origin.", 403, {
+        code: "CROSS_SITE_MUTATION",
+      });
+    }
 
     let body: unknown;
     try {
       body = await req.json();
     } catch {
-      return apiError('invalid JSON body', 400);
+      return apiError("invalid JSON body", 400);
     }
     const parsed = BodySchema.safeParse(body);
     if (!parsed.success) {
-      return apiError('invalid override payload', 400, {
-        code: 'INVALID_REQUEST',
+      return apiError("invalid override payload", 400, {
+        code: "INVALID_REQUEST",
       });
     }
 
@@ -100,19 +108,25 @@ export const POST = withApiHandler<{ id: string }>(
         icdCodes: true,
         cptCodes: true,
         rxDrafts: true,
+        templateTwinSyntheticQaRun: {
+          select: TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
+        },
       },
     });
-    if (!visit || visit.userId !== userId) return apiError('not found', 404);
+    if (!visit || visit.userId !== userId) return apiError("not found", 404);
     if (visit.deletedAt !== null || visit.archivedAt !== null) {
-      return apiError('Visit is no longer active.', 400, {
-        code: 'VISIT_NOT_ACTIVE',
+      return apiError("Visit is no longer active.", 400, {
+        code: "VISIT_NOT_ACTIVE",
       });
     }
-    if (visit.signedAt !== null || visit.status === TranscribeVisitStatus.SIGNED) {
+    if (
+      visit.signedAt !== null ||
+      visit.status === TranscribeVisitStatus.SIGNED
+    ) {
       return apiError(
-        'Visit is signed and locked — override can no longer be set.',
+        "Visit is signed and locked — override can no longer be set.",
         409,
-        { code: 'VISIT_LOCKED' },
+        { code: "VISIT_LOCKED" },
       );
     }
     // Only allow on visits that have actually completed the pipeline —
@@ -122,17 +136,30 @@ export const POST = withApiHandler<{ id: string }>(
       return apiError(
         `Visit is in status ${visit.status}; override requires a READY visit.`,
         409,
-        { code: 'VISIT_NOT_READY' },
+        { code: "VISIT_NOT_READY" },
       );
     }
 
-    const currentSoap = visit.soapFinal ?? visit.soapDraft ?? '';
+    const currentSoap = visit.soapFinal ?? visit.soapDraft ?? "";
     if (!currentSoap.trim()) {
-      return apiError(
-        'Visit has no SOAP draft to score.',
-        400,
-        { code: 'NO_SOAP_DRAFT' },
-      );
+      return apiError("Visit has no SOAP draft to score.", 400, {
+        code: "NO_SOAP_DRAFT",
+      });
+    }
+
+    try {
+      const stagingQaClaim = await pinTemplateTwinStagingQaMutation({
+        visitId,
+        userId,
+        run: visit.templateTwinSyntheticQaRun,
+      });
+      if (stagingQaClaim) {
+        return apiError("not found", 404, {
+          code: "TEMPLATE_TWIN_STAGING_QA_MUTATION_UNAVAILABLE",
+        });
+      }
+    } catch {
+      return apiError("not found", 404);
     }
 
     // Re-score against the current SOAP so the rail receives a fresh
@@ -147,7 +174,7 @@ export const POST = withApiHandler<{ id: string }>(
     });
 
     const durationSec =
-      visit.inputMode === 'voice_dictation'
+      visit.inputMode === "voice_dictation"
         ? (visit.dictationDurationSec ?? 0)
         : (visit.audioDurationSec ?? 0);
 
@@ -160,7 +187,7 @@ export const POST = withApiHandler<{ id: string }>(
     const newUiScore = engineToUiScore(
       engineScore,
       durationSec,
-      overrideRecord
+      overrideRecord,
     );
 
     // cptCodes is a Json column. Merge `em.override` into whatever
@@ -180,8 +207,8 @@ export const POST = withApiHandler<{ id: string }>(
     });
 
     void logAudit({
-      action: 'EM_OVERRIDE_APPLIED',
-      targetType: 'transcribe_visit',
+      action: "EM_OVERRIDE_APPLIED",
+      targetType: "transcribe_visit",
       targetId: visitId,
       metadata: {
         fromCode: engineScore.code,
@@ -202,7 +229,7 @@ export const POST = withApiHandler<{ id: string }>(
 // ──────────────────────────────────────────────────────────────────────
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null && !Array.isArray(v);
+  return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
 // E/M signal extractors now come from @/lib/em-coding/displayed-level

@@ -25,14 +25,14 @@
 // emits (L2/L3/L4/L5) that were not yet passing userId+practiceId.
 // ============================================================================
 
-import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { describe, expect, it, vi, beforeEach } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
-const REPO_ROOT = resolve(__dirname, '..', '..', '..', '..');
+const REPO_ROOT = resolve(__dirname, "..", "..", "..", "..");
 
 function readSource(relPath: string): string {
-  return readFileSync(resolve(REPO_ROOT, relPath), 'utf-8');
+  return readFileSync(resolve(REPO_ROOT, relPath), "utf-8");
 }
 
 // ============================================================================
@@ -43,35 +43,59 @@ const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   headers: vi.fn(),
   prismaCreate: vi.fn(),
+  prismaQueryRaw: vi.fn(),
+  prismaTransaction: vi.fn(),
   isRedisReady: vi.fn(() => false),
 }));
 
-vi.mock('@/lib/nextauth', () => ({ auth: mocks.auth }));
-vi.mock('next/headers', () => ({ headers: mocks.headers }));
-vi.mock('@meddoc/db', () => ({
-  default: { auditLog: { create: mocks.prismaCreate } },
+vi.mock("@/lib/nextauth", () => ({ auth: mocks.auth }));
+vi.mock("next/headers", () => ({ headers: mocks.headers }));
+vi.mock("@meddoc/db", () => ({
+  default: {
+    auditLog: { create: mocks.prismaCreate },
+    $transaction: mocks.prismaTransaction,
+  },
 }));
-vi.mock('@/lib/redis', () => ({
+vi.mock("@/lib/redis", () => ({
   getRedis: () => ({ publish: vi.fn() }),
   isRedisReady: mocks.isRedisReady,
-  ADMIN_AUDIT_STREAM_CHANNEL: 'admin:audit',
+  ADMIN_AUDIT_STREAM_CHANNEL: "admin:audit",
 }));
 
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.headers.mockResolvedValue({ get: () => null });
-  mocks.prismaCreate.mockResolvedValue({ id: 'audit_1' });
+  mocks.prismaCreate.mockResolvedValue({ id: "audit_1" });
+  mocks.prismaQueryRaw
+    .mockResolvedValueOnce([{ id: "synthetic_practice_1" }])
+    .mockResolvedValueOnce([
+      {
+        id: "synthetic_doctor_1",
+        practiceId: "synthetic_practice_1",
+        isActive: true,
+      },
+    ])
+    .mockResolvedValueOnce([
+      { id: "synthetic_visit_1", userId: "synthetic_doctor_1" },
+    ]);
+  mocks.prismaTransaction.mockImplementation(
+    async (callback: (tx: unknown) => Promise<unknown>) =>
+      callback({
+        $queryRaw: mocks.prismaQueryRaw,
+        auditLog: { create: mocks.prismaCreate },
+      }),
+  );
 });
 
-describe('logAudit session resolution — worker-context safety', () => {
-  it('skips auth() when caller passes both userId AND practiceId', async () => {
-    const { logAudit } = await import('@/lib/audit');
+describe("logAudit session resolution — worker-context safety", () => {
+  it("skips auth() when caller passes both userId AND practiceId", async () => {
+    const { logAudit } = await import("@/lib/audit");
     await logAudit({
-      action: 'PIPELINE_REJECTED_INJECTION_DELIMITER',
-      targetId: 'visit_1',
-      targetType: 'transcribe_visit',
-      userId: 'user_42',
-      practiceId: 'practice_7',
+      action: "PIPELINE_REJECTED_INJECTION_DELIMITER",
+      targetId: "visit_1",
+      targetType: "transcribe_visit",
+      userId: "user_42",
+      practiceId: "practice_7",
     });
     // Critical: auth() must NOT have been called. This is the worker-
     // context safety property — even if Auth.js's session resolution
@@ -79,28 +103,28 @@ describe('logAudit session resolution — worker-context safety', () => {
     expect(mocks.auth).not.toHaveBeenCalled();
     expect(mocks.prismaCreate).toHaveBeenCalledTimes(1);
     const arg = mocks.prismaCreate.mock.calls[0][0];
-    expect(arg.data.userId).toBe('user_42');
-    expect(arg.data.practiceId).toBe('practice_7');
+    expect(arg.data.userId).toBe("user_42");
+    expect(arg.data.practiceId).toBe("practice_7");
   });
 
-  it('still calls auth() when caller passes ONLY userId (partial override)', async () => {
+  it("still calls auth() when caller passes ONLY userId (partial override)", async () => {
     mocks.auth.mockResolvedValue({
-      user: { id: 'session_user', practiceId: 'session_practice' },
+      user: { id: "session_user", practiceId: "session_practice" },
     });
-    const { logAudit } = await import('@/lib/audit');
+    const { logAudit } = await import("@/lib/audit");
     await logAudit({
-      action: 'VISIT_SIGNED',
-      targetId: 'visit_1',
-      userId: 'caller_user',
+      action: "VISIT_SIGNED",
+      targetId: "visit_1",
+      userId: "caller_user",
       // No practiceId override — session lookup needed for that.
     });
     expect(mocks.auth).toHaveBeenCalledTimes(1);
     const arg = mocks.prismaCreate.mock.calls[0][0];
-    expect(arg.data.userId).toBe('caller_user');
-    expect(arg.data.practiceId).toBe('session_practice');
+    expect(arg.data.userId).toBe("caller_user");
+    expect(arg.data.practiceId).toBe("session_practice");
   });
 
-  it('survives a SYNCHRONOUS throw from auth() and still writes the row', async () => {
+  it("survives a SYNCHRONOUS throw from auth() and still writes the row", async () => {
     // This is the failure mode that the pre-fix `.catch(() => null)`
     // did NOT cover. `.catch()` only handles rejected promises; if
     // `auth()` throws before returning a thenable (the worker-context
@@ -111,37 +135,37 @@ describe('logAudit session resolution — worker-context safety', () => {
     // `.catch` then handles, returning null and letting the prisma
     // write proceed.
     mocks.auth.mockImplementation(() => {
-      throw new Error('headers was called outside a request scope');
+      throw new Error("headers was called outside a request scope");
     });
-    const { logAudit } = await import('@/lib/audit');
+    const { logAudit } = await import("@/lib/audit");
     await logAudit({
-      action: 'PIPELINE_REJECTED_INJECTION_DELIMITER',
-      targetId: 'visit_1',
+      action: "PIPELINE_REJECTED_INJECTION_DELIMITER",
+      targetId: "visit_1",
       // Only ONE override → triggers auth() lookup → sync throw.
-      userId: 'caller_user',
+      userId: "caller_user",
     });
     expect(mocks.auth).toHaveBeenCalledTimes(1);
     expect(mocks.prismaCreate).toHaveBeenCalledTimes(1);
     const arg = mocks.prismaCreate.mock.calls[0][0];
-    expect(arg.data.userId).toBe('caller_user');
+    expect(arg.data.userId).toBe("caller_user");
     // Falls through to 'clinic_main' sentinel since we couldn't
     // resolve the session.
-    expect(arg.data.practiceId).toBe('clinic_main');
+    expect(arg.data.practiceId).toBe("clinic_main");
   });
 
-  it('survives a REJECTED-promise throw from auth() (legacy failure mode)', async () => {
-    mocks.auth.mockRejectedValue(new Error('session unreadable'));
-    const { logAudit } = await import('@/lib/audit');
+  it("survives a REJECTED-promise throw from auth() (legacy failure mode)", async () => {
+    mocks.auth.mockRejectedValue(new Error("session unreadable"));
+    const { logAudit } = await import("@/lib/audit");
     await logAudit({
-      action: 'VISIT_SIGNED',
-      targetId: 'visit_1',
-      userId: 'caller_user',
+      action: "VISIT_SIGNED",
+      targetId: "visit_1",
+      userId: "caller_user",
     });
     expect(mocks.prismaCreate).toHaveBeenCalledTimes(1);
-    expect(mocks.prismaCreate.mock.calls[0][0].data.userId).toBe('caller_user');
+    expect(mocks.prismaCreate.mock.calls[0][0].data.userId).toBe("caller_user");
   });
 
-  it('writes the row when userId is null + auth() throws (anonymous worker hot path)', async () => {
+  it("writes the row when userId is null + auth() throws (anonymous worker hot path)", async () => {
     // Worker hot path: many BullMQ jobs run for visits whose owning
     // user is set, but the layer can be invoked with `userId: null`
     // when no user context is available (e.g., scheduled cleanups,
@@ -150,62 +174,131 @@ describe('logAudit session resolution — worker-context safety', () => {
     // auth() path. Production worker context throws synchronously
     // here. The row must still write with userId: null.
     mocks.auth.mockImplementation(() => {
-      throw new Error('headers was called outside a request scope');
+      throw new Error("headers was called outside a request scope");
     });
-    const { logAudit } = await import('@/lib/audit');
+    const { logAudit } = await import("@/lib/audit");
     await logAudit({
-      action: 'PIPELINE_REJECTED_INJECTION_DELIMITER',
-      targetId: 'visit_1',
+      action: "PIPELINE_REJECTED_INJECTION_DELIMITER",
+      targetId: "visit_1",
       userId: null,
-      practiceId: 'practice_7',
+      practiceId: "practice_7",
     });
     expect(mocks.auth).toHaveBeenCalledTimes(1);
     expect(mocks.prismaCreate).toHaveBeenCalledTimes(1);
     const arg = mocks.prismaCreate.mock.calls[0][0];
     expect(arg.data.userId).toBeNull();
-    expect(arg.data.practiceId).toBe('practice_7');
+    expect(arg.data.practiceId).toBe("practice_7");
   });
 
-  it('never throws — even when prisma itself fails (T-M2 contract)', async () => {
-    mocks.prismaCreate.mockRejectedValue(new Error('db down'));
-    const { logAudit } = await import('@/lib/audit');
+  it("never throws — even when prisma itself fails (T-M2 contract)", async () => {
+    mocks.prismaCreate.mockRejectedValue(new Error("db down"));
+    const { logAudit } = await import("@/lib/audit");
     await expect(
       logAudit({
-        action: 'VISIT_SIGNED',
-        targetId: 'visit_1',
-        userId: 'u',
-        practiceId: 'p',
+        action: "VISIT_SIGNED",
+        targetId: "visit_1",
+        userId: "u",
+        practiceId: "p",
       }),
     ).resolves.toBeUndefined();
+  });
+
+  it("required synthetic audit retries a complete transaction before succeeding", async () => {
+    const serializationFailure = Object.assign(
+      new Error("synthetic serialization abort"),
+      { code: "40001" },
+    );
+    mocks.prismaTransaction
+      .mockRejectedValueOnce(serializationFailure)
+      .mockImplementationOnce(
+        async (callback: (tx: unknown) => Promise<unknown>) =>
+          callback({
+            $queryRaw: mocks.prismaQueryRaw,
+            auditLog: { create: mocks.prismaCreate },
+          }),
+      );
+    const { logRequiredAudit } = await import("@/lib/audit");
+    await expect(
+      logRequiredAudit({
+        action: "VIEWED_VISIT",
+        targetId: "synthetic_visit_1",
+        targetType: "TranscribeVisit",
+        userId: "synthetic_doctor_1",
+        practiceId: "synthetic_practice_1",
+      }),
+    ).resolves.toBeUndefined();
+    expect(mocks.prismaTransaction).toHaveBeenCalledTimes(2);
+    expect(mocks.prismaTransaction.mock.calls[1]?.[1]).toEqual({
+      isolationLevel: "ReadCommitted",
+    });
+    expect(mocks.prismaCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it("required synthetic audit rejects after bounded retry exhaustion", async () => {
+    const deadlock = Object.assign(new Error("synthetic deadlock"), {
+      code: "40P01",
+    });
+    mocks.prismaTransaction.mockRejectedValue(deadlock);
+    const { logRequiredAudit } = await import("@/lib/audit");
+    await expect(
+      logRequiredAudit({
+        action: "VIEWED_VISIT",
+        targetId: "synthetic_visit_2",
+        targetType: "TranscribeVisit",
+        userId: "synthetic_doctor_2",
+        practiceId: "synthetic_practice_2",
+      }),
+    ).rejects.toMatchObject({
+      code: "DATABASE_TRANSACTION_RETRY_EXHAUSTED",
+      databaseCode: "40P01",
+      attempts: 3,
+    });
+    expect(mocks.prismaTransaction).toHaveBeenCalledTimes(3);
+    expect(mocks.prismaCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe("synthetic visit reads await their durable audit", () => {
+  it.each([
+    "apps/transcribe-md/src/app/visits/[id]/page.tsx",
+    "apps/transcribe-md/src/app/api/visits/[id]/route.ts",
+  ])("%s uses the fail-closed audit path", (path) => {
+    const source = readSource(path);
+    expect(source).toContain("await logRequiredAudit({");
+    expect(source).toContain("syntheticQaAuditPracticeId");
   });
 });
 
 // ============================================================================
 // Part B — Source-pinning: prove the 4 prompt-injection audit emits in
-// L2/L3/L4/L5 pass userId+practiceId from `input`. Mirrors the pattern
+// L2/L3/L4/L5 await the durable worker outbox path and pass
+// userId+practiceId from `input`. Mirrors the pattern
 // in tests/audit/page-rsc-audits.test.ts — full-runtime testing of
 // these layers requires the entire worker stack, so we pin the source
 // shape so a future refactor can't drop the override silently.
 // ============================================================================
 
-const INJECTION_AUDIT_BLOCK = (layer: 'L2' | 'L3' | 'L4' | 'L5') =>
+const INJECTION_AUDIT_BLOCK = (layer: "L2" | "L3" | "L4" | "L5") =>
   new RegExp(
-    `void\\s+logAudit\\s*\\(\\s*\\{[\\s\\S]*?` +
+    `await\\s+logWorkerAudit\\s*\\(\\s*\\{[\\s\\S]*?` +
       `action:\\s*['"]PIPELINE_REJECTED_INJECTION_DELIMITER['"][\\s\\S]*?` +
       `userId:\\s*input\\.userId[\\s\\S]*?` +
       `practiceId:\\s*input\\.practiceId[\\s\\S]*?` +
       `layer:\\s*['"]${layer}['"][\\s\\S]*?\\}\\s*\\)`,
-    'm',
+    "m",
   );
 
-describe('worker prompt-injection audit calls pass userId+practiceId', () => {
+describe("worker prompt-injection audit calls are durable and pass userId+practiceId", () => {
   it.each([
-    ['L2', 'apps/transcribe-md/src/worker/layers/02-speaker-roles.ts'],
-    ['L3', 'apps/transcribe-md/src/worker/layers/03-extract-entities.ts'],
-    ['L4', 'apps/transcribe-md/src/worker/layers/04-generate-soap.ts'],
-    ['L5', 'apps/transcribe-md/src/worker/layers/05-self-critique.ts'],
-  ] as const)('%s injection-delimiter audit emits override fields', (layer, path) => {
-    const src = readSource(path);
-    expect(src).toMatch(INJECTION_AUDIT_BLOCK(layer));
-  });
+    ["L2", "apps/transcribe-md/src/worker/layers/02-speaker-roles.ts"],
+    ["L3", "apps/transcribe-md/src/worker/layers/03-extract-entities.ts"],
+    ["L4", "apps/transcribe-md/src/worker/layers/04-generate-soap.ts"],
+    ["L5", "apps/transcribe-md/src/worker/layers/05-self-critique.ts"],
+  ] as const)(
+    "%s injection-delimiter audit emits override fields",
+    (layer, path) => {
+      const src = readSource(path);
+      expect(src).toMatch(INJECTION_AUDIT_BLOCK(layer));
+    },
+  );
 });

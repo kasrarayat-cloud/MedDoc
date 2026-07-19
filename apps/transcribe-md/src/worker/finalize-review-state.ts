@@ -18,10 +18,12 @@
 // ============================================================================
 
 import prisma from '@meddoc/db';
+import { runTemplateTwinSyntheticQaClaimBoundMutation } from '@/worker/staging-qa-mutation-fence';
 
 export async function applyAdditiveReviewState(
   visitId: string,
-  incoming: { needsReview: boolean; reviewReason: string | null }
+  incoming: { needsReview: boolean; reviewReason: string | null },
+  actor?: { userId: string; practiceId: string },
 ): Promise<void> {
   // Nothing to add — leave the row's review state exactly as the pipeline
   // set it (writing `needsReview = needsReview OR false` would be a no-op
@@ -30,14 +32,34 @@ export async function applyAdditiveReviewState(
 
   // NULL-safe concat: in Postgres `a || NULL` is NULL, so COALESCE walks
   // (both → concatenated, row-only → row, incoming-only → incoming).
-  await prisma.$executeRaw`
-    UPDATE "transcribe_visits"
-    SET "needsReview" = "needsReview" OR ${incoming.needsReview},
-        "reviewReason" = COALESCE(
-          "reviewReason" || ' ' || ${incoming.reviewReason},
-          "reviewReason",
-          ${incoming.reviewReason}
-        )
-    WHERE id = ${visitId}
-  `;
+  if (!actor) {
+    await prisma.$executeRaw`
+      UPDATE "transcribe_visits"
+      SET "needsReview" = "needsReview" OR ${incoming.needsReview},
+          "reviewReason" = COALESCE(
+            "reviewReason" || ' ' || ${incoming.reviewReason},
+            "reviewReason",
+            ${incoming.reviewReason}
+          )
+      WHERE id = ${visitId}
+    `;
+    return;
+  }
+  await runTemplateTwinSyntheticQaClaimBoundMutation({
+    visitId,
+    userId: actor.userId,
+    practiceId: actor.practiceId,
+    mutate: async (client) => {
+      await client.$executeRaw`
+        UPDATE "transcribe_visits"
+        SET "needsReview" = "needsReview" OR ${incoming.needsReview},
+            "reviewReason" = COALESCE(
+              "reviewReason" || ' ' || ${incoming.reviewReason},
+              "reviewReason",
+              ${incoming.reviewReason}
+            )
+        WHERE id = ${visitId}
+      `;
+    },
+  });
 }

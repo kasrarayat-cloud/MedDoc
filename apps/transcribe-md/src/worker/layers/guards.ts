@@ -18,7 +18,7 @@
 // needsReview.
 // ============================================================================
 
-import { logAudit } from '@/lib/audit';
+import { logWorkerAudit } from "@/worker/worker-audit";
 
 /** Audio shorter than this is rejected outright (Guard A). 3s is enough
  *  for the shortest legitimate dictation ("Patient stable, follow up in
@@ -38,31 +38,33 @@ export const MIN_TRANSCRIPT_WORD_COUNT = 10;
 export class PipelineRejectError extends Error {
   /** Stable machine-readable reason. Used by audit metadata + tests. */
   public readonly reasonCode:
-    | 'audio_too_short'
-    | 'transcript_too_short'
-    | 'fabrication_flagged';
+    | "audio_too_short"
+    | "transcript_too_short"
+    | "fabrication_flagged";
   /** Human-readable; rendered as the visit's reviewReason banner. */
   public readonly humanReason: string;
 
   constructor(
     reasonCode:
-      | 'audio_too_short'
-      | 'transcript_too_short'
-      | 'fabrication_flagged',
-    humanReason: string
+      | "audio_too_short"
+      | "transcript_too_short"
+      | "fabrication_flagged",
+    humanReason: string,
   ) {
     super(humanReason);
-    this.name = 'PipelineRejectError';
+    this.name = "PipelineRejectError";
     this.reasonCode = reasonCode;
     this.humanReason = humanReason;
   }
 }
 
-export function isPipelineRejectError(err: unknown): err is PipelineRejectError {
+export function isPipelineRejectError(
+  err: unknown,
+): err is PipelineRejectError {
   return (
     err instanceof Error &&
-    err.name === 'PipelineRejectError' &&
-    typeof (err as PipelineRejectError).reasonCode === 'string'
+    err.name === "PipelineRejectError" &&
+    typeof (err as PipelineRejectError).reasonCode === "string"
   );
 }
 
@@ -96,40 +98,43 @@ export async function assertSufficientTranscript(input: {
   transcriptText: string;
 }): Promise<void> {
   // Guard A — audio duration.
-  if (!Number.isFinite(input.durationSec) || input.durationSec < MIN_AUDIO_DURATION_SEC) {
+  if (
+    !Number.isFinite(input.durationSec) ||
+    input.durationSec < MIN_AUDIO_DURATION_SEC
+  ) {
     const durFmt = Number.isFinite(input.durationSec)
       ? input.durationSec.toFixed(1)
-      : 'unknown';
-    void logAudit({
-      action: 'PIPELINE_REJECTED_TOO_SHORT',
+      : "unknown";
+    await logWorkerAudit({
+      action: "PIPELINE_REJECTED_TOO_SHORT",
       targetId: input.visitId,
-      targetType: 'TranscribeVisit',
+      targetType: "TranscribeVisit",
       userId: input.userId,
       practiceId: input.practiceId,
       success: false,
-      errorCode: 'audio_too_short',
+      errorCode: "audio_too_short",
       metadata: {
         durationSec: input.durationSec,
         threshold: MIN_AUDIO_DURATION_SEC,
       },
     });
     throw new PipelineRejectError(
-      'audio_too_short',
-      `Recording is ${durFmt}s; need at least ${MIN_AUDIO_DURATION_SEC}s of audio. Re-record with the conversation captured.`
+      "audio_too_short",
+      `Recording is ${durFmt}s; need at least ${MIN_AUDIO_DURATION_SEC}s of audio. Re-record with the conversation captured.`,
     );
   }
 
   // Guard B — transcript word count.
   const wordCount = countWords(input.transcriptText);
   if (wordCount < MIN_TRANSCRIPT_WORD_COUNT) {
-    void logAudit({
-      action: 'PIPELINE_REJECTED_INSUFFICIENT_TRANSCRIPT',
+    await logWorkerAudit({
+      action: "PIPELINE_REJECTED_INSUFFICIENT_TRANSCRIPT",
       targetId: input.visitId,
-      targetType: 'TranscribeVisit',
+      targetType: "TranscribeVisit",
       userId: input.userId,
       practiceId: input.practiceId,
       success: false,
-      errorCode: 'transcript_too_short',
+      errorCode: "transcript_too_short",
       metadata: {
         wordCount,
         threshold: MIN_TRANSCRIPT_WORD_COUNT,
@@ -137,8 +142,8 @@ export async function assertSufficientTranscript(input: {
       },
     });
     throw new PipelineRejectError(
-      'transcript_too_short',
-      `Transcript has ${wordCount} word${wordCount === 1 ? '' : 's'}; pipeline halted to prevent fabricated SOAP. Re-record with audible speech.`
+      "transcript_too_short",
+      `Transcript has ${wordCount} word${wordCount === 1 ? "" : "s"}; pipeline halted to prevent fabricated SOAP. Re-record with audible speech.`,
     );
   }
 }

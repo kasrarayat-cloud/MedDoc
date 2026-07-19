@@ -1,4 +1,4 @@
-'use server';
+"use server";
 
 // ============================================================================
 // Patients dashboard — 'use server' action surface (T-M17.2 Phase 3)
@@ -7,22 +7,26 @@
 // live in lib/patients-pagination.ts + lib/patients-query.ts.
 // ============================================================================
 
-import prisma from '@meddoc/db';
-import { Prisma, type TranscribeVisitStatus } from '@prisma/client';
-import { requireSession } from '@/lib/auth';
-import { fetchPatientsPage } from '@/lib/patients-query';
+import prisma from "@meddoc/db";
+import { Prisma, type TranscribeVisitStatus } from "@prisma/client";
+import { requireSession } from "@/lib/auth";
+import { fetchPatientsPage } from "@/lib/patients-query";
 import type {
   PatientsCursor,
   LoadMorePatientsResult,
-} from '@/lib/patients-pagination';
+} from "@/lib/patients-pagination";
 import {
   C3_PATIENTS_PAGE_SIZE,
   type C3PatientsCursor,
   type C3PatientsPage,
-} from '@/lib/c3-list-pagination';
+} from "@/lib/c3-list-pagination";
+import {
+  ordinaryClinicalVisitWhere,
+  TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID,
+} from "@/lib/template-twin/synthetic-qa-patient";
 
 export async function loadMorePatientsAction(
-  cursor: PatientsCursor
+  cursor: PatientsCursor,
 ): Promise<LoadMorePatientsResult> {
   const session = await requireSession();
   return fetchPatientsPage(session.user.practiceId, cursor);
@@ -54,7 +58,7 @@ type C3PatientRaw = {
 
 export async function searchPatientsAction(
   cursor: C3PatientsCursor | null,
-  query: string
+  query: string,
 ): Promise<C3PatientsPage> {
   const session = await requireSession();
   const practiceId = session.user.practiceId;
@@ -63,12 +67,12 @@ export async function searchPatientsAction(
   let cur: { updatedAt: Date; id: string } | null = null;
   if (cursor) {
     const d = new Date(cursor.updatedAt);
-    if (Number.isNaN(d.getTime())) throw new Error('Invalid cursor');
+    if (Number.isNaN(d.getTime())) throw new Error("Invalid cursor");
     cur = { updatedAt: d, id: cursor.id };
   }
 
   const andClauses: Prisma.TranscribeMdPatientWhereInput[] = [];
-  if (q) andClauses.push({ name: { contains: q, mode: 'insensitive' } });
+  if (q) andClauses.push({ name: { contains: q, mode: "insensitive" } });
   if (cur) {
     andClauses.push({
       OR: [
@@ -81,12 +85,20 @@ export async function searchPatientsAction(
   const where: Prisma.TranscribeMdPatientWhereInput = {
     practiceId,
     deletedAt: null,
+    OR: [
+      { externalId: null },
+      {
+        externalId: {
+          not: TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID,
+        },
+      },
+    ],
   };
   if (andClauses.length) where.AND = andClauses;
 
   const rows = (await prisma.transcribeMdPatient.findMany({
     where,
-    orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+    orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
     take: C3_PATIENTS_PAGE_SIZE + 1,
     select: {
       id: true,
@@ -94,8 +106,11 @@ export async function searchPatientsAction(
       dateOfBirth: true,
       updatedAt: true,
       transcribeVisits: {
-        where: { deletedAt: null, archivedAt: null },
-        orderBy: { createdAt: 'desc' },
+        where: ordinaryClinicalVisitWhere({
+          deletedAt: null,
+          archivedAt: null,
+        }),
+        orderBy: { createdAt: "desc" },
         take: 1,
         select: {
           createdAt: true,
@@ -113,9 +128,13 @@ export async function searchPatientsAction(
 
   const ids = page.map((p) => p.id);
   const counts = ids.length
-    ? await prisma.transcribeVisit.groupBy({
-        by: ['patientId'],
-        where: { patientId: { in: ids }, deletedAt: null, archivedAt: null },
+      ? await prisma.transcribeVisit.groupBy({
+        by: ["patientId"],
+        where: ordinaryClinicalVisitWhere({
+          patientId: { in: ids },
+          deletedAt: null,
+          archivedAt: null,
+        }),
         _count: { _all: true },
       })
     : [];
@@ -123,7 +142,7 @@ export async function searchPatientsAction(
     counts.map((c: { patientId: string; _count: { _all: number } }) => [
       c.patientId,
       c._count._all,
-    ])
+    ]),
   );
 
   const last = page[page.length - 1];

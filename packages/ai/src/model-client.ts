@@ -10,21 +10,18 @@
 //   - Per-call AiCall row (via the backend modules)
 // ============================================================================
 
-import type { z } from 'zod';
+import type { z } from "zod";
 import {
   anthropicComplete,
   anthropicCompleteText,
   type AnthropicCompleteTextResult,
-} from './anthropic';
-import { ModelOutputMalformedError } from './errors';
-import {
-  isMockEnabled,
-  mockComplete,
-  mockCompleteText,
-} from './mock';
-import type { AiLogContext, ModelProvider } from './types';
+} from "./anthropic";
+import { ModelOutputMalformedError } from "./errors";
+import { isMockEnabled, mockComplete, mockCompleteText } from "./mock";
+import { syntheticQaFixtureForProviderCall } from "./synthetic-qa-context";
+import type { AiLogContext, ModelProvider } from "./types";
 
-export type * from './types';
+export type * from "./types";
 export type { AnthropicCompleteTextResult };
 
 /** T-M17.1: SCHEMA_FAIL and JSON_PARSE_FAIL from Claude have a ~5% per-call
@@ -34,7 +31,7 @@ export type { AnthropicCompleteTextResult };
 const MAX_RETRIES = 2;
 
 export interface CompleteArgs<T> extends AiLogContext {
-  provider: Exclude<ModelProvider, 'deepgram'>;
+  provider: Exclude<ModelProvider, "deepgram">;
   model: string;
   system: string;
   user: string;
@@ -43,6 +40,10 @@ export interface CompleteArgs<T> extends AiLogContext {
   /** Sampling temperature 0-1. Medical layers pin this low for
    *  determinism; undefined = provider default. */
   temperature?: number;
+  /** Durable automation execution key. It is generated server-side and is
+   * never accepted from a browser request. Provider support is best-effort;
+   * the application ledger remains authoritative for replay safety. */
+  idempotencyKey?: string;
   /** Retry on schema-fail or JSON-parse-fail with the prior output + error
    *  appended. Default true. Up to MAX_RETRIES attempts after the initial. */
   retryOnSchemaFail?: boolean;
@@ -61,7 +62,7 @@ export interface CompleteArgs<T> extends AiLogContext {
 }
 
 export interface CompleteTextArgs extends AiLogContext {
-  provider: Exclude<ModelProvider, 'deepgram'>;
+  provider: Exclude<ModelProvider, "deepgram">;
   model: string;
   system: string;
   user: string;
@@ -72,14 +73,26 @@ export interface CompleteTextArgs extends AiLogContext {
 
 export const modelClient = {
   async complete<T>(args: CompleteArgs<T>): Promise<T> {
+    const syntheticQaFixture = syntheticQaFixtureForProviderCall(args);
+    if (syntheticQaFixture) {
+      return mockComplete({
+        purpose: args.purpose,
+        schema: args.schema,
+        fixtureVersion: syntheticQaFixture,
+      });
+    }
     // T-M10: MOCK_AI_CALLS short-circuit. See packages/ai/src/mock.ts
     // for the contract. No-op unless the env flag is true.
     if (isMockEnabled()) {
-      return mockComplete({ purpose: args.purpose, schema: args.schema });
+      return mockComplete({
+        purpose: args.purpose,
+        schema: args.schema,
+        visitId: args.visitId,
+      });
     }
-    if (args.provider !== 'anthropic') {
+    if (args.provider !== "anthropic") {
       throw new Error(
-        `complete() with provider=${args.provider} is not wired yet — M2 only uses Anthropic.`
+        `complete() with provider=${args.provider} is not wired yet — M2 only uses Anthropic.`,
       );
     }
     const retryEnabled = args.retryOnSchemaFail ?? true;
@@ -100,8 +113,8 @@ export const modelClient = {
         const isRetryable =
           err instanceof ModelOutputMalformedError ||
           (err instanceof Error &&
-            (err.message === 'SCHEMA_FAIL' ||
-              err.message.startsWith('Anthropic response was not valid JSON')));
+            (err.message === "SCHEMA_FAIL" ||
+              err.message.startsWith("Anthropic response was not valid JSON")));
         if (!retryEnabled || !isRetryable || attempt === MAX_RETRIES) {
           throw err;
         }
@@ -113,13 +126,13 @@ export const modelClient = {
           const rawOutput = (err as Error & { rawOutput?: string }).rawOutput;
           const zodErrors = (err as Error & { zodErrors?: unknown }).zodErrors;
           retryContext = zodErrors
-            ? `${rawOutput ?? ''}\n\nZod errors:\n${JSON.stringify(zodErrors, null, 2)}`
+            ? `${rawOutput ?? ""}\n\nZod errors:\n${JSON.stringify(zodErrors, null, 2)}`
             : `Previous response failed to parse: ${(err as Error).message}`;
         }
       }
     }
     // TS needs a terminal return — unreachable given the loop above.
-    throw new Error('modelClient.complete: retry loop exhausted unexpectedly');
+    throw new Error("modelClient.complete: retry loop exhausted unexpectedly");
   },
 
   /**
@@ -129,14 +142,26 @@ export const modelClient = {
    * them into a per-visit cost aggregate if it wants to, independent
    * of the AiCall row this call already wrote.
    */
-  async completeText(args: CompleteTextArgs): Promise<AnthropicCompleteTextResult> {
+  async completeText(
+    args: CompleteTextArgs,
+  ): Promise<AnthropicCompleteTextResult> {
+    const syntheticQaFixture = syntheticQaFixtureForProviderCall(args);
+    if (syntheticQaFixture) {
+      return mockCompleteText({
+        purpose: args.purpose,
+        fixtureVersion: syntheticQaFixture,
+      });
+    }
     // T-M10: MOCK_AI_CALLS short-circuit. See packages/ai/src/mock.ts.
     if (isMockEnabled()) {
-      return mockCompleteText({ purpose: args.purpose });
+      return mockCompleteText({
+        purpose: args.purpose,
+        visitId: args.visitId,
+      });
     }
-    if (args.provider !== 'anthropic') {
+    if (args.provider !== "anthropic") {
       throw new Error(
-        `completeText() with provider=${args.provider} is not wired yet — T-M4 only uses Anthropic.`
+        `completeText() with provider=${args.provider} is not wired yet — T-M4 only uses Anthropic.`,
       );
     }
     return anthropicCompleteText({

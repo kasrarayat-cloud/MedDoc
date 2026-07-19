@@ -1,0 +1,137 @@
+name: Template Twin human release gate
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: template-twin-human-gate-${{ github.event.pull_request.head.sha }}
+  cancel-in-progress: true
+
+jobs:
+  synthetic-human-gate-package:
+    name: Synthetic Office and human evidence package
+    if: github.event.pull_request.head.ref == 'feat/template-twin-wm-iov-compatibility-v1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out exact pull-request head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Verify immutable source identity
+        id: source
+        shell: bash
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_HEAD" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$(git rev-parse HEAD)" == "$EXPECTED_HEAD" ]]
+          short="${EXPECTED_HEAD:0:12}"
+          generated_at="$(git show -s --format=%cI "$EXPECTED_HEAD")"
+          root="/tmp/template-twin-human-gate-$short"
+          printf 'sha=%s\nshort=%s\ngenerated_at=%s\nroot=%s\nartifact=template-twin-human-gate-%s\n' \
+            "$EXPECTED_HEAD" "$short" "$generated_at" "$root" "$short" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install locked dependencies without lifecycle credentials
+        run: npm ci --no-audit --no-fund
+
+      - name: Generate the Prisma client used by the production-path resolver
+        run: npm run db:generate
+
+      - name: Verify disposable Office tooling prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          for command in docker jq; do
+            command -v "$command" >/dev/null || {
+              echo "BLOCKED: required synthetic QA tool is unavailable: $command" >&2
+              exit 1
+            }
+          done
+          docker version >/dev/null
+
+      - name: Generate synthetic production-path Office corpus
+        run: >-
+          npx tsx apps/transcribe-md/scripts/template-twin-human-gate/generate-office-corpus.ts
+          --output-root "${{ steps.source.outputs.root }}"
+          --source-commit "${{ steps.source.outputs.sha }}"
+          --generated-at "${{ steps.source.outputs.generated_at }}"
+
+      - name: Generate content-withheld physician and media worksheets
+        run: >-
+          npx tsx apps/transcribe-md/scripts/template-twin-human-gate/generate-review-packets.ts
+          --output-root "${{ steps.source.outputs.root }}"
+          --source-commit "${{ steps.source.outputs.sha }}"
+          --generated-at "${{ steps.source.outputs.generated_at }}"
+
+      - name: Validate every pre-delivery DOCX with pinned Open XML SDK
+        env:
+          TEMPLATE_TWIN_HUMAN_GATE_ROOT: ${{ steps.source.outputs.root }}
+          QA_SOURCE_COMMIT: ${{ steps.source.outputs.sha }}
+          QA_GENERATED_AT: ${{ steps.source.outputs.generated_at }}
+        run: bash apps/transcribe-md/scripts/template-twin-human-gate/run-openxml-validation.sh
+
+      - name: Run isolated pinned LibreOffice round-trip evidence
+        run: >-
+          npx tsx apps/transcribe-md/scripts/template-twin-human-gate/run-libreoffice-evidence.ts
+          --input-root "${{ steps.source.outputs.root }}"
+          --source-commit "${{ steps.source.outputs.sha }}"
+          --generated-at "${{ steps.source.outputs.generated_at }}"
+
+      - name: Run human-gate contract and hygiene regression tests
+        run: >-
+          npx vitest run
+          src/lib/template-twin/human-release-gate/__tests__
+        working-directory: apps/transcribe-md
+
+      - name: Build deterministic synthetic-only gate package
+        run: >-
+          npx tsx apps/transcribe-md/scripts/template-twin-human-gate/package-human-gate.ts
+          --input-root "${{ steps.source.outputs.root }}"
+          --output-root "${{ steps.source.outputs.root }}/delivery"
+          --source-commit "${{ steps.source.outputs.sha }}"
+          --generated-at "${{ steps.source.outputs.generated_at }}"
+
+      - name: Record artifact identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          delivery="${{ steps.source.outputs.root }}/delivery"
+          artifact="${{ steps.source.outputs.artifact }}"
+          (cd "$delivery" && sha256sum --check "$artifact.zip.sha256")
+          {
+            echo "### Template Twin human release gate"
+            echo ""
+            echo "- Pull-request head SHA: \`${{ steps.source.outputs.sha }}\`"
+            echo "- Artifact: \`$artifact\`"
+            echo "- SHA-256: \`$(cut -d' ' -f1 "$delivery/$artifact.zip.sha256")\`"
+            echo "- Size: \`$(stat -c '%s' "$delivery/$artifact.zip") bytes\`"
+            echo "- Synthetic corpus only; tracked source-template bytes/text/media are excluded."
+            echo "- LibreOffice: passed pinned isolated round trip."
+            echo "- Desktop Microsoft Word: **PENDING returned human evidence**."
+            echo "- This artifact cannot activate, certify, sign, import, approve media, or deploy."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload seven-day human gate package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.source.outputs.artifact }}
+          path: |
+            ${{ steps.source.outputs.root }}/delivery/${{ steps.source.outputs.artifact }}.zip
+            ${{ steps.source.outputs.root }}/delivery/${{ steps.source.outputs.artifact }}.zip.sha256
+            ${{ steps.source.outputs.root }}/delivery/${{ steps.source.outputs.artifact }}.summary.json
+            ${{ steps.source.outputs.root }}/delivery/${{ steps.source.outputs.artifact }}.hygiene.json
+          if-no-files-found: error
+          retention-days: 7

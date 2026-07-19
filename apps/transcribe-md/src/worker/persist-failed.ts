@@ -22,12 +22,14 @@
 // retries; it doesn't catch silent swallows.
 // ============================================================================
 
-import prisma from '@meddoc/db';
-import { TranscribeVisitStatus } from '@prisma/client';
-import { redactPhi } from '@meddoc/ai';
-import { log } from '@/lib/log';
-import { captureWorkerException } from '../worker-sentry';
-import type { ErrorCategory } from './error-categorize';
+import { TranscribeVisitStatus } from "@prisma/client";
+import { redactPhi } from "@meddoc/ai";
+import { log } from "@/lib/log";
+import { enqueueTemplateTwinAudit } from "@/lib/template-twin/audit-outbox";
+import { captureWorkerException } from "../worker-sentry";
+import type { ErrorCategory } from "./error-categorize";
+import { runVisitAutomationTransaction } from "./automation-locks";
+import { markVisitAutomationManifestFailed } from "./automation-manifest";
 
 export interface PersistFailedArgs {
   visitId: string;
@@ -45,7 +47,7 @@ export interface PersistFailedArgs {
   reviewReason: string;
   /** For Sentry tagging on the secondary (persist) failure. */
   userId: string;
-  practiceId: string | null;
+  practiceId: string;
 }
 
 export interface PersistFailedResult {
@@ -65,20 +67,55 @@ export interface PersistFailedResult {
  *
  *  Does NOT throw. Failures land in the returned `persistErr` field. */
 export async function persistFailedState(
-  args: PersistFailedArgs
+  args: PersistFailedArgs,
 ): Promise<PersistFailedResult> {
   try {
-    await prisma.transcribeVisit.update({
-      where: { id: args.visitId },
-      data: {
-        status: TranscribeVisitStatus.FAILED,
-        processingFinishedAt: new Date(),
-        needsReview: true,
-        // T-M18.1 A2: phase-tagged user-friendly string only — never
-        // raw err.message (could carry PHI from upstream provider
-        // bodies). Caller is responsible for building this.
-        reviewReason: args.reviewReason,
-        failureCategory: args.category,
+    await runVisitAutomationTransaction({
+      operation: "persist_visit_automation_failed",
+      visitId: args.visitId,
+      userId: args.userId,
+      practiceId: args.practiceId,
+      transaction: async (tx) => {
+        const completedAt = new Date();
+        const manifest = await markVisitAutomationManifestFailed(tx, {
+          visitId: args.visitId,
+          failureCode: "WORKER_ATTEMPT_FAILED",
+          completedAt,
+        });
+        await tx.transcribeVisit.update({
+          where: { id: args.visitId },
+          data: {
+            status: TranscribeVisitStatus.FAILED,
+            processingFinishedAt: completedAt,
+            needsReview: true,
+            // Phase-tagged user copy only; never persist raw errors.
+            reviewReason: args.reviewReason,
+            failureCategory: args.category,
+          },
+        });
+        await enqueueTemplateTwinAudit(tx, {
+          eventKey: manifest
+            ? `visit-automation:failed:${args.visitId}:${manifest.manifestVersion}:${manifest.attemptCount}`
+            : `visit-processing:failed:${args.visitId}:${args.layer}`,
+          practiceId: args.practiceId,
+          actorId: args.userId,
+          action: "VISIT_AUTOMATION_INCOMPLETE",
+          targetType: "TranscribeVisit",
+          targetId: args.visitId,
+          metadata: {
+            reasonCode: manifest
+              ? "VISIT_AUTOMATION_WORKER_FAILED"
+              : "VISIT_PIPELINE_FAILED_BEFORE_AUTOMATION",
+            layer: args.layer,
+            category: args.category,
+            ...(manifest
+              ? {
+                  manifestId: manifest.id,
+                  manifestVersion: manifest.manifestVersion,
+                }
+              : {}),
+          },
+        });
       },
     });
     return { persistOk: true, persistErr: null };
@@ -86,26 +123,22 @@ export async function persistFailedState(
     // FIND-P1-014: surface the double-failure so post-mortems are
     // diagnosable. Original error went to Sentry at the top of the
     // outer catch; this Sentry event is its companion.
-    log.error(
-      'transcribe-md-worker',
-      'FAILED-state persist also failed',
-      {
-        visitId: args.visitId,
-        layer: args.layer,
-        category: args.category,
-        originalErrMessage: redactPhi(
-          args.originalErr instanceof Error
-            ? args.originalErr.message
-            : String(args.originalErr ?? '')
-        ),
-        persistErrMessage: redactPhi(
-          writeErr instanceof Error ? writeErr.message : String(writeErr ?? '')
-        ),
-      }
-    );
+    log.error("transcribe-md-worker", "FAILED-state persist also failed", {
+      visitId: args.visitId,
+      layer: args.layer,
+      category: args.category,
+      originalErrMessage: redactPhi(
+        args.originalErr instanceof Error
+          ? args.originalErr.message
+          : String(args.originalErr ?? ""),
+      ),
+      persistErrMessage: redactPhi(
+        writeErr instanceof Error ? writeErr.message : String(writeErr ?? ""),
+      ),
+    });
     captureWorkerException(writeErr, {
       visitId: args.visitId,
-      layer: 'finalize',
+      layer: "finalize",
       userId: args.userId,
       practiceId: args.practiceId,
     });

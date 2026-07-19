@@ -6,16 +6,38 @@
 // resolver does no I/O; the async shell is exercised separately in Phase 1).
 // ============================================================================
 
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const rolloutMocks = vi.hoisted(() => ({ pin: vi.fn() }));
 
 vi.mock('@meddoc/db', () => ({
-  default: { noteTemplate: { findMany: vi.fn() } },
+  default: {
+    noteTemplate: { findMany: vi.fn(), findFirst: vi.fn() },
+    templateTwinSyntheticQaRun: { findFirst: vi.fn() },
+    user: { findUnique: vi.fn() },
+  },
 }));
+vi.mock('@/lib/template-twin/rollout', async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import('@/lib/template-twin/rollout')
+  >();
+  return { ...actual, pinTemplateTwinRollout: rolloutMocks.pin };
+});
 
 import type { NoteTemplate } from '@prisma/client';
+import prisma from '@meddoc/db';
+import {
+  TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256,
+  TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES,
+} from '@/lib/template-twin/staging-qa-fixtures';
 import {
   selectTemplate,
   MissingSystemDefaultTemplateError,
+  PinnedTemplateUnavailableError,
+  TemplateTwinWorkerRolloutError,
+  resolveActiveTemplate,
+  resolveActiveTemplateAdmission,
+  resolveVisitTemplate,
 } from '../resolve-active-template';
 
 /** Build a NoteTemplate row with sane Phase-0 defaults. */
@@ -42,6 +64,17 @@ const systemDefault = tmpl({
   doctorId: null,
   isSystemDefault: true,
   name: 'System Default — SOAP',
+});
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  delete process.env.TEMPLATE_TWIN_STAGING_QA_ENABLED;
+  process.env.TEMPLATE_TWIN_KILL_SWITCH = 'false';
+  rolloutMocks.pin.mockResolvedValue({
+    practiceId: 'practice-1',
+    globalGeneration: BigInt(1),
+    practiceGeneration: BigInt(1),
+  });
 });
 
 describe('selectTemplate — fallback chain', () => {
@@ -131,5 +164,353 @@ describe('selectTemplate — fallback chain', () => {
     expect(() => selectTemplate([draft], { doctorId: 'doc1' })).toThrow(
       MissingSystemDefaultTemplateError
     );
+  });
+
+  it('does not treat a user-facing staging-like name or scope as provenance', () => {
+    const ordinary = tmpl({
+      id: 'ordinary-lookalike',
+      doctorId: 'doc1',
+      name: 'Template Twin Synthetic QA',
+      encounterType: 'template-twin-synthetic-qa',
+    });
+    expect(
+      selectTemplate([systemDefault, ordinary], {
+        doctorId: 'doc1',
+        encounterType: 'template-twin-synthetic-qa',
+      }),
+    ).toBe(ordinary);
+  });
+});
+
+describe('resolveVisitTemplate — immutable retry provenance', () => {
+  it('reuses the exact pinned version even after it becomes inactive', async () => {
+    const pinned = tmpl({
+      id: 'twin-v1',
+      doctorId: 'doc1',
+      version: 1,
+      status: 'inactive',
+    });
+    vi.mocked(prisma.noteTemplate.findFirst).mockResolvedValueOnce(pinned);
+
+    await expect(
+      resolveVisitTemplate({
+        doctorId: 'doc1',
+        encounterType: 'cardiology',
+        pinnedTemplateId: 'twin-v1',
+        pinnedTemplateVersion: 1,
+      })
+    ).resolves.toBe(pinned);
+    expect(prisma.noteTemplate.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'twin-v1',
+        version: 1,
+        OR: [{ doctorId: 'doc1' }, { isSystemDefault: true }],
+      },
+      include: {
+        templateTwinCompiledVersion: {
+          select: {
+            sourceArtifact: { select: { sha256: true, sizeBytes: true } },
+          },
+        },
+      },
+    });
+  });
+
+  it('excludes an exact staging source from ordinary active resolution even after rename', async () => {
+    const renamedStaging = {
+      ...tmpl({
+        id: 'renamed-staging',
+        doctorId: 'doc1',
+        name: 'Ordinary looking name',
+        encounterType: 'cardiology',
+        templateKind: 'template_twin_docx',
+      }),
+      templateTwinCompiledVersion: {
+        sourceArtifact: {
+          sha256: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256,
+          sizeBytes: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES,
+        },
+      },
+    };
+    vi.mocked(prisma.noteTemplate.findMany).mockResolvedValueOnce([
+      systemDefault,
+      renamedStaging,
+    ] as never);
+
+    await expect(
+      resolveActiveTemplate({ doctorId: 'doc1', encounterType: 'cardiology' }),
+    ).resolves.toBe(systemDefault);
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('requires a matching durable run for a pinned exact staging source', async () => {
+    process.env.TEMPLATE_TWIN_STAGING_QA_ENABLED = 'true';
+    const pinnedStaging = {
+      ...tmpl({
+        id: 'staging-pinned',
+        doctorId: 'doc1',
+        templateKind: 'template_twin_docx',
+      }),
+      templateTwinCompiledVersion: {
+        sourceArtifact: {
+          sha256: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256,
+          sizeBytes: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES,
+        },
+      },
+    };
+    vi.mocked(prisma.noteTemplate.findFirst).mockResolvedValue(pinnedStaging as never);
+    vi.mocked(prisma.templateTwinSyntheticQaRun.findFirst).mockResolvedValueOnce(
+      null,
+    );
+
+    await expect(
+      resolveVisitTemplate({
+        visitId: 'visit-without-run',
+        doctorId: 'doc1',
+        pinnedTemplateId: pinnedStaging.id,
+        pinnedTemplateVersion: pinnedStaging.version,
+      }),
+    ).rejects.toBeInstanceOf(PinnedTemplateUnavailableError);
+
+    vi.mocked(prisma.templateTwinSyntheticQaRun.findFirst).mockResolvedValueOnce({
+      id: 'run-1',
+    } as never);
+    vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({
+      role: 'DOCTOR',
+      isActive: true,
+      practiceId: 'practice-1',
+      practice: { templateTwinEnabled: true },
+    } as never);
+    await expect(
+      resolveVisitTemplate({
+        visitId: 'visit-with-run',
+        doctorId: 'doc1',
+        pinnedTemplateId: pinnedStaging.id,
+        pinnedTemplateVersion: pinnedStaging.version,
+      }),
+    ).resolves.toBe(pinnedStaging);
+  });
+
+  it('rejects a pinned Template Twin when the practice rollout flag is off', async () => {
+    process.env.TEMPLATE_TWIN_KILL_SWITCH = 'false';
+    const pinned = tmpl({
+      id: 'twin-disabled',
+      doctorId: 'doc1',
+      templateKind: 'template_twin_docx',
+    });
+    vi.mocked(prisma.noteTemplate.findFirst).mockResolvedValueOnce(pinned);
+    vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({
+      role: 'DOCTOR',
+      isActive: true,
+      practice: { templateTwinEnabled: false },
+    } as never);
+
+    await expect(
+      resolveVisitTemplate({
+        doctorId: 'doc1',
+        pinnedTemplateId: pinned.id,
+        pinnedTemplateVersion: pinned.version,
+      }),
+    ).rejects.toBeInstanceOf(TemplateTwinWorkerRolloutError);
+  });
+
+  it('excludes an active Template Twin from first-pass selection while rollout is disabled', async () => {
+    process.env.TEMPLATE_TWIN_KILL_SWITCH = 'false';
+    const twin = tmpl({
+      id: 'twin-disabled-active',
+      doctorId: 'doc1',
+      encounterType: 'cardiology',
+      templateKind: 'template_twin_docx',
+    });
+    vi.mocked(prisma.noteTemplate.findMany).mockResolvedValueOnce([
+      systemDefault,
+      twin,
+    ]);
+    vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({
+      role: 'DOCTOR',
+      isActive: true,
+      practice: { templateTwinEnabled: false },
+    } as never);
+
+    await expect(
+      resolveActiveTemplate({ doctorId: 'doc1', encounterType: 'cardiology' }),
+    ).resolves.toBe(systemDefault);
+  });
+
+  it('excludes every generic active Template Twin when synthetic-only staging is requested', async () => {
+    process.env.TEMPLATE_TWIN_STAGING_QA_ENABLED = 'true';
+    const twin = tmpl({
+      id: 'twin-staging-bypass-active',
+      doctorId: 'doc1',
+      encounterType: 'cardiology',
+      templateKind: 'template_twin_docx',
+    });
+    vi.mocked(prisma.noteTemplate.findMany).mockResolvedValueOnce([
+      systemDefault,
+      twin,
+    ]);
+
+    await expect(
+      resolveActiveTemplate({ doctorId: 'doc1', encounterType: 'cardiology' }),
+    ).resolves.toBe(systemDefault);
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    expect(rolloutMocks.pin).not.toHaveBeenCalled();
+  });
+
+  it('rejects a pinned non-fixture Template Twin when synthetic-only staging is requested', async () => {
+    process.env.TEMPLATE_TWIN_STAGING_QA_ENABLED = 'true';
+    const pinned = tmpl({
+      id: 'twin-staging-bypass-pinned',
+      doctorId: 'doc1',
+      templateKind: 'template_twin_docx',
+    });
+    vi.mocked(prisma.noteTemplate.findFirst).mockResolvedValueOnce(pinned);
+
+    await expect(
+      resolveVisitTemplate({
+        visitId: 'visit-staging-bypass',
+        doctorId: 'doc1',
+        pinnedTemplateId: pinned.id,
+        pinnedTemplateVersion: pinned.version,
+      }),
+    ).rejects.toBeInstanceOf(PinnedTemplateUnavailableError);
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    expect(rolloutMocks.pin).not.toHaveBeenCalled();
+  });
+
+  it('uses persisted global and lineage admission before selecting an active Twin', async () => {
+    const twin = tmpl({
+      id: 'twin-enabled-active',
+      doctorId: 'doc1',
+      encounterType: 'cardiology',
+      templateKind: 'template_twin_docx',
+    });
+    vi.mocked(prisma.noteTemplate.findMany).mockResolvedValueOnce([
+      systemDefault,
+      twin,
+    ]);
+    vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({
+      role: 'DOCTOR',
+      isActive: true,
+      practiceId: 'practice-1',
+      practice: { templateTwinEnabled: true },
+    } as never);
+
+    await expect(
+      resolveActiveTemplate({ doctorId: 'doc1', encounterType: 'cardiology' }),
+    ).resolves.toBe(twin);
+    expect(rolloutMocks.pin).toHaveBeenCalledWith({
+      practiceId: 'practice-1',
+    });
+  });
+
+  it('returns the exact persisted rollout token with a worker Twin selection', async () => {
+    const twin = tmpl({
+      id: 'twin-admission-token',
+      doctorId: 'doc1',
+      encounterType: 'cardiology',
+      templateKind: 'template_twin_docx',
+    });
+    const token = {
+      practiceId: 'practice-1',
+      globalGeneration: BigInt(17),
+      practiceGeneration: BigInt(23),
+    };
+    vi.mocked(prisma.noteTemplate.findMany).mockResolvedValueOnce([
+      systemDefault,
+      twin,
+    ]);
+    vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({
+      role: 'DOCTOR',
+      isActive: true,
+      practiceId: 'practice-1',
+      practice: { templateTwinEnabled: true },
+    } as never);
+    rolloutMocks.pin.mockResolvedValueOnce(token);
+
+    await expect(
+      resolveActiveTemplateAdmission({
+        doctorId: 'doc1',
+        encounterType: 'cardiology',
+      }),
+    ).resolves.toEqual({
+      template: twin,
+      templateTwinRolloutToken: token,
+    });
+  });
+
+  it('falls back to the structured default when persisted admission fails closed', async () => {
+    const twin = tmpl({
+      id: 'twin-db-disabled-active',
+      doctorId: 'doc1',
+      encounterType: 'cardiology',
+      templateKind: 'template_twin_docx',
+    });
+    vi.mocked(prisma.noteTemplate.findMany).mockResolvedValueOnce([
+      systemDefault,
+      twin,
+    ]);
+    vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({
+      role: 'DOCTOR',
+      isActive: true,
+      practiceId: 'practice-1',
+      practice: { templateTwinEnabled: true },
+    } as never);
+    rolloutMocks.pin.mockRejectedValueOnce(
+      new Error('synthetic persisted global disable'),
+    );
+
+    await expect(
+      resolveActiveTemplate({ doctorId: 'doc1', encounterType: 'cardiology' }),
+    ).resolves.toBe(systemDefault);
+  });
+
+  it('keeps legacy structured templates eligible while Template Twin rollout is disabled', async () => {
+    process.env.TEMPLATE_TWIN_KILL_SWITCH = 'false';
+    const structured = tmpl({
+      id: 'structured-active',
+      doctorId: 'doc1',
+      encounterType: null,
+      templateKind: 'structured',
+    });
+    const twin = tmpl({
+      id: 'twin-disabled-active',
+      doctorId: 'doc1',
+      encounterType: 'cardiology',
+      templateKind: 'template_twin_docx',
+    });
+    vi.mocked(prisma.noteTemplate.findMany).mockResolvedValueOnce([
+      systemDefault,
+      structured,
+      twin,
+    ]);
+    vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({
+      role: 'DOCTOR',
+      isActive: true,
+      practice: { templateTwinEnabled: false },
+    } as never);
+
+    await expect(
+      resolveActiveTemplate({ doctorId: 'doc1', encounterType: 'cardiology' }),
+    ).resolves.toBe(structured);
+  });
+
+  it('fails closed when a pin is partial or unavailable', async () => {
+    await expect(
+      resolveVisitTemplate({
+        doctorId: 'doc1',
+        pinnedTemplateId: 'twin-v1',
+        pinnedTemplateVersion: null,
+      })
+    ).rejects.toBeInstanceOf(PinnedTemplateUnavailableError);
+
+    vi.mocked(prisma.noteTemplate.findFirst).mockResolvedValueOnce(null);
+    await expect(
+      resolveVisitTemplate({
+        doctorId: 'doc1',
+        pinnedTemplateId: 'twin-v1',
+        pinnedTemplateVersion: 1,
+      })
+    ).rejects.toBeInstanceOf(PinnedTemplateUnavailableError);
   });
 });

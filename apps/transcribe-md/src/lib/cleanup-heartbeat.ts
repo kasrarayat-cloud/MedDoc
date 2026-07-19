@@ -31,7 +31,8 @@ export type CleanupJobName =
   | 'stale-visit-cleanup'
   | 'retention-sweep'
   | 'minio-orphan-cleanup'
-  | 'stuck-visit-watchdog';
+  | 'stuck-visit-watchdog'
+  | 'template-twin-maintenance';
 
 interface HeartbeatPayload {
   /** Epoch ms when the run completed. */
@@ -90,6 +91,7 @@ export async function readCleanupHeartbeats(): Promise<HeartbeatSnapshot[]> {
     'retention-sweep',
     'minio-orphan-cleanup',
     'stuck-visit-watchdog',
+    'template-twin-maintenance',
   ];
   const redis = getSharedRedisConnection();
   const now = Date.now();

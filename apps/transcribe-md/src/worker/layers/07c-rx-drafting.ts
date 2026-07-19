@@ -16,20 +16,21 @@
 //   - ageYears >= 18 OR null DOB       → adult ceilings (status quo)
 // ============================================================================
 
-import { z } from 'zod';
+import { z } from "zod";
 import {
   checkDrugInteractions,
   modelClient,
   validateRxDose,
   type InteractionMed,
-} from '@meddoc/ai';
-import prisma from '@meddoc/db';
-import { RX_PEDIATRIC_FEWSHOT_EXAMPLES } from '@/worker/prompts/rx-pediatric-examples';
-import { logAudit, type AuditAction } from '@/lib/audit';
-import { parseRxToMgPerDay } from './rx-sig-parser';
+} from "@meddoc/ai";
+import { updateTemplateTwinSyntheticQaClaimBoundVisit } from "@/worker/staging-qa-mutation-fence";
+import { RX_PEDIATRIC_FEWSHOT_EXAMPLES } from "@/worker/prompts/rx-pediatric-examples";
+import { type AuditAction } from "@/lib/audit";
+import { logWorkerAudit } from "@/worker/worker-audit";
+import { parseRxToMgPerDay } from "./rx-sig-parser";
 
 // TRANSCRIBE_MD_CLINICAL_MODEL — eval override (feat/fable5-eval); unset → default unchanged.
-const MODEL = process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-opus-4-8';
+const MODEL = process.env.TRANSCRIBE_MD_CLINICAL_MODEL || "claude-opus-4-8";
 
 /** Round 3 PR-D + Fix-Pack 1 Q0-2: shared peds threshold. Mirrors the
  *  threshold in packages/ai/src/data/dose-ranges-validator.ts. Hoisting to a
@@ -53,11 +54,11 @@ const PEDS_AGE_THRESHOLD_YEARS = 18;
  */
 export function mergeAllergiesForSafety(
   chartAllergies: ReadonlyArray<string> | null | undefined,
-  entitiesJson: string
+  entitiesJson: string,
 ): string[] {
   const set = new Map<string, string>(); // lowercased key → first-seen casing
   const add = (raw: unknown) => {
-    if (typeof raw !== 'string') return;
+    if (typeof raw !== "string") return;
     const s = raw.trim();
     if (s.length === 0) return;
     const key = s.toLowerCase();
@@ -85,16 +86,16 @@ export function mergeAllergiesForSafety(
 // not a substitute for those. 'unclear' stays as the safety fallback
 // for ambiguous plan language.
 export const RxAction = z.enum([
-  'new',
-  'refill',
-  'continue',
-  'increase',
-  'decrease',
-  'switch',
-  'hold',
-  'restart',
-  'discontinue',
-  'unclear',
+  "new",
+  "refill",
+  "continue",
+  "increase",
+  "decrease",
+  "switch",
+  "hold",
+  "restart",
+  "discontinue",
+  "unclear",
 ]);
 export type RxAction = z.infer<typeof RxAction>;
 
@@ -111,7 +112,7 @@ export const Prescription = z.object({
 export type Prescription = z.infer<typeof Prescription>;
 
 export const RxWarning = z.object({
-  severity: z.enum(['critical', 'major', 'minor']),
+  severity: z.enum(["critical", "major", "minor"]),
   // Q1 #19 follow-up: model returns null for general warnings (no
   // specific drug attribution; e.g. "no medications prescribed"
   // observations). 15 of 69 tm_rx_drafting calls SCHEMA_FAILed on
@@ -119,7 +120,7 @@ export const RxWarning = z.object({
   // wire-shape stays string (downstream pdf-generator, docx-generator,
   // ehr-formatters, rx-tab.tsx all treat this as a non-null string).
   rx_drug: z.preprocess(
-    (value) => (value == null ? 'General' : value),
+    (value) => (value == null ? "General" : value),
     z.string().min(1),
   ),
   message: z.string().min(1),
@@ -139,6 +140,7 @@ export interface Layer7cInput {
   userId: string | null;
   soapFinal: string;
   entitiesJson: string;
+  providerIdempotencyKey?: string;
   /** Fix-Pack 1 Q0-2 — patient demographic + safety context. Required so
    *  the prompt can frame mg/kg/day correctly for pediatrics and (in a
    *  follow-on Sub-Agent 1 PR) so validateRxDose can run. `allergies` is
@@ -178,140 +180,139 @@ function computeAgeYears(dob: Date | string | null): number | null {
  */
 function buildPediatricContext(
   ageYears: number | null,
-  weightKg: number | null
+  weightKg: number | null,
 ): string {
   if (ageYears !== null && ageYears < PEDS_AGE_THRESHOLD_YEARS) {
     if (weightKg === null) {
       return [
-        'PEDIATRIC PATIENT WITH UNKNOWN WEIGHT.',
+        "PEDIATRIC PATIENT WITH UNKNOWN WEIGHT.",
         `Patient age: ${ageYears} years. Weight: not recorded.`,
         'Refuse to draft a numeric dose; emit action="unclear" for every',
         'Rx and a critical warning "weight required for pediatric dosing".',
-        'Do NOT guess a weight from age, do NOT default to adult dosing,',
-        'do NOT compute mg/kg without a recorded weight.',
-      ].join('\n');
+        "Do NOT guess a weight from age, do NOT default to adult dosing,",
+        "do NOT compute mg/kg without a recorded weight.",
+      ].join("\n");
     }
     return [
       `PEDIATRIC PATIENT, age ${ageYears} years, weight ${weightKg} kg.`,
-      'Compute every dose as mg/kg/day. Use peds ceilings:',
-      '  - acetaminophen: 75 mg/kg/day max OR 4000 mg/day, whichever is lower',
-      '  - amoxicillin: 80-90 mg/kg/day (high-dose); 40-50 mg/kg/day (standard)',
-      '  - ibuprofen: 30-40 mg/kg/day max',
-      '  - other drugs: cite peds source range when known; emit a minor',
-      '    warning if the prescribed mg/kg/day appears outside it.',
-      'Include the mg/kg/day calculation in the evidence_quote AND in any',
-      'warning message. If the dose is at-or-near the peds ceiling, emit',
-      'a minor or major warning with the computed mg/kg/day in the message.',
+      "Compute every dose as mg/kg/day. Use peds ceilings:",
+      "  - acetaminophen: 75 mg/kg/day max OR 4000 mg/day, whichever is lower",
+      "  - amoxicillin: 80-90 mg/kg/day (high-dose); 40-50 mg/kg/day (standard)",
+      "  - ibuprofen: 30-40 mg/kg/day max",
+      "  - other drugs: cite peds source range when known; emit a minor",
+      "    warning if the prescribed mg/kg/day appears outside it.",
+      "Include the mg/kg/day calculation in the evidence_quote AND in any",
+      "warning message. If the dose is at-or-near the peds ceiling, emit",
+      "a minor or major warning with the computed mg/kg/day in the message.",
       'For neonates (< 28 days old), default action="unclear" and emit a',
-      'critical warning unless the SOAP cites a neonate-specific protocol.',
-    ].join('\n');
+      "critical warning unless the SOAP cites a neonate-specific protocol.",
+    ].join("\n");
   }
-  return 'ADULT PATIENT. Use adult dose ceilings.';
+  return "ADULT PATIENT. Use adult dose ceilings.";
 }
 
 export async function runLayer7cRxDrafting(
-  input: Layer7cInput
+  input: Layer7cInput,
 ): Promise<RxResult> {
   // Fix-Pack 1 Q0-2 — derive age once at the top so prompt assembly +
   // (future) validator calls share the same number.
   const ageYears = computeAgeYears(input.patient.dateOfBirth);
-  const isPediatric =
-    ageYears !== null && ageYears < PEDS_AGE_THRESHOLD_YEARS;
+  const isPediatric = ageYears !== null && ageYears < PEDS_AGE_THRESHOLD_YEARS;
 
   const systemSections: string[] = [
     [
-      'You are a clinical pharmacist drafting prescriptions from a SOAP',
-      'plan. For each medication the doctor wants to prescribe, change,',
-      'or stop, produce a structured prescription object.',
-      '',
-      'Prescription fields:',
+      "You are a clinical pharmacist drafting prescriptions from a SOAP",
+      "plan. For each medication the doctor wants to prescribe, change,",
+      "or stop, produce a structured prescription object.",
+      "",
+      "Prescription fields:",
       '- drug: generic name preferred, proper case (e.g. "Lisinopril")',
       '- strength: e.g. "20 mg"; null when dose is not specified',
-      '- form: tablet, capsule, solution, inhaler, injection, etc.',
-      '  (null if not stated)',
+      "- form: tablet, capsule, solution, inhaler, injection, etc.",
+      "  (null if not stated)",
       '- sig: patient instructions — e.g. "Take 1 tablet by mouth daily"',
-      '  (null if not stated)',
+      "  (null if not stated)",
       '- quantity: e.g. "90" or "30 mL" (null if not stated)',
       '- refills: as a string, e.g. "3" or "0" (null if not stated)',
-      '- action: one of:',
-      '    new          — first-time start; full sig required',
-      '    refill       — same drug, same dose; new fill cycle',
-      '    continue     — keep on current drug/dose with no change',
-      '    increase     — same drug, higher dose',
-      '    decrease     — same drug, lower dose',
-      '    switch       — replacing one drug with another (single decision)',
-      '    hold         — temporary pause (peri-op, illness, lab abnormality)',
-      '    restart      — resuming a previously held drug',
-      '    discontinue  — stopping the drug',
-      '    unclear      — plan is ambiguous; do NOT guess',
+      "- action: one of:",
+      "    new          — first-time start; full sig required",
+      "    refill       — same drug, same dose; new fill cycle",
+      "    continue     — keep on current drug/dose with no change",
+      "    increase     — same drug, higher dose",
+      "    decrease     — same drug, lower dose",
+      "    switch       — replacing one drug with another (single decision)",
+      "    hold         — temporary pause (peri-op, illness, lab abnormality)",
+      "    restart      — resuming a previously held drug",
+      "    discontinue  — stopping the drug",
+      "    unclear      — plan is ambiguous; do NOT guess",
       '  Use "unclear" WHEN YOU ARE NOT SURE rather than guessing.',
-      '- evidence_quote: verbatim SOAP snippet supporting the Rx',
-      '',
-      'SAFETY WARNINGS — surface, don\'t silently fix. For each concern,',
-      'emit a warning object with severity and a human-readable message:',
-      '',
-      '  critical — likely patient harm if unaddressed:',
-      '    - Drug matches a documented allergy / known cross-reactivity',
-      '    - Dose appears out of the therapeutic range for this patient',
-      '      (adult OR pediatric — see PEDIATRIC AWARENESS section below',
-      '       for how to handle peds)',
-      '    - Contraindication with a condition documented in the SOAP',
-      '      PMH/entities',
-      '    - Pediatric patient with no recorded weight (do NOT guess)',
-      '    - Neonatal (< 28 days) without a neonate-specific protocol cited',
-      '',
-      '  major — almost certainly needs clarification:',
-      '    - Known drug-drug interaction with the patient\'s current',
-      '      medication list (from entities)',
-      '    - Duplicate-therapy (two drugs in the same class without',
-      '      rationale in the plan)',
-      '    - Pediatric dose at-or-above the published mg/kg/day ceiling',
-      '',
-      '  minor — worth a glance:',
-      '    - Missing or ambiguous information (no dose, no frequency,',
+      "- evidence_quote: verbatim SOAP snippet supporting the Rx",
+      "",
+      "SAFETY WARNINGS — surface, don't silently fix. For each concern,",
+      "emit a warning object with severity and a human-readable message:",
+      "",
+      "  critical — likely patient harm if unaddressed:",
+      "    - Drug matches a documented allergy / known cross-reactivity",
+      "    - Dose appears out of the therapeutic range for this patient",
+      "      (adult OR pediatric — see PEDIATRIC AWARENESS section below",
+      "       for how to handle peds)",
+      "    - Contraindication with a condition documented in the SOAP",
+      "      PMH/entities",
+      "    - Pediatric patient with no recorded weight (do NOT guess)",
+      "    - Neonatal (< 28 days) without a neonate-specific protocol cited",
+      "",
+      "  major — almost certainly needs clarification:",
+      "    - Known drug-drug interaction with the patient's current",
+      "      medication list (from entities)",
+      "    - Duplicate-therapy (two drugs in the same class without",
+      "      rationale in the plan)",
+      "    - Pediatric dose at-or-above the published mg/kg/day ceiling",
+      "",
+      "  minor — worth a glance:",
+      "    - Missing or ambiguous information (no dose, no frequency,",
       '      "increase lisinopril" with no target dose)',
-      '    - Unusual but plausible choice for the documented indication',
-      '    - Pediatric dose near (within ~10% of) the mg/kg/day ceiling',
-      '',
-      'PEDIATRIC AWARENESS:',
+      "    - Unusual but plausible choice for the documented indication",
+      "    - Pediatric dose near (within ~10% of) the mg/kg/day ceiling",
+      "",
+      "PEDIATRIC AWARENESS:",
       '- "Pediatric" = patient age < 18 years.',
-      '- For pediatric patients, the dose ceiling is the LOWER of:',
-      '    (a) the adult max',
-      '    (b) the peds mg/kg/day × patient weight (kg)',
-      '- ALWAYS compute mg/kg/day from the prescribed dose and the',
-      '  patient\'s weight, and surface the calculation in BOTH the',
+      "- For pediatric patients, the dose ceiling is the LOWER of:",
+      "    (a) the adult max",
+      "    (b) the peds mg/kg/day × patient weight (kg)",
+      "- ALWAYS compute mg/kg/day from the prescribed dose and the",
+      "  patient's weight, and surface the calculation in BOTH the",
       '  evidence_quote (e.g. "amoxicillin 250 mg TID — 47 mg/kg/day at',
       '  16 kg") AND any warning message that fires for that Rx.',
-      '- If the SOAP names a pediatric dose that\'s at-or-near the adult',
-      '  ceiling for a peds patient, emit a major or minor warning with',
-      '  the mg/kg/day calculation so the doctor can verify against',
-      '  references before signing.',
+      "- If the SOAP names a pediatric dose that's at-or-near the adult",
+      "  ceiling for a peds patient, emit a major or minor warning with",
+      "  the mg/kg/day calculation so the doctor can verify against",
+      "  references before signing.",
       '- For neonatal patients (< 28 days old), default action="unclear"',
-      '  and emit a critical warning UNLESS the SOAP cites a neonate-',
-      '  specific protocol — neonate dosing is highly drug-specific and',
-      '  should not be inferred from older-pediatric ranges.',
-      '- If the patient is pediatric AND no weight is recorded:',
+      "  and emit a critical warning UNLESS the SOAP cites a neonate-",
+      "  specific protocol — neonate dosing is highly drug-specific and",
+      "  should not be inferred from older-pediatric ranges.",
+      "- If the patient is pediatric AND no weight is recorded:",
       '    DO NOT draft a numeric dose. Emit action="unclear" for every',
       '    Rx and a CRITICAL warning "weight required for pediatric',
-      '    dosing — please record the patient\'s weight before signing."',
-      '    Pediatric dose-by-age guesses are unsafe — refuse rather than',
-      '    estimate.',
-      '',
-      'CRITICAL RULES:',
+      "    dosing — please record the patient's weight before signing.\"",
+      "    Pediatric dose-by-age guesses are unsafe — refuse rather than",
+      "    estimate.",
+      "",
+      "CRITICAL RULES:",
       '1. Never silently assume a dose. If the plan says "increase',
       '   lisinopril" without a target, action="unclear" and emit a',
-      '   minor warning asking for the target dose.',
+      "   minor warning asking for the target dose.",
       '2. When the plan says "continue current meds", pull doses from',
-      '   the entities.medications list rather than inventing.',
-      '3. For discontinuations, still emit the prescription object',
+      "   the entities.medications list rather than inventing.",
+      "3. For discontinuations, still emit the prescription object",
       '   (action="discontinue") so the doctor sees what was stopped.',
-      '4. Do not suggest drugs the doctor did NOT mention. You are',
-      '   transcribing the plan, not prescribing.',
-      '5. Pediatric without a weight = refuse to draft numeric doses.',
+      "4. Do not suggest drugs the doctor did NOT mention. You are",
+      "   transcribing the plan, not prescribing.",
+      "5. Pediatric without a weight = refuse to draft numeric doses.",
       '   Action="unclear" + critical warning. (See PEDIATRIC AWARENESS.)',
-      '',
-      'Respond with VALID JSON ONLY, no markdown fences:',
-      '{',
+      "",
+      "Respond with VALID JSON ONLY, no markdown fences:",
+      "{",
       '  "prescriptions": [{',
       '    "drug": "Lisinopril",',
       '    "strength": "20 mg",',
@@ -321,53 +322,55 @@ export async function runLayer7cRxDrafting(
       '    "refills": "3",',
       '    "action": "increase",',
       '    "evidence_quote": "Increased lisinopril to 20 mg daily"',
-      '  }],',
+      "  }],",
       '  "warnings": [{',
       '    "severity": "major",',
       '    "rx_drug": "Lisinopril",',
       '    "message": "Patient reported ACE inhibitor cough previously — verify tolerance before increasing dose.",',
       '    "evidence_quote": "reports dry cough with prior lisinopril"',
-      '  }]',
-      '}',
-    ].join('\n'),
+      "  }]",
+      "}",
+    ].join("\n"),
   ];
 
   // Append peds few-shot examples ONLY when the patient is pediatric.
   // Adult visits don't need the extra tokens, and the examples would
   // anchor the model on weight-based dosing inappropriately.
   if (isPediatric) {
-    systemSections.push('', RX_PEDIATRIC_FEWSHOT_EXAMPLES);
+    systemSections.push("", RX_PEDIATRIC_FEWSHOT_EXAMPLES);
   }
 
-  const system = systemSections.join('\n');
+  const system = systemSections.join("\n");
 
   const pediatricContext = buildPediatricContext(
     ageYears,
-    input.patient.weightKg
+    input.patient.weightKg,
   );
 
   const user = [
     pediatricContext,
-    '',
-    'Extracted entities (includes current medications + allergies):',
+    "",
+    "Extracted entities (includes current medications + allergies):",
     input.entitiesJson,
-    '',
-    'SOAP note (plan section is where Rx changes live):',
+    "",
+    "SOAP note (plan section is where Rx changes live):",
     input.soapFinal,
-  ].join('\n');
+  ].join("\n");
 
   const result = await modelClient.complete({
     practiceId: input.practiceId,
     visitId: input.visitId,
     userId: input.userId,
-    purpose: 'tm_rx_drafting',
-    provider: 'anthropic',
+    purpose: "tm_rx_drafting",
+    provider: "anthropic",
     model: MODEL,
     system,
     user,
     schema: RxResult,
     maxTokens: 3072,
     temperature: 0.1,
+    idempotencyKey: input.providerIdempotencyKey,
+    retryOnSchemaFail: false,
   });
 
   // Fix-Pack 1 Q0-1 (audit Finding 06.1) — deterministic safety floor.
@@ -391,13 +394,10 @@ export async function runLayer7cRxDrafting(
   // ever a deliberate doctor action — never an extraction-layer decision.
   const effectiveAllergies = mergeAllergiesForSafety(
     input.patient.allergies,
-    input.entitiesJson
+    input.entitiesJson,
   );
   for (const rx of result.prescriptions) {
-    const doseMgPerDay = parseRxToMgPerDay(
-      rx.strength ?? null,
-      rx.sig ?? null
-    );
+    const doseMgPerDay = parseRxToMgPerDay(rx.strength ?? null, rx.sig ?? null);
     const validation = validateRxDose({
       drug: rx.drug,
       doseMgPerDay,
@@ -421,11 +421,11 @@ export async function runLayer7cRxDrafting(
       // contraindications + dose-exceeds keep their `critical` tier and
       // the sign gate still counts ONLY `critical`, so this changes the
       // alarm level, never the safety gate.
-      const severity: 'critical' | 'major' | 'minor' =
-        w.code === 'RX_DOSE_EXCEEDS_VERIFIED_RANGE' ||
-        w.code === 'RX_CONTRAINDICATION_MATCH'
-          ? 'critical'
-          : 'minor';
+      const severity: "critical" | "major" | "minor" =
+        w.code === "RX_DOSE_EXCEEDS_VERIFIED_RANGE" ||
+        w.code === "RX_CONTRAINDICATION_MATCH"
+          ? "critical"
+          : "minor";
 
       result.warnings.push({
         severity,
@@ -442,16 +442,16 @@ export async function runLayer7cRxDrafting(
       // migration 20260702153000 (F-8 audit leg) — all four validator
       // codes now write audit rows.
       const isAuditable =
-        w.code === 'RX_DOSE_EXCEEDS_VERIFIED_RANGE' ||
-        w.code === 'RX_CONTRAINDICATION_MATCH' ||
-        w.code === 'RX_DRUG_NOT_IN_VERIFIED_DATABASE' ||
-        w.code === 'RX_COMPLEX_DOSING_VERIFY_INDIVIDUALLY';
+        w.code === "RX_DOSE_EXCEEDS_VERIFIED_RANGE" ||
+        w.code === "RX_CONTRAINDICATION_MATCH" ||
+        w.code === "RX_DRUG_NOT_IN_VERIFIED_DATABASE" ||
+        w.code === "RX_COMPLEX_DOSING_VERIFY_INDIVIDUALLY";
 
       if (isAuditable) {
-        void logAudit({
+        await logWorkerAudit({
           action: w.code as AuditAction,
           targetId: input.visitId,
-          targetType: 'TranscribeVisit',
+          targetType: "TranscribeVisit",
           userId: input.userId,
           practiceId: input.practiceId,
           success: false,
@@ -472,23 +472,29 @@ export async function runLayer7cRxDrafting(
   const interactionMeds: InteractionMed[] = result.prescriptions.map((rx) => ({
     name: rx.drug,
     doseMgPerDay: parseRxToMgPerDay(rx.strength ?? null, rx.sig ?? null),
-    source: 'draft' as const,
+    source: "draft" as const,
     evidenceQuote: rx.evidence_quote ?? null,
   }));
   try {
     const entities = JSON.parse(input.entitiesJson) as {
-      medications?: Array<{ name?: unknown; dose?: unknown; frequency?: unknown; evidence_quote?: unknown }>;
+      medications?: Array<{
+        name?: unknown;
+        dose?: unknown;
+        frequency?: unknown;
+        evidence_quote?: unknown;
+      }>;
     };
     for (const m of entities.medications ?? []) {
-      if (typeof m?.name !== 'string' || m.name.trim() === '') continue;
+      if (typeof m?.name !== "string" || m.name.trim() === "") continue;
       interactionMeds.push({
         name: m.name,
         doseMgPerDay: parseRxToMgPerDay(
-          typeof m.dose === 'string' ? m.dose : null,
-          typeof m.frequency === 'string' ? m.frequency : null
+          typeof m.dose === "string" ? m.dose : null,
+          typeof m.frequency === "string" ? m.frequency : null,
         ),
-        source: 'current' as const,
-        evidenceQuote: typeof m.evidence_quote === 'string' ? m.evidence_quote : null,
+        source: "current" as const,
+        evidenceQuote:
+          typeof m.evidence_quote === "string" ? m.evidence_quote : null,
       });
     }
   } catch {
@@ -501,15 +507,16 @@ export async function runLayer7cRxDrafting(
       rx_drug: w.primaryDrug,
       message: `[deterministic] ${w.message}`,
       evidence_quote:
-        interactionMeds.find((m) => m.name === w.primaryDrug)?.evidenceQuote ?? null,
+        interactionMeds.find((m) => m.name === w.primaryDrug)?.evidenceQuote ??
+        null,
     });
     // F-8 audit leg (migration 20260702153000): PHI boundary per the PR-D
     // RX_* contract — drug names + rule id + numbers only; never the
     // message or evidence_quote (transcript content).
-    void logAudit({
+    await logWorkerAudit({
       action: w.code,
       targetId: input.visitId,
-      targetType: 'TranscribeVisit',
+      targetType: "TranscribeVisit",
       userId: input.userId,
       practiceId: input.practiceId,
       success: false,
@@ -519,13 +526,16 @@ export async function runLayer7cRxDrafting(
         otherDrug: w.otherDrug,
         severity: w.severity,
         doseMgPerDay:
-          interactionMeds.find((m) => m.name === w.primaryDrug)?.doseMgPerDay ?? null,
+          interactionMeds.find((m) => m.name === w.primaryDrug)?.doseMgPerDay ??
+          null,
       },
     });
   }
 
-  await prisma.transcribeVisit.update({
-    where: { id: input.visitId },
+  await updateTemplateTwinSyntheticQaClaimBoundVisit({
+    visitId: input.visitId,
+    userId: input.userId ?? "",
+    practiceId: input.practiceId,
     data: { rxDrafts: result as unknown as object },
   });
 

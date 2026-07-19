@@ -1,7 +1,7 @@
 // ============================================================================
 // Seed Script — QA Interaction Auditor test user + non-PHI patient
 // ----------------------------------------------------------------------------
-// Creates (or resets the password of) `qa-auditor@quillmd.test` as a
+// Creates (or resets the password of) `qa-auditor@synthetic.test` as a
 // `DOCTOR` on the default `clinic_main` practice + one non-PHI test
 // patient ("QA Test Patient", DOB 2000-01-01) owned by that user. The
 // QA Interaction Auditor agent (.claude/agents/qa-interaction-auditor/)
@@ -18,7 +18,7 @@
 //                           shell only; not in git.
 //
 // Optional env:
-//   QA_AUDITOR_EMAIL      — defaults to qa-auditor@quillmd.test (see
+//   QA_AUDITOR_EMAIL      — defaults to qa-auditor@synthetic.test (see
 //                           .claude/agents/qa-interaction-auditor/
 //                           fixtures/test-user.md for the rationale).
 //
@@ -37,7 +37,7 @@ import bcrypt from 'bcryptjs';
 
 import { assertNonProdDatabase } from '@meddoc/db/guard';
 
-export const QA_EMAIL_DEFAULT = 'qa-auditor@quillmd.test';
+export const QA_EMAIL_DEFAULT = 'qa-auditor@synthetic.test';
 export const PRACTICE_ID = 'clinic_main';
 export const PATIENT_NAME = 'QA Test Patient';
 export const PATIENT_DOB = new Date('2000-01-01T00:00:00.000Z');

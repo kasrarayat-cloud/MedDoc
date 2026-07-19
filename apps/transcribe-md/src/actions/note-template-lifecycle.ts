@@ -1,5 +1,7 @@
 'use server';
 
+import { randomUUID } from 'node:crypto';
+
 // ============================================================================
 // Note-format customization — Phase 2b: template lifecycle server actions
 // ----------------------------------------------------------------------------
@@ -93,14 +95,34 @@ export async function saveNoteTemplateAction(
 
   // Ownership pre-check (scoped) so we never create a version off another
   // doctor's row, and so we know the existing status/version.
-  let existing: { id: string; status: string; version: number } | null = null;
+  let existing: {
+    id: string;
+    status: string;
+    version: number;
+    // Nullable only during the online expand/backfill deployment window. The
+    // final schema is NOT NULL; pre-existing rows safely self-root at their id.
+    lineageId: string | null;
+    templateKind: string;
+  } | null = null;
   if (inputId) {
     existing = await prisma.noteTemplate.findFirst({
       where: { id: inputId, doctorId },
-      select: { id: true, status: true, version: true },
+      select: {
+        id: true,
+        status: true,
+        version: true,
+        lineageId: true,
+        templateKind: true,
+      },
     });
     if (!existing) {
       return { ok: false, error: "That template doesn't exist or isn't yours to edit." };
+    }
+    if (existing.templateKind === 'template_twin_docx') {
+      return {
+        ok: false,
+        error: 'Original Word templates must be revised through Template Twin certification.',
+      };
     }
   }
 
@@ -123,12 +145,35 @@ export async function saveNoteTemplateAction(
         // draft / inactive → update in place (not a live row)
         const updated = await tx.noteTemplate.update({
           where: { id: existing.id },
-          data: { name, encounterType, sections: cleanSections, styleProfile, status },
+          data: {
+            name,
+            encounterType,
+            sections: cleanSections,
+            styleProfile,
+            status,
+            // Transition compatibility: touching a pre-expand generic row also
+            // completes its deterministic self-root lineage in this bounded
+            // single-row write.
+            lineageId: existing.lineageId ?? existing.id,
+          },
           select: { id: true },
         });
         return { id: updated.id, status };
       }
       // new, OR editing an active row → new version (history preserved)
+      const lineageId = existing?.lineageId ?? existing?.id ?? randomUUID();
+      if (existing && existing.lineageId === null) {
+        // Parent and child must enter the same lineage. The cursor backfill uses
+        // the identical self-root value, so this is race-safe and idempotent.
+        // Raw SQL is intentional during the expand window: schema.prisma models
+        // the final non-null shape, so the generated Prisma filter type cannot
+        // express the transitional `lineageId IS NULL` predicate.
+        await tx.$executeRaw`
+          UPDATE "note_templates"
+          SET "lineageId" = ${lineageId}
+          WHERE "id" = ${existing.id} AND "lineageId" IS NULL
+        `;
+      }
       const created = await tx.noteTemplate.create({
         data: {
           doctorId,
@@ -139,6 +184,10 @@ export async function saveNoteTemplateAction(
           version: existing ? existing.version + 1 : 1,
           status,
           isSystemDefault: false,
+          // Explicit in every new application write; the online migration's
+          // insert trigger remains only as mixed-version defense in depth.
+          lineageId,
+          ...(existing ? { parentVersionId: existing.id } : {}),
         },
         select: { id: true },
       });
@@ -164,9 +213,15 @@ export async function activateNoteTemplateAction(id: string): Promise<SimpleResu
 
   const row = await prisma.noteTemplate.findFirst({
     where: { id, doctorId },
-    select: { id: true, encounterType: true },
+    select: { id: true, encounterType: true, templateKind: true },
   });
   if (!row) return { ok: false, error: "That template doesn't exist or isn't yours." };
+  if (row.templateKind === 'template_twin_docx') {
+    return {
+      ok: false,
+      error: 'Template Twin activation requires a verified certification.',
+    };
+  }
 
   try {
     await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
@@ -192,9 +247,22 @@ export async function duplicateNoteTemplateAction(id: string): Promise<SimpleRes
 
   const row = await prisma.noteTemplate.findFirst({
     where: { id, doctorId },
-    select: { name: true, encounterType: true, sections: true, styleProfile: true, specialtyBaseline: true },
+    select: {
+      name: true,
+      encounterType: true,
+      sections: true,
+      styleProfile: true,
+      specialtyBaseline: true,
+      templateKind: true,
+    },
   });
   if (!row) return { ok: false, error: "That template doesn't exist or isn't yours." };
+  if (row.templateKind === 'template_twin_docx') {
+    return {
+      ok: false,
+      error: 'Create a new Template Twin version from the certification workspace.',
+    };
+  }
 
   const created = await prisma.noteTemplate.create({
     data: {
@@ -207,6 +275,8 @@ export async function duplicateNoteTemplateAction(id: string): Promise<SimpleRes
       version: 1,
       status: 'draft',
       isSystemDefault: false,
+      // A duplicate is a fresh lineage, not a version of the source row.
+      lineageId: randomUUID(),
     },
     select: { id: true },
   });
@@ -219,8 +289,19 @@ export async function duplicateNoteTemplateAction(id: string): Promise<SimpleRes
 export async function deleteNoteTemplateAction(id: string): Promise<SimpleResult> {
   const session = await requireSession();
   const doctorId = session.user.id;
+  const row = await prisma.noteTemplate.findFirst({
+    where: { id, doctorId },
+    select: { templateKind: true },
+  });
+  if (!row) return { ok: false, error: "That template doesn't exist or isn't yours." };
+  if (row.templateKind === 'template_twin_docx') {
+    return {
+      ok: false,
+      error: 'Template Twin versions are immutable; retire or supersede this version instead.',
+    };
+  }
   const res = await prisma.noteTemplate.deleteMany({ where: { id, doctorId } });
-  if (res.count === 0) return { ok: false, error: "That template doesn't exist or isn't yours." };
+  if (res.count === 0) return { ok: false, error: 'Could not delete the template just now.' };
   revalidatePath('/settings');
   return { ok: true };
 }
@@ -233,8 +314,21 @@ export async function getNoteTemplateForEditAction(
   const doctorId = session.user.id;
   const row = await prisma.noteTemplate.findFirst({
     where: { id, doctorId },
-    select: { id: true, name: true, encounterType: true, sections: true, styleProfile: true },
+    select: {
+      id: true,
+      name: true,
+      encounterType: true,
+      sections: true,
+      styleProfile: true,
+      templateKind: true,
+    },
   });
   if (!row) return { ok: false, error: "That template doesn't exist or isn't yours." };
+  if (row.templateKind === 'template_twin_docx') {
+    return {
+      ok: false,
+      error: 'Open this version in the Template Twin certification workspace.',
+    };
+  }
   return { ok: true, template: rowToReviewModel(row) };
 }

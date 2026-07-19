@@ -15,21 +15,25 @@
 // with the rest of the visits API.
 // ============================================================================
 
-import { NextResponse } from 'next/server';
-import { z } from 'zod';
+import { NextResponse } from "next/server";
+import { z } from "zod";
 
-import prisma from '@meddoc/db';
-import { TranscribeVisitStatus } from '@prisma/client';
-import { auth } from '@/lib/nextauth';
-import { apiError, withApiHandler } from '@/lib/api-error';
-import { computeEmScore } from '@/lib/em-coding/score';
-import { engineToUiScore } from '@/lib/em-coding/to-ui-score';
-import { extractIcdRows, extractRxRows } from '@/lib/em-coding/displayed-level';
-import { mergeAdditions } from '@/lib/em-coding/merge-additions';
-import { logAudit } from '@/lib/audit';
+import prisma from "@meddoc/db";
+import { Prisma, TranscribeVisitStatus } from "@prisma/client";
+import { auth } from "@/lib/nextauth";
+import { apiError, withApiHandler } from "@/lib/api-error";
+import { computeEmScore } from "@/lib/em-coding/score";
+import { engineToUiScore } from "@/lib/em-coding/to-ui-score";
+import { extractIcdRows, extractRxRows } from "@/lib/em-coding/displayed-level";
+import { mergeAdditions } from "@/lib/em-coding/merge-additions";
+import { logAudit } from "@/lib/audit";
+import { invalidateTemplateTwinAfterSoapEdit } from "@/lib/template-twin/soap-binding";
+import { isSameOriginTemplateTwinMutation } from "@/lib/template-twin/request-security";
+import { pinTemplateTwinStagingQaMutation } from "@/lib/template-twin/staging-qa-mutation";
+import { TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT } from "@/lib/template-twin/staging-qa-visit-guard";
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 // Conservative caps so a malicious or fat-fingered payload can't bloat
@@ -47,7 +51,7 @@ const BodySchema = z.object({
 });
 
 export const POST = withApiHandler<{ id: string }>(
-  'api:visits:em-score:apply-additions',
+  "api:visits:em-score:apply-additions",
   async (req, { params }) => {
     const { id: visitId } = await params;
 
@@ -55,18 +59,23 @@ export const POST = withApiHandler<{ id: string }>(
     const userId = session?.user?.id;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const practiceId = (session?.user as any)?.practiceId as string | undefined;
-    if (!userId || !practiceId) return apiError('unauthorized', 401);
+    if (!userId || !practiceId) return apiError("unauthorized", 401);
+    if (!isSameOriginTemplateTwinMutation(req)) {
+      return apiError("The additions request was not same-origin.", 403, {
+        code: "CROSS_SITE_MUTATION",
+      });
+    }
 
     let body: unknown;
     try {
       body = await req.json();
     } catch {
-      return apiError('invalid JSON body', 400);
+      return apiError("invalid JSON body", 400);
     }
     const parsed = BodySchema.safeParse(body);
     if (!parsed.success) {
-      return apiError('invalid additions payload', 400, {
-        code: 'INVALID_REQUEST',
+      return apiError("invalid additions payload", 400, {
+        code: "INVALID_REQUEST",
       });
     }
 
@@ -82,24 +91,31 @@ export const POST = withApiHandler<{ id: string }>(
         signedAt: true,
         soapDraft: true,
         soapFinal: true,
+        soapVersion: true,
         audioDurationSec: true,
         dictationDurationSec: true,
         inputMode: true,
         icdCodes: true,
         rxDrafts: true,
+        templateTwinSyntheticQaRun: {
+          select: TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
+        },
       },
     });
-    if (!visit || visit.userId !== userId) return apiError('not found', 404);
+    if (!visit || visit.userId !== userId) return apiError("not found", 404);
     if (visit.deletedAt !== null || visit.archivedAt !== null) {
-      return apiError('Visit is no longer active.', 400, {
-        code: 'VISIT_NOT_ACTIVE',
+      return apiError("Visit is no longer active.", 400, {
+        code: "VISIT_NOT_ACTIVE",
       });
     }
-    if (visit.signedAt !== null || visit.status === TranscribeVisitStatus.SIGNED) {
+    if (
+      visit.signedAt !== null ||
+      visit.status === TranscribeVisitStatus.SIGNED
+    ) {
       return apiError(
-        'Visit is signed and locked — additions can no longer be applied.',
+        "Visit is signed and locked — additions can no longer be applied.",
         409,
-        { code: 'VISIT_LOCKED' },
+        { code: "VISIT_LOCKED" },
       );
     }
     // Only allow on visits that have actually completed the pipeline.
@@ -108,17 +124,34 @@ export const POST = withApiHandler<{ id: string }>(
       return apiError(
         `Visit is in status ${visit.status}; bump additions require a READY visit.`,
         409,
-        { code: 'VISIT_NOT_READY' },
+        { code: "VISIT_NOT_READY" },
       );
     }
 
-    const currentSoap = visit.soapFinal ?? visit.soapDraft ?? '';
+    const currentSoap = visit.soapFinal ?? visit.soapDraft ?? "";
     if (!currentSoap.trim()) {
-      return apiError(
-        'Visit has no SOAP draft to apply additions to.',
-        400,
-        { code: 'NO_SOAP_DRAFT' },
-      );
+      return apiError("Visit has no SOAP draft to apply additions to.", 400, {
+        code: "NO_SOAP_DRAFT",
+      });
+    }
+
+    try {
+      const stagingQaClaim = await pinTemplateTwinStagingQaMutation({
+        visitId,
+        userId,
+        run: visit.templateTwinSyntheticQaRun,
+      });
+      // This generic E/M surface may invoke a model-backed scoring path.
+      // Marked staging visits must use only the deterministic guided Twin
+      // workflow, so fail closed before scoring rather than risk provider
+      // escape or create a second clinical mutation path.
+      if (stagingQaClaim) {
+        return apiError("not found", 404, {
+          code: "TEMPLATE_TWIN_STAGING_QA_MUTATION_UNAVAILABLE",
+        });
+      }
+    } catch {
+      return apiError("not found", 404);
     }
 
     // Merge the additions into the SOAP. Pure function — testable
@@ -157,7 +190,7 @@ export const POST = withApiHandler<{ id: string }>(
     });
 
     const durationSec =
-      visit.inputMode === 'voice_dictation'
+      visit.inputMode === "voice_dictation"
         ? (visit.dictationDurationSec ?? 0)
         : (visit.audioDurationSec ?? 0);
     const newUiScore = engineToUiScore(engineScore, durationSec);
@@ -168,19 +201,39 @@ export const POST = withApiHandler<{ id: string }>(
     // The pre-merge soapFinal is preserved as soapL6Original (set by
     // L6 polish; not touched here so the original-AI-output snapshot
     // remains immutable for the doctor-edit-pattern capture path).
-    await prisma.transcribeVisit.update({
-      where: { id: visitId },
-      data: {
-        soapDraft: merge.newSoap,
-        soapFinal: merge.newSoap,
+    const updated = await prisma.$transaction(
+      async (tx: Prisma.TransactionClient) => {
+        const saved = await tx.transcribeVisit.updateMany({
+          where: {
+            id: visitId,
+            status: TranscribeVisitStatus.READY,
+            soapVersion: visit.soapVersion,
+          },
+          data: {
+            soapDraft: merge.newSoap,
+            soapFinal: merge.newSoap,
+            soapVersion: { increment: 1 },
+          },
+        });
+        if (saved.count === 1) {
+          await invalidateTemplateTwinAfterSoapEdit(tx, visitId);
+        }
+        return saved;
       },
-    });
+    );
+    if (updated.count !== 1) {
+      return apiError(
+        "The note changed in another tab. Reload before applying additions.",
+        409,
+        { code: "SOAP_VERSION_CONFLICT" },
+      );
+    }
 
     // Audit row. Metadata carries the from→to code pair + per-criterion
     // counts; never the addition text itself (PHI).
     void logAudit({
-      action: 'EM_BUMP_APPLIED',
-      targetType: 'transcribe_visit',
+      action: "EM_BUMP_APPLIED",
+      targetType: "transcribe_visit",
       targetId: visitId,
       metadata: {
         fromCode: engineScore.code,

@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 // ============================================================================
 // SignAndSendModal — Sign & Send / Export-again destination picker
@@ -11,41 +11,47 @@
 // browser delivery semantics are unchanged from Phase 2.
 // ============================================================================
 
-import { useCallback, useState, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
-import * as Dialog from '@radix-ui/react-dialog';
-import { Check, Loader2, Lock, Send, TrendingUp, X } from 'lucide-react';
-import { toast } from 'sonner';
+import { useCallback, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import * as Dialog from "@radix-ui/react-dialog";
+import { Check, Loader2, Lock, Send, TrendingUp, X } from "lucide-react";
+import { toast } from "sonner";
 
-import { cn } from '@/lib/cn';
+import { cn } from "@/lib/cn";
 
 export type Destination =
-  | 'clipboard_epic'
-  | 'clipboard_athena'
-  | 'clipboard_cerner'
-  | 'clipboard_eclinicalworks'
-  | 'clipboard_generic'
-  | 'pdf'
-  | 'docx'
-  | 'email';
+  | "clipboard_epic"
+  | "clipboard_athena"
+  | "clipboard_cerner"
+  | "clipboard_eclinicalworks"
+  | "clipboard_generic"
+  | "pdf"
+  | "docx"
+  | "docx_original_template"
+  | "email";
 
 const DESTINATIONS: {
   key: Destination;
   label: string;
-  group: 'clipboard' | 'download' | 'email';
+  group: "clipboard" | "download" | "email";
 }[] = [
-  { key: 'clipboard_epic', label: 'Copy for Epic', group: 'clipboard' },
-  { key: 'clipboard_athena', label: 'Copy for Athena', group: 'clipboard' },
-  { key: 'clipboard_cerner', label: 'Copy for Cerner', group: 'clipboard' },
+  { key: "clipboard_epic", label: "Copy for Epic", group: "clipboard" },
+  { key: "clipboard_athena", label: "Copy for Athena", group: "clipboard" },
+  { key: "clipboard_cerner", label: "Copy for Cerner", group: "clipboard" },
   {
-    key: 'clipboard_eclinicalworks',
-    label: 'Copy for eClinicalWorks',
-    group: 'clipboard',
+    key: "clipboard_eclinicalworks",
+    label: "Copy for eClinicalWorks",
+    group: "clipboard",
   },
-  { key: 'clipboard_generic', label: 'Copy as plain text', group: 'clipboard' },
-  { key: 'pdf', label: 'Download PDF', group: 'download' },
-  { key: 'docx', label: 'Download DOCX', group: 'download' },
-  { key: 'email', label: 'Email to me', group: 'email' },
+  { key: "clipboard_generic", label: "Copy as plain text", group: "clipboard" },
+  {
+    key: "docx_original_template",
+    label: "Original Template DOCX · Primary",
+    group: "download",
+  },
+  { key: "pdf", label: "Download PDF", group: "download" },
+  { key: "docx", label: "Download DOCX · Generic", group: "download" },
+  { key: "email", label: "Email to me", group: "email" },
 ];
 
 interface SignResponse {
@@ -53,11 +59,12 @@ interface SignResponse {
   clipboardTexts?: Partial<Record<Destination, string>>;
   pdfDownloadUrl?: string;
   docxDownloadUrl?: string;
+  originalTemplateDocxDownloadUrl?: string;
   emailQueued?: boolean;
   deliveryErrors?: Record<string, string>;
 }
 
-type SignAndSendModalTheme = 'legacy' | 'clinician';
+type SignAndSendModalTheme = "legacy" | "clinician";
 
 interface SignAndSendModalProps {
   visitId: string;
@@ -71,13 +78,21 @@ interface SignAndSendModalProps {
    *  from any submission payload as belt-and-braces. Set from the
    *  server based on RESEND_API_KEY + RESEND_FROM_VERIFIED. */
   emailEnabled: boolean;
+  /** Show the exact source-template clone only when the server supplied a
+   *  verified Template Twin fill for this visit. The export route repeats all
+   *  ownership, signing, version, round-trip, and digest checks. */
+  originalTemplateDocxAvailable?: boolean;
+  /** Synthetic staging visits may deliver only the strictly verified clone of
+   *  the original template. This is presentation-level defense in depth; the
+   *  sign and export routes enforce the same restriction server-side. */
+  originalTemplateOnly?: boolean;
   /** The trigger button's label — "Sign & Send" vs "Export again". */
   triggerLabel: string;
   /** Icon shown on the trigger. */
   triggerIcon: React.ReactNode;
   /** Variant of the trigger button — primary for sign, secondary for
    *  re-export. */
-  triggerVariant?: 'primary' | 'secondary';
+  triggerVariant?: "primary" | "secondary";
   /** Disable the trigger while parent is saving edits, etc. */
   disabled?: boolean;
   /** Phase 5.2 stub completion — optional controlled-open mode. When
@@ -118,10 +133,12 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
         setInternalOpen(next);
       }
     },
-    [isControlled, props]
+    [isControlled, props],
   );
-  const [selected, setSelected] = useState<Set<Destination>>(
-    () => new Set(['clipboard_epic', 'pdf'])
+  const [selected, setSelected] = useState<Set<Destination>>(() =>
+    props.originalTemplateDocxAvailable || props.originalTemplateOnly
+      ? new Set(["docx_original_template"])
+      : new Set(["clipboard_epic", "pdf"]),
   );
   const [pending, startTransition] = useTransition();
   // Selections persist across open/close so a doctor who always picks
@@ -132,8 +149,7 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
   // open of the sign dialog requires a fresh, conscious confirmation.
   // Reset uses the adjust-state-during-render pattern (not an effect)
   // so the checkbox is already cleared in the same render that closes.
-  const emChangeRequired =
-    props.signOnSubmit && props.emPendingChange != null;
+  const emChangeRequired = props.signOnSubmit && props.emPendingChange != null;
   const [emChangeConfirmed, setEmChangeConfirmed] = useState(false);
   const [prevOpen, setPrevOpen] = useState(open);
   if (prevOpen !== open) {
@@ -154,18 +170,25 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
     // Strip 'email' defensively — if emailEnabled flips off between
     // renders, or a stale entry somehow lingers in `selected`, don't
     // send it to the server.
-    const destinations = Array.from(selected).filter(
-      (d) => d !== 'email' || props.emailEnabled
-    );
+    const destinations = props.originalTemplateOnly
+      ? props.originalTemplateDocxAvailable
+        ? (["docx_original_template"] satisfies Destination[])
+        : []
+      : Array.from(selected).filter(
+          (d) =>
+            (d !== "email" || props.emailEnabled) &&
+            (d !== "docx_original_template" ||
+              props.originalTemplateDocxAvailable === true),
+        );
     if (destinations.length === 0) {
-      toast.error('Pick at least one destination.');
+      toast.error("Pick at least one destination.");
       return;
     }
     // E/M visible-confirm: belt to the disabled button — never submit a
     // sign while an unconfirmed level change is showing. The server gate
     // would reject it anyway (fail-closed); this just keeps the UX clean.
     if (emChangeRequired && !emChangeConfirmed) {
-      toast.error('Confirm the documentation level change before signing.');
+      toast.error("Confirm the documentation level change before signing.");
       return;
     }
     startTransition(async () => {
@@ -180,7 +203,7 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
               destinations,
               emChangeRequired && emChangeConfirmed
                 ? (props.emPendingChange ?? undefined)
-                : undefined
+                : undefined,
             )
           : await prepareDeliverOnly(props.visitId, destinations);
 
@@ -200,14 +223,14 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
         const deliveryErrors = payload.deliveryErrors ?? {};
         const failedEntries = Object.entries(deliveryErrors);
         const setupErrors = failedEntries.filter(([, msg]) =>
-          /isn't set up|not configured|EMAIL_NOT_CONFIGURED/i.test(msg)
+          /isn't set up|not configured|EMAIL_NOT_CONFIGURED/i.test(msg),
         );
         const failureSummary = failedEntries
           .map(([k, v]) => `${k}: ${v}`)
-          .join('\n');
+          .join("\n");
 
         if (setupErrors.length > 0) {
-          toast.error('Email delivery not configured', {
+          toast.error("Email delivery not configured", {
             description: `${setupErrors[0][1]}\n\nAll other destinations ran normally — PDF/DOCX/clipboard have been delivered. Download the PDF if you need the record immediately.`,
             duration: 15_000,
           });
@@ -215,8 +238,8 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
             const rest = failedEntries
               .filter(([k]) => !setupErrors.some(([sk]) => sk === k))
               .map(([k, v]) => `${k}: ${v}`)
-              .join('\n');
-            toast.error('Other destinations also failed', {
+              .join("\n");
+            toast.error("Other destinations also failed", {
               description: rest,
               duration: 10_000,
             });
@@ -224,18 +247,22 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
         } else if (failedEntries.length > 0) {
           toast.warning(
             props.signOnSubmit
-              ? 'Signed — some destinations failed'
-              : 'Partial export',
+              ? "Signed — some destinations failed"
+              : "Partial export",
             {
               description: failureSummary,
               duration: 10_000,
-            }
+            },
           );
         } else {
-          toast.success(props.signOnSubmit ? 'Signed' : 'Exported', {
-            description: props.signOnSubmit
-              ? 'Your note is locked. Delivered to the chosen destinations.'
-              : 'Delivered to the chosen destinations.',
+          toast.success(props.signOnSubmit ? "Signed" : "Exported", {
+            description: props.originalTemplateOnly
+              ? props.signOnSubmit
+                ? "The synthetic note is locked and its verified Original Template DOCX is downloading."
+                : "The verified Original Template DOCX is downloading."
+              : props.signOnSubmit
+                ? "Your note is locked. Delivered to the chosen destinations."
+                : "Delivered to the chosen destinations.",
           });
         }
 
@@ -243,30 +270,33 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
         // surface as toasts, but crucially they don't block the modal.
         void applyBrowserSideDeliveries(payload, destinations).catch(
           (err: unknown) => {
-            console.error('[sign] browser-side delivery failed:', err);
-            toast.error('Some deliveries were blocked by the browser', {
+            console.error("[sign] browser-side delivery failed:", err);
+            toast.error("Some deliveries were blocked by the browser", {
               description:
-                'Try copy/download again from the signed-visit view.',
+                "Try copy/download again from the signed-visit view.",
             });
-          }
+          },
         );
       } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Unknown error';
-        toast.error('Could not deliver', { description: msg });
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        toast.error("Could not deliver", { description: msg });
       }
     });
   }, [
     props.visitId,
     props.signOnSubmit,
     props.emailEnabled,
+    props.originalTemplateDocxAvailable,
+    props.originalTemplateOnly,
     props.emPendingChange,
     emChangeRequired,
     emChangeConfirmed,
     router,
     selected,
+    setOpen,
   ]);
 
-  const triggerVariant = props.triggerVariant ?? 'primary';
+  const triggerVariant = props.triggerVariant ?? "primary";
 
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
@@ -274,10 +304,10 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
         <button
           type="button"
           className={
-            triggerVariant === 'primary' ? 'qm-lin-btn-primary' : 'qm-lin-btn'
+            triggerVariant === "primary" ? "qm-lin-btn-primary" : "qm-lin-btn"
           }
           disabled={props.disabled}
-          style={{ padding: '8px 14px', height: 32 }}
+          style={{ padding: "8px 14px", height: 32 }}
         >
           {props.triggerIcon}
           {props.triggerLabel}
@@ -286,52 +316,61 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
       <Dialog.Portal>
         <Dialog.Overlay
           className={cn(
-            'qm-lin-spotlight',
-            'data-[state=open]:animate-in data-[state=open]:fade-in-0',
-            'data-[state=closed]:animate-out data-[state=closed]:fade-out-0'
+            "qm-lin-spotlight",
+            "data-[state=open]:animate-in data-[state=open]:fade-in-0",
+            "data-[state=closed]:animate-out data-[state=closed]:fade-out-0",
           )}
         />
         <Dialog.Content
           aria-describedby={undefined}
           className={cn(
-            'qm-lin-spotlight-panel',
-            'fixed left-1/2 top-[12vh] z-[201] -translate-x-1/2',
-            'focus:outline-none qm-lin-blur-in',
-            'data-[state=closed]:animate-out data-[state=closed]:fade-out-0',
-            'data-[state=closed]:zoom-out-95'
+            "qm-lin-spotlight-panel",
+            "fixed left-1/2 top-[12vh] z-[201] -translate-x-1/2",
+            "focus:outline-none qm-lin-blur-in",
+            "data-[state=closed]:animate-out data-[state=closed]:fade-out-0",
+            "data-[state=closed]:zoom-out-95",
           )}
-          style={{ width: 'min(94vw, 560px)' }}
+          style={{ width: "min(94vw, 560px)" }}
         >
           <div
             className="flex items-start justify-between gap-4"
-            style={{ padding: '20px 24px 12px' }}
+            style={{ padding: "20px 24px 12px" }}
           >
             <div>
               <Dialog.Title
                 style={{
                   margin: 0,
-                  fontFamily: 'var(--font-sans)',
+                  fontFamily: "var(--font-sans)",
                   fontSize: 16,
                   fontWeight: 500,
-                  letterSpacing: '-0.01em',
-                  color: 'var(--color-linear-text)',
+                  letterSpacing: "-0.01em",
+                  color: "var(--color-linear-text)",
                 }}
               >
-                {props.signOnSubmit
-                  ? 'Sign and deliver your note'
-                  : 'Export signed note'}
+                {props.originalTemplateOnly
+                  ? props.signOnSubmit
+                    ? "Sign synthetic Original Template DOCX"
+                    : "Download signed synthetic DOCX"
+                  : props.signOnSubmit
+                    ? "Sign and deliver your note"
+                    : "Export signed note"}
               </Dialog.Title>
-              <p
+              <Dialog.Description
                 style={{
                   marginTop: 6,
                   marginBottom: 0,
                   fontSize: 13,
-                  color: 'var(--color-linear-text-2)',
+                  color: "var(--color-linear-text-2)",
                 }}
               >
-                Pick one or more destinations.{' '}
-                {props.signOnSubmit && 'The note locks after signing.'}
-              </p>
+                {props.originalTemplateOnly
+                  ? props.signOnSubmit
+                    ? "Synthetic QA permits only the independently verified clone of the original Word template. The note locks after signing."
+                    : "Synthetic QA permits only the independently verified clone of the original Word template."
+                  : `Pick one or more destinations.${
+                      props.signOnSubmit ? " The note locks after signing." : ""
+                    }`}
+              </Dialog.Description>
             </div>
             <Dialog.Close asChild>
               <button
@@ -346,27 +385,45 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
 
           <div
             className="max-h-[60vh] overflow-y-auto"
-            style={{ padding: '4px 24px 8px' }}
+            style={{ padding: "4px 24px 8px" }}
           >
-            <Group
-              title="Copy to clipboard"
-              hint="Paste the formatted note into your EHR's note field."
-              items={DESTINATIONS.filter((d) => d.group === 'clipboard')}
-              selected={selected}
-              onToggle={toggle}
-            />
+            {!props.originalTemplateOnly && (
+              <Group
+                title="Copy to clipboard"
+                hint="Paste the formatted note into your EHR's note field."
+                items={DESTINATIONS.filter((d) => d.group === "clipboard")}
+                selected={selected}
+                onToggle={toggle}
+              />
+            )}
             <Group
               title="Download"
-              hint="Save a PDF for records or a DOCX to edit in Word."
-              items={DESTINATIONS.filter((d) => d.group === 'download')}
+              hint={
+                props.originalTemplateOnly
+                  ? props.originalTemplateDocxAvailable
+                    ? "Required for synthetic QA. PDF, clipboard, email, and generic DOCX delivery are intentionally unavailable."
+                    : "Complete Template Twin review and strict verification before this synthetic DOCX can be signed or downloaded."
+                  : props.originalTemplateDocxAvailable
+                    ? "The verified clone of your original Word template is the primary document. Generic exports remain available."
+                    : "Save a PDF for records or a DOCX to edit in Word."
+              }
+              items={DESTINATIONS.filter(
+                (d) =>
+                  d.group === "download" &&
+                  (!props.originalTemplateOnly ||
+                    d.key === "docx_original_template") &&
+                  (d.key !== "docx_original_template" ||
+                    props.originalTemplateDocxAvailable === true),
+              )}
               selected={selected}
               onToggle={toggle}
+              locked={props.originalTemplateOnly}
             />
-            {props.emailEnabled && (
+            {props.emailEnabled && !props.originalTemplateOnly && (
               <Group
                 title="Email"
                 hint={`Send a PDF to ${props.doctorEmail} for your records. Don't use for patient communication.`}
-                items={DESTINATIONS.filter((d) => d.group === 'email')}
+                items={DESTINATIONS.filter((d) => d.group === "email")}
                 selected={selected}
                 onToggle={toggle}
               />
@@ -386,37 +443,36 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
               data-testid="em-change-confirm"
               className="rounded-lg border"
               style={{
-                margin: '4px 24px 12px',
-                padding: '10px 12px',
+                margin: "4px 24px 12px",
+                padding: "10px 12px",
                 borderColor:
-                  'color-mix(in srgb, var(--color-linear-amber) 35%, transparent)',
+                  "color-mix(in srgb, var(--color-linear-amber) 35%, transparent)",
                 background:
-                  'color-mix(in srgb, var(--color-linear-amber) 8%, transparent)',
+                  "color-mix(in srgb, var(--color-linear-amber) 8%, transparent)",
               }}
             >
               <div className="flex items-center gap-2">
                 <TrendingUp
                   className="h-3.5 w-3.5 flex-none"
                   aria-hidden
-                  style={{ color: 'var(--color-linear-amber)' }}
+                  style={{ color: "var(--color-linear-amber)" }}
                 />
                 <span
                   className="text-[13px] font-medium"
-                  style={{ color: 'var(--color-linear-amber)' }}
+                  style={{ color: "var(--color-linear-amber)" }}
                 >
-                  Documentation level changed:{' '}
-                  <span style={{ fontFamily: 'var(--font-mono)' }}>
+                  Documentation level changed:{" "}
+                  <span style={{ fontFamily: "var(--font-mono)" }}>
                     {props.emPendingChange.from} → {props.emPendingChange.to}
                   </span>
                 </span>
               </div>
               <p
                 className="mb-0 mt-1.5 text-[12px] leading-relaxed"
-                style={{ color: 'var(--color-linear-text-3)' }}
+                style={{ color: "var(--color-linear-text-3)" }}
               >
-                An AI-suggestion you adopted or dismissed changed the
-                suggested E/M level. Signing requires confirming the
-                updated level.
+                An AI-suggestion you adopted or dismissed changed the suggested
+                E/M level. Signing requires confirming the updated level.
               </p>
               <button
                 type="button"
@@ -426,14 +482,14 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
                 className="mt-2 flex w-full items-center gap-3 rounded-md border px-3 py-2 text-left transition-colors duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-linear-sage focus-visible:ring-offset-2 focus-visible:ring-offset-linear-bg"
                 style={{
                   borderColor: emChangeConfirmed
-                    ? 'color-mix(in srgb, var(--color-linear-amber) 45%, transparent)'
-                    : 'var(--color-linear-border)',
+                    ? "color-mix(in srgb, var(--color-linear-amber) 45%, transparent)"
+                    : "var(--color-linear-border)",
                   background: emChangeConfirmed
-                    ? 'color-mix(in srgb, var(--color-linear-amber) 14%, transparent)'
-                    : 'var(--color-linear-surface-2)',
+                    ? "color-mix(in srgb, var(--color-linear-amber) 14%, transparent)"
+                    : "var(--color-linear-surface-2)",
                   color: emChangeConfirmed
-                    ? 'var(--color-linear-text)'
-                    : 'var(--color-linear-text-2)',
+                    ? "var(--color-linear-text)"
+                    : "var(--color-linear-text-2)",
                 }}
               >
                 <span
@@ -441,12 +497,12 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
                   className="flex h-4 w-4 flex-none items-center justify-center rounded-[4px] border"
                   style={{
                     borderColor: emChangeConfirmed
-                      ? 'var(--color-linear-amber)'
-                      : 'var(--color-linear-border-strong)',
+                      ? "var(--color-linear-amber)"
+                      : "var(--color-linear-border-strong)",
                     background: emChangeConfirmed
-                      ? 'var(--color-linear-amber)'
-                      : 'transparent',
-                    color: '#16120a',
+                      ? "var(--color-linear-amber)"
+                      : "transparent",
+                    color: "#16120a",
                   }}
                 >
                   {emChangeConfirmed && (
@@ -454,10 +510,10 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
                   )}
                 </span>
                 <span className="flex-1 text-[13px]">
-                  I&apos;ve reviewed the change and confirm{' '}
-                  <span style={{ fontFamily: 'var(--font-mono)' }}>
+                  I&apos;ve reviewed the change and confirm{" "}
+                  <span style={{ fontFamily: "var(--font-mono)" }}>
                     {props.emPendingChange.to}
-                  </span>{' '}
+                  </span>{" "}
                   as the documentation level
                 </span>
               </button>
@@ -467,21 +523,25 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
           <div
             className="flex items-center justify-between gap-3"
             style={{
-              borderTop: '1px solid var(--color-linear-hairline)',
-              background: 'var(--color-linear-surface-2)',
-              padding: '12px 24px',
+              borderTop: "1px solid var(--color-linear-hairline)",
+              background: "var(--color-linear-surface-2)",
+              padding: "12px 24px",
             }}
           >
             <p
               style={{
                 margin: 0,
                 fontSize: 11,
-                color: 'var(--color-linear-text-3)',
+                color: "var(--color-linear-text-3)",
               }}
             >
-              {props.signOnSubmit
-                ? 'Locked notes can still be re-exported later.'
-                : 'This visit is already signed.'}
+              {props.originalTemplateOnly
+                ? props.signOnSubmit
+                  ? "Microsoft Word compatibility remains PENDING after signing."
+                  : "Microsoft Word compatibility remains PENDING."
+                : props.signOnSubmit
+                  ? "Locked notes can still be re-exported later."
+                  : "This visit is already signed."}
             </p>
             <div className="flex items-center gap-2">
               <Dialog.Close asChild>
@@ -496,12 +556,17 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
                 // E/M visible-confirm: the sign CTA stays disabled until
                 // the doctor explicitly confirms a recorded level change.
                 // The server gate rejects unconfirmed signs regardless.
-                disabled={pending || (emChangeRequired && !emChangeConfirmed)}
+                disabled={
+                  pending ||
+                  (emChangeRequired && !emChangeConfirmed) ||
+                  (props.originalTemplateOnly &&
+                    !props.originalTemplateDocxAvailable)
+                }
               >
                 {pending ? (
                   <>
                     <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                    {props.signOnSubmit ? 'Signing…' : 'Exporting…'}
+                    {props.signOnSubmit ? "Signing…" : "Exporting…"}
                   </>
                 ) : (
                   <>
@@ -510,7 +575,7 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
                     ) : (
                       <Send className="h-3.5 w-3.5" aria-hidden />
                     )}
-                    {props.signOnSubmit ? 'Sign & Deliver' : 'Deliver'}
+                    {props.signOnSubmit ? "Sign & Deliver" : "Deliver"}
                   </>
                 )}
               </button>
@@ -532,12 +597,14 @@ function Group({
   items,
   selected,
   onToggle,
+  locked = false,
 }: {
   title: string;
   hint: string;
   items: { key: Destination; label: string }[];
   selected: Set<Destination>;
   onToggle: (k: Destination) => void;
+  locked?: boolean;
 }) {
   return (
     <div className="py-3">
@@ -552,6 +619,7 @@ function Group({
             label={it.label}
             checked={selected.has(it.key)}
             onToggle={() => onToggle(it.key)}
+            locked={locked}
           />
         ))}
       </div>
@@ -563,32 +631,36 @@ function CheckboxRow({
   label,
   checked,
   onToggle,
+  locked = false,
 }: {
   label: string;
   checked: boolean;
   onToggle: () => void;
+  locked?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onToggle}
       aria-pressed={checked}
+      disabled={locked}
       className={cn(
-        'flex w-full items-center gap-3 rounded-md border px-3 py-2 text-left',
-        'transition-colors duration-150 ease-out',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-linear-sage focus-visible:ring-offset-2 focus-visible:ring-offset-linear-bg',
+        "flex w-full items-center gap-3 rounded-md border px-3 py-2 text-left",
+        "transition-colors duration-150 ease-out",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-linear-sage focus-visible:ring-offset-2 focus-visible:ring-offset-linear-bg",
+        locked && "cursor-default opacity-90",
         checked
-          ? 'border-[rgba(122,166,140,0.34)] bg-linear-sage-tint text-linear-text'
-          : 'border-linear-border bg-linear-surface-2 text-linear-text-2 hover:border-linear-border-strong hover:text-linear-text'
+          ? "border-[rgba(122,166,140,0.34)] bg-linear-sage-tint text-linear-text"
+          : "border-linear-border bg-linear-surface-2 text-linear-text-2 hover:border-linear-border-strong hover:text-linear-text",
       )}
     >
       <span
         aria-hidden
         className={cn(
-          'flex h-4 w-4 flex-none items-center justify-center rounded-[4px] border',
+          "flex h-4 w-4 flex-none items-center justify-center rounded-[4px] border",
           checked
-            ? 'border-linear-sage bg-linear-sage text-[#0d1611]'
-            : 'border-linear-border-strong bg-transparent'
+            ? "border-linear-sage bg-linear-sage text-[#0d1611]"
+            : "border-linear-border-strong bg-transparent",
         )}
       >
         {checked && <Check className="h-3 w-3" strokeWidth={3} aria-hidden />}
@@ -612,11 +684,11 @@ async function fetchSignAndDeliver(
    *  Omitted when there is nothing to confirm. The server rejects the
    *  sign (400, EM_CHANGE_UNACKNOWLEDGED) if a recorded change exists
    *  and this is absent or stale. */
-  acknowledgedEmChange?: { from: string; to: string }
+  acknowledgedEmChange?: { from: string; to: string },
 ): Promise<SignResponse> {
   const res = await fetch(`/api/visits/${visitId}/sign`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       destinations,
       ...(acknowledgedEmChange ? { acknowledgedEmChange } : {}),
@@ -631,7 +703,7 @@ async function fetchSignAndDeliver(
 
 async function prepareDeliverOnly(
   visitId: string,
-  destinations: Destination[]
+  destinations: Destination[],
 ): Promise<SignResponse> {
   // Already-signed path: hit the per-channel routes + collect into a
   // SignResponse-shaped payload so the caller can hand it to
@@ -639,17 +711,20 @@ async function prepareDeliverOnly(
   const clipboardTexts: Partial<Record<Destination, string>> = {};
   let pdfDownloadUrl: string | undefined;
   let docxDownloadUrl: string | undefined;
+  let originalTemplateDocxDownloadUrl: string | undefined;
   let emailQueued = false;
 
   for (const dest of destinations) {
-    if (dest === 'pdf') {
+    if (dest === "pdf") {
       pdfDownloadUrl = `/api/visits/${visitId}/export/pdf`;
-    } else if (dest === 'docx') {
+    } else if (dest === "docx") {
       docxDownloadUrl = `/api/visits/${visitId}/export/docx`;
-    } else if (dest === 'email') {
+    } else if (dest === "docx_original_template") {
+      originalTemplateDocxDownloadUrl = `/api/visits/${visitId}/export/original-template-docx`;
+    } else if (dest === "email") {
       const res = await fetch(`/api/visits/${visitId}/export/email`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
       });
       if (!res.ok) {
@@ -658,10 +733,10 @@ async function prepareDeliverOnly(
       }
       emailQueued = true;
     } else {
-      const format = dest.replace('clipboard_', '');
+      const format = dest.replace("clipboard_", "");
       const res = await fetch(`/api/visits/${visitId}/export/clipboard`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ format }),
       });
       if (!res.ok) {
@@ -678,24 +753,34 @@ async function prepareDeliverOnly(
     clipboardTexts,
     pdfDownloadUrl,
     docxDownloadUrl,
+    originalTemplateDocxDownloadUrl,
     emailQueued,
   };
 }
 
 async function applyBrowserSideDeliveries(
   res: SignResponse,
-  destinations: Destination[]
+  destinations: Destination[],
 ): Promise<void> {
   // 1. Download URLs fire FIRST — so if the clipboard write fails the
   //    doctor has already gotten the file as a fallback. When both PDF
   //    and DOCX are selected we gap them: Chrome drops the second
   //    programmatic download if two anchors click inside the same tick.
-  if (res.pdfDownloadUrl) triggerDownload(res.pdfDownloadUrl, 'pdf');
+  if (res.pdfDownloadUrl) triggerDownload(res.pdfDownloadUrl, "pdf");
   if (res.docxDownloadUrl) {
     if (res.pdfDownloadUrl) {
       await new Promise((r) => setTimeout(r, 600));
     }
-    triggerDownload(res.docxDownloadUrl, 'docx');
+    triggerDownload(res.docxDownloadUrl, "docx");
+  }
+  if (res.originalTemplateDocxDownloadUrl) {
+    if (res.pdfDownloadUrl || res.docxDownloadUrl) {
+      await new Promise((r) => setTimeout(r, 600));
+    }
+    triggerDownload(
+      res.originalTemplateDocxDownloadUrl,
+      "docx_original_template",
+    );
   }
 
   // 2. Clipboard writes — navigator.clipboard only holds ONE payload
@@ -708,8 +793,8 @@ async function applyBrowserSideDeliveries(
   //    user-activation has expired — wrap in a 3s timeout so a silent
   //    hang can't block the rest of the deliveries (email toast below,
   //    and more importantly, the calling promise's completion).
-  const clipboardChoices = destinations.filter(
-    (d) => d.startsWith('clipboard_')
+  const clipboardChoices = destinations.filter((d) =>
+    d.startsWith("clipboard_"),
   ) as Array<Extract<Destination, `clipboard_${string}`>>;
   if (clipboardChoices.length > 0 && res.clipboardTexts) {
     const lastKey = clipboardChoices[clipboardChoices.length - 1];
@@ -719,13 +804,13 @@ async function applyBrowserSideDeliveries(
         await Promise.race([
           navigator.clipboard.writeText(text),
           new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('clipboard-timeout')), 3_000)
+            setTimeout(() => reject(new Error("clipboard-timeout")), 3_000),
           ),
         ]);
       } catch {
-        toast.error('Copy blocked', {
+        toast.error("Copy blocked", {
           description:
-            'Your browser blocked clipboard access. Re-open the export modal and try again.',
+            "Your browser blocked clipboard access. Re-open the export modal and try again.",
         });
       }
     }
@@ -735,23 +820,26 @@ async function applyBrowserSideDeliveries(
   if (res.emailQueued) {
     // Resend doesn't guarantee inbox delivery, but it guarantees
     // accepted-for-delivery at this point.
-    toast.success('Email sent');
+    toast.success("Email sent");
   }
 }
 
-function triggerDownload(href: string, kind: 'pdf' | 'docx') {
-  const a = document.createElement('a');
+function triggerDownload(
+  href: string,
+  kind: "pdf" | "docx" | "docx_original_template",
+) {
+  const a = document.createElement("a");
   a.href = href;
-  a.rel = 'noopener';
+  a.rel = "noopener";
   // Setting `download` tells the browser "this is a download, not a
   // navigation", so even if the server's Content-Disposition is
   // missed (proxy strip, browser quirk) the current tab doesn't
   // navigate away from the visit page mid-sign. Empty string lets
   // the server's filename win via Content-Disposition.
-  a.download = '';
+  a.download = "";
   // Hint for tooling/accessibility; the browser doesn't strictly need
   // it but it helps if something along the way inspects the element.
-  a.setAttribute('data-download-kind', kind);
+  a.setAttribute("data-download-kind", kind);
   document.body.appendChild(a);
   a.click();
   a.remove();

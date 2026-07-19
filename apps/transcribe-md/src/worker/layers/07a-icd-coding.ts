@@ -7,17 +7,17 @@
 // is emitted per-code so the UI can surface uncertainty visually.
 // ============================================================================
 
-import { z } from 'zod';
-import { modelClient, isValidIcd10 } from '@meddoc/ai';
-import prisma from '@meddoc/db';
-import { logAudit } from '@/lib/audit';
+import { z } from "zod";
+import { modelClient, isValidIcd10 } from "@meddoc/ai";
+import { updateTemplateTwinSyntheticQaClaimBoundVisit } from "@/worker/staging-qa-mutation-fence";
+import { logWorkerAudit } from "@/worker/worker-audit";
 
-const MODEL = 'claude-sonnet-4-6';
+const MODEL = "claude-sonnet-4-6";
 
 export const IcdCode = z.object({
   code: z
     .string()
-    .regex(/^[A-Z][0-9][0-9A-Z](?:\.[0-9A-Z]{1,4})?$/i, 'ICD-10-CM format'),
+    .regex(/^[A-Z][0-9][0-9A-Z](?:\.[0-9A-Z]{1,4})?$/i, "ICD-10-CM format"),
   description: z.string().min(1),
   evidence_quote: z.string().min(1),
   /** 0-1 confidence — the UI maps <0.5 red, 0.5-0.8 amber, >0.8 green. */
@@ -27,7 +27,7 @@ export const IcdCode = z.object({
    *  medium, <0.5 = low). The dual representation lets the UI render
    *  the gradient AND the post-processor flag low-confidence codes
    *  for `needsReview` without re-deriving thresholds. */
-  confidenceLevel: z.enum(['high', 'medium', 'low']),
+  confidenceLevel: z.enum(["high", "medium", "low"]),
 });
 export type IcdCode = z.infer<typeof IcdCode>;
 
@@ -43,6 +43,7 @@ export interface Layer7aInput {
   specialty: string;
   soapFinal: string;
   entitiesJson: string;
+  providerIdempotencyKey?: string;
 }
 
 /** L7a system prompt — exported for regression-guard tests. The
@@ -52,160 +53,160 @@ export interface Layer7aInput {
  *  cohorts (e.g. "chronic GERD on PPI" anchors the K21.9 hoisting
  *  pattern that audit-finding B2 reproduced). */
 export const L7A_SYSTEM_PROMPT: string = [
-    'You are a certified medical coding specialist. Extract ICD-10-CM',
-    '(2025) codes from this clinician SOAP note for billing purposes.',
-    '',
-    'Principles:',
-    '- Primary diagnosis first, then comorbidities addressed in the plan.',
-    '- INCLUDE chronic comorbidities documented in PMH, imaging reports,',
-    '  problem lists, or medication lists when they influence current',
-    '  care planning, comorbidity reporting, HCC risk-adjustment, or',
-    '  routine surveillance ordered at this visit. Examples for primary',
-    '  care / weight management: NAFLD (K76.0) shown on prior imaging;',
-    '  obstructive sleep apnea (G47.33) treated with CPAP; CKD (N18.x)',
-    '  trended via creatinine; prior MI (I25.2); COPD (J44.x); HFrEF',
-    '  (I50.22 chronic / I50.21 acute) on guideline-directed therapy;',
-    '  HFpEF (I50.32 chronic / I50.31 acute) — pick the systolic vs',
-    '  diastolic family based on the documented EF + clinical phenotype;',
-    '  chronic GERD on PPI (K21.9) — chronic PPI use is the marker, not',
-    '  active reflux symptoms this visit. The plan need not explicitly',
-    '  act on each chronic condition for that condition to merit coding',
-    '  — ongoing therapy, monitoring, or surveillance counts as "active".',
-    '- INCLUDE chronic medication Z-codes (e.g. Z79.84 long-term oral',
-    '  hypoglycemic, Z79.890 long-term hormonal therapy, Z79.01 long-term',
-    '  anticoagulant, Z79.02 long-term antiplatelet) when the medication',
-    '  list documents chronic use of a relevant drug class — even when',
-    '  the underlying condition is coded separately.',
-    '- INCLUDE personal-history Z-codes (Z86.7x family) when the PMH or',
-    '  problem list documents a clinically-relevant prior event whose',
-    '  history shapes current management — even when no active symptoms.',
-    '  Examples: Z86.718 personal history of VTE (prior DVT/PE is the',
-    '  driver of extended VTE prophylaxis post-op + the reason behind',
-    '  any continued anticoagulant); Z86.73 personal history of TIA /',
-    '  cerebral infarction without residual deficit (drives statin +',
-    '  antiplatelet decisions); Z87.891 personal history of nicotine',
-    '  dependence (former smoker — code even when not active).',
-    '- INCLUDE acquired-absence Z-codes (Z90.x family) for post-surgical',
-    '  anatomy on every visit at month 1+. Examples: Z90.3 acquired',
-    '  absence of stomach (post-RYGB / post-sleeve / post-BPD-DS — pair',
-    '  with Z98.84 bariatric-surgery-status); Z90.49 acquired absence',
-    '  of other digestive-tract parts. The bariatric anatomy persists',
-    '  for life, so these codes belong on every follow-up encounter.',
-    '- INCLUDE acute findings documented during a workup, even when the',
-    '  encounter is "evaluating" rather than "treating" them. The most',
-    '  commonly missed shapes:',
-    '    * AKI (N17.x) — code when creatinine has shifted from baseline',
-    '      (e.g., Cr 1.4 from baseline 0.8 = N17.9), not only when AKI',
-    '      is the named diagnosis. The shift IS the diagnosis.',
-    '    * Dehydration / volume depletion (E86.0 / E86.9) — code when',
-    '      clinical exam documents it (dry mucous membranes, orthostatic',
-    '      vitals, low PO intake) even when fluid resuscitation is the',
-    '      same encounter\'s treatment.',
-    '    * Site-specific abdominal pain (R10.10-.84) — prefer the site-',
-    '      specific code over R10.9 unspecified when the exam localizes',
-    '      it (LUQ → R10.12, RUQ → R10.11, epigastric → R10.13).',
-    '- PREFER the documented diagnosis over symptom codes. When the SOAP',
-    '  explicitly names a diagnosis (e.g., "PROTEIN-CALORIE MALNUTRITION"',
-    '  with albumin < 3.0 and sarcopenia → E43 / E44.0), code that',
-    '  diagnosis directly. Symptom codes (R63.4 abnormal weight loss,',
-    '  R53.83 fatigue) are appropriate ONLY when no specific diagnosis',
-    '  is established. Same pattern: B12-deficiency anemia → D51.9 over',
-    '  separately coding E53.8 + D50.9.',
-    '- Do NOT code "rule out" / "suspected" / "differential" diagnoses',
-    '  that the clinician explicitly framed as uncertain. The exclusion',
-    '  is uncertainty, NOT chronicity, NOT documented acute findings.',
-    '- Do NOT code one-off historical events that have no bearing on',
-    '  current care (e.g. childhood appendectomy with no current sequelae).',
-    '- Use the most specific code possible (e.g. I11.0 over I15.9 when',
-    '  hypertensive heart failure is clearly documented).',
-    '- Include Z codes for preventive or screening encounters when the',
-    '  SOAP explicitly documents them.',
-    '',
-    'For EACH code, include:',
-    '- code: valid ICD-10-CM, letter + 2-7 alphanumerics, e.g. "E11.9"',
-    '- description: the ICD-10-CM official title',
-    '- evidence_quote: verbatim snippet from the SOAP note supporting',
-    '  this code',
-    '- confidence: 0.0-1.0 based on how directly the SOAP documents it',
-    '    >=0.9 explicit diagnosis statement',
-    '    0.7-0.9 strongly implied by findings + plan',
-    '    0.5-0.7 reasonable inference, worth doctor review',
-    '    <0.5   speculative — include only if you would back it in',
-    '            a billing audit',
-    '- confidenceLevel: categorical view of confidence (Q2 fix-pack):',
-    '    "high"   → confidence >= 0.8',
-    '    "medium" → 0.5 <= confidence < 0.8',
-    '    "low"    → confidence < 0.5',
-    '  Always set; downstream UI flags low-confidence codes for review.',
-    '',
-    'CRITICAL: If you cannot cite a specific evidence_quote for a code,',
-    'OMIT the code. Hallucinating ICD codes can constitute billing fraud.',
-    '',
-    // 2026-05-13 cross-input-mode-audit Finding 3 — procedure-dominant
-    // visits (suspicious-mole biopsy, postpartum visit, acute ankle
-    // sprain) were returning empty `codes: []` because the model
-    // reasoned "the procedure CPT codes carry the billing here." Every
-    // billable encounter has at least one diagnosis or encounter Z-code;
-    // an empty diagnosis list is a billing-compliance gap. The rule
-    // below is the floor.
-    'MINIMUM CODING REQUIREMENT — EVERY VISIT EMITS AT LEAST ONE CODE.',
-    'Every clinical encounter has at minimum ONE billable diagnosis or',
-    'encounter Z-code, even when the visit\'s billing center is a',
-    'procedure or routine follow-up. Returning an empty `codes` array',
-    'is not an acceptable output unless the SOAP itself is empty.',
-    '',
-    'Specific patterns the model SHOULD match (not optional):',
-    '- Routine postpartum visit / lactation check → Z39.0 / Z39.1 / Z39.2.',
-    '- Suspicious-mole biopsy / nevus excision → D22.x (melanocytic nevi',
-    '  by site) or D48.5 (uncertain behavior, pre-pathology). Do NOT',
-    '  leave a derm-biopsy visit without a diagnosis code — the path',
-    '  result is the eventual code; the day-of code is the clinical',
-    '  impression at biopsy time.',
-    '- Acute ankle sprain / joint sprain → S93.4xxA / S83.xxxA / S39.012A',
-    '  for the lumbar strain shape. Acute injuries ALWAYS get an S-code.',
-    '- Knee OA injection / aftercare visit → M17.x (OA), plus M25.x',
-    '  joint-pain-by-site, plus Z47.x aftercare when relevant.',
-    '- Routine well-care / preventive → Z00.00 / Z00.01 / Z12.x screening',
-    '  Z-codes; pair with any chronic comorbidity codes for HCC risk.',
-    '- Counseling-dominant visit (weight, smoking, diet, contraception)',
-    '  → Z71.x family + the underlying condition code(s).',
-    '- Lifestyle / metabolic follow-up → primary chronic-condition',
-    '  code (E11.x for T2DM, E66.x for obesity) is mandatory.',
-    '- Imaging or procedure pre-op → encounter Z-code (Z01.81x pre-procedural',
-    '  exams) + the indication condition code.',
-    '',
-    'If you genuinely cannot identify any diagnosis or encounter Z-code',
-    'from the SOAP, return ONE confidence:0.3-0.4 Z76.89 ("other specified',
-    'reason for encounter") and let the L7a post-validation layer flag',
-    'the visit for review. This is preferable to returning `codes: []`.',
-    '',
-    'Respond with VALID JSON ONLY, no markdown fences:',
-    '{ "codes": [{ "code": "...", "description": "...",',
-    '              "evidence_quote": "...", "confidence": 0.0,',
-    '              "confidenceLevel": "high" }] }',
-].join('\n');
+  "You are a certified medical coding specialist. Extract ICD-10-CM",
+  "(2025) codes from this clinician SOAP note for billing purposes.",
+  "",
+  "Principles:",
+  "- Primary diagnosis first, then comorbidities addressed in the plan.",
+  "- INCLUDE chronic comorbidities documented in PMH, imaging reports,",
+  "  problem lists, or medication lists when they influence current",
+  "  care planning, comorbidity reporting, HCC risk-adjustment, or",
+  "  routine surveillance ordered at this visit. Examples for primary",
+  "  care / weight management: NAFLD (K76.0) shown on prior imaging;",
+  "  obstructive sleep apnea (G47.33) treated with CPAP; CKD (N18.x)",
+  "  trended via creatinine; prior MI (I25.2); COPD (J44.x); HFrEF",
+  "  (I50.22 chronic / I50.21 acute) on guideline-directed therapy;",
+  "  HFpEF (I50.32 chronic / I50.31 acute) — pick the systolic vs",
+  "  diastolic family based on the documented EF + clinical phenotype;",
+  "  chronic GERD on PPI (K21.9) — chronic PPI use is the marker, not",
+  "  active reflux symptoms this visit. The plan need not explicitly",
+  "  act on each chronic condition for that condition to merit coding",
+  '  — ongoing therapy, monitoring, or surveillance counts as "active".',
+  "- INCLUDE chronic medication Z-codes (e.g. Z79.84 long-term oral",
+  "  hypoglycemic, Z79.890 long-term hormonal therapy, Z79.01 long-term",
+  "  anticoagulant, Z79.02 long-term antiplatelet) when the medication",
+  "  list documents chronic use of a relevant drug class — even when",
+  "  the underlying condition is coded separately.",
+  "- INCLUDE personal-history Z-codes (Z86.7x family) when the PMH or",
+  "  problem list documents a clinically-relevant prior event whose",
+  "  history shapes current management — even when no active symptoms.",
+  "  Examples: Z86.718 personal history of VTE (prior DVT/PE is the",
+  "  driver of extended VTE prophylaxis post-op + the reason behind",
+  "  any continued anticoagulant); Z86.73 personal history of TIA /",
+  "  cerebral infarction without residual deficit (drives statin +",
+  "  antiplatelet decisions); Z87.891 personal history of nicotine",
+  "  dependence (former smoker — code even when not active).",
+  "- INCLUDE acquired-absence Z-codes (Z90.x family) for post-surgical",
+  "  anatomy on every visit at month 1+. Examples: Z90.3 acquired",
+  "  absence of stomach (post-RYGB / post-sleeve / post-BPD-DS — pair",
+  "  with Z98.84 bariatric-surgery-status); Z90.49 acquired absence",
+  "  of other digestive-tract parts. The bariatric anatomy persists",
+  "  for life, so these codes belong on every follow-up encounter.",
+  "- INCLUDE acute findings documented during a workup, even when the",
+  '  encounter is "evaluating" rather than "treating" them. The most',
+  "  commonly missed shapes:",
+  "    * AKI (N17.x) — code when creatinine has shifted from baseline",
+  "      (e.g., Cr 1.4 from baseline 0.8 = N17.9), not only when AKI",
+  "      is the named diagnosis. The shift IS the diagnosis.",
+  "    * Dehydration / volume depletion (E86.0 / E86.9) — code when",
+  "      clinical exam documents it (dry mucous membranes, orthostatic",
+  "      vitals, low PO intake) even when fluid resuscitation is the",
+  "      same encounter's treatment.",
+  "    * Site-specific abdominal pain (R10.10-.84) — prefer the site-",
+  "      specific code over R10.9 unspecified when the exam localizes",
+  "      it (LUQ → R10.12, RUQ → R10.11, epigastric → R10.13).",
+  "- PREFER the documented diagnosis over symptom codes. When the SOAP",
+  '  explicitly names a diagnosis (e.g., "PROTEIN-CALORIE MALNUTRITION"',
+  "  with albumin < 3.0 and sarcopenia → E43 / E44.0), code that",
+  "  diagnosis directly. Symptom codes (R63.4 abnormal weight loss,",
+  "  R53.83 fatigue) are appropriate ONLY when no specific diagnosis",
+  "  is established. Same pattern: B12-deficiency anemia → D51.9 over",
+  "  separately coding E53.8 + D50.9.",
+  '- Do NOT code "rule out" / "suspected" / "differential" diagnoses',
+  "  that the clinician explicitly framed as uncertain. The exclusion",
+  "  is uncertainty, NOT chronicity, NOT documented acute findings.",
+  "- Do NOT code one-off historical events that have no bearing on",
+  "  current care (e.g. childhood appendectomy with no current sequelae).",
+  "- Use the most specific code possible (e.g. I11.0 over I15.9 when",
+  "  hypertensive heart failure is clearly documented).",
+  "- Include Z codes for preventive or screening encounters when the",
+  "  SOAP explicitly documents them.",
+  "",
+  "For EACH code, include:",
+  '- code: valid ICD-10-CM, letter + 2-7 alphanumerics, e.g. "E11.9"',
+  "- description: the ICD-10-CM official title",
+  "- evidence_quote: verbatim snippet from the SOAP note supporting",
+  "  this code",
+  "- confidence: 0.0-1.0 based on how directly the SOAP documents it",
+  "    >=0.9 explicit diagnosis statement",
+  "    0.7-0.9 strongly implied by findings + plan",
+  "    0.5-0.7 reasonable inference, worth doctor review",
+  "    <0.5   speculative — include only if you would back it in",
+  "            a billing audit",
+  "- confidenceLevel: categorical view of confidence (Q2 fix-pack):",
+  '    "high"   → confidence >= 0.8',
+  '    "medium" → 0.5 <= confidence < 0.8',
+  '    "low"    → confidence < 0.5',
+  "  Always set; downstream UI flags low-confidence codes for review.",
+  "",
+  "CRITICAL: If you cannot cite a specific evidence_quote for a code,",
+  "OMIT the code. Hallucinating ICD codes can constitute billing fraud.",
+  "",
+  // 2026-05-13 cross-input-mode-audit Finding 3 — procedure-dominant
+  // visits (suspicious-mole biopsy, postpartum visit, acute ankle
+  // sprain) were returning empty `codes: []` because the model
+  // reasoned "the procedure CPT codes carry the billing here." Every
+  // billable encounter has at least one diagnosis or encounter Z-code;
+  // an empty diagnosis list is a billing-compliance gap. The rule
+  // below is the floor.
+  "MINIMUM CODING REQUIREMENT — EVERY VISIT EMITS AT LEAST ONE CODE.",
+  "Every clinical encounter has at minimum ONE billable diagnosis or",
+  "encounter Z-code, even when the visit's billing center is a",
+  "procedure or routine follow-up. Returning an empty `codes` array",
+  "is not an acceptable output unless the SOAP itself is empty.",
+  "",
+  "Specific patterns the model SHOULD match (not optional):",
+  "- Routine postpartum visit / lactation check → Z39.0 / Z39.1 / Z39.2.",
+  "- Suspicious-mole biopsy / nevus excision → D22.x (melanocytic nevi",
+  "  by site) or D48.5 (uncertain behavior, pre-pathology). Do NOT",
+  "  leave a derm-biopsy visit without a diagnosis code — the path",
+  "  result is the eventual code; the day-of code is the clinical",
+  "  impression at biopsy time.",
+  "- Acute ankle sprain / joint sprain → S93.4xxA / S83.xxxA / S39.012A",
+  "  for the lumbar strain shape. Acute injuries ALWAYS get an S-code.",
+  "- Knee OA injection / aftercare visit → M17.x (OA), plus M25.x",
+  "  joint-pain-by-site, plus Z47.x aftercare when relevant.",
+  "- Routine well-care / preventive → Z00.00 / Z00.01 / Z12.x screening",
+  "  Z-codes; pair with any chronic comorbidity codes for HCC risk.",
+  "- Counseling-dominant visit (weight, smoking, diet, contraception)",
+  "  → Z71.x family + the underlying condition code(s).",
+  "- Lifestyle / metabolic follow-up → primary chronic-condition",
+  "  code (E11.x for T2DM, E66.x for obesity) is mandatory.",
+  "- Imaging or procedure pre-op → encounter Z-code (Z01.81x pre-procedural",
+  "  exams) + the indication condition code.",
+  "",
+  "If you genuinely cannot identify any diagnosis or encounter Z-code",
+  'from the SOAP, return ONE confidence:0.3-0.4 Z76.89 ("other specified',
+  'reason for encounter") and let the L7a post-validation layer flag',
+  "the visit for review. This is preferable to returning `codes: []`.",
+  "",
+  "Respond with VALID JSON ONLY, no markdown fences:",
+  '{ "codes": [{ "code": "...", "description": "...",',
+  '              "evidence_quote": "...", "confidence": 0.0,',
+  '              "confidenceLevel": "high" }] }',
+].join("\n");
 
 export async function runLayer7aIcdCoding(
-  input: Layer7aInput
+  input: Layer7aInput,
 ): Promise<IcdResult> {
   const system = L7A_SYSTEM_PROMPT;
 
   const user = [
     `Specialty: ${input.specialty}`,
-    '',
-    'Entities (structured extract from the visit):',
+    "",
+    "Entities (structured extract from the visit):",
     input.entitiesJson,
-    '',
-    'SOAP note (the authoritative source for codes):',
+    "",
+    "SOAP note (the authoritative source for codes):",
     input.soapFinal,
-  ].join('\n');
+  ].join("\n");
 
   const result = await modelClient.complete({
     practiceId: input.practiceId,
     visitId: input.visitId,
     userId: input.userId,
-    purpose: 'tm_icd_coding',
-    provider: 'anthropic',
+    purpose: "tm_icd_coding",
+    provider: "anthropic",
     model: MODEL,
     system,
     user,
@@ -214,6 +215,8 @@ export async function runLayer7aIcdCoding(
     // Q2 fix-pack — billing codes are deterministic; tightened from
     // 0.1 to 0 so the same SOAP produces the same code list every time.
     temperature: 0,
+    idempotencyKey: input.providerIdempotencyKey,
+    retryOnSchemaFail: false,
     // 2026-05-13 SCHEMA_FAIL hardening (cross-input-mode-audit Finding 1):
     // Force Anthropic to return structured output via tool_use instead
     // of free-form text + JSON.parse. PED1 in the cross-input-mode-audit
@@ -221,9 +224,9 @@ export async function runLayer7aIcdCoding(
     // exhausted the 2-retry budget; tool_use eliminates that failure
     // class because the response is a structured object, not free text.
     useToolUse: {
-      name: 'submit_icd_codes',
+      name: "submit_icd_codes",
       description:
-        'Submit the final ICD-10-CM code list for this visit. Each code carries the verbatim SOAP evidence and per-code confidence.',
+        "Submit the final ICD-10-CM code list for this visit. Each code carries the verbatim SOAP evidence and per-code confidence.",
     },
   });
 
@@ -241,19 +244,18 @@ export async function runLayer7aIcdCoding(
       // and they should agree; if the model drifted on the categorical
       // rule, the numeric value is the source of truth. Prevents a
       // "high" badge over a 0.4-confidence code.
-      const derivedLevel: 'high' | 'medium' | 'low' =
-        c.confidence >= 0.8 ? 'high' :
-        c.confidence >= 0.5 ? 'medium' : 'low';
+      const derivedLevel: "high" | "medium" | "low" =
+        c.confidence >= 0.8 ? "high" : c.confidence >= 0.5 ? "medium" : "low";
       accepted.push({ ...c, confidenceLevel: derivedLevel });
     } else {
       rejected.push({ code: c.code, description: c.description });
     }
   }
   if (rejected.length > 0) {
-    void logAudit({
-      action: 'CODING_COACH_REJECTED_INVALID_ICD',
+    await logWorkerAudit({
+      action: "CODING_COACH_REJECTED_INVALID_ICD",
       targetId: input.visitId,
-      targetType: 'TranscribeVisit',
+      targetType: "TranscribeVisit",
       userId: input.userId,
       practiceId: input.practiceId,
       success: false,
@@ -272,13 +274,15 @@ export async function runLayer7aIcdCoding(
   // when one or more accepted codes land at confidenceLevel='low'.
   // Doctor sees the warning before signing rather than auto-attaching
   // a speculative code to billing.
-  const lowConfCodes = accepted.filter((c) => c.confidenceLevel === 'low');
+  const lowConfCodes = accepted.filter((c) => c.confidenceLevel === "low");
   if (lowConfCodes.length > 0) {
-    await prisma.transcribeVisit.update({
-      where: { id: input.visitId },
+    await updateTemplateTwinSyntheticQaClaimBoundVisit({
+      visitId: input.visitId,
+      userId: input.userId ?? "",
+      practiceId: input.practiceId,
       data: {
         needsReview: true,
-        reviewReason: `${lowConfCodes.length} ICD code${lowConfCodes.length === 1 ? '' : 's'} at low confidence — verify before billing: ${lowConfCodes.map((c) => c.code).join(', ')}.`,
+        reviewReason: `${lowConfCodes.length} ICD code${lowConfCodes.length === 1 ? "" : "s"} at low confidence — verify before billing: ${lowConfCodes.map((c) => c.code).join(", ")}.`,
       },
     });
   }
@@ -291,27 +295,30 @@ export async function runLayer7aIcdCoding(
   // needsReview + reviewReason so the billing-compliance gap surfaces
   // before sign-off.
   const isPlaceholderOnly =
-    accepted.length === 1 && accepted[0].code.toUpperCase() === 'Z76.89';
+    accepted.length === 1 && accepted[0].code.toUpperCase() === "Z76.89";
   if (accepted.length === 0 || isPlaceholderOnly) {
-    const reason = accepted.length === 0
-      ? `Auto-coding returned no diagnoses for this ${input.specialty.replace(/-/g, ' ')} encounter — verify before signing. Every billable visit should carry at least one diagnosis or encounter Z-code.`
-      : 'Auto-coding could not identify a specific diagnosis (placeholder Z76.89 used) — verify before signing.';
-    await prisma.transcribeVisit.update({
-      where: { id: input.visitId },
+    const reason =
+      accepted.length === 0
+        ? `Auto-coding returned no diagnoses for this ${input.specialty.replace(/-/g, " ")} encounter — verify before signing. Every billable visit should carry at least one diagnosis or encounter Z-code.`
+        : "Auto-coding could not identify a specific diagnosis (placeholder Z76.89 used) — verify before signing.";
+    await updateTemplateTwinSyntheticQaClaimBoundVisit({
+      visitId: input.visitId,
+      userId: input.userId ?? "",
+      practiceId: input.practiceId,
       data: {
         needsReview: true,
         reviewReason: reason,
       },
     });
-    void logAudit({
-      action: 'VISIT_AUTOMATION_INCOMPLETE',
+    await logWorkerAudit({
+      action: "VISIT_AUTOMATION_INCOMPLETE",
       targetId: input.visitId,
-      targetType: 'TranscribeVisit',
+      targetType: "TranscribeVisit",
       userId: input.userId,
       practiceId: input.practiceId,
       success: false,
       metadata: {
-        layer: 'l7a-icd',
+        layer: "l7a-icd",
         emptyArray: accepted.length === 0,
         placeholderOnly: isPlaceholderOnly,
         specialty: input.specialty,
@@ -319,8 +326,10 @@ export async function runLayer7aIcdCoding(
     });
   }
 
-  await prisma.transcribeVisit.update({
-    where: { id: input.visitId },
+  await updateTemplateTwinSyntheticQaClaimBoundVisit({
+    visitId: input.visitId,
+    userId: input.userId ?? "",
+    practiceId: input.practiceId,
     data: { icdCodes: filtered as unknown as object },
   });
 

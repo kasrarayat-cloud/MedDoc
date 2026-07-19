@@ -22,21 +22,33 @@
 // T-M13 resume logic skips whatever layers already completed.
 // ============================================================================
 
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
 
-import prisma from '@meddoc/db';
-import { TranscribeVisitStatus } from '@prisma/client';
+import prisma from "@meddoc/db";
+import { TranscribeVisitStatus } from "@prisma/client";
 
-import { apiError, withApiHandler } from '@/lib/api-error';
-import { auth } from '@/lib/nextauth';
-import { enqueueProcessVisit } from '@/lib/queue';
-import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
-import { redactPhi } from '@meddoc/ai';
-import { log } from '@/lib/log';
-import { logAudit } from '@/lib/audit';
+import { apiError, withApiHandler } from "@/lib/api-error";
+import { AuthError, requireFreshDoctorIdentity } from "@/lib/auth";
+import { auth } from "@/lib/nextauth";
+import { enqueueProcessVisit } from "@/lib/queue";
+import { RATE_LIMITS, rateLimitOr429 } from "@/lib/rate-limit";
+import { redactPhi } from "@meddoc/ai";
+import { log } from "@/lib/log";
+import { logAudit } from "@/lib/audit";
+import { isSameOriginTemplateTwinMutation } from "@/lib/template-twin/request-security";
+import { TemplateTwinStagingQaDisabledError } from "@/lib/template-twin/staging-qa-gate";
+import {
+  retryTemplateTwinStagingQaRun,
+  TemplateTwinStagingQaError,
+  TemplateTwinStagingQaRetryRequestSchema,
+} from "@/lib/template-twin/staging-qa-service";
+import {
+  readBoundedTemplateTwinStagingQaJson,
+  TemplateTwinStagingQaRequestError,
+} from "@/lib/template-twin/staging-qa-request";
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 /** How "fresh" updatedAt has to be for the retry to be rejected as
  *  STILL_PROCESSING. A working worker writes the row at every layer
@@ -57,6 +69,7 @@ const STILL_PROCESSING_WINDOW_MS = 10 * 60 * 1000;
  *  legitimately clicking Try again should usually succeed inside
  *  this budget. */
 const MANUAL_RETRY_BUDGET = 5;
+const MAX_TEMPLATE_TWIN_RETRY_REQUEST_BYTES = 1024;
 
 const IN_FLIGHT_STATUSES: TranscribeVisitStatus[] = [
   TranscribeVisitStatus.TRANSCRIBING,
@@ -68,13 +81,13 @@ const IN_FLIGHT_STATUSES: TranscribeVisitStatus[] = [
 ];
 
 export const POST = withApiHandler<{ id: string }>(
-  'api:visits:retry',
+  "api:visits:retry",
   async (_req, { params }) => {
     const { id: visitId } = await params;
 
     const session = await auth();
     const userId = session?.user?.id;
-    if (!userId) return apiError('unauthorized', 401);
+    if (!userId) return apiError("unauthorized", 401);
 
     // T-M18.3 A26: retry is a visit-management op (same cadence as
     // delete / archive / restore), not an upload. Aligning the bucket
@@ -93,51 +106,118 @@ export const POST = withApiHandler<{ id: string }>(
         deletedAt: true,
         archivedAt: true,
         manualRetryCount: true,
+        templateTwinSyntheticQaRun: { select: { id: true } },
       },
     });
-    if (!visit || visit.userId !== userId) return apiError('not found', 404);
+    if (!visit || visit.userId !== userId) return apiError("not found", 404);
+
+    // A synthetic QA visit must never fall through to the normal retry queue:
+    // doing so would drop its exact run/attempt admission and could select a
+    // live provider. Route it through the durable staging run ledger instead.
+    if (visit.templateTwinSyntheticQaRun) {
+      if (!isSameOriginTemplateTwinMutation(_req)) {
+        return apiError("not found", 404);
+      }
+      try {
+        const raw = await readBoundedTemplateTwinStagingQaJson(
+          _req,
+          MAX_TEMPLATE_TWIN_RETRY_REQUEST_BYTES,
+        );
+        const retryRequest =
+          TemplateTwinStagingQaRetryRequestSchema.safeParse(raw);
+        if (!retryRequest.success) {
+          return apiError(
+            "Refresh this synthetic QA run before retrying.",
+            400,
+          );
+        }
+        const doctor = await requireFreshDoctorIdentity(userId);
+        const email = session?.user?.email;
+        if (!email) return apiError("not found", 404);
+        const run = await retryTemplateTwinStagingQaRun({
+          actor: {
+            userId,
+            userEmail: email,
+            practiceId: doctor.practiceId,
+            rolloutToken: doctor.rolloutToken,
+          },
+          visitId,
+          expectedAttempt: retryRequest.data.expectedAttempt,
+        });
+        return NextResponse.json(
+          { ok: true, run },
+          {
+            status: 202,
+            headers: { "Cache-Control": "no-store, private" },
+          },
+        );
+      } catch (error) {
+        if (
+          error instanceof AuthError ||
+          error instanceof TemplateTwinStagingQaDisabledError ||
+          (error instanceof TemplateTwinStagingQaError &&
+            error.code === "NOT_FOUND")
+        ) {
+          return apiError("not found", 404);
+        }
+        if (error instanceof TemplateTwinStagingQaRequestError) {
+          return apiError(
+            error.message,
+            error.code === "REQUEST_TOO_LARGE" ? 413 : 400,
+            { code: error.code },
+          );
+        }
+        if (error instanceof TemplateTwinStagingQaError) {
+          return apiError(error.message, 409, {
+            code: error.code,
+            retry: error.code === "QUEUE_UNAVAILABLE",
+          });
+        }
+        throw error;
+      }
+    }
 
     if (visit.manualRetryCount >= MANUAL_RETRY_BUDGET) {
-      log.warn('api:visits:retry', 'budget exhausted', {
+      log.warn("api:visits:retry", "budget exhausted", {
         userId,
         visitId,
         count: visit.manualRetryCount,
       });
       void logAudit({
-        action: 'VISIT_RETRY_BUDGET_EXHAUSTED',
-        targetType: 'TranscribeVisit',
+        action: "VISIT_RETRY_BUDGET_EXHAUSTED",
+        targetType: "TranscribeVisit",
         targetId: visitId,
         success: false,
-        errorCode: 'RETRY_BUDGET_EXHAUSTED',
+        errorCode: "RETRY_BUDGET_EXHAUSTED",
         metadata: { count: visit.manualRetryCount },
       });
       return NextResponse.json(
         {
           error:
-            'This visit has been retried multiple times. Please contact support if the issue persists.',
-          code: 'RETRY_BUDGET_EXHAUSTED',
+            "This visit has been retried multiple times. Please contact support if the issue persists.",
+          code: "RETRY_BUDGET_EXHAUSTED",
         },
-        { status: 429 }
+        { status: 429 },
       );
     }
 
     if (visit.deletedAt !== null || visit.archivedAt !== null) {
       return NextResponse.json(
         {
-          error: 'Visit is no longer active. Restore it first.',
-          code: 'VISIT_NOT_ACTIVE',
+          error: "Visit is no longer active. Restore it first.",
+          code: "VISIT_NOT_ACTIVE",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (visit.status === TranscribeVisitStatus.SIGNED) {
       return NextResponse.json(
         {
-          error: 'Signed visits cannot be retried.',
-          code: 'ALREADY_SIGNED',
+          error: "Signed visits cannot be retried.",
+          code: "ALREADY_SIGNED",
         },
-        { status: 409 }
+        { status: 409 },
       );
     }
 
@@ -147,10 +227,10 @@ export const POST = withApiHandler<{ id: string }>(
     if (isInFlight && freshlyUpdated) {
       return NextResponse.json(
         {
-          error: 'Visit is still processing, please wait.',
-          code: 'STILL_PROCESSING',
+          error: "Visit is still processing, please wait.",
+          code: "STILL_PROCESSING",
         },
-        { status: 409 }
+        { status: 409 },
       );
     }
 
@@ -171,24 +251,24 @@ export const POST = withApiHandler<{ id: string }>(
       });
       await enqueueProcessVisit(visitId, userId, { retry: true });
       void logAudit({
-        action: 'VISIT_RETRY',
-        targetType: 'TranscribeVisit',
+        action: "VISIT_RETRY",
+        targetType: "TranscribeVisit",
         targetId: visitId,
         metadata: { prevStatus: visit.status },
       });
-      log.info('api:visits:retry', 're-enqueued', {
+      log.info("api:visits:retry", "re-enqueued", {
         userId,
         visitId,
         prevStatus: visit.status,
       });
     } catch (err) {
       console.error(
-        '[api:visits:retry] enqueue failed:',
-        redactPhi(err instanceof Error ? err.message : err)
+        "[api:visits:retry] enqueue failed:",
+        redactPhi(err instanceof Error ? err.message : err),
       );
-      return apiError('Could not re-enqueue the visit. Try again.', 502);
+      return apiError("Could not re-enqueue the visit. Try again.", 502);
     }
 
     return NextResponse.json({ ok: true }, { status: 200 });
-  }
+  },
 );

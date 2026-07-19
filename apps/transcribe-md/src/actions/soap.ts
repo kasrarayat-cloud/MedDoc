@@ -1,12 +1,22 @@
-'use server';
+"use server";
 
-import { revalidatePath } from 'next/cache';
-import { z } from 'zod';
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
 
-import prisma from '@meddoc/db';
-import { TranscribeVisitStatus } from '@prisma/client';
-import { requireSession } from '@/lib/auth';
-import { logAudit } from '@/lib/audit';
+import prisma from "@meddoc/db";
+import { Prisma, TranscribeVisitStatus } from "@prisma/client";
+import { requireSession } from "@/lib/auth";
+import { logAudit } from "@/lib/audit";
+import { invalidateTemplateTwinAfterSoapEdit } from "@/lib/template-twin/soap-binding";
+import {
+  assertTemplateTwinStagingQaSoapEdit,
+  enqueueTemplateTwinStagingQaMutationAudit,
+  lockTemplateTwinStagingQaMutation,
+  pinTemplateTwinStagingQaMutation,
+  type TemplateTwinStagingQaMutationClaim,
+} from "@/lib/template-twin/staging-qa-mutation";
+import { TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT } from "@/lib/template-twin/staging-qa-visit-guard";
+import { isOwnedTemplateTwinStagingQaVisit } from "@/lib/template-twin/staging-qa-access";
 
 const SaveSoapSchema = z.object({
   visitId: z.string().min(1),
@@ -77,12 +87,12 @@ export interface SaveSoapResult {
 export async function saveSoapDraftAction(
   visitId: string,
   text: string,
-  expectedVersion?: number
+  expectedVersion?: number,
 ): Promise<SaveSoapResult> {
   const session = await requireSession();
   const parsed = SaveSoapSchema.safeParse({ visitId, text, expectedVersion });
   if (!parsed.success) {
-    return { ok: false, error: 'Invalid input.' };
+    return { ok: false, error: "Invalid input." };
   }
 
   const visit = await prisma.transcribeVisit.findUnique({
@@ -93,22 +103,41 @@ export async function saveSoapDraftAction(
       status: true,
       deletedAt: true,
       archivedAt: true,
+      templateTwinSyntheticQaRun: {
+        select: TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
+      },
     },
   });
   if (!visit || visit.userId !== session.user.id) {
-    return { ok: false, error: 'Visit not found.' };
+    return { ok: false, error: "Visit not found." };
   }
   // T-M17.3: reject writes on trashed / archived visits. The UI
   // already hides these from the default dashboard but a stale tab
   // could still fire this action.
   if (visit.deletedAt !== null || visit.archivedAt !== null) {
-    return { ok: false, error: 'Visit is no longer active. Restore it first.' };
+    return { ok: false, error: "Visit is no longer active. Restore it first." };
   }
   if (visit.status === TranscribeVisitStatus.SIGNED) {
-    return { ok: false, error: 'Signed notes cannot be edited.' };
+    return { ok: false, error: "Signed notes cannot be edited." };
   }
   if (visit.status !== TranscribeVisitStatus.READY) {
-    return { ok: false, error: 'Note is still processing.' };
+    return { ok: false, error: "Note is still processing." };
+  }
+  let stagingQaClaim: TemplateTwinStagingQaMutationClaim | null;
+  try {
+    stagingQaClaim = await pinTemplateTwinStagingQaMutation({
+      visitId,
+      userId: session.user.id,
+      run: visit.templateTwinSyntheticQaRun,
+    });
+  } catch {
+    return { ok: false, error: "Visit not found." };
+  }
+  if (stagingQaClaim && parsed.data.expectedVersion === undefined) {
+    return {
+      ok: false,
+      error: "Synthetic QA requires the current SOAP version. Reload and retry.",
+    };
   }
 
   // Round 3 PR-E (A09-P0-003) — optimistic-concurrency path.
@@ -116,13 +145,54 @@ export async function saveSoapDraftAction(
   // Postgres: only one of two concurrent saves with the same
   // expectedVersion succeeds; the other returns count=0.
   if (parsed.data.expectedVersion !== undefined) {
-    const result = await prisma.transcribeVisit.updateMany({
-      where: { id: visitId, soapVersion: parsed.data.expectedVersion },
-      data: {
-        soapFinal: parsed.data.text,
-        soapVersion: { increment: 1 },
-      },
-    });
+    let result: { count: number };
+    try {
+      result = await prisma.$transaction(
+        async (tx: Prisma.TransactionClient) => {
+          const lockedStagingVisit = await lockTemplateTwinStagingQaMutation({
+            tx,
+            claim: stagingQaClaim,
+          });
+          if (stagingQaClaim) {
+            assertTemplateTwinStagingQaSoapEdit({
+              currentSoap: lockedStagingVisit?.soapFinal ?? null,
+              nextSoap: parsed.data.text,
+            });
+          }
+          const updated = await tx.transcribeVisit.updateMany({
+            where: {
+              id: visitId,
+              userId: session.user.id,
+              soapVersion: parsed.data.expectedVersion,
+              status: TranscribeVisitStatus.READY,
+            },
+            data: {
+              soapFinal: parsed.data.text,
+              soapVersion: { increment: 1 },
+            },
+          });
+          if (updated.count === 1) {
+            await invalidateTemplateTwinAfterSoapEdit(tx, visitId);
+            await enqueueTemplateTwinStagingQaMutationAudit({
+              tx,
+              claim: stagingQaClaim,
+              actorEmail: session.user.email,
+              operation: "soap_save",
+              soapVersion: parsed.data.expectedVersion! + 1,
+            });
+          }
+          return updated;
+        },
+      );
+    } catch (error) {
+      if (stagingQaClaim) {
+        return {
+          ok: false,
+          error: "Synthetic QA authorization changed. Reload and try again.",
+        };
+      }
+      throw error;
+    }
     if (result.count === 0) {
       // Conflict: another save landed first. Surface current version
       // + text so the client can show a "reload to see latest" prompt.
@@ -132,10 +202,10 @@ export async function saveSoapDraftAction(
       });
       return {
         ok: false,
-        error: 'conflict',
+        error: "conflict",
         conflict: {
           currentVersion: current?.soapVersion ?? -1,
-          currentText: current?.soapFinal ?? '',
+          currentText: current?.soapFinal ?? "",
         },
       };
     }
@@ -146,14 +216,43 @@ export async function saveSoapDraftAction(
   // Legacy fallback (no expectedVersion supplied) — last-write-wins.
   // Still bumps soapVersion so a subsequent expectedVersion-aware
   // call sees the right value.
-  const updated = await prisma.transcribeVisit.update({
-    where: { id: visitId },
-    data: {
-      soapFinal: parsed.data.text,
-      soapVersion: { increment: 1 },
-    },
-    select: { soapVersion: true },
-  });
+  let updated: { soapVersion: number };
+  try {
+    updated = await prisma.$transaction(
+      async (tx: Prisma.TransactionClient) => {
+        await lockTemplateTwinStagingQaMutation({ tx, claim: stagingQaClaim });
+        const saved = await tx.transcribeVisit.update({
+          where: {
+            id: visitId,
+            userId: session.user.id,
+            status: TranscribeVisitStatus.READY,
+          },
+          data: {
+            soapFinal: parsed.data.text,
+            soapVersion: { increment: 1 },
+          },
+          select: { soapVersion: true },
+        });
+        await invalidateTemplateTwinAfterSoapEdit(tx, visitId);
+        await enqueueTemplateTwinStagingQaMutationAudit({
+          tx,
+          claim: stagingQaClaim,
+          actorEmail: session.user.email,
+          operation: "soap_save",
+          soapVersion: saved.soapVersion,
+        });
+        return saved;
+      },
+    );
+  } catch (error) {
+    if (stagingQaClaim) {
+      return {
+        ok: false,
+        error: "Synthetic QA authorization changed. Reload and try again.",
+      };
+    }
+    throw error;
+  }
 
   revalidatePath(`/visits/${visitId}`);
   return { ok: true, newVersion: updated.soapVersion };
@@ -166,7 +265,13 @@ export async function saveSoapDraftAction(
 // override gate. The unified POST /api/visits/[id]/sign route is now the SOLE
 // path that transitions a visit to SIGNED, and it enforces the gate.
 
-const SpeakerRoleKeys = z.enum(['doctor', 'patient', 'family', 'other', 'unknown']);
+const SpeakerRoleKeys = z.enum([
+  "doctor",
+  "patient",
+  "family",
+  "other",
+  "unknown",
+]);
 
 const ReassignSpeakerSchema = z.object({
   visitId: z.string().min(1),
@@ -182,12 +287,23 @@ const ReassignSpeakerSchema = z.object({
 export async function reassignSpeakerAction(
   visitId: string,
   speakerId: string,
-  role: string
+  role: string,
 ): Promise<SaveSoapResult> {
   const session = await requireSession();
   const parsed = ReassignSpeakerSchema.safeParse({ visitId, speakerId, role });
   if (!parsed.success) {
-    return { ok: false, error: 'Invalid speaker role.' };
+    return { ok: false, error: "Invalid speaker role." };
+  }
+  // Mock-voice evidence is immutable for the staging contract. Reassigning a
+  // speaker would create a second interpretation path that the admitted
+  // worker facts and signed output do not represent.
+  if (
+    await isOwnedTemplateTwinStagingQaVisit({
+      visitId,
+      userId: session.user.id,
+    })
+  ) {
+    return { ok: false, error: "Visit not found." };
   }
 
   const visit = await prisma.transcribeVisit.findUnique({
@@ -202,27 +318,31 @@ export async function reassignSpeakerAction(
     },
   });
   if (!visit || visit.userId !== session.user.id) {
-    return { ok: false, error: 'Visit not found.' };
+    return { ok: false, error: "Visit not found." };
   }
   if (visit.deletedAt !== null || visit.archivedAt !== null) {
-    return { ok: false, error: 'Visit is no longer active. Restore it first.' };
+    return { ok: false, error: "Visit is no longer active. Restore it first." };
   }
   if (visit.status === TranscribeVisitStatus.SIGNED) {
-    return { ok: false, error: 'Signed notes cannot be edited.' };
+    return { ok: false, error: "Signed notes cannot be edited." };
   }
 
   // Prisma Json typing is loose; treat as record + write back.
-  const map = (visit.speakerMap as Record<string, {
-    role: string;
-    confidence: number;
-    reasoning: string;
-  }> | null) ?? {};
+  const map =
+    (visit.speakerMap as Record<
+      string,
+      {
+        role: string;
+        confidence: number;
+        reasoning: string;
+      }
+    > | null) ?? {};
   // Capture the previous role BEFORE mutating the map — feeds the
   // audit metadata below so forensics can see what changed without
   // reading DB row history.
   const previousRole = map[parsed.data.speakerId]?.role ?? null;
   map[parsed.data.speakerId] = {
-    ...(map[parsed.data.speakerId] ?? { confidence: 1, reasoning: '' }),
+    ...(map[parsed.data.speakerId] ?? { confidence: 1, reasoning: "" }),
     role: parsed.data.role,
     // Manual override → high confidence, marker reasoning so the
     // Pipeline tab can show "(manually reassigned)" later.
@@ -246,11 +366,11 @@ export async function reassignSpeakerAction(
   // emit. The user identity is captured by logAudit's own session
   // resolution (audit_logs.userId + userEmailSnapshot columns).
   void logAudit({
-    action: 'SPEAKER_ROLE_REASSIGNED',
-    targetType: 'TranscribeVisit',
+    action: "SPEAKER_ROLE_REASSIGNED",
+    targetType: "TranscribeVisit",
     targetId: visitId,
     metadata: {
-      source: 'server_action',
+      source: "server_action",
       speakerId: parsed.data.speakerId,
       previousRole,
       newRole: parsed.data.role,

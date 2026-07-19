@@ -26,19 +26,235 @@
 //   silent fallback to "something" would let future tests drift.
 // ============================================================================
 
-import type { ZodType } from 'zod';
-import type { AnthropicCompleteTextResult } from './anthropic';
+import { AsyncLocalStorage } from "node:async_hooks";
+
+import type { ZodType } from "zod";
+import type { AnthropicCompleteTextResult } from "./anthropic";
 import type {
   DeepgramBatchResponse,
   DeepgramBatchResult,
-} from './deepgram-batch';
-import type { EmbedTextResult } from './embed';
-import type { ModelCallPurpose } from './types';
+} from "./deepgram-batch";
+import type { EmbedTextResult } from "./embed";
+import {
+  TEMPLATE_TWIN_SYNTHETIC_QA_ALL_EVIDENCE_CLAIMS,
+  TEMPLATE_TWIN_SYNTHETIC_QA_EVIDENCE,
+  TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION,
+  TEMPLATE_TWIN_SYNTHETIC_QA_TRANSCRIPT,
+  getTemplateTwinSyntheticQaProviderContext,
+  type TemplateTwinSyntheticQaEvidenceClaim,
+  type TemplateTwinSyntheticQaFixtureVersion,
+} from "./synthetic-qa-context";
+import type { ModelCallPurpose } from "./types";
 
 /** Single source of truth for "are we in mock mode". Read each call —
  *  no cache — so a test can flip the env without a module reload. */
 export function isMockEnabled(): boolean {
-  return process.env.MOCK_AI_CALLS === 'true';
+  return process.env.MOCK_AI_CALLS === "true";
+}
+
+const legacyTemplateTwinInfrastructureContext =
+  new AsyncLocalStorage<true>();
+
+type LegacyTemplateTwinInfrastructureEnvironment = Readonly<
+  Record<string, string | undefined>
+>;
+
+export function isLegacyTemplateTwinInfrastructureFixtureEnvironment(
+  env: LegacyTemplateTwinInfrastructureEnvironment,
+): boolean {
+  if (
+    env.MOCK_AI_CALLS !== "true" ||
+    env.MOCK_TEMPLATE_TWIN_E2E !== "true"
+  ) {
+    return false;
+  }
+  const rawDatabaseUrl = env.DATABASE_URL;
+  if (!rawDatabaseUrl) return false;
+  try {
+    const parsed = new URL(rawDatabaseUrl);
+    if (parsed.protocol !== "postgres:" && parsed.protocol !== "postgresql:") {
+      return false;
+    }
+    const name = decodeURIComponent(parsed.pathname.replace(/^\/+/, ""));
+    return /(?:^|[_-])(?:qa|test|synthetic)(?:[_-]|$)/iu.test(name);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Bind the old scenario-29 worker to its deterministic fixture without
+ * changing unrelated visits in the same disposable QA process. Product code
+ * may enter this only after it has proved that the visit owns an active,
+ * certified Template Twin; the environment guard prevents production use.
+ */
+export function runWithLegacyTemplateTwinInfrastructureFixture<T>(
+  callback: () => Promise<T> | T,
+  env: LegacyTemplateTwinInfrastructureEnvironment = process.env,
+): Promise<T> | T {
+  if (!isLegacyTemplateTwinInfrastructureFixtureEnvironment(env)) {
+    return callback();
+  }
+  return legacyTemplateTwinInfrastructureContext.run(true, callback);
+}
+
+/**
+ * Temporary compatibility seam for the pre-staging scenario-29 certification
+ * and worker harness. New staging visits must use the AsyncLocalStorage
+ * provider context instead. This fallback is deliberately triple-gated and is
+ * evaluated only after the provider boundary has established that no staging
+ * context is active.
+ */
+function legacyTemplateTwinInfrastructureFixtureEnabled(): boolean {
+  if (getTemplateTwinSyntheticQaProviderContext() !== null) return false;
+  if (legacyTemplateTwinInfrastructureContext.getStore() === true) return true;
+  return isLegacyTemplateTwinInfrastructureFixtureEnvironment(process.env);
+}
+
+const MOCK_TEMPLATE_TWIN_ENTITIES = {
+  chief_complaint: {
+    statement: "synthetic wrist discomfort",
+    evidence_quote: "Chief concern is synthetic wrist discomfort.",
+  },
+  hpi: {
+    onset: "2099-07-16",
+    severity: "Moderate",
+    context: "Explicit synthetic detail",
+    evidence_quote:
+      "Synthetic wrist discomfort began on 2099-07-16 with Moderate severity and context Explicit synthetic detail.",
+  },
+  medications: [
+    {
+      name: "Syntheticmed",
+      evidence_quote: "Medication Syntheticmed documented.",
+    },
+  ],
+  social_history: {
+    smoking: {
+      status: "Current",
+      evidence_quote: "Smoking status is Current.",
+    },
+  },
+  ros: [
+    {
+      system: "respiratory",
+      finding: "synthetic cough",
+      evidence_quote: "Respiratory review confirms synthetic cough.",
+    },
+  ],
+  plan_discussed: [
+    {
+      item: "Use synthetic brace",
+      evidence_quote: "Plan use synthetic brace.",
+    },
+  ],
+  assessment_discussed: [
+    {
+      finding: "Follow-up",
+      evidence_quote: "Encounter category is Follow-up.",
+    },
+  ],
+} as const;
+
+/**
+ * Compatibility fixture for scenario 29, which predates the visit-bound
+ * staging provider contract. Keep it byte-for-byte aligned with that
+ * scenario's reviewed evidence instead of leaking the richer staging fixture
+ * (including its reserved 2099 date) into a generic certification route.
+ */
+const MOCK_LEGACY_TEMPLATE_TWIN_ENTITIES = {
+  chief_complaint: MOCK_TEMPLATE_TWIN_ENTITIES.chief_complaint,
+  hpi: null,
+  medications: MOCK_TEMPLATE_TWIN_ENTITIES.medications,
+  social_history: MOCK_TEMPLATE_TWIN_ENTITIES.social_history,
+  ros: [],
+  plan_discussed: MOCK_TEMPLATE_TWIN_ENTITIES.plan_discussed,
+  assessment_discussed: [],
+} as const;
+
+const MOCK_LEGACY_TEMPLATE_TWIN_TRANSCRIPT =
+  "Chief concern is synthetic wrist discomfort. Smoking status is Current. Medication Syntheticmed documented. Plan use synthetic brace." as const;
+
+const MOCK_LEGACY_TEMPLATE_TWIN_SOAP = [
+  "## Subjective",
+  "[SYNTHETIC QA] Chief concern is synthetic wrist discomfort. Smoking status is Current.",
+  "",
+  "## Objective",
+  "[SYNTHETIC QA] No additional objective finding was supplied.",
+  "",
+  "## Assessment",
+  "[SYNTHETIC QA] Synthetic wrist discomfort.",
+  "",
+  "## Plan",
+  "[SYNTHETIC QA] Medication Syntheticmed documented. Plan use synthetic brace.",
+].join("\n");
+
+function admittedTemplateTwinEvidenceClaims(): ReadonlySet<TemplateTwinSyntheticQaEvidenceClaim> {
+  const context = getTemplateTwinSyntheticQaProviderContext();
+  return new Set(
+    context?.evidenceClaims ?? TEMPLATE_TWIN_SYNTHETIC_QA_ALL_EVIDENCE_CLAIMS,
+  );
+}
+
+function evidenceBoundTemplateTwinEntities(legacy: boolean): object {
+  if (legacy) return MOCK_LEGACY_TEMPLATE_TWIN_ENTITIES;
+  const claims = admittedTemplateTwinEvidenceClaims();
+  return {
+    chief_complaint: claims.has("chief_complaint")
+      ? MOCK_TEMPLATE_TWIN_ENTITIES.chief_complaint
+      : null,
+    hpi: claims.has("hpi") ? MOCK_TEMPLATE_TWIN_ENTITIES.hpi : null,
+    medications: claims.has("medication")
+      ? MOCK_TEMPLATE_TWIN_ENTITIES.medications
+      : [],
+    social_history: claims.has("smoking")
+      ? MOCK_TEMPLATE_TWIN_ENTITIES.social_history
+      : {},
+    ros: claims.has("respiratory_review")
+      ? MOCK_TEMPLATE_TWIN_ENTITIES.ros
+      : [],
+    plan_discussed: claims.has("plan")
+      ? MOCK_TEMPLATE_TWIN_ENTITIES.plan_discussed
+      : [],
+    assessment_discussed: claims.has("encounter_category")
+      ? MOCK_TEMPLATE_TWIN_ENTITIES.assessment_discussed
+      : [],
+  };
+}
+
+function evidenceBoundTemplateTwinSoap(legacy: boolean): string {
+  if (legacy) return MOCK_LEGACY_TEMPLATE_TWIN_SOAP;
+  const claims = admittedTemplateTwinEvidenceClaims();
+  const section = (
+    heading: string,
+    claimKeys: readonly TemplateTwinSyntheticQaEvidenceClaim[],
+  ): string[] => {
+    const supported = claimKeys
+      .filter((claim) => claims.has(claim))
+      .map((claim) => TEMPLATE_TWIN_SYNTHETIC_QA_EVIDENCE[claim]);
+    return [
+      `## ${heading}`,
+      supported.length > 0
+        ? `[SYNTHETIC QA] ${supported.join(" ")}`
+        : "[SYNTHETIC QA] Not mentioned in the supplied synthetic evidence.",
+    ];
+  };
+
+  return [
+    ...section("Subjective", [
+      "chief_complaint",
+      "hpi",
+      "smoking",
+      "respiratory_review",
+      "additional_detail",
+    ]),
+    "",
+    ...section("Objective", []),
+    "",
+    ...section("Assessment", ["encounter_category"]),
+    "",
+    ...section("Plan", ["medication", "plan", "plan_detail"]),
+  ].join("\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -50,8 +266,8 @@ export function isMockEnabled(): boolean {
 // ---------------------------------------------------------------------------
 const MOCK_COMPLETE_FIXTURES: Partial<Record<ModelCallPurpose, unknown>> = {
   tm_speaker_roles: {
-    '0': { role: 'doctor', confidence: 0.95, reasoning: '[MOCK] e2e fixture' },
-    '1': { role: 'patient', confidence: 0.92, reasoning: '[MOCK] e2e fixture' },
+    "0": { role: "doctor", confidence: 0.95, reasoning: "[MOCK] e2e fixture" },
+    "1": { role: "patient", confidence: 0.92, reasoning: "[MOCK] e2e fixture" },
   },
   tm_entities: {
     chief_complaint: null,
@@ -59,7 +275,7 @@ const MOCK_COMPLETE_FIXTURES: Partial<Record<ModelCallPurpose, unknown>> = {
   },
   tm_critique: {
     issues: [],
-    overall_quality: 'high',
+    overall_quality: "high",
     safe_to_sign_without_review: true,
   },
   tm_icd_coding: { codes: [] },
@@ -76,7 +292,13 @@ const MOCK_COMPLETE_FIXTURES: Partial<Record<ModelCallPurpose, unknown>> = {
   // MOCK run (rescued by Promise.allSettled; surfaced as a latent
   // [MOCK_AI_CALLS] log line).
   tm_patient_summary: {
-    summary: '[MOCK] Your visit went well. Drink fluids, rest, and come back if symptoms worsen.',
+    summary:
+      "[MOCK] Your visit went well. Drink fluids, rest, and come back if symptoms worsen.",
+  },
+  tm_template_synthetic_phi_scan: {
+    directIdentifierClasses: [],
+    appearsExplicitlySynthetic: true,
+    anyUncertain: false,
   },
   // Note-format customization (Phase 2a). parseNoteToTemplate() makes two
   // complete() calls — without fixtures here the mock throws, so the whole
@@ -85,48 +307,52 @@ const MOCK_COMPLETE_FIXTURES: Partial<Record<ModelCallPurpose, unknown>> = {
   // a small, realistic 4-section template with no patient specifics — the lone
   // defaultText is generic normal-exam boilerplate, so the PHI gate stays clean.
   tm_template_parse: {
-    name: '[MOCK] General Follow-up',
+    name: "[MOCK] General Follow-up",
     // null = "All my visits". Avoids coupling the fixture to the specialty
     // taxonomy; the parse schema allows encounterType to be null.
     encounterType: null,
     sections: [
       {
-        key: 'subjective',
-        label: 'Subjective',
+        key: "subjective",
+        label: "Subjective",
         order: 0,
-        formatHint: 'prose',
-        styleInstructions: '[MOCK] Brief HPI in the patient’s words; one short paragraph.',
+        formatHint: "prose",
+        styleInstructions:
+          "[MOCK] Brief HPI in the patient’s words; one short paragraph.",
         defaultText: null,
       },
       {
-        key: 'objective',
-        label: 'Objective',
+        key: "objective",
+        label: "Objective",
         order: 1,
-        formatHint: 'bullets',
-        styleInstructions: '[MOCK] Vitals first, then a focused exam by system.',
-        defaultText: '[MOCK] General: well-appearing, no acute distress. Normal exam.',
+        formatHint: "bullets",
+        styleInstructions:
+          "[MOCK] Vitals first, then a focused exam by system.",
+        defaultText:
+          "[MOCK] General: well-appearing, no acute distress. Normal exam.",
       },
       {
-        key: 'assessment',
-        label: 'Assessment',
+        key: "assessment",
+        label: "Assessment",
         order: 2,
-        formatHint: 'numbered',
-        styleInstructions: '[MOCK] One numbered line per active problem.',
+        formatHint: "numbered",
+        styleInstructions: "[MOCK] One numbered line per active problem.",
         defaultText: null,
       },
       {
-        key: 'plan',
-        label: 'Plan',
+        key: "plan",
+        label: "Plan",
         order: 3,
-        formatHint: 'bullets',
-        styleInstructions: '[MOCK] Action items per problem; meds and follow-up interval.',
+        formatHint: "bullets",
+        styleInstructions:
+          "[MOCK] Action items per problem; meds and follow-up interval.",
         defaultText: null,
       },
     ],
     styleProfile: {
-      tense: 'past',
-      tone: 'concise clinical',
-      abbreviations: 'standard medical',
+      tense: "past",
+      tone: "concise clinical",
+      abbreviations: "standard medical",
     },
     flags: [],
   },
@@ -137,13 +363,42 @@ const MOCK_COMPLETE_FIXTURES: Partial<Record<ModelCallPurpose, unknown>> = {
   tm_template_phi_scan: { phiFields: [], anyUncertain: false },
 };
 
+const MOCK_TEMPLATE_TWIN_STAGING_ICD = {
+  codes: [
+    {
+      code: "M25.50",
+      description: "Pain in unspecified joint",
+      evidence_quote: "synthetic wrist discomfort",
+      confidence: 1,
+      confidenceLevel: "high",
+    },
+  ],
+} as const;
+
+const MOCK_TEMPLATE_TWIN_STAGING_CPT = {
+  em: {
+    code: "99212",
+    description: "Synthetic established follow-up",
+    reasoning: {
+      problems: [
+        { description: "Synthetic wrist discomfort", status: "minor" },
+      ],
+      data: "No synthetic data reviewed.",
+      risk: "minimal",
+    },
+    evidence_quote: "Encounter category is Follow-up.",
+  },
+  procedures: [],
+  modifiers: [],
+} as const;
+
 // Note-format PHI gate — the FLAGGED counterpart to the clean
 // `tm_template_phi_scan` fixture above. `anyUncertain: true` forces the
 // fail-safe gate to reject/scrub even though it also names a field. Exported
 // for direct unit-test use, and returned by mockComplete() when
 // MOCK_TEMPLATE_PHI_FLAG=true so the reject path is reachable under MOCK.
 export const MOCK_TEMPLATE_PHI_SCAN_FLAGGED = {
-  phiFields: ['sections[1].defaultText'],
+  phiFields: ["sections[1].defaultText"],
   anyUncertain: true,
 } as const;
 
@@ -162,54 +417,56 @@ export const MOCK_TEMPLATE_PHI_SCAN_FLAGGED = {
 export const MOCK_RX_DRAFTING_WITH_WARNINGS = {
   prescriptions: [
     {
-      drug: 'Warfarin',
-      strength: '5 mg',
-      form: 'tablet',
-      sig: 'Take 1 tablet by mouth once daily',
-      quantity: '30',
-      refills: '0',
-      action: 'new',
-      evidence_quote: '[MOCK] start warfarin for new atrial fibrillation',
+      drug: "Warfarin",
+      strength: "5 mg",
+      form: "tablet",
+      sig: "Take 1 tablet by mouth once daily",
+      quantity: "30",
+      refills: "0",
+      action: "new",
+      evidence_quote: "[MOCK] start warfarin for new atrial fibrillation",
     },
     {
-      drug: 'Amoxicillin',
-      strength: '500 mg',
-      form: 'capsule',
-      sig: 'Take 1 capsule by mouth three times daily',
-      quantity: '21',
-      refills: '0',
-      action: 'new',
-      evidence_quote: '[MOCK] treat acute bacterial sinusitis',
+      drug: "Amoxicillin",
+      strength: "500 mg",
+      form: "capsule",
+      sig: "Take 1 capsule by mouth three times daily",
+      quantity: "21",
+      refills: "0",
+      action: "new",
+      evidence_quote: "[MOCK] treat acute bacterial sinusitis",
     },
     {
-      drug: 'Lisinopril',
-      strength: '10 mg',
-      form: 'tablet',
-      sig: 'Take 1 tablet by mouth once daily',
-      quantity: '30',
-      refills: '3',
-      action: 'continue',
-      evidence_quote: '[MOCK] continue home lisinopril for hypertension',
+      drug: "Lisinopril",
+      strength: "10 mg",
+      form: "tablet",
+      sig: "Take 1 tablet by mouth once daily",
+      quantity: "30",
+      refills: "3",
+      action: "continue",
+      evidence_quote: "[MOCK] continue home lisinopril for hypertension",
     },
   ],
   warnings: [
     {
-      severity: 'critical',
-      rx_drug: 'Warfarin',
+      severity: "critical",
+      rx_drug: "Warfarin",
       message:
-        '[MOCK] Critical interaction: warfarin + amoxicillin can raise INR and bleeding risk — confirm the indication and plan close INR monitoring.',
-      evidence_quote: '[MOCK] both newly started this visit',
+        "[MOCK] Critical interaction: warfarin + amoxicillin can raise INR and bleeding risk — confirm the indication and plan close INR monitoring.",
+      evidence_quote: "[MOCK] both newly started this visit",
     },
     {
-      severity: 'major',
-      rx_drug: 'Lisinopril',
-      message: '[MOCK] Major: monitor renal function and serum potassium on an ACE inhibitor.',
+      severity: "major",
+      rx_drug: "Lisinopril",
+      message:
+        "[MOCK] Major: monitor renal function and serum potassium on an ACE inhibitor.",
       evidence_quote: null,
     },
     {
-      severity: 'minor',
-      rx_drug: 'Amoxicillin',
-      message: '[MOCK] Minor: advise taking amoxicillin with food to reduce GI upset.',
+      severity: "minor",
+      rx_drug: "Amoxicillin",
+      message:
+        "[MOCK] Minor: advise taking amoxicillin with food to reduce GI upset.",
       evidence_quote: null,
     },
   ],
@@ -224,18 +481,18 @@ export const MOCK_RX_DRAFTING_WITH_WARNINGS = {
 // Subjective / Objective / Assessment / Plan headings.
 // ---------------------------------------------------------------------------
 const MOCK_SOAP_TEXT = [
-  '## Subjective',
-  '[MOCK] Patient reports mild tension headache x 3 days, improving.',
-  '',
-  '## Objective',
-  '[MOCK] Vitals: BP 120/80, HR 72, afebrile. General: well-appearing, NAD.',
-  '',
-  '## Assessment',
-  '[MOCK] Tension-type headache, resolving.',
-  '',
-  '## Plan',
-  '[MOCK] Hydration, OTC analgesics PRN. Return if headache worsens or new neuro symptoms.',
-].join('\n');
+  "## Subjective",
+  "[MOCK] Patient reports mild tension headache x 3 days, improving.",
+  "",
+  "## Objective",
+  "[MOCK] Vitals: BP 120/80, HR 72, afebrile. General: well-appearing, NAD.",
+  "",
+  "## Assessment",
+  "[MOCK] Tension-type headache, resolving.",
+  "",
+  "## Plan",
+  "[MOCK] Hydration, OTC analgesics PRN. Return if headache worsens or new neuro symptoms.",
+].join("\n");
 
 const MOCK_COMPLETE_TEXT_FIXTURES: Partial<
   Record<ModelCallPurpose, AnthropicCompleteTextResult>
@@ -277,14 +534,14 @@ const MOCK_COMPLETE_TEXT_FIXTURES: Partial<
 // Layer 2 (speaker roles) has more than one ID to classify.
 // ---------------------------------------------------------------------------
 const MOCK_DEEPGRAM_BATCH: DeepgramBatchResponse = {
-  metadata: { duration: 3.5, request_id: 'mock-deepgram-request' },
+  metadata: { duration: 3.5, request_id: "mock-deepgram-request" },
   results: {
     channels: [
       {
         alternatives: [
           {
             transcript:
-              '[MOCK] Hi, how are you feeling today? [MOCK] My head has been aching for three days.',
+              "[MOCK] Hi, how are you feeling today? [MOCK] My head has been aching for three days.",
             confidence: 0.95,
             words: [],
           },
@@ -297,7 +554,7 @@ const MOCK_DEEPGRAM_BATCH: DeepgramBatchResponse = {
         end: 2.0,
         confidence: 0.95,
         channel: 0,
-        transcript: '[MOCK] Hi, how are you feeling today?',
+        transcript: "[MOCK] Hi, how are you feeling today?",
         words: [],
         speaker: 0,
       },
@@ -306,9 +563,75 @@ const MOCK_DEEPGRAM_BATCH: DeepgramBatchResponse = {
         end: 3.5,
         confidence: 0.93,
         channel: 0,
-        transcript: '[MOCK] My head has been aching for three days.',
+        transcript: "[MOCK] My head has been aching for three days.",
         words: [],
         speaker: 1,
+      },
+    ],
+  },
+};
+
+/**
+ * The dedicated Template Twin QA transcript deliberately contains every
+ * evidence_quote returned by MOCK_TEMPLATE_TWIN_ENTITIES verbatim. That makes
+ * source offsets independently recoverable and prevents the infrastructure
+ * test from accepting model-shaped evidence that is absent from the mocked
+ * encounter recording.
+ */
+const MOCK_TEMPLATE_TWIN_DEEPGRAM_BATCH: DeepgramBatchResponse = {
+  metadata: { duration: 4, request_id: "mock-template-twin-deepgram-request" },
+  results: {
+    channels: [
+      {
+        alternatives: [
+          {
+            transcript: TEMPLATE_TWIN_SYNTHETIC_QA_TRANSCRIPT,
+            confidence: 0.95,
+            words: [],
+          },
+        ],
+      },
+    ],
+    utterances: [
+      {
+        start: 0,
+        end: 4,
+        confidence: 0.95,
+        channel: 0,
+        transcript: TEMPLATE_TWIN_SYNTHETIC_QA_TRANSCRIPT,
+        words: [],
+        speaker: 0,
+      },
+    ],
+  },
+};
+
+const MOCK_LEGACY_TEMPLATE_TWIN_DEEPGRAM_BATCH: DeepgramBatchResponse = {
+  metadata: {
+    duration: 4,
+    request_id: "mock-legacy-template-twin-deepgram-request",
+  },
+  results: {
+    channels: [
+      {
+        alternatives: [
+          {
+            transcript: MOCK_LEGACY_TEMPLATE_TWIN_TRANSCRIPT,
+            confidence: 0.95,
+            words: [],
+          },
+        ],
+      },
+    ],
+    utterances: [
+      {
+        start: 0,
+        end: 4,
+        confidence: 0.95,
+        channel: 0,
+        transcript: MOCK_LEGACY_TEMPLATE_TWIN_TRANSCRIPT,
+        words: [],
+        speaker: 0,
       },
     ],
   },
@@ -317,14 +640,33 @@ const MOCK_DEEPGRAM_BATCH: DeepgramBatchResponse = {
 export function mockComplete<T>(args: {
   purpose: ModelCallPurpose;
   schema: ZodType<T>;
+  fixtureVersion?: TemplateTwinSyntheticQaFixtureVersion;
+  visitId?: string | null;
 }): T {
+  const explicitStagingFixture =
+    args.fixtureVersion === TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION;
+  const legacyFixture =
+    args.fixtureVersion === undefined &&
+    legacyTemplateTwinInfrastructureFixtureEnabled() &&
+    (args.visitId == null ||
+      legacyTemplateTwinInfrastructureContext.getStore() === true);
+  const templateTwinFixture = explicitStagingFixture || legacyFixture;
+  if (args.purpose === "tm_entities" && templateTwinFixture) {
+    return args.schema.parse(evidenceBoundTemplateTwinEntities(legacyFixture));
+  }
+  if (explicitStagingFixture && args.purpose === "tm_icd_coding") {
+    return args.schema.parse(MOCK_TEMPLATE_TWIN_STAGING_ICD);
+  }
+  if (explicitStagingFixture && args.purpose === "tm_cpt_coding") {
+    return args.schema.parse(MOCK_TEMPLATE_TWIN_STAGING_CPT);
+  }
   // Note-format PHI gate: opt into the FLAGGED scan result (the reject path)
   // via env. The mock keys on `purpose` only and can't see the input, so a
   // content-aware "this note has PHI" branch isn't possible; the env flag is
   // the deterministic knob. Unset (the default) returns the clean fixture.
   if (
-    args.purpose === 'tm_template_phi_scan' &&
-    process.env.MOCK_TEMPLATE_PHI_FLAG === 'true'
+    args.purpose === "tm_template_phi_scan" &&
+    process.env.MOCK_TEMPLATE_PHI_FLAG === "true"
   ) {
     return args.schema.parse(MOCK_TEMPLATE_PHI_SCAN_FLAGGED);
   }
@@ -333,8 +675,8 @@ export function mockComplete<T>(args: {
   // override gate are exercisable under MOCK. Default (unset) returns the empty
   // fixture so visits sign without an Rx block.
   if (
-    args.purpose === 'tm_rx_drafting' &&
-    process.env.MOCK_RX_WARNINGS === 'true'
+    args.purpose === "tm_rx_drafting" &&
+    process.env.MOCK_RX_WARNINGS === "true"
   ) {
     return args.schema.parse(MOCK_RX_DRAFTING_WITH_WARNINGS);
   }
@@ -342,7 +684,7 @@ export function mockComplete<T>(args: {
   if (fixture === undefined) {
     throw new Error(
       `[MOCK_AI_CALLS] no complete() fixture for purpose=${args.purpose}. ` +
-        `Add one to packages/ai/src/mock.ts before enabling this purpose in tests.`
+        `Add one to packages/ai/src/mock.ts before enabling this purpose in tests.`,
     );
   }
   // schema.parse() backfills .default() clauses so fixtures above
@@ -352,22 +694,56 @@ export function mockComplete<T>(args: {
 
 export function mockCompleteText(args: {
   purpose: ModelCallPurpose;
+  fixtureVersion?: TemplateTwinSyntheticQaFixtureVersion;
+  visitId?: string | null;
 }): AnthropicCompleteTextResult {
+  const explicitStagingFixture =
+    args.fixtureVersion === TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION;
+  const legacyFixture =
+    args.fixtureVersion === undefined &&
+    legacyTemplateTwinInfrastructureFixtureEnabled() &&
+    (args.visitId == null ||
+      legacyTemplateTwinInfrastructureContext.getStore() === true);
+  const templateTwinFixture = explicitStagingFixture || legacyFixture;
+  if (
+    (args.purpose === "tm_soap_draft" || args.purpose === "tm_polish") &&
+    templateTwinFixture
+  ) {
+    return {
+      text: evidenceBoundTemplateTwinSoap(legacyFixture),
+      inputTokens: 1,
+      outputTokens: 1,
+    };
+  }
   const fixture = MOCK_COMPLETE_TEXT_FIXTURES[args.purpose];
   if (fixture === undefined) {
     throw new Error(
-      `[MOCK_AI_CALLS] no completeText() fixture for purpose=${args.purpose}.`
+      `[MOCK_AI_CALLS] no completeText() fixture for purpose=${args.purpose}.`,
     );
   }
   return fixture;
 }
 
-export function mockDeepgramBatch(): DeepgramBatchResult {
-  const raw = MOCK_DEEPGRAM_BATCH;
+export function mockDeepgramBatch(
+  fixtureVersion?: TemplateTwinSyntheticQaFixtureVersion,
+  visitId?: string | null,
+): DeepgramBatchResult {
+  const explicitStagingFixture =
+    fixtureVersion === TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION;
+  const legacyFixture =
+    fixtureVersion === undefined &&
+    legacyTemplateTwinInfrastructureFixtureEnabled() &&
+    (visitId == null ||
+      legacyTemplateTwinInfrastructureContext.getStore() === true);
+  const raw = explicitStagingFixture
+    ? MOCK_TEMPLATE_TWIN_DEEPGRAM_BATCH
+    : legacyFixture
+      ? MOCK_LEGACY_TEMPLATE_TWIN_DEEPGRAM_BATCH
+      : MOCK_DEEPGRAM_BATCH;
   const firstChannel = raw.results?.channels?.[0]?.alternatives?.[0];
   return {
     raw,
-    transcript: (firstChannel?.transcript ?? '').trim(),
+    transcript: (firstChannel?.transcript ?? "").trim(),
     utterances: raw.results?.utterances ?? [],
     durationSec: Math.round(raw.metadata?.duration ?? 0),
   };
@@ -383,7 +759,7 @@ export function mockDeepgramBatch(): DeepgramBatchResult {
 // ---------------------------------------------------------------------------
 const MOCK_EMBED_VECTOR: number[] = Array.from(
   { length: 1536 },
-  (_, i) => ((i % 10) + 1) / 10000
+  (_, i) => ((i % 10) + 1) / 10000,
 );
 
 const MOCK_EMBED_FIXTURES: Partial<Record<ModelCallPurpose, EmbedTextResult>> =
@@ -401,7 +777,7 @@ export function mockEmbed(args: {
   const fixture = MOCK_EMBED_FIXTURES[args.purpose];
   if (fixture === undefined) {
     throw new Error(
-      `[MOCK_AI_CALLS] no embedText() fixture for purpose=${args.purpose}.`
+      `[MOCK_AI_CALLS] no embedText() fixture for purpose=${args.purpose}.`,
     );
   }
   return fixture;

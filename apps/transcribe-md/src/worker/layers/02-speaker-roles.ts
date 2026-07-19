@@ -11,17 +11,17 @@
 // downstream layers.
 // ============================================================================
 
-import { z } from 'zod';
+import { z } from "zod";
 import {
   modelClient,
   type DeepgramUtterance,
   wrapAsData,
   delimiterSystemSuffix,
-} from '@meddoc/ai';
-import prisma from '@meddoc/db';
-import { logAudit } from '@/lib/audit';
+} from "@meddoc/ai";
+import { updateTemplateTwinSyntheticQaClaimBoundVisit } from "@/worker/staging-qa-mutation-fence";
+import { logWorkerAudit } from "@/worker/worker-audit";
 
-const MODEL = 'claude-sonnet-4-6';
+const MODEL = "claude-sonnet-4-6";
 
 // How many utterances per speaker we sample. Full transcripts are
 // often thousands of utterances; 5 per speaker is enough signal for
@@ -32,11 +32,11 @@ const SAMPLE_SIZE = 5;
 export const SPEAKER_REVIEW_THRESHOLD = 0.7;
 
 export const SpeakerRole = z.enum([
-  'doctor',
-  'patient',
-  'family',
-  'other',
-  'unknown',
+  "doctor",
+  "patient",
+  "family",
+  "other",
+  "unknown",
 ]);
 export type SpeakerRole = z.infer<typeof SpeakerRole>;
 
@@ -75,11 +75,11 @@ export interface Layer2Output {
 }
 
 function groupSamplesBySpeaker(
-  utterances: DeepgramUtterance[]
+  utterances: DeepgramUtterance[],
 ): Map<number, string[]> {
   const out = new Map<number, string[]>();
   for (const u of utterances) {
-    if (typeof u.speaker !== 'number') continue;
+    if (typeof u.speaker !== "number") continue;
     const list = out.get(u.speaker) ?? [];
     if (list.length < SAMPLE_SIZE) {
       list.push(u.transcript.trim());
@@ -90,7 +90,7 @@ function groupSamplesBySpeaker(
 }
 
 export async function runLayer2SpeakerRoles(
-  input: Layer2Input
+  input: Layer2Input,
 ): Promise<Layer2Output> {
   const samples = groupSamplesBySpeaker(input.utterances);
   if (samples.size === 0) {
@@ -106,14 +106,17 @@ export async function runLayer2SpeakerRoles(
     // the constant through SpeakerMap.parse(...) makes the drift
     // surface during a dev rebuild rather than in production.
     const fallback = SpeakerMap.parse({
-      '0': {
-        role: 'doctor',
+      "0": {
+        role: "doctor",
         confidence: 0.5,
-        reasoning: 'Diarization returned no speaker tags; defaulting to single-speaker doctor.',
+        reasoning:
+          "Diarization returned no speaker tags; defaulting to single-speaker doctor.",
       },
     });
-    await prisma.transcribeVisit.update({
-      where: { id: input.visitId },
+    await updateTemplateTwinSyntheticQaClaimBoundVisit({
+      visitId: input.visitId,
+      userId: input.userId ?? "",
+      practiceId: input.practiceId,
       data: { speakerMap: fallback as unknown as object, needsReview: true },
     });
     return {
@@ -135,14 +138,16 @@ export async function runLayer2SpeakerRoles(
     const speakerId = [...samples.keys()][0];
     const fallback = SpeakerMap.parse({
       [String(speakerId)]: {
-        role: 'doctor',
+        role: "doctor",
         confidence: 0.5,
         reasoning:
-          'Single speaker detected (one diarized voice) — treated as dictation and assigned doctor; flagged for review in case of a patient monologue.',
+          "Single speaker detected (one diarized voice) — treated as dictation and assigned doctor; flagged for review in case of a patient monologue.",
       },
     });
-    await prisma.transcribeVisit.update({
-      where: { id: input.visitId },
+    await updateTemplateTwinSyntheticQaClaimBoundVisit({
+      visitId: input.visitId,
+      userId: input.userId ?? "",
+      practiceId: input.practiceId,
       data: { speakerMap: fallback as unknown as object, needsReview: true },
     });
     return {
@@ -153,55 +158,57 @@ export async function runLayer2SpeakerRoles(
   }
 
   const blocks: string[] = [];
-  for (const [speakerId, lines] of [...samples.entries()].sort((a, b) => a[0] - b[0])) {
+  for (const [speakerId, lines] of [...samples.entries()].sort(
+    (a, b) => a[0] - b[0],
+  )) {
     blocks.push(
       `Speaker ${speakerId}:\n` +
-        lines.map((l, i) => `  ${i + 1}. ${l}`).join('\n')
+        lines.map((l, i) => `  ${i + 1}. ${l}`).join("\n"),
     );
   }
 
   const interpreterParagraph = input.interpreterMode
     ? [
-        '',
-        'INTERPRETER SESSION CONTEXT:',
-        '- This visit was flagged as having a medical interpreter present.',
-        '  Expect THREE distinct voices: doctor, patient, and interpreter.',
-        '- The interpreter\'s utterances are translation conduits — they',
-        '  paraphrase the patient\'s words to the doctor in English and the',
-        '  doctor\'s words to the patient in the patient\'s native language.',
+        "",
+        "INTERPRETER SESSION CONTEXT:",
+        "- This visit was flagged as having a medical interpreter present.",
+        "  Expect THREE distinct voices: doctor, patient, and interpreter.",
+        "- The interpreter's utterances are translation conduits — they",
+        "  paraphrase the patient's words to the doctor in English and the",
+        "  doctor's words to the patient in the patient's native language.",
         '  Map the interpreter\'s speaker ID to role "other".',
-        '- If the transcript contains both English and Spanish (or another',
-        '  non-English language), the bilingual speaker is almost always',
-        '  the interpreter, not the patient or doctor. The patient typically',
-        '  speaks only in the non-English language; the doctor speaks only',
-        '  in English.',
-      ].join('\n')
-    : '';
+        "- If the transcript contains both English and Spanish (or another",
+        "  non-English language), the bilingual speaker is almost always",
+        "  the interpreter, not the patient or doctor. The patient typically",
+        "  speaks only in the non-English language; the doctor speaks only",
+        "  in English.",
+      ].join("\n")
+    : "";
 
   const system = [
-    'You are a medical scribe assistant. You are given an anonymized',
-    'transcript with diarized speakers. Your task is to assign each',
-    'speaker one of these roles: doctor, patient, family, other, unknown.',
-    '',
-    'Rules:',
-    '- Doctors ask diagnostic questions, use medical terminology, direct',
-    '  the interview, and give instructions.',
-    '- Patients describe symptoms in lay terms, respond to questions,',
-    '  ask clarifying questions about their condition.',
-    '- Family members may speak FOR the patient or provide history.',
+    "You are a medical scribe assistant. You are given an anonymized",
+    "transcript with diarized speakers. Your task is to assign each",
+    "speaker one of these roles: doctor, patient, family, other, unknown.",
+    "",
+    "Rules:",
+    "- Doctors ask diagnostic questions, use medical terminology, direct",
+    "  the interview, and give instructions.",
+    "- Patients describe symptoms in lay terms, respond to questions,",
+    "  ask clarifying questions about their condition.",
+    "- Family members may speak FOR the patient or provide history.",
     '- "other" covers nurses, techs, interpreters — anyone clearly',
-    '  clinical-team but not the primary doctor.',
+    "  clinical-team but not the primary doctor.",
     '- If you cannot confidently determine a role, use "unknown".',
     interpreterParagraph,
-    '',
-    'Respond with VALID JSON ONLY, no markdown fences. Shape:',
-    '{',
+    "",
+    "Respond with VALID JSON ONLY, no markdown fences. Shape:",
+    "{",
     '  "0": { "role": "doctor", "confidence": 0.95, "reasoning": "..." },',
     '  "1": { "role": "patient", "confidence": 0.9, "reasoning": "..." }',
-    '}',
-    '',
-    'Confidence is 0.0-1.0. Keep reasoning under 200 characters.',
-  ].join('\n');
+    "}",
+    "",
+    "Confidence is 0.0-1.0. Keep reasoning under 200 characters.",
+  ].join("\n");
 
   // Q1 #18 — L2 was previously feeding raw user-supplied content (the
   // diarized utterances) directly into the user prompt with no
@@ -209,30 +216,30 @@ export async function runLayer2SpeakerRoles(
   // Even though L2 is upstream of L3 in the pipeline, the speaker
   // utterances themselves are user-content and a crafted utterance
   // could in principle attempt prompt injection at this stage.
-  const userContent = blocks.join('\n\n');
-  const wrap = wrapAsData(userContent, 'transcript');
+  const userContent = blocks.join("\n\n");
+  const wrap = wrapAsData(userContent, "transcript");
   if (wrap.injectionAttemptDetected) {
-    void logAudit({
-      action: 'PIPELINE_REJECTED_INJECTION_DELIMITER',
-      targetType: 'transcribe_visit',
+    await logWorkerAudit({
+      action: "PIPELINE_REJECTED_INJECTION_DELIMITER",
+      targetType: "transcribe_visit",
       targetId: input.visitId,
       userId: input.userId,
       practiceId: input.practiceId,
       success: false,
-      errorCode: 'INJECTION_DELIMITER_DETECTED',
-      metadata: { layer: 'L2', suffix: wrap.suffix },
+      errorCode: "INJECTION_DELIMITER_DETECTED",
+      metadata: { layer: "L2", suffix: wrap.suffix },
     });
   }
-  const user = [wrap.wrapped, '', delimiterSystemSuffix('transcript')].join(
-    '\n',
+  const user = [wrap.wrapped, "", delimiterSystemSuffix("transcript")].join(
+    "\n",
   );
 
   const speakerMap = await modelClient.complete({
     practiceId: input.practiceId,
     visitId: input.visitId,
     userId: input.userId,
-    purpose: 'tm_speaker_roles',
-    provider: 'anthropic',
+    purpose: "tm_speaker_roles",
+    provider: "anthropic",
     model: MODEL,
     system,
     user,
@@ -253,20 +260,20 @@ export async function runLayer2SpeakerRoles(
     // Pattern matches L7a icd-coding (PR #235) — the canonical
     // useToolUse adoption in the worker pipeline.
     useToolUse: {
-      name: 'submit_speaker_roles',
+      name: "submit_speaker_roles",
       description:
-        'Submit the per-speaker role classification. Each entry carries a confidence (0-1) and a short reasoning snippet for the Transcript-tab tooltip.',
+        "Submit the per-speaker role classification. Each entry carries a confidence (0-1) and a short reasoning snippet for the Transcript-tab tooltip.",
     },
   });
 
   const confidences = Object.values(speakerMap).map((s) => s.confidence);
-  const lowestConfidence = confidences.length
-    ? Math.min(...confidences)
-    : 0;
+  const lowestConfidence = confidences.length ? Math.min(...confidences) : 0;
   const needsReview = lowestConfidence < SPEAKER_REVIEW_THRESHOLD;
 
-  await prisma.transcribeVisit.update({
-    where: { id: input.visitId },
+  await updateTemplateTwinSyntheticQaClaimBoundVisit({
+    visitId: input.visitId,
+    userId: input.userId ?? "",
+    practiceId: input.practiceId,
     data: {
       speakerMap: speakerMap as unknown as object,
       ...(needsReview
@@ -274,7 +281,7 @@ export async function runLayer2SpeakerRoles(
             needsReview: true,
             reviewReason:
               `One or more speakers were classified with confidence below ${SPEAKER_REVIEW_THRESHOLD}. ` +
-              'Review the Transcript tab and reassign roles if needed.',
+              "Review the Transcript tab and reassign roles if needed.",
           }
         : {}),
     },

@@ -1,0 +1,1493 @@
+{
+  "matrixContract": "template-twin-office-schema-stage-matrix/1.0.0",
+  "auditedRepositorySha": "f7b4c480ce41e4d74daea6cd923c9281a9bd3036",
+  "evidenceProvenance": {
+    "corpus": "Fresh synthetic OOXML generated locally, regenerated through the production compiler/resolver/renderer, and independently validated; no physician document or real PHI.",
+    "validator": "DocumentFormat.OpenXml.OpenXmlValidator",
+    "sdkVersion": "3.5.1.0",
+    "packageVersion": "3.5.1+Branch.main.Sha.3139fdfd27414548a41555f7848d5728f6e71a42.3139fdfd27414548a41555f7848d5728f6e71a42",
+    "libreOfficeVersion": "LibreOffice 25.8.7.3 580(Build:3)"
+  },
+  "stageSummary": [
+    {
+      "stage": "synthetic_source_before_rendering",
+      "documents": [
+        "legacy-controls.source.docx",
+        "maximum-text.source.docx",
+        "modern-controls.source.docx",
+        "table-layout.source.docx",
+        "unresolved-checkbox.source.docx"
+      ],
+      "target": "Office2013",
+      "errors": 0,
+      "firstIntroduction": "none",
+      "result": "PASS"
+    },
+    {
+      "stage": "quillmd_rendered_before_libreoffice",
+      "documents": [
+        "legacy-controls.output.docx",
+        "maximum-text.output.docx",
+        "modern-controls.output.docx",
+        "table-layout.output.docx"
+      ],
+      "target": "Office2013",
+      "errors": 0,
+      "firstIntroduction": "none",
+      "result": "PASS"
+    },
+    {
+      "stage": "libreoffice_saved",
+      "documents": [
+        "legacy-controls.libreoffice-saved.docx",
+        "maximum-text.libreoffice-saved.docx",
+        "modern-controls.libreoffice-saved.docx",
+        "table-layout.libreoffice-saved.docx"
+      ],
+      "targets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "physicalErrors": 42,
+      "targetSpecificObservations": 84,
+      "firstIntroduction": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "result": "CLASSIFIED_EXTERNAL_TOOL_FAILURE_PENDING_WORD"
+    }
+  ],
+  "classificationSummary": {
+    "FONT_CHARACTER_SET_EXTENSION": 20,
+    "LOGICAL_ALIGNMENT_ENUM": 19,
+    "TABLE_ROW_ON_OFF_LEXICAL_VALUE": 3
+  },
+  "policy": "No schema error is accepted by a broad allowlist. Sources and immutable pre-delivery renderer outputs require zero errors. LibreOffice-only errors remain explicit QA compatibility findings and can never authorize signing or reimport.",
+  "errors": [
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-001",
+      "document": "legacy-controls",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/fontTable.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:fonts[1]/w:font[6]/w:charset[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}fonts[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}font[6]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}charset[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:characterSet' has invalid value 'utf-8'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:charset",
+      "attributeQName": "w:characterSet",
+      "invalidValue": "utf-8",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "FONT_CHARACTER_SET_EXTENSION",
+      "clinicalImpact": "No clinical value changed in the synthetic PDF comparison, but invalid font metadata can change fallback or encoding behavior in another Office implementation.",
+      "layoutImpact": "Potential font substitution; none observed in this LibreOffice-to-PDF corpus.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Keep pending for desktop Word evidence or select a pinned Office save filter that emits schema-valid font metadata; do not normalize this inside the signing verifier.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-002",
+      "document": "legacy-controls",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/fontTable.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:fonts[1]/w:font[5]/w:charset[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}fonts[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}font[5]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}charset[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:characterSet' has invalid value 'utf-8'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:charset",
+      "attributeQName": "w:characterSet",
+      "invalidValue": "utf-8",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "FONT_CHARACTER_SET_EXTENSION",
+      "clinicalImpact": "No clinical value changed in the synthetic PDF comparison, but invalid font metadata can change fallback or encoding behavior in another Office implementation.",
+      "layoutImpact": "Potential font substitution; none observed in this LibreOffice-to-PDF corpus.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Keep pending for desktop Word evidence or select a pinned Office save filter that emits schema-valid font metadata; do not normalize this inside the signing verifier.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-003",
+      "document": "legacy-controls",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/fontTable.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:fonts[1]/w:font[4]/w:charset[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}fonts[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}font[4]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}charset[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:characterSet' has invalid value 'utf-8'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:charset",
+      "attributeQName": "w:characterSet",
+      "invalidValue": "utf-8",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "FONT_CHARACTER_SET_EXTENSION",
+      "clinicalImpact": "No clinical value changed in the synthetic PDF comparison, but invalid font metadata can change fallback or encoding behavior in another Office implementation.",
+      "layoutImpact": "Potential font substitution; none observed in this LibreOffice-to-PDF corpus.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Keep pending for desktop Word evidence or select a pinned Office save filter that emits schema-valid font metadata; do not normalize this inside the signing verifier.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-004",
+      "document": "legacy-controls",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/fontTable.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:fonts[1]/w:font[3]/w:charset[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}fonts[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}font[3]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}charset[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:characterSet' has invalid value 'windows-1252'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:charset",
+      "attributeQName": "w:characterSet",
+      "invalidValue": "windows-1252",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "FONT_CHARACTER_SET_EXTENSION",
+      "clinicalImpact": "No clinical value changed in the synthetic PDF comparison, but invalid font metadata can change fallback or encoding behavior in another Office implementation.",
+      "layoutImpact": "Potential font substitution; none observed in this LibreOffice-to-PDF corpus.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Keep pending for desktop Word evidence or select a pinned Office save filter that emits schema-valid font metadata; do not normalize this inside the signing verifier.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-005",
+      "document": "legacy-controls",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/fontTable.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:fonts[1]/w:font[1]/w:charset[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}fonts[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}font[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}charset[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:characterSet' has invalid value 'windows-1252'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:charset",
+      "attributeQName": "w:characterSet",
+      "invalidValue": "windows-1252",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "FONT_CHARACTER_SET_EXTENSION",
+      "clinicalImpact": "No clinical value changed in the synthetic PDF comparison, but invalid font metadata can change fallback or encoding behavior in another Office implementation.",
+      "layoutImpact": "Potential font substitution; none observed in this LibreOffice-to-PDF corpus.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Keep pending for desktop Word evidence or select a pinned Office save filter that emits schema-valid font metadata; do not normalize this inside the signing verifier.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-006",
+      "document": "maximum-text",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/fontTable.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:fonts[1]/w:font[6]/w:charset[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}fonts[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}font[6]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}charset[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:characterSet' has invalid value 'utf-8'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:charset",
+      "attributeQName": "w:characterSet",
+      "invalidValue": "utf-8",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "FONT_CHARACTER_SET_EXTENSION",
+      "clinicalImpact": "No clinical value changed in the synthetic PDF comparison, but invalid font metadata can change fallback or encoding behavior in another Office implementation.",
+      "layoutImpact": "Potential font substitution; none observed in this LibreOffice-to-PDF corpus.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Keep pending for desktop Word evidence or select a pinned Office save filter that emits schema-valid font metadata; do not normalize this inside the signing verifier.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-007",
+      "document": "maximum-text",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/fontTable.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:fonts[1]/w:font[5]/w:charset[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}fonts[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}font[5]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}charset[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:characterSet' has invalid value 'utf-8'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:charset",
+      "attributeQName": "w:characterSet",
+      "invalidValue": "utf-8",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "FONT_CHARACTER_SET_EXTENSION",
+      "clinicalImpact": "No clinical value changed in the synthetic PDF comparison, but invalid font metadata can change fallback or encoding behavior in another Office implementation.",
+      "layoutImpact": "Potential font substitution; none observed in this LibreOffice-to-PDF corpus.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Keep pending for desktop Word evidence or select a pinned Office save filter that emits schema-valid font metadata; do not normalize this inside the signing verifier.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-008",
+      "document": "maximum-text",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/fontTable.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:fonts[1]/w:font[4]/w:charset[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}fonts[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}font[4]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}charset[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:characterSet' has invalid value 'utf-8'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:charset",
+      "attributeQName": "w:characterSet",
+      "invalidValue": "utf-8",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "FONT_CHARACTER_SET_EXTENSION",
+      "clinicalImpact": "No clinical value changed in the synthetic PDF comparison, but invalid font metadata can change fallback or encoding behavior in another Office implementation.",
+      "layoutImpact": "Potential font substitution; none observed in this LibreOffice-to-PDF corpus.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Keep pending for desktop Word evidence or select a pinned Office save filter that emits schema-valid font metadata; do not normalize this inside the signing verifier.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-009",
+      "document": "maximum-text",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/fontTable.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:fonts[1]/w:font[3]/w:charset[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}fonts[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}font[3]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}charset[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:characterSet' has invalid value 'windows-1252'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:charset",
+      "attributeQName": "w:characterSet",
+      "invalidValue": "windows-1252",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "FONT_CHARACTER_SET_EXTENSION",
+      "clinicalImpact": "No clinical value changed in the synthetic PDF comparison, but invalid font metadata can change fallback or encoding behavior in another Office implementation.",
+      "layoutImpact": "Potential font substitution; none observed in this LibreOffice-to-PDF corpus.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Keep pending for desktop Word evidence or select a pinned Office save filter that emits schema-valid font metadata; do not normalize this inside the signing verifier.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-010",
+      "document": "maximum-text",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/fontTable.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:fonts[1]/w:font[1]/w:charset[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}fonts[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}font[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}charset[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:characterSet' has invalid value 'windows-1252'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:charset",
+      "attributeQName": "w:characterSet",
+      "invalidValue": "windows-1252",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "FONT_CHARACTER_SET_EXTENSION",
+      "clinicalImpact": "No clinical value changed in the synthetic PDF comparison, but invalid font metadata can change fallback or encoding behavior in another Office implementation.",
+      "layoutImpact": "Potential font substitution; none observed in this LibreOffice-to-PDF corpus.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Keep pending for desktop Word evidence or select a pinned Office save filter that emits schema-valid font metadata; do not normalize this inside the signing verifier.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-011",
+      "document": "modern-controls",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/numbering.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:numbering[1]/w:abstractNum[2]/w:lvl[9]/w:lvlJc[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}numbering[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}abstractNum[2]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvl[9]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvlJc[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:val' has invalid value 'start'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:lvlJc",
+      "attributeQName": "w:val",
+      "invalidValue": "start",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "LOGICAL_ALIGNMENT_ENUM",
+      "clinicalImpact": "No clinical text changed, but an invalid logical-alignment enumeration is not portable proof of numbering/table alignment.",
+      "layoutImpact": "Potential list or table alignment drift, especially across compatibility or bidirectional-layout modes; none observed in the current PDF geometry.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Preserve as a classified compatibility failure pending desktop Word evidence or a schema-valid pinned save filter; do not add a broad validator allowlist.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-012",
+      "document": "modern-controls",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/numbering.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:numbering[1]/w:abstractNum[2]/w:lvl[8]/w:lvlJc[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}numbering[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}abstractNum[2]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvl[8]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvlJc[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:val' has invalid value 'start'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:lvlJc",
+      "attributeQName": "w:val",
+      "invalidValue": "start",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "LOGICAL_ALIGNMENT_ENUM",
+      "clinicalImpact": "No clinical text changed, but an invalid logical-alignment enumeration is not portable proof of numbering/table alignment.",
+      "layoutImpact": "Potential list or table alignment drift, especially across compatibility or bidirectional-layout modes; none observed in the current PDF geometry.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Preserve as a classified compatibility failure pending desktop Word evidence or a schema-valid pinned save filter; do not add a broad validator allowlist.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-013",
+      "document": "modern-controls",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/numbering.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:numbering[1]/w:abstractNum[2]/w:lvl[7]/w:lvlJc[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}numbering[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}abstractNum[2]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvl[7]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvlJc[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:val' has invalid value 'start'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:lvlJc",
+      "attributeQName": "w:val",
+      "invalidValue": "start",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "LOGICAL_ALIGNMENT_ENUM",
+      "clinicalImpact": "No clinical text changed, but an invalid logical-alignment enumeration is not portable proof of numbering/table alignment.",
+      "layoutImpact": "Potential list or table alignment drift, especially across compatibility or bidirectional-layout modes; none observed in the current PDF geometry.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Preserve as a classified compatibility failure pending desktop Word evidence or a schema-valid pinned save filter; do not add a broad validator allowlist.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-014",
+      "document": "modern-controls",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/numbering.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:numbering[1]/w:abstractNum[2]/w:lvl[6]/w:lvlJc[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}numbering[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}abstractNum[2]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvl[6]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvlJc[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:val' has invalid value 'start'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:lvlJc",
+      "attributeQName": "w:val",
+      "invalidValue": "start",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "LOGICAL_ALIGNMENT_ENUM",
+      "clinicalImpact": "No clinical text changed, but an invalid logical-alignment enumeration is not portable proof of numbering/table alignment.",
+      "layoutImpact": "Potential list or table alignment drift, especially across compatibility or bidirectional-layout modes; none observed in the current PDF geometry.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Preserve as a classified compatibility failure pending desktop Word evidence or a schema-valid pinned save filter; do not add a broad validator allowlist.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-015",
+      "document": "modern-controls",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/numbering.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:numbering[1]/w:abstractNum[2]/w:lvl[5]/w:lvlJc[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}numbering[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}abstractNum[2]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvl[5]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvlJc[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:val' has invalid value 'start'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:lvlJc",
+      "attributeQName": "w:val",
+      "invalidValue": "start",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "LOGICAL_ALIGNMENT_ENUM",
+      "clinicalImpact": "No clinical text changed, but an invalid logical-alignment enumeration is not portable proof of numbering/table alignment.",
+      "layoutImpact": "Potential list or table alignment drift, especially across compatibility or bidirectional-layout modes; none observed in the current PDF geometry.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Preserve as a classified compatibility failure pending desktop Word evidence or a schema-valid pinned save filter; do not add a broad validator allowlist.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-016",
+      "document": "modern-controls",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/numbering.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:numbering[1]/w:abstractNum[2]/w:lvl[4]/w:lvlJc[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}numbering[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}abstractNum[2]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvl[4]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvlJc[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:val' has invalid value 'start'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:lvlJc",
+      "attributeQName": "w:val",
+      "invalidValue": "start",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "LOGICAL_ALIGNMENT_ENUM",
+      "clinicalImpact": "No clinical text changed, but an invalid logical-alignment enumeration is not portable proof of numbering/table alignment.",
+      "layoutImpact": "Potential list or table alignment drift, especially across compatibility or bidirectional-layout modes; none observed in the current PDF geometry.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Preserve as a classified compatibility failure pending desktop Word evidence or a schema-valid pinned save filter; do not add a broad validator allowlist.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-017",
+      "document": "modern-controls",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/numbering.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:numbering[1]/w:abstractNum[2]/w:lvl[3]/w:lvlJc[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}numbering[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}abstractNum[2]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvl[3]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvlJc[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:val' has invalid value 'start'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:lvlJc",
+      "attributeQName": "w:val",
+      "invalidValue": "start",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "LOGICAL_ALIGNMENT_ENUM",
+      "clinicalImpact": "No clinical text changed, but an invalid logical-alignment enumeration is not portable proof of numbering/table alignment.",
+      "layoutImpact": "Potential list or table alignment drift, especially across compatibility or bidirectional-layout modes; none observed in the current PDF geometry.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Preserve as a classified compatibility failure pending desktop Word evidence or a schema-valid pinned save filter; do not add a broad validator allowlist.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-018",
+      "document": "modern-controls",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/numbering.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:numbering[1]/w:abstractNum[2]/w:lvl[2]/w:lvlJc[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}numbering[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}abstractNum[2]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvl[2]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvlJc[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:val' has invalid value 'start'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:lvlJc",
+      "attributeQName": "w:val",
+      "invalidValue": "start",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "LOGICAL_ALIGNMENT_ENUM",
+      "clinicalImpact": "No clinical text changed, but an invalid logical-alignment enumeration is not portable proof of numbering/table alignment.",
+      "layoutImpact": "Potential list or table alignment drift, especially across compatibility or bidirectional-layout modes; none observed in the current PDF geometry.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Preserve as a classified compatibility failure pending desktop Word evidence or a schema-valid pinned save filter; do not add a broad validator allowlist.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-019",
+      "document": "modern-controls",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/numbering.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:numbering[1]/w:abstractNum[2]/w:lvl[1]/w:lvlJc[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}numbering[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}abstractNum[2]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvl[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvlJc[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:val' has invalid value 'start'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:lvlJc",
+      "attributeQName": "w:val",
+      "invalidValue": "start",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "LOGICAL_ALIGNMENT_ENUM",
+      "clinicalImpact": "No clinical text changed, but an invalid logical-alignment enumeration is not portable proof of numbering/table alignment.",
+      "layoutImpact": "Potential list or table alignment drift, especially across compatibility or bidirectional-layout modes; none observed in the current PDF geometry.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Preserve as a classified compatibility failure pending desktop Word evidence or a schema-valid pinned save filter; do not add a broad validator allowlist.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-020",
+      "document": "modern-controls",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/numbering.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:numbering[1]/w:abstractNum[1]/w:lvl[9]/w:lvlJc[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}numbering[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}abstractNum[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvl[9]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvlJc[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:val' has invalid value 'start'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:lvlJc",
+      "attributeQName": "w:val",
+      "invalidValue": "start",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "LOGICAL_ALIGNMENT_ENUM",
+      "clinicalImpact": "No clinical text changed, but an invalid logical-alignment enumeration is not portable proof of numbering/table alignment.",
+      "layoutImpact": "Potential list or table alignment drift, especially across compatibility or bidirectional-layout modes; none observed in the current PDF geometry.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Preserve as a classified compatibility failure pending desktop Word evidence or a schema-valid pinned save filter; do not add a broad validator allowlist.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-021",
+      "document": "modern-controls",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/numbering.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:numbering[1]/w:abstractNum[1]/w:lvl[8]/w:lvlJc[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}numbering[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}abstractNum[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvl[8]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvlJc[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:val' has invalid value 'start'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:lvlJc",
+      "attributeQName": "w:val",
+      "invalidValue": "start",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "LOGICAL_ALIGNMENT_ENUM",
+      "clinicalImpact": "No clinical text changed, but an invalid logical-alignment enumeration is not portable proof of numbering/table alignment.",
+      "layoutImpact": "Potential list or table alignment drift, especially across compatibility or bidirectional-layout modes; none observed in the current PDF geometry.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Preserve as a classified compatibility failure pending desktop Word evidence or a schema-valid pinned save filter; do not add a broad validator allowlist.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-022",
+      "document": "modern-controls",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/numbering.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:numbering[1]/w:abstractNum[1]/w:lvl[7]/w:lvlJc[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}numbering[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}abstractNum[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvl[7]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvlJc[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:val' has invalid value 'start'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:lvlJc",
+      "attributeQName": "w:val",
+      "invalidValue": "start",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "LOGICAL_ALIGNMENT_ENUM",
+      "clinicalImpact": "No clinical text changed, but an invalid logical-alignment enumeration is not portable proof of numbering/table alignment.",
+      "layoutImpact": "Potential list or table alignment drift, especially across compatibility or bidirectional-layout modes; none observed in the current PDF geometry.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Preserve as a classified compatibility failure pending desktop Word evidence or a schema-valid pinned save filter; do not add a broad validator allowlist.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-023",
+      "document": "modern-controls",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/numbering.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:numbering[1]/w:abstractNum[1]/w:lvl[6]/w:lvlJc[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}numbering[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}abstractNum[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvl[6]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvlJc[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:val' has invalid value 'start'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:lvlJc",
+      "attributeQName": "w:val",
+      "invalidValue": "start",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "LOGICAL_ALIGNMENT_ENUM",
+      "clinicalImpact": "No clinical text changed, but an invalid logical-alignment enumeration is not portable proof of numbering/table alignment.",
+      "layoutImpact": "Potential list or table alignment drift, especially across compatibility or bidirectional-layout modes; none observed in the current PDF geometry.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Preserve as a classified compatibility failure pending desktop Word evidence or a schema-valid pinned save filter; do not add a broad validator allowlist.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-024",
+      "document": "modern-controls",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/numbering.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:numbering[1]/w:abstractNum[1]/w:lvl[5]/w:lvlJc[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}numbering[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}abstractNum[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvl[5]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvlJc[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:val' has invalid value 'start'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:lvlJc",
+      "attributeQName": "w:val",
+      "invalidValue": "start",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "LOGICAL_ALIGNMENT_ENUM",
+      "clinicalImpact": "No clinical text changed, but an invalid logical-alignment enumeration is not portable proof of numbering/table alignment.",
+      "layoutImpact": "Potential list or table alignment drift, especially across compatibility or bidirectional-layout modes; none observed in the current PDF geometry.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Preserve as a classified compatibility failure pending desktop Word evidence or a schema-valid pinned save filter; do not add a broad validator allowlist.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-025",
+      "document": "modern-controls",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/numbering.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:numbering[1]/w:abstractNum[1]/w:lvl[4]/w:lvlJc[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}numbering[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}abstractNum[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvl[4]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvlJc[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:val' has invalid value 'start'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:lvlJc",
+      "attributeQName": "w:val",
+      "invalidValue": "start",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "LOGICAL_ALIGNMENT_ENUM",
+      "clinicalImpact": "No clinical text changed, but an invalid logical-alignment enumeration is not portable proof of numbering/table alignment.",
+      "layoutImpact": "Potential list or table alignment drift, especially across compatibility or bidirectional-layout modes; none observed in the current PDF geometry.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Preserve as a classified compatibility failure pending desktop Word evidence or a schema-valid pinned save filter; do not add a broad validator allowlist.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-026",
+      "document": "modern-controls",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/numbering.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:numbering[1]/w:abstractNum[1]/w:lvl[3]/w:lvlJc[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}numbering[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}abstractNum[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvl[3]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvlJc[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:val' has invalid value 'start'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:lvlJc",
+      "attributeQName": "w:val",
+      "invalidValue": "start",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "LOGICAL_ALIGNMENT_ENUM",
+      "clinicalImpact": "No clinical text changed, but an invalid logical-alignment enumeration is not portable proof of numbering/table alignment.",
+      "layoutImpact": "Potential list or table alignment drift, especially across compatibility or bidirectional-layout modes; none observed in the current PDF geometry.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Preserve as a classified compatibility failure pending desktop Word evidence or a schema-valid pinned save filter; do not add a broad validator allowlist.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-027",
+      "document": "modern-controls",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/numbering.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:numbering[1]/w:abstractNum[1]/w:lvl[2]/w:lvlJc[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}numbering[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}abstractNum[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvl[2]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvlJc[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:val' has invalid value 'start'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:lvlJc",
+      "attributeQName": "w:val",
+      "invalidValue": "start",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "LOGICAL_ALIGNMENT_ENUM",
+      "clinicalImpact": "No clinical text changed, but an invalid logical-alignment enumeration is not portable proof of numbering/table alignment.",
+      "layoutImpact": "Potential list or table alignment drift, especially across compatibility or bidirectional-layout modes; none observed in the current PDF geometry.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Preserve as a classified compatibility failure pending desktop Word evidence or a schema-valid pinned save filter; do not add a broad validator allowlist.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-028",
+      "document": "modern-controls",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/numbering.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:numbering[1]/w:abstractNum[1]/w:lvl[1]/w:lvlJc[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}numbering[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}abstractNum[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvl[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lvlJc[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:val' has invalid value 'start'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:lvlJc",
+      "attributeQName": "w:val",
+      "invalidValue": "start",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "LOGICAL_ALIGNMENT_ENUM",
+      "clinicalImpact": "No clinical text changed, but an invalid logical-alignment enumeration is not portable proof of numbering/table alignment.",
+      "layoutImpact": "Potential list or table alignment drift, especially across compatibility or bidirectional-layout modes; none observed in the current PDF geometry.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Preserve as a classified compatibility failure pending desktop Word evidence or a schema-valid pinned save filter; do not add a broad validator allowlist.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-029",
+      "document": "modern-controls",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/fontTable.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:fonts[1]/w:font[6]/w:charset[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}fonts[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}font[6]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}charset[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:characterSet' has invalid value 'utf-8'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:charset",
+      "attributeQName": "w:characterSet",
+      "invalidValue": "utf-8",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "FONT_CHARACTER_SET_EXTENSION",
+      "clinicalImpact": "No clinical value changed in the synthetic PDF comparison, but invalid font metadata can change fallback or encoding behavior in another Office implementation.",
+      "layoutImpact": "Potential font substitution; none observed in this LibreOffice-to-PDF corpus.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Keep pending for desktop Word evidence or select a pinned Office save filter that emits schema-valid font metadata; do not normalize this inside the signing verifier.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-030",
+      "document": "modern-controls",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/fontTable.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:fonts[1]/w:font[5]/w:charset[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}fonts[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}font[5]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}charset[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:characterSet' has invalid value 'utf-8'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:charset",
+      "attributeQName": "w:characterSet",
+      "invalidValue": "utf-8",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "FONT_CHARACTER_SET_EXTENSION",
+      "clinicalImpact": "No clinical value changed in the synthetic PDF comparison, but invalid font metadata can change fallback or encoding behavior in another Office implementation.",
+      "layoutImpact": "Potential font substitution; none observed in this LibreOffice-to-PDF corpus.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Keep pending for desktop Word evidence or select a pinned Office save filter that emits schema-valid font metadata; do not normalize this inside the signing verifier.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-031",
+      "document": "modern-controls",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/fontTable.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:fonts[1]/w:font[4]/w:charset[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}fonts[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}font[4]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}charset[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:characterSet' has invalid value 'utf-8'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:charset",
+      "attributeQName": "w:characterSet",
+      "invalidValue": "utf-8",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "FONT_CHARACTER_SET_EXTENSION",
+      "clinicalImpact": "No clinical value changed in the synthetic PDF comparison, but invalid font metadata can change fallback or encoding behavior in another Office implementation.",
+      "layoutImpact": "Potential font substitution; none observed in this LibreOffice-to-PDF corpus.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Keep pending for desktop Word evidence or select a pinned Office save filter that emits schema-valid font metadata; do not normalize this inside the signing verifier.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-032",
+      "document": "modern-controls",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/fontTable.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:fonts[1]/w:font[3]/w:charset[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}fonts[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}font[3]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}charset[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:characterSet' has invalid value 'windows-1252'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:charset",
+      "attributeQName": "w:characterSet",
+      "invalidValue": "windows-1252",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "FONT_CHARACTER_SET_EXTENSION",
+      "clinicalImpact": "No clinical value changed in the synthetic PDF comparison, but invalid font metadata can change fallback or encoding behavior in another Office implementation.",
+      "layoutImpact": "Potential font substitution; none observed in this LibreOffice-to-PDF corpus.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Keep pending for desktop Word evidence or select a pinned Office save filter that emits schema-valid font metadata; do not normalize this inside the signing verifier.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-033",
+      "document": "modern-controls",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/fontTable.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:fonts[1]/w:font[1]/w:charset[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}fonts[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}font[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}charset[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:characterSet' has invalid value 'windows-1252'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:charset",
+      "attributeQName": "w:characterSet",
+      "invalidValue": "windows-1252",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "FONT_CHARACTER_SET_EXTENSION",
+      "clinicalImpact": "No clinical value changed in the synthetic PDF comparison, but invalid font metadata can change fallback or encoding behavior in another Office implementation.",
+      "layoutImpact": "Potential font substitution; none observed in this LibreOffice-to-PDF corpus.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Keep pending for desktop Word evidence or select a pinned Office save filter that emits schema-valid font metadata; do not normalize this inside the signing verifier.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-034",
+      "document": "table-layout",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/document.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:document[1]/w:body[1]/w:tbl[1]/w:tr[2]/w:trPr[1]/w:cantSplit[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}document[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}body[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tbl[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tr[2]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}trPr[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}cantSplit[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:val' has invalid value 'true'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:cantSplit",
+      "attributeQName": "w:val",
+      "invalidValue": "true",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "TABLE_ROW_ON_OFF_LEXICAL_VALUE",
+      "clinicalImpact": "No clinical value changed, but invalid row-control lexical values can make pagination behavior implementation-dependent.",
+      "layoutImpact": "Potential repeated-header or row-splitting drift; the current three-page PDF retained page count and major geometry.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Keep classified and pending; require a schema-valid save filter plus Word evidence before approval.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-035",
+      "document": "table-layout",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/document.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:document[1]/w:body[1]/w:tbl[1]/w:tr[1]/w:trPr[1]/w:cantSplit[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}document[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}body[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tbl[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tr[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}trPr[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}cantSplit[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:val' has invalid value 'true'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:cantSplit",
+      "attributeQName": "w:val",
+      "invalidValue": "true",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "TABLE_ROW_ON_OFF_LEXICAL_VALUE",
+      "clinicalImpact": "No clinical value changed, but invalid row-control lexical values can make pagination behavior implementation-dependent.",
+      "layoutImpact": "Potential repeated-header or row-splitting drift; the current three-page PDF retained page count and major geometry.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Keep classified and pending; require a schema-valid save filter plus Word evidence before approval.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-036",
+      "document": "table-layout",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/document.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:document[1]/w:body[1]/w:tbl[1]/w:tr[1]/w:trPr[1]/w:tblHeader[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}document[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}body[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tbl[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tr[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}trPr[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblHeader[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:val' has invalid value 'true'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:tblHeader",
+      "attributeQName": "w:val",
+      "invalidValue": "true",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "TABLE_ROW_ON_OFF_LEXICAL_VALUE",
+      "clinicalImpact": "No clinical value changed, but invalid row-control lexical values can make pagination behavior implementation-dependent.",
+      "layoutImpact": "Potential repeated-header or row-splitting drift; the current three-page PDF retained page count and major geometry.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Keep classified and pending; require a schema-valid save filter plus Word evidence before approval.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-037",
+      "document": "table-layout",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/document.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:document[1]/w:body[1]/w:tbl[1]/w:tblPr[1]/w:jc[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}document[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}body[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tbl[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblPr[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}jc[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:val' has invalid value 'start'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:jc",
+      "attributeQName": "w:val",
+      "invalidValue": "start",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "LOGICAL_ALIGNMENT_ENUM",
+      "clinicalImpact": "No clinical text changed, but an invalid logical-alignment enumeration is not portable proof of numbering/table alignment.",
+      "layoutImpact": "Potential list or table alignment drift, especially across compatibility or bidirectional-layout modes; none observed in the current PDF geometry.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Preserve as a classified compatibility failure pending desktop Word evidence or a schema-valid pinned save filter; do not add a broad validator allowlist.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-038",
+      "document": "table-layout",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/fontTable.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:fonts[1]/w:font[6]/w:charset[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}fonts[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}font[6]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}charset[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:characterSet' has invalid value 'utf-8'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:charset",
+      "attributeQName": "w:characterSet",
+      "invalidValue": "utf-8",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "FONT_CHARACTER_SET_EXTENSION",
+      "clinicalImpact": "No clinical value changed in the synthetic PDF comparison, but invalid font metadata can change fallback or encoding behavior in another Office implementation.",
+      "layoutImpact": "Potential font substitution; none observed in this LibreOffice-to-PDF corpus.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Keep pending for desktop Word evidence or select a pinned Office save filter that emits schema-valid font metadata; do not normalize this inside the signing verifier.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-039",
+      "document": "table-layout",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/fontTable.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:fonts[1]/w:font[5]/w:charset[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}fonts[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}font[5]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}charset[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:characterSet' has invalid value 'utf-8'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:charset",
+      "attributeQName": "w:characterSet",
+      "invalidValue": "utf-8",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "FONT_CHARACTER_SET_EXTENSION",
+      "clinicalImpact": "No clinical value changed in the synthetic PDF comparison, but invalid font metadata can change fallback or encoding behavior in another Office implementation.",
+      "layoutImpact": "Potential font substitution; none observed in this LibreOffice-to-PDF corpus.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Keep pending for desktop Word evidence or select a pinned Office save filter that emits schema-valid font metadata; do not normalize this inside the signing verifier.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-040",
+      "document": "table-layout",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/fontTable.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:fonts[1]/w:font[4]/w:charset[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}fonts[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}font[4]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}charset[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:characterSet' has invalid value 'utf-8'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:charset",
+      "attributeQName": "w:characterSet",
+      "invalidValue": "utf-8",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "FONT_CHARACTER_SET_EXTENSION",
+      "clinicalImpact": "No clinical value changed in the synthetic PDF comparison, but invalid font metadata can change fallback or encoding behavior in another Office implementation.",
+      "layoutImpact": "Potential font substitution; none observed in this LibreOffice-to-PDF corpus.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Keep pending for desktop Word evidence or select a pinned Office save filter that emits schema-valid font metadata; do not normalize this inside the signing verifier.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-041",
+      "document": "table-layout",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/fontTable.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:fonts[1]/w:font[3]/w:charset[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}fonts[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}font[3]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}charset[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:characterSet' has invalid value 'windows-1252'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:charset",
+      "attributeQName": "w:characterSet",
+      "invalidValue": "windows-1252",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "FONT_CHARACTER_SET_EXTENSION",
+      "clinicalImpact": "No clinical value changed in the synthetic PDF comparison, but invalid font metadata can change fallback or encoding behavior in another Office implementation.",
+      "layoutImpact": "Potential font substitution; none observed in this LibreOffice-to-PDF corpus.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Keep pending for desktop Word evidence or select a pinned Office save filter that emits schema-valid font metadata; do not normalize this inside the signing verifier.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    },
+    {
+      "findingId": "QMD-OFFICE-SCHEMA-042",
+      "document": "table-layout",
+      "stage": "libreoffice_saved",
+      "officeTargets": [
+        "Office2013",
+        "Microsoft365"
+      ],
+      "ooxmlPart": "/word/fontTable.xml",
+      "namespaceBindings": {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+      },
+      "validatorXPath": "/w:fonts[1]/w:font[1]/w:charset[1]",
+      "namespaceAwareXPath": "/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}fonts[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}font[1]/Q{http://schemas.openxmlformats.org/wordprocessingml/2006/main}charset[1]",
+      "schemaRule": {
+        "validatorId": "Sch_AttributeValueDataTypeDetailed",
+        "errorType": "Schema",
+        "constraint": "attribute enumeration",
+        "description": "The attribute 'http://schemas.openxmlformats.org/wordprocessingml/2006/main:characterSet' has invalid value 'windows-1252'. The Enumeration constraint failed."
+      },
+      "elementQName": "w:charset",
+      "attributeQName": "w:characterSet",
+      "invalidValue": "windows-1252",
+      "firstIntroducedBy": "LibreOffice 25.8.7.3 Office Open XML Text save filter",
+      "sourceStageError": false,
+      "rendererStageError": false,
+      "structuralCategory": "FONT_CHARACTER_SET_EXTENSION",
+      "clinicalImpact": "No clinical value changed in the synthetic PDF comparison, but invalid font metadata can change fallback or encoding behavior in another Office implementation.",
+      "layoutImpact": "Potential font substitution; none observed in this LibreOffice-to-PDF corpus.",
+      "securityImpact": "No macro, external relationship, active field, or unsafe package behavior was introduced; the production package-security inspection passed after save.",
+      "requiredFixOrClassification": "LibreOffice-only external-tool output. Keep pending for desktop Word evidence or select a pinned Office save filter that emits schema-valid font metadata; do not normalize this inside the signing verifier.",
+      "preDeliveryReleaseImpact": "none; the immutable QuillMD source/output is schema-valid and remains governed by strict verification-contract-v2",
+      "officeCompatibilityImpact": "blocking until explicitly resolved or approved with desktop Word evidence"
+    }
+  ]
+}

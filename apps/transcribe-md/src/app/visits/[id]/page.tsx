@@ -1,39 +1,62 @@
-import type { Metadata } from 'next';
-import Link from 'next/link';
-import { notFound, redirect } from 'next/navigation';
-import * as Sentry from '@sentry/nextjs';
+import type { Metadata } from "next";
+import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
+import * as Sentry from "@sentry/nextjs";
 
-import prisma from '@meddoc/db';
-import { TranscribeVisitStatus } from '@prisma/client';
+import prisma from "@meddoc/db";
+import { TranscribeVisitStatus } from "@prisma/client";
 import {
   findSpecialty,
   isImagingReportSpecialty,
   ultrasoundSpecialtyEnabled,
-} from '@meddoc/shared/specialties';
-import { auth } from '@/lib/nextauth';
-import { logAudit } from '@/lib/audit';
-import { AppFrame } from '@/components/ui/app-frame';
-import { Ic } from '@/components/ui/icon';
-import { type SpecialtyKind } from '@/components/ui/spec-chip';
-import { AudioUploader } from '@/components/audio-uploader';
-import { VoiceDictator } from '@/components/voice-dictator';
-import { TextComposer } from '@/components/text-composer';
+} from "@meddoc/shared/specialties";
+import { auth } from "@/lib/nextauth";
+import { AuthError, requireFreshDoctorIdentity } from "@/lib/auth";
+import { logAudit, logRequiredAudit } from "@/lib/audit";
+import { AppFrame } from "@/components/ui/app-frame";
+import { Ic } from "@/components/ui/icon";
+import { type SpecialtyKind } from "@/components/ui/spec-chip";
+import { AudioUploader } from "@/components/audio-uploader";
+import { VoiceDictator } from "@/components/voice-dictator";
+import { TextComposer } from "@/components/text-composer";
+import { TemplateTwinSyntheticQaBanner } from "@/components/template-twin-synthetic-qa-banner";
 
-import { ProcessingTypewriter } from './processing-typewriter';
-import { VisitReadyView, type Utterance, type SpeakerInfo } from './visit-ready-view';
-import { VisitFailedView } from './visit-failed-view';
-import { VisitLifecycleActions } from './visit-lifecycle-actions';
-import { EditDraftDialog } from './edit-draft-dialog';
+import { ProcessingTypewriter } from "./processing-typewriter";
+import {
+  VisitReadyView,
+  type Utterance,
+  type SpeakerInfo,
+} from "./visit-ready-view";
+import { VisitFailedView } from "./visit-failed-view";
+import { VisitLifecycleActions } from "./visit-lifecycle-actions";
+import { EditDraftDialog } from "./edit-draft-dialog";
 
-import { isEmailDeliveryEnabled } from '@/lib/email-enabled';
+import { isEmailDeliveryEnabled } from "@/lib/email-enabled";
 import {
   extractIcdRows,
   extractRxRows,
   extractEmOverride,
-} from '@/lib/em-coding/displayed-level';
-import { unacknowledgedEmChange } from '@/lib/em-pending-change';
+} from "@/lib/em-coding/displayed-level";
+import { unacknowledgedEmChange } from "@/lib/em-pending-change";
+import {
+  serializeTemplateTwinReview,
+  type TemplateTwinReviewData,
+  type TemplateTwinReviewRow,
+} from "@/components/visit/template-twin-review-data";
+import { evaluateTemplateTwinRollout } from "@/lib/template-twin/rollout";
+import {
+  evaluateTemplateTwinStagingQaGate,
+  isTemplateTwinStagingQaRequested,
+  TemplateTwinStagingQaDisabledError,
+} from "@/lib/template-twin/staging-qa-gate";
+import {
+  assertTemplateTwinStagingQaVisitGuard,
+  TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
+  type TemplateTwinStagingQaRunGuardRow,
+  TemplateTwinStagingQaVisitGuardError,
+} from "@/lib/template-twin/staging-qa-visit-guard";
 
-export const metadata: Metadata = { title: 'Visit' };
+export const metadata: Metadata = { title: "Visit" };
 
 // E/M signal extractors (icd/rx/override) now come from the shared
 // @/lib/em-coding/displayed-level so the initial render, the rescore route,
@@ -45,26 +68,35 @@ export const metadata: Metadata = { title: 'Visit' };
  *  can never drift from the DB array's indices, which the adopt/dismiss
  *  server actions validate against. */
 function extractSuggestedClaims(
-  raw: unknown
+  raw: unknown,
 ): { text: string; reason: string; section: string; anchor: string }[] | null {
   if (!Array.isArray(raw) || raw.length === 0) return null;
-  const out: { text: string; reason: string; section: string; anchor: string }[] = [];
+  const out: {
+    text: string;
+    reason: string;
+    section: string;
+    anchor: string;
+  }[] = [];
   for (const entry of raw) {
-    if (entry === null || typeof entry !== 'object') return null;
+    if (entry === null || typeof entry !== "object") return null;
     const c = entry as Record<string, unknown>;
     if (
-      typeof c.text !== 'string' ||
-      typeof c.reason !== 'string' ||
-      typeof c.section !== 'string' ||
-      typeof c.anchor !== 'string'
+      typeof c.text !== "string" ||
+      typeof c.reason !== "string" ||
+      typeof c.section !== "string" ||
+      typeof c.anchor !== "string"
     ) {
       return null;
     }
-    out.push({ text: c.text, reason: c.reason, section: c.section, anchor: c.anchor });
+    out.push({
+      text: c.text,
+      reason: c.reason,
+      section: c.section,
+      anchor: c.anchor,
+    });
   }
   return out;
 }
-
 
 const PROCESSING_STATES: ReadonlyArray<TranscribeVisitStatus> = [
   TranscribeVisitStatus.TRANSCRIBING,
@@ -76,12 +108,12 @@ const PROCESSING_STATES: ReadonlyArray<TranscribeVisitStatus> = [
 ];
 
 const KNOWN_SPECIALTIES: readonly SpecialtyKind[] = [
-  'cardiology',
-  'pain',
-  'ortho',
-  'primary',
-  'pulmonology',
-  'ophthalmology',
+  "cardiology",
+  "pain",
+  "ortho",
+  "primary",
+  "pulmonology",
+  "ophthalmology",
 ];
 
 // findSpecialty (shared) handles canonical ids, legacy display names
@@ -96,31 +128,33 @@ void KNOWN_SPECIALTIES;
 // Phase 5 — collapse the seven-state TranscribeVisitStatus into the
 // labels the meta strip + status pill exposes.
 function visitStatusLabel(status: TranscribeVisitStatus, needsReview: boolean) {
-  if (status === TranscribeVisitStatus.SIGNED) return 'Signed';
-  if (status === TranscribeVisitStatus.FAILED) return 'Failed';
+  if (status === TranscribeVisitStatus.SIGNED) return "Signed";
+  if (status === TranscribeVisitStatus.FAILED) return "Failed";
   if (status === TranscribeVisitStatus.READY)
-    return needsReview ? 'Needs review' : 'Ready';
-  if (status === TranscribeVisitStatus.QUEUED) return 'Queued';
-  return 'Processing';
+    return needsReview ? "Needs review" : "Ready";
+  if (status === TranscribeVisitStatus.QUEUED) return "Queued";
+  return "Processing";
 }
 
 function visitStatusPillClass(
   status: TranscribeVisitStatus,
-  needsReview: boolean
+  needsReview: boolean,
 ) {
   if (status === TranscribeVisitStatus.SIGNED) {
-    return 'qm-lin-pill qm-lin-pill--signed';
+    return "qm-lin-pill qm-lin-pill--signed";
   }
   if (status === TranscribeVisitStatus.FAILED) {
-    return 'qm-lin-pill bg-linear-danger/15 text-linear-danger';
+    return "qm-lin-pill bg-linear-danger/15 text-linear-danger";
   }
   if (status === TranscribeVisitStatus.READY) {
-    return needsReview ? 'qm-lin-pill qm-lin-pill--review' : 'qm-lin-pill qm-lin-pill--ready';
+    return needsReview
+      ? "qm-lin-pill qm-lin-pill--review"
+      : "qm-lin-pill qm-lin-pill--ready";
   }
   if (status === TranscribeVisitStatus.QUEUED) {
-    return 'qm-lin-pill qm-lin-pill--draft';
+    return "qm-lin-pill qm-lin-pill--draft";
   }
-  return 'qm-lin-pill qm-lin-pill--processing';
+  return "qm-lin-pill qm-lin-pill--processing";
 }
 
 export default async function VisitPage({
@@ -130,17 +164,21 @@ export default async function VisitPage({
 }) {
   const { id } = await params;
   const session = await auth();
-  if (!session?.user?.id) redirect('/login');
+  if (!session?.user?.id) redirect("/login");
 
   // Round 3 PR-H — A11-P1 Sentry context.
   // PHI guard: visitId is a UUID — safe. NEVER set patient name, MRN,
   // DOB, email, or transcript content as Sentry tags or context. The
   // redactPhi beforeSend hook is a backstop; primary defense is
   // never sending PHI in the first place.
-  Sentry.setTag('visitId', id);
+  Sentry.setTag("visitId", id);
   Sentry.setUser({ id: session.user.id });
 
-  type UserRow = { name: string | null; email: string };
+  type UserRow = {
+    name: string | null;
+    email: string;
+    practice: { templateTwinEnabled: boolean };
+  };
   type VisitRow = {
     id: string;
     userId: string;
@@ -193,6 +231,8 @@ export default async function VisitPage({
     emPendingChange: unknown;
     patientSummary: string | null;
     confidenceScores: unknown;
+    templateTwinFill: TemplateTwinReviewRow | null;
+    templateTwinSyntheticQaRun: TemplateTwinStagingQaRunGuardRow | null;
   };
 
   // Round 4 critical-Rx-override fix: pull existing override rows so
@@ -202,7 +242,11 @@ export default async function VisitPage({
   const [user, visit, rxOverrides] = (await Promise.all([
     prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { name: true, email: true },
+      select: {
+        name: true,
+        email: true,
+        practice: { select: { templateTwinEnabled: true } },
+      },
     }),
     prisma.transcribeVisit.findUnique({
       where: { id },
@@ -258,30 +302,140 @@ export default async function VisitPage({
         emPendingChange: true,
         patientSummary: true,
         confidenceScores: true,
+        templateTwinFill: {
+          select: {
+            id: true,
+            status: true,
+            manifestVersion: true,
+            manifestSha256: true,
+            fillManifest: true,
+            filledCount: true,
+            needsReviewCount: true,
+            notMentionedCount: true,
+            conflictCount: true,
+            criticalUnresolvedCount: true,
+            roundTripVerified: true,
+            roundTripVerification: true,
+            reviewedAt: true,
+            reviewedManifestVersion: true,
+            reviewedManifestSha256: true,
+            compilerVersion: true,
+            resolverVersion: true,
+            resolverModelVersion: true,
+            rendererVersion: true,
+            soapVersion: true,
+            soapSha256: true,
+            outputSha256: true,
+            outputSizeBytes: true,
+            staticContentSha256: true,
+            compiledVersion: {
+              select: {
+                noteTemplate: { select: { name: true } },
+                certification: {
+                  select: { approvedMappingsSha256: true },
+                },
+                fields: {
+                  orderBy: { displayOrder: "asc" },
+                  select: {
+                    id: true,
+                    fieldId: true,
+                    displayOrder: true,
+                    originalLabel: true,
+                    fieldKind: true,
+                    allowedOptions: true,
+                    rendererBinding: true,
+                    criticality: true,
+                    required: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        templateTwinSyntheticQaRun: {
+          select: TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
+        },
       },
     }),
     prisma.rxWarningOverride.findMany({
       where: { visitId: id },
       select: { warningId: true },
     }),
-  ])) as [
-    UserRow | null,
-    VisitRow | null,
-    Array<{ warningId: string }>,
-  ];
+  ])) as [UserRow | null, VisitRow | null, Array<{ warningId: string }>];
 
-  if (!user) redirect('/login');
+  if (!user) redirect("/login");
   if (!visit || visit.userId !== session.user.id) notFound();
+  let syntheticQaAuditPracticeId: string | null = null;
+  if (
+    visit.templateTwinSyntheticQaRun ||
+    isTemplateTwinStagingQaRequested()
+  ) {
+    try {
+      const doctor = await requireFreshDoctorIdentity(session.user.id);
+      syntheticQaAuditPracticeId = doctor.practiceId;
+      assertTemplateTwinStagingQaVisitGuard({
+        run: visit.templateTwinSyntheticQaRun,
+        actor: {
+          userId: session.user.id,
+          practiceId: doctor.practiceId,
+        },
+        currentRolloutToken: doctor.rolloutToken,
+      });
+    } catch (error) {
+      if (
+        error instanceof AuthError ||
+        error instanceof TemplateTwinStagingQaDisabledError ||
+        error instanceof TemplateTwinStagingQaVisitGuardError
+      ) {
+        notFound();
+      }
+      throw error;
+    }
+  }
+  const serializedTemplateTwinReview = evaluateTemplateTwinRollout({
+    practiceEnabled: user.practice.templateTwinEnabled,
+  }).allowed
+    ? serializeTemplateTwinReview(visit.templateTwinFill)
+    : null;
+  const templateTwinReview = serializedTemplateTwinReview
+    ? {
+        ...serializedTemplateTwinReview,
+        syntheticQaMode:
+          visit.templateTwinSyntheticQaRun !== null &&
+          evaluateTemplateTwinStagingQaGate(process.env).allowed,
+        syntheticQaRunId:
+          visit.templateTwinSyntheticQaRun !== null &&
+          evaluateTemplateTwinStagingQaGate(process.env).allowed
+            ? visit.templateTwinSyntheticQaRun.id
+            : null,
+        syntheticQaAttempt:
+          visit.templateTwinSyntheticQaRun !== null &&
+          evaluateTemplateTwinStagingQaGate(process.env).allowed
+            ? visit.templateTwinSyntheticQaRun.attempt
+            : null,
+      }
+    : null;
+  const syntheticQaVisit = visit.templateTwinSyntheticQaRun !== null;
 
   // Round 3 PR-C — §164.312(b) PHI-read audit (A05-P0-004). Single
   // visit detail page is the highest-volume PHI surface — every doctor
   // visit-detail load lands a row.
-  void logAudit({
-    action: 'VIEWED_VISIT',
+  const viewAudit = {
+    action: "VIEWED_VISIT" as const,
     targetId: visit.id,
-    targetType: 'TranscribeVisit',
-    metadata: { source: 'rsc:/visits/[id]', status: visit.status },
-  });
+    targetType: "TranscribeVisit",
+    metadata: { source: "rsc:/visits/[id]", status: visit.status },
+  };
+  if (syntheticQaVisit) {
+    if (!syntheticQaAuditPracticeId) notFound();
+    await logRequiredAudit({
+      ...viewAudit,
+      userId: session.user.id,
+      practiceId: syntheticQaAuditPracticeId,
+    });
+  } else {
+    void logAudit(viewAudit);
+  }
 
   const hasInput =
     visit.audioKey !== null ||
@@ -289,7 +443,7 @@ export default async function VisitPage({
     (visit.rawTextInput !== null && visit.rawTextInput.length > 0);
 
   const patientDisplayName =
-    visit.patient?.name ?? visit.patientName ?? 'Patient';
+    visit.patient?.name ?? visit.patientName ?? "Patient";
   const statusLabel = visitStatusLabel(visit.status, visit.needsReview);
   const statusPillCls = visitStatusPillClass(visit.status, visit.needsReview);
 
@@ -299,23 +453,23 @@ export default async function VisitPage({
           column, hairline-separated from the meta strip below. */}
       <div
         style={{
-          padding: '14px 24px 0',
-          display: 'flex',
-          alignItems: 'center',
+          padding: "14px 24px 0",
+          display: "flex",
+          alignItems: "center",
           gap: 8,
-          fontFamily: 'var(--font-sans)',
+          fontFamily: "var(--font-sans)",
           fontSize: 13,
-          color: 'var(--color-linear-text-3)',
+          color: "var(--color-linear-text-3)",
         }}
       >
         <Link
           href="/dashboard"
           className="qm-tap-44"
           style={{
-            color: 'var(--color-linear-text-3)',
-            textDecoration: 'none',
-            display: 'inline-flex',
-            alignItems: 'center',
+            color: "var(--color-linear-text-3)",
+            textDecoration: "none",
+            display: "inline-flex",
+            alignItems: "center",
           }}
         >
           Dashboard
@@ -327,10 +481,10 @@ export default async function VisitPage({
               href={`/patients/${visit.patient.id}`}
               className="qm-tap-44"
               style={{
-                color: 'var(--color-linear-text-3)',
-                textDecoration: 'none',
-                display: 'inline-flex',
-                alignItems: 'center',
+                color: "var(--color-linear-text-3)",
+                textDecoration: "none",
+                display: "inline-flex",
+                alignItems: "center",
               }}
             >
               {visit.patient.name}
@@ -338,7 +492,7 @@ export default async function VisitPage({
             <Ic.chevRight width={12} height={12} />
           </>
         ) : null}
-        <span style={{ color: 'var(--color-linear-text), inherit' }}>
+        <span style={{ color: "var(--color-linear-text), inherit" }}>
           Visit · {visit.status.toLowerCase()}
         </span>
       </div>
@@ -347,25 +501,25 @@ export default async function VisitPage({
           hairline dividers. Mirrors visit-detail.html. */}
       <div
         style={{
-          margin: '14px 24px 0',
-          padding: '10px 0 14px',
-          display: 'flex',
-          alignItems: 'center',
+          margin: "14px 24px 0",
+          padding: "10px 0 14px",
+          display: "flex",
+          alignItems: "center",
           gap: 0,
-          flexWrap: 'wrap',
-          borderBottom: '1px solid var(--color-linear-hairline)',
-          fontFamily: 'var(--font-mono)',
+          flexWrap: "wrap",
+          borderBottom: "1px solid var(--color-linear-hairline)",
+          fontFamily: "var(--font-mono)",
           fontSize: 11,
-          letterSpacing: '0.06em',
-          textTransform: 'uppercase',
-          color: 'var(--color-linear-text-2)',
+          letterSpacing: "0.06em",
+          textTransform: "uppercase",
+          color: "var(--color-linear-text-2)",
         }}
       >
         <div
           style={{
             paddingRight: 14,
-            borderRight: '1px solid var(--color-linear-hairline)',
-            color: 'var(--color-linear-text)',
+            borderRight: "1px solid var(--color-linear-hairline)",
+            color: "var(--color-linear-text)",
             fontWeight: 500,
           }}
         >
@@ -373,8 +527,8 @@ export default async function VisitPage({
         </div>
         <div
           style={{
-            padding: '0 14px',
-            borderRight: '1px solid var(--color-linear-hairline)',
+            padding: "0 14px",
+            borderRight: "1px solid var(--color-linear-hairline)",
           }}
         >
           {specialtyLabel(visit.specialty)}
@@ -382,76 +536,90 @@ export default async function VisitPage({
         {visit.patient?.externalId && (
           <div
             style={{
-              padding: '0 14px',
-              borderRight: '1px solid var(--color-linear-hairline)',
+              padding: "0 14px",
+              borderRight: "1px solid var(--color-linear-hairline)",
             }}
           >
-            <span style={{ color: 'var(--color-linear-text-3)' }}>MRN&nbsp;</span>
+            <span style={{ color: "var(--color-linear-text-3)" }}>
+              MRN&nbsp;
+            </span>
             {visit.patient.externalId}
           </div>
         )}
         {visit.chiefComplaint && (
           <div
             style={{
-              padding: '0 14px',
-              borderRight: '1px solid var(--color-linear-hairline)',
+              padding: "0 14px",
+              borderRight: "1px solid var(--color-linear-hairline)",
             }}
           >
-            <span style={{ color: 'var(--color-linear-text-3)' }}>CC&nbsp;</span>
-            <span style={{ textTransform: 'none', letterSpacing: '-0.005em' }}>
+            <span style={{ color: "var(--color-linear-text-3)" }}>
+              CC&nbsp;
+            </span>
+            <span style={{ textTransform: "none", letterSpacing: "-0.005em" }}>
               {visit.chiefComplaint}
             </span>
           </div>
         )}
-        <div style={{ padding: '0 14px', marginLeft: 'auto' }}>
-          <span className={statusPillCls} style={{ textTransform: 'uppercase' }}>
+        <div style={{ padding: "0 14px", marginLeft: "auto" }}>
+          <span
+            className={statusPillCls}
+            style={{ textTransform: "uppercase" }}
+          >
             {statusLabel}
           </span>
         </div>
       </div>
 
-      <div style={{ padding: '14px 24px 0' }}>
-        <VisitLifecycleActions
-          visitId={visit.id}
-          status={visit.status}
-          deletedAt={visit.deletedAt ? visit.deletedAt.toISOString() : null}
-          archivedAt={
-            visit.archivedAt ? visit.archivedAt.toISOString() : null
-          }
-          hasInput={hasInput}
-          editSlot={
-            visit.status === TranscribeVisitStatus.QUEUED &&
-            visit.audioKey === null &&
-            visit.dictationAudioKey === null &&
-            (visit.rawTextInput === null ||
-              visit.rawTextInput.length === 0) &&
-            visit.deletedAt === null &&
-            visit.patient !== null ? (
-              <EditDraftDialog
-                visitId={visit.id}
-                initialPatient={{
-                  id: visit.patient.id,
-                  name: visit.patient.name,
-                  dateOfBirth: visit.patient.dateOfBirth
-                    ? visit.patient.dateOfBirth.toISOString().slice(0, 10)
-                    : null,
-                  externalId: visit.patient.externalId,
-                }}
-                initialSpecialty={visit.specialty}
-                initialChiefComplaint={visit.chiefComplaint}
-                initialInputMode={
-                  visit.inputMode as
-                    | 'audio_upload'
-                    | 'voice_dictation'
-                    | 'text_notes'
-                }
-              />
-            ) : null
-          }
-        />
+      <div style={{ padding: "14px 24px 0" }}>
+        {!syntheticQaVisit && (
+          <VisitLifecycleActions
+            visitId={visit.id}
+            status={visit.status}
+            deletedAt={visit.deletedAt ? visit.deletedAt.toISOString() : null}
+            archivedAt={
+              visit.archivedAt ? visit.archivedAt.toISOString() : null
+            }
+            hasInput={hasInput}
+            editSlot={
+              visit.status === TranscribeVisitStatus.QUEUED &&
+              visit.audioKey === null &&
+              visit.dictationAudioKey === null &&
+              (visit.rawTextInput === null ||
+                visit.rawTextInput.length === 0) &&
+              visit.deletedAt === null &&
+              visit.patient !== null ? (
+                <EditDraftDialog
+                  visitId={visit.id}
+                  initialPatient={{
+                    id: visit.patient.id,
+                    name: visit.patient.name,
+                    dateOfBirth: visit.patient.dateOfBirth
+                      ? visit.patient.dateOfBirth.toISOString().slice(0, 10)
+                      : null,
+                    externalId: visit.patient.externalId,
+                  }}
+                  initialSpecialty={visit.specialty}
+                  initialChiefComplaint={visit.chiefComplaint}
+                  initialInputMode={
+                    visit.inputMode as
+                      | "audio_upload"
+                      | "voice_dictation"
+                      | "text_notes"
+                  }
+                />
+              ) : null
+            }
+          />
+        )}
       </div>
 
-      <div style={{ padding: '18px 24px 48px' }}>
+      <div style={{ padding: "18px 24px 48px" }}>
+        {syntheticQaVisit && (
+          <div style={{ marginBottom: 18 }}>
+            <TemplateTwinSyntheticQaBanner />
+          </div>
+        )}
         <VisitBody
           visitId={visit.id}
           doctorEmail={user.email}
@@ -489,6 +657,9 @@ export default async function VisitPage({
           emPendingChange={visit.emPendingChange}
           patientSummary={visit.patientSummary}
           confidenceScores={visit.confidenceScores}
+          templateTwinReview={templateTwinReview}
+          syntheticQaMode={syntheticQaVisit}
+          syntheticQaAttempt={visit.templateTwinSyntheticQaRun?.attempt ?? null}
           // Phase 5.1.1 — V4 Extras card-stream wiring
           patientName={visit.patientName}
           patient={visit.patient}
@@ -550,6 +721,11 @@ interface VisitBodyProps {
   emPendingChange: unknown;
   patientSummary: string | null;
   confidenceScores: unknown;
+  templateTwinReview: TemplateTwinReviewData | null;
+  /** Exact persisted visit identity; staging-only UI never infers this from
+   *  document availability or from client-visible labels. */
+  syntheticQaMode: boolean;
+  syntheticQaAttempt: number | null;
 
   // Phase 5.1.1 — V4 Extras card-stream wiring.
   patientName: string | null;
@@ -566,17 +742,14 @@ interface VisitBodyProps {
 }
 
 async function VisitBody(props: VisitBodyProps) {
-  if (props.status === TranscribeVisitStatus.QUEUED) {
-    if (props.inputMode === 'audio_upload' && !props.audioKey) {
+  if (!props.syntheticQaMode && props.status === TranscribeVisitStatus.QUEUED) {
+    if (props.inputMode === "audio_upload" && !props.audioKey) {
       return <AudioUploader visitId={props.visitId} />;
     }
-    if (
-      props.inputMode === 'voice_dictation' &&
-      !props.dictationAudioKey
-    ) {
+    if (props.inputMode === "voice_dictation" && !props.dictationAudioKey) {
       return <VoiceDictator visitId={props.visitId} theme="clinician" />;
     }
-    if (props.inputMode === 'text_notes' && !props.rawTextInput) {
+    if (props.inputMode === "text_notes" && !props.rawTextInput) {
       return <TextComposer visitId={props.visitId} />;
     }
   }
@@ -584,7 +757,8 @@ async function VisitBody(props: VisitBodyProps) {
   if (
     PROCESSING_STATES.includes(props.status) ||
     (props.status === TranscribeVisitStatus.QUEUED &&
-      (props.audioKey ||
+      (props.syntheticQaMode ||
+        props.audioKey ||
         props.dictationAudioKey ||
         props.rawTextInput))
   ) {
@@ -594,8 +768,12 @@ async function VisitBody(props: VisitBodyProps) {
     // null or unexpected — same defensive pattern as the status route.
     const icdBlob = props.icdCodes as { codes?: unknown[] } | null;
     const cptBlob = props.cptCodes as { codes?: unknown[] } | null;
-    const initialIcdCount = Array.isArray(icdBlob?.codes) ? icdBlob.codes.length : 0;
-    const initialCptCount = Array.isArray(cptBlob?.codes) ? cptBlob.codes.length : 0;
+    const initialIcdCount = Array.isArray(icdBlob?.codes)
+      ? icdBlob.codes.length
+      : 0;
+    const initialCptCount = Array.isArray(cptBlob?.codes)
+      ? cptBlob.codes.length
+      : 0;
     return (
       <ProcessingTypewriter
         visitId={props.visitId}
@@ -608,14 +786,30 @@ async function VisitBody(props: VisitBodyProps) {
             : null
         }
         specialtyLabel={props.specialty}
+        syntheticQaAttempt={props.syntheticQaAttempt}
       />
     );
   }
 
   if (props.status === TranscribeVisitStatus.FAILED) {
+    if (props.syntheticQaMode) {
+      return (
+        <div className="space-y-4">
+          <TemplateTwinSyntheticQaBanner />
+          <VisitFailedView
+            visitId={props.visitId}
+            syntheticQaAttempt={props.syntheticQaAttempt}
+            reason={props.reviewReason}
+            failureCategory={props.failureCategory}
+            inputMode={props.inputMode}
+          />
+        </div>
+      );
+    }
     return (
       <VisitFailedView
         visitId={props.visitId}
+        syntheticQaAttempt={props.syntheticQaAttempt}
         reason={props.reviewReason}
         failureCategory={props.failureCategory}
         inputMode={props.inputMode}
@@ -623,39 +817,37 @@ async function VisitBody(props: VisitBodyProps) {
     );
   }
 
-  const raw = (props.transcriptRaw as
-    | { results?: { utterances?: Utterance[] } }
-    | null) ?? null;
+  const raw =
+    (props.transcriptRaw as {
+      results?: { utterances?: Utterance[] };
+    } | null) ?? null;
   const utterances: Utterance[] = raw?.results?.utterances ?? [];
 
   const speakerMap =
     (props.speakerMap as Record<string, SpeakerInfo> | null) ?? {};
 
-  const critique = props.critique as
-    | {
-        issues: {
-          severity: string;
-          location: string;
-          description: string;
-          suggested_fix: string;
-        }[];
-        overall_quality: string;
-        safe_to_sign_without_review: boolean;
-      }
-    | null;
+  const critique = props.critique as {
+    issues: {
+      severity: string;
+      location: string;
+      description: string;
+      suggested_fix: string;
+    }[];
+    overall_quality: string;
+    safe_to_sign_without_review: boolean;
+  } | null;
 
   const soapText =
     props.status === TranscribeVisitStatus.SIGNED
-      ? (props.signedSoap ?? props.soapFinal ?? '')
-      : (props.soapFinal ?? '');
+      ? (props.signedSoap ?? props.soapFinal ?? "")
+      : (props.soapFinal ?? "");
 
   const durationSec =
-    props.inputMode === 'voice_dictation'
+    props.inputMode === "voice_dictation"
       ? props.dictationDurationSec
       : props.audioDurationSec;
 
-  const showPipelineTab =
-    process.env.NEXT_PUBLIC_SHOW_PIPELINE_TAB === 'true';
+  const showPipelineTab = process.env.NEXT_PUBLIC_SHOW_PIPELINE_TAB === "true";
 
   // Server-side initial E&M score for the Coding Coach rail. As of
   // feat/em-score-precomputed-judge: routes through the LLM-judge
@@ -684,41 +876,47 @@ async function VisitBody(props: VisitBodyProps) {
   // "not applicable" note instead of a forced clinic-visit code.
   const emNotApplicable =
     ultrasoundSpecialtyEnabled() && isImagingReportSpecialty(props.specialty);
+  const syntheticQaMode = props.syntheticQaMode;
   // Imaging reports skip E/M scoring entirely (left null → the Billing surface
   // renders the "not applicable" note). Only clinic encounters are scored.
-  let initialEmScore: import('@/lib/em-coding-ui/types').EmScore | null = null;
-  if (!emNotApplicable) {
-  try {
-    const { computeEmScore } = await import('@/lib/em-coding/score');
-    const { engineToUiScore } = await import('@/lib/em-coding/to-ui-score');
-    const engineScore = await computeEmScore(soapText, {
-      practiceId: sessionPracticeId,
-      visitId: props.visitId,
-      userId: session?.user?.id,
-      icdCodes: extractIcdRows(props.icdCodes),
-      rxDrafts: extractRxRows(props.rxDrafts),
-    });
-    // Hydrate the doctor's previously-set override (if any) from
-    // cptCodes.em.override so the rail renders the doctor-set code on
-    // page load. The server route at POST /em-score/override writes
-    // here; this read is the round-trip back to the rail.
-    const existingOverride = extractEmOverride(props.cptCodes);
-    initialEmScore = engineToUiScore(
-      engineScore,
-      durationSec ?? 0,
-      existingOverride
-    );
-  } catch (e) {
-    console.error('[em-score] initial render failed:', e);
-  }
+  let initialEmScore: import("@/lib/em-coding-ui/types").EmScore | null = null;
+  // Synthetic QA is deliberately provider-isolated. Its worker already
+  // produced the bounded mocked facts used by Template Twin; an on-read E/M
+  // score could otherwise fall through to a live judge when the cache is
+  // cold. The staging review does not need a billing recommendation.
+  if (!emNotApplicable && !syntheticQaMode) {
+    try {
+      const { computeEmScore } = await import("@/lib/em-coding/score");
+      const { engineToUiScore } = await import("@/lib/em-coding/to-ui-score");
+      const engineScore = await computeEmScore(soapText, {
+        practiceId: sessionPracticeId,
+        visitId: props.visitId,
+        userId: session?.user?.id,
+        icdCodes: extractIcdRows(props.icdCodes),
+        rxDrafts: extractRxRows(props.rxDrafts),
+      });
+      // Hydrate the doctor's previously-set override (if any) from
+      // cptCodes.em.override so the rail renders the doctor-set code on
+      // page load. The server route at POST /em-score/override writes
+      // here; this read is the round-trip back to the rail.
+      const existingOverride = extractEmOverride(props.cptCodes);
+      initialEmScore = engineToUiScore(
+        engineScore,
+        durationSec ?? 0,
+        existingOverride,
+      );
+    } catch (e) {
+      console.error("[em-score] initial render failed:", e);
+    }
   }
 
   // E/M visible-confirm (prod smoke #311) — strict coercion of the
   // pending-change jsonb to the {from, to} pair the modal renders.
   // Imaging reports have no E/M level → never a pending E/M change to confirm.
-  const pendingEm = emNotApplicable
-    ? null
-    : unacknowledgedEmChange(props.emPendingChange);
+  const pendingEm =
+    emNotApplicable || syntheticQaMode
+      ? null
+      : unacknowledgedEmChange(props.emPendingChange);
   const pendingEmChange = pendingEm
     ? { from: pendingEm.from, to: pendingEm.to }
     : null;
@@ -757,6 +955,8 @@ async function VisitBody(props: VisitBodyProps) {
       emPendingChange={pendingEmChange}
       patientSummary={props.patientSummary}
       confidenceScores={props.confidenceScores}
+      templateTwinReview={props.templateTwinReview}
+      syntheticQaMode={props.syntheticQaMode}
       durationSec={durationSec}
       costCents={props.processingCostCents}
       processingStartedAt={
@@ -772,9 +972,7 @@ async function VisitBody(props: VisitBodyProps) {
       doctorEmail={props.doctorEmail}
       emailEnabled={props.emailEnabled}
       showPipelineTab={showPipelineTab}
-      signedAt={
-        props.signedAt ? props.signedAt.toISOString() : null
-      }
+      signedAt={props.signedAt ? props.signedAt.toISOString() : null}
       signedByName={props.doctorName}
       specialtyLabel={props.specialty}
       recordedByName={props.doctorName}
@@ -793,9 +991,7 @@ async function VisitBody(props: VisitBodyProps) {
       patientInsurance={props.patient?.insurance ?? null}
       patientExternalId={props.patient?.externalId ?? null}
       patientProblemList={props.patient?.problemList ?? null}
-      visitCreatedAt={
-        props.createdAt ? props.createdAt.toISOString() : null
-      }
+      visitCreatedAt={props.createdAt ? props.createdAt.toISOString() : null}
     />
   );
 }

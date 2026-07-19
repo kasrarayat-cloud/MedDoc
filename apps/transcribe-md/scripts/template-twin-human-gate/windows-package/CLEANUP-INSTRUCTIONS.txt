@@ -1,0 +1,6 @@
+After the returned evidence ZIP and its SHA-256 sidecar have been delivered and
+verified, close Microsoft Word and delete the extracted package folder and all
+generated work copies. Originals are never modified by the script. No clinical
+or patient information should be present because the corpus is synthetic-only.
+
+Commit: __SOURCE_COMMIT__

@@ -16,37 +16,41 @@
 // unchanged per PROTECTED_CONTRACTS.md.
 // ============================================================================
 
-import type { Metadata } from 'next';
-import Link from 'next/link';
-import { redirect } from 'next/navigation';
-import { Suspense } from 'react';
+import type { Metadata } from "next";
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { Suspense } from "react";
 
-import prisma from '@meddoc/db';
-import { TranscribeVisitStatus } from '@prisma/client';
-import { auth } from '@/lib/nextauth';
-import { logAudit } from '@/lib/audit';
-import { isSkinBeta } from '@/config/skin-beta';
-import { AppFrame } from '@/components/ui/app-frame';
-import { DashboardC3Body } from '@/components/dashboard/dashboard-c3';
-import { StatCard } from '@/components/dashboard/stat-card';
-import { Greeting } from '@/components/dashboard/greeting';
+import prisma from "@meddoc/db";
+import {
+  ordinaryClinicalVisitWhere,
+  TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID,
+} from "@/lib/template-twin/synthetic-qa-patient";
+import { TranscribeVisitStatus } from "@prisma/client";
+import { auth } from "@/lib/nextauth";
+import { logAudit } from "@/lib/audit";
+import { isSkinBeta } from "@/config/skin-beta";
+import { AppFrame } from "@/components/ui/app-frame";
+import { DashboardC3Body } from "@/components/dashboard/dashboard-c3";
+import { StatCard } from "@/components/dashboard/stat-card";
+import { Greeting } from "@/components/dashboard/greeting";
 import {
   VisitList,
   type DashboardVisit,
-} from '@/components/dashboard/visit-list';
+} from "@/components/dashboard/visit-list";
 import {
   PatientList,
   type DashboardListPatient,
-} from '@/components/dashboard/patient-list';
+} from "@/components/dashboard/patient-list";
 import {
   DraftsReady,
   type DraftReadyVisit,
-} from '@/components/dashboard/drafts-ready';
+} from "@/components/dashboard/drafts-ready";
 
-export const metadata: Metadata = { title: 'Dashboard' };
+export const metadata: Metadata = { title: "Dashboard" };
 
 type SearchParams = Record<string, string | string[] | undefined>;
-type ActiveTab = 'patients' | 'all';
+type ActiveTab = "patients" | "all";
 
 const VISITS_PAGE_SIZE = 20;
 
@@ -56,17 +60,17 @@ export default async function DashboardPage({
   searchParams: Promise<SearchParams>;
 }) {
   const session = await auth();
-  if (!session?.user?.id) redirect('/login');
+  if (!session?.user?.id) redirect("/login");
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: { practiceId: true, name: true },
   });
-  if (!user) redirect('/login');
+  if (!user) redirect("/login");
 
   const params = await searchParams;
   const tabRaw = Array.isArray(params.tab) ? params.tab[0] : params.tab;
-  const activeTab: ActiveTab = tabRaw === 'all' ? 'all' : 'patients';
+  const activeTab: ActiveTab = tabRaw === "all" ? "all" : "patients";
 
   return (
     <AppFrame>
@@ -121,46 +125,62 @@ async function DashboardBody({
     activeVisitCount,
   ] = await Promise.all([
     prisma.transcribeVisit.count({
-      where: {
+      where: ordinaryClinicalVisitWhere({
         userId,
         deletedAt: null,
         createdAt: { gte: startOfMonth },
-      },
+      }),
     }),
     prisma.transcribeVisit.aggregate({
-      where: {
+      where: ordinaryClinicalVisitWhere({
         userId,
         deletedAt: null,
         draftedInSeconds: { not: null },
-      },
+      }),
       _avg: { draftedInSeconds: true },
     }),
     prisma.transcribeVisit.count({
-      where: {
+      where: ordinaryClinicalVisitWhere({
         userId,
         deletedAt: null,
         archivedAt: null,
         status: TranscribeVisitStatus.READY,
         needsReview: true,
-      },
+      }),
     }),
     prisma.transcribeVisit.count({
-      where: {
+      where: ordinaryClinicalVisitWhere({
         userId,
         status: TranscribeVisitStatus.SIGNED,
         signedAt: { gte: startOfWeek },
-      },
+      }),
     }),
     prisma.transcribeMdPatient.count({
-      where: { practiceId, deletedAt: null },
+      where: {
+        practiceId,
+        deletedAt: null,
+        OR: [
+          { externalId: null },
+          {
+            externalId: {
+              not: TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID,
+            },
+          },
+        ],
+      },
     }),
     prisma.transcribeVisit.count({
-      where: { userId, deletedAt: null, archivedAt: null },
+      where: ordinaryClinicalVisitWhere({
+        userId,
+        deletedAt: null,
+        archivedAt: null,
+      }),
     }),
   ]);
 
   const avgDraftedSec = avgDraftedAgg._avg.draftedInSeconds;
-  const avgDraftedMin = avgDraftedSec != null ? Math.round(avgDraftedSec / 60) : null;
+  const avgDraftedMin =
+    avgDraftedSec != null ? Math.round(avgDraftedSec / 60) : null;
 
   // §164.312(b) audit row — F-09 from QA agent v3.2 discovery report.
   // The dashboard reads the patient + visit lists for this user; that's
@@ -168,29 +188,29 @@ async function DashboardBody({
   // Fire-and-forget per the patient/visit-list precedent — `logAudit`
   // is internally try/wrapped so failures never break the render.
   void logAudit({
-    action: 'VIEWED_DASHBOARD',
-    targetType: 'User',
+    action: "VIEWED_DASHBOARD",
+    targetType: "User",
     targetId: userId,
     metadata: {
-      source: 'rsc:/dashboard',
+      source: "rsc:/dashboard",
       activeTab,
       patientCount,
       activeVisitCount,
     },
   });
 
-  const firstName = userName ? userName.trim().split(/\s+/)[0] ?? null : null;
+  const firstName = userName ? (userName.trim().split(/\s+/)[0] ?? null) : null;
 
   // Greeting subtitle — sage-bright callout when there are pending
   // reviews so the doctor sees the action signal at a glance.
   const subtitleNode = (
     <>
-      {patientCount} patient{patientCount === 1 ? '' : 's'} ·{' '}
-      {activeVisitCount} visit{activeVisitCount === 1 ? '' : 's'}
+      {patientCount} patient{patientCount === 1 ? "" : "s"} · {activeVisitCount}{" "}
+      visit{activeVisitCount === 1 ? "" : "s"}
       {pendingReview > 0 && (
         <>
-          {' · '}
-          <span style={{ color: 'var(--color-linear-sage-bright)' }}>
+          {" · "}
+          <span style={{ color: "var(--color-linear-sage-bright)" }}>
             {pendingReview} awaiting review
           </span>
         </>
@@ -199,39 +219,39 @@ async function DashboardBody({
   );
 
   return (
-    <div style={{ padding: '18px 24px 80px' }}>
+    <div style={{ padding: "18px 24px 80px" }}>
       <Greeting firstName={firstName} subtitle={subtitleNode} />
 
       <div
         style={{
-          display: 'flex',
-          alignItems: 'flex-end',
+          display: "flex",
+          alignItems: "flex-end",
           gap: 0,
-          padding: '6px 0 14px',
+          padding: "6px 0 14px",
           marginBottom: 8,
-          borderBottom: '1px solid var(--color-linear-hairline)',
+          borderBottom: "1px solid var(--color-linear-hairline)",
         }}
       >
         <StatCard
-          label={`Visits / ${now.toLocaleString('en-US', { month: 'short' })}`}
+          label={`Visits / ${now.toLocaleString("en-US", { month: "short" })}`}
           value={visitsThisMonth}
           unit="this month"
         />
         <StatCard
           label="Avg drafted in"
-          value={avgDraftedMin != null ? avgDraftedMin : '—'}
-          unit={avgDraftedMin != null ? 'min / visit' : 'no data yet'}
+          value={avgDraftedMin != null ? avgDraftedMin : "—"}
+          unit={avgDraftedMin != null ? "min / visit" : "no data yet"}
         />
         <StatCard
           label="Pending review"
           value={pendingReview}
-          unit={pendingReview === 1 ? 'visit' : 'visits'}
-          deltaTone={pendingReview > 0 ? 'amber' : 'mint'}
+          unit={pendingReview === 1 ? "visit" : "visits"}
+          deltaTone={pendingReview > 0 ? "amber" : "mint"}
         />
         <StatCard
           label="Signed this week"
           value={signedThisWeek}
-          unit={signedThisWeek === 1 ? 'note' : 'notes'}
+          unit={signedThisWeek === 1 ? "note" : "notes"}
         />
       </div>
 
@@ -241,7 +261,7 @@ async function DashboardBody({
         visitCount={activeVisitCount}
       />
 
-      {activeTab === 'patients' ? (
+      {activeTab === "patients" ? (
         <PatientsTab
           practiceId={practiceId}
           userId={userId}
@@ -263,16 +283,27 @@ function TabBar({
   patientCount: number;
   visitCount: number;
 }) {
-  const tabs: { id: ActiveTab; label: string; count: number; href: string }[] = [
-    { id: 'patients', label: 'Patients', count: patientCount, href: '/dashboard' },
-    { id: 'all', label: 'All visits', count: visitCount, href: '/dashboard?tab=all' },
-  ];
+  const tabs: { id: ActiveTab; label: string; count: number; href: string }[] =
+    [
+      {
+        id: "patients",
+        label: "Patients",
+        count: patientCount,
+        href: "/dashboard",
+      },
+      {
+        id: "all",
+        label: "All visits",
+        count: visitCount,
+        href: "/dashboard?tab=all",
+      },
+    ];
 
   return (
     <div
       style={{
-        display: 'flex',
-        alignItems: 'center',
+        display: "flex",
+        alignItems: "center",
         gap: 6,
         marginTop: 16,
         marginBottom: 4,
@@ -285,38 +316,37 @@ function TabBar({
             key={t.id}
             href={t.href}
             scroll={false}
-            aria-current={active ? 'page' : undefined}
+            aria-current={active ? "page" : undefined}
             className="qm-tap-44"
             style={{
-              display: 'inline-flex',
-              alignItems: 'center',
+              display: "inline-flex",
+              alignItems: "center",
               gap: 8,
-              padding: '6px 12px',
+              padding: "6px 12px",
               borderRadius: 6,
-              fontFamily: 'var(--font-sans)',
+              fontFamily: "var(--font-sans)",
               fontSize: 12.5,
               color: active
-                ? 'var(--color-linear-text)'
-                : 'var(--color-linear-text-2)',
+                ? "var(--color-linear-text)"
+                : "var(--color-linear-text-2)",
               background: active
-                ? 'var(--color-linear-sage-tint)'
-                : 'transparent',
-              textDecoration: 'none',
-              transition:
-                'background-color 100ms ease, color 100ms ease',
+                ? "var(--color-linear-sage-tint)"
+                : "transparent",
+              textDecoration: "none",
+              transition: "background-color 100ms ease, color 100ms ease",
               fontWeight: active ? 500 : 400,
-              letterSpacing: '-0.005em',
+              letterSpacing: "-0.005em",
             }}
           >
             {t.label}
             <span
               style={{
-                fontFamily: 'var(--font-mono)',
+                fontFamily: "var(--font-mono)",
                 fontSize: 11,
                 color: active
-                  ? 'var(--color-linear-sage-bright)'
-                  : 'var(--color-linear-text-3)',
-                fontVariantNumeric: 'tabular-nums',
+                  ? "var(--color-linear-sage-bright)"
+                  : "var(--color-linear-text-3)",
+                fontVariantNumeric: "tabular-nums",
               }}
             >
               {t.count}
@@ -343,7 +373,7 @@ async function PatientsTab({
     id: string;
     createdAt: Date;
     specialty: string;
-    status: import('@prisma/client').TranscribeVisitStatus;
+    status: import("@prisma/client").TranscribeVisitStatus;
     needsReview: boolean;
     signedAt: Date | null;
     chiefComplaint: string | null;
@@ -369,16 +399,30 @@ async function PatientsTab({
 
   const [rows, draftRows] = await Promise.all([
     prisma.transcribeMdPatient.findMany({
-      where: { practiceId, deletedAt: null },
-      orderBy: { updatedAt: 'desc' },
+      where: {
+        practiceId,
+        deletedAt: null,
+        OR: [
+          { externalId: null },
+          {
+            externalId: {
+              not: TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID,
+            },
+          },
+        ],
+      },
+      orderBy: { updatedAt: "desc" },
       take: DASHBOARD_PATIENT_LIMIT,
       select: {
         id: true,
         name: true,
         dateOfBirth: true,
         transcribeVisits: {
-          where: { deletedAt: null, archivedAt: null },
-          orderBy: { createdAt: 'desc' },
+          where: ordinaryClinicalVisitWhere({
+            deletedAt: null,
+            archivedAt: null,
+          }),
+          orderBy: { createdAt: "desc" },
           take: 1,
           select: {
             id: true,
@@ -393,14 +437,14 @@ async function PatientsTab({
       },
     }) as Promise<PatientRow[]>,
     prisma.transcribeVisit.findMany({
-      where: {
+      where: ordinaryClinicalVisitWhere({
         userId,
         deletedAt: null,
         archivedAt: null,
         status: TranscribeVisitStatus.READY,
         signedAt: null,
-      },
-      orderBy: { updatedAt: 'desc' },
+      }),
+      orderBy: { updatedAt: "desc" },
       take: DASHBOARD_DRAFT_LIMIT,
       select: {
         id: true,
@@ -419,12 +463,12 @@ async function PatientsTab({
   const patientIds = rows.map((r: PatientRow) => r.id);
   const counts: CountRow[] = patientIds.length
     ? await prisma.transcribeVisit.groupBy({
-        by: ['patientId'],
-        where: {
+        by: ["patientId"],
+        where: ordinaryClinicalVisitWhere({
           patientId: { in: patientIds },
           deletedAt: null,
           archivedAt: null,
-        },
+        }),
         _count: { _all: true },
       })
     : [];
@@ -463,7 +507,10 @@ async function PatientsTab({
       patientFallback: v.patientName ?? null,
       specialty: v.specialty ?? null,
       draftedAt: v.updatedAt.toISOString(),
-      previewLine: firstLineFromSoap(v.soapFinal ?? v.soapDraft, v.chiefComplaint),
+      previewLine: firstLineFromSoap(
+        v.soapFinal ?? v.soapDraft,
+        v.chiefComplaint,
+      ),
       needsReview: v.needsReview,
     }),
   );
@@ -485,19 +532,22 @@ function firstLineFromSoap(
   body: string | null | undefined,
   chiefComplaint: string | null | undefined,
 ): string | null {
-  const source = body && body.trim().length > 0 ? body : chiefComplaint ?? '';
+  const source = body && body.trim().length > 0 ? body : (chiefComplaint ?? "");
   if (!source) return null;
   const lines = source.split(/\r?\n/);
   for (const raw of lines) {
     const line = raw
-      .replace(/^#+\s*/g, '')
-      .replace(/^\s*\*\*\s*/, '')
-      .replace(/\s*\*\*\s*$/, '')
-      .replace(/^(S|O|A|P|Subjective|Objective|Assessment|Plan)\s*[:—–-]\s*/i, '')
+      .replace(/^#+\s*/g, "")
+      .replace(/^\s*\*\*\s*/, "")
+      .replace(/\s*\*\*\s*$/, "")
+      .replace(
+        /^(S|O|A|P|Subjective|Objective|Assessment|Plan)\s*[:—–-]\s*/i,
+        "",
+      )
       .trim();
     if (line.length === 0) continue;
     return line.length > SOAP_PREVIEW_MAX_CHARS
-      ? line.slice(0, SOAP_PREVIEW_MAX_CHARS - 1).trimEnd() + '…'
+      ? line.slice(0, SOAP_PREVIEW_MAX_CHARS - 1).trimEnd() + "…"
       : line;
   }
   return null;
@@ -505,10 +555,10 @@ function firstLineFromSoap(
 
 function clipChiefComplaint(raw: string | null | undefined): string | null {
   if (!raw) return null;
-  const trimmed = raw.replace(/\s+/g, ' ').trim();
+  const trimmed = raw.replace(/\s+/g, " ").trim();
   if (!trimmed) return null;
   return trimmed.length > CHIEF_PREVIEW_MAX_CHARS
-    ? trimmed.slice(0, CHIEF_PREVIEW_MAX_CHARS - 1).trimEnd() + '…'
+    ? trimmed.slice(0, CHIEF_PREVIEW_MAX_CHARS - 1).trimEnd() + "…"
     : trimmed;
 }
 
@@ -525,7 +575,7 @@ async function AllVisitsTab({
     id: string;
     patientName: string | null;
     specialty: string;
-    status: import('@prisma/client').TranscribeVisitStatus;
+    status: import("@prisma/client").TranscribeVisitStatus;
     needsReview: boolean;
     createdAt: Date;
     signedAt: Date | null;
@@ -533,8 +583,12 @@ async function AllVisitsTab({
     patient: { name: string } | null;
   };
   const rows: VisitRow[] = await prisma.transcribeVisit.findMany({
-    where: { userId, deletedAt: null, archivedAt: null },
-    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    where: ordinaryClinicalVisitWhere({
+      userId,
+      deletedAt: null,
+      archivedAt: null,
+    }),
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: VISITS_PAGE_SIZE,
     select: {
       id: true,
@@ -570,12 +624,12 @@ function EmptyPatients() {
   return (
     <div
       style={{
-        margin: '60px auto',
+        margin: "60px auto",
         maxWidth: 460,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        textAlign: 'center',
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        textAlign: "center",
       }}
     >
       <div
@@ -584,13 +638,13 @@ function EmptyPatients() {
           width: 56,
           height: 56,
           borderRadius: 14,
-          background: 'var(--color-linear-sage-tint)',
-          border: '1px solid rgba(122, 166, 140, 0.3)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
+          background: "var(--color-linear-sage-tint)",
+          border: "1px solid rgba(122, 166, 140, 0.3)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
           marginBottom: 18,
-          color: 'var(--color-linear-sage-bright)',
+          color: "var(--color-linear-sage-bright)",
           fontSize: 22,
         }}
       >
@@ -599,11 +653,11 @@ function EmptyPatients() {
       <h2
         style={{
           margin: 0,
-          fontFamily: 'var(--font-sans)',
+          fontFamily: "var(--font-sans)",
           fontSize: 22,
           fontWeight: 500,
-          letterSpacing: '-0.012em',
-          color: 'var(--color-linear-text)',
+          letterSpacing: "-0.012em",
+          color: "var(--color-linear-text)",
           lineHeight: 1.2,
         }}
       >
@@ -612,9 +666,9 @@ function EmptyPatients() {
       <p
         style={{
           marginTop: 10,
-          fontFamily: 'var(--font-sans)',
+          fontFamily: "var(--font-sans)",
           fontSize: 13.5,
-          color: 'var(--color-linear-text-2)',
+          color: "var(--color-linear-text-2)",
           lineHeight: 1.55,
           maxWidth: 360,
         }}
@@ -627,9 +681,9 @@ function EmptyPatients() {
         className="qm-lin-btn-primary"
         style={{
           marginTop: 18,
-          textDecoration: 'none',
+          textDecoration: "none",
           height: 32,
-          padding: '0 14px',
+          padding: "0 14px",
           fontSize: 13,
         }}
       >
@@ -643,21 +697,21 @@ function EmptyVisits() {
   return (
     <div
       style={{
-        margin: '60px auto',
+        margin: "60px auto",
         maxWidth: 460,
-        textAlign: 'center',
-        color: 'var(--color-linear-text-3)',
-        fontFamily: 'var(--font-sans)',
+        textAlign: "center",
+        color: "var(--color-linear-text-3)",
+        fontFamily: "var(--font-sans)",
         fontSize: 13,
       }}
     >
-      No visits yet for any patient.{' '}
+      No visits yet for any patient.{" "}
       <Link
         href="/visits/new"
         style={{
-          color: 'var(--color-linear-sage-bright)',
+          color: "var(--color-linear-sage-bright)",
           fontWeight: 500,
-          textDecoration: 'none',
+          textDecoration: "none",
         }}
       >
         Start one →
@@ -669,12 +723,12 @@ function EmptyVisits() {
 function DashboardSkeleton() {
   // Linear V1 skeleton — quiet linear-surface-2 placeholders, no shimmer.
   const tile: React.CSSProperties = {
-    background: 'var(--color-linear-surface-2)',
-    border: '1px solid var(--color-linear-border)',
+    background: "var(--color-linear-surface-2)",
+    border: "1px solid var(--color-linear-border)",
     borderRadius: 8,
   };
   return (
-    <div style={{ padding: '18px 24px 0' }}>
+    <div style={{ padding: "18px 24px 0" }}>
       <div
         style={{
           height: 18,
@@ -686,11 +740,11 @@ function DashboardSkeleton() {
       />
       <div
         style={{
-          display: 'flex',
+          display: "flex",
           gap: 0,
-          padding: '6px 0 14px',
+          padding: "6px 0 14px",
           marginBottom: 8,
-          borderBottom: '1px solid var(--color-linear-hairline)',
+          borderBottom: "1px solid var(--color-linear-hairline)",
         }}
       >
         {Array.from({ length: 4 }).map((_, i) => (
@@ -698,13 +752,11 @@ function DashboardSkeleton() {
             key={i}
             style={{
               flex: 1,
-              padding: '0 18px',
+              padding: "0 18px",
               borderRight:
-                i < 3
-                  ? '1px solid var(--color-linear-hairline)'
-                  : 'none',
-              display: 'flex',
-              flexDirection: 'column',
+                i < 3 ? "1px solid var(--color-linear-hairline)" : "none",
+              display: "flex",
+              flexDirection: "column",
               gap: 6,
             }}
           >
@@ -715,8 +767,8 @@ function DashboardSkeleton() {
       </div>
       <div
         style={{
-          display: 'flex',
-          flexDirection: 'column',
+          display: "flex",
+          flexDirection: "column",
           gap: 0,
           marginTop: 18,
         }}
@@ -726,7 +778,7 @@ function DashboardSkeleton() {
             key={i}
             style={{
               height: 36,
-              borderBottom: '1px solid var(--color-linear-hairline)',
+              borderBottom: "1px solid var(--color-linear-hairline)",
               opacity: 0.6,
             }}
           />

@@ -12,15 +12,16 @@
 // of T-M4.
 // ============================================================================
 
-import { logAiCall } from './log';
-import { isMockEnabled, mockDeepgramBatch } from './mock';
-import { deepgramBatchCostCents } from './pricing';
-import { withRetry, type RetryAttemptInfo } from './retry';
-import type { AiLogContext } from './types';
-import { logApiUsage, buildDeepgramUsage } from './api-usage';
+import { logAiCall } from "./log";
+import { isMockEnabled, mockDeepgramBatch } from "./mock";
+import { deepgramBatchCostCents } from "./pricing";
+import { withRetry, type RetryAttemptInfo } from "./retry";
+import type { AiLogContext } from "./types";
+import { logApiUsage, buildDeepgramUsage } from "./api-usage";
+import { syntheticQaFixtureForProviderCall } from "./synthetic-qa-context";
 
-const DEEPGRAM_BATCH_URL = 'https://api.deepgram.com/v1/listen';
-export const DEFAULT_BATCH_MODEL = 'nova-3-medical';
+const DEEPGRAM_BATCH_URL = "https://api.deepgram.com/v1/listen";
+export const DEFAULT_BATCH_MODEL = "nova-3-medical";
 
 export interface DeepgramBatchOptions {
   /** Speaker diarization. Defaults true (conversation transcripts).
@@ -160,8 +161,16 @@ export interface DeepgramBatchResult {
  * Throws on 4xx (permanent input error) or after retries exhaust.
  */
 export async function deepgramBatchTranscribe(
-  args: DeepgramBatchArgs
+  args: DeepgramBatchArgs,
 ): Promise<DeepgramBatchResult> {
+  // Resolve the visit-bound staging fixture before entering generic retry
+  // logic. A tenant mismatch must fail immediately, and an admitted staging
+  // call must never advance far enough to read credentials or construct a
+  // fetch request—even if generic mock flags are changed concurrently.
+  const syntheticQaFixture = syntheticQaFixtureForProviderCall(args);
+  if (syntheticQaFixture) {
+    return mockDeepgramBatch(syntheticQaFixture);
+  }
   return withRetry(() => deepgramBatchTranscribeOnce(args), {
     maxAttempts: 2,
     baseDelayMs: 1000,
@@ -171,14 +180,14 @@ export async function deepgramBatchTranscribe(
       // without surfacing audio metadata or transcripts.
       const err = info.error as { status?: number; code?: string };
       console.warn(
-        '[deepgram-batch] retrying',
+        "[deepgram-batch] retrying",
         JSON.stringify({
           attempt: info.attempt,
           maxAttempts: info.maxAttempts,
           delayMs: info.delayMs,
           status: err?.status ?? null,
           code: err?.code ?? null,
-        })
+        }),
       );
     },
   });
@@ -190,21 +199,21 @@ export async function deepgramBatchTranscribe(
  * on 4xx/5xx.
  */
 async function deepgramBatchTranscribeOnce(
-  args: DeepgramBatchArgs
+  args: DeepgramBatchArgs,
 ): Promise<DeepgramBatchResult> {
   // T-M10: MOCK_AI_CALLS short-circuit. See packages/ai/src/mock.ts.
   if (isMockEnabled()) {
-    return mockDeepgramBatch();
+    return mockDeepgramBatch(undefined, args.visitId);
   }
 
   const apiKey = process.env.DEEPGRAM_API_KEY;
   if (!apiKey) {
-    throw new Error('DEEPGRAM_API_KEY is not set.');
+    throw new Error("DEEPGRAM_API_KEY is not set.");
   }
 
   const model =
     args.model ?? process.env.DEEPGRAM_MODEL?.trim() ?? DEFAULT_BATCH_MODEL;
-  const language = args.language ?? 'en';
+  const language = args.language ?? "en";
 
   const wantDiarize = args.options?.diarize ?? true;
   const wantUtterances = args.options?.utterances ?? true;
@@ -216,19 +225,19 @@ async function deepgramBatchTranscribeOnce(
   const baseParams: Record<string, string> = {
     model,
     diarize: String(wantDiarize),
-    punctuate: 'true',
-    smart_format: 'true',
-    paragraphs: 'true',
+    punctuate: "true",
+    smart_format: "true",
+    paragraphs: "true",
     utterances: String(wantUtterances),
-    filler_words: 'false',
+    filler_words: "false",
   };
   if (wantDetectLanguage) {
-    baseParams.detect_language = 'true';
+    baseParams.detect_language = "true";
     // `language=multi` opts the model into code-switching mode.
-    baseParams.language = 'multi';
+    baseParams.language = "multi";
   } else {
     baseParams.language = language;
-    baseParams.detect_language = 'false';
+    baseParams.detect_language = "false";
   }
   const params = new URLSearchParams(baseParams);
   // Phase-2 voice: append one ?keyterm= per entry. Deepgram accepts
@@ -236,7 +245,7 @@ async function deepgramBatchTranscribeOnce(
   // No-op when the caller omits keyterms.
   for (const term of args.keyterms ?? []) {
     const trimmed = term.trim();
-    if (trimmed.length > 0) params.append('keyterm', trimmed);
+    if (trimmed.length > 0) params.append("keyterm", trimmed);
   }
   const url = `${DEEPGRAM_BATCH_URL}?${params.toString()}`;
   const started = Date.now();
@@ -275,32 +284,30 @@ async function deepgramBatchTranscribeOnce(
     // the right thing at runtime. For the streaming path we pass
     // `duplex: 'half'` (required by Node fetch when body is a stream).
     res = await fetch(url, {
-      method: 'POST',
+      method: "POST",
       headers: {
         Authorization: `Token ${apiKey}`,
-        'Content-Type': args.mimeType,
-        'Content-Length': String(sizeBytes),
+        "Content-Type": args.mimeType,
+        "Content-Length": String(sizeBytes),
       },
       body,
       signal: controller.signal,
-      ...(isStreamed
-        ? ({ duplex: 'half' } as { duplex: 'half' })
-        : {}),
+      ...(isStreamed ? ({ duplex: "half" } as { duplex: "half" }) : {}),
     });
   } catch (err) {
     clearTimeout(timer);
     const latencyMs = Date.now() - started;
     logAiCall({
       ...args,
-      provider: 'deepgram',
+      provider: "deepgram",
       model,
       promptHash,
       latencyMs,
       success: false,
       errorCode:
-        err instanceof Error && err.name === 'AbortError'
-          ? 'TIMEOUT'
-          : 'NETWORK_ERROR',
+        err instanceof Error && err.name === "AbortError"
+          ? "TIMEOUT"
+          : "NETWORK_ERROR",
     });
     throw err;
   }
@@ -309,15 +316,15 @@ async function deepgramBatchTranscribeOnce(
   const latencyMs = Date.now() - started;
 
   if (!res.ok) {
-    let body = '';
+    let body = "";
     try {
       body = (await res.text()).slice(0, 500);
     } catch {
-      body = '(body read failed)';
+      body = "(body read failed)";
     }
     logAiCall({
       ...args,
-      provider: 'deepgram',
+      provider: "deepgram",
       model,
       promptHash,
       latencyMs,
@@ -325,7 +332,7 @@ async function deepgramBatchTranscribeOnce(
       errorCode: `HTTP_${res.status}`,
     });
     const err = new Error(
-      `Deepgram batch failed: HTTP ${res.status} ${res.statusText} ${body}`
+      `Deepgram batch failed: HTTP ${res.status} ${res.statusText} ${body}`,
     ) as Error & { status?: number };
     err.status = res.status;
     throw err;
@@ -337,7 +344,7 @@ async function deepgramBatchTranscribeOnce(
   // alternatives[0]; the surrounding code has used the misnomer for
   // multiple releases. Kept as-is to minimize diff surface.)
   const firstChannel = raw.results?.channels?.[0]?.alternatives?.[0];
-  const transcript = (firstChannel?.transcript ?? '').trim();
+  const transcript = (firstChannel?.transcript ?? "").trim();
   const utterances = raw.results?.utterances ?? [];
   const durationSec = Math.round(raw.metadata?.duration ?? 0);
   // 2026-05-12 interpreter-mode: Deepgram returns the inferred language
@@ -354,17 +361,17 @@ async function deepgramBatchTranscribeOnce(
   const altObj = firstChannel as { detected_language?: unknown } | undefined;
   const metaObj = raw.metadata as { detected_language?: unknown } | undefined;
   const detectedLanguage =
-    typeof channelObj?.detected_language === 'string'
+    typeof channelObj?.detected_language === "string"
       ? (channelObj.detected_language as string)
-      : typeof altObj?.detected_language === 'string'
+      : typeof altObj?.detected_language === "string"
         ? (altObj.detected_language as string)
-        : typeof metaObj?.detected_language === 'string'
+        : typeof metaObj?.detected_language === "string"
           ? (metaObj.detected_language as string)
           : undefined;
 
   logAiCall({
     ...args,
-    provider: 'deepgram',
+    provider: "deepgram",
     model,
     promptHash,
     latencyMs,
@@ -380,8 +387,8 @@ async function deepgramBatchTranscribeOnce(
         visitId: args.visitId ?? null,
         metadata: { purpose: args.purpose, latencyMs, model },
       },
-      durationSec
-    )
+      durationSec,
+    ),
   );
 
   return {
