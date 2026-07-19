@@ -47,7 +47,7 @@ async function expectDatabaseRejection(
   }
   assert(
     rejection instanceof Error && rejection.message.includes(expectedMessage),
-    "A fenced direct enable did not fail with the expected database guard.",
+    `A rollback-integrity probe did not fail with the expected database guard: ${expectedMessage}`,
   );
 }
 
@@ -161,6 +161,54 @@ async function main(): Promise<void> {
     !fencedFinalClaim.allowed &&
       fencedFinalClaim.code === "TEMPLATE_TWIN_ROLLBACK_FENCE_ACTIVE",
     "Prepared rollback did not block a database-backed final claim.",
+  );
+
+  await expectDatabaseRejection(
+    () =>
+      prisma.$executeRaw`
+        UPDATE "template_twin_rollout_controls"
+        SET "rollbackFenceState" = 'OPEN',
+            "rollbackFenceGeneration" = "rollbackFenceGeneration" + 1,
+            "rollbackOperationId" = NULL,
+            "rollbackPreparedAt" = NULL,
+            "rollbackRevokedAt" = NULL
+        WHERE "id" = 'global'
+      `,
+    "Template Twin prepared operation must own the fence",
+  );
+  await expectDatabaseRejection(
+    () =>
+      prisma.$executeRaw`
+        UPDATE "template_twin_rollback_operations"
+        SET "state" = 'CANCELLED',
+            "cancelledAt" = CURRENT_TIMESTAMP,
+            "updatedAt" = CURRENT_TIMESTAMP
+        WHERE "id" = ${REVOKE_ID}::uuid
+      `,
+    "Template Twin prepared fence must link a prepared operation",
+  );
+  await expectDatabaseRejection(
+    () =>
+      prisma.$executeRaw`
+        DELETE FROM "template_twin_rollout_controls" WHERE "id" = 'global'
+      `,
+    "Template Twin rollout singleton cannot be deleted",
+  );
+  await expectDatabaseRejection(
+    () =>
+      prisma.$executeRaw`
+        TRUNCATE TABLE "template_twin_rollback_operations"
+      `,
+    "Template Twin rollback control history cannot be truncated",
+  );
+  await expectDatabaseRejection(
+    () =>
+      prisma.$executeRaw`
+        UPDATE "note_templates"
+        SET "templateKind" = 'template_twin_docx'
+        WHERE "id" = ${ORDINARY_TEMPLATE_ID}
+      `,
+    "Template Twin version cannot be activated while rollback is fenced",
   );
 
   await expectDatabaseRejection(
@@ -332,6 +380,10 @@ async function main(): Promise<void> {
       ordinaryTemplatePreserved: true,
       repeatedRevokeIdempotent: true,
       operationHistoryImmutable: true,
+      operationFenceCouplingEnforced: true,
+      rolloutSingletonImmutable: true,
+      rollbackTruncateBlocked: true,
+      activeVersionFenceEnforced: true,
       fenceMetadataImmutable: true,
       auditDeliveryComplete: true,
       finalClaimBlocked: true,

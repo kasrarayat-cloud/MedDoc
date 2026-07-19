@@ -11,6 +11,13 @@ const migration = readFileSync(
   ),
   "utf8",
 );
+const integrityMigration = readFileSync(
+  path.join(
+    ROOT,
+    "packages/db/prisma/migrations/20260719140000_template_twin_rollback_fence_integrity_v2/migration.sql",
+  ),
+  "utf8",
+);
 const route = readFileSync(
   path.join(
     ROOT,
@@ -73,6 +80,41 @@ describe("Template Twin rollback-control migration contract", () => {
     }
   });
 
+  it("commit-fences the singleton, operation state, audit evidence, and active versions", () => {
+    expect(integrityMigration).toMatch(/\bBEGIN;[\s\S]*\bCOMMIT;\s*$/u);
+    for (const evidence of [
+      "template_twin_rollout_singleton_insert_delete_guard",
+      "template_twin_rollout_singleton_identity_guard",
+      "template_twin_rollout_singleton_truncate_guard",
+      "template_twin_rollback_operation_truncate_guard",
+      "DEFERRABLE INITIALLY DEFERRED",
+      "Template Twin prepared fence must link a prepared operation",
+      "Template Twin revoked fence must link a revoked operation",
+      "Template Twin prepared operation must own the fence",
+      "Template Twin rollback operation audit evidence is missing",
+      "Template Twin version cannot be activated while rollback is fenced",
+      "aa_template_twin_active_version_rollback_insert_guard",
+      "aa_template_twin_active_version_rollback_update_guard",
+    ]) {
+      expect(integrityMigration).toContain(evidence);
+    }
+  });
+
+  it("requires all physician, synthetic, automation, and provider work to drain before a revoked fence can commit", () => {
+    for (const evidence of [
+      "Template Twin revoked fence requires fill work drained",
+      "Template Twin revoked fence requires pinned visits drained",
+      "Template Twin revoked fence requires synthetic work drained",
+      "Template Twin revoked fence requires provider work drained",
+      "Template Twin revoked fence requires automation work drained",
+      "'RESOLVING', 'NEEDS_REVIEW', 'VERIFIED'",
+      "'RESERVED', 'IN_FLIGHT', 'UNKNOWN_OUTCOME'",
+      "'PENDING', 'RUNNING'",
+    ]) {
+      expect(integrityMigration).toContain(evidence);
+    }
+  });
+
   it("does not mutate visits, fills, signed evidence, audit history, or object lineage", () => {
     for (const table of [
       "transcribe_visits",
@@ -83,6 +125,9 @@ describe("Template Twin rollback-control migration contract", () => {
       "template_twin_certifications",
     ]) {
       expect(migration).not.toMatch(
+        new RegExp(`(?:UPDATE|DELETE\\s+FROM|TRUNCATE)\\s+"${table}"`, "iu"),
+      );
+      expect(integrityMigration).not.toMatch(
         new RegExp(`(?:UPDATE|DELETE\\s+FROM|TRUNCATE)\\s+"${table}"`, "iu"),
       );
     }

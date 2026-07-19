@@ -24,6 +24,7 @@ function emptyInventory(
     enabledPractices: 2,
     resolvingFills: 0,
     reviewPendingFills: 0,
+    pinnedTemplateTwinVisitsWithoutFill: 0,
     signedFillManifests: 3,
     nonterminalSyntheticRuns: 0,
     processingSyntheticRuns: 0,
@@ -290,6 +291,35 @@ describe("Template Twin rollback fence operation", () => {
           "PROCESSING_SYNTHETIC_RUNS",
           "UNKNOWN_PROVIDER_OUTCOMES",
         ],
+      },
+    });
+    expect(store.control.rollbackFenceState).toBe("PREPARED");
+    expect(store.templates).toHaveLength(2);
+    expect(store.practices).toHaveLength(2);
+  });
+
+  it("blocks review-pending fills and Twin-pinned visits that have not created a fill", async () => {
+    const store = new FakeRollbackStore();
+    store.inventory = emptyInventory({
+      reviewPendingFills: 1,
+      pinnedTemplateTwinVisitsWithoutFill: 2,
+    });
+    await prepare(store);
+
+    await expect(
+      revokeTemplateTwinRollout({
+        operationId: OPERATION_ID,
+        actor,
+        dependencies: store.dependencies(),
+      }),
+    ).rejects.toMatchObject({
+      code: "TEMPLATE_TWIN_ROLLBACK_IN_FLIGHT_WORK",
+      status: {
+        blockingInFlight: [
+          "REVIEW_PENDING_FILLS",
+          "PINNED_TEMPLATE_TWIN_VISITS_WITHOUT_FILL",
+        ],
+        rollbackComplete: false,
       },
     });
     expect(store.control.rollbackFenceState).toBe("PREPARED");

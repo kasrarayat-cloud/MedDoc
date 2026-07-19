@@ -34,6 +34,7 @@ export interface TemplateTwinRollbackInventory {
   readonly enabledPractices: number;
   readonly resolvingFills: number;
   readonly reviewPendingFills: number;
+  readonly pinnedTemplateTwinVisitsWithoutFill: number;
   readonly signedFillManifests: number;
   readonly nonterminalSyntheticRuns: number;
   readonly processingSyntheticRuns: number;
@@ -121,6 +122,7 @@ interface InventoryRow {
   readonly enabledPractices: bigint | number | string;
   readonly resolvingFills: bigint | number | string;
   readonly reviewPendingFills: bigint | number | string;
+  readonly pinnedTemplateTwinVisitsWithoutFill: bigint | number | string;
   readonly signedFillManifests: bigint | number | string;
   readonly nonterminalSyntheticRuns: bigint | number | string;
   readonly processingSyntheticRuns: bigint | number | string;
@@ -244,8 +246,20 @@ function blockingInFlight(
 ): readonly string[] {
   const blocked: string[] = [];
   if (inventory.resolvingFills > 0) blocked.push("RESOLVING_FILLS");
+  if (inventory.reviewPendingFills > 0) {
+    blocked.push("REVIEW_PENDING_FILLS");
+  }
+  if (inventory.pinnedTemplateTwinVisitsWithoutFill > 0) {
+    blocked.push("PINNED_TEMPLATE_TWIN_VISITS_WITHOUT_FILL");
+  }
   if (inventory.processingSyntheticRuns > 0) {
     blocked.push("PROCESSING_SYNTHETIC_RUNS");
+  }
+  if (inventory.nonterminalSyntheticRuns > 0) {
+    blocked.push("NONTERMINAL_SYNTHETIC_RUNS");
+  }
+  if (inventory.nonterminalSyntheticAdmissions > 0) {
+    blocked.push("NONTERMINAL_SYNTHETIC_ADMISSIONS");
   }
   if (inventory.runningAutomationManifests > 0) {
     blocked.push("RUNNING_AUTOMATION_MANIFESTS");
@@ -314,6 +328,8 @@ async function statusFrom(
       blockers.length === 0 &&
       inventory.nonterminalSyntheticRuns === 0 &&
       inventory.nonterminalSyntheticAdmissions === 0 &&
+      inventory.reviewPendingFills === 0 &&
+      inventory.pinnedTemplateTwinVisitsWithoutFill === 0 &&
       inventory.pendingAuditOutboxEvents === 0 &&
       inventory.objectMaintenanceBacklog === 0,
   };
@@ -742,6 +758,16 @@ async function readInventory(
        WHERE "status" IN ('NEEDS_REVIEW', 'VERIFIED'))
         AS "reviewPendingFills",
       (SELECT COUNT(*)::bigint
+       FROM "transcribe_visits" visit
+       JOIN "note_templates" template
+         ON template."id" = visit."noteTemplateId"
+       LEFT JOIN "template_twin_fill_manifests" fill
+         ON fill."visitId" = visit."id"
+       WHERE template."templateKind" = 'template_twin_docx'
+         AND visit."status" NOT IN ('FAILED', 'SIGNED')
+         AND fill."id" IS NULL)
+        AS "pinnedTemplateTwinVisitsWithoutFill",
+      (SELECT COUNT(*)::bigint
        FROM "template_twin_fill_manifests" WHERE "status" = 'SIGNED')
         AS "signedFillManifests",
       (SELECT COUNT(*)::bigint
@@ -765,6 +791,14 @@ async function readInventory(
              SELECT 1 FROM "template_twin_fill_manifests" fill
              WHERE fill."visitId" = manifest."visitId"
            )
+           OR EXISTS (
+             SELECT 1
+             FROM "transcribe_visits" visit
+             JOIN "note_templates" template
+               ON template."id" = visit."noteTemplateId"
+             WHERE visit."id" = manifest."visitId"
+               AND template."templateKind" = 'template_twin_docx'
+           )
          )) AS "runningAutomationManifests",
       (SELECT COUNT(*)::bigint
        FROM "visit_automation_provider_executions" execution
@@ -775,6 +809,14 @@ async function readInventory(
            OR EXISTS (
              SELECT 1 FROM "template_twin_fill_manifests" fill
              WHERE fill."visitId" = execution."visitId"
+           )
+           OR EXISTS (
+             SELECT 1
+             FROM "transcribe_visits" visit
+             JOIN "note_templates" template
+               ON template."id" = visit."noteTemplateId"
+             WHERE visit."id" = execution."visitId"
+               AND template."templateKind" = 'template_twin_docx'
            )
          )) AS "providerExecutionsReserved",
       (SELECT COUNT(*)::bigint
@@ -787,6 +829,14 @@ async function readInventory(
              SELECT 1 FROM "template_twin_fill_manifests" fill
              WHERE fill."visitId" = execution."visitId"
            )
+           OR EXISTS (
+             SELECT 1
+             FROM "transcribe_visits" visit
+             JOIN "note_templates" template
+               ON template."id" = visit."noteTemplateId"
+             WHERE visit."id" = execution."visitId"
+               AND template."templateKind" = 'template_twin_docx'
+           )
          )) AS "providerExecutionsInFlight",
       (SELECT COUNT(*)::bigint
        FROM "visit_automation_provider_executions" execution
@@ -797,6 +847,14 @@ async function readInventory(
            OR EXISTS (
              SELECT 1 FROM "template_twin_fill_manifests" fill
              WHERE fill."visitId" = execution."visitId"
+           )
+           OR EXISTS (
+             SELECT 1
+             FROM "transcribe_visits" visit
+             JOIN "note_templates" template
+               ON template."id" = visit."noteTemplateId"
+             WHERE visit."id" = execution."visitId"
+               AND template."templateKind" = 'template_twin_docx'
            )
          )) AS "providerExecutionsUnknown",
       (SELECT COUNT(*)::bigint
@@ -820,6 +878,9 @@ async function readInventory(
     enabledPractices: exactCount(row.enabledPractices),
     resolvingFills: exactCount(row.resolvingFills),
     reviewPendingFills: exactCount(row.reviewPendingFills),
+    pinnedTemplateTwinVisitsWithoutFill: exactCount(
+      row.pinnedTemplateTwinVisitsWithoutFill,
+    ),
     signedFillManifests: exactCount(row.signedFillManifests),
     nonterminalSyntheticRuns: exactCount(row.nonterminalSyntheticRuns),
     processingSyntheticRuns: exactCount(row.processingSyntheticRuns),
