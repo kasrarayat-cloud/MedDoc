@@ -247,14 +247,6 @@ describe(TAB_ONLY_BLANK_TABLE_CELL_PROFILE, () => {
       "",
     ],
     [
-      "a data binding hidden in paragraph properties",
-      TAB_STOP_PROPERTIES.replace(
-        "</w:pPr>",
-        '<w:dataBinding w:xpath="/root/value" w:storeItemID="{00000000-0000-0000-0000-000000000000}"/></w:pPr>',
-      ),
-      "",
-    ],
-    [
       "an active altChunk after the properties",
       `${TAB_STOP_PROPERTIES}<w:altChunk r:id="syntheticExternal"/>`,
       "",
@@ -285,11 +277,6 @@ describe(TAB_ONLY_BLANK_TABLE_CELL_PROFILE, () => {
       "a duplicate run property",
       TAB_STOP_PROPERTIES.replace("</w:rPr>", "<w:b/></w:rPr>"),
       "",
-    ],
-    [
-      "a data binding hidden in table-cell properties",
-      TAB_STOP_PROPERTIES,
-      '<w:tcPr><w:dataBinding w:xpath="/root/value" w:storeItemID="{00000000-0000-0000-0000-000000000000}"/></w:tcPr>',
     ],
     [
       "duplicate table-cell width properties",
@@ -340,6 +327,29 @@ describe(TAB_ONLY_BLANK_TABLE_CELL_PROFILE, () => {
       });
     },
   );
+
+  it.each([
+    [
+      "paragraph properties",
+      targetCell(
+        TAB_STOP_PROPERTIES.replace(
+          "</w:pPr>",
+          '<w:dataBinding w:xpath="/root/value" w:storeItemID="{00000000-0000-0000-0000-000000000000}"/></w:pPr>',
+        ),
+      ),
+    ],
+    [
+      "table-cell properties",
+      targetCell(
+        TAB_STOP_PROPERTIES,
+        '<w:tcPr><w:dataBinding w:xpath="/root/value" w:storeItemID="{00000000-0000-0000-0000-000000000000}"/></w:tcPr>',
+      ),
+    ],
+  ])("rejects a data binding hidden in %s", async (_name, target) => {
+    await expect(compileTarget(target)).rejects.toMatchObject({
+      code: "XML_INVALID",
+    });
+  });
 
   it("rejects a tracked insertion at package admission", async () => {
     await expect(

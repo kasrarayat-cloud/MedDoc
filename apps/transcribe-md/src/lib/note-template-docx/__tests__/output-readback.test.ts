@@ -194,7 +194,7 @@ describe('independent Template Twin DOCX output readback', () => {
     );
   });
 
-  it('detects an appended Word SDT even when it lacks sdtPr identity metadata', async () => {
+  it('rejects an appended Word SDT that lacks sdtPr identity metadata', async () => {
     const fixture = await renderFixture();
     const malformed =
       '<w:p><w:sdt><w:sdtContent><w:r><w:t>Synthetic unexpected control</w:t></w:r></w:sdtContent></w:sdt></w:p>';
@@ -211,9 +211,7 @@ describe('independent Template Twin DOCX output readback', () => {
         ir: fixture.ir,
         resolutions: fixture.resolutions,
       }),
-    ).toThrowError(
-      expect.objectContaining({ code: 'ROUNDTRIP_FIELD_MISMATCH' }),
-    );
+    ).toThrowError(expect.objectContaining({ code: 'XML_INVALID' }));
   });
 
   it('detects an appended malformed legacy form field with no supported ffData control', async () => {

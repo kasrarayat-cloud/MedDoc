@@ -372,23 +372,17 @@ describe("native Word identity admission", () => {
     },
   );
 
-  it("blocks multiple SDT ID elements even when values are equal", async () => {
-    const compiled = compileTemplateDocx(
-      await buildSyntheticDocx({
+  it("rejects multiple SDT ID elements even when values are equal", async () => {
+    await expect(
+      buildSyntheticDocx({
         documentXml: insertBeforeSection(
           textControlWithIds({
             ids: ["940", "940"],
             alias: "Multiple IDs",
           }),
         ),
-      }),
-    );
-    expect(duplicateBlockers(compiled, "MULTIPLE_SDT_ID")).toEqual([
-      expect.objectContaining({
-        label: "Multiple IDs",
-        blocksCertification: true,
-      }),
-    ]);
+      }).then((source) => compileTemplateDocx(source)),
+    ).rejects.toMatchObject({ code: "XML_INVALID" });
   });
 
   it("censuses auxiliary Word stories and blocks their controls", async () => {

@@ -111,10 +111,10 @@ export function inspectDocxPackage(
     if (name.endsWith(".xml") || name.endsWith(".rels")) {
       const tree = parseOrderedXml(entry.bytes, limits);
       assertNoHiddenWordContent(tree);
-      assertHarmlessWordFieldInstructions(tree);
       if (/^word\/.*\.xml$/i.test(name)) {
         assertNoNamespaceShadowedWordStructures(tree);
         assertDeterministicWordControlShape(tree);
+        assertHarmlessWordFieldInstructions(tree);
         const roots = expandedXmlVisits(tree).filter(
           (visit) => visit.depth === 0,
         );
@@ -548,6 +548,20 @@ const HIDDEN_WORD_ELEMENTS = new Set([
   "moveTo",
   "moveToRangeEnd",
   "moveToRangeStart",
+  // Property/table revision payloads preserve an earlier document state that
+  // is not part of the physician-visible accepted surface.
+  "cellDel",
+  "cellIns",
+  "cellMerge",
+  "numberingChange",
+  "pPrChange",
+  "rPrChange",
+  "sectPrChange",
+  "tblGridChange",
+  "tblPrChange",
+  "tblPrExChange",
+  "tcPrChange",
+  "trPrChange",
 ]);
 
 function assertNoHiddenWordContent(tree: OrderedXmlNode[]): void {
@@ -564,16 +578,26 @@ function assertNoHiddenWordContent(tree: OrderedXmlNode[]): void {
 const WORD_CONTROL_ELEMENTS = new Set([
   "alias",
   "bookmarkStart",
+  "bibliography",
   "calendar",
+  "calcOnExit",
   "checkBox",
+  "citation",
   "comboBox",
   "dataBinding",
   "date",
   "dateFormat",
   "ddList",
   "default",
+  "docPartCategory",
+  "docPartGallery",
+  "docPartList",
+  "docPartObj",
+  "docPartUnique",
   "dropDownList",
+  "enabled",
   "entryMacro",
+  "equation",
   "exitMacro",
   "ffData",
   "fldChar",
@@ -584,22 +608,36 @@ const WORD_CONTROL_ELEMENTS = new Set([
   "gridBefore",
   "gridCol",
   "gridSpan",
+  "group",
   "hMerge",
   "headerReference",
+  "helpText",
   "id",
   "instrText",
+  "lastValue",
+  "label",
   "lid",
   "listEntry",
   "listItem",
+  "lock",
   "maxLength",
   "name",
   "numPr",
+  "picture",
+  "placeholder",
   "result",
+  "richText",
   "sdt",
   "sdtContent",
   "sdtPr",
   "sectPr",
+  "showingPlcHdr",
+  "size",
+  "sizeAuto",
+  "statusText",
   "storeMappedDataAs",
+  "tabIndex",
+  "temporary",
   "tag",
   "tbl",
   "tblGrid",
@@ -613,6 +651,7 @@ const WORD_CONTROL_ELEMENTS = new Set([
 const WORD_2010_CONTROL_ELEMENTS = new Set([
   "checkbox",
   "checkedState",
+  "entityPicker",
   "uncheckedState",
 ]);
 const WORD_2012_CONTROL_ELEMENTS = new Set([
@@ -632,14 +671,27 @@ const WORD_CONTROL_ATTRIBUTE_POLICY = new Map<string, ReadonlySet<string>>(
       ["format", ["val"]],
       ["maxLength", ["val"]],
       ["result", ["val"]],
+      ["checked", ["val"]],
+      ["calcOnExit", ["val"]],
+      ["enabled", ["val"]],
+      ["entryMacro", ["val"]],
+      ["exitMacro", ["val"]],
+      ["helpText", ["type", "val"]],
+      ["label", ["val"]],
       ["listEntry", ["val"]],
       ["listItem", ["displayText", "value"]],
+      ["size", ["val"]],
+      ["statusText", ["type", "val"]],
+      ["tabIndex", ["val"]],
       ["date", ["fullDate"]],
       ["dateFormat", ["val"]],
       ["lid", ["val"]],
       ["calendar", ["val"]],
       ["storeMappedDataAs", ["val"]],
       ["lastValue", ["val"]],
+      ["docPartCategory", ["val"]],
+      ["docPartGallery", ["val"]],
+      ["lock", ["val"]],
       ["text", ["multiLine"]],
       ["rStyle", ["val"]],
       ["gridCol", ["w"]],
@@ -706,38 +758,330 @@ const WORD_SDT_MAIN_TYPES = new Set([
   "citation",
   "comboBox",
   "date",
+  "docPartList",
   "docPartObj",
   "dropDownList",
   "equation",
   "group",
   "picture",
+  "richText",
   "text",
 ]);
+
+const WORD_SDT_METADATA_CHILDREN = new Set([
+  "alias",
+  "dataBinding",
+  "id",
+  "lock",
+  "placeholder",
+  "showingPlcHdr",
+  "tag",
+  "temporary",
+]);
+const WORD_DOC_PART_CHILDREN = new Set([
+  "docPartCategory",
+  "docPartGallery",
+  "docPartUnique",
+]);
+const WORD_DATE_CHILDREN = new Set([
+  "calendar",
+  "dateFormat",
+  "storeMappedDataAs",
+]);
+const WORD_LEGACY_FORM_CHILDREN = new Set([
+  "calcOnExit",
+  "enabled",
+  "helpText",
+  "label",
+  "statusText",
+  "tabIndex",
+]);
+const WORD_LEGACY_CHECKBOX_CHILDREN = new Set(["checked", "size", "sizeAuto"]);
+const WORD_LEGACY_DROPDOWN_CHILDREN = new Set(["listEntry", "result"]);
+const WORD_LEGACY_TEXT_CHILDREN = new Set(["format", "maxLength"]);
 
 function assertDeterministicWordControlShape(tree: OrderedXmlNode[]): void {
   const visits = expandedXmlVisits(tree);
   for (const visit of visits) {
+    if (
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      ["entryMacro", "exitMacro", "fieldMapData", "mailMerge", "odso"].includes(
+        visit.localName,
+      )
+    ) {
+      failTemplateDocx("ACTIVE_CONTENT_REJECTED");
+    }
     if (isWordSdtTypeElement(visit)) {
-      const properties = nearestWordAncestor(visit, "sdtPr");
-      if (properties && visit.parent !== properties) {
-        failTemplateDocx("XML_INVALID");
-      }
+      requireDirectParent(
+        visit,
+        [[WORDPROCESSINGML_NAMESPACE, "sdtPr"]],
+        "XML_INVALID",
+      );
     }
     if (
       visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
       ["checkBox", "ddList", "textInput"].includes(visit.localName)
     ) {
-      const formData = nearestWordAncestor(visit, "ffData");
-      if (formData && visit.parent !== formData) {
+      requireDirectParent(
+        visit,
+        [[WORDPROCESSINGML_NAMESPACE, "ffData"]],
+        "XML_INVALID",
+      );
+    }
+    if (
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      ["sdtPr", "sdtContent"].includes(visit.localName)
+    ) {
+      requireDirectParent(
+        visit,
+        [[WORDPROCESSINGML_NAMESPACE, "sdt"]],
+        "XML_INVALID",
+      );
+    }
+    if (
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      visit.localName === "ffData"
+    ) {
+      requireDirectParent(
+        visit,
+        [[WORDPROCESSINGML_NAMESPACE, "fldChar"]],
+        "XML_INVALID",
+      );
+      if (exactWordAttribute(visit.parent!, "fldCharType") !== "begin") {
         failTemplateDocx("XML_INVALID");
       }
     }
     if (
       visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
-      ["entryMacro", "exitMacro"].includes(visit.localName) &&
+      ["fldChar", "instrText"].includes(visit.localName)
+    ) {
+      requireDirectParent(
+        visit,
+        [[WORDPROCESSINGML_NAMESPACE, "r"]],
+        "XML_INVALID",
+      );
+    }
+    if (
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      visit.localName === "fldSimple"
+    ) {
+      requireDirectParent(
+        visit,
+        [
+          [WORDPROCESSINGML_NAMESPACE, "bdo"],
+          [WORDPROCESSINGML_NAMESPACE, "customXml"],
+          [WORDPROCESSINGML_NAMESPACE, "dir"],
+          [WORDPROCESSINGML_NAMESPACE, "fldSimple"],
+          [WORDPROCESSINGML_NAMESPACE, "hyperlink"],
+          [WORDPROCESSINGML_NAMESPACE, "p"],
+          [WORDPROCESSINGML_NAMESPACE, "rt"],
+          [WORDPROCESSINGML_NAMESPACE, "rubyBase"],
+          [WORDPROCESSINGML_NAMESPACE, "sdtContent"],
+        ],
+        "XML_INVALID",
+      );
+    }
+    if (
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      WORD_SDT_METADATA_CHILDREN.has(visit.localName)
+    ) {
+      requireDirectParent(
+        visit,
+        [[WORDPROCESSINGML_NAMESPACE, "sdtPr"]],
+        "XML_INVALID",
+      );
+    }
+    if (
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      visit.localName === "listItem"
+    ) {
+      requireDirectParent(
+        visit,
+        [
+          [WORDPROCESSINGML_NAMESPACE, "comboBox"],
+          [WORDPROCESSINGML_NAMESPACE, "dropDownList"],
+        ],
+        "XML_INVALID",
+      );
+    }
+    if (
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      WORD_DOC_PART_CHILDREN.has(visit.localName)
+    ) {
+      requireDirectParent(
+        visit,
+        [
+          [WORDPROCESSINGML_NAMESPACE, "docPartList"],
+          [WORDPROCESSINGML_NAMESPACE, "docPartObj"],
+        ],
+        "XML_INVALID",
+      );
+    }
+    if (
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      visit.localName === "lastValue"
+    ) {
+      requireDirectParent(
+        visit,
+        [[WORDPROCESSINGML_NAMESPACE, "comboBox"]],
+        "XML_INVALID",
+      );
+    }
+    if (
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      WORD_DATE_CHILDREN.has(visit.localName)
+    ) {
+      requireDirectParent(
+        visit,
+        [[WORDPROCESSINGML_NAMESPACE, "date"]],
+        "XML_INVALID",
+      );
+    }
+    if (
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      visit.localName === "lid"
+    ) {
+      requireDirectParent(
+        visit,
+        [
+          [WORDPROCESSINGML_NAMESPACE, "date"],
+          [WORDPROCESSINGML_NAMESPACE, "rubyPr"],
+        ],
+        "XML_INVALID",
+      );
+    }
+    if (
+      visit.namespaceUri === WORDPROCESSINGML_2010_NAMESPACE &&
+      ["checked", "checkedState", "uncheckedState"].includes(visit.localName)
+    ) {
+      requireDirectParent(
+        visit,
+        [[WORDPROCESSINGML_2010_NAMESPACE, "checkbox"]],
+        "XML_INVALID",
+      );
+    }
+    if (
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      WORD_LEGACY_FORM_CHILDREN.has(visit.localName)
+    ) {
+      requireDirectParent(
+        visit,
+        [[WORDPROCESSINGML_NAMESPACE, "ffData"]],
+        "XML_INVALID",
+      );
+    }
+    if (
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      WORD_LEGACY_CHECKBOX_CHILDREN.has(visit.localName)
+    ) {
+      requireDirectParent(
+        visit,
+        [[WORDPROCESSINGML_NAMESPACE, "checkBox"]],
+        "XML_INVALID",
+      );
+    }
+    if (
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      WORD_LEGACY_DROPDOWN_CHILDREN.has(visit.localName)
+    ) {
+      requireDirectParent(
+        visit,
+        [[WORDPROCESSINGML_NAMESPACE, "ddList"]],
+        "XML_INVALID",
+      );
+    }
+    if (
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      WORD_LEGACY_TEXT_CHILDREN.has(visit.localName)
+    ) {
+      requireDirectParent(
+        visit,
+        [[WORDPROCESSINGML_NAMESPACE, "textInput"]],
+        "XML_INVALID",
+      );
+    }
+    if (
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      visit.localName === "type"
+    ) {
+      requireDirectParent(
+        visit,
+        [
+          [WORDPROCESSINGML_NAMESPACE, "sectPr"],
+          [WORDPROCESSINGML_NAMESPACE, "textInput"],
+          [WORDPROCESSINGML_NAMESPACE, "types"],
+        ],
+        "XML_INVALID",
+      );
+    }
+    if (
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      visit.localName === "default"
+    ) {
+      requireDirectParent(
+        visit,
+        [
+          [WORDPROCESSINGML_NAMESPACE, "checkBox"],
+          [WORDPROCESSINGML_NAMESPACE, "ddList"],
+          [WORDPROCESSINGML_NAMESPACE, "textInput"],
+        ],
+        "XML_INVALID",
+      );
+    }
+    if (
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      visit.localName === "name" &&
       nearestWordAncestor(visit, "ffData")
     ) {
-      failTemplateDocx("ACTIVE_CONTENT_REJECTED");
+      requireDirectParent(
+        visit,
+        [[WORDPROCESSINGML_NAMESPACE, "ffData"]],
+        "XML_INVALID",
+      );
+    }
+    if (
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      visit.localName === "tblGrid"
+    ) {
+      requireDirectParent(
+        visit,
+        [[WORDPROCESSINGML_NAMESPACE, "tbl"]],
+        "XML_INVALID",
+      );
+    }
+    if (
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      visit.localName === "gridCol"
+    ) {
+      requireDirectParent(
+        visit,
+        [[WORDPROCESSINGML_NAMESPACE, "tblGrid"]],
+        "XML_INVALID",
+      );
+    }
+    if (
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      ["gridSpan", "hMerge", "vMerge"].includes(visit.localName)
+    ) {
+      requireDirectParent(
+        visit,
+        [[WORDPROCESSINGML_NAMESPACE, "tcPr"]],
+        "XML_INVALID",
+      );
+    }
+    if (
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      visit.localName === "tcPr"
+    ) {
+      requireDirectParent(
+        visit,
+        [
+          [WORDPROCESSINGML_NAMESPACE, "style"],
+          [WORDPROCESSINGML_NAMESPACE, "tblStylePr"],
+          [WORDPROCESSINGML_NAMESPACE, "tc"],
+        ],
+        "XML_INVALID",
+      );
     }
   }
   for (const properties of visits) {
@@ -753,7 +1097,16 @@ function assertDeterministicWordControlShape(tree: OrderedXmlNode[]): void {
     );
     if (typeChildren.length > 1) failTemplateDocx("XML_INVALID");
 
-    for (const singleton of ["alias", "tag", "dataBinding"]) {
+    for (const singleton of [
+      "alias",
+      "dataBinding",
+      "id",
+      "lock",
+      "placeholder",
+      "showingPlcHdr",
+      "tag",
+      "temporary",
+    ]) {
       if (
         children.filter(
           (child) =>
@@ -764,6 +1117,59 @@ function assertDeterministicWordControlShape(tree: OrderedXmlNode[]): void {
         failTemplateDocx("XML_INVALID");
       }
     }
+  }
+
+  for (const contentControl of visits.filter(
+    (visit) =>
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      visit.localName === "sdt",
+  )) {
+    const children = visits.filter((visit) => visit.parent === contentControl);
+    for (const required of ["sdtPr", "sdtContent"]) {
+      if (
+        children.filter(
+          (child) =>
+            child.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+            child.localName === required,
+        ).length !== 1
+      ) {
+        failTemplateDocx("XML_INVALID");
+      }
+    }
+  }
+
+  for (const docPart of visits.filter(
+    (visit) =>
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      ["docPartList", "docPartObj"].includes(visit.localName),
+  )) {
+    assertSingletonWordChildren(
+      visits.filter((visit) => visit.parent === docPart),
+      ["docPartCategory", "docPartGallery", "docPartUnique"],
+    );
+  }
+
+  for (const comboBox of visits.filter(
+    (visit) =>
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      visit.localName === "comboBox",
+  )) {
+    assertSingletonWordChildren(
+      visits.filter((visit) => visit.parent === comboBox),
+      ["lastValue"],
+    );
+  }
+
+  for (const checkbox of visits.filter(
+    (visit) =>
+      visit.namespaceUri === WORDPROCESSINGML_2010_NAMESPACE &&
+      visit.localName === "checkbox",
+  )) {
+    assertSingletonChildren(
+      visits.filter((visit) => visit.parent === checkbox),
+      WORDPROCESSINGML_2010_NAMESPACE,
+      ["checked", "checkedState", "uncheckedState"],
+    );
   }
 
   for (const date of visits.filter(
@@ -808,8 +1214,10 @@ function assertDeterministicWordControlShape(tree: OrderedXmlNode[]): void {
       "entryMacro",
       "exitMacro",
       "helpText",
+      "label",
       "name",
       "statusText",
+      "tabIndex",
     ]);
   }
 
@@ -884,6 +1292,34 @@ function assertDeterministicWordControlShape(tree: OrderedXmlNode[]): void {
       ["tblGrid"],
     );
   }
+
+  for (const parent of visits.filter(
+    (visit) =>
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      ["style", "tblStylePr", "tc"].includes(visit.localName),
+  )) {
+    assertSingletonWordChildren(
+      visits.filter((visit) => visit.parent === parent),
+      ["tcPr"],
+    );
+  }
+}
+
+function requireDirectParent(
+  visit: ExpandedXmlVisit,
+  allowedParents: readonly (readonly [string, string])[],
+  errorCode: "ACTIVE_CONTENT_REJECTED" | "XML_INVALID",
+): void {
+  if (
+    !visit.parent ||
+    !allowedParents.some(
+      ([namespaceUri, localName]) =>
+        visit.parent?.namespaceUri === namespaceUri &&
+        visit.parent.localName === localName,
+    )
+  ) {
+    failTemplateDocx(errorCode);
+  }
 }
 
 function nearestWordAncestor(
@@ -908,7 +1344,7 @@ function isWordSdtTypeElement(visit: ExpandedXmlVisit): boolean {
     (visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
       WORD_SDT_MAIN_TYPES.has(visit.localName)) ||
     (visit.namespaceUri === WORDPROCESSINGML_2010_NAMESPACE &&
-      visit.localName === "checkbox") ||
+      ["checkbox", "entityPicker"].includes(visit.localName)) ||
     (visit.namespaceUri === WORDPROCESSINGML_2012_NAMESPACE &&
       WORD_2012_CONTROL_ELEMENTS.has(visit.localName))
   );
@@ -918,12 +1354,19 @@ function assertSingletonWordChildren(
   children: readonly ExpandedXmlVisit[],
   localNames: readonly string[],
 ): void {
+  assertSingletonChildren(children, WORDPROCESSINGML_NAMESPACE, localNames);
+}
+
+function assertSingletonChildren(
+  children: readonly ExpandedXmlVisit[],
+  namespaceUri: string,
+  localNames: readonly string[],
+): void {
   for (const localName of localNames) {
     if (
       children.filter(
         (child) =>
-          child.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
-          child.localName === localName,
+          child.namespaceUri === namespaceUri && child.localName === localName,
       ).length > 1
     ) {
       failTemplateDocx("XML_INVALID");

@@ -1108,10 +1108,12 @@ function processContentControl(
   const unsupportedType = [
     'picture',
     'group',
+    'docPartList',
     'docPartObj',
     'bibliography',
     'citation',
     'equation',
+    'entityPicker',
   ].find((name) => descendants(properties, name).length > 0);
 
   if (unsupportedType) {
