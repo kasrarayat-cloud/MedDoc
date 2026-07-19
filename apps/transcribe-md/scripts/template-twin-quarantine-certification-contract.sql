@@ -46,14 +46,15 @@ INSERT INTO template_twin_quarantine_artifacts (
     'profileVersion', 'template-twin-clamd-instream-v1',
     'scanner', 'clamav-clamd',
     'transport', 'unix-domain-socket',
-    'engineVersion', '1.4.3',
-    'signatureVersion', '27888',
+    'engineVersion', '1.4.5',
+    'signatureVersion', '28065',
     'sourceSha256', repeat('a', 64),
     'sourceSizeBytes', 140,
     'verdict', 'clean',
     'threatNameSha256', NULL,
-    'scannedAt', '2026-07-19T00:00:00.000Z',
-    'attestationSha256', repeat('b', 64)
+    'scannedAt', '2026-07-19T08:00:00.000Z',
+    'attestationSha256',
+      'dbeaa00b68b4377505674c7a1b58bd7a08160a7dbadd4d6a5faba71cca86f256'
   ),
   jsonb_build_object(
     'profileVersion', 'template-twin-docx-metadata-minimization-v1',
@@ -62,8 +63,8 @@ INSERT INTO template_twin_quarantine_artifacts (
     'replacedParts', jsonb_build_array(),
     'zipEntryTimestampsNormalized', true
   ),
-  ARRAY[]::text[], '2026-07-19T00:00:00.000Z',
-  '2026-07-19T00:01:00.000Z'
+  ARRAY[]::text[], '2026-07-19T08:00:00.000Z',
+  '2026-07-19T08:01:00.000Z'
 );
 
 INSERT INTO template_twin_source_artifacts (
@@ -102,7 +103,7 @@ INSERT INTO template_twin_compiled_versions (
   'CERTIFIED', 0, '{}'::jsonb, repeat('1', 64),
   'practices/tt-q-contract-practice/template-twin/outputs/contract-good.docx',
   'output-version-good', 'output-etag-good', repeat('f', 64),
-  repeat('e', 64), '{}'::jsonb, '2026-07-19T00:02:00.000Z'
+  repeat('e', 64), '{}'::jsonb, '2026-07-19T08:02:00.000Z'
 );
 
 INSERT INTO template_twin_object_ledgers (
@@ -132,6 +133,55 @@ INSERT INTO template_twin_object_ledgers (
   );
 
 SET CONSTRAINTS ALL IMMEDIATE;
+
+-- The hash above is the real SHA-256 of the application's ordered canonical
+-- JSON receipt. A different, otherwise well-formed 64-character value must be
+-- rejected at persistence time. This proves database/application receipt
+-- consistency; the disposable contract does not claim a live clamd scan.
+DO $$
+DECLARE
+  tampered_hash_rejected BOOLEAN := false;
+BEGIN
+  BEGIN
+    INSERT INTO template_twin_quarantine_artifacts (
+      id, "practiceId", "createdById", "lineageId", "lineageVersion",
+      "intakeMode", "objectKey", "objectVersionId", "objectEtag", sha256,
+      "mimeType", "sizeBytes", status, "malwareScanEvidence",
+      "rejectionCodes", "scannedAt"
+    ) VALUES (
+      'tt-q-contract-quarantine-tampered', 'tt-q-contract-practice',
+      'tt-q-contract-doctor', 'tt-q-contract-lineage-tampered', 1,
+      'NATIVE_TEMPLATE',
+      'practices/tt-q-contract-practice/template-twin/quarantine/contract-tampered.docx',
+      'quarantine-version-tampered', 'quarantine-etag-tampered', repeat('a', 64),
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      140, 'MALWARE_CLEAN',
+      jsonb_build_object(
+        'profileVersion', 'template-twin-clamd-instream-v1',
+        'scanner', 'clamav-clamd',
+        'transport', 'unix-domain-socket',
+        'engineVersion', '1.4.5',
+        'signatureVersion', '28065',
+        'sourceSha256', repeat('a', 64),
+        'sourceSizeBytes', 140,
+        'verdict', 'clean',
+        'threatNameSha256', NULL,
+        'scannedAt', '2026-07-19T08:00:00.000Z',
+        'attestationSha256', repeat('b', 64)
+      ),
+      ARRAY[]::text[], '2026-07-19T08:00:00.000Z'
+    );
+  EXCEPTION WHEN check_violation THEN
+    IF SQLERRM NOT LIKE '%template_twin_quarantine_malware_attestation_canonical%' THEN
+      RAISE;
+    END IF;
+    tampered_hash_rejected := true;
+  END;
+  IF NOT tampered_hash_rejected THEN
+    RAISE EXCEPTION 'TT_QUARANTINE_TAMPERED_ATTESTATION_WAS_ACCEPTED';
+  END IF;
+END;
+$$;
 
 INSERT INTO template_twin_certifications (
   id, "compiledVersionId", "certifiedById", "compiledStructureSha256",
@@ -192,7 +242,7 @@ INSERT INTO template_twin_compiled_versions (
   'CERTIFIED', 0, '{}'::jsonb, repeat('6', 64),
   'practices/tt-q-contract-practice/template-twin/outputs/contract-missing.docx',
   'output-version-missing', 'output-etag-missing', repeat('5', 64),
-  repeat('4', 64), '{}'::jsonb, '2026-07-19T00:02:00.000Z'
+  repeat('4', 64), '{}'::jsonb, '2026-07-19T08:02:00.000Z'
 );
 
 INSERT INTO template_twin_object_ledgers (
@@ -248,5 +298,5 @@ BEGIN
 END;
 $$;
 
-SELECT 'PASS template-twin-quarantine-certification-contract-v1';
+SELECT 'PASS template-twin-quarantine-certification-contract-v2';
 ROLLBACK;

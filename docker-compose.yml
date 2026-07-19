@@ -171,6 +171,52 @@ services:
       timeout: 3s
       retries: 5
 
+  # ── Template Twin malware admission scanner ──
+  # The amd64 OCI manifest was resolved from the official 1.4.5 tag on
+  # 2026-07-19 with `docker manifest inspect --verbose`. clamd has no TCP
+  # listener: only the named Unix-socket volume shared with transcribe-md can
+  # reach it. Signature state persists across recreates and readiness fails
+  # closed when daily signatures are older than 48 hours.
+  template-twin-clamav:
+    image: clamav/clamav:1.4.5@sha256:48eaad9644475c2d466ce6d4ba2da892dbd4dcd47713201d31b665364655cc3c
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/opt/quillmd/clamav-entrypoint.sh"]
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    mem_limit: 1536m
+    cpus: "1.0"
+    stop_grace_period: 30s
+    environment:
+      CLAMD_STARTUP_TIMEOUT: "600"
+      CLAMAV_SIGNATURE_MAX_AGE_SECONDS: "172800"
+      FRESHCLAM_CHECKS: "24"
+    networks:
+      - template_twin_scanner
+    volumes:
+      - clamav_signatures:/var/lib/clamav
+      - clamav_socket:/run/clamav
+      - ./deploy/clamav/clamd.conf:/etc/clamav/clamd.conf:ro
+      - ./deploy/clamav/freshclam.conf:/etc/clamav/freshclam.conf:ro
+      - ./deploy/clamav/entrypoint.sh:/opt/quillmd/clamav-entrypoint.sh:ro
+      - ./deploy/clamav/readiness.sh:/opt/quillmd/clamav-readiness.sh:ro
+    healthcheck:
+      test: ["CMD", "/bin/sh", "/opt/quillmd/clamav-readiness.sh"]
+      interval: 60s
+      timeout: 10s
+      retries: 5
+      start_period: 10m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   # ── MinIO (S3-compatible object storage for audio) ──
   # Browsers upload audio directly here via presigned PUT URLs (spec §10).
   # The worker downloads by object key. Data lives in a docker volume.
@@ -459,6 +505,10 @@ services:
     image: ${TRANSCRIBE_MD_IMAGE:-meddoc-pro-transcribe-md:latest}
     cap_drop:
       - ALL
+    # The scanner socket is mode 0660 and owned by ClamAV gid 101. Grant only
+    # this web container the supplementary group required to connect.
+    group_add:
+      - "101"
     build:
       context: .
       dockerfile: apps/transcribe-md/Dockerfile
@@ -523,6 +573,8 @@ services:
         condition: service_healthy
     env_file:
       - .env
+    volumes:
+      - clamav_socket:/var/run/quillmd-clamav:ro
     environment:
       DATABASE_URL: postgresql://meddoc:${DB_PASSWORD:-changeme_in_production}@postgres:5432/meddoc?schema=public
       AUTH_URL: ${TRANSCRIBE_MD_AUTH_URL:-http://5.231.107.93:9020}
@@ -541,6 +593,7 @@ services:
       QUILLMD_REQUIRED_RUNTIME_PROTOCOL_EPOCH: template-twin-final-schema-v2
       TEMPLATE_TWIN_RUNTIME_MODE: ${TEMPLATE_TWIN_RUNTIME_MODE:-standard}
       TEMPLATE_TWIN_KILL_SWITCH: ${TEMPLATE_TWIN_KILL_SWITCH:-true}
+      TEMPLATE_TWIN_MALWARE_SCANNER_SOCKET: /var/run/quillmd-clamav/clamd.sock
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
       # T-M18.3 A15: surface the deployed milestone through /api/health.
@@ -691,5 +744,13 @@ volumes:
   pgbackups:
   redis_data:
   minio_data:
+  clamav_signatures:
+  clamav_socket:
   caddy_data:
   caddy_config:
+
+networks:
+  # Outbound-only update island. No application, database, queue, or object
+  # service joins this network; admission traffic uses the Unix socket volume.
+  template_twin_scanner:
+    driver: bridge

@@ -54,6 +54,45 @@ services:
       timeout: 3s
       retries: 10
 
+  # Exact production scanner profile, isolated to this synthetic QA project.
+  # There is deliberately no TCP listener or published port. The disposable
+  # QA signature volume persists across `up`/`down` and is removed by the
+  # documented `down -v` teardown.
+  template-twin-clamav:
+    image: clamav/clamav:1.4.5@sha256:48eaad9644475c2d466ce6d4ba2da892dbd4dcd47713201d31b665364655cc3c
+    restart: "no"
+    entrypoint: ["/bin/sh", "/opt/quillmd/clamav-entrypoint.sh"]
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    mem_limit: 1536m
+    cpus: "1.0"
+    stop_grace_period: 30s
+    environment:
+      CLAMD_STARTUP_TIMEOUT: "600"
+      CLAMAV_SIGNATURE_MAX_AGE_SECONDS: "172800"
+      FRESHCLAM_CHECKS: "24"
+    networks:
+      - template_twin_scanner
+    volumes:
+      - qa_clamav_signatures:/var/lib/clamav
+      - qa_clamav_socket:/run/clamav
+      - ./deploy/clamav/clamd.conf:/etc/clamav/clamd.conf:ro
+      - ./deploy/clamav/freshclam.conf:/etc/clamav/freshclam.conf:ro
+      - ./deploy/clamav/entrypoint.sh:/opt/quillmd/clamav-entrypoint.sh:ro
+      - ./deploy/clamav/readiness.sh:/opt/quillmd/clamav-readiness.sh:ro
+    healthcheck:
+      test: ["CMD", "/bin/sh", "/opt/quillmd/clamav-readiness.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 10m
+
   minio:
     image: minio/minio:latest
     restart: "no"
@@ -110,6 +149,8 @@ services:
     restart: "no"
     mem_limit: 512m
     cpus: "1.0"
+    group_add:
+      - "101"
     depends_on:
       postgres:
         condition: service_healthy
@@ -147,6 +188,7 @@ services:
       QUILLMD_REQUIRED_RUNTIME_PROTOCOL_EPOCH: template-twin-final-schema-v2
       TEMPLATE_TWIN_RUNTIME_MODE: standard
       TEMPLATE_TWIN_KILL_SWITCH: "false"
+      TEMPLATE_TWIN_MALWARE_SCANNER_SOCKET: /var/run/quillmd-clamav/clamd.sock
       # Authenticated synthetic staging UI. Both values default empty, so the
       # UI and every server mutation remain unavailable unless a QA operator
       # deliberately enables the dedicated Playwright profile.
@@ -193,6 +235,8 @@ services:
       # Clinical-model override for evals (feat/fable5-eval). Empty default →
       # the app/worker keep their hardcoded per-layer models (prod behaviour).
       TRANSCRIBE_MD_CLINICAL_MODEL: "${TRANSCRIBE_MD_CLINICAL_MODEL:-}"
+    volumes:
+      - qa_clamav_socket:/var/run/quillmd-clamav:ro
     healthcheck:
       test:
         ["CMD", "wget", "-qO-", "--spider", "http://127.0.0.1:3011/api/health"]
@@ -288,3 +332,9 @@ services:
 volumes:
   qa_pgdata:
   qa_minio:
+  qa_clamav_signatures:
+  qa_clamav_socket:
+
+networks:
+  template_twin_scanner:
+    driver: bridge
