@@ -6,7 +6,12 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { buildSyntheticDocx } from "../../../note-template-docx/__tests__/synthetic-docx";
 import { compileTemplateDocx } from "../../../note-template-docx/compiler";
-import { buildOfficeExpectedValueManifest } from "../../../note-template-docx/office-roundtrip-qa";
+import {
+  buildOfficeExpectedValueManifest,
+  buildOfficeVisibleStaticManifestFromDocxBytes,
+  compareOfficeVisibleStaticManifests,
+  type OfficeExpectedValueManifest,
+} from "../../../note-template-docx/office-roundtrip-qa";
 import { renderTemplateDocx } from "../../../note-template-docx/renderer";
 import { canonicalSha256 } from "../../canonical";
 import {
@@ -31,7 +36,10 @@ import {
   WORD_OPENXML_VALIDATOR_SDK_VERSION,
   WORD_VERIFICATION_CONTRACT_VERSION,
 } from "../contracts";
-import { validateReturnedHumanGateEvidence } from "../evidence-validator";
+import {
+  validateReturnedHumanGateEvidence,
+  type TrustedOpenXmlValidator,
+} from "../evidence-validator";
 import { verifyReturnedOfficeArtifacts } from "../../../../../scripts/template-twin-human-gate/returned-office-artifact-verifier";
 
 const SOURCE_COMMIT = "a".repeat(40);
@@ -50,6 +58,7 @@ interface SyntheticOfficeFixture {
   readonly source: Buffer;
   readonly rendererOutput: Buffer;
   readonly staticTamperedRenderer: Buffer;
+  readonly structureTamperedRenderer: Buffer;
   readonly expectedManifestBytes: Buffer;
   readonly pdf: Buffer;
 }
@@ -105,20 +114,39 @@ beforeAll(async () => {
     resolutions,
     validation: VALIDATION,
   });
-  const tamperedZip = await JSZip.loadAsync(rendered.document);
-  const tamperedDocument = tamperedZip.file("word/document.xml");
-  if (!tamperedDocument) throw new Error("Missing synthetic document XML.");
-  tamperedZip.file(
+  const staticTamperedZip = await JSZip.loadAsync(rendered.document);
+  const staticTamperedDocument = staticTamperedZip.file("word/document.xml");
+  if (!staticTamperedDocument)
+    throw new Error("Missing synthetic document XML.");
+  staticTamperedZip.file(
     "word/document.xml",
-    (await tamperedDocument.async("string")).replace(
+    (await staticTamperedDocument.async("string")).replace(
       "Synthetic finding: ",
       "Altered static finding: ",
     ),
   );
+  const structureTamperedZip = await JSZip.loadAsync(rendered.document);
+  const structureTamperedDocument =
+    structureTamperedZip.file("word/document.xml");
+  if (!structureTamperedDocument)
+    throw new Error("Missing synthetic document XML.");
+  const structureXml = await structureTamperedDocument.async("string");
+  const structureMutatedXml = structureXml.replace(
+    "<w:r><w:t>Synthetic finding: </w:t></w:r>",
+    '<w:r><w:rPr><w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/></w:rPr><w:t>Synthetic finding: </w:t></w:r>',
+  );
+  if (structureMutatedXml === structureXml) {
+    throw new Error("Synthetic font mutation did not apply.");
+  }
+  structureTamperedZip.file("word/document.xml", structureMutatedXml);
   officeFixture = {
     source,
     rendererOutput: rendered.document,
-    staticTamperedRenderer: await tamperedZip.generateAsync({
+    staticTamperedRenderer: await staticTamperedZip.generateAsync({
+      type: "nodebuffer",
+      compression: "DEFLATE",
+    }),
+    structureTamperedRenderer: await structureTamperedZip.generateAsync({
       type: "nodebuffer",
       compression: "DEFLATE",
     }),
@@ -348,6 +376,7 @@ interface MutableWordEvidence {
 
 interface WordPackageOptions {
   readonly commit?: string;
+  readonly validatorSha256?: string;
   readonly mutateEvidence?: (evidence: MutableWordEvidence) => void;
   readonly mutateEntries?: (entries: Map<string, Buffer>) => void;
 }
@@ -356,6 +385,7 @@ async function wordEvidenceZip(
   options: WordPackageOptions = {},
 ): Promise<Buffer> {
   const commit = options.commit ?? SOURCE_COMMIT;
+  const validatorSha256 = options.validatorSha256 ?? OPENXML_VALIDATOR_SHA256;
   const expectedManifestRelativePath =
     "evidence/corpus/synthetic-office/office-expected-manifest.json";
   const originals = [
@@ -383,7 +413,7 @@ async function wordEvidenceZip(
     openXmlValidator: {
       name: WORD_OPENXML_VALIDATOR_NAME,
       sdkVersion: WORD_OPENXML_VALIDATOR_SDK_VERSION,
-      executableSha256: OPENXML_VALIDATOR_SHA256,
+      executableSha256: validatorSha256,
       targets: ["Office2013", "Microsoft365"],
     },
     documentCount: originals.length,
@@ -418,13 +448,15 @@ async function wordEvidenceZip(
         tool: WORD_OPENXML_VALIDATOR_NAME,
         sdkVersion: WORD_OPENXML_VALIDATOR_SDK_VERSION,
         packageVersion: "3.5.1+synthetic.test",
-        validatorExecutableSha256: OPENXML_VALIDATOR_SHA256,
+        validatorExecutableSha256: validatorSha256,
         targetFileFormat: target,
         sourceCommit: commit,
         generatedAt: CHECKED_AT,
         results: [
           {
             file: `${safeStem}.word-reopened.docx`,
+            sha256: sha256(reopened),
+            sizeBytes: reopened.length,
             opened: true,
             valid: true,
             errorCount: 0,
@@ -560,6 +592,39 @@ const WORD_DOCUMENT_MANIFEST_PATH = "WORD-QA-DOCUMENTS.json";
 const WORD_EVIDENCE_PATH = "WORD-EVIDENCE.json";
 const FILE_HASH_MANIFEST_PATH = "RESULT-FILE-HASHES.json";
 
+async function originalCiPackageZipFromReturnedEvidence(
+  returnedEvidenceZip: Buffer,
+): Promise<Buffer> {
+  const returned = await JSZip.loadAsync(returnedEvidenceZip);
+  const manifestFile = returned.file(WORD_DOCUMENT_MANIFEST_PATH);
+  if (!manifestFile) throw new Error("Missing returned manifest fixture.");
+  const manifestBytes = await manifestFile.async("nodebuffer");
+  const original = new JSZip();
+  original.file(`manifests/${WORD_DOCUMENT_MANIFEST_PATH}`, manifestBytes, {
+    createFolders: false,
+  });
+  return original.generateAsync({
+    type: "nodebuffer",
+    compression: "DEFLATE",
+  });
+}
+
+const trustedOpenXmlValidator: TrustedOpenXmlValidator = async (input) => ({
+  contractVersion: "template-twin-trusted-openxml-rerun/1.0.0",
+  tool: WORD_OPENXML_VALIDATOR_NAME,
+  sdkVersion: WORD_OPENXML_VALIDATOR_SDK_VERSION,
+  validatorSourceCommit: input.expectedSourceCommit,
+  validatorExecutableSha256: "d".repeat(64),
+  returnedExecutableUsed: false,
+  networkModeDuringValidation: "none",
+  targetFileFormat: input.targetFileFormat,
+  documentFilename: input.documentFilename,
+  documentSha256: sha256(input.documentBytes),
+  documentSizeBytes: input.documentBytes.byteLength,
+  valid: true,
+  errorCount: 0,
+});
+
 async function validInputs(
   options: {
     word?: WordPackageOptions;
@@ -571,8 +636,12 @@ async function validInputs(
 ) {
   const manifest = physicianManifest(options.word?.commit ?? SOURCE_COMMIT);
   const zip = await wordEvidenceZip(options.word);
+  const originalCiPackageZip =
+    await originalCiPackageZipFromReturnedEvidence(zip);
   return {
     expectedSourceCommit: SOURCE_COMMIT,
+    originalCiPackageZip,
+    expectedOriginalCiPackageZipSha256: sha256(originalCiPackageZip),
     wordEvidenceZip: zip,
     expectedWordEvidenceZipSha256: sha256(zip),
     physicianManifestJson: jsonBytes(manifest),
@@ -589,6 +658,7 @@ async function validInputs(
       }),
     ),
     officeArtifactVerifier: verifyReturnedOfficeArtifacts,
+    trustedOpenXmlValidator,
     checkedAtIso: CHECKED_AT,
   };
 }
@@ -601,6 +671,37 @@ describe("returned Template Twin human-gate evidence validation", () => {
     expect(report.issues).toEqual([]);
     expect(report.authorizesClinicalOrProductionAction).toBe(false);
     expect(report.sourceCommit).toBe(SOURCE_COMMIT);
+  });
+
+  it("rejects a self-consistent replacement ZIP that is not bound to the independently trusted original CI package", async () => {
+    const trusted = await validInputs();
+    const replacement = await validInputs({
+      word: { validatorSha256: "e".repeat(64) },
+    });
+    const report = await validateReturnedHumanGateEvidence({
+      ...replacement,
+      originalCiPackageZip: trusted.originalCiPackageZip,
+      expectedOriginalCiPackageZipSha256:
+        trusted.expectedOriginalCiPackageZipSha256,
+    });
+
+    expect(report.status).toBe("FAIL");
+    expect(report.issues.map((issue) => issue.code)).toContain(
+      "TT_HUMAN_GATE_WORD_TRUSTED_MANIFEST_MISMATCH",
+    );
+  });
+
+  it("fails closed when the out-of-band original CI package digest is absent", async () => {
+    const inputs = await validInputs();
+    const report = await validateReturnedHumanGateEvidence({
+      ...inputs,
+      expectedOriginalCiPackageZipSha256: undefined,
+    });
+
+    expect(report.status).toBe("FAIL");
+    expect(report.issues.map((issue) => issue.code)).toContain(
+      "TT_HUMAN_GATE_ORIGINAL_CI_PACKAGE_HASH_MISSING",
+    );
   });
 
   it("fails a valid reopened DOCX whose synthetic semantic value no longer matches", async () => {
@@ -640,6 +741,109 @@ describe("returned Template Twin human-gate evidence validation", () => {
     expect(report.status).toBe("FAIL");
     expect(report.issues.map((issue) => issue.code)).toContain(
       "TT_HUMAN_GATE_WORD_STATIC_OR_OCCURRENCE_MISMATCH",
+    );
+  });
+
+  it("fails a font/layout structure mutation even when visible text is unchanged", async () => {
+    const expected = JSON.parse(
+      officeFixture.expectedManifestBytes.toString("utf8"),
+    ) as OfficeExpectedValueManifest;
+    const before = buildOfficeVisibleStaticManifestFromDocxBytes({
+      syntheticOnly: true,
+      docxBytes: officeFixture.rendererOutput,
+      expected,
+    });
+    const after = buildOfficeVisibleStaticManifestFromDocxBytes({
+      syntheticOnly: true,
+      docxBytes: officeFixture.structureTamperedRenderer,
+      expected,
+    });
+    expect(
+      compareOfficeVisibleStaticManifests(before.manifest, after.manifest),
+    ).toMatchObject({
+      aggregateVisibleContentMatches: true,
+      aggregateStructureMatches: false,
+    });
+
+    const report = await validateReturnedHumanGateEvidence(
+      await validInputs({
+        word: {
+          mutateEntries(entries) {
+            entries.set(
+              "word-reopened-docx/synthetic-office--renderer_output.word-reopened.docx",
+              officeFixture.structureTamperedRenderer,
+            );
+          },
+        },
+      }),
+    );
+
+    expect(report.status).toBe("FAIL");
+    expect(report.issues.map((issue) => issue.code)).toContain(
+      "TT_HUMAN_GATE_WORD_STATIC_OR_OCCURRENCE_MISMATCH",
+    );
+  });
+
+  it("rejects stale Open XML reports whose DOCX hash and size no longer match the returned bytes", async () => {
+    const report = await validateReturnedHumanGateEvidence(
+      await validInputs({
+        word: {
+          mutateEntries(entries) {
+            entries.set(
+              "word-reopened-docx/synthetic-office--renderer_output.word-reopened.docx",
+              officeFixture.staticTamperedRenderer,
+            );
+          },
+        },
+      }),
+    );
+
+    expect(report.status).toBe("FAIL");
+    expect(report.issues.map((issue) => issue.code)).toContain(
+      "TT_HUMAN_GATE_WORD_OPENXML_SCHEMA_INVALID",
+    );
+  });
+
+  it("rejects a substituted Open XML report with the right filename but another DOCX identity", async () => {
+    const report = await validateReturnedHumanGateEvidence(
+      await validInputs({
+        word: {
+          mutateEntries(entries) {
+            const reportPath =
+              "openxml/synthetic-office--renderer_output.Office2013.json";
+            const parsed = JSON.parse(
+              entries.get(reportPath)!.toString("utf8"),
+            ) as {
+              results: Array<{ sha256: string; sizeBytes: number }>;
+            };
+            parsed.results[0]!.sha256 = sha256(officeFixture.source);
+            parsed.results[0]!.sizeBytes = officeFixture.source.length;
+            entries.set(reportPath, jsonBytes(parsed));
+          },
+        },
+      }),
+    );
+
+    expect(report.status).toBe("FAIL");
+    expect(report.issues.map((issue) => issue.code)).toContain(
+      "TT_HUMAN_GATE_WORD_OPENXML_SCHEMA_INVALID",
+    );
+  });
+
+  it("requires a fresh trusted Open XML rerun instead of accepting returned reports alone", async () => {
+    const inputs = await validInputs();
+    const report = await validateReturnedHumanGateEvidence({
+      ...inputs,
+      trustedOpenXmlValidator: async (input) => ({
+        ...(await trustedOpenXmlValidator(input)),
+        valid: false,
+        errorCount: 1,
+      }),
+    });
+
+    expect(report.status).toBe("FAIL");
+    expect(report.issues.map((issue) => issue.code)).toContain(
+      "TT_HUMAN_GATE_WORD_TRUSTED_OPENXML_RERUN_INVALID",
     );
   });
 

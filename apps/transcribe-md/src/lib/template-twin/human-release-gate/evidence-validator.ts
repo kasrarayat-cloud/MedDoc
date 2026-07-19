@@ -41,6 +41,13 @@ interface CentralDirectoryEntry {
 
 export interface ValidateReturnedHumanGateEvidenceInput {
   readonly expectedSourceCommit: string;
+  /**
+   * The unmodified package ZIP produced by the exact-head CI run. Its digest
+   * must be copied independently from the trusted workflow summary. Returned
+   * Word evidence is never allowed to provide its own package trust anchor.
+   */
+  readonly originalCiPackageZip: Uint8Array;
+  readonly expectedOriginalCiPackageZipSha256: string | undefined;
   readonly wordEvidenceZip: Uint8Array;
   /**
    * Digest copied from the adjacent ZIP.sha256 returned by the Word runner.
@@ -53,6 +60,7 @@ export interface ValidateReturnedHumanGateEvidenceInput {
   readonly physicianDecisionJson: Uint8Array;
   readonly mediaReviewJson: Uint8Array;
   readonly officeArtifactVerifier: ReturnedOfficeArtifactVerifier;
+  readonly trustedOpenXmlValidator: TrustedOpenXmlValidator;
   readonly checkedAtIso?: string;
 }
 
@@ -81,6 +89,33 @@ export interface ReturnedOfficeArtifactVerification {
 export type ReturnedOfficeArtifactVerifier = (
   input: ReturnedOfficeArtifactVerifierInput,
 ) => Promise<ReturnedOfficeArtifactVerification>;
+
+export interface TrustedOpenXmlValidatorInput {
+  readonly expectedSourceCommit: string;
+  readonly targetFileFormat: "Office2013" | "Microsoft365";
+  readonly documentFilename: string;
+  readonly documentBytes: Uint8Array;
+}
+
+export interface TrustedOpenXmlValidation {
+  readonly contractVersion: "template-twin-trusted-openxml-rerun/1.0.0";
+  readonly tool: typeof WORD_OPENXML_VALIDATOR_NAME;
+  readonly sdkVersion: typeof WORD_OPENXML_VALIDATOR_SDK_VERSION;
+  readonly validatorSourceCommit: string;
+  readonly validatorExecutableSha256: string;
+  readonly returnedExecutableUsed: false;
+  readonly networkModeDuringValidation: "none";
+  readonly targetFileFormat: "Office2013" | "Microsoft365";
+  readonly documentFilename: string;
+  readonly documentSha256: string;
+  readonly documentSizeBytes: number;
+  readonly valid: boolean;
+  readonly errorCount: number;
+}
+
+export type TrustedOpenXmlValidator = (
+  input: TrustedOpenXmlValidatorInput,
+) => Promise<TrustedOpenXmlValidation>;
 
 function sha256(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
@@ -250,12 +285,112 @@ function exactObjectKeys(
   );
 }
 
+async function loadTrustedOriginalPackageManifest(input: {
+  readonly bytes: Buffer;
+  readonly expectedZipSha256: string | undefined;
+  readonly expectedSourceCommit: string;
+  readonly issues: HumanGateValidationIssue[];
+}): Promise<Buffer | null> {
+  const actualZipSha256 = sha256(input.bytes);
+  if (input.expectedZipSha256 === undefined) {
+    addIssue(
+      input.issues,
+      "TT_HUMAN_GATE_ORIGINAL_CI_PACKAGE_HASH_MISSING",
+      "FAIL",
+      "The original CI package is missing the trusted SHA-256 copied out-of-band from the exact-head workflow summary.",
+    );
+    return null;
+  }
+  if (
+    !/^[a-f0-9]{64}$/u.test(input.expectedZipSha256) ||
+    input.expectedZipSha256 !== actualZipSha256
+  ) {
+    addIssue(
+      input.issues,
+      "TT_HUMAN_GATE_ORIGINAL_CI_PACKAGE_HASH_MISMATCH",
+      "FAIL",
+      "The supplied original CI package does not match its independently trusted workflow digest.",
+    );
+    return null;
+  }
+
+  let centralEntries: CentralDirectoryEntry[];
+  try {
+    centralEntries = inspectZipCentralDirectory(input.bytes);
+  } catch (error) {
+    addIssue(
+      input.issues,
+      errorCode(error, "TT_HUMAN_GATE_ORIGINAL_CI_PACKAGE_INVALID"),
+      "FAIL",
+      "The digest-bound original CI package failed bounded structural inspection.",
+    );
+    return null;
+  }
+
+  const artifactName = `template-twin-human-gate-${input.expectedSourceCommit.slice(0, 12)}`;
+  const expectedManifestPath = `manifests/${WORD_DOCUMENT_MANIFEST_PATH}`;
+  const manifestCandidates = centralEntries.filter(
+    (entry) =>
+      entry.name === expectedManifestPath ||
+      entry.name.endsWith(`/manifests/${WORD_DOCUMENT_MANIFEST_PATH}`),
+  );
+  if (
+    manifestCandidates.length !== 1 ||
+    manifestCandidates[0]?.name !== expectedManifestPath ||
+    manifestCandidates[0].uncompressedSize > MAX_JSON_BYTES
+  ) {
+    addIssue(
+      input.issues,
+      "TT_HUMAN_GATE_ORIGINAL_CI_MANIFEST_MISSING",
+      "FAIL",
+      "The trusted original CI package lacks the one exact-head Word document manifest at its deterministic path.",
+    );
+    return null;
+  }
+
+  try {
+    const zip = await JSZip.loadAsync(input.bytes, {
+      checkCRC32: true,
+      createFolders: false,
+    });
+    const entry = zip.file(expectedManifestPath);
+    if (!entry) throw new Error("missing");
+    const manifestBytes = await entry.async("nodebuffer");
+    if (manifestBytes.length !== manifestCandidates[0].uncompressedSize) {
+      throw new Error("size");
+    }
+    const manifest = WordQaDocumentManifestSchema.parse(
+      parseJsonBytes(
+        manifestBytes,
+        "TT_HUMAN_GATE_TRUSTED_ORIGINAL_WORD_MANIFEST",
+      ),
+    );
+    if (
+      manifest.sourceCommit !== input.expectedSourceCommit ||
+      manifest.artifactName !== artifactName
+    ) {
+      throw new Error("identity");
+    }
+    return manifestBytes;
+  } catch {
+    addIssue(
+      input.issues,
+      "TT_HUMAN_GATE_ORIGINAL_CI_MANIFEST_INVALID",
+      "FAIL",
+      "The exact manifest inside the digest-bound original CI package is malformed or belongs to another release head.",
+    );
+    return null;
+  }
+}
+
 function validOpenXmlReport(input: {
   readonly bytes: Uint8Array;
   readonly expectedSourceCommit: string;
   readonly expectedValidatorSha256: string;
   readonly expectedTarget: "Office2013" | "Microsoft365";
   readonly expectedDocumentFilename: string;
+  readonly expectedDocumentSha256: string;
+  readonly expectedDocumentSizeBytes: number;
 }): boolean {
   try {
     const report = objectRecord(
@@ -290,23 +425,54 @@ function validOpenXmlReport(input: {
     const result = objectRecord(report.results[0]);
     return Boolean(
       result &&
-        exactObjectKeys(result, [
-          "file",
-          "opened",
-          "valid",
-          "errorCount",
-          "errors",
-        ]) &&
-        result.file === input.expectedDocumentFilename &&
-        result.opened === true &&
-        result.valid === true &&
-        result.errorCount === 0 &&
-        Array.isArray(result.errors) &&
-        result.errors.length === 0,
+      exactObjectKeys(result, [
+        "file",
+        "sha256",
+        "sizeBytes",
+        "opened",
+        "valid",
+        "errorCount",
+        "errors",
+      ]) &&
+      result.file === input.expectedDocumentFilename &&
+      result.sha256 === input.expectedDocumentSha256 &&
+      result.sizeBytes === input.expectedDocumentSizeBytes &&
+      result.opened === true &&
+      result.valid === true &&
+      result.errorCount === 0 &&
+      Array.isArray(result.errors) &&
+      result.errors.length === 0,
     );
   } catch {
     return false;
   }
+}
+
+function validTrustedOpenXmlRerun(input: {
+  readonly validation: TrustedOpenXmlValidation;
+  readonly expectedSourceCommit: string;
+  readonly expectedTarget: "Office2013" | "Microsoft365";
+  readonly expectedDocumentFilename: string;
+  readonly expectedDocumentSha256: string;
+  readonly expectedDocumentSizeBytes: number;
+}): boolean {
+  const validation = input.validation;
+  return Boolean(
+    validation.contractVersion ===
+      "template-twin-trusted-openxml-rerun/1.0.0" &&
+    validation.tool === WORD_OPENXML_VALIDATOR_NAME &&
+    validation.sdkVersion === WORD_OPENXML_VALIDATOR_SDK_VERSION &&
+    validation.validatorSourceCommit === input.expectedSourceCommit &&
+    /^[a-f0-9]{64}$/u.test(validation.validatorExecutableSha256) &&
+    validation.returnedExecutableUsed === false &&
+    validation.networkModeDuringValidation === "none" &&
+    validation.targetFileFormat === input.expectedTarget &&
+    validation.documentFilename === input.expectedDocumentFilename &&
+    validation.documentSha256 === input.expectedDocumentSha256 &&
+    validation.documentSizeBytes === input.expectedDocumentSizeBytes &&
+    validation.valid === true &&
+    validation.errorCount === 0,
+  );
 }
 
 function statusFromIssues(
@@ -327,11 +493,22 @@ function errorCode(error: unknown, fallback: string): string {
 
 async function validateWordEvidence(input: {
   readonly bytes: Buffer;
+  readonly originalCiPackageBytes: Buffer;
+  readonly expectedOriginalCiPackageZipSha256: string | undefined;
   readonly expectedSourceCommit: string;
   readonly expectedZipSha256: string | undefined;
   readonly officeArtifactVerifier: ReturnedOfficeArtifactVerifier;
+  readonly trustedOpenXmlValidator: TrustedOpenXmlValidator;
   readonly issues: HumanGateValidationIssue[];
 }): Promise<void> {
+  const trustedOriginalManifestBytes = await loadTrustedOriginalPackageManifest(
+    {
+      bytes: input.originalCiPackageBytes,
+      expectedZipSha256: input.expectedOriginalCiPackageZipSha256,
+      expectedSourceCommit: input.expectedSourceCommit,
+      issues: input.issues,
+    },
+  );
   const zipSha256 = sha256(input.bytes);
   if (input.expectedZipSha256 === undefined) {
     addIssue(
@@ -512,6 +689,17 @@ async function validateWordEvidence(input: {
     );
   }
   const manifestBytes = inflated.get(WORD_DOCUMENT_MANIFEST_PATH)!;
+  if (
+    trustedOriginalManifestBytes &&
+    !Buffer.from(manifestBytes).equals(trustedOriginalManifestBytes)
+  ) {
+    addIssue(
+      input.issues,
+      "TT_HUMAN_GATE_WORD_TRUSTED_MANIFEST_MISMATCH",
+      "FAIL",
+      "The returned Word evidence contains a self-consistent replacement manifest instead of the manifest authenticated by the original exact-head CI package digest.",
+    );
+  }
   if (wordEvidence.packageManifestSha256 !== sha256(manifestBytes)) {
     addIssue(
       input.issues,
@@ -815,6 +1003,10 @@ async function validateWordEvidence(input: {
     }
 
     const reopenedFilename = `${safeStem}.word-reopened.docx`;
+    const reopenedBytes = reopened
+      ? (inflated.get(reopened.relativePath) ?? new Uint8Array())
+      : new Uint8Array();
+    const reopenedSha256 = sha256(reopenedBytes);
     for (const [kind, target] of [
       ["openxml_office2013_json", "Office2013"],
       ["openxml_microsoft365_json", "Microsoft365"],
@@ -829,6 +1021,8 @@ async function validateWordEvidence(input: {
             documentManifest.openXmlValidator.executableSha256,
           expectedTarget: target,
           expectedDocumentFilename: reopenedFilename,
+          expectedDocumentSha256: reopenedSha256,
+          expectedDocumentSizeBytes: reopenedBytes.byteLength,
         })
       ) {
         addIssue(
@@ -836,6 +1030,40 @@ async function validateWordEvidence(input: {
           "TT_HUMAN_GATE_WORD_OPENXML_SCHEMA_INVALID",
           "FAIL",
           `The reopened Word file lacks a passing ${target} Open XML SDK result from the pinned validator.`,
+        );
+      }
+
+      if (reopenedBytes.byteLength === 0) continue;
+      try {
+        const trustedValidation = await input.trustedOpenXmlValidator({
+          expectedSourceCommit: input.expectedSourceCommit,
+          targetFileFormat: target,
+          documentFilename: reopenedFilename,
+          documentBytes: reopenedBytes,
+        });
+        if (
+          !validTrustedOpenXmlRerun({
+            validation: trustedValidation,
+            expectedSourceCommit: input.expectedSourceCommit,
+            expectedTarget: target,
+            expectedDocumentFilename: reopenedFilename,
+            expectedDocumentSha256: reopenedSha256,
+            expectedDocumentSizeBytes: reopenedBytes.byteLength,
+          })
+        ) {
+          addIssue(
+            input.issues,
+            "TT_HUMAN_GATE_WORD_TRUSTED_OPENXML_RERUN_INVALID",
+            "FAIL",
+            `The exact returned DOCX bytes failed the source-built trusted ${target} Open XML rerun or its byte identity did not match.`,
+          );
+        }
+      } catch {
+        addIssue(
+          input.issues,
+          "TT_HUMAN_GATE_WORD_TRUSTED_OPENXML_RERUN_BLOCKED",
+          "BLOCKED",
+          `The required source-built trusted ${target} Open XML rerun could not be completed; returned executables and reports cannot substitute for it.`,
         );
       }
     }
@@ -1041,9 +1269,13 @@ export async function validateReturnedHumanGateEvidence(
 
   await validateWordEvidence({
     bytes: Buffer.from(input.wordEvidenceZip),
+    originalCiPackageBytes: Buffer.from(input.originalCiPackageZip),
+    expectedOriginalCiPackageZipSha256:
+      input.expectedOriginalCiPackageZipSha256,
     expectedSourceCommit: input.expectedSourceCommit,
     expectedZipSha256: input.expectedWordEvidenceZipSha256,
     officeArtifactVerifier: input.officeArtifactVerifier,
+    trustedOpenXmlValidator: input.trustedOpenXmlValidator,
     issues,
   });
   validatePhysicianEvidence({
@@ -1064,6 +1296,7 @@ export async function validateReturnedHumanGateEvidence(
     status: statusFromIssues(issues),
     authorizesClinicalOrProductionAction: false,
     inputs: {
+      originalCiPackageZipSha256: sha256(input.originalCiPackageZip),
       wordEvidenceZipSha256: sha256(input.wordEvidenceZip),
       physicianDecisionSha256: sha256(input.physicianDecisionJson),
       mediaReviewSha256: sha256(input.mediaReviewJson),

@@ -96,14 +96,14 @@ export async function verifyReturnedOfficeArtifacts(
   const expected = parseExpectedManifest(input);
   const workCopyIdentityValid = Boolean(
     input.workCopyBytes.byteLength === input.expectedDocumentSizeBytes &&
-      sha256(input.workCopyBytes) === input.expectedDocumentSha256,
+    sha256(input.workCopyBytes) === input.expectedDocumentSha256,
   );
   const security = inspectOfficeDocxSecurityQa(input.reopenedDocxBytes);
   const reopenedPackageValid = Boolean(
     workCopyIdentityValid &&
-      security.status === "passed" &&
-      security.inspectedDocxSha256 === sha256(input.reopenedDocxBytes) &&
-      security.inspectedSizeBytes === input.reopenedDocxBytes.byteLength,
+    security.status === "passed" &&
+    security.inspectedDocxSha256 === sha256(input.reopenedDocxBytes) &&
+    security.inspectedSizeBytes === input.reopenedDocxBytes.byteLength,
   );
 
   let staticAndOccurrenceValid = false;
@@ -120,9 +120,14 @@ export async function verifyReturnedOfficeArtifacts(
         docxBytes: input.reopenedDocxBytes,
         expected,
       });
-      staticAndOccurrenceValid =
-        compareOfficeVisibleStaticManifests(before.manifest, after.manifest)
-          .aggregateVisibleContentMatches;
+      const staticComparison = compareOfficeVisibleStaticManifests(
+        before.manifest,
+        after.manifest,
+      );
+      staticAndOccurrenceValid = Boolean(
+        staticComparison.aggregateVisibleContentMatches &&
+        staticComparison.aggregateStructureMatches,
+      );
 
       if (input.documentRole === "source") {
         semanticReadbackValid = staticAndOccurrenceValid;
@@ -137,20 +142,19 @@ export async function verifyReturnedOfficeArtifacts(
         );
         semanticReadbackValid = Boolean(
           validActualManifest(actual, expected) &&
-            actual.unexpectedBindingCount === 0 &&
-            actual.ambiguousBindingCount === 0 &&
-            actual.fields.length === expected.fields.length &&
-            actual.fields.every((field) => {
-              const expectedField = expectedFields.get(field.fieldId);
-              return Boolean(
-                expectedField &&
-                  field.actualOccurrences === 1 &&
-                  field.actualValueSha256 ===
-                    expectedField.expectedValueSha256 &&
-                  field.actualControlStateSha256 ===
-                    expectedField.expectedControlStateSha256,
-              );
-            }),
+          actual.unexpectedBindingCount === 0 &&
+          actual.ambiguousBindingCount === 0 &&
+          actual.fields.length === expected.fields.length &&
+          actual.fields.every((field) => {
+            const expectedField = expectedFields.get(field.fieldId);
+            return Boolean(
+              expectedField &&
+              field.actualOccurrences === 1 &&
+              field.actualValueSha256 === expectedField.expectedValueSha256 &&
+              field.actualControlStateSha256 ===
+                expectedField.expectedControlStateSha256,
+            );
+          }),
         );
       }
     } catch {
@@ -160,8 +164,7 @@ export async function verifyReturnedOfficeArtifacts(
   }
 
   return {
-    contractVersion:
-      "template-twin-returned-office-artifact-verifier/1.0.0",
+    contractVersion: "template-twin-returned-office-artifact-verifier/1.0.0",
     verificationManifestValid: expected !== null,
     reopenedPackageValid,
     staticAndOccurrenceValid,

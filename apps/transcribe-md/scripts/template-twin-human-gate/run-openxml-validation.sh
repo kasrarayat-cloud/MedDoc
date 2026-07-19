@@ -46,7 +46,12 @@ for target in Office2013 Microsoft365; do
     .sourceCommit == $commit and
     .tool == "DocumentFormat.OpenXml.OpenXmlValidator" and
     .sdkVersion == "3.5.1.0" and
-    all(.results[]; .opened and .valid and .errorCount == 0 and (.errors | length == 0))
+    all(.results[];
+      .opened and .valid and .errorCount == 0 and
+      (.sha256 | test("^[a-f0-9]{64}$")) and
+      (.sizeBytes | type == "number") and .sizeBytes > 0 and
+      (.errors | length == 0)
+    )
   ' "$RESULT_ROOT/$output" >/dev/null
 done
 

@@ -170,8 +170,7 @@ async function main(): Promise<void> {
   await rm(outputZip, { force: true });
   await mkdir(stage, { recursive: true });
 
-  const validatorRelativePath =
-    "tools/openxml-validator/OpenXmlValidator.exe";
+  const validatorRelativePath = "tools/openxml-validator/OpenXmlValidator.exe";
   const validatorSource = path.join(
     options.inputRoot,
     "openxml-build",
@@ -255,8 +254,7 @@ async function main(): Promise<void> {
       corpusCase.id,
       "office-expected-manifest.json",
     );
-    const expectedManifestRelativePath =
-      `evidence/corpus/${corpusCase.id}/office-expected-manifest.json`;
+    const expectedManifestRelativePath = `evidence/corpus/${corpusCase.id}/office-expected-manifest.json`;
     const expectedManifestBytes = (await exists(expectedManifestSource))
       ? await readFile(expectedManifestSource)
       : null;
@@ -664,6 +662,11 @@ async function main(): Promise<void> {
         relativePath: path.basename(outputZip),
         sizeBytes: zipBytes.length,
         sha256: artifactSha256,
+      },
+      documentManifest: {
+        relativePath: "manifests/WORD-QA-DOCUMENTS.json",
+        sizeBytes: manifestBytes.length,
+        sha256: sha256(manifestBytes),
       },
       hygiene,
       wordStatus: "PENDING_RETURNED_DESKTOP_WORD_EVIDENCE",

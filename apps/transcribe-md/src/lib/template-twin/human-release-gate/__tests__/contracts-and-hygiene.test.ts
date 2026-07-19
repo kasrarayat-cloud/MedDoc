@@ -125,7 +125,26 @@ describe("human release-gate contracts", () => {
     );
     expect(script).not.toMatch(/function Read-YesNo[\s\S]{0,240}Read-Enum/u);
     expect(script).toContain("Invoke-OpenXmlValidation $reopenedPath");
-    expect(script).toContain("reopenReadOnlyCompleted = $reopenReadOnlyCompleted");
+    expect(script).toContain(
+      "$ReportResults[0].sha256 -ne (Get-Sha256 $DocumentPath)",
+    );
+    expect(script).toContain(
+      "[long]$ReportResults[0].sizeBytes -ne (Get-Item -LiteralPath $DocumentPath).Length",
+    );
+    expect(script).toContain(
+      "reopenReadOnlyCompleted = $reopenReadOnlyCompleted",
+    );
+
+    const validator = await readFile(
+      path.join(
+        process.cwd(),
+        "scripts/template-twin-human-gate/openxml-validator/Program.cs",
+      ),
+      "utf8",
+    );
+    expect(validator).toContain("SHA256.HashData(documentBytes)");
+    expect(validator).toContain("sizeBytes = documentBytes.LongLength");
+    expect(validator).toContain("WordprocessingDocument.Open(stream, false)");
   });
 
   it("runs only for the legacy audited branch or explicitly named Template Twin GA releases", async () => {
@@ -150,6 +169,9 @@ describe("human release-gate contracts", () => {
     );
     expect(workflow).toContain(
       "startsWith(github.event.pull_request.head.ref, 'release/template-twin-ga-')",
+    );
+    expect(workflow).toContain(
+      "Trusted original package SHA-256 (copy out-of-band for returned-evidence validation)",
     );
     expect(workflow).toContain(
       "^release/template-twin-ga-[0-9]{8}(-[a-z0-9][a-z0-9._-]{0,62})?$",

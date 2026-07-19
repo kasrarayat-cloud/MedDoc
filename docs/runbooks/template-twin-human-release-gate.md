@@ -44,13 +44,19 @@ The founder coordinates the gate as follows:
 2. Confirm that the full commit in the workflow summary is the intended PR
    head. Do not use a package from another commit.
 3. Download the artifact with the matching short SHA and compare its SHA-256
-   with the workflow summary before extracting it.
-4. Extract it to a new local folder. Do not add files to the package or reuse
+   with the workflow summary before extracting it. Preserve the original inner
+   `template-twin-human-gate-<short-sha>.zip`; it is a required independent
+   input to returned-evidence validation.
+4. Copy the original-package SHA-256 directly from the trusted workflow
+   summary into the validation command. Do not obtain this trust anchor from
+   the downloaded package, returned Word ZIP, a sidecar supplied by the Word
+   reviewer, email, or another copied evidence file.
+5. Extract it to a new local folder. Do not add files to the package or reuse
    evidence from an older package.
-5. Give the Word instructions to the desktop Word reviewer, the physician
+6. Give the Word instructions to the desktop Word reviewer, the physician
    worksheet to a licensed physician, and the media worksheet to an
    authorized administrator for the owning practice.
-6. Collect the machine-readable outputs without editing them, and return them
+7. Collect the machine-readable outputs without editing them, and return them
    for repository-local validation.
 
 If the artifact expires, rerun the PR-only workflow for the same commit. If the
@@ -187,12 +193,16 @@ the repository root on these evidence inputs:
 
 - the returned desktop Word evidence ZIP and its mandatory adjacent
   `<zip-filename>.sha256` sidecar;
+- the unmodified original CI package ZIP plus its SHA-256 copied out-of-band
+  from the trusted exact-head workflow summary;
 - the unchanged physician-intent manifest from the exact downloaded package;
 - the physician decision JSON; and
 - the media-review evidence JSON.
 
 ```bash
 npx tsx apps/transcribe-md/scripts/template-twin-human-gate/validate-returned-evidence.ts \
+  --original-ci-package-zip /approved/local/path/template-twin-human-gate-<short-sha>.zip \
+  --trusted-original-ci-package-sha256 <digest-copied-directly-from-the-workflow-summary> \
   --word-evidence-zip /approved/local/path/template-twin-word-evidence-<short-sha>.zip \
   --physician-manifest /approved/local/path/physician-intent-manifest.json \
   --physician-decision /approved/local/path/template-twin-physician-intent-<short-sha>.json \
@@ -201,16 +211,27 @@ npx tsx apps/transcribe-md/scripts/template-twin-human-gate/validate-returned-ev
   --output /tmp/template-twin-human-gate-validation.json
 ```
 
-The validator verifies the package and file hashes, strict JSON schemas,
-source commit, source-document/manifest bindings, exact generated paths,
-save/reopen/export completion, both pinned Open XML results, parseable and
-page-count-matched PDF output, the production OPC/XML/security inspection,
+The validator first authenticates the original CI package against the
+out-of-band workflow digest, extracts its exact-head document manifest, and
+requires the returned copy to match byte-for-byte. A self-consistent
+replacement returned ZIP therefore fails. It then verifies the package and
+file hashes, strict JSON schemas, source commit, source-document/manifest
+bindings, exact generated paths, save/reopen/export completion, both pinned
+Open XML reports including the exact reopened DOCX SHA-256 and byte size,
+parseable and page-count-matched PDF output, the production OPC/XML/security inspection,
 verification-contract-v2 field identity and occurrence, normalized static
-regions, exact renderer values and control states, reviewer roles, all seven
+regions and structure, exact renderer values and control states, reviewer roles, all seven
 physician decisions, required observations, attestations, and evidence
 completeness. It rejects altered files, stale or mismatched SHAs, incomplete
 answers, founder-only clinical approval, and evidence for another document or
 Template Twin commit.
+
+The local command also builds the pinned Open XML SDK validator from the clean
+requested Git head and reruns it, with networking disabled, against the exact
+returned DOCX bytes. It never executes or treats the desktop-returned
+executable as a trust source. The packaged Windows reports remain required
+evidence of what ran after Word save, but they cannot replace this trusted
+source-built rerun.
 
 The Word ZIP sidecar must be in the same directory under the exact name
 `<zip-filename>.sha256`. A missing sidecar is a `FAIL`; the validator never

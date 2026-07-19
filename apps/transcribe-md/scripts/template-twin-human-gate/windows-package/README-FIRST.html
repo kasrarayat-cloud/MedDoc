@@ -73,8 +73,11 @@
       no network request and never uploads evidence. After Word saves and
       reopens each copy, the package's path-and-hash-pinned Open XML SDK
       validator checks that exact reopened file for both Office 2013 and
-      Microsoft 365. An independent local validator then rechecks package,
-      semantic-field, static-region, field-occurrence, and PDF evidence.
+      Microsoft 365 and records its SHA-256 and byte size. An independent local
+      validator authenticates the original CI package from a separately supplied
+      workflow digest, builds trusted tooling from the exact Git source, and
+      then rechecks schema, semantic-field, static-region, structure,
+      field-occurrence, and PDF evidence.
     </p>
   </body>
 </html>

@@ -39,7 +39,15 @@ foreach (var input in args.Skip(1))
     var fullPath = Path.GetFullPath(input);
     try
     {
-        using var document = WordprocessingDocument.Open(fullPath, false);
+        // Read once, hash those exact bytes, and validate the same immutable
+        // in-memory snapshot. This prevents a report from being replayed for a
+        // stale or substituted DOCX with the same filename.
+        var documentBytes = await File.ReadAllBytesAsync(fullPath);
+        var documentSha256 = Convert.ToHexString(
+            SHA256.HashData(documentBytes)
+        ).ToLowerInvariant();
+        using var stream = new MemoryStream(documentBytes, writable: false);
+        using var document = WordprocessingDocument.Open(stream, false);
         var errors = validator.Validate(document).Select(error => new
         {
             id = error.Id,
@@ -48,13 +56,15 @@ foreach (var input in args.Skip(1))
             part = error.Part?.Uri.ToString(),
             path = error.Path?.XPath,
         }).ToArray();
-        results.Add(new { file = Path.GetFileName(fullPath), opened = true, valid = errors.Length == 0, errorCount = errors.Length, errors });
+        results.Add(new { file = Path.GetFileName(fullPath), sha256 = documentSha256, sizeBytes = documentBytes.LongLength, opened = true, valid = errors.Length == 0, errorCount = errors.Length, errors });
     }
     catch (Exception exception)
     {
         results.Add(new
         {
             file = Path.GetFileName(fullPath),
+            sha256 = (string?)null,
+            sizeBytes = (long?)null,
             opened = false,
             valid = false,
             errorCount = 1,

@@ -274,6 +274,7 @@ export interface HumanGateValidationReport {
   readonly status: HumanGateValidationStatus;
   readonly authorizesClinicalOrProductionAction: false;
   readonly inputs: {
+    readonly originalCiPackageZipSha256: string;
     readonly wordEvidenceZipSha256: string;
     readonly physicianDecisionSha256: string;
     readonly mediaReviewSha256: string;

@@ -58,6 +58,21 @@ function Invoke-OpenXmlValidation([string]$DocumentPath, [string]$OutputPath, [s
   if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $OutputPath -PathType Leaf)) {
     throw "OPENXML_SCHEMA"
   }
+  $Report = Get-Content -LiteralPath $OutputPath -Raw | ConvertFrom-Json
+  $ReportResults = @($Report.results)
+  if ($Report.tool -ne "DocumentFormat.OpenXml.OpenXmlValidator" -or
+      $Report.sdkVersion -ne "3.5.1.0" -or
+      $Report.validatorExecutableSha256 -ne $ExpectedOpenXmlValidatorSha256 -or
+      $Report.targetFileFormat -ne $Target -or
+      $Report.sourceCommit -ne $ExpectedCommit -or
+      $ReportResults.Count -ne 1 -or
+      $ReportResults[0].file -ne (Split-Path -Leaf $DocumentPath) -or
+      $ReportResults[0].sha256 -ne (Get-Sha256 $DocumentPath) -or
+      [long]$ReportResults[0].sizeBytes -ne (Get-Item -LiteralPath $DocumentPath).Length -or
+      $ReportResults[0].opened -ne $true -or $ReportResults[0].valid -ne $true -or
+      [int]$ReportResults[0].errorCount -ne 0 -or @($ReportResults[0].errors).Count -ne 0) {
+    throw "OPENXML_SCHEMA"
+  }
 }
 
 function Read-Enum([string]$Prompt, [hashtable]$Choices) {
