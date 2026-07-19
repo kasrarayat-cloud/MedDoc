@@ -1,6 +1,6 @@
 # Template Twin production control-plane contract
 
-Status: DESIGN COMPLETE — implementation and independent review pending  
+Status: IMPLEMENTED AND PG-VERIFIED — independent exact-head review pending
 Date: 2026-07-19 UTC
 
 ## Purpose
@@ -107,8 +107,11 @@ Every state-changing request must:
    existing global-then-practice rollout-generation order;
 8. persist the checkpoint decision and audit outbox in the same commit.
 
-The commit is the linearization point. A stale UI generation, concurrent revoke,
-approval revocation, or direct rollout update loses closed.
+The commit is the linearization point. Stale enabling actions and direct rollout
+updates lose closed. Exact-identity human/operational revocations and critical
+guardrail snapshots are monotonic: if an advance/pass commits first, the
+waiting safety action observes that generation and still disables exposure
+before it returns.
 
 Database triggers reject global/practice enablement without a matching ACTIVE
 checkpoint capability, protect all release/approval/checkpoint history from
@@ -151,7 +154,7 @@ runbook; a browser action is not the safety boundary.
 - missing, self-authored, wrong-discipline, rejected, revoked, or stale human
   approval rejected;
 - actual two-session advance/advance, advance/revoke, approval-revoke/advance,
-  and global-kill/advance races;
+  global-kill/advance, and critical-guardrail/pass races;
 - stage skip, replay, duplicated request, stale generation, and target overshoot
   reporting;
 - 100% completeness against the frozen manifest and fresh physician census;
@@ -160,4 +163,3 @@ runbook; a browser action is not the safety boundary.
 - PHI-like metric keys/values and unsupported metric schemas rejected;
 - responsive, keyboard, screen-reader, focus, contrast, and 44 px interaction
   tests for the admin workbench.
-

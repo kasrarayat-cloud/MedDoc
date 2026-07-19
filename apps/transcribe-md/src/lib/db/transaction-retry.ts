@@ -11,7 +11,11 @@ export type RetriableDatabaseCode = "40P01" | "40001" | "P2034";
 export interface TransactionHost {
   $transaction<T>(
     callback: (tx: Prisma.TransactionClient) => Promise<T>,
-    options?: { isolationLevel?: Prisma.TransactionIsolationLevel },
+    options?: {
+      isolationLevel?: Prisma.TransactionIsolationLevel;
+      maxWait?: number;
+      timeout?: number;
+    },
   ): Promise<T>;
 }
 
@@ -141,6 +145,9 @@ export async function runSerializableTransactionWithRetry<T>(input: {
   context?: TransactionRetrySafeContext;
   maxAttempts?: number;
   isolationLevel?: Prisma.TransactionIsolationLevel;
+  /** Prisma interactive-transaction pool wait and execution ceilings. */
+  maxWait?: number;
+  timeout?: number;
   transaction: (tx: Prisma.TransactionClient, attempt: number) => Promise<T>;
   /** Test-only deterministic hooks; production callers must omit these. */
   retryHooks?: {
@@ -176,6 +183,8 @@ export async function runSerializableTransactionWithRetry<T>(input: {
           isolationLevel:
             input.isolationLevel ??
             Prisma.TransactionIsolationLevel.Serializable,
+          ...(input.maxWait === undefined ? {} : { maxWait: input.maxWait }),
+          ...(input.timeout === undefined ? {} : { timeout: input.timeout }),
         },
       );
     } catch (error) {

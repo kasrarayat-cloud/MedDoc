@@ -23,13 +23,13 @@
 //   });
 // ============================================================================
 
-import type { NextRequest } from 'next/server';
-import { NextResponse } from 'next/server';
+import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 
-import { auth } from '@/lib/nextauth';
-import { logAudit } from '@/lib/audit';
-import { isAdminRequestHost } from '@/lib/admin-host';
-import { verifyFreshPlatformAdminSession } from '@/lib/admin-session-freshness';
+import { auth } from "@/lib/nextauth";
+import { logAudit } from "@/lib/audit";
+import { isAdminRequestHost } from "@/lib/admin-host";
+import { verifyFreshPlatformAdminSession } from "@/lib/admin-session-freshness";
 
 /** What admin handlers actually need — slim subset of the next-auth
  *  session. The full app `Session` from @meddoc/auth requires
@@ -46,6 +46,10 @@ export interface AdminSession {
 
 export interface AdminContext {
   session: AdminSession;
+  /** Opaque live-session claim for server-only authorization services.
+   * Keep it out of `session.user` so generic response serializers cannot
+   * accidentally echo it. */
+  verifiedSessionId: string;
   /** The route key passed to adminApi(); used in audit logs and
    *  error messages. */
   routeKey: string;
@@ -60,7 +64,7 @@ type AdminHandler = (
  *  attacker can't distinguish "wrong-method" from "not-admin" from
  *  "route-doesn't-exist". */
 function notFoundResponse(): NextResponse {
-  return new NextResponse('Not Found', { status: 404 });
+  return new NextResponse("Not Found", { status: 404 });
 }
 
 export function adminApi(
@@ -87,27 +91,31 @@ export function adminApi(
       },
     };
 
-    void logAudit({
-      action: 'ADMIN_API_ACCESS',
-      targetType: 'AdminAPI',
+    await logAudit({
+      action: "ADMIN_API_ACCESS",
+      targetType: "AdminAPI",
       targetId: routeKey,
       metadata: {
         routeKey,
         method: req.method,
         path: new URL(req.url).pathname,
       },
+      userId: verified.userId,
+      userEmail: verified.email,
+      practiceId: verified.practiceId,
     });
 
     try {
-      return await handler(req, { session, routeKey });
-    } catch (err) {
-      console.error(
-        `[admin-api:${routeKey}] handler threw:`,
-        err instanceof Error ? err.message : err,
-      );
+      return await handler(req, {
+        session,
+        verifiedSessionId: verified.sessionId,
+        routeKey,
+      });
+    } catch {
+      console.error(`[admin-api:${routeKey}] handler failed closed`);
       // Generic 500 — don't expose stack traces.
       return NextResponse.json(
-        { error: 'Internal server error' },
+        { error: "Internal server error" },
         { status: 500 },
       );
     }

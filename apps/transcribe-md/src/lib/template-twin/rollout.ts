@@ -11,6 +11,8 @@ export const TEMPLATE_TWIN_KILL_SWITCH_ENV =
   "TEMPLATE_TWIN_KILL_SWITCH" as const;
 export const TEMPLATE_TWIN_GLOBAL_ROLLOUT_ID = "global" as const;
 export const TEMPLATE_TWIN_ROLLBACK_FENCE_OPEN = "OPEN" as const;
+export const TEMPLATE_TWIN_RELEASE_CONTROL_LOCK_NAMESPACE = 73119 as const;
+export const TEMPLATE_TWIN_RELEASE_CONTROL_LOCK_KEY = 20260719 as const;
 
 export type TemplateTwinRolloutCode =
   | "TEMPLATE_TWIN_ROLLBACK_COMPAT_ACTIVE"
@@ -72,6 +74,23 @@ interface GlobalRolloutRow {
   generation: bigint | number | string;
   rollbackFenceState: string;
   rollbackOperationId: string | null;
+}
+
+/**
+ * Every operation that can mutate the global/practice rollout epoch takes the
+ * release-control advisory lock before row locks. The database update trigger
+ * takes the same lock as defense in depth, but taking a rollout row first
+ * would invert the release transaction's advisory -> global -> practice order.
+ */
+async function acquireTemplateTwinReleaseControlMutationLock(
+  tx: Pick<Prisma.TransactionClient, "$executeRaw">,
+): Promise<void> {
+  await tx.$executeRaw(Prisma.sql`
+    SELECT pg_advisory_xact_lock(
+      ${TEMPLATE_TWIN_RELEASE_CONTROL_LOCK_NAMESPACE},
+      ${TEMPLATE_TWIN_RELEASE_CONTROL_LOCK_KEY}
+    )
+  `);
 }
 
 interface PracticeRolloutRow {
@@ -385,6 +404,7 @@ export async function applyTemplateTwinGlobalRolloutMutation(input: {
 }): Promise<bigint> {
   if (input.enabled) assertRuntimeModeAllowsEnable();
   const tx = input.tx;
+  await acquireTemplateTwinReleaseControlMutationLock(tx);
   const rows = await tx.$queryRaw<GlobalRolloutRow[]>(Prisma.sql`
     SELECT "enabled", "generation", "rollbackFenceState", "rollbackOperationId"
     FROM "template_twin_rollout_controls"
@@ -454,6 +474,7 @@ export async function applyTemplateTwinPracticeRolloutMutation(input: {
 }): Promise<bigint> {
   if (input.enabled) assertRuntimeModeAllowsEnable();
   const tx = input.tx;
+  await acquireTemplateTwinReleaseControlMutationLock(tx);
   const globalRows = await tx.$queryRaw<GlobalRolloutRow[]>(Prisma.sql`
     SELECT "enabled", "generation", "rollbackFenceState", "rollbackOperationId"
     FROM "template_twin_rollout_controls"

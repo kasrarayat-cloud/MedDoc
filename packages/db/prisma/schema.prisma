@@ -175,6 +175,13 @@ enum AuditAction {
   TEMPLATE_TWIN_ROLLBACK_PREPARED
   TEMPLATE_TWIN_ROLLBACK_CANCELLED
   TEMPLATE_TWIN_ROLLOUT_REVOKED
+  TEMPLATE_TWIN_RELEASE_CREATED
+  TEMPLATE_TWIN_RELEASE_FROZEN
+  TEMPLATE_TWIN_RELEASE_APPROVAL_RECORDED
+  TEMPLATE_TWIN_ROLLOUT_CHECKPOINT_ACTIVATED
+  TEMPLATE_TWIN_ROLLOUT_CHECKPOINT_PASSED
+  TEMPLATE_TWIN_RELEASE_REVOKED
+  TEMPLATE_TWIN_ROLLOUT_GUARDRAIL_REVOKED
 
   // transcribe-md — patient CRUD (TranscribeMdPatient; CRM patient
   // events use CREATED_PATIENT / UPDATED_PATIENT / ARCHIVED_PATIENT
@@ -600,6 +607,7 @@ model Practice {
   templateTwinSyntheticQaAdmissions            TemplateTwinSyntheticQaAdmission[]
   templateTwinSyntheticQaRuns                  TemplateTwinSyntheticQaRun[]
   templateTwinRollbackOperations               TemplateTwinRollbackOperation[]
+  templateTwinReleasePractices                 TemplateTwinReleasePractice[]
   visitAutomationManifests                     VisitAutomationManifest[]
   visitAutomationProviderExecutions            VisitAutomationProviderExecution[]
 
@@ -769,6 +777,13 @@ model User {
   templateTwinSyntheticQaAdmissions      TemplateTwinSyntheticQaAdmission[]            @relation("TemplateTwinSyntheticQaAdmissionActor")
   templateTwinSyntheticQaRuns            TemplateTwinSyntheticQaRun[]                  @relation("TemplateTwinSyntheticQaDoctor")
   templateTwinRollbackOperations         TemplateTwinRollbackOperation[]
+  templateTwinReleaseCandidatesCreated   TemplateTwinReleaseCandidate[]                @relation("TemplateTwinReleaseCreator")
+  templateTwinReleaseCandidatesFrozen    TemplateTwinReleaseCandidate[]                @relation("TemplateTwinReleaseFinalizer")
+  templateTwinReleaseAuthorities         TemplateTwinReleaseAuthority[]                @relation("TemplateTwinReleaseAuthorityUser")
+  templateTwinReleaseApprovals           TemplateTwinReleaseApprovalDecision[]         @relation("TemplateTwinReleaseApprovalActor")
+  templateTwinCheckpointsActivated       TemplateTwinReleaseCheckpoint[]               @relation("TemplateTwinCheckpointActivator")
+  templateTwinCheckpointsPassed          TemplateTwinReleaseCheckpoint[]               @relation("TemplateTwinCheckpointPasser")
+  templateTwinMetricSnapshotsRecorded    TemplateTwinReleaseMetricSnapshot[]           @relation("TemplateTwinMetricRecorder")
   // T-M16.2: one-time tokens for password reset, email verification,
   // email change. All cascade-deleted with the user.
   authTokens                             AuthToken[]
@@ -3389,6 +3404,191 @@ model TemplateTwinRolloutControl {
   rollbackOperation TemplateTwinRollbackOperation? @relation("ActiveTemplateTwinRollbackOperation", fields: [rollbackOperationId], references: [id], onDelete: Restrict)
 
   @@map("template_twin_rollout_controls")
+}
+
+/// One exact production release candidate. Identity-bearing fields are
+/// immutable in PostgreSQL; only the guarded state/generation transition
+/// columns can change after insertion.
+model TemplateTwinReleaseCandidate {
+  id                    String @id @db.Uuid
+  identityVersion       String @db.VarChar(64)
+  releaseIdentitySha256 String @unique @db.Char(64)
+
+  sourceCommitSha String @db.Char(40)
+  baseCommitSha   String @db.Char(40)
+
+  appImageDigest      String @db.VarChar(71)
+  workerImageDigest   String @db.VarChar(71)
+  migratorImageDigest String @db.VarChar(71)
+
+  testCensusEvidenceSha256         String @db.Char(64)
+  independentReviewEvidenceSha256  String @db.Char(64)
+  securityEvidenceSha256           String @db.Char(64)
+  migrationRestoreEvidenceSha256   String @db.Char(64)
+  officeWordEvidenceSha256         String @db.Char(64)
+  guardrailPolicySha256            String @db.Char(64)
+  authorizedPracticeManifestSha256 String @db.Char(64)
+
+  guardrailPolicy Json
+  status          String @default("DRAFT") @db.VarChar(32)
+  generation      BigInt @default(1)
+
+  createdById String
+  createdBy   User   @relation("TemplateTwinReleaseCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  frozenById String?
+  frozenBy   User?     @relation("TemplateTwinReleaseFinalizer", fields: [frozenById], references: [id], onDelete: Restrict)
+  frozenAt   DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  practices   TemplateTwinReleasePractice[]
+  approvals   TemplateTwinReleaseApprovalDecision[]
+  checkpoints TemplateTwinReleaseCheckpoint[]
+  metrics     TemplateTwinReleaseMetricSnapshot[]
+
+  @@index([status, createdAt])
+  @@map("template_twin_release_candidates")
+}
+
+/// Out-of-band human authority assignment. There is deliberately no
+/// self-service application API for these rows.
+model TemplateTwinReleaseAuthority {
+  id          String    @id @db.Uuid
+  userId      String
+  user        User      @relation("TemplateTwinReleaseAuthorityUser", fields: [userId], references: [id], onDelete: Restrict)
+  discipline  String    @db.VarChar(32)
+  sourceRef   String    @db.VarChar(160)
+  effectiveAt DateTime  @default(now()) @db.Timestamptz(6)
+  revokedAt   DateTime? @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@index([userId, discipline, revokedAt])
+  @@map("template_twin_release_authorities")
+}
+
+/// Frozen, PHI-free authorized-practice manifest with deterministic cohort
+/// rank and an indivisible practice-to-checkpoint assignment.
+model TemplateTwinReleasePractice {
+  id                    String                       @id @db.Uuid
+  releaseId             String                       @db.Uuid
+  release               TemplateTwinReleaseCandidate @relation(fields: [releaseId], references: [id], onDelete: Restrict)
+  releaseIdentitySha256 String                       @db.Char(64)
+
+  practiceId             String
+  practice               Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict)
+  practiceSlugSnapshot   String   @db.VarChar(160)
+  physicianCountSnapshot Int
+  cohortRank             Int
+  cohortHashSha256       String   @db.Char(64)
+  isCanary               Boolean  @default(false)
+  activationStage        String   @db.VarChar(24)
+  activationStageOrdinal Int
+  createdAt              DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([releaseId, practiceId])
+  @@unique([releaseId, cohortRank])
+  @@index([releaseId, activationStageOrdinal, cohortRank])
+  @@map("template_twin_release_practices")
+}
+
+/// Append-only APPROVE/REJECT/REVOKE decision. The actor's authority,
+/// session, release identity, evidence digest, and audit event are captured
+/// at the decision boundary and cannot be edited later.
+model TemplateTwinReleaseApprovalDecision {
+  id                    String                       @id @db.Uuid
+  releaseId             String                       @db.Uuid
+  release               TemplateTwinReleaseCandidate @relation(fields: [releaseId], references: [id], onDelete: Restrict)
+  releaseIdentitySha256 String                       @db.Char(64)
+  discipline            String                       @db.VarChar(32)
+  decision              String                       @db.VarChar(16)
+  evidenceSha256        String                       @db.Char(64)
+  confirmation          String                       @db.VarChar(160)
+
+  actorId               String
+  actor                 User     @relation("TemplateTwinReleaseApprovalActor", fields: [actorId], references: [id], onDelete: Restrict)
+  actorEmailSnapshot    String?
+  actorSessionSha256    String   @db.Char(64)
+  authorityAssignmentId String   @db.Uuid
+  auditOutboxEventKey   String   @unique
+  decidedAt             DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([releaseId, discipline, decidedAt])
+  @@index([actorId, decidedAt])
+  @@map("template_twin_release_approval_decisions")
+}
+
+/// Fixed CANARY/10/25/50/100 checkpoint rail. Stage rows are inserted with
+/// the release and only move through the database-enforced state machine.
+model TemplateTwinReleaseCheckpoint {
+  id                     String                       @id @db.Uuid
+  releaseId              String                       @db.Uuid
+  release                TemplateTwinReleaseCandidate @relation(fields: [releaseId], references: [id], onDelete: Restrict)
+  releaseIdentitySha256  String                       @db.Char(64)
+  stage                  String                       @db.VarChar(24)
+  ordinal                Int
+  targetPercent          Int
+  targetPhysicianCount   Int
+  assignedPhysicianCount Int
+  status                 String                       @default("PENDING") @db.VarChar(16)
+  minimumBakeSeconds     Int
+
+  activatedPhysicianCount Int?
+  passedPhysicianCount    Int?
+  activatedAt             DateTime? @db.Timestamptz(6)
+  earliestPassAt          DateTime? @db.Timestamptz(6)
+  passedAt                DateTime? @db.Timestamptz(6)
+  revokedAt               DateTime? @db.Timestamptz(6)
+
+  activatedById String?
+  activatedBy   User?   @relation("TemplateTwinCheckpointActivator", fields: [activatedById], references: [id], onDelete: Restrict)
+  passedById    String?
+  passedBy      User?   @relation("TemplateTwinCheckpointPasser", fields: [passedById], references: [id], onDelete: Restrict)
+
+  activationOutboxEventKey String?  @unique
+  passOutboxEventKey       String?  @unique
+  createdAt                DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt                DateTime @updatedAt @db.Timestamptz(6)
+
+  metrics TemplateTwinReleaseMetricSnapshot[]
+
+  @@unique([releaseId, stage])
+  @@unique([releaseId, ordinal])
+  @@index([releaseId, status, ordinal])
+  @@map("template_twin_release_checkpoints")
+}
+
+/// Immutable aggregate-only observation used to pass or automatically revoke
+/// one checkpoint. Clinical/patient/document identifiers and free text are
+/// not accepted by the application contract or database shape.
+model TemplateTwinReleaseMetricSnapshot {
+  id                    String                        @id @db.Uuid
+  releaseId             String                        @db.Uuid
+  release               TemplateTwinReleaseCandidate  @relation(fields: [releaseId], references: [id], onDelete: Restrict)
+  checkpointId          String                        @db.Uuid
+  checkpoint            TemplateTwinReleaseCheckpoint @relation(fields: [checkpointId], references: [id], onDelete: Restrict)
+  releaseIdentitySha256 String                        @db.Char(64)
+  policySha256          String                        @db.Char(64)
+  schemaVersion         String                        @db.VarChar(64)
+  sampleCount           Int
+  observationStartedAt  DateTime                      @db.Timestamptz(6)
+  observationEndedAt    DateTime                      @db.Timestamptz(6)
+  metrics               Json
+  canonicalSha256       String                        @unique @db.Char(64)
+  evaluation            String                        @db.VarChar(24)
+  missingMetrics        String[]                      @default([])
+  breachedMetrics       String[]                      @default([])
+  blockingReasons       String[]                      @default([])
+
+  recordedById           String?
+  recordedBy             User?    @relation("TemplateTwinMetricRecorder", fields: [recordedById], references: [id], onDelete: Restrict)
+  criticalOutboxEventKey String?  @unique
+  createdAt              DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([checkpointId, createdAt])
+  @@index([releaseId, evaluation, createdAt])
+  @@map("template_twin_release_metric_snapshots")
 }
 
 /// Immutable operator identity plus PHI-free before/after census for one

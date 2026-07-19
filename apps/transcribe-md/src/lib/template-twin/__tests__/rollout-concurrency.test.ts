@@ -92,6 +92,15 @@ class DeterministicRolloutDatabase {
   async transaction<T>(callback: (tx: unknown) => Promise<T>): Promise<T> {
     const transactionId = ++this.nextTransaction;
     const tx = {
+      $executeRaw: async (query: unknown) => {
+        const text = sqlText(query);
+        if (text.includes("pg_advisory_xact_lock")) {
+          await this.acquire(transactionId, "release-control");
+          this.queryOrder.push(`${transactionId}:advisory`);
+          return 1;
+        }
+        throw new Error(`Unexpected synthetic SQL: ${text}`);
+      },
       $queryRaw: async (query: unknown) => {
         const text = sqlText(query);
         if (
@@ -237,6 +246,7 @@ describe("Template Twin rollout transaction protocol", () => {
     await expect(disable).resolves.toBe(BigInt(2));
     expect(syntheticDb.queryOrder).toEqual([
       "1:global",
+      "2:advisory",
       "1:practice",
       "2:global",
       "2:practice",

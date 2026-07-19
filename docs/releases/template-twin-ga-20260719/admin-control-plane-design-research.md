@@ -1,7 +1,7 @@
 # Template Twin administration control-plane design lock
 
 Date: 2026-07-19 UTC  
-Status: REFERENCE LOCKED — implementation and independent review pending
+Status: REFERENCE IMPLEMENTED — independent exact-head review pending
 
 ## Brief
 
@@ -115,14 +115,13 @@ simulating a client-side toggle.
 
 ## Decision ledger
 
-| Decision | Source | Role preserved | Reason |
-| --- | --- | --- | --- |
-| Existing dark, compact admin language | QuillMD admin | Canvas/type/density | Avoids a second design system in a safety-critical workbench. |
-| Ordered fixed checkpoint rail | Google canary + user mandate | Journey structure | Prevents arbitrary percentage mutation and makes skipped stages impossible. |
-| Immutable metrics on each checkpoint | Microsoft health model | Gate evidence | A later dashboard value cannot rewrite the decision basis. |
-| Approval rows beside release identity | LaunchDarkly approvals | Pending-change context | Makes stale or cross-release approval visibly ineligible. |
-| Initiator cannot approve | GitHub environments + user mandate | Reviewer role | Preserves independent human authorization. |
-| Sage/amber/red remain semantic | QuillMD tokens + Refero color | Status only | Prevents false green and color-role drift. |
-| 44 px labeled controls and visible focus | Refero craft/icons | Interaction | Supports touch and keyboard without enlarging the visual glyphs. |
-| Manual advance, automatic revoke | User mandate + Microsoft SDP | Authority boundary | Automation may reduce harm, never fabricate release approval. |
-
+| Decision                                 | Source                             | Role preserved         | Reason                                                                      |
+| ---------------------------------------- | ---------------------------------- | ---------------------- | --------------------------------------------------------------------------- |
+| Existing dark, compact admin language    | QuillMD admin                      | Canvas/type/density    | Avoids a second design system in a safety-critical workbench.               |
+| Ordered fixed checkpoint rail            | Google canary + user mandate       | Journey structure      | Prevents arbitrary percentage mutation and makes skipped stages impossible. |
+| Immutable metrics on each checkpoint     | Microsoft health model             | Gate evidence          | A later dashboard value cannot rewrite the decision basis.                  |
+| Approval rows beside release identity    | LaunchDarkly approvals             | Pending-change context | Makes stale or cross-release approval visibly ineligible.                   |
+| Initiator cannot approve                 | GitHub environments + user mandate | Reviewer role          | Preserves independent human authorization.                                  |
+| Sage/amber/red remain semantic           | QuillMD tokens + Refero color      | Status only            | Prevents false green and color-role drift.                                  |
+| 44 px labeled controls and visible focus | Refero craft/icons                 | Interaction            | Supports touch and keyboard without enlarging the visual glyphs.            |
+| Manual advance, automatic revoke         | User mandate + Microsoft SDP       | Authority boundary     | Automation may reduce harm, never fabricate release approval.               |
