@@ -14,15 +14,15 @@ Only `PASS`, `FAIL`, and `HUMAN PENDING` are release states. A `FAIL` may simply
 | Full DB/PITR/object/queue restore | FAIL | Not yet proven with approved synthetic/offsite evidence. |
 | Complete production infrastructure inventory | PASS | Read-only census completed; its failures gate production but the inventory itself is recorded. |
 | Consolidated branch | PASS | Two-parent merge `719eea4`; tree equals accepted `79c04e8` exactly. |
-| Consolidated draft PR | PASS | Draft PR #371 targets `main`; published head is `9088f74f17e11ff3f7e5869e5a56b6c5d36796fd`. |
-| All migrations additive/ordered and rollback-safe | FAIL | All 78 migrations, including quarantine admission, apply from zero in disposable PostgreSQL and the certification contract passes. Final-schema bridge review/rehearsal and the audited maintenance fence remain pending. |
+| Consolidated draft PR | PASS | Draft PR #371 targets `main`; published head `9088f74` is intentionally stale while local additive head `2014ec2` remains under review. |
+| All migrations additive/ordered and rollback-safe | FAIL | All 86 current migrations apply from zero in disposable PostgreSQL; rollback v4 fresh/data-bearing proofs pass. Detached review, final control-plane integration, and complete rollback rehearsal remain pending. |
 | Default rollout off and ordinary visits unchanged | FAIL | Static evidence exists; final integration verification pending. |
 | No production synthetic-only bypass | FAIL | Runtime legacy-source bypass is closed at `9088f74` with 138 focused tests; database activation enforcement, final diff review, and exact-head tests remain pending. |
 | Initial identical-manifest base/head test census | PASS | Base 143 files/1,895 tests and head 143 files/1,925 tests pass; head total is 270 files/3,264 tests. |
 | Final exact-head identical-manifest census | FAIL | Must rerun after all corrective commits and frozen RC. |
 | Independent exact-head integration review | FAIL | Not run. |
-| Native blank/fillable DOCX GA matrix | FAIL | Quarantine, malware, metadata, hidden-content, lineage, and certification boundaries are implemented at `581b5b5`; repeating/complex structures and final matrix evidence remain incomplete. |
-| Completed Document → Template Candidate | FAIL | Separate additive implementation is in progress and not yet independently reviewed. |
+| Native blank/fillable DOCX GA matrix | FAIL | Bounded compatibility hardening and explicit unsupported matrix are integrated through `5cafc12`; author corpus/Open XML/LibreOffice evidence passes, but detached and final-head review remain pending. |
+| Completed Document → Template Candidate | PASS | Separate workflow integrated through `1edc68c`; detached exact `a0c142bc` review returned ACCEPT with no P0/P1/P2 findings. Final integration review still applies. |
 | Real malware-scan attestation and quarantine | FAIL | Independent review rejected enum/client consistency, canonical SQL receipt proof, and deployment readiness; isolated remediation is in progress. |
 | Exact core source-evidence anchors | FAIL | Canonical-source reconstruction and review/sign/download revalidation are implemented at `581b5b5`; independent exact-head ACCEPT is pending. |
 | Database and audit least privilege | FAIL | Runtime role is a superuser/owner with unrestricted `audit_logs` mutation. |
@@ -36,7 +36,7 @@ Only `PASS`, `FAIL`, and `HUMAN PENDING` are release states. A `FAIL` may simply
 | Clinical Safety approval | HUMAN PENDING | Approval packet and signature required. |
 | Operations approval | HUMAN PENDING | Approval packet and named ownership required. |
 | Frozen release candidate and independent ACCEPT | FAIL | Not created/reviewed. |
-| All CI/new-diff/security/secret gates green | FAIL | Final exact-head run pending. |
+| All CI/new-diff/security/secret gates green | FAIL | Local full unit, strict TypeScript, production app build, high/critical audit, and verified-only secret scan pass through `2014ec2`; final exact-head CI and remaining gates are pending. |
 | Immutable image build/sign/tag/digests | FAIL | Final exact-SHA images not built. |
 | Production migration | FAIL | Not authorized. |
 | Canary, 10%, 25%, 50%, 100% checkpoints | FAIL | Current production availability is 0%. |
