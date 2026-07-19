@@ -37,6 +37,10 @@ import {
   failTemplateDocxRender,
   type RenderedFieldProof,
 } from "./roundtrip-verify";
+import {
+  formatSupportedWordDate,
+  parseSupportedWordDateFormat,
+} from "./word-date-format";
 
 export interface ReadbackTemplateDocxOutputInput {
   readonly source: Uint8Array;
@@ -921,7 +925,10 @@ function readContentControl(
       descendantsWord(date, "dateFormat", part)[0],
       "val",
     );
-    if (wordText(content, part) !== formatDate(value, format)) {
+    const locale = wordAttribute(descendantsWord(date, "lid", part)[0], "val");
+    const profile = parseSupportedWordDateFormat(format, locale);
+    const display = profile ? formatSupportedWordDate(value, profile) : null;
+    if (display === null || wordText(content, part) !== display) {
       failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
     }
     return value;
@@ -1227,27 +1234,6 @@ function nodeText(node: OrderedXmlNode): string {
     .replaceAll("&gt;", ">")
     .replaceAll("&lt;", "<")
     .replaceAll("&amp;", "&");
-}
-
-function formatDate(value: string, format: string | undefined): string {
-  if (!format) return value;
-  const [year, month, day] = value.split("-");
-  if (
-    !year ||
-    !month ||
-    !day ||
-    /[A-Za-z]/.test(format.replace(/yyyy|yy|MM|M|dd|d/g, ""))
-  ) {
-    return value;
-  }
-  return format.replace(/yyyy|yy|MM|M|dd|d/g, (token) => {
-    if (token === "yyyy") return year;
-    if (token === "yy") return year.slice(-2);
-    if (token === "MM") return month;
-    if (token === "M") return String(Number(month));
-    if (token === "dd") return day;
-    return String(Number(day));
-  });
 }
 
 function fieldValueSha256(

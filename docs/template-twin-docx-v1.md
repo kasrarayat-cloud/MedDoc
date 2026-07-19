@@ -94,9 +94,9 @@ The implementation is divided into these boundaries:
 Version constants in v1 are:
 
 - IR schema: `2`
-- compiler: `template-docx-compiler/1.3.0`
+- compiler: `template-docx-compiler/1.4.0`
 - resolver: `template-field-resolver/1.0.0`
-- renderer: `template-docx-renderer/1.3.0`
+- renderer: `template-docx-renderer/1.4.0`
 - validator: `template-field-validator/1.0.0`
 - strict binding/readback: `template-docx-certified-binding/2.0.0` and
   `template-docx-readback/2.0.0`
@@ -105,10 +105,11 @@ Version constants in v1 are:
 - custom outcome proof: `template-twin-custom-outcome-proof/1.0.0`
 - field intent: `template-twin-field-intent/1.0.0`
 
-The 1.3 renderer accepts a persisted compiler-1.1 or compiler-1.2 IR only when a fresh
-independent compile produces identical structure/static hashes and identical
-parts, fields, and tables. A source that newly qualifies for a 1.3 structural
-profile therefore fails closed and requires a new immutable certified version.
+The 1.4 renderer accepts a persisted compiler-1.1, compiler-1.2, or compiler-1.3
+IR only when a fresh independent compile produces identical structure/static
+hashes and identical parts, fields, and tables. A source whose field status,
+date grammar, text-run ownership, table topology, or reachable story set changes
+under 1.4 therefore fails closed and requires a new immutable certified version.
 
 ## Immutable artifacts and tenant boundary
 
@@ -261,22 +262,22 @@ generation, correction rendering, and signing with stable gate code
 
 The compiler reads OOXML structure directly; it does not ask a language model to rediscover Word controls. It inventories the main document, headers, footers, relationships, styles, numbering, media, static nodes, bookmarks, and tables.
 
-The safe-alpha compiler supports these structures when each exact binding can
-be rendered and independently read back:
+The compatibility boundary is an allowlist, not an “every DOCX” claim:
 
-- single-paragraph plain-text content controls;
-- native dropdowns with exact option order and stored value/display text;
-- combo boxes, dates, and native Word checkboxes;
-- safely detectable legacy text, dropdown, date, and checkbox form fields;
-- simple fixed-table cells, including deterministic labels from adjacent or
-  header cells;
-- exact `TAB_ONLY_BLANK_TABLE_CELL_V1` blank-cell regions; and
-- exact `ORDINARY_PLACEHOLDER_TOKEN_V1` visible tokens contained within one
-  paragraph and one certified OOXML story/path, including tokens split across
-  adjacent ordinary Word text runs; and
-- table grids, horizontal `gridSpan`, vertical `vMerge`, nested-table
-  inventory, fixed rows, headers, footers, bookmarks, tags, aliases, Word IDs,
-  legacy names, static hashes, and exact structural paths.
+| Document structure | Admission and fail-closed boundary |
+| --- | --- |
+| Native scalar text | One control type, one simple paragraph, at least one Word text target, and uniform effective run formatting. Newlines require `w:text w:multiLine="true"`; otherwise a multiline resolution is rejected. Rich text, lists, drawings, mixed formatting, and multi-paragraph content block certification. |
+| Dropdown / combo box | One exact finite ordered list with Word-namespaced, noncolliding `displayText`/`value` attributes. Duplicate or incomplete options block. Combo boxes operate only in exact-option mode; arbitrary free text is unsupported. |
+| Checkbox | Modern `w14:checkbox` and a single deterministic legacy checkbox definition. Unknown remains a third state, affirmative and explicit denial remain distinct, and missing evidence blocks signing. |
+| Date | Native `w:date` only, with a strict ISO canonical value and one bounded display pattern containing exactly one year, month, and day. Numeric formats may omit locale; English month/weekday names require `en-US`. Only Gregorian/date-time storage semantics are admitted. Legacy dates, other calendars/locales/storage modes, duplicate children, and unprofiled Word formatting tokens block. |
+| Legacy form field | Exactly one text, dropdown, or checkbox child. Legacy regular/number text rejects Word display transforms and enforces a strict 1–32,767 maximum length at render. Legacy dates and mixed definitions are unsupported. |
+| Ordinary placeholder | Exact `ORDINARY_PLACEHOLDER_TOKEN_V1`: one bounded `<<...>>`, `[[...]]`, `{{...}}`, or recognized underscore token within one paragraph/story/path, with immutable span and context hashes. Other placeholders block. |
+| Plain blank table cell | One unmerged, non-nested cell with one blank paragraph and at most one empty run. If the run owns formatting, output text is inserted into that same run; multiple runs or other mutable content block. |
+| Tab-only blank cell | Exact `TAB_ONLY_BLANK_TABLE_CELL_V1`, one unmerged cell and its bounded tab-stop/property allowlist. Newlines and content tabs are rejected. |
+| Tables and merges | At most 63 explicit grid columns, bounded widths, strict positive `gridSpan`, and no span outside the declared grid. A `vMerge` continuation must match the preceding restart at the same columns and span. Transitional `hMerge`, invalid/orphan `vMerge`, implicit grid-before/after, over-wide rows, and unbounded spans block. Merged blank cells are not inferred as fillable. |
+| Repeating rows/sections/items | Inventoried but certification-blocked in safe alpha. No row cloning is claimed until unique Word identities and clinical row alignment are independently proven. |
+| Headers and footers | Only parts reached by valid `w:sectPr` references and matching document relationships/content types are compiled. Dangling references, unused story relationships, and orphan story parts reject the package. Supported scalar controls and exact placeholders then use the same rules as the main story. |
+| Original layout | Untouched package parts and static regions are verified; supported values patch only certified targets. This technical proof does not replace the mandatory desktop Word open/save/reopen/PDF and visual approval gate. |
 
 Detection is broader than certification support. The IR records repeating
 sections/rows, rich-text controls, multi-paragraph or list-bearing text
@@ -294,12 +295,15 @@ blockers include:
 - all Word repeating sections/items (`REPEATING_STRUCTURE_UNSUPPORTED_SAFE_ALPHA`),
   including non-table repeats; no cloned row is certified in this phase;
 - rich-text controls and plain-text controls containing multiple paragraphs or
-  list structure;
+  list structure, mixed run formatting, non-Word mutable text, or an unbounded
+  multiline definition;
 - ordinary placeholders and visually blank complex table cells outside an
   explicitly versioned structural profile;
 - `mc:AlternateContent`, data-bound/malformed/unrecognized controls, ambiguous
   or duplicate choice options, dynamic/active fields outside the harmless
   allowlist, and imported alternative-format content; and
+- unsupported date/legacy profiles, table topology outside the bounded grid and
+  merge grammar, and unreachable/dangling header or footer stories; and
 - structures with a missing, duplicated, moved, or otherwise unstable binding.
 
 An ordinary placeholder is fillable only under

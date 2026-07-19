@@ -24,6 +24,8 @@ import {
 
 const DOCX_MAIN_CONTENT_TYPE =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml";
+const OFFICE_DOCUMENT_RELATIONSHIPS_NAMESPACE =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 const OFFICE_DOCUMENT_RELATIONSHIP = "/officeDocument";
 const HEADER_RELATIONSHIP = "/header";
 const FOOTER_RELATIONSHIP = "/footer";
@@ -106,6 +108,7 @@ export function inspectDocxPackage(
       assertHarmlessWordFieldInstructions(tree);
       if (/^word\/.*\.xml$/i.test(name)) {
         assertNoNamespaceShadowedWordStructures(tree);
+        assertDeterministicWordControlShape(tree);
       }
     }
   }
@@ -159,25 +162,14 @@ export function inspectDocxPackage(
   const documentRelationships = relationships.filter(
     (relationship) => relationship.sourcePartName === "word/document.xml",
   );
-  const relatedHeaders = documentRelationships
-    .filter((relationship) => relationship.type.endsWith(HEADER_RELATIONSHIP))
-    .map((relationship) => relationship.targetPartName);
-  const relatedFooters = documentRelationships
-    .filter((relationship) => relationship.type.endsWith(FOOTER_RELATIONSHIP))
-    .map((relationship) => relationship.targetPartName);
-
-  const headerPartNames = unionSorted(
-    relatedHeaders,
-    [...zip.entries.keys()].filter((name) =>
-      /^word\/header[^/]*\.xml$/i.test(name),
+  const { headerPartNames, footerPartNames } = resolveReferencedStoryParts({
+    document: parseOrderedXml(
+      zip.entries.get("word/document.xml")!.bytes,
+      limits,
     ),
-  );
-  const footerPartNames = unionSorted(
-    relatedFooters,
-    [...zip.entries.keys()].filter((name) =>
-      /^word\/footer[^/]*\.xml$/i.test(name),
-    ),
-  );
+    documentRelationships,
+    contentTypes,
+  });
   for (const partName of [...headerPartNames, ...footerPartNames]) {
     if (!zip.entries.has(partName))
       failTemplateDocx("OPC_REQUIRED_PART_MISSING");
@@ -555,9 +547,49 @@ const WORD_2012_CONTROL_ELEMENTS = new Set([
   "repeatingSectionItem",
 ]);
 
-function assertNoNamespaceShadowedWordStructures(
-  tree: OrderedXmlNode[],
-): void {
+const WORD_CONTROL_ATTRIBUTE_POLICY = new Map<string, ReadonlySet<string>>(
+  [
+    ...([
+      ["alias", ["val"]],
+      ["tag", ["val"]],
+      ["id", ["val"]],
+      ["name", ["val"]],
+      ["type", ["val"]],
+      ["default", ["val"]],
+      ["format", ["val"]],
+      ["maxLength", ["val"]],
+      ["result", ["val"]],
+      ["listEntry", ["val"]],
+      ["listItem", ["displayText", "value"]],
+      ["date", ["fullDate"]],
+      ["dateFormat", ["val"]],
+      ["lid", ["val"]],
+      ["calendar", ["val"]],
+      ["storeMappedDataAs", ["val"]],
+      ["lastValue", ["val"]],
+      ["text", ["multiLine"]],
+      ["rStyle", ["val"]],
+      ["gridCol", ["w"]],
+      ["gridSpan", ["val"]],
+      ["vMerge", ["val"]],
+      ["bookmarkStart", ["name"]],
+      ["fldChar", ["fldCharType"]],
+      ["fldSimple", ["instr"]],
+    ] as const),
+  ].map(([element, attributes]) => [
+    `${WORDPROCESSINGML_NAMESPACE}\0${element}`,
+    new Set(attributes),
+  ]),
+);
+
+for (const element of ["checked", "checkedState", "uncheckedState"]) {
+  WORD_CONTROL_ATTRIBUTE_POLICY.set(
+    `${WORDPROCESSINGML_2010_NAMESPACE}\0${element}`,
+    new Set(["val"]),
+  );
+}
+
+function assertNoNamespaceShadowedWordStructures(tree: OrderedXmlNode[]): void {
   for (const visit of expandedXmlVisits(tree)) {
     if (
       visit.localName === "checked" &&
@@ -575,6 +607,185 @@ function assertNoNamespaceShadowedWordStructures(
           : null;
     if (expected && visit.namespaceUri !== expected) {
       failTemplateDocx("ACTIVE_CONTENT_REJECTED");
+    }
+    const attributePolicy = WORD_CONTROL_ATTRIBUTE_POLICY.get(
+      `${visit.namespaceUri ?? ""}\0${visit.localName}`,
+    );
+    if (attributePolicy) {
+      for (const localName of attributePolicy) {
+        const matches = visit.attributes.filter(
+          (attribute) => attribute.localName === localName,
+        );
+        if (
+          matches.length > 1 ||
+          (matches.length === 1 &&
+            matches[0]!.namespaceUri !== visit.namespaceUri)
+        ) {
+          failTemplateDocx("ACTIVE_CONTENT_REJECTED");
+        }
+      }
+    }
+  }
+}
+
+const WORD_SDT_MAIN_TYPES = new Set([
+  "bibliography",
+  "citation",
+  "comboBox",
+  "date",
+  "docPartObj",
+  "dropDownList",
+  "equation",
+  "group",
+  "picture",
+  "text",
+]);
+
+function assertDeterministicWordControlShape(tree: OrderedXmlNode[]): void {
+  const visits = expandedXmlVisits(tree);
+  for (const properties of visits) {
+    if (
+      properties.namespaceUri !== WORDPROCESSINGML_NAMESPACE ||
+      properties.localName !== "sdtPr"
+    ) {
+      continue;
+    }
+    const children = visits.filter((visit) => visit.parent === properties);
+    const typeChildren = children.filter(
+      (child) =>
+        (child.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+          WORD_SDT_MAIN_TYPES.has(child.localName)) ||
+        (child.namespaceUri === WORDPROCESSINGML_2010_NAMESPACE &&
+          child.localName === "checkbox") ||
+        (child.namespaceUri === WORDPROCESSINGML_2012_NAMESPACE &&
+          WORD_2012_CONTROL_ELEMENTS.has(child.localName)),
+    );
+    if (typeChildren.length > 1) failTemplateDocx("XML_INVALID");
+
+    for (const singleton of ["alias", "tag", "dataBinding"]) {
+      if (
+        children.filter(
+          (child) =>
+            child.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+            child.localName === singleton,
+        ).length > 1
+      ) {
+        failTemplateDocx("XML_INVALID");
+      }
+    }
+  }
+
+  for (const date of visits.filter(
+    (visit) =>
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      visit.localName === "date",
+  )) {
+    const children = visits.filter((visit) => visit.parent === date);
+    for (const singleton of [
+      "dateFormat",
+      "lid",
+      "calendar",
+      "storeMappedDataAs",
+    ]) {
+      if (
+        children.filter(
+          (child) =>
+            child.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+            child.localName === singleton,
+        ).length > 1
+      ) {
+        failTemplateDocx("XML_INVALID");
+      }
+    }
+  }
+
+  for (const formData of visits.filter(
+    (visit) =>
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      visit.localName === "ffData",
+  )) {
+    const children = visits.filter((visit) => visit.parent === formData);
+    const controlChildren = children.filter(
+      (child) =>
+        child.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+        ["checkBox", "ddList", "textInput"].includes(child.localName),
+    );
+    if (controlChildren.length !== 1) failTemplateDocx("XML_INVALID");
+    assertSingletonWordChildren(children, [
+      "calcOnExit",
+      "enabled",
+      "entryMacro",
+      "exitMacro",
+      "helpText",
+      "name",
+      "statusText",
+    ]);
+  }
+
+  for (const textInput of visits.filter(
+    (visit) =>
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      visit.localName === "textInput",
+  )) {
+    assertSingletonWordChildren(
+      visits.filter((visit) => visit.parent === textInput),
+      ["default", "format", "maxLength", "type"],
+    );
+  }
+
+  for (const dropdown of visits.filter(
+    (visit) =>
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      visit.localName === "ddList",
+  )) {
+    assertSingletonWordChildren(
+      visits.filter((visit) => visit.parent === dropdown),
+      ["default", "result"],
+    );
+  }
+
+  for (const checkbox of visits.filter(
+    (visit) =>
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      visit.localName === "checkBox",
+  )) {
+    const children = visits.filter((visit) => visit.parent === checkbox);
+    assertSingletonWordChildren(children, [
+      "checked",
+      "default",
+      "size",
+      "sizeAuto",
+    ]);
+    if (
+      children.some(
+        (child) =>
+          child.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+          child.localName === "size",
+      ) &&
+      children.some(
+        (child) =>
+          child.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+          child.localName === "sizeAuto",
+      )
+    ) {
+      failTemplateDocx("XML_INVALID");
+    }
+  }
+}
+
+function assertSingletonWordChildren(
+  children: readonly ExpandedXmlVisit[],
+  localNames: readonly string[],
+): void {
+  for (const localName of localNames) {
+    if (
+      children.filter(
+        (child) =>
+          child.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+          child.localName === localName,
+      ).length > 1
+    ) {
+      failTemplateDocx("XML_INVALID");
     }
   }
 }
@@ -606,8 +817,87 @@ function assertHarmlessFieldInstruction(raw: string): void {
   }
 }
 
-function unionSorted(...lists: readonly string[][]): string[] {
-  return [...new Set(lists.flat())].sort((left, right) =>
-    left.localeCompare(right),
+function resolveReferencedStoryParts(input: {
+  document: OrderedXmlNode[];
+  documentRelationships: readonly OpcRelationship[];
+  contentTypes: ReadonlyMap<string, string>;
+}): { headerPartNames: string[]; footerPartNames: string[] } {
+  const relationshipById = new Map(
+    input.documentRelationships.map((relationship) => [
+      relationship.id,
+      relationship,
+    ]),
   );
+  const headerPartNames = new Set<string>();
+  const footerPartNames = new Set<string>();
+  for (const reference of expandedXmlVisits(input.document).filter(
+    (visit) =>
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      ["headerReference", "footerReference"].includes(visit.localName),
+  )) {
+    if (
+      reference.parent?.namespaceUri !== WORDPROCESSINGML_NAMESPACE ||
+      reference.parent.localName !== "sectPr"
+    ) {
+      failTemplateDocx("OPC_RELATIONSHIP_INVALID");
+    }
+    const id = exactExpandedAttribute(
+      reference,
+      OFFICE_DOCUMENT_RELATIONSHIPS_NAMESPACE,
+      "id",
+    );
+    const type = exactExpandedAttribute(
+      reference,
+      WORDPROCESSINGML_NAMESPACE,
+      "type",
+    );
+    if (!id || !type || !["default", "even", "first"].includes(type)) {
+      failTemplateDocx("OPC_RELATIONSHIP_INVALID");
+    }
+    const relationship = relationshipById.get(id);
+    const expectedSuffix =
+      reference.localName === "headerReference"
+        ? HEADER_RELATIONSHIP
+        : FOOTER_RELATIONSHIP;
+    if (!relationship || !relationship.type.endsWith(expectedSuffix)) {
+      failTemplateDocx("OPC_RELATIONSHIP_INVALID");
+    }
+    const targetSet =
+      reference.localName === "headerReference"
+        ? headerPartNames
+        : footerPartNames;
+    targetSet.add(relationship.targetPartName);
+  }
+
+  const relatedStoryRelationships = input.documentRelationships.filter(
+    (relationship) =>
+      relationship.type.endsWith(HEADER_RELATIONSHIP) ||
+      relationship.type.endsWith(FOOTER_RELATIONSHIP),
+  );
+  if (
+    relatedStoryRelationships.some((relationship) =>
+      relationship.type.endsWith(HEADER_RELATIONSHIP)
+        ? !headerPartNames.has(relationship.targetPartName)
+        : !footerPartNames.has(relationship.targetPartName),
+    )
+  ) {
+    failTemplateDocx("OPC_RELATIONSHIP_INVALID");
+  }
+
+  for (const [partName, contentType] of input.contentTypes) {
+    if (contentType.endsWith(".header+xml") && !headerPartNames.has(partName)) {
+      failTemplateDocx("OPC_RELATIONSHIP_INVALID");
+    }
+    if (contentType.endsWith(".footer+xml") && !footerPartNames.has(partName)) {
+      failTemplateDocx("OPC_RELATIONSHIP_INVALID");
+    }
+  }
+  return {
+    headerPartNames: [...headerPartNames].sort((left, right) =>
+      left.localeCompare(right),
+    ),
+    footerPartNames: [...footerPartNames].sort((left, right) =>
+      left.localeCompare(right),
+    ),
+  };
 }

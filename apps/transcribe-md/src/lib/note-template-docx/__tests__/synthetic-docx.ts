@@ -34,7 +34,7 @@ const DOCUMENT_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
     <w:p><w:bookmarkStart w:id="1" w:name="ClinicalHeading"/><w:r><w:t>Synthetic clinical template</w:t></w:r><w:bookmarkEnd w:id="1"/></w:p>
     <w:p><w:r><w:t>Exam side: </w:t></w:r><w:sdt><w:sdtPr><w:id w:val="100"/><w:alias w:val="Exam side"/><w:tag w:val="exam_side"/><w:dropDownList><w:listItem w:displayText="Left" w:value="L"/><w:listItem w:displayText="Right" w:value="R"/><w:listItem w:displayText="Bilateral" w:value="B"/></w:dropDownList></w:sdtPr><w:sdtContent><w:r><w:t>Choose an item.</w:t></w:r></w:sdtContent></w:sdt></w:p>
     <w:p><w:sdt><w:sdtPr><w:id w:val="101"/><w:alias w:val="Encounter category"/><w:comboBox><w:listItem w:displayText="Initial" w:value="initial"/><w:listItem w:displayText="Follow-up" w:value="follow_up"/></w:comboBox></w:sdtPr><w:sdtContent><w:r><w:t>Initial</w:t></w:r></w:sdtContent></w:sdt></w:p>
-    <w:p><w:sdt><w:sdtPr><w:id w:val="102"/><w:alias w:val="Assessment narrative"/><w:text/></w:sdtPr><w:sdtContent><w:r><w:t>Enter assessment</w:t></w:r></w:sdtContent></w:sdt></w:p>
+    <w:p><w:sdt><w:sdtPr><w:id w:val="102"/><w:alias w:val="Assessment narrative"/><w:text w:multiLine="true"/></w:sdtPr><w:sdtContent><w:r><w:t>Enter assessment</w:t></w:r></w:sdtContent></w:sdt></w:p>
     <w:p><w:sdt><w:sdtPr><w:id w:val="103"/><w:alias w:val="Encounter date"/><w:date w:fullDate="2026-01-01T00:00:00Z"><w:dateFormat w:val="yyyy-MM-dd"/></w:date></w:sdtPr><w:sdtContent><w:r><w:t>2026-01-01</w:t></w:r></w:sdtContent></w:sdt></w:p>
     <w:p><w:sdt><w:sdtPr><w:id w:val="104"/><w:alias w:val="Medication reviewed"/><w14:checkbox><w14:checked w14:val="0"/><w14:checkedState w14:val="2612"/><w14:uncheckedState w14:val="2610"/></w14:checkbox></w:sdtPr><w:sdtContent><w:r><w:t>☐</w:t></w:r></w:sdtContent></w:sdt></w:p>
     <w:p><w:r><w:fldChar w:fldCharType="begin"><w:ffData><w:name w:val="Legacy severity"/><w:ddList><w:listEntry w:val="Mild"/><w:listEntry w:val="Moderate"/><w:listEntry w:val="Severe"/></w:ddList></w:ffData></w:fldChar></w:r><w:r><w:instrText> FORMDROPDOWN </w:instrText></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>
@@ -75,18 +75,47 @@ export interface SyntheticDocxOptions {
 export async function buildSyntheticDocx(
   options: SyntheticDocxOptions = {},
 ): Promise<Buffer> {
+  const documentXml = options.documentXml ?? DOCUMENT_XML;
+  const usesDefaultContentTypes = options.contentTypes === undefined;
+  const usesDefaultDocumentRelationships =
+    options.documentRelationships === undefined;
+  const referencesHeader = documentXml.includes('r:id="rIdHeader"');
+  const referencesFooter = documentXml.includes('r:id="rIdFooter"');
+  const contentTypes = usesDefaultContentTypes
+    ? CONTENT_TYPES.replace(
+        referencesHeader
+          ? ""
+          : /\s*<Override PartName="\/word\/header1\.xml"[^>]*\/>/u,
+        "",
+      ).replace(
+        referencesFooter
+          ? ""
+          : /\s*<Override PartName="\/word\/footer1\.xml"[^>]*\/>/u,
+        "",
+      )
+    : options.contentTypes!;
+  const documentRelationships = usesDefaultDocumentRelationships
+    ? DOCUMENT_RELATIONSHIPS.replace(
+        referencesHeader ? "" : /\s*<Relationship Id="rIdHeader"[^>]*\/>/u,
+        "",
+      ).replace(
+        referencesFooter ? "" : /\s*<Relationship Id="rIdFooter"[^>]*\/>/u,
+        "",
+      )
+    : options.documentRelationships!;
   const zip = new JSZip();
-  zip.file("[Content_Types].xml", options.contentTypes ?? CONTENT_TYPES, {
+  zip.file("[Content_Types].xml", contentTypes, {
     comment: options.firstEntryComment,
   });
   zip.file("_rels/.rels", options.rootRelationships ?? ROOT_RELATIONSHIPS);
-  zip.file("word/document.xml", options.documentXml ?? DOCUMENT_XML);
-  zip.file(
-    "word/_rels/document.xml.rels",
-    options.documentRelationships ?? DOCUMENT_RELATIONSHIPS,
-  );
-  zip.file("word/header1.xml", HEADER_XML);
-  zip.file("word/footer1.xml", FOOTER_XML);
+  zip.file("word/document.xml", documentXml);
+  zip.file("word/_rels/document.xml.rels", documentRelationships);
+  if (referencesHeader || !usesDefaultDocumentRelationships) {
+    zip.file("word/header1.xml", HEADER_XML);
+  }
+  if (referencesFooter || !usesDefaultDocumentRelationships) {
+    zip.file("word/footer1.xml", FOOTER_XML);
+  }
   zip.file(
     "word/styles.xml",
     '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:styleId="Normal"/></w:styles>',

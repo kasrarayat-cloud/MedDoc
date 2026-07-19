@@ -34,7 +34,8 @@ function resolved(
     sourceFactIds: value === null ? [] : [FACT],
     evidenceAnchorIds: value === null ? [] : ['synthetic-anchor'],
     selectedOptionOrdinal: option,
-    reasonCode: value === null ? 'synthetic_not_mentioned' : 'synthetic_evidence',
+    reasonCode:
+      value === null ? 'synthetic_not_mentioned' : 'synthetic_evidence',
     clinicianReviewed: false,
   });
 }
@@ -114,41 +115,72 @@ describe('independent Template Twin DOCX output readback', () => {
   it.each([
     ['native dropdown display', 'word/document.xml', '>Right<', '>Left<'],
     ['combo display', 'word/document.xml', '>Follow-up<', '>Initial<'],
-    ['combo stored value', 'word/document.xml', '</w:comboBox>', '<w:lastValue w:val="initial"/></w:comboBox>'],
-    ['narrative text', 'word/document.xml', 'Synthetic assessment', 'Tampered assessment'],
+    [
+      'combo stored value',
+      'word/document.xml',
+      '</w:comboBox>',
+      '<w:lastValue w:val="initial"/></w:comboBox>',
+    ],
+    [
+      'narrative text',
+      'word/document.xml',
+      'Synthetic assessment',
+      'Tampered assessment',
+    ],
     ['date display', 'word/document.xml', '>2026-07-15<', '>2026-07-14<'],
-    ['native checkbox state', 'word/document.xml', 'w14:checked w14:val="1"', 'w14:checked w14:val="0"'],
-    ['legacy dropdown state', 'word/document.xml', '<w:result w:val="1"/>', '<w:result w:val="2"/>'],
-    ['table cell', 'word/document.xml', 'Synthetic finding', 'Tampered finding'],
+    [
+      'native checkbox state',
+      'word/document.xml',
+      'w14:checked w14:val="1"',
+      'w14:checked w14:val="0"',
+    ],
+    [
+      'legacy dropdown state',
+      'word/document.xml',
+      '<w:result w:val="1"/>',
+      '<w:result w:val="2"/>',
+    ],
+    [
+      'table cell',
+      'word/document.xml',
+      'Synthetic finding',
+      'Tampered finding',
+    ],
     ['header text', 'word/header1.xml', 'Synthetic Clinic', 'Tampered Clinic'],
-  ])('detects post-render tampering of %s', async (_name, part, before, after) => {
-    const fixture = await renderFixture();
-    const tampered = await replacePart(
-      fixture.rendered.document,
-      part,
-      (xml) => xml.replace(before, after),
-    );
-    expect(() =>
-      readbackTemplateDocxOutput({
-        source: fixture.source,
-        output: tampered,
-        ir: fixture.ir,
-        resolutions: fixture.resolutions,
-      }),
-    ).toThrowError(expect.objectContaining({ code: 'ROUNDTRIP_FIELD_MISMATCH' }));
-  });
+  ])(
+    'detects post-render tampering of %s',
+    async (_name, part, before, after) => {
+      const fixture = await renderFixture();
+      const tampered = await replacePart(
+        fixture.rendered.document,
+        part,
+        (xml) => xml.replace(before, after),
+      );
+      expect(() =>
+        readbackTemplateDocxOutput({
+          source: fixture.source,
+          output: tampered,
+          ir: fixture.ir,
+          resolutions: fixture.resolutions,
+        }),
+      ).toThrowError(
+        expect.objectContaining({ code: 'ROUNDTRIP_FIELD_MISMATCH' }),
+      );
+    },
+  );
 
   it('detects duplicated stable control identities and unexpected occurrences', async () => {
     const fixture = await renderFixture();
-    const xml = inspectDocxPackage(fixture.rendered.document).zip.entries
-      .get('word/document.xml')!
+    const xml = inspectDocxPackage(fixture.rendered.document)
+      .zip.entries.get('word/document.xml')!
       .bytes.toString('utf8');
     const start = xml.indexOf('<w:sdt><w:sdtPr><w:id w:val="100"');
     const end = xml.indexOf('</w:sdt>', start) + '</w:sdt>'.length;
     const duplicated = await replacePart(
       fixture.rendered.document,
       'word/document.xml',
-      (value) => value.replace('<w:sectPr>', `${value.slice(start, end)}<w:sectPr>`),
+      (value) =>
+        value.replace('<w:sectPr>', `${value.slice(start, end)}<w:sectPr>`),
     );
     expect(() =>
       readbackTemplateDocxOutput({
@@ -157,7 +189,9 @@ describe('independent Template Twin DOCX output readback', () => {
         ir: fixture.ir,
         resolutions: fixture.resolutions,
       }),
-    ).toThrowError(expect.objectContaining({ code: 'ROUNDTRIP_FIELD_MISMATCH' }));
+    ).toThrowError(
+      expect.objectContaining({ code: 'ROUNDTRIP_FIELD_MISMATCH' }),
+    );
   });
 
   it('detects an appended Word SDT even when it lacks sdtPr identity metadata', async () => {
@@ -177,7 +211,9 @@ describe('independent Template Twin DOCX output readback', () => {
         ir: fixture.ir,
         resolutions: fixture.resolutions,
       }),
-    ).toThrowError(expect.objectContaining({ code: 'ROUNDTRIP_FIELD_MISMATCH' }));
+    ).toThrowError(
+      expect.objectContaining({ code: 'ROUNDTRIP_FIELD_MISMATCH' }),
+    );
   });
 
   it('detects an appended malformed legacy form field with no supported ffData control', async () => {
@@ -197,7 +233,7 @@ describe('independent Template Twin DOCX output readback', () => {
         ir: fixture.ir,
         resolutions: fixture.resolutions,
       }),
-    ).toThrowError(expect.objectContaining({ code: 'ROUNDTRIP_FIELD_MISMATCH' }));
+    ).toThrowError(expect.objectContaining({ code: 'XML_INVALID' }));
   });
 
   it('preserves harmless complex Word fields but detects appended field markers', async () => {
@@ -232,7 +268,9 @@ describe('independent Template Twin DOCX output readback', () => {
         ir: fixture.ir,
         resolutions: fixture.resolutions,
       }),
-    ).toThrowError(expect.objectContaining({ code: 'ROUNDTRIP_FIELD_MISMATCH' }));
+    ).toThrowError(
+      expect.objectContaining({ code: 'ROUNDTRIP_FIELD_MISMATCH' }),
+    );
   });
 
   it('clears Word placeholder state and PlaceholderText style only when populated', async () => {
@@ -252,8 +290,8 @@ describe('independent Template Twin DOCX output readback', () => {
     const fixture = await renderFixture(
       await buildSyntheticDocx({ documentXml }),
     );
-    const output = inspectDocxPackage(fixture.rendered.document).zip.entries
-      .get('word/document.xml')!
+    const output = inspectDocxPackage(fixture.rendered.document)
+      .zip.entries.get('word/document.xml')!
       .bytes.toString('utf8');
     const populated = controlById(output, '102');
     const unresolved = controlById(output, '108');
@@ -280,7 +318,9 @@ describe('independent Template Twin DOCX output readback', () => {
         ir: fixture.ir,
         resolutions: fixture.resolutions,
       }),
-    ).toThrowError(expect.objectContaining({ code: 'ROUNDTRIP_FIELD_MISMATCH' }));
+    ).toThrowError(
+      expect.objectContaining({ code: 'ROUNDTRIP_FIELD_MISMATCH' }),
+    );
   });
 
   it('independently reads exact multi-select option values from displayed output', async () => {
@@ -318,7 +358,9 @@ describe('independent Template Twin DOCX output readback', () => {
       ir,
       resolutions,
     });
-    expect(proofs.find((proof) => proof.fieldId === field.fieldId)).toMatchObject({
+    expect(
+      proofs.find((proof) => proof.fieldId === field.fieldId),
+    ).toMatchObject({
       disposition: 'rendered',
       occurrences: 1,
     });
@@ -326,7 +368,12 @@ describe('independent Template Twin DOCX output readback', () => {
 
   it.each([
     ['number', '7', 7, '8'],
-    ['measurement', '120 synthetic-unit', '120 synthetic-unit', '121 synthetic-unit'],
+    [
+      'measurement',
+      '120 synthetic-unit',
+      '120 synthetic-unit',
+      '121 synthetic-unit',
+    ],
   ] as const)(
     'independently derives and detects tampering of %s values',
     async (kind, display, expected, tamperedDisplay) => {
@@ -373,17 +420,22 @@ describe('independent Template Twin DOCX output readback', () => {
     },
   );
 
-  it('never patches DrawingML a:t compatibility text inside a plain Word control', async () => {
+  it('certification-blocks DrawingML compatibility text inside a plain Word control', async () => {
     const documentXml = syntheticOpc.documentXml.replace(
       '<w:r><w:t>Enter assessment</w:t></w:r>',
       '<w:r><w:t>Enter assessment</w:t></w:r><w:r><w:drawing><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:t>Static drawing label</a:t></a:graphic></w:drawing></w:r>',
     );
-    const fixture = await renderFixture(await buildSyntheticDocx({ documentXml }));
-    const output = inspectDocxPackage(fixture.rendered.document).zip.entries
-      .get('word/document.xml')!
-      .bytes.toString('utf8');
-    expect(output).toContain('<a:t>Static drawing label</a:t>');
-    expect(output).toContain('Synthetic assessment');
+    const ir = compileTemplateDocx(await buildSyntheticDocx({ documentXml }));
+    expect(
+      ir.fields.find((field) => field.originalLabel === 'Assessment narrative')
+        ?.detectionStatus,
+    ).toBe('unsupported');
+    expect(ir.unsupported).toContainEqual(
+      expect.objectContaining({
+        code: 'CONTENT_CONTROL_TEXT_SHAPE_UNSUPPORTED',
+        blocksCertification: true,
+      }),
+    );
   });
 });
 

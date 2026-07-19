@@ -33,6 +33,7 @@ import {
   visibleText,
   type OrderedXmlNode,
 } from './xml';
+import { parseSupportedWordDateFormat } from './word-date-format';
 import {
   certifiedBindingFingerprintSha256,
   certifyOrdinaryPlaceholderTokenBinding,
@@ -48,6 +49,8 @@ import {
 const DOCX_MIME =
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document' as const;
 const MAX_TABLE_ROWS = 100;
+const MAX_WORD_TABLE_GRID_COLUMNS = 63;
+const MAX_WORD_GRID_COLUMN_WIDTH_DXA = 31_680;
 const ORDINARY_PLACEHOLDER_RE =
   /(?:<<[^<>\r\n]{1,160}>>|\[\[[^\[\]\r\n]{1,160}\]\]|\{\{[^{}\r\n]{1,160}\}\}|_{3,160})/i;
 const ORDINARY_PLACEHOLDER_GLOBAL_RE =
@@ -471,7 +474,7 @@ function indexedWordDescendants(
     const child = part.byNode.get(childNode);
     if (!child) continue;
     if (isIndexedWordElement(child, localName)) output.push(child);
-    stack.push(...childrenOf(child.node).reverse());
+    stack.push(...[...childrenOf(child.node)].reverse());
   }
   return output;
 }
@@ -1057,14 +1060,14 @@ function processContentControl(
         blocksCertification: true,
       });
     }
-    if (isRepeatingSection) {
+    if (isRepeatingSection || isRepeatingItem) {
       addUnsupported(state, {
         code: 'REPEATING_STRUCTURE_UNSUPPORTED_SAFE_ALPHA',
         partName: context.partName,
         path: nodePath,
         label: contentControlIdentity(properties).label,
         detail:
-          'Repeating Word sections are blocked in safe alpha because cloned rows cannot yet prove unique Word identifiers and stable clinical row alignment.',
+          'Repeating Word sections and items are blocked in safe alpha because cloned rows cannot yet prove unique Word identifiers and stable clinical row alignment.',
         clinicallyMaterial: true,
         blocksCertification: true,
       });
@@ -1085,11 +1088,22 @@ function processContentControl(
   const checkBox = descendants(properties, 'checkbox')[0];
   const date = directChild(properties, 'date');
   const plainText = directChild(properties, 'text');
+  const multilineValue = plainText
+    ? getAttribute(plainText, 'multiLine')
+    : undefined;
   const richText = !dropdown && !comboBox && !checkBox && !date && !plainText;
   const structuredPlainText = Boolean(
     plainText &&
     (descendants(content, 'p').length > 1 ||
       descendants(content, 'numPr').length > 0),
+  );
+  const unsafeTextTarget =
+    !richText &&
+    (!hasDeterministicContentTextTarget(content, context.partName, state) ||
+      (multilineValue !== undefined &&
+        !['0', '1', 'false', 'off', 'on', 'true'].includes(multilineValue)));
+  const unsupportedDateProfile = Boolean(
+    date && !isSupportedNativeDateControl(date),
   );
   const unsupportedType = [
     'picture',
@@ -1226,6 +1240,30 @@ function processContentControl(
       blocksCertification: true,
     });
   }
+  if (unsafeTextTarget) {
+    addUnsupported(state, {
+      code: 'CONTENT_CONTROL_TEXT_SHAPE_UNSUPPORTED',
+      partName: context.partName,
+      path: nodePath,
+      label: identity.label,
+      detail:
+        'The mutable control text does not have one deterministic, uniformly formatted Word run target.',
+      clinicallyMaterial: true,
+      blocksCertification: true,
+    });
+  }
+  if (unsupportedDateProfile) {
+    addUnsupported(state, {
+      code: 'DATE_CONTROL_PROFILE_UNSUPPORTED',
+      partName: context.partName,
+      path: nodePath,
+      label: identity.label,
+      detail:
+        'The date control uses an unbounded format, locale, calendar, or storage profile and cannot be populated deterministically.',
+      clinicallyMaterial: true,
+      blocksCertification: true,
+    });
+  }
 
   const fieldId = stableId(
     'ttf_',
@@ -1264,6 +1302,8 @@ function processContentControl(
       ambiguousChoiceOptions ||
       richText ||
       structuredPlainText ||
+      unsafeTextTarget ||
+      unsupportedDateProfile ||
       context.repeatAncestorPath
         ? 'unsupported'
         : comboBox ||
@@ -1303,6 +1343,65 @@ function processContentControl(
   );
 }
 
+function hasDeterministicContentTextTarget(
+  content: OrderedXmlNode,
+  partName: string,
+  state: CompilerState,
+): boolean {
+  const part = state.bindingIndexes.get(partName);
+  const indexedContent = part?.byNode.get(content);
+  if (!part || !indexedContent) return false;
+  const textNodes = indexedWordDescendants(part, indexedContent, 't');
+  const runs = indexedWordDescendants(part, indexedContent, 'r');
+  if (
+    textNodes.length === 0 ||
+    runs.length === 0 ||
+    textNodes.some(
+      (textNode) =>
+        !textNode.parent || !isIndexedWordElement(textNode.parent, 'r'),
+    )
+  ) {
+    return false;
+  }
+
+  const formatting = new Set<string>();
+  for (const run of runs) {
+    const children = indexedDirectChildren(part, run);
+    const properties = children.filter((child) =>
+      isIndexedWordElement(child, 'rPr'),
+    );
+    if (
+      properties.length > 1 ||
+      children.some(
+        (child) =>
+          !isIndexedWordElement(child, 'rPr') &&
+          !isIndexedWordElement(child, 't'),
+      )
+    ) {
+      return false;
+    }
+    formatting.add(
+      properties[0] ? canonicalSha256(properties[0].node) : 'unformatted',
+    );
+  }
+  return formatting.size === 1;
+}
+
+function isSupportedNativeDateControl(date: OrderedXmlNode): boolean {
+  const format = getAttribute(directChild(date, 'dateFormat') ?? {}, 'val');
+  const locale = getAttribute(directChild(date, 'lid') ?? {}, 'val');
+  const calendar = getAttribute(directChild(date, 'calendar') ?? {}, 'val');
+  const storage = getAttribute(
+    directChild(date, 'storeMappedDataAs') ?? {},
+    'val',
+  );
+  return Boolean(
+    parseSupportedWordDateFormat(format, locale) &&
+    (calendar === undefined || calendar === 'gregorian') &&
+    (storage === undefined || storage === 'dateTime'),
+  );
+}
+
 function processLegacyField(
   node: OrderedXmlNode,
   nodePath: string,
@@ -1322,6 +1421,7 @@ function processLegacyField(
   let kind: TemplateField['kind'];
   let allowedOptions: TemplateField['allowedOptions'] = [];
   let ambiguousChoiceOptions = false;
+  let unsupportedLegacyProfile = false;
   if (dropdown) {
     kind = 'single_select';
     allowedOptions = descendants(dropdown, 'listEntry').map(
@@ -1353,14 +1453,34 @@ function processLegacyField(
   } else if (checkbox) {
     kind = 'checkbox';
   } else if (textInput) {
-    const typeValue = descendants(textInput, 'type')
-      .map((type) => getAttribute(type, 'val')?.toLowerCase())
-      .find(Boolean);
-    kind = typeValue?.includes('number')
-      ? 'number'
-      : typeValue?.includes('date')
-        ? 'date'
-        : inferTextKind(legacyName ?? '');
+    const typeValue = (
+      getAttribute(directChild(textInput, 'type') ?? {}, 'val') ?? 'regular'
+    ).toLowerCase();
+    if (typeValue === 'number') kind = 'number';
+    else if (typeValue === 'date') {
+      kind = 'date';
+      // Legacy FORMTEXT dates do not carry an independently verifiable locale
+      // contract. Native w:date controls are the supported deterministic path.
+      unsupportedLegacyProfile = true;
+    } else if (typeValue === 'regular') kind = inferTextKind(legacyName ?? '');
+    else {
+      kind = inferTextKind(legacyName ?? '');
+      unsupportedLegacyProfile = true;
+    }
+
+    const format = getAttribute(directChild(textInput, 'format') ?? {}, 'val');
+    const maxLength = getAttribute(
+      directChild(textInput, 'maxLength') ?? {},
+      'val',
+    );
+    if (
+      (maxLength !== undefined &&
+        (!/^(?:[1-9][0-9]{0,4})$/.test(maxLength) ||
+          Number(maxLength) > 32_767)) ||
+      format !== undefined
+    ) {
+      unsupportedLegacyProfile = true;
+    }
   } else {
     addUnsupportedLegacy(state, context, nodePath, legacyName);
     return;
@@ -1370,6 +1490,18 @@ function processLegacyField(
     normalizeLabel(legacyName ?? '') ||
     `Legacy field ${state.fields.length + 1}`;
   const labelSource = legacyName ? 'legacy_name' : 'generated';
+  if (unsupportedLegacyProfile) {
+    addUnsupported(state, {
+      code: 'LEGACY_FORM_FIELD_PROFILE_UNSUPPORTED',
+      partName: context.partName,
+      path: nodePath,
+      label: trimNullable(legacyName, 240),
+      detail:
+        'The legacy form field uses an unsupported type, display format, or maximum-length contract.',
+      clinicallyMaterial: true,
+      blocksCertification: true,
+    });
+  }
   const fieldId = stableId(
     'ttf_',
     24,
@@ -1399,7 +1531,9 @@ function processLegacyField(
     labelSource,
     displayOrder,
     detectionStatus:
-      ambiguousChoiceOptions || context.repeatAncestorPath
+      ambiguousChoiceOptions ||
+      unsupportedLegacyProfile ||
+      context.repeatAncestorPath
         ? 'unsupported'
         : legacyName
           ? 'recognized'
@@ -1463,17 +1597,31 @@ function processTable(
       : 'fixed_table';
   const displayOrder = state.nextDisplayOrder++;
   const cells: TemplateTableCell[] = [];
+  const tableGrid = directChild(node, 'tblGrid');
+  const gridColumns = tableGrid ? directChildren(tableGrid, 'gridCol') : [];
+  const parsedGridWidths = gridColumns.map((column) =>
+    strictNonnegativeInteger(getAttribute(column, 'w')),
+  );
+  if (
+    gridColumns.length > MAX_WORD_TABLE_GRID_COLUMNS ||
+    parsedGridWidths.some(
+      (width) => width === null || width > MAX_WORD_GRID_COLUMN_WIDTH_DXA,
+    )
+  ) {
+    addTableTopologyBlocker(
+      state,
+      context.partName,
+      nodePath,
+      'The table grid exceeds the certified Word column or width bounds.',
+    );
+  }
   const table: TemplateTable = {
     tableId,
     partName: context.partName,
     path: nodePath,
     kind,
     displayOrder,
-    gridColumnWidths: directChild(node, 'tblGrid')
-      ? directChildren(directChild(node, 'tblGrid')!, 'gridCol').map((column) =>
-          nonnegativeInteger(getAttribute(column, 'w')),
-        )
-      : [],
+    gridColumnWidths: parsedGridWidths.map((width) => width ?? 0),
     rowCount: rows.length,
     repeatPrototypeRow:
       kind === 'repeating_table' ? Math.max(0, repeatPrototypeRow) : null,
@@ -1496,29 +1644,97 @@ function processTable(
   );
 
   const tableHeaderLabels = new Map<number, string>();
+  let activeVerticalMerges = new Map<number, number>();
   rows.forEach((row, rowIndex) => {
     let logicalColumnStart = 0;
+    const nextVerticalMerges = new Map<number, number>();
+    if (
+      descendants(row.node, 'gridBefore').length > 0 ||
+      descendants(row.node, 'gridAfter').length > 0
+    ) {
+      addTableTopologyBlocker(
+        state,
+        context.partName,
+        row.path,
+        'Rows with implicit grid-before or grid-after columns are outside the certified table topology.',
+      );
+    }
     const rowCells = directChildrenWithPaths(row.node, row.path, 'tc', state);
     rowCells.forEach((cellLocation, cellIndex) => {
       const cell = cellLocation.node;
       const properties = directChild(cell, 'tcPr');
-      const gridSpan = Math.max(
-        1,
-        positiveInteger(
-          properties
-            ? getAttribute(directChild(properties, 'gridSpan') ?? {}, 'val')
-            : undefined,
-        ),
-      );
+      const gridSpanNode = properties
+        ? directChild(properties, 'gridSpan')
+        : undefined;
+      const parsedGridSpan = gridSpanNode
+        ? strictPositiveInteger(getAttribute(gridSpanNode, 'val'))
+        : 1;
+      const gridSpanCandidate = parsedGridSpan ?? 1;
+      // Keep downstream loops and persisted IR bounded even for a rejected
+      // source value. The topology blocker still prevents certification.
+      const gridSpan =
+        gridSpanCandidate <= MAX_WORD_TABLE_GRID_COLUMNS
+          ? gridSpanCandidate
+          : 1;
+      if (
+        parsedGridSpan === null ||
+        gridSpanCandidate > MAX_WORD_TABLE_GRID_COLUMNS ||
+        (gridSpanCandidate > 1 && gridColumns.length === 0) ||
+        (gridColumns.length > 0 &&
+          logicalColumnStart + gridSpanCandidate > gridColumns.length)
+      ) {
+        addTableTopologyBlocker(
+          state,
+          context.partName,
+          cellLocation.path,
+          'A cell grid span is malformed or falls outside the certified table grid.',
+        );
+      }
+      if (properties && directChild(properties, 'hMerge')) {
+        addTableTopologyBlocker(
+          state,
+          context.partName,
+          cellLocation.path,
+          'Transitional horizontal-merge markup is unsupported; use a bounded gridSpan table instead.',
+        );
+      }
       const verticalMergeNode = properties
         ? directChild(properties, 'vMerge')
         : undefined;
+      const verticalMergeValue = verticalMergeNode
+        ? getAttribute(verticalMergeNode, 'val')
+        : undefined;
+      const invalidVerticalMerge = Boolean(
+        verticalMergeNode &&
+        verticalMergeValue !== undefined &&
+        !['continue', 'restart'].includes(verticalMergeValue),
+      );
       const verticalMerge: TemplateTableCell['verticalMerge'] =
         !verticalMergeNode
           ? 'none'
-          : getAttribute(verticalMergeNode, 'val') === 'restart'
+          : verticalMergeValue === 'restart'
             ? 'restart'
             : 'continue';
+      if (invalidVerticalMerge) {
+        addTableTopologyBlocker(
+          state,
+          context.partName,
+          cellLocation.path,
+          'A vertical-merge value is malformed and cannot be interpreted as a certified continuation.',
+        );
+      } else if (verticalMerge === 'continue') {
+        if (activeVerticalMerges.get(logicalColumnStart) !== gridSpan) {
+          addTableTopologyBlocker(
+            state,
+            context.partName,
+            cellLocation.path,
+            'A vertical-merge continuation has no matching restart at the same columns and span.',
+          );
+        }
+        nextVerticalMerges.set(logicalColumnStart, gridSpan);
+      } else if (verticalMerge === 'restart') {
+        nextVerticalMerges.set(logicalColumnStart, gridSpan);
+      }
       const fieldIds: string[] = [];
       const nestedTableCount = countNestedTables(cell);
       const cellText = normalizeLabel(visibleText(cell));
@@ -1616,6 +1832,35 @@ function processTable(
       }
       logicalColumnStart += gridSpan;
     });
+    if (
+      rowCells.length > MAX_WORD_TABLE_GRID_COLUMNS ||
+      (gridColumns.length > 0 && logicalColumnStart !== gridColumns.length)
+    ) {
+      addTableTopologyBlocker(
+        state,
+        context.partName,
+        row.path,
+        'The row does not resolve to exactly the certified table-grid width.',
+      );
+    }
+    activeVerticalMerges = nextVerticalMerges;
+  });
+}
+
+function addTableTopologyBlocker(
+  state: CompilerState,
+  partName: string,
+  path: string,
+  detail: string,
+): void {
+  addUnsupported(state, {
+    code: 'TABLE_TOPOLOGY_UNSUPPORTED',
+    partName,
+    path,
+    label: null,
+    detail,
+    clinicallyMaterial: true,
+    blocksCertification: true,
   });
 }
 
@@ -1632,9 +1877,10 @@ function blankTableCellAdmissionProfile(input: {
   state: CompilerState;
 }): BlankTableCellAdmissionProfile | null {
   if (
+    input.gridSpan === 1 &&
     input.nestedTableCount === 0 &&
-    input.verticalMerge !== 'continue' &&
-    !blankCellHasUnsupportedStructure(input.cell)
+    input.verticalMerge === 'none' &&
+    isPlainBlankTableCellV1(input)
   ) {
     return 'PLAIN_BLANK_TABLE_CELL_V1';
   }
@@ -1643,11 +1889,69 @@ function blankTableCellAdmissionProfile(input: {
     : null;
 }
 
-function blankCellHasUnsupportedStructure(cell: OrderedXmlNode): boolean {
+function isPlainBlankTableCellV1(input: {
+  cell: OrderedXmlNode;
+  partName: string;
+  state: CompilerState;
+}): boolean {
+  if (!hasOnlyWhitespaceCharacterData(input.cell)) return false;
+  const part = input.state.bindingIndexes.get(input.partName);
+  const cell = part?.byNode.get(input.cell);
+  if (!part || !cell || !isIndexedWordElement(cell, 'tc')) return false;
+
+  const cellChildren = indexedDirectChildren(part, cell);
+  const paragraphs = cellChildren.filter((child) =>
+    isIndexedWordElement(child, 'p'),
+  );
+  if (
+    cell.visit.attributes.length > 0 ||
+    paragraphs.length !== 1 ||
+    cellChildren.filter((child) => isIndexedWordElement(child, 'tcPr')).length >
+      1 ||
+    cellChildren.some(
+      (child) =>
+        !isIndexedWordElement(child, 'tcPr') &&
+        !isIndexedWordElement(child, 'p'),
+    )
+  ) {
+    return false;
+  }
+
+  const paragraph = paragraphs[0]!;
+  if (!validTabOnlyParagraphAttributes(paragraph)) return false;
+  const paragraphChildren = indexedDirectChildren(part, paragraph);
+  const paragraphProperties = paragraphChildren.filter((child) =>
+    isIndexedWordElement(child, 'pPr'),
+  );
+  const runs = paragraphChildren.filter((child) =>
+    isIndexedWordElement(child, 'r'),
+  );
+  if (
+    paragraphProperties.length > 1 ||
+    runs.length > 1 ||
+    paragraphChildren.some(
+      (child) =>
+        !isIndexedWordElement(child, 'pPr') &&
+        !isIndexedWordElement(child, 'r'),
+    ) ||
+    (paragraphProperties[0] &&
+      indexedWordDescendants(part, paragraphProperties[0], 'tabs').length > 0)
+  ) {
+    return false;
+  }
+  if (runs.length === 0) return true;
+
+  const run = runs[0]!;
+  const runChildren = indexedDirectChildren(part, run);
   return (
-    descendants(cell, 'p').length !== 1 ||
-    ['br', 'cr', 'tab', 'drawing', 'pict', 'object'].some(
-      (name) => descendants(cell, name).length > 0,
+    run.visit.attributes.length === 0 &&
+    runChildren.filter((child) => isIndexedWordElement(child, 'rPr')).length <=
+      1 &&
+    runChildren.filter((child) => isIndexedWordElement(child, 't')).length <=
+      1 &&
+    runChildren.every(
+      (child) =>
+        isIndexedWordElement(child, 'rPr') || isIndexedWordElement(child, 't'),
     )
   );
 }
@@ -2730,12 +3034,16 @@ function trimNullable(
   return normalized ? normalized.slice(0, maxLength) : null;
 }
 
-function nonnegativeInteger(value: string | undefined): number {
-  const parsed = Number.parseInt(value ?? '', 10);
-  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
+function strictNonnegativeInteger(value: string | undefined): number | null {
+  if (value === undefined || !/^(?:0|[1-9][0-9]{0,8})$/.test(value)) {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? parsed : null;
 }
 
-function positiveInteger(value: string | undefined): number {
-  const parsed = Number.parseInt(value ?? '', 10);
-  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : 1;
+function strictPositiveInteger(value: string | undefined): number | null {
+  if (value === undefined || !/^[1-9][0-9]{0,8}$/.test(value)) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? parsed : null;
 }

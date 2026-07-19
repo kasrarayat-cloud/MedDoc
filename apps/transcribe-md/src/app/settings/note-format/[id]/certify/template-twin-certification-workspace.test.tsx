@@ -51,7 +51,7 @@ function workspace(
       mimeType:
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       compiledAtIso: "2026-07-17T00:00:00.000Z",
-      compilerVersion: "template-docx-compiler/1.3.0",
+      compilerVersion: "template-docx-compiler/1.4.0",
     },
     stagingQaFixtureSource,
     stats: {

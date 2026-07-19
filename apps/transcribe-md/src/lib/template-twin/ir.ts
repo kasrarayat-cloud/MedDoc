@@ -9,9 +9,9 @@
 import { z } from 'zod';
 
 export const TEMPLATE_TWIN_IR_SCHEMA_VERSION = 2 as const;
-export const TEMPLATE_TWIN_COMPILER_VERSION = 'template-docx-compiler/1.3.0';
+export const TEMPLATE_TWIN_COMPILER_VERSION = 'template-docx-compiler/1.4.0';
 export const TEMPLATE_TWIN_RESOLVER_VERSION = 'template-field-resolver/1.0.0';
-export const TEMPLATE_TWIN_RENDERER_VERSION = 'template-docx-renderer/1.3.0';
+export const TEMPLATE_TWIN_RENDERER_VERSION = 'template-docx-renderer/1.4.0';
 
 export const Sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
 

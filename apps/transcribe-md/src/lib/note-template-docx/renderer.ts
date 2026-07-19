@@ -20,6 +20,11 @@ import type { TemplateDocxLimits } from "./limits";
 import { inspectDocxPackage } from "./package-security";
 import { readbackTemplateDocxOutput } from "./output-readback";
 import {
+  formatSupportedWordDate,
+  isStrictIsoDate,
+  parseSupportedWordDateFormat,
+} from "./word-date-format";
+import {
   applyApprovedXmlPatches,
   descendantXmlElements,
   descendantWordElements,
@@ -323,6 +328,7 @@ function assertSourceMatchesIr(
       ([
         "template-docx-compiler/1.1.0",
         "template-docx-compiler/1.2.0",
+        "template-docx-compiler/1.3.0",
       ].includes(ir.compilerVersion) &&
         compiled.compilerVersion === TEMPLATE_TWIN_COMPILER_VERSION)
     ) ||
@@ -1010,6 +1016,15 @@ function contentControlPatches(
   }
 
   const display = displayValue(field, resolution);
+  if (/\r|\n/u.test(display)) {
+    const textControl = directWordChild(properties, "text");
+    const multiline = textControl
+      ? readXmlAttribute(xml, textControl, "multiLine")
+      : null;
+    if (!multiline || !["1", "on", "true"].includes(multiline)) {
+      failTemplateDocxRender("FIELD_VALUE_INVALID");
+    }
+  }
   return [
     ...placeholderPatches,
     ...textContainerPatches(xml, content, display, field.fieldId),
@@ -1097,6 +1112,19 @@ function legacyFieldPatches(
   } else {
     const textInput = descendantWordElements(formData, "textInput")[0];
     if (!textInput) failTemplateDocxRender("BINDING_NOT_FOUND");
+    if (field.kind === "date") failTemplateDocxRender("UNSUPPORTED_BINDING");
+    const maxLengthNode = descendantWordElements(textInput, "maxLength")[0];
+    const maxLengthRaw = maxLengthNode
+      ? readXmlAttribute(xml, maxLengthNode, "val")
+      : null;
+    const maxLength = maxLengthRaw ? Number(maxLengthRaw) : 32_767;
+    if (!Number.isSafeInteger(maxLength) || maxLength < 1) {
+      failTemplateDocxRender("UNSUPPORTED_BINDING");
+    }
+    const legacyDisplay = display;
+    if (legacyDisplay.length > maxLength) {
+      failTemplateDocxRender("FIELD_VALUE_INVALID");
+    }
     const currentDefault = descendantWordElements(textInput, "default")[0];
     if (resolution.value === null) {
       if (currentDefault) {
@@ -1109,7 +1137,7 @@ function legacyFieldPatches(
               xml,
               currentDefault,
               "val",
-              display,
+              legacyDisplay,
               field.fieldId,
             )
           : insertXmlChildPatch(
@@ -1118,7 +1146,7 @@ function legacyFieldPatches(
               textInput.children.find((child) =>
                 ["maxLength", "format"].includes(xmlLocalName(child.name)),
               ),
-              wordElement(textInput, "default", display),
+              wordElement(textInput, "default", legacyDisplay),
               field.fieldId,
             ),
       );
@@ -1153,6 +1181,19 @@ function tableCellPatches(
   const paragraph = descendantXmlElements(cell, "p")[0];
   if (!paragraph) failTemplateDocxRender("BINDING_NOT_FOUND");
   const prefix = qualifiedPrefix(paragraph.name);
+  const runs = descendantWordElements(paragraph, "r");
+  if (runs.length === 1) {
+    const preserve = /^\s|\s$/u.test(display) ? ' xml:space="preserve"' : "";
+    return [
+      appendXmlChildPatch(
+        xml,
+        runs[0]!,
+        `<${prefix}t${preserve}>${escapeXmlText(display)}</${prefix}t>`,
+        field.fieldId,
+      ),
+    ];
+  }
+  if (runs.length > 1) failTemplateDocxRender("BINDING_AMBIGUOUS");
   const run = `<${prefix}r><${prefix}t>${escapeXmlText(display)}</${prefix}t></${prefix}r>`;
   return [appendXmlChildPatch(xml, paragraph, run, field.fieldId)];
 }
@@ -1335,49 +1376,17 @@ function formatDateValue(
   if (typeof value !== "string" || !isStrictIsoDate(value)) {
     failTemplateDocxRender("FIELD_VALUE_INVALID");
   }
-  const formatNode = descendantXmlElements(dateControl, "dateFormat")[0];
+  const formatNode = directWordChild(dateControl, "dateFormat");
+  const localeNode = directWordChild(dateControl, "lid");
   const format = formatNode ? readXmlAttribute(xml, formatNode, "val") : null;
-  if (!format) return value;
-  const [year, month, day] = value.split("-");
-  if (
-    !year ||
-    !month ||
-    !day ||
-    /[A-Za-z]/.test(format.replace(/yyyy|yy|MM|M|dd|d/g, ""))
-  ) {
-    return value;
-  }
-  return format.replace(/yyyy|yy|MM|M|dd|d/g, (token) => {
-    switch (token) {
-      case "yyyy":
-        return year;
-      case "yy":
-        return year.slice(-2);
-      case "MM":
-        return month;
-      case "M":
-        return String(Number(month));
-      case "dd":
-        return day;
-      case "d":
-        return String(Number(day));
-      default:
-        return token;
-    }
-  });
-}
-
-function isStrictIsoDate(value: string): boolean {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) return false;
-  const date = new Date(
-    Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])),
+  const locale = localeNode ? readXmlAttribute(xml, localeNode, "val") : null;
+  const profile = parseSupportedWordDateFormat(
+    format ?? undefined,
+    locale ?? undefined,
   );
-  return (
-    date.getUTCFullYear() === Number(match[1]) &&
-    date.getUTCMonth() === Number(match[2]) - 1 &&
-    date.getUTCDate() === Number(match[3])
-  );
+  const display = profile ? formatSupportedWordDate(value, profile) : null;
+  if (display === null) failTemplateDocxRender("UNSUPPORTED_BINDING");
+  return display;
 }
 
 function safeDisplayText(value: string): string {
