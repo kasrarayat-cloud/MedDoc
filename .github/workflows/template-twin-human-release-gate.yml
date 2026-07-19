@@ -1,4 +1,5 @@
 name: Template Twin human release gate
+run-name: Template Twin Office review package — human approval remains pending
 
 on:
   pull_request:
@@ -12,8 +13,15 @@ concurrency:
 
 jobs:
   synthetic-human-gate-package:
+    # Preserve this established check name so existing branch-protection rules
+    # continue to match. A passing check only means package generation passed.
     name: Synthetic Office and human evidence package
-    if: github.event.pull_request.head.ref == 'feat/template-twin-wm-iov-compatibility-v1'
+    # Deliberately scoped to the audited compatibility branch and explicitly
+    # named GA release-program branches.  Do not broaden this to all PRs: the
+    # package is expensive and remains an exact-head, synthetic-only human gate.
+    if: >-
+      github.event.pull_request.head.ref == 'feat/template-twin-wm-iov-compatibility-v1' ||
+      startsWith(github.event.pull_request.head.ref, 'release/template-twin-ga-')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -28,9 +36,12 @@ jobs:
         shell: bash
         env:
           EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          EXPECTED_HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           set -euo pipefail
           [[ "$EXPECTED_HEAD" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$EXPECTED_HEAD_REF" == "feat/template-twin-wm-iov-compatibility-v1" || \
+             "$EXPECTED_HEAD_REF" =~ ^release/template-twin-ga-[0-9]{8}(-[a-z0-9][a-z0-9._-]{0,62})?$ ]]
           [[ "$(git rev-parse HEAD)" == "$EXPECTED_HEAD" ]]
           short="${EXPECTED_HEAD:0:12}"
           generated_at="$(git show -s --format=%cI "$EXPECTED_HEAD")"

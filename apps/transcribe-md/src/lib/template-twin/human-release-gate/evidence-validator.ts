@@ -9,6 +9,8 @@ import {
   type HumanGateValidationStatus,
   WordHumanEvidenceSchema,
   WordQaDocumentManifestSchema,
+  WORD_OPENXML_VALIDATOR_NAME,
+  WORD_OPENXML_VALIDATOR_SDK_VERSION,
 } from "./contracts";
 import {
   PhysicianIntentManifestSchema,
@@ -50,8 +52,35 @@ export interface ValidateReturnedHumanGateEvidenceInput {
   readonly physicianManifestJson: Uint8Array;
   readonly physicianDecisionJson: Uint8Array;
   readonly mediaReviewJson: Uint8Array;
+  readonly officeArtifactVerifier: ReturnedOfficeArtifactVerifier;
   readonly checkedAtIso?: string;
 }
+
+export interface ReturnedOfficeArtifactVerifierInput {
+  readonly documentRole: "source" | "renderer_output";
+  readonly expectedDocumentSha256: string;
+  readonly expectedDocumentSizeBytes: number;
+  readonly expectedPageCount: number;
+  readonly expectedManifestBytes: Uint8Array;
+  readonly expectedManifestSha256: string;
+  readonly expectedManifestSizeBytes: number;
+  readonly workCopyBytes: Uint8Array;
+  readonly reopenedDocxBytes: Uint8Array;
+  readonly exportedPdfBytes: Uint8Array;
+}
+
+export interface ReturnedOfficeArtifactVerification {
+  readonly contractVersion: "template-twin-returned-office-artifact-verifier/1.0.0";
+  readonly verificationManifestValid: boolean;
+  readonly reopenedPackageValid: boolean;
+  readonly staticAndOccurrenceValid: boolean;
+  readonly semanticReadbackValid: boolean;
+  readonly exportedPdfValid: boolean;
+}
+
+export type ReturnedOfficeArtifactVerifier = (
+  input: ReturnedOfficeArtifactVerifierInput,
+) => Promise<ReturnedOfficeArtifactVerification>;
 
 function sha256(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
@@ -203,6 +232,83 @@ function parseJsonBytes(bytes: Uint8Array, label: string): unknown {
   return JSON.parse(text) as unknown;
 }
 
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function exactObjectKeys(
+  value: Record<string, unknown>,
+  expected: readonly string[],
+): boolean {
+  const actual = Object.keys(value).sort();
+  const sortedExpected = [...expected].sort();
+  return (
+    actual.length === sortedExpected.length &&
+    actual.every((key, index) => key === sortedExpected[index])
+  );
+}
+
+function validOpenXmlReport(input: {
+  readonly bytes: Uint8Array;
+  readonly expectedSourceCommit: string;
+  readonly expectedValidatorSha256: string;
+  readonly expectedTarget: "Office2013" | "Microsoft365";
+  readonly expectedDocumentFilename: string;
+}): boolean {
+  try {
+    const report = objectRecord(
+      parseJsonBytes(input.bytes, "TT_HUMAN_GATE_OPENXML_REPORT"),
+    );
+    if (
+      !report ||
+      !exactObjectKeys(report, [
+        "tool",
+        "sdkVersion",
+        "packageVersion",
+        "validatorExecutableSha256",
+        "targetFileFormat",
+        "sourceCommit",
+        "generatedAt",
+        "results",
+      ]) ||
+      report.tool !== WORD_OPENXML_VALIDATOR_NAME ||
+      report.sdkVersion !== WORD_OPENXML_VALIDATOR_SDK_VERSION ||
+      typeof report.packageVersion !== "string" ||
+      !/^3\.5\.1(?:\+|$)/u.test(report.packageVersion) ||
+      report.validatorExecutableSha256 !== input.expectedValidatorSha256 ||
+      report.targetFileFormat !== input.expectedTarget ||
+      report.sourceCommit !== input.expectedSourceCommit ||
+      typeof report.generatedAt !== "string" ||
+      Number.isNaN(Date.parse(report.generatedAt)) ||
+      !Array.isArray(report.results) ||
+      report.results.length !== 1
+    ) {
+      return false;
+    }
+    const result = objectRecord(report.results[0]);
+    return Boolean(
+      result &&
+        exactObjectKeys(result, [
+          "file",
+          "opened",
+          "valid",
+          "errorCount",
+          "errors",
+        ]) &&
+        result.file === input.expectedDocumentFilename &&
+        result.opened === true &&
+        result.valid === true &&
+        result.errorCount === 0 &&
+        Array.isArray(result.errors) &&
+        result.errors.length === 0,
+    );
+  } catch {
+    return false;
+  }
+}
+
 function statusFromIssues(
   issues: readonly HumanGateValidationIssue[],
 ): HumanGateValidationStatus {
@@ -223,6 +329,7 @@ async function validateWordEvidence(input: {
   readonly bytes: Buffer;
   readonly expectedSourceCommit: string;
   readonly expectedZipSha256: string | undefined;
+  readonly officeArtifactVerifier: ReturnedOfficeArtifactVerifier;
   readonly issues: HumanGateValidationIssue[];
 }): Promise<void> {
   const zipSha256 = sha256(input.bytes);
@@ -453,6 +560,7 @@ async function validateWordEvidence(input: {
   }
 
   const evidenceKeys = new Set<string>();
+  const generatedPaths = new Set<string>();
   for (const evidence of wordEvidence.documents) {
     const key = `${evidence.caseId}\0${evidence.documentRole}`;
     if (evidenceKeys.has(key)) {
@@ -513,6 +621,18 @@ async function validateWordEvidence(input: {
       );
     }
     if (
+      !evidence.saveAsCompleted ||
+      !evidence.reopenReadOnlyCompleted ||
+      !evidence.pdfExportCompleted
+    ) {
+      addIssue(
+        input.issues,
+        "TT_HUMAN_GATE_WORD_SAVE_REOPEN_EXPORT_INCOMPLETE",
+        "FAIL",
+        "Desktop Word did not prove save-as, read-only reopen, and PDF export for every document.",
+      );
+    }
+    if (
       evidence.pageCountAfterReopen === null ||
       evidence.pageCountAfterReopen < expected.minimumExpectedPages
     ) {
@@ -535,24 +655,51 @@ async function validateWordEvidence(input: {
       );
     }
 
-    const generatedKinds = new Set(
-      evidence.generatedFiles.map((file) => file.kind),
+    const safeStem = `${evidence.caseId}--${evidence.documentRole}`;
+    const expectedGeneratedPaths = new Map<
+      (typeof evidence.generatedFiles)[number]["kind"],
+      string
+    >([
+      ["work_copy", `work-copies/${safeStem}.work-copy.docx`],
+      [
+        "word_reopened_docx",
+        `word-reopened-docx/${safeStem}.word-reopened.docx`,
+      ],
+      ["word_exported_pdf", `word-exported-pdf/${safeStem}.word.pdf`],
+      ["openxml_office2013_json", `openxml/${safeStem}.Office2013.json`],
+      ["openxml_microsoft365_json", `openxml/${safeStem}.Microsoft365.json`],
+    ]);
+    const generatedByKind = new Map(
+      evidence.generatedFiles.map((file) => [file.kind, file]),
     );
+    const generatedKinds = new Set(generatedByKind.keys());
     if (
-      evidence.generatedFiles.length !== 3 ||
-      generatedKinds.size !== 3 ||
-      !generatedKinds.has("work_copy") ||
-      !generatedKinds.has("word_reopened_docx") ||
-      !generatedKinds.has("word_exported_pdf")
+      evidence.generatedFiles.length !== expectedGeneratedPaths.size ||
+      generatedKinds.size !== expectedGeneratedPaths.size ||
+      [...expectedGeneratedPaths.keys()].some(
+        (kind) => !generatedKinds.has(kind),
+      )
     ) {
       addIssue(
         input.issues,
         "TT_HUMAN_GATE_WORD_GENERATED_EVIDENCE_INCOMPLETE",
         "FAIL",
-        "Each Word document must have one work copy, reopened DOCX, and exported PDF.",
+        "Each Word document must have one work copy, reopened DOCX, exported PDF, and two target-specific Open XML reports.",
       );
     }
     for (const generated of evidence.generatedFiles) {
+      if (
+        expectedGeneratedPaths.get(generated.kind) !== generated.relativePath ||
+        generatedPaths.has(generated.relativePath)
+      ) {
+        addIssue(
+          input.issues,
+          "TT_HUMAN_GATE_WORD_GENERATED_PATH_MISMATCH",
+          "FAIL",
+          "A generated evidence path is not the exact path for its document identity or was reused.",
+        );
+      }
+      generatedPaths.add(generated.relativePath);
       const bytes = inflated.get(generated.relativePath);
       if (
         !bytes ||
@@ -579,26 +726,116 @@ async function validateWordEvidence(input: {
           "The disposable Word work copy does not match the immutable package document.",
         );
       }
+    }
+
+    const expectedManifestFile = expected.verification.expectedValueManifest;
+    const expectedManifestBytes = inflated.get(
+      expectedManifestFile.relativePath,
+    );
+    const workCopy = generatedByKind.get("work_copy");
+    const reopened = generatedByKind.get("word_reopened_docx");
+    const exportedPdf = generatedByKind.get("word_exported_pdf");
+    let artifactVerification: ReturnedOfficeArtifactVerification;
+    try {
+      artifactVerification = await input.officeArtifactVerifier({
+        documentRole: evidence.documentRole,
+        expectedDocumentSha256: expected.sha256,
+        expectedDocumentSizeBytes: expected.sizeBytes,
+        expectedPageCount: expected.expectedPageCount,
+        expectedManifestBytes: expectedManifestBytes ?? new Uint8Array(),
+        expectedManifestSha256: expectedManifestFile.sha256,
+        expectedManifestSizeBytes: expectedManifestFile.sizeBytes,
+        workCopyBytes: workCopy
+          ? (inflated.get(workCopy.relativePath) ?? new Uint8Array())
+          : new Uint8Array(),
+        reopenedDocxBytes: reopened
+          ? (inflated.get(reopened.relativePath) ?? new Uint8Array())
+          : new Uint8Array(),
+        exportedPdfBytes: exportedPdf
+          ? (inflated.get(exportedPdf.relativePath) ?? new Uint8Array())
+          : new Uint8Array(),
+      });
+    } catch {
+      artifactVerification = {
+        contractVersion:
+          "template-twin-returned-office-artifact-verifier/1.0.0",
+        verificationManifestValid: false,
+        reopenedPackageValid: false,
+        staticAndOccurrenceValid: false,
+        semanticReadbackValid: false,
+        exportedPdfValid: false,
+      };
+    }
+    if (
+      artifactVerification.contractVersion !==
+        "template-twin-returned-office-artifact-verifier/1.0.0" ||
+      !artifactVerification.verificationManifestValid
+    ) {
+      addIssue(
+        input.issues,
+        "TT_HUMAN_GATE_WORD_VERIFICATION_MANIFEST_INVALID",
+        "FAIL",
+        "The exact verification-contract-v2 expected-value manifest is missing, invalid, or belongs to another document.",
+      );
+    }
+    if (!artifactVerification.reopenedPackageValid) {
+      addIssue(
+        input.issues,
+        "TT_HUMAN_GATE_WORD_REOPENED_PACKAGE_INVALID",
+        "FAIL",
+        "The reopened Word file failed the production OPC/XML/security package inspector.",
+      );
+    }
+    if (!artifactVerification.staticAndOccurrenceValid) {
+      addIssue(
+        input.issues,
+        "TT_HUMAN_GATE_WORD_STATIC_OR_OCCURRENCE_MISMATCH",
+        "FAIL",
+        "The reopened Word file did not preserve every normalized static region and unique certified field occurrence.",
+      );
+    }
+    if (
+      evidence.documentRole === "renderer_output" &&
+      !artifactVerification.semanticReadbackValid
+    ) {
+      addIssue(
+        input.issues,
+        "TT_HUMAN_GATE_WORD_SEMANTIC_READBACK_MISMATCH",
+        "FAIL",
+        "The reopened Word renderer output failed exact semantic value, control-state, binding, or occurrence readback.",
+      );
+    }
+    if (!artifactVerification.exportedPdfValid) {
+      addIssue(
+        input.issues,
+        "TT_HUMAN_GATE_WORD_EXPORTED_PDF_INVALID",
+        "FAIL",
+        "The Word-exported PDF is malformed, active, encrypted, or has the wrong page count.",
+      );
+    }
+
+    const reopenedFilename = `${safeStem}.word-reopened.docx`;
+    for (const [kind, target] of [
+      ["openxml_office2013_json", "Office2013"],
+      ["openxml_microsoft365_json", "Microsoft365"],
+    ] as const) {
+      const report = generatedByKind.get(kind);
       if (
-        generated.kind === "word_reopened_docx" &&
-        !bytes.subarray(0, 2).equals(Buffer.from("PK"))
+        !report ||
+        !validOpenXmlReport({
+          bytes: inflated.get(report.relativePath) ?? new Uint8Array(),
+          expectedSourceCommit: input.expectedSourceCommit,
+          expectedValidatorSha256:
+            documentManifest.openXmlValidator.executableSha256,
+          expectedTarget: target,
+          expectedDocumentFilename: reopenedFilename,
+        })
       ) {
         addIssue(
           input.issues,
-          "TT_HUMAN_GATE_WORD_REOPENED_DOCX_INVALID",
+          "TT_HUMAN_GATE_WORD_OPENXML_SCHEMA_INVALID",
           "FAIL",
-          "The reopened Word file is not a DOCX ZIP package.",
-        );
-      }
-      if (
-        generated.kind === "word_exported_pdf" &&
-        !bytes.subarray(0, 5).equals(Buffer.from("%PDF-"))
-      ) {
-        addIssue(
-          input.issues,
-          "TT_HUMAN_GATE_WORD_EXPORTED_PDF_INVALID",
-          "FAIL",
-          "The Word-exported PDF does not have valid PDF magic bytes.",
+          `The reopened Word file lacks a passing ${target} Open XML SDK result from the pinned validator.`,
         );
       }
     }
@@ -806,6 +1043,7 @@ export async function validateReturnedHumanGateEvidence(
     bytes: Buffer.from(input.wordEvidenceZip),
     expectedSourceCommit: input.expectedSourceCommit,
     expectedZipSha256: input.expectedWordEvidenceZipSha256,
+    officeArtifactVerifier: input.officeArtifactVerifier,
     issues,
   });
   validatePhysicianEvidence({

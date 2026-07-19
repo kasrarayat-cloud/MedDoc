@@ -1,7 +1,9 @@
 This synthetic-only package contains no upload code and makes no network request.
 The PowerShell script uses only the local filesystem, local hashing, ZIP APIs,
-and the installed desktop Microsoft Word COM interface. It requires no
-administrator privileges. Do not manually upload documents to an online Office
-service, cloud drive, email, or another external service.
+the installed desktop Microsoft Word COM interface, and the bundled
+path-and-SHA-256-pinned Open XML SDK validator. The validator is self-contained
+and does not install or download dependencies. No administrator privileges are
+required. Do not manually upload documents to an online Office service, cloud
+drive, email, or another external service.
 
 Commit: __SOURCE_COMMIT__

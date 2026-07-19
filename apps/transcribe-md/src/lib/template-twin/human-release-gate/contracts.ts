@@ -1,11 +1,16 @@
 import { z } from "zod";
 
 export const HUMAN_GATE_PACKAGE_VERSION =
-  "template-twin-human-release-gate-package/1.0.0" as const;
+  "template-twin-human-release-gate-package/2.0.0" as const;
 export const WORD_HUMAN_EVIDENCE_VERSION =
-  "template-twin-desktop-word-human-evidence/1.0.0" as const;
+  "template-twin-desktop-word-human-evidence/2.0.0" as const;
 export const WORD_DOCUMENT_MANIFEST_VERSION =
-  "template-twin-desktop-word-document-manifest/1.0.0" as const;
+  "template-twin-desktop-word-document-manifest/2.0.0" as const;
+export const WORD_OPENXML_VALIDATOR_NAME =
+  "DocumentFormat.OpenXml.OpenXmlValidator" as const;
+export const WORD_OPENXML_VALIDATOR_SDK_VERSION = "3.5.1.0" as const;
+export const WORD_VERIFICATION_CONTRACT_VERSION =
+  "template-docx-readback/2.0.0" as const;
 
 const Sha256Schema = z.string().regex(/^[a-f0-9]{64}$/u);
 const CommitShaSchema = z.string().regex(/^[a-f0-9]{40}$/u);
@@ -35,6 +40,12 @@ export const WordQaDocumentSchema = ReleaseGateFileEvidenceSchema.extend({
   documentRole: z.enum(["source", "renderer_output"]),
   expectedPageCount: z.number().int().positive(),
   minimumExpectedPages: z.number().int().positive(),
+  verification: z
+    .object({
+      contractVersion: z.literal(WORD_VERIFICATION_CONTRACT_VERSION),
+      expectedValueManifest: ReleaseGateFileEvidenceSchema,
+    })
+    .strict(),
 }).strict();
 
 export const WordQaDocumentManifestSchema = z
@@ -45,6 +56,14 @@ export const WordQaDocumentManifestSchema = z
     syntheticOnly: z.literal(true),
     generatedAtIso: IsoDateTimeSchema,
     originalsMayBeOpenedByWord: z.literal(false),
+    openXmlValidator: z
+      .object({
+        name: z.literal(WORD_OPENXML_VALIDATOR_NAME),
+        sdkVersion: z.literal(WORD_OPENXML_VALIDATOR_SDK_VERSION),
+        executableSha256: Sha256Schema,
+        targets: z.tuple([z.literal("Office2013"), z.literal("Microsoft365")]),
+      })
+      .strict(),
     documentCount: z.number().int().positive(),
     documents: z.array(WordQaDocumentSchema).min(2),
   })
@@ -71,7 +90,13 @@ export type WordQaDocumentManifest = z.infer<
 >;
 
 const WordAutomationFileSchema = ReleaseGateFileEvidenceSchema.extend({
-  kind: z.enum(["work_copy", "word_reopened_docx", "word_exported_pdf"]),
+  kind: z.enum([
+    "work_copy",
+    "word_reopened_docx",
+    "word_exported_pdf",
+    "openxml_office2013_json",
+    "openxml_microsoft365_json",
+  ]),
 }).strict();
 
 const HumanPassFailBlockedSchema = z.enum(["PASS", "FAIL", "BLOCKED"]);
@@ -111,7 +136,11 @@ export const WordQaDocumentEvidenceSchema = z
       "ORIGINAL_HASH_CHANGED",
       "PAGE_COUNT_BELOW_MINIMUM",
       "PAGE_COUNT_MISMATCH",
+      "OPENXML_SCHEMA_INVALID",
     ]),
+    saveAsCompleted: z.boolean(),
+    reopenReadOnlyCompleted: z.boolean(),
+    pdfExportCompleted: z.boolean(),
     pageCountBeforeSave: z.number().int().positive().nullable(),
     pageCountAfterReopen: z.number().int().positive().nullable(),
     expectedPageCount: z.number().int().positive(),
@@ -119,7 +148,7 @@ export const WordQaDocumentEvidenceSchema = z
     minimumExpectedPages: z.number().int().positive(),
     compatibilityModeBeforeSave: z.number().int().nullable(),
     compatibilityModeAfterReopen: z.number().int().nullable(),
-    generatedFiles: z.array(WordAutomationFileSchema).max(3),
+    generatedFiles: z.array(WordAutomationFileSchema).max(5),
     humanObservation: WordHumanObservationSchema,
   })
   .strict();

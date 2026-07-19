@@ -21,10 +21,13 @@ mkdir -p "$BUILD_ROOT" "$RESULT_ROOT"
 cp "$PROJECT_ROOT/apps/transcribe-md/scripts/template-twin-human-gate/openxml-validator/"{OpenXmlValidator.csproj,Program.cs,packages.lock.json} "$BUILD_ROOT/"
 
 docker run --rm --network bridge --read-only --cap-drop ALL --security-opt no-new-privileges \
-  --user "$(id -u):$(id -g)" --memory 1g --cpus 2 --pids-limit 256 \
-  --tmpfs /tmp:rw,noexec,nosuid,size=256m -e HOME=/tmp \
+  --user "$(id -u):$(id -g)" --memory 2g --cpus 2 --pids-limit 256 \
+  --tmpfs /tmp:rw,noexec,nosuid,size=1g -e DOTNET_CLI_HOME=/tmp/dotnet-cli -e NUGET_PACKAGES=/tmp/nuget \
   -v "$BUILD_ROOT:/src:rw" -w /src "$DOTNET_IMAGE" \
-  sh -c 'dotnet restore --locked-mode && dotnet publish --no-restore -c Release -o /src/publish'
+  sh -c 'dotnet restore --locked-mode && dotnet publish --no-restore -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o /src/publish-linux && dotnet publish --no-restore -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o /src/publish-windows'
+# The desktop package validates the bytes Word actually saved. The Windows
+# build is self-contained so reviewer machines need no separately managed SDK.
+[[ -s "$BUILD_ROOT/publish-windows/OpenXmlValidator.exe" ]]
 
 mapfile -t DOCUMENTS < <(find "$ROOT/corpus" -mindepth 2 -maxdepth 2 -type f \( -name '*.source.docx' -o -name '*.output.docx' \) -print | LC_ALL=C sort)
 [[ "${#DOCUMENTS[@]}" -ge 2 ]]
@@ -35,10 +38,10 @@ for target in Office2013 Microsoft365; do
   output="pre-delivery-${target}.json"
   docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
     --user "$(id -u):$(id -g)" --memory 768m --cpus 2 --pids-limit 128 \
-    --tmpfs /tmp:rw,noexec,nosuid,size=128m -e HOME=/tmp \
+    --tmpfs /tmp:rw,noexec,nosuid,size=128m \
     -e "OPENXML_TARGET=$target" -e "QA_SOURCE_COMMIT=$QA_SOURCE_COMMIT" -e "QA_GENERATED_AT=$QA_GENERATED_AT" \
-    -v "$BUILD_ROOT/publish:/validator:ro" -v "$ROOT/corpus:/corpus:ro" -v "$RESULT_ROOT:/out:rw" \
-    -w /out --entrypoint dotnet "$DOTNET_IMAGE" /validator/OpenXmlValidator.dll "/out/$output" "${CONTAINER_DOCUMENTS[@]}"
+    -v "$BUILD_ROOT/publish-linux:/validator:ro" -v "$ROOT/corpus:/corpus:ro" -v "$RESULT_ROOT:/out:rw" \
+    -w /out --entrypoint /validator/OpenXmlValidator "$DOTNET_IMAGE" "/out/$output" "${CONTAINER_DOCUMENTS[@]}"
   jq -e --arg commit "$QA_SOURCE_COMMIT" '
     .sourceCommit == $commit and
     .tool == "DocumentFormat.OpenXml.OpenXmlValidator" and

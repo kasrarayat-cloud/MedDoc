@@ -2,6 +2,7 @@ import { lstat, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { validateReturnedHumanGateEvidence } from "../../src/lib/template-twin/human-release-gate/evidence-validator";
+import { verifyReturnedOfficeArtifacts } from "./returned-office-artifact-verifier";
 
 const MAX_WORD_EVIDENCE_ZIP_BYTES = 256 * 1024 * 1024;
 const MAX_JSON_BYTES = 8 * 1024 * 1024;
@@ -136,6 +137,7 @@ async function main(): Promise<void> {
     physicianManifestJson,
     physicianDecisionJson,
     mediaReviewJson,
+    officeArtifactVerifier: verifyReturnedOfficeArtifacts,
   });
   await writeFile(options.output, `${JSON.stringify(report, null, 2)}\n`, {
     encoding: "utf8",

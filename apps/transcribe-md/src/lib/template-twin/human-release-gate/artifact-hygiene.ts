@@ -243,7 +243,14 @@ async function scanDocx(
 
 export async function scanHumanGateDirectory(
   root: string,
-  options: { readonly forbiddenFileSha256?: readonly string[] } = {},
+  options: {
+    readonly forbiddenFileSha256?: readonly string[];
+    /**
+     * Executables are forbidden by default. The desktop Word gate may carry
+     * only a path-and-digest-pinned, CI-built Open XML validator.
+     */
+    readonly allowedExecutableSha256ByPath?: Readonly<Record<string, string>>;
+  } = {},
 ): Promise<HumanGateHygieneReport> {
   const issues: HumanGateHygieneIssue[] = [];
   const files: string[] = [];
@@ -284,7 +291,10 @@ export async function scanHumanGateDirectory(
       continue;
     }
     const extension = path.extname(relativePath).toLocaleLowerCase("en-US");
-    if (!HUMAN_GATE_ALLOWED_EXTENSIONS.includes(extension)) {
+    if (
+      extension !== ".exe" &&
+      !HUMAN_GATE_ALLOWED_EXTENSIONS.includes(extension)
+    ) {
       issues.push({
         code: "BINARY_NOT_ALLOWLISTED",
         relativePath,
@@ -301,7 +311,17 @@ export async function scanHumanGateDirectory(
       });
       continue;
     }
-    if (extension === ".docx") {
+    if (extension === ".exe") {
+      const expected = options.allowedExecutableSha256ByPath?.[relativePath];
+      if (!expected || !/^[a-f0-9]{64}$/u.test(expected) || sha256(bytes) !== expected) {
+        issues.push({
+          code: "EXECUTABLE_NOT_EXACTLY_ALLOWLISTED",
+          relativePath,
+          detail:
+            "Executable evidence must match the exact path-and-digest-pinned validator built by CI.",
+        });
+      }
+    } else if (extension === ".docx") {
       const docx = await scanDocx(relativePath, bytes);
       issues.push(...docx.issues);
       docxEntriesScanned += docx.entries;

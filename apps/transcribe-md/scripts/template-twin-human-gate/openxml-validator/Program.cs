@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Text.Json;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
@@ -23,6 +24,15 @@ if (!Enum.TryParse<FileFormatVersions>(targetName, false, out var targetVersion)
 }
 
 var validator = new OpenXmlValidator(targetVersion);
+var executablePath = Environment.ProcessPath;
+if (string.IsNullOrWhiteSpace(executablePath) || !File.Exists(executablePath))
+{
+    Console.Error.WriteLine("The validator executable identity is unavailable.");
+    return 2;
+}
+var validatorExecutableSha256 = Convert.ToHexString(
+    SHA256.HashData(await File.ReadAllBytesAsync(executablePath))
+).ToLowerInvariant();
 var results = new List<object>();
 foreach (var input in args.Skip(1))
 {
@@ -58,6 +68,7 @@ var payload = new
     tool = "DocumentFormat.OpenXml.OpenXmlValidator",
     sdkVersion = typeof(OpenXmlValidator).Assembly.GetName().Version?.ToString(),
     packageVersion = typeof(WordprocessingDocument).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion,
+    validatorExecutableSha256,
     targetFileFormat = targetVersion.ToString(),
     sourceCommit,
     generatedAt,

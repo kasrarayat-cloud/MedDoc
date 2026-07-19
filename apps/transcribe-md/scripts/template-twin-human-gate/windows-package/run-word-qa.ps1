@@ -6,6 +6,7 @@ $ErrorActionPreference = "Stop"
 
 $ExpectedCommit = "__SOURCE_COMMIT__"
 $ExpectedManifestSha256 = "__MANIFEST_SHA256__"
+$ExpectedOpenXmlValidatorSha256 = "__OPENXML_VALIDATOR_SHA256__"
 $ShortSha = "__SHORT_SHA__"
 $BundleRoot = Split-Path -Parent $PSScriptRoot
 $ManifestPath = Join-Path $BundleRoot "manifests\WORD-QA-DOCUMENTS.json"
@@ -14,6 +15,8 @@ $ResultsRoot = Join-Path $BundleRoot ("word-evidence-" + $ShortSha + "-" + $RunT
 $WorkRoot = Join-Path $ResultsRoot "work-copies"
 $ReopenedRoot = Join-Path $ResultsRoot "word-reopened-docx"
 $PdfRoot = Join-Path $ResultsRoot "word-exported-pdf"
+$OpenXmlRoot = Join-Path $ResultsRoot "openxml"
+$OpenXmlValidatorPath = Join-Path $BundleRoot "tools\openxml-validator\OpenXmlValidator.exe"
 $ReturnZip = Join-Path $BundleRoot ("template-twin-word-evidence-" + $ShortSha + ".zip")
 $ReturnSidecar = $ReturnZip + ".sha256"
 
@@ -44,6 +47,16 @@ function Get-FileEvidence([string]$Path, [string]$Root, [string]$Kind) {
 function Release-ComObject($Object) {
   if ($null -ne $Object) {
     try { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($Object) } catch {}
+  }
+}
+
+function Invoke-OpenXmlValidation([string]$DocumentPath, [string]$OutputPath, [string]$Target) {
+  $env:OPENXML_TARGET = $Target
+  $env:QA_SOURCE_COMMIT = $ExpectedCommit
+  $env:QA_GENERATED_AT = (Get-Date).ToUniversalTime().ToString("o")
+  & $OpenXmlValidatorPath $OutputPath $DocumentPath | Out-Host
+  if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $OutputPath -PathType Leaf)) {
+    throw "OPENXML_SCHEMA"
   }
 }
 
@@ -133,8 +146,15 @@ if ((Get-Sha256 $ManifestPath) -ne $ExpectedManifestSha256) {
   throw "The package manifest hash changed. No document was opened."
 }
 $Manifest = Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json
-if ($Manifest.sourceCommit -ne $ExpectedCommit -or $Manifest.syntheticOnly -ne $true) {
+if ($Manifest.sourceCommit -ne $ExpectedCommit -or $Manifest.syntheticOnly -ne $true -or
+    $Manifest.openXmlValidator.name -ne "DocumentFormat.OpenXml.OpenXmlValidator" -or
+    $Manifest.openXmlValidator.sdkVersion -ne "3.5.1.0" -or
+    $Manifest.openXmlValidator.executableSha256 -ne $ExpectedOpenXmlValidatorSha256) {
   throw "The package commit or synthetic-only marker is invalid. No document was opened."
+}
+if (-not (Test-Path -LiteralPath $OpenXmlValidatorPath -PathType Leaf) -or
+    (Get-Sha256 $OpenXmlValidatorPath) -ne $ExpectedOpenXmlValidatorSha256) {
+  throw "The pinned Open XML validator is missing or changed. No document was opened."
 }
 
 $Documents = New-Object System.Collections.Generic.List[object]
@@ -159,6 +179,7 @@ foreach ($entry in $Manifest.documents) {
     sizeBytes = [long]$entry.sizeBytes
     minimumExpectedPages = [int]$entry.minimumExpectedPages
     expectedPageCount = [int]$entry.expectedPageCount
+    verification = $entry.verification
   })
 }
 if ($Documents.Count -ne [int]$Manifest.documentCount) {
@@ -166,10 +187,31 @@ if ($Documents.Count -ne [int]$Manifest.documentCount) {
 }
 
 if (Test-Path -LiteralPath $ResultsRoot) { Remove-Item -LiteralPath $ResultsRoot -Recurse -Force }
-foreach ($directory in @($ResultsRoot, $WorkRoot, $ReopenedRoot, $PdfRoot)) { Ensure-Directory $directory }
+foreach ($directory in @($ResultsRoot, $WorkRoot, $ReopenedRoot, $PdfRoot, $OpenXmlRoot)) { Ensure-Directory $directory }
 Copy-Item -LiteralPath $ManifestPath -Destination (Join-Path $ResultsRoot "WORD-QA-DOCUMENTS.json")
 Copy-Item -LiteralPath (Join-Path $BundleRoot "VISUAL-CHECKLIST.html") -Destination $ResultsRoot
 Copy-Item -LiteralPath (Join-Path $BundleRoot "NO-NETWORK-ASSURANCE.txt") -Destination $ResultsRoot
+
+$CopiedVerificationPaths = @{}
+foreach ($entry in $Documents) {
+  $verificationFile = $entry.verification.expectedValueManifest
+  if ($null -eq $verificationFile) { continue }
+  $relative = [string]$verificationFile.relativePath
+  if ([IO.Path]::IsPathRooted($relative) -or $relative.Contains("..") -or $relative.Contains("\")) {
+    throw "The verification manifest contains an unsafe path. No document was opened."
+  }
+  if ($CopiedVerificationPaths.ContainsKey($relative)) { continue }
+  $source = Join-Path $BundleRoot $relative.Replace("/", "\")
+  if (-not (Test-Path -LiteralPath $source -PathType Leaf) -or
+      (Get-Sha256 $source) -ne [string]$verificationFile.sha256 -or
+      (Get-Item $source).Length -ne [long]$verificationFile.sizeBytes) {
+    throw "A byte-bound verification manifest is missing or changed. No document was opened."
+  }
+  $destination = Join-Path $ResultsRoot $relative.Replace("/", "\")
+  Ensure-Directory ([IO.Path]::GetDirectoryName($destination))
+  Copy-Item -LiteralPath $source -Destination $destination
+  $CopiedVerificationPaths[$relative] = $true
+}
 
 $ReviewerId = Read-ReviewerId
 $Records = New-Object System.Collections.Generic.List[object]
@@ -209,6 +251,9 @@ try {
     $pageAfter = $null
     $compatBefore = $null
     $compatAfter = $null
+    $saveAsCompleted = $false
+    $reopenReadOnlyCompleted = $false
+    $pdfExportCompleted = $false
     $generated = New-Object System.Collections.Generic.List[object]
     $humanObservation = $null
     $document = $null
@@ -223,13 +268,16 @@ try {
         try { $pageBefore = [int]$document.ComputeStatistics(2) } catch {}
         try { $compatBefore = [int]$document.CompatibilityMode } catch {}
         $document.SaveAs2($reopenedPath, 12)
+        $saveAsCompleted = $true
         $document.Close(0)
         Release-ComObject $document
         $document = $null
         $reopened = $Word.Documents.Open($reopenedPath, $false, $true, $false)
+        $reopenReadOnlyCompleted = $true
         try { $pageAfter = [int]$reopened.ComputeStatistics(2) } catch {}
         try { $compatAfter = [int]$reopened.CompatibilityMode } catch {}
         $reopened.ExportAsFixedFormat($pdfPath, 17)
+        $pdfExportCompleted = $true
         try { Start-Process -FilePath $pdfPath | Out-Null } catch {}
         $humanObservation = Read-HumanObservation $entry.caseId $entry.documentRole
         $reopened.Close(0)
@@ -237,7 +285,16 @@ try {
         $reopened = $null
         $generated.Add([pscustomobject](Get-FileEvidence $reopenedPath $ResultsRoot "word_reopened_docx"))
         $generated.Add([pscustomobject](Get-FileEvidence $pdfPath $ResultsRoot "word_exported_pdf"))
-        if ($null -ne $pageAfter -and [int]$pageAfter -ne $entry.expectedPageCount) {
+        $openXmlOffice2013 = Join-Path $OpenXmlRoot ($safeStem + ".Office2013.json")
+        $openXmlMicrosoft365 = Join-Path $OpenXmlRoot ($safeStem + ".Microsoft365.json")
+        Invoke-OpenXmlValidation $reopenedPath $openXmlOffice2013 "Office2013"
+        Invoke-OpenXmlValidation $reopenedPath $openXmlMicrosoft365 "Microsoft365"
+        $generated.Add([pscustomobject](Get-FileEvidence $openXmlOffice2013 $ResultsRoot "openxml_office2013_json"))
+        $generated.Add([pscustomobject](Get-FileEvidence $openXmlMicrosoft365 $ResultsRoot "openxml_microsoft365_json"))
+        if ($null -eq $pageAfter -or [int]$pageAfter -lt $entry.minimumExpectedPages) {
+          $status = "FAILED"
+          $errorCode = "PAGE_COUNT_BELOW_MINIMUM"
+        } elseif ([int]$pageAfter -ne $entry.expectedPageCount) {
           $status = "FAILED"
           $errorCode = "PAGE_COUNT_MISMATCH"
         } else {
@@ -245,7 +302,7 @@ try {
         }
       } catch {
         $status = "FAILED"
-        $errorCode = if ($_.Exception.Message -eq "COPY_HASH") { "ORIGINAL_HASH_CHANGED" } else { "WORD_COM_AUTOMATION_FAILED" }
+        $errorCode = if ($_.Exception.Message -eq "COPY_HASH") { "ORIGINAL_HASH_CHANGED" } elseif ($_.Exception.Message -eq "OPENXML_SCHEMA") { "OPENXML_SCHEMA_INVALID" } else { "WORD_COM_AUTOMATION_FAILED" }
       } finally {
         if ($null -ne $reopened) { try { $reopened.Close(0) } catch {}; Release-ComObject $reopened }
         if ($null -ne $document) { try { $document.Close(0) } catch {}; Release-ComObject $document }
@@ -269,6 +326,9 @@ try {
       originalUnchanged = $originalUnchanged
       automationStatus = $status
       automationErrorCode = $errorCode
+      saveAsCompleted = $saveAsCompleted
+      reopenReadOnlyCompleted = $reopenReadOnlyCompleted
+      pdfExportCompleted = $pdfExportCompleted
       pageCountBeforeSave = $pageBefore
       pageCountAfterReopen = $pageAfter
       expectedPageCount = $entry.expectedPageCount
@@ -294,7 +354,7 @@ $Attestation = [ordered]@{
 }
 $ManifestCopy = Join-Path $ResultsRoot "WORD-QA-DOCUMENTS.json"
 $Evidence = [ordered]@{
-  contractVersion = "template-twin-desktop-word-human-evidence/1.0.0"
+  contractVersion = "template-twin-desktop-word-human-evidence/2.0.0"
   sourceCommit = $ExpectedCommit
   packageManifestSha256 = Get-Sha256 $ManifestCopy
   syntheticOnly = $true

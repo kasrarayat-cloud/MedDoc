@@ -32,6 +32,9 @@ function validWordEvidence(): Record<string, unknown> {
     originalUnchanged: true,
     automationStatus: "COMPLETED",
     automationErrorCode: "NONE",
+    saveAsCompleted: true,
+    reopenReadOnlyCompleted: true,
+    pdfExportCompleted: true,
     pageCountBeforeSave: 1,
     pageCountAfterReopen: 1,
     expectedPageCount: 1,
@@ -52,7 +55,7 @@ function validWordEvidence(): Record<string, unknown> {
     },
   });
   return {
-    contractVersion: "template-twin-desktop-word-human-evidence/1.0.0",
+    contractVersion: "template-twin-desktop-word-human-evidence/2.0.0",
     sourceCommit: SHA,
     packageManifestSha256: DIGEST,
     syntheticOnly: true,
@@ -121,6 +124,37 @@ describe("human release-gate contracts", () => {
       'word-evidence-" + $ShortSha + "-" + $RunTimestamp',
     );
     expect(script).not.toMatch(/function Read-YesNo[\s\S]{0,240}Read-Enum/u);
+    expect(script).toContain("Invoke-OpenXmlValidation $reopenedPath");
+    expect(script).toContain("reopenReadOnlyCompleted = $reopenReadOnlyCompleted");
+  });
+
+  it("runs only for the legacy audited branch or explicitly named Template Twin GA releases", async () => {
+    const workflow = await readFile(
+      path.join(
+        process.cwd(),
+        "..",
+        "..",
+        ".github/workflows/template-twin-human-release-gate.yml",
+      ),
+      "utf8",
+    );
+    expect(workflow).toContain("name: Template Twin human release gate");
+    expect(workflow).toContain(
+      "run-name: Template Twin Office review package — human approval remains pending",
+    );
+    expect(workflow).toContain(
+      "name: Synthetic Office and human evidence package",
+    );
+    expect(workflow).toContain(
+      "github.event.pull_request.head.ref == 'feat/template-twin-wm-iov-compatibility-v1'",
+    );
+    expect(workflow).toContain(
+      "startsWith(github.event.pull_request.head.ref, 'release/template-twin-ga-')",
+    );
+    expect(workflow).toContain(
+      "^release/template-twin-ga-[0-9]{8}(-[a-z0-9][a-z0-9._-]{0,62})?$",
+    );
+    expect(workflow).not.toMatch(/if:\s*(?:true|\$\{\{\s*always\(\))/u);
   });
 });
 
@@ -207,5 +241,27 @@ describe("human release-gate artifact hygiene", () => {
     expect(codes).toContain("FORBIDDEN_WM_IOV_CONTENT");
     expect(codes).toContain("NON_RESERVED_EMAIL_ADDRESS");
     expect(codes).toContain("PDF_ACTIVE_OR_EMBEDDED_CONTENT");
+  });
+
+  it("permits only an exact path-and-digest-pinned desktop validator executable", async () => {
+    const relativePath = "tools/openxml-validator/OpenXmlValidator.exe";
+    const executable = Buffer.from([0x4d, 0x5a, 0, 1, 2, 3, 4]);
+    await mkdir(path.join(root, "tools/openxml-validator"), {
+      recursive: true,
+    });
+    await writeFile(path.join(root, relativePath), executable);
+
+    const unbound = await scanHumanGateDirectory(root);
+    expect(unbound.safe).toBe(false);
+    expect(unbound.issues.map((issue) => issue.code)).toContain(
+      "EXECUTABLE_NOT_EXACTLY_ALLOWLISTED",
+    );
+
+    const bound = await scanHumanGateDirectory(root, {
+      allowedExecutableSha256ByPath: {
+        [relativePath]: sha256(executable),
+      },
+    });
+    expect(bound).toMatchObject({ safe: true, issues: [] });
   });
 });

@@ -70,7 +70,11 @@
     <p>
       The script makes a disposable copy before Word opens anything. Original
       package documents are hash-checked before and after. The script contains
-      no network request and never uploads evidence.
+      no network request and never uploads evidence. After Word saves and
+      reopens each copy, the package's path-and-hash-pinned Open XML SDK
+      validator checks that exact reopened file for both Office 2013 and
+      Microsoft 365. An independent local validator then rechecks package,
+      semantic-field, static-region, field-occurrence, and PDF evidence.
     </p>
   </body>
 </html>

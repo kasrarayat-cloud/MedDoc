@@ -18,6 +18,9 @@ import {
   WORD_DOCUMENT_MANIFEST_JSON_SCHEMA,
   WORD_HUMAN_EVIDENCE_JSON_SCHEMA,
   WORD_DOCUMENT_MANIFEST_VERSION,
+  WORD_OPENXML_VALIDATOR_NAME,
+  WORD_OPENXML_VALIDATOR_SDK_VERSION,
+  WORD_VERIFICATION_CONTRACT_VERSION,
   WordQaDocumentManifestSchema,
 } from "../../src/lib/template-twin/human-release-gate/contracts";
 import {
@@ -167,6 +170,19 @@ async function main(): Promise<void> {
   await rm(outputZip, { force: true });
   await mkdir(stage, { recursive: true });
 
+  const validatorRelativePath =
+    "tools/openxml-validator/OpenXmlValidator.exe";
+  const validatorSource = path.join(
+    options.inputRoot,
+    "openxml-build",
+    "publish-windows",
+    "OpenXmlValidator.exe",
+  );
+  const validatorDestination = path.join(stage, validatorRelativePath);
+  await copy(validatorSource, validatorDestination);
+  const validatorBytes = await readFile(validatorDestination);
+  const validatorSha256 = sha256(validatorBytes);
+
   const corpusRoot = path.join(options.inputRoot, "corpus");
   const corpusManifest = (await readJson(
     path.join(corpusRoot, "corpus-manifest.json"),
@@ -220,30 +236,60 @@ async function main(): Promise<void> {
     sha256: string;
     expectedPageCount: number | null;
     minimumExpectedPages: number;
+    verification: {
+      contractVersion: typeof WORD_VERIFICATION_CONTRACT_VERSION;
+      expectedValueManifest: {
+        relativePath: string;
+        sizeBytes: number;
+        sha256: string;
+      };
+    };
   }> = [];
   for (const corpusCase of corpusManifest.cases ?? []) {
     invariant(
       /^[a-z0-9][a-z0-9-]{0,79}$/u.test(corpusCase.id),
       "Unsafe corpus case ID.",
     );
-    const roles = [
-      {
-        documentRole: "source" as const,
-        source: corpusCase.sourcePath,
-        sha256: corpusCase.sourceSha256,
-        sizeBytes: corpusCase.sourceSizeBytes,
-      },
-      ...(corpusCase.outputPath
-        ? [
-            {
-              documentRole: "renderer_output" as const,
-              source: corpusCase.outputPath,
-              sha256: corpusCase.outputSha256!,
-              sizeBytes: corpusCase.outputSizeBytes!,
-            },
-          ]
-        : []),
-    ];
+    const expectedManifestSource = path.join(
+      corpusRoot,
+      corpusCase.id,
+      "office-expected-manifest.json",
+    );
+    const expectedManifestRelativePath =
+      `evidence/corpus/${corpusCase.id}/office-expected-manifest.json`;
+    const expectedManifestBytes = (await exists(expectedManifestSource))
+      ? await readFile(expectedManifestSource)
+      : null;
+    const expectedValueManifest = expectedManifestBytes
+      ? {
+          relativePath: expectedManifestRelativePath,
+          sizeBytes: expectedManifestBytes.length,
+          sha256: sha256(expectedManifestBytes),
+        }
+      : null;
+    // Fail-closed/unsupported corpus cases remain in the package evidence but
+    // are not presented to Word as supported compatibility claims: there is no
+    // verification-contract-v2 value/static/occurrence manifest for them.
+    const roles = expectedValueManifest
+      ? [
+          {
+            documentRole: "source" as const,
+            source: corpusCase.sourcePath,
+            sha256: corpusCase.sourceSha256,
+            sizeBytes: corpusCase.sourceSizeBytes,
+          },
+          ...(corpusCase.outputPath
+            ? [
+                {
+                  documentRole: "renderer_output" as const,
+                  source: corpusCase.outputPath,
+                  sha256: corpusCase.outputSha256!,
+                  sizeBytes: corpusCase.outputSizeBytes!,
+                },
+              ]
+            : []),
+        ]
+      : [];
     for (const role of roles) {
       invariant(
         role.source.startsWith(`${corpusRoot}${path.sep}`),
@@ -274,6 +320,10 @@ async function main(): Promise<void> {
         sha256: sha256(bytes),
         expectedPageCount: corpusCase.expectedPageCount,
         minimumExpectedPages: corpusCase.minimumExpectedPages,
+        verification: {
+          contractVersion: WORD_VERIFICATION_CONTRACT_VERSION,
+          expectedValueManifest: expectedValueManifest!,
+        },
       });
     }
     for (const name of [
@@ -481,6 +531,12 @@ async function main(): Promise<void> {
     syntheticOnly: true,
     generatedAtIso: options.generatedAtIso,
     originalsMayBeOpenedByWord: false,
+    openXmlValidator: {
+      name: WORD_OPENXML_VALIDATOR_NAME,
+      sdkVersion: WORD_OPENXML_VALIDATOR_SDK_VERSION,
+      executableSha256: validatorSha256,
+      targets: ["Office2013", "Microsoft365"],
+    },
     documentCount: documents.length,
     documents,
   });
@@ -536,7 +592,8 @@ async function main(): Promise<void> {
     powerShellTemplate
       .replaceAll("__SOURCE_COMMIT__", options.sourceCommit)
       .replaceAll("__SHORT_SHA__", shortSha)
-      .replaceAll("__MANIFEST_SHA256__", sha256(manifestBytes)),
+      .replaceAll("__MANIFEST_SHA256__", sha256(manifestBytes))
+      .replaceAll("__OPENXML_VALIDATOR_SHA256__", validatorSha256),
     "utf8",
   );
 
@@ -563,11 +620,21 @@ async function main(): Promise<void> {
     }).trim() === options.sourceCommit,
     "Checked-out repository does not match the package source commit.",
   );
+  invariant(
+    execFileSync("git", ["status", "--porcelain=v1", "--untracked-files=all"], {
+      cwd: root,
+      encoding: "utf8",
+    }).trim().length === 0,
+    "Exact-head packaging requires a clean checkout with no untracked inputs.",
+  );
   const forbiddenSourceBytes = await readFile(
     path.join(root, "WM IOV Template.docx"),
   );
   const hygiene = await scanHumanGateDirectory(stage, {
     forbiddenFileSha256: [sha256(forbiddenSourceBytes)],
+    allowedExecutableSha256ByPath: {
+      [validatorRelativePath]: validatorSha256,
+    },
   });
   await writeJson(
     path.join(options.outputRoot, `${artifactName}.hygiene.json`),

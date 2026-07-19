@@ -25,7 +25,9 @@ well-formed, unaltered, and tied to the expected commit.
 ## Package identity and download
 
 The PR-only GitHub Actions workflow, `.github/workflows/template-twin-human-release-gate.yml`
-(`Template Twin human release gate`), publishes an artifact named:
+(`Template Twin human release gate`, with a run title stating that human
+approval remains pending), publishes an
+artifact named:
 
 ```text
 template-twin-human-gate-<first-12-characters-of-PR-head-SHA>
@@ -36,8 +38,9 @@ byte size, and SHA-256. The artifact is retained for seven days.
 
 The founder coordinates the gate as follows:
 
-1. Open draft PR #363 and select the successful human-release-gate workflow
-   run for the exact PR head under review.
+1. Open the audited compatibility PR or an explicitly named
+   `release/template-twin-ga-*` consolidated PR and select the successful
+   Office-review-package workflow run for the exact PR head under review.
 2. Confirm that the full commit in the workflow summary is the intended PR
    head. Do not use a package from another commit.
 3. Download the artifact with the matching short SHA and compare its SHA-256
@@ -82,10 +85,14 @@ The reviewer needs no coding knowledge and no administrator privileges:
 
 The script verifies Microsoft Word availability, records Windows and Word
 versions, checks originals before and after the run, opens only working copies,
-saves separately reopened DOCX copies, exports PDFs, records hashes and
-automation errors, and creates one timestamped evidence ZIP. It makes no
-network request and does not upload any evidence. Repair dialogs and visual
-layout remain human observations; automation cannot truthfully decide them.
+saves separately reopened DOCX copies, exports PDFs, and validates the exact
+Word-saved bytes for Office 2013 and Microsoft 365 with a self-contained Open
+XML SDK 3.5.1 validator whose executable path and SHA-256 are bound into the
+package. It records hashes and automation errors and creates one timestamped
+evidence ZIP. It makes no network request and does not upload any evidence.
+Repair dialogs and visual layout remain human observations; automation cannot
+truthfully decide them. If Windows blocks or quarantines the pinned validator,
+record `BLOCKED`; do not infer schema validity or bypass endpoint policy.
 
 Word status remains **PENDING** until the returned ZIP passes local evidence
 validation and the human observations pass review. A Word pass is still QA
@@ -195,7 +202,11 @@ npx tsx apps/transcribe-md/scripts/template-twin-human-gate/validate-returned-ev
 ```
 
 The validator verifies the package and file hashes, strict JSON schemas,
-source commit, source-document/manifest bindings, reviewer roles, all seven
+source commit, source-document/manifest bindings, exact generated paths,
+save/reopen/export completion, both pinned Open XML results, parseable and
+page-count-matched PDF output, the production OPC/XML/security inspection,
+verification-contract-v2 field identity and occurrence, normalized static
+regions, exact renderer values and control states, reviewer roles, all seven
 physician decisions, required observations, attestations, and evidence
 completeness. It rejects altered files, stale or mismatched SHAs, incomplete
 answers, founder-only clinical approval, and evidence for another document or
@@ -234,7 +245,9 @@ DOCX/PDF test cases. It must never contain:
 - patient data, encounter evidence, production logs, credentials, secrets, or
   production endpoints; or
 - unexpected binaries, macros, embedded objects, custom XML, active fields,
-  external relationships, or unapproved media.
+  external relationships, or unapproved media. The only executable exception
+  is the CI-built desktop Open XML validator at its single allowlisted path and
+  exact manifest-bound SHA-256.
 
 Generation is pinned to the pull request's head SHA. The hygiene gate checks
 allowlisted file types, ZIP/OPC contents, forbidden names, PHI/secret patterns,
