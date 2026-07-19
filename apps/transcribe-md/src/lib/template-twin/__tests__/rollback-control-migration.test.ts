@@ -25,6 +25,13 @@ const linearizationMigration = readFileSync(
   ),
   "utf8",
 );
+const fillIdentityMigration = readFileSync(
+  path.join(
+    ROOT,
+    "packages/db/prisma/migrations/20260719153000_template_twin_fill_identity_immutability_v4/migration.sql",
+  ),
+  "utf8",
+);
 const route = readFileSync(
   path.join(
     ROOT,
@@ -140,6 +147,27 @@ describe("Template Twin rollback-control migration contract", () => {
     ]) {
       expect(linearizationMigration).toContain(evidence);
     }
+  });
+
+  it("makes unsigned fill tenant, visit, and compiled-template lineage immutable", () => {
+    expect(fillIdentityMigration).toMatch(
+      /\bBEGIN;[\s\S]*SET LOCAL lock_timeout = '2s'[\s\S]*\bCOMMIT;\s*$/u,
+    );
+    for (const evidence of [
+      "template_twin_guard_fill_identity_immutable_v4",
+      "aaa_template_twin_fill_identity_immutability_v4",
+      "Template Twin fill identity is immutable",
+      'OLD."practiceId" IS DISTINCT FROM NEW."practiceId"',
+      'OLD."visitId" IS DISTINCT FROM NEW."visitId"',
+      'OLD."compiledVersionId" IS DISTINCT FROM NEW."compiledVersionId"',
+      'OLD."noteTemplateId" IS DISTINCT FROM NEW."noteTemplateId"',
+      'OLD."noteTemplateVersion" IS DISTINCT FROM NEW."noteTemplateVersion"',
+    ]) {
+      expect(fillIdentityMigration).toContain(evidence);
+    }
+    expect(fillIdentityMigration).toMatch(
+      /BEFORE UPDATE OF[\s\S]*"practiceId"[\s\S]*"visitId"[\s\S]*"compiledVersionId"[\s\S]*"noteTemplateId"[\s\S]*"noteTemplateVersion"/u,
+    );
   });
 
   it("binds complete rollback history to exact immutable audit receipts", () => {

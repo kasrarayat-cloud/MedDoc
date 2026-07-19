@@ -14,8 +14,13 @@ const PRACTICE_ID = "synthetic-rollback-fence-practice";
 const ACTOR_ID = "synthetic-rollback-fence-admin";
 const ORDINARY_TEMPLATE_ID = "synthetic-ordinary-template";
 const INACTIVE_TWIN_TEMPLATE_ID = "synthetic-inactive-twin-template";
+const TWIN_SOURCE_ID = "synthetic-rollback-fence-twin-source";
+const TWIN_COMPILED_ID = "synthetic-rollback-fence-twin-compiled";
+const TWIN_FILL_ID = "synthetic-rollback-fence-twin-fill";
 const PATIENT_ID = "synthetic-rollback-fence-patient";
 const VISIT_ID = "synthetic-rollback-fence-visit";
+const TWIN_VISIT_ID = "synthetic-rollback-fence-twin-visit";
+const SYNTHETIC_SHA256 = "a".repeat(64);
 const PREPARE_CANCEL_ID = "573250ae-77b6-4dc7-920d-82f82ac8887c";
 const REVOKE_ID = "bd5c7de8-3490-4aee-a16e-3bb74e3dd072";
 
@@ -135,6 +140,32 @@ async function main(): Promise<void> {
       )
     `;
     await tx.$executeRaw`
+      INSERT INTO "template_twin_source_artifacts" (
+        "id", "practiceId", "createdById", "lineageId", "lineageVersion",
+        "sha256", "mimeType", "sizeBytes", "validationStatus",
+        "rejectionCodes", "createdAt"
+      ) VALUES (
+        ${TWIN_SOURCE_ID}, ${PRACTICE_ID}, ${ACTOR_ID},
+        'synthetic-inactive-twin-lineage', 1, ${SYNTHETIC_SHA256},
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        4096, 'quarantined', ARRAY['SYNTHETIC_ROLLBACK_FIXTURE'],
+        CURRENT_TIMESTAMP
+      )
+    `;
+    await tx.$executeRaw`
+      INSERT INTO "template_twin_compiled_versions" (
+        "id", "sourceArtifactId", "noteTemplateId", "compilerVersion",
+        "irSchemaVersion", "compiledAt", "compiledDocumentIr",
+        "unsupportedElements", "structureSha256", "staticContentSha256",
+        "certificationStatus", "blockingUnsupportedCount"
+      ) VALUES (
+        ${TWIN_COMPILED_ID}, ${TWIN_SOURCE_ID}, ${INACTIVE_TWIN_TEMPLATE_ID},
+        'synthetic-compiler-v1', 1, CURRENT_TIMESTAMP,
+        '{"synthetic":true}'::jsonb, '[]'::jsonb, ${SYNTHETIC_SHA256},
+        ${SYNTHETIC_SHA256}, 'NEEDS_CONFIRMATION', 0
+      )
+    `;
+    await tx.$executeRaw`
       INSERT INTO "transcribe_md_patients" (
         "id", "practiceId", "name", "createdAt", "updatedAt"
       ) VALUES (
@@ -150,6 +181,34 @@ async function main(): Promise<void> {
         ${VISIT_ID}, ${ACTOR_ID}, ${PATIENT_ID}, 'synthetic', 'text_notes',
         'QUEUED', ${ORDINARY_TEMPLATE_ID}, 1,
         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      )
+    `;
+    await tx.$executeRaw`
+      INSERT INTO "transcribe_visits" (
+        "id", "userId", "patientId", "specialty", "inputMode", "status",
+        "noteTemplateId", "noteTemplateVersion", "createdAt", "updatedAt"
+      ) VALUES (
+        ${TWIN_VISIT_ID}, ${ACTOR_ID}, ${PATIENT_ID}, 'synthetic', 'text_notes',
+        'QUEUED', ${INACTIVE_TWIN_TEMPLATE_ID}, 1,
+        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      )
+    `;
+    // A terminal-but-unsigned fill hides its nonterminal Twin visit from the
+    // pinned-without-fill inventory. Reassigning it after PREPARE used to
+    // expose new drain inventory without touching status.
+    await tx.$executeRaw`
+      INSERT INTO "template_twin_fill_manifests" (
+        "id", "practiceId", "visitId", "compiledVersionId",
+        "noteTemplateId", "noteTemplateVersion", "compilerVersion",
+        "resolverVersion", "rendererVersion", "status", "fillManifest",
+        "manifestSha256", "factSetSha256", "validationResult",
+        "createdAt", "updatedAt"
+      ) VALUES (
+        ${TWIN_FILL_ID}, ${PRACTICE_ID}, ${TWIN_VISIT_ID}, ${TWIN_COMPILED_ID},
+        ${INACTIVE_TWIN_TEMPLATE_ID}, 1, 'synthetic-compiler-v1',
+        'synthetic-resolver-v1', 'synthetic-renderer-v1', 'FAILED',
+        '{"synthetic":true}'::jsonb, ${SYNTHETIC_SHA256}, ${SYNTHETIC_SHA256},
+        '{"synthetic":true}'::jsonb, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
       )
     `;
     await tx.$executeRaw`
@@ -310,6 +369,15 @@ async function main(): Promise<void> {
         WHERE "id" = 'global'
       `,
     "Template Twin rollback fence metadata cannot change without a transition",
+  );
+  await expectDatabaseRejection(
+    () =>
+      prisma.$executeRaw`
+        UPDATE "template_twin_fill_manifests"
+        SET "visitId" = ${VISIT_ID}, "updatedAt" = CURRENT_TIMESTAMP
+        WHERE "id" = ${TWIN_FILL_ID}
+      `,
+    "Template Twin fill identity is immutable",
   );
 
   const preparedEventKey = `template-twin:rollback:${REVOKE_ID}:prepared`;
@@ -528,6 +596,7 @@ async function main(): Promise<void> {
       fenceMetadataImmutable: true,
       auditDeliveryComplete: true,
       exactAuditReceiptsImmutable: true,
+      unsignedFillIdentityImmutable: true,
       concurrentPinnedVisitBlocked: true,
       finalClaimBlocked: true,
       directEnableBlocked: true,
