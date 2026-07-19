@@ -227,6 +227,7 @@ export async function drainTemplateTwinAuditOutbox(input: {
       await input.prisma.$transaction(async (tx) => {
         await tx.auditLog.create({
           data: {
+            templateTwinOutboxEventKey: row.eventKey,
             userId: row.actorId,
             userEmailSnapshot: row.actorEmailSnapshot,
             action: row.action,

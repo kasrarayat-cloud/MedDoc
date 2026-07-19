@@ -1,4 +1,5 @@
 import prisma from "@meddoc/db";
+import { Client } from "pg";
 
 import {
   cancelPreparedTemplateTwinRollback,
@@ -12,6 +13,9 @@ import { lockTemplateTwinRolloutForFinalClaim } from "../../../apps/transcribe-m
 const PRACTICE_ID = "synthetic-rollback-fence-practice";
 const ACTOR_ID = "synthetic-rollback-fence-admin";
 const ORDINARY_TEMPLATE_ID = "synthetic-ordinary-template";
+const INACTIVE_TWIN_TEMPLATE_ID = "synthetic-inactive-twin-template";
+const PATIENT_ID = "synthetic-rollback-fence-patient";
+const VISIT_ID = "synthetic-rollback-fence-visit";
 const PREPARE_CANCEL_ID = "573250ae-77b6-4dc7-920d-82f82ac8887c";
 const REVOKE_ID = "bd5c7de8-3490-4aee-a16e-3bb74e3dd072";
 
@@ -48,6 +52,26 @@ async function expectDatabaseRejection(
   assert(
     rejection instanceof Error && rejection.message.includes(expectedMessage),
     `A rollback-integrity probe did not fail with the expected database guard: ${expectedMessage}`,
+  );
+}
+
+async function expectAnyDatabaseRejection(
+  operation: () => Promise<unknown>,
+  description: string,
+): Promise<void> {
+  let rejection: unknown;
+  const originalConsoleError = console.error;
+  console.error = () => undefined;
+  try {
+    await operation();
+  } catch (error) {
+    rejection = error;
+  } finally {
+    console.error = originalConsoleError;
+  }
+  assert(
+    rejection instanceof Error,
+    `A rollback-integrity probe unexpectedly succeeded: ${description}`,
   );
 }
 
@@ -94,6 +118,37 @@ async function main(): Promise<void> {
         ${ORDINARY_TEMPLATE_ID}, ${ACTOR_ID}, 'Synthetic ordinary SOAP',
         '[]'::jsonb, 1, 'Synthetic rollback continuity control', 'active',
         false, 'synthetic-ordinary-lineage', 'structured',
+        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      )
+    `;
+    await tx.$executeRaw`
+      INSERT INTO "note_templates" (
+        "id", "doctorId", "name", "sections", "version",
+        "versionDescription", "status", "isSystemDefault", "lineageId",
+        "templateKind", "createdAt", "updatedAt"
+      ) VALUES (
+        ${INACTIVE_TWIN_TEMPLATE_ID}, ${ACTOR_ID},
+        'Synthetic inactive Twin boundary', '[]'::jsonb, 1,
+        'Synthetic rollback concurrency boundary', 'inactive', false,
+        'synthetic-inactive-twin-lineage', 'template_twin_docx',
+        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      )
+    `;
+    await tx.$executeRaw`
+      INSERT INTO "transcribe_md_patients" (
+        "id", "practiceId", "name", "createdAt", "updatedAt"
+      ) VALUES (
+        ${PATIENT_ID}, ${PRACTICE_ID}, 'Reserved Synthetic Identity',
+        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      )
+    `;
+    await tx.$executeRaw`
+      INSERT INTO "transcribe_visits" (
+        "id", "userId", "patientId", "specialty", "inputMode", "status",
+        "noteTemplateId", "noteTemplateVersion", "createdAt", "updatedAt"
+      ) VALUES (
+        ${VISIT_ID}, ${ACTOR_ID}, ${PATIENT_ID}, 'synthetic', 'text_notes',
+        'QUEUED', ${ORDINARY_TEMPLATE_ID}, 1,
         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
       )
     `;
@@ -194,12 +249,12 @@ async function main(): Promise<void> {
       `,
     "Template Twin rollout singleton cannot be deleted",
   );
-  await expectDatabaseRejection(
+  await expectAnyDatabaseRejection(
     () =>
       prisma.$executeRaw`
         TRUNCATE TABLE "template_twin_rollback_operations"
       `,
-    "Template Twin rollback control history cannot be truncated",
+    "rollback operation history truncate",
   );
   await expectDatabaseRejection(
     () =>
@@ -257,10 +312,63 @@ async function main(): Promise<void> {
     "Template Twin rollback fence metadata cannot change without a transition",
   );
 
-  const revoked = await revokeTemplateTwinRollout({
-    operationId: REVOKE_ID,
-    actor,
-  });
+  const preparedEventKey = `template-twin:rollback:${REVOKE_ID}:prepared`;
+  await expectDatabaseRejection(
+    () =>
+      prisma.$executeRaw`
+        DELETE FROM "template_twin_audit_outbox"
+        WHERE "eventKey" = ${preparedEventKey}
+      `,
+    "Template Twin rollback outbox evidence cannot be deleted",
+  );
+  await expectDatabaseRejection(
+    () =>
+      prisma.$executeRaw`
+        UPDATE "template_twin_audit_outbox"
+        SET "eventKey" = ${`${preparedEventKey}:tampered`}
+        WHERE "eventKey" = ${preparedEventKey}
+      `,
+    "Template Twin rollback outbox identity is immutable",
+  );
+  await expectDatabaseRejection(
+    () =>
+      prisma.$executeRaw`
+        UPDATE "template_twin_audit_outbox"
+        SET "status" = 'DELIVERED',
+            "deliveredAt" = CURRENT_TIMESTAMP,
+            "updatedAt" = CURRENT_TIMESTAMP
+        WHERE "eventKey" = ${preparedEventKey}
+      `,
+    "Template Twin delivered rollback audit receipt is missing",
+  );
+
+  const databaseUrl = process.env.DATABASE_URL!;
+  const concurrentClient = new Client({ connectionString: databaseUrl });
+  await concurrentClient.connect();
+  const [revocationRace, pinnedVisitRace] = await Promise.allSettled([
+    revokeTemplateTwinRollout({ operationId: REVOKE_ID, actor }),
+    concurrentClient.query(
+      `UPDATE "transcribe_visits"
+       SET "noteTemplateId" = $1, "noteTemplateVersion" = 1,
+           "updatedAt" = CURRENT_TIMESTAMP
+       WHERE "id" = $2`,
+      [INACTIVE_TWIN_TEMPLATE_ID, VISIT_ID],
+    ),
+  ]);
+  await concurrentClient.end();
+  assert(
+    revocationRace.status === "fulfilled",
+    "Concurrent rollback revocation did not complete.",
+  );
+  assert(
+    pinnedVisitRace.status === "rejected" &&
+      pinnedVisitRace.reason instanceof Error &&
+      pinnedVisitRace.reason.message.includes(
+        "Template Twin pinned visit cannot start while rollback is fenced",
+      ),
+    "A concurrent Twin-pinned visit crossed the rollback fence.",
+  );
+  const revoked = revocationRace.value;
   const repeated = await revokeTemplateTwinRollout({
     operationId: REVOKE_ID,
     actor,
@@ -330,12 +438,37 @@ async function main(): Promise<void> {
     completed.rollbackComplete,
     "Synthetic rollback did not complete after audit delivery and reconciliation.",
   );
+  assert(
+    completed.inventory.missingRollbackAuditReceipts === 0,
+    "Rollback completion retained missing exact audit receipts.",
+  );
+  await expectDatabaseRejection(
+    () =>
+      prisma.$executeRaw`
+        DELETE FROM "audit_logs"
+        WHERE "templateTwinOutboxEventKey" = ${preparedEventKey}
+      `,
+    "Template Twin rollback audit receipt cannot be deleted",
+  );
+  await expectDatabaseRejection(
+    () =>
+      prisma.$executeRaw`
+        DELETE FROM "template_twin_audit_outbox"
+        WHERE "eventKey" = ${preparedEventKey}
+      `,
+    "Template Twin rollback outbox evidence cannot be deleted",
+  );
+  await expectDatabaseRejection(
+    () => prisma.$executeRaw`TRUNCATE TABLE "audit_logs"`,
+    "Template Twin rollback audit evidence cannot be truncated",
+  );
 
   const rows = await prisma.$queryRaw<
     Array<{
       ordinaryStatus: string;
       auditCount: bigint;
       rollbackEventCount: bigint;
+      exactReceiptCount: bigint;
       actorEmailCount: bigint;
       appliedMigrationCount: bigint;
     }>
@@ -351,6 +484,9 @@ async function main(): Promise<void> {
          'TEMPLATE_TWIN_ROLLBACK_CANCELLED',
          'TEMPLATE_TWIN_ROLLOUT_REVOKED'
        )) AS "rollbackEventCount",
+      (SELECT COUNT(*)::bigint FROM "audit_logs"
+       WHERE "templateTwinOutboxEventKey" LIKE
+         ${`template-twin:rollback:${REVOKE_ID}:%`}) AS "exactReceiptCount",
       (SELECT COUNT(*)::bigint FROM "template_twin_audit_outbox"
        WHERE "actorEmailSnapshot" = 'rollback-fence-admin@synthetic.test')
         AS "actorEmailCount",
@@ -364,6 +500,10 @@ async function main(): Promise<void> {
   assert(
     evidence.rollbackEventCount === BigInt(4),
     "Rollback audit events are incomplete.",
+  );
+  assert(
+    evidence.exactReceiptCount === BigInt(3),
+    "Revoked operation audit receipts are not exactly linked.",
   );
   assert(
     evidence.actorEmailCount === evidence.auditCount,
@@ -381,11 +521,14 @@ async function main(): Promise<void> {
       repeatedRevokeIdempotent: true,
       operationHistoryImmutable: true,
       operationFenceCouplingEnforced: true,
+      completeOperationAuditHistoryEnforced: true,
       rolloutSingletonImmutable: true,
       rollbackTruncateBlocked: true,
       activeVersionFenceEnforced: true,
       fenceMetadataImmutable: true,
       auditDeliveryComplete: true,
+      exactAuditReceiptsImmutable: true,
+      concurrentPinnedVisitBlocked: true,
       finalClaimBlocked: true,
       directEnableBlocked: true,
       productionMutation: false,

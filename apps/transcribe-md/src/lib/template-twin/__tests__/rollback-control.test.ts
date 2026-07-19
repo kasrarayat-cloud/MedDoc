@@ -34,6 +34,7 @@ function emptyInventory(
     providerExecutionsInFlight: 0,
     providerExecutionsUnknown: 0,
     pendingAuditOutboxEvents: 0,
+    missingRollbackAuditReceipts: 0,
     objectMaintenanceBacklog: 0,
     ...overrides,
   };
@@ -197,6 +198,9 @@ class FakeRollbackStore {
       this.inventory = {
         ...this.inventory,
         pendingAuditOutboxEvents: this.inventory.pendingAuditOutboxEvents + 1,
+        missingRollbackAuditReceipts:
+          this.inventory.missingRollbackAuditReceipts +
+          (input.targetType === "TemplateTwinRollbackOperation" ? 1 : 0),
       };
     },
   };
@@ -355,6 +359,7 @@ describe("Template Twin rollback fence operation", () => {
     store.inventory = {
       ...store.inventory,
       pendingAuditOutboxEvents: 0,
+      missingRollbackAuditReceipts: 0,
     };
     const repeated = await revokeTemplateTwinRollout({
       operationId: OPERATION_ID,
@@ -397,6 +402,7 @@ describe("Template Twin rollback fence operation", () => {
     store.inventory = {
       ...store.inventory,
       objectMaintenanceBacklog: 0,
+      missingRollbackAuditReceipts: 0,
     };
     const reconciled = await revokeTemplateTwinRollout({
       operationId: OPERATION_ID,
@@ -404,6 +410,41 @@ describe("Template Twin rollback fence operation", () => {
       dependencies: store.dependencies(),
     });
     expect(reconciled.status.rollbackComplete).toBe(true);
+  });
+
+  it("requires exact delivered rollback audit receipts after the outbox drains", async () => {
+    const store = new FakeRollbackStore();
+    await prepare(store);
+    await revokeTemplateTwinRollout({
+      operationId: OPERATION_ID,
+      actor,
+      dependencies: store.dependencies(),
+    });
+    store.inventory = {
+      ...store.inventory,
+      pendingAuditOutboxEvents: 0,
+    };
+
+    const missingReceipt = await revokeTemplateTwinRollout({
+      operationId: OPERATION_ID,
+      actor,
+      dependencies: store.dependencies(),
+    });
+    expect(missingReceipt.status.rollbackComplete).toBe(false);
+    expect(
+      missingReceipt.status.inventory.missingRollbackAuditReceipts,
+    ).toBe(2);
+
+    store.inventory = {
+      ...store.inventory,
+      missingRollbackAuditReceipts: 0,
+    };
+    const delivered = await revokeTemplateTwinRollout({
+      operationId: OPERATION_ID,
+      actor,
+      dependencies: store.dependencies(),
+    });
+    expect(delivered.status.rollbackComplete).toBe(true);
   });
 
   it("cancels only a prepared fence without changing global or practice rollout", async () => {

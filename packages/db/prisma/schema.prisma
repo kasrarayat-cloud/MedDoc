@@ -1158,6 +1158,11 @@ model Document {
 model AuditLog {
   id String @id @default(cuid())
 
+  /// Exact durable Template Twin outbox event delivered into this immutable
+  /// receipt. Nullable for direct and pre-v3 audit rows.
+  templateTwinOutboxEventKey String?                  @unique(map: "audit_logs_template_twin_outbox_event_key")
+  templateTwinOutbox         TemplateTwinAuditOutbox? @relation("TemplateTwinAuditDelivery", fields: [templateTwinOutboxEventKey], references: [eventKey], onDelete: Restrict, onUpdate: Restrict)
+
   // WHO — nullable because auth-failure events have no authenticated user yet
   userId            String?
   user              User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
@@ -3313,6 +3318,7 @@ model TemplateTwinAuditOutbox {
   updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
 
   staticAssetDecision TemplateTwinStaticAssetDecision? @relation("TemplateTwinStaticAssetDecisionAudit")
+  auditLog            AuditLog?                        @relation("TemplateTwinAuditDelivery")
 
   @@index([status, availableAt])
   @@index([practiceId, createdAt])

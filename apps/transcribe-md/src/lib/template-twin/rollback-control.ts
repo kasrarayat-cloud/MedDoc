@@ -44,6 +44,7 @@ export interface TemplateTwinRollbackInventory {
   readonly providerExecutionsInFlight: number;
   readonly providerExecutionsUnknown: number;
   readonly pendingAuditOutboxEvents: number;
+  readonly missingRollbackAuditReceipts: number;
   readonly objectMaintenanceBacklog: number;
 }
 
@@ -132,6 +133,7 @@ interface InventoryRow {
   readonly providerExecutionsInFlight: bigint | number | string;
   readonly providerExecutionsUnknown: bigint | number | string;
   readonly pendingAuditOutboxEvents: bigint | number | string;
+  readonly missingRollbackAuditReceipts: bigint | number | string;
   readonly objectMaintenanceBacklog: bigint | number | string;
 }
 
@@ -331,6 +333,7 @@ async function statusFrom(
       inventory.reviewPendingFills === 0 &&
       inventory.pinnedTemplateTwinVisitsWithoutFill === 0 &&
       inventory.pendingAuditOutboxEvents === 0 &&
+      inventory.missingRollbackAuditReceipts === 0 &&
       inventory.objectMaintenanceBacklog === 0,
   };
 }
@@ -862,6 +865,58 @@ async function readInventory(
        WHERE "status" <> 'DELIVERED')
         AS "pendingAuditOutboxEvents",
       (SELECT COUNT(*)::bigint
+       FROM (
+         SELECT
+           operation."id", operation."actorPracticeId",
+           operation."requestedById", operation."actorEmailSnapshot",
+           'prepared'::text AS "stage",
+           'TEMPLATE_TWIN_ROLLBACK_PREPARED'::"AuditAction" AS "action"
+         FROM "template_twin_rollback_operations" operation
+         UNION ALL
+         SELECT
+           operation."id", operation."actorPracticeId",
+           operation."requestedById", operation."actorEmailSnapshot",
+           CASE operation."state"
+             WHEN 'CANCELLED' THEN 'cancelled'
+             WHEN 'REVOKED' THEN 'revoked'
+           END,
+           CASE operation."state"
+             WHEN 'CANCELLED' THEN
+               'TEMPLATE_TWIN_ROLLBACK_CANCELLED'::"AuditAction"
+             WHEN 'REVOKED' THEN
+               'TEMPLATE_TWIN_ROLLOUT_REVOKED'::"AuditAction"
+           END
+         FROM "template_twin_rollback_operations" operation
+         WHERE operation."state" IN ('CANCELLED', 'REVOKED')
+       ) expected
+       WHERE NOT EXISTS (
+         SELECT 1
+         FROM "template_twin_audit_outbox" outbox
+         JOIN "audit_logs" audit
+           ON audit."templateTwinOutboxEventKey" = outbox."eventKey"
+         WHERE outbox."eventKey" =
+             'template-twin:rollback:' || expected."id"::text || ':' ||
+             expected."stage"
+           AND outbox."status" = 'DELIVERED'
+           AND outbox."deliveredAt" IS NOT NULL
+           AND outbox."action" = expected."action"
+           AND outbox."targetType" = 'TemplateTwinRollbackOperation'
+           AND outbox."targetId" = expected."id"::text
+           AND outbox."practiceId" = expected."actorPracticeId"
+           AND outbox."actorId" = expected."requestedById"
+           AND outbox."actorEmailSnapshot" IS NOT DISTINCT FROM
+             expected."actorEmailSnapshot"
+           AND audit."action" = outbox."action"
+           AND audit."targetType" = outbox."targetType"
+           AND audit."targetId" = outbox."targetId"
+           AND audit."practiceId" = outbox."practiceId"
+           AND audit."userId" IS NOT DISTINCT FROM outbox."actorId"
+           AND audit."userEmailSnapshot" IS NOT DISTINCT FROM
+             outbox."actorEmailSnapshot"
+           AND audit."success" = true
+           AND audit."errorCode" IS NULL
+       )) AS "missingRollbackAuditReceipts",
+      (SELECT COUNT(*)::bigint
        FROM "template_twin_object_ledgers"
        WHERE "state" IN ('INTENT', 'WRITTEN_UNCLAIMED', 'PURGE_PENDING', 'FAILED'))
         AS "objectMaintenanceBacklog"
@@ -892,6 +947,9 @@ async function readInventory(
     providerExecutionsInFlight: exactCount(row.providerExecutionsInFlight),
     providerExecutionsUnknown: exactCount(row.providerExecutionsUnknown),
     pendingAuditOutboxEvents: exactCount(row.pendingAuditOutboxEvents),
+    missingRollbackAuditReceipts: exactCount(
+      row.missingRollbackAuditReceipts,
+    ),
     objectMaintenanceBacklog: exactCount(row.objectMaintenanceBacklog),
   };
 }
@@ -902,7 +960,12 @@ function snapshotJson(status: TemplateTwinRollbackStatus): string {
 
 function prismaTransaction(client: PrismaRollbackClient): RollbackTransaction {
   return {
-    lockControl: () => readControl(client, true),
+    async lockControl() {
+      await client.$executeRaw(Prisma.sql`
+        SELECT template_twin_acquire_rollback_linearization_lock()
+      `);
+      return readControl(client, true);
+    },
     async lockSuperAdminActor(actor) {
       const rows = await client.$queryRaw<TemplateTwinRollbackActor[]>(
         Prisma.sql`
@@ -1116,9 +1179,14 @@ const defaultDependencies: TemplateTwinRollbackDependencies = {
       { isolationLevel: "Serializable" },
     ),
   inspect: async () => {
-    const client = prisma as unknown as PrismaRollbackClient;
-    const tx = prismaTransaction(client);
-    const control = await readControl(client, false);
-    return statusFrom(tx, control);
+    return prisma.$transaction(
+      async (client: Prisma.TransactionClient) => {
+        const rollbackClient = client as unknown as PrismaRollbackClient;
+        const tx = prismaTransaction(rollbackClient);
+        const control = await readControl(rollbackClient, false);
+        return statusFrom(tx, control);
+      },
+      { isolationLevel: "RepeatableRead" },
+    );
   },
 };

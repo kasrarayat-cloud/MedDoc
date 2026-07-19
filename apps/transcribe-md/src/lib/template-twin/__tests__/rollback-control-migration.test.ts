@@ -18,6 +18,13 @@ const integrityMigration = readFileSync(
   ),
   "utf8",
 );
+const linearizationMigration = readFileSync(
+  path.join(
+    ROOT,
+    "packages/db/prisma/migrations/20260719150000_template_twin_rollback_fence_linearization_v3/migration.sql",
+  ),
+  "utf8",
+);
 const route = readFileSync(
   path.join(
     ROOT,
@@ -113,6 +120,45 @@ describe("Template Twin rollback-control migration contract", () => {
     ]) {
       expect(integrityMigration).toContain(evidence);
     }
+  });
+
+  it("linearizes every drain-inventory entry path with the rollback control", () => {
+    expect(linearizationMigration).toMatch(
+      /\bBEGIN;[\s\S]*\bCOMMIT;\s*$/u,
+    );
+    for (const evidence of [
+      "template_twin_acquire_rollback_linearization_lock",
+      "pg_advisory_xact_lock(73119, 20260719)",
+      "aaa_template_twin_rollout_control_linearization_lock",
+      "aa_template_twin_practice_rollback_insert_guard",
+      "aa_template_twin_fill_rollback_insert_guard",
+      "aa_template_twin_visit_rollback_insert_guard",
+      "aa_template_twin_synthetic_run_rollback_insert_guard",
+      "aa_template_twin_synthetic_admission_rollback_insert_guard",
+      "aa_template_twin_manifest_rollback_insert_guard",
+      "aa_template_twin_provider_rollback_insert_guard",
+    ]) {
+      expect(linearizationMigration).toContain(evidence);
+    }
+  });
+
+  it("binds complete rollback history to exact immutable audit receipts", () => {
+    for (const evidence of [
+      'ADD COLUMN "templateTwinOutboxEventKey" TEXT',
+      "audit_logs_template_twin_outbox_event_fkey",
+      "Template Twin rollback outbox evidence cannot be deleted",
+      "Template Twin delivered rollback receipt is immutable",
+      "Template Twin rollback audit receipt cannot be deleted",
+      "Template Twin rollback audit evidence cannot be truncated",
+      "Template Twin delivered rollback audit receipt is missing",
+      "Template Twin rollback operation audit history is incomplete",
+      "'prepared'::TEXT AS stage",
+      "WHERE operation.\"state\" IN ('CANCELLED', 'REVOKED')",
+    ]) {
+      expect(linearizationMigration).toContain(evidence);
+    }
+    expect(service).toContain("missingRollbackAuditReceipts");
+    expect(service).toContain('isolationLevel: "RepeatableRead"');
   });
 
   it("does not mutate visits, fills, signed evidence, audit history, or object lineage", () => {

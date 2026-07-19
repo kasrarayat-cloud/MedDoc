@@ -154,6 +154,7 @@ describe("Template Twin durable audit outbox", () => {
     });
     expect(auditCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({
+        templateTwinOutboxEventKey: event.eventKey,
         action: event.action,
         practiceId: event.practiceId,
         metadata: event.metadata,
