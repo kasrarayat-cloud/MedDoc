@@ -28,6 +28,11 @@ describe("admin-host MFA recovery contract", () => {
       /completionHref=\{isAdminHost \? ["']\/admin["'] : ["']\/settings["']\}/u,
     );
     expect(page).toContain("isPlatformAdmin={user.products.includes");
+    expect(page).toContain("mfaSecret: true");
+    expect(page).toContain("hasInconsistentMfaEnrollment");
+    expect(page).toContain(
+      "MFA configuration requires controlled repair",
+    );
   });
 
   it("uses the strict host validator for both post-login paths", () => {

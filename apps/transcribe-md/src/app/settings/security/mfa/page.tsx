@@ -7,7 +7,8 @@
 //
 // Server-rendered shell that decides which client surface to mount:
 //   - mfaEnabled=false → enrollment flow (QR + 6-digit verify + recovery codes)
-//   - mfaEnabled=true  → "MFA is on" panel + disable + re-issue recovery codes
+//   - complete enrollment → "MFA is on" panel (platform admins cannot disable)
+//   - inconsistent enabled record → fail-closed controlled-repair guidance
 //
 // SUPER_ADMINs land here automatically when they reach /admin/* without
 // an enrolled factor — see admin/layout.tsx redirect path. The
@@ -63,6 +64,7 @@ export default async function MfaSettingsPage({
       email: true,
       products: true,
       mfaEnabled: true,
+      mfaSecret: true,
       mfaVerifiedAt: true,
     },
   });
@@ -72,9 +74,13 @@ export default async function MfaSettingsPage({
   }
 
   const params = await searchParams;
+  const hasCompleteMfaEnrollment =
+    user.mfaEnabled && !!user.mfaSecret && user.mfaVerifiedAt !== null;
+  const hasInconsistentMfaEnrollment =
+    user.mfaEnabled && !hasCompleteMfaEnrollment;
   const isSuperAdminGated =
     isAdminHost ||
-    (params.reason === "super_admin_required" && !user.mfaEnabled);
+    (params.reason === "super_admin_required" && !hasCompleteMfaEnrollment);
 
   const content = (
     <div
@@ -84,7 +90,7 @@ export default async function MfaSettingsPage({
         padding: "24px 24px 80px",
       }}
     >
-      {isSuperAdminGated && !user.mfaEnabled && (
+      {isSuperAdminGated && !hasCompleteMfaEnrollment && (
         <div
           role="alert"
           style={{
@@ -134,7 +140,43 @@ export default async function MfaSettingsPage({
         </p>
       </header>
 
-      {isAdminHost && user.mfaEnabled ? (
+      {hasInconsistentMfaEnrollment ? (
+        <section
+          role="alert"
+          style={{
+            background: "var(--color-linear-surface-1)",
+            border: "1px solid rgba(212, 165, 116, 0.36)",
+            borderRadius: 10,
+            padding: 22,
+          }}
+        >
+          <h2
+            style={{
+              margin: "0 0 8px",
+              color: "var(--color-linear-text)",
+              fontFamily: "var(--font-sans)",
+              fontSize: 16,
+              fontWeight: 600,
+            }}
+          >
+            MFA configuration requires controlled repair
+          </h2>
+          <p
+            style={{
+              margin: 0,
+              color: "var(--color-linear-text-2)",
+              fontFamily: "var(--font-sans)",
+              fontSize: 13,
+              lineHeight: 1.55,
+            }}
+          >
+            Administrative access remains blocked because the enrolled-factor
+            record is incomplete. Sign out and contact the designated security
+            or operations owner. This page cannot disable, replace, or infer
+            the missing factor.
+          </p>
+        </section>
+      ) : isAdminHost && hasCompleteMfaEnrollment ? (
         <section
           style={{
             background: "var(--color-linear-surface-1)",
@@ -158,7 +200,7 @@ export default async function MfaSettingsPage({
             Continue to admin
           </Link>
         </section>
-      ) : user.mfaEnabled ? (
+      ) : hasCompleteMfaEnrollment ? (
         <MfaManagementPanel
           isPlatformAdmin={user.products.includes(Product.SUPER_ADMIN)}
           verifiedAt={user.mfaVerifiedAt?.toISOString() ?? null}
