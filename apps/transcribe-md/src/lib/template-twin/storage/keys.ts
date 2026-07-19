@@ -6,7 +6,11 @@ export const DOCX_MIME_TYPE =
 export const DEFAULT_TEMPLATE_TWIN_BUCKET =
   'transcribe-md-template-artifacts';
 
-export type TemplateTwinArtifactKind = 'quarantine' | 'source' | 'output';
+export type TemplateTwinArtifactKind =
+  | 'quarantine'
+  | 'candidate'
+  | 'source'
+  | 'output';
 
 const SAFE_OPAQUE_ID = /^[A-Za-z0-9_-]{1,128}$/;
 const SHA256 = /^[a-f0-9]{64}$/;
@@ -111,6 +115,34 @@ export function createQuarantineArtifactKey({
   const objectId = assertOpaqueId(idFactory(), 'artifactId');
   const digest = assertSha256(sha256);
   return `${prefix}/quarantine/${lineage}/v${lineageVersion}/${objectId}/${digest}.docx`;
+}
+
+export interface CreateCandidateArtifactKeyInput {
+  practiceId: string;
+  candidateId: string;
+  candidateVersion: number;
+  sha256: string;
+  /** Test seam only. Production callers leave this unset and receive a UUID. */
+  idFactory?: () => string;
+}
+
+export function createCandidateArtifactKey({
+  practiceId,
+  candidateId,
+  candidateVersion,
+  sha256,
+  idFactory = randomUUID,
+}: CreateCandidateArtifactKeyInput): string {
+  if (!Number.isSafeInteger(candidateVersion) || candidateVersion < 1) {
+    throw new InvalidTemplateTwinStorageInputError(
+      'candidateVersion must be a positive integer.'
+    );
+  }
+  const prefix = templateTwinTenantPrefix(practiceId);
+  const candidate = assertOpaqueId(candidateId, 'candidateId');
+  const objectId = assertOpaqueId(idFactory(), 'artifactId');
+  const digest = assertSha256(sha256);
+  return `${prefix}/candidates/${candidate}/v${candidateVersion}/${objectId}/${digest}.docx`;
 }
 
 export interface CreateOutputArtifactKeyInput {

@@ -53,6 +53,7 @@ import {
   evaluateTemplateTwinStagingQaGate,
   isTemplateTwinStagingQaRequested,
 } from "@/lib/template-twin/staging-qa-gate";
+import { completedCandidateSyntheticModeEnabled } from "@/lib/template-twin/completed-candidate-access";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -163,6 +164,15 @@ export default async function SettingsPage() {
     evaluateTemplateTwinRollout({
       practiceEnabled: user.practice.templateTwinEnabled,
     }).allowed;
+  const canCreateCompletedCandidate =
+    templateTwinUiEnabled &&
+    !templateTwinStagingQaRequested &&
+    completedCandidateSyntheticModeEnabled(process.env) &&
+    user.role === "DOCTOR" &&
+    user.practice !== null &&
+    evaluateTemplateTwinRollout({
+      practiceEnabled: user.practice.templateTwinEnabled,
+    }).allowed;
   const templateTwinSyntheticQaState: "enabled" | "unavailable" | "hidden" =
     !templateTwinUiEnabled || user.role !== "DOCTOR"
       ? "hidden"
@@ -264,6 +274,7 @@ export default async function SettingsPage() {
         content: (
           <>
             {canManageTemplateTwinStaticAssets && <StaticAssetSettingsLink />}
+            {canCreateCompletedCandidate && <CompletedCandidateSettingsLink />}
             <NoteFormatManager
               templates={noteTemplates}
               uploadCaps={uploadCaps}
@@ -677,6 +688,7 @@ export default async function SettingsPage() {
             title="My Note Format"
           >
             {canManageTemplateTwinStaticAssets && <StaticAssetSettingsLink />}
+            {canCreateCompletedCandidate && <CompletedCandidateSettingsLink />}
             <NoteFormatManager
               templates={noteTemplates}
               uploadCaps={uploadCaps}
@@ -952,6 +964,58 @@ function StaticAssetSettingsLink() {
         style={{ textDecoration: "none" }}
       >
         Review practice images
+      </Link>
+    </div>
+  );
+}
+
+function CompletedCandidateSettingsLink() {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 16,
+        flexWrap: "wrap",
+        marginBottom: 16,
+        padding: "13px 14px",
+        border: "1px solid rgba(212,165,116,0.34)",
+        borderRadius: 8,
+        background: "rgba(212,165,116,0.06)",
+      }}
+    >
+      <div style={{ minWidth: 220, flex: 1 }}>
+        <div
+          style={{
+            color: "var(--color-linear-text)",
+            fontFamily: "var(--font-sans)",
+            fontSize: 13,
+            fontWeight: 560,
+          }}
+        >
+          Completed examples → blank candidate
+        </div>
+        <p
+          style={{
+            margin: "4px 0 0",
+            color: "var(--color-linear-text-2)",
+            fontFamily: "var(--font-sans)",
+            fontSize: 12,
+            lineHeight: 1.5,
+          }}
+        >
+          Synthetic review mode only. Compare two or three structurally
+          identical examples, approve every detected region, then download a new
+          blank DOCX for the ordinary certification workflow.
+        </p>
+      </div>
+      <Link
+        className="qm-lin-btn qm-tap-44"
+        href="/settings/note-format/completed-candidate"
+        style={{ textDecoration: "none" }}
+      >
+        Convert synthetic examples
       </Link>
     </div>
   );

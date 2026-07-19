@@ -535,6 +535,8 @@ function storage(
     bucket: "synthetic-private-bucket",
     storeQuarantineArtifact: vi.fn(),
     readQuarantineArtifact: vi.fn(),
+    storeCandidateArtifact: vi.fn(),
+    readCandidateArtifact: vi.fn(),
     storeSourceArtifact: vi.fn(),
     readOutputArtifact: vi.fn(),
     readSourceArtifact: vi.fn(async () => Buffer.alloc(20, 1)),

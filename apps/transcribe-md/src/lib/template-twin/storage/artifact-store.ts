@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import {
+  createCandidateArtifactKey,
   createOutputArtifactKey,
   createQuarantineArtifactKey,
   createSourceArtifactKey,
@@ -122,6 +123,13 @@ export interface StoreQuarantineArtifactInput {
   bytes: Buffer | Uint8Array;
 }
 
+export interface StoreCandidateArtifactInput {
+  practiceId: string;
+  candidateId: string;
+  candidateVersion: number;
+  bytes: Buffer | Uint8Array;
+}
+
 export interface StoreOutputArtifactInput {
   practiceId: string;
   visitId: string;
@@ -141,9 +149,11 @@ export interface ReadArtifactInput {
 export interface TemplateTwinArtifactStore {
   readonly bucket: string;
   storeQuarantineArtifact(input: StoreQuarantineArtifactInput): Promise<StoredTemplateTwinArtifact>;
+  storeCandidateArtifact(input: StoreCandidateArtifactInput): Promise<StoredTemplateTwinArtifact>;
   storeSourceArtifact(input: StoreSourceArtifactInput): Promise<StoredTemplateTwinArtifact>;
   storeOutputArtifact(input: StoreOutputArtifactInput): Promise<StoredTemplateTwinArtifact>;
   readQuarantineArtifact(input: ReadArtifactInput): Promise<Buffer>;
+  readCandidateArtifact(input: ReadArtifactInput): Promise<Buffer>;
   readSourceArtifact(input: ReadArtifactInput): Promise<Buffer>;
   readOutputArtifact(input: ReadArtifactInput): Promise<Buffer>;
 }
@@ -642,6 +652,26 @@ export function createTemplateTwinArtifactStore(
         kind: 'source',
       });
     },
+    async storeCandidateArtifact(
+      input: StoreCandidateArtifactInput
+    ): Promise<StoredTemplateTwinArtifact> {
+      const bytes = asBuffer(input.bytes);
+      const digest = sha256(bytes);
+      const objectKey = createCandidateArtifactKey({
+        practiceId: input.practiceId,
+        candidateId: input.candidateId,
+        candidateVersion: input.candidateVersion,
+        sha256: digest,
+        ...(idFactory ? { idFactory } : {}),
+      });
+      return putOnce({
+        practiceId: input.practiceId,
+        objectKey,
+        bytes,
+        digest,
+        kind: 'candidate',
+      });
+    },
     async storeOutputArtifact(
       input: StoreOutputArtifactInput
     ): Promise<StoredTemplateTwinArtifact> {
@@ -667,6 +697,9 @@ export function createTemplateTwinArtifactStore(
     },
     readQuarantineArtifact(input: ReadArtifactInput): Promise<Buffer> {
       return readVerified(input, 'quarantine');
+    },
+    readCandidateArtifact(input: ReadArtifactInput): Promise<Buffer> {
+      return readVerified(input, 'candidate');
     },
     readOutputArtifact(input: ReadArtifactInput): Promise<Buffer> {
       return readVerified(input, 'output');

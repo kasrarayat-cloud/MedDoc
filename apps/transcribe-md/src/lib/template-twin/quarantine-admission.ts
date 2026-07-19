@@ -432,3 +432,65 @@ export async function admitTemplateTwinQuarantine(input: {
     },
   });
 }
+
+/**
+ * Terminally isolates a completed-document example without admitting it as a
+ * reusable source. The immutable raw object remains in quarantine; only the
+ * metadata-minimized digest and PHI-safe structural receipts are linked to a
+ * newly generated candidate.
+ */
+export async function isolateCompletedExampleQuarantine(input: {
+  tx: Prisma.TransactionClient;
+  receipt: TemplateTwinQuarantineReceipt;
+  actor: TemplateTwinIntakeActor;
+  candidateId: string;
+  metadataEvidence: TemplateTwinMetadataEvidence;
+}): Promise<void> {
+  if (input.receipt.intakeMode !== "COMPLETED_EXAMPLE") {
+    throw new TemplateTwinQuarantineError(
+      "TEMPLATE_TWIN_QUARANTINE_STATE_CONFLICT",
+      "Only a completed-document example can enter candidate isolation.",
+    );
+  }
+  const isolatedAt = new Date();
+  const updated = await input.tx.templateTwinQuarantineArtifact.updateMany({
+    where: {
+      id: input.receipt.id,
+      practiceId: input.actor.practiceId,
+      status: "MALWARE_CLEAN",
+      intakeMode: "COMPLETED_EXAMPLE",
+      sha256: input.receipt.stored.sha256,
+    },
+    data: {
+      status: "ISOLATED",
+      metadataMinimizationEvidence: asJson(input.metadataEvidence),
+      isolatedAt,
+      rejectionCodes: [],
+    },
+  });
+  if (updated.count !== 1) {
+    throw new TemplateTwinQuarantineError(
+      "TEMPLATE_TWIN_QUARANTINE_STATE_CONFLICT",
+      "The completed-document example changed before isolation completed.",
+    );
+  }
+  await enqueueTemplateTwinAudit(input.tx, {
+    eventKey: `template-twin:completed-example-isolated:${input.receipt.id}:${input.metadataEvidence.minimizedSha256}`,
+    practiceId: input.actor.practiceId,
+    actorId: input.actor.userId,
+    actorEmailSnapshot: input.actor.userEmail,
+    action: "TEMPLATE_TWIN_METADATA_MINIMIZED",
+    targetType: "TemplateTwinQuarantineArtifact",
+    targetId: input.receipt.id,
+    metadata: {
+      candidateId: input.candidateId,
+      originalSha256: input.metadataEvidence.originalSha256,
+      minimizedSha256: input.metadataEvidence.minimizedSha256,
+      profileVersion: input.metadataEvidence.profileVersion,
+      replacedParts: [...input.metadataEvidence.replacedParts],
+      zipEntryTimestampsNormalized:
+        input.metadataEvidence.zipEntryTimestampsNormalized,
+      gateOutcome: "isolated_completed_example",
+    },
+  });
+}

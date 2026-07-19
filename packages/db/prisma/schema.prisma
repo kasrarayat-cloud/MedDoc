@@ -132,6 +132,7 @@ enum AuditAction {
   EXPORT_PDF_DOWNLOADED
   EXPORT_DOCX_DOWNLOADED
   EXPORT_TEMPLATE_TWIN_DOCX_DOWNLOADED
+  EXPORT_TEMPLATE_TWIN_CANDIDATE_DOCX_DOWNLOADED
   EXPORT_CLIPBOARD_COPIED
 
   // Template Twin — structure-preserving DOCX lifecycle. Metadata on these
@@ -142,6 +143,8 @@ enum AuditAction {
   TEMPLATE_TWIN_QUARANTINED
   TEMPLATE_TWIN_MALWARE_SCANNED
   TEMPLATE_TWIN_METADATA_MINIMIZED
+  TEMPLATE_TWIN_COMPLETED_CANDIDATE_CREATED
+  TEMPLATE_TWIN_COMPLETED_CANDIDATE_REVIEWED
   TEMPLATE_TWIN_MAPPING_UPDATED
   TEMPLATE_TWIN_CERTIFIED
   TEMPLATE_TWIN_ACTIVATED
@@ -582,6 +585,7 @@ model Practice {
   // creating user later leaves the practice.
   templateTwinSources                   TemplateTwinSourceArtifact[]
   templateTwinQuarantineArtifacts       TemplateTwinQuarantineArtifact[]
+  templateTwinCompletedCandidates       TemplateTwinCompletedCandidate[]
   templateTwinFills                     TemplateTwinFillManifest[]
   templateTwinObjects                   TemplateTwinObjectLedger[]
   templateTwinOutbox                    TemplateTwinAuditOutbox[]
@@ -741,6 +745,8 @@ model User {
   noteTemplates                          NoteTemplate[]
   templateTwinSourcesCreated             TemplateTwinSourceArtifact[]           @relation("TemplateTwinSourceCreator")
   templateTwinQuarantineArtifactsCreated TemplateTwinQuarantineArtifact[]       @relation("TemplateTwinQuarantineCreator")
+  templateTwinCompletedCandidatesCreated TemplateTwinCompletedCandidate[]       @relation("TemplateTwinCompletedCandidateCreator")
+  templateTwinCandidateRegionDecisions   TemplateTwinCompletedCandidateRegion[] @relation("TemplateTwinCompletedCandidateDecider")
   templateTwinMappingsApproved           TemplateTwinSemanticMapping[]          @relation("TemplateTwinMappingApprover")
   templateTwinCertifications             TemplateTwinCertification[]            @relation("TemplateTwinCertifier")
   templateTwinReviews                    TemplateTwinReviewDecision[]           @relation("TemplateTwinReviewer")
@@ -2629,14 +2635,108 @@ model TemplateTwinQuarantineArtifact {
   createdAt  DateTime  @default(now()) @db.Timestamptz(6)
   scannedAt  DateTime? @db.Timestamptz(6)
   admittedAt DateTime? @db.Timestamptz(6)
+  isolatedAt DateTime? @db.Timestamptz(6)
 
-  admittedSourceArtifact TemplateTwinSourceArtifact?
+  admittedSourceArtifact    TemplateTwinSourceArtifact?
+  completedCandidateExample TemplateTwinCompletedCandidateExample?
 
   @@index([practiceId, createdAt])
   @@index([lineageId, lineageVersion])
   @@index([sha256])
   @@index([practiceId, status, createdAt])
   @@map("template_twin_quarantine_artifacts")
+}
+
+/// A newly generated blank DOCX candidate. It is deliberately not a
+/// NoteTemplate or TemplateTwinSourceArtifact: physician review only permits
+/// download into the native intake workflow and can never activate it.
+model TemplateTwinCompletedCandidate {
+  id String @id
+
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict)
+
+  createdById String?
+  createdBy   User?   @relation("TemplateTwinCompletedCandidateCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  name               String
+  encounterScope     String
+  versionDescription String
+  status             String @default("PENDING_REVIEW")
+
+  candidateObjectKey       String @unique
+  candidateObjectVersionId String
+  candidateObjectEtag      String
+  candidateSha256          String @db.Char(64)
+  candidateSizeBytes       Int
+  candidateStructureSha256 String @db.Char(64)
+  inventorySha256          String @db.Char(64)
+  converterVersion         String
+  comparisonEvidence       Json
+  privacyEvidence          Json
+
+  createdAt  DateTime  @default(now()) @db.Timestamptz(6)
+  reviewedAt DateTime? @db.Timestamptz(6)
+
+  examples TemplateTwinCompletedCandidateExample[]
+  regions  TemplateTwinCompletedCandidateRegion[]
+
+  @@index([practiceId, createdById, status, createdAt])
+  @@index([candidateSha256])
+  @@map("template_twin_completed_candidates")
+}
+
+model TemplateTwinCompletedCandidateExample {
+  id String @id @default(cuid())
+
+  candidateId String
+  candidate   TemplateTwinCompletedCandidate @relation(fields: [candidateId], references: [id], onDelete: Restrict)
+
+  quarantineArtifactId String                         @unique
+  quarantineArtifact   TemplateTwinQuarantineArtifact @relation(fields: [quarantineArtifactId], references: [id], onDelete: Restrict)
+
+  ordinal                    Int
+  minimizedSha256            String @db.Char(64)
+  documentStructureSha256    String @db.Char(64)
+  localPrivacyEvidenceSha256 String @db.Char(64)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([candidateId, ordinal])
+  @@index([candidateId])
+  @@map("template_twin_completed_candidate_examples")
+}
+
+model TemplateTwinCompletedCandidateRegion {
+  id String @id @default(cuid())
+
+  candidateId String
+  candidate   TemplateTwinCompletedCandidate @relation(fields: [candidateId], references: [id], onDelete: Restrict)
+
+  regionId             String
+  displayOrder         Int
+  label                String
+  evidenceType         String
+  partName             String
+  tableIndex           Int
+  rowIndex             Int
+  cellIndex            Int
+  candidateTag         String
+  candidateSdtId       String
+  sourceEvidenceSha256 String @db.Char(64)
+
+  decision    String    @default("PENDING")
+  decidedById String?
+  decidedBy   User?     @relation("TemplateTwinCompletedCandidateDecider", fields: [decidedById], references: [id], onDelete: Restrict)
+  decidedAt   DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([candidateId, regionId])
+  @@unique([candidateId, displayOrder])
+  @@unique([candidateId, candidateTag])
+  @@index([candidateId, decision])
+  @@map("template_twin_completed_candidate_regions")
 }
 
 model TemplateTwinSourceArtifact {

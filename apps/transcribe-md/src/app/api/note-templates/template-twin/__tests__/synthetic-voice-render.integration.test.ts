@@ -319,6 +319,8 @@ function inMemoryStorage(): TemplateTwinArtifactStore {
     bucket: 'synthetic-memory-only',
     storeQuarantineArtifact: vi.fn(),
     readQuarantineArtifact: vi.fn(),
+    storeCandidateArtifact: vi.fn(),
+    readCandidateArtifact: vi.fn(),
     storeSourceArtifact: vi.fn(),
     readSourceArtifact: vi.fn(async (input) => {
       expect(input).toEqual({

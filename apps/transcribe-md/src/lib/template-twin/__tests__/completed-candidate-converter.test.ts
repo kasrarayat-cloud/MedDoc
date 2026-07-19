@@ -1,0 +1,223 @@
+import { createHash } from "node:crypto";
+
+import JSZip from "jszip";
+import { describe, expect, it } from "vitest";
+
+import {
+  compileTemplateDocx,
+  inspectDocxPackage,
+} from "@/lib/note-template-docx";
+
+import {
+  COMPLETED_CANDIDATE_SYNTHETIC_SENTINEL,
+  CompletedCandidateConversionError,
+  convertCompletedDocumentsToCandidate,
+} from "../completed-candidate-converter";
+
+const CONTENT_TYPES = `<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`;
+const ROOT_RELS = `<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`;
+
+function documentXml(input: {
+  finding: string;
+  plan: string;
+  extraParagraph?: string;
+  extraRow?: string;
+}): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
+  <w:p><w:r><w:t>${COMPLETED_CANDIDATE_SYNTHETIC_SENTINEL}</w:t></w:r></w:p>
+  ${input.extraParagraph ? `<w:p><w:r><w:t>${input.extraParagraph}</w:t></w:r></w:p>` : ""}
+  <w:tbl><w:tblGrid><w:gridCol w:w="2400"/><w:gridCol w:w="4800"/></w:tblGrid>
+    <w:tr><w:tc><w:p><w:r><w:t>Finding</w:t></w:r></w:p></w:tc><w:tc><w:p><w:pPr><w:spacing w:after="0"/></w:pPr><w:r><w:t>${input.finding}</w:t></w:r></w:p></w:tc></w:tr>
+    <w:tr><w:tc><w:p><w:r><w:t>Plan</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>${input.plan}</w:t></w:r></w:p></w:tc></w:tr>
+    ${input.extraRow ?? ""}
+  </w:tbl><w:sectPr/>
+</w:body></w:document>`;
+}
+
+async function example(input: Parameters<typeof documentXml>[0]) {
+  const zip = new JSZip();
+  zip.file("[Content_Types].xml", CONTENT_TYPES);
+  zip.file("_rels/.rels", ROOT_RELS);
+  zip.file("word/document.xml", documentXml(input));
+  const document = await zip.generateAsync({
+    type: "nodebuffer",
+    compression: "DEFLATE",
+    compressionOptions: { level: 6 },
+  });
+  return {
+    document,
+    minimizedSha256: createHash("sha256").update(document).digest("hex"),
+  };
+}
+
+describe("completed document to blank candidate conversion", () => {
+  it("creates a new blank DOCX with stable bindings and never copies example values", async () => {
+    const first = await example({
+      finding: "Synthetic mild finding",
+      plan: "Synthetic brace plan",
+    });
+    const second = await example({
+      finding: "Synthetic moderate finding",
+      plan: "Synthetic exercise plan",
+    });
+
+    const result = await convertCompletedDocumentsToCandidate([first, second]);
+    expect(result.regions).toHaveLength(2);
+    expect(result.regions.map((region) => region.label)).toEqual([
+      "Finding",
+      "Plan",
+    ]);
+    expect(result.comparison).toMatchObject({
+      exampleCount: 2,
+      identicalStructure: true,
+      candidateFieldCount: 2,
+    });
+    expect(result.privacyEvidence.providerEgress).toBe(false);
+    expect(result.document.equals(first.document)).toBe(false);
+    const candidateZip = await JSZip.loadAsync(result.document);
+    const candidateXml = await candidateZip
+      .file("word/document.xml")!
+      .async("string");
+    expect(candidateXml).not.toContain("Synthetic mild finding");
+    expect(candidateXml).not.toContain("Synthetic brace plan");
+
+    const ir = compileTemplateDocx(result.document);
+    expect(ir.fields).toHaveLength(2);
+    expect(ir.fields.every((field) => field.rendererBinding.sdtId)).toBe(true);
+    expect(ir.fields.map((field) => field.rendererBinding.tag).sort()).toEqual(
+      result.regions.map((region) => region.candidateTag).sort(),
+    );
+    expect(inspectDocxPackage(first.document).sourceSha256).toBe(
+      first.minimizedSha256,
+    );
+  });
+
+  it("is deterministic for identical example bytes", async () => {
+    const inputs = [
+      await example({
+        finding: "Synthetic finding alpha",
+        plan: "Synthetic plan alpha",
+      }),
+      await example({
+        finding: "Synthetic finding beta",
+        plan: "Synthetic plan beta",
+      }),
+    ];
+    const first = await convertCompletedDocumentsToCandidate(inputs);
+    const second = await convertCompletedDocumentsToCandidate(inputs);
+    expect(second.candidateSha256).toBe(first.candidateSha256);
+    expect(second.inventorySha256).toBe(first.inventorySha256);
+    expect(second.regions).toEqual(first.regions);
+  });
+
+  it.each([
+    [
+      "ordinary narrative changes",
+      async () => [
+        await example({
+          finding: "Synthetic finding alpha",
+          plan: "Synthetic plan",
+          extraParagraph: "Synthetic narrative alpha",
+        }),
+        await example({
+          finding: "Synthetic finding beta",
+          plan: "Synthetic plan",
+          extraParagraph: "Synthetic narrative beta",
+        }),
+      ],
+      "AMBIGUOUS_NARRATIVE_CHANGE",
+    ],
+    [
+      "row shape changes",
+      async () => [
+        await example({
+          finding: "Synthetic finding alpha",
+          plan: "Synthetic plan alpha",
+        }),
+        await example({
+          finding: "Synthetic finding beta",
+          plan: "Synthetic plan beta",
+          extraRow:
+            "<w:tr><w:tc><w:p><w:r><w:t>Extra</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Synthetic extra</w:t></w:r></w:p></w:tc></w:tr>",
+        }),
+      ],
+      "REPEATING_STRUCTURE_UNSUPPORTED",
+    ],
+    [
+      "a non-synthetic value",
+      async () => [
+        await example({
+          finding: "Mild finding",
+          plan: "Synthetic plan alpha",
+        }),
+        await example({
+          finding: "Moderate finding",
+          plan: "Synthetic plan beta",
+        }),
+      ],
+      "SYNTHETIC_SENTINEL_REQUIRED",
+    ],
+    [
+      "a structured identifier",
+      async () => [
+        await example({
+          finding: "Synthetic MRN RFM-0098214",
+          plan: "Synthetic plan alpha",
+        }),
+        await example({
+          finding: "Synthetic MRN RFM-0098215",
+          plan: "Synthetic plan beta",
+        }),
+      ],
+      "POSSIBLE_IDENTIFYING_CONTENT",
+    ],
+  ])(
+    "rejects %s without producing a candidate",
+    async (_label, build, code) => {
+      await expect(
+        convertCompletedDocumentsToCandidate(await build()),
+      ).rejects.toMatchObject({ code });
+    },
+  );
+
+  it("routes documents with existing controls to the native template workflow", async () => {
+    const first = await example({
+      finding: "Synthetic finding alpha",
+      plan: "Synthetic plan alpha",
+    });
+    const zip = await JSZip.loadAsync(first.document);
+    const xml = await zip.file("word/document.xml")!.async("string");
+    zip.file(
+      "word/document.xml",
+      xml.replace(
+        "Synthetic plan alpha",
+        '<w:sdt><w:sdtPr><w:id w:val="900"/><w:alias w:val="Plan"/><w:text/></w:sdtPr><w:sdtContent><w:r><w:t>Choose</w:t></w:r></w:sdtContent></w:sdt>',
+      ),
+    );
+    const controlled = await zip.generateAsync({ type: "nodebuffer" });
+
+    await expect(
+      convertCompletedDocumentsToCandidate([
+        {
+          document: controlled,
+          minimizedSha256: createHash("sha256")
+            .update(controlled)
+            .digest("hex"),
+        },
+        await example({
+          finding: "Synthetic finding beta",
+          plan: "Synthetic plan beta",
+        }),
+      ]),
+    ).rejects.toBeInstanceOf(CompletedCandidateConversionError);
+  });
+});

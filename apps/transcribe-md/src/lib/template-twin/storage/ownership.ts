@@ -57,6 +57,13 @@ export function parseTemplateTwinArtifactKey(
       return { practiceId, kind: 'quarantine', sha256 };
     }
 
+    if (category === 'candidates') {
+      assertOpaqueId(parts[4] ?? '', 'candidateId');
+      if (!/^v[1-9][0-9]*$/.test(parts[5] ?? '')) return null;
+      assertOpaqueId(parts[6] ?? '', 'artifactId');
+      return { practiceId, kind: 'candidate', sha256 };
+    }
+
     if (category === 'outputs') {
       assertOpaqueId(parts[4] ?? '', 'visitId');
       assertSha256(parts[5] ?? '', 'manifestSha256');

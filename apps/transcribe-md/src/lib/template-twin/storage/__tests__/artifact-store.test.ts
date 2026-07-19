@@ -219,6 +219,39 @@ describe("Template Twin artifact storage initialization", () => {
 });
 
 describe("Template Twin put-once behavior", () => {
+  it("keeps generated candidates in a distinct immutable namespace", async () => {
+    const { store } = setup();
+    const stored = await store.storeCandidateArtifact({
+      practiceId: "practice_1",
+      candidateId: "candidate_1",
+      candidateVersion: 1,
+      bytes: DOCX_BYTES,
+    });
+
+    expect(stored.objectKey).toContain(
+      "/template-twin/candidates/candidate_1/v1/",
+    );
+    await expect(
+      store.readCandidateArtifact({
+        practiceId: "practice_1",
+        objectKey: stored.objectKey,
+        expectedObjectVersionId: stored.objectVersionId,
+        expectedObjectEtag: stored.objectEtag,
+        expectedSha256: stored.sha256,
+        expectedSizeBytes: stored.sizeBytes,
+      }),
+    ).resolves.toEqual(DOCX_BYTES);
+    await expect(
+      store.readSourceArtifact({
+        practiceId: "practice_1",
+        objectKey: stored.objectKey,
+        expectedObjectVersionId: stored.objectVersionId,
+        expectedObjectEtag: stored.objectEtag,
+        expectedSha256: stored.sha256,
+      }),
+    ).rejects.toBeInstanceOf(TemplateTwinArtifactNotFoundError);
+  });
+
   it("writes and verifies raw uploads in the isolated quarantine namespace", async () => {
     const { store } = setup();
     const stored = await store.storeQuarantineArtifact({

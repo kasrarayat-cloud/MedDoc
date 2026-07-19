@@ -8,6 +8,7 @@ export {
   type CreateTemplateTwinArtifactStoreOptions,
   type ReadArtifactInput,
   type StoredTemplateTwinArtifact,
+  type StoreCandidateArtifactInput,
   type StoreOutputArtifactInput,
   type StoreQuarantineArtifactInput,
   type StoreSourceArtifactInput,
@@ -17,6 +18,7 @@ export {
 } from './artifact-store';
 
 export {
+  createCandidateArtifactKey,
   createOutputArtifactKey,
   createQuarantineArtifactKey,
   createSourceArtifactKey,
