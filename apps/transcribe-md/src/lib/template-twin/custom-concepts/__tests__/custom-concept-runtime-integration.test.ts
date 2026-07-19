@@ -89,7 +89,7 @@ async function compilePlaceholderFixture(): Promise<{
   ir: TemplateDocIR;
   field: TemplateField;
 }> {
-  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="${W}"><w:body><w:p><w:r><w:t>Custom detail: [[synthetic custom value]]</w:t></w:r></w:p><w:sectPr/></w:body></w:document>`;
+  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="${W}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body><w:p><w:r><w:t>Custom detail: [[synthetic custom value]]</w:t></w:r></w:p><w:sectPr><w:headerReference w:type="default" r:id="rIdHeader"/><w:footerReference w:type="default" r:id="rIdFooter"/></w:sectPr></w:body></w:document>`;
   const source = await buildSyntheticDocx({
     documentXml,
     extraEntries: {

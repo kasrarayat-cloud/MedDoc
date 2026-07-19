@@ -131,7 +131,7 @@ function execution(batchId = "batch-custom-service") {
 
 beforeAll(async () => {
   const source = await buildSyntheticDocx({
-    documentXml: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="${W}"><w:body><w:p><w:r><w:t>[[synthetic score]]</w:t></w:r></w:p><w:sectPr/></w:body></w:document>`,
+    documentXml: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="${W}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body><w:p><w:r><w:t>[[synthetic score]]</w:t></w:r></w:p><w:sectPr><w:headerReference w:type="default" r:id="rIdHeader"/></w:sectPr></w:body></w:document>`,
     extraEntries: {
       "word/header1.xml": `<?xml version="1.0" encoding="UTF-8"?><w:hdr xmlns:w="${W}"><w:p><w:r><w:t>Synthetic header</w:t></w:r></w:p></w:hdr>`,
     },

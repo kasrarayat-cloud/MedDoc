@@ -318,7 +318,7 @@ function assertSourceMatchesIr(
     failTemplateDocxRender("SOURCE_IR_MISMATCH");
   }
   const compiled = compileTemplateDocx(source, { limits });
-  // Earlier draft alphas can render through 1.3 only when every independently
+  // Earlier draft alphas can render through 1.4 only when every independently
   // recompiled structure, field, table, and static hash below is unchanged.
   // A source that gains the new profile therefore fails closed and must create
   // and certify a new immutable version; unchanged older templates keep working.
@@ -329,6 +329,7 @@ function assertSourceMatchesIr(
         "template-docx-compiler/1.1.0",
         "template-docx-compiler/1.2.0",
         "template-docx-compiler/1.3.0",
+        "template-docx-compiler/1.4.0",
       ].includes(ir.compilerVersion) &&
         compiled.compilerVersion === TEMPLATE_TWIN_COMPILER_VERSION)
     ) ||
@@ -1181,21 +1182,30 @@ function tableCellPatches(
   const paragraph = descendantXmlElements(cell, "p")[0];
   if (!paragraph) failTemplateDocxRender("BINDING_NOT_FOUND");
   const prefix = qualifiedPrefix(paragraph.name);
+  const textChildren = wordTextChildren(prefix, display);
   const runs = descendantWordElements(paragraph, "r");
   if (runs.length === 1) {
-    const preserve = /^\s|\s$/u.test(display) ? ' xml:space="preserve"' : "";
-    return [
-      appendXmlChildPatch(
-        xml,
-        runs[0]!,
-        `<${prefix}t${preserve}>${escapeXmlText(display)}</${prefix}t>`,
-        field.fieldId,
-      ),
-    ];
+    return [appendXmlChildPatch(xml, runs[0]!, textChildren, field.fieldId)];
   }
   if (runs.length > 1) failTemplateDocxRender("BINDING_AMBIGUOUS");
-  const run = `<${prefix}r><${prefix}t>${escapeXmlText(display)}</${prefix}t></${prefix}r>`;
+  const run = `<${prefix}r>${textChildren}</${prefix}r>`;
   return [appendXmlChildPatch(xml, paragraph, run, field.fieldId)];
+}
+
+function wordTextChildren(prefix: string, value: string): string {
+  if (value.length === 0) return `<${prefix}t></${prefix}t>`;
+  return value
+    .split(/(\r\n|\r|\n|\t)/u)
+    .map((token) => {
+      if (token === "\t") return `<${prefix}tab/>`;
+      if (token === "\r" || token === "\n" || token === "\r\n") {
+        return `<${prefix}br/>`;
+      }
+      if (!token) return "";
+      const preserve = /^\s|\s$/u.test(token) ? ' xml:space="preserve"' : "";
+      return `<${prefix}t${preserve}>${escapeXmlText(token)}</${prefix}t>`;
+    })
+    .join("");
 }
 
 function tabOnlyBlankTableCellPatches(

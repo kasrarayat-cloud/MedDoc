@@ -388,10 +388,12 @@ describe('Template Twin immutable-source PHI gate', () => {
 
   it('scans preserved relationship identifiers and targets for hidden PHI', async () => {
     const complete = vi.fn();
-    const documentRelationships = syntheticOpc.documentRelationships.replace(
-      'Id="rIdHeader"',
-      'Id="hidden.patient@example.test"',
-    );
+    const documentRelationships = syntheticOpc.documentRelationships
+      .replace('Id="rIdStyles"', 'Id="hidden.patient@example.test"')
+      .replace(
+        'Target="styles.xml"',
+        'Target="hidden.patient@example.test/../styles.xml"',
+      );
     await expect(
       assertTemplateTwinSourcePhiFree({
         source: await buildSyntheticDocx({
@@ -409,8 +411,8 @@ describe('Template Twin immutable-source PHI gate', () => {
   it('scans relationship types and content types for hidden identifiers', async () => {
     const complete = vi.fn();
     const documentRelationships = syntheticOpc.documentRelationships.replace(
-      'relationships/header',
-      'relationships/header/patient-123456789',
+      'relationships/styles',
+      'relationships/styles/patient-123456789',
     );
     await expect(
       assertTemplateTwinSourcePhiFree({

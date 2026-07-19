@@ -51,6 +51,36 @@ describe("native DOCX compatibility boundary", () => {
     await expectCompileFailure(documentXml, "ACTIVE_CONTENT_REJECTED");
   });
 
+  it("rejects foreign-namespace date and table semantic lookalikes", async () => {
+    const calendarShadow = syntheticOpc.documentXml
+      .replace(
+        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"',
+        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:evil="urn:synthetic:evil"',
+      )
+      .replace(
+        '<w:dateFormat w:val="yyyy-MM-dd"/>',
+        '<w:dateFormat w:val="yyyy-MM-dd"/><evil:calendar evil:val="gregorian"/><w:calendar w:val="hijri"/>',
+      );
+    await expectCompileFailure(calendarShadow, "ACTIVE_CONTENT_REJECTED");
+
+    const gridSpanShadow = syntheticOpc.documentXml
+      .replace(
+        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"',
+        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:evil="urn:synthetic:evil"',
+      )
+      .replace(
+        '<w:gridSpan w:val="2"/>',
+        '<evil:gridSpan evil:val="2"/><w:gridSpan w:val="999999999"/>',
+      );
+    await expectCompileFailure(gridSpanShadow, "ACTIVE_CONTENT_REJECTED");
+
+    const duplicateWordGridSpan = syntheticOpc.documentXml.replace(
+      '<w:gridSpan w:val="2"/>',
+      '<w:gridSpan w:val="2"/><w:gridSpan w:val="999999999"/>',
+    );
+    await expectCompileFailure(duplicateWordGridSpan, "XML_INVALID");
+  });
+
   it("rejects mutually exclusive native and legacy control definitions", async () => {
     const mixedNative = syntheticOpc.documentXml.replace(
       "</w:dropDownList></w:sdtPr>",
@@ -63,6 +93,32 @@ describe("native DOCX compatibility boundary", () => {
       '</w:ddList><w:textInput><w:type w:val="regular"/></w:textInput></w:ffData>',
     );
     await expectCompileFailure(mixedLegacy, "XML_INVALID");
+  });
+
+  it("rejects nested competing native and legacy control definitions", async () => {
+    const nestedNative = syntheticOpc.documentXml.replace(
+      '<w:text w:multiLine="true"/>',
+      '<w:text w:multiLine="true"/><w:placeholder><w14:checkbox><w14:checked w14:val="0"/></w14:checkbox></w:placeholder>',
+    );
+    await expectCompileFailure(nestedNative, "XML_INVALID");
+
+    const nestedLegacy = syntheticOpc.documentXml.replace(
+      "</w:ddList></w:ffData>",
+      '</w:ddList><w:helpText><w:textInput><w:type w:val="regular"/></w:textInput></w:helpText></w:ffData>',
+    );
+    await expectCompileFailure(nestedLegacy, "XML_INVALID");
+  });
+
+  it("rejects legacy form-field macro hooks", async () => {
+    for (const macroName of ["entryMacro", "exitMacro"]) {
+      await expectCompileFailure(
+        syntheticOpc.documentXml.replace(
+          '<w:name w:val="Legacy severity"/>',
+          `<w:name w:val="Legacy severity"/><w:${macroName} w:val="SyntheticMacro"/>`,
+        ),
+        "ACTIVE_CONTENT_REJECTED",
+      );
+    }
   });
 
   it("renders and independently verifies a bounded English Word date format", async () => {
@@ -177,6 +233,49 @@ describe("native DOCX compatibility boundary", () => {
     );
   });
 
+  it("renders multiline styled blank-cell text as explicit Word breaks", async () => {
+    const documentXml = syntheticOpc.documentXml.replace(
+      "<w:tc><w:p/></w:tc></w:tr>",
+      '<w:tc><w:p><w:r><w:rPr><w:b/><w:sz w:val="28"/></w:rPr></w:r></w:p></w:tc></w:tr>',
+    );
+    const source = await buildSyntheticDocx({ documentXml });
+    const ir = compileTemplateDocx(source);
+    const field = ir.fields.find(
+      (candidate) => candidate.originalLabel === "Additional finding",
+    );
+    expect(field?.rendererBinding.bindingType).toBe("table_cell");
+
+    const rendered = await renderTemplateDocx({
+      source,
+      ir,
+      resolutions: resolutionsFor(
+        ir,
+        new Map([["Additional finding", "Line one\nLine two"]]),
+      ),
+      validation: VALIDATION,
+    });
+    const xml = inspectDocxPackage(rendered.document)
+      .zip.entries.get("word/document.xml")!
+      .bytes.toString("utf8");
+    expect(xml).toContain(
+      '<w:r><w:rPr><w:b/><w:sz w:val="28"/></w:rPr><w:t>Line one</w:t><w:br/><w:t>Line two</w:t></w:r>',
+    );
+    expect(rendered.verification).toMatchObject({
+      verified: true,
+      packageCheck: "verified",
+      fieldCheck: "verified",
+      staticRegionCheck: "verified",
+      fields: expect.arrayContaining([
+        expect.objectContaining({
+          fieldId: field?.fieldId,
+          occurrences: 1,
+          status: "verified",
+          bindingEvidence: expect.objectContaining({ status: "verified" }),
+        }),
+      ]),
+    });
+  });
+
   it("blocks orphan repeat items and unbounded table topology", async () => {
     const orphanItem =
       '<w:sdt><w:sdtPr><w:id w:val="990"/><w15:repeatingSectionItem/></w:sdtPr><w:sdtContent><w:p><w:r><w:t>Synthetic orphan item</w:t></w:r></w:p></w:sdtContent></w:sdt>';
@@ -210,6 +309,60 @@ describe("native DOCX compatibility boundary", () => {
     await expect(
       buildSyntheticDocx({
         contentTypes,
+        extraEntries: {
+          "word/header2.xml":
+            '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Synthetic orphan</w:t></w:r></w:p></w:hdr>',
+        },
+      }).then((source) => compileTemplateDocx(source)),
+    ).rejects.toMatchObject({ code: "OPC_RELATIONSHIP_INVALID" });
+  });
+
+  it("rejects malformed section topology and duplicate story roles", async () => {
+    const malformedLocation = syntheticOpc.documentXml.replace(
+      '<w:sectPr><w:headerReference w:type="default" r:id="rIdHeader"/><w:footerReference w:type="default" r:id="rIdFooter"/></w:sectPr>',
+      '<w:p><w:r><w:sectPr><w:headerReference w:type="default" r:id="rIdHeader"/><w:footerReference w:type="default" r:id="rIdFooter"/></w:sectPr></w:r></w:p>',
+    );
+    await expectCompileFailure(malformedLocation, "OPC_RELATIONSHIP_INVALID");
+
+    const duplicateDefault = syntheticOpc.documentXml.replace(
+      '<w:headerReference w:type="default" r:id="rIdHeader"/>',
+      '<w:headerReference w:type="default" r:id="rIdHeader"/><w:headerReference w:type="default" r:id="rIdHeader"/>',
+    );
+    await expectCompileFailure(duplicateDefault, "OPC_RELATIONSHIP_INVALID");
+  });
+
+  it("requires exact header relationship and content types", async () => {
+    await expect(
+      buildSyntheticDocx({
+        documentRelationships: syntheticOpc.documentRelationships.replace(
+          "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header",
+          "urn:synthetic/header",
+        ),
+      }).then((source) => compileTemplateDocx(source)),
+    ).rejects.toMatchObject({ code: "OPC_RELATIONSHIP_INVALID" });
+
+    await expect(
+      buildSyntheticDocx({
+        contentTypes: syntheticOpc.contentTypes.replace(
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml",
+          "application/x-synthetic.header+xml",
+        ),
+      }).then((source) => compileTemplateDocx(source)),
+    ).rejects.toMatchObject({ code: "OPC_CONTENT_TYPE_INVALID" });
+
+    await expect(
+      buildSyntheticDocx({
+        extraEntries: {
+          "word/header1.xml":
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p/></w:body></w:document>',
+        },
+      }).then((source) => compileTemplateDocx(source)),
+    ).rejects.toMatchObject({ code: "OPC_RELATIONSHIP_INVALID" });
+  });
+
+  it("rejects an orphan header-shaped part hidden behind application/xml", async () => {
+    await expect(
+      buildSyntheticDocx({
         extraEntries: {
           "word/header2.xml":
             '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Synthetic orphan</w:t></w:r></w:p></w:hdr>',

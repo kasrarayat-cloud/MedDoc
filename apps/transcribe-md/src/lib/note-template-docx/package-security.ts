@@ -24,11 +24,15 @@ import {
 
 const DOCX_MAIN_CONTENT_TYPE =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml";
+const DOCX_HEADER_CONTENT_TYPE =
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml";
+const DOCX_FOOTER_CONTENT_TYPE =
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml";
 const OFFICE_DOCUMENT_RELATIONSHIPS_NAMESPACE =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
-const OFFICE_DOCUMENT_RELATIONSHIP = "/officeDocument";
-const HEADER_RELATIONSHIP = "/header";
-const FOOTER_RELATIONSHIP = "/footer";
+const OFFICE_DOCUMENT_RELATIONSHIP = `${OFFICE_DOCUMENT_RELATIONSHIPS_NAMESPACE}/officeDocument`;
+const HEADER_RELATIONSHIP = `${OFFICE_DOCUMENT_RELATIONSHIPS_NAMESPACE}/header`;
+const FOOTER_RELATIONSHIP = `${OFFICE_DOCUMENT_RELATIONSHIPS_NAMESPACE}/footer`;
 
 const ACTIVE_PART_RE = /(?:^|\/)(?:vbaProject\.bin|activeX|customUI)(?:\/|$)/i;
 const EMBEDDED_PART_RE = /(?:^|\/)(?:embeddings)(?:\/|$)/i;
@@ -86,6 +90,8 @@ export function inspectDocxPackage(
       failTemplateDocx("OPC_REQUIRED_PART_MISSING");
   }
 
+  const wordHeaderRootParts = new Set<string>();
+  const wordFooterRootParts = new Set<string>();
   for (const [name, entry] of zip.entries) {
     if (ACTIVE_PART_RE.test(name)) failTemplateDocx("ACTIVE_CONTENT_REJECTED");
     if (EMBEDDED_PART_RE.test(name))
@@ -109,6 +115,16 @@ export function inspectDocxPackage(
       if (/^word\/.*\.xml$/i.test(name)) {
         assertNoNamespaceShadowedWordStructures(tree);
         assertDeterministicWordControlShape(tree);
+        const roots = expandedXmlVisits(tree).filter(
+          (visit) => visit.depth === 0,
+        );
+        if (
+          roots.length === 1 &&
+          roots[0]!.namespaceUri === WORDPROCESSINGML_NAMESPACE
+        ) {
+          if (roots[0]!.localName === "hdr") wordHeaderRootParts.add(name);
+          if (roots[0]!.localName === "ftr") wordFooterRootParts.add(name);
+        }
       }
     }
   }
@@ -150,7 +166,7 @@ export function inspectDocxPackage(
   const rootOfficeDocuments = relationships.filter(
     (relationship) =>
       relationship.sourcePartName === "" &&
-      relationship.type.endsWith(OFFICE_DOCUMENT_RELATIONSHIP),
+      relationship.type === OFFICE_DOCUMENT_RELATIONSHIP,
   );
   if (
     rootOfficeDocuments.length !== 1 ||
@@ -173,11 +189,37 @@ export function inspectDocxPackage(
   for (const partName of [...headerPartNames, ...footerPartNames]) {
     if (!zip.entries.has(partName))
       failTemplateDocx("OPC_REQUIRED_PART_MISSING");
-    const expectedSuffix = headerPartNames.includes(partName)
-      ? ".header+xml"
-      : ".footer+xml";
-    if (!contentTypes.get(partName)?.endsWith(expectedSuffix)) {
+    const isHeader = headerPartNames.includes(partName);
+    const expectedContentType = isHeader
+      ? DOCX_HEADER_CONTENT_TYPE
+      : DOCX_FOOTER_CONTENT_TYPE;
+    if (contentTypes.get(partName) !== expectedContentType) {
       failTemplateDocx("OPC_CONTENT_TYPE_INVALID");
+    }
+    if (
+      isHeader
+        ? !wordHeaderRootParts.has(partName)
+        : !wordFooterRootParts.has(partName)
+    ) {
+      failTemplateDocx("OPC_RELATIONSHIP_INVALID");
+    }
+  }
+  const referencedHeaders = new Set(headerPartNames);
+  const referencedFooters = new Set(footerPartNames);
+  for (const partName of zip.entries.keys()) {
+    const headerLikeName = /^word\/header[^/]*\.xml$/iu.test(partName);
+    const footerLikeName = /^word\/footer[^/]*\.xml$/iu.test(partName);
+    if (
+      (headerLikeName || wordHeaderRootParts.has(partName)) &&
+      !referencedHeaders.has(partName)
+    ) {
+      failTemplateDocx("OPC_RELATIONSHIP_INVALID");
+    }
+    if (
+      (footerLikeName || wordFooterRootParts.has(partName)) &&
+      !referencedFooters.has(partName)
+    ) {
+      failTemplateDocx("OPC_RELATIONSHIP_INVALID");
     }
   }
 
@@ -520,22 +562,53 @@ function assertNoHiddenWordContent(tree: OrderedXmlNode[]): void {
 }
 
 const WORD_CONTROL_ELEMENTS = new Set([
+  "alias",
+  "bookmarkStart",
+  "calendar",
+  "checkBox",
   "comboBox",
+  "dataBinding",
   "date",
   "dateFormat",
   "ddList",
+  "default",
   "dropDownList",
+  "entryMacro",
+  "exitMacro",
   "ffData",
   "fldChar",
   "fldSimple",
+  "footerReference",
+  "format",
+  "gridAfter",
+  "gridBefore",
+  "gridCol",
+  "gridSpan",
+  "hMerge",
+  "headerReference",
+  "id",
   "instrText",
+  "lid",
   "listEntry",
   "listItem",
+  "maxLength",
+  "name",
+  "numPr",
+  "result",
   "sdt",
   "sdtContent",
   "sdtPr",
+  "sectPr",
+  "storeMappedDataAs",
+  "tag",
+  "tbl",
+  "tblGrid",
+  "tcPr",
   "text",
   "textInput",
+  "tr",
+  "type",
+  "vMerge",
 ]);
 const WORD_2010_CONTROL_ELEMENTS = new Set([
   "checkbox",
@@ -643,6 +716,30 @@ const WORD_SDT_MAIN_TYPES = new Set([
 
 function assertDeterministicWordControlShape(tree: OrderedXmlNode[]): void {
   const visits = expandedXmlVisits(tree);
+  for (const visit of visits) {
+    if (isWordSdtTypeElement(visit)) {
+      const properties = nearestWordAncestor(visit, "sdtPr");
+      if (properties && visit.parent !== properties) {
+        failTemplateDocx("XML_INVALID");
+      }
+    }
+    if (
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      ["checkBox", "ddList", "textInput"].includes(visit.localName)
+    ) {
+      const formData = nearestWordAncestor(visit, "ffData");
+      if (formData && visit.parent !== formData) {
+        failTemplateDocx("XML_INVALID");
+      }
+    }
+    if (
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      ["entryMacro", "exitMacro"].includes(visit.localName) &&
+      nearestWordAncestor(visit, "ffData")
+    ) {
+      failTemplateDocx("ACTIVE_CONTENT_REJECTED");
+    }
+  }
   for (const properties of visits) {
     if (
       properties.namespaceUri !== WORDPROCESSINGML_NAMESPACE ||
@@ -651,14 +748,8 @@ function assertDeterministicWordControlShape(tree: OrderedXmlNode[]): void {
       continue;
     }
     const children = visits.filter((visit) => visit.parent === properties);
-    const typeChildren = children.filter(
-      (child) =>
-        (child.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
-          WORD_SDT_MAIN_TYPES.has(child.localName)) ||
-        (child.namespaceUri === WORDPROCESSINGML_2010_NAMESPACE &&
-          child.localName === "checkbox") ||
-        (child.namespaceUri === WORDPROCESSINGML_2012_NAMESPACE &&
-          WORD_2012_CONTROL_ELEMENTS.has(child.localName)),
+    const typeChildren = children.filter((child) =>
+      isWordSdtTypeElement(child),
     );
     if (typeChildren.length > 1) failTemplateDocx("XML_INVALID");
 
@@ -771,6 +862,56 @@ function assertDeterministicWordControlShape(tree: OrderedXmlNode[]): void {
       failTemplateDocx("XML_INVALID");
     }
   }
+
+  for (const cellProperties of visits.filter(
+    (visit) =>
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      visit.localName === "tcPr",
+  )) {
+    assertSingletonWordChildren(
+      visits.filter((visit) => visit.parent === cellProperties),
+      ["gridSpan", "hMerge", "vMerge"],
+    );
+  }
+
+  for (const table of visits.filter(
+    (visit) =>
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      visit.localName === "tbl",
+  )) {
+    assertSingletonWordChildren(
+      visits.filter((visit) => visit.parent === table),
+      ["tblGrid"],
+    );
+  }
+}
+
+function nearestWordAncestor(
+  visit: ExpandedXmlVisit,
+  localName: string,
+): ExpandedXmlVisit | null {
+  let current = visit.parent;
+  while (current) {
+    if (
+      current.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      current.localName === localName
+    ) {
+      return current;
+    }
+    current = current.parent;
+  }
+  return null;
+}
+
+function isWordSdtTypeElement(visit: ExpandedXmlVisit): boolean {
+  return (
+    (visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      WORD_SDT_MAIN_TYPES.has(visit.localName)) ||
+    (visit.namespaceUri === WORDPROCESSINGML_2010_NAMESPACE &&
+      visit.localName === "checkbox") ||
+    (visit.namespaceUri === WORDPROCESSINGML_2012_NAMESPACE &&
+      WORD_2012_CONTROL_ELEMENTS.has(visit.localName))
+  );
 }
 
 function assertSingletonWordChildren(
@@ -822,6 +963,8 @@ function resolveReferencedStoryParts(input: {
   documentRelationships: readonly OpcRelationship[];
   contentTypes: ReadonlyMap<string, string>;
 }): { headerPartNames: string[]; footerPartNames: string[] } {
+  const visits = expandedXmlVisits(input.document);
+  assertDocumentSectionTopology(visits);
   const relationshipById = new Map(
     input.documentRelationships.map((relationship) => [
       relationship.id,
@@ -830,7 +973,8 @@ function resolveReferencedStoryParts(input: {
   );
   const headerPartNames = new Set<string>();
   const footerPartNames = new Set<string>();
-  for (const reference of expandedXmlVisits(input.document).filter(
+  const rolesBySection = new Map<ExpandedXmlVisit, Set<string>>();
+  for (const reference of visits.filter(
     (visit) =>
       visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
       ["headerReference", "footerReference"].includes(visit.localName),
@@ -854,12 +998,18 @@ function resolveReferencedStoryParts(input: {
     if (!id || !type || !["default", "even", "first"].includes(type)) {
       failTemplateDocx("OPC_RELATIONSHIP_INVALID");
     }
+    const section = reference.parent!;
+    const roles = rolesBySection.get(section) ?? new Set<string>();
+    const role = `${reference.localName}\0${type}`;
+    if (roles.has(role)) failTemplateDocx("OPC_RELATIONSHIP_INVALID");
+    roles.add(role);
+    rolesBySection.set(section, roles);
     const relationship = relationshipById.get(id);
-    const expectedSuffix =
+    const expectedType =
       reference.localName === "headerReference"
         ? HEADER_RELATIONSHIP
         : FOOTER_RELATIONSHIP;
-    if (!relationship || !relationship.type.endsWith(expectedSuffix)) {
+    if (!relationship || relationship.type !== expectedType) {
       failTemplateDocx("OPC_RELATIONSHIP_INVALID");
     }
     const targetSet =
@@ -871,12 +1021,12 @@ function resolveReferencedStoryParts(input: {
 
   const relatedStoryRelationships = input.documentRelationships.filter(
     (relationship) =>
-      relationship.type.endsWith(HEADER_RELATIONSHIP) ||
-      relationship.type.endsWith(FOOTER_RELATIONSHIP),
+      relationship.type === HEADER_RELATIONSHIP ||
+      relationship.type === FOOTER_RELATIONSHIP,
   );
   if (
     relatedStoryRelationships.some((relationship) =>
-      relationship.type.endsWith(HEADER_RELATIONSHIP)
+      relationship.type === HEADER_RELATIONSHIP
         ? !headerPartNames.has(relationship.targetPartName)
         : !footerPartNames.has(relationship.targetPartName),
     )
@@ -885,10 +1035,16 @@ function resolveReferencedStoryParts(input: {
   }
 
   for (const [partName, contentType] of input.contentTypes) {
-    if (contentType.endsWith(".header+xml") && !headerPartNames.has(partName)) {
+    if (
+      contentType === DOCX_HEADER_CONTENT_TYPE &&
+      !headerPartNames.has(partName)
+    ) {
       failTemplateDocx("OPC_RELATIONSHIP_INVALID");
     }
-    if (contentType.endsWith(".footer+xml") && !footerPartNames.has(partName)) {
+    if (
+      contentType === DOCX_FOOTER_CONTENT_TYPE &&
+      !footerPartNames.has(partName)
+    ) {
       failTemplateDocx("OPC_RELATIONSHIP_INVALID");
     }
   }
@@ -900,4 +1056,71 @@ function resolveReferencedStoryParts(input: {
       left.localeCompare(right),
     ),
   };
+}
+
+function assertDocumentSectionTopology(
+  visits: readonly ExpandedXmlVisit[],
+): void {
+  const roots = visits.filter((visit) => visit.depth === 0);
+  if (
+    roots.length !== 1 ||
+    roots[0]!.namespaceUri !== WORDPROCESSINGML_NAMESPACE ||
+    roots[0]!.localName !== "document"
+  ) {
+    failTemplateDocx("OPC_RELATIONSHIP_INVALID");
+  }
+  const document = roots[0]!;
+  const bodies = visits.filter(
+    (visit) =>
+      visit.parent === document &&
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      visit.localName === "body",
+  );
+  if (bodies.length !== 1) failTemplateDocx("OPC_RELATIONSHIP_INVALID");
+  const body = bodies[0]!;
+  const bodyChildren = visits.filter((visit) => visit.parent === body);
+  const bodySections = bodyChildren.filter(
+    (visit) =>
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      visit.localName === "sectPr",
+  );
+  if (
+    bodySections.length > 1 ||
+    (bodySections.length === 1 && bodyChildren.at(-1) !== bodySections[0])
+  ) {
+    failTemplateDocx("OPC_RELATIONSHIP_INVALID");
+  }
+
+  const sections = visits.filter(
+    (visit) =>
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      visit.localName === "sectPr",
+  );
+  for (const section of sections) {
+    const bodyLevel = section.parent === body;
+    const paragraphLevel =
+      section.parent?.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      section.parent.localName === "pPr" &&
+      section.parent.parent?.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      section.parent.parent.localName === "p";
+    if (!bodyLevel && !paragraphLevel) {
+      failTemplateDocx("OPC_RELATIONSHIP_INVALID");
+    }
+  }
+  for (const paragraphProperties of visits.filter(
+    (visit) =>
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      visit.localName === "pPr",
+  )) {
+    if (
+      visits.filter(
+        (visit) =>
+          visit.parent === paragraphProperties &&
+          visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+          visit.localName === "sectPr",
+      ).length > 1
+    ) {
+      failTemplateDocx("OPC_RELATIONSHIP_INVALID");
+    }
+  }
 }
