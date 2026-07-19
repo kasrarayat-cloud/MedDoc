@@ -20,12 +20,13 @@ INSERT INTO users (
 INSERT INTO note_templates (
   id, "doctorId", name, "encounterType", sections, "styleProfile",
   version, status, "isSystemDefault", "updatedAt", "lineageId",
-  "templateKind"
+  "templateKind", "versionDescription"
 ) VALUES (
   'tt-q-contract-template-good', 'tt-q-contract-doctor',
   'Synthetic admitted template', 'synthetic_contract', '[]'::jsonb,
-  '{}'::jsonb, 1, 'active', false, CURRENT_TIMESTAMP,
-  'tt-q-contract-lineage-good', 'template_twin_docx'
+  '{}'::jsonb, 1, 'draft', false, CURRENT_TIMESTAMP,
+  'tt-q-contract-lineage-good', 'template_twin_docx',
+  'Synthetic admitted version'
 );
 
 INSERT INTO template_twin_quarantine_artifacts (
@@ -195,17 +196,24 @@ INSERT INTO template_twin_certifications (
   'output-version-good', 'output-etag-good', repeat('f', 64)
 );
 
+-- Activation is independently blocked at the NoteTemplate boundary until the
+-- complete native quarantine, source, certification, and ledger chain exists.
+UPDATE note_templates
+SET status = 'active', "updatedAt" = CURRENT_TIMESTAMP
+WHERE id = 'tt-q-contract-template-good';
+
 -- A structurally valid historical source without quarantine linkage remains
 -- readable, but direct SQL certification must fail at the BEFORE INSERT gate.
 INSERT INTO note_templates (
   id, "doctorId", name, "encounterType", sections, "styleProfile",
   version, status, "isSystemDefault", "updatedAt", "lineageId",
-  "templateKind"
+  "templateKind", "versionDescription"
 ) VALUES (
   'tt-q-contract-template-missing', 'tt-q-contract-doctor',
   'Synthetic pre-GA template', 'synthetic_contract_missing', '[]'::jsonb,
   '{}'::jsonb, 1, 'draft', false, CURRENT_TIMESTAMP,
-  'tt-q-contract-lineage-missing', 'template_twin_docx'
+  'tt-q-contract-lineage-missing', 'template_twin_docx',
+  'Synthetic historical version'
 );
 
 INSERT INTO template_twin_source_artifacts (
@@ -289,14 +297,74 @@ BEGIN
 END;
 $$;
 
+-- Direct creation of an active Twin cannot bypass the activation transition.
+DO $$
+BEGIN
+  BEGIN
+    INSERT INTO note_templates (
+      id, "doctorId", name, "encounterType", sections, "styleProfile",
+      version, status, "isSystemDefault", "updatedAt", "lineageId",
+      "templateKind", "versionDescription"
+    ) VALUES (
+      'tt-q-contract-template-direct-active', 'tt-q-contract-doctor',
+      'Synthetic direct active', 'synthetic_direct_active', '[]'::jsonb,
+      '{}'::jsonb, 1, 'active', false, CURRENT_TIMESTAMP,
+      'tt-q-contract-lineage-direct-active', 'template_twin_docx',
+      'Synthetic direct activation attempt'
+    );
+    RAISE EXCEPTION 'TT_QUARANTINE_DIRECT_ACTIVE_INSERT_DID_NOT_BLOCK';
+  EXCEPTION WHEN check_violation THEN
+    IF SQLERRM NOT LIKE '%activation source admission mismatch%' THEN
+      RAISE;
+    END IF;
+  END;
+END;
+$$;
+
+-- The backstop is scoped to Template Twin and leaves ordinary templates
+-- unchanged when the feature is disabled.
+INSERT INTO note_templates (
+  id, "doctorId", name, "encounterType", sections, "styleProfile",
+  version, status, "isSystemDefault", "updatedAt", "lineageId",
+  "templateKind"
+) VALUES (
+  'tt-q-contract-template-ordinary', 'tt-q-contract-doctor',
+  'Synthetic ordinary template', 'synthetic_ordinary', '[]'::jsonb,
+  '{}'::jsonb, 1, 'active', false, CURRENT_TIMESTAMP,
+  'tt-q-contract-lineage-ordinary', 'structured'
+);
+
+DO $$
+BEGIN
+  BEGIN
+    UPDATE note_templates
+    SET status = 'active', "updatedAt" = CURRENT_TIMESTAMP
+    WHERE id = 'tt-q-contract-template-missing';
+    RAISE EXCEPTION 'TT_QUARANTINE_ACTIVATION_CONTRACT_DID_NOT_BLOCK';
+  EXCEPTION WHEN check_violation THEN
+    IF SQLERRM NOT LIKE '%activation source admission mismatch%' THEN
+      RAISE;
+    END IF;
+  END;
+END;
+$$;
+
 DO $$
 BEGIN
   IF (SELECT count(*) FROM template_twin_certifications
       WHERE id = 'tt-q-contract-cert-good') <> 1 THEN
     RAISE EXCEPTION 'TT_QUARANTINE_CERTIFICATION_CONTRACT_VALID_PATH_FAILED';
   END IF;
+  IF (SELECT status FROM note_templates
+      WHERE id = 'tt-q-contract-template-good') <> 'active' THEN
+    RAISE EXCEPTION 'TT_QUARANTINE_ACTIVATION_CONTRACT_VALID_PATH_FAILED';
+  END IF;
+  IF (SELECT status FROM note_templates
+      WHERE id = 'tt-q-contract-template-ordinary') <> 'active' THEN
+    RAISE EXCEPTION 'TT_QUARANTINE_ACTIVATION_ORDINARY_PATH_REGRESSED';
+  END IF;
 END;
 $$;
 
-SELECT 'PASS template-twin-quarantine-certification-contract-v2';
+SELECT 'PASS template-twin-quarantine-certification-contract-v3';
 ROLLBACK;
