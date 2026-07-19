@@ -1,11 +1,15 @@
 import { createHash } from "node:crypto";
 
-import { getDocumentProxy } from "unpdf";
+import { extractTextItems, getDocumentProxy } from "unpdf";
 
 import {
+  buildOfficeLayoutIntegrityManifestQa,
   buildOfficeVisibleStaticManifestFromDocxBytes,
+  compareOfficeLayoutIntegrityManifestsQa,
   compareOfficeVisibleStaticManifests,
+  deriveOfficePdfDocumentFactsQa,
   inspectOfficeDocxSecurityQa,
+  normalizeOfficePdfWordTokens,
 } from "../../src/lib/note-template-docx/office-roundtrip-qa";
 import {
   readOfficeSavedDocxFieldsQa,
@@ -17,6 +21,7 @@ import type {
   ReturnedOfficeArtifactVerification,
   ReturnedOfficeArtifactVerifierInput,
 } from "../../src/lib/template-twin/human-release-gate/evidence-validator";
+import { WordPdfExportBindingSchema } from "../../src/lib/template-twin/human-release-gate/contracts";
 
 const PDF_PARSE_TIMEOUT_MS = 15_000;
 
@@ -52,17 +57,38 @@ function parseExpectedManifest(
   }
 }
 
-async function validWordExportedPdf(
+interface WordPdfInspection {
+  readonly packageValid: boolean;
+  readonly semanticLayoutValid: boolean;
+}
+
+function containsExpectedTokens(
+  expected: readonly string[],
+  actual: readonly string[],
+): boolean {
+  const remaining = new Map<string, number>();
+  for (const token of actual)
+    remaining.set(token, (remaining.get(token) ?? 0) + 1);
+  for (const token of expected) {
+    const count = remaining.get(token) ?? 0;
+    if (count === 0) return false;
+    remaining.set(token, count - 1);
+  }
+  return expected.length > 0;
+}
+
+async function inspectWordExportedPdf(
   bytes: Uint8Array,
   expectedPageCount: number,
-): Promise<boolean> {
+  reopenedDocxBytes: Uint8Array,
+): Promise<WordPdfInspection> {
   if (
     !Buffer.from(bytes).subarray(0, 5).equals(Buffer.from("%PDF-")) ||
     /\/(?:AA|EmbeddedFile|JavaScript|JS|Launch|OpenAction)\b/u.test(
       Buffer.from(bytes).toString("latin1"),
     )
   ) {
-    return false;
+    return { packageValid: false, semanticLayoutValid: false };
   }
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -75,13 +101,84 @@ async function validWordExportedPdf(
         );
       }),
     ]);
-    const valid = pdf.numPages === expectedPageCount;
+    const packageValid = pdf.numPages === expectedPageCount;
+    const documentFacts = deriveOfficePdfDocumentFactsQa({
+      syntheticOnly: true,
+      docxBytes: reopenedDocxBytes,
+    });
+    const extracted = await extractTextItems(pdf);
+    const actualTokens = extracted.items.flatMap((page) =>
+      page.flatMap((item) => normalizeOfficePdfWordTokens(item.str)),
+    );
+    let geometryValid =
+      extracted.totalPages === expectedPageCount &&
+      extracted.items.length === expectedPageCount &&
+      extracted.items.some((page) => page.length > 0);
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+      const page = await pdf.getPage(pageNumber);
+      const viewport = page.getViewport({ scale: 1 });
+      const pageSizeMatches = documentFacts.pageSizesPoints.some(
+        (size) =>
+          Math.abs(size.width - viewport.width) <= 1.5 &&
+          Math.abs(size.height - viewport.height) <= 1.5,
+      );
+      const items = extracted.items[pageNumber - 1] ?? [];
+      if (
+        !pageSizeMatches ||
+        items.some(
+          (item) =>
+            ![item.x, item.y, item.width, item.height, item.fontSize].every(
+              Number.isFinite,
+            ) ||
+            item.width < 0 ||
+            item.height < 0 ||
+            item.x < -5 ||
+            item.x > viewport.width + 5 ||
+            item.y < -5 ||
+            item.y > viewport.height + 5,
+        )
+      ) {
+        geometryValid = false;
+      }
+      page.cleanup();
+    }
+    const semanticLayoutValid = Boolean(
+      packageValid &&
+      geometryValid &&
+      containsExpectedTokens(documentFacts.normalizedWordTokens, actualTokens),
+    );
     await pdf.destroy();
-    return valid;
+    return { packageValid, semanticLayoutValid };
   } catch {
-    return false;
+    return { packageValid: false, semanticLayoutValid: false };
   } finally {
     if (timer) clearTimeout(timer);
+  }
+}
+
+function validPdfExportBinding(
+  input: ReturnedOfficeArtifactVerifierInput,
+): boolean {
+  try {
+    const parsed = WordPdfExportBindingSchema.parse(
+      JSON.parse(
+        Buffer.from(input.pdfExportBindingBytes)
+          .toString("utf8")
+          .replace(/^\uFEFF/u, ""),
+      ) as unknown,
+    );
+    return Boolean(
+      parsed.sourceCommit === input.expectedSourceCommit &&
+      parsed.caseId === input.caseId &&
+      parsed.documentRole === input.documentRole &&
+      parsed.reopenedDocxSha256 === sha256(input.reopenedDocxBytes) &&
+      parsed.reopenedDocxSizeBytes === input.reopenedDocxBytes.byteLength &&
+      parsed.exportedPdfSha256 === sha256(input.exportedPdfBytes) &&
+      parsed.exportedPdfSizeBytes === input.exportedPdfBytes.byteLength &&
+      parsed.wordPageCount === input.expectedPageCount,
+    );
+  } catch {
+    return false;
   }
 }
 
@@ -108,6 +205,7 @@ export async function verifyReturnedOfficeArtifacts(
 
   let staticAndOccurrenceValid = false;
   let semanticReadbackValid = false;
+  let layoutIntegrityValid = false;
   if (expected && reopenedPackageValid) {
     try {
       const before = buildOfficeVisibleStaticManifestFromDocxBytes({
@@ -128,6 +226,16 @@ export async function verifyReturnedOfficeArtifacts(
         staticComparison.aggregateVisibleContentMatches &&
         staticComparison.aggregateStructureMatches,
       );
+      layoutIntegrityValid = compareOfficeLayoutIntegrityManifestsQa(
+        buildOfficeLayoutIntegrityManifestQa({
+          syntheticOnly: true,
+          docxBytes: input.workCopyBytes,
+        }),
+        buildOfficeLayoutIntegrityManifestQa({
+          syntheticOnly: true,
+          docxBytes: input.reopenedDocxBytes,
+        }),
+      ).matches;
 
       if (input.documentRole === "source") {
         semanticReadbackValid = staticAndOccurrenceValid;
@@ -160,18 +268,25 @@ export async function verifyReturnedOfficeArtifacts(
     } catch {
       staticAndOccurrenceValid = false;
       semanticReadbackValid = false;
+      layoutIntegrityValid = false;
     }
   }
 
+  const pdfInspection = await inspectWordExportedPdf(
+    input.exportedPdfBytes,
+    input.expectedPageCount,
+    input.reopenedDocxBytes,
+  );
+
   return {
-    contractVersion: "template-twin-returned-office-artifact-verifier/1.0.0",
+    contractVersion: "template-twin-returned-office-artifact-verifier/2.0.0",
     verificationManifestValid: expected !== null,
     reopenedPackageValid,
     staticAndOccurrenceValid,
     semanticReadbackValid,
-    exportedPdfValid: await validWordExportedPdf(
-      input.exportedPdfBytes,
-      input.expectedPageCount,
-    ),
+    layoutIntegrityValid,
+    exportedPdfValid: pdfInspection.packageValid,
+    pdfSemanticLayoutValid: pdfInspection.semanticLayoutValid,
+    pdfExportBindingValid: validPdfExportBinding(input),
   };
 }

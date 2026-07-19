@@ -13,6 +13,7 @@ import {
   EVIDENCE_FILE_HASH_MANIFEST_JSON_SCHEMA,
   WORD_DOCUMENT_MANIFEST_JSON_SCHEMA,
   WORD_HUMAN_EVIDENCE_JSON_SCHEMA,
+  WORD_PDF_EXPORT_BINDING_JSON_SCHEMA,
   WordHumanEvidenceSchema,
 } from "../contracts";
 import { scanHumanGateDirectory, sha256 } from "../artifact-hygiene";
@@ -55,7 +56,7 @@ function validWordEvidence(): Record<string, unknown> {
     },
   });
   return {
-    contractVersion: "template-twin-desktop-word-human-evidence/2.0.0",
+    contractVersion: "template-twin-desktop-word-human-evidence/3.0.0",
     sourceCommit: SHA,
     packageManifestSha256: DIGEST,
     syntheticOnly: true,
@@ -97,6 +98,7 @@ describe("human release-gate contracts", () => {
       WORD_HUMAN_EVIDENCE_JSON_SCHEMA,
       WORD_DOCUMENT_MANIFEST_JSON_SCHEMA,
       EVIDENCE_FILE_HASH_MANIFEST_JSON_SCHEMA,
+      WORD_PDF_EXPORT_BINDING_JSON_SCHEMA,
     ]) {
       expect(() => ajv.compile(schema)).not.toThrow();
       expect(schema).toHaveProperty("properties");
@@ -134,6 +136,21 @@ describe("human release-gate contracts", () => {
     expect(script).toContain(
       "reopenReadOnlyCompleted = $reopenReadOnlyCompleted",
     );
+    expect(script).toContain(
+      'contractVersion = "__PDF_EXPORT_BINDING_VERSION__"',
+    );
+    const packager = await readFile(
+      path.join(
+        process.cwd(),
+        "scripts/template-twin-human-gate/package-human-gate.ts",
+      ),
+      "utf8",
+    );
+    expect(packager).toMatch(
+      /\.replaceAll\(\s*"__PDF_EXPORT_BINDING_VERSION__",\s*WORD_PDF_EXPORT_BINDING_VERSION,?\s*\)/u,
+    );
+    expect(script).toContain("reopenedDocxSha256 = Get-Sha256 $reopenedPath");
+    expect(script).toContain("exportedPdfSha256 = Get-Sha256 $pdfPath");
 
     const validator = await readFile(
       path.join(

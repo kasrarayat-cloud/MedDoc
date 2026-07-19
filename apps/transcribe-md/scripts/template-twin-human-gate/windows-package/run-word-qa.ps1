@@ -15,6 +15,7 @@ $ResultsRoot = Join-Path $BundleRoot ("word-evidence-" + $ShortSha + "-" + $RunT
 $WorkRoot = Join-Path $ResultsRoot "work-copies"
 $ReopenedRoot = Join-Path $ResultsRoot "word-reopened-docx"
 $PdfRoot = Join-Path $ResultsRoot "word-exported-pdf"
+$PdfBindingRoot = Join-Path $ResultsRoot "pdf-export-binding"
 $OpenXmlRoot = Join-Path $ResultsRoot "openxml"
 $OpenXmlValidatorPath = Join-Path $BundleRoot "tools\openxml-validator\OpenXmlValidator.exe"
 $ReturnZip = Join-Path $BundleRoot ("template-twin-word-evidence-" + $ShortSha + ".zip")
@@ -202,7 +203,7 @@ if ($Documents.Count -ne [int]$Manifest.documentCount) {
 }
 
 if (Test-Path -LiteralPath $ResultsRoot) { Remove-Item -LiteralPath $ResultsRoot -Recurse -Force }
-foreach ($directory in @($ResultsRoot, $WorkRoot, $ReopenedRoot, $PdfRoot, $OpenXmlRoot)) { Ensure-Directory $directory }
+foreach ($directory in @($ResultsRoot, $WorkRoot, $ReopenedRoot, $PdfRoot, $PdfBindingRoot, $OpenXmlRoot)) { Ensure-Directory $directory }
 Copy-Item -LiteralPath $ManifestPath -Destination (Join-Path $ResultsRoot "WORD-QA-DOCUMENTS.json")
 Copy-Item -LiteralPath (Join-Path $BundleRoot "VISUAL-CHECKLIST.html") -Destination $ResultsRoot
 Copy-Item -LiteralPath (Join-Path $BundleRoot "NO-NETWORK-ASSURANCE.txt") -Destination $ResultsRoot
@@ -259,6 +260,7 @@ try {
     $workCopy = Join-Path $WorkRoot ($safeStem + ".work-copy.docx")
     $reopenedPath = Join-Path $ReopenedRoot ($safeStem + ".word-reopened.docx")
     $pdfPath = Join-Path $PdfRoot ($safeStem + ".word.pdf")
+    $pdfBindingPath = Join-Path $PdfBindingRoot ($safeStem + ".pdf-export-binding.json")
     $originalBefore = Get-Sha256 $entry.sourcePath
     $status = "BLOCKED"
     $errorCode = if ($WordUnavailable) { "WORD_NOT_INSTALLED" } else { "NONE" }
@@ -293,6 +295,22 @@ try {
         try { $compatAfter = [int]$reopened.CompatibilityMode } catch {}
         $reopened.ExportAsFixedFormat($pdfPath, 17)
         $pdfExportCompleted = $true
+        if ($null -eq $pageAfter) { throw "PDF_EXPORT_BINDING" }
+        $PdfExportBinding = [ordered]@{
+          contractVersion = "__PDF_EXPORT_BINDING_VERSION__"
+          sourceCommit = $ExpectedCommit
+          syntheticOnly = $true
+          authorizesClinicalOrProductionAction = $false
+          caseId = $entry.caseId
+          documentRole = $entry.documentRole
+          reopenedDocxSha256 = Get-Sha256 $reopenedPath
+          reopenedDocxSizeBytes = [long](Get-Item -LiteralPath $reopenedPath).Length
+          exportedPdfSha256 = Get-Sha256 $pdfPath
+          exportedPdfSizeBytes = [long](Get-Item -LiteralPath $pdfPath).Length
+          wordPageCount = [int]$pageAfter
+          recordedAtIso = (Get-Date).ToUniversalTime().ToString("o")
+        }
+        $PdfExportBinding | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $pdfBindingPath -Encoding UTF8
         try { Start-Process -FilePath $pdfPath | Out-Null } catch {}
         $humanObservation = Read-HumanObservation $entry.caseId $entry.documentRole
         $reopened.Close(0)
@@ -300,6 +318,7 @@ try {
         $reopened = $null
         $generated.Add([pscustomobject](Get-FileEvidence $reopenedPath $ResultsRoot "word_reopened_docx"))
         $generated.Add([pscustomobject](Get-FileEvidence $pdfPath $ResultsRoot "word_exported_pdf"))
+        $generated.Add([pscustomobject](Get-FileEvidence $pdfBindingPath $ResultsRoot "pdf_export_binding_json"))
         $openXmlOffice2013 = Join-Path $OpenXmlRoot ($safeStem + ".Office2013.json")
         $openXmlMicrosoft365 = Join-Path $OpenXmlRoot ($safeStem + ".Microsoft365.json")
         Invoke-OpenXmlValidation $reopenedPath $openXmlOffice2013 "Office2013"
@@ -369,7 +388,7 @@ $Attestation = [ordered]@{
 }
 $ManifestCopy = Join-Path $ResultsRoot "WORD-QA-DOCUMENTS.json"
 $Evidence = [ordered]@{
-  contractVersion = "template-twin-desktop-word-human-evidence/2.0.0"
+  contractVersion = "template-twin-desktop-word-human-evidence/3.0.0"
   sourceCommit = $ExpectedCommit
   packageManifestSha256 = Get-Sha256 $ManifestCopy
   syntheticOnly = $true

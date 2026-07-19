@@ -59,8 +59,10 @@ interface SyntheticOfficeFixture {
   readonly rendererOutput: Buffer;
   readonly staticTamperedRenderer: Buffer;
   readonly structureTamperedRenderer: Buffer;
+  readonly layoutTamperedRenderers: Readonly<Record<string, Buffer>>;
   readonly expectedManifestBytes: Buffer;
-  readonly pdf: Buffer;
+  readonly sourcePdf: Buffer;
+  readonly rendererPdf: Buffer;
 }
 
 let officeFixture: SyntheticOfficeFixture;
@@ -73,25 +75,27 @@ function jsonBytes(value: unknown): Buffer {
   return Buffer.from(`${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
-async function buildSyntheticPdf(): Promise<Buffer> {
+async function buildSyntheticPdf(text: string): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     const document = new PDFDocument({ autoFirstPage: true, compress: false });
     document.on("data", (chunk: Buffer) => chunks.push(chunk));
     document.on("error", reject);
     document.on("end", () => resolve(Buffer.concat(chunks)));
-    document.text("Synthetic Template Twin desktop Word PDF evidence");
+    document.text(text);
     document.end();
   });
 }
 
 beforeAll(async () => {
-  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="${W}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body><w:p><w:r><w:t>Synthetic finding: </w:t></w:r><w:sdt><w:sdtPr><w:id w:val="901"/><w:tag w:val="synthetic_finding"/><w:alias w:val="Synthetic finding"/><w:text/></w:sdtPr><w:sdtContent><w:r><w:t>Enter finding</w:t></w:r></w:sdtContent></w:sdt></w:p><w:sectPr><w:headerReference w:type="default" r:id="rIdHeader"/><w:footerReference w:type="default" r:id="rIdFooter"/></w:sectPr></w:body></w:document>`;
+  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="${W}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body><w:p><w:pPr><w:pStyle w:val="Normal"/><w:jc w:val="left"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Synthetic finding: </w:t></w:r><w:sdt><w:sdtPr><w:id w:val="901"/><w:tag w:val="synthetic_finding"/><w:alias w:val="Synthetic finding"/><w:text/></w:sdtPr><w:sdtContent><w:r><w:t>Enter finding</w:t></w:r></w:sdtContent></w:sdt></w:p><w:tbl><w:tblPr><w:tblW w:w="9000" w:type="dxa"/><w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid><w:gridCol w:w="9000"/></w:tblGrid><w:tr><w:trPr><w:cantSplit/></w:trPr><w:tc><w:tcPr><w:tcW w:w="9000" w:type="dxa"/><w:vAlign w:val="center"/></w:tcPr><w:p><w:r><w:t>Synthetic table</w:t></w:r></w:p></w:tc></w:tr></w:tbl><w:sectPr><w:headerReference w:type="default" r:id="rIdHeader"/><w:footerReference w:type="default" r:id="rIdFooter"/><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1080" w:right="1080" w:bottom="1080" w:left="1080" w:header="540" w:footer="540"/></w:sectPr></w:body></w:document>`;
   const source = await buildSyntheticDocx({
     documentXml,
     extraEntries: {
       "word/header1.xml": `<w:hdr xmlns:w="${W}"><w:p><w:r><w:t>Synthetic header</w:t></w:r></w:p></w:hdr>`,
       "word/footer1.xml": `<w:ftr xmlns:w="${W}"><w:p><w:r><w:t>Synthetic footer</w:t></w:r></w:p></w:ftr>`,
+      "word/styles.xml": `<w:styles xmlns:w="${W}"><w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:basedOn w:val="Base"/><w:pPr><w:jc w:val="left"/><w:spacing w:after="120"/></w:pPr><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Base"><w:pPr><w:widowControl/></w:pPr></w:style></w:styles>`,
+      "word/numbering.xml": `<w:numbering xmlns:w="${W}"><w:abstractNum w:abstractNumId="7"><w:nsid w:val="A1B2C3D4"/><w:multiLevelType w:val="singleLevel"/><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="7"/></w:num></w:numbering>`,
     },
   });
   const ir = compileTemplateDocx(source);
@@ -139,6 +143,78 @@ beforeAll(async () => {
     throw new Error("Synthetic font mutation did not apply.");
   }
   structureTamperedZip.file("word/document.xml", structureMutatedXml);
+  const mutateRenderedEntry = async (
+    partName: string,
+    before: string,
+    after: string,
+  ): Promise<Buffer> => {
+    const zip = await JSZip.loadAsync(rendered.document);
+    const entry = zip.file(partName);
+    if (!entry) throw new Error(`Missing synthetic layout part: ${partName}.`);
+    const xml = await entry.async("string");
+    const changed = xml.replace(before, after);
+    if (changed === xml)
+      throw new Error(`Synthetic layout mutation did not apply: ${partName}.`);
+    zip.file(partName, changed);
+    return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+  };
+  const layoutTamperedRenderers = Object.fromEntries(
+    await Promise.all(
+      [
+        [
+          "paragraph-alignment",
+          "word/document.xml",
+          '<w:jc w:val="left"/>',
+          '<w:jc w:val="center"/>',
+        ],
+        [
+          "table-properties",
+          "word/document.xml",
+          '<w:tblLayout w:type="fixed"/>',
+          '<w:tblLayout w:type="autofit"/>',
+        ],
+        [
+          "row-properties",
+          "word/document.xml",
+          "<w:cantSplit/>",
+          '<w:cantSplit w:val="false"/>',
+        ],
+        [
+          "cell-properties",
+          "word/document.xml",
+          '<w:vAlign w:val="center"/>',
+          '<w:vAlign w:val="bottom"/>',
+        ],
+        [
+          "section-properties",
+          "word/document.xml",
+          '<w:pgMar w:top="1080"',
+          '<w:pgMar w:top="1440"',
+        ],
+        [
+          "normal-style",
+          "word/styles.xml",
+          '<w:jc w:val="left"/>',
+          '<w:jc w:val="center"/>',
+        ],
+        [
+          "numbering",
+          "word/numbering.xml",
+          '<w:lvlJc w:val="left"/>',
+          '<w:lvlJc w:val="right"/>',
+        ],
+      ].map(async ([name, partName, before, after]) => [
+        name!,
+        await mutateRenderedEntry(partName!, before!, after!),
+      ]),
+    ),
+  );
+  const sourcePdf = await buildSyntheticPdf(
+    "Synthetic finding: Enter finding Synthetic table Synthetic header Synthetic footer",
+  );
+  const rendererPdf = await buildSyntheticPdf(
+    "Synthetic finding: Synthetic stable finding Synthetic table Synthetic header Synthetic footer",
+  );
   officeFixture = {
     source,
     rendererOutput: rendered.document,
@@ -150,6 +226,7 @@ beforeAll(async () => {
       type: "nodebuffer",
       compression: "DEFLATE",
     }),
+    layoutTamperedRenderers,
     expectedManifestBytes: jsonBytes(
       buildOfficeExpectedValueManifest({
         syntheticOnly: true,
@@ -159,7 +236,8 @@ beforeAll(async () => {
         resolutions,
       }),
     ),
-    pdf: await buildSyntheticPdf(),
+    sourcePdf,
+    rendererPdf,
   };
 });
 
@@ -443,6 +521,24 @@ async function wordEvidenceZip(
   const documentEvidence = originals.map((document) => {
     const safeStem = `${document.caseId}--${document.documentRole}`;
     const reopened = document.bytes;
+    const pdf =
+      document.documentRole === "source"
+        ? officeFixture.sourcePdf
+        : officeFixture.rendererPdf;
+    const pdfExportBinding = jsonBytes({
+      contractVersion: "template-twin-word-pdf-export-binding/1.0.0",
+      sourceCommit: commit,
+      syntheticOnly: true,
+      authorizesClinicalOrProductionAction: false,
+      caseId: document.caseId,
+      documentRole: document.documentRole,
+      reopenedDocxSha256: sha256(reopened),
+      reopenedDocxSizeBytes: reopened.length,
+      exportedPdfSha256: sha256(pdf),
+      exportedPdfSizeBytes: pdf.length,
+      wordPageCount: 1,
+      recordedAtIso: CHECKED_AT,
+    });
     const openXmlReport = (target: "Office2013" | "Microsoft365") =>
       jsonBytes({
         tool: WORD_OPENXML_VALIDATOR_NAME,
@@ -481,10 +577,17 @@ async function wordEvidenceZip(
       },
       {
         relativePath: `word-exported-pdf/${safeStem}.word.pdf`,
-        sizeBytes: officeFixture.pdf.length,
-        sha256: sha256(officeFixture.pdf),
+        sizeBytes: pdf.length,
+        sha256: sha256(pdf),
         kind: "word_exported_pdf",
-        bytes: officeFixture.pdf,
+        bytes: pdf,
+      },
+      {
+        relativePath: `pdf-export-binding/${safeStem}.pdf-export-binding.json`,
+        sizeBytes: pdfExportBinding.length,
+        sha256: sha256(pdfExportBinding),
+        kind: "pdf_export_binding_json",
+        bytes: pdfExportBinding,
       },
       {
         relativePath: `openxml/${safeStem}.Office2013.json`,
@@ -782,6 +885,70 @@ describe("returned Template Twin human-gate evidence validation", () => {
     expect(report.issues.map((issue) => issue.code)).toContain(
       "TT_HUMAN_GATE_WORD_STATIC_OR_OCCURRENCE_MISMATCH",
     );
+  });
+
+  it.each([
+    "paragraph-alignment",
+    "table-properties",
+    "row-properties",
+    "cell-properties",
+    "section-properties",
+    "normal-style",
+    "numbering",
+  ])(
+    "fails canonical %s layout drift with unchanged clinical text",
+    async (mutation) => {
+      const tampered = officeFixture.layoutTamperedRenderers[mutation];
+      if (!tampered)
+        throw new Error(`Missing layout mutation fixture: ${mutation}.`);
+      const report = await validateReturnedHumanGateEvidence(
+        await validInputs({
+          word: {
+            mutateEntries(entries) {
+              entries.set(
+                "word-reopened-docx/synthetic-office--renderer_output.word-reopened.docx",
+                tampered,
+              );
+            },
+          },
+        }),
+      );
+
+      expect(report.status).toBe("FAIL");
+      expect(report.issues.map((issue) => issue.code)).toContain(
+        "TT_HUMAN_GATE_WORD_LAYOUT_INTEGRITY_MISMATCH",
+      );
+    },
+  );
+
+  it("rejects a self-consistent stale same-page-count PDF substitution", async () => {
+    const stalePdf = officeFixture.sourcePdf;
+    const stalePath =
+      "word-exported-pdf/synthetic-office--renderer_output.word.pdf";
+    const report = await validateReturnedHumanGateEvidence(
+      await validInputs({
+        word: {
+          mutateEvidence(evidence) {
+            const file = evidence.documents[1]!.generatedFiles.find(
+              (candidate) => candidate.relativePath === stalePath,
+            );
+            if (!file)
+              throw new Error("Missing renderer PDF fixture evidence.");
+            file.sizeBytes = stalePdf.length;
+            file.sha256 = sha256(stalePdf);
+          },
+          mutateEntries(entries) {
+            entries.set(stalePath, stalePdf);
+          },
+        },
+      }),
+    );
+
+    const codes = report.issues.map((issue) => issue.code);
+    expect(report.status).toBe("FAIL");
+    expect(codes).not.toContain("TT_HUMAN_GATE_WORD_GENERATED_FILE_MISMATCH");
+    expect(codes).toContain("TT_HUMAN_GATE_WORD_PDF_SEMANTIC_LAYOUT_MISMATCH");
+    expect(codes).toContain("TT_HUMAN_GATE_WORD_PDF_EXPORT_BINDING_MISMATCH");
   });
 
   it("rejects stale Open XML reports whose DOCX hash and size no longer match the returned bytes", async () => {

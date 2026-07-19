@@ -65,6 +65,8 @@ export interface ValidateReturnedHumanGateEvidenceInput {
 }
 
 export interface ReturnedOfficeArtifactVerifierInput {
+  readonly expectedSourceCommit: string;
+  readonly caseId: string;
   readonly documentRole: "source" | "renderer_output";
   readonly expectedDocumentSha256: string;
   readonly expectedDocumentSizeBytes: number;
@@ -75,15 +77,19 @@ export interface ReturnedOfficeArtifactVerifierInput {
   readonly workCopyBytes: Uint8Array;
   readonly reopenedDocxBytes: Uint8Array;
   readonly exportedPdfBytes: Uint8Array;
+  readonly pdfExportBindingBytes: Uint8Array;
 }
 
 export interface ReturnedOfficeArtifactVerification {
-  readonly contractVersion: "template-twin-returned-office-artifact-verifier/1.0.0";
+  readonly contractVersion: "template-twin-returned-office-artifact-verifier/2.0.0";
   readonly verificationManifestValid: boolean;
   readonly reopenedPackageValid: boolean;
   readonly staticAndOccurrenceValid: boolean;
   readonly semanticReadbackValid: boolean;
+  readonly layoutIntegrityValid: boolean;
   readonly exportedPdfValid: boolean;
+  readonly pdfSemanticLayoutValid: boolean;
+  readonly pdfExportBindingValid: boolean;
 }
 
 export type ReturnedOfficeArtifactVerifier = (
@@ -854,6 +860,10 @@ async function validateWordEvidence(input: {
         `word-reopened-docx/${safeStem}.word-reopened.docx`,
       ],
       ["word_exported_pdf", `word-exported-pdf/${safeStem}.word.pdf`],
+      [
+        "pdf_export_binding_json",
+        `pdf-export-binding/${safeStem}.pdf-export-binding.json`,
+      ],
       ["openxml_office2013_json", `openxml/${safeStem}.Office2013.json`],
       ["openxml_microsoft365_json", `openxml/${safeStem}.Microsoft365.json`],
     ]);
@@ -872,7 +882,7 @@ async function validateWordEvidence(input: {
         input.issues,
         "TT_HUMAN_GATE_WORD_GENERATED_EVIDENCE_INCOMPLETE",
         "FAIL",
-        "Each Word document must have one work copy, reopened DOCX, exported PDF, and two target-specific Open XML reports.",
+        "Each Word document must have one work copy, reopened DOCX, exported PDF, PDF export-binding record, and two target-specific Open XML reports.",
       );
     }
     for (const generated of evidence.generatedFiles) {
@@ -923,9 +933,12 @@ async function validateWordEvidence(input: {
     const workCopy = generatedByKind.get("work_copy");
     const reopened = generatedByKind.get("word_reopened_docx");
     const exportedPdf = generatedByKind.get("word_exported_pdf");
+    const pdfExportBinding = generatedByKind.get("pdf_export_binding_json");
     let artifactVerification: ReturnedOfficeArtifactVerification;
     try {
       artifactVerification = await input.officeArtifactVerifier({
+        expectedSourceCommit: input.expectedSourceCommit,
+        caseId: evidence.caseId,
         documentRole: evidence.documentRole,
         expectedDocumentSha256: expected.sha256,
         expectedDocumentSizeBytes: expected.sizeBytes,
@@ -942,21 +955,27 @@ async function validateWordEvidence(input: {
         exportedPdfBytes: exportedPdf
           ? (inflated.get(exportedPdf.relativePath) ?? new Uint8Array())
           : new Uint8Array(),
+        pdfExportBindingBytes: pdfExportBinding
+          ? (inflated.get(pdfExportBinding.relativePath) ?? new Uint8Array())
+          : new Uint8Array(),
       });
     } catch {
       artifactVerification = {
         contractVersion:
-          "template-twin-returned-office-artifact-verifier/1.0.0",
+          "template-twin-returned-office-artifact-verifier/2.0.0",
         verificationManifestValid: false,
         reopenedPackageValid: false,
         staticAndOccurrenceValid: false,
         semanticReadbackValid: false,
+        layoutIntegrityValid: false,
         exportedPdfValid: false,
+        pdfSemanticLayoutValid: false,
+        pdfExportBindingValid: false,
       };
     }
     if (
       artifactVerification.contractVersion !==
-        "template-twin-returned-office-artifact-verifier/1.0.0" ||
+        "template-twin-returned-office-artifact-verifier/2.0.0" ||
       !artifactVerification.verificationManifestValid
     ) {
       addIssue(
@@ -982,6 +1001,14 @@ async function validateWordEvidence(input: {
         "The reopened Word file did not preserve every normalized static region and unique certified field occurrence.",
       );
     }
+    if (!artifactVerification.layoutIntegrityValid) {
+      addIssue(
+        input.issues,
+        "TT_HUMAN_GATE_WORD_LAYOUT_INTEGRITY_MISMATCH",
+        "FAIL",
+        "The reopened Word file changed canonical paragraph, run, table, row, cell, section, style, or numbering layout semantics.",
+      );
+    }
     if (
       evidence.documentRole === "renderer_output" &&
       !artifactVerification.semanticReadbackValid
@@ -999,6 +1026,22 @@ async function validateWordEvidence(input: {
         "TT_HUMAN_GATE_WORD_EXPORTED_PDF_INVALID",
         "FAIL",
         "The Word-exported PDF is malformed, active, encrypted, or has the wrong page count.",
+      );
+    }
+    if (!artifactVerification.pdfSemanticLayoutValid) {
+      addIssue(
+        input.issues,
+        "TT_HUMAN_GATE_WORD_PDF_SEMANTIC_LAYOUT_MISMATCH",
+        "FAIL",
+        "The Word-exported PDF does not preserve the reopened DOCX semantic token census and supported page geometry.",
+      );
+    }
+    if (!artifactVerification.pdfExportBindingValid) {
+      addIssue(
+        input.issues,
+        "TT_HUMAN_GATE_WORD_PDF_EXPORT_BINDING_MISMATCH",
+        "FAIL",
+        "The desktop Word export record is missing or does not bind the exact reopened DOCX, exported PDF, document identity, and page count.",
       );
     }
 

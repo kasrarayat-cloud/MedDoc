@@ -1,11 +1,13 @@
 import { z } from "zod";
 
 export const HUMAN_GATE_PACKAGE_VERSION =
-  "template-twin-human-release-gate-package/2.0.0" as const;
+  "template-twin-human-release-gate-package/3.0.0" as const;
 export const WORD_HUMAN_EVIDENCE_VERSION =
-  "template-twin-desktop-word-human-evidence/2.0.0" as const;
+  "template-twin-desktop-word-human-evidence/3.0.0" as const;
 export const WORD_DOCUMENT_MANIFEST_VERSION =
-  "template-twin-desktop-word-document-manifest/2.0.0" as const;
+  "template-twin-desktop-word-document-manifest/3.0.0" as const;
+export const WORD_PDF_EXPORT_BINDING_VERSION =
+  "template-twin-word-pdf-export-binding/1.0.0" as const;
 export const WORD_OPENXML_VALIDATOR_NAME =
   "DocumentFormat.OpenXml.OpenXmlValidator" as const;
 export const WORD_OPENXML_VALIDATOR_SDK_VERSION = "3.5.1.0" as const;
@@ -38,8 +40,8 @@ export const ReleaseGateFileEvidenceSchema = z
 export const WordQaDocumentSchema = ReleaseGateFileEvidenceSchema.extend({
   caseId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,79}$/u),
   documentRole: z.enum(["source", "renderer_output"]),
-  expectedPageCount: z.number().int().positive(),
-  minimumExpectedPages: z.number().int().positive(),
+  expectedPageCount: z.number().int().positive().max(500),
+  minimumExpectedPages: z.number().int().positive().max(500),
   verification: z
     .object({
       contractVersion: z.literal(WORD_VERIFICATION_CONTRACT_VERSION),
@@ -94,10 +96,29 @@ const WordAutomationFileSchema = ReleaseGateFileEvidenceSchema.extend({
     "work_copy",
     "word_reopened_docx",
     "word_exported_pdf",
+    "pdf_export_binding_json",
     "openxml_office2013_json",
     "openxml_microsoft365_json",
   ]),
 }).strict();
+
+export const WordPdfExportBindingSchema = z
+  .object({
+    contractVersion: z.literal(WORD_PDF_EXPORT_BINDING_VERSION),
+    sourceCommit: CommitShaSchema,
+    syntheticOnly: z.literal(true),
+    authorizesClinicalOrProductionAction: z.literal(false),
+    caseId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,79}$/u),
+    documentRole: z.enum(["source", "renderer_output"]),
+    reopenedDocxSha256: Sha256Schema,
+    reopenedDocxSizeBytes: z.number().int().positive(),
+    exportedPdfSha256: Sha256Schema,
+    exportedPdfSizeBytes: z.number().int().positive(),
+    wordPageCount: z.number().int().positive().max(500),
+    recordedAtIso: IsoDateTimeSchema,
+  })
+  .strict();
+export type WordPdfExportBinding = z.infer<typeof WordPdfExportBindingSchema>;
 
 const HumanPassFailBlockedSchema = z.enum(["PASS", "FAIL", "BLOCKED"]);
 
@@ -141,14 +162,14 @@ export const WordQaDocumentEvidenceSchema = z
     saveAsCompleted: z.boolean(),
     reopenReadOnlyCompleted: z.boolean(),
     pdfExportCompleted: z.boolean(),
-    pageCountBeforeSave: z.number().int().positive().nullable(),
-    pageCountAfterReopen: z.number().int().positive().nullable(),
-    expectedPageCount: z.number().int().positive(),
+    pageCountBeforeSave: z.number().int().positive().max(500).nullable(),
+    pageCountAfterReopen: z.number().int().positive().max(500).nullable(),
+    expectedPageCount: z.number().int().positive().max(500),
     pageCountMatchesExpected: z.boolean(),
-    minimumExpectedPages: z.number().int().positive(),
+    minimumExpectedPages: z.number().int().positive().max(500),
     compatibilityModeBeforeSave: z.number().int().nullable(),
     compatibilityModeAfterReopen: z.number().int().nullable(),
-    generatedFiles: z.array(WordAutomationFileSchema).max(5),
+    generatedFiles: z.array(WordAutomationFileSchema).max(6),
     humanObservation: WordHumanObservationSchema,
   })
   .strict();
@@ -249,6 +270,12 @@ export const WORD_HUMAN_EVIDENCE_JSON_SCHEMA = Object.freeze(
 );
 export const WORD_DOCUMENT_MANIFEST_JSON_SCHEMA = Object.freeze(
   z.toJSONSchema(WordQaDocumentManifestSchema, {
+    target: "draft-2020-12",
+    io: "input",
+  }),
+);
+export const WORD_PDF_EXPORT_BINDING_JSON_SCHEMA = Object.freeze(
+  z.toJSONSchema(WordPdfExportBindingSchema, {
     target: "draft-2020-12",
     io: "input",
   }),

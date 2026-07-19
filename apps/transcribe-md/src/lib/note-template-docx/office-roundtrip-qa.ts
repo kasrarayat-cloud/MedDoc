@@ -21,6 +21,23 @@ import {
 import { inspectDocxPackage } from "./package-security";
 
 export {
+  OFFICE_LAYOUT_CANONICALIZER_VERSION,
+  OFFICE_LAYOUT_INTEGRITY_CONTRACT_VERSION,
+  buildOfficeLayoutIntegrityManifestQa,
+  compareOfficeLayoutIntegrityManifestsQa,
+  deriveOfficePdfDocumentFactsQa,
+  normalizeOfficePdfWordTokens,
+} from "./office-layout-integrity";
+export type {
+  OfficeLayoutIntegrityComparison,
+  OfficeLayoutIntegrityManifest,
+  OfficeLayoutIntegrityRegion,
+  OfficeLayoutRole,
+  OfficeLayoutScope,
+  OfficePdfDocumentFacts,
+} from "./office-layout-integrity";
+
+export {
   OFFICE_DOCX_BYTE_READBACK_QA_VERSION,
   OFFICE_FIELD_READBACK_QA_CONTRACT_VERSION,
   OFFICE_ROUNDTRIP_QA_CONTRACT_VERSION,

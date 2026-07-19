@@ -91,7 +91,8 @@ The reviewer needs no coding knowledge and no administrator privileges:
 
 The script verifies Microsoft Word availability, records Windows and Word
 versions, checks originals before and after the run, opens only working copies,
-saves separately reopened DOCX copies, exports PDFs, and validates the exact
+saves separately reopened DOCX copies, exports PDFs, writes a strict export
+binding containing the exact reopened-DOCX and PDF hashes/sizes, and validates the exact
 Word-saved bytes for Office 2013 and Microsoft 365 with a self-contained Open
 XML SDK 3.5.1 validator whose executable path and SHA-256 are bound into the
 package. It records hashes and automation errors and creates one timestamped
@@ -218,13 +219,25 @@ replacement returned ZIP therefore fails. It then verifies the package and
 file hashes, strict JSON schemas, source commit, source-document/manifest
 bindings, exact generated paths, save/reopen/export completion, both pinned
 Open XML reports including the exact reopened DOCX SHA-256 and byte size,
-parseable and page-count-matched PDF output, the production OPC/XML/security inspection,
+parseable and page-count-matched PDF output, exact PDF-export binding,
+DOCX-to-PDF semantic-token coverage and supported page geometry, the production OPC/XML/security inspection,
 verification-contract-v2 field identity and occurrence, normalized static
-regions and structure, exact renderer values and control states, reviewer roles, all seven
+regions and structure, canonical paragraph/run/table/row/cell/section layout,
+inheritance-relevant styles and numbering, exact renderer values and control states, reviewer roles, all seven
 physician decisions, required observations, attestations, and evidence
 completeness. It rejects altered files, stale or mismatched SHAs, incomplete
 answers, founder-only clinical approval, and evidence for another document or
 Template Twin commit.
+
+The canonical layout check normalizes namespace prefixes, property/definition
+ordering, relationship IDs, and semantically equivalent boolean/default
+lexical forms while preserving property ownership and inheritance-relevant
+definitions. It is intentionally not a pixel-perfect renderer comparison.
+Likewise, the PDF verifier no longer treats matching page count as sufficient:
+it parses the PDF locally, checks its semantic token census and page geometry,
+and verifies the Word-run export binding. Margins, font rendering, pagination,
+and other visual quality still require the returned desktop Word human
+observation.
 
 The local command also builds the pinned Open XML SDK validator from the clean
 requested Git head and reruns it, with networking disabled, against the exact

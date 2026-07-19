@@ -20,6 +20,8 @@ import {
   WORD_DOCUMENT_MANIFEST_VERSION,
   WORD_OPENXML_VALIDATOR_NAME,
   WORD_OPENXML_VALIDATOR_SDK_VERSION,
+  WORD_PDF_EXPORT_BINDING_JSON_SCHEMA,
+  WORD_PDF_EXPORT_BINDING_VERSION,
   WORD_VERIFICATION_CONTRACT_VERSION,
   WordQaDocumentManifestSchema,
 } from "../../src/lib/template-twin/human-release-gate/contracts";
@@ -355,6 +357,10 @@ async function main(): Promise<void> {
     path.join(stage, "manifests", "RESULT-FILE-HASHES.schema.json"),
     EVIDENCE_FILE_HASH_MANIFEST_JSON_SCHEMA,
   );
+  await writeJson(
+    path.join(stage, "manifests", "PDF-EXPORT-BINDING.schema.json"),
+    WORD_PDF_EXPORT_BINDING_JSON_SCHEMA,
+  );
   await copy(
     path.join(corpusRoot, "corpus-manifest.json"),
     path.join(stage, "evidence", "corpus", "corpus-manifest.json"),
@@ -591,7 +597,11 @@ async function main(): Promise<void> {
       .replaceAll("__SOURCE_COMMIT__", options.sourceCommit)
       .replaceAll("__SHORT_SHA__", shortSha)
       .replaceAll("__MANIFEST_SHA256__", sha256(manifestBytes))
-      .replaceAll("__OPENXML_VALIDATOR_SHA256__", validatorSha256),
+      .replaceAll("__OPENXML_VALIDATOR_SHA256__", validatorSha256)
+      .replaceAll(
+        "__PDF_EXPORT_BINDING_VERSION__",
+        WORD_PDF_EXPORT_BINDING_VERSION,
+      ),
     "utf8",
   );
 
