@@ -21,9 +21,13 @@ import {
 import { detectStructuredPhi } from "@/lib/note-template-parse/phi-gate";
 
 import { canonicalSha256 } from "./canonical";
+import {
+  CompletedCandidateReviewProjectionSchema,
+  type CompletedCandidateReviewProjection,
+} from "./completed-candidate-contract";
 
 export const COMPLETED_CANDIDATE_CONVERTER_VERSION =
-  "completed-document-candidate/1.0.0" as const;
+  "completed-document-candidate/1.1.0" as const;
 export const COMPLETED_CANDIDATE_SYNTHETIC_SENTINEL =
   "QUILLMD SYNTHETIC EXAMPLE — NO REAL PATIENT DATA" as const;
 
@@ -46,6 +50,7 @@ export type CompletedCandidateFailureCode =
   | "AMBIGUOUS_NARRATIVE_CHANGE"
   | "AMBIGUOUS_TABLE_CHANGE"
   | "DUPLICATE_LABEL_AMBIGUOUS"
+  | "STRUCTURAL_PREVIEW_UNSUPPORTED"
   | "NO_DETERMINISTIC_REGIONS"
   | "CANDIDATE_GENERATION_FAILED";
 
@@ -72,6 +77,8 @@ const SAFE_MESSAGES: Record<CompletedCandidateFailureCode, string> = {
     "A changing table value is not an unambiguous scalar cell beside one stable label.",
   DUPLICATE_LABEL_AMBIGUOUS:
     "Two changing regions use the same label. Rename them in the synthetic examples before conversion.",
+  STRUCTURAL_PREVIEW_UNSUPPORTED:
+    "This document has too many tables, rows, cells, or merged columns for a complete safe comparison. Simplify the synthetic examples before conversion.",
   NO_DETERMINISTIC_REGIONS:
     "No deterministic changing scalar regions were found across the synthetic examples.",
   CANDIDATE_GENERATION_FAILED:
@@ -139,6 +146,8 @@ export interface CompletedCandidateConversionResult {
   readonly converterVersion: typeof COMPLETED_CANDIDATE_CONVERTER_VERSION;
   readonly regions: readonly CompletedCandidateRegion[];
   readonly comparison: CompletedCandidateComparison;
+  readonly reviewProjection: CompletedCandidateReviewProjection;
+  readonly reviewProjectionSha256: string;
   readonly privacyEvidence: CompletedCandidatePrivacyEvidence;
   readonly exampleStructureSha256: string;
 }
@@ -366,6 +375,294 @@ function inspectExample(
 interface ScalarCellShape {
   readonly paragraph: XmlElementSpan;
   readonly runPropertiesXml: string;
+}
+
+function wordAttribute(
+  scan: ScannedXmlPart,
+  node: XmlElementSpan,
+  localName: "val" | "w",
+): string | null {
+  const tag = scan.text.slice(node.start, node.startTagEnd);
+  const expression = new RegExp(
+    `\\b(?:[A-Za-z_][\\w.-]*:)?${localName}\\s*=\\s*["']([^"']+)["']`,
+    "u",
+  );
+  return expression.exec(tag)?.[1] ?? null;
+}
+
+function positiveWordInteger(
+  scan: ScannedXmlPart,
+  node: XmlElementSpan,
+  localName: "val" | "w",
+): number {
+  const raw = wordAttribute(scan, node, localName);
+  const value = raw ? Number.parseInt(raw, 10) : Number.NaN;
+  if (!Number.isInteger(value) || value < 1) {
+    throw new CompletedCandidateConversionError(
+      "STRUCTURAL_PREVIEW_UNSUPPORTED",
+    );
+  }
+  return value;
+}
+
+function cellColumnSpan(scan: ScannedXmlPart, cell: XmlElementSpan): number {
+  const cellProperties = directWordChild(cell, "tcPr");
+  if (!cellProperties) return 1;
+  if (
+    directWordChild(cellProperties, "vMerge") ||
+    directWordChild(cellProperties, "hMerge")
+  ) {
+    // The first candidate release does not pretend to render a merge it cannot
+    // prove exactly. Bounded horizontal gridSpan is handled explicitly below.
+    throw new CompletedCandidateConversionError(
+      "STRUCTURAL_PREVIEW_UNSUPPORTED",
+    );
+  }
+  const gridSpan = directWordChild(cellProperties, "gridSpan");
+  if (!gridSpan) return 1;
+  const value = positiveWordInteger(scan, gridSpan, "val");
+  if (value > 64) {
+    throw new CompletedCandidateConversionError(
+      "STRUCTURAL_PREVIEW_UNSUPPORTED",
+    );
+  }
+  return value;
+}
+
+function tableGridBasisPoints(
+  scan: ScannedXmlPart,
+  table: XmlElementSpan,
+): readonly number[] {
+  const grid = directWordChild(table, "tblGrid");
+  const columns = grid ? directWordChildren(grid, "gridCol") : [];
+  if (columns.length < 1 || columns.length > 64) {
+    throw new CompletedCandidateConversionError(
+      "STRUCTURAL_PREVIEW_UNSUPPORTED",
+    );
+  }
+  const widths = columns.map((column) =>
+    positiveWordInteger(scan, column, "w"),
+  );
+  const total = widths.reduce((sum, width) => sum + width, 0);
+  const basisPoints = widths.map((width) =>
+    Math.floor((width * 10_000) / total),
+  );
+  if (basisPoints.some((width) => width < 1)) {
+    throw new CompletedCandidateConversionError(
+      "STRUCTURAL_PREVIEW_UNSUPPORTED",
+    );
+  }
+  let remainder = 10_000 - basisPoints.reduce((sum, width) => sum + width, 0);
+  for (let index = 0; remainder > 0; index = (index + 1) % basisPoints.length) {
+    basisPoints[index]! += 1;
+    remainder -= 1;
+  }
+  return Object.freeze(basisPoints);
+}
+
+function assertCandidateControlAtCell(input: {
+  scan: ScannedXmlPart;
+  cell: XmlElementSpan;
+  region: CompletedCandidateRegion;
+}): void {
+  const controls = descendantWordElements(input.cell, "sdt");
+  if (controls.length !== 1) {
+    throw new CompletedCandidateConversionError("CANDIDATE_GENERATION_FAILED");
+  }
+  const properties = directWordChild(controls[0]!, "sdtPr");
+  const tag = properties ? directWordChild(properties, "tag") : undefined;
+  if (
+    !tag ||
+    wordAttribute(input.scan, tag, "val") !== input.region.candidateTag
+  ) {
+    throw new CompletedCandidateConversionError("CANDIDATE_GENERATION_FAILED");
+  }
+}
+
+function buildReviewProjection(input: {
+  sourceScan: ScannedXmlPart;
+  candidateScan: ScannedXmlPart;
+  sourceExampleSha256s: readonly string[];
+  candidateSha256: string;
+  inventorySha256: string;
+  regions: readonly CompletedCandidateRegion[];
+}): CompletedCandidateReviewProjection {
+  const sourceBody = directWordChild(input.sourceScan.roots[0]!, "body");
+  const candidateBody = directWordChild(input.candidateScan.roots[0]!, "body");
+  if (!sourceBody || !candidateBody) {
+    throw new CompletedCandidateConversionError("CANDIDATE_GENERATION_FAILED");
+  }
+  const sourceBlocks = sourceBody.children.filter((child) =>
+    ["p", "tbl"].includes(xmlLocalName(child.name)),
+  );
+  const candidateBlocks = candidateBody.children.filter((child) =>
+    ["p", "tbl"].includes(xmlLocalName(child.name)),
+  );
+  if (
+    sourceBlocks.length !== candidateBlocks.length ||
+    sourceBlocks.some(
+      (block, index) =>
+        xmlLocalName(block.name) !== xmlLocalName(candidateBlocks[index]!.name),
+    )
+  ) {
+    throw new CompletedCandidateConversionError("CANDIDATE_GENERATION_FAILED");
+  }
+  const regionByCell = new Map(
+    input.regions.map((region) => [
+      `${region.tableIndex}:${region.rowIndex}:${region.cellIndex}`,
+      region,
+    ]),
+  );
+  const labelByCell = new Map(
+    input.regions.map((region) => [
+      `${region.tableIndex}:${region.rowIndex}:${region.cellIndex - 1}`,
+      region,
+    ]),
+  );
+  let tableIndex = 0;
+  let totalRows = 0;
+  let totalCells = 0;
+  const blocks = sourceBlocks.map((sourceBlock, displayOrder) => {
+    const candidateBlock = candidateBlocks[displayOrder]!;
+    if (xmlLocalName(sourceBlock.name) === "p") {
+      return Object.freeze({
+        kind: "redacted_paragraph" as const,
+        blockKey: `paragraph:${sourceBlock.path}`,
+        displayOrder,
+      });
+    }
+    const currentTableIndex = tableIndex;
+    tableIndex += 1;
+    const sourceGrid = tableGridBasisPoints(input.sourceScan, sourceBlock);
+    const candidateGrid = tableGridBasisPoints(
+      input.candidateScan,
+      candidateBlock,
+    );
+    if (canonicalSha256(sourceGrid) !== canonicalSha256(candidateGrid)) {
+      throw new CompletedCandidateConversionError(
+        "CANDIDATE_GENERATION_FAILED",
+      );
+    }
+    const sourceRows = directWordChildren(sourceBlock, "tr");
+    const candidateRows = directWordChildren(candidateBlock, "tr");
+    if (sourceRows.length < 1 || sourceRows.length !== candidateRows.length) {
+      throw new CompletedCandidateConversionError(
+        "CANDIDATE_GENERATION_FAILED",
+      );
+    }
+    const rows = sourceRows.map((sourceRow, rowIndex) => {
+      totalRows += 1;
+      const sourceCells = directWordChildren(sourceRow, "tc");
+      const candidateCells = directWordChildren(candidateRows[rowIndex]!, "tc");
+      if (
+        sourceCells.length < 1 ||
+        sourceCells.length > 64 ||
+        sourceCells.length !== candidateCells.length
+      ) {
+        throw new CompletedCandidateConversionError(
+          "CANDIDATE_GENERATION_FAILED",
+        );
+      }
+      let columnStart = 0;
+      const cells = sourceCells.map((sourceCell, cellIndex) => {
+        totalCells += 1;
+        const candidateCell = candidateCells[cellIndex]!;
+        const columnSpan = cellColumnSpan(input.sourceScan, sourceCell);
+        if (
+          columnSpan !== cellColumnSpan(input.candidateScan, candidateCell) ||
+          columnStart + columnSpan > sourceGrid.length
+        ) {
+          throw new CompletedCandidateConversionError(
+            "CANDIDATE_GENERATION_FAILED",
+          );
+        }
+        const key = `${currentTableIndex}:${rowIndex}:${cellIndex}`;
+        const region = regionByCell.get(key);
+        const labelRegion = labelByCell.get(key);
+        if (descendantWordElements(sourceCell, "sdt").length > 0) {
+          throw new CompletedCandidateConversionError(
+            "CANDIDATE_GENERATION_FAILED",
+          );
+        }
+        if (region) {
+          assertCandidateControlAtCell({
+            scan: input.candidateScan,
+            cell: candidateCell,
+            region,
+          });
+        } else if (descendantWordElements(candidateCell, "sdt").length > 0) {
+          throw new CompletedCandidateConversionError(
+            "CANDIDATE_GENERATION_FAILED",
+          );
+        }
+        const role = region
+          ? Object.freeze({
+              kind: "candidate_region" as const,
+              regionId: region.regionId,
+              candidateTag: region.candidateTag,
+              controlKind: "plain_text" as const,
+              sourceState: "VALUE_WITHHELD" as const,
+              candidateState: "BLANK_CONTROL" as const,
+            })
+          : labelRegion
+            ? Object.freeze({
+                kind: "stable_label" as const,
+                label: labelRegion.label,
+                forRegionId: labelRegion.regionId,
+              })
+            : Object.freeze({ kind: "static_redacted" as const });
+        const projected = Object.freeze({
+          cellKey: `table:${currentTableIndex}:row:${rowIndex}:cell:${cellIndex}`,
+          cellIndex,
+          columnStart,
+          columnSpan,
+          rowSpan: 1 as const,
+          role,
+        });
+        columnStart += columnSpan;
+        return projected;
+      });
+      if (columnStart !== sourceGrid.length) {
+        throw new CompletedCandidateConversionError(
+          "STRUCTURAL_PREVIEW_UNSUPPORTED",
+        );
+      }
+      return Object.freeze({ rowIndex, cells: Object.freeze(cells) });
+    });
+    return Object.freeze({
+      kind: "table" as const,
+      blockKey: `table:${currentTableIndex}:${sourceBlock.path}`,
+      displayOrder,
+      tableIndex: currentTableIndex,
+      gridColumnBasisPoints: sourceGrid,
+      rows: Object.freeze(rows),
+    });
+  });
+  if (
+    tableIndex < 1 ||
+    tableIndex > 40 ||
+    totalRows > 500 ||
+    totalCells > 2_000
+  ) {
+    throw new CompletedCandidateConversionError(
+      "STRUCTURAL_PREVIEW_UNSUPPORTED",
+    );
+  }
+  return CompletedCandidateReviewProjectionSchema.parse({
+    profileVersion:
+      "completed-candidate-redacted-structural-review/1.0.0" as const,
+    valuesRedacted: true as const,
+    sourceBytesReturned: false as const,
+    providerEgress: false as const,
+    paginationRepresented: false as const,
+    sourceExampleSha256s: [...input.sourceExampleSha256s],
+    sourceStructureSha256: documentStructureSha256(input.sourceScan),
+    candidateStructureSha256: documentStructureSha256(input.candidateScan),
+    inventorySha256: input.inventorySha256,
+    candidateSha256: input.candidateSha256,
+    blocks,
+    regionCount: input.regions.length,
+  });
 }
 
 function assertScalarCellShape(
@@ -679,6 +976,24 @@ export async function convertCompletedDocumentsToCandidate(
     }
     const candidateSha256 = sha256(document);
     const inventorySha256 = canonicalSha256(regions);
+    const candidatePackage = inspectDocxPackage(document);
+    const candidateDocumentPart =
+      candidatePackage.zip.entries.get("word/document.xml");
+    if (!candidateDocumentPart) {
+      throw new CompletedCandidateConversionError(
+        "CANDIDATE_GENERATION_FAILED",
+      );
+    }
+    const candidateScan = scanXmlPart(candidateDocumentPart.bytes);
+    const reviewProjection = buildReviewProjection({
+      sourceScan: primary.scan,
+      candidateScan,
+      sourceExampleSha256s: inputs.map((input) => input.minimizedSha256),
+      candidateSha256,
+      inventorySha256,
+      regions,
+    });
+    const reviewProjectionSha256 = canonicalSha256(reviewProjection);
     const comparison: CompletedCandidateComparison = Object.freeze({
       exampleCount: examples.length,
       identicalStructure: true,
@@ -709,6 +1024,8 @@ export async function convertCompletedDocumentsToCandidate(
       converterVersion: COMPLETED_CANDIDATE_CONVERTER_VERSION,
       regions: Object.freeze(regions),
       comparison,
+      reviewProjection,
+      reviewProjectionSha256,
       privacyEvidence: Object.freeze({
         ...privacyReceipt,
         evidenceSha256: canonicalSha256(privacyReceipt),

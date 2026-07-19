@@ -14,7 +14,10 @@ import {
   convertCompletedDocumentsToCandidate,
 } from "../completed-candidate-converter";
 import { canonicalSha256 } from "../canonical";
-import { CompletedCandidatePrivacyEvidenceSchema } from "../completed-candidate-contract";
+import {
+  CompletedCandidatePrivacyEvidenceSchema,
+  CompletedCandidateReviewProjectionSchema,
+} from "../completed-candidate-contract";
 
 const CONTENT_TYPES = `<?xml version="1.0" encoding="UTF-8"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -34,13 +37,14 @@ function documentXml(input: {
   extraRow?: string;
   findingRunProperties?: string;
   findingRunsXml?: string;
+  findingCellProperties?: string;
 }): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
   <w:p><w:r><w:t>${COMPLETED_CANDIDATE_SYNTHETIC_SENTINEL}</w:t></w:r></w:p>
   ${input.extraParagraph ? `<w:p><w:r><w:t>${input.extraParagraph}</w:t></w:r></w:p>` : ""}
   <w:tbl><w:tblGrid><w:gridCol w:w="2400"/><w:gridCol w:w="4800"/></w:tblGrid>
-    <w:tr><w:tc><w:p><w:r><w:t>Finding</w:t></w:r></w:p></w:tc><w:tc><w:p><w:pPr><w:spacing w:after="0"/></w:pPr>${input.findingRunsXml ?? `<w:r>${input.findingRunProperties ?? ""}<w:t>${input.finding}</w:t></w:r>`}</w:p></w:tc></w:tr>
+    <w:tr><w:tc><w:p><w:r><w:t>Finding</w:t></w:r></w:p></w:tc><w:tc>${input.findingCellProperties ?? ""}<w:p><w:pPr><w:spacing w:after="0"/></w:pPr>${input.findingRunsXml ?? `<w:r>${input.findingRunProperties ?? ""}<w:t>${input.finding}</w:t></w:r>`}</w:p></w:tc></w:tr>
     <w:tr><w:tc><w:p><w:r><w:t>Plan</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>${input.plan}</w:t></w:r></w:p></w:tc></w:tr>
     ${input.extraRow ?? ""}
   </w:tbl><w:sectPr/>
@@ -98,6 +102,35 @@ describe("completed document to blank candidate conversion", () => {
     ).toBe(true);
     const { evidenceSha256, ...privacyReceipt } = result.privacyEvidence;
     expect(evidenceSha256).toBe(canonicalSha256(privacyReceipt));
+    expect(
+      CompletedCandidateReviewProjectionSchema.safeParse(
+        result.reviewProjection,
+      ).success,
+    ).toBe(true);
+    expect(result.reviewProjectionSha256).toBe(
+      canonicalSha256(result.reviewProjection),
+    );
+    const serializedProjection = JSON.stringify(result.reviewProjection);
+    expect(serializedProjection).not.toContain(
+      COMPLETED_CANDIDATE_SYNTHETIC_SENTINEL,
+    );
+    expect(serializedProjection).not.toContain("Synthetic mild finding");
+    expect(serializedProjection).not.toContain("Synthetic brace plan");
+    const projectedTable = result.reviewProjection.blocks.find(
+      (block) => block.kind === "table",
+    );
+    expect(projectedTable).toMatchObject({
+      kind: "table",
+      gridColumnBasisPoints: [3334, 6666],
+    });
+    if (!projectedTable || projectedTable.kind !== "table") {
+      throw new Error("Expected the synthetic table projection.");
+    }
+    expect(
+      projectedTable.rows.flatMap((row) =>
+        row.cells.filter((cell) => cell.role.kind === "candidate_region"),
+      ),
+    ).toHaveLength(2);
     expect(result.document.equals(first.document)).toBe(false);
     const candidateZip = await JSZip.loadAsync(result.document);
     const candidateXml = await candidateZip
@@ -132,6 +165,7 @@ describe("completed document to blank candidate conversion", () => {
     const second = await convertCompletedDocumentsToCandidate(inputs);
     expect(second.candidateSha256).toBe(first.candidateSha256);
     expect(second.inventorySha256).toBe(first.inventorySha256);
+    expect(second.reviewProjectionSha256).toBe(first.reviewProjectionSha256);
     expect(second.regions).toEqual(first.regions);
   });
 
@@ -173,6 +207,42 @@ describe("completed document to blank candidate conversion", () => {
         }),
       ]),
     ).rejects.toMatchObject({ code: "AMBIGUOUS_TABLE_CHANGE" });
+  });
+
+  it("fails closed when merged-cell topology cannot be reproduced exactly", async () => {
+    await expect(
+      convertCompletedDocumentsToCandidate([
+        await example({
+          finding: "Synthetic finding alpha",
+          plan: "Synthetic plan alpha",
+          findingCellProperties: '<w:tcPr><w:vMerge w:val="restart"/></w:tcPr>',
+        }),
+        await example({
+          finding: "Synthetic finding beta",
+          plan: "Synthetic plan beta",
+          findingCellProperties: '<w:tcPr><w:vMerge w:val="restart"/></w:tcPr>',
+        }),
+      ]),
+    ).rejects.toMatchObject({ code: "STRUCTURAL_PREVIEW_UNSUPPORTED" });
+  });
+
+  it("rejects arbitrary text injected into the strict projection contract", async () => {
+    const result = await convertCompletedDocumentsToCandidate([
+      await example({
+        finding: "Synthetic finding alpha",
+        plan: "Synthetic plan alpha",
+      }),
+      await example({
+        finding: "Synthetic finding beta",
+        plan: "Synthetic plan beta",
+      }),
+    ]);
+    expect(
+      CompletedCandidateReviewProjectionSchema.safeParse({
+        ...result.reviewProjection,
+        sourceText: "must never be exposed",
+      }).success,
+    ).toBe(false);
   });
 
   it.each([
