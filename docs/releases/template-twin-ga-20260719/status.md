@@ -1,6 +1,6 @@
 # QuillMD Template Twin GA release-program status
 
-Last updated: 2026-07-19T06:13:48Z
+Last updated: 2026-07-19T07:28:27Z
 
 ## Production verdict
 
@@ -14,12 +14,13 @@ Last updated: 2026-07-19T06:13:48Z
 | Accepted remediation | `fix/template-twin-manual-certification-remediation-v1` at `79c04e88785a16e8e3b37b58544e107e3a16996e` | PASS |
 | Accepted parent | `b46c62f97544a0193c60929d5ac8e8870b20dc4b` | PASS |
 | Stacked PRs | #362–#370, all open drafts, exact heads verified linear | PASS |
-| Consolidated release branch | `release/template-twin-ga-20260719` at `719eea4b27c68cc76e6bf485612c833705cef913` | PASS |
-| Consolidated release PR | Not created | FAIL |
+| Consolidated release branch | `release/template-twin-ga-20260719` local head `581b5b5cfe17655f0994a382ccde5ca98088f4a9`; published PR head remains `c4f6afa315e1589c7a5e449296c06c9c53317933` pending push | PASS |
+| Lossless stack integration | Merge `719eea4b27c68cc76e6bf485612c833705cef913` | PASS |
+| Consolidated release PR | Draft PR #371 targeting `main` | PASS |
 | Frozen release candidate | Not created | FAIL |
 | Current production Git SHA | Not reproducible from a clean commit | FAIL |
 
-`origin/main` is an ancestor of the accepted remediation; the accepted stack is 82 commits ahead and `git merge-tree` reports no integration conflict. Merge commit `719eea4b27c68cc76e6bf485612c833705cef913` has exactly two parents (`1be1019` and `79c04e8`), and its tree `1450b6fe4acdd78f0d6c46df5ef276e86735ab93` is byte-for-byte identical to the accepted remediation tree. The stack adds 465 files/changes, 146,048 lines, and ten ordered Prisma migrations (production currently has the preceding 67).
+`origin/main` is an ancestor of the accepted remediation; the accepted stack is 82 commits ahead and `git merge-tree` reports no integration conflict. Merge commit `719eea4b27c68cc76e6bf485612c833705cef913` has exactly two parents (`1be1019` and `79c04e8`), and its tree `1450b6fe4acdd78f0d6c46df5ef276e86735ab93` is byte-for-byte identical to the accepted remediation tree. The accepted stack adds ten ordered Prisma migrations; corrective head `581b5b5` adds one raw-quarantine admission migration, bringing the repository total to 78 while production remains at the preceding 67.
 
 ## Current production provenance
 
@@ -41,10 +42,10 @@ The two exact images were exported without runtime secrets to a mode-0600 local 
 | Phase | Status | Evidence / blocking condition |
 |---|---|---|
 | 0 — Preflight and inventory | FAIL | Read-only inventory completed and production gate is closed: exact deployed SHA, least-privilege DB/object-storage identities, PITR, encrypted offsite restore, internal transport, capacity, and monitoring evidence fail. |
-| 1 — Consolidated implementation | FAIL | Accepted history is consolidated losslessly at `719eea4`; draft PR, full census, corrective commits, and independent exact-head review remain pending. |
-| 2 — Production template intake | FAIL | Existing safe-alpha boundary is narrower than the requested GA boundary; completed-document conversion is not implemented. |
-| 3 — Extraction quality | FAIL | Core facts can currently populate without exact source offsets; existing deterministic/mocked tests are not a signed multispecialty quality evaluation. |
-| 4 — Microsoft Office compatibility | HUMAN PENDING | Synthetic Open XML/LibreOffice tooling exists; returned desktop Microsoft Word evidence is mandatory and absent. |
+| 1 — Consolidated implementation | FAIL | Accepted history is consolidated losslessly and draft PR #371 exists. Two additive corrective commits are local; independent exact-head reviews, push/CI, and the final exact-base/head census remain pending. |
+| 2 — Production template intake | FAIL | `581b5b5` implements raw first-write quarantine, local ClamAV receipts, metadata minimization, hidden/revision rejection, immutable source binding, and database certification enforcement. Completed-document conversion and remaining complex/repeating compatibility remain open. |
+| 3 — Extraction quality | FAIL | `581b5b5` reconstructs canonical typed/voice sources and revalidates exact evidence at review, correction, signing, and download. Independent review and a signed multispecialty quality evaluation remain open. |
+| 4 — Microsoft Office compatibility | FAIL | `70d3717` hardens consolidated-branch exact-head OpenXML/Windows evidence packaging and returned-artifact checks. Independent review, final-SHA execution, and desktop Microsoft Word evidence remain pending. |
 | 5 — Infrastructure and operations | FAIL | Complete restore, PITR, object-store recovery, monitoring, capacity, and operational ownership gates are not passed. |
 | 6 — Privacy/Legal, Clinical, Operations approvals | HUMAN PENDING | No approval may be fabricated by Codex. |
 | 7 — Final release candidate | FAIL | No frozen exact head or independent final review exists. |
@@ -61,6 +62,31 @@ The two exact images were exported without runtime secrets to a mode-0600 local 
 - Production DB: 67/67 migrations complete and no invalid indexes, but one documented historical migration checksum differs from the repository; PostgreSQL has no PITR and application traffic uses the sole superuser/owner role, including unrestricted mutation of `audit_logs`.
 - Production storage: MinIO is private and default-SSE encrypted, but web and worker use root credentials; versioning/object lock/lifecycle are absent, orphan reconciliation is disabled, and 76 storage-full events occurred July 16–17.
 - Internal service transport: PostgreSQL, Redis, and MinIO use plaintext on the private Docker network. Loopback-only host publishing reduces exposure but does not satisfy the explicit encryption-in-transit gate.
+
+## Initial consolidated test census
+
+The census used clean detached worktrees, Node 22.22.0, npm 11.10.0, `npm ci`, and generated Prisma clients. It compared exact base `1be101912f01293de3b8fddae722c823ecc86f29` with release documentation head `4d011f6bcb8b8e9bac17a3f17d1874faec4f8ff3` before corrective commit `c4f6afa`; the final exact head must be rerun.
+
+- Repository test-file census: base 196, head 325, 129 added, 34 modified, none removed.
+- Offline unit census: base 143 files / 1,895 tests PASS; head 270 files / 3,264 tests PASS.
+- Identical 143-file manifest: base 1,895 tests PASS; head 1,925 tests PASS.
+- Head-only unit inventory: 127 files / 1,339 tests PASS.
+- The root `npm run test:all` command is a zero-test placeholder and is not counted as evidence.
+- The top-level CRM integration suite requires a seeded PostgreSQL instance and failed identically on base and head with the same unavailable test-database authentication; it is not marked PASS.
+- Browser, database-backed, Office, provider, load, and migration rehearsals remain separate open gates.
+
+Draft PR #371 is still published at `c4f6afa315e1589c7a5e449296c06c9c53317933`. Its unit, repository test, npm high/critical audit, verified-only TruffleHog, and axe-core checks passed. The two local corrective commits have not yet been pushed, so none of those earlier checks is final-head evidence; commit `70d3717` generalizes the Office workflow predicate, which must be exercised after push.
+
+## Corrective technical evidence at local head
+
+- Office evidence hardening commit: `70d37172f5c54ef146c74f43d6717532d5786d08`; focused human-gate tests 30/30, targeted lint, shell/YAML checks, pinned Linux/Windows OpenXML cross-publish, and exact executable hash smoke pass. Desktop Word remains a human gate.
+- Intake/evidence/rollback commit: `581b5b5cfe17655f0994a382ccde5ca98088f4a9`; Template Twin path census 93 files / 1,012 tests PASS, application TypeScript PASS, changed-file ESLint PASS, Prisma format/validate/generate PASS.
+- A fresh disposable PostgreSQL database applied all 78 migrations. The synthetic-only `template-twin-quarantine-certification-contract-v1` passed its valid path and proved direct-SQL certification of a pre-GA source is rejected.
+- Independent detached reviews of `70d3717` and `581b5b5` are in progress. These implementation authors do not approve their own work.
+
+## Rollback compatibility finding
+
+An independent disposable-schema rehearsal rejected the preserved pre-release images as post-migration rollback targets. After the accepted lineage contract, the old application cannot create generic templates, cannot read newly appended audit enum values, can fail ordinary automation/signing transitions, can expose or select Template Twin rows without the new rollout contract, and its worker can replay ambiguous provider work. The archived images remain valid only for a rollback before any Template Twin migration. Commit `581b5b5` implements a final-schema `rollback-compat-v2` bridge and image guard, but production migration remains blocked until independent ACCEPT, immutable bridge digests, a data-bearing swap/roll-forward rehearsal, and an audited maintenance fence prove the required valid-token deactivation-before-revocation sequence.
 
 ## Protected-worktree statement
 

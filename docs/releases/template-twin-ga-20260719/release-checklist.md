@@ -14,22 +14,23 @@ Only `PASS`, `FAIL`, and `HUMAN PENDING` are release states. A `FAIL` may simply
 | Full DB/PITR/object/queue restore | FAIL | Not yet proven with approved synthetic/offsite evidence. |
 | Complete production infrastructure inventory | PASS | Read-only census completed; its failures gate production but the inventory itself is recorded. |
 | Consolidated branch | PASS | Two-parent merge `719eea4`; tree equals accepted `79c04e8` exactly. |
-| Consolidated draft PR | FAIL | Branch is not yet pushed and PR is not yet created. |
-| All migrations additive/ordered and rollback-safe | FAIL | Ten migrations ordered; post-contract old-image rollback needs closure. |
+| Consolidated draft PR | PASS | Draft PR #371 targets `main`; local corrective head is `581b5b5cfe17655f0994a382ccde5ca98088f4a9` and push/CI are pending. |
+| All migrations additive/ordered and rollback-safe | FAIL | All 78 migrations, including quarantine admission, apply from zero in disposable PostgreSQL and the certification contract passes. Final-schema bridge review/rehearsal and the audited maintenance fence remain pending. |
 | Default rollout off and ordinary visits unchanged | FAIL | Static evidence exists; final integration verification pending. |
 | No production synthetic-only bypass | FAIL | Final diff review and tests pending. |
-| Identical-manifest base/head test census | FAIL | Not run for consolidated exact head. |
+| Initial identical-manifest base/head test census | PASS | Base 143 files/1,895 tests and head 143 files/1,925 tests pass; head total is 270 files/3,264 tests. |
+| Final exact-head identical-manifest census | FAIL | Must rerun after all corrective commits and frozen RC. |
 | Independent exact-head integration review | FAIL | Not run. |
-| Native blank/fillable DOCX GA matrix | FAIL | Existing safe-alpha boundary is incomplete for requested GA scope. |
+| Native blank/fillable DOCX GA matrix | FAIL | Quarantine, malware, metadata, hidden-content, lineage, and certification boundaries are implemented at `581b5b5`; repeating/complex structures and final matrix evidence remain incomplete. |
 | Completed Document → Template Candidate | FAIL | Separate workflow absent. |
-| Real malware-scan attestation and quarantine | FAIL | Production scanner contract/readiness unproven. |
-| Exact core source-evidence anchors | FAIL | Missing/non-exact evidence may currently populate with null offsets. |
+| Real malware-scan attestation and quarantine | FAIL | Exact-byte local ClamAV/quarantine contract and DB certification binding are implemented; production service/signature/monitoring readiness and independent review remain unproven. |
+| Exact core source-evidence anchors | FAIL | Canonical-source reconstruction and review/sign/download revalidation are implemented at `581b5b5`; independent exact-head ACCEPT is pending. |
 | Database and audit least privilege | FAIL | Runtime role is a superuser/owner with unrestricted `audit_logs` mutation. |
 | Object-storage least privilege | FAIL | Runtime services use MinIO root credentials. |
 | Internal service transport encryption | FAIL | PostgreSQL, Redis, and MinIO service traffic is plaintext. |
 | Storage write capacity/versioning/lifecycle | FAIL | Recent storage-full events; durability controls and write-capacity checks absent. |
 | Clinical-quality evaluation and thresholds | HUMAN PENDING | Technical evaluation and Clinical Safety signature required. |
-| Open XML and LibreOffice exact-head evidence | FAIL | Must rerun on final SHA. |
+| Open XML and LibreOffice exact-head evidence | FAIL | Office gate hardening is committed at `70d3717`; exact final-SHA generation and execution remain pending. |
 | Desktop Microsoft Word returned evidence | HUMAN PENDING | Mandatory external review. |
 | Privacy/Legal approval | HUMAN PENDING | Approval packet and signature required. |
 | Clinical Safety approval | HUMAN PENDING | Approval packet and signature required. |
