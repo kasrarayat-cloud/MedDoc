@@ -102,6 +102,6 @@ describe("packages/auth — cookie config (P1-H)", () => {
       path: "/",
       secure: true,
     });
-    expect(authConfig.cookies?.sessionToken?.options.domain).toBeUndefined();
+    expect(authConfig.cookies?.sessionToken?.options?.domain).toBeUndefined();
   });
 });
