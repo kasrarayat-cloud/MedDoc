@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   transaction: vi.fn(),
   findFill: vi.fn(),
   queryRaw: vi.fn(),
+  verifyEvidence: vi.fn(),
 }));
 
 vi.mock("next/server", () => {
@@ -84,6 +85,9 @@ vi.mock("@/lib/template-twin/fill-engine", () => ({
     deletedAt: null,
     archivedAt: null,
   }),
+}));
+vi.mock("@/lib/template-twin/encounter-evidence-verification", () => ({
+  persistedTemplateTwinEncounterEvidenceIsValid: mocks.verifyEvidence,
 }));
 vi.mock("@/lib/template-twin/rollout", () => ({
   TemplateTwinRolloutError: class TemplateTwinRolloutError extends Error {
@@ -202,9 +206,22 @@ beforeEach(() => {
       }),
   );
   mocks.queryRaw.mockResolvedValue([{ id: "synthetic-doctor-1" }]);
+  mocks.verifyEvidence.mockReturnValue(true);
 });
 
 describe("Original Template DOCX export durable audit gate", () => {
+  it("blocks download when encounter evidence changes before the final claim", async () => {
+    mocks.verifyEvidence.mockReturnValue(false);
+
+    const response = await call();
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      code: "TEMPLATE_TWIN_ENCOUNTER_EVIDENCE_STALE",
+    });
+    expect(mocks.logDelivery).not.toHaveBeenCalled();
+  });
+
   it("durably enqueues the export audit before returning verified bytes", async () => {
     const response = await call();
 

@@ -354,9 +354,12 @@ services:
   # No ffmpeg: Deepgram batch handles 10h files natively so we skip
   # the chunking step scribe-worker needs.
   transcribe-md-worker:
+    image: ${TRANSCRIBE_MD_WORKER_IMAGE:-meddoc-pro-transcribe-md-worker:latest}
     build:
       context: .
       dockerfile: apps/transcribe-md/Dockerfile.worker
+      args:
+        QUILLMD_RELEASE_SHA: ${QUILLMD_RELEASE_SHA:-development}
     restart: unless-stopped
     # Phase 19 — h16-cap-drop. BullMQ worker; outbound HTTPS only;
     # no privileged port; no host filesystem writes (logs go to
@@ -390,6 +393,9 @@ services:
     environment:
       DATABASE_URL: postgresql://meddoc:${DB_PASSWORD:-changeme_in_production}@postgres:5432/meddoc?schema=public
       REDIS_URL: redis://redis:6379
+      QUILLMD_REQUIRED_RUNTIME_PROTOCOL_EPOCH: template-twin-final-schema-v2
+      TEMPLATE_TWIN_RUNTIME_MODE: ${TEMPLATE_TWIN_RUNTIME_MODE:-standard}
+      TEMPLATE_TWIN_KILL_SWITCH: ${TEMPLATE_TWIN_KILL_SWITCH:-true}
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-meddoc}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-changeme_in_production}
@@ -450,6 +456,7 @@ services:
   transcribe-md:
     # Phase 19 — h16-cap-drop. Next app, binds 3011 inside the
     # container, runs as uid 1001. No default cap required.
+    image: ${TRANSCRIBE_MD_IMAGE:-meddoc-pro-transcribe-md:latest}
     cap_drop:
       - ALL
     build:
@@ -458,6 +465,7 @@ services:
       # T-M19.2: mirror of the marketing build.args — see the comment
       # on that block for the rationale.
       args:
+        QUILLMD_RELEASE_SHA: ${QUILLMD_RELEASE_SHA:-development}
         NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL: ${TRANSCRIBE_MD_AUTH_URL:-http://5.231.107.93:9020}
         NEXT_PUBLIC_MARKETING_URL: ${MARKETING_URL:-http://5.231.107.93:9010}
         # T-M20.3: Pipeline tab gate. Build-time default is "false"
@@ -530,6 +538,9 @@ services:
       TRANSCRIBE_MD_MINIO_BUCKET: ${TRANSCRIBE_MD_MINIO_BUCKET:-transcribe-md-audio}
       MINIO_USE_SSL: "false"
       REDIS_URL: redis://redis:6379
+      QUILLMD_REQUIRED_RUNTIME_PROTOCOL_EPOCH: template-twin-final-schema-v2
+      TEMPLATE_TWIN_RUNTIME_MODE: ${TEMPLATE_TWIN_RUNTIME_MODE:-standard}
+      TEMPLATE_TWIN_KILL_SWITCH: ${TEMPLATE_TWIN_KILL_SWITCH:-true}
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
       # T-M18.3 A15: surface the deployed milestone through /api/health.

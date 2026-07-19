@@ -579,6 +579,7 @@ model Practice {
   // Template Twin source artifacts remain practice-scoped even if their
   // creating user later leaves the practice.
   templateTwinSources                   TemplateTwinSourceArtifact[]
+  templateTwinQuarantineArtifacts       TemplateTwinQuarantineArtifact[]
   templateTwinFills                     TemplateTwinFillManifest[]
   templateTwinObjects                   TemplateTwinObjectLedger[]
   templateTwinOutbox                    TemplateTwinAuditOutbox[]
@@ -737,6 +738,7 @@ model User {
   // system-default NoteTemplate (doctorId = null) until then.
   noteTemplates                          NoteTemplate[]
   templateTwinSourcesCreated             TemplateTwinSourceArtifact[]           @relation("TemplateTwinSourceCreator")
+  templateTwinQuarantineArtifactsCreated TemplateTwinQuarantineArtifact[]       @relation("TemplateTwinQuarantineCreator")
   templateTwinMappingsApproved           TemplateTwinSemanticMapping[]          @relation("TemplateTwinMappingApprover")
   templateTwinCertifications             TemplateTwinCertification[]            @relation("TemplateTwinCertifier")
   templateTwinReviews                    TemplateTwinReviewDecision[]           @relation("TemplateTwinReviewer")
@@ -2594,6 +2596,47 @@ model VisitAutomationProviderExecution {
 // source/template/compiler/resolver/renderer versions it used.
 // ============================================================================
 
+/// Immutable raw upload captured before any DOCX parsing, model invocation, or
+/// admission. Only PHI-free hashes, scanner receipts, and state codes live in
+/// PostgreSQL; the bytes remain in the private quarantine object namespace.
+model TemplateTwinQuarantineArtifact {
+  id String @id @default(cuid())
+
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict)
+
+  createdById String?
+  createdBy   User?   @relation("TemplateTwinQuarantineCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  lineageId      String
+  lineageVersion Int
+  intakeMode     String
+
+  objectKey       String @unique
+  objectVersionId String
+  objectEtag      String
+  sha256          String @db.Char(64)
+  mimeType        String
+  sizeBytes       Int
+
+  status                       String   @default("QUARANTINED")
+  malwareScanEvidence          Json?
+  metadataMinimizationEvidence Json?
+  rejectionCodes               String[] @default([])
+
+  createdAt  DateTime  @default(now()) @db.Timestamptz(6)
+  scannedAt  DateTime? @db.Timestamptz(6)
+  admittedAt DateTime? @db.Timestamptz(6)
+
+  admittedSourceArtifact TemplateTwinSourceArtifact?
+
+  @@index([practiceId, createdAt])
+  @@index([lineageId, lineageVersion])
+  @@index([sha256])
+  @@index([practiceId, status, createdAt])
+  @@map("template_twin_quarantine_artifacts")
+}
+
 model TemplateTwinSourceArtifact {
   id String @id @default(cuid())
 
@@ -2618,6 +2661,12 @@ model TemplateTwinSourceArtifact {
   /// PHI-safe provenance for the deterministic/model privacy scan and the
   /// exact practice-scoped static-asset approval set used before storage.
   privacyScanEvidence Json?
+
+  /// Every new GA admission points to the immutable raw quarantine capture.
+  /// Nullable only for pre-GA/synthetic-history rows, which certification
+  /// rejects through the v2 admission evidence gate.
+  quarantineArtifactId String?                         @unique
+  quarantineArtifact   TemplateTwinQuarantineArtifact? @relation(fields: [quarantineArtifactId], references: [id], onDelete: Restrict)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
 

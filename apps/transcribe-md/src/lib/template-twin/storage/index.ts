@@ -9,6 +9,7 @@ export {
   type ReadArtifactInput,
   type StoredTemplateTwinArtifact,
   type StoreOutputArtifactInput,
+  type StoreQuarantineArtifactInput,
   type StoreSourceArtifactInput,
   type TemplateTwinArtifactStore,
   type TemplateTwinObjectClient,
@@ -17,6 +18,7 @@ export {
 
 export {
   createOutputArtifactKey,
+  createQuarantineArtifactKey,
   createSourceArtifactKey,
   DEFAULT_TEMPLATE_TWIN_BUCKET,
   DOCX_MIME_TYPE,

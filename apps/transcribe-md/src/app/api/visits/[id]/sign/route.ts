@@ -88,6 +88,7 @@ import {
 } from "@/worker/automation-finalization";
 import { runVisitAutomationTransaction } from "@/worker/automation-locks";
 import { runSerializableTransactionWithRetry } from "@/lib/db/transaction-retry";
+import { persistedTemplateTwinEncounterEvidenceIsValid } from "@/lib/template-twin/encounter-evidence-verification";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -350,6 +351,11 @@ export const POST = withApiHandler<{ id: string }>(
       visitStatus: visit.status,
       soapFinal: visit.soapFinal,
       soapVersion: visit.soapVersion,
+      inputMode: visit.inputMode,
+      rawTextInput: visit.rawTextInput,
+      transcriptText: visit.transcriptText,
+      transcriptRaw: visit.transcriptRaw,
+      speakerMap: visit.speakerMap,
       noteTemplateId: visit.noteTemplateId,
       noteTemplateVersion: visit.noteTemplateVersion,
       noteTemplate: visit.noteTemplate,
@@ -717,6 +723,7 @@ export const POST = withApiHandler<{ id: string }>(
           code: string;
           reason: string;
         } | null;
+        evidenceRejected?: boolean;
       };
       if (twinClaim) {
         if (!templateTwinRolloutToken) {
@@ -743,6 +750,7 @@ export const POST = withApiHandler<{ id: string }>(
             ): Promise<{
               count: number;
               rolloutRejected?: { code: string; reason: string } | null;
+              evidenceRejected?: boolean;
             }> => {
               const finalRollout = await lockTemplateTwinRolloutForFinalClaim({
                 tx,
@@ -867,6 +875,33 @@ export const POST = withApiHandler<{ id: string }>(
                 lockedVisit.noteTemplateVersion !== visit.noteTemplateVersion
               ) {
                 throw new TemplateTwinSignClaimConflict();
+              }
+              if (
+                !persistedTemplateTwinEncounterEvidenceIsValid({
+                  visit: lockedVisit,
+                  manifest: visit.templateTwinFill?.fillManifest,
+                })
+              ) {
+                await enqueueTemplateTwinAudit(tx, {
+                  eventKey: `template-twin-sign-evidence-stale:${visitId}:${twinClaim.manifestVersion}:${randomUUID()}`,
+                  practiceId: templateTwinPracticeId,
+                  actorId: userId,
+                  actorEmailSnapshot: sessionEmail,
+                  action: "TEMPLATE_TWIN_SIGN_BLOCKED",
+                  targetType: "TranscribeVisit",
+                  targetId: visitId,
+                  metadata: {
+                    reasonCode: "ENCOUNTER_EVIDENCE_INVALID",
+                    operation: "sign_final_claim",
+                    fillManifestId: twinClaim.id,
+                    manifestVersion: twinClaim.manifestVersion,
+                  },
+                });
+                return {
+                  count: 0,
+                  rolloutRejected: null,
+                  evidenceRejected: true,
+                };
               }
               await lockAndAssertVisitAutomationProof({
                 tx,
@@ -1061,6 +1096,16 @@ export const POST = withApiHandler<{ id: string }>(
           code: updated.rolloutRejected.code,
           retry: true,
         });
+      }
+      if (updated.evidenceRejected) {
+        return apiError(
+          "The encounter evidence changed before signing. Regenerate and review the document.",
+          409,
+          {
+            code: "TEMPLATE_TWIN_ENCOUNTER_EVIDENCE_STALE",
+            retry: true,
+          },
+        );
       }
       if (updated.count === 0) {
         // Another concurrent request got there first. Re-read.

@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -120,6 +122,49 @@ const SOURCE_PRIVACY_SCAN_EVIDENCE = {
   approvedStaticAssetUsageSha256: 'b'.repeat(64),
 };
 
+function validQuarantineEvidence(input: {
+  rawSha256: string;
+  rawSizeBytes: number;
+  minimizedSha256: string;
+}) {
+  const malware = {
+    profileVersion: 'template-twin-clamd-instream-v1',
+    scanner: 'clamav-clamd',
+    transport: 'unix-domain-socket',
+    engineVersion: '1.4.3',
+    signatureVersion: '27888',
+    sourceSha256: input.rawSha256,
+    sourceSizeBytes: input.rawSizeBytes,
+    verdict: 'clean',
+    threatNameSha256: null,
+    scannedAt: '2026-07-15T11:30:00.000Z',
+  } as const;
+  return {
+    practiceId: ACTOR.practiceId,
+    lineageId: 'lineage-synthetic-lifecycle',
+    intakeMode: 'NATIVE_TEMPLATE',
+    sha256: input.rawSha256,
+    sizeBytes: input.rawSizeBytes,
+    status: 'ADMITTED',
+    malwareScanEvidence: {
+      ...malware,
+      attestationSha256: createHash('sha256')
+        .update(JSON.stringify(malware))
+        .digest('hex'),
+    },
+    metadataMinimizationEvidence: {
+      profileVersion: 'template-twin-docx-metadata-minimization-v1',
+      originalSha256: input.rawSha256,
+      minimizedSha256: input.minimizedSha256,
+      replacedParts: [] as string[],
+      zipEntryTimestampsNormalized: true,
+    },
+    rejectionCodes: [] as string[],
+    scannedAt: new Date(malware.scannedAt),
+    admittedAt: new Date('2026-07-15T11:31:00.000Z'),
+  };
+}
+
 interface RowOptions {
   mappings?: readonly SemanticMapping[];
   practiceId?: string;
@@ -133,6 +178,7 @@ interface RowOptions {
   latestTestVerifiedAt?: Date;
   privacyScanEvidence?: unknown;
   validationStatus?: string;
+  quarantineArtifact?: ReturnType<typeof validQuarantineEvidence> | null;
 }
 
 function validRoundTrip(
@@ -328,14 +374,24 @@ function ownedRow(
       certification: null,
       sourceArtifact: {
         practiceId: options.practiceId ?? ACTOR.practiceId,
+        lineageId: 'lineage-synthetic-lifecycle',
         objectVersionId: 'provider-source-version-synthetic-1',
         objectEtag: 'provider-source-etag-synthetic-1',
         sha256: ir.source.sha256,
+        sizeBytes: ir.source.sizeBytes,
         validationStatus: options.validationStatus ?? 'accepted',
         privacyScanEvidence:
           options.privacyScanEvidence === undefined
             ? SOURCE_PRIVACY_SCAN_EVIDENCE
             : options.privacyScanEvidence,
+        quarantineArtifact:
+          options.quarantineArtifact === undefined
+            ? validQuarantineEvidence({
+                rawSha256: 'e'.repeat(64),
+                rawSizeBytes: ir.source.sizeBytes + 17,
+                minimizedSha256: ir.source.sha256,
+              })
+            : options.quarantineArtifact,
       },
       fields: ir.fields.map((field, index) => ({
         id: `field-definition-synthetic-${index + 1}`,
@@ -1005,6 +1061,42 @@ describe('Template Twin certification lifecycle service', () => {
         expectedMappingsSha256: templateTwinMappingsSha256(mappings),
       }),
     ).rejects.toMatchObject({ code: 'CERTIFICATION_BLOCKED' });
+
+    expect(mocks.fieldUpdateMany).not.toHaveBeenCalled();
+    expect(mocks.noteTemplateUpdateMany).not.toHaveBeenCalled();
+    expect(mocks.certificationCreate).not.toHaveBeenCalled();
+  });
+
+  it('blocks certification when immutable quarantine admission evidence is missing or tampered', async () => {
+    const fixture = await buildTemplateTwinIntegrationFixture();
+    const missing = ownedRow(fixture.ir, fixture.mappings, {
+      quarantineArtifact: null,
+    });
+    const tampered = ownedRow(fixture.ir, fixture.mappings);
+    const tamperedMalwareEvidence = tampered.templateTwinCompiledVersion
+      .sourceArtifact.quarantineArtifact!.malwareScanEvidence as unknown as Record<
+      string,
+      unknown
+    >;
+    tamperedMalwareEvidence.signatureVersion = '99999';
+    mocks.findTemplate
+      .mockResolvedValueOnce(missing)
+      .mockResolvedValueOnce(tampered);
+
+    for (const row of [missing, tampered]) {
+      await expect(
+        certifyAndActivateTemplateTwin({
+          noteTemplateId: TEMPLATE_ID,
+          actor: ACTOR,
+          expectedMappingsSha256: templateTwinMappingsSha256(fixture.mappings),
+          expectedSyntheticTestProvenanceSha256:
+            syntheticTestProvenanceSha256(row),
+        }),
+      ).rejects.toMatchObject({
+        code: 'CERTIFICATION_BLOCKED',
+        message: expect.stringContaining('quarantine record'),
+      });
+    }
 
     expect(mocks.fieldUpdateMany).not.toHaveBeenCalled();
     expect(mocks.noteTemplateUpdateMany).not.toHaveBeenCalled();

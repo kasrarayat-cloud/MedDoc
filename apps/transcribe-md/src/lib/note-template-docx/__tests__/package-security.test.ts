@@ -273,6 +273,56 @@ describe("Template Twin untrusted DOCX boundary", () => {
     );
   });
 
+  it("rejects hidden Word text, unresolved revisions, and comment payloads", async () => {
+    for (const hiddenRunProperty of ["vanish", "webHidden", "specVanish"]) {
+      const hidden = await buildSyntheticDocx({
+        documentXml: syntheticOpc.documentXml.replace(
+          "<w:sectPr>",
+          `<w:p><w:r><w:rPr><w:${hiddenRunProperty}/></w:rPr><w:t>synthetic hidden patient-like text</w:t></w:r></w:p><w:sectPr>`,
+        ),
+      });
+      expectTemplateError(
+        () => inspectDocxPackage(hidden),
+        "XML_HIDDEN_CONTENT_UNSUPPORTED",
+      );
+    }
+
+    for (const revision of ["del", "ins", "moveFrom", "moveTo"]) {
+      const unresolved = await buildSyntheticDocx({
+        documentXml: syntheticOpc.documentXml.replace(
+          "<w:sectPr>",
+          `<w:${revision} w:id="9"><w:r><w:t>synthetic revision text</w:t></w:r></w:${revision}><w:sectPr>`,
+        ),
+      });
+      expectTemplateError(
+        () => inspectDocxPackage(unresolved),
+        "XML_HIDDEN_CONTENT_UNSUPPORTED",
+      );
+    }
+
+    const comments = await buildSyntheticDocx({
+      extraEntries: {
+        "word/comments.xml":
+          '<w:comments xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:comment w:id="0"><w:p><w:r><w:t>synthetic hidden comment</w:t></w:r></w:p></w:comment></w:comments>',
+      },
+    });
+    expectTemplateError(
+      () => inspectDocxPackage(comments),
+      "XML_HIDDEN_CONTENT_UNSUPPORTED",
+    );
+
+    const collaborationPeople = await buildSyntheticDocx({
+      extraEntries: {
+        "word/people.xml":
+          '<w15:people xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml"><w15:person w15:author="Synthetic Author"/></w15:people>',
+      },
+    });
+    expectTemplateError(
+      () => inspectDocxPackage(collaborationPeople),
+      "XML_HIDDEN_CONTENT_UNSUPPORTED",
+    );
+  });
+
   it("enforces parsed XML element, attribute, and aggregate text limits", async () => {
     const source = await buildSyntheticDocx();
     expectTemplateError(

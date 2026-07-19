@@ -164,6 +164,14 @@ const OWNED_VERSION_SELECT = {
           sha256: true,
           sizeBytes: true,
           mimeType: true,
+          quarantineArtifact: {
+            select: {
+              sha256: true,
+              sizeBytes: true,
+              status: true,
+              intakeMode: true,
+            },
+          },
         },
       },
       fields: {
@@ -583,6 +591,20 @@ export async function createTemplateTwinVersionAction(
                 sourceArtifactId: sourceCompiled.sourceArtifactId,
                 sha256: sourceCompiled.sourceArtifact.sha256,
                 sizeBytes: sourceCompiled.sourceArtifact.sizeBytes,
+                intakeSha256:
+                  sourceCompiled.sourceArtifact.quarantineArtifact?.status ===
+                    "ADMITTED" &&
+                  sourceCompiled.sourceArtifact.quarantineArtifact
+                    .intakeMode === "NATIVE_TEMPLATE"
+                    ? sourceCompiled.sourceArtifact.quarantineArtifact.sha256
+                    : null,
+                intakeSizeBytes:
+                  sourceCompiled.sourceArtifact.quarantineArtifact?.status ===
+                    "ADMITTED" &&
+                  sourceCompiled.sourceArtifact.quarantineArtifact
+                    .intakeMode === "NATIVE_TEMPLATE"
+                    ? sourceCompiled.sourceArtifact.quarantineArtifact.sizeBytes
+                    : null,
               },
               target: { noteTemplateId, version: nextVersion },
             });

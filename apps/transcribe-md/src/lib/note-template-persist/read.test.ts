@@ -42,8 +42,13 @@ const admitted = {
 };
 
 beforeEach(() => {
+  delete process.env.TEMPLATE_TWIN_RUNTIME_MODE;
   mocks.findMany.mockReset().mockImplementation(async (query) =>
-    query.where.templateTwinSyntheticQaAdmissions ? [admitted] : [generic, admitted],
+    query.where.templateTwinSyntheticQaAdmissions
+      ? [admitted]
+      : query.where.templateKind?.not
+        ? [generic]
+        : [generic, admitted],
   );
 });
 
@@ -90,5 +95,32 @@ describe("note-template settings collections", () => {
       generic.id,
       admitted.id,
     ]);
+  });
+
+  it("server-filters Twin rows from the ordinary collection in bridge mode", async () => {
+    process.env.TEMPLATE_TWIN_RUNTIME_MODE = "rollback-compat-v2";
+
+    await expect(
+      listDoctorTemplates("doctor-settings@synthetic.test"),
+    ).resolves.toEqual([expect.objectContaining({ id: generic.id })]);
+    expect(mocks.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          doctorId: "doctor-settings@synthetic.test",
+          templateKind: { not: "template_twin_docx" },
+        },
+      }),
+    );
+
+    mocks.findMany.mockClear();
+    await expect(
+      listDoctorStagingQaTemplates({
+        doctorId: "doctor-settings@synthetic.test",
+        practiceId: "practice-settings-synthetic",
+        globalGeneration: BigInt(31),
+        practiceGeneration: BigInt(37),
+      }),
+    ).resolves.toEqual([]);
+    expect(mocks.findMany).not.toHaveBeenCalled();
   });
 });

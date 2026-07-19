@@ -29,6 +29,7 @@ import {
   type SemanticMapping,
   type TemplateDocIR,
   type TemplateField,
+  type TemplateTwinEncounterSourceReceipt,
   type TemplateTwinFillManifest,
 } from "./ir";
 import { templateTwinMappingsSha256 } from "./mapping-hash";
@@ -80,6 +81,11 @@ import {
   type TemplateTwinSyntheticQaAttemptClaim,
 } from "./staging-qa-visit-guard";
 import { runTemplateTwinSyntheticQaClaimBoundMutation } from "@/worker/staging-qa-mutation-fence";
+import {
+  isTemplateTwinRollbackCompatRuntime,
+  templateTwinRuntimeEnabled,
+} from "@/lib/runtime-protocol";
+import { createTemplateTwinEncounterSourceReceipt } from "./canonical-encounter-source";
 
 /** The worker-owned review marker for an unresolved Template Twin fill.
  * Correction code may clear it only by exact equality after a fully verified
@@ -122,6 +128,7 @@ export interface PrepareTemplateTwinFillInput {
   certifiedFieldIds?: readonly string[];
   source?: Uint8Array;
   resolverModelVersion: string | null;
+  encounterSourceReceipt?: TemplateTwinEncounterSourceReceipt | null;
   validationNow: Date | string;
   allowUncertifiedForSyntheticTest?: boolean;
   fieldIntentsSha256?: string | null;
@@ -234,6 +241,7 @@ export async function finalizeTemplateTwinFill(
     resolverVersion: TEMPLATE_TWIN_RESOLVER_VERSION,
     resolverModelVersion: input.resolverModelVersion,
     rendererVersion: TEMPLATE_TWIN_RENDERER_VERSION,
+    encounterSourceReceipt: input.encounterSourceReceipt ?? null,
     fieldIntentsSha256: input.fieldIntentsSha256 ?? null,
     customExampleProofSha256: input.customExampleProofSha256 ?? null,
     customExtraction: input.customExtraction
@@ -416,6 +424,11 @@ export interface LockedTemplateTwinVisit {
   soapFinal: string | null;
   noteTemplateId: string | null;
   noteTemplateVersion: number | null;
+  inputMode: string;
+  rawTextInput: string | null;
+  transcriptText: string | null;
+  transcriptRaw: unknown;
+  speakerMap: unknown;
 }
 
 /**
@@ -438,7 +451,12 @@ export async function lockCurrentTemplateTwinVisit(
       "soapVersion",
       "soapFinal",
       "noteTemplateId",
-      "noteTemplateVersion"
+      "noteTemplateVersion",
+      "inputMode",
+      "rawTextInput",
+      "transcriptText",
+      "transcriptRaw",
+      "speakerMap"
     FROM "transcribe_visits"
     WHERE "id" = ${visitId}
     FOR UPDATE
@@ -498,6 +516,17 @@ export interface ProcessTemplateTwinVisitInput {
 export async function processTemplateTwinVisit(
   input: ProcessTemplateTwinVisitInput,
 ): Promise<PreparedTemplateTwinFill> {
+  if (!templateTwinRuntimeEnabled(process.env)) {
+    const rollbackCompat = isTemplateTwinRollbackCompatRuntime(process.env);
+    throw new TemplateTwinFillError(
+      rollbackCompat
+        ? "TEMPLATE_TWIN_ROLLBACK_COMPAT_ACTIVE"
+        : "TEMPLATE_TWIN_RUNTIME_MODE_INVALID",
+      rollbackCompat
+        ? "Template Twin provider work is unavailable in this runtime mode."
+        : "Template Twin runtime configuration is invalid.",
+    );
+  }
   const practice = await prisma.practice.findFirst({
     where: {
       id: input.practiceId,
@@ -857,6 +886,10 @@ export async function processTemplateTwinVisit(
     ir,
     mappings,
     facts,
+    encounterSourceReceipt: createTemplateTwinEncounterSourceReceipt({
+      mode: input.inputMode,
+      contextText: input.contextText,
+    }),
     fieldIntentsSha256,
     customExampleProofSha256,
     staticFieldIds,

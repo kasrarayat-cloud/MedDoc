@@ -31,6 +31,7 @@ import {
   TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES,
 } from '@/lib/template-twin/staging-qa-fixtures';
 import {
+  assertTemplateTwinWorkerRuntimeAdmission,
   selectTemplate,
   MissingSystemDefaultTemplateError,
   PinnedTemplateUnavailableError,
@@ -69,6 +70,7 @@ const systemDefault = tmpl({
 beforeEach(() => {
   vi.clearAllMocks();
   delete process.env.TEMPLATE_TWIN_STAGING_QA_ENABLED;
+  delete process.env.TEMPLATE_TWIN_RUNTIME_MODE;
   process.env.TEMPLATE_TWIN_KILL_SWITCH = 'false';
   rolloutMocks.pin.mockResolvedValue({
     practiceId: 'practice-1',
@@ -78,6 +80,19 @@ beforeEach(() => {
 });
 
 describe('selectTemplate — fallback chain', () => {
+  it('rejects a pinned Twin before providers in rollback compatibility mode', () => {
+    expect(() =>
+      assertTemplateTwinWorkerRuntimeAdmission('template_twin_docx', {
+        TEMPLATE_TWIN_RUNTIME_MODE: 'rollback-compat-v2',
+      }),
+    ).toThrow(TemplateTwinWorkerRolloutError);
+    expect(() =>
+      assertTemplateTwinWorkerRuntimeAdmission('structured', {
+        TEMPLATE_TWIN_RUNTIME_MODE: 'rollback-compat-v2',
+      }),
+    ).not.toThrow();
+  });
+
   it('Phase-0 reality: returns the system default when the doctor has no custom template', () => {
     expect(
       selectTemplate([systemDefault], { doctorId: 'doc1', encounterType: 'cardiology' })
@@ -493,6 +508,49 @@ describe('resolveVisitTemplate — immutable retry provenance', () => {
     await expect(
       resolveActiveTemplate({ doctorId: 'doc1', encounterType: 'cardiology' }),
     ).resolves.toBe(structured);
+  });
+
+  it('server-filters active and pinned Twin rows in rollback compatibility mode', async () => {
+    process.env.TEMPLATE_TWIN_RUNTIME_MODE = 'rollback-compat-v2';
+    const structured = tmpl({
+      id: 'structured-bridge-active',
+      doctorId: 'doc1',
+      encounterType: null,
+      templateKind: 'structured',
+    });
+    vi.mocked(prisma.noteTemplate.findMany).mockResolvedValueOnce([
+      systemDefault,
+      structured,
+    ]);
+
+    await expect(
+      resolveActiveTemplate({ doctorId: 'doc1', encounterType: 'cardiology' }),
+    ).resolves.toBe(structured);
+    expect(prisma.noteTemplate.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          templateKind: { not: 'template_twin_docx' },
+        }),
+      }),
+    );
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    expect(rolloutMocks.pin).not.toHaveBeenCalled();
+
+    vi.mocked(prisma.noteTemplate.findFirst).mockResolvedValueOnce(null);
+    await expect(
+      resolveVisitTemplate({
+        doctorId: 'doc1',
+        pinnedTemplateId: 'twin-v1',
+        pinnedTemplateVersion: 1,
+      }),
+    ).rejects.toBeInstanceOf(PinnedTemplateUnavailableError);
+    expect(prisma.noteTemplate.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          templateKind: { not: 'template_twin_docx' },
+        }),
+      }),
+    );
   });
 
   it('fails closed when a pin is partial or unavailable', async () => {

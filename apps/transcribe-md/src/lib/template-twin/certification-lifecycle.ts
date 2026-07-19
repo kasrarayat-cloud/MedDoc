@@ -85,6 +85,11 @@ import {
   type TemplateTwinMappingFieldError,
   type TemplateTwinMappingSetting,
 } from "./mapping-validation";
+import { isTemplateTwinMalwareScanEvidenceValid } from "./malware-scan";
+import { isTemplateTwinMetadataEvidenceValid } from "./source-metadata";
+
+const TEMPLATE_TWIN_SOURCE_ADMISSION_GATE_MESSAGE =
+  "Certification requires an admitted native-template quarantine record with exact clean-malware, metadata-minimization, tenant, lineage, and source-byte evidence.";
 
 export class TemplateTwinLifecycleError extends Error {
   readonly code:
@@ -310,11 +315,28 @@ async function loadOwnedCompilation(
           sourceArtifact: {
             select: {
               practiceId: true,
+              lineageId: true,
               objectVersionId: true,
               objectEtag: true,
               sha256: true,
+              sizeBytes: true,
               validationStatus: true,
               privacyScanEvidence: true,
+              quarantineArtifact: {
+                select: {
+                  practiceId: true,
+                  lineageId: true,
+                  intakeMode: true,
+                  sha256: true,
+                  sizeBytes: true,
+                  status: true,
+                  malwareScanEvidence: true,
+                  metadataMinimizationEvidence: true,
+                  rejectionCodes: true,
+                  scannedAt: true,
+                  admittedAt: true,
+                },
+              },
             },
           },
           fields: {
@@ -1441,6 +1463,43 @@ export async function certifyAndActivateTemplateTwin(input: {
         throw new TemplateTwinLifecycleError(
           "CERTIFICATION_BLOCKED",
           TEMPLATE_TWIN_SOURCE_PROVENANCE_GATE_MESSAGE,
+        );
+      }
+      const quarantine = compiled.sourceArtifact.quarantineArtifact;
+      if (
+        !quarantine ||
+        quarantine.status !== "ADMITTED" ||
+        quarantine.intakeMode !== "NATIVE_TEMPLATE" ||
+        quarantine.practiceId !== compiled.sourceArtifact.practiceId ||
+        quarantine.lineageId !== compiled.sourceArtifact.lineageId ||
+        quarantine.rejectionCodes.length !== 0 ||
+        !quarantine.scannedAt ||
+        !quarantine.admittedAt
+      ) {
+        throw new TemplateTwinLifecycleError(
+          "CERTIFICATION_BLOCKED",
+          TEMPLATE_TWIN_SOURCE_ADMISSION_GATE_MESSAGE,
+        );
+      }
+      const malwareBinding = {
+        evidence: quarantine.malwareScanEvidence,
+        sourceSha256: quarantine.sha256,
+        sourceSizeBytes: quarantine.sizeBytes,
+        requireClean: true,
+      } as const;
+      if (
+        !isTemplateTwinMalwareScanEvidenceValid(malwareBinding) ||
+        new Date(malwareBinding.evidence.scannedAt).valueOf() !==
+          quarantine.scannedAt.valueOf() ||
+        !isTemplateTwinMetadataEvidenceValid({
+          evidence: quarantine.metadataMinimizationEvidence,
+          originalSha256: quarantine.sha256,
+          minimizedSha256: compiled.sourceArtifact.sha256,
+        })
+      ) {
+        throw new TemplateTwinLifecycleError(
+          "CERTIFICATION_BLOCKED",
+          TEMPLATE_TWIN_SOURCE_ADMISSION_GATE_MESSAGE,
         );
       }
       let sourcePrivacyScanEvidenceSha256: string;

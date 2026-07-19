@@ -17,6 +17,7 @@ import {
   type TemplateTwinFieldIntentView,
 } from "../../field-intent";
 import { canonicalSha256 } from "../../canonical";
+import { createTemplateTwinEncounterSourceReceipt } from "../../canonical-encounter-source";
 import { prepareTemplateTwinFill } from "../../fill-engine";
 import { templateTwinMappingsSha256 } from "../../mapping-hash";
 import { resolveTemplateFields } from "../../resolver";
@@ -31,6 +32,7 @@ import {
 } from "../../review-service";
 import {
   CertifiedTemplateFieldSpecificationSchema,
+  buildCanonicalCustomConceptEvidence,
   TEMPLATE_CUSTOM_EXTRACTION_SCHEMA_VERSION,
   TEMPLATE_CUSTOM_EXTRACTION_VERSION,
   TEMPLATE_FIELD_SPECIFICATION_VERSION,
@@ -389,10 +391,21 @@ async function buildCustomSigningContext(): Promise<TemplateTwinSigningContext> 
     intents: intentRows,
   });
   const mapping = mappingFor(effectiveFields[0]!, specification);
+  const encounterSource = "Synthetic evidence for Synthetic supported finding.";
+  const canonicalEvidence = buildCanonicalCustomConceptEvidence({
+    mode: "text",
+    contextText: encounterSource,
+  });
   const supportedFact = makeFact({
     specification,
     value: "Synthetic supported finding",
   });
+  supportedFact.sourceTranscriptOffsets =
+    canonicalEvidence.anchors[0]!.sourceTranscriptOffsets;
+  supportedFact.evidenceAnchorIds = [
+    canonicalEvidence.anchors[0]!.evidenceAnchorId,
+  ];
+  supportedFact.evidenceQuote = canonicalEvidence.anchors[0]!.quote;
   const customExtraction = {
     extractorVersion: TEMPLATE_CUSTOM_EXTRACTION_VERSION,
     extractionSchemaVersion: TEMPLATE_CUSTOM_EXTRACTION_SCHEMA_VERSION,
@@ -423,6 +436,10 @@ async function buildCustomSigningContext(): Promise<TemplateTwinSigningContext> 
     effectiveFields,
     mappings: [mapping],
     facts: [supportedFact],
+    encounterSourceReceipt: createTemplateTwinEncounterSourceReceipt({
+      mode: "text",
+      contextText: encounterSource,
+    }),
     certifiedFieldIds: [field.fieldId],
     source,
     resolverModelVersion: customExtraction.model,
@@ -458,6 +475,11 @@ async function buildCustomSigningContext(): Promise<TemplateTwinSigningContext> 
     visitStatus: "READY",
     soapVersion: 4,
     soapFinal: "Synthetic reviewed SOAP note.",
+    inputMode: "text_notes",
+    rawTextInput: encounterSource,
+    transcriptText: null,
+    transcriptRaw: null,
+    speakerMap: null,
     noteTemplateId: "synthetic-template-v1",
     noteTemplateVersion: 1,
     noteTemplate: {

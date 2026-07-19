@@ -67,6 +67,7 @@ function input(over: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  delete process.env.TEMPLATE_TWIN_RUNTIME_MODE;
   mocks.requireSession.mockResolvedValue({ user: { id: DOCTOR, practiceId: 'p1' } });
   mocks.create.mockResolvedValue({ id: 'created-id' });
   mocks.update.mockResolvedValue({ id: 'updated-id' });
@@ -311,5 +312,57 @@ describe('Template Twin isolation from legacy lifecycle actions', () => {
     expect(mocks.update).not.toHaveBeenCalled();
     expect(mocks.updateMany).not.toHaveBeenCalled();
     expect(mocks.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('server-excludes Twin rows while ordinary lifecycle actions continue in bridge mode', async () => {
+    process.env.TEMPLATE_TWIN_RUNTIME_MODE = 'rollback-compat-v2';
+    mocks.findFirst.mockResolvedValue({
+      id: CUID,
+      encounterType: 'cardiology',
+      templateKind: 'structured',
+    });
+
+    await expect(activateNoteTemplateAction(CUID)).resolves.toMatchObject({
+      ok: true,
+    });
+    expect(mocks.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: CUID,
+          doctorId: DOCTOR,
+          templateKind: { not: 'template_twin_docx' },
+        },
+      }),
+    );
+    expect(mocks.updateMany).toHaveBeenCalledWith({
+      where: {
+        doctorId: DOCTOR,
+        encounterType: 'cardiology',
+        status: 'active',
+        NOT: { id: CUID },
+        templateKind: { not: 'template_twin_docx' },
+      },
+      data: { status: 'inactive' },
+    });
+  });
+
+  it('fails closed and server-excludes Twin rows for an invalid runtime mode', async () => {
+    process.env.TEMPLATE_TWIN_RUNTIME_MODE = 'legacy-image-bypass';
+    mocks.findFirst.mockResolvedValue({
+      id: CUID,
+      encounterType: 'cardiology',
+      templateKind: 'structured',
+    });
+
+    await expect(activateNoteTemplateAction(CUID)).resolves.toMatchObject({
+      ok: true,
+    });
+    expect(mocks.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          templateKind: { not: 'template_twin_docx' },
+        }),
+      }),
+    );
   });
 });

@@ -123,11 +123,13 @@ export function NoteFormatManager({
   uploadCaps,
   templateTwinSyntheticQaState,
   templateTwinStagingQaRequested,
+  templateTwinUiEnabled,
 }: {
   templates: ClientTemplateListItem[];
   uploadCaps: UploadCaps;
   templateTwinSyntheticQaState: "enabled" | "unavailable" | "hidden";
   templateTwinStagingQaRequested: boolean;
+  templateTwinUiEnabled: boolean;
 }) {
   const router = useRouter();
   const hasTemplates = templates.length > 0;
@@ -269,6 +271,7 @@ export function NoteFormatManager({
   }
 
   function openTwinUpload(mode: TwinUploadMode) {
+    if (!templateTwinUiEnabled) return;
     // The server remains authoritative, but do not retain a generic-upload
     // affordance or stale client callback in a process explicitly requested as
     // synthetic-only. This is intentionally stronger than the full staging
@@ -656,10 +659,12 @@ export function NoteFormatManager({
           onTwinUploadClick={openTwinUpload}
           templateTwinSyntheticQaState={templateTwinSyntheticQaState}
           templateTwinStagingQaRequested={templateTwinStagingQaRequested}
+          templateTwinUiEnabled={templateTwinUiEnabled}
         />
         <TwinUploadDialog
           open={
             twinUploadOpen &&
+            templateTwinUiEnabled &&
             (twinUploadMode === "synthetic_staging"
               ? templateTwinSyntheticQaState === "enabled"
               : !templateTwinStagingQaRequested)
@@ -735,7 +740,7 @@ export function NoteFormatManager({
             justifyContent: "flex-end",
           }}
         >
-          {!templateTwinStagingQaRequested && (
+          {templateTwinUiEnabled && !templateTwinStagingQaRequested && (
             <button
               type="button"
               style={btn}
@@ -849,6 +854,7 @@ export function NoteFormatManager({
       <TwinUploadDialog
         open={
           twinUploadOpen &&
+          templateTwinUiEnabled &&
           (twinUploadMode === "synthetic_staging"
             ? templateTwinSyntheticQaState === "enabled"
             : !templateTwinStagingQaRequested)
@@ -1790,6 +1796,7 @@ function EntryState({
   onTwinUploadClick,
   templateTwinSyntheticQaState,
   templateTwinStagingQaRequested,
+  templateTwinUiEnabled,
 }: {
   pasteText: string;
   setPasteText: (v: string) => void;
@@ -1804,6 +1811,7 @@ function EntryState({
   onTwinUploadClick: (mode: TwinUploadMode) => void;
   templateTwinSyntheticQaState: "enabled" | "unavailable" | "hidden";
   templateTwinStagingQaRequested: boolean;
+  templateTwinUiEnabled: boolean;
 }) {
   // Only offer a format whose extractor actually loads in this image (incident
   // 2026-06-04). .txt/.md always available; .pdf/.docx gated on uploadCaps so we
@@ -1921,7 +1929,7 @@ function EntryState({
         </button>
       </div>
 
-      {!templateTwinStagingQaRequested && (
+      {templateTwinUiEnabled && !templateTwinStagingQaRequested && (
         <section
           aria-labelledby="template-twin-docx-entry"
           style={{

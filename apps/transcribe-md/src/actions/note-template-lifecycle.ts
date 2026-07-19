@@ -39,6 +39,7 @@ import {
 import { rowToReviewModel } from '@/lib/note-template-persist/read';
 import type { TemplateReviewModel } from '@/lib/note-template-persist/types';
 import type { Prisma } from '@prisma/client';
+import { templateTwinRuntimeEnabled } from '@/lib/runtime-protocol';
 
 export type SaveTemplateResult =
   | { ok: true; id: string; status: 'draft' | 'active'; flags: string[] }
@@ -47,6 +48,14 @@ export type SaveTemplateResult =
 export type SimpleResult =
   | { ok: true; id?: string }
   | { ok: false; error: string };
+
+function bridgeTemplateExclusion():
+  | { templateKind: { not: 'template_twin_docx' } }
+  | Record<string, never> {
+  return !templateTwinRuntimeEnabled(process.env)
+    ? { templateKind: { not: 'template_twin_docx' } }
+    : {};
+}
 
 /**
  * Validate + persist a reviewed template. `activate` decides whether it goes
@@ -106,7 +115,7 @@ export async function saveNoteTemplateAction(
   } | null = null;
   if (inputId) {
     existing = await prisma.noteTemplate.findFirst({
-      where: { id: inputId, doctorId },
+      where: { id: inputId, doctorId, ...bridgeTemplateExclusion() },
       select: {
         id: true,
         status: true,
@@ -134,7 +143,12 @@ export async function saveNoteTemplateAction(
       //    when an active template is being re-activated as a new version.
       if (activate) {
         await tx.noteTemplate.updateMany({
-          where: { doctorId, encounterType, status: 'active' },
+          where: {
+            doctorId,
+            encounterType,
+            status: 'active',
+            ...bridgeTemplateExclusion(),
+          },
           data: { status: 'inactive' },
         });
       }
@@ -212,7 +226,7 @@ export async function activateNoteTemplateAction(id: string): Promise<SimpleResu
   const doctorId = session.user.id;
 
   const row = await prisma.noteTemplate.findFirst({
-    where: { id, doctorId },
+    where: { id, doctorId, ...bridgeTemplateExclusion() },
     select: { id: true, encounterType: true, templateKind: true },
   });
   if (!row) return { ok: false, error: "That template doesn't exist or isn't yours." };
@@ -228,7 +242,13 @@ export async function activateNoteTemplateAction(id: string): Promise<SimpleResu
       // Deactivate the prior active for this slot FIRST (index-safe ordering),
       // excluding the target so re-activating an already-active row is a no-op.
       await tx.noteTemplate.updateMany({
-        where: { doctorId, encounterType: row.encounterType, status: 'active', NOT: { id } },
+        where: {
+          doctorId,
+          encounterType: row.encounterType,
+          status: 'active',
+          NOT: { id },
+          ...bridgeTemplateExclusion(),
+        },
         data: { status: 'inactive' },
       });
       await tx.noteTemplate.update({ where: { id }, data: { status: 'active' } });
@@ -246,7 +266,7 @@ export async function duplicateNoteTemplateAction(id: string): Promise<SimpleRes
   const doctorId = session.user.id;
 
   const row = await prisma.noteTemplate.findFirst({
-    where: { id, doctorId },
+    where: { id, doctorId, ...bridgeTemplateExclusion() },
     select: {
       name: true,
       encounterType: true,
@@ -290,7 +310,7 @@ export async function deleteNoteTemplateAction(id: string): Promise<SimpleResult
   const session = await requireSession();
   const doctorId = session.user.id;
   const row = await prisma.noteTemplate.findFirst({
-    where: { id, doctorId },
+    where: { id, doctorId, ...bridgeTemplateExclusion() },
     select: { templateKind: true },
   });
   if (!row) return { ok: false, error: "That template doesn't exist or isn't yours." };
@@ -300,7 +320,9 @@ export async function deleteNoteTemplateAction(id: string): Promise<SimpleResult
       error: 'Template Twin versions are immutable; retire or supersede this version instead.',
     };
   }
-  const res = await prisma.noteTemplate.deleteMany({ where: { id, doctorId } });
+  const res = await prisma.noteTemplate.deleteMany({
+    where: { id, doctorId, ...bridgeTemplateExclusion() },
+  });
   if (res.count === 0) return { ok: false, error: 'Could not delete the template just now.' };
   revalidatePath('/settings');
   return { ok: true };
@@ -313,7 +335,7 @@ export async function getNoteTemplateForEditAction(
   const session = await requireSession();
   const doctorId = session.user.id;
   const row = await prisma.noteTemplate.findFirst({
-    where: { id, doctorId },
+    where: { id, doctorId, ...bridgeTemplateExclusion() },
     select: {
       id: true,
       name: true,

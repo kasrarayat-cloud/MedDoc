@@ -35,6 +35,10 @@ import {
   type CustomScalarValue,
   type TemplateFieldSpecificationContent,
 } from "./specification";
+import {
+  buildCanonicalCustomEvidenceAnchors,
+  TEMPLATE_TWIN_CUSTOM_EVIDENCE_MAX_CONTEXT_CHARS,
+} from "./canonical-evidence-anchors";
 
 export {
   CertifiedTemplateFieldSpecificationSchema,
@@ -68,12 +72,11 @@ const CUSTOM_CONCEPT_ID = /^ttcustom_[a-f0-9]{24}$/;
 const SHA256 = /^[a-f0-9]{64}$/;
 const ISO_DATE = /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/;
 const MAX_SPECIFICATIONS = TEMPLATE_TWIN_CUSTOM_FIELD_LIMIT;
-const MAX_CONTEXT_CHARS = 80_000;
 
 export const CanonicalCustomConceptEvidenceSchema = z
   .object({
     mode: z.enum(["conversation", "dictation", "text"]),
-    contextText: z.string().min(1).max(MAX_CONTEXT_CHARS),
+    contextText: z.string().min(1).max(TEMPLATE_TWIN_CUSTOM_EVIDENCE_MAX_CONTEXT_CHARS),
     anchors: z
       .array(
         z
@@ -253,51 +256,14 @@ export interface BuildCanonicalCustomConceptEvidenceInput {
 export function buildCanonicalCustomConceptEvidence(
   input: BuildCanonicalCustomConceptEvidenceInput,
 ): CanonicalCustomConceptEvidence {
-  if (
-    input.contextText.length === 0 ||
-    input.contextText.length > MAX_CONTEXT_CHARS
-  ) {
+  const canonical = buildCanonicalCustomEvidenceAnchors(input);
+  if (!canonical.ok && canonical.code === "CONTEXT_LENGTH_INVALID") {
     throw new CustomConceptExtractionError(
       "EVIDENCE_INVALID",
-      `Encounter evidence must contain 1-${MAX_CONTEXT_CHARS} characters.`,
+      `Encounter evidence must contain 1-${TEMPLATE_TWIN_CUSTOM_EVIDENCE_MAX_CONTEXT_CHARS} characters.`,
     );
   }
-
-  const spans: Array<{ start: number; end: number }> = [];
-  const appendBounded = (rawStart: number, rawEnd: number): void => {
-    let start = rawStart;
-    let end = rawEnd;
-    while (start < end && /\s/u.test(input.contextText[start] ?? ""))
-      start += 1;
-    while (end > start && /\s/u.test(input.contextText[end - 1] ?? ""))
-      end -= 1;
-    while (end - start > 4_000) {
-      const hardEnd = start + 4_000;
-      const window = input.contextText.slice(start, hardEnd);
-      const whitespace = Math.max(
-        window.lastIndexOf(" "),
-        window.lastIndexOf("\t"),
-      );
-      const chunkEnd = whitespace > 0 ? start + whitespace : hardEnd;
-      spans.push({ start, end: chunkEnd });
-      start = chunkEnd;
-      while (start < end && /\s/u.test(input.contextText[start] ?? "")) {
-        start += 1;
-      }
-    }
-    if (start < end) spans.push({ start, end });
-  };
-
-  const boundary = /(?:[.!?]+(?=\s|$)|\n+)/gu;
-  let cursor = 0;
-  for (const match of input.contextText.matchAll(boundary)) {
-    const boundaryStart = match.index;
-    const boundaryEnd = boundaryStart + match[0].length;
-    appendBounded(cursor, boundaryEnd);
-    cursor = boundaryEnd;
-  }
-  appendBounded(cursor, input.contextText.length);
-  if (spans.length === 0 || spans.length > 500) {
+  if (!canonical.ok) {
     throw new CustomConceptExtractionError(
       "EVIDENCE_INVALID",
       "Encounter evidence could not be represented as a bounded canonical anchor set.",
@@ -307,8 +273,8 @@ export function buildCanonicalCustomConceptEvidence(
   const evidence = {
     mode: input.mode,
     contextText: input.contextText,
-    anchors: spans.map(({ start, end }) => {
-      const quote = input.contextText.slice(start, end);
+    anchors: canonical.anchors.map((anchor) => {
+      const { quote, sourceTranscriptOffsets } = anchor;
       const rolePrefix =
         input.mode === "conversation"
           ? quote.match(
@@ -327,11 +293,9 @@ export function buildCanonicalCustomConceptEvidence(
             : Number(rolePrefix[3]) * 60 + Number(rolePrefix[4])
           : null;
       return {
-        evidenceAnchorId: `ttev_${sha256(
-          stableJson({ mode: input.mode, start, end, quote }),
-        ).slice(0, 24)}`,
+        evidenceAnchorId: anchor.evidenceAnchorId,
         quote,
-        sourceTranscriptOffsets: { start, end },
+        sourceTranscriptOffsets,
         audioTimestampSeconds,
         speaker,
         quality: {

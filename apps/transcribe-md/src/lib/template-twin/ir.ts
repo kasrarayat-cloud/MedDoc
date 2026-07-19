@@ -526,6 +526,18 @@ export type TemplateTwinValidationResult = z.infer<
   typeof TemplateTwinValidationResultSchema
 >;
 
+export const TemplateTwinEncounterSourceReceiptSchema = z
+  .object({
+    receiptVersion: z.literal('template-twin-encounter-source-v1'),
+    mode: z.enum(['conversation', 'dictation', 'text']),
+    canonicalSourceSha256: Sha256Schema,
+    canonicalSourceLength: z.number().int().positive().max(2_000_000),
+  })
+  .strict();
+export type TemplateTwinEncounterSourceReceipt = z.infer<
+  typeof TemplateTwinEncounterSourceReceiptSchema
+>;
+
 export const TemplateTwinFillManifestSchema = z
   .object({
     manifestVersion: z.literal(1),
@@ -538,6 +550,8 @@ export const TemplateTwinFillManifestSchema = z
     resolverVersion: z.string().min(1),
     resolverModelVersion: z.string().nullable(),
     rendererVersion: z.string().min(1),
+    encounterSourceReceipt:
+      TemplateTwinEncounterSourceReceiptSchema.nullable().default(null),
     fieldIntentsSha256: Sha256Schema.nullable().default(null),
     customExampleProofSha256: Sha256Schema.nullable().default(null),
     customExtraction: z

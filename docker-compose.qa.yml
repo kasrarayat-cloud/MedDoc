@@ -144,6 +144,8 @@ services:
       # No media is approved in the synthetic QA profile. Real byte digests
       # require practice-scoped Privacy/Legal + Operations change control.
       TEMPLATE_TWIN_APPROVED_STATIC_ASSETS_BY_PRACTICE_JSON: "{}"
+      QUILLMD_REQUIRED_RUNTIME_PROTOCOL_EPOCH: template-twin-final-schema-v2
+      TEMPLATE_TWIN_RUNTIME_MODE: standard
       TEMPLATE_TWIN_KILL_SWITCH: "false"
       # Authenticated synthetic staging UI. Both values default empty, so the
       # UI and every server mutation remain unavailable unless a QA operator
@@ -237,6 +239,8 @@ services:
       TEMPLATE_TWIN_QA_STORAGE_BACKUP_RESTORE_ATTESTATION: accepted-isolated-synthetic-qa-gap
       TEMPLATE_TWIN_ORPHAN_RETENTION_DAYS: "7"
       TEMPLATE_TWIN_MAINTENANCE_ENABLED: "true"
+      QUILLMD_REQUIRED_RUNTIME_PROTOCOL_EPOCH: template-twin-final-schema-v2
+      TEMPLATE_TWIN_RUNTIME_MODE: standard
       TEMPLATE_TWIN_KILL_SWITCH: "false"
       TEMPLATE_TWIN_STAGING_QA_ENABLED: "${TEMPLATE_TWIN_STAGING_QA_ENABLED:-}"
       TEMPLATE_TWIN_STAGING_QA_ENVIRONMENT: "${TEMPLATE_TWIN_STAGING_QA_ENVIRONMENT:-}"

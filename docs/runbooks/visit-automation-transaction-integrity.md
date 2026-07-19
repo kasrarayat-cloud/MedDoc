@@ -166,8 +166,11 @@ deploy`. The disposable contention test proves that sequence.
 
 Rollback/disable does not delete proof. Disable staging through the existing
 global/practice controls, stop new workers, and retain the additive rows and
-outbox evidence. Application rollback to code unaware of the trigger requires
-a reviewed forward migration; do not drop proof tables or triggers ad hoc.
+outbox evidence. Code unaware of the final trigger/provider protocol is not an
+application rollback target. Use only the final-schema-compatible
+`rollback-compat-v2` image procedure in
+`docs/runbooks/template-twin-rollback-compat-v2.md`; do not drop proof tables
+or triggers ad hoc.
 
 Migration `20260718090000_visit_automation_provider_execution_v1` is also
 additive. It creates the private provider-execution ledger, tenant/lineage
@@ -200,9 +203,11 @@ pre-migration schema and data completely.
 
 Operational rollback is disable-only: stop new provider work through the
 existing rollout controls and retain the additive columns and immutable
-evidence. Do not drop claim data or reinterpret unknown outcomes. A failed
-deployment can be retried after the blocking transaction is released; do not
-edit the migration checksum.
+evidence. Do not drop claim data or reinterpret unknown outcomes. A
+post-contract application swap must use a final-schema-compatible image in
+`rollback-compat-v2`; a pre-stack worker does not implement this ownership
+protocol. A failed deployment can be retried after the blocking transaction is
+released; do not edit the migration checksum.
 
 ## Disposable PostgreSQL verification
 

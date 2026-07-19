@@ -219,6 +219,38 @@ describe("Template Twin artifact storage initialization", () => {
 });
 
 describe("Template Twin put-once behavior", () => {
+  it("writes and verifies raw uploads in the isolated quarantine namespace", async () => {
+    const { store } = setup();
+    const stored = await store.storeQuarantineArtifact({
+      practiceId: "practice_1",
+      lineageId: "lineage_1",
+      lineageVersion: 1,
+      bytes: DOCX_BYTES,
+    });
+
+    expect(stored.objectKey).toContain("/template-twin/quarantine/");
+    await expect(
+      store.readQuarantineArtifact({
+        practiceId: "practice_1",
+        objectKey: stored.objectKey,
+        expectedObjectVersionId: stored.objectVersionId,
+        expectedObjectEtag: stored.objectEtag,
+        expectedSha256: stored.sha256,
+        expectedSizeBytes: stored.sizeBytes,
+      }),
+    ).resolves.toEqual(DOCX_BYTES);
+    await expect(
+      store.readSourceArtifact({
+        practiceId: "practice_1",
+        objectKey: stored.objectKey,
+        expectedObjectVersionId: stored.objectVersionId,
+        expectedObjectEtag: stored.objectEtag,
+        expectedSha256: stored.sha256,
+        expectedSizeBytes: stored.sizeBytes,
+      }),
+    ).rejects.toBeInstanceOf(TemplateTwinArtifactNotFoundError);
+  });
+
   it("fails closed when the provider omits an immutable version or ETag", async () => {
     const { client, store } = setup();
     const write = client.putObject.getMockImplementation();

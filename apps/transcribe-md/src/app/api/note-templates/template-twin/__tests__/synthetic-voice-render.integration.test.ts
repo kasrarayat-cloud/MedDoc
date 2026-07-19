@@ -317,6 +317,8 @@ function templateRow() {
 function inMemoryStorage(): TemplateTwinArtifactStore {
   return {
     bucket: 'synthetic-memory-only',
+    storeQuarantineArtifact: vi.fn(),
+    readQuarantineArtifact: vi.fn(),
     storeSourceArtifact: vi.fn(),
     readSourceArtifact: vi.fn(async (input) => {
       expect(input).toEqual({

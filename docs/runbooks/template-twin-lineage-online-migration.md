@@ -168,9 +168,13 @@ does not authorize setting them.
 - **Validation failure:** phase cannot become `VALIDATED`; do not contract.
 - **Contract lock timeout:** the transaction rolls back and cannot report
   `CONTRACTED`. Retry after the blocker is gone.
-- **Application rollback:** keep the additive schema, all progress/evidence,
-  and rollout controls disabled. Roll back application images only. Do not drop
-  columns, tables, indexes, triggers, outbox rows, or clinical evidence.
+- **Application rollback after contract:** keep the additive schema, all
+  progress/evidence, and rollout controls disabled. Use only a reviewed current
+  image carrying the `template-twin-final-schema-v2` protocol epoch in
+  `rollback-compat-v2` mode. Pre-stack images are incompatible once lineage is
+  `NOT NULL` and are prohibited. Follow
+  `docs/runbooks/template-twin-rollback-compat-v2.md`; do not drop columns,
+  tables, indexes, triggers, outbox rows, or clinical evidence.
 - **Data rollback:** none is needed for the deterministic `lineageId=id`
   backfill. Destructive reversal is prohibited; database restore requires its
   own approved incident/change procedure.

@@ -28,6 +28,11 @@ import {
   templateTwinStagingQaSha256,
 } from "@/lib/template-twin/staging-qa-fixtures";
 import { isTemplateTwinStagingQaRequested } from "@/lib/template-twin/staging-qa-gate";
+import {
+  TemplateTwinMalwareRejectedError,
+  TemplateTwinMalwareScanUnavailableError,
+} from "@/lib/template-twin/malware-scan";
+import { TemplateTwinQuarantineError } from "@/lib/template-twin/quarantine-admission";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -68,6 +73,19 @@ function safeError(error: unknown): { status: number; message: string } {
   }
   if (error instanceof TemplateTwinPhiRejectedError) {
     return { status: 422, message: error.message };
+  }
+  if (error instanceof TemplateTwinMalwareRejectedError) {
+    return { status: 422, message: error.message };
+  }
+  if (error instanceof TemplateTwinMalwareScanUnavailableError) {
+    return { status: 503, message: error.message };
+  }
+  if (error instanceof TemplateTwinQuarantineError) {
+    return {
+      status:
+        error.code === "TEMPLATE_TWIN_QUARANTINE_STATE_CONFLICT" ? 409 : 503,
+      message: error.message,
+    };
   }
   if (error instanceof TemplateTwinSourcePrivacyUnsupportedError) {
     return { status: 422, message: error.message };

@@ -673,11 +673,14 @@ reviewed maintenance window and lock-wait monitoring; the migration must not be
 split into statementwise execution.
 
 There is no down migration. No migration has been applied to production by
-this branch. Production rollback, if a later deployment is approved, is an
-app/worker code-image rollback with the additive schema left in place and both
-rollout gates off. Dropping Template Twin tables, enum values, triggers,
-outbox/ledger evidence, or source/output objects is destructive and is not an
-approved rollback.
+this branch. After an approved contract migration, production application
+rollback uses only a reviewed current image carrying the
+`template-twin-final-schema-v2` epoch in `rollback-compat-v2` mode, with the
+additive schema left in place and all rollout gates off. Pre-stack app/worker
+images are incompatible and prohibited. Dropping Template Twin tables, enum
+values, triggers, outbox/ledger evidence, or source/output objects is
+destructive and is not an approved rollback. See
+`docs/runbooks/template-twin-rollback-compat-v2.md`.
 
 ## Dedicated bucket readiness and QA boundary
 
@@ -783,17 +786,25 @@ Required order:
 - Existing generic note formats and exports are not removed.
 - Product rollback for new visits is to activate a previously certified Twin
   version or deactivate the Twin and return to the approved structured
-  template; historical Twin fills/outputs remain retained and readable.
+  template; historical Twin fills/outputs remain retained. They remain readable
+  in standard mode under the normal signing/export gates, but Template
+  Twin-specific review/certification UI and original-layout DOCX download are
+  intentionally unavailable during `rollback-compat-v2`.
 - Immediate rollout rollback is `TEMPLATE_TWIN_KILL_SWITCH` absent/truthy or
-  `Practice.templateTwinEnabled=false`; deployment rollback restores the prior
-  app and worker images together and leaves additive database changes in place.
+  `Practice.templateTwinEnabled=false`; after contract, deployment rollback
+  swaps app and worker together only to an independently accepted current-code
+  `rollback-compat-v2` image pair and leaves additive database changes in
+  place. It never restores a pre-stack image.
   The practice flag is rechecked in the final acknowledgement/signing database
   claim so a concurrent disable wins closed. The process environment kill
   switch stops newly evaluated requests; changing it by app rollout does not
   purport to drain work already executing on an older process, so Operations
   should also disable the practice flag before or with a global stop.
 - If migrations themselves cause an unrecoverable database incident, use the established point-in-time/verified-backup recovery procedure. Do not improvise table drops on production.
-- Before rollout, record exact previous app/worker image digests and confirm that the prior code tolerates the additive columns/tables (it should ignore them).
+- Before rollout, record exact previous app/worker image digests as disaster
+  evidence, but do not treat a pre-stack digest as eligible after contract.
+  Build and independently verify a final-schema-compatible bridge image pair
+  before migration; prove it through the checked runtime-swap guard.
 
 ## Active TranscribeMD verification commands
 

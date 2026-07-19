@@ -55,6 +55,38 @@ describe("Template Twin safe-alpha rollout gate", () => {
     ).toEqual({ allowed: true });
   });
 
+  it("blocks every Template Twin admission in rollback compatibility mode", () => {
+    expect(
+      evaluateTemplateTwinRollout({
+        practiceEnabled: true,
+        env: {
+          TEMPLATE_TWIN_KILL_SWITCH: "false",
+          TEMPLATE_TWIN_RUNTIME_MODE: "rollback-compat-v2",
+        },
+      }),
+    ).toEqual({
+      allowed: false,
+      code: "TEMPLATE_TWIN_ROLLBACK_COMPAT_ACTIVE",
+      reason:
+        "Template Twin is unavailable while rollback compatibility mode is active.",
+    });
+  });
+
+  it("fails closed when the runtime mode is malformed", () => {
+    expect(
+      evaluateTemplateTwinRollout({
+        practiceEnabled: true,
+        env: {
+          TEMPLATE_TWIN_KILL_SWITCH: "false",
+          TEMPLATE_TWIN_RUNTIME_MODE: "pre-stack-image",
+        },
+      }),
+    ).toMatchObject({
+      allowed: false,
+      code: "TEMPLATE_TWIN_RUNTIME_MODE_INVALID",
+    });
+  });
+
   it("throws a stable physician-readable error at server boundaries", () => {
     expect(() =>
       assertTemplateTwinRollout({

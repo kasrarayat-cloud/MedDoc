@@ -21,7 +21,9 @@ import { canonicalSoapSha256 } from '../soap-binding';
 import {
   buildTemplateTwinIntegrationFixture,
   factsForMode,
+  SYNTHETIC_CONTEXT,
 } from './integration-fixture';
+import { createTemplateTwinEncounterSourceReceipt } from '../canonical-encounter-source';
 
 const VALIDATION_NOW = '2026-07-15T12:00:00.000Z';
 const REVIEWED_SOAP = [
@@ -77,6 +79,10 @@ beforeAll(async () => {
     ir: fixture.ir,
     mappings: fixture.mappings,
     facts: factsForMode('text'),
+    encounterSourceReceipt: createTemplateTwinEncounterSourceReceipt({
+      mode: 'text',
+      contextText: SYNTHETIC_CONTEXT,
+    }),
     certifiedFieldIds: fixture.ir.fields.map((field) => field.fieldId),
     source: fixture.source,
     resolverModelVersion: 'synthetic-model-v1',
@@ -104,6 +110,11 @@ beforeAll(async () => {
     visitStatus: 'READY',
     soapVersion: 7,
     soapFinal: REVIEWED_SOAP,
+    inputMode: 'text_notes',
+    rawTextInput: SYNTHETIC_CONTEXT,
+    transcriptText: null,
+    transcriptRaw: null,
+    speakerMap: null,
     noteTemplateId: 'template-1',
     noteTemplateVersion: 1,
     noteTemplate: {
@@ -281,6 +292,17 @@ describe('Template Twin server-side signing gate', () => {
       pinnedPracticeRolloutGeneration: BigInt(1),
       updatedAt: new Date('2026-07-15T12:04:00.000Z'),
     });
+  });
+
+  it('blocks signing when canonical encounter evidence no longer matches the immutable receipt', () => {
+    const input = validContext();
+    input.rawTextInput = `${SYNTHETIC_CONTEXT}\nSynthetic source drift.`;
+
+    const result = assessTemplateTwinSigning(input);
+
+    expect(result.ready).toBe(false);
+    expect(result.blockerCodes).toContain('ENCOUNTER_EVIDENCE_INVALID');
+    expect(result.claim).toBeNull();
   });
 
   it('blocks a verified output until the physician confirms the current manifest', () => {

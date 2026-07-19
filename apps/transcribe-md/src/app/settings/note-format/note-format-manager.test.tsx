@@ -65,6 +65,7 @@ function renderManager(
   state: "enabled" | "unavailable" | "hidden" = "enabled",
   requested = state === "enabled",
   templates: ClientTemplateListItem[] = [],
+  templateTwinUiEnabled = true,
 ) {
   render(
     <NoteFormatManager
@@ -72,6 +73,7 @@ function renderManager(
       uploadCaps={{ pdf: true, docx: true }}
       templateTwinSyntheticQaState={state}
       templateTwinStagingQaRequested={requested}
+      templateTwinUiEnabled={templateTwinUiEnabled}
     />,
   );
 }
@@ -125,6 +127,18 @@ describe("Template Twin synthetic upload dialog", () => {
     expect(
       screen.queryByRole("button", { name: "Upload original DOCX" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("removes every Template Twin onboarding control in rollback compatibility mode", () => {
+    renderManager("hidden", false, [], false);
+
+    expect(
+      screen.queryByRole("button", { name: "Upload original DOCX" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Upload synthetic DOCX" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Template Twin · DOCX")).not.toBeInTheDocument();
   });
 
   it("traps modal focus and restores it to the staging trigger on Escape", async () => {

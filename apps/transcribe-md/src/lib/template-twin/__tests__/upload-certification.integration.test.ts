@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { Prisma } from '@prisma/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -17,6 +19,8 @@ const mocks = vi.hoisted(() => ({
   noteUpdate: vi.fn(),
   noteUpdateMany: vi.fn(),
   sourceCreate: vi.fn(),
+  quarantineCreate: vi.fn(),
+  quarantineUpdateMany: vi.fn(),
   transaction: vi.fn(),
   ledgerUpdate: vi.fn(),
   ledgerFind: vi.fn(),
@@ -55,6 +59,10 @@ vi.mock('@meddoc/db', () => ({
     templateTwinFieldDefinition: { updateMany: mocks.fieldUpdateMany },
     templateTwinSemanticMapping: { update: mocks.mappingUpdate },
     templateTwinSourceArtifact: { create: mocks.sourceCreate },
+    templateTwinQuarantineArtifact: {
+      create: mocks.quarantineCreate,
+      updateMany: mocks.quarantineUpdateMany,
+    },
     templateTwinObjectLedger: {
       updateMany: mocks.ledgerUpdate,
       findUnique: mocks.ledgerFind,
@@ -95,6 +103,13 @@ import { runTemplateTwinSyntheticTest } from '../synthetic-test';
 import { TemplateTwinSyntheticEvidenceScanUnavailableError } from '../synthetic-evidence-gate';
 import { readTemplateTwinWorkspace } from '../workspace-read';
 import { TEMPLATE_TWIN_QA_STORAGE_EXCEPTION_ATTESTATION } from '../storage/readiness';
+import {
+  TEMPLATE_TWIN_MALWARE_SCAN_PROFILE,
+  type TemplateTwinMalwareScanEvidence,
+  type TemplateTwinMalwareScanner,
+} from '../malware-scan';
+import { minimizeTemplateTwinSourceMetadata } from '../source-metadata';
+import { compileTemplateDocx } from '../../note-template-docx/compiler';
 import {
   buildTemplateTwinIntegrationFixture,
   SYNTHETIC_CONTEXT,
@@ -164,6 +179,29 @@ interface MemorySource {
   sizeBytes: number;
   validationStatus: string;
   rejectionCodes: string[];
+  quarantineArtifactId: string;
+  quarantineArtifact: MemoryQuarantine;
+}
+
+interface MemoryQuarantine {
+  id: string;
+  practiceId: string;
+  createdById: string;
+  lineageId: string;
+  lineageVersion: number;
+  intakeMode: string;
+  objectKey: string;
+  objectVersionId: string;
+  objectEtag: string;
+  sha256: string;
+  mimeType: string;
+  sizeBytes: number;
+  status: string;
+  malwareScanEvidence: unknown;
+  metadataMinimizationEvidence: unknown;
+  rejectionCodes: string[];
+  scannedAt: Date | null;
+  admittedAt: Date | null;
 }
 
 interface MemoryCertification {
@@ -231,6 +269,7 @@ interface MemoryDatabase {
   sources: Map<string, MemorySource>;
   compiled: Map<string, MemoryCompiled>;
   certifications: Map<string, MemoryCertification>;
+  quarantines: Map<string, MemoryQuarantine>;
 }
 
 interface StoredObject {
@@ -251,6 +290,30 @@ function record(value: unknown): Record<string, unknown> {
 
 function nullableDatabaseValue(value: unknown): unknown {
   return value === Prisma.DbNull || value === Prisma.JsonNull ? null : value;
+}
+
+function sha256(value: Uint8Array | string): string {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+function cleanMalwareScanner(source: Uint8Array): TemplateTwinMalwareScanner {
+  const unsigned = {
+    profileVersion: TEMPLATE_TWIN_MALWARE_SCAN_PROFILE,
+    scanner: 'clamav-clamd' as const,
+    transport: 'unix-domain-socket' as const,
+    engineVersion: '1.4.3',
+    signatureVersion: '27888',
+    sourceSha256: sha256(source),
+    sourceSizeBytes: source.byteLength,
+    verdict: 'clean' as const,
+    threatNameSha256: null,
+    scannedAt: '2026-07-19T00:00:00.000Z',
+  };
+  const evidence: TemplateTwinMalwareScanEvidence = {
+    ...unsigned,
+    attestationSha256: sha256(JSON.stringify(unsigned)),
+  };
+  return { scan: vi.fn().mockResolvedValue(evidence) };
 }
 
 function templateForQuery(args: unknown): MemoryTemplate | null | Record<string, unknown> {
@@ -296,9 +359,57 @@ function configureInMemoryPrisma(): void {
   });
   mocks.sourceCreate.mockImplementation(async (args: unknown) => {
     const data = record(record(args).data);
-    const source = { ...data } as unknown as MemorySource;
+    const quarantine = database.quarantines.get(
+      String(data.quarantineArtifactId),
+    );
+    if (!quarantine) throw new Error('Synthetic quarantine relation missing');
+    const source = {
+      ...data,
+      quarantineArtifact: quarantine,
+    } as unknown as MemorySource;
     database.sources.set(source.id, source);
     return source;
+  });
+  mocks.quarantineCreate.mockImplementation(async (args: unknown) => {
+    const data = record(record(args).data);
+    const quarantine = {
+      ...data,
+      malwareScanEvidence: null,
+      metadataMinimizationEvidence: null,
+      scannedAt: null,
+      admittedAt: null,
+    } as unknown as MemoryQuarantine;
+    database.quarantines.set(quarantine.id, quarantine);
+    return quarantine;
+  });
+  mocks.quarantineUpdateMany.mockImplementation(async (args: unknown) => {
+    const input = record(args);
+    const where = record(input.where);
+    const id = String(where.id);
+    const quarantine = database.quarantines.get(id);
+    if (!quarantine) return { count: 0 };
+    const expectedStatus = where.status;
+    if (
+      typeof expectedStatus === 'string' &&
+      quarantine.status !== expectedStatus
+    ) {
+      return { count: 0 };
+    }
+    if (
+      expectedStatus &&
+      typeof expectedStatus === 'object' &&
+      !Array.isArray(expectedStatus)
+    ) {
+      const statuses = record(expectedStatus).in;
+      if (
+        Array.isArray(statuses) &&
+        !statuses.includes(quarantine.status)
+      ) {
+        return { count: 0 };
+      }
+    }
+    Object.assign(quarantine, record(input.data));
+    return { count: 1 };
   });
   mocks.compiledCreate.mockImplementation(async (args: unknown) => {
     const data = record(record(args).data);
@@ -460,6 +571,10 @@ function configureInMemoryPrisma(): void {
         templateTwinFieldDefinition: { updateMany: mocks.fieldUpdateMany },
         templateTwinSemanticMapping: { update: mocks.mappingUpdate },
         templateTwinSourceArtifact: { create: mocks.sourceCreate },
+        templateTwinQuarantineArtifact: {
+          create: mocks.quarantineCreate,
+          updateMany: mocks.quarantineUpdateMany,
+        },
         templateTwinObjectLedger: {
           updateMany: mocks.ledgerUpdate,
           findUnique: mocks.ledgerFind,
@@ -562,6 +677,7 @@ beforeEach(() => {
     sources: new Map(),
     compiled: new Map(),
     certifications: new Map(),
+    quarantines: new Map(),
   };
   database.templates.set(PRIOR_TEMPLATE_ID, {
     id: PRIOR_TEMPLATE_ID,
@@ -597,6 +713,14 @@ beforeEach(() => {
 describe('Template Twin stateful upload-to-certification integration', () => {
   it('carries one immutable DOCX through real compile, mapping, proof invalidation, rerender, and activation', async () => {
     const fixture = await buildTemplateTwinIntegrationFixture();
+    const minimizedFixture = await minimizeTemplateTwinSourceMetadata(
+      fixture.source,
+    );
+    const admittedIr = compileTemplateDocx(minimizedFixture.document);
+    const admittedMappings = fixture.mappings.map((mapping, index) => ({
+      ...mapping,
+      fieldId: admittedIr.fields[index]!.fieldId,
+    }));
     mocks.modelComplete.mockImplementation(
       async (request: { purpose: string }) => {
         if (request.purpose === 'tm_template_phi_scan') {
@@ -610,7 +734,7 @@ describe('Template Twin stateful upload-to-certification integration', () => {
           };
         }
         if (request.purpose === 'tm_template_parse') {
-          return { mappings: proposalMappings(fixture.mappings) };
+          return { mappings: proposalMappings(admittedMappings) };
         }
         throw new Error(`Unexpected synthetic model purpose: ${request.purpose}`);
       },
@@ -647,6 +771,7 @@ describe('Template Twin stateful upload-to-certification integration', () => {
       },
       actor: ACTOR,
       storage,
+      malwareScanner: cleanMalwareScanner(fixture.source),
     });
     const draftWorkspace = await readTemplateTwinWorkspace({
       noteTemplateId: draft.noteTemplateId,
@@ -657,16 +782,16 @@ describe('Template Twin stateful upload-to-certification integration', () => {
     expect(draftWorkspace).toMatchObject({
       template: { status: 'draft', certificationStatus: 'needs_confirmation' },
       stats: {
-        totalFields: fixture.ir.fields.length,
+        totalFields: admittedIr.fields.length,
         dropdowns: 1,
         checkboxes: 1,
         tables: 1,
       },
-      unsupported: fixture.ir.unsupported,
+      unsupported: admittedIr.unsupported,
       latestSyntheticTest: null,
     });
     expect(draftWorkspace!.fields.map((item) => item.field.fieldId)).toEqual(
-      fixture.ir.fields.map((field) => field.fieldId),
+      admittedIr.fields.map((field) => field.fieldId),
     );
     expect(database.templates.get(PRIOR_TEMPLATE_ID)?.status).toBe('active');
 
@@ -686,11 +811,11 @@ describe('Template Twin stateful upload-to-certification integration', () => {
       actor: ACTOR,
       expectedMappingsSha256: draftWorkspace!.mappingsSha256,
       expectedFieldIntentsSha256: draftWorkspace!.fieldIntentsSha256,
-      mappings: fixture.mappings,
+      mappings: admittedMappings,
       fieldIntents: [],
     });
     expect(confirmed.mappingsSha256).toBe(
-      templateTwinMappingsSha256(fixture.mappings),
+      templateTwinMappingsSha256(admittedMappings),
     );
     expect(confirmed.fields.every((item) => item.mapping.status === 'certified')).toBe(true);
 
@@ -780,7 +905,7 @@ describe('Template Twin stateful upload-to-certification integration', () => {
       packageCheck: 'verified',
       fieldCheck: 'verified',
       staticRegionCheck: 'verified',
-      sourceSha256: fixture.ir.source.sha256,
+      sourceSha256: admittedIr.source.sha256,
     });
 
     const changedMappings = firstProof.fields.map((item, index) =>
@@ -865,7 +990,7 @@ describe('Template Twin stateful upload-to-certification integration', () => {
     expect(database.templates.get(PRIOR_TEMPLATE_ID)?.status).toBe('inactive');
     expect(database.certifications.size).toBe(1);
     expect(compiledForTemplate(draft.noteTemplateId).certification).toMatchObject({
-      compiledStructureSha256: fixture.ir.structureSha256,
+      compiledStructureSha256: admittedIr.structureSha256,
       approvedMappingsSha256: changedHash,
       testOutputSha256: refreshedProof.latestSyntheticTest!.outputSha256,
     });
@@ -873,17 +998,22 @@ describe('Template Twin stateful upload-to-certification integration', () => {
     const sourceObjects = [...memory.objects.entries()].filter(([key]) =>
       key.includes('/sources/'),
     );
+    const quarantineObjects = [...memory.objects.entries()].filter(([key]) =>
+      key.includes('/quarantine/'),
+    );
     const outputObjects = [...memory.objects.entries()].filter(([key]) =>
       key.includes('/outputs/'),
     );
+    expect(quarantineObjects).toHaveLength(1);
+    expect(quarantineObjects[0]![1].bytes).toEqual(fixture.source);
     expect(sourceObjects).toHaveLength(1);
-    expect(sourceObjects[0]![1].bytes).toEqual(fixture.source);
+    expect(sourceObjects[0]![1].bytes).toEqual(minimizedFixture.document);
     expect(outputObjects).toHaveLength(3);
     expect(new Set(outputObjects.map(([key]) => key)).size).toBe(3);
     expect(
       outputObjects.every(([, artifact]) => artifact.bytes.byteLength > 0),
     ).toBe(true);
-    expect(memory.getPutCount()).toBe(4);
+    expect(memory.getPutCount()).toBe(5);
     expect(mocks.modelComplete.mock.calls.map((call) => call[0].purpose)).toEqual([
       'tm_template_phi_scan',
       'tm_template_parse',

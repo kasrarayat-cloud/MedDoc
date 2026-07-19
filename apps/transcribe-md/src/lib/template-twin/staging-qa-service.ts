@@ -894,8 +894,15 @@ export async function createTemplateTwinStagingQaRun(input: {
                   is: {
                     practiceId: input.actor.practiceId,
                     validationStatus: "accepted",
-                    sha256: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256,
-                    sizeBytes: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES,
+                    quarantineArtifact: {
+                      is: {
+                        practiceId: input.actor.practiceId,
+                        intakeMode: "NATIVE_TEMPLATE",
+                        status: "ADMITTED",
+                        sha256: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256,
+                        sizeBytes: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES,
+                      },
+                    },
                   },
                 },
               },

@@ -9,6 +9,7 @@
 
 import prisma from "@meddoc/db";
 import { TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION } from "@meddoc/ai";
+import { templateTwinRuntimeEnabled } from "@/lib/runtime-protocol";
 import type {
   NoteTemplateSection,
   ParsedStyleProfile,
@@ -102,8 +103,14 @@ export function rowToListItem(row: {
 export async function listDoctorTemplates(
   doctorId: string,
 ): Promise<TemplateListItem[]> {
+  const twinRuntimeEnabled = templateTwinRuntimeEnabled(process.env);
   const rows = await prisma.noteTemplate.findMany({
-    where: { doctorId },
+    where: {
+      doctorId,
+      ...(twinRuntimeEnabled
+        ? {}
+        : { templateKind: { not: "template_twin_docx" } }),
+    },
     select: {
       id: true,
       name: true,
@@ -167,6 +174,7 @@ export async function listDoctorStagingQaTemplates(input: {
   practiceGeneration: bigint;
   now?: Date;
 }): Promise<TemplateListItem[]> {
+  if (!templateTwinRuntimeEnabled(process.env)) return [];
   const rows = await prisma.noteTemplate.findMany({
     where: {
       doctorId: input.doctorId,

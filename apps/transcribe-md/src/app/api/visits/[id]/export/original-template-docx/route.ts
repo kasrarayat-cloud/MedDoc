@@ -40,6 +40,7 @@ import {
   lockAndAssertVisitAutomationProof,
   VisitAutomationIncompleteError,
 } from "@/worker/automation-finalization";
+import { persistedTemplateTwinEncounterEvidenceIsValid } from "@/lib/template-twin/encounter-evidence-verification";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -157,6 +158,11 @@ export const GET = withApiHandler<{ id: string }>(
       visitStatus: visit.status,
       soapFinal: visit.soapFinal,
       soapVersion: visit.soapVersion,
+      inputMode: visit.inputMode,
+      rawTextInput: visit.rawTextInput,
+      transcriptText: visit.transcriptText,
+      transcriptRaw: visit.transcriptRaw,
+      speakerMap: visit.speakerMap,
       noteTemplateId: visit.noteTemplateId,
       noteTemplateVersion: visit.noteTemplateVersion,
       noteTemplate: visit.noteTemplate,
@@ -444,6 +450,33 @@ export const GET = withApiHandler<{ id: string }>(
               allowed: false as const,
               code: "VISIT_AUTOMATION_PROOF_STALE",
               reason: "Download authorization changed. Refresh and try again.",
+            };
+          }
+          if (
+            !persistedTemplateTwinEncounterEvidenceIsValid({
+              visit: lockedVisit,
+              manifest: fill.fillManifest,
+            })
+          ) {
+            await enqueueTemplateTwinAudit(tx, {
+              eventKey: `template-twin-export-evidence-stale:${visitId}:${randomUUID()}`,
+              practiceId,
+              actorId: userId,
+              actorEmailSnapshot: session.user.email ?? null,
+              action: "TEMPLATE_TWIN_SAFETY_GATE_BLOCKED",
+              targetType: "TranscribeVisit",
+              targetId: visitId,
+              metadata: {
+                reasonCode: "ENCOUNTER_EVIDENCE_INVALID",
+                operation: "download_final_authorization",
+                fillManifestId: fill.id,
+              },
+            });
+            return {
+              allowed: false as const,
+              code: "TEMPLATE_TWIN_ENCOUNTER_EVIDENCE_STALE",
+              reason:
+                "The encounter evidence changed before download authorization. Regenerate and review the document.",
             };
           }
           await lockAndAssertVisitAutomationProof({

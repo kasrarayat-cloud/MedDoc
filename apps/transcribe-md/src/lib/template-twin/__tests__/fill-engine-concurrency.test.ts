@@ -188,6 +188,8 @@ function storage(
 ): TemplateTwinArtifactStore {
   return {
     bucket: "synthetic-memory-only",
+    storeQuarantineArtifact: vi.fn(),
+    readQuarantineArtifact: vi.fn(),
     storeSourceArtifact: vi.fn(),
     readSourceArtifact: vi.fn(async () => Buffer.from(fixture.source)),
     readOutputArtifact: vi.fn(),
@@ -261,6 +263,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  delete process.env.TEMPLATE_TWIN_RUNTIME_MODE;
   process.env.TEMPLATE_TWIN_KILL_SWITCH = "false";
   outputWrites = 0;
   globalRolloutEnabled = true;
@@ -296,6 +299,22 @@ beforeEach(() => {
 });
 
 describe("Template Twin worker provenance and manifest concurrency", () => {
+  it("blocks direct provider/fill work before database or object access in bridge mode", async () => {
+    process.env.TEMPLATE_TWIN_RUNTIME_MODE = "rollback-compat-v2";
+    const artifacts = storage();
+
+    await expect(
+      processTemplateTwinVisit(processInput(artifacts)),
+    ).rejects.toMatchObject({
+      code: "TEMPLATE_TWIN_ROLLBACK_COMPAT_ACTIVE",
+      message: "Template Twin provider work is unavailable in this runtime mode.",
+    });
+    expect(mocks.findPractice).not.toHaveBeenCalled();
+    expect(mocks.claimVisit).not.toHaveBeenCalled();
+    expect(artifacts.readSourceArtifact).not.toHaveBeenCalled();
+    expect(outputWrites).toBe(0);
+  });
+
   it("durably records a failed clinical render gate in the manifest transaction", async () => {
     mocks.findFill.mockResolvedValue(null);
 

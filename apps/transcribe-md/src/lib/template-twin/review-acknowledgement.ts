@@ -29,6 +29,10 @@ import {
   lockAndAssertTemplateTwinStagingQaOperation,
   TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
 } from "./staging-qa-visit-guard";
+import {
+  assessTemplateTwinEncounterEvidence,
+  persistedTemplateTwinEncounterEvidenceIsValid,
+} from "./encounter-evidence-verification";
 
 export interface TemplateTwinReviewAcknowledgementActor {
   userId: string;
@@ -42,6 +46,7 @@ export class TemplateTwinReviewAcknowledgementError extends Error {
       | "NOT_FOUND"
       | "NOT_READY"
       | "MANIFEST_INVALID"
+      | "ENCOUNTER_EVIDENCE_INVALID"
       | "SOAP_BINDING_STALE"
       | "OPTIMISTIC_CONFLICT"
       | "VISIT_AUTOMATION_INCOMPLETE"
@@ -74,6 +79,11 @@ export async function acknowledgeTemplateTwinReview(input: {
       status: true,
       soapVersion: true,
       soapFinal: true,
+      inputMode: true,
+      rawTextInput: true,
+      transcriptText: true,
+      transcriptRaw: true,
+      speakerMap: true,
       automationManifest: { select: VISIT_AUTOMATION_MANIFEST_SELECT },
       templateTwinSyntheticQaRun: {
         select: TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
@@ -220,6 +230,17 @@ export async function acknowledgeTemplateTwinReview(input: {
     );
   }
   if (
+    !assessTemplateTwinEncounterEvidence({
+      visit,
+      manifest: parsedManifest.data,
+    }).valid
+  ) {
+    throw new TemplateTwinReviewAcknowledgementError(
+      "ENCOUNTER_EVIDENCE_INVALID",
+      "The encounter evidence no longer matches this Template Twin. Regenerate it before confirming review.",
+    );
+  }
+  if (
     typeof visit.soapFinal !== "string" ||
     fill.soapVersion !== visit.soapVersion ||
     fill.soapSha256 !== canonicalSoapSha256(visit.soapFinal) ||
@@ -318,6 +339,35 @@ export async function acknowledgeTemplateTwinReview(input: {
       ) {
         return { applied: false as const, rolloutRejected: null };
       }
+      if (
+        !persistedTemplateTwinEncounterEvidenceIsValid({
+          visit: lockedVisit,
+          manifest: fill.fillManifest,
+        })
+      ) {
+        await enqueueTemplateTwinAudit(tx, {
+          eventKey:
+            `template-twin:manifest-review-evidence-stale:${fill.id}:` +
+            `${fill.manifestVersion}:${fill.manifestSha256}`,
+          practiceId: input.actor.practiceId,
+          actorId: input.actor.userId,
+          actorEmailSnapshot: input.actor.userEmail,
+          action: "TEMPLATE_TWIN_SAFETY_GATE_BLOCKED",
+          targetType: "TemplateTwinFillManifest",
+          targetId: fill.id,
+          metadata: {
+            reasonCode: "ENCOUNTER_EVIDENCE_INVALID",
+            operation: "whole_manifest_review_final_claim",
+            visitId: input.visitId,
+            manifestVersion: fill.manifestVersion,
+          },
+        });
+        return {
+          applied: false as const,
+          rolloutRejected: null,
+          encounterEvidenceRejected: true as const,
+        };
+      }
       await lockAndAssertVisitAutomationProof({
         tx,
         visitId: input.visitId,
@@ -410,6 +460,15 @@ export async function acknowledgeTemplateTwinReview(input: {
     throw new TemplateTwinReviewAcknowledgementError(
       applied.rolloutRejected.code,
       applied.rolloutRejected.reason,
+    );
+  }
+  if (
+    "encounterEvidenceRejected" in applied &&
+    applied.encounterEvidenceRejected
+  ) {
+    throw new TemplateTwinReviewAcknowledgementError(
+      "ENCOUNTER_EVIDENCE_INVALID",
+      "The encounter evidence changed before review confirmation. Regenerate and review the document.",
     );
   }
   if (!applied.applied) {

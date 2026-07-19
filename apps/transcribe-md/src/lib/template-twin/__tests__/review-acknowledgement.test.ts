@@ -56,7 +56,9 @@ import { VisitAutomationIncompleteError } from "@/worker/automation-finalization
 import {
   buildTemplateTwinIntegrationFixture,
   factsForMode,
+  SYNTHETIC_CONTEXT,
 } from "./integration-fixture";
+import { createTemplateTwinEncounterSourceReceipt } from "../canonical-encounter-source";
 
 const SOAP = "Synthetic SOAP reviewed for Template Twin.";
 const ACTOR = {
@@ -78,6 +80,10 @@ beforeAll(async () => {
     ir: fixture.ir,
     mappings: fixture.mappings,
     facts: factsForMode("text"),
+    encounterSourceReceipt: createTemplateTwinEncounterSourceReceipt({
+      mode: "text",
+      contextText: SYNTHETIC_CONTEXT,
+    }),
     certifiedFieldIds: fixture.ir.fields.map((field) => field.fieldId),
     source: fixture.source,
     resolverModelVersion: "synthetic-model",
@@ -92,6 +98,11 @@ function visitRow(overrides: Record<string, unknown> = {}) {
     status: "READY",
     soapVersion: 4,
     soapFinal: SOAP,
+    inputMode: "text_notes",
+    rawTextInput: SYNTHETIC_CONTEXT,
+    transcriptText: null,
+    transcriptRaw: null,
+    speakerMap: null,
     user: { practice: { templateTwinEnabled: true } },
     templateTwinFill: {
       id: "fill-review-ack",
@@ -148,6 +159,11 @@ beforeEach(() => {
     archivedAt: null,
     soapVersion: 4,
     soapFinal: SOAP,
+    inputMode: "text_notes",
+    rawTextInput: SYNTHETIC_CONTEXT,
+    transcriptText: null,
+    transcriptRaw: null,
+    speakerMap: null,
   });
   mocks.transaction.mockImplementation(
     async (callback: (tx: unknown) => Promise<unknown>) =>
@@ -159,6 +175,58 @@ beforeEach(() => {
 });
 
 describe("whole-manifest Template Twin review acknowledgement", () => {
+  it("blocks review confirmation when the canonical encounter source is missing", async () => {
+    mocks.findVisit.mockResolvedValue(visitRow({ rawTextInput: null }));
+
+    await expect(
+      acknowledgeTemplateTwinReview({
+        visitId: "visit-review-ack",
+        expectedManifestVersion: 3,
+        expectedManifestSha256: manifestSha256,
+        actor: ACTOR,
+      }),
+    ).rejects.toMatchObject({ code: "ENCOUNTER_EVIDENCE_INVALID" });
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
+  it("blocks and audits review when encounter evidence changes before the final claim", async () => {
+    mocks.lockVisit.mockResolvedValue({
+      id: "visit-review-ack",
+      userId: ACTOR.userId,
+      status: "READY",
+      deletedAt: null,
+      archivedAt: null,
+      soapVersion: 4,
+      soapFinal: SOAP,
+      inputMode: "text_notes",
+      rawTextInput: `${SYNTHETIC_CONTEXT}\nSynthetic source drift.`,
+      transcriptText: null,
+      transcriptRaw: null,
+      speakerMap: null,
+    });
+
+    await expect(
+      acknowledgeTemplateTwinReview({
+        visitId: "visit-review-ack",
+        expectedManifestVersion: 3,
+        expectedManifestSha256: manifestSha256,
+        actor: ACTOR,
+      }),
+    ).rejects.toMatchObject({ code: "ENCOUNTER_EVIDENCE_INVALID" });
+    expect(mocks.updateFill).not.toHaveBeenCalled();
+    expect(mocks.outboxCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: "TEMPLATE_TWIN_SAFETY_GATE_BLOCKED",
+          metadata: expect.objectContaining({
+            reasonCode: "ENCOUNTER_EVIDENCE_INVALID",
+            operation: "whole_manifest_review_final_claim",
+          }),
+        }),
+      }),
+    );
+  });
+
   it("blocks review before the transaction when automation proof is incomplete", async () => {
     mocks.assessAutomation.mockReturnValue({
       ready: false,

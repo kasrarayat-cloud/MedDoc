@@ -32,13 +32,19 @@ export async function createTemplateTwinStagingQaVersionAdmission(input: {
     sourceArtifactId: string;
     sha256: string;
     sizeBytes: number;
+    intakeSha256?: string | null;
+    intakeSizeBytes?: number | null;
   };
   target: { noteTemplateId: string; version: number };
   now?: Date;
 }): Promise<string | null> {
+  const admissionSource = {
+    sha256: input.source.intakeSha256 ?? input.source.sha256,
+    sizeBytes: input.source.intakeSizeBytes ?? input.source.sizeBytes,
+  };
   if (
-    input.source.sha256 !== TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256 ||
-    input.source.sizeBytes !== TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES
+    admissionSource.sha256 !== TEMPLATE_TWIN_STAGING_QA_FIXTURE_SHA256 ||
+    admissionSource.sizeBytes !== TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES
   ) {
     return null;
   }
@@ -58,8 +64,8 @@ export async function createTemplateTwinStagingQaVersionAdmission(input: {
         phase: { in: ["TEMPLATE_LINKED", "CERTIFIED"] },
         noteTemplateId: input.source.noteTemplateId,
         sourceArtifactId: input.source.sourceArtifactId,
-        sourceSha256: input.source.sha256,
-        sourceSizeBytes: input.source.sizeBytes,
+        sourceSha256: admissionSource.sha256,
+        sourceSizeBytes: admissionSource.sizeBytes,
         pinnedGlobalRolloutGeneration: token.globalGeneration,
         pinnedPracticeRolloutGeneration: token.practiceGeneration,
         failedAt: null,
@@ -114,8 +120,8 @@ export async function createTemplateTwinStagingQaVersionAdmission(input: {
     data: {
       practiceId: input.actor.practiceId,
       actorId: input.actor.userId,
-      sourceSha256: input.source.sha256,
-      sourceSizeBytes: input.source.sizeBytes,
+      sourceSha256: admissionSource.sha256,
+      sourceSizeBytes: admissionSource.sizeBytes,
       fixtureVersion: TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION,
       providerMode: "SYNTHETIC_LIFECYCLE",
       purpose: "UPLOAD",

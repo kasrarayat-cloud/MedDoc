@@ -60,6 +60,20 @@ describe('Template Twin maintenance configuration', () => {
     ).toMatchObject({ enabled: false, purgeApproved: false });
   });
 
+  it('keeps outbox and object reconciliation available in rollback compatibility mode', () => {
+    expect(
+      resolveTemplateTwinMaintenanceConfig({
+        ...enabledEnv,
+        TEMPLATE_TWIN_RUNTIME_MODE: 'rollback-compat-v2',
+        TEMPLATE_TWIN_KILL_SWITCH: 'true',
+      }),
+    ).toMatchObject({
+      enabled: true,
+      orphanRetentionMs: 14 * DAY_MS,
+      purgeApproved: false,
+    });
+  });
+
   it('requires an explicit bounded orphan-retention window when enabled', () => {
     for (const value of [undefined, '', '0', '-1', '1.5', '366', 'not-days']) {
       expect(() =>

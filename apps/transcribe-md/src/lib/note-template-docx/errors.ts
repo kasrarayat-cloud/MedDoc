@@ -78,7 +78,7 @@ const SAFE_MESSAGES: Record<TemplateDocxErrorCode, string> = {
   XML_DTD_REJECTED:
     "DTD and entity declarations are not permitted in DOCX XML.",
   XML_HIDDEN_CONTENT_UNSUPPORTED:
-    "XML comments, processing instructions, and CDATA are not supported in safe-alpha templates.",
+    "Hidden text, unresolved revisions, comments, XML comments, processing instructions, and CDATA are not supported in templates.",
   XML_INVALID: "An OOXML part is malformed.",
   DOCUMENT_STRUCTURE_LIMIT_EXCEEDED:
     "The DOCX document structure exceeds the supported complexity limit.",

@@ -29,6 +29,7 @@ import {
 } from "@/worker/automation-manifest";
 
 import { enqueueTemplateTwinAudit } from "./audit-outbox";
+import { canonicalSha256 } from "./canonical";
 import {
   canonicalSoapSha256,
   TEMPLATE_TWIN_SOAP_BINDING_REVIEW_REASON,
@@ -103,6 +104,10 @@ import {
   type TemplateTwinStagingQaRunGuardRow,
 } from "./staging-qa-visit-guard";
 import { isTemplateTwinStagingQaCorrectionValueAllowed } from "./staging-qa-values";
+import {
+  assessTemplateTwinEncounterEvidence,
+  persistedTemplateTwinEncounterEvidenceIsValid,
+} from "./encounter-evidence-verification";
 
 export interface TemplateTwinReviewActor {
   userId: string;
@@ -116,6 +121,7 @@ export class TemplateTwinReviewError extends Error {
     | "SIGNED_IMMUTABLE"
     | "OPTIMISTIC_CONFLICT"
     | "MANIFEST_INVALID"
+    | "ENCOUNTER_EVIDENCE_INVALID"
     | "SOAP_BINDING_STALE"
     | "CORRECTION_INVALID"
     | "TEMPLATE_PROVENANCE_INVALID"
@@ -185,6 +191,7 @@ interface OwnedReviewContext {
   status: string;
   signedDecisionAt: Date | null;
   manifestVersion: number;
+  manifestSha256: string;
   fillManifest: unknown;
   resolverModelVersion: string | null;
   visit: {
@@ -193,6 +200,11 @@ interface OwnedReviewContext {
     reviewReason: string | null;
     soapFinal: string | null;
     soapVersion: number;
+    inputMode: string;
+    rawTextInput: string | null;
+    transcriptText: string | null;
+    transcriptRaw: unknown;
+    speakerMap: unknown;
     automationManifest?: VisitAutomationManifestProof | null;
     templateTwinSyntheticQaRun?: TemplateTwinStagingQaRunGuardRow | null;
   };
@@ -220,6 +232,12 @@ interface OwnedReviewContext {
       sizeBytes: number;
       validationStatus: string;
       privacyScanEvidence: unknown;
+      quarantineArtifact?: {
+        sha256: string;
+        sizeBytes: number;
+        status: string;
+        intakeMode: string;
+      } | null;
     };
     noteTemplate: {
       id: string;
@@ -265,6 +283,7 @@ interface CommitReviewPlan {
   soapVersion: number;
   soapFinal: string;
   expectedManifestVersion: number;
+  expectedManifestSha256: string;
   prepared: PreparedTemplateTwinFill;
   storedOutput: StoredTemplateTwinArtifact | null;
   staticContentSha256: string;
@@ -278,6 +297,7 @@ interface CommitReviewPlan {
 interface CommitReviewResult {
   applied: boolean;
   soapBindingStale?: boolean;
+  encounterEvidenceStale?: boolean;
   rolloutRejected?: Exclude<
     LockedTemplateTwinRolloutDecision,
     { allowed: true }
@@ -853,6 +873,7 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
           status: true,
           signedDecisionAt: true,
           manifestVersion: true,
+          manifestSha256: true,
           fillManifest: true,
           resolverModelVersion: true,
           visit: {
@@ -862,6 +883,11 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
               reviewReason: true,
               soapFinal: true,
               soapVersion: true,
+              inputMode: true,
+              rawTextInput: true,
+              transcriptText: true,
+              transcriptRaw: true,
+              speakerMap: true,
               automationManifest: {
                 select: VISIT_AUTOMATION_MANIFEST_SELECT,
               },
@@ -898,6 +924,14 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
                   sizeBytes: true,
                   validationStatus: true,
                   privacyScanEvidence: true,
+                  quarantineArtifact: {
+                    select: {
+                      sha256: true,
+                      sizeBytes: true,
+                      status: true,
+                      intakeMode: true,
+                    },
+                  },
                 },
               },
               noteTemplate: {
@@ -1052,7 +1086,7 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
           );
           if (
             !visitMatchesPreparedSoap({
-              visit: lockedVisit,
+              visit: lockedVisit!,
               doctorId: plan.decision.reviewerId,
               noteTemplateId: plan.prepared.manifest.noteTemplateId,
               noteTemplateVersion: plan.prepared.manifest.noteTemplateVersion,
@@ -1076,6 +1110,7 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
                 status: { not: "SIGNED" },
                 signedDecisionAt: null,
                 manifestVersion: plan.expectedManifestVersion,
+                manifestSha256: plan.expectedManifestSha256,
                 soapVersion: plan.prepared.manifest.soapVersion,
                 soapSha256: plan.prepared.manifest.soapSha256,
               },
@@ -1115,6 +1150,49 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
               draftTemplateVersion: null,
             };
           }
+          if (
+            !persistedTemplateTwinEncounterEvidenceIsValid({
+              visit: lockedVisit!,
+              manifest: plan.prepared.manifest,
+            })
+          ) {
+            if (plan.storedOutput) {
+              await quarantineTemplateTwinObject(tx, {
+                objectKey: plan.storedOutput.objectKey,
+                practiceId: plan.practiceId,
+                objectVersionId: plan.storedOutput.objectVersionId,
+                objectEtag: plan.storedOutput.objectEtag,
+                reasonCode: "ENCOUNTER_EVIDENCE_INVALID",
+              });
+            }
+            await enqueueTemplateTwinAudit(tx, {
+              eventKey:
+                `template-twin:encounter-evidence-stale-review:${plan.fillManifestId}:` +
+                `${plan.expectedManifestVersion}:${plan.expectedManifestSha256}`,
+              practiceId: plan.practiceId,
+              actorId: plan.decision.reviewerId,
+              actorEmailSnapshot: plan.reviewerEmail,
+              action: "TEMPLATE_TWIN_SAFETY_GATE_BLOCKED",
+              targetType: "TemplateTwinFillManifest",
+              targetId: plan.fillManifestId,
+              metadata: {
+                reasonCode: "ENCOUNTER_EVIDENCE_INVALID",
+                operation: "field_correction_final_claim",
+                visitId: plan.visitId,
+                manifestVersion: plan.expectedManifestVersion,
+                outputQuarantined: plan.storedOutput !== null,
+              },
+            });
+            return {
+              applied: false,
+              soapBindingStale: false,
+              encounterEvidenceStale: true,
+              rolloutRejected: null,
+              manifestVersion: null,
+              draftTemplateId: null,
+              draftTemplateVersion: null,
+            };
+          }
           await lockAndAssertVisitAutomationProof({
             tx,
             visitId: plan.visitId,
@@ -1136,6 +1214,7 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
               id: plan.fillManifestId,
               practiceId: plan.practiceId,
               manifestVersion: plan.expectedManifestVersion,
+              manifestSha256: plan.expectedManifestSha256,
               status: { not: "SIGNED" },
               signedDecisionAt: null,
               visit: { is: { soapVersion: plan.soapVersion } },
@@ -1323,6 +1402,20 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
                 sourceArtifactId: source.sourceArtifactId,
                 sha256: source.sourceArtifact.sha256,
                 sizeBytes: source.sourceArtifact.sizeBytes,
+                intakeSha256:
+                  source.sourceArtifact.quarantineArtifact?.status ===
+                    "ADMITTED" &&
+                  source.sourceArtifact.quarantineArtifact.intakeMode ===
+                    "NATIVE_TEMPLATE"
+                    ? source.sourceArtifact.quarantineArtifact.sha256
+                    : null,
+                intakeSizeBytes:
+                  source.sourceArtifact.quarantineArtifact?.status ===
+                    "ADMITTED" &&
+                  source.sourceArtifact.quarantineArtifact.intakeMode ===
+                    "NATIVE_TEMPLATE"
+                    ? source.sourceArtifact.quarantineArtifact.sizeBytes
+                    : null,
               },
               target: {
                 noteTemplateId: draft.id,
@@ -1459,13 +1552,27 @@ export async function reviewTemplateTwinField(
   const parsedManifest = TemplateTwinFillManifestSchema.safeParse(
     context.fillManifest,
   );
-  if (!parsedManifest.success) {
+  if (
+    !parsedManifest.success ||
+    canonicalSha256(parsedManifest.data) !== context.manifestSha256
+  ) {
     throw new TemplateTwinReviewError(
       "MANIFEST_INVALID",
       "The persisted Template Twin manifest failed integrity validation.",
     );
   }
   const manifest = parsedManifest.data;
+  if (
+    !assessTemplateTwinEncounterEvidence({
+      visit: context.visit,
+      manifest,
+    }).valid
+  ) {
+    throw new TemplateTwinReviewError(
+      "ENCOUNTER_EVIDENCE_INVALID",
+      "The encounter evidence no longer matches this Template Twin. Regenerate it before correcting fields.",
+    );
+  }
   if (
     context.visit.soapVersion !== manifest.soapVersion ||
     typeof context.visit.soapFinal !== "string" ||
@@ -1680,6 +1787,7 @@ export async function reviewTemplateTwinField(
     ir,
     mappings,
     facts,
+    encounterSourceReceipt: manifest.encounterSourceReceipt,
     certifiedFieldIds,
     fieldIntentsSha256:
       explicitIntents.length > 0
@@ -1720,6 +1828,7 @@ export async function reviewTemplateTwinField(
       soapVersion: manifest.soapVersion,
       soapFinal: context.visit.soapFinal,
       expectedManifestVersion: input.correction.expectedManifestVersion,
+      expectedManifestSha256: context.manifestSha256,
       prepared,
       storedOutput,
       staticContentSha256: ir.staticContentSha256,
@@ -1769,6 +1878,12 @@ export async function reviewTemplateTwinField(
     throw new TemplateTwinReviewError(
       "SOAP_BINDING_STALE",
       TEMPLATE_TWIN_SOAP_BINDING_REVIEW_REASON,
+    );
+  }
+  if (committed.encounterEvidenceStale) {
+    throw new TemplateTwinReviewError(
+      "ENCOUNTER_EVIDENCE_INVALID",
+      "The encounter evidence changed before the correction committed. Regenerate and review the document.",
     );
   }
   if (committed.rolloutRejected) {

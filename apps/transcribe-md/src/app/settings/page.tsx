@@ -37,6 +37,7 @@ import { ChangePasswordForm } from "./change-password-form";
 import { ChangeEmailDialog } from "./change-email-dialog";
 import { EmailChangeToast } from "./email-change-toast";
 import { isDataExportEnabled } from "@/lib/data-export-feature";
+import { templateTwinRuntimeEnabled } from "@/lib/runtime-protocol";
 import { NoteFormatManager } from "./note-format/note-format-manager";
 import {
   listDoctorStagingQaTemplates,
@@ -151,6 +152,7 @@ export default async function SettingsPage() {
 
   // Which upload formats can this image actually extract (see getUploadCaps).
   const uploadCaps = await getUploadCaps();
+  const templateTwinUiEnabled = templateTwinRuntimeEnabled(process.env);
   const templateTwinStagingQaRequested = isTemplateTwinStagingQaRequested(
     process.env,
   );
@@ -162,7 +164,7 @@ export default async function SettingsPage() {
       practiceEnabled: user.practice.templateTwinEnabled,
     }).allowed;
   const templateTwinSyntheticQaState: "enabled" | "unavailable" | "hidden" =
-    user.role !== "DOCTOR"
+    !templateTwinUiEnabled || user.role !== "DOCTOR"
       ? "hidden"
       : user.practice !== null &&
           evaluateTemplateTwinRollout({
@@ -267,6 +269,7 @@ export default async function SettingsPage() {
               uploadCaps={uploadCaps}
               templateTwinSyntheticQaState={templateTwinSyntheticQaState}
               templateTwinStagingQaRequested={templateTwinStagingQaRequested}
+              templateTwinUiEnabled={templateTwinUiEnabled}
             />
           </>
         ),
@@ -679,6 +682,7 @@ export default async function SettingsPage() {
               uploadCaps={uploadCaps}
               templateTwinSyntheticQaState={templateTwinSyntheticQaState}
               templateTwinStagingQaRequested={templateTwinStagingQaRequested}
+              templateTwinUiEnabled={templateTwinUiEnabled}
             />
           </Section>
 

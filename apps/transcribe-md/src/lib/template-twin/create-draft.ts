@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 
 import type { Prisma } from '@prisma/client';
@@ -15,7 +15,6 @@ import {
 import {
   createTemplateTwinArtifactStore,
   claimTemplateTwinObject,
-  DOCX_MIME_TYPE,
   type TemplateTwinArtifactStore,
 } from './storage';
 import {
@@ -31,6 +30,14 @@ import {
   lockTemplateTwinRolloutForFinalClaim,
   type TemplateTwinRolloutToken,
 } from './rollout';
+import type { TemplateTwinMalwareScanner } from './malware-scan';
+import {
+  admitTemplateTwinQuarantine,
+  beginTemplateTwinQuarantine,
+  rejectTemplateTwinQuarantine,
+  scanTemplateTwinQuarantine,
+} from './quarantine-admission';
+import { minimizeTemplateTwinSourceMetadata } from './source-metadata';
 
 export class TemplateTwinDraftError extends Error {
   readonly code:
@@ -73,6 +80,9 @@ export interface CreateTemplateTwinDraftInput {
    */
   providerVisitId?: string | null;
   storage?: TemplateTwinArtifactStore;
+  /** Explicit test seam. Runtime callers omit this and require the configured
+   * Unix-socket ClamAV scanner. */
+  malwareScanner?: TemplateTwinMalwareScanner;
 }
 
 export interface CreateTemplateTwinDraftResult {
@@ -101,57 +111,6 @@ function enumStatus(
 
 function asJson(value: unknown): Prisma.InputJsonValue {
   return value as Prisma.InputJsonValue;
-}
-
-async function quarantineRejectedSource(input: {
-  bytes: Uint8Array;
-  actor: CreateTemplateTwinDraftInput['actor'];
-  rejectionCode: string;
-}): Promise<void> {
-  if (input.bytes.byteLength < 1) return;
-  const digest = createHash('sha256').update(input.bytes).digest('hex');
-  try {
-    await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      const row = await tx.templateTwinSourceArtifact.create({
-        data: {
-          practiceId: input.actor.practiceId,
-          createdById: input.actor.userId,
-          lineageId: randomUUID(),
-          lineageVersion: 1,
-          objectKey: null,
-          sha256: digest,
-          mimeType: DOCX_MIME_TYPE,
-          sizeBytes: input.bytes.byteLength,
-          validationStatus: 'quarantined',
-          rejectionCodes: [input.rejectionCode.slice(0, 80)],
-        },
-        select: { id: true },
-      });
-      await enqueueTemplateTwinAudit(tx, {
-        eventKey: `template-twin:quarantined:${row.id}:${digest}`,
-        practiceId: input.actor.practiceId,
-        actorId: input.actor.userId,
-        actorEmailSnapshot: input.actor.userEmail,
-        action: 'TEMPLATE_TWIN_QUARANTINED',
-        targetType: 'TemplateTwinSourceArtifact',
-        targetId: row.id,
-        metadata: {
-          sha256: digest,
-          sizeBytes: input.bytes.byteLength,
-          rejectionCode: input.rejectionCode.slice(0, 80),
-          gateOutcome: 'blocked',
-        },
-      });
-    });
-  } catch (error) {
-    // The source bytes are still rejected and discarded. Fail closed when the
-    // quarantine row and its durable audit event cannot be committed together.
-    throw new TemplateTwinDraftError(
-      'PERSISTENCE_FAILED',
-      'The rejected template could not be recorded. It was not stored or activated.',
-      error,
-    );
-  }
 }
 
 function fieldCreateInput(
@@ -210,23 +169,53 @@ export async function createTemplateTwinDraft(
       'Name the template, choose its visit scope, and describe this version.',
     );
   }
-  let ir: TemplateDocIR;
+  const artifactStore = input.storage ?? createTemplateTwinArtifactStore();
+  const quarantine = await beginTemplateTwinQuarantine({
+    source: input.source,
+    actor: input.actor,
+    intakeMode: 'NATIVE_TEMPLATE',
+    storage: artifactStore,
+  });
+  await scanTemplateTwinQuarantine({
+    source: input.source,
+    receipt: quarantine,
+    actor: input.actor,
+    ...(input.malwareScanner ? { scanner: input.malwareScanner } : {}),
+  });
+
+  let minimizedSource;
   try {
-    ir = DOCX_TEMPLATE_COMPILER.compile(input.source);
+    minimizedSource = await minimizeTemplateTwinSourceMetadata(input.source);
   } catch (error) {
-    const code = error instanceof TemplateDocxError ? error.code : 'DOCX_COMPILE_FAILED';
-    await quarantineRejectedSource({
-      bytes: input.source,
+    const code = error instanceof TemplateDocxError ? error.code : 'DOCX_METADATA_MINIMIZATION_FAILED';
+    await rejectTemplateTwinQuarantine({
+      receipt: quarantine,
       actor: input.actor,
       rejectionCode: code,
     });
     throw error;
   }
+
+  const admittedSource = minimizedSource.document;
+  let ir: TemplateDocIR;
+  try {
+    ir = DOCX_TEMPLATE_COMPILER.compile(admittedSource);
+  } catch (error) {
+    const code = error instanceof TemplateDocxError ? error.code : 'DOCX_COMPILE_FAILED';
+    await rejectTemplateTwinQuarantine({
+      receipt: quarantine,
+      actor: input.actor,
+      rejectionCode: code,
+      metadataEvidence: minimizedSource.evidence,
+    });
+    throw error;
+  }
   if (ir.fields.length === 0) {
-    await quarantineRejectedSource({
-      bytes: input.source,
+    await rejectTemplateTwinQuarantine({
+      receipt: quarantine,
       actor: input.actor,
       rejectionCode: 'NO_FILLABLE_FIELDS',
+      metadataEvidence: minimizedSource.evidence,
     });
     throw new TemplateTwinDraftError(
       'NO_FILLABLE_FIELDS',
@@ -237,7 +226,7 @@ export async function createTemplateTwinDraft(
   let privacyScanEvidence: TemplateTwinSourcePhiScanEvidence;
   try {
     privacyScanEvidence = await assertTemplateTwinSourcePhiFree({
-      source: input.source,
+      source: admittedSource,
       practiceId: input.actor.practiceId,
       userId: input.actor.userId,
       providerVisitId: input.providerVisitId,
@@ -248,10 +237,11 @@ export async function createTemplateTwinDraft(
       error instanceof TemplateTwinPhiScanUnavailableError ||
       error instanceof TemplateTwinSourcePrivacyUnsupportedError
     ) {
-      await quarantineRejectedSource({
-        bytes: input.source,
+      await rejectTemplateTwinQuarantine({
+        receipt: quarantine,
         actor: input.actor,
         rejectionCode: error.code,
+        metadataEvidence: minimizedSource.evidence,
       });
     }
     throw error;
@@ -292,16 +282,15 @@ export async function createTemplateTwinDraft(
     );
   }
 
-  const lineageId = randomUUID();
+  const lineageId = quarantine.lineageId;
   const noteTemplateId = randomUUID();
   const sourceArtifactId = randomUUID();
   const compiledVersionId = randomUUID();
-  const artifactStore = input.storage ?? createTemplateTwinArtifactStore();
   const stored = await artifactStore.storeSourceArtifact({
     practiceId: input.actor.practiceId,
     lineageId,
     templateVersion: 1,
-    bytes: input.source,
+    bytes: admittedSource,
   });
 
   try {
@@ -361,7 +350,15 @@ export async function createTemplateTwinDraft(
           validationStatus: 'accepted',
           rejectionCodes: [],
           privacyScanEvidence: asJson(privacyScanEvidence),
+          quarantineArtifactId: quarantine.id,
         },
+      });
+      await admitTemplateTwinQuarantine({
+        tx,
+        receipt: quarantine,
+        actor: input.actor,
+        sourceArtifactId,
+        metadataEvidence: minimizedSource.evidence,
       });
       await tx.templateTwinCompiledVersion.create({
         data: {
@@ -412,6 +409,13 @@ export async function createTemplateTwinDraft(
             privacyScanEvidence.approvedStaticAssetCount,
           approvedStaticAssetUsedCount:
             privacyScanEvidence.approvedStaticAssetUsedCount,
+          quarantineArtifactId: quarantine.id,
+          quarantinedSourceSha256: quarantine.stored.sha256,
+          malwareScanProfileVersion: 'template-twin-clamd-instream-v1',
+          metadataMinimizationProfileVersion:
+            minimizedSource.evidence.profileVersion,
+          metadataMinimizationSha256:
+            minimizedSource.evidence.minimizedSha256,
         },
       });
       for (const binding of

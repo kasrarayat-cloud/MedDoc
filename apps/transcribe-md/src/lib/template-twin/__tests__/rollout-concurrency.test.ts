@@ -158,6 +158,7 @@ let syntheticDb: DeterministicRolloutDatabase;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  delete process.env.TEMPLATE_TWIN_RUNTIME_MODE;
   process.env.TEMPLATE_TWIN_KILL_SWITCH = 'false';
   syntheticDb = new DeterministicRolloutDatabase();
   database.transaction.mockImplementation(
@@ -242,5 +243,41 @@ describe('Template Twin rollout transaction protocol', () => {
     expect(syntheticDb.global.enabled).toBe(false);
     expect(syntheticDb.practice.enabled).toBe(false);
     expect(syntheticDb.auditEvents).toHaveLength(0);
+  });
+
+  it('permits revocation but rejects re-enable in rollback compatibility mode', async () => {
+    process.env.TEMPLATE_TWIN_RUNTIME_MODE = 'rollback-compat-v2';
+
+    await expect(
+      setTemplateTwinGlobalRollout({ enabled: false, actor }),
+    ).resolves.toBe(BigInt(2));
+    await expect(
+      setTemplateTwinPracticeRollout({
+        practiceId: actor.practiceId,
+        enabled: false,
+        actor,
+      }),
+    ).resolves.toBe(BigInt(2));
+    const revocationTransactionCount = database.transaction.mock.calls.length;
+
+    await expect(
+      setTemplateTwinGlobalRollout({ enabled: true, actor }),
+    ).rejects.toMatchObject({
+      code: 'TEMPLATE_TWIN_ROLLBACK_COMPAT_ACTIVE',
+    });
+    await expect(
+      setTemplateTwinPracticeRollout({
+        practiceId: actor.practiceId,
+        enabled: true,
+        actor,
+      }),
+    ).rejects.toMatchObject({
+      code: 'TEMPLATE_TWIN_ROLLBACK_COMPAT_ACTIVE',
+    });
+    expect(database.transaction).toHaveBeenCalledTimes(
+      revocationTransactionCount,
+    );
+    expect(syntheticDb.global.enabled).toBe(false);
+    expect(syntheticDb.practice.enabled).toBe(false);
   });
 });

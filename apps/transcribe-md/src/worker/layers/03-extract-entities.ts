@@ -21,8 +21,10 @@ import {
 } from "@meddoc/ai";
 import { updateTemplateTwinSyntheticQaClaimBoundVisit } from "@/worker/staging-qa-mutation-fence";
 import type { SpeakerMap } from "./02-speaker-roles";
-import { markUnclearTranscript } from "./transcript-clarity";
 import { logWorkerAudit } from "@/worker/worker-audit";
+import { buildRoleLabeledTranscript } from "@/lib/template-twin/canonical-encounter-source";
+
+export { buildRoleLabeledTranscript } from "@/lib/template-twin/canonical-encounter-source";
 
 // TRANSCRIBE_MD_CLINICAL_MODEL — eval override (feat/fable5-eval); unset → default unchanged.
 const MODEL = process.env.TRANSCRIBE_MD_CLINICAL_MODEL || "claude-sonnet-4-6";
@@ -210,37 +212,6 @@ export const ExtractedEntities = z.object({
   plan_discussed: z.array(factWithEvidence("item")).default([]),
 });
 export type ExtractedEntities = z.infer<typeof ExtractedEntities>;
-
-// ---------------------------------------------------------------------------
-// Formatting helper for conversation mode — produces the role-labeled
-// transcript that Layer 4 + 5 also consume.
-// ---------------------------------------------------------------------------
-
-function formatRoleLabeledLine(
-  u: DeepgramUtterance,
-  speakerMap: SpeakerMap,
-): string {
-  const speakerKey =
-    typeof u.speaker === "number" ? String(u.speaker) : "unknown";
-  const role = speakerMap[speakerKey]?.role ?? "unknown";
-  const displayRole = role.charAt(0).toUpperCase() + role.slice(1);
-  const ts = Math.max(0, Math.floor(u.start ?? 0));
-  const mm = Math.floor(ts / 60);
-  const ss = (ts % 60).toString().padStart(2, "0");
-  // 2026-06-11 inaudible-span hardening: low-confidence content-word runs
-  // become explicit "[unclear in recording]" markers so L4/L5 can hedge
-  // spans they previously couldn't see (Deepgram garbles unintelligible
-  // audio into plausible words — measured: "sphenitol" @0.61 shipped as a
-  // drug name). No word-level data → raw text unchanged (dictation/legacy).
-  return `[${displayRole} #${speakerKey}, ${mm}:${ss}]: ${markUnclearTranscript(u)}`;
-}
-
-export function buildRoleLabeledTranscript(
-  utterances: DeepgramUtterance[],
-  speakerMap: SpeakerMap,
-): string {
-  return utterances.map((u) => formatRoleLabeledLine(u, speakerMap)).join("\n");
-}
 
 // ---------------------------------------------------------------------------
 // Layer 3 input — discriminated union by mode.

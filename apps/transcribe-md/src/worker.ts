@@ -43,6 +43,10 @@ import { loadResumeState, VisitNotFoundError } from "./worker/resume-state";
 import { persistFailedState } from "./worker/persist-failed";
 import { sanitizeConfidenceScores } from "./worker/confidence-scores";
 import { notifyAdminOnFailure } from "./lib/admin-notifications";
+import {
+  assertQuillmdRuntimeProtocol,
+  templateTwinRuntimeEnabled,
+} from "@/lib/runtime-protocol";
 
 import {
   QUEUE_NAME,
@@ -97,6 +101,7 @@ import type { AudioConfidenceStats } from "@/worker/layers/audio-confidence";
 import { shouldFlagForReview } from "@/worker/layers/audio-confidence";
 import { runLayer6Polish } from "@/worker/layers/06-polish";
 import {
+  assertTemplateTwinWorkerRuntimeAdmission,
   resolveActiveTemplateAdmission,
   resolveVisitTemplateAdmission,
   TemplateTwinWorkerRolloutError,
@@ -340,6 +345,12 @@ async function processVisit(
   if (!admission) {
     throw new Error(`Visit ${job.data.visitId} not found`);
   }
+  // Bridge mode must reject an already-queued/pinned Twin before the provider
+  // context, transcription, extraction, or any other clinical model call.
+  assertTemplateTwinWorkerRuntimeAdmission(
+    admission.noteTemplate?.templateKind,
+    process.env,
+  );
 
   // Scenario 29 predates visit-time template pinning: the normal pipeline
   // resolves the active template at L4, after transcription/entity calls.
@@ -1850,7 +1861,11 @@ async function startHeartbeat(
 }
 
 async function main() {
-  log.info("transcribe-md-worker", "booting");
+  const runtimeProtocol = assertQuillmdRuntimeProtocol(process.env);
+  log.info("transcribe-md-worker", "booting", {
+    runtimeProtocolEpoch: runtimeProtocol.epoch,
+    runtimeMode: runtimeProtocol.mode,
+  });
   // Flag-vs-capability assertion (#311 lesson: a flag flipped ON against a
   // stale image that lacks the capability is SILENTLY inert — no error, no
   // log). This line is the operator check: after any flag flip + recreate,
@@ -1943,6 +1958,7 @@ async function main() {
         syntheticQaAttempt: job?.data.syntheticQaAttempt ?? null,
       });
       if (
+        templateTwinRuntimeEnabled(process.env) &&
         job?.data.syntheticQaRunId &&
         job.data.syntheticQaAttempt !== undefined
       ) {
@@ -2030,7 +2046,11 @@ async function main() {
   const heartbeat = await startHeartbeat(getSharedRedisConnection());
   const stagingQaLeaseReconciler =
     startTemplateTwinSyntheticQaExpiredLeaseReconciler({
-      enabled: evaluateTemplateTwinStagingQaGate(process.env).allowed,
+      // rollback-compat-v2 keeps ordinary maintenance/outbox reconciliation
+      // online, but must not mutate the synthetic Template Twin QA lifecycle.
+      enabled:
+        templateTwinRuntimeEnabled(process.env) &&
+        evaluateTemplateTwinStagingQaGate(process.env).allowed,
       onError: () => {
         log.warn(
           "transcribe-md-worker",

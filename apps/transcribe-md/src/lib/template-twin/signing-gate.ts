@@ -41,12 +41,18 @@ import type { TemplateTwinConceptProvider } from "./supported-concepts";
 import { verifyCustomExtractionOutcomeProof } from "./custom-outcome-proof";
 import { TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT } from "./staging-qa-visit-guard";
 import { VISIT_AUTOMATION_MANIFEST_SELECT } from "@/worker/automation-manifest";
+import { assessTemplateTwinEncounterEvidence } from "./encounter-evidence-verification";
 
 const SHA256 = /^[a-f0-9]{64}$/;
 
 export const TEMPLATE_TWIN_SIGNING_VISIT_SELECT = {
   soapFinal: true,
   soapVersion: true,
+  inputMode: true,
+  rawTextInput: true,
+  transcriptText: true,
+  transcriptRaw: true,
+  speakerMap: true,
   templateTwinSyntheticQaRun: {
     select: TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
   },
@@ -200,6 +206,7 @@ export type TemplateTwinSignBlockerCode =
   | "FILL_NOT_READY"
   | "FILL_MANIFEST_VERSION_MISMATCH"
   | "FILL_MANIFEST_INVALID"
+  | "ENCOUNTER_EVIDENCE_INVALID"
   | "CUSTOM_EXTRACTION_PROVENANCE_INVALID"
   | "CUSTOM_EXTRACTION_OUTCOME_INVALID"
   | "FILL_REVIEW_REQUIRED"
@@ -218,6 +225,11 @@ export interface TemplateTwinSigningContext {
   visitStatus: string;
   soapFinal?: string | null;
   soapVersion?: number | null;
+  inputMode?: string | null;
+  rawTextInput?: string | null;
+  transcriptText?: string | null;
+  transcriptRaw?: unknown;
+  speakerMap?: unknown;
   noteTemplateId?: string | null;
   noteTemplateVersion?: number | null;
   noteTemplate?: {
@@ -933,6 +945,14 @@ export function assessTemplateTwinSigning(
     } else {
       const manifest = parsedManifest.data;
       const validation = parsedValidation.data;
+      if (
+        !assessTemplateTwinEncounterEvidence({
+          visit: context,
+          manifest,
+        }).valid
+      ) {
+        add("ENCOUNTER_EVIDENCE_INVALID");
+      }
       manifestSoapVersion = manifest.soapVersion;
       manifestSoapSha256 = manifest.soapSha256;
       if (

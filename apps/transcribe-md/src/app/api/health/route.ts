@@ -27,6 +27,10 @@ import prisma from '@meddoc/db';
 import { getSharedRedisConnection } from '@/lib/queue';
 import { getMinio, TRANSCRIBE_MD_BUCKET } from '@/lib/minio';
 import { readCleanupHeartbeats } from '@/lib/cleanup-heartbeat';
+import {
+  QUILLMD_RUNTIME_PROTOCOL_EPOCH,
+  resolveTemplateTwinRuntimeMode,
+} from '@/lib/runtime-protocol';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -141,6 +145,8 @@ export async function GET(): Promise<NextResponse> {
     // take the container out of Docker's healthcheck loop.
     cleanup_crons: cleanupHeartbeats,
     version: VERSION,
+    runtime_protocol_epoch: QUILLMD_RUNTIME_PROTOCOL_EPOCH,
+    runtime_mode: resolveTemplateTwinRuntimeMode(process.env),
   };
 
   return NextResponse.json(body, {

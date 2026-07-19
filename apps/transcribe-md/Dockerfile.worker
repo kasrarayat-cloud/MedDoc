@@ -56,7 +56,13 @@ RUN npm run generate -w @meddoc/db
 FROM ${NODE_BASE} AS runner
 WORKDIR /app
 
+ARG QUILLMD_RELEASE_SHA=development
+LABEL org.opencontainers.image.revision="${QUILLMD_RELEASE_SHA}" \
+      com.quillmd.runtime-protocol-epoch="template-twin-final-schema-v2" \
+      com.quillmd.runtime-component="transcribe-md-worker"
+
 ENV NODE_ENV=production
+ENV QUILLMD_RUNTIME_PROTOCOL_EPOCH=template-twin-final-schema-v2
 
 # Prod-only node_modules.
 COPY --from=prod-deps /app/node_modules ./node_modules

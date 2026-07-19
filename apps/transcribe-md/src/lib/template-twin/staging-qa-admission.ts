@@ -559,9 +559,16 @@ export async function completeTemplateTwinStagingQaUploadAdmission(input: {
               sourceArtifact: {
                 is: {
                   practiceId: input.actor.practiceId,
-                  sha256: admission.sourceSha256,
-                  sizeBytes: admission.sourceSizeBytes,
                   validationStatus: "accepted",
+                  quarantineArtifact: {
+                    is: {
+                      practiceId: input.actor.practiceId,
+                      intakeMode: "NATIVE_TEMPLATE",
+                      status: "ADMITTED",
+                      sha256: admission.sourceSha256,
+                      sizeBytes: admission.sourceSizeBytes,
+                    },
+                  },
                 },
               },
             },
@@ -654,8 +661,15 @@ export async function readTemplateTwinStagingQaAdmittedDraft(input: {
           sourceArtifact: {
             is: {
               practiceId: input.actor.practiceId,
-              sha256: input.admission.sourceSha256,
-              sizeBytes: input.admission.sourceSizeBytes,
+              quarantineArtifact: {
+                is: {
+                  practiceId: input.actor.practiceId,
+                  intakeMode: "NATIVE_TEMPLATE",
+                  status: "ADMITTED",
+                  sha256: input.admission.sourceSha256,
+                  sizeBytes: input.admission.sourceSizeBytes,
+                },
+              },
             },
           },
         },

@@ -87,6 +87,10 @@ jobs:
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: '1'
       PORT: '9020'
+      QUILLMD_RUNTIME_PROTOCOL_EPOCH: template-twin-final-schema-v2
+      QUILLMD_REQUIRED_RUNTIME_PROTOCOL_EPOCH: template-twin-final-schema-v2
+      TEMPLATE_TWIN_RUNTIME_MODE: standard
+      TEMPLATE_TWIN_KILL_SWITCH: 'true'
       # ---- Spec config -----------------------------------------------------
       PW_BASE_URL: http://localhost:9020
       # PSQL_BIN switches helpers/seedVisitStates.ts off the docker-

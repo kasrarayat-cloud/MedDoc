@@ -1,6 +1,10 @@
 import { Prisma } from "@prisma/client";
 import prisma from "@meddoc/db";
 
+import {
+  TEMPLATE_TWIN_ROLLBACK_COMPAT_RUNTIME_MODE,
+  resolveTemplateTwinRuntimeMode,
+} from "@/lib/runtime-protocol";
 import { enqueueTemplateTwinAudit } from "./audit-outbox";
 
 export const TEMPLATE_TWIN_KILL_SWITCH_ENV =
@@ -8,6 +12,8 @@ export const TEMPLATE_TWIN_KILL_SWITCH_ENV =
 export const TEMPLATE_TWIN_GLOBAL_ROLLOUT_ID = "global" as const;
 
 export type TemplateTwinRolloutCode =
+  | "TEMPLATE_TWIN_ROLLBACK_COMPAT_ACTIVE"
+  | "TEMPLATE_TWIN_RUNTIME_MODE_INVALID"
   | "TEMPLATE_TWIN_KILL_SWITCH_ACTIVE"
   | "TEMPLATE_TWIN_GLOBAL_DISABLED"
   | "TEMPLATE_TWIN_PRACTICE_DISABLED"
@@ -101,6 +107,40 @@ function killSwitchIsExplicitlyOff(value: string | undefined): boolean {
   return value?.trim().toLowerCase() === "false";
 }
 
+function evaluateRuntimeMode(
+  env: Readonly<Record<string, string | undefined>>,
+): TemplateTwinRolloutDecision | null {
+  try {
+    if (
+      resolveTemplateTwinRuntimeMode(env) ===
+      TEMPLATE_TWIN_ROLLBACK_COMPAT_RUNTIME_MODE
+    ) {
+      return {
+        allowed: false,
+        code: "TEMPLATE_TWIN_ROLLBACK_COMPAT_ACTIVE",
+        reason:
+          "Template Twin is unavailable while rollback compatibility mode is active.",
+      };
+    }
+  } catch {
+    return {
+      allowed: false,
+      code: "TEMPLATE_TWIN_RUNTIME_MODE_INVALID",
+      reason: "Template Twin runtime configuration is invalid.",
+    };
+  }
+  return null;
+}
+
+function assertRuntimeModeAllowsEnable(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): void {
+  const decision = evaluateRuntimeMode(env);
+  if (decision && !decision.allowed) {
+    throw new TemplateTwinRolloutError(decision.code, decision.reason);
+  }
+}
+
 /**
  * Safe-alpha process boundary. The persisted rollout rows are evaluated by
  * `pinTemplateTwinRollout` and `lockTemplateTwinRolloutForFinalClaim`; this
@@ -111,6 +151,8 @@ export function evaluateTemplateTwinRollout({
   practiceEnabled,
   env = process.env,
 }: TemplateTwinRolloutInput): TemplateTwinRolloutDecision {
+  const runtimeDecision = evaluateRuntimeMode(env);
+  if (runtimeDecision) return runtimeDecision;
   if (!killSwitchIsExplicitlyOff(env[TEMPLATE_TWIN_KILL_SWITCH_ENV])) {
     return {
       allowed: false,
@@ -151,6 +193,10 @@ export async function lockTemplateTwinRolloutForFinalClaim(input: {
   env?: Readonly<Record<string, string | undefined>>;
 }): Promise<LockedTemplateTwinRolloutDecision> {
   const env = input.env ?? process.env;
+  const runtimeDecision = evaluateRuntimeMode(env);
+  if (runtimeDecision && !runtimeDecision.allowed) {
+    return blocked(runtimeDecision.code, runtimeDecision.reason);
+  }
   if (!killSwitchIsExplicitlyOff(env[TEMPLATE_TWIN_KILL_SWITCH_ENV])) {
     return blocked(
       "TEMPLATE_TWIN_KILL_SWITCH_ACTIVE",
@@ -297,6 +343,7 @@ export async function setTemplateTwinGlobalRollout(input: {
   enabled: boolean;
   actor: RolloutMutationActor;
 }): Promise<bigint> {
+  if (input.enabled) assertRuntimeModeAllowsEnable();
   return prisma.$transaction((tx: Prisma.TransactionClient) =>
     applyTemplateTwinGlobalRolloutMutation({ tx, ...input }),
   );
@@ -312,6 +359,7 @@ export async function applyTemplateTwinGlobalRolloutMutation(input: {
   enabled: boolean;
   actor: RolloutMutationActor;
 }): Promise<bigint> {
+  if (input.enabled) assertRuntimeModeAllowsEnable();
   const tx = input.tx;
   const rows = await tx.$queryRaw<GlobalRolloutRow[]>(Prisma.sql`
     SELECT "enabled", "generation"
@@ -364,6 +412,7 @@ export async function setTemplateTwinPracticeRollout(input: {
   enabled: boolean;
   actor: RolloutMutationActor;
 }): Promise<bigint> {
+  if (input.enabled) assertRuntimeModeAllowsEnable();
   return prisma.$transaction((tx: Prisma.TransactionClient) =>
     applyTemplateTwinPracticeRolloutMutation({ tx, ...input }),
   );
@@ -376,6 +425,7 @@ export async function applyTemplateTwinPracticeRolloutMutation(input: {
   enabled: boolean;
   actor: RolloutMutationActor;
 }): Promise<bigint> {
+  if (input.enabled) assertRuntimeModeAllowsEnable();
   const tx = input.tx;
   const globalRows = await tx.$queryRaw<GlobalRolloutRow[]>(Prisma.sql`
     SELECT "enabled", "generation"

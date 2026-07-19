@@ -121,14 +121,6 @@ describe('Template Twin immutable-source PHI gate', () => {
 
   it.each([
     {
-      name: 'tracked-deleted text',
-      documentXml: cleanDocument.replace(
-        '<w:sectPr>',
-        '<w:p><w:del><w:r><w:delText>deleted&#46;patient&#64;example.test</w:delText></w:r></w:del></w:p><w:sectPr>',
-      ),
-      extraEntries: {},
-    },
-    {
       name: 'drawing alternative text',
       documentXml: cleanDocument.replace(
         '<w:sectPr>',
@@ -161,6 +153,26 @@ describe('Template Twin immutable-source PHI gate', () => {
         client: { complete } as never,
       }),
     ).rejects.toBeInstanceOf(TemplateTwinPhiRejectedError);
+    expect(complete).not.toHaveBeenCalled();
+  });
+
+  it('rejects tracked-deleted content at the package boundary before PHI scanning', async () => {
+    const complete = vi.fn();
+    const documentXml = cleanDocument.replace(
+      '<w:sectPr>',
+      '<w:p><w:del><w:r><w:delText>deleted&#46;patient&#64;example.test</w:delText></w:r></w:del></w:p><w:sectPr>',
+    );
+    await expect(
+      assertTemplateTwinSourcePhiFree({
+        source: await buildSyntheticDocx({ documentXml }),
+        practiceId: 'practice_1',
+        userId: 'doctor_1',
+        client: { complete } as never,
+      }),
+    ).rejects.toMatchObject({
+      name: 'TemplateDocxError',
+      code: 'XML_HIDDEN_CONTENT_UNSUPPORTED',
+    });
     expect(complete).not.toHaveBeenCalled();
   });
 

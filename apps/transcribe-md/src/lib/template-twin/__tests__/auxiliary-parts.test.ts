@@ -148,8 +148,19 @@ describe('safe standard Word glossary/auxiliary inspection', () => {
   });
 
   it('fails closed on tracked-deleted glossary text, active fields, and compatibility branches', async () => {
+    const trackedDeleted = await glossaryDocx({
+      glossary: glossaryDocument(
+        '<w:docParts><w:docPart><w:docPartBody><w:p><w:del><w:r><w:delText>deleted.patient@example.test</w:delText></w:r></w:del></w:p></w:docPartBody></w:docPart></w:docParts>',
+      ),
+    });
+    expect(() => inspectDocxPackage(trackedDeleted)).toThrowError(
+      expect.objectContaining({
+        name: 'TemplateDocxError',
+        code: 'XML_HIDDEN_CONTENT_UNSUPPORTED',
+      }),
+    );
+
     for (const inner of [
-      '<w:docParts><w:docPart><w:docPartBody><w:p><w:del><w:r><w:delText>deleted.patient@example.test</w:delText></w:r></w:del></w:p></w:docPartBody></w:docPart></w:docParts>',
       '<w:docParts><w:docPart><w:docPartBody><w:p><w:fldSimple w:instr="PAGE"/></w:p></w:docPartBody></w:docPart></w:docParts>',
       '<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice Requires="w"><w:docParts/></mc:Choice></mc:AlternateContent>',
     ]) {

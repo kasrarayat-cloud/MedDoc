@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 
 import {
   createOutputArtifactKey,
+  createQuarantineArtifactKey,
   createSourceArtifactKey,
   DOCX_MIME_TYPE,
   resolveTemplateTwinBucket,
@@ -114,6 +115,13 @@ export interface StoreSourceArtifactInput {
   bytes: Buffer | Uint8Array;
 }
 
+export interface StoreQuarantineArtifactInput {
+  practiceId: string;
+  lineageId: string;
+  lineageVersion: number;
+  bytes: Buffer | Uint8Array;
+}
+
 export interface StoreOutputArtifactInput {
   practiceId: string;
   visitId: string;
@@ -132,8 +140,10 @@ export interface ReadArtifactInput {
 
 export interface TemplateTwinArtifactStore {
   readonly bucket: string;
+  storeQuarantineArtifact(input: StoreQuarantineArtifactInput): Promise<StoredTemplateTwinArtifact>;
   storeSourceArtifact(input: StoreSourceArtifactInput): Promise<StoredTemplateTwinArtifact>;
   storeOutputArtifact(input: StoreOutputArtifactInput): Promise<StoredTemplateTwinArtifact>;
+  readQuarantineArtifact(input: ReadArtifactInput): Promise<Buffer>;
   readSourceArtifact(input: ReadArtifactInput): Promise<Buffer>;
   readOutputArtifact(input: ReadArtifactInput): Promise<Buffer>;
 }
@@ -592,6 +602,26 @@ export function createTemplateTwinArtifactStore(
 
   return Object.freeze({
     bucket,
+    async storeQuarantineArtifact(
+      input: StoreQuarantineArtifactInput
+    ): Promise<StoredTemplateTwinArtifact> {
+      const bytes = asBuffer(input.bytes);
+      const digest = sha256(bytes);
+      const objectKey = createQuarantineArtifactKey({
+        practiceId: input.practiceId,
+        lineageId: input.lineageId,
+        lineageVersion: input.lineageVersion,
+        sha256: digest,
+        ...(idFactory ? { idFactory } : {}),
+      });
+      return putOnce({
+        practiceId: input.practiceId,
+        objectKey,
+        bytes,
+        digest,
+        kind: 'quarantine',
+      });
+    },
     async storeSourceArtifact(
       input: StoreSourceArtifactInput
     ): Promise<StoredTemplateTwinArtifact> {
@@ -634,6 +664,9 @@ export function createTemplateTwinArtifactStore(
     },
     readSourceArtifact(input: ReadArtifactInput): Promise<Buffer> {
       return readVerified(input, 'source');
+    },
+    readQuarantineArtifact(input: ReadArtifactInput): Promise<Buffer> {
+      return readVerified(input, 'quarantine');
     },
     readOutputArtifact(input: ReadArtifactInput): Promise<Buffer> {
       return readVerified(input, 'output');

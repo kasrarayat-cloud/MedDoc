@@ -70,6 +70,7 @@ import {
   type TemplateDocIR,
   type TemplateField,
 } from "../ir";
+import { createTemplateTwinEncounterSourceReceipt } from "../canonical-encounter-source";
 import {
   buildClinicianCorrection,
   createTemplateTwinReviewRepository,
@@ -320,11 +321,16 @@ function context(definition = field()): ReviewContext {
     resolverVersion: TEMPLATE_TWIN_RESOLVER_VERSION,
     resolverModelVersion: null,
     rendererVersion: TEMPLATE_TWIN_RENDERER_VERSION,
+    encounterSourceReceipt: createTemplateTwinEncounterSourceReceipt({
+      mode: "text",
+      contextText: REVIEWED_SOAP,
+    }),
     facts: [],
     fields: [unresolved(definition.fieldId)],
     validation,
     counts: templateTwinCounts([unresolved(definition.fieldId)], [definition]),
   });
+  const manifestSha256 = canonicalSha256(manifest);
   return {
     id: "fill-1",
     practiceId: "practice-1",
@@ -332,6 +338,7 @@ function context(definition = field()): ReviewContext {
     status: "NEEDS_REVIEW",
     signedDecisionAt: null,
     manifestVersion: 4,
+    manifestSha256,
     fillManifest: manifest,
     resolverModelVersion: null,
     visit: {
@@ -340,6 +347,11 @@ function context(definition = field()): ReviewContext {
       reviewReason: TEMPLATE_TWIN_REVIEW_REASON,
       soapFinal: REVIEWED_SOAP,
       soapVersion: 7,
+      inputMode: "text_notes",
+      rawTextInput: REVIEWED_SOAP,
+      transcriptText: null,
+      transcriptRaw: null,
+      speakerMap: null,
     },
     compiledVersion: {
       id: "compiled-1",
@@ -419,6 +431,7 @@ function lockedVisitRow(
     soapVersion: number;
     soapFinal: string | null;
     status: string;
+    rawTextInput: string | null;
   }> = {},
 ) {
   return {
@@ -432,6 +445,14 @@ function lockedVisitRow(
       overrides.soapFinal === undefined ? REVIEWED_SOAP : overrides.soapFinal,
     noteTemplateId: "template-1",
     noteTemplateVersion: 1,
+    inputMode: "text_notes",
+    rawTextInput:
+      overrides.rawTextInput === undefined
+        ? REVIEWED_SOAP
+        : overrides.rawTextInput,
+    transcriptText: null,
+    transcriptRaw: null,
+    speakerMap: null,
   };
 }
 
@@ -512,6 +533,8 @@ function storage(
 
   return {
     bucket: "synthetic-private-bucket",
+    storeQuarantineArtifact: vi.fn(),
+    readQuarantineArtifact: vi.fn(),
     storeSourceArtifact: vi.fn(),
     readOutputArtifact: vi.fn(),
     readSourceArtifact: vi.fn(async () => Buffer.alloc(20, 1)),
@@ -562,6 +585,7 @@ async function fakeFinalize(
     resolverVersion: TEMPLATE_TWIN_RESOLVER_VERSION,
     resolverModelVersion: input.resolverModelVersion,
     rendererVersion: TEMPLATE_TWIN_RENDERER_VERSION,
+    encounterSourceReceipt: input.encounterSourceReceipt,
     facts: input.facts,
     fields: input.resolutions,
     validation,
@@ -893,6 +917,36 @@ describe("reviewTemplateTwinField lifecycle", () => {
     },
   );
 
+  it("quarantines correction output when canonical encounter evidence changes during storage", async () => {
+    const artifacts = storage(() => {
+      mockRolloutAndVisitLocks(
+        lockedVisitRow({
+          rawTextInput: `${REVIEWED_SOAP}\nSynthetic encounter source drift.`,
+        }),
+      );
+    });
+
+    await expect(
+      reviewTemplateTwinField(
+        {
+          visitId: "visit-1",
+          actor,
+          correction: correction(),
+          validationNow: NOW,
+        },
+        {
+          storage: artifacts,
+          finalizeFill: fakeFinalize,
+          factIdFactory: () => "a".repeat(24),
+          now: () => new Date(NOW),
+        },
+      ),
+    ).rejects.toMatchObject({ code: "ENCOUNTER_EVIDENCE_INVALID" });
+
+    expect(artifacts.storeOutputArtifact).toHaveBeenCalledTimes(1);
+    expect(database.manifestUpdateMany).not.toHaveBeenCalled();
+  });
+
   it("appends a value delta, independently validates, renders, stores, and commits once", async () => {
     const loaded = context();
     const { repo, committed } = repository(loaded);
@@ -1049,6 +1103,7 @@ describe("reviewTemplateTwinField lifecycle", () => {
           status: { not: "SIGNED" },
           signedDecisionAt: null,
           manifestVersion: 4,
+          manifestSha256: expect.stringMatching(/^[a-f0-9]{64}$/),
           soapVersion: 7,
           soapSha256: canonicalSoapSha256(REVIEWED_SOAP),
         },

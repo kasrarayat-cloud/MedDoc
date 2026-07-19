@@ -86,6 +86,7 @@ ARG NEXT_PUBLIC_ULTRASOUND_SPECIALTY=false
 ENV NEXT_PUBLIC_ULTRASOUND_SPECIALTY=${NEXT_PUBLIC_ULTRASOUND_SPECIALTY}
 
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV QUILLMD_RUNTIME_PROTOCOL_EPOCH=template-twin-final-schema-v2
 
 # ── Build heap (incident 2026-06-04) ──
 # `next build` of this app hit V8's DEFAULT old-space ceiling and heap-OOM'd
@@ -100,8 +101,14 @@ RUN npm run build -w transcribe-md
 FROM ${NODE_BASE} AS runner
 WORKDIR /app
 
+ARG QUILLMD_RELEASE_SHA=development
+LABEL org.opencontainers.image.revision="${QUILLMD_RELEASE_SHA}" \
+      com.quillmd.runtime-protocol-epoch="template-twin-final-schema-v2" \
+      com.quillmd.runtime-component="transcribe-md-app"
+
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV QUILLMD_RUNTIME_PROTOCOL_EPOCH=template-twin-final-schema-v2
 
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs

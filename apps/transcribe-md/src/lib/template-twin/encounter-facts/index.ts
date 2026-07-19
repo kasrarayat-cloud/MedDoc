@@ -197,7 +197,7 @@ export function parseExplicitNumberAndUnit(
   return { number: parsed, unit: match[2]?.trim() || null };
 }
 
-function uniqueExactOffset(
+export function uniqueExactEncounterEvidenceOffset(
   contextText: string,
   quote: string,
 ): { start: number; end: number } | null {
@@ -220,9 +220,28 @@ function uniqueExactOffset(
     : null;
 }
 
+export function encounterEvidenceAnchorId(input: {
+  mode: EncounterInputMode;
+  contextText: string;
+  quote: string;
+  offsets: { start: number; end: number } | null;
+  timestamp: number | null;
+  unresolvedGroup?: string | null;
+}): string {
+  const anchorIdentity = JSON.stringify({
+    mode: input.mode,
+    sourceEvidenceSha256: digest(input.contextText),
+    quote: input.quote,
+    offsets: input.offsets,
+    timestamp: input.timestamp,
+    unresolvedGroup: input.unresolvedGroup ?? null,
+  });
+  return `ttev_${digest(anchorIdentity).slice(0, 24)}`;
+}
+
 /**
  * Structural proof available after projection has discarded the source text.
- * Exact quote equality is established by `uniqueExactOffset`; downstream
+ * Exact quote equality is established by `uniqueExactEncounterEvidenceOffset`; downstream
  * consumers can still reject null, empty, or quote-length-inconsistent spans
  * without trusting resolver status.
  */
@@ -245,8 +264,6 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
     string,
     { offsets: { start: number; end: number } | null }
   >();
-  const sourceEvidenceSha256 = digest(input.contextText);
-
   const add = (options: AddFactOptions): void => {
     // Layer 3 may contain specialty detail outside the bounded safe-alpha
     // Template Twin registry. Generic SOAP keeps that source data, while Twin
@@ -265,7 +282,7 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
         // the canonical source. Compound facts may share that one real span.
         // Missing, non-exact, and duplicate quotes remain unanchored so the
         // resolver and independent validator can fail closed.
-        offsets: uniqueExactOffset(input.contextText, quote),
+        offsets: uniqueExactEncounterEvidenceOffset(input.contextText, quote),
       };
       evidenceLocations.set(evidenceGroup, evidenceLocation);
     }
@@ -294,9 +311,9 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
       quote,
       offsets,
     });
-    const anchorIdentity = JSON.stringify({
+    const evidenceAnchorId = encounterEvidenceAnchorId({
       mode: input.mode,
-      sourceEvidenceSha256,
+      contextText: input.contextText,
       quote,
       offsets,
       timestamp: options.evidence.timestamp ?? null,
@@ -327,7 +344,7 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
           options.evidence.timestamp >= 0
             ? options.evidence.timestamp
             : null,
-        evidenceAnchorIds: [`ttev_${digest(anchorIdentity).slice(0, 24)}`],
+        evidenceAnchorIds: [evidenceAnchorId],
         evidenceQuote: quote,
         quality: { asr, evidence: evidenceQuality },
       }),

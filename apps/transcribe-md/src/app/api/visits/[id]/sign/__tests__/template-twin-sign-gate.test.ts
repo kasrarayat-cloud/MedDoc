@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   enqueueAudit: vi.fn(),
   pinRollout: vi.fn(),
   finalRollout: vi.fn(),
+  verifyEvidence: vi.fn(),
 }));
 
 vi.mock("next/server", () => {
@@ -131,6 +132,9 @@ vi.mock("@/lib/template-twin/fill-engine", () => ({
   lockCurrentTemplateTwinVisit: async (tx: {
     $queryRaw: () => Promise<unknown[]>;
   }) => (await tx.$queryRaw())[0] ?? null,
+}));
+vi.mock("@/lib/template-twin/encounter-evidence-verification", () => ({
+  persistedTemplateTwinEncounterEvidenceIsValid: mocks.verifyEvidence,
 }));
 vi.mock("@/lib/template-twin/rollout", () => ({
   TemplateTwinRolloutError: class TemplateTwinRolloutError extends Error {
@@ -297,6 +301,7 @@ beforeEach(() => {
     mocks.assess,
     mocks.finalRollout,
     mocks.enqueueAudit,
+    mocks.verifyEvidence,
   ]) {
     mock.mockReset();
   }
@@ -345,6 +350,7 @@ beforeEach(() => {
   mocks.criticalWarningRefs.mockReturnValue([]);
   mocks.rxOverrideFindMany.mockResolvedValue([]);
   mocks.enqueueAudit.mockResolvedValue(undefined);
+  mocks.verifyEvidence.mockReturnValue(true);
   mocks.pinRollout.mockResolvedValue({
     practiceId: "practice-1",
     globalGeneration: BigInt(1),
@@ -646,6 +652,23 @@ describe("POST /api/visits/[id]/sign — Template Twin server gate", () => {
     expect((await response.json()).originalTemplateDocxDownloadUrl).toBe(
       `/api/visits/${VISIT_ID}/export/original-template-docx`,
     );
+  });
+
+  it("blocks signing when encounter evidence changes before the final claim", async () => {
+    mocks.verifyEvidence.mockReturnValue(false);
+    mocks.findUnique.mockReset();
+    mocks.findUnique
+      .mockResolvedValueOnce(visitRow())
+      .mockResolvedValue({ signedAt: null, status: TranscribeVisitStatus.READY });
+
+    const response = await call([]);
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      code: "TEMPLATE_TWIN_ENCOUNTER_EVIDENCE_STALE",
+    });
+    expect(mocks.txFillUpdateMany).not.toHaveBeenCalled();
+    expect(mocks.txVisitUpdateMany).not.toHaveBeenCalled();
   });
 
   it("rolls back both clinical transitions when durable audit enqueue fails", async () => {

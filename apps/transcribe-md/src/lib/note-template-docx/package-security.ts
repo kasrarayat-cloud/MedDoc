@@ -90,8 +90,19 @@ export function inspectDocxPackage(
       failTemplateDocx("EMBEDDED_OBJECT_REJECTED");
     if (SIGNATURE_PART_RE.test(name))
       failTemplateDocx("ACTIVE_CONTENT_REJECTED");
+    // Word comments are not part of the rendered document surface and can
+    // retain names, clinical text, and deleted content that a reviewer does
+    // not see in the ordinary page view. They are outside the supported
+    // template boundary rather than silently copied into every output.
+    if (
+      /^word\/comments(?:Extended|Extensible|Ids)?\.xml$/i.test(name) ||
+      /^word\/people\.xml$/i.test(name)
+    ) {
+      failTemplateDocx("XML_HIDDEN_CONTENT_UNSUPPORTED");
+    }
     if (name.endsWith(".xml") || name.endsWith(".rels")) {
       const tree = parseOrderedXml(entry.bytes, limits);
+      assertNoHiddenWordContent(tree);
       assertHarmlessWordFieldInstructions(tree);
       if (/^word\/.*\.xml$/i.test(name)) {
         assertNoNamespaceShadowedWordStructures(tree);
@@ -485,6 +496,35 @@ function assertHarmlessWordFieldInstructions(tree: OrderedXmlNode[]): void {
     }
   }
   if (active.length > 0) failTemplateDocx("ACTIVE_CONTENT_REJECTED");
+}
+
+const HIDDEN_WORD_ELEMENTS = new Set([
+  // Run properties that suppress text in Word or its web layout.
+  "specVanish",
+  "vanish",
+  "webHidden",
+  // Revision containers preserve text that is absent from the ordinary
+  // accepted document surface. Accepting insertions is also intentionally
+  // unsupported: a template must first be saved with revisions resolved.
+  "del",
+  "ins",
+  "moveFrom",
+  "moveFromRangeEnd",
+  "moveFromRangeStart",
+  "moveTo",
+  "moveToRangeEnd",
+  "moveToRangeStart",
+]);
+
+function assertNoHiddenWordContent(tree: OrderedXmlNode[]): void {
+  for (const visit of expandedXmlVisits(tree)) {
+    if (
+      visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+      HIDDEN_WORD_ELEMENTS.has(visit.localName)
+    ) {
+      failTemplateDocx("XML_HIDDEN_CONTENT_UNSUPPORTED");
+    }
+  }
 }
 
 const WORD_CONTROL_ELEMENTS = new Set([

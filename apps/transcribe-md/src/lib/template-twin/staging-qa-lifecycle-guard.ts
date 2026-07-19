@@ -99,7 +99,20 @@ export async function inspectTemplateTwinStagingQaLifecycleProvenance(input: {
       templateTwinCompiledVersion: {
         select: {
           sourceArtifact: {
-            select: { practiceId: true, sha256: true, sizeBytes: true },
+            select: {
+              practiceId: true,
+              sha256: true,
+              sizeBytes: true,
+              quarantineArtifact: {
+                select: {
+                  practiceId: true,
+                  intakeMode: true,
+                  status: true,
+                  sha256: true,
+                  sizeBytes: true,
+                },
+              },
+            },
           },
         },
       },
@@ -118,10 +131,18 @@ export async function inspectTemplateTwinStagingQaLifecycleProvenance(input: {
   });
   const source = row?.templateTwinCompiledVersion?.sourceArtifact;
   if (!source || source.practiceId !== input.actor.practiceId) return null;
+  const admittedRaw = source.quarantineArtifact;
+  const lifecycleSource =
+    admittedRaw &&
+    admittedRaw.practiceId === input.actor.practiceId &&
+    admittedRaw.intakeMode === "NATIVE_TEMPLATE" &&
+    admittedRaw.status === "ADMITTED"
+      ? { sha256: admittedRaw.sha256, sizeBytes: admittedRaw.sizeBytes }
+      : { sha256: source.sha256, sizeBytes: source.sizeBytes };
   return {
-    source: { sha256: source.sha256, sizeBytes: source.sizeBytes },
+    source: lifecycleSource,
     stagingQa:
-      isTemplateTwinStagingQaFixtureSource(source) ||
+      isTemplateTwinStagingQaFixtureSource(lifecycleSource) ||
       row.templateTwinSyntheticQaAdmissions.length > 0,
     admission: row.templateTwinSyntheticQaAdmissions[0] ?? null,
   };

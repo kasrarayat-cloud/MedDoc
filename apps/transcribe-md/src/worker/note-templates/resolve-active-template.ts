@@ -25,6 +25,7 @@
 
 import type { NoteTemplate } from '@prisma/client';
 import prisma from '@meddoc/db';
+import { templateTwinRuntimeEnabled } from '@/lib/runtime-protocol';
 import {
   evaluateTemplateTwinRollout,
   pinTemplateTwinRollout,
@@ -93,6 +94,19 @@ export class TemplateTwinWorkerRolloutError extends Error {
   constructor() {
     super('Template Twin is disabled for this practice or by the global kill switch.');
     this.name = 'TemplateTwinWorkerRolloutError';
+  }
+}
+
+/** Earliest worker boundary: reject a queued/pinned Twin before any provider. */
+export function assertTemplateTwinWorkerRuntimeAdmission(
+  templateKind: string | null | undefined,
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): void {
+  if (
+    templateKind === 'template_twin_docx' &&
+    !templateTwinRuntimeEnabled(env)
+  ) {
+    throw new TemplateTwinWorkerRolloutError();
   }
 }
 
@@ -201,9 +215,13 @@ export async function resolveActiveTemplate(
 export async function resolveActiveTemplateAdmission(
   input: ResolveTemplateInput
 ): Promise<ResolvedVisitTemplateAdmission> {
+  const twinRuntimeEnabled = templateTwinRuntimeEnabled(process.env);
   const candidates = (await prisma.noteTemplate.findMany({
     where: {
       OR: [{ doctorId: input.doctorId }, { isSystemDefault: true }],
+      ...(twinRuntimeEnabled
+        ? {}
+        : { templateKind: { not: 'template_twin_docx' } }),
     },
     include: {
       templateTwinCompiledVersion: {
@@ -216,6 +234,7 @@ export async function resolveActiveTemplateAdmission(
   const stagingQaRequested = isTemplateTwinStagingQaRequested();
   const ordinaryCandidates = candidates.filter(
     (template) =>
+      (twinRuntimeEnabled || template.templateKind !== 'template_twin_docx') &&
       !isStagingFixtureTemplate(template) &&
       (!stagingQaRequested || template.templateKind !== 'template_twin_docx'),
   );
@@ -255,12 +274,16 @@ export async function resolveVisitTemplateAdmission(
   const hasVersion = input.pinnedTemplateVersion != null;
   if (hasId !== hasVersion) throw new PinnedTemplateUnavailableError();
   if (!hasId) return resolveActiveTemplateAdmission(input);
+  const twinRuntimeEnabled = templateTwinRuntimeEnabled(process.env);
 
   const pinned = (await prisma.noteTemplate.findFirst({
     where: {
       id: input.pinnedTemplateId!,
       version: input.pinnedTemplateVersion!,
       OR: [{ doctorId: input.doctorId }, { isSystemDefault: true }],
+      ...(twinRuntimeEnabled
+        ? {}
+        : { templateKind: { not: 'template_twin_docx' } }),
     },
     include: {
       templateTwinCompiledVersion: {
@@ -271,6 +294,9 @@ export async function resolveVisitTemplateAdmission(
     },
   })) as TemplateWithSourceProvenance | null;
   if (!pinned) throw new PinnedTemplateUnavailableError();
+  if (!twinRuntimeEnabled && pinned.templateKind === 'template_twin_docx') {
+    throw new PinnedTemplateUnavailableError();
+  }
   const stagingFixture = isStagingFixtureTemplate(pinned);
   if (
     isTemplateTwinStagingQaRequested() &&
