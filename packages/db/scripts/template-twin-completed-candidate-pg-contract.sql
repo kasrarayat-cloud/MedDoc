@@ -39,11 +39,16 @@ BEGIN
       'profileVersion', 'template-twin-clamd-instream-v1',
       'scanner', 'clamav-clamd',
       'transport', 'unix-domain-socket',
+      'engineVersion', '1.4.5',
+      'signatureVersion', '28065',
       'sourceSha256', q1_sha,
       'sourceSizeBytes', 101,
       'verdict', 'clean',
-      'attestationSha256', repeat('a', 64)
-    ), clock_timestamp()
+      'threatNameSha256', NULL,
+      'scannedAt', '2026-07-19T08:00:00.000Z',
+      'attestationSha256',
+        '6a00945caef5805ab670f33886ac912399a752710f579aa35b89c5bf183a79cd'
+    ), '2026-07-19T08:00:00.000Z'
   ),
   (
     'q_candidate_contract_2', practice_id, 'candidate_contract_v1', 2,
@@ -57,11 +62,16 @@ BEGIN
       'profileVersion', 'template-twin-clamd-instream-v1',
       'scanner', 'clamav-clamd',
       'transport', 'unix-domain-socket',
+      'engineVersion', '1.4.5',
+      'signatureVersion', '28065',
       'sourceSha256', q2_sha,
       'sourceSizeBytes', 102,
       'verdict', 'clean',
-      'attestationSha256', repeat('b', 64)
-    ), clock_timestamp()
+      'threatNameSha256', NULL,
+      'scannedAt', '2026-07-19T08:00:01.000Z',
+      'attestationSha256',
+        '60a13b82c7ad81f1fd5c0ea70c8760ac7c8d9f4d1ed24a77e17a2eaae120e591'
+    ), '2026-07-19T08:00:01.000Z'
   );
 
   INSERT INTO "template_twin_object_ledgers" (
@@ -129,10 +139,14 @@ BEGIN
       "metadataMinimizationEvidence" = CASE "id"
         WHEN 'q_candidate_contract_1' THEN jsonb_build_object(
           'profileVersion', 'template-twin-docx-metadata-minimization-v1',
-          'originalSha256', q1_sha, 'minimizedSha256', minimized_1)
+          'originalSha256', q1_sha, 'minimizedSha256', minimized_1,
+          'replacedParts', jsonb_build_array(),
+          'zipEntryTimestampsNormalized', true)
         ELSE jsonb_build_object(
           'profileVersion', 'template-twin-docx-metadata-minimization-v1',
-          'originalSha256', q2_sha, 'minimizedSha256', minimized_2)
+          'originalSha256', q2_sha, 'minimizedSha256', minimized_2,
+          'replacedParts', jsonb_build_array(),
+          'zipEntryTimestampsNormalized', true)
       END
   WHERE "id" IN ('q_candidate_contract_1', 'q_candidate_contract_2');
 
