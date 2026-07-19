@@ -171,6 +171,9 @@ enum AuditAction {
   TEMPLATE_TWIN_STAGING_QA_ADMISSION_CREATED
   TEMPLATE_TWIN_STAGING_QA_ADMISSION_ADVANCED
   TEMPLATE_TWIN_STAGING_QA_ADMISSION_FAILED
+  TEMPLATE_TWIN_ROLLBACK_PREPARED
+  TEMPLATE_TWIN_ROLLBACK_CANCELLED
+  TEMPLATE_TWIN_ROLLOUT_REVOKED
 
   // transcribe-md — patient CRUD (TranscribeMdPatient; CRM patient
   // events use CREATED_PATIENT / UPDATED_PATIENT / ARCHIVED_PATIENT
@@ -594,6 +597,7 @@ model Practice {
   templateTwinCustomExampleExecutions   TemplateTwinCustomExampleExecution[]
   templateTwinSyntheticQaAdmissions     TemplateTwinSyntheticQaAdmission[]
   templateTwinSyntheticQaRuns           TemplateTwinSyntheticQaRun[]
+  templateTwinRollbackOperations        TemplateTwinRollbackOperation[]
   visitAutomationManifests              VisitAutomationManifest[]
   visitAutomationProviderExecutions     VisitAutomationProviderExecution[]
 
@@ -761,6 +765,7 @@ model User {
   templateTwinCustomExamplesAcknowledged TemplateTwinCustomExampleExecution[]   @relation("TemplateTwinCustomExampleAcknowledger")
   templateTwinSyntheticQaAdmissions      TemplateTwinSyntheticQaAdmission[]     @relation("TemplateTwinSyntheticQaAdmissionActor")
   templateTwinSyntheticQaRuns            TemplateTwinSyntheticQaRun[]           @relation("TemplateTwinSyntheticQaDoctor")
+  templateTwinRollbackOperations         TemplateTwinRollbackOperation[]
   // T-M16.2: one-time tokens for password reset, email verification,
   // email change. All cascade-deleted with the user.
   authTokens                             AuthToken[]
@@ -3318,13 +3323,53 @@ model TemplateTwinAuditOutbox {
 /// remains an additional process boundary; this row supplies the monotonic,
 /// transactionally lockable generation used for linearizable revocation.
 model TemplateTwinRolloutControl {
-  id         String   @id
-  enabled    Boolean  @default(false)
-  generation BigInt   @default(1)
-  createdAt  DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt  DateTime @updatedAt @db.Timestamptz(6)
+  id                      String    @id
+  enabled                 Boolean   @default(false)
+  generation              BigInt    @default(1)
+  rollbackFenceState      String    @default("OPEN")
+  rollbackFenceGeneration BigInt    @default(1)
+  rollbackOperationId     String?   @unique @db.Uuid
+  rollbackPreparedAt      DateTime? @db.Timestamptz(6)
+  rollbackRevokedAt       DateTime? @db.Timestamptz(6)
+  createdAt               DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt               DateTime  @updatedAt @db.Timestamptz(6)
+
+  rollbackOperation TemplateTwinRollbackOperation? @relation("ActiveTemplateTwinRollbackOperation", fields: [rollbackOperationId], references: [id], onDelete: Restrict)
 
   @@map("template_twin_rollout_controls")
+}
+
+/// Immutable operator identity plus PHI-free before/after census for one
+/// rollback-fence operation. The singleton rollout row points at the active
+/// operation while PREPARED or REVOKED. CANCELLED applies only before revoke.
+model TemplateTwinRollbackOperation {
+  id String @id @db.Uuid
+
+  state      String
+  reasonCode String @db.VarChar(80)
+  changeId   String @db.VarChar(80)
+
+  requestedById String
+  requestedBy   User   @relation(fields: [requestedById], references: [id], onDelete: Restrict)
+
+  actorPracticeId String
+  actorPractice   Practice @relation(fields: [actorPracticeId], references: [id], onDelete: Restrict)
+
+  actorEmailSnapshot String?
+  preparedSnapshot   Json
+  revokedSnapshot    Json?
+
+  preparedAt  DateTime  @default(now()) @db.Timestamptz(6)
+  revokedAt   DateTime? @db.Timestamptz(6)
+  cancelledAt DateTime? @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+
+  rolloutControl TemplateTwinRolloutControl? @relation("ActiveTemplateTwinRollbackOperation")
+
+  @@index([state, createdAt])
+  @@index([actorPracticeId, createdAt])
+  @@map("template_twin_rollback_operations")
 }
 
 // ============================================================================

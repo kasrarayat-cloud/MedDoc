@@ -154,6 +154,8 @@ function mockRolloutAndVisitLocks(visit = lockedVisitRow()) {
         {
           enabled: globalRolloutEnabled,
           generation: globalRolloutGeneration,
+          rollbackFenceState: "OPEN",
+          rollbackOperationId: null,
         },
       ];
     }

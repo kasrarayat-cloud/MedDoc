@@ -10,11 +10,13 @@ import { enqueueTemplateTwinAudit } from "./audit-outbox";
 export const TEMPLATE_TWIN_KILL_SWITCH_ENV =
   "TEMPLATE_TWIN_KILL_SWITCH" as const;
 export const TEMPLATE_TWIN_GLOBAL_ROLLOUT_ID = "global" as const;
+export const TEMPLATE_TWIN_ROLLBACK_FENCE_OPEN = "OPEN" as const;
 
 export type TemplateTwinRolloutCode =
   | "TEMPLATE_TWIN_ROLLBACK_COMPAT_ACTIVE"
   | "TEMPLATE_TWIN_RUNTIME_MODE_INVALID"
   | "TEMPLATE_TWIN_KILL_SWITCH_ACTIVE"
+  | "TEMPLATE_TWIN_ROLLBACK_FENCE_ACTIVE"
   | "TEMPLATE_TWIN_GLOBAL_DISABLED"
   | "TEMPLATE_TWIN_PRACTICE_DISABLED"
   | "TEMPLATE_TWIN_GLOBAL_GENERATION_STALE"
@@ -68,6 +70,8 @@ interface RolloutLockClient {
 interface GlobalRolloutRow {
   enabled: boolean;
   generation: bigint | number | string;
+  rollbackFenceState: string;
+  rollbackOperationId: string | null;
 }
 
 interface PracticeRolloutRow {
@@ -105,6 +109,19 @@ function blocked(
 
 function killSwitchIsExplicitlyOff(value: string | undefined): boolean {
   return value?.trim().toLowerCase() === "false";
+}
+
+function rollbackFenceIsOpen(row: GlobalRolloutRow): boolean {
+  return row.rollbackFenceState === TEMPLATE_TWIN_ROLLBACK_FENCE_OPEN;
+}
+
+function assertRollbackFenceAllowsEnable(row: GlobalRolloutRow): void {
+  if (!rollbackFenceIsOpen(row)) {
+    throw new TemplateTwinRolloutError(
+      "TEMPLATE_TWIN_ROLLBACK_FENCE_ACTIVE",
+      "Template Twin cannot be enabled while an operational rollback fence is active.",
+    );
+  }
 }
 
 function evaluateRuntimeMode(
@@ -206,7 +223,7 @@ export async function lockTemplateTwinRolloutForFinalClaim(input: {
 
   // Lock order is load-bearing. Never move the practice query above this one.
   const globalRows = await input.tx.$queryRaw<GlobalRolloutRow[]>(Prisma.sql`
-    SELECT "enabled", "generation"
+    SELECT "enabled", "generation", "rollbackFenceState", "rollbackOperationId"
     FROM "template_twin_rollout_controls"
     WHERE "id" = ${TEMPLATE_TWIN_GLOBAL_ROLLOUT_ID}
     FOR UPDATE
@@ -240,6 +257,13 @@ export async function lockTemplateTwinRolloutForFinalClaim(input: {
     globalGeneration: generation(global.generation),
     practiceGeneration: generation(practice.templateTwinRolloutGeneration),
   };
+  if (!rollbackFenceIsOpen(global)) {
+    return blocked(
+      "TEMPLATE_TWIN_ROLLBACK_FENCE_ACTIVE",
+      "Template Twin is temporarily unavailable while an operational rollback is in progress.",
+      currentToken,
+    );
+  }
   if (!global.enabled) {
     return blocked(
       "TEMPLATE_TWIN_GLOBAL_DISABLED",
@@ -362,7 +386,7 @@ export async function applyTemplateTwinGlobalRolloutMutation(input: {
   if (input.enabled) assertRuntimeModeAllowsEnable();
   const tx = input.tx;
   const rows = await tx.$queryRaw<GlobalRolloutRow[]>(Prisma.sql`
-    SELECT "enabled", "generation"
+    SELECT "enabled", "generation", "rollbackFenceState", "rollbackOperationId"
     FROM "template_twin_rollout_controls"
     WHERE "id" = ${TEMPLATE_TWIN_GLOBAL_ROLLOUT_ID}
     FOR UPDATE
@@ -373,6 +397,9 @@ export async function applyTemplateTwinGlobalRolloutMutation(input: {
       "TEMPLATE_TWIN_ROLLOUT_CONTROL_UNAVAILABLE",
       "Template Twin rollout controls are unavailable.",
     );
+  }
+  if (input.enabled) {
+    assertRollbackFenceAllowsEnable(current);
   }
   if (input.enabled) {
     await assertTemplateTwinLineageContracted(tx);
@@ -428,16 +455,20 @@ export async function applyTemplateTwinPracticeRolloutMutation(input: {
   if (input.enabled) assertRuntimeModeAllowsEnable();
   const tx = input.tx;
   const globalRows = await tx.$queryRaw<GlobalRolloutRow[]>(Prisma.sql`
-    SELECT "enabled", "generation"
+    SELECT "enabled", "generation", "rollbackFenceState", "rollbackOperationId"
     FROM "template_twin_rollout_controls"
     WHERE "id" = ${TEMPLATE_TWIN_GLOBAL_ROLLOUT_ID}
     FOR UPDATE
   `);
-  if (!globalRows[0]) {
+  const global = globalRows[0];
+  if (!global) {
     throw new TemplateTwinRolloutError(
       "TEMPLATE_TWIN_ROLLOUT_CONTROL_UNAVAILABLE",
       "Template Twin rollout controls are unavailable.",
     );
+  }
+  if (input.enabled) {
+    assertRollbackFenceAllowsEnable(global);
   }
   if (input.enabled) {
     await assertTemplateTwinLineageContracted(tx);

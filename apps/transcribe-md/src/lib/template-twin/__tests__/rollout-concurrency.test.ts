@@ -1,8 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const database = vi.hoisted(() => ({ transaction: vi.fn() }));
 
-vi.mock('@meddoc/db', () => ({
+vi.mock("@meddoc/db", () => ({
   default: { $transaction: database.transaction },
 }));
 
@@ -10,11 +10,11 @@ import {
   lockTemplateTwinRolloutForFinalClaim,
   setTemplateTwinGlobalRollout,
   setTemplateTwinPracticeRollout,
-} from '../rollout';
+} from "../rollout";
 
 function sqlText(query: unknown): string {
   return String(
-    (query as { strings?: readonly string[] }).strings?.join(' ') ?? '',
+    (query as { strings?: readonly string[] }).strings?.join(" ") ?? "",
   );
 }
 
@@ -31,9 +31,14 @@ function barrier() {
 }
 
 class DeterministicRolloutDatabase {
-  global = { enabled: true, generation: BigInt(1) };
+  global = {
+    enabled: true,
+    generation: BigInt(1),
+    rollbackFenceState: "OPEN",
+    rollbackOperationId: null as string | null,
+  };
   practice = { enabled: true, generation: BigInt(1) };
-  lineagePhase = 'CONTRACTED';
+  lineagePhase = "CONTRACTED";
   auditEvents: unknown[] = [];
   queryOrder: string[] = [];
   pauseFirstGlobal: ReturnType<typeof barrier> | null = null;
@@ -90,10 +95,10 @@ class DeterministicRolloutDatabase {
       $queryRaw: async (query: unknown) => {
         const text = sqlText(query);
         if (
-          text.includes('template_twin_rollout_controls') &&
-          text.includes('FOR UPDATE')
+          text.includes("template_twin_rollout_controls") &&
+          text.includes("FOR UPDATE")
         ) {
-          await this.acquire(transactionId, 'global');
+          await this.acquire(transactionId, "global");
           this.queryOrder.push(`${transactionId}:global`);
           if (transactionId === 1 && this.pauseFirstGlobal) {
             this.pauseFirstGlobal.entered();
@@ -101,11 +106,8 @@ class DeterministicRolloutDatabase {
           }
           return [{ ...this.global }];
         }
-        if (
-          text.includes('FROM "practices"') &&
-          text.includes('FOR UPDATE')
-        ) {
-          await this.acquire(transactionId, 'practice');
+        if (text.includes('FROM "practices"') && text.includes("FOR UPDATE")) {
+          await this.acquire(transactionId, "practice");
           this.queryOrder.push(`${transactionId}:practice`);
           return [
             {
@@ -114,17 +116,17 @@ class DeterministicRolloutDatabase {
             },
           ];
         }
-        if (text.includes('template_twin_lineage_migration_progress')) {
+        if (text.includes("template_twin_lineage_migration_progress")) {
           return [{ phase: this.lineagePhase }];
         }
         if (text.includes('UPDATE "template_twin_rollout_controls"')) {
           this.global.generation += BigInt(1);
-          this.global.enabled = text.includes('true');
+          this.global.enabled = text.includes("true");
           return [{ generation: this.global.generation }];
         }
         if (text.includes('UPDATE "practices"')) {
           this.practice.generation += BigInt(1);
-          this.practice.enabled = text.includes('true');
+          this.practice.enabled = text.includes("true");
           return [
             {
               templateTwinRolloutGeneration: this.practice.generation,
@@ -149,9 +151,9 @@ class DeterministicRolloutDatabase {
 }
 
 const actor = {
-  userId: 'synthetic-rollout-operator',
-  userEmail: 'rollout-operator@synthetic.test',
-  practiceId: 'synthetic-practice',
+  userId: "synthetic-rollout-operator",
+  userEmail: "rollout-operator@synthetic.test",
+  practiceId: "synthetic-practice",
 };
 
 let syntheticDb: DeterministicRolloutDatabase;
@@ -159,7 +161,7 @@ let syntheticDb: DeterministicRolloutDatabase;
 beforeEach(() => {
   vi.clearAllMocks();
   delete process.env.TEMPLATE_TWIN_RUNTIME_MODE;
-  process.env.TEMPLATE_TWIN_KILL_SWITCH = 'false';
+  process.env.TEMPLATE_TWIN_KILL_SWITCH = "false";
   syntheticDb = new DeterministicRolloutDatabase();
   database.transaction.mockImplementation(
     (callback: (tx: unknown) => Promise<unknown>) =>
@@ -167,8 +169,8 @@ beforeEach(() => {
   );
 });
 
-describe('Template Twin rollout transaction protocol', () => {
-  it('locks global before practice for every final claim', async () => {
+describe("Template Twin rollout transaction protocol", () => {
+  it("locks global before practice for every final claim", async () => {
     await syntheticDb.transaction((tx) =>
       lockTemplateTwinRolloutForFinalClaim({
         tx: tx as never,
@@ -181,10 +183,34 @@ describe('Template Twin rollout transaction protocol', () => {
       }),
     );
 
-    expect(syntheticDb.queryOrder).toEqual(['1:global', '1:practice']);
+    expect(syntheticDb.queryOrder).toEqual(["1:global", "1:practice"]);
   });
 
-  it('does not deadlock when a final claim opposes a practice disable', async () => {
+  it("fences final claims only after taking global then practice locks", async () => {
+    syntheticDb.global.rollbackFenceState = "PREPARED";
+    syntheticDb.global.rollbackOperationId =
+      "4d5cb6df-91bb-4b1e-8d2a-3ecbbf421cea";
+
+    const decision = await syntheticDb.transaction((tx) =>
+      lockTemplateTwinRolloutForFinalClaim({
+        tx: tx as never,
+        practiceId: actor.practiceId,
+        pinnedToken: {
+          practiceId: actor.practiceId,
+          globalGeneration: BigInt(1),
+          practiceGeneration: BigInt(1),
+        },
+      }),
+    );
+
+    expect(decision).toMatchObject({
+      allowed: false,
+      code: "TEMPLATE_TWIN_ROLLBACK_FENCE_ACTIVE",
+    });
+    expect(syntheticDb.queryOrder).toEqual(["1:global", "1:practice"]);
+  });
+
+  it("does not deadlock when a final claim opposes a practice disable", async () => {
     const latch = barrier();
     syntheticDb.pauseFirstGlobal = latch;
     const claim = syntheticDb.transaction((tx) =>
@@ -210,10 +236,10 @@ describe('Template Twin rollout transaction protocol', () => {
     await expect(claim).resolves.toMatchObject({ allowed: true });
     await expect(disable).resolves.toBe(BigInt(2));
     expect(syntheticDb.queryOrder).toEqual([
-      '1:global',
-      '1:practice',
-      '2:global',
-      '2:practice',
+      "1:global",
+      "1:practice",
+      "2:global",
+      "2:practice",
     ]);
     expect(syntheticDb.practice).toEqual({
       enabled: false,
@@ -221,15 +247,15 @@ describe('Template Twin rollout transaction protocol', () => {
     });
   });
 
-  it('refuses both global and practice enable while lineage contract is incomplete', async () => {
+  it("refuses both global and practice enable while lineage contract is incomplete", async () => {
     syntheticDb.global.enabled = false;
     syntheticDb.practice.enabled = false;
-    syntheticDb.lineagePhase = 'BACKFILLING';
+    syntheticDb.lineagePhase = "BACKFILLING";
 
     await expect(
       setTemplateTwinGlobalRollout({ enabled: true, actor }),
     ).rejects.toMatchObject({
-      code: 'TEMPLATE_TWIN_LINEAGE_MIGRATION_INCOMPLETE',
+      code: "TEMPLATE_TWIN_LINEAGE_MIGRATION_INCOMPLETE",
     });
     await expect(
       setTemplateTwinPracticeRollout({
@@ -238,15 +264,15 @@ describe('Template Twin rollout transaction protocol', () => {
         actor,
       }),
     ).rejects.toMatchObject({
-      code: 'TEMPLATE_TWIN_LINEAGE_MIGRATION_INCOMPLETE',
+      code: "TEMPLATE_TWIN_LINEAGE_MIGRATION_INCOMPLETE",
     });
     expect(syntheticDb.global.enabled).toBe(false);
     expect(syntheticDb.practice.enabled).toBe(false);
     expect(syntheticDb.auditEvents).toHaveLength(0);
   });
 
-  it('permits revocation but rejects re-enable in rollback compatibility mode', async () => {
-    process.env.TEMPLATE_TWIN_RUNTIME_MODE = 'rollback-compat-v2';
+  it("permits revocation but rejects re-enable in rollback compatibility mode", async () => {
+    process.env.TEMPLATE_TWIN_RUNTIME_MODE = "rollback-compat-v2";
 
     await expect(
       setTemplateTwinGlobalRollout({ enabled: false, actor }),
@@ -263,7 +289,7 @@ describe('Template Twin rollout transaction protocol', () => {
     await expect(
       setTemplateTwinGlobalRollout({ enabled: true, actor }),
     ).rejects.toMatchObject({
-      code: 'TEMPLATE_TWIN_ROLLBACK_COMPAT_ACTIVE',
+      code: "TEMPLATE_TWIN_ROLLBACK_COMPAT_ACTIVE",
     });
     await expect(
       setTemplateTwinPracticeRollout({
@@ -272,12 +298,34 @@ describe('Template Twin rollout transaction protocol', () => {
         actor,
       }),
     ).rejects.toMatchObject({
-      code: 'TEMPLATE_TWIN_ROLLBACK_COMPAT_ACTIVE',
+      code: "TEMPLATE_TWIN_ROLLBACK_COMPAT_ACTIVE",
     });
     expect(database.transaction).toHaveBeenCalledTimes(
       revocationTransactionCount,
     );
     expect(syntheticDb.global.enabled).toBe(false);
     expect(syntheticDb.practice.enabled).toBe(false);
+  });
+
+  it("rejects global and practice enable while the rollback fence is prepared", async () => {
+    syntheticDb.global.enabled = false;
+    syntheticDb.practice.enabled = false;
+    syntheticDb.global.rollbackFenceState = "PREPARED";
+    syntheticDb.global.rollbackOperationId =
+      "4d5cb6df-91bb-4b1e-8d2a-3ecbbf421cea";
+
+    await expect(
+      setTemplateTwinGlobalRollout({ enabled: true, actor }),
+    ).rejects.toMatchObject({ code: "TEMPLATE_TWIN_ROLLBACK_FENCE_ACTIVE" });
+    await expect(
+      setTemplateTwinPracticeRollout({
+        practiceId: actor.practiceId,
+        enabled: true,
+        actor,
+      }),
+    ).rejects.toMatchObject({ code: "TEMPLATE_TWIN_ROLLBACK_FENCE_ACTIVE" });
+    expect(syntheticDb.global.enabled).toBe(false);
+    expect(syntheticDb.practice.enabled).toBe(false);
+    expect(syntheticDb.auditEvents).toHaveLength(0);
   });
 });

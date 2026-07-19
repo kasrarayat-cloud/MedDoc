@@ -297,6 +297,8 @@ function memoryDb() {
           {
             enabled: rollout.globalEnabled,
             generation: rollout.globalGeneration,
+            rollbackFenceState: "OPEN",
+            rollbackOperationId: null,
           },
         ] as T;
       }
