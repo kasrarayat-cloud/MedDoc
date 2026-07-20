@@ -19,12 +19,12 @@ import { updateTemplateTwinSyntheticQaClaimBoundVisit } from "@/worker/staging-q
 // concerns on the fallback branch — Whisper produces the same flat
 // text Deepgram does (with `diarize: false`).
 import {
-  transcribe,
   withRetry,
   CrossProviderFallbackDisabledError,
   type TranscribeResult,
   type RetryAttemptInfo,
 } from "@meddoc/ai";
+import { runTemplateTwinOwnedTranscribe } from "@/lib/template-twin/provider-ownership";
 import { statAudio, streamAudio } from "@/lib/minio";
 import {
   isWhisperFallbackEnabled,
@@ -102,46 +102,56 @@ export async function runLayer1bTranscribeDictation(
   const allowCrossProviderFallback = isWhisperFallbackEnabled();
 
   const attempt = async () => {
-    return transcribe({
-      practiceId: input.practiceId,
-      visitId: input.visitId,
-      userId: input.userId,
-      purpose: "tm_transcribe",
-      allowCrossProviderFallback,
-      audio: {
-        stream: webStream,
+    return runTemplateTwinOwnedTranscribe({
+      operation: "L1B_TRANSCRIBE",
+      operationVersion: "deepgram-batch-l1b-v1",
+      audioIdentity: {
+        objectKey: input.dictationAudioKey,
+        objectEtag: stat.etag ?? null,
         sizeBytes: stat.size,
-        toBuffer: async () => {
-          const fresh = await streamAudio(input.dictationAudioKey);
-          const chunks: Buffer[] = [];
-          for await (const chunk of fresh) {
-            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-          }
-          return Buffer.concat(chunks);
-        },
+        lastModifiedIso: stat.lastModified?.toISOString() ?? null,
       },
-      mimeType: input.dictationMimeType,
-      deepgram: input.interpreterMode
-        ? {
-            // 2026-05-12 interpreter-mode (Sylvia incident follow-up):
-            // switch to multilingual nova-3 + language detection.
-            // Dictation stays single-speaker (diarize off) so the
-            // utterances pipeline behaves identically downstream.
-            model: "nova-3",
-            options: {
-              diarize: false,
-              utterances: false,
-              detectLanguage: true,
-            },
-          }
-        : {
-            // Single-speaker dictation — disable diarize + utterances.
-            // Whisper has no equivalent toggles (it just transcribes), so
-            // the fallback path produces functionally the same flat text.
-            options: { diarize: false, utterances: false },
-            // 2026-05-13 Issues #202 + #206 — scoped per-visit keyterms.
-            keyterms: built?.keyterms ?? [],
+      args: {
+        practiceId: input.practiceId,
+        visitId: input.visitId,
+        userId: input.userId,
+        purpose: "tm_transcribe",
+        allowCrossProviderFallback,
+        audio: {
+          stream: webStream,
+          sizeBytes: stat.size,
+          toBuffer: async () => {
+            const fresh = await streamAudio(input.dictationAudioKey);
+            const chunks: Buffer[] = [];
+            for await (const chunk of fresh) {
+              chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+            }
+            return Buffer.concat(chunks);
           },
+        },
+        mimeType: input.dictationMimeType,
+        deepgram: input.interpreterMode
+          ? {
+              // 2026-05-12 interpreter-mode (Sylvia incident follow-up):
+              // switch to multilingual nova-3 + language detection.
+              // Dictation stays single-speaker (diarize off) so the
+              // utterances pipeline behaves identically downstream.
+              model: "nova-3",
+              options: {
+                diarize: false,
+                utterances: false,
+                detectLanguage: true,
+              },
+            }
+          : {
+              // Single-speaker dictation — disable diarize + utterances.
+              // Whisper has no equivalent toggles (it just transcribes), so
+              // the fallback path produces functionally the same flat text.
+              options: { diarize: false, utterances: false },
+              // 2026-05-13 Issues #202 + #206 — scoped per-visit keyterms.
+              keyterms: built?.keyterms ?? [],
+            },
+      },
     });
   };
 

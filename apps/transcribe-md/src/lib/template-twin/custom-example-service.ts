@@ -57,6 +57,11 @@ export interface TemplateTwinCustomExampleActor {
 
 interface CurrentCustomExampleState {
   readonly compiledVersionId: string;
+  readonly noteTemplateVersion: number;
+  readonly sourceArtifactId: string;
+  readonly sourceLineageId: string;
+  readonly sourceLineageVersion: number;
+  readonly sourceSha256: string;
   readonly mappingsSha256: string;
   readonly fieldIntentsSha256: string;
   readonly specifications: readonly CertifiedTemplateFieldSpecification[];
@@ -119,13 +124,22 @@ async function loadCurrentCustomExampleState(input: {
     },
     select: {
       status: true,
+      version: true,
       templateTwinCompiledVersion: {
         select: {
           id: true,
           certificationStatus: true,
           certification: { select: { id: true } },
           compiledDocumentIr: true,
-          sourceArtifact: { select: { practiceId: true } },
+          sourceArtifact: {
+            select: {
+              id: true,
+              practiceId: true,
+              lineageId: true,
+              lineageVersion: true,
+              sha256: true,
+            },
+          },
           fields: {
             select: {
               id: true,
@@ -238,6 +252,11 @@ async function loadCurrentCustomExampleState(input: {
   }
   return {
     compiledVersionId: compiled.id,
+    noteTemplateVersion: row.version,
+    sourceArtifactId: compiled.sourceArtifact.id,
+    sourceLineageId: compiled.sourceArtifact.lineageId,
+    sourceLineageVersion: compiled.sourceArtifact.lineageVersion,
+    sourceSha256: compiled.sourceArtifact.sha256,
     mappingsSha256: templateTwinMappingsSha256(mappings),
     fieldIntentsSha256: templateTwinFieldIntentsSha256(intents),
     specifications,
@@ -387,6 +406,13 @@ export async function runTemplateTwinCustomExamples(input: {
     practiceId: input.actor.practiceId,
     userId: input.actor.userId,
     noteTemplateId: input.noteTemplateId,
+    noteTemplateVersion: before.noteTemplateVersion,
+    sourceArtifactId: before.sourceArtifactId,
+    compiledVersionId: before.compiledVersionId,
+    sourceLineageId: before.sourceLineageId,
+    sourceLineageVersion: before.sourceLineageVersion,
+    sourceSha256: before.sourceSha256,
+    rolloutToken: input.actor.rolloutToken,
     model: input.model ?? TEMPLATE_CUSTOM_EXTRACTION_DEFAULT_MODEL,
     client: input.client,
     privacyClient: input.privacyClient,
@@ -479,6 +505,10 @@ export async function runTemplateTwinCustomExamples(input: {
             passed: execution.passed,
             failureCode: execution.failureCode,
             executedById: input.actor.userId,
+            providerOwnershipEvidence:
+              execution.providerOwnershipReceipt?.evidence ?? Prisma.DbNull,
+            providerOwnershipSha256:
+              execution.providerOwnershipReceipt?.sha256 ?? null,
           },
         });
         await enqueueTemplateTwinAudit(tx, {

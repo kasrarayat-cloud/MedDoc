@@ -29,7 +29,11 @@
 // ============================================================================
 
 import { z } from 'zod';
-import { modelClient } from '@meddoc/ai';
+import {
+  getTemplateTwinProviderOwnershipContext,
+  recordTemplateTwinProviderNotApplicable,
+  runTemplateTwinOwnedModelCompleteText,
+} from '@/lib/template-twin/provider-ownership';
 import {
   EMPTY_SECTION_PLACEHOLDER,
   renumberOrderedLists,
@@ -651,20 +655,26 @@ async function entailmentPass(
   claims: ClaimRow[],
   user: string,
   lens: string,
+  operationInstance: string,
   ids: { practiceId: string; visitId: string; userId: string | null }
 ): Promise<Set<number> | null> {
   try {
-    const { text } = await modelClient.completeText({
-      practiceId: ids.practiceId,
-      visitId: ids.visitId,
-      userId: ids.userId,
-      purpose: 'tm_anchor_entailment',
-      provider: 'anthropic',
-      model: MODEL,
-      system: ENTAILMENT_SYSTEM + lens,
-      user,
-      maxTokens: 2048,
-      temperature: 0,
+    const { text } = await runTemplateTwinOwnedModelCompleteText({
+      operation: 'L4_ANCHOR_VERIFY',
+      operationInstance,
+      operationVersion: 'anchor-entailment-verifier-v1',
+      args: {
+        practiceId: ids.practiceId,
+        visitId: ids.visitId,
+        userId: ids.userId,
+        purpose: 'tm_anchor_entailment',
+        provider: 'anthropic',
+        model: MODEL,
+        system: ENTAILMENT_SYSTEM + lens,
+        user,
+        maxTokens: 2048,
+        temperature: 0,
+      },
     });
     const objects = extractAllJsonObjects(text ?? '');
     const valid = objects
@@ -692,12 +702,29 @@ async function entailmentStage(
   roleLabeledTranscript: string,
   ids: { practiceId: string; visitId: string; userId: string | null }
 ): Promise<{ entailedIdx: Set<number>; errored: boolean; passErrors: number }> {
-  if (claims.length === 0)
+  const recordNotApplicable = async (reasonCode: string): Promise<void> => {
+    if (
+      getTemplateTwinProviderOwnershipContext()?.scope !== "VISIT_PIPELINE"
+    ) {
+      return;
+    }
+    for (let pass = 1; pass <= 3; pass += 1) {
+      await recordTemplateTwinProviderNotApplicable({
+        operation: "L4_ANCHOR_VERIFY",
+        operationInstance: `ensemble-pass-${pass}`,
+        reasonCode,
+      });
+    }
+  };
+  if (claims.length === 0) {
+    await recordNotApplicable("NO_ANCHORED_CLAIMS");
     return { entailedIdx: new Set(), errored: false, passErrors: 0 };
+  }
   // MOCK short-circuit: under MOCK_AI_CALLS the mock "model" approves —
   // mirrors every other mock fixture; reject/fail-closed paths are covered
   // by deterministic unit tests, never by the MOCK e2e flow.
   if (process.env.MOCK_AI_CALLS === 'true') {
+    await recordNotApplicable("DETERMINISTIC_ANCHOR_MOCK");
     return {
       entailedIdx: new Set(claims.map((c) => c.index)),
       errored: false,
@@ -721,7 +748,15 @@ async function entailmentStage(
   // leaves survival possible only by BOTH remaining passes agreeing; two
   // errors make majority unreachable → the whole stage is verifier_failed.
   const passes = await Promise.all(
-    ENSEMBLE_LENSES.map((lens) => entailmentPass(claims, user, lens, ids))
+    ENSEMBLE_LENSES.map((lens, index) =>
+      entailmentPass(
+        claims,
+        user,
+        lens,
+        `ensemble-pass-${index + 1}`,
+        ids
+      )
+    )
   );
   const passErrors = passes.filter((p) => p === null).length;
   if (passErrors >= 2)

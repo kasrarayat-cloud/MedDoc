@@ -1,4 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("../provider-ownership", () => ({
+  requireTemplateTwinProviderOwnershipContext: vi.fn(),
+  runTemplateTwinOwnedModelComplete: vi.fn(
+    async (input: {
+      args: unknown;
+      client: { complete(args: unknown): Promise<unknown> };
+    }) => input.client.complete(input.args),
+  ),
+}));
 
 import { compileTemplateDocx } from "../../note-template-docx/compiler";
 import { assertTemplateTwinSourcePhiFree } from "../source-phi";

@@ -13,7 +13,6 @@ import { createHash } from "node:crypto";
 
 import {
   delimiterSystemSuffix,
-  modelClient,
   wrapAsData,
   type ModelClient,
 } from "@meddoc/ai";
@@ -39,6 +38,11 @@ import {
   buildCanonicalCustomEvidenceAnchors,
   TEMPLATE_TWIN_CUSTOM_EVIDENCE_MAX_CONTEXT_CHARS,
 } from "./canonical-evidence-anchors";
+import {
+  requireTemplateTwinProviderOwnershipContext,
+  runTemplateTwinOwnedModelComplete,
+  type TemplateTwinProviderOperation,
+} from "../provider-ownership";
 
 export {
   CertifiedTemplateFieldSpecificationSchema,
@@ -72,6 +76,24 @@ const CUSTOM_CONCEPT_ID = /^ttcustom_[a-f0-9]{24}$/;
 const SHA256 = /^[a-f0-9]{64}$/;
 const ISO_DATE = /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/;
 const MAX_SPECIFICATIONS = TEMPLATE_TWIN_CUSTOM_FIELD_LIMIT;
+
+/** Stable, PHI-free provider-plan identity for the exact certified custom
+ * specification set handled by one bounded batch call. */
+export function customConceptProviderOperationInstance(
+  specifications: readonly CertifiedTemplateFieldSpecification[],
+): string {
+  const identity = specifications
+    .map((specification) =>
+      [
+        specification.conceptId,
+        specification.certification.contentSha256,
+        specification.certification.syntheticCoverageSha256,
+      ].join(":"),
+    )
+    .sort()
+    .join("|");
+  return `spec-set-${createHash("sha256").update(identity, "utf8").digest("hex").slice(0, 48)}`;
+}
 
 export const CanonicalCustomConceptEvidenceSchema = z
   .object({
@@ -1612,7 +1634,11 @@ export interface ExtractCertifiedCustomConceptsInput {
   readonly specifications: readonly CertifiedTemplateFieldSpecification[];
   readonly evidence: CanonicalCustomConceptEvidence;
   readonly practiceId: string;
-  readonly visitId: string;
+  /** Real visit identity for visit-pipeline executions; null for pre-visit
+   * custom-example evidence. */
+  readonly visitId: string | null;
+  /** Provider-log correlation only. Never persisted as a visit foreign key. */
+  readonly providerCorrelationId?: string | null;
   readonly userId: string | null;
   readonly model?: string;
   readonly client?: Pick<ModelClient, "complete">;
@@ -1644,27 +1670,47 @@ export async function extractCertifiedCustomConcepts(
   }
 
   const model = input.model ?? TEMPLATE_CUSTOM_EXTRACTION_DEFAULT_MODEL;
+  const providerContext = requireTemplateTwinProviderOwnershipContext([
+    "VISIT_PIPELINE",
+    "CUSTOM_EXAMPLE",
+    "SYNTHETIC_EVIDENCE",
+  ]);
+  const providerOperation: TemplateTwinProviderOperation =
+    providerContext?.scope === "CUSTOM_EXAMPLE"
+      ? "CUSTOM_EXAMPLE_EXTRACTION"
+      : providerContext?.scope === "SYNTHETIC_EVIDENCE"
+        ? "SYNTHETIC_EVIDENCE_EXTRACTION"
+        : "CUSTOM_CONCEPT_EXTRACTION";
   const response = ModelCustomConceptExtractionBatchSchema.parse(
-    await (input.client ?? modelClient).complete({
-      practiceId: input.practiceId,
-      visitId: input.visitId,
-      userId: input.userId,
-      purpose: "tm_entities",
-      provider: "anthropic",
-      model,
-      system: CUSTOM_EXTRACTION_SYSTEM,
-      user: [
-        "Certified specifications and canonical encounter evidence:",
-        wrapped.wrapped,
-      ].join("\n"),
-      schema: ModelCustomConceptExtractionBatchSchema,
-      maxTokens: Math.min(8_192, 768 + specifications.length * 384),
-      temperature: 0,
-      retryOnSchemaFail: true,
-      useToolUse: {
-        name: "submit_template_twin_custom_scalar_extraction",
-        description:
-          "Return one evidence-cited scalar extraction result for every physician-certified concept ID.",
+    await runTemplateTwinOwnedModelComplete({
+      operation: providerOperation,
+      operationInstance: customConceptProviderOperationInstance(specifications),
+      operationVersion: TEMPLATE_CUSTOM_EXTRACTION_VERSION,
+      ...(input.providerCorrelationId !== undefined
+        ? { providerCorrelationId: input.providerCorrelationId }
+        : {}),
+      client: input.client,
+      args: {
+        practiceId: input.practiceId,
+        visitId: input.providerCorrelationId ?? input.visitId,
+        userId: input.userId,
+        purpose: "tm_entities",
+        provider: "anthropic",
+        model,
+        system: CUSTOM_EXTRACTION_SYSTEM,
+        user: [
+          "Certified specifications and canonical encounter evidence:",
+          wrapped.wrapped,
+        ].join("\n"),
+        schema: ModelCustomConceptExtractionBatchSchema,
+        maxTokens: Math.min(8_192, 768 + specifications.length * 384),
+        temperature: 0,
+        retryOnSchemaFail: true,
+        useToolUse: {
+          name: "submit_template_twin_custom_scalar_extraction",
+          description:
+            "Return one evidence-cited scalar extraction result for every physician-certified concept ID.",
+        },
       },
     }),
   );

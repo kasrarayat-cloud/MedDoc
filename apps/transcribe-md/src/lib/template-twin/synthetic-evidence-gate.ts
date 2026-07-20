@@ -9,6 +9,15 @@ import {
 import { z } from "zod";
 
 import { detectStructuredPhi } from "@/lib/note-template-parse/phi-gate";
+import { canonicalSha256 } from "@/lib/template-twin/canonical";
+import {
+  buildTemplateTwinProviderOwnershipReceipt,
+  getTemplateTwinProviderOwnershipContext,
+  requireTemplateTwinProviderOwnershipContext,
+  runTemplateTwinOwnedModelComplete,
+  runWithTemplateTwinProviderOwnershipContext,
+} from "@/lib/template-twin/provider-ownership";
+import type { TemplateTwinRolloutToken } from "@/lib/template-twin/rollout";
 
 const MODEL = process.env.TRANSCRIBE_MD_CLINICAL_MODEL || "claude-opus-4-8";
 const MAX_SYNTHETIC_SCAN_CHARS = 12_000;
@@ -89,6 +98,7 @@ export async function assertTemplateTwinAuthoredCorpusPhiFree(input: {
   fragments: readonly string[];
   practiceId: string;
   userId: string;
+  rolloutToken: TemplateTwinRolloutToken;
   client?: Pick<ModelClient, "complete">;
 }): Promise<void> {
   if (input.fragments.length === 0) return;
@@ -125,6 +135,7 @@ export async function assertTemplateTwinAuthoredCorpusPhiFree(input: {
     encounterText: corpus,
     practiceId: input.practiceId,
     userId: input.userId,
+    rolloutToken: input.rolloutToken,
     providerVisitId: stagingContext?.visitId ?? null,
     client: input.client,
   });
@@ -141,6 +152,7 @@ export async function assertTemplateTwinSyntheticEvidencePhiFree(input: {
   encounterText: string;
   practiceId: string;
   userId: string;
+  rolloutToken: TemplateTwinRolloutToken;
   /** Bound to the deterministic staging provider context when present. */
   providerVisitId?: string | null;
   client?: Pick<ModelClient, "complete">;
@@ -150,8 +162,20 @@ export async function assertTemplateTwinSyntheticEvidencePhiFree(input: {
   );
   const wrapped = wrapAsData(encounterText, "transcript");
 
-  try {
-    const scan = await (input.client ?? modelClient).complete({
+  const subjectSha256 = canonicalSha256({
+    contractVersion: "template-twin-synthetic-evidence-provider-subject-v1",
+    practiceId: input.practiceId,
+    actorUserId: input.userId,
+    visitId: input.providerVisitId ?? null,
+    encounterText,
+  });
+  const executeScan = async () => {
+    const scan = await runTemplateTwinOwnedModelComplete({
+      operation: "SYNTHETIC_EVIDENCE_PRIVACY_SCAN",
+      operationVersion: "template-twin-synthetic-evidence-privacy-scan-v1",
+      providerCorrelationId: input.providerVisitId ?? null,
+      client: input.client ?? modelClient,
+      args: {
       practiceId: input.practiceId,
       visitId: input.providerVisitId ?? null,
       userId: input.userId,
@@ -171,6 +195,7 @@ export async function assertTemplateTwinSyntheticEvidencePhiFree(input: {
         description:
           "Classify whether certification evidence is unmistakably synthetic and free of patient identifiers.",
       },
+      },
     });
     if (
       !scan.appearsExplicitlySynthetic ||
@@ -179,6 +204,56 @@ export async function assertTemplateTwinSyntheticEvidencePhiFree(input: {
     ) {
       throw new TemplateTwinSyntheticEvidenceRejectedError();
     }
+  };
+
+  try {
+    const active = getTemplateTwinProviderOwnershipContext();
+    if (active) {
+      requireTemplateTwinProviderOwnershipContext(["SYNTHETIC_EVIDENCE"]);
+      await executeScan();
+      return;
+    }
+    const stagingContext = getTemplateTwinSyntheticQaProviderContext();
+    await runWithTemplateTwinProviderOwnershipContext(
+      {
+        practiceId: input.practiceId,
+        actorUserId: input.userId,
+        visitId: null,
+        visitInputMode: null,
+        scope: "SYNTHETIC_EVIDENCE",
+        logicalAttempt: 1,
+        subjectId: `synthetic-evidence:${subjectSha256}`,
+        subjectSha256,
+        sourceArtifactId: null,
+        compiledVersionId: null,
+        noteTemplateId: null,
+        noteTemplateVersion: null,
+        sourceLineageId: null,
+        sourceLineageVersion: null,
+        sourceSha256: null,
+        syntheticAdmissionId: stagingContext?.admissionId ?? null,
+        rolloutToken: input.rolloutToken,
+      },
+      async () => {
+        await executeScan();
+        buildTemplateTwinProviderOwnershipReceipt({
+          projection: {
+            subjectId: `synthetic-evidence:${subjectSha256}`,
+            subjectSha256,
+            visitId: null,
+            sourceArtifactId: null,
+            compiledVersionId: null,
+            noteTemplateId: null,
+          },
+          expectedExecutionPlan: [
+            {
+              operation: "SYNTHETIC_EVIDENCE_PRIVACY_SCAN",
+              disposition: "EXECUTED",
+            },
+          ],
+        });
+      },
+    );
   } catch (error) {
     if (error instanceof TemplateTwinSyntheticEvidenceRejectedError) {
       throw error;
@@ -197,6 +272,7 @@ export async function assertTemplateTwinStagingQaEvidencePhiFree(input: {
   encounterText: string;
   practiceId: string;
   userId: string;
+  rolloutToken: TemplateTwinRolloutToken;
   /** Bound to the deterministic staging provider context when present. */
   providerVisitId?: string | null;
   client?: Pick<ModelClient, "complete">;

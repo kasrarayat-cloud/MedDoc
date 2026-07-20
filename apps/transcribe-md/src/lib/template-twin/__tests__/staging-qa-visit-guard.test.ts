@@ -58,6 +58,11 @@ function run(
       phase: "REVIEW_READY",
       requestSha256: "a".repeat(64),
       payloadSha256: "b".repeat(64),
+      preCertificationVoiceEvidence: false,
+      audioSha256: null,
+      audioSizeBytes: null,
+      audioMimeType: null,
+      audioObjectKey: null,
       pinnedGlobalRolloutGeneration: BigInt(7),
       pinnedPracticeRolloutGeneration: BigInt(11),
       sourceArtifactId: "source-synthetic-1",
@@ -71,6 +76,7 @@ function run(
       failedAt: null,
       revokedAt: null,
       consumedAt: null,
+      createdAt: new Date("2026-07-19T00:00:00.000Z"),
     },
   };
   const merged = { ...base, ...overrides };

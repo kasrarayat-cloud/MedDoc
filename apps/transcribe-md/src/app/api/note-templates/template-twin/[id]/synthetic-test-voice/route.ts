@@ -1,5 +1,6 @@
+import { createHash } from "node:crypto";
+
 import { NextResponse } from "next/server";
-import { transcribe } from "@meddoc/ai";
 import prisma from "@meddoc/db";
 
 import { AuthError, requireDoctorSession } from "@/lib/auth";
@@ -19,12 +20,10 @@ import {
   runTemplateTwinSyntheticTest,
   TemplateTwinSyntheticTestError,
 } from "@/lib/template-twin/synthetic-test";
-import { runWithTemplateTwinStagingQaCertificationProvider } from "@/lib/template-twin/staging-qa-certification-provider";
-import { TEMPLATE_TWIN_STAGING_QA_VOICE_TRANSCRIPT } from "@/lib/template-twin/staging-qa-fixtures";
 import {
-  TemplateTwinStagingQaLifecycleGuardError,
-  runWithTemplateTwinStagingQaLifecycleGuard,
-} from "@/lib/template-twin/staging-qa-lifecycle-guard";
+  TemplateTwinSyntheticVoiceProviderError,
+  transcribeTemplateTwinSyntheticVoice,
+} from "@/lib/template-twin/synthetic-voice-provider";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -108,22 +107,11 @@ export async function POST(
         templateTwinCompiledVersion: {
           select: {
             certificationStatus: true,
-            sourceArtifact: {
-              select: {
-                practiceId: true,
-                sha256: true,
-                sizeBytes: true,
-              },
-            },
           },
         },
       },
     });
-    if (
-      !ownedTemplate?.templateTwinCompiledVersion ||
-      ownedTemplate.templateTwinCompiledVersion.sourceArtifact.practiceId !==
-        session.user.practiceId
-    ) {
+    if (!ownedTemplate?.templateTwinCompiledVersion) {
       return response(
         {
           ok: false,
@@ -166,82 +154,41 @@ export async function POST(
       );
     }
 
-    // The certification recorder is explicitly synthetic-only and ephemeral:
-    // bytes go through the existing transcription orchestrator and are never
-    // written to object storage or application logs. Cross-provider Whisper
-    // fallback remains disabled at this boundary.
     const actor = {
       userId: session.user.id,
       userEmail: session.user.email,
       practiceId: session.user.practiceId,
       rolloutToken: session.templateTwinRolloutToken,
     };
-    const workspace = await runWithTemplateTwinStagingQaLifecycleGuard({
+    const transcription = await transcribeTemplateTwinSyntheticVoice({
       noteTemplateId: id,
       actor,
-      purpose: "synthetic-test-voice",
-      evidenceText: TEMPLATE_TWIN_STAGING_QA_VOICE_TRANSCRIPT,
-      requireConfirmedMappings: true,
+      audio,
+      audioSha256: createHash("sha256").update(audio).digest("hex"),
+      mimeType: sniff.detected!,
       expectedMappingConfirmation: {
         mappingsSha256: expectedMappingsSha256,
         ...(typeof expectedFieldIntentsSha256 === "string"
           ? { fieldIntentsSha256: expectedFieldIntentsSha256 }
           : {}),
       },
-      isExpectedBusinessError: (error) =>
-        error instanceof TemplateTwinSyntheticTestError,
-      operation: async () => {
-        const transcription =
-          await runWithTemplateTwinStagingQaCertificationProvider({
-            source: {
-              sha256:
-                ownedTemplate.templateTwinCompiledVersion.sourceArtifact.sha256,
-              sizeBytes:
-                ownedTemplate.templateTwinCompiledVersion.sourceArtifact
-                  .sizeBytes,
-            },
-            noteTemplateId: id,
-            doctorId: session.user.id,
-            practiceId: session.user.practiceId,
-            rolloutToken: session.templateTwinRolloutToken,
-            encounterMode: "dictation",
-            expectedMappingConfirmation: {
-              mappingsSha256: expectedMappingsSha256,
-              ...(typeof expectedFieldIntentsSha256 === "string"
-                ? { fieldIntentsSha256: expectedFieldIntentsSha256 }
-                : {}),
-            },
-            evidenceText: TEMPLATE_TWIN_STAGING_QA_VOICE_TRANSCRIPT,
-            operation: (providerVisitId) =>
-              transcribe({
-                practiceId: session.user.practiceId,
-                userId: session.user.id,
-                visitId: providerVisitId,
-                purpose: "tm_transcribe",
-                audio,
-                mimeType: sniff.detected!,
-                allowCrossProviderFallback: false,
-                deepgram: { options: { diarize: false, utterances: false } },
-              }),
-          });
-        if (transcription.transcript.trim().length < 10) {
-          throw new TemplateTwinSyntheticTestError(
-            "VALIDATION_FAILED",
-            "The synthetic recording was too short to test safely.",
-          );
-        }
-        return runTemplateTwinSyntheticTest({
-          noteTemplateId: id,
-          actor,
-          expectedMappingsSha256,
-          expectedFieldIntentsSha256:
-            typeof expectedFieldIntentsSha256 === "string"
-              ? expectedFieldIntentsSha256
-              : undefined,
-          encounterText: transcription.transcript,
-          encounterMode: "dictation",
-        });
-      },
+    });
+    if (transcription.transcript.trim().length < 10) {
+      throw new TemplateTwinSyntheticTestError(
+        "VALIDATION_FAILED",
+        "The synthetic recording was too short to test safely.",
+      );
+    }
+    const workspace = await runTemplateTwinSyntheticTest({
+      noteTemplateId: id,
+      actor,
+      expectedMappingsSha256,
+      expectedFieldIntentsSha256:
+        typeof expectedFieldIntentsSha256 === "string"
+          ? expectedFieldIntentsSha256
+          : undefined,
+      encounterText: transcription.transcript,
+      encounterMode: "dictation",
     });
     return response({ ok: true, workspace }, 200);
   } catch (error) {
@@ -269,16 +216,16 @@ export async function POST(
             : 409;
       return response({ ok: false, error: error.message }, status);
     }
-    if (error instanceof TemplateTwinStagingQaLifecycleGuardError) {
+    if (error instanceof TemplateTwinSyntheticVoiceProviderError) {
       return response(
         {
           ok: false,
-          code: "VERSION_STALE",
+          code: "SYNTHETIC_VOICE_UNAVAILABLE",
           recoverable: true,
           error:
-            "This Template Twin version is stale or unavailable. Refresh the certification workspace to continue.",
+            "Synthetic voice review is unavailable for this template version. Refresh the certification workspace to continue.",
         },
-        409,
+        422,
       );
     }
     if (error instanceof TemplateTwinMultipartError) {

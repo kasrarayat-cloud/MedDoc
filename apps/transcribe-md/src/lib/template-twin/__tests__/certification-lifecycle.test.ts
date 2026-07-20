@@ -56,6 +56,22 @@ vi.mock('../rollout', async (importOriginal) => {
   };
 });
 
+// Provider-ledger behavior has its own exact unit/PG suites. These lifecycle
+// tests keep their historical in-memory provider seam so privacy failures are
+// asserted without requiring a second database emulator.
+vi.mock('../provider-ownership', async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import('../provider-ownership')
+  >();
+  return {
+    ...actual,
+    runWithTemplateTwinProviderOwnershipContext: async <T>(
+      _context: unknown,
+      callback: () => Promise<T>,
+    ) => callback(),
+  };
+});
+
 import {
   certifyAndActivateTemplateTwin,
   updateTemplateTwinMappings,
@@ -1149,6 +1165,8 @@ describe('Template Twin certification lifecycle service', () => {
       data: {
         compiledVersionId: COMPILED_ID,
         certifiedById: ACTOR.userId,
+        providerAuthorizationMode: 'LIVE',
+        providerAuthorizationAdmissionId: null,
         compiledStructureSha256: fixture.ir.structureSha256,
         approvedMappingsSha256: mappingHash,
         approvedFieldIntentsSha256: EMPTY_FIELD_INTENTS_SHA256,
@@ -1166,12 +1184,12 @@ describe('Template Twin certification lifecycle service', () => {
         testOutputSha256: OUTPUT_SHA,
       },
     });
+    expect(mocks.certificationCreate.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.noteTemplateUpdateMany.mock.invocationCallOrder[0]!,
+    );
     expect(
       mocks.noteTemplateUpdateMany.mock.invocationCallOrder[0],
     ).toBeLessThan(mocks.noteTemplateUpdate.mock.invocationCallOrder[0]!);
-    expect(mocks.noteTemplateUpdate.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.certificationCreate.mock.invocationCallOrder[0]!,
-    );
     expect(mocks.outboxCreate).toHaveBeenCalledTimes(2);
     expect(mocks.outboxCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({

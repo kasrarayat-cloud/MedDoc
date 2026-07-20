@@ -28,6 +28,10 @@ import {
   TEMPLATE_TWIN_SUPPORTED_CONCEPTS,
   isSupportedTemplateTwinConcept,
 } from '../supported-concepts';
+import {
+  requireTemplateTwinProviderOwnershipContext,
+  runTemplateTwinOwnedModelComplete,
+} from '../provider-ownership';
 
 const DEFAULT_MODEL =
   process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-sonnet-4-6';
@@ -218,8 +222,13 @@ export async function proposeSemanticMappings(
     );
   }
 
-  const client = context.client ?? modelClient;
-  const proposed = await client.complete({
+  requireTemplateTwinProviderOwnershipContext(['SOURCE_INTAKE']);
+  const proposed = await runTemplateTwinOwnedModelComplete({
+    operation: 'SOURCE_SEMANTIC_MAPPING',
+    operationVersion: `template-twin-semantic-mapping-${TEMPLATE_TWIN_CONCEPT_REGISTRY_VERSION}`,
+    providerCorrelationId: context.providerVisitId ?? null,
+    client: context.client ?? modelClient,
+    args: {
     practiceId: context.practiceId,
     visitId: context.providerVisitId ?? null,
     userId: context.userId,
@@ -238,6 +247,7 @@ export async function proposeSemanticMappings(
       name: 'submit_template_twin_semantic_mappings',
       description:
         'Submit exactly one non-certified semantic mapping proposal for every supplied field ID.',
+    },
     },
   });
 

@@ -32,6 +32,10 @@ import {
   resolveApprovedTemplateTwinStaticAssets,
   type TemplateTwinStaticAssetApprovalBinding,
 } from './static-assets';
+import {
+  requireTemplateTwinProviderOwnershipContext,
+  runTemplateTwinOwnedModelComplete,
+} from './provider-ownership';
 
 const MAX_PHI_SCAN_CHARS = 50_000;
 const MODEL = process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-opus-4-8';
@@ -301,7 +305,13 @@ export async function assertTemplateTwinSourcePhiFree(input: {
   }
 
   try {
-    const scan = await (input.client ?? modelClient).complete({
+    requireTemplateTwinProviderOwnershipContext(['SOURCE_INTAKE']);
+    const scan = await runTemplateTwinOwnedModelComplete({
+      operation: 'SOURCE_PHI_SCAN',
+      operationVersion: 'template-twin-source-phi-scan-v1',
+      providerCorrelationId: input.providerVisitId ?? null,
+      client: input.client ?? modelClient,
+      args: {
       practiceId: input.practiceId,
       visitId: input.providerVisitId ?? null,
       userId: input.userId,
@@ -318,6 +328,7 @@ export async function assertTemplateTwinSourcePhiFree(input: {
         name: 'submit_template_twin_phi_scan',
         description:
           'Report any OOXML part containing patient-specific content and whether the scan is uncertain.',
+      },
       },
     });
     const knownParts = new Set(Object.keys(fields));

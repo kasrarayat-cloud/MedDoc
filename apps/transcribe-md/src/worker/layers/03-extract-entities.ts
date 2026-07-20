@@ -14,11 +14,14 @@
 
 import { z } from "zod";
 import {
-  modelClient,
   type DeepgramUtterance,
   wrapAsData,
   delimiterSystemSuffix,
 } from "@meddoc/ai";
+import {
+  getTemplateTwinProviderOwnershipContext,
+  runTemplateTwinOwnedModelComplete,
+} from "@/lib/template-twin/provider-ownership";
 import { updateTemplateTwinSyntheticQaClaimBoundVisit } from "@/worker/staging-qa-mutation-fence";
 import type { SpeakerMap } from "./02-speaker-roles";
 import { logWorkerAudit } from "@/worker/worker-audit";
@@ -463,20 +466,32 @@ async function completeLayer3Entities(input: {
     delimiterSystemSuffix("transcript"),
   ].join("\n");
 
-  return modelClient.complete({
-    practiceId: input.practiceId,
-    visitId: input.visitId ?? null,
-    userId: input.userId,
-    purpose: "tm_entities",
-    provider: "anthropic",
-    model: MODEL,
-    system: input.prompts.system,
-    user,
-    schema: ExtractedEntities,
-    maxTokens: 6144,
-    // Q2 fix-pack — entity extraction is structured-output; tightened
-    // from 0.2 to 0.1 for reproducible parses (audit §08).
-    temperature: 0.1,
+  const ownership = getTemplateTwinProviderOwnershipContext();
+  return runTemplateTwinOwnedModelComplete({
+    operation:
+      ownership?.scope === "SYNTHETIC_EVIDENCE"
+        ? "SYNTHETIC_EVIDENCE_EXTRACTION"
+        : "L3_EXTRACT_ENTITIES",
+    operationInstance:
+      ownership?.scope === "SYNTHETIC_EVIDENCE"
+        ? "canonical-entities"
+        : undefined,
+    operationVersion: "clinical-entity-extractor-v1",
+    args: {
+      practiceId: input.practiceId,
+      visitId: input.visitId ?? null,
+      userId: input.userId,
+      purpose: "tm_entities",
+      provider: "anthropic",
+      model: MODEL,
+      system: input.prompts.system,
+      user,
+      schema: ExtractedEntities,
+      maxTokens: 6144,
+      // Q2 fix-pack — entity extraction is structured-output; tightened
+      // from 0.2 to 0.1 for reproducible parses (audit §08).
+      temperature: 0.1,
+    },
   });
 }
 

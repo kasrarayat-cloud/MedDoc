@@ -93,6 +93,11 @@ function admissionBase(): TemplateTwinStagingQaAdmissionRow {
     phase: "ADMITTED",
     requestSha256: "a".repeat(64),
     payloadSha256: null,
+    preCertificationVoiceEvidence: false,
+    audioSha256: null,
+    audioSizeBytes: null,
+    audioMimeType: null,
+    audioObjectKey: null,
     pinnedGlobalRolloutGeneration: TOKEN.globalGeneration,
     pinnedPracticeRolloutGeneration: TOKEN.practiceGeneration,
     sourceArtifactId: null,
@@ -106,6 +111,7 @@ function admissionBase(): TemplateTwinStagingQaAdmissionRow {
     failedAt: null,
     revokedAt: null,
     consumedAt: null,
+    createdAt: new Date("2026-07-19T00:00:00.000Z"),
   };
 }
 

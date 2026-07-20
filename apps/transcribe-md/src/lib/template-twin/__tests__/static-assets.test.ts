@@ -15,6 +15,46 @@ vi.mock("@meddoc/ai", () => ({
   }),
   modelClient: { complete: aiMocks.complete },
 }));
+vi.mock("../provider-ownership", () => ({
+  runWithTemplateTwinProviderOwnershipContext: vi.fn(
+    async (_context: unknown, callback: () => Promise<unknown>) => callback(),
+  ),
+  runTemplateTwinOwnedModelComplete: vi.fn(
+    async (input: {
+      args: unknown;
+      client: { complete(args: unknown): Promise<unknown> };
+    }) => input.client.complete(input.args),
+  ),
+  buildTemplateTwinProviderOwnershipReceipt: vi.fn(
+    (input: {
+      projection: {
+        subjectId: string;
+        subjectSha256: string;
+        visitId: string | null;
+        sourceArtifactId: string | null;
+        compiledVersionId: string | null;
+        noteTemplateId: string | null;
+      };
+    }) => {
+      const evidence = {
+        contractVersion: "template-twin-provider-ownership-receipt-v2",
+        practiceId: "practice_synthetic",
+        actorUserId: "admin_synthetic",
+        providerMode: "LIVE",
+        syntheticAdmissionId: null,
+        ...input.projection,
+        executions: [
+          {
+            executionId: "static-provider-execution-synthetic",
+            operation: "STATIC_ASSET_PRIVACY_SCAN",
+            resultSha256: "b".repeat(64),
+          },
+        ],
+      };
+      return { evidence, sha256: canonicalSha256(evidence) };
+    },
+  ),
+}));
 vi.mock("../runtime-attestation", () => ({
   registerTemplateTwinRuntimeAttestation: vi.fn().mockResolvedValue({
     instanceId: "app-1",
@@ -119,6 +159,7 @@ function syntheticPng(
 interface MemoryAsset {
   id: string;
   practiceId: string;
+  createdById: string;
   sha256: string;
   mimeType: string;
   width: number;
@@ -133,6 +174,8 @@ interface MemoryAsset {
   privacyScanModel: string;
   inspectionEvidenceSha256: string;
   inspectionEvidence: unknown;
+  providerOwnershipEvidence: unknown;
+  providerOwnershipSha256: string | null;
   currentStatus: string;
   currentDecisionVersion: number;
   createdAt: Date;

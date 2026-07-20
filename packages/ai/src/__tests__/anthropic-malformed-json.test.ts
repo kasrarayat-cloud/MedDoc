@@ -40,7 +40,7 @@ vi.mock('../api-usage', () => ({
   buildAnthropicUsage: () => ({}),
 }));
 
-import { anthropicComplete } from '../anthropic';
+import { anthropicComplete, anthropicCompleteText } from '../anthropic';
 import { ModelOutputMalformedError } from '../errors';
 
 const Schema = z.object({
@@ -187,4 +187,118 @@ describe('anthropicComplete — text-mode JSON.parse fail (FIND-P1-010)', () => 
     const result = await anthropicComplete(baseArgs);
     expect(result).toEqual({ codes: [{ code: 'Z00.00' }] });
   });
+
+  it('removes malformed response content from owned logs and thrown errors', async () => {
+    const identifier = 'SYNTHETIC_PATIENT_ALICE_MRN_998877';
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mocks.createCall.mockResolvedValueOnce({
+      content: [{ type: 'text', text: `${identifier} { definitely-not-json` }],
+      usage: mockUsage(),
+    });
+
+    let caught: unknown;
+    try {
+      await anthropicComplete({ ...baseArgs, idempotencyKey: 'c'.repeat(64) });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(ModelOutputMalformedError);
+    expect((caught as ModelOutputMalformedError).rawTextSlice).toBe('');
+    expect(JSON.stringify(caught)).not.toContain(identifier);
+    const logged = mocks.logAiCall.mock.calls.find(
+      ([arg]) => arg?.errorCode === 'JSON_PARSE_FAIL',
+    )?.[0];
+    expect(logged).toBeTruthy();
+    expect(JSON.stringify(logged)).not.toContain(identifier);
+    expect(JSON.parse(logged.errorDetails)).toMatchObject({
+      contractVersion: 'owned-anthropic-malformed-v1',
+      errorCode: 'JSON_PARSE_FAIL',
+      responseSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
+    });
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it('keeps owned schema failures structural and omits the raw output', async () => {
+    const identifier = 'SYNTHETIC_PATIENT_BOB_MRN_112233';
+    mocks.createCall.mockResolvedValueOnce({
+      content: [{ type: 'text', text: JSON.stringify({ codes: identifier }) }],
+      usage: mockUsage(),
+    });
+
+    let caught: unknown;
+    try {
+      await anthropicComplete({ ...baseArgs, idempotencyKey: 'd'.repeat(64) });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe('SCHEMA_FAIL');
+    expect((caught as Error & { rawOutput?: string }).rawOutput).toBeUndefined();
+    expect(JSON.stringify(caught)).not.toContain(identifier);
+    const logged = mocks.logAiCall.mock.calls.find(
+      ([arg]) => arg?.errorCode === 'SCHEMA_FAIL',
+    )?.[0];
+    expect(JSON.stringify(logged)).not.toContain(identifier);
+    expect(JSON.parse(logged.errorDetails)).toMatchObject({
+      contractVersion: 'owned-anthropic-malformed-v1',
+      errorCode: 'SCHEMA_FAIL',
+      issueCount: 1,
+    });
+  });
+
+  it.each(['structured', 'text'] as const)(
+    'removes provider error messages from owned %s failures',
+    async (path) => {
+      const identifier = 'SYNTHETIC_PATIENT_CAROL_MRN_445566';
+      mocks.createCall.mockRejectedValueOnce(
+        Object.assign(new Error(`upstream echoed ${identifier}`), {
+          status: 503,
+          error: {
+            type: 'error',
+            error: {
+              type: 'api_error',
+              message: `provider echoed ${identifier}`,
+            },
+          },
+          request_id: 'req_synthetic_123',
+        }),
+      );
+
+      let caught: unknown;
+      try {
+        if (path === 'structured') {
+          await anthropicComplete({
+            ...baseArgs,
+            idempotencyKey: 'e'.repeat(64),
+          });
+        } else {
+          await anthropicCompleteText({
+            ...baseArgs,
+            idempotencyKey: 'f'.repeat(64),
+          });
+        }
+      } catch (error) {
+        caught = error;
+      }
+
+      expect(caught).toMatchObject({
+        name: 'OwnedProviderRequestError',
+        status: 503,
+        request_id: 'req_synthetic_123',
+      });
+      expect(JSON.stringify(caught)).not.toContain(identifier);
+      expect((caught as Error).message).not.toContain(identifier);
+      const logged = mocks.logAiCall.mock.calls.at(-1)?.[0];
+      expect(JSON.stringify(logged)).not.toContain(identifier);
+      expect(JSON.parse(logged.errorDetails)).toEqual({
+        contractVersion: 'owned-anthropic-error-v1',
+        errorClass: 'Error',
+        httpStatus: 503,
+        apiErrorType: 'api_error',
+        requestId: 'req_synthetic_123',
+      });
+    },
+  );
 });

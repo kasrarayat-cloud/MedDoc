@@ -146,6 +146,20 @@ import {
   type AutomationFanoutTask,
 } from "@/worker/run-automation-fanout";
 import { finalizeVisitAutomationReady } from "@/worker/automation-finalization";
+import {
+  getTemplateTwinProviderOwnershipContext,
+  hydrateTemplateTwinProviderOwnershipReceipt,
+  pinTemplateTwinVisitProviderOwnershipContext,
+  recordTemplateTwinProviderNotApplicable,
+  runWithTemplateTwinProviderOwnershipContext,
+} from "@/lib/template-twin/provider-ownership";
+import { runWithTemplateTwinProviderCensus } from "@/lib/template-twin/provider-census";
+import {
+  resolveVisitTemplateProviderCensus,
+  mayUseLegacySystemDefaultFallback,
+  shouldDropPreCertificationSyntheticVoiceVisit,
+  shouldReuseProviderLayerCheckpoint,
+} from "@/worker/visit-template-provider-census";
 
 const CONCURRENCY = Number.parseInt(
   process.env.TRANSCRIBE_MD_WORKER_CONCURRENCY ?? "2",
@@ -291,6 +305,12 @@ async function processVisit(
         },
       },
       user: { select: { practiceId: true } },
+      templateTwinSyntheticQaAdmission: {
+        select: {
+          id: true,
+          preCertificationVoiceEvidence: true,
+        },
+      },
       templateTwinSyntheticQaRun: {
         select: {
           id: true,
@@ -346,6 +366,21 @@ async function processVisit(
   });
   if (!admission) {
     throw new Error(`Visit ${job.data.visitId} not found`);
+  }
+  if (
+    shouldDropPreCertificationSyntheticVoiceVisit(
+      admission.templateTwinSyntheticQaAdmission,
+    )
+  ) {
+    log.warn(
+      "transcribe-md-worker",
+      "isolated pre-certification synthetic voice visit from clinical pipeline",
+      {
+        visitId: admission.id,
+        admissionId: admission.templateTwinSyntheticQaAdmission?.id ?? null,
+      },
+    );
+    return;
   }
   // Bridge mode must reject an already-queued/pinned Twin before the provider
   // context, transcription, extraction, or any other clinical model call.
@@ -445,8 +480,124 @@ async function processVisit(
   );
 }
 
+interface PreparedVisitTemplateProviderAdmission {
+  readonly template: NoteTemplate;
+  readonly rolloutToken: TemplateTwinRolloutToken | null;
+  readonly classification: "ORDINARY" | "TEMPLATE_TWIN";
+}
+
+/** Resolve the exact attempt-level template census before L1 whenever the
+ * Twin runtime can be enabled. Both ordinary and Twin decisions are pinned in
+ * memory for the full attempt so L4 cannot observe a different active row. */
 async function processVisitPipeline(
   job: Job<ProcessVisitPayload>,
+): Promise<void> {
+  const runtimeEnabled = templateTwinRuntimeEnabled(process.env);
+  const visit = await prisma.transcribeVisit.findUnique({
+    where: { id: job.data.visitId },
+    select: {
+      id: true,
+      userId: true,
+      specialty: true,
+      inputMode: true,
+      manualRetryCount: true,
+      patient: { select: { externalId: true } },
+      noteTemplateId: true,
+      noteTemplateVersion: true,
+      noteTemplate: {
+        select: { id: true, version: true, templateKind: true },
+      },
+      templateTwinFill: {
+        select: { noteTemplateId: true, noteTemplateVersion: true },
+      },
+      templateTwinSyntheticQaRun: { select: { id: true } },
+      templateTwinSyntheticQaAdmission: { select: { id: true } },
+      templateTwinProviderExecutions: {
+        select: { id: true },
+        take: 1,
+      },
+      user: { select: { practiceId: true } },
+    },
+  });
+  if (!visit) throw new Error(`Visit ${job.data.visitId} not found`);
+  const fillPin = visit.templateTwinFill;
+  const pinnedTemplateId = fillPin?.noteTemplateId ?? visit.noteTemplateId;
+  const pinnedTemplateVersion =
+    fillPin?.noteTemplateVersion ?? visit.noteTemplateVersion;
+
+  // Standard runtime gets one mutable active-template lookup, before any
+  // clinical provider call. Failure is retryable here and never falls through
+  // to L1-L3 followed by a second, potentially Twin, lookup at L4.
+  const census = await resolveVisitTemplateProviderCensus({
+    runtimeEnabled,
+    pinnedOrdinary: false,
+    durableProvenance: visit,
+    resolve: () =>
+      resolveVisitTemplateAdmission({
+        visitId: visit.id,
+        doctorId: visit.userId,
+        encounterType: visit.specialty,
+        pinnedTemplateId,
+        pinnedTemplateVersion,
+      }),
+  });
+  if (census.kind === "LEGACY_DISABLED") {
+    return processVisitPipelineCore(job);
+  }
+  if (census.kind === "PINNED_ORDINARY") {
+    throw new Error("Template provider census returned an impossible state.");
+  }
+  const providerAdmission: PreparedVisitTemplateProviderAdmission = {
+    template: census.template,
+    rolloutToken:
+      census.kind === "RESOLVED_TEMPLATE_TWIN"
+        ? (census.rolloutToken as TemplateTwinRolloutToken)
+        : null,
+    classification:
+      census.kind === "RESOLVED_TEMPLATE_TWIN" ? "TEMPLATE_TWIN" : "ORDINARY",
+  };
+  if (providerAdmission.classification === "ORDINARY") {
+    return runWithTemplateTwinProviderCensus(
+      {
+        classification: "ORDINARY",
+        templateId: providerAdmission.template.id,
+        templateVersion: providerAdmission.template.version,
+      },
+      () => processVisitPipelineCore(job, providerAdmission),
+    );
+  }
+  if (!providerAdmission.rolloutToken) {
+    throw new TemplateTwinWorkerRolloutError();
+  }
+  assertSyntheticQaResolvedRolloutToken(providerAdmission.rolloutToken);
+
+  const context = await pinTemplateTwinVisitProviderOwnershipContext({
+    practiceId: visit.user.practiceId,
+    actorUserId: visit.userId,
+    visitId: visit.id,
+    noteTemplateId: providerAdmission.template.id,
+    noteTemplateVersion: providerAdmission.template.version,
+    logicalAttempt: visit.manualRetryCount + 1,
+    inputMode: visit.inputMode,
+    rolloutToken: providerAdmission.rolloutToken,
+  });
+  await runWithTemplateTwinProviderCensus(
+    {
+      classification: "TEMPLATE_TWIN",
+      templateId: providerAdmission.template.id,
+      templateVersion: providerAdmission.template.version,
+    },
+    () =>
+      runWithTemplateTwinProviderOwnershipContext(context, async () => {
+        await hydrateTemplateTwinProviderOwnershipReceipt();
+        await processVisitPipelineCore(job, providerAdmission);
+      }),
+  );
+}
+
+async function processVisitPipelineCore(
+  job: Job<ProcessVisitPayload>,
+  preparedTemplateAdmission?: PreparedVisitTemplateProviderAdmission | null,
 ): Promise<void> {
   const { visitId } = job.data;
 
@@ -548,6 +699,38 @@ async function processVisitPipeline(
   const attempt = job.attemptsMade + 1;
   const resumeState = await loadResumeState(visitId, job.attemptsMade);
   const skipped: PipelineLayer[] = [];
+  const providerOwnedTwin =
+    getTemplateTwinProviderOwnershipContext()?.scope === "VISIT_PIPELINE";
+  if (providerOwnedTwin) {
+    if (visit.inputMode === "audio_upload") {
+      await recordTemplateTwinProviderNotApplicable({
+        operation: "L1B_TRANSCRIBE",
+        reasonCode: "INPUT_MODE_CONVERSATION",
+      });
+    } else if (visit.inputMode === "voice_dictation") {
+      await recordTemplateTwinProviderNotApplicable({
+        operation: "L1_TRANSCRIBE",
+        reasonCode: "INPUT_MODE_DICTATION",
+      });
+      await recordTemplateTwinProviderNotApplicable({
+        operation: "L2_SPEAKER_ROLES",
+        reasonCode: "INPUT_MODE_DICTATION",
+      });
+    } else {
+      await recordTemplateTwinProviderNotApplicable({
+        operation: "L1_TRANSCRIBE",
+        reasonCode: "INPUT_MODE_TEXT",
+      });
+      await recordTemplateTwinProviderNotApplicable({
+        operation: "L1B_TRANSCRIBE",
+        reasonCode: "INPUT_MODE_TEXT",
+      });
+      await recordTemplateTwinProviderNotApplicable({
+        operation: "L2_SPEAKER_ROLES",
+        reasonCode: "INPUT_MODE_TEXT",
+      });
+    }
+  }
 
   try {
     // -------------------------------------------------------------------
@@ -563,7 +746,12 @@ async function processVisitPipeline(
 
     if (visit.inputMode === "audio_upload") {
       // ── L1 — Deepgram with diarize on ───────────────────────────
-      if (isLayerComplete(resumeState, "L1")) {
+      if (
+        shouldReuseProviderLayerCheckpoint({
+          checkpointComplete: isLayerComplete(resumeState, "L1"),
+          providerOwnedTwin,
+        })
+      ) {
         logSkippedLayer(visitId, "L1", attempt);
         skipped.push("L1");
       } else {
@@ -630,7 +818,12 @@ async function processVisitPipeline(
         data: { status: TranscribeVisitStatus.EXTRACTING },
       });
       let speakerMap: SpeakerMap;
-      if (isLayerComplete(resumeState, "L2")) {
+      if (
+        shouldReuseProviderLayerCheckpoint({
+          checkpointComplete: isLayerComplete(resumeState, "L2"),
+          providerOwnedTwin,
+        })
+      ) {
         logSkippedLayer(visitId, "L2", attempt);
         skipped.push("L2");
         speakerMap = (withTranscript?.speakerMap ?? {}) as SpeakerMap;
@@ -647,7 +840,12 @@ async function processVisitPipeline(
       }
 
       // ── L3 — conversation entities ──────────────────────────────
-      if (isLayerComplete(resumeState, "L3")) {
+      if (
+        shouldReuseProviderLayerCheckpoint({
+          checkpointComplete: isLayerComplete(resumeState, "L3"),
+          providerOwnedTwin,
+        })
+      ) {
         logSkippedLayer(visitId, "L3", attempt);
         skipped.push("L3");
         entities = resumeState.entities as ExtractedEntities;
@@ -688,7 +886,12 @@ async function processVisitPipeline(
     } else if (visit.inputMode === "voice_dictation") {
       // ── L1' — single-speaker Deepgram ──────────────────────────
       let dictationText: string;
-      if (isLayerComplete(resumeState, "L1b")) {
+      if (
+        shouldReuseProviderLayerCheckpoint({
+          checkpointComplete: isLayerComplete(resumeState, "L1b"),
+          providerOwnedTwin,
+        })
+      ) {
         logSkippedLayer(visitId, "L1b", attempt);
         skipped.push("L1b");
         dictationText = resumeState.transcriptText ?? "";
@@ -745,7 +948,12 @@ async function processVisitPipeline(
         practiceId,
         data: { status: TranscribeVisitStatus.EXTRACTING },
       });
-      if (isLayerComplete(resumeState, "L3")) {
+      if (
+        shouldReuseProviderLayerCheckpoint({
+          checkpointComplete: isLayerComplete(resumeState, "L3"),
+          providerOwnedTwin,
+        })
+      ) {
         logSkippedLayer(visitId, "L3", attempt);
         skipped.push("L3");
         entities = resumeState.entities as ExtractedEntities;
@@ -764,7 +972,12 @@ async function processVisitPipeline(
       }
     } else {
       // text_notes — no transcription step. L3 is the earliest layer.
-      if (isLayerComplete(resumeState, "L3")) {
+      if (
+        shouldReuseProviderLayerCheckpoint({
+          checkpointComplete: isLayerComplete(resumeState, "L3"),
+          providerOwnedTwin,
+        })
+      ) {
         logSkippedLayer(visitId, "L3", attempt);
         skipped.push("L3");
         entities = resumeState.entities as ExtractedEntities;
@@ -844,18 +1057,47 @@ async function processVisitPipeline(
           "Template Twin visit provenance is internally inconsistent.",
         );
       }
-      const admission = await resolveVisitTemplateAdmission({
-        visitId,
-        doctorId: visit.userId ?? "",
-        encounterType: visit.specialty,
-        pinnedTemplateId,
-        pinnedTemplateVersion,
-      });
-      selectedTemplate = admission.template;
-      selectedTemplateRolloutToken = admission.templateTwinRolloutToken;
+      if (preparedTemplateAdmission) {
+        selectedTemplate = preparedTemplateAdmission.template;
+        selectedTemplateRolloutToken = preparedTemplateAdmission.rolloutToken;
+      } else {
+        const admission = await resolveVisitTemplateAdmission({
+          visitId,
+          doctorId: visit.userId ?? "",
+          encounterType: visit.specialty,
+          pinnedTemplateId,
+          pinnedTemplateVersion,
+        });
+        selectedTemplate = admission.template;
+        selectedTemplateRolloutToken = admission.templateTwinRolloutToken;
+      }
+      if (
+        selectedTemplate.templateKind === "template_twin_docx" &&
+        !providerOwnedTwin
+      ) {
+        throw new Error(
+          "Template Twin provider ownership was not pinned before clinical processing.",
+        );
+      }
+      if (
+        preparedTemplateAdmission?.classification === "ORDINARY" &&
+        selectedTemplate.templateKind === "template_twin_docx"
+      ) {
+        throw new Error("The pinned ordinary template census changed.");
+      }
       noteTemplate = normalizeTemplate(selectedTemplate);
     } catch (err) {
-      if (pinnedTemplateId || pinnedTemplateVersion != null) throw err;
+      if (
+        !mayUseLegacySystemDefaultFallback({
+          preparedClassification:
+            preparedTemplateAdmission?.classification ?? null,
+          hasPersistedTemplatePin:
+            Boolean(pinnedTemplateId) || pinnedTemplateVersion != null,
+          selectedTemplateKind: selectedTemplate?.templateKind ?? null,
+        })
+      ) {
+        throw err;
+      }
       log.warn(
         "worker:note-template",
         "initial template resolution failed; falling back to system default",
@@ -865,7 +1107,12 @@ async function processVisitPipeline(
     }
 
     let soapDraft: string;
-    if (isLayerComplete(resumeState, "L4")) {
+    if (
+      shouldReuseProviderLayerCheckpoint({
+        checkpointComplete: isLayerComplete(resumeState, "L4"),
+        providerOwnedTwin,
+      })
+    ) {
       logSkippedLayer(visitId, "L4", attempt);
       skipped.push("L4");
       soapDraft = resumeState.soapDraft ?? "";
@@ -894,7 +1141,12 @@ async function processVisitPipeline(
       data: { status: TranscribeVisitStatus.CRITIQUING },
     });
     let critique: Awaited<ReturnType<typeof runLayer5SelfCritique>>;
-    if (isLayerComplete(resumeState, "L5")) {
+    if (
+      shouldReuseProviderLayerCheckpoint({
+        checkpointComplete: isLayerComplete(resumeState, "L5"),
+        providerOwnedTwin,
+      })
+    ) {
       logSkippedLayer(visitId, "L5", attempt);
       skipped.push("L5");
       critique = resumeState.critique as typeof critique;
@@ -923,7 +1175,12 @@ async function processVisitPipeline(
       data: { status: TranscribeVisitStatus.POLISHING },
     });
     let polished: { soapFinal: string };
-    if (isLayerComplete(resumeState, "L6")) {
+    if (
+      shouldReuseProviderLayerCheckpoint({
+        checkpointComplete: isLayerComplete(resumeState, "L6"),
+        providerOwnedTwin,
+      })
+    ) {
       logSkippedLayer(visitId, "L6", attempt);
       skipped.push("L6");
       polished = { soapFinal: resumeState.soapFinal ?? "" };
@@ -945,6 +1202,11 @@ async function processVisitPipeline(
     // independently compares both values again.
     if (selectedTemplate?.templateKind === "template_twin_docx") {
       currentLayer = "template_twin";
+      if (!getTemplateTwinProviderOwnershipContext()) {
+        throw new Error(
+          "Template Twin provider ownership was not pinned before clinical processing.",
+        );
+      }
       if (!selectedTemplateRolloutToken) {
         throw new TemplateTwinWorkerRolloutError();
       }

@@ -65,6 +65,9 @@ export interface DeepgramBatchArgs extends AiLogContext {
   /** Network timeout in ms. Long by default — a 45 min recording takes
    *  Deepgram ~60s wall-clock to process. */
   timeoutMs?: number;
+  /** Bound provider attempts for an application-owned execution. Ordinary
+   * calls retain the historical two-attempt default. */
+  maxAttempts?: 1 | 2;
   /** T-M5 opt-outs for single-speaker dictation. Undefined = current
    *  Layer 1 conversation defaults (diarize+utterances on). */
   options?: DeepgramBatchOptions;
@@ -172,7 +175,7 @@ export async function deepgramBatchTranscribe(
     return mockDeepgramBatch(syntheticQaFixture);
   }
   return withRetry(() => deepgramBatchTranscribeOnce(args), {
-    maxAttempts: 2,
+    maxAttempts: args.maxAttempts ?? 2,
     baseDelayMs: 1000,
     onRetry: (info: RetryAttemptInfo) => {
       // Structured telemetry — NO PHI in payload, just operational shape.

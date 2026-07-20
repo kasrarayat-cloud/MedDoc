@@ -102,7 +102,7 @@ export interface TranscribeArgs extends AiLogContext {
   /** IETF language tag. Defaults to 'en'. */
   language?: string;
   /** Pass-through to Deepgram primary call: keyterm prompts, etc. */
-  deepgram?: Pick<DeepgramBatchArgs, 'options' | 'keyterms' | 'model' | 'timeoutMs'>;
+  deepgram?: Pick<DeepgramBatchArgs, 'options' | 'keyterms' | 'model' | 'timeoutMs' | 'maxAttempts'>;
   /** Pass-through to Whisper fallback call. */
   whisper?: { model?: string; timeoutMs?: number };
   /** Kill-switch for the cross-provider (Deepgram → OpenAI Whisper)

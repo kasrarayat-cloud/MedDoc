@@ -19,11 +19,35 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@meddoc/ai', () => ({
   delimiterSystemSuffix: () => '',
+  getTemplateTwinSyntheticQaProviderContext: () => null,
   wrapAsData: (value: string) => ({
     wrapped: value,
     injectionAttemptDetected: false,
   }),
   modelClient: { complete: mocks.modelComplete },
+}));
+
+vi.mock('../provider-ownership', () => ({
+  requireTemplateTwinProviderOwnershipContext: vi.fn(),
+  runTemplateTwinOwnedModelComplete: vi.fn(
+    async (input: {
+      args: unknown;
+      client: { complete(args: unknown): Promise<unknown> };
+    }) => input.client.complete(input.args),
+  ),
+  runWithTemplateTwinProviderOwnershipContext: vi.fn(
+    async (_context: unknown, callback: () => Promise<unknown>) => callback(),
+  ),
+  buildTemplateTwinProviderOwnershipReceipt: vi.fn(() => ({
+    evidence: {
+      contractVersion: 'template-twin-provider-ownership-receipt-v2',
+      practiceId: 'practice-synthetic-1',
+      actorUserId: 'doctor-synthetic-1',
+      providerMode: 'LIVE',
+      executions: [],
+    },
+    sha256: 'c'.repeat(64),
+  })),
 }));
 
 vi.mock('@meddoc/db', () => {
@@ -383,6 +407,9 @@ describe('Template Twin upload/compile proposal orchestration', () => {
 
   it('leaves uploaded bytes unclaimed when rollout changes before the draft claim', async () => {
     const fixture = await buildTemplateTwinIntegrationFixture();
+    const admittedIr = DOCX_TEMPLATE_COMPILER.compile(
+      (await minimizeTemplateTwinSourceMetadata(fixture.source)).document,
+    );
     mocks.modelComplete.mockImplementation(
       async (request: { purpose: string }) => {
         if (request.purpose === 'tm_template_phi_scan') {
@@ -390,8 +417,9 @@ describe('Template Twin upload/compile proposal orchestration', () => {
         }
         if (request.purpose === 'tm_template_parse') {
           return {
-            mappings: fixture.mappings.map((mapping) => ({
+            mappings: fixture.mappings.map((mapping, index) => ({
               ...mapping,
+              fieldId: admittedIr.fields[index]!.fieldId,
               status: 'recognized',
               practiceDefault: null,
             })),
@@ -445,6 +473,9 @@ describe('Template Twin upload/compile proposal orchestration', () => {
 
   it('fails the upload transaction when its durable audit event cannot be enqueued', async () => {
     const fixture = await buildTemplateTwinIntegrationFixture();
+    const admittedIr = DOCX_TEMPLATE_COMPILER.compile(
+      (await minimizeTemplateTwinSourceMetadata(fixture.source)).document,
+    );
     mocks.modelComplete.mockImplementation(
       async (request: { purpose: string }) => {
         if (request.purpose === 'tm_template_phi_scan') {
@@ -452,8 +483,9 @@ describe('Template Twin upload/compile proposal orchestration', () => {
         }
         if (request.purpose === 'tm_template_parse') {
           return {
-            mappings: fixture.mappings.map((mapping) => ({
+            mappings: fixture.mappings.map((mapping, index) => ({
               ...mapping,
+              fieldId: admittedIr.fields[index]!.fieldId,
               status: 'recognized',
               practiceDefault: null,
             })),

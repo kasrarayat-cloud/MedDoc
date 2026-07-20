@@ -1,17 +1,15 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 
 import type { Prisma } from '@prisma/client';
+import { getTemplateTwinSyntheticQaProviderContext } from '@meddoc/ai';
 import prisma from '@meddoc/db';
 
 import { TemplateDocxError } from '@/lib/note-template-docx';
 
 import type { SemanticMapping, TemplateDocIR } from './ir';
 import { DOCX_TEMPLATE_COMPILER } from './artifact-compiler';
-import {
-  fallbackSemanticMappings,
-  proposeSemanticMappings,
-} from './semantic-mapping';
+import { proposeSemanticMappings } from './semantic-mapping';
 import {
   createTemplateTwinArtifactStore,
   claimTemplateTwinObject,
@@ -38,6 +36,11 @@ import {
   scanTemplateTwinQuarantine,
 } from './quarantine-admission';
 import { minimizeTemplateTwinSourceMetadata } from './source-metadata';
+import {
+  buildTemplateTwinProviderOwnershipReceipt,
+  runWithTemplateTwinProviderOwnershipContext,
+  type TemplateTwinProviderOwnershipReceipt,
+} from './provider-ownership';
 
 export class TemplateTwinDraftError extends Error {
   readonly code:
@@ -223,14 +226,70 @@ export async function createTemplateTwinDraft(
     );
   }
 
+  const lineageId = quarantine.lineageId;
+  const noteTemplateId = randomUUID();
+  const sourceArtifactId = randomUUID();
+  const compiledVersionId = randomUUID();
+  const sourceSha256 = createHash('sha256').update(admittedSource).digest('hex');
+  const syntheticAdmissionId =
+    getTemplateTwinSyntheticQaProviderContext()?.admissionId ?? null;
   let privacyScanEvidence: TemplateTwinSourcePhiScanEvidence;
+  let mappings: SemanticMapping[];
+  let providerReceipt: TemplateTwinProviderOwnershipReceipt;
   try {
-    privacyScanEvidence = await assertTemplateTwinSourcePhiFree({
-      source: admittedSource,
+    const owned = await runWithTemplateTwinProviderOwnershipContext({
       practiceId: input.actor.practiceId,
-      userId: input.actor.userId,
-      providerVisitId: input.providerVisitId,
+      actorUserId: input.actor.userId,
+      visitId: null,
+      visitInputMode: null,
+      scope: 'SOURCE_INTAKE',
+      logicalAttempt: 1,
+      subjectId: sourceArtifactId,
+      subjectSha256: sourceSha256,
+      sourceArtifactId,
+      compiledVersionId,
+      noteTemplateId,
+      noteTemplateVersion: 1,
+      sourceLineageId: lineageId,
+      sourceLineageVersion: 1,
+      sourceSha256,
+      syntheticAdmissionId,
+      rolloutToken: input.actor.rolloutToken,
+    }, async () => {
+      const privacy = await assertTemplateTwinSourcePhiFree({
+        source: admittedSource,
+        practiceId: input.actor.practiceId,
+        userId: input.actor.userId,
+        providerVisitId: input.providerVisitId,
+      });
+      const proposedMappings = await proposeSemanticMappings(ir, {
+        practiceId: input.actor.practiceId,
+        userId: input.actor.userId,
+        providerVisitId: input.providerVisitId,
+      });
+      const receipt = buildTemplateTwinProviderOwnershipReceipt({
+        projection: {
+          subjectId: sourceArtifactId,
+          subjectSha256: sourceSha256,
+          visitId: null,
+          sourceArtifactId,
+          compiledVersionId,
+          noteTemplateId,
+        },
+        expectedExecutionPlan: [
+          { operation: 'SOURCE_PHI_SCAN', disposition: 'EXECUTED' },
+          { operation: 'SOURCE_SEMANTIC_MAPPING', disposition: 'EXECUTED' },
+        ],
+      });
+      return {
+        privacyScanEvidence: privacy,
+        mappings: proposedMappings,
+        providerReceipt: receipt,
+      };
     });
+    privacyScanEvidence = owned.privacyScanEvidence;
+    mappings = owned.mappings;
+    providerReceipt = owned.providerReceipt;
   } catch (error) {
     if (
       error instanceof TemplateTwinPhiRejectedError ||
@@ -243,29 +302,19 @@ export async function createTemplateTwinDraft(
         rejectionCode: error.code,
         metadataEvidence: minimizedSource.evidence,
       });
+    } else {
+      await rejectTemplateTwinQuarantine({
+        receipt: quarantine,
+        actor: input.actor,
+        rejectionCode: 'SOURCE_PROVIDER_OWNERSHIP_FAILED',
+        metadataEvidence: minimizedSource.evidence,
+      });
     }
     throw error;
   }
-
-  let mappings: SemanticMapping[];
-  let proposedByModel: string | null;
-  let usedFallbackMappings = false;
-  try {
-    mappings = await proposeSemanticMappings(ir, {
-      practiceId: input.actor.practiceId,
-      userId: input.actor.userId,
-      providerVisitId: input.providerVisitId,
-    });
-    proposedByModel =
-      process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-sonnet-4-6';
-  } catch {
-    // Structure remains useful when the semantic provider is unavailable.
-    // The fallback is visibly unconfirmed and cannot be certified until the
-    // physician supplies and confirms each concept.
-    mappings = fallbackSemanticMappings(ir);
-    proposedByModel = null;
-    usedFallbackMappings = true;
-  }
+  const proposedByModel =
+    process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-sonnet-4-6';
+  const usedFallbackMappings = false;
 
   const systemDefault = await prisma.noteTemplate.findFirst({
     where: { isSystemDefault: true },
@@ -282,16 +331,18 @@ export async function createTemplateTwinDraft(
     );
   }
 
-  const lineageId = quarantine.lineageId;
-  const noteTemplateId = randomUUID();
-  const sourceArtifactId = randomUUID();
-  const compiledVersionId = randomUUID();
   const stored = await artifactStore.storeSourceArtifact({
     practiceId: input.actor.practiceId,
     lineageId,
     templateVersion: 1,
     bytes: admittedSource,
   });
+  if (stored.sha256 !== sourceSha256) {
+    throw new TemplateTwinDraftError(
+      'PERSISTENCE_FAILED',
+      'The immutable source digest changed before it could be recorded.',
+    );
+  }
 
   try {
     await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
@@ -350,6 +401,8 @@ export async function createTemplateTwinDraft(
           validationStatus: 'accepted',
           rejectionCodes: [],
           privacyScanEvidence: asJson(privacyScanEvidence),
+          providerOwnershipEvidence: asJson(providerReceipt.evidence),
+          providerOwnershipSha256: providerReceipt.sha256,
           quarantineArtifactId: quarantine.id,
         },
       });
@@ -374,6 +427,8 @@ export async function createTemplateTwinDraft(
           certificationStatus:
             ir.stats.blockingUnsupported > 0 ? 'UNSUPPORTED' : 'NEEDS_CONFIRMATION',
           blockingUnsupportedCount: ir.stats.blockingUnsupported,
+          providerOwnershipEvidence: asJson(providerReceipt.evidence),
+          providerOwnershipSha256: providerReceipt.sha256,
           fields: {
             create: fieldCreateInput(ir, mappings, proposedByModel),
           },

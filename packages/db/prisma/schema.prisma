@@ -2467,6 +2467,15 @@ model TemplateTwinSyntheticQaAdmission {
   /// Hash of the bounded run request/evidence identity for visit admissions.
   payloadSha256 String? @db.Char(64)
 
+  /// Narrow capability for the pre-certification voice-review route. It is
+  /// never an ordinary clinical visit or staging run and can authorize only one synthetic mock
+  /// transcription against the exact immutable audio identity below.
+  preCertificationVoiceEvidence Boolean @default(false)
+  audioSha256                   String? @db.Char(64)
+  audioSizeBytes                Int?
+  audioMimeType                 String? @db.VarChar(80)
+  audioObjectKey                String? @db.VarChar(500)
+
   pinnedGlobalRolloutGeneration   BigInt
   pinnedPracticeRolloutGeneration BigInt
 
@@ -2481,11 +2490,12 @@ model TemplateTwinSyntheticQaAdmission {
   certification   TemplateTwinCertification? @relation(fields: [certificationId], references: [id], onDelete: Restrict, map: "template_twin_qa_admission_certification_fkey")
   mappingSha256   String?                    @db.Char(64)
 
-  visitId            String?                            @unique(map: "template_twin_qa_admission_visit_unique")
-  visit              TranscribeVisit?                   @relation(fields: [visitId], references: [id], onDelete: Restrict, map: "template_twin_qa_admission_visit_fkey")
-  run                TemplateTwinSyntheticQaRun?
-  automationManifest VisitAutomationManifest?           @relation("VisitAutomationStagingAdmission")
-  providerExecutions VisitAutomationProviderExecution[]
+  visitId                        String?                            @unique(map: "template_twin_qa_admission_visit_unique")
+  visit                          TranscribeVisit?                   @relation(fields: [visitId], references: [id], onDelete: Restrict, map: "template_twin_qa_admission_visit_fkey")
+  run                            TemplateTwinSyntheticQaRun?
+  automationManifest             VisitAutomationManifest?           @relation("VisitAutomationStagingAdmission")
+  providerExecutions             VisitAutomationProviderExecution[]
+  templateTwinProviderExecutions TemplateTwinProviderExecution[]    @relation("TemplateTwinProviderSyntheticAdmission")
 
   attempt          Int       @default(1)
   expiresAt        DateTime  @db.Timestamptz(6)
@@ -2663,14 +2673,16 @@ model TemplateTwinProviderExecution {
   actorUserId String
   actor       User   @relation("TemplateTwinProviderExecutionActor", fields: [actorUserId], references: [id], onDelete: Restrict, map: "template_twin_provider_execution_actor_fkey")
 
-  visitId String?
-  visit   TranscribeVisit? @relation(fields: [visitId], references: [id], onDelete: Restrict, map: "template_twin_provider_execution_visit_fkey")
+  visitId        String?
+  visit          TranscribeVisit? @relation(fields: [visitId], references: [id], onDelete: Restrict, map: "template_twin_provider_execution_visit_fkey")
+  visitInputMode String?          @db.VarChar(40)
 
-  scope          String @db.VarChar(40)
-  operation      String @db.VarChar(80)
-  logicalAttempt Int
-  subjectId      String @db.VarChar(200)
-  subjectSha256  String @db.Char(64)
+  scope             String @db.VarChar(40)
+  operation         String @db.VarChar(80)
+  operationInstance String @db.VarChar(120)
+  logicalAttempt    Int
+  subjectId         String @db.VarChar(200)
+  subjectSha256     String @db.Char(64)
 
   /// Planned identifiers are generated before source-intake provider calls.
   /// They become the persisted source/compiled identifiers only after every
@@ -2699,6 +2711,9 @@ model TemplateTwinProviderExecution {
   releaseIdentitySha256           String? @db.Char(64)
   runtimeManifestSha256           String? @db.Char(64)
   runtimeInstanceId               String? @db.VarChar(128)
+
+  syntheticAdmissionId String?
+  syntheticAdmission   TemplateTwinSyntheticQaAdmission? @relation("TemplateTwinProviderSyntheticAdmission", fields: [syntheticAdmissionId], references: [id], onDelete: Restrict, map: "template_twin_provider_execution_synthetic_admission_fkey")
 
   status          VisitAutomationProviderExecutionStatus @default(RESERVED)
   invocationCount Int                                    @default(0)
@@ -3107,6 +3122,11 @@ model TemplateTwinCertification {
 
   certifiedById String
   certifiedBy   User   @relation("TemplateTwinCertifier", fields: [certifiedById], references: [id], onDelete: Restrict, map: "template_twin_certification_certifier_fkey")
+
+  /// Explicitly separates ordinary LIVE certification from the exact
+  /// allowlisted synthetic lifecycle. Historical rows remain fail-closed.
+  providerAuthorizationMode        String  @default("LEGACY_UNKNOWN") @db.VarChar(24)
+  providerAuthorizationAdmissionId String?
 
   compiledStructureSha256          String   @db.Char(64)
   approvedMappingsSha256           String   @db.Char(64)

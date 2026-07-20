@@ -13,11 +13,14 @@
 
 import { z } from "zod";
 import {
-  modelClient,
   type DeepgramUtterance,
   wrapAsData,
   delimiterSystemSuffix,
 } from "@meddoc/ai";
+import {
+  runTemplateTwinOwnedModelComplete,
+  runTemplateTwinOwnedProvider,
+} from "@/lib/template-twin/provider-ownership";
 import { updateTemplateTwinSyntheticQaClaimBoundVisit } from "@/worker/staging-qa-mutation-fence";
 import { logWorkerAudit } from "@/worker/worker-audit";
 
@@ -74,6 +77,27 @@ export interface Layer2Output {
   needsReview: boolean;
 }
 
+async function ownDeterministicSpeakerMap(input: {
+  fallback: SpeakerMap;
+  reason: "NO_DIARIZATION" | "SINGLE_SPEAKER";
+  layerInput: Layer2Input;
+}): Promise<SpeakerMap> {
+  return runTemplateTwinOwnedProvider({
+    operation: "L2_SPEAKER_ROLES",
+    operationVersion: "speaker-role-deterministic-fallback-v1",
+    provider: "local_deterministic",
+    model: "speaker-role-fallback-v1",
+    providerConfiguration: { reason: input.reason },
+    inputIdentity: {
+      reason: input.reason,
+      utterances: input.layerInput.utterances,
+      interpreterMode: input.layerInput.interpreterMode ?? false,
+    },
+    invoke: async () => input.fallback,
+    validate: (output) => SpeakerMap.parse(output),
+  });
+}
+
 function groupSamplesBySpeaker(
   utterances: DeepgramUtterance[],
 ): Map<number, string[]> {
@@ -105,13 +129,17 @@ export async function runLayer2SpeakerRoles(
     // DB write-time but L3+ choke on the malformed shape. Running
     // the constant through SpeakerMap.parse(...) makes the drift
     // surface during a dev rebuild rather than in production.
-    const fallback = SpeakerMap.parse({
-      "0": {
-        role: "doctor",
-        confidence: 0.5,
-        reasoning:
-          "Diarization returned no speaker tags; defaulting to single-speaker doctor.",
-      },
+    const fallback = await ownDeterministicSpeakerMap({
+      fallback: SpeakerMap.parse({
+        "0": {
+          role: "doctor",
+          confidence: 0.5,
+          reasoning:
+            "Diarization returned no speaker tags; defaulting to single-speaker doctor.",
+        },
+      }),
+      reason: "NO_DIARIZATION",
+      layerInput: input,
     });
     await updateTemplateTwinSyntheticQaClaimBoundVisit({
       visitId: input.visitId,
@@ -136,13 +164,17 @@ export async function runLayer2SpeakerRoles(
     // size===0 fallback's schema-checked shape (FIND-P1-017). The size===0
     // path above (diarization returned NO tags) is unchanged.
     const speakerId = [...samples.keys()][0];
-    const fallback = SpeakerMap.parse({
-      [String(speakerId)]: {
-        role: "doctor",
-        confidence: 0.5,
-        reasoning:
-          "Single speaker detected (one diarized voice) — treated as dictation and assigned doctor; flagged for review in case of a patient monologue.",
-      },
+    const fallback = await ownDeterministicSpeakerMap({
+      fallback: SpeakerMap.parse({
+        [String(speakerId)]: {
+          role: "doctor",
+          confidence: 0.5,
+          reasoning:
+            "Single speaker detected (one diarized voice) — treated as dictation and assigned doctor; flagged for review in case of a patient monologue.",
+        },
+      }),
+      reason: "SINGLE_SPEAKER",
+      layerInput: input,
     });
     await updateTemplateTwinSyntheticQaClaimBoundVisit({
       visitId: input.visitId,
@@ -234,35 +266,39 @@ export async function runLayer2SpeakerRoles(
     "\n",
   );
 
-  const speakerMap = await modelClient.complete({
-    practiceId: input.practiceId,
-    visitId: input.visitId,
-    userId: input.userId,
-    purpose: "tm_speaker_roles",
-    provider: "anthropic",
-    model: MODEL,
-    system,
-    user,
-    schema: SpeakerMap,
-    maxTokens: 2048,
-    // Q2 fix-pack §08.1 — speaker classification is a deterministic
-    // task. Without temperature, SDK default (~1.0) made the same audio
-    // oscillate between confidence 0.65 (needsReview) and 0.75 (clean)
-    // run-to-run. Pin to 0 so the lowestConfidence gate is consistent.
-    temperature: 0,
-    // FIND-P1-017 (comprehensive-audit 2026-05-14) / Cluster 3 zod
-    // hardening: force Anthropic to return the speaker map via
-    // tool_use rather than free-form text + JSON.parse. The schema
-    // (SpeakerMap above) doubles as the tool's input_schema; the
-    // model's response is a structured object, not a JSON-encoded
-    // string. Eliminates the JSON_PARSE_FAIL class for L2; the
-    // Zod parse on the result still runs as defense-in-depth.
-    // Pattern matches L7a icd-coding (PR #235) — the canonical
-    // useToolUse adoption in the worker pipeline.
-    useToolUse: {
-      name: "submit_speaker_roles",
-      description:
-        "Submit the per-speaker role classification. Each entry carries a confidence (0-1) and a short reasoning snippet for the Transcript-tab tooltip.",
+  const speakerMap = await runTemplateTwinOwnedModelComplete({
+    operation: "L2_SPEAKER_ROLES",
+    operationVersion: "speaker-role-classifier-v1",
+    args: {
+      practiceId: input.practiceId,
+      visitId: input.visitId,
+      userId: input.userId,
+      purpose: "tm_speaker_roles",
+      provider: "anthropic",
+      model: MODEL,
+      system,
+      user,
+      schema: SpeakerMap,
+      maxTokens: 2048,
+      // Q2 fix-pack §08.1 — speaker classification is a deterministic
+      // task. Without temperature, SDK default (~1.0) made the same audio
+      // oscillate between confidence 0.65 (needsReview) and 0.75 (clean)
+      // run-to-run. Pin to 0 so the lowestConfidence gate is consistent.
+      temperature: 0,
+      // FIND-P1-017 (comprehensive-audit 2026-05-14) / Cluster 3 zod
+      // hardening: force Anthropic to return the speaker map via
+      // tool_use rather than free-form text + JSON.parse. The schema
+      // (SpeakerMap above) doubles as the tool's input_schema; the
+      // model's response is a structured object, not a JSON-encoded
+      // string. Eliminates the JSON_PARSE_FAIL class for L2; the
+      // Zod parse on the result still runs as defense-in-depth.
+      // Pattern matches L7a icd-coding (PR #235) — the canonical
+      // useToolUse adoption in the worker pipeline.
+      useToolUse: {
+        name: "submit_speaker_roles",
+        description:
+          "Submit the per-speaker role classification. Each entry carries a confidence (0-1) and a short reasoning snippet for the Transcript-tab tooltip.",
+      },
     },
   });
 

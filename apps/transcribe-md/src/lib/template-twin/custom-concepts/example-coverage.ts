@@ -7,9 +7,16 @@ import {
 
 import { canonicalSha256 } from "../canonical";
 import {
+  buildTemplateTwinProviderOwnershipReceipt,
+  runWithTemplateTwinProviderOwnershipContext,
+  type TemplateTwinProviderOwnershipReceipt,
+} from "../provider-ownership";
+import type { TemplateTwinRolloutToken } from "../rollout";
+import {
   buildCanonicalCustomConceptEvidence,
   computeCustomExtractionSchemaHash,
   computeTemplateFieldSpecificationContentSha256,
+  customConceptProviderOperationInstance,
   extractCertifiedCustomConcepts,
   TEMPLATE_CUSTOM_EXTRACTION_SCHEMA_VERSION,
   TEMPLATE_CUSTOM_EXTRACTION_VERSION,
@@ -70,6 +77,7 @@ export interface TemplateTwinCustomExampleExecution {
   readonly resultSha256: string;
   readonly passed: boolean;
   readonly failureCode: string | null;
+  readonly providerOwnershipReceipt: TemplateTwinProviderOwnershipReceipt | null;
 }
 
 export interface ExecuteTemplateTwinCustomExamplesInput {
@@ -77,6 +85,13 @@ export interface ExecuteTemplateTwinCustomExamplesInput {
   readonly practiceId: string;
   readonly userId: string;
   readonly noteTemplateId: string;
+  readonly noteTemplateVersion: number;
+  readonly sourceArtifactId: string;
+  readonly compiledVersionId: string;
+  readonly sourceLineageId: string;
+  readonly sourceLineageVersion: number;
+  readonly sourceSha256: string;
+  readonly rolloutToken: TemplateTwinRolloutToken;
   readonly model: string;
   readonly client?: Pick<ModelClient, "complete">;
   readonly privacyClient?: Pick<ModelClient, "complete">;
@@ -477,6 +492,7 @@ export async function executeTemplateTwinCustomExamples(
     ),
     practiceId: input.practiceId,
     userId: input.userId,
+    rolloutToken: input.rolloutToken,
     client: input.privacyClient,
   });
   const specificationSetSha256 = templateTwinCustomSpecificationSetSha256(
@@ -490,24 +506,68 @@ export async function executeTemplateTwinCustomExamples(
   const executions: TemplateTwinCustomExampleExecution[] = [];
 
   for (const definition of definitions) {
+    const executionId = randomUUID();
+    const providerCorrelationId = `template-custom-example:${executionId}`;
     try {
-      const extraction = await extractCertifiedCustomConcepts({
-        specifications: input.specifications,
-        evidence: buildCanonicalCustomConceptEvidence({
-          mode: "text",
-          contextText: definition.syntheticEvidence,
-        }),
-        practiceId: input.practiceId,
-        visitId:
-          stagingContext?.visitId ??
-          `template-custom-example:${input.noteTemplateId}:${batchId}`,
-        userId: input.userId,
-        model: input.model,
-        client: input.client,
-      });
+      const owned = await runWithTemplateTwinProviderOwnershipContext(
+        {
+          practiceId: input.practiceId,
+          actorUserId: input.userId,
+          visitId: null,
+          visitInputMode: null,
+          scope: "CUSTOM_EXAMPLE",
+          logicalAttempt: 1,
+          subjectId: executionId,
+          subjectSha256: definition.evidenceSha256,
+          sourceArtifactId: input.sourceArtifactId,
+          compiledVersionId: input.compiledVersionId,
+          noteTemplateId: input.noteTemplateId,
+          noteTemplateVersion: input.noteTemplateVersion,
+          sourceLineageId: input.sourceLineageId,
+          sourceLineageVersion: input.sourceLineageVersion,
+          sourceSha256: input.sourceSha256,
+          syntheticAdmissionId: stagingContext?.admissionId ?? null,
+          rolloutToken: input.rolloutToken,
+        },
+        async () => {
+          const extraction = await extractCertifiedCustomConcepts({
+            specifications: input.specifications,
+            evidence: buildCanonicalCustomConceptEvidence({
+              mode: "text",
+              contextText: definition.syntheticEvidence,
+            }),
+            practiceId: input.practiceId,
+            visitId: null,
+            providerCorrelationId,
+            userId: input.userId,
+            model: input.model,
+            client: input.client,
+          });
+          const receipt = buildTemplateTwinProviderOwnershipReceipt({
+            projection: {
+              subjectId: executionId,
+              subjectSha256: definition.evidenceSha256,
+              visitId: null,
+              sourceArtifactId: input.sourceArtifactId,
+              compiledVersionId: input.compiledVersionId,
+              noteTemplateId: input.noteTemplateId,
+            },
+            expectedExecutionPlan: [
+              {
+                operation: "CUSTOM_EXAMPLE_EXTRACTION",
+                operationInstance:
+                  customConceptProviderOperationInstance(input.specifications),
+                disposition: "EXECUTED",
+              },
+            ],
+          });
+          return { extraction, receipt };
+        },
+      );
+      const extraction = owned.extraction;
       const classified = classifyExecution({ definition, extraction });
       const core = {
-        id: randomUUID(),
+        id: executionId,
         batchId,
         definition,
         contractVersion: TEMPLATE_TWIN_CUSTOM_EXAMPLE_CONTRACT_VERSION,
@@ -524,6 +584,7 @@ export async function executeTemplateTwinCustomExamples(
       executions.push({
         ...core,
         resultSha256: canonicalSha256(core),
+        providerOwnershipReceipt: owned.receipt,
       });
     } catch (error) {
       const provider = "anthropic";
@@ -534,7 +595,7 @@ export async function executeTemplateTwinCustomExamples(
           ? `TT_CUSTOM_EXAMPLE_${error.code}`
           : "TT_CUSTOM_EXAMPLE_EXTRACTION_REJECTED";
       const core = {
-        id: randomUUID(),
+        id: executionId,
         batchId,
         definition,
         contractVersion: TEMPLATE_TWIN_CUSTOM_EXAMPLE_CONTRACT_VERSION,
@@ -557,6 +618,7 @@ export async function executeTemplateTwinCustomExamples(
       executions.push({
         ...core,
         resultSha256: canonicalSha256(core),
+        providerOwnershipReceipt: null,
       });
     }
   }

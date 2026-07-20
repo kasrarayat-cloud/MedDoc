@@ -8,6 +8,7 @@
 // ============================================================================
 
 import Anthropic from '@anthropic-ai/sdk';
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { hashPrompt } from './prompt-hash';
 import { logAiCall } from './log';
@@ -35,6 +36,11 @@ function createAnthropicMessage(
   if (!idempotencyKey) return client.messages.create(params);
   return client.messages.create(params, {
     headers: { 'Idempotency-Key': idempotencyKey },
+    // The exact-owner ledger owns the only retry decision. Anthropic's SDK
+    // otherwise performs up to two hidden transport retries, which could turn
+    // one claimed execution into three provider requests after an ambiguous
+    // network outcome.
+    maxRetries: 0,
   });
 }
 
@@ -149,6 +155,74 @@ export function anthropicErrorDetailsJson(err: unknown): string {
     apiErrorType: shape.apiErrorType,
     apiErrorMessage: '[truncated — payload exceeded 4KB]',
     requestId: shape.requestId,
+  });
+}
+
+function boundedStructuralCode(value: unknown): string | null {
+  return typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,80}$/.test(value)
+    ? value
+    : null;
+}
+
+/** PHI-free error metadata for exact-owner calls. Provider messages and
+ * response bodies are deliberately excluded because either may echo input. */
+function anthropicOwnedErrorDetailsJson(err: unknown): string {
+  const shape = extractAnthropicError(err);
+  return JSON.stringify({
+    contractVersion: 'owned-anthropic-error-v1',
+    errorClass: boundedStructuralCode(
+      err instanceof Error ? err.name : typeof err,
+    ),
+    httpStatus: shape.httpStatus,
+    apiErrorType: boundedStructuralCode(shape.apiErrorType),
+    requestId:
+      typeof shape.requestId === 'string' &&
+      /^[A-Za-z0-9_.:-]{1,160}$/.test(shape.requestId)
+        ? shape.requestId
+        : null,
+  });
+}
+
+function ownedProviderFailure(err: unknown): Error {
+  const shape = extractAnthropicError(err);
+  const safe = new Error(
+    'The owned provider request failed without a reusable outcome.',
+  ) as Error & { status?: number; request_id?: string };
+  safe.name = 'OwnedProviderRequestError';
+  if (shape.httpStatus !== null) safe.status = shape.httpStatus;
+  if (
+    typeof shape.requestId === 'string' &&
+    /^[A-Za-z0-9_.:-]{1,160}$/.test(shape.requestId)
+  ) {
+    safe.request_id = shape.requestId;
+  }
+  return safe;
+}
+
+function ownedMalformedDetails(
+  errorCode: 'JSON_PARSE_FAIL' | 'SCHEMA_FAIL',
+  rawOutput: string,
+  issues: readonly { code?: unknown; path?: unknown }[] = [],
+): string {
+  const issueCodes = [
+    ...new Set(
+      issues
+        .map((issue) => boundedStructuralCode(issue.code))
+        .filter((code): code is string => code !== null),
+    ),
+  ].sort();
+  return JSON.stringify({
+    contractVersion: 'owned-anthropic-malformed-v1',
+    errorCode,
+    responseSha256: createHash('sha256')
+      .update(rawOutput, 'utf8')
+      .digest('hex'),
+    responseByteLength: Buffer.byteLength(rawOutput, 'utf8'),
+    issueCount: issues.length,
+    issueCodes,
+    issuePathDepths: issues.map((issue) =>
+      Array.isArray(issue.path) ? issue.path.length : 0,
+    ),
   });
 }
 
@@ -292,7 +366,9 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
           ),
           success: false,
           errorCode: 'JSON_PARSE_FAIL',
-          errorDetails: capErrorDetails(unfenced),
+          errorDetails: args.idempotencyKey
+            ? ownedMalformedDetails('JSON_PARSE_FAIL', unfenced)
+            : capErrorDetails(unfenced),
         });
         throw new Error(
           'Anthropic response was not valid JSON: tool_use block missing',
@@ -378,7 +454,9 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
           ),
           success: false,
           errorCode: 'JSON_PARSE_FAIL',
-          errorDetails: capErrorDetails(unfenced),
+          errorDetails: args.idempotencyKey
+            ? ownedMalformedDetails('JSON_PARSE_FAIL', unfenced)
+            : capErrorDetails(unfenced),
         });
         // FIND-P1-010 (2026-05-14): typed error replaces the prior
         // generic `Error('Anthropic response was not valid JSON: ...')`.
@@ -388,7 +466,12 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
         // the message-startsWith check as a fallback) keeps working.
         // categorizeError.ts now keys off the class via instanceof for
         // permanent classification.
-        throw new ModelOutputMalformedError(unfenced, err);
+        throw new ModelOutputMalformedError(
+          args.idempotencyKey ? '' : unfenced,
+          args.idempotencyKey
+            ? new SyntaxError('Provider response was malformed.')
+            : err,
+        );
       }
     }
 
@@ -412,16 +495,27 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
         ),
         success: false,
         errorCode: 'SCHEMA_FAIL',
-        errorDetails: capErrorDetails(
-          `${unfenced}\n\n--- Zod errors ---\n${JSON.stringify(schemaResult.error.issues, null, 2)}`
-        ),
+        errorDetails: args.idempotencyKey
+          ? ownedMalformedDetails(
+              'SCHEMA_FAIL',
+              unfenced,
+              schemaResult.error.issues,
+            )
+          : capErrorDetails(
+              `${unfenced}\n\n--- Zod errors ---\n${JSON.stringify(schemaResult.error.issues, null, 2)}`,
+            ),
       });
       const err = new Error('SCHEMA_FAIL') as Error & {
         rawOutput?: string;
         zodErrors?: unknown;
       };
-      err.rawOutput = unfenced;
-      err.zodErrors = schemaResult.error.issues;
+      if (!args.idempotencyKey) err.rawOutput = unfenced;
+      err.zodErrors = args.idempotencyKey
+        ? schemaResult.error.issues.map((issue) => ({
+            code: boundedStructuralCode(issue.code),
+            pathDepth: issue.path.length,
+          }))
+        : schemaResult.error.issues;
       throw err;
     }
 
@@ -489,8 +583,18 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
         latencyMs,
         success: false,
         errorCode: err instanceof Error ? err.name.toUpperCase() : 'UNKNOWN',
-        errorDetails: anthropicErrorDetailsJson(err),
+        errorDetails: args.idempotencyKey
+          ? anthropicOwnedErrorDetailsJson(err)
+          : anthropicErrorDetailsJson(err),
       });
+    }
+    if (
+      args.idempotencyKey &&
+      !(err instanceof ModelOutputMalformedError) &&
+      !(err instanceof AnthropicRefusalError) &&
+      !(err instanceof Error && err.message === 'SCHEMA_FAIL')
+    ) {
+      throw ownedProviderFailure(err);
     }
     throw err;
   }
@@ -635,8 +739,13 @@ export async function anthropicCompleteText(
         latencyMs,
         success: false,
         errorCode: err instanceof Error ? err.name.toUpperCase() : 'UNKNOWN',
-        errorDetails: anthropicErrorDetailsJson(err),
+        errorDetails: args.idempotencyKey
+          ? anthropicOwnedErrorDetailsJson(err)
+          : anthropicErrorDetailsJson(err),
       });
+    }
+    if (args.idempotencyKey && !(err instanceof AnthropicRefusalError)) {
+      throw ownedProviderFailure(err);
     }
     throw err;
   }

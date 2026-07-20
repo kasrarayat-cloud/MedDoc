@@ -1,49 +1,53 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from "node:crypto";
 
-import { Prisma } from '@prisma/client';
-import prisma from '@meddoc/db';
+import { Prisma } from "@prisma/client";
+import prisma from "@meddoc/db";
 
 import {
   extractTemplateTwinDictationEntities,
   extractTemplateTwinTextEntities,
-} from '@/worker/layers/03-extract-entities';
+} from "@/worker/layers/03-extract-entities";
 
-import { enqueueTemplateTwinAudit } from './audit-outbox';
-import { prepareTemplateTwinFill } from './fill-engine';
+import { enqueueTemplateTwinAudit } from "./audit-outbox";
+import { prepareTemplateTwinFill } from "./fill-engine";
 import {
   projectEncounterFacts,
   type EncounterEntitySnapshot,
-} from './encounter-facts';
-import { SemanticMappingSchema, TemplateDocIRSchema, type SemanticMapping } from './ir';
-import { templateTwinMappingsSha256 } from './mapping-hash';
+} from "./encounter-facts";
+import {
+  SemanticMappingSchema,
+  TemplateDocIRSchema,
+  type SemanticMapping,
+} from "./ir";
+import { templateTwinMappingsSha256 } from "./mapping-hash";
 import {
   claimTemplateTwinObject,
   createTemplateTwinArtifactStore,
   type TemplateTwinArtifactStore,
-} from './storage';
-import type { TemplateTwinActor } from './certification-lifecycle';
-import { readTemplateTwinWorkspace } from './workspace-read';
+} from "./storage";
+import type { TemplateTwinActor } from "./certification-lifecycle";
+import { readTemplateTwinWorkspace } from "./workspace-read";
 import {
   assertTemplateTwinStagingQaEvidencePhiFree,
   assertTemplateTwinSyntheticEvidencePhiFree,
   TemplateTwinSyntheticEvidenceRejectedError,
-} from './synthetic-evidence-gate';
-import { isTemplateTwinStagingQaFixtureSource } from './staging-qa-fixtures';
-import { runWithTemplateTwinStagingQaCertificationProvider } from './staging-qa-certification-provider';
+} from "./synthetic-evidence-gate";
+import { isTemplateTwinStagingQaFixtureSource } from "./staging-qa-fixtures";
+import { runWithTemplateTwinStagingQaCertificationProvider } from "./staging-qa-certification-provider";
 import {
   assertTemplateTwinSourceProvenance,
   bindTemplateTwinSyntheticProofToSourceProvenance,
   TEMPLATE_TWIN_SOURCE_PROVENANCE_GATE_MESSAGE,
-} from './source-phi-evidence';
+} from "./source-phi-evidence";
 import {
   TEMPLATE_TWIN_UNSUPPORTED_CONCEPT_CODE,
   isSupportedTemplateTwinConcept,
-} from './supported-concepts';
+} from "./supported-concepts";
 import {
   buildCanonicalCustomConceptEvidence,
   createCertifiedCustomConceptProvider,
   extractCertifiedCustomConcepts,
-} from './custom-concepts';
+} from "./custom-concepts";
 import {
   customConceptSpecifications,
   fieldRequiresExplicitIntent,
@@ -52,23 +56,24 @@ import {
   templateTwinFieldIntentsSha256,
   unresolvedFieldIntent,
   type PersistedTemplateTwinFieldIntent,
-} from './field-intent';
-import { lockTemplateTwinRolloutForFinalClaim } from './rollout';
+} from "./field-intent";
+import { lockTemplateTwinRolloutForFinalClaim } from "./rollout";
+import { lockAndAssertCurrentTemplateTwinPhysician } from "./final-claim-authority";
 
 export class TemplateTwinSyntheticTestError extends Error {
   readonly code:
-    | 'NOT_FOUND'
-    | 'IMMUTABLE'
-    | 'CONFLICT'
-    | 'MAPPINGS_NOT_READY'
-    | 'VALIDATION_FAILED'
-    | 'SYNTHETIC_EVIDENCE_REJECTED'
-    | 'SOURCE_PROVENANCE_INVALID'
-    | 'ROLLOUT_CHANGED';
+    | "NOT_FOUND"
+    | "IMMUTABLE"
+    | "CONFLICT"
+    | "MAPPINGS_NOT_READY"
+    | "VALIDATION_FAILED"
+    | "SYNTHETIC_EVIDENCE_REJECTED"
+    | "SOURCE_PROVENANCE_INVALID"
+    | "ROLLOUT_CHANGED";
 
-  constructor(code: TemplateTwinSyntheticTestError['code'], message: string) {
+  constructor(code: TemplateTwinSyntheticTestError["code"], message: string) {
     super(message);
-    this.name = 'TemplateTwinSyntheticTestError';
+    this.name = "TemplateTwinSyntheticTestError";
     this.code = code;
   }
 }
@@ -90,7 +95,7 @@ interface MappingRow {
 
 type PersistedIntentDecisionRow = Omit<
   PersistedTemplateTwinFieldIntent,
-  'fieldDefinitionId' | 'fieldId'
+  "fieldDefinitionId" | "fieldId"
 >;
 
 interface PersistedFieldWithIntent {
@@ -109,7 +114,9 @@ function mapping(fieldId: string, row: MappingRow): SemanticMapping {
     temporality: row.temporality,
     laterality: row.laterality,
     unitPolicy: row.unitPolicy,
-    approvedSynonyms: Array.isArray(row.approvedSynonyms) ? row.approvedSynonyms : [],
+    approvedSynonyms: Array.isArray(row.approvedSynonyms)
+      ? row.approvedSynonyms
+      : [],
     required: row.required,
     blankPolicy: row.blankPolicy,
     unknownPolicy: row.unknownPolicy,
@@ -130,14 +137,14 @@ export async function runTemplateTwinSyntheticTest(input: {
    * may omit it only when the IR has no explicit intent-bearing fields. */
   expectedFieldIntentsSha256?: string;
   encounterText: string;
-  encounterMode?: 'text' | 'dictation';
+  encounterMode?: "text" | "dictation";
   storage?: TemplateTwinArtifactStore;
 }) {
   const row = await prisma.noteTemplate.findFirst({
     where: {
       id: input.noteTemplateId,
       doctorId: input.actor.userId,
-      templateKind: 'template_twin_docx',
+      templateKind: "template_twin_docx",
     },
     select: {
       id: true,
@@ -161,12 +168,12 @@ export async function runTemplateTwinSyntheticTest(input: {
             },
           },
           fields: {
-            orderBy: { displayOrder: 'asc' },
+            orderBy: { displayOrder: "asc" },
             select: {
               fieldId: true,
               id: true,
               intentDecisions: {
-                orderBy: { version: 'desc' },
+                orderBy: { version: "desc" },
                 take: 1,
                 select: {
                   id: true,
@@ -208,14 +215,14 @@ export async function runTemplateTwinSyntheticTest(input: {
     !row ||
     !compiled ||
     compiled.sourceArtifact.practiceId !== input.actor.practiceId ||
-    compiled.sourceArtifact.validationStatus !== 'accepted' ||
+    compiled.sourceArtifact.validationStatus !== "accepted" ||
     !compiled.sourceArtifact.objectKey ||
     !compiled.sourceArtifact.objectVersionId ||
     !compiled.sourceArtifact.objectEtag
   ) {
     throw new TemplateTwinSyntheticTestError(
-      'NOT_FOUND',
-      'This Template Twin version is stale or unavailable. Refresh the certification workspace.',
+      "NOT_FOUND",
+      "This Template Twin version is stale or unavailable. Refresh the certification workspace.",
     );
   }
   let sourceProvenance;
@@ -226,22 +233,22 @@ export async function runTemplateTwinSyntheticTest(input: {
     });
   } catch {
     throw new TemplateTwinSyntheticTestError(
-      'SOURCE_PROVENANCE_INVALID',
+      "SOURCE_PROVENANCE_INVALID",
       TEMPLATE_TWIN_SOURCE_PROVENANCE_GATE_MESSAGE,
     );
   }
-  if (compiled.certificationStatus === 'CERTIFIED') {
+  if (compiled.certificationStatus === "CERTIFIED") {
     throw new TemplateTwinSyntheticTestError(
-      'IMMUTABLE',
-      'Certified Template Twin versions cannot be retested or changed.',
+      "IMMUTABLE",
+      "Certified Template Twin versions cannot be retested or changed.",
     );
   }
   const persistedFields = compiled.fields as PersistedFieldWithIntent[];
   const mappings = persistedFields.map((field) => {
     if (!field.mapping) {
       throw new TemplateTwinSyntheticTestError(
-        'MAPPINGS_NOT_READY',
-        'Every field needs a physician-confirmed mapping before testing.',
+        "MAPPINGS_NOT_READY",
+        "Every field needs a physician-confirmed mapping before testing.",
       );
     }
     return mapping(field.fieldId, field.mapping);
@@ -249,8 +256,8 @@ export async function runTemplateTwinSyntheticTest(input: {
   const mappingsSha256 = templateTwinMappingsSha256(mappings);
   if (mappingsSha256 !== input.expectedMappingsSha256) {
     throw new TemplateTwinSyntheticTestError(
-      'CONFLICT',
-      'Mappings changed after the page loaded. Reload before testing.',
+      "CONFLICT",
+      "Mappings changed after the page loaded. Reload before testing.",
     );
   }
   const ir = TemplateDocIRSchema.parse(compiled.compiledDocumentIr);
@@ -263,8 +270,8 @@ export async function runTemplateTwinSyntheticTest(input: {
       const persisted = persistedFieldById.get(field.fieldId);
       if (!persisted) {
         throw new TemplateTwinSyntheticTestError(
-          'MAPPINGS_NOT_READY',
-          'A placeholder field is missing its physician intent record.',
+          "MAPPINGS_NOT_READY",
+          "A placeholder field is missing its physician intent record.",
         );
       }
       const decision = persisted.intentDecisions[0];
@@ -286,8 +293,8 @@ export async function runTemplateTwinSyntheticTest(input: {
       fieldIntentsSha256 !== input.expectedFieldIntentsSha256)
   ) {
     throw new TemplateTwinSyntheticTestError(
-      'CONFLICT',
-      'Field intent changed after the page loaded. Reload before testing.',
+      "CONFLICT",
+      "Field intent changed after the page loaded. Reload before testing.",
     );
   }
   const intentByFieldId = new Map(
@@ -303,23 +310,23 @@ export async function runTemplateTwinSyntheticTest(input: {
       ? [createCertifiedCustomConceptProvider(customSpecifications)]
       : [];
   const staticFieldIds = explicitIntents.flatMap((entry) =>
-    entry.intent.intentKind === 'static' ? [entry.fieldId] : [],
+    entry.intent.intentKind === "static" ? [entry.fieldId] : [],
   );
   if (
     mappings.some((item: SemanticMapping) => {
       const intent = intentByFieldId.get(item.fieldId);
       return (
-        item.status !== 'certified' ||
-        intent?.intentKind === 'unresolved' ||
-        (intent?.intentKind === 'static'
+        item.status !== "certified" ||
+        intent?.intentKind === "unresolved" ||
+        (intent?.intentKind === "static"
           ? item.clinicalConcept !== null
           : !item.clinicalConcept)
       );
     })
   ) {
     throw new TemplateTwinSyntheticTestError(
-      'MAPPINGS_NOT_READY',
-      'Every field needs a physician-confirmed mapping before testing.',
+      "MAPPINGS_NOT_READY",
+      "Every field needs a physician-confirmed mapping before testing.",
     );
   }
   if (
@@ -330,12 +337,12 @@ export async function runTemplateTwinSyntheticTest(input: {
     )
   ) {
     throw new TemplateTwinSyntheticTestError(
-      'MAPPINGS_NOT_READY',
+      "MAPPINGS_NOT_READY",
       `${TEMPLATE_TWIN_UNSUPPORTED_CONCEPT_CODE}: One or more fields use clinical details that the current extractor cannot safely produce.`,
     );
   }
 
-  const encounterMode = input.encounterMode ?? 'text';
+  const encounterMode = input.encounterMode ?? "text";
   const providerResult =
     await runWithTemplateTwinStagingQaCertificationProvider({
       source: {
@@ -359,17 +366,17 @@ export async function runTemplateTwinSyntheticTest(input: {
         // staging fixture, this privacy-provider call is itself inside the
         // deterministic provider context; it cannot fall through to live AI.
         try {
-          const assertEvidencePhiFree =
-            isTemplateTwinStagingQaFixtureSource({
-              sha256: compiled.sourceArtifact.sha256,
-              sizeBytes: compiled.sourceArtifact.sizeBytes,
-            })
-              ? assertTemplateTwinStagingQaEvidencePhiFree
-              : assertTemplateTwinSyntheticEvidencePhiFree;
+          const assertEvidencePhiFree = isTemplateTwinStagingQaFixtureSource({
+            sha256: compiled.sourceArtifact.sha256,
+            sizeBytes: compiled.sourceArtifact.sizeBytes,
+          })
+            ? assertTemplateTwinStagingQaEvidencePhiFree
+            : assertTemplateTwinSyntheticEvidencePhiFree;
           await assertEvidencePhiFree({
             encounterText: input.encounterText,
             practiceId: input.actor.practiceId,
             userId: input.actor.userId,
+            rolloutToken: input.actor.rolloutToken,
             providerVisitId,
           });
         } catch (error) {
@@ -377,13 +384,13 @@ export async function runTemplateTwinSyntheticTest(input: {
             throw error;
           }
           throw new TemplateTwinSyntheticTestError(
-            'SYNTHETIC_EVIDENCE_REJECTED',
-            'Use clearly labeled synthetic test evidence without patient identifiers.',
+            "SYNTHETIC_EVIDENCE_REJECTED",
+            "Use clearly labeled synthetic test evidence without patient identifiers.",
           );
         }
 
         const extracted =
-          encounterMode === 'dictation'
+          encounterMode === "dictation"
             ? await extractTemplateTwinDictationEntities({
                 practiceId: input.actor.practiceId,
                 userId: input.actor.userId,
@@ -402,7 +409,7 @@ export async function runTemplateTwinSyntheticTest(input: {
           mode: encounterMode,
           contextText: extracted.contextText,
           entities: extracted.entities as unknown as EncounterEntitySnapshot,
-          asrQuality: 'unknown',
+          asrQuality: "unknown",
         });
         const customExtraction =
           customSpecifications.length > 0
@@ -411,12 +418,11 @@ export async function runTemplateTwinSyntheticTest(input: {
                 evidence: buildCanonicalCustomConceptEvidence({
                   mode: encounterMode,
                   contextText: extracted.contextText,
-                  asrQuality: 'unknown',
+                  asrQuality: "unknown",
                 }),
                 practiceId: input.actor.practiceId,
                 visitId:
-                  providerVisitId ??
-                  `template-twin-synthetic-${compiled.id}`,
+                  providerVisitId ?? `template-twin-synthetic-${compiled.id}`,
                 userId: input.actor.userId,
               })
             : null;
@@ -424,10 +430,7 @@ export async function runTemplateTwinSyntheticTest(input: {
       },
     });
   const { extracted, projectedFacts, customExtraction } = providerResult;
-  const facts = [
-    ...projectedFacts,
-    ...(customExtraction?.facts ?? []),
-  ];
+  const facts = [...projectedFacts, ...(customExtraction?.facts ?? [])];
   const storage = input.storage ?? createTemplateTwinArtifactStore();
   const source = await storage.readSourceArtifact({
     practiceId: input.actor.practiceId,
@@ -457,17 +460,17 @@ export async function runTemplateTwinSyntheticTest(input: {
     customSpecifications,
     source,
     resolverModelVersion:
-      process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-sonnet-4-6',
+      process.env.TRANSCRIBE_MD_CLINICAL_MODEL || "claude-sonnet-4-6",
     validationNow: new Date(),
     allowUncertifiedForSyntheticTest: true,
   });
   if (!prepared.render) {
     const blockers = prepared.manifest.validation.issues.filter(
-      (issue) => issue.severity === 'blocking',
+      (issue) => issue.severity === "blocking",
     ).length;
     throw new TemplateTwinSyntheticTestError(
-      'VALIDATION_FAILED',
-      `The synthetic encounter left ${blockers} blocking field check${blockers === 1 ? '' : 's'}. Add direct synthetic evidence or correct the mapping, then test again.`,
+      "VALIDATION_FAILED",
+      `The synthetic encounter left ${blockers} blocking field check${blockers === 1 ? "" : "s"}. Add direct synthetic evidence or correct the mapping, then test again.`,
     );
   }
   const render = prepared.render;
@@ -480,8 +483,7 @@ export async function runTemplateTwinSyntheticTest(input: {
   // Generated once outside the serializable callback: a database retry uses
   // the same key, while an explicit physician re-test remains a distinct
   // audited action even when deterministic rendering reuses identical bytes.
-  const syntheticTestEventKey =
-    `template-twin:synthetic-tested:${compiled.id}:${randomUUID()}`;
+  const syntheticTestEventKey = `template-twin:synthetic-tested:${compiled.id}:${randomUUID()}`;
 
   await prisma.$transaction(
     async (tx: Prisma.TransactionClient) => {
@@ -496,10 +498,14 @@ export async function runTemplateTwinSyntheticTest(input: {
       });
       if (!finalRollout.allowed) {
         throw new TemplateTwinSyntheticTestError(
-          'ROLLOUT_CHANGED',
+          "ROLLOUT_CHANGED",
           `${finalRollout.code}: Template Twin availability changed while the synthetic proof was being verified. Run the test again.`,
         );
       }
+      await lockAndAssertCurrentTemplateTwinPhysician({
+        tx,
+        actor: input.actor,
+      });
       const fresh = await tx.templateTwinCompiledVersion.findUnique({
         where: { id: compiled.id },
         select: {
@@ -517,7 +523,7 @@ export async function runTemplateTwinSyntheticTest(input: {
             },
           },
           fields: {
-            orderBy: { displayOrder: 'asc' },
+            orderBy: { displayOrder: "asc" },
             select: {
               fieldId: true,
               mapping: {
@@ -540,8 +546,11 @@ export async function runTemplateTwinSyntheticTest(input: {
           },
         },
       });
-      if (!fresh || fresh.certificationStatus === 'CERTIFIED') {
-        throw new TemplateTwinSyntheticTestError('IMMUTABLE', 'This template is already certified.');
+      if (!fresh || fresh.certificationStatus === "CERTIFIED") {
+        throw new TemplateTwinSyntheticTestError(
+          "IMMUTABLE",
+          "This template is already certified.",
+        );
       }
       try {
         assertTemplateTwinSourceProvenance({
@@ -551,33 +560,43 @@ export async function runTemplateTwinSyntheticTest(input: {
         });
       } catch {
         throw new TemplateTwinSyntheticTestError(
-          'SOURCE_PROVENANCE_INVALID',
+          "SOURCE_PROVENANCE_INVALID",
           TEMPLATE_TWIN_SOURCE_PROVENANCE_GATE_MESSAGE,
         );
       }
       if (
-        fresh.sourceArtifact.practiceId !== compiled.sourceArtifact.practiceId ||
-        fresh.sourceArtifact.validationStatus !== 'accepted' ||
+        fresh.sourceArtifact.practiceId !==
+          compiled.sourceArtifact.practiceId ||
+        fresh.sourceArtifact.validationStatus !== "accepted" ||
         fresh.sourceArtifact.objectKey !== compiled.sourceArtifact.objectKey ||
         fresh.sourceArtifact.objectVersionId !==
           compiled.sourceArtifact.objectVersionId ||
-        fresh.sourceArtifact.objectEtag !== compiled.sourceArtifact.objectEtag ||
+        fresh.sourceArtifact.objectEtag !==
+          compiled.sourceArtifact.objectEtag ||
         fresh.sourceArtifact.sha256 !== compiled.sourceArtifact.sha256 ||
         fresh.sourceArtifact.sizeBytes !== compiled.sourceArtifact.sizeBytes
       ) {
         throw new TemplateTwinSyntheticTestError(
-          'SOURCE_PROVENANCE_INVALID',
+          "SOURCE_PROVENANCE_INVALID",
           TEMPLATE_TWIN_SOURCE_PROVENANCE_GATE_MESSAGE,
         );
       }
-      const freshMappings = fresh.fields.map((field: { fieldId: string; mapping: MappingRow | null }) => {
-        if (!field.mapping) {
-          throw new TemplateTwinSyntheticTestError('CONFLICT', 'Mappings changed during the test.');
-        }
-        return mapping(field.fieldId, field.mapping);
-      });
+      const freshMappings = fresh.fields.map(
+        (field: { fieldId: string; mapping: MappingRow | null }) => {
+          if (!field.mapping) {
+            throw new TemplateTwinSyntheticTestError(
+              "CONFLICT",
+              "Mappings changed during the test.",
+            );
+          }
+          return mapping(field.fieldId, field.mapping);
+        },
+      );
       if (templateTwinMappingsSha256(freshMappings) !== mappingsSha256) {
-        throw new TemplateTwinSyntheticTestError('CONFLICT', 'Mappings changed during the test.');
+        throw new TemplateTwinSyntheticTestError(
+          "CONFLICT",
+          "Mappings changed during the test.",
+        );
       }
       await tx.templateTwinCompiledVersion.update({
         where: { id: compiled.id },
@@ -602,7 +621,7 @@ export async function runTemplateTwinSyntheticTest(input: {
       await claimTemplateTwinObject(tx, {
         objectKey: output.objectKey,
         practiceId: input.actor.practiceId,
-        claimType: 'compiled_test_output',
+        claimType: "compiled_test_output",
         claimId: compiled.id,
       });
       await enqueueTemplateTwinAudit(tx, {
@@ -610,8 +629,8 @@ export async function runTemplateTwinSyntheticTest(input: {
         practiceId: input.actor.practiceId,
         actorId: input.actor.userId,
         actorEmailSnapshot: input.actor.userEmail,
-        action: 'TEMPLATE_TWIN_SYNTHETIC_TESTED',
-        targetType: 'TemplateTwinCompiledVersion',
+        action: "TEMPLATE_TWIN_SYNTHETIC_TESTED",
+        targetType: "TemplateTwinCompiledVersion",
         targetId: compiled.id,
         metadata: {
           templateVersion: row.version,
@@ -622,8 +641,7 @@ export async function runTemplateTwinSyntheticTest(input: {
           fieldCount: prepared.manifest.fields.length,
           verified: true,
           inputMode: encounterMode,
-          sourcePrivacyScanEvidenceSha256:
-            sourceProvenance.evidenceSha256,
+          sourcePrivacyScanEvidenceSha256: sourceProvenance.evidenceSha256,
           rolloutGlobalGeneration:
             input.actor.rolloutToken.globalGeneration.toString(),
           rolloutPracticeGeneration:
@@ -631,7 +649,7 @@ export async function runTemplateTwinSyntheticTest(input: {
         },
       });
     },
-    { isolationLevel: 'Serializable' },
+    { isolationLevel: "Serializable" },
   );
   const workspace = await readTemplateTwinWorkspace({
     noteTemplateId: row.id,
@@ -640,8 +658,8 @@ export async function runTemplateTwinSyntheticTest(input: {
   });
   if (!workspace) {
     throw new TemplateTwinSyntheticTestError(
-      'NOT_FOUND',
-      'This Template Twin version is stale or unavailable. Refresh the certification workspace.',
+      "NOT_FOUND",
+      "This Template Twin version is stale or unavailable. Refresh the certification workspace.",
     );
   }
   return workspace;

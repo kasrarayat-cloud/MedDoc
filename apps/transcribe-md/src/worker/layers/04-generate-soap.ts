@@ -8,7 +8,12 @@
 // "Per patient, …" are encouraged where the ground truth is weak.
 // ============================================================================
 
-import { modelClient, wrapAsData } from "@meddoc/ai";
+import { wrapAsData } from "@meddoc/ai";
+import {
+  getTemplateTwinProviderOwnershipContext,
+  recordTemplateTwinProviderNotApplicable,
+  runTemplateTwinOwnedModelCompleteText,
+} from "@/lib/template-twin/provider-ownership";
 import { updateTemplateTwinSyntheticQaClaimBoundVisit } from "@/worker/staging-qa-mutation-fence";
 import { Prisma } from "@prisma/client";
 import { specialtyGuidance } from "../prompts/specialty-guidance";
@@ -216,6 +221,18 @@ export async function runLayer4GenerateSoap(
   // becomes soapDraft — downstream L5/L6/resume untouched) + a suggestions
   // lane. Flag OFF (prod default) → prompt and behavior byte-identical.
   const anchorsOn = evidenceAnchorsEnabled();
+  if (
+    !anchorsOn &&
+    getTemplateTwinProviderOwnershipContext()?.scope === "VISIT_PIPELINE"
+  ) {
+    for (let pass = 1; pass <= 3; pass += 1) {
+      await recordTemplateTwinProviderNotApplicable({
+        operation: "L4_ANCHOR_VERIFY",
+        operationInstance: `ensemble-pass-${pass}`,
+        reasonCode: "EVIDENCE_ANCHORS_DISABLED",
+      });
+    }
+  }
   const systemOpts = {
     specialty: input.specialty,
     audioQualityAlert,
@@ -238,17 +255,21 @@ export async function runLayer4GenerateSoap(
     wrappedTranscript: wrap.wrapped,
   });
 
-  const { text: rawText } = await modelClient.completeText({
-    practiceId: input.practiceId,
-    visitId: input.visitId,
-    userId: input.userId,
-    purpose: "tm_soap_draft",
-    provider: "anthropic",
-    model: MODEL,
-    system,
-    user,
-    maxTokens: 8192,
-    temperature: 0.2,
+  const { text: rawText } = await runTemplateTwinOwnedModelCompleteText({
+    operation: "L4_GENERATE_SOAP",
+    operationVersion: "soap-draft-generator-v1",
+    args: {
+      practiceId: input.practiceId,
+      visitId: input.visitId,
+      userId: input.userId,
+      purpose: "tm_soap_draft",
+      provider: "anthropic",
+      model: MODEL,
+      system,
+      user,
+      maxTokens: 8192,
+      temperature: 0.2,
+    },
   });
 
   let text = rawText;

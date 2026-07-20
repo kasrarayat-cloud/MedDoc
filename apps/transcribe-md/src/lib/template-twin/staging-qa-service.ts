@@ -793,6 +793,7 @@ export async function createTemplateTwinStagingQaRun(input: {
           encounterText: evidenceText,
           practiceId: input.actor.practiceId,
           userId: input.actor.userId,
+          rolloutToken: input.actor.rolloutToken,
           providerVisitId,
         }),
     });

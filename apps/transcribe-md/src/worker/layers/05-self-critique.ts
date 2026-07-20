@@ -12,7 +12,8 @@
 // ============================================================================
 
 import { z } from "zod";
-import { modelClient, wrapAsData, delimiterSystemSuffix } from "@meddoc/ai";
+import { wrapAsData, delimiterSystemSuffix } from "@meddoc/ai";
+import { runTemplateTwinOwnedModelComplete } from "@/lib/template-twin/provider-ownership";
 import { updateTemplateTwinSyntheticQaClaimBoundVisit } from "@/worker/staging-qa-mutation-fence";
 import type { ExtractedEntities } from "./03-extract-entities";
 import { logWorkerAudit } from "@/worker/worker-audit";
@@ -207,21 +208,25 @@ export async function runLayer5SelfCritique(
     wrap.wrapped,
   ].join("\n");
 
-  const report = await modelClient.complete({
-    practiceId: input.practiceId,
-    visitId: input.visitId,
-    userId: input.userId,
-    purpose: "tm_critique",
-    provider: "anthropic",
-    model: MODEL,
-    system,
-    user,
-    schema: CritiqueReport,
-    maxTokens: 4096,
-    // Q2 fix-pack §08.2 — critique is the audit pass. Same SOAP audited
-    // twice should produce the same critique. Tightened from 0.2 to 0.1
-    // so safe_to_sign_without_review doesn't oscillate run-to-run.
-    temperature: 0.1,
+  const report = await runTemplateTwinOwnedModelComplete({
+    operation: "L5_SELF_CRITIQUE",
+    operationVersion: "clinical-self-critique-v1",
+    args: {
+      practiceId: input.practiceId,
+      visitId: input.visitId,
+      userId: input.userId,
+      purpose: "tm_critique",
+      provider: "anthropic",
+      model: MODEL,
+      system,
+      user,
+      schema: CritiqueReport,
+      maxTokens: 4096,
+      // Q2 fix-pack §08.2 — critique is the audit pass. Same SOAP audited
+      // twice should produce the same critique. Tightened from 0.2 to 0.1
+      // so safe_to_sign_without_review doesn't oscillate run-to-run.
+      temperature: 0.1,
+    },
   });
 
   await updateTemplateTwinSyntheticQaClaimBoundVisit({

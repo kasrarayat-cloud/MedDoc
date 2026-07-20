@@ -162,6 +162,15 @@ describe('anthropicCompleteText — Opus 4.x temperature stripping', () => {
     });
     expect(captured[0]!.options).toEqual({
       headers: { 'Idempotency-Key': 'b'.repeat(64) },
+      maxRetries: 0,
     });
+  });
+
+  it('keeps ordinary unowned text calls on the SDK default retry policy', async () => {
+    await anthropicCompleteText({
+      ...baseArgs,
+      model: 'claude-sonnet-4-6',
+    });
+    expect(captured[0]!.options).toBeUndefined();
   });
 });

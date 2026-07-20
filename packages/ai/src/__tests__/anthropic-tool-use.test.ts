@@ -126,7 +126,26 @@ describe('anthropicComplete with useToolUse — SDK call shape', () => {
 
     expect(mocks.createCall).toHaveBeenCalledWith(expect.any(Object), {
       headers: { 'Idempotency-Key': 'a'.repeat(64) },
+      maxRetries: 0,
     });
+  });
+
+  it('keeps ordinary unowned structured calls on the SDK default retry policy', async () => {
+    mocks.createCall.mockResolvedValueOnce({
+      content: [
+        {
+          type: 'tool_use',
+          id: 'tu_unowned',
+          name: 'submit_icd_codes',
+          input: { codes: [] },
+        },
+      ],
+      usage: mockUsage(),
+    });
+
+    await anthropicComplete(baseArgs);
+
+    expect(mocks.createCall).toHaveBeenCalledWith(expect.any(Object));
   });
 
   it('does NOT pass `tools` to the SDK when useToolUse is omitted (backwards-compat)', async () => {

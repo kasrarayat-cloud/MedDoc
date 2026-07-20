@@ -1,7 +1,17 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('../../template-twin/provider-ownership', () => ({
+  requireTemplateTwinProviderOwnershipContext: vi.fn(),
+  runTemplateTwinOwnedModelComplete: vi.fn(
+    async (input: {
+      args: unknown;
+      client: { complete(args: unknown): Promise<unknown> };
+    }) => input.client.complete(input.args),
+  ),
+}));
 
 import {
   FieldResolutionSchema,

@@ -58,6 +58,7 @@ import type { CertifiedTemplateFieldSpecification } from "./custom-concepts/spec
 import {
   buildCanonicalCustomConceptEvidence,
   createCertifiedCustomConceptProvider,
+  customConceptProviderOperationInstance,
   extractCertifiedCustomConcepts,
   TEMPLATE_CUSTOM_EXTRACTION_DEFAULT_MODEL,
   type CertifiedCustomExtractionProvenance,
@@ -87,6 +88,18 @@ import {
 } from "@/lib/runtime-protocol";
 import { createTemplateTwinEncounterSourceReceipt } from "./canonical-encounter-source";
 import { isTemplateTwinSourceAdmissionCurrent } from "./source-admission";
+import {
+  isTemplateTwinLiveProviderCompilationOwned,
+  isTemplateTwinStagingProviderCompilationOwned,
+} from "./live-provider-ownership";
+import {
+  buildTemplateTwinProviderOwnershipReceipt,
+  getTemplateTwinProviderOwnershipContext,
+  getTemplateTwinProviderPlanDisposition,
+  recordTemplateTwinProviderNotApplicable,
+  TemplateTwinProviderOwnershipError,
+  type TemplateTwinProviderExpectedPlanEntry,
+} from "./provider-ownership";
 
 /** The worker-owned review marker for an unresolved Template Twin fill.
  * Correction code may clear it only by exact equality after a fully verified
@@ -582,6 +595,20 @@ export async function processTemplateTwinVisit(
       "Synthetic QA worker context does not match this Template Twin fill.",
     );
   }
+  const syntheticParentAdmissionId = syntheticQaContext
+    ? (
+        await prisma.templateTwinSyntheticQaAdmission.findUnique({
+          where: { id: syntheticQaContext.admissionId },
+          select: { parentAdmissionId: true },
+        })
+      )?.parentAdmissionId ?? null
+    : null;
+  if (syntheticQaContext && !syntheticParentAdmissionId) {
+    throw new TemplateTwinFillError(
+      "TEMPLATE_TWIN_STAGING_QA_ATTEMPT_STALE",
+      "Synthetic QA provider admission is not bound to its certified upload admission.",
+    );
+  }
 
   // Persist the first selected version before source I/O, resolution, model-
   // derived evidence processing, or rendering. A retry must never switch to a
@@ -638,6 +665,8 @@ export async function processTemplateTwinVisit(
           compilerVersion: true,
           compiledDocumentIr: true,
           certificationStatus: true,
+          providerOwnershipEvidence: true,
+          providerOwnershipSha256: true,
           certification: {
             select: {
               id: true,
@@ -649,8 +678,10 @@ export async function processTemplateTwinVisit(
           },
           sourceArtifact: {
             select: {
+              id: true,
               practiceId: true,
               lineageId: true,
+              lineageVersion: true,
               objectKey: true,
               objectVersionId: true,
               objectEtag: true,
@@ -658,6 +689,8 @@ export async function processTemplateTwinVisit(
               sizeBytes: true,
               validationStatus: true,
               privacyScanEvidence: true,
+              providerOwnershipEvidence: true,
+              providerOwnershipSha256: true,
               quarantineArtifact: {
                 select: {
                   practiceId: true,
@@ -745,6 +778,45 @@ export async function processTemplateTwinVisit(
   if (
     row.version !== input.noteTemplateVersion ||
     compiled.sourceArtifact.practiceId !== input.practiceId ||
+    !(syntheticQaAttempt
+      ? isTemplateTwinStagingProviderCompilationOwned({
+          practiceId: input.practiceId,
+          actorUserId: input.doctorId,
+          noteTemplateId: row.id,
+          noteTemplateVersion: row.version,
+          compiledVersionId: compiled.id,
+          sourceArtifactId: compiled.sourceArtifact.id,
+          sourceLineageId: compiled.sourceArtifact.lineageId,
+          sourceLineageVersion: compiled.sourceArtifact.lineageVersion,
+          sourceSha256: compiled.sourceArtifact.sha256,
+          sourceProviderOwnershipEvidence:
+            compiled.sourceArtifact.providerOwnershipEvidence,
+          sourceProviderOwnershipSha256:
+            compiled.sourceArtifact.providerOwnershipSha256,
+          compiledProviderOwnershipEvidence:
+            compiled.providerOwnershipEvidence,
+          compiledProviderOwnershipSha256:
+            compiled.providerOwnershipSha256,
+          expectedSyntheticAdmissionId: syntheticParentAdmissionId!,
+        })
+      : isTemplateTwinLiveProviderCompilationOwned({
+        practiceId: input.practiceId,
+        actorUserId: input.doctorId,
+        noteTemplateId: row.id,
+        noteTemplateVersion: row.version,
+        compiledVersionId: compiled.id,
+        sourceArtifactId: compiled.sourceArtifact.id,
+        sourceLineageId: compiled.sourceArtifact.lineageId,
+        sourceLineageVersion: compiled.sourceArtifact.lineageVersion,
+        sourceSha256: compiled.sourceArtifact.sha256,
+        sourceProviderOwnershipEvidence:
+          compiled.sourceArtifact.providerOwnershipEvidence,
+        sourceProviderOwnershipSha256:
+          compiled.sourceArtifact.providerOwnershipSha256,
+        compiledProviderOwnershipEvidence:
+          compiled.providerOwnershipEvidence,
+        compiledProviderOwnershipSha256: compiled.providerOwnershipSha256,
+      })) ||
     !isTemplateTwinSourceAdmissionCurrent(compiled.sourceArtifact) ||
     !sourceProvenanceValid ||
     !compiled.sourceArtifact.objectKey ||
@@ -822,6 +894,8 @@ export async function processTemplateTwinVisit(
     );
   }
   const customSpecifications = customConceptSpecifications(explicitIntents);
+  const customConceptOperationInstance =
+    customConceptProviderOperationInstance(customSpecifications);
   const customExtractionModel =
     input.resolverModelVersion ?? TEMPLATE_CUSTOM_EXTRACTION_DEFAULT_MODEL;
   let customExampleProofSha256: string | null = null;
@@ -934,6 +1008,7 @@ export async function processTemplateTwinVisit(
       roundTripVerified: true,
       pinnedGlobalRolloutGeneration: true,
       pinnedPracticeRolloutGeneration: true,
+      providerOwnershipSha256: true,
     },
   });
   if (
@@ -943,6 +1018,156 @@ export async function processTemplateTwinVisit(
     throw new TemplateTwinFillError(
       "SIGNED_MANIFEST_IMMUTABLE",
       "A signed Template Twin fill manifest cannot be replaced.",
+    );
+  }
+  const providerContext = getTemplateTwinProviderOwnershipContext();
+  if (
+    !providerContext ||
+    providerContext.scope !== "VISIT_PIPELINE" ||
+    providerContext.practiceId !== input.practiceId ||
+    providerContext.actorUserId !== input.doctorId ||
+    providerContext.visitId !== input.visitId ||
+    providerContext.sourceArtifactId !== compiled.sourceArtifact.id ||
+    providerContext.compiledVersionId !== compiled.id ||
+    providerContext.noteTemplateId !== row.id ||
+    providerContext.noteTemplateVersion !== row.version
+  ) {
+    throw new TemplateTwinProviderOwnershipError(
+      "TEMPLATE_TWIN_PROVIDER_CONTEXT_INVALID",
+    );
+  }
+  if (customSpecifications.length === 0) {
+    await recordTemplateTwinProviderNotApplicable({
+      operation: "CUSTOM_CONCEPT_EXTRACTION",
+      operationInstance: customConceptOperationInstance,
+      reasonCode: "NO_CERTIFIED_CUSTOM_SPECIFICATIONS",
+    });
+  }
+  const inputModePlan: TemplateTwinProviderExpectedPlanEntry[] =
+    input.inputMode === "conversation"
+      ? [
+          { operation: "L1_TRANSCRIBE", disposition: "EXECUTED" },
+          {
+            operation: "L1B_TRANSCRIBE",
+            disposition: "NOT_APPLICABLE",
+            reasonCode: "INPUT_MODE_CONVERSATION",
+          },
+          { operation: "L2_SPEAKER_ROLES", disposition: "EXECUTED" },
+        ]
+      : input.inputMode === "dictation"
+        ? [
+            {
+              operation: "L1_TRANSCRIBE",
+              disposition: "NOT_APPLICABLE",
+              reasonCode: "INPUT_MODE_DICTATION",
+            },
+            { operation: "L1B_TRANSCRIBE", disposition: "EXECUTED" },
+            {
+              operation: "L2_SPEAKER_ROLES",
+              disposition: "NOT_APPLICABLE",
+              reasonCode: "INPUT_MODE_DICTATION",
+            },
+          ]
+        : [
+            {
+              operation: "L1_TRANSCRIBE",
+              disposition: "NOT_APPLICABLE",
+              reasonCode: "INPUT_MODE_TEXT",
+            },
+            {
+              operation: "L1B_TRANSCRIBE",
+              disposition: "NOT_APPLICABLE",
+              reasonCode: "INPUT_MODE_TEXT",
+            },
+            {
+              operation: "L2_SPEAKER_ROLES",
+              disposition: "NOT_APPLICABLE",
+              reasonCode: "INPUT_MODE_TEXT",
+            },
+          ];
+  const anchorPlan = [1, 2, 3].map((pass) =>
+    getTemplateTwinProviderPlanDisposition({
+      operation: "L4_ANCHOR_VERIFY",
+      operationInstance: `ensemble-pass-${pass}`,
+    }),
+  );
+  const anchorDisposition = anchorPlan[0];
+  if (
+    anchorPlan.some(
+      (entry) =>
+        entry.disposition !== anchorDisposition.disposition ||
+        entry.reasonCode !== anchorDisposition.reasonCode,
+    ) ||
+    (anchorDisposition.disposition === "NOT_APPLICABLE" &&
+      ![
+        "EVIDENCE_ANCHORS_DISABLED",
+        "NO_ANCHORED_CLAIMS",
+        "DETERMINISTIC_ANCHOR_MOCK",
+      ].includes(anchorDisposition.reasonCode ?? ""))
+  ) {
+    throw new TemplateTwinProviderOwnershipError(
+      "TEMPLATE_TWIN_PROVIDER_RECEIPT_INCOMPLETE",
+    );
+  }
+  const polishPlan = getTemplateTwinProviderPlanDisposition({
+    operation: "L6_POLISH",
+  });
+  const fidelityPlan = getTemplateTwinProviderPlanDisposition({
+    operation: "L6_FIDELITY_VERIFY",
+  });
+  if (
+    (polishPlan.disposition === "NOT_APPLICABLE" &&
+      (polishPlan.reasonCode !== "NO_FIXABLE_CRITIQUE_WORK" ||
+        fidelityPlan.disposition !== "NOT_APPLICABLE" ||
+        fidelityPlan.reasonCode !== "POLISH_NOT_EXECUTED")) ||
+    (polishPlan.disposition === "EXECUTED" &&
+      fidelityPlan.disposition === "NOT_APPLICABLE" &&
+      fidelityPlan.reasonCode !== "EMPTY_POLISH_OUTPUT")
+  ) {
+    throw new TemplateTwinProviderOwnershipError(
+      "TEMPLATE_TWIN_PROVIDER_RECEIPT_INCOMPLETE",
+    );
+  }
+  const customConceptPlan: TemplateTwinProviderExpectedPlanEntry =
+    customSpecifications.length > 0
+      ? {
+          operation: "CUSTOM_CONCEPT_EXTRACTION",
+          operationInstance: customConceptOperationInstance,
+          disposition: "EXECUTED",
+        }
+      : {
+          operation: "CUSTOM_CONCEPT_EXTRACTION",
+          operationInstance: customConceptOperationInstance,
+          disposition: "NOT_APPLICABLE",
+          reasonCode: "NO_CERTIFIED_CUSTOM_SPECIFICATIONS",
+        };
+  const providerReceipt = buildTemplateTwinProviderOwnershipReceipt({
+    projection: {
+      subjectId: providerContext.subjectId,
+      subjectSha256: providerContext.subjectSha256,
+      visitId: input.visitId,
+      sourceArtifactId: compiled.sourceArtifact.id,
+      compiledVersionId: compiled.id,
+      noteTemplateId: row.id,
+    },
+    expectedExecutionPlan: [
+      ...inputModePlan,
+      { operation: "L3_EXTRACT_ENTITIES", disposition: "EXECUTED" },
+      { operation: "L4_GENERATE_SOAP", disposition: "EXECUTED" },
+      ...anchorPlan,
+      { operation: "L5_SELF_CRITIQUE", disposition: "EXECUTED" },
+      polishPlan,
+      fidelityPlan,
+      customConceptPlan,
+    ],
+  });
+  if (
+    existing &&
+    (!existing.providerOwnershipSha256 ||
+      existing.providerOwnershipSha256 !== providerReceipt.sha256)
+  ) {
+    throw new TemplateTwinProviderOwnershipError(
+      "TEMPLATE_TWIN_PROVIDER_RECEIPT_INCOMPLETE",
     );
   }
   if (
@@ -1210,6 +1435,8 @@ export async function processTemplateTwinVisit(
     pinnedPracticeRolloutGeneration: rolloutToken.practiceGeneration,
     signedGlobalRolloutGeneration: null,
     signedPracticeRolloutGeneration: null,
+    providerOwnershipEvidence: asJson(providerReceipt.evidence),
+    providerOwnershipSha256: providerReceipt.sha256,
     // Regeneration creates a new review boundary. Prior physician decisions
     // remain append-only rows, but they cannot authorize the new SOAP-bound
     // manifest without a fresh review.

@@ -14,6 +14,10 @@ const mocks = vi.hoisted(() => ({
   findPractice: vi.fn(),
   outboxCreate: vi.fn(),
   lockVisit: vi.fn(),
+  getProviderContext: vi.fn(),
+  getPlanDisposition: vi.fn(),
+  recordNotApplicable: vi.fn(),
+  buildProviderReceipt: vi.fn(),
 }));
 
 vi.mock("@meddoc/db", () => ({
@@ -36,6 +40,19 @@ vi.mock("../runtime-attestation", () => ({
   }),
   TemplateTwinRuntimeAttestationError: class extends Error {},
 }));
+vi.mock("../provider-ownership", () => ({
+  getTemplateTwinProviderOwnershipContext: mocks.getProviderContext,
+  getTemplateTwinProviderPlanDisposition: mocks.getPlanDisposition,
+  recordTemplateTwinProviderNotApplicable: mocks.recordNotApplicable,
+  buildTemplateTwinProviderOwnershipReceipt: mocks.buildProviderReceipt,
+  TemplateTwinProviderOwnershipError: class extends Error {
+    constructor(readonly code: string) {
+      super(
+        "The Template Twin provider result is unavailable or cannot be safely reused.",
+      );
+    }
+  },
+}));
 
 import { templateTwinMappingsSha256 } from "../mapping-hash";
 import { templateTwinFieldIntentsSha256 } from "../field-intent";
@@ -49,17 +66,20 @@ import {
   SYNTHETIC_ENTITIES,
 } from "./integration-fixture";
 import { syntheticSourceAdmission } from "./source-admission-fixture";
+import { sourceProviderOwnershipFixture } from "./provider-ownership-fixture";
 
 const PRACTICE_ID = "practice-fill-concurrency";
 const DOCTOR_ID = "doctor-fill-concurrency";
 const VISIT_ID = "visit-fill-concurrency";
 const TEMPLATE_ID = "template-fill-concurrency";
 const COMPILED_ID = "compiled-fill-concurrency";
+const SOURCE_ID = "source-fill-concurrency";
 const RELEASE_ID = "0eb13c1b-0893-4cb0-bbd6-68b3e544baac";
 const RELEASE_IDENTITY_SHA256 = "1".repeat(64);
 const RUNTIME_MANIFEST_SHA256 = "2".repeat(64);
 const RUNTIME_INSTANCE_ID = "app-1";
 const OLD_MANIFEST_SHA = "b".repeat(64);
+const PROVIDER_RECEIPT_SHA = "c".repeat(64);
 const CURRENT_SOAP = "Synthetic current SOAP for concurrency verification.";
 const SOURCE_PRIVACY_SCAN_EVIDENCE = {
   profileVersion: "template-twin-source-phi-safe-alpha-v1" as const,
@@ -83,6 +103,17 @@ let practiceRolloutEnabled: boolean;
 let practiceRolloutGeneration: bigint;
 
 function templateRow() {
+  const ownership = sourceProviderOwnershipFixture({
+    practiceId: PRACTICE_ID,
+    actorUserId: DOCTOR_ID,
+    sourceArtifactId: SOURCE_ID,
+    sourceSha256: fixture.ir.source.sha256,
+    compiledVersionId: COMPILED_ID,
+    noteTemplateId: TEMPLATE_ID,
+    noteTemplateVersion: 1,
+    sourceLineageId: "lineage-fill-concurrency",
+    sourceLineageVersion: 1,
+  });
   return {
     id: TEMPLATE_ID,
     version: 1,
@@ -91,6 +122,8 @@ function templateRow() {
       compilerVersion: fixture.ir.compilerVersion,
       compiledDocumentIr: fixture.ir,
       certificationStatus: "CERTIFIED",
+      providerOwnershipEvidence: ownership.evidence,
+      providerOwnershipSha256: ownership.sha256,
       certification: {
         id: "certification-fill-concurrency",
         approvedMappingsSha256: templateTwinMappingsSha256(fixture.mappings),
@@ -101,6 +134,8 @@ function templateRow() {
         ),
       },
       sourceArtifact: {
+        id: SOURCE_ID,
+        lineageVersion: 1,
         ...syntheticSourceAdmission({
           practiceId: PRACTICE_ID,
           lineageId: "lineage-fill-concurrency",
@@ -109,6 +144,8 @@ function templateRow() {
         }),
         objectKey: `practices/${PRACTICE_ID}/template-twin/sources/lineage/v1/source/${fixture.ir.source.sha256}.docx`,
         privacyScanEvidence: SOURCE_PRIVACY_SCAN_EVIDENCE,
+        providerOwnershipEvidence: ownership.evidence,
+        providerOwnershipSha256: ownership.sha256,
       },
       fields: fixture.mappings.map((mapping) => ({
         fieldId: mapping.fieldId,
@@ -308,6 +345,72 @@ beforeEach(() => {
   mocks.ledgerUpdate.mockResolvedValue({ count: 1 });
   mocks.ledgerFind.mockResolvedValue(null);
   mocks.outboxCreate.mockResolvedValue({ id: "render-audit-outbox" });
+  mocks.getProviderContext.mockReturnValue({
+    practiceId: PRACTICE_ID,
+    actorUserId: DOCTOR_ID,
+    visitId: VISIT_ID,
+    visitInputMode: "text_notes",
+    scope: "VISIT_PIPELINE",
+    subjectId: VISIT_ID,
+    subjectSha256: "d".repeat(64),
+    sourceArtifactId: SOURCE_ID,
+    compiledVersionId: COMPILED_ID,
+    noteTemplateId: TEMPLATE_ID,
+    noteTemplateVersion: 1,
+  });
+  mocks.getPlanDisposition.mockImplementation(
+    ({ operation, operationInstance = "primary" }) => {
+      if (operation === "L4_ANCHOR_VERIFY") {
+        return {
+          operation,
+          operationInstance,
+          disposition: "NOT_APPLICABLE",
+          reasonCode: "EVIDENCE_ANCHORS_DISABLED",
+        };
+      }
+      if (operation === "L6_POLISH") {
+        return {
+          operation,
+          operationInstance,
+          disposition: "NOT_APPLICABLE",
+          reasonCode: "NO_FIXABLE_CRITIQUE_WORK",
+        };
+      }
+      return {
+        operation,
+        operationInstance,
+        disposition: "NOT_APPLICABLE",
+        reasonCode: "POLISH_NOT_EXECUTED",
+      };
+    },
+  );
+  mocks.buildProviderReceipt.mockImplementation(
+    ({ projection }: { projection: Record<string, unknown> }) => ({
+      evidence: {
+        contractVersion: "template-twin-provider-ownership-receipt-v2",
+        practiceId: PRACTICE_ID,
+        ...projection,
+        executions: [
+          {
+            executionId: "provider-execution-fill-concurrency",
+            operation: "L3_EXTRACT_ENTITIES",
+            resultSha256: "e".repeat(64),
+          },
+          {
+            executionId: "provider-execution-fill-concurrency-l4",
+            operation: "L4_GENERATE_SOAP",
+            resultSha256: "f".repeat(64),
+          },
+          {
+            executionId: "provider-execution-fill-concurrency-l5",
+            operation: "L5_SELF_CRITIQUE",
+            resultSha256: "a".repeat(64),
+          },
+        ],
+      },
+      sha256: PROVIDER_RECEIPT_SHA,
+    }),
+  );
   mockRolloutAndVisitLocks();
   mocks.transaction.mockImplementation(
     async (callback: (tx: unknown) => Promise<unknown>) =>
@@ -337,7 +440,8 @@ describe("Template Twin worker provenance and manifest concurrency", () => {
       processTemplateTwinVisit(processInput(artifacts)),
     ).rejects.toMatchObject({
       code: "TEMPLATE_TWIN_ROLLBACK_COMPAT_ACTIVE",
-      message: "Template Twin provider work is unavailable in this runtime mode.",
+      message:
+        "Template Twin provider work is unavailable in this runtime mode.",
     });
     expect(mocks.findPractice).not.toHaveBeenCalled();
     expect(mocks.claimVisit).not.toHaveBeenCalled();
@@ -583,6 +687,7 @@ describe("Template Twin worker provenance and manifest concurrency", () => {
         manifestVersion: 4,
         manifestSha256: OLD_MANIFEST_SHA,
         roundTripVerified: true,
+        providerOwnershipSha256: PROVIDER_RECEIPT_SHA,
       })
       .mockResolvedValueOnce({
         status: "SIGNED",
@@ -626,6 +731,7 @@ describe("Template Twin worker provenance and manifest concurrency", () => {
       manifestVersion: 5,
       manifestSha256: OLD_MANIFEST_SHA,
       roundTripVerified: true,
+      providerOwnershipSha256: PROVIDER_RECEIPT_SHA,
     });
 
     await expect(
@@ -652,6 +758,7 @@ describe("Template Twin worker provenance and manifest concurrency", () => {
       manifestVersion: 6,
       manifestSha256: OLD_MANIFEST_SHA,
       roundTripVerified: false,
+      providerOwnershipSha256: PROVIDER_RECEIPT_SHA,
     });
 
     const editedSoap = `${CURRENT_SOAP} Synthetic plan edit.`;
@@ -695,6 +802,7 @@ describe("Template Twin worker provenance and manifest concurrency", () => {
       manifestVersion: 7,
       manifestSha256: OLD_MANIFEST_SHA,
       roundTripVerified: false,
+      providerOwnershipSha256: PROVIDER_RECEIPT_SHA,
     });
 
     const result = await processTemplateTwinVisit(processInput());
@@ -861,6 +969,7 @@ describe("Template Twin worker provenance and manifest concurrency", () => {
       manifestVersion: 8,
       manifestSha256: OLD_MANIFEST_SHA,
       roundTripVerified: true,
+      providerOwnershipSha256: PROVIDER_RECEIPT_SHA,
     });
     const editedSoap = `${CURRENT_SOAP} Synthetic medication edit.`;
     const artifacts = storage(() => {

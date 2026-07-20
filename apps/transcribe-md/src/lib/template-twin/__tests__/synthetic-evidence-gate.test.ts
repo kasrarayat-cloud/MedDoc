@@ -4,6 +4,24 @@ import {
 } from '@meddoc/ai';
 import { describe, expect, it, vi } from 'vitest';
 
+vi.mock('../provider-ownership', () => ({
+  getTemplateTwinProviderOwnershipContext: vi.fn(() => null),
+  requireTemplateTwinProviderOwnershipContext: vi.fn(),
+  runWithTemplateTwinProviderOwnershipContext: vi.fn(
+    async (_context: unknown, callback: () => Promise<unknown>) => callback(),
+  ),
+  runTemplateTwinOwnedModelComplete: vi.fn(
+    async (input: {
+      args: unknown;
+      client: { complete(args: unknown): Promise<unknown> };
+    }) => input.client.complete(input.args),
+  ),
+  buildTemplateTwinProviderOwnershipReceipt: vi.fn(() => ({
+    evidence: {},
+    sha256: 'c'.repeat(64),
+  })),
+}));
+
 import {
   assertTemplateTwinSyntheticEvidencePhiFree,
   assertTemplateTwinStagingQaEvidencePhiFree,
@@ -14,6 +32,11 @@ import {
 const BASE = {
   practiceId: 'practice-synthetic-gate',
   userId: 'doctor-synthetic-gate',
+  rolloutToken: {
+    practiceId: 'practice-synthetic-gate',
+    globalGeneration: BigInt(1),
+    practiceGeneration: BigInt(1),
+  },
 };
 
 function client(result: unknown) {

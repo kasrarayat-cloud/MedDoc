@@ -24,6 +24,12 @@ import {
   lockTemplateTwinRolloutForFinalClaim,
   type TemplateTwinRolloutToken,
 } from "./rollout";
+import {
+  buildTemplateTwinProviderOwnershipReceipt,
+  runTemplateTwinOwnedModelComplete,
+  runWithTemplateTwinProviderOwnershipContext,
+  type TemplateTwinProviderOwnershipReceipt,
+} from "./provider-ownership";
 
 export const TEMPLATE_TWIN_STATIC_ASSET_SCANNER =
   "template-twin-static-png/1.0.0" as const;
@@ -131,6 +137,9 @@ export interface TemplateTwinStaticAssetInspectionEvidence {
 
 export interface TemplateTwinStaticAssetInspection {
   readonly evidence: TemplateTwinStaticAssetInspectionEvidence;
+  /** Server-only durable provider authorization. Route responses deliberately
+   * project explicit review fields and never serialize this receipt. */
+  readonly providerOwnershipReceipt: TemplateTwinProviderOwnershipReceipt;
   /** Ephemeral, authorized-admin preview only. Never persisted by this module. */
   readonly previewBytes: Uint8Array;
 }
@@ -166,6 +175,7 @@ interface StaticAssetDecisionRow {
 interface StaticAssetRow {
   id: string;
   practiceId: string;
+  createdById: string;
   sha256: string;
   mimeType: string;
   width: number;
@@ -180,11 +190,54 @@ interface StaticAssetRow {
   privacyScanModel: string;
   inspectionEvidenceSha256: string;
   inspectionEvidence: unknown;
+  providerOwnershipEvidence: unknown;
+  providerOwnershipSha256: string | null;
   currentStatus: string;
   currentDecisionVersion: number;
   createdAt: Date;
   updatedAt: Date;
   decisions?: StaticAssetDecisionRow[];
+}
+
+function hasExactStaticAssetProviderOwnership(asset: StaticAssetRow): boolean {
+  const evidence =
+    asset.providerOwnershipEvidence !== null &&
+    typeof asset.providerOwnershipEvidence === "object" &&
+    !Array.isArray(asset.providerOwnershipEvidence)
+      ? (asset.providerOwnershipEvidence as Record<string, unknown>)
+      : null;
+  const executions = Array.isArray(evidence?.executions)
+    ? evidence.executions
+    : [];
+  const execution =
+    executions.length === 1 &&
+    executions[0] !== null &&
+    typeof executions[0] === "object" &&
+    !Array.isArray(executions[0])
+      ? (executions[0] as Record<string, unknown>)
+      : null;
+  return Boolean(
+    evidence &&
+      asset.providerOwnershipSha256 &&
+      SHA256_RE.test(asset.providerOwnershipSha256) &&
+      canonicalSha256(evidence) === asset.providerOwnershipSha256 &&
+      evidence.contractVersion ===
+        "template-twin-provider-ownership-receipt-v2" &&
+      evidence.practiceId === asset.practiceId &&
+      evidence.actorUserId === asset.createdById &&
+      evidence.providerMode === "LIVE" &&
+      evidence.syntheticAdmissionId === null &&
+      evidence.subjectId === asset.sha256 &&
+      evidence.subjectSha256 === asset.sha256 &&
+      evidence.visitId === null &&
+      evidence.sourceArtifactId === null &&
+      evidence.compiledVersionId === null &&
+      evidence.noteTemplateId === null &&
+      execution?.operation === "STATIC_ASSET_PRIVACY_SCAN" &&
+      typeof execution.executionId === "string" &&
+      typeof execution.resultSha256 === "string" &&
+      SHA256_RE.test(execution.resultSha256),
+  );
 }
 
 interface StaticAssetReviewReceiptRow {
@@ -259,6 +312,7 @@ export async function inspectTemplateTwinStaticAsset(input: {
   actor: TemplateTwinStaticAssetActor;
   ocr: LocalStaticAssetOcr;
   client?: Pick<ModelClient, "complete">;
+  ownershipOperationInstance?: "direct" | "review" | "decision";
 }): Promise<TemplateTwinStaticAssetInspection> {
   assertPracticeAdmin(input.actor);
   if (input.claimedMimeType.toLowerCase() !== "image/png") {
@@ -320,29 +374,81 @@ export async function inspectTemplateTwinStaticAsset(input: {
       "The image text contains instruction-like content and cannot be approved as a static asset.",
     );
   }
+  const sha256 = digest(bytes);
   let privacyScan: { phiFields: string[]; anyUncertain: boolean };
+  let providerOwnershipReceipt: TemplateTwinProviderOwnershipReceipt;
   try {
-    privacyScan = await (input.client ?? modelClient).complete({
-      practiceId: input.actor.practiceId,
-      visitId: null,
-      userId: input.actor.userId,
-      purpose: "tm_template_phi_scan",
-      provider: "anthropic",
-      model: PRIVACY_MODEL,
-      system: STATIC_ASSET_PRIVACY_SYSTEM,
-      user: ["Locally extracted static-image evidence:", wrapped.wrapped].join(
-        "\n",
-      ),
-      schema: PhiScanSchema,
-      maxTokens: 512,
-      temperature: 0,
-      retryOnSchemaFail: true,
-      useToolUse: {
-        name: "submit_template_twin_static_asset_phi_scan",
-        description:
-          "Report whether locally extracted OCR or metadata may contain patient-specific content.",
+    const owned = await runWithTemplateTwinProviderOwnershipContext(
+      {
+        practiceId: input.actor.practiceId,
+        actorUserId: input.actor.userId,
+        visitId: null,
+        visitInputMode: null,
+        scope: "STATIC_ASSET",
+        logicalAttempt: 1,
+        subjectId: sha256,
+        subjectSha256: sha256,
+        sourceArtifactId: null,
+        compiledVersionId: null,
+        noteTemplateId: null,
+        noteTemplateVersion: null,
+        sourceLineageId: null,
+        sourceLineageVersion: null,
+        sourceSha256: null,
+        syntheticAdmissionId: null,
+        rolloutToken: input.actor.rolloutToken,
       },
-    });
+      async () => {
+        const scan = await runTemplateTwinOwnedModelComplete({
+          operation: "STATIC_ASSET_PRIVACY_SCAN",
+          operationInstance:
+            input.ownershipOperationInstance ?? "direct",
+          operationVersion: "template-twin-static-asset-privacy-scan-v1",
+          client: input.client ?? modelClient,
+          args: {
+            practiceId: input.actor.practiceId,
+            visitId: null,
+            userId: input.actor.userId,
+            purpose: "tm_template_phi_scan",
+            provider: "anthropic",
+            model: PRIVACY_MODEL,
+            system: STATIC_ASSET_PRIVACY_SYSTEM,
+            user: [
+              "Locally extracted static-image evidence:",
+              wrapped.wrapped,
+            ].join("\n"),
+            schema: PhiScanSchema,
+            maxTokens: 512,
+            temperature: 0,
+            retryOnSchemaFail: true,
+            useToolUse: {
+              name: "submit_template_twin_static_asset_phi_scan",
+              description:
+                "Report whether locally extracted OCR or metadata may contain patient-specific content.",
+            },
+          },
+        });
+        const receipt = buildTemplateTwinProviderOwnershipReceipt({
+          projection: {
+            subjectId: sha256,
+            subjectSha256: sha256,
+            visitId: null,
+            sourceArtifactId: null,
+            compiledVersionId: null,
+            noteTemplateId: null,
+          },
+          expectedExecutionPlan: [
+            {
+              operation: "STATIC_ASSET_PRIVACY_SCAN",
+              disposition: "EXECUTED",
+            },
+          ],
+        });
+        return { scan, receipt };
+      },
+    );
+    privacyScan = owned.scan;
+    providerOwnershipReceipt = owned.receipt;
   } catch (error) {
     throw new TemplateTwinStaticAssetError(
       "TT_STATIC_ASSET_PRIVACY_SCAN_UNAVAILABLE",
@@ -363,7 +469,6 @@ export async function inspectTemplateTwinStaticAsset(input: {
     );
   }
 
-  const sha256 = digest(bytes);
   const ocrTextSha256 = digestText(ocrResult.text);
   const metadataEvidenceSha256 = canonicalSha256({
     kinds: png.metadataKinds,
@@ -395,6 +500,7 @@ export async function inspectTemplateTwinStaticAsset(input: {
       privacyModel: PRIVACY_MODEL,
       metadataKinds: png.metadataKinds,
     },
+    providerOwnershipReceipt,
     previewBytes: bytes,
   };
 }
@@ -408,7 +514,10 @@ export async function inspectTemplateTwinStaticAssetForReview(input: {
   db?: TemplateTwinStaticAssetDb;
 }): Promise<TemplateTwinStaticAssetReview> {
   try {
-    const inspection = await inspectTemplateTwinStaticAsset(input);
+    const inspection = await inspectTemplateTwinStaticAsset({
+      ...input,
+      ownershipOperationInstance: "review",
+    });
     const receiptId = randomUUID();
     const receiptSecret = randomBytes(32).toString("base64url");
     const previewReviewReceipt = `${receiptId}.${receiptSecret}`;
@@ -472,7 +581,10 @@ async function inspectStaticAssetForDecision(input: {
   db?: TemplateTwinStaticAssetDb;
 }): Promise<TemplateTwinStaticAssetInspection> {
   try {
-    return await inspectTemplateTwinStaticAsset(input);
+    return await inspectTemplateTwinStaticAsset({
+      ...input,
+      ownershipOperationInstance: "decision",
+    });
   } catch (error) {
     if (error instanceof TemplateTwinStaticAssetError) {
       await auditStaticAssetRejection({
@@ -549,7 +661,7 @@ export async function approveTemplateTwinStaticAsset(input: {
       });
       if (!asset) {
         asset = await tx.templateTwinStaticAsset.create({
-          data: staticAssetCreateData(inspection.evidence, input.actor),
+          data: staticAssetCreateData(inspection, input.actor),
         });
       } else {
         assertSameInspection(asset, inspection.evidence);
@@ -647,7 +759,7 @@ export async function rejectTemplateTwinStaticAsset(input: {
       });
       if (!asset) {
         asset = await tx.templateTwinStaticAsset.create({
-          data: staticAssetCreateData(inspection.evidence, input.actor),
+          data: staticAssetCreateData(inspection, input.actor),
         });
       } else {
         assertSameInspection(asset, inspection.evidence);
@@ -873,6 +985,7 @@ export async function resolveApprovedTemplateTwinStaticAssets(input: {
       !decision ||
       decision.decision !== "APPROVED" ||
       decision.version !== asset.currentDecisionVersion ||
+      !hasExactStaticAssetProviderOwnership(asset) ||
       !SHA256_RE.test(decision.inspectionEvidenceSha256) ||
       decision.inspectionEvidenceSha256 !== asset.inspectionEvidenceSha256
     ) {
@@ -1345,7 +1458,8 @@ function assertSameInspection(
   const evidenceSha256 = canonicalSha256(evidence);
   if (
     canonicalSha256(persisted) !== evidenceSha256 ||
-    asset.inspectionEvidenceSha256 !== evidenceSha256
+    asset.inspectionEvidenceSha256 !== evidenceSha256 ||
+    !hasExactStaticAssetProviderOwnership(asset)
   ) {
     throw new TemplateTwinStaticAssetError(
       "TT_STATIC_ASSET_STALE_DIGEST",
@@ -1355,9 +1469,10 @@ function assertSameInspection(
 }
 
 function staticAssetCreateData(
-  evidence: TemplateTwinStaticAssetInspectionEvidence,
+  inspection: TemplateTwinStaticAssetInspection,
   actor: TemplateTwinStaticAssetActor,
 ): Record<string, unknown> {
+  const evidence = inspection.evidence;
   return {
     id: randomUUID(),
     practiceId: actor.practiceId,
@@ -1376,6 +1491,8 @@ function staticAssetCreateData(
     privacyScanModel: evidence.privacyModel,
     inspectionEvidence: evidence,
     inspectionEvidenceSha256: canonicalSha256(evidence),
+    providerOwnershipEvidence: inspection.providerOwnershipReceipt.evidence,
+    providerOwnershipSha256: inspection.providerOwnershipReceipt.sha256,
     currentStatus: "PENDING_REVIEW",
     currentDecisionVersion: 0,
   };

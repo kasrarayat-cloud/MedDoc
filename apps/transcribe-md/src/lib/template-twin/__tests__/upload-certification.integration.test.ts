@@ -34,11 +34,35 @@ vi.mock('@meddoc/ai', () => ({
   TEMPLATE_TWIN_SYNTHETIC_QA_TRANSCRIPT:
     'Chief concern is synthetic wrist discomfort.',
   delimiterSystemSuffix: () => '',
+  getTemplateTwinSyntheticQaProviderContext: () => null,
   modelClient: { complete: mocks.modelComplete },
   wrapAsData: (value: string) => ({
     wrapped: value,
     injectionAttemptDetected: false,
   }),
+}));
+
+vi.mock('../provider-ownership', () => ({
+  requireTemplateTwinProviderOwnershipContext: vi.fn(),
+  runTemplateTwinOwnedModelComplete: vi.fn(
+    async (input: {
+      args: unknown;
+      client: { complete(args: unknown): Promise<unknown> };
+    }) => input.client.complete(input.args),
+  ),
+  runWithTemplateTwinProviderOwnershipContext: vi.fn(
+    async (_context: unknown, callback: () => Promise<unknown>) => callback(),
+  ),
+  buildTemplateTwinProviderOwnershipReceipt: vi.fn(() => ({
+    evidence: {
+      contractVersion: 'template-twin-provider-ownership-receipt-v2',
+      practiceId: 'practice-stateful-synthetic',
+      actorUserId: 'doctor-stateful-synthetic',
+      providerMode: 'LIVE',
+      executions: [],
+    },
+    sha256: 'c'.repeat(64),
+  })),
 }));
 
 vi.mock('@meddoc/db', () => ({

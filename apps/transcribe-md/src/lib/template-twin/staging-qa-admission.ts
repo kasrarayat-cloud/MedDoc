@@ -93,6 +93,11 @@ export interface TemplateTwinStagingQaAdmissionRow {
   readonly phase: string;
   readonly requestSha256: string;
   readonly payloadSha256: string | null;
+  readonly preCertificationVoiceEvidence: boolean;
+  readonly audioSha256: string | null;
+  readonly audioSizeBytes: number | null;
+  readonly audioMimeType: string | null;
+  readonly audioObjectKey: string | null;
   readonly pinnedGlobalRolloutGeneration: bigint;
   readonly pinnedPracticeRolloutGeneration: bigint;
   readonly sourceArtifactId: string | null;
@@ -106,6 +111,7 @@ export interface TemplateTwinStagingQaAdmissionRow {
   readonly failedAt: Date | null;
   readonly revokedAt: Date | null;
   readonly consumedAt: Date | null;
+  readonly createdAt: Date;
 }
 
 export const TEMPLATE_TWIN_STAGING_QA_ADMISSION_SELECT = {
@@ -121,6 +127,11 @@ export const TEMPLATE_TWIN_STAGING_QA_ADMISSION_SELECT = {
   phase: true,
   requestSha256: true,
   payloadSha256: true,
+  preCertificationVoiceEvidence: true,
+  audioSha256: true,
+  audioSizeBytes: true,
+  audioMimeType: true,
+  audioObjectKey: true,
   pinnedGlobalRolloutGeneration: true,
   pinnedPracticeRolloutGeneration: true,
   sourceArtifactId: true,
@@ -134,6 +145,7 @@ export const TEMPLATE_TWIN_STAGING_QA_ADMISSION_SELECT = {
   failedAt: true,
   revokedAt: true,
   consumedAt: true,
+  createdAt: true,
 } as const;
 
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9._~-]{16,128}$/u;
@@ -186,6 +198,15 @@ function assertAdmissionMatches(input: {
   expectedSource?: { sha256: string; sizeBytes: number };
   expectedTemplate?: { id: string; version?: number };
   expectedVisitId?: string;
+  expectedParentAdmissionId?: string;
+  expectedPurpose?: "UPLOAD" | "VISIT";
+  expectedAttempt?: number;
+  expectedPreCertificationVoiceAudio?: {
+    sha256: string;
+    sizeBytes: number;
+    mimeType: string;
+    objectKey: string;
+  };
   now?: Date;
 }): TemplateTwinStagingQaAdmissionRow {
   const admission = input.admission;
@@ -251,7 +272,25 @@ function assertAdmissionMatches(input: {
         (input.expectedTemplate.version !== undefined &&
           admission.noteTemplateVersion !== input.expectedTemplate.version))) ||
     (input.expectedVisitId !== undefined &&
-      admission.visitId !== input.expectedVisitId)
+      admission.visitId !== input.expectedVisitId) ||
+    (input.expectedParentAdmissionId !== undefined &&
+      admission.parentAdmissionId !== input.expectedParentAdmissionId) ||
+    (input.expectedPurpose !== undefined &&
+      admission.purpose !== input.expectedPurpose) ||
+    (input.expectedAttempt !== undefined &&
+      admission.attempt !== input.expectedAttempt) ||
+    (input.expectedPreCertificationVoiceAudio !== undefined &&
+      (!admission.preCertificationVoiceEvidence ||
+        admission.providerMode !== "SYNTHETIC_MOCK_VOICE" ||
+        admission.purpose !== "VISIT" ||
+        admission.audioSha256 !==
+          input.expectedPreCertificationVoiceAudio.sha256 ||
+        admission.audioSizeBytes !==
+          input.expectedPreCertificationVoiceAudio.sizeBytes ||
+        admission.audioMimeType !==
+          input.expectedPreCertificationVoiceAudio.mimeType ||
+        admission.audioObjectKey !==
+          input.expectedPreCertificationVoiceAudio.objectKey))
   ) {
     throw new TemplateTwinStagingQaAdmissionError(
       "TEMPLATE_TWIN_STAGING_QA_ADMISSION_MISMATCH",
@@ -273,6 +312,15 @@ export async function lockAndAssertTemplateTwinStagingQaAdmission(input: {
   expectedProviderMode?: TemplateTwinStagingQaAdmissionProviderMode;
   expectedTemplate?: { id: string; version?: number };
   expectedVisitId?: string;
+  expectedParentAdmissionId?: string;
+  expectedPurpose?: "UPLOAD" | "VISIT";
+  expectedAttempt?: number;
+  expectedPreCertificationVoiceAudio?: {
+    sha256: string;
+    sizeBytes: number;
+    mimeType: string;
+    objectKey: string;
+  };
 }): Promise<TemplateTwinStagingQaAdmissionRow> {
   const rows = await input.tx.$queryRaw<TemplateTwinStagingQaAdmissionRow[]>(
     Prisma.sql`
@@ -280,10 +328,12 @@ export async function lockAndAssertTemplateTwinStagingQaAdmission(input: {
         "id", "practiceId", "actorId", "parentAdmissionId",
         "sourceSha256", "sourceSizeBytes", "fixtureVersion", "providerMode",
         "purpose", "phase", "requestSha256", "payloadSha256",
+        "preCertificationVoiceEvidence", "audioSha256", "audioSizeBytes",
+        "audioMimeType", "audioObjectKey",
         "pinnedGlobalRolloutGeneration", "pinnedPracticeRolloutGeneration",
         "sourceArtifactId", "noteTemplateId", "noteTemplateVersion",
         "certificationId", "mappingSha256", "visitId", "attempt",
-        "expiresAt", "failedAt", "revokedAt", "consumedAt"
+        "expiresAt", "failedAt", "revokedAt", "consumedAt", "createdAt"
       FROM "template_twin_synthetic_qa_admissions"
       WHERE "id" = ${input.admissionId}
       FOR UPDATE
@@ -300,6 +350,11 @@ export async function lockAndAssertTemplateTwinStagingQaAdmission(input: {
     expectedProviderMode: input.expectedProviderMode,
     expectedTemplate: input.expectedTemplate,
     expectedVisitId: input.expectedVisitId,
+    expectedParentAdmissionId: input.expectedParentAdmissionId,
+    expectedPurpose: input.expectedPurpose,
+    expectedAttempt: input.expectedAttempt,
+    expectedPreCertificationVoiceAudio:
+      input.expectedPreCertificationVoiceAudio,
     now: clockRows[0]?.databaseNow,
   });
 }
@@ -432,6 +487,16 @@ export async function runWithVerifiedTemplateTwinStagingQaAdmissionProvider<T>(
     expectedProviderMode: TemplateTwinStagingQaAdmissionProviderMode;
     expectedSource?: { sha256: string; sizeBytes: number };
     expectedTemplate?: { id: string; version?: number };
+    expectedVisitId?: string;
+    expectedParentAdmissionId?: string;
+    expectedPurpose?: "UPLOAD" | "VISIT";
+    expectedAttempt?: number;
+    expectedPreCertificationVoiceAudio?: {
+      sha256: string;
+      sizeBytes: number;
+      mimeType: string;
+      objectKey: string;
+    };
     evidenceText?: string;
     operation: (providerVisitId: string) => Promise<T> | T;
     env?: SyntheticQaProviderEnvironment;
@@ -459,6 +524,12 @@ export async function runWithVerifiedTemplateTwinStagingQaAdmissionProvider<T>(
     expectedProviderMode: input.expectedProviderMode,
     expectedSource: input.expectedSource,
     expectedTemplate: input.expectedTemplate,
+    expectedVisitId: input.expectedVisitId,
+    expectedParentAdmissionId: input.expectedParentAdmissionId,
+    expectedPurpose: input.expectedPurpose,
+    expectedAttempt: input.expectedAttempt,
+    expectedPreCertificationVoiceAudio:
+      input.expectedPreCertificationVoiceAudio,
   });
   const evidenceText = input.evidenceText ?? TEMPLATE_TWIN_SYNTHETIC_QA_TRANSCRIPT;
   const active = getTemplateTwinSyntheticQaProviderContext();

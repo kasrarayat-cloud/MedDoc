@@ -2,6 +2,16 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { ModelClient } from '@meddoc/ai';
 
+vi.mock('../../provider-ownership', () => ({
+  requireTemplateTwinProviderOwnershipContext: vi.fn(),
+  runTemplateTwinOwnedModelComplete: vi.fn(
+    async (input: {
+      args: unknown;
+      client: { complete(args: unknown): Promise<unknown> };
+    }) => input.client.complete(input.args),
+  ),
+}));
+
 import type { SemanticMapping, TemplateField } from '../../ir';
 import {
   SemanticMappingInvariantError,

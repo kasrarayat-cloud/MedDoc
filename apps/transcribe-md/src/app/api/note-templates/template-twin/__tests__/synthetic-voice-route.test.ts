@@ -4,12 +4,8 @@ const mocks = vi.hoisted(() => ({
   findTemplate: vi.fn(),
   rateLimitOr429: vi.fn(),
   requireDoctorSession: vi.fn(),
-  runCertificationProvider: vi.fn(),
   runSyntheticTest: vi.fn(),
-  transcribe: vi.fn(),
-  lifecycleGuard: vi.fn(async (input: { operation: () => unknown }) =>
-    input.operation(),
-  ),
+  transcribeSyntheticVoice: vi.fn(),
 }));
 
 vi.mock("next/server", () => {
@@ -42,7 +38,6 @@ vi.mock("next/server", () => {
   return { NextResponse: FakeNextResponse };
 });
 
-vi.mock("@meddoc/ai", () => ({ transcribe: mocks.transcribe }));
 vi.mock("@meddoc/db", () => ({
   default: {
     noteTemplate: { findFirst: mocks.findTemplate },
@@ -74,25 +69,17 @@ vi.mock("@/lib/template-twin/request-security", () => ({
   isMultipartFile: (value: unknown) =>
     Boolean(
       value &&
-        typeof value === "object" &&
-        "arrayBuffer" in value &&
-        typeof value.arrayBuffer === "function",
+      typeof value === "object" &&
+      "arrayBuffer" in value &&
+      typeof value.arrayBuffer === "function",
     ),
   TemplateTwinMultipartError: class TemplateTwinMultipartError extends Error {
     code = "MULTIPART_INVALID";
   },
 }));
-vi.mock("@/lib/template-twin/staging-qa-lifecycle-guard", () => ({
-  TemplateTwinStagingQaLifecycleGuardError: class TemplateTwinStagingQaLifecycleGuardError extends Error {},
-  runWithTemplateTwinStagingQaLifecycleGuard: mocks.lifecycleGuard,
-}));
-vi.mock("@/lib/template-twin/staging-qa-certification-provider", () => ({
-  runWithTemplateTwinStagingQaCertificationProvider:
-    mocks.runCertificationProvider,
-}));
-vi.mock("@/lib/template-twin/staging-qa-fixtures", () => ({
-  TEMPLATE_TWIN_STAGING_QA_VOICE_TRANSCRIPT:
-    "Reviewed synthetic voice transcript.",
+vi.mock("@/lib/template-twin/synthetic-voice-provider", () => ({
+  TemplateTwinSyntheticVoiceProviderError: class TemplateTwinSyntheticVoiceProviderError extends Error {},
+  transcribeTemplateTwinSyntheticVoice: mocks.transcribeSyntheticVoice,
 }));
 vi.mock("@/lib/template-twin/synthetic-test", () => ({
   TemplateTwinSyntheticTestError: class TemplateTwinSyntheticTestError extends Error {
@@ -103,7 +90,7 @@ vi.mock("@/lib/template-twin/synthetic-test", () => ({
 
 import { POST } from "../[id]/synthetic-test-voice/route";
 import { AuthError } from "@/lib/auth";
-import { TemplateTwinSyntheticTestError } from "@/lib/template-twin/synthetic-test";
+import { TemplateTwinSyntheticVoiceProviderError } from "@/lib/template-twin/synthetic-voice-provider";
 const HASH = "a".repeat(64);
 const SESSION = {
   templateTwinRolloutToken: {
@@ -124,22 +111,10 @@ beforeEach(() => {
   mocks.rateLimitOr429.mockReturnValue(null);
   mocks.findTemplate.mockResolvedValue({
     templateTwinCompiledVersion: {
-      certificationStatus: "DRAFT",
-      sourceArtifact: {
-        practiceId: SESSION.user.practiceId,
-        sha256: "b".repeat(64),
-        sizeBytes: 2_048,
-      },
+      certificationStatus: "NEEDS_CONFIRMATION",
     },
   });
-  mocks.runCertificationProvider.mockImplementation(
-    (input: { operation: (providerVisitId: string | null) => unknown }) =>
-      input.operation(null),
-  );
-  mocks.lifecycleGuard.mockImplementation(
-    async (input: { operation: () => unknown }) => input.operation(),
-  );
-  mocks.transcribe.mockResolvedValue({
+  mocks.transcribeSyntheticVoice.mockResolvedValue({
     transcript: "Synthetic voice encounter evidence only.",
   });
   mocks.runSyntheticTest.mockResolvedValue({
@@ -163,12 +138,12 @@ describe("Template Twin synthetic voice certification route", () => {
 
       expect(response.status).toBe(403);
       expect(mocks.findTemplate).not.toHaveBeenCalled();
-      expect(mocks.transcribe).not.toHaveBeenCalled();
+      expect(mocks.transcribeSyntheticVoice).not.toHaveBeenCalled();
       expect(mocks.runSyntheticTest).not.toHaveBeenCalled();
     },
   );
 
-  it("keeps the no-placeholder voice payload compatible while using the shared dictation pipeline", async () => {
+  it("passes the exact audio identity only to the owned synthetic voice service", async () => {
     const form = new FormData();
     form.set(
       "audio",
@@ -197,41 +172,26 @@ describe("Template Twin synthetic voice certification route", () => {
         templateTwinCompiledVersion: {
           select: {
             certificationStatus: true,
-            sourceArtifact: {
-              select: {
-                practiceId: true,
-                sha256: true,
-                sizeBytes: true,
-              },
-            },
           },
         },
       },
     });
-    expect(mocks.transcribe).toHaveBeenCalledWith({
-      practiceId: SESSION.user.practiceId,
-      userId: SESSION.user.id,
-      visitId: null,
-      purpose: "tm_transcribe",
+    expect(mocks.transcribeSyntheticVoice).toHaveBeenCalledWith({
+      noteTemplateId: "template-synthetic-voice",
+      actor: {
+        userId: SESSION.user.id,
+        userEmail: SESSION.user.email,
+        practiceId: SESSION.user.practiceId,
+        rolloutToken: SESSION.templateTwinRolloutToken,
+      },
       audio: expect.any(Buffer),
       mimeType: "audio/webm",
-      allowCrossProviderFallback: false,
-      deepgram: { options: { diarize: false, utterances: false } },
-    });
-    expect(mocks.runCertificationProvider).toHaveBeenCalledWith({
-      source: { sha256: "b".repeat(64), sizeBytes: 2_048 },
-      noteTemplateId: "template-synthetic-voice",
-      doctorId: SESSION.user.id,
-      practiceId: SESSION.user.practiceId,
-      rolloutToken: SESSION.templateTwinRolloutToken,
-      encounterMode: "dictation",
+      audioSha256: expect.stringMatching(/^[a-f0-9]{64}$/),
       expectedMappingConfirmation: { mappingsSha256: HASH },
-      evidenceText: "Reviewed synthetic voice transcript.",
-      operation: expect.any(Function),
     });
     expect(
-      mocks.runCertificationProvider.mock.invocationCallOrder[0],
-    ).toBeLessThan(mocks.transcribe.mock.invocationCallOrder[0]!);
+      mocks.transcribeSyntheticVoice.mock.invocationCallOrder[0],
+    ).toBeLessThan(mocks.runSyntheticTest.mock.invocationCallOrder[0]!);
     expect(mocks.runSyntheticTest).toHaveBeenCalledWith({
       noteTemplateId: "template-synthetic-voice",
       actor: {
@@ -252,25 +212,11 @@ describe("Template Twin synthetic voice certification route", () => {
         mappingsSha256: HASH,
       },
     });
-    const guardInput = mocks.lifecycleGuard.mock.calls[0]?.[0] as unknown as {
-      isExpectedBusinessError?: (error: unknown) => boolean;
-    };
-    expect(
-      guardInput.isExpectedBusinessError?.(
-        new TemplateTwinSyntheticTestError("CONFLICT", "conflict"),
-      ),
-    ).toBe(true);
-    expect(
-      guardInput.isExpectedBusinessError?.(
-        new Error("transcription provider failure"),
-      ),
-    ).toBe(false);
   });
 
-  it("passes the provider-bound visit identity to transcription before any exact-fixture provider call", async () => {
-    mocks.runCertificationProvider.mockImplementation(
-      (input: { operation: (providerVisitId: string | null) => unknown }) =>
-        input.operation("template-twin-staging-certification-visit:fixture"),
+  it("rejects an ordinary or unowned template before synthetic testing", async () => {
+    mocks.transcribeSyntheticVoice.mockRejectedValue(
+      new TemplateTwinSyntheticVoiceProviderError(),
     );
     const form = new FormData();
     form.set(
@@ -289,15 +235,12 @@ describe("Template Twin synthetic voice certification route", () => {
       { params: Promise.resolve({ id: "template-synthetic-voice" }) },
     );
 
-    expect(response.status).toBe(200);
-    expect(mocks.transcribe).toHaveBeenCalledWith(
-      expect.objectContaining({
-        visitId: "template-twin-staging-certification-visit:fixture",
-        allowCrossProviderFallback: false,
-      }),
-    );
-    expect(
-      mocks.runCertificationProvider.mock.invocationCallOrder[0],
-    ).toBeLessThan(mocks.transcribe.mock.invocationCallOrder[0]!);
+    expect(response.status).toBe(422);
+    expect(mocks.transcribeSyntheticVoice).toHaveBeenCalledOnce();
+    expect(mocks.runSyntheticTest).not.toHaveBeenCalled();
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      code: "SYNTHETIC_VOICE_UNAVAILABLE",
+    });
   });
 });

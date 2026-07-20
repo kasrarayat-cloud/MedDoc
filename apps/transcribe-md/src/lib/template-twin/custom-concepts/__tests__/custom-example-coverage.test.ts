@@ -1,5 +1,29 @@
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("../../provider-ownership", () => ({
+  getTemplateTwinProviderOwnershipContext: vi.fn(() => null),
+  requireTemplateTwinProviderOwnershipContext: vi.fn(() => ({
+    scope: "CUSTOM_EXAMPLE",
+  })),
+  runTemplateTwinOwnedModelComplete: vi.fn(
+    async (input: {
+      args: unknown;
+      client: { complete(args: unknown): Promise<unknown> };
+    }) => input.client.complete(input.args),
+  ),
+  runWithTemplateTwinProviderOwnershipContext: vi.fn(
+    async (_context: unknown, callback: () => Promise<unknown>) => callback(),
+  ),
+  buildTemplateTwinProviderOwnershipReceipt: vi.fn(() => ({
+    evidence: {
+      contractVersion: "template-twin-provider-ownership-receipt-v2",
+      providerMode: "LIVE",
+      executions: [],
+    },
+    sha256: "c".repeat(64),
+  })),
+}));
+
 import {
   buildCanonicalCustomConceptEvidence,
   computeCustomExtractionSchemaHash,
@@ -18,11 +42,25 @@ import {
 } from "../example-coverage";
 import { assertTemplateTwinCustomExamplesReadyForCertification } from "../../custom-example-service";
 import { canonicalSha256 } from "../../canonical";
+import { runWithTemplateTwinProviderOwnershipContext } from "../../provider-ownership";
 
 const FIELD_ID = `ttf_${"1".repeat(24)}`;
 const LINEAGE_ID = "synthetic-custom-example-lineage";
 const COMPILED_ID = "synthetic-custom-example-compiled";
 const PHYSICIAN_ID = "doctor-custom-example@synthetic.test";
+const ROLLOUT_TOKEN = {
+  practiceId: "practice-synthetic-example",
+  globalGeneration: BigInt(1),
+  practiceGeneration: BigInt(1),
+};
+const EXECUTION_IDENTITY = {
+  noteTemplateVersion: 1,
+  sourceArtifactId: "synthetic-custom-example-source",
+  compiledVersionId: COMPILED_ID,
+  sourceLineageId: LINEAGE_ID,
+  sourceLineageVersion: 1,
+  sourceSha256: "d".repeat(64),
+};
 
 function specification(
   overrides: Partial<TemplateFieldSpecificationContent> = {},
@@ -269,6 +307,8 @@ describe("physician-reviewed custom-concept example coverage", () => {
       practiceId: "practice-synthetic-example",
       userId: PHYSICIAN_ID,
       noteTemplateId: "template-synthetic-example",
+      ...EXECUTION_IDENTITY,
+      rolloutToken: ROLLOUT_TOKEN,
       model: "mock-certified-example-model-v1",
       client: mock.client,
       privacyClient: privacy,
@@ -287,6 +327,30 @@ describe("physician-reviewed custom-concept example coverage", () => {
     expect(executions[2]?.resultFactCount).toBe(0);
     expect(executions.every((item) => item.modelSha256.length === 64)).toBe(
       true,
+    );
+    expect(new Set(executions.map((item) => item.id)).size).toBe(3);
+    expect(
+      executions.every(
+        (item) => item.providerOwnershipReceipt?.sha256 === "c".repeat(64),
+      ),
+    ).toBe(true);
+    expect(
+      vi
+        .mocked(runWithTemplateTwinProviderOwnershipContext)
+        .mock.calls.slice(-3)
+        .map(([context]) => context),
+    ).toEqual(
+      executions.map((execution) =>
+        expect.objectContaining({
+          visitId: null,
+          scope: "CUSTOM_EXAMPLE",
+          subjectId: execution.id,
+          subjectSha256: execution.definition.evidenceSha256,
+          sourceArtifactId: EXECUTION_IDENTITY.sourceArtifactId,
+          compiledVersionId: EXECUTION_IDENTITY.compiledVersionId,
+          noteTemplateId: "template-synthetic-example",
+        }),
+      ),
     );
   });
 
@@ -327,6 +391,8 @@ describe("physician-reviewed custom-concept example coverage", () => {
       practiceId: "practice-synthetic-example",
       userId: PHYSICIAN_ID,
       noteTemplateId: "template-synthetic-example",
+      ...EXECUTION_IDENTITY,
+      rolloutToken: ROLLOUT_TOKEN,
       model: "mock-certified-example-model-v1",
       client: mock.client,
       privacyClient: privacyClient(),
@@ -335,6 +401,33 @@ describe("physician-reviewed custom-concept example coverage", () => {
       passed: false,
       failureCode: "TT_CUSTOM_EXAMPLE_NEGATIVE_FALSE_POSITIVE",
     });
+  });
+
+  it("keeps caught extraction failures receipt-free and nonpassing", async () => {
+    const spec = specification();
+    const complete = vi.fn().mockRejectedValue(new Error("synthetic failure"));
+    const executions = await executeTemplateTwinCustomExamples({
+      specifications: [spec],
+      practiceId: "practice-synthetic-example",
+      userId: PHYSICIAN_ID,
+      noteTemplateId: "template-synthetic-example",
+      ...EXECUTION_IDENTITY,
+      rolloutToken: ROLLOUT_TOKEN,
+      model: "mock-certified-example-model-v1",
+      client: { complete } as never,
+      privacyClient: privacyClient(),
+    });
+
+    expect(executions).toHaveLength(3);
+    expect(new Set(executions.map((execution) => execution.id)).size).toBe(3);
+    expect(
+      executions.every(
+        (execution) =>
+          !execution.passed &&
+          execution.resultStatus === "extraction_rejected" &&
+          execution.providerOwnershipReceipt === null,
+      ),
+    ).toBe(true);
   });
 
   it("fails a negative example that produces any different usable value", async () => {
@@ -373,6 +466,8 @@ describe("physician-reviewed custom-concept example coverage", () => {
       practiceId: "practice-synthetic-example",
       userId: PHYSICIAN_ID,
       noteTemplateId: "template-synthetic-example",
+      ...EXECUTION_IDENTITY,
+      rolloutToken: ROLLOUT_TOKEN,
       model: "mock-certified-example-model-v1",
       client: mock.client,
       privacyClient: privacyClient(),
@@ -413,6 +508,8 @@ describe("physician-reviewed custom-concept example coverage", () => {
       practiceId: "practice-synthetic-example",
       userId: PHYSICIAN_ID,
       noteTemplateId: "template-synthetic-example",
+      ...EXECUTION_IDENTITY,
+      rolloutToken: ROLLOUT_TOKEN,
       model: "mock-certified-example-model-v1",
       client: mock.client,
       privacyClient: privacyClient(),
@@ -450,6 +547,8 @@ describe("physician-reviewed custom-concept example coverage", () => {
       practiceId: "practice-synthetic-example",
       userId: PHYSICIAN_ID,
       noteTemplateId: "template-synthetic-example",
+      ...EXECUTION_IDENTITY,
+      rolloutToken: ROLLOUT_TOKEN,
       model: "mock-certified-example-model-v1",
       client: mock.client,
       privacyClient: privacyClient(),
@@ -487,6 +586,8 @@ describe("physician-reviewed custom-concept example coverage", () => {
       practiceId: "practice-synthetic-example",
       userId: PHYSICIAN_ID,
       noteTemplateId: "template-synthetic-example",
+      ...EXECUTION_IDENTITY,
+      rolloutToken: ROLLOUT_TOKEN,
       model: "mock-certified-example-model-v1",
       client: mock.client,
       privacyClient: privacyClient(),
@@ -510,6 +611,8 @@ describe("physician-reviewed custom-concept example coverage", () => {
         practiceId: "practice-synthetic-example",
         userId: PHYSICIAN_ID,
         noteTemplateId: "template-synthetic-example",
+        ...EXECUTION_IDENTITY,
+        rolloutToken: ROLLOUT_TOKEN,
         model: "mock-certified-example-model-v1",
         client: extraction.client,
         privacyClient: privacy,
@@ -601,6 +704,8 @@ describe("physician-reviewed custom-concept example coverage", () => {
         practiceId: "practice-synthetic-example",
         userId: PHYSICIAN_ID,
         noteTemplateId: "template-synthetic-example",
+        ...EXECUTION_IDENTITY,
+        rolloutToken: ROLLOUT_TOKEN,
         model: "mock-certified-example-model-v1",
         client: extraction.client,
         privacyClient: privacy,
@@ -637,6 +742,8 @@ describe("physician-reviewed custom-concept example coverage", () => {
       practiceId: "practice-synthetic-example",
       userId: PHYSICIAN_ID,
       noteTemplateId: "template-synthetic-example",
+      ...EXECUTION_IDENTITY,
+      rolloutToken: ROLLOUT_TOKEN,
       model: "mock-certified-example-model-v1",
       client: mock.client,
       privacyClient: privacyClient(),
@@ -713,6 +820,8 @@ describe("physician-reviewed custom-concept example coverage", () => {
       practiceId: "practice-synthetic-example",
       userId: PHYSICIAN_ID,
       noteTemplateId: "template-synthetic-example",
+      ...EXECUTION_IDENTITY,
+      rolloutToken: ROLLOUT_TOKEN,
       model: "mock-certified-example-model-v1",
       client: mock.client,
       privacyClient: privacyClient(),

@@ -48,7 +48,7 @@
 // ============================================================================
 
 import { z } from 'zod';
-import { modelClient } from '@meddoc/ai';
+import { runTemplateTwinOwnedModelCompleteText } from '@/lib/template-twin/provider-ownership';
 
 // Same env override pattern as L4/L5/L6 (feat/fable5-eval); unset → Sonnet.
 const MODEL = process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-sonnet-4-6';
@@ -230,17 +230,21 @@ export async function runPolishFidelityGate(
       input.polished,
     ].join('\n');
 
-    const { text } = await modelClient.completeText({
-      practiceId: input.practiceId,
-      visitId: input.visitId,
-      userId: input.userId,
-      purpose: 'tm_polish_gate',
-      provider: 'anthropic',
-      model: MODEL,
-      system: VERIFIER_SYSTEM,
-      user,
-      maxTokens: 1024,
-      temperature: 0,
+    const { text } = await runTemplateTwinOwnedModelCompleteText({
+      operation: 'L6_FIDELITY_VERIFY',
+      operationVersion: 'polish-fidelity-verifier-v1',
+      args: {
+        practiceId: input.practiceId,
+        visitId: input.visitId,
+        userId: input.userId,
+        purpose: 'tm_polish_gate',
+        provider: 'anthropic',
+        model: MODEL,
+        system: VERIFIER_SYSTEM,
+        user,
+        maxTokens: 1024,
+        temperature: 0,
+      },
     });
 
     const rawObjects = extractAllJsonObjects(text ?? '');

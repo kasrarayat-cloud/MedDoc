@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 
 import { Prisma } from "@prisma/client";
 import prisma from "@meddoc/db";
-import type { ModelClient } from "@meddoc/ai";
+import {
+  getTemplateTwinSyntheticQaProviderContext,
+  type ModelClient,
+} from "@meddoc/ai";
 
 import {
   SemanticMappingSchema,
@@ -924,6 +927,7 @@ export async function updateTemplateTwinMappings(input: {
       fragments: privacyFragments,
       practiceId: input.actor.practiceId,
       userId: input.actor.userId,
+      rolloutToken: input.actor.rolloutToken,
       client: input.privacyClient,
     });
   } catch (error) {
@@ -942,6 +946,7 @@ export async function updateTemplateTwinMappings(input: {
           fragments: group.fragments,
           practiceId: input.actor.practiceId,
           userId: input.actor.userId,
+          rolloutToken: input.actor.rolloutToken,
           client: input.privacyClient,
         });
       } catch (groupError) {
@@ -1432,6 +1437,8 @@ export async function certifyAndActivateTemplateTwin(input: {
   expectedSyntheticTestProvenanceSha256?: string;
   optionalFieldWaivers?: readonly { fieldId: string; reason: string }[];
 }): Promise<TemplateTwinWorkspace> {
+  const providerAuthorizationContext =
+    getTemplateTwinSyntheticQaProviderContext();
   await prisma.$transaction(
     async (tx: Prisma.TransactionClient) => {
       // Certification activates a document version. Its rollout epoch is
@@ -1769,23 +1776,16 @@ export async function certifyAndActivateTemplateTwin(input: {
         where: { id: compiled.id },
         data: { certificationStatus: "CERTIFIED" },
       });
-      await tx.noteTemplate.updateMany({
-        where: {
-          doctorId: input.actor.userId,
-          encounterType: template.encounterType,
-          status: "active",
-          NOT: { id: template.id },
-        },
-        data: { status: "inactive" },
-      });
-      await tx.noteTemplate.update({
-        where: { id: template.id },
-        data: { status: "active" },
-      });
       await tx.templateTwinCertification.create({
         data: {
           compiledVersionId: compiled.id,
           certifiedById: input.actor.userId,
+          providerAuthorizationMode:
+            providerAuthorizationContext === null
+              ? "LIVE"
+              : "SYNTHETIC_QA",
+          providerAuthorizationAdmissionId:
+            providerAuthorizationContext?.admissionId ?? null,
           compiledStructureSha256: ir.structureSha256,
           approvedMappingsSha256: mappingHash,
           approvedFieldIntentsSha256: fieldIntentsSha256,
@@ -1798,6 +1798,19 @@ export async function certifyAndActivateTemplateTwin(input: {
           testOutputEtag: compiled.latestTestOutputEtag!,
           testOutputSha256: compiled.latestTestOutputSha256!,
         },
+      });
+      await tx.noteTemplate.updateMany({
+        where: {
+          doctorId: input.actor.userId,
+          encounterType: template.encounterType,
+          status: "active",
+          NOT: { id: template.id },
+        },
+        data: { status: "inactive" },
+      });
+      await tx.noteTemplate.update({
+        where: { id: template.id },
+        data: { status: "active" },
       });
 
       for (const waiver of waiverEvidence) {

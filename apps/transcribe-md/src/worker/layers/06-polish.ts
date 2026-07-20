@@ -7,7 +7,11 @@
 // with needsReview=true so the clinician sees the gap.
 // ============================================================================
 
-import { modelClient } from "@meddoc/ai";
+import {
+  getTemplateTwinProviderOwnershipContext,
+  recordTemplateTwinProviderNotApplicable,
+  runTemplateTwinOwnedModelCompleteText,
+} from "@/lib/template-twin/provider-ownership";
 import { updateTemplateTwinSyntheticQaClaimBoundVisit } from "@/worker/staging-qa-mutation-fence";
 import { logWorkerAudit } from "@/worker/worker-audit";
 import { applyAdditiveReviewState } from "@/worker/finalize-review-state";
@@ -181,8 +185,20 @@ export async function runLayer6Polish(
   // audit row gives operators a grep target for prompt regressions.
   let polishValidationFailReason: string | null = null;
   let polishRejected = false;
+  const providerOwnershipActive =
+    getTemplateTwinProviderOwnershipContext()?.scope === "VISIT_PIPELINE";
 
   if (fixable.length === 0) {
+    if (providerOwnershipActive) {
+      await recordTemplateTwinProviderNotApplicable({
+        operation: "L6_POLISH",
+        reasonCode: "NO_FIXABLE_CRITIQUE_WORK",
+      });
+      await recordTemplateTwinProviderNotApplicable({
+        operation: "L6_FIDELITY_VERIFY",
+        reasonCode: "POLISH_NOT_EXECUTED",
+      });
+    }
     // Nothing to auto-patch — the draft itself is our final note.
     // Still persist it so /visits/[id] renders soapFinal rather than
     // soapDraft (simpler UI state machine).
@@ -238,20 +254,24 @@ export async function runLayer6Polish(
       fixesText,
     ].join("\n");
 
-    const { text } = await modelClient.completeText({
-      practiceId: input.practiceId,
-      visitId: input.visitId,
-      userId: input.userId,
-      purpose: "tm_polish",
-      provider: "anthropic",
-      model: MODEL,
-      system,
-      user,
-      maxTokens: 8192,
-      // Q2 fix-pack — polish is constrained edit ("apply these fixes").
-      // Tightened from 0.2 to 0.1 so the same draft + critique produce
-      // the same revised SOAP run-to-run.
-      temperature: 0.1,
+    const { text } = await runTemplateTwinOwnedModelCompleteText({
+      operation: "L6_POLISH",
+      operationVersion: "soap-polish-v1",
+      args: {
+        practiceId: input.practiceId,
+        visitId: input.visitId,
+        userId: input.userId,
+        purpose: "tm_polish",
+        provider: "anthropic",
+        model: MODEL,
+        system,
+        user,
+        maxTokens: 8192,
+        // Q2 fix-pack — polish is constrained edit ("apply these fixes").
+        // Tightened from 0.2 to 0.1 so the same draft + critique produce
+        // the same revised SOAP run-to-run.
+        temperature: 0.1,
+      },
     });
     soapFinal = text;
 
@@ -295,6 +315,11 @@ export async function runLayer6Polish(
           },
         });
       }
+    } else if (providerOwnershipActive) {
+      await recordTemplateTwinProviderNotApplicable({
+        operation: "L6_FIDELITY_VERIFY",
+        reasonCode: "EMPTY_POLISH_OUTPUT",
+      });
     }
 
     // FIND-P1-016 — same validator L4 uses, now scoped to the resolved

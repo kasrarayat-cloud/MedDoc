@@ -20,12 +20,12 @@ import { updateTemplateTwinSyntheticQaClaimBoundVisit } from "@/worker/staging-q
 // transcript. See packages/ai/src/transcribe.ts header for the full
 // fallback semantics + the foundation-scope rationale (PR #162).
 import {
-  transcribe,
   withRetry,
   CrossProviderFallbackDisabledError,
   type TranscribeResult,
   type RetryAttemptInfo,
 } from "@meddoc/ai";
+import { runTemplateTwinOwnedTranscribe } from "@/lib/template-twin/provider-ownership";
 import { statAudio, streamAudio } from "@/lib/minio";
 import {
   isWhisperFallbackEnabled,
@@ -123,57 +123,67 @@ export async function runLayer1Transcribe(
   const allowCrossProviderFallback = isWhisperFallbackEnabled();
 
   const attempt = async () => {
-    return transcribe({
-      practiceId: input.practiceId,
-      visitId: input.visitId,
-      userId: input.userId,
-      purpose: "tm_transcribe",
-      allowCrossProviderFallback,
-      audio: {
-        stream: webStream,
+    return runTemplateTwinOwnedTranscribe({
+      operation: "L1_TRANSCRIBE",
+      operationVersion: "deepgram-batch-l1-v1",
+      audioIdentity: {
+        objectKey: input.audioKey,
+        objectEtag: stat.etag ?? null,
         sizeBytes: stat.size,
-        // Re-open + drain on fallback. Buffer.concat with a typed
-        // chunks list keeps the conversion small + explicit.
-        toBuffer: async () => {
-          const fresh = await streamAudio(input.audioKey);
-          const chunks: Buffer[] = [];
-          for await (const chunk of fresh) {
-            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-          }
-          return Buffer.concat(chunks);
-        },
+        lastModifiedIso: stat.lastModified?.toISOString() ?? null,
       },
-      mimeType: input.audioMimeType!,
-      deepgram: input.interpreterMode
-        ? {
-            // 2026-05-12 interpreter-mode (Sylvia incident follow-up):
-            // nova-3-medical is English-only; running it on a mixed-
-            // language interpreted visit produces a fragmentary
-            // transcript with only the doctor's English questions.
-            // Switching to nova-3 general + detect_language=true +
-            // language=multi captures the code-switching audio.
-            // Domain-specific keyterm biasing is lost (Nova-3 general
-            // doesn't accept it the same way) — accepted trade-off
-            // since we'd rather have the full transcript with weaker
-            // drug-name handling than a half-conversation with strong
-            // medical bias.
-            model: "nova-3",
-            options: {
-              detectLanguage: true,
-              // The 2-speaker hint is wrong for interpreter visits
-              // (doctor + patient + interpreter = 3 voices). Deepgram
-              // diarization handles N speakers natively; this just
-              // matches the SOAP-side expectation downstream.
-            },
-          }
-        : {
-            // 2026-05-13 Issues #202 + #206 — keyterms composed per-visit
-            // from core + specialty + (PR-2 safety floor). Persisted to
-            // transcribe_visits.keytermsApplied below so a future
-            // transcription regression can be attributed to the exact
-            // keyterm set that ran.
-            keyterms: built?.keyterms ?? [],
+      args: {
+        practiceId: input.practiceId,
+        visitId: input.visitId,
+        userId: input.userId,
+        purpose: "tm_transcribe",
+        allowCrossProviderFallback,
+        audio: {
+          stream: webStream,
+          sizeBytes: stat.size,
+          // Re-open + drain on fallback. Buffer.concat with a typed
+          // chunks list keeps the conversion small + explicit.
+          toBuffer: async () => {
+            const fresh = await streamAudio(input.audioKey);
+            const chunks: Buffer[] = [];
+            for await (const chunk of fresh) {
+              chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+            }
+            return Buffer.concat(chunks);
           },
+        },
+        mimeType: input.audioMimeType!,
+        deepgram: input.interpreterMode
+          ? {
+              // 2026-05-12 interpreter-mode (Sylvia incident follow-up):
+              // nova-3-medical is English-only; running it on a mixed-
+              // language interpreted visit produces a fragmentary
+              // transcript with only the doctor's English questions.
+              // Switching to nova-3 general + detect_language=true +
+              // language=multi captures the code-switching audio.
+              // Domain-specific keyterm biasing is lost (Nova-3 general
+              // doesn't accept it the same way) — accepted trade-off
+              // since we'd rather have the full transcript with weaker
+              // drug-name handling than a half-conversation with strong
+              // medical bias.
+              model: "nova-3",
+              options: {
+                detectLanguage: true,
+                // The 2-speaker hint is wrong for interpreter visits
+                // (doctor + patient + interpreter = 3 voices). Deepgram
+                // diarization handles N speakers natively; this just
+                // matches the SOAP-side expectation downstream.
+              },
+            }
+          : {
+              // 2026-05-13 Issues #202 + #206 — keyterms composed per-visit
+              // from core + specialty + (PR-2 safety floor). Persisted to
+              // transcribe_visits.keytermsApplied below so a future
+              // transcription regression can be attributed to the exact
+              // keyterm set that ran.
+              keyterms: built?.keyterms ?? [],
+            },
+      },
     });
   };
 
