@@ -17,6 +17,10 @@ import { apiError, withApiHandler } from "@/lib/api-error";
 import { logAudit } from "@/lib/audit";
 import { isOwnedTemplateTwinStagingQaVisit } from "@/lib/template-twin/staging-qa-access";
 import { isTemplateTwinStagingQaRequested } from "@/lib/template-twin/staging-qa-gate";
+import {
+  authorizeVisitDeliveryFinalClaim,
+  TemplateTwinDeliveryAuthorizationError,
+} from "@/lib/template-twin/delivery-authorization";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -65,12 +69,34 @@ export const POST = withApiHandler<{ id: string }>(
       );
     }
 
-    const data = await loadVisitExportData(visitId, userId);
+    let data: Awaited<ReturnType<typeof loadVisitExportData>>;
+    try {
+      data = await loadVisitExportData(visitId, userId);
+    } catch (error) {
+      if (error instanceof TemplateTwinDeliveryAuthorizationError) {
+        return apiError(error.message, error.status, {
+          code: error.code,
+          retry: false,
+        });
+      }
+      throw error;
+    }
     // loadVisitExportData returns null for both missing-visit and
     // not-yours; 404 guards against ID enumeration.
     if (!data) return apiError("not found", 404);
 
     const text = formatForEhr(parsed.data.format, data);
+    try {
+      await authorizeVisitDeliveryFinalClaim({ visitId, actorUserId: userId });
+    } catch (error) {
+      if (error instanceof TemplateTwinDeliveryAuthorizationError) {
+        return apiError(error.message, error.status, {
+          code: error.code,
+          retry: false,
+        });
+      }
+      throw error;
+    }
 
     logDelivery({
       visitId,

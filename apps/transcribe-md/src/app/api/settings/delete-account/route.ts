@@ -93,6 +93,7 @@ const RETAINED_TEMPLATE_TWIN_AUDIT_ACTIONS: readonly AuditAction[] = [
 
 type RetainedTemplateTwinClient = Pick<
   Prisma.TransactionClient,
+  | "$queryRaw"
   | "templateTwinSourceArtifact"
   | "templateTwinCertification"
   | "templateTwinFieldTestWaiver"
@@ -101,6 +102,8 @@ type RetainedTemplateTwinClient = Pick<
   | "templateTwinStaticAssetDecision"
   | "templateTwinStaticAssetReviewReceipt"
   | "templateTwinCustomExampleExecution"
+  | "templateTwinProviderExecution"
+  | "templateTwinSyntheticQaAdmission"
   | "templateTwinSyntheticQaRun"
   | "templateTwinCompletedCandidate"
   | "templateTwinCompletedCandidateReviewReceipt"
@@ -111,72 +114,136 @@ type RetainedTemplateTwinClient = Pick<
   | "auditLog"
 >;
 
+class TemplateTwinRetentionCensusError extends Error {
+  constructor(cause?: unknown) {
+    super("The Template Twin retention census could not be verified.", {
+      cause,
+    });
+    this.name = "TemplateTwinRetentionCensusError";
+  }
+}
+
+function retainedRawCount(value: bigint | number | string | undefined): number {
+  try {
+    const count = BigInt(value ?? -1);
+    if (count < BigInt(0) || count > BigInt(Number.MAX_SAFE_INTEGER)) {
+      throw new Error("retained count outside safe range");
+    }
+    return Number(count);
+  } catch (error) {
+    throw new TemplateTwinRetentionCensusError(error);
+  }
+}
+
+function retainedRawCountRow(
+  rows: Array<{ retainedCount: bigint | number | string }>,
+): number {
+  if (!Array.isArray(rows) || rows.length !== 1) {
+    throw new TemplateTwinRetentionCensusError();
+  }
+  return retainedRawCount(rows[0]?.retainedCount);
+}
+
 async function countRetainedTemplateTwinRecords(
   client: RetainedTemplateTwinClient,
   user: { id: string; practiceId: string },
 ): Promise<number> {
-  const counts = await Promise.all([
-    client.templateTwinSourceArtifact.count({
-      where: { practiceId: user.practiceId },
-    }),
-    client.templateTwinCertification.count({
-      where: { certifiedById: user.id },
-    }),
-    client.templateTwinFieldTestWaiver.count({
-      where: { waivedById: user.id },
-    }),
-    client.templateTwinFieldIntentDecision.count({
-      where: { decidedById: user.id },
-    }),
-    client.templateTwinStaticAsset.count({
-      where: { practiceId: user.practiceId },
-    }),
-    client.templateTwinStaticAssetDecision.count({
-      where: { asset: { practiceId: user.practiceId } },
-    }),
-    client.templateTwinStaticAssetReviewReceipt.count({
-      where: { practiceId: user.practiceId },
-    }),
-    client.templateTwinCustomExampleExecution.count({
-      where: {
-        OR: [
-          { practiceId: user.practiceId },
-          { executedById: user.id },
-          { acknowledgedById: user.id },
-        ],
-      },
-    }),
-    client.templateTwinSyntheticQaRun.count({
-      where: {
-        OR: [{ practiceId: user.practiceId }, { doctorId: user.id }],
-      },
-    }),
-    client.templateTwinCompletedCandidate.count({
-      where: { practiceId: user.practiceId },
-    }),
-    client.templateTwinCompletedCandidateReviewReceipt.count({
-      where: { practiceId: user.practiceId },
-    }),
-    client.noteTemplate.count({
-      where: { doctorId: user.id, templateKind: "template_twin_docx" },
-    }),
-    client.templateTwinFillManifest.count({
-      where: { practiceId: user.practiceId },
-    }),
-    client.templateTwinObjectLedger.count({
-      where: { practiceId: user.practiceId },
-    }),
-    client.templateTwinAuditOutbox.count({
-      where: { practiceId: user.practiceId },
-    }),
-    client.auditLog.count({
-      where: {
-        practiceId: user.practiceId,
-        action: { in: [...RETAINED_TEMPLATE_TWIN_AUDIT_ACTIONS] },
-      },
-    }),
-  ]);
-  return counts.reduce((total, count) => total + count, 0);
+  try {
+    const counts = await Promise.all([
+      client.templateTwinSourceArtifact.count({
+        where: { practiceId: user.practiceId },
+      }),
+      client.templateTwinCertification.count({
+        where: { certifiedById: user.id },
+      }),
+      client.templateTwinFieldTestWaiver.count({
+        where: { waivedById: user.id },
+      }),
+      client.templateTwinFieldIntentDecision.count({
+        where: { decidedById: user.id },
+      }),
+      client.templateTwinStaticAsset.count({
+        where: { practiceId: user.practiceId },
+      }),
+      client.templateTwinStaticAssetDecision.count({
+        where: { asset: { practiceId: user.practiceId } },
+      }),
+      client.templateTwinStaticAssetReviewReceipt.count({
+        where: { practiceId: user.practiceId },
+      }),
+      client.templateTwinCustomExampleExecution.count({
+        where: {
+          OR: [
+            { practiceId: user.practiceId },
+            { executedById: user.id },
+            { acknowledgedById: user.id },
+          ],
+        },
+      }),
+      client.templateTwinProviderExecution.count({
+        where: {
+          OR: [{ practiceId: user.practiceId }, { actorUserId: user.id }],
+        },
+      }),
+      client.templateTwinSyntheticQaAdmission.count({
+        where: {
+          OR: [{ practiceId: user.practiceId }, { actorId: user.id }],
+        },
+      }),
+      client.templateTwinSyntheticQaRun.count({
+        where: {
+          OR: [{ practiceId: user.practiceId }, { doctorId: user.id }],
+        },
+      }),
+      client.templateTwinCompletedCandidate.count({
+        where: { practiceId: user.practiceId },
+      }),
+      client.templateTwinCompletedCandidateReviewReceipt.count({
+        where: { practiceId: user.practiceId },
+      }),
+      client.noteTemplate.count({
+        where: { doctorId: user.id, templateKind: "template_twin_docx" },
+      }),
+      client.templateTwinFillManifest.count({
+        where: { practiceId: user.practiceId },
+      }),
+      client.templateTwinObjectLedger.count({
+        where: { practiceId: user.practiceId },
+      }),
+      client.templateTwinAuditOutbox.count({
+        where: { practiceId: user.practiceId },
+      }),
+      client.auditLog.count({
+        where: {
+          practiceId: user.practiceId,
+          action: { in: [...RETAINED_TEMPLATE_TWIN_AUDIT_ACTIONS] },
+        },
+      }),
+      client
+        .$queryRaw<Array<{ retainedCount: bigint | number | string }>>(
+          Prisma.sql`
+        SELECT COUNT(*)::bigint AS "retainedCount"
+        FROM "template_twin_provider_plan_decisions"
+        WHERE "practiceId" = ${user.practiceId}
+           OR "actorUserId" = ${user.id}
+      `,
+        )
+        .then(retainedRawCountRow),
+    ]);
+    return counts.reduce((total, count) => {
+      if (!Number.isSafeInteger(count) || count < 0) {
+        throw new TemplateTwinRetentionCensusError();
+      }
+      const next = total + count;
+      if (!Number.isSafeInteger(next)) {
+        throw new TemplateTwinRetentionCensusError();
+      }
+      return next;
+    }, 0);
+  } catch (error) {
+    if (error instanceof TemplateTwinRetentionCensusError) throw error;
+    throw new TemplateTwinRetentionCensusError(error);
+  }
 }
 
 class TemplateTwinDeletionAuditError extends Error {
@@ -317,10 +384,25 @@ export const POST = withApiHandler(
     // foreign keys. Detect that state before starting the destructive
     // transaction or touching object storage, and durably record the blocked
     // safety gate.
-    const retainedTwinRecordCount = await countRetainedTemplateTwinRecords(
-      prisma,
-      user,
-    );
+    let retainedTwinRecordCount: number;
+    try {
+      retainedTwinRecordCount = await countRetainedTemplateTwinRecords(
+        prisma,
+        user,
+      );
+    } catch (error) {
+      if (error instanceof TemplateTwinRetentionCensusError) {
+        return NextResponse.json(
+          {
+            error:
+              "Account deletion is temporarily unavailable because retained Template Twin records could not be verified.",
+            code: "TEMPLATE_TWIN_RETENTION_CENSUS_UNAVAILABLE",
+          },
+          { status: 503 },
+        );
+      }
+      throw error;
+    }
 
     if (retainedTwinRecordCount > 0) {
       try {
@@ -441,6 +523,16 @@ export const POST = withApiHandler(
         return retainedTemplateTwinResponse();
       }
     } catch (err) {
+      if (err instanceof TemplateTwinRetentionCensusError) {
+        return NextResponse.json(
+          {
+            error:
+              "Account deletion is temporarily unavailable because retained Template Twin records could not be verified.",
+            code: "TEMPLATE_TWIN_RETENTION_CENSUS_UNAVAILABLE",
+          },
+          { status: 503 },
+        );
+      }
       if (err instanceof TemplateTwinDeletionAuditError) {
         return NextResponse.json(
           {
@@ -458,10 +550,25 @@ export const POST = withApiHandler(
         // The destructive transaction has rolled back. Recount and enqueue the
         // policy gate in a separate committed statement so a restrictive FK,
         // trigger, or exhausted serializable race cannot become a generic 500.
-        const racedRetainedCount = await countRetainedTemplateTwinRecords(
-          prisma,
-          user,
-        );
+        let racedRetainedCount: number;
+        try {
+          racedRetainedCount = await countRetainedTemplateTwinRecords(
+            prisma,
+            user,
+          );
+        } catch (error) {
+          if (error instanceof TemplateTwinRetentionCensusError) {
+            return NextResponse.json(
+              {
+                error:
+                  "Account deletion is temporarily unavailable because retained Template Twin records could not be verified.",
+                code: "TEMPLATE_TWIN_RETENTION_CENSUS_UNAVAILABLE",
+              },
+              { status: 503 },
+            );
+          }
+          throw error;
+        }
         try {
           await enqueueRetainedTemplateTwinDeletionGate(prisma, {
             userId: user.id,

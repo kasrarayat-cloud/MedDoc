@@ -79,6 +79,10 @@ export async function requireFreshDoctorIdentity(userId: string): Promise<{
         role: true,
         isActive: true,
         practiceId: true,
+        deactivatedAt: true,
+        suspendedAt: true,
+        softDeletedAt: true,
+        products: true,
         practice: { select: { templateTwinEnabled: true } },
       },
     });
@@ -86,7 +90,11 @@ export async function requireFreshDoctorIdentity(userId: string): Promise<{
       !user ||
       !user.isActive ||
       user.role !== 'DOCTOR' ||
-      !user.practiceId
+      !user.practiceId ||
+      user.deactivatedAt !== null ||
+      user.suspendedAt !== null ||
+      user.softDeletedAt !== null ||
+      !user.products.includes('TRANSCRIBE_MD')
     ) {
       throw new AuthError(
         'FORBIDDEN',

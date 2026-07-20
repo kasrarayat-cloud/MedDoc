@@ -104,9 +104,11 @@ export async function POST(
       const status =
         error.code === "NOT_FOUND"
           ? 404
-          : error.code === "MANIFEST_INVALID" || error.code === "NOT_READY"
-            ? 422
-            : 409;
+          : error.code === "TEMPLATE_TWIN_CURRENT_PHYSICIAN_REQUIRED"
+            ? 403
+            : error.code === "MANIFEST_INVALID" || error.code === "NOT_READY"
+              ? 422
+              : 409;
       return response(
         { ok: false, error: error.message, code: error.code },
         status,

@@ -46,12 +46,18 @@ import {
   isTemplateTwinSourceAdmissionCurrent,
   type TemplateTwinSourceAdmissionRecord,
 } from "./source-admission";
+import {
+  isTemplateTwinLiveProviderCompilationOwned,
+  isTemplateTwinStagingProviderCompilationOwned,
+  isTemplateTwinVisitProviderReceiptOwned,
+} from "./live-provider-ownership";
 
 const SHA256 = /^[a-f0-9]{64}$/;
 
 export const TEMPLATE_TWIN_SIGNING_VISIT_SELECT = {
   soapFinal: true,
   soapVersion: true,
+  manualRetryCount: true,
   inputMode: true,
   rawTextInput: true,
   transcriptText: true,
@@ -66,6 +72,7 @@ export const TEMPLATE_TWIN_SIGNING_VISIT_SELECT = {
   noteTemplate: {
     select: {
       id: true,
+      doctorId: true,
       version: true,
       templateKind: true,
       templateTwinCompiledVersion: {
@@ -82,10 +89,14 @@ export const TEMPLATE_TWIN_SIGNING_VISIT_SELECT = {
           latestTestOutputEtag: true,
           latestTestOutputSha256: true,
           certificationStatus: true,
+          providerOwnershipEvidence: true,
+          providerOwnershipSha256: true,
           sourceArtifact: {
             select: {
+              id: true,
               practiceId: true,
               lineageId: true,
+              lineageVersion: true,
               objectVersionId: true,
               objectEtag: true,
               sha256: true,
@@ -93,6 +104,8 @@ export const TEMPLATE_TWIN_SIGNING_VISIT_SELECT = {
               sizeBytes: true,
               validationStatus: true,
               privacyScanEvidence: true,
+              providerOwnershipEvidence: true,
+              providerOwnershipSha256: true,
               quarantineArtifact: {
                 select: {
                   practiceId: true,
@@ -211,6 +224,8 @@ export const TEMPLATE_TWIN_SIGNING_VISIT_SELECT = {
       reviewedManifestVersion: true,
       reviewedManifestSha256: true,
       signedDecisionAt: true,
+      providerOwnershipEvidence: true,
+      providerOwnershipSha256: true,
       updatedAt: true,
     },
   },
@@ -222,6 +237,7 @@ export type TemplateTwinSignBlockerCode =
   | "TENANT_MISMATCH"
   | "TEMPLATE_VERSION_MISMATCH"
   | "TEMPLATE_NOT_CERTIFIED"
+  | "PROVIDER_OWNERSHIP_INVALID"
   | "CERTIFICATION_INTEGRITY_FAILED"
   | "FILL_MANIFEST_MISSING"
   | "FILL_NOT_READY"
@@ -243,18 +259,25 @@ export type TemplateTwinSignBlockerCode =
 export interface TemplateTwinSigningContext {
   visitId: string;
   practiceId: string;
+  actorUserId?: string | null;
   visitStatus: string;
   soapFinal?: string | null;
   soapVersion?: number | null;
+  manualRetryCount?: number | null;
   inputMode?: string | null;
   rawTextInput?: string | null;
   transcriptText?: string | null;
   transcriptRaw?: unknown;
   speakerMap?: unknown;
+  templateTwinSyntheticQaRun?: {
+    admissionId?: string | null;
+    admission?: { parentAdmissionId?: string | null } | null;
+  } | null;
   noteTemplateId?: string | null;
   noteTemplateVersion?: number | null;
   noteTemplate?: {
     id: string;
+    doctorId: string;
     version: number;
     templateKind: string;
     templateTwinCompiledVersion?: {
@@ -270,9 +293,15 @@ export interface TemplateTwinSigningContext {
       latestTestOutputEtag: string | null;
       latestTestOutputSha256: string | null;
       certificationStatus: string;
+      providerOwnershipEvidence: unknown;
+      providerOwnershipSha256: string | null;
       sourceArtifact: TemplateTwinSourceAdmissionRecord & {
+        id: string;
+        lineageVersion: number;
         mimeType: string;
         privacyScanEvidence: unknown;
+        providerOwnershipEvidence: unknown;
+        providerOwnershipSha256: string | null;
       };
       fields: Array<{
         id: string;
@@ -361,6 +390,8 @@ export interface TemplateTwinSigningContext {
     reviewedManifestVersion: number | null;
     reviewedManifestSha256: string | null;
     signedDecisionAt: Date | null;
+    providerOwnershipEvidence: unknown;
+    providerOwnershipSha256: string | null;
     updatedAt: Date;
   } | null;
 }
@@ -380,6 +411,8 @@ export interface TemplateTwinManifestSignClaim {
   outputSizeBytes: number;
   pinnedGlobalRolloutGeneration: bigint;
   pinnedPracticeRolloutGeneration: bigint;
+  providerOwnershipEvidence: unknown;
+  providerOwnershipSha256: string;
   updatedAt: Date;
 }
 
@@ -854,6 +887,37 @@ export function assessTemplateTwinSigning(
     if (compiled.sourceArtifact.practiceId !== context.practiceId) {
       add("TENANT_MISMATCH");
     }
+    const compilationIdentity = {
+      practiceId: context.practiceId,
+      actorUserId: template.doctorId,
+      noteTemplateId: template.id,
+      noteTemplateVersion: template.version,
+      compiledVersionId: compiled.id,
+      sourceArtifactId: compiled.sourceArtifact.id,
+      sourceLineageId: compiled.sourceArtifact.lineageId,
+      sourceLineageVersion: compiled.sourceArtifact.lineageVersion,
+      sourceSha256: compiled.sourceArtifact.sha256,
+      sourceProviderOwnershipEvidence:
+        compiled.sourceArtifact.providerOwnershipEvidence,
+      sourceProviderOwnershipSha256:
+        compiled.sourceArtifact.providerOwnershipSha256,
+      compiledProviderOwnershipEvidence: compiled.providerOwnershipEvidence,
+      compiledProviderOwnershipSha256: compiled.providerOwnershipSha256,
+    };
+    const expectedSyntheticAdmissionId =
+      context.templateTwinSyntheticQaRun?.admission?.parentAdmissionId ?? null;
+    const compilationOwned = context.templateTwinSyntheticQaRun
+      ? Boolean(
+          expectedSyntheticAdmissionId &&
+          isTemplateTwinStagingProviderCompilationOwned({
+            ...compilationIdentity,
+            expectedSyntheticAdmissionId,
+          }),
+        )
+      : isTemplateTwinLiveProviderCompilationOwned(compilationIdentity);
+    if (!compilationOwned) {
+      add("PROVIDER_OWNERSHIP_INVALID");
+    }
     if (
       !compiled.sourceArtifact.objectVersionId?.trim() ||
       !compiled.sourceArtifact.objectEtag?.trim()
@@ -923,6 +987,52 @@ export function assessTemplateTwinSigning(
       add("ROLLOUT_PROVENANCE_MISSING");
     }
     if (fill.practiceId !== context.practiceId) add("TENANT_MISMATCH");
+    const visitInputMode =
+      context.inputMode === "audio_upload" ||
+      context.inputMode === "voice_dictation" ||
+      context.inputMode === "text_notes"
+        ? context.inputMode
+        : null;
+    const logicalAttempt =
+      Number.isSafeInteger(context.manualRetryCount) &&
+      Number(context.manualRetryCount) >= 0
+        ? Number(context.manualRetryCount) + 1
+        : null;
+    const syntheticAdmissionId = context.templateTwinSyntheticQaRun
+      ? (context.templateTwinSyntheticQaRun.admissionId ?? null)
+      : null;
+    if (
+      !compiled ||
+      !context.actorUserId ||
+      !visitInputMode ||
+      logicalAttempt === null ||
+      fill.pinnedGlobalRolloutGeneration === null ||
+      fill.pinnedPracticeRolloutGeneration === null ||
+      !isTemplateTwinVisitProviderReceiptOwned({
+        evidence: fill.providerOwnershipEvidence,
+        evidenceSha256: fill.providerOwnershipSha256,
+        practiceId: context.practiceId,
+        actorUserId: context.actorUserId,
+        visitId: context.visitId,
+        visitInputMode,
+        sourceArtifactId: compiled.sourceArtifact.id,
+        compiledVersionId: compiled.id,
+        noteTemplateId: template.id,
+        noteTemplateVersion: template.version,
+        sourceLineageId: compiled.sourceArtifact.lineageId,
+        sourceLineageVersion: compiled.sourceArtifact.lineageVersion,
+        sourceSha256: compiled.sourceArtifact.sha256,
+        logicalAttempt,
+        providerMode: context.templateTwinSyntheticQaRun
+          ? "SYNTHETIC_QA"
+          : "LIVE",
+        syntheticAdmissionId,
+        pinnedGlobalRolloutGeneration: fill.pinnedGlobalRolloutGeneration,
+        pinnedPracticeRolloutGeneration: fill.pinnedPracticeRolloutGeneration,
+      })
+    ) {
+      add("PROVIDER_OWNERSHIP_INVALID");
+    }
     const expectedFillStatus =
       context.visitStatus === "SIGNED" ? "SIGNED" : "VERIFIED";
     if (
@@ -1129,6 +1239,7 @@ export function assessTemplateTwinSigning(
       fill.outputEtag &&
       fill.outputSha256 &&
       fill.outputSizeBytes &&
+      fill.providerOwnershipSha256 &&
       fill.pinnedGlobalRolloutGeneration !== null &&
       fill.pinnedPracticeRolloutGeneration !== null &&
       manifestSoapVersion !== null &&
@@ -1149,6 +1260,8 @@ export function assessTemplateTwinSigning(
             pinnedGlobalRolloutGeneration: fill.pinnedGlobalRolloutGeneration,
             pinnedPracticeRolloutGeneration:
               fill.pinnedPracticeRolloutGeneration,
+            providerOwnershipEvidence: fill.providerOwnershipEvidence,
+            providerOwnershipSha256: fill.providerOwnershipSha256,
             updatedAt: fill.updatedAt,
           }
         : null,

@@ -25,6 +25,10 @@ import {
 } from './integration-fixture';
 import { createTemplateTwinEncounterSourceReceipt } from '../canonical-encounter-source';
 import { syntheticSourceAdmission } from './source-admission-fixture';
+import {
+  sourceProviderOwnershipFixture,
+  visitProviderOwnershipFixture,
+} from './provider-ownership-fixture';
 
 const VALIDATION_NOW = '2026-07-15T12:00:00.000Z';
 const REVIEWED_SOAP = [
@@ -97,6 +101,31 @@ beforeAll(async () => {
   }
 
   const mappingsSha256 = templateTwinMappingsSha256(fixture.mappings);
+  const sourceOwnership = sourceProviderOwnershipFixture({
+    practiceId: 'practice-1',
+    actorUserId: 'doctor-1',
+    sourceArtifactId: 'source-1',
+    sourceSha256: fixture.ir.source.sha256,
+    compiledVersionId: 'compiled-1',
+    noteTemplateId: 'template-1',
+    noteTemplateVersion: 1,
+    sourceLineageId: 'lineage-signing-gate',
+    sourceLineageVersion: 1,
+  });
+  const visitOwnership = visitProviderOwnershipFixture({
+    practiceId: 'practice-1',
+    actorUserId: 'doctor-1',
+    visitId: 'visit-1',
+    visitInputMode: 'text_notes',
+    sourceArtifactId: 'source-1',
+    sourceSha256: fixture.ir.source.sha256,
+    compiledVersionId: 'compiled-1',
+    noteTemplateId: 'template-1',
+    noteTemplateVersion: 1,
+    sourceLineageId: 'lineage-signing-gate',
+    sourceLineageVersion: 1,
+    logicalAttempt: 1,
+  });
   const outputSha256 = prepared.render.outputSha256;
   const outputObjectKey =
     `practices/practice-1/template-twin/outputs/visit-1/` +
@@ -108,6 +137,7 @@ beforeAll(async () => {
   baseContext = {
     visitId: 'visit-1',
     practiceId: 'practice-1',
+    actorUserId: 'doctor-1',
     visitStatus: 'READY',
     soapVersion: 7,
     soapFinal: REVIEWED_SOAP,
@@ -116,10 +146,12 @@ beforeAll(async () => {
     transcriptText: null,
     transcriptRaw: null,
     speakerMap: null,
+    manualRetryCount: 0,
     noteTemplateId: 'template-1',
     noteTemplateVersion: 1,
     noteTemplate: {
       id: 'template-1',
+      doctorId: 'doctor-1',
       version: 1,
       templateKind: 'template_twin_docx',
       templateTwinCompiledVersion: {
@@ -135,7 +167,11 @@ beforeAll(async () => {
         latestTestOutputEtag: 'provider-test-etag-synthetic',
         latestTestOutputSha256: outputSha256,
         certificationStatus: 'CERTIFIED',
+        providerOwnershipEvidence: sourceOwnership.evidence,
+        providerOwnershipSha256: sourceOwnership.sha256,
         sourceArtifact: {
+          id: 'source-1',
+          lineageVersion: 1,
           ...syntheticSourceAdmission({
             practiceId: 'practice-1',
             lineageId: 'lineage-signing-gate',
@@ -144,6 +180,8 @@ beforeAll(async () => {
           }),
           mimeType: fixture.ir.source.mimeType,
           privacyScanEvidence: SOURCE_PRIVACY_SCAN_EVIDENCE,
+          providerOwnershipEvidence: sourceOwnership.evidence,
+          providerOwnershipSha256: sourceOwnership.sha256,
         },
         fields: fixture.ir.fields.map((field) => {
           const mapping = fixture.mappings.find(
@@ -205,6 +243,8 @@ beforeAll(async () => {
       staticContentSha256: fixture.ir.staticContentSha256,
       roundTripVerified: prepared.render.verification.verified,
       roundTripVerification: prepared.render.verification,
+      providerOwnershipEvidence: visitOwnership.evidence,
+      providerOwnershipSha256: visitOwnership.sha256,
       pinnedGlobalRolloutGeneration: BigInt(1),
       pinnedPracticeRolloutGeneration: BigInt(1),
       signedGlobalRolloutGeneration: null,
@@ -254,6 +294,7 @@ describe('Template Twin server-side signing gate', () => {
       noteTemplateVersion: 3,
       noteTemplate: {
         id: 'template-1',
+        doctorId: 'doctor-1',
         version: 3,
         templateKind: 'structured',
       },
@@ -289,6 +330,11 @@ describe('Template Twin server-side signing gate', () => {
       outputEtag: 'provider-output-etag-synthetic',
       outputSha256: expect.stringMatching(/^[a-f0-9]{64}$/),
       outputSizeBytes: expect.any(Number),
+      providerOwnershipEvidence: expect.objectContaining({
+        scope: 'VISIT_PIPELINE',
+        subjectId: 'visit-1',
+      }),
+      providerOwnershipSha256: expect.stringMatching(/^[a-f0-9]{64}$/),
       pinnedGlobalRolloutGeneration: BigInt(1),
       pinnedPracticeRolloutGeneration: BigInt(1),
       updatedAt: new Date('2026-07-15T12:04:00.000Z'),

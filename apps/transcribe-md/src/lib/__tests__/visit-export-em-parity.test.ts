@@ -12,6 +12,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   findUnique: vi.fn(),
   assessAutomation: vi.fn(),
+  authorizeDelivery: vi.fn(),
 }));
 vi.mock("@meddoc/db", () => ({
   default: { transcribeVisit: { findUnique: mocks.findUnique } },
@@ -21,6 +22,9 @@ vi.mock("@meddoc/shared/specialties", () => ({
 }));
 vi.mock("@/worker/automation-finalization", () => ({
   assessVisitAutomationProof: mocks.assessAutomation,
+}));
+vi.mock("@/lib/template-twin/delivery-authorization", () => ({
+  authorizeVisitDeliveryFinalClaim: mocks.authorizeDelivery,
 }));
 
 import { loadVisitExportData } from "../visit-export-server";
@@ -63,6 +67,7 @@ function row(over: Record<string, unknown> = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.assessAutomation.mockReturnValue({ ready: true, blockerCodes: [] });
+  mocks.authorizeDelivery.mockResolvedValue({ templateTwin: false });
 });
 
 describe("loadVisitExportData — printed E/M code === confirmed displayed level", () => {

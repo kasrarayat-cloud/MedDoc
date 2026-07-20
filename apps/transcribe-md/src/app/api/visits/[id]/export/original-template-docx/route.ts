@@ -41,6 +41,11 @@ import {
   VisitAutomationIncompleteError,
 } from "@/worker/automation-finalization";
 import { persistedTemplateTwinEncounterEvidenceIsValid } from "@/lib/template-twin/encounter-evidence-verification";
+import {
+  lockAndAssertCurrentTemplateTwinPhysician,
+  TemplateTwinCurrentPhysicianAuthorityError,
+} from "@/lib/template-twin/final-claim-authority";
+import { canonicalSha256 } from "@/lib/template-twin/canonical";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -155,14 +160,17 @@ export const GET = withApiHandler<{ id: string }>(
     const assessment = assessTemplateTwinSigning({
       visitId: visit.id,
       practiceId,
+      actorUserId: userId,
       visitStatus: visit.status,
       soapFinal: visit.soapFinal,
       soapVersion: visit.soapVersion,
+      manualRetryCount: visit.manualRetryCount,
       inputMode: visit.inputMode,
       rawTextInput: visit.rawTextInput,
       transcriptText: visit.transcriptText,
       transcriptRaw: visit.transcriptRaw,
       speakerMap: visit.speakerMap,
+      templateTwinSyntheticQaRun: visit.templateTwinSyntheticQaRun,
       noteTemplateId: visit.noteTemplateId,
       noteTemplateVersion: visit.noteTemplateVersion,
       noteTemplate: visit.noteTemplate,
@@ -417,24 +425,11 @@ export const GET = withApiHandler<{ id: string }>(
               }
               throw error;
             }
-          } else {
-            const actors = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-              SELECT "id"
-              FROM "users"
-              WHERE "id" = ${userId}
-                AND "practiceId" = ${practiceId}
-                AND "isActive" = true
-              FOR UPDATE
-            `);
-            if (actors.length !== 1) {
-              return {
-                allowed: false as const,
-                code: "VISIT_AUTOMATION_PROOF_STALE",
-                reason:
-                  "Download authorization changed. Refresh and try again.",
-              };
-            }
           }
+          await lockAndAssertCurrentTemplateTwinPhysician({
+            tx,
+            actor: { userId, practiceId },
+          });
 
           const lockedVisit = await lockCurrentTemplateTwinVisit(tx, visitId);
           if (
@@ -506,6 +501,8 @@ export const GET = withApiHandler<{ id: string }>(
               outputEtag: true,
               outputSha256: true,
               outputSizeBytes: true,
+              providerOwnershipEvidence: true,
+              providerOwnershipSha256: true,
               pinnedGlobalRolloutGeneration: true,
               pinnedPracticeRolloutGeneration: true,
               signedGlobalRolloutGeneration: true,
@@ -521,6 +518,10 @@ export const GET = withApiHandler<{ id: string }>(
             currentFill.outputEtag !== fill.outputEtag ||
             currentFill.outputSha256 !== fill.outputSha256 ||
             currentFill.outputSizeBytes !== fill.outputSizeBytes ||
+            currentFill.providerOwnershipSha256 !==
+              fill.providerOwnershipSha256 ||
+            canonicalSha256(currentFill.providerOwnershipEvidence) !==
+              canonicalSha256(fill.providerOwnershipEvidence) ||
             currentFill.pinnedGlobalRolloutGeneration !==
               rolloutToken.globalGeneration ||
             currentFill.pinnedPracticeRolloutGeneration !==
@@ -574,6 +575,13 @@ export const GET = withApiHandler<{ id: string }>(
         },
       });
     } catch (error) {
+      if (error instanceof TemplateTwinCurrentPhysicianAuthorityError) {
+        return apiError(
+          "Current physician authorization is required for Template Twin.",
+          403,
+          { code: error.code, retry: false },
+        );
+      }
       if (error instanceof VisitAutomationIncompleteError) {
         return apiError(
           "Required visit automation changed before download. Retry processing.",

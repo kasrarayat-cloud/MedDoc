@@ -11,9 +11,8 @@ vi.mock('@meddoc/db', () => ({
   default: { user: { findUnique: mocks.findUser } },
 }));
 vi.mock('@/lib/template-twin/rollout', async (importOriginal) => {
-  const actual = await importOriginal<
-    typeof import('@/lib/template-twin/rollout')
-  >();
+  const actual =
+    await importOriginal<typeof import('@/lib/template-twin/rollout')>();
   return {
     ...actual,
     pinTemplateTwinRollout: mocks.pinRollout,
@@ -21,6 +20,20 @@ vi.mock('@/lib/template-twin/rollout', async (importOriginal) => {
 });
 
 import { requireDoctorSession } from '../auth';
+
+function currentPhysician(overrides: Record<string, unknown> = {}) {
+  return {
+    role: 'DOCTOR',
+    isActive: true,
+    practiceId: 'practice-current',
+    deactivatedAt: null,
+    suspendedAt: null,
+    softDeletedAt: null,
+    products: ['TRANSCRIBE_MD'],
+    practice: { templateTwinEnabled: true },
+    ...overrides,
+  };
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -45,12 +58,7 @@ describe('Template Twin fresh physician authorization', () => {
   it.each(['STAFF', 'ADMIN'] as const)(
     'rejects a stale DOCTOR JWT when the current database role is %s',
     async (role) => {
-      mocks.findUser.mockResolvedValue({
-        role,
-        isActive: true,
-        practiceId: 'practice-current',
-        practice: { templateTwinEnabled: true },
-      });
+      mocks.findUser.mockResolvedValue(currentPhysician({ role }));
 
       await expect(requireDoctorSession()).rejects.toMatchObject({
         code: 'FORBIDDEN',
@@ -62,6 +70,10 @@ describe('Template Twin fresh physician authorization', () => {
           role: true,
           isActive: true,
           practiceId: true,
+          deactivatedAt: true,
+          suspendedAt: true,
+          softDeletedAt: true,
+          products: true,
           practice: { select: { templateTwinEnabled: true } },
         },
       });
@@ -78,12 +90,7 @@ describe('Template Twin fresh physician authorization', () => {
         practiceId: 'practice-stale-jwt',
       },
     });
-    mocks.findUser.mockResolvedValue({
-      role: 'DOCTOR',
-      isActive: true,
-      practiceId: 'practice-current',
-      practice: { templateTwinEnabled: true },
-    });
+    mocks.findUser.mockResolvedValue(currentPhysician());
 
     await expect(requireDoctorSession()).resolves.toMatchObject({
       templateTwinRolloutToken: {
@@ -111,12 +118,7 @@ describe('Template Twin fresh physician authorization', () => {
   });
 
   it('rejects an inactive physician', async () => {
-    mocks.findUser.mockResolvedValue({
-      role: 'DOCTOR',
-      isActive: false,
-      practiceId: 'practice-current',
-      practice: { templateTwinEnabled: true },
-    });
+    mocks.findUser.mockResolvedValue(currentPhysician({ isActive: false }));
 
     await expect(requireDoctorSession()).rejects.toMatchObject({
       code: 'FORBIDDEN',
@@ -124,12 +126,9 @@ describe('Template Twin fresh physician authorization', () => {
   });
 
   it('fails closed when the owning practice rollout flag is disabled', async () => {
-    mocks.findUser.mockResolvedValue({
-      role: 'DOCTOR',
-      isActive: true,
-      practiceId: 'practice-current',
-      practice: { templateTwinEnabled: false },
-    });
+    mocks.findUser.mockResolvedValue(
+      currentPhysician({ practice: { templateTwinEnabled: false } }),
+    );
 
     await expect(requireDoctorSession()).rejects.toMatchObject({
       code: 'FORBIDDEN',
@@ -139,16 +138,36 @@ describe('Template Twin fresh physician authorization', () => {
 
   it('fails closed when the global kill switch is not explicitly disabled', async () => {
     delete process.env.TEMPLATE_TWIN_KILL_SWITCH;
-    mocks.findUser.mockResolvedValue({
-      role: 'DOCTOR',
-      isActive: true,
-      practiceId: 'practice-current',
-      practice: { templateTwinEnabled: true },
-    });
+    mocks.findUser.mockResolvedValue(currentPhysician());
 
     await expect(requireDoctorSession()).rejects.toMatchObject({
       code: 'FORBIDDEN',
       message: 'Template Twin is temporarily unavailable.',
     });
+  });
+
+  it.each([
+    ['deactivatedAt', new Date('2026-07-20T00:00:00.000Z')],
+    ['suspendedAt', new Date('2026-07-20T00:00:00.000Z')],
+    ['softDeletedAt', new Date('2026-07-20T00:00:00.000Z')],
+  ] as const)(
+    'rejects a physician with current %s set',
+    async (field, value) => {
+      mocks.findUser.mockResolvedValue(currentPhysician({ [field]: value }));
+
+      await expect(requireDoctorSession()).rejects.toMatchObject({
+        code: 'FORBIDDEN',
+      });
+      expect(mocks.pinRollout).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects a physician without the Transcribe MD product entitlement', async () => {
+    mocks.findUser.mockResolvedValue(currentPhysician({ products: [] }));
+
+    await expect(requireDoctorSession()).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    expect(mocks.pinRollout).not.toHaveBeenCalled();
   });
 });

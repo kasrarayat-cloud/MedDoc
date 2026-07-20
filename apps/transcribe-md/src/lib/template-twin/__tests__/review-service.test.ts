@@ -16,6 +16,7 @@ const database = vi.hoisted(() => ({
   assessAutomation: vi.fn(),
   lockAutomation: vi.fn(),
   lockActor: vi.fn(),
+  currentVisitFind: vi.fn(),
 }));
 vi.mock("@meddoc/db", () => {
   const tx = {
@@ -26,6 +27,7 @@ vi.mock("@meddoc/db", () => {
       findUnique: database.ledgerFindUnique,
     },
     templateTwinAuditOutbox: { create: database.outboxCreate },
+    transcribeVisit: { findUnique: database.currentVisitFind },
     $queryRaw: database.lockVisit,
   };
   return {
@@ -91,6 +93,10 @@ import {
   type StoredTemplateTwinArtifact,
   type TemplateTwinArtifactStore,
 } from "../storage";
+import {
+  sourceProviderOwnershipFixture,
+  visitProviderOwnershipFixture,
+} from "./provider-ownership-fixture";
 
 const SHA = "a".repeat(64);
 const OUTPUT_SHA = "b".repeat(64);
@@ -313,6 +319,31 @@ function persistedMapping(semantic: SemanticMapping) {
 function context(definition = field()): ReviewContext {
   const documentIr = ir(definition);
   const semantic = mapping(definition);
+  const sourceOwnership = sourceProviderOwnershipFixture({
+    practiceId: "practice-1",
+    actorUserId: "doctor-1",
+    sourceArtifactId: "source-1",
+    sourceSha256: SHA,
+    compiledVersionId: "compiled-1",
+    noteTemplateId: "template-1",
+    noteTemplateVersion: 1,
+    sourceLineageId: "lineage-1",
+    sourceLineageVersion: 1,
+  });
+  const visitOwnership = visitProviderOwnershipFixture({
+    practiceId: "practice-1",
+    actorUserId: "doctor-1",
+    visitId: "visit-1",
+    visitInputMode: "text_notes",
+    sourceArtifactId: "source-1",
+    sourceSha256: SHA,
+    compiledVersionId: "compiled-1",
+    noteTemplateId: "template-1",
+    noteTemplateVersion: 1,
+    sourceLineageId: "lineage-1",
+    sourceLineageVersion: 1,
+    logicalAttempt: 1,
+  });
   const validation = validateTemplateTwin({
     fields: documentIr.fields,
     mappings: [semantic],
@@ -350,6 +381,10 @@ function context(definition = field()): ReviewContext {
     manifestVersion: 4,
     manifestSha256,
     fillManifest: manifest,
+    providerOwnershipEvidence: visitOwnership.evidence,
+    providerOwnershipSha256: visitOwnership.sha256,
+    pinnedGlobalRolloutGeneration: BigInt(1),
+    pinnedPracticeRolloutGeneration: BigInt(1),
     resolverModelVersion: null,
     visit: {
       userId: "doctor-1",
@@ -357,6 +392,7 @@ function context(definition = field()): ReviewContext {
       reviewReason: TEMPLATE_TWIN_REVIEW_REASON,
       soapFinal: REVIEWED_SOAP,
       soapVersion: 7,
+      manualRetryCount: 0,
       inputMode: "text_notes",
       rawTextInput: REVIEWED_SOAP,
       transcriptText: null,
@@ -373,6 +409,8 @@ function context(definition = field()): ReviewContext {
       structureSha256: SHA,
       staticContentSha256: SHA,
       certificationStatus: "CERTIFIED",
+      providerOwnershipEvidence: sourceOwnership.evidence,
+      providerOwnershipSha256: sourceOwnership.sha256,
       blockingUnsupportedCount: 0,
       certification: {
         sourcePrivacyScanEvidenceSha256: canonicalSha256(
@@ -380,7 +418,10 @@ function context(definition = field()): ReviewContext {
         ),
       },
       sourceArtifact: {
+        id: "source-1",
         practiceId: "practice-1",
+        lineageId: "lineage-1",
+        lineageVersion: 1,
         objectKey: `practices/practice-1/template-twin/sources/lineage-1/v1/${SHA}/artifact/${SHA}.docx`,
         objectVersionId: "provider-source-version-synthetic",
         objectEtag: "provider-source-etag-synthetic",
@@ -388,6 +429,8 @@ function context(definition = field()): ReviewContext {
         sizeBytes: 20,
         validationStatus: "accepted",
         privacyScanEvidence: SOURCE_PRIVACY_SCAN_EVIDENCE,
+        providerOwnershipEvidence: sourceOwnership.evidence,
+        providerOwnershipSha256: sourceOwnership.sha256,
       },
       noteTemplate: {
         id: "template-1",
@@ -502,6 +545,9 @@ function mockRolloutAndVisitLocks(visit = lockedVisitRow()) {
     }
     if (text.includes("template_twin_lineage_migration_progress")) {
       return [{ phase: "CONTRACTED" }];
+    }
+    if (text.includes('FROM "users" actor')) {
+      return [{ id: "doctor-1" }];
     }
     return [visit];
   });
@@ -676,6 +722,7 @@ beforeEach(async () => {
     id: "automation-proof-synthetic",
   });
   database.lockActor.mockResolvedValue(undefined);
+  database.currentVisitFind.mockResolvedValue({ manualRetryCount: 0 });
   mockRolloutAndVisitLocks();
 });
 
@@ -833,6 +880,29 @@ describe("reviewTemplateTwinField lifecycle", () => {
     ).rejects.toMatchObject({ code: "VISIT_AUTOMATION_INCOMPLETE" });
     expect(database.manifestUpdateMany).not.toHaveBeenCalled();
     expect(database.outboxCreate).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when physician authority is revoked before correction commit", async () => {
+    const current = database.lockVisit.getMockImplementation();
+    database.lockVisit.mockImplementation(async (query: unknown) => {
+      const text = String(
+        (query as { strings?: readonly string[] }).strings?.join(" ") ?? "",
+      );
+      if (text.includes('FROM "users" actor')) return [];
+      return current?.(query);
+    });
+
+    await expect(
+      reviewTemplateTwinField(
+        { visitId: "visit-1", actor, correction: correction() },
+        { storage: storage(), finalizeFill: fakeFinalize },
+      ),
+    ).rejects.toMatchObject({
+      code: "TEMPLATE_TWIN_CURRENT_PHYSICIAN_REQUIRED",
+      message: "Current physician authorization is required for Template Twin.",
+    });
+    expect(database.manifestUpdateMany).not.toHaveBeenCalled();
+    expect(database.decisionCreate).not.toHaveBeenCalled();
   });
 
   it("fails closed when the authenticated doctor/practice does not own the visit", async () => {
@@ -1123,7 +1193,7 @@ describe("reviewTemplateTwinField lifecycle", () => {
       });
 
       expect(artifacts.storeOutputArtifact).toHaveBeenCalledTimes(1);
-      expect(database.lockVisit).toHaveBeenCalledTimes(9);
+      expect(database.lockVisit).toHaveBeenCalledTimes(10);
       expect(database.manifestUpdateMany).toHaveBeenCalledTimes(1);
       expect(database.manifestUpdateMany).toHaveBeenCalledWith({
         where: {
@@ -1135,6 +1205,13 @@ describe("reviewTemplateTwinField lifecycle", () => {
           manifestSha256: expect.stringMatching(/^[a-f0-9]{64}$/),
           soapVersion: 7,
           soapSha256: canonicalSoapSha256(REVIEWED_SOAP),
+          providerOwnershipEvidence: {
+            equals: expect.objectContaining({
+              scope: "VISIT_PIPELINE",
+              subjectId: "visit-1",
+            }),
+          },
+          providerOwnershipSha256: expect.stringMatching(/^[a-f0-9]{64}$/),
         },
         data: {
           status: "NEEDS_REVIEW",

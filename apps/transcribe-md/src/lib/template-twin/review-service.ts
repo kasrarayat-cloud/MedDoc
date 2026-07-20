@@ -108,6 +108,15 @@ import {
   assessTemplateTwinEncounterEvidence,
   persistedTemplateTwinEncounterEvidenceIsValid,
 } from "./encounter-evidence-verification";
+import {
+  lockAndAssertCurrentTemplateTwinPhysician,
+  TemplateTwinCurrentPhysicianAuthorityError,
+} from "./final-claim-authority";
+import {
+  isTemplateTwinLiveProviderCompilationOwned,
+  isTemplateTwinStagingProviderCompilationOwned,
+  isTemplateTwinVisitProviderReceiptOwned,
+} from "./live-provider-ownership";
 
 export interface TemplateTwinReviewActor {
   userId: string;
@@ -125,6 +134,8 @@ export class TemplateTwinReviewError extends Error {
     | "SOAP_BINDING_STALE"
     | "CORRECTION_INVALID"
     | "TEMPLATE_PROVENANCE_INVALID"
+    | "PROVIDER_OWNERSHIP_INVALID"
+    | "TEMPLATE_TWIN_CURRENT_PHYSICIAN_REQUIRED"
     | "VISIT_AUTOMATION_INCOMPLETE"
     | TemplateTwinRolloutCode;
 
@@ -193,6 +204,10 @@ interface OwnedReviewContext {
   manifestVersion: number;
   manifestSha256: string;
   fillManifest: unknown;
+  providerOwnershipEvidence: unknown;
+  providerOwnershipSha256: string | null;
+  pinnedGlobalRolloutGeneration: bigint | null;
+  pinnedPracticeRolloutGeneration: bigint | null;
   resolverModelVersion: string | null;
   visit: {
     userId: string;
@@ -200,6 +215,7 @@ interface OwnedReviewContext {
     reviewReason: string | null;
     soapFinal: string | null;
     soapVersion: number;
+    manualRetryCount: number;
     inputMode: string;
     rawTextInput: string | null;
     transcriptText: string | null;
@@ -218,13 +234,18 @@ interface OwnedReviewContext {
     structureSha256: string;
     staticContentSha256: string;
     certificationStatus: string;
+    providerOwnershipEvidence: unknown;
+    providerOwnershipSha256: string | null;
     blockingUnsupportedCount: number;
     certification: {
       sourcePrivacyScanEvidenceSha256: string | null;
       approvedFieldIntentsSha256?: string | null;
     } | null;
     sourceArtifact: {
+      id: string;
       practiceId: string;
+      lineageId: string;
+      lineageVersion: number;
       objectKey: string | null;
       objectVersionId: string | null;
       objectEtag: string | null;
@@ -232,6 +253,8 @@ interface OwnedReviewContext {
       sizeBytes: number;
       validationStatus: string;
       privacyScanEvidence: unknown;
+      providerOwnershipEvidence: unknown;
+      providerOwnershipSha256: string | null;
       quarantineArtifact?: {
         sha256: string;
         sizeBytes: number;
@@ -284,6 +307,10 @@ interface CommitReviewPlan {
   soapFinal: string;
   expectedManifestVersion: number;
   expectedManifestSha256: string;
+  expectedProviderOwnershipEvidence: unknown;
+  expectedProviderOwnershipSha256: string;
+  expectedVisitInputMode: string;
+  expectedManualRetryCount: number;
   prepared: PreparedTemplateTwinFill;
   storedOutput: StoredTemplateTwinArtifact | null;
   staticContentSha256: string;
@@ -850,6 +877,94 @@ function assertProvenance(
   }
 }
 
+function assertProviderOwnership(
+  context: OwnedReviewContext,
+  actor: TemplateTwinReviewActor,
+): asserts context is OwnedReviewContext & {
+  providerOwnershipSha256: string;
+  pinnedGlobalRolloutGeneration: bigint;
+  pinnedPracticeRolloutGeneration: bigint;
+} {
+  const compiled = context.compiledVersion;
+  const source = compiled.sourceArtifact;
+  const template = compiled.noteTemplate;
+  const identity = {
+    practiceId: actor.practiceId,
+    actorUserId: actor.userId,
+    noteTemplateId: template.id,
+    noteTemplateVersion: template.version,
+    compiledVersionId: compiled.id,
+    sourceArtifactId: source.id,
+    sourceLineageId: source.lineageId,
+    sourceLineageVersion: source.lineageVersion,
+    sourceSha256: source.sha256,
+    sourceProviderOwnershipEvidence: source.providerOwnershipEvidence,
+    sourceProviderOwnershipSha256: source.providerOwnershipSha256,
+    compiledProviderOwnershipEvidence: compiled.providerOwnershipEvidence,
+    compiledProviderOwnershipSha256: compiled.providerOwnershipSha256,
+  };
+  const stagingRun = context.visit.templateTwinSyntheticQaRun;
+  const expectedSyntheticSourceAdmissionId = stagingRun
+    ? (stagingRun.admission?.parentAdmissionId ?? null)
+    : null;
+  const compilationOwned = stagingRun
+    ? Boolean(
+        expectedSyntheticSourceAdmissionId &&
+        isTemplateTwinStagingProviderCompilationOwned({
+          ...identity,
+          expectedSyntheticAdmissionId: expectedSyntheticSourceAdmissionId,
+        }),
+      )
+    : isTemplateTwinLiveProviderCompilationOwned(identity);
+  const visitInputMode =
+    context.visit.inputMode === "audio_upload" ||
+    context.visit.inputMode === "voice_dictation" ||
+    context.visit.inputMode === "text_notes"
+      ? context.visit.inputMode
+      : null;
+  const fillOwned = Boolean(
+    visitInputMode &&
+    context.providerOwnershipSha256 &&
+    context.pinnedGlobalRolloutGeneration !== null &&
+    context.pinnedPracticeRolloutGeneration !== null &&
+    Number.isSafeInteger(context.visit.manualRetryCount) &&
+    context.visit.manualRetryCount >= 0 &&
+    isTemplateTwinVisitProviderReceiptOwned({
+      evidence: context.providerOwnershipEvidence,
+      evidenceSha256: context.providerOwnershipSha256,
+      practiceId: actor.practiceId,
+      actorUserId: actor.userId,
+      visitId: context.visitId,
+      visitInputMode,
+      sourceArtifactId: source.id,
+      compiledVersionId: compiled.id,
+      noteTemplateId: template.id,
+      noteTemplateVersion: template.version,
+      sourceLineageId: source.lineageId,
+      sourceLineageVersion: source.lineageVersion,
+      sourceSha256: source.sha256,
+      logicalAttempt: context.visit.manualRetryCount + 1,
+      providerMode: stagingRun ? "SYNTHETIC_QA" : "LIVE",
+      syntheticAdmissionId: stagingRun
+        ? (stagingRun.admissionId ?? null)
+        : null,
+      pinnedGlobalRolloutGeneration: context.pinnedGlobalRolloutGeneration!,
+      pinnedPracticeRolloutGeneration: context.pinnedPracticeRolloutGeneration!,
+    }),
+  );
+  if (
+    template.doctorId !== actor.userId ||
+    context.visit.userId !== actor.userId ||
+    !compilationOwned ||
+    !fillOwned
+  ) {
+    throw new TemplateTwinReviewError(
+      "PROVIDER_OWNERSHIP_INVALID",
+      "The Template Twin provider proof could not be verified. Regenerate it before correcting fields.",
+    );
+  }
+}
+
 export function createTemplateTwinReviewRepository(): TemplateTwinReviewRepository {
   return {
     pinRollout(practiceId) {
@@ -875,6 +990,10 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
           manifestVersion: true,
           manifestSha256: true,
           fillManifest: true,
+          providerOwnershipEvidence: true,
+          providerOwnershipSha256: true,
+          pinnedGlobalRolloutGeneration: true,
+          pinnedPracticeRolloutGeneration: true,
           resolverModelVersion: true,
           visit: {
             select: {
@@ -883,6 +1002,7 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
               reviewReason: true,
               soapFinal: true,
               soapVersion: true,
+              manualRetryCount: true,
               inputMode: true,
               rawTextInput: true,
               transcriptText: true,
@@ -907,6 +1027,8 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
               structureSha256: true,
               staticContentSha256: true,
               certificationStatus: true,
+              providerOwnershipEvidence: true,
+              providerOwnershipSha256: true,
               blockingUnsupportedCount: true,
               certification: {
                 select: {
@@ -916,7 +1038,10 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
               },
               sourceArtifact: {
                 select: {
+                  id: true,
                   practiceId: true,
+                  lineageId: true,
+                  lineageVersion: true,
                   objectKey: true,
                   objectVersionId: true,
                   objectEtag: true,
@@ -924,6 +1049,8 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
                   sizeBytes: true,
                   validationStatus: true,
                   privacyScanEvidence: true,
+                  providerOwnershipEvidence: true,
+                  providerOwnershipSha256: true,
                   quarantineArtifact: {
                     select: {
                       sha256: true,
@@ -1080,11 +1207,24 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
               },
             });
           }
+          await lockAndAssertCurrentTemplateTwinPhysician({
+            tx,
+            actor: {
+              userId: plan.decision.reviewerId,
+              practiceId: plan.practiceId,
+            },
+          });
           const lockedVisit = await lockCurrentTemplateTwinVisit(
             tx,
             plan.visitId,
           );
+          const currentRetry = await tx.transcribeVisit.findUnique({
+            where: { id: plan.visitId },
+            select: { manualRetryCount: true },
+          });
           if (
+            lockedVisit?.inputMode !== plan.expectedVisitInputMode ||
+            currentRetry?.manualRetryCount !== plan.expectedManualRetryCount ||
             !visitMatchesPreparedSoap({
               visit: lockedVisit!,
               doctorId: plan.decision.reviewerId,
@@ -1113,6 +1253,11 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
                 manifestSha256: plan.expectedManifestSha256,
                 soapVersion: plan.prepared.manifest.soapVersion,
                 soapSha256: plan.prepared.manifest.soapSha256,
+                providerOwnershipEvidence: {
+                  equals:
+                    plan.expectedProviderOwnershipEvidence as Prisma.InputJsonValue,
+                },
+                providerOwnershipSha256: plan.expectedProviderOwnershipSha256,
               },
               data: {
                 status: "NEEDS_REVIEW",
@@ -1217,6 +1362,11 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
               manifestSha256: plan.expectedManifestSha256,
               status: { not: "SIGNED" },
               signedDecisionAt: null,
+              providerOwnershipEvidence: {
+                equals:
+                  plan.expectedProviderOwnershipEvidence as Prisma.InputJsonValue,
+              },
+              providerOwnershipSha256: plan.expectedProviderOwnershipSha256,
               visit: { is: { soapVersion: plan.soapVersion } },
             },
             data: {
@@ -1587,6 +1737,7 @@ export async function reviewTemplateTwinField(
     context.compiledVersion.compiledDocumentIr,
   );
   assertProvenance(context, input.actor, manifest, ir);
+  assertProviderOwnership(context, input.actor);
 
   const persistedFields = new Map(
     context.compiledVersion.fields.map((field) => [field.fieldId, field]),
@@ -1829,6 +1980,10 @@ export async function reviewTemplateTwinField(
       soapFinal: context.visit.soapFinal,
       expectedManifestVersion: input.correction.expectedManifestVersion,
       expectedManifestSha256: context.manifestSha256,
+      expectedProviderOwnershipEvidence: context.providerOwnershipEvidence,
+      expectedProviderOwnershipSha256: context.providerOwnershipSha256,
+      expectedVisitInputMode: context.visit.inputMode,
+      expectedManualRetryCount: context.visit.manualRetryCount,
       prepared,
       storedOutput,
       staticContentSha256: ir.staticContentSha256,
@@ -1865,6 +2020,13 @@ export async function reviewTemplateTwinField(
         : null,
     });
   } catch (error) {
+    if (error instanceof TemplateTwinCurrentPhysicianAuthorityError) {
+      throw new TemplateTwinReviewError(
+        error.code,
+        "Current physician authorization is required for Template Twin.",
+        error,
+      );
+    }
     if (error instanceof VisitAutomationIncompleteError) {
       throw new TemplateTwinReviewError(
         "VISIT_AUTOMATION_INCOMPLETE",

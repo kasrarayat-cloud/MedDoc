@@ -38,6 +38,10 @@ import { loadVisitExportData } from "@/lib/visit-export-server";
 import { generateVisitPdf } from "@/lib/pdf-generator";
 import { redactPhi } from "@meddoc/ai";
 import { log } from "@/lib/log";
+import {
+  authorizeVisitDeliveryFinalClaim,
+  TemplateTwinDeliveryAuthorizationError,
+} from "@/lib/template-twin/delivery-authorization";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -102,6 +106,23 @@ export const GET = withApiHandler<{ id: string }>(
       },
       orderBy: { createdAt: "asc" },
     });
+
+    try {
+      for (const visit of visits) {
+        await authorizeVisitDeliveryFinalClaim({
+          visitId: visit.id,
+          actorUserId: userId,
+        });
+      }
+    } catch (error) {
+      if (error instanceof TemplateTwinDeliveryAuthorizationError) {
+        return apiError(error.message, error.status, {
+          code: error.code,
+          retry: false,
+        });
+      }
+      throw error;
+    }
 
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     const safeName = patient.name.replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, 40);

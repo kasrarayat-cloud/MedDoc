@@ -20,6 +20,10 @@ import { redactPhi } from "@meddoc/ai";
 import { logAudit } from "@/lib/audit";
 import { isOwnedTemplateTwinStagingQaVisit } from "@/lib/template-twin/staging-qa-access";
 import { isTemplateTwinStagingQaRequested } from "@/lib/template-twin/staging-qa-gate";
+import {
+  authorizeVisitDeliveryFinalClaim,
+  TemplateTwinDeliveryAuthorizationError,
+} from "@/lib/template-twin/delivery-authorization";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,7 +44,18 @@ export const GET = withApiHandler<{ id: string }>(
       return apiError("not found", 404);
     }
 
-    const data = await loadVisitExportData(visitId, userId);
+    let data: Awaited<ReturnType<typeof loadVisitExportData>>;
+    try {
+      data = await loadVisitExportData(visitId, userId);
+    } catch (error) {
+      if (error instanceof TemplateTwinDeliveryAuthorizationError) {
+        return apiError(error.message, error.status, {
+          code: error.code,
+          retry: false,
+        });
+      }
+      throw error;
+    }
     // 404 covers both "missing" and "not yours" — anti-enumeration.
     if (!data) return apiError("not found", 404);
 
@@ -53,6 +68,17 @@ export const GET = withApiHandler<{ id: string }>(
         redactPhi(err instanceof Error ? err.message : err),
       );
       return apiError("pdf generation failed", 500);
+    }
+    try {
+      await authorizeVisitDeliveryFinalClaim({ visitId, actorUserId: userId });
+    } catch (error) {
+      if (error instanceof TemplateTwinDeliveryAuthorizationError) {
+        return apiError(error.message, error.status, {
+          code: error.code,
+          retry: false,
+        });
+      }
+      throw error;
     }
 
     logDelivery({

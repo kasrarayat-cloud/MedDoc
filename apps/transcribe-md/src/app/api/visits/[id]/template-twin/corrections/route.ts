@@ -94,17 +94,21 @@ async function mutate(
       const status =
         error.code === "NOT_FOUND"
           ? 404
-          : error.code === "CORRECTION_INVALID" ||
-              error.code === "MANIFEST_INVALID" ||
-              error.code === "TEMPLATE_PROVENANCE_INVALID"
-            ? 422
-            : 409;
+          : error.code === "TEMPLATE_TWIN_CURRENT_PHYSICIAN_REQUIRED"
+            ? 403
+            : error.code === "CORRECTION_INVALID" ||
+                error.code === "MANIFEST_INVALID" ||
+                error.code === "TEMPLATE_PROVENANCE_INVALID"
+              ? 422
+              : 409;
       return response(
         {
           ok: false,
           error: error.message,
           code: error.code,
-          retry: error.code.startsWith("TEMPLATE_TWIN_"),
+          retry:
+            error.code !== "TEMPLATE_TWIN_CURRENT_PHYSICIAN_REQUIRED" &&
+            error.code.startsWith("TEMPLATE_TWIN_"),
         },
         status,
       );

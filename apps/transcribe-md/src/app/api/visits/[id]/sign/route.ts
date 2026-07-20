@@ -89,6 +89,14 @@ import {
 import { runVisitAutomationTransaction } from "@/worker/automation-locks";
 import { runSerializableTransactionWithRetry } from "@/lib/db/transaction-retry";
 import { persistedTemplateTwinEncounterEvidenceIsValid } from "@/lib/template-twin/encounter-evidence-verification";
+import {
+  lockAndAssertCurrentTemplateTwinPhysician,
+  TemplateTwinCurrentPhysicianAuthorityError,
+} from "@/lib/template-twin/final-claim-authority";
+import {
+  authorizeVisitDeliveryFinalClaim,
+  TemplateTwinDeliveryAuthorizationError,
+} from "@/lib/template-twin/delivery-authorization";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -348,14 +356,17 @@ export const POST = withApiHandler<{ id: string }>(
     const twinGate = assessTemplateTwinSigning({
       visitId: visit.id,
       practiceId: templateTwinPracticeId,
+      actorUserId: userId,
       visitStatus: visit.status,
       soapFinal: visit.soapFinal,
       soapVersion: visit.soapVersion,
+      manualRetryCount: visit.manualRetryCount,
       inputMode: visit.inputMode,
       rawTextInput: visit.rawTextInput,
       transcriptText: visit.transcriptText,
       transcriptRaw: visit.transcriptRaw,
       speakerMap: visit.speakerMap,
+      templateTwinSyntheticQaRun: visit.templateTwinSyntheticQaRun,
       noteTemplateId: visit.noteTemplateId,
       noteTemplateVersion: visit.noteTemplateVersion,
       noteTemplate: visit.noteTemplate,
@@ -855,6 +866,13 @@ export const POST = withApiHandler<{ id: string }>(
                   },
                 });
               }
+              await lockAndAssertCurrentTemplateTwinPhysician({
+                tx,
+                actor: {
+                  userId,
+                  practiceId: templateTwinPracticeId,
+                },
+              });
               // Keep the common lock order global -> practice -> staging run
               // -> visit -> fill. This prevents a retry that observed READY
               // before signing from overwriting SIGNED after waiting on the
@@ -942,6 +960,11 @@ export const POST = withApiHandler<{ id: string }>(
                   outputEtag: twinClaim.outputEtag,
                   outputSha256: twinClaim.outputSha256,
                   outputSizeBytes: twinClaim.outputSizeBytes,
+                  providerOwnershipEvidence: {
+                    equals:
+                      twinClaim.providerOwnershipEvidence as Prisma.InputJsonValue,
+                  },
+                  providerOwnershipSha256: twinClaim.providerOwnershipSha256,
                   roundTripVerified: true,
                   needsReviewCount: 0,
                   conflictCount: 0,
@@ -1019,6 +1042,13 @@ export const POST = withApiHandler<{ id: string }>(
             },
           });
         } catch (error) {
+          if (error instanceof TemplateTwinCurrentPhysicianAuthorityError) {
+            return apiError(
+              "Current physician authorization is required for Template Twin.",
+              403,
+              { code: error.code, retry: false },
+            );
+          }
           if (error instanceof VisitAutomationIncompleteError) {
             return apiError(
               "Required visit automation changed before signing. Retry processing.",
@@ -1139,7 +1169,21 @@ export const POST = withApiHandler<{ id: string }>(
     // ── Deliver ─────────────────────────────────────────────────────
     // loadVisitExportData reads the freshly-signed row so downstream
     // generators see signedSoap / signedAt set correctly.
-    const data = await loadVisitExportData(visitId, userId);
+    let data: Awaited<ReturnType<typeof loadVisitExportData>>;
+    try {
+      data = await loadVisitExportData(visitId, userId, {
+        allowSyntheticOriginalTemplate:
+          parsed.data.destinations.length <= 1 && wantsOriginalTemplate,
+      });
+    } catch (error) {
+      if (error instanceof TemplateTwinDeliveryAuthorizationError) {
+        return apiError(error.message, error.status, {
+          code: error.code,
+          retry: false,
+        });
+      }
+      throw error;
+    }
     if (!data) return apiError("visit disappeared after signing", 500);
 
     const clipboardTexts: Record<string, string> = {};
@@ -1151,9 +1195,37 @@ export const POST = withApiHandler<{ id: string }>(
     // the client can tell the user specifically what didn't go through.
     const deliveryErrors: Record<string, string> = {};
 
+    try {
+      await authorizeVisitDeliveryFinalClaim({
+        visitId,
+        actorUserId: userId,
+        allowSyntheticOriginalTemplate:
+          parsed.data.destinations.length <= 1 && wantsOriginalTemplate,
+      });
+    } catch (error) {
+      if (error instanceof TemplateTwinDeliveryAuthorizationError) {
+        return apiError(error.message, error.status, {
+          code: error.code,
+          retry: false,
+        });
+      }
+      throw error;
+    }
+
     for (const dest of parsed.data.destinations) {
       const channel: DeliveryChannel = dest;
       try {
+        // Re-assert the exact signed Twin claim immediately before each
+        // destination side effect (or issuing a fetch URL). A suspension,
+        // rollout revocation, or evidence mutation between destinations must
+        // stop the remaining deliveries even when the first one succeeded.
+        await authorizeVisitDeliveryFinalClaim({
+          visitId,
+          actorUserId: userId,
+          allowSyntheticOriginalTemplate:
+            parsed.data.destinations.length <= 1 &&
+            dest === "docx_original_template",
+        });
         if (dest === "pdf") {
           // The browser does the actual download; we return a URL so the
           // JSON response stays small. We still log here — the user
@@ -1206,14 +1278,19 @@ export const POST = withApiHandler<{ id: string }>(
           });
         }
       } catch (err) {
+        if (err instanceof TemplateTwinDeliveryAuthorizationError) {
+          return apiError(err.message, err.status, {
+            code: err.code,
+            retry: false,
+          });
+        }
         // T-M16.3: Resend/MinIO/PDF errors occasionally echo recipient
         // email or filename — scrub before logging.
         console.error(
           `[api:visits:sign] destination ${dest} failed:`,
           redactPhi(err instanceof Error ? err.message : err),
         );
-        deliveryErrors[dest] =
-          err instanceof Error ? err.message : "delivery failed";
+        deliveryErrors[dest] = "delivery failed";
       }
     }
 

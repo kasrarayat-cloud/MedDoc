@@ -39,6 +39,10 @@ import { redactPhi } from '@meddoc/ai';
 import { log } from '@/lib/log';
 import { isDataExportEnabled } from '@/lib/data-export-feature';
 import { ordinaryClinicalVisitWhere } from '@/lib/template-twin/synthetic-qa-patient';
+import {
+  authorizeVisitDeliveryFinalClaim,
+  TemplateTwinDeliveryAuthorizationError,
+} from '@/lib/template-twin/delivery-authorization';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -105,6 +109,26 @@ export const GET = withApiHandler('api:settings:export-data', async () => {
     },
     orderBy: { createdAt: 'asc' },
   });
+
+  // Do not begin a streaming 200 response until every Template Twin visit in
+  // the archive has a current signed/review/provider-owned delivery claim.
+  // Ordinary visits are a no-op in the shared authorizer.
+  try {
+    for (const visit of visits) {
+      await authorizeVisitDeliveryFinalClaim({
+        visitId: visit.id,
+        actorUserId: userId,
+      });
+    }
+  } catch (error) {
+    if (error instanceof TemplateTwinDeliveryAuthorizationError) {
+      return apiError(error.message, error.status, {
+        code: error.code,
+        retry: false,
+      });
+    }
+    throw error;
+  }
 
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const filename = `transcribemd-export-${userId}-${stamp}.zip`;

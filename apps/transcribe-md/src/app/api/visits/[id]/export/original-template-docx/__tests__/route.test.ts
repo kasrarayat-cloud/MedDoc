@@ -156,6 +156,8 @@ beforeEach(() => {
       outputEtag: "provider-output-etag-synthetic",
       outputSha256: "b".repeat(64),
       outputSizeBytes: 128,
+      providerOwnershipEvidence: { synthetic: "provider-receipt" },
+      providerOwnershipSha256: "c".repeat(64),
       pinnedGlobalRolloutGeneration: BigInt(1),
       pinnedPracticeRolloutGeneration: BigInt(1),
       signedGlobalRolloutGeneration: BigInt(1),
@@ -193,6 +195,8 @@ beforeEach(() => {
     outputEtag: "provider-output-etag-synthetic",
     outputSha256: "b".repeat(64),
     outputSizeBytes: 128,
+    providerOwnershipEvidence: { synthetic: "provider-receipt" },
+    providerOwnershipSha256: "c".repeat(64),
     pinnedGlobalRolloutGeneration: BigInt(1),
     pinnedPracticeRolloutGeneration: BigInt(1),
     signedGlobalRolloutGeneration: BigInt(1),
@@ -205,7 +209,7 @@ beforeEach(() => {
         $queryRaw: mocks.queryRaw,
       }),
   );
-  mocks.queryRaw.mockResolvedValue([{ id: "synthetic-doctor-1" }]);
+  mocks.queryRaw.mockReset().mockResolvedValue([{ id: "synthetic-doctor-1" }]);
   mocks.verifyEvidence.mockReturnValue(true);
 });
 
@@ -243,6 +247,20 @@ describe("Original Template DOCX export durable audit gate", () => {
       }),
     );
     expect(mocks.logDelivery).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks a suspension race at the final download claim", async () => {
+    mocks.queryRaw.mockReset().mockResolvedValue([]);
+
+    const response = await call();
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "TEMPLATE_TWIN_CURRENT_PHYSICIAN_REQUIRED",
+      retry: false,
+    });
+    expect(mocks.enqueueAudit).not.toHaveBeenCalled();
+    expect(mocks.logDelivery).not.toHaveBeenCalled();
   });
 
   it("fails closed without recording a delivery when durable audit enqueue fails", async () => {

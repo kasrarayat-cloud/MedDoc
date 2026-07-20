@@ -20,6 +20,8 @@ const mocks = vi.hoisted(() => ({
   pinRollout: vi.fn(),
   finalRollout: vi.fn(),
   verifyEvidence: vi.fn(),
+  authorizeDelivery: vi.fn(),
+  logDelivery: vi.fn(),
 }));
 
 vi.mock("next/server", () => {
@@ -85,7 +87,7 @@ vi.mock("@/lib/pdf-generator", () => ({
   generateVisitPdf: vi.fn(async () => Buffer.from("pdf")),
 }));
 vi.mock("@/lib/email", () => ({ sendVisitPdfEmail: vi.fn() }));
-vi.mock("@/lib/deliveries", () => ({ logDelivery: vi.fn() }));
+vi.mock("@/lib/deliveries", () => ({ logDelivery: mocks.logDelivery }));
 vi.mock("@/lib/edit-tracking", () => ({ captureEditPattern: vi.fn() }));
 vi.mock("@/lib/rx-warnings", () => ({
   criticalWarningRefs: mocks.criticalWarningRefs,
@@ -96,6 +98,17 @@ vi.mock("@/lib/em-coding/displayed-level", () => ({
 vi.mock("@/lib/template-twin/signing-gate", () => ({
   TEMPLATE_TWIN_SIGNING_VISIT_SELECT: {},
   assessTemplateTwinSigning: mocks.assess,
+}));
+vi.mock("@/lib/template-twin/delivery-authorization", () => ({
+  TemplateTwinDeliveryAuthorizationError: class TemplateTwinDeliveryAuthorizationError extends Error {
+    constructor(
+      public readonly code: string,
+      public readonly status: number,
+    ) {
+      super("Template Twin delivery authorization changed.");
+    }
+  },
+  authorizeVisitDeliveryFinalClaim: mocks.authorizeDelivery,
 }));
 vi.mock("@/lib/template-twin/storage", () => ({
   TemplateTwinStorageUnavailableError: class TemplateTwinStorageUnavailableError extends Error {},
@@ -159,6 +172,7 @@ import type { NextRequest } from "next/server";
 import { TranscribeVisitStatus } from "@prisma/client";
 import { AuthError } from "@/lib/auth";
 import { TemplateTwinStorageUnavailableError } from "@/lib/template-twin/storage";
+import { TemplateTwinDeliveryAuthorizationError } from "@/lib/template-twin/delivery-authorization";
 
 import { POST } from "../route";
 
@@ -316,6 +330,7 @@ beforeEach(() => {
     role: "DOCTOR",
     practiceId: "practice-1",
   });
+  mocks.authorizeDelivery.mockResolvedValue({ templateTwin: true });
   mocks.readTemplateTwinOutput.mockResolvedValue(
     Buffer.from("synthetic verified DOCX bytes"),
   );
@@ -344,6 +359,8 @@ beforeEach(() => {
       outputEtag: "provider-output-etag-synthetic",
       outputSha256: "b".repeat(64),
       outputSizeBytes: 4096,
+      providerOwnershipEvidence: { synthetic: "provider-receipt" },
+      providerOwnershipSha256: "d".repeat(64),
       updatedAt: CLAIM_UPDATED_AT,
     },
   });
@@ -375,6 +392,7 @@ beforeEach(() => {
         isActive: true,
       },
     ])
+    .mockResolvedValueOnce([{ id: "doctor-1" }])
     .mockResolvedValue([
       {
         id: VISIT_ID,
@@ -386,6 +404,7 @@ beforeEach(() => {
         soapFinal: "Synthetic SOAP note.",
         noteTemplateId: "template-1",
         noteTemplateVersion: 1,
+        inputMode: "text_notes",
       },
     ]);
   mocks.transaction.mockImplementation(
@@ -606,6 +625,10 @@ describe("POST /api/visits/[id]/sign — Template Twin server gate", () => {
         outputEtag: "provider-output-etag-synthetic",
         outputSha256: "b".repeat(64),
         outputSizeBytes: 4096,
+        providerOwnershipEvidence: {
+          equals: { synthetic: "provider-receipt" },
+        },
+        providerOwnershipSha256: "d".repeat(64),
         roundTripVerified: true,
         needsReviewCount: 0,
         conflictCount: 0,
@@ -654,12 +677,63 @@ describe("POST /api/visits/[id]/sign — Template Twin server gate", () => {
     );
   });
 
+  it("rechecks authorization before every destination and stops on revocation", async () => {
+    mocks.authorizeDelivery
+      .mockResolvedValueOnce({ templateTwin: true })
+      .mockResolvedValueOnce({ templateTwin: true })
+      .mockRejectedValueOnce(
+        new TemplateTwinDeliveryAuthorizationError(
+          "TEMPLATE_TWIN_DELIVERY_BLOCKED",
+          409,
+        ),
+      );
+
+    const response = await call(["clipboard_generic", "pdf"]);
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "TEMPLATE_TWIN_DELIVERY_BLOCKED",
+      retry: false,
+    });
+    expect(mocks.authorizeDelivery).toHaveBeenCalledTimes(3);
+    expect(mocks.authorizeDelivery).toHaveBeenNthCalledWith(2, {
+      visitId: VISIT_ID,
+      actorUserId: "doctor-1",
+      allowSyntheticOriginalTemplate: false,
+    });
+    expect(mocks.authorizeDelivery).toHaveBeenNthCalledWith(3, {
+      visitId: VISIT_ID,
+      actorUserId: "doctor-1",
+      allowSyntheticOriginalTemplate: false,
+    });
+    expect(mocks.logDelivery).toHaveBeenCalledTimes(1);
+    expect(mocks.logDelivery).toHaveBeenCalledWith(
+      expect.objectContaining({ channel: "clipboard_generic" }),
+    );
+  });
+
+  it("never returns a destination collaborator error verbatim", async () => {
+    mocks.logDelivery.mockImplementationOnce(() => {
+      throw new Error(
+        "synthetic patient and provider receipt detail must not escape",
+      );
+    });
+
+    const response = await call(["pdf"]);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.deliveryErrors).toEqual({ pdf: "delivery failed" });
+    expect(JSON.stringify(body)).not.toMatch(/patient|provider receipt/i);
+  });
+
   it("blocks signing when encounter evidence changes before the final claim", async () => {
     mocks.verifyEvidence.mockReturnValue(false);
     mocks.findUnique.mockReset();
-    mocks.findUnique
-      .mockResolvedValueOnce(visitRow())
-      .mockResolvedValue({ signedAt: null, status: TranscribeVisitStatus.READY });
+    mocks.findUnique.mockResolvedValueOnce(visitRow()).mockResolvedValue({
+      signedAt: null,
+      status: TranscribeVisitStatus.READY,
+    });
 
     const response = await call([]);
 
@@ -734,6 +808,30 @@ describe("POST /api/visits/[id]/sign — Template Twin server gate", () => {
       expectedSizeBytes: 4096,
     });
     expect(mocks.transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks a suspension race at the final signed claim", async () => {
+    mocks.txQueryRaw
+      .mockReset()
+      .mockResolvedValueOnce([
+        {
+          id: "doctor-1",
+          practiceId: "practice-1",
+          role: "DOCTOR",
+          isActive: true,
+        },
+      ])
+      .mockResolvedValueOnce([]);
+
+    const response = await call([]);
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "TEMPLATE_TWIN_CURRENT_PHYSICIAN_REQUIRED",
+      retry: false,
+    });
+    expect(mocks.txFillUpdateMany).not.toHaveBeenCalled();
+    expect(mocks.txVisitUpdateMany).not.toHaveBeenCalled();
   });
 
   it.each([

@@ -11,6 +11,9 @@ const mocks = vi.hoisted(() => ({
   lockAutomation: vi.fn(),
   lockActor: vi.fn(),
   lockVisit: vi.fn(),
+  lockCurrentPhysician: vi.fn(),
+  findCurrentVisit: vi.fn(),
+  findCurrentFill: vi.fn(),
 }));
 
 vi.mock("@meddoc/db", () => ({
@@ -59,6 +62,10 @@ import {
   SYNTHETIC_CONTEXT,
 } from "./integration-fixture";
 import { createTemplateTwinEncounterSourceReceipt } from "../canonical-encounter-source";
+import {
+  sourceProviderOwnershipFixture,
+  visitProviderOwnershipFixture,
+} from "./provider-ownership-fixture";
 
 const SOAP = "Synthetic SOAP reviewed for Template Twin.";
 const ACTOR = {
@@ -68,6 +75,9 @@ const ACTOR = {
 };
 let manifest: Awaited<ReturnType<typeof prepareTemplateTwinFill>>["manifest"];
 let manifestSha256: string;
+let sourceOwnership: ReturnType<typeof sourceProviderOwnershipFixture>;
+let visitOwnership: ReturnType<typeof visitProviderOwnershipFixture>;
+let sourceSha256: string;
 
 beforeAll(async () => {
   const fixture = await buildTemplateTwinIntegrationFixture();
@@ -91,22 +101,73 @@ beforeAll(async () => {
   });
   manifest = prepared.manifest;
   manifestSha256 = prepared.manifestSha256;
+  sourceSha256 = fixture.ir.source.sha256;
+  sourceOwnership = sourceProviderOwnershipFixture({
+    practiceId: ACTOR.practiceId,
+    actorUserId: ACTOR.userId,
+    sourceArtifactId: "source-review-ack",
+    sourceSha256,
+    compiledVersionId: "compiled-review-ack",
+    noteTemplateId: "template-review-ack",
+    noteTemplateVersion: 2,
+    sourceLineageId: "lineage-review-ack",
+    sourceLineageVersion: 1,
+  });
+  visitOwnership = visitProviderOwnershipFixture({
+    practiceId: ACTOR.practiceId,
+    actorUserId: ACTOR.userId,
+    visitId: "visit-review-ack",
+    visitInputMode: "text_notes",
+    sourceArtifactId: "source-review-ack",
+    sourceSha256,
+    compiledVersionId: "compiled-review-ack",
+    noteTemplateId: "template-review-ack",
+    noteTemplateVersion: 2,
+    sourceLineageId: "lineage-review-ack",
+    sourceLineageVersion: 1,
+    logicalAttempt: 1,
+  });
 });
 
 function visitRow(overrides: Record<string, unknown> = {}) {
   return {
     status: "READY",
     soapVersion: 4,
+    manualRetryCount: 0,
     soapFinal: SOAP,
     inputMode: "text_notes",
     rawTextInput: SYNTHETIC_CONTEXT,
     transcriptText: null,
     transcriptRaw: null,
     speakerMap: null,
+    noteTemplateId: "template-review-ack",
+    noteTemplateVersion: 2,
+    noteTemplate: {
+      id: "template-review-ack",
+      doctorId: ACTOR.userId,
+      version: 2,
+      templateKind: "template_twin_docx",
+      templateTwinCompiledVersion: {
+        id: "compiled-review-ack",
+        providerOwnershipEvidence: sourceOwnership.evidence,
+        providerOwnershipSha256: sourceOwnership.sha256,
+        sourceArtifact: {
+          id: "source-review-ack",
+          lineageId: "lineage-review-ack",
+          lineageVersion: 1,
+          sha256: sourceSha256,
+          providerOwnershipEvidence: sourceOwnership.evidence,
+          providerOwnershipSha256: sourceOwnership.sha256,
+        },
+      },
+    },
     user: { practice: { templateTwinEnabled: true } },
     templateTwinFill: {
       id: "fill-review-ack",
       practiceId: ACTOR.practiceId,
+      compiledVersionId: "compiled-review-ack",
+      noteTemplateId: "template-review-ack",
+      noteTemplateVersion: 2,
       status: "VERIFIED",
       signedDecisionAt: null,
       manifestVersion: 3,
@@ -124,6 +185,8 @@ function visitRow(overrides: Record<string, unknown> = {}) {
       reviewedManifestSha256: null,
       pinnedGlobalRolloutGeneration: BigInt(1),
       pinnedPracticeRolloutGeneration: BigInt(1),
+      providerOwnershipEvidence: visitOwnership.evidence,
+      providerOwnershipSha256: visitOwnership.sha256,
     },
     ...overrides,
   };
@@ -165,10 +228,18 @@ beforeEach(() => {
     transcriptRaw: null,
     speakerMap: null,
   });
+  mocks.lockCurrentPhysician.mockResolvedValue([{ id: ACTOR.userId }]);
+  mocks.findCurrentVisit.mockResolvedValue({ manualRetryCount: 0 });
+  mocks.findCurrentFill.mockResolvedValue({ id: "fill-review-ack" });
   mocks.transaction.mockImplementation(
     async (callback: (tx: unknown) => Promise<unknown>) =>
       callback({
-        templateTwinFillManifest: { updateMany: mocks.updateFill },
+        $queryRaw: mocks.lockCurrentPhysician,
+        transcribeVisit: { findUnique: mocks.findCurrentVisit },
+        templateTwinFillManifest: {
+          updateMany: mocks.updateFill,
+          findFirst: mocks.findCurrentFill,
+        },
         templateTwinAuditOutbox: { create: mocks.outboxCreate },
       }),
   );
@@ -312,6 +383,24 @@ describe("whole-manifest Template Twin review acknowledgement", () => {
         }),
       }),
     );
+  });
+
+  it("fails closed when physician authority is revoked before the final review claim", async () => {
+    mocks.lockCurrentPhysician.mockResolvedValue([]);
+
+    await expect(
+      acknowledgeTemplateTwinReview({
+        visitId: "visit-review-ack",
+        expectedManifestVersion: 3,
+        expectedManifestSha256: manifestSha256,
+        actor: ACTOR,
+      }),
+    ).rejects.toMatchObject({
+      code: "TEMPLATE_TWIN_CURRENT_PHYSICIAN_REQUIRED",
+      message: "Current physician authorization is required for Template Twin.",
+    });
+    expect(mocks.updateFill).not.toHaveBeenCalled();
+    expect(mocks.outboxCreate).not.toHaveBeenCalled();
   });
 
   it("rejects a stale browser review of an older manifest version", async () => {

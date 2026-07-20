@@ -27,10 +27,12 @@ import {
 } from "../../signing-gate";
 import { DOCX_MIME_TYPE, createOutputArtifactKey } from "../../storage/keys";
 import { syntheticSourceAdmission } from "../../__tests__/source-admission-fixture";
-import { validateTemplateTwin } from "../../validation";
 import {
-  buildClinicianCorrection,
-} from "../../review-service";
+  sourceProviderOwnershipFixture,
+  visitProviderOwnershipFixture,
+} from "../../__tests__/provider-ownership-fixture";
+import { validateTemplateTwin } from "../../validation";
+import { buildClinicianCorrection } from "../../review-service";
 import {
   CertifiedTemplateFieldSpecificationSchema,
   buildCanonicalCustomConceptEvidence,
@@ -227,9 +229,7 @@ function makeSpecification(
   }
   if (
     candidate.polarityPolicy.allowExplicitDenial &&
-    !positives.some(
-      (example) => example.expectedStatus === "explicitly_denied",
-    )
+    !positives.some((example) => example.expectedStatus === "explicitly_denied")
   ) {
     positives.push({
       exampleId: "positive-explicit-denial",
@@ -469,10 +469,36 @@ async function buildCustomSigningContext(): Promise<TemplateTwinSigningContext> 
     outputSha256: prepared.render.outputSha256,
     idFactory: () => "synthetic-certification-artifact",
   });
+  const sourceOwnership = sourceProviderOwnershipFixture({
+    practiceId: "synthetic-practice",
+    actorUserId: "synthetic-doctor",
+    sourceArtifactId: "synthetic-source",
+    sourceSha256: ir.source.sha256,
+    compiledVersionId: COMPILED_VERSION_ID,
+    noteTemplateId: "synthetic-template-v1",
+    noteTemplateVersion: 1,
+    sourceLineageId: LINEAGE_ID,
+    sourceLineageVersion: 1,
+  });
+  const visitOwnership = visitProviderOwnershipFixture({
+    practiceId: "synthetic-practice",
+    actorUserId: "synthetic-doctor",
+    visitId: "synthetic-visit",
+    visitInputMode: "text_notes",
+    sourceArtifactId: "synthetic-source",
+    sourceSha256: ir.source.sha256,
+    compiledVersionId: COMPILED_VERSION_ID,
+    noteTemplateId: "synthetic-template-v1",
+    noteTemplateVersion: 1,
+    sourceLineageId: LINEAGE_ID,
+    sourceLineageVersion: 1,
+    logicalAttempt: 1,
+  });
 
   return {
     visitId: "synthetic-visit",
     practiceId: "synthetic-practice",
+    actorUserId: "synthetic-doctor",
     visitStatus: "READY",
     soapVersion: 4,
     soapFinal: "Synthetic reviewed SOAP note.",
@@ -481,10 +507,12 @@ async function buildCustomSigningContext(): Promise<TemplateTwinSigningContext> 
     transcriptText: null,
     transcriptRaw: null,
     speakerMap: null,
+    manualRetryCount: 0,
     noteTemplateId: "synthetic-template-v1",
     noteTemplateVersion: 1,
     noteTemplate: {
       id: "synthetic-template-v1",
+      doctorId: "synthetic-doctor",
       version: 1,
       templateKind: "template_twin_docx",
       templateTwinCompiledVersion: {
@@ -500,7 +528,11 @@ async function buildCustomSigningContext(): Promise<TemplateTwinSigningContext> 
         latestTestOutputEtag: "synthetic-certification-etag",
         latestTestOutputSha256: prepared.render.outputSha256,
         certificationStatus: "CERTIFIED",
+        providerOwnershipEvidence: sourceOwnership.evidence,
+        providerOwnershipSha256: sourceOwnership.sha256,
         sourceArtifact: {
+          id: "synthetic-source",
+          lineageVersion: 1,
           ...syntheticSourceAdmission({
             practiceId: "synthetic-practice",
             lineageId: LINEAGE_ID,
@@ -509,6 +541,8 @@ async function buildCustomSigningContext(): Promise<TemplateTwinSigningContext> 
           }),
           mimeType: ir.source.mimeType,
           privacyScanEvidence: SOURCE_PRIVACY_SCAN_EVIDENCE,
+          providerOwnershipEvidence: sourceOwnership.evidence,
+          providerOwnershipSha256: sourceOwnership.sha256,
         },
         fields: [
           {
@@ -595,6 +629,8 @@ async function buildCustomSigningContext(): Promise<TemplateTwinSigningContext> 
       staticContentSha256: ir.staticContentSha256,
       roundTripVerified: prepared.render.verification.verified,
       roundTripVerification: prepared.render.verification,
+      providerOwnershipEvidence: visitOwnership.evidence,
+      providerOwnershipSha256: visitOwnership.sha256,
       pinnedGlobalRolloutGeneration: BigInt(1),
       pinnedPracticeRolloutGeneration: BigInt(1),
       signedGlobalRolloutGeneration: null,
@@ -1220,7 +1256,9 @@ describe("custom concept runtime integration", () => {
 
       expect(assessTemplateTwinSigning(context)).toMatchObject({
         ready: false,
-        blockerCodes: expect.arrayContaining(["FILL_MANIFEST_VERSION_MISMATCH"]),
+        blockerCodes: expect.arrayContaining([
+          "FILL_MANIFEST_VERSION_MISMATCH",
+        ]),
       });
     },
   );
@@ -1232,9 +1270,7 @@ describe("custom concept runtime integration", () => {
     const assessment = assessTemplateTwinSigning(context);
     expect(assessment.ready).toBe(false);
     expect(assessment.blockerCodes).toEqual(
-      expect.arrayContaining([
-        "FILL_MANIFEST_VERSION_MISMATCH",
-      ]),
+      expect.arrayContaining(["FILL_MANIFEST_VERSION_MISMATCH"]),
     );
   });
 

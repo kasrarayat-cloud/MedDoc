@@ -33,6 +33,7 @@ const mocks = vi.hoisted(() => ({
   captureEditPattern: vi.fn(),
   computeDisplayedEmCode: vi.fn(),
   enqueueAudit: vi.fn(),
+  authorizeDelivery: vi.fn(),
 }));
 
 // Minimal NextResponse stand-in — deterministic across vitest
@@ -121,6 +122,17 @@ vi.mock("@/worker/automation-locks", () => ({
 vi.mock("@/lib/template-twin/audit-outbox", () => ({
   enqueueTemplateTwinAudit: mocks.enqueueAudit,
 }));
+vi.mock("@/lib/template-twin/delivery-authorization", () => ({
+  TemplateTwinDeliveryAuthorizationError: class TemplateTwinDeliveryAuthorizationError extends Error {
+    constructor(
+      public readonly code: string,
+      public readonly status: number,
+    ) {
+      super("Template Twin delivery authorization changed.");
+    }
+  },
+  authorizeVisitDeliveryFinalClaim: mocks.authorizeDelivery,
+}));
 
 import type { NextRequest } from "next/server";
 import { TranscribeVisitStatus } from "@prisma/client";
@@ -175,6 +187,7 @@ beforeEach(() => {
   mocks.rxOverrideFindMany.mockResolvedValue([]);
   mocks.criticalWarningRefs.mockReturnValue([]);
   mocks.computeDisplayedEmCode.mockResolvedValue("99214");
+  mocks.authorizeDelivery.mockResolvedValue({ templateTwin: false });
   mocks.loadVisitExportData.mockResolvedValue({
     clinicianName: "Dr. Test",
     patientName: "P",

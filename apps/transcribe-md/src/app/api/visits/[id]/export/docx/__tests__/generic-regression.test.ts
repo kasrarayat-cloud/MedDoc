@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   logAudit: vi.fn(),
   isOwnedTemplateTwinStagingQaVisit: vi.fn(),
   isTemplateTwinStagingQaRequested: vi.fn(),
+  authorizeDelivery: vi.fn(),
 }));
 
 vi.mock("next/server", () => {
@@ -51,6 +52,10 @@ vi.mock("@/lib/template-twin/staging-qa-access", () => ({
 vi.mock("@/lib/template-twin/staging-qa-gate", () => ({
   isTemplateTwinStagingQaRequested: mocks.isTemplateTwinStagingQaRequested,
 }));
+vi.mock("@/lib/template-twin/delivery-authorization", () => ({
+  TemplateTwinDeliveryAuthorizationError: class TemplateTwinDeliveryAuthorizationError extends Error {},
+  authorizeVisitDeliveryFinalClaim: mocks.authorizeDelivery,
+}));
 vi.mock("@meddoc/ai", () => ({ redactPhi: (value: unknown) => value }));
 
 import { GET } from "../route";
@@ -80,6 +85,7 @@ beforeEach(() => {
   mocks.generateVisitDocx.mockResolvedValue(DOCUMENT);
   mocks.isOwnedTemplateTwinStagingQaVisit.mockResolvedValue(false);
   mocks.isTemplateTwinStagingQaRequested.mockReturnValue(false);
+  mocks.authorizeDelivery.mockResolvedValue({ templateTwin: false });
 });
 
 describe("generic DOCX export regression", () => {
@@ -106,6 +112,10 @@ describe("generic DOCX export regression", () => {
       userId: "doctor-structured-1",
     });
     expect(mocks.generateVisitDocx).toHaveBeenCalledWith(STRUCTURED_EXPORT);
+    expect(mocks.authorizeDelivery).toHaveBeenCalledWith({
+      visitId: "visit-structured-1",
+      actorUserId: "doctor-structured-1",
+    });
     expect(mocks.logDelivery).toHaveBeenCalledWith({
       visitId: "visit-structured-1",
       channel: "docx",

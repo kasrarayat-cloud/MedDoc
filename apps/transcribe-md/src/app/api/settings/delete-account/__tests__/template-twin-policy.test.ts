@@ -16,7 +16,11 @@ const mocks = vi.hoisted(() => ({
   staticAssetDecisionCount: vi.fn(),
   staticAssetReviewReceiptCount: vi.fn(),
   customExampleExecutionCount: vi.fn(),
+  providerExecutionCount: vi.fn(),
+  syntheticQaAdmissionCount: vi.fn(),
   syntheticQaRunCount: vi.fn(),
+  providerPlanDecisionCount: vi.fn(),
+  transactionRaw: vi.fn(),
   completedCandidateCount: vi.fn(),
   completedCandidateReviewReceiptCount: vi.fn(),
   noteTemplateCount: vi.fn(),
@@ -81,6 +85,10 @@ vi.mock("@meddoc/db", () => ({
     templateTwinCustomExampleExecution: {
       count: mocks.customExampleExecutionCount,
     },
+    templateTwinProviderExecution: { count: mocks.providerExecutionCount },
+    templateTwinSyntheticQaAdmission: {
+      count: mocks.syntheticQaAdmissionCount,
+    },
     templateTwinSyntheticQaRun: { count: mocks.syntheticQaRunCount },
     templateTwinCompletedCandidate: {
       count: mocks.completedCandidateCount,
@@ -96,6 +104,7 @@ vi.mock("@meddoc/db", () => ({
       create: mocks.outboxCreate,
     },
     auditLog: { count: mocks.auditLogCount },
+    $queryRaw: mocks.providerPlanDecisionCount,
     $transaction: mocks.transaction,
   },
 }));
@@ -134,7 +143,12 @@ beforeEach(() => {
   mocks.staticAssetDecisionCount.mockResolvedValue(0);
   mocks.staticAssetReviewReceiptCount.mockResolvedValue(0);
   mocks.customExampleExecutionCount.mockResolvedValue(0);
+  mocks.providerExecutionCount.mockResolvedValue(0);
+  mocks.syntheticQaAdmissionCount.mockResolvedValue(0);
   mocks.syntheticQaRunCount.mockResolvedValue(0);
+  mocks.providerPlanDecisionCount.mockResolvedValue([
+    { retainedCount: BigInt(0) },
+  ]);
   mocks.completedCandidateCount.mockResolvedValue(0);
   mocks.completedCandidateReviewReceiptCount.mockResolvedValue(0);
   mocks.noteTemplateCount.mockResolvedValue(0);
@@ -144,6 +158,17 @@ beforeEach(() => {
   mocks.auditLogCount.mockResolvedValue(0);
   mocks.outboxCreate.mockResolvedValue({ id: "outbox-1" });
   mocks.ownerLock.mockResolvedValue([{ userId: "doctor-1" }]);
+  mocks.transactionRaw.mockImplementation((query: unknown) => {
+    const sql =
+      query && typeof query === "object" && "strings" in query
+        ? Array.from((query as { strings: readonly string[] }).strings).join(
+            " ",
+          )
+        : String(query);
+    return sql.includes("template_twin_provider_plan_decisions")
+      ? mocks.providerPlanDecisionCount(query)
+      : mocks.ownerLock(query);
+  });
   mocks.accountDeletionCreate.mockResolvedValue({ id: "deletion-1" });
   mocks.aiCallDeleteMany.mockResolvedValue({ count: 0 });
   mocks.userDelete.mockResolvedValue({ id: "doctor-1" });
@@ -151,7 +176,7 @@ beforeEach(() => {
   mocks.transaction.mockImplementation(
     async (callback: (tx: unknown) => unknown) =>
       callback({
-        $queryRaw: mocks.ownerLock,
+        $queryRaw: mocks.transactionRaw,
         accountDeletion: { create: mocks.accountDeletionCreate },
         aiCall: { deleteMany: mocks.aiCallDeleteMany },
         user: { delete: mocks.userDelete },
@@ -169,6 +194,12 @@ beforeEach(() => {
         },
         templateTwinCustomExampleExecution: {
           count: mocks.customExampleExecutionCount,
+        },
+        templateTwinProviderExecution: {
+          count: mocks.providerExecutionCount,
+        },
+        templateTwinSyntheticQaAdmission: {
+          count: mocks.syntheticQaAdmissionCount,
         },
         templateTwinSyntheticQaRun: { count: mocks.syntheticQaRunCount },
         templateTwinCompletedCandidate: {
@@ -254,6 +285,123 @@ describe("delete account with retained Template Twin records", () => {
     expect(mocks.deleteAudio).not.toHaveBeenCalled();
   });
 
+  it("counts immutable provider lineage by both actor and practice before deletion", async () => {
+    mocks.providerExecutionCount.mockResolvedValue(1);
+
+    const response = await POST(request(), { params: Promise.resolve({}) });
+
+    expect(response.status).toBe(409);
+    expect(mocks.providerExecutionCount).toHaveBeenCalledWith({
+      where: {
+        OR: [{ practiceId: "practice-1" }, { actorUserId: "doctor-1" }],
+      },
+    });
+    expect(mocks.transaction).not.toHaveBeenCalled();
+    expect(mocks.userDelete).not.toHaveBeenCalled();
+  });
+
+  it("counts synthetic admissions by both actor and practice before deletion", async () => {
+    mocks.syntheticQaAdmissionCount.mockResolvedValue(1);
+
+    const response = await POST(request(), { params: Promise.resolve({}) });
+
+    expect(response.status).toBe(409);
+    expect(mocks.syntheticQaAdmissionCount).toHaveBeenCalledWith({
+      where: {
+        OR: [{ practiceId: "practice-1" }, { actorId: "doctor-1" }],
+      },
+    });
+    expect(mocks.transaction).not.toHaveBeenCalled();
+    expect(mocks.userDelete).not.toHaveBeenCalled();
+  });
+
+  it("counts raw provider plan decisions by both actor and practice", async () => {
+    mocks.providerPlanDecisionCount.mockResolvedValue([
+      { retainedCount: BigInt(1) },
+    ]);
+
+    const response = await POST(request(), { params: Promise.resolve({}) });
+
+    expect(response.status).toBe(409);
+    const query = mocks.providerPlanDecisionCount.mock.calls[0]?.[0] as {
+      strings: readonly string[];
+      values: readonly unknown[];
+    };
+    expect(query.strings.join(" ")).toContain(
+      "template_twin_provider_plan_decisions",
+    );
+    expect(query.strings.join(" ")).toContain('"actorUserId"');
+    expect(query.values).toEqual(["practice-1", "doctor-1"]);
+    expect(mocks.transaction).not.toHaveBeenCalled();
+    expect(mocks.userDelete).not.toHaveBeenCalled();
+  });
+
+  it("fails closed with a fixed response when the raw retention census fails", async () => {
+    mocks.providerPlanDecisionCount.mockRejectedValue(
+      new Error("synthetic database detail must not escape"),
+    );
+
+    const response = await POST(request(), { params: Promise.resolve({}) });
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body).toEqual({
+      error:
+        "Account deletion is temporarily unavailable because retained Template Twin records could not be verified.",
+      code: "TEMPLATE_TWIN_RETENTION_CENSUS_UNAVAILABLE",
+    });
+    expect(JSON.stringify(body)).not.toContain("synthetic database detail");
+    expect(mocks.transaction).not.toHaveBeenCalled();
+    expect(mocks.deleteAudio).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["missing", []],
+    ["duplicate", [{ retainedCount: "0" }, { retainedCount: "0" }]],
+    ["negative", [{ retainedCount: "-1" }]],
+    [
+      "unsafe integer",
+      [
+        {
+          retainedCount: (
+            BigInt(Number.MAX_SAFE_INTEGER) + BigInt(1)
+          ).toString(),
+        },
+      ],
+    ],
+  ])("fails closed for a %s raw retention count", async (_label, rows) => {
+    mocks.providerPlanDecisionCount.mockResolvedValue(rows);
+
+    const response = await POST(request(), { params: Promise.resolve({}) });
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "TEMPLATE_TWIN_RETENTION_CENSUS_UNAVAILABLE",
+    });
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when the post-conflict retention recount is unavailable", async () => {
+    mocks.providerPlanDecisionCount
+      .mockResolvedValueOnce([{ retainedCount: BigInt(0) }])
+      .mockRejectedValueOnce(new Error("synthetic recount detail"));
+    mocks.transaction.mockRejectedValueOnce({
+      code: "P2003",
+      message: "Foreign key constraint failed",
+    });
+
+    const response = await POST(request(), { params: Promise.resolve({}) });
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      error:
+        "Account deletion is temporarily unavailable because retained Template Twin records could not be verified.",
+      code: "TEMPLATE_TWIN_RETENTION_CENSUS_UNAVAILABLE",
+    });
+    expect(mocks.outboxCreate).not.toHaveBeenCalled();
+    expect(mocks.deleteAudio).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["orphan object", "objectLedgerCount"],
     ["pending audit outbox", "auditOutboxCount"],
@@ -263,6 +411,8 @@ describe("delete account with retained Template Twin records", () => {
     ["static-asset decision", "staticAssetDecisionCount"],
     ["static-asset preview-review receipt", "staticAssetReviewReceiptCount"],
     ["custom-example execution", "customExampleExecutionCount"],
+    ["provider ownership execution", "providerExecutionCount"],
+    ["synthetic staging QA admission", "syntheticQaAdmissionCount"],
     ["synthetic staging QA run", "syntheticQaRunCount"],
     ["completed-document candidate", "completedCandidateCount"],
     [

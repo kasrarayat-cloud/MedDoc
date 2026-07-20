@@ -26,6 +26,7 @@ import type {
 } from "./visit-export";
 import { assessVisitAutomationProof } from "@/worker/automation-finalization";
 import { VISIT_AUTOMATION_MANIFEST_SELECT } from "@/worker/automation-manifest";
+import { authorizeVisitDeliveryFinalClaim } from "@/lib/template-twin/delivery-authorization";
 
 /**
  * Auth + load. Returns null for "not found / not yours" so the route
@@ -35,6 +36,7 @@ import { VISIT_AUTOMATION_MANIFEST_SELECT } from "@/worker/automation-manifest";
 export async function loadVisitExportData(
   visitId: string,
   userId: string,
+  options: { allowSyntheticOriginalTemplate?: boolean } = {},
 ): Promise<VisitExportData | null> {
   const visit = await prisma.transcribeVisit.findUnique({
     where: { id: visitId },
@@ -68,6 +70,15 @@ export async function loadVisitExportData(
     },
   });
   if (!visit || visit.userId !== userId) return null;
+  // Central delivery admission. This is a no-op for ordinary visits. Template
+  // Twin exports require the exact signed/reviewed/provider-owned final claim,
+  // so every current and future caller of this shared loader fails closed.
+  await authorizeVisitDeliveryFinalClaim({
+    visitId,
+    actorUserId: userId,
+    allowSyntheticOriginalTemplate:
+      options.allowSyntheticOriginalTemplate === true,
+  });
   const automation = assessVisitAutomationProof({
     visitId: visit.id,
     practiceId: visit.user.practiceId,
