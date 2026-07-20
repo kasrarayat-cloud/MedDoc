@@ -29,8 +29,10 @@ import prisma from "@meddoc/db";
 import { auth } from "@/lib/nextauth";
 import { apiError, withApiHandler } from "@/lib/api-error";
 import { isOwnedTemplateTwinStagingQaVisit } from "@/lib/template-twin/staging-qa-access";
+import { isSameOriginTemplateTwinMutation } from "@/lib/template-twin/request-security";
 import { computeEmScore } from "@/lib/em-coding/score";
 import { engineToUiScore } from "@/lib/em-coding/to-ui-score";
+import { hasTemplateTwinProvenance } from "@/lib/em-coding/template-twin-boundary";
 import {
   extractIcdRows,
   extractRxRows,
@@ -54,6 +56,11 @@ export const POST = withApiHandler<{ id: string }>(
     const userId = session?.user?.id;
     const practiceId = session?.user?.practiceId;
     if (!userId || !practiceId) return apiError("unauthorized", 401);
+    if (!isSameOriginTemplateTwinMutation(req)) {
+      return apiError("The E/M score request was not same-origin.", 403, {
+        code: "CROSS_SITE_MUTATION",
+      });
+    }
     // The staging flow is provider-isolated. A direct request must not turn a
     // synthetic visit into a live E/M-judge call when its cache is cold.
     if (await isOwnedTemplateTwinStagingQaVisit({ visitId, userId })) {
@@ -89,6 +96,10 @@ export const POST = withApiHandler<{ id: string }>(
         // the doctor-set code after a re-score (matching page.tsx's
         // initial render path).
         cptCodes: true,
+        noteTemplate: { select: { templateKind: true } },
+        templateTwinFill: { select: { id: true } },
+        templateTwinSyntheticQaRun: { select: { id: true } },
+        templateTwinSyntheticQaAdmission: { select: { id: true } },
       },
     });
     if (!visit || visit.userId !== userId) return apiError("not found", 404);
@@ -96,6 +107,16 @@ export const POST = withApiHandler<{ id: string }>(
       return apiError("Visit is no longer active.", 400, {
         code: "VISIT_NOT_ACTIVE",
       });
+    }
+    if (hasTemplateTwinProvenance(visit)) {
+      return apiError(
+        "Provider-backed E/M scoring is unavailable for Template Twin visits.",
+        409,
+        {
+          code: "TEMPLATE_TWIN_PROVIDER_BACKED_EM_UNAVAILABLE",
+          retry: false,
+        },
+      );
     }
 
     // Extract structured signals from the visit row. The Prisma JSON

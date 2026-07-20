@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   mergeAdditions: vi.fn(),
   invalidateTwin: vi.fn(),
   pinStagingMutation: vi.fn(),
+  isOwnedStagingVisit: vi.fn(),
   logAudit: vi.fn(),
 }));
 
@@ -49,6 +50,7 @@ vi.mock("@/lib/em-coding/to-ui-score", () => ({
 vi.mock("@/lib/em-coding/displayed-level", () => ({
   extractIcdRows: vi.fn(() => []),
   extractRxRows: vi.fn(() => []),
+  extractEmOverride: vi.fn(() => undefined),
 }));
 vi.mock("@/lib/em-coding/merge-additions", () => ({
   mergeAdditions: mocks.mergeAdditions,
@@ -59,12 +61,16 @@ vi.mock("@/lib/template-twin/soap-binding", () => ({
 vi.mock("@/lib/template-twin/staging-qa-mutation", () => ({
   pinTemplateTwinStagingQaMutation: mocks.pinStagingMutation,
 }));
+vi.mock("@/lib/template-twin/staging-qa-access", () => ({
+  isOwnedTemplateTwinStagingQaVisit: mocks.isOwnedStagingVisit,
+}));
 vi.mock("@/lib/audit", () => ({ logAudit: mocks.logAudit }));
 
 import { TranscribeVisitStatus } from "@prisma/client";
 
 import { POST as applyAdditions } from "../apply-additions/route";
 import { POST as applyOverride } from "../override/route";
+import { POST as computeScore } from "../route";
 
 const VISIT_ID = "synthetic-visit-1";
 const DOCTOR_ID = "synthetic-doctor-1";
@@ -92,7 +98,10 @@ const stagingClaim = {
   },
 };
 
-function visitRow(templateTwinSyntheticQaRun: typeof stagingRun | null = null) {
+function visitRow(
+  templateTwinSyntheticQaRun: typeof stagingRun | null = null,
+  overrides: Record<string, unknown> = {},
+) {
   return {
     id: VISIT_ID,
     userId: DOCTOR_ID,
@@ -110,11 +119,15 @@ function visitRow(templateTwinSyntheticQaRun: typeof stagingRun | null = null) {
     cptCodes: {},
     rxDrafts: [],
     templateTwinSyntheticQaRun,
+    noteTemplate: { templateKind: "structured" },
+    templateTwinFill: null,
+    templateTwinSyntheticQaAdmission: null,
+    ...overrides,
   };
 }
 
 function request(
-  route: "apply-additions" | "override",
+  route: "apply-additions" | "override" | "score",
   sameOrigin = true,
 ): NextRequest {
   const body =
@@ -124,9 +137,12 @@ function request(
             { criterionId: "synthetic-criterion", text: "Synthetic addition." },
           ],
         }
-      : { overrideToCode: "99213", reason: "Synthetic QA reason." };
+      : route === "override"
+        ? { overrideToCode: "99213", reason: "Synthetic QA reason." }
+        : { soapText: "Caller supplied synthetic SOAP." };
+  const suffix = route === "score" ? "" : `/${route}`;
   return new Request(
-    `https://app.example.test/api/visits/${VISIT_ID}/em-score/${route}`,
+    `https://app.example.test/api/visits/${VISIT_ID}/em-score${suffix}`,
     {
       method: "POST",
       headers: {
@@ -155,6 +171,7 @@ beforeEach(() => {
   });
   mocks.findUnique.mockResolvedValue(visitRow());
   mocks.pinStagingMutation.mockResolvedValue(null);
+  mocks.isOwnedStagingVisit.mockResolvedValue(false);
   mocks.updateMany.mockResolvedValue({ count: 1 });
   mocks.update.mockResolvedValue({ id: VISIT_ID });
   mocks.transaction.mockImplementation(
@@ -172,6 +189,20 @@ beforeEach(() => {
 });
 
 describe("ordinary visit compatibility", () => {
+  it("preserves same-origin provider-backed scoring for an ordinary visit", async () => {
+    const response = await computeScore(request("score"), context);
+
+    expect(response.status).toBe(200);
+    expect(mocks.computeEmScore).toHaveBeenCalledWith(
+      "Caller supplied synthetic SOAP.",
+      expect.objectContaining({
+        practiceId: "synthetic-practice-1",
+        visitId: VISIT_ID,
+        userId: DOCTOR_ID,
+      }),
+    );
+  });
+
   it("preserves the existing additions mutation path", async () => {
     const response = await applyAdditions(request("apply-additions"), context);
 
@@ -208,6 +239,7 @@ describe("ordinary visit compatibility", () => {
 
 describe("same-origin mutation boundary", () => {
   it.each([
+    ["score", computeScore, "score"],
     ["additions", applyAdditions, "apply-additions"],
     ["override", applyOverride, "override"],
   ] as const)(
@@ -223,6 +255,105 @@ describe("same-origin mutation boundary", () => {
       expect(mocks.computeEmScore).not.toHaveBeenCalled();
     },
   );
+});
+
+describe("durable Template Twin provider-backed E/M boundary", () => {
+  const provenanceCases = [
+    [
+      "current Twin template",
+      { noteTemplate: { templateKind: "template_twin_docx" } },
+    ],
+    [
+      "fill with a mutated ordinary template",
+      {
+        noteTemplate: { templateKind: "structured" },
+        templateTwinFill: { id: "fill-1" },
+      },
+    ],
+    [
+      "fill with a detached template",
+      { noteTemplate: null, templateTwinFill: { id: "fill-1" } },
+    ],
+    ["synthetic run", { templateTwinSyntheticQaRun: stagingRun }],
+    [
+      "pre-certification admission",
+      { templateTwinSyntheticQaAdmission: { id: "voice-admission-1" } },
+    ],
+  ] as const;
+
+  it.each(provenanceCases)(
+    "rejects base score for %s before caller SOAP reaches the model/cache",
+    async (_label, provenance) => {
+      mocks.findUnique.mockResolvedValue(visitRow(null, provenance));
+
+      const response = await computeScore(request("score"), context);
+
+      expect(response.status).toBe(409);
+      await expect(response.json()).resolves.toMatchObject({
+        code: "TEMPLATE_TWIN_PROVIDER_BACKED_EM_UNAVAILABLE",
+      });
+      expect(mocks.computeEmScore).not.toHaveBeenCalled();
+      expect(mocks.engineToUiScore).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(provenanceCases)(
+    "rejects apply-additions for %s before scoring or mutation",
+    async (_label, provenance) => {
+      mocks.findUnique.mockResolvedValue(visitRow(null, provenance));
+
+      const response = await applyAdditions(
+        request("apply-additions"),
+        context,
+      );
+
+      expect(response.status).toBe(409);
+      await expect(response.json()).resolves.toMatchObject({
+        code: "TEMPLATE_TWIN_PROVIDER_BACKED_EM_UNAVAILABLE",
+      });
+      expect(mocks.mergeAdditions).not.toHaveBeenCalled();
+      expect(mocks.computeEmScore).not.toHaveBeenCalled();
+      expect(mocks.updateMany).not.toHaveBeenCalled();
+      expect(mocks.transaction).not.toHaveBeenCalled();
+      expect(mocks.invalidateTwin).not.toHaveBeenCalled();
+      expect(mocks.logAudit).not.toHaveBeenCalled();
+    },
+  );
+
+  it("retains the explicitly deterministic live Twin override", async () => {
+    mocks.findUnique.mockResolvedValue(
+      visitRow(null, {
+        noteTemplate: { templateKind: "template_twin_docx" },
+        templateTwinFill: { id: "fill-1" },
+      }),
+    );
+
+    const response = await applyOverride(request("override"), context);
+
+    expect(response.status).toBe(200);
+    expect(mocks.computeEmScore).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ mdmCachedJudgement: null }),
+    );
+    expect(mocks.computeEmScore.mock.calls[0]?.[1]).not.toHaveProperty(
+      "practiceId",
+    );
+    expect(mocks.update).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks a pre-certification admission from even deterministic generic override mutation", async () => {
+    mocks.findUnique.mockResolvedValue(
+      visitRow(null, {
+        templateTwinSyntheticQaAdmission: { id: "voice-admission-1" },
+      }),
+    );
+
+    const response = await applyOverride(request("override"), context);
+
+    expect(response.status).toBe(404);
+    expect(mocks.computeEmScore).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
 });
 
 describe("marked staging visits never enter model-backed E/M mutations", () => {

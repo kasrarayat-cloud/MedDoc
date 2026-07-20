@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import prisma from "@meddoc/db";
 import { Prisma, TranscribeVisitStatus } from "@prisma/client";
 
@@ -9,6 +11,7 @@ import {
 } from "@/worker/automation-finalization";
 
 import { canonicalSha256 } from "./canonical";
+import { enqueueTemplateTwinAudit } from "./audit-outbox";
 import { persistedTemplateTwinEncounterEvidenceIsValid } from "./encounter-evidence-verification";
 import {
   lockAndAssertCurrentTemplateTwinPhysician,
@@ -59,6 +62,14 @@ function blocked(): never {
   );
 }
 
+function normalizedEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+export type TemplateTwinDeliveryFinalClaim =
+  | { templateTwin: false }
+  | { templateTwin: true; currentPhysicianEmail: string };
+
 /**
  * Final authorization claim for every generic visit delivery surface.
  * Ordinary visits retain their prior behavior. A Template Twin delivery must
@@ -70,7 +81,13 @@ export async function authorizeVisitDeliveryFinalClaim(input: {
   visitId: string;
   actorUserId: string;
   allowSyntheticOriginalTemplate?: boolean;
-}): Promise<{ templateTwin: boolean }> {
+  /**
+   * Present only for an email side effect. An explicit target is compared to
+   * the current locked users.email value. When omitted, the locked address is
+   * the target; a stale session/JWT email is never used for a Twin delivery.
+   */
+  emailDelivery?: { targetEmail?: string };
+}): Promise<TemplateTwinDeliveryFinalClaim> {
   const visit = await prisma.transcribeVisit.findUnique({
     where: { id: input.visitId },
     select: {
@@ -183,7 +200,7 @@ export async function authorizeVisitDeliveryFinalClaim(input: {
   }
 
   try {
-    const allowed = await runSerializableTransactionWithRetry({
+    const decision = await runSerializableTransactionWithRetry({
       prisma,
       operation: "template_twin_delivery_final_claim",
       context: {
@@ -210,10 +227,35 @@ export async function authorizeVisitDeliveryFinalClaim(input: {
               allowedAdmissionPhases: ["SIGNED"],
             })
           : null;
-        await lockAndAssertCurrentTemplateTwinPhysician({
-          tx,
-          actor: { userId: input.actorUserId, practiceId },
-        });
+        const currentPhysician =
+          await lockAndAssertCurrentTemplateTwinPhysician({
+            tx,
+            actor: { userId: input.actorUserId, practiceId },
+          });
+        if (
+          input.emailDelivery?.targetEmail !== undefined &&
+          normalizedEmail(input.emailDelivery.targetEmail) !==
+            normalizedEmail(currentPhysician.email)
+        ) {
+          await enqueueTemplateTwinAudit(tx, {
+            eventKey: `template-twin-email-delivery-blocked:${input.visitId}:${randomUUID()}`,
+            practiceId,
+            actorId: input.actorUserId,
+            actorEmailSnapshot: currentPhysician.email,
+            action: "TEMPLATE_TWIN_DELIVERY_BLOCKED",
+            targetType: "TranscribeVisit",
+            targetId: input.visitId,
+            metadata: {
+              reasonCode: "EMAIL_TARGET_MISMATCH",
+              operation: "email_delivery_final_claim",
+            },
+          });
+          return {
+            allowed: false,
+            emailTargetRejected: true,
+            currentPhysicianEmail: currentPhysician.email,
+          };
+        }
 
         const lockedVisit = await lockCurrentTemplateTwinVisit(
           tx,
@@ -294,7 +336,7 @@ export async function authorizeVisitDeliveryFinalClaim(input: {
             updatedAt: true,
           },
         });
-        return Boolean(
+        const allowed = Boolean(
           currentFill &&
           currentFill.practiceId === practiceId &&
           currentFill.visitId === input.visitId &&
@@ -330,9 +372,33 @@ export async function authorizeVisitDeliveryFinalClaim(input: {
             rolloutToken.practiceGeneration &&
           currentFill.updatedAt.getTime() === claim.updatedAt.getTime(),
         );
+        if (allowed && input.emailDelivery) {
+          await enqueueTemplateTwinAudit(tx, {
+            eventKey: `template-twin-email-delivery-authorized:${input.visitId}:${randomUUID()}`,
+            practiceId,
+            actorId: input.actorUserId,
+            actorEmailSnapshot: currentPhysician.email,
+            action: "TEMPLATE_TWIN_DELIVERY_AUTHORIZED",
+            targetType: "TranscribeVisit",
+            targetId: input.visitId,
+            metadata: {
+              operation: "email_delivery_final_claim",
+              explicitTarget: input.emailDelivery.targetEmail !== undefined,
+            },
+          });
+        }
+        return {
+          allowed,
+          emailTargetRejected: false,
+          currentPhysicianEmail: currentPhysician.email,
+        };
       },
     });
-    if (!allowed) blocked();
+    if (decision === false || decision.allowed !== true) blocked();
+    return {
+      templateTwin: true,
+      currentPhysicianEmail: decision.currentPhysicianEmail,
+    };
   } catch (error) {
     if (error instanceof TemplateTwinDeliveryAuthorizationError) throw error;
     if (error instanceof TemplateTwinCurrentPhysicianAuthorityError) {
@@ -351,6 +417,4 @@ export async function authorizeVisitDeliveryFinalClaim(input: {
     }
     throw error;
   }
-
-  return { templateTwin: true };
 }

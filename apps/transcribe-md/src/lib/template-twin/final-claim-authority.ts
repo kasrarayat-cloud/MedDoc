@@ -29,9 +29,11 @@ interface TemplateTwinAuthorityLockClient {
 export async function lockAndAssertCurrentTemplateTwinPhysician(input: {
   tx: TemplateTwinAuthorityLockClient;
   actor: { userId: string; practiceId: string };
-}): Promise<void> {
-  const rows = await input.tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-    SELECT actor."id"
+}): Promise<{ email: string }> {
+  const rows = await input.tx.$queryRaw<
+    Array<{ id: string; email: string | null }>
+  >(Prisma.sql`
+    SELECT actor."id", actor."email"
     FROM "users" actor
     WHERE actor."id" = ${input.actor.userId}
       AND actor."practiceId" = ${input.actor.practiceId}
@@ -47,8 +49,12 @@ export async function lockAndAssertCurrentTemplateTwinPhysician(input: {
   if (
     !Array.isArray(rows) ||
     rows.length !== 1 ||
-    rows[0]?.id !== input.actor.userId
+    rows[0]?.id !== input.actor.userId ||
+    typeof rows[0]?.email !== "string" ||
+    rows[0].email.trim().length === 0
   ) {
     throw new TemplateTwinCurrentPhysicianAuthorityError();
   }
+
+  return { email: rows[0].email };
 }

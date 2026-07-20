@@ -70,31 +70,7 @@ export const POST = withApiHandler<{ id: string }>(
     // equal the caller's own account email (case-insensitive). If a
     // future feature wants colleague delivery, register the
     // destination on the Practice and match against that list.
-    const toEmail = (parsed.data.to ?? sessionEmail).toLowerCase().trim();
-    if (toEmail !== sessionEmail.toLowerCase().trim()) {
-      log.warn("api:visits:export:email", "destination blocked", {
-        userId,
-        visitId,
-        requestedDomain: toEmail.split("@")[1] ?? "unknown",
-        sessionDomain: sessionEmail.split("@")[1] ?? "unknown",
-      });
-      void logAudit({
-        action: "EXPORT_EMAIL_BLOCKED_DESTINATION",
-        targetType: "TranscribeVisit",
-        targetId: visitId,
-        success: false,
-        errorCode: "INVALID_DESTINATION",
-        metadata: {
-          via: "export/email",
-          requestedDomain: toEmail.split("@")[1] ?? "unknown",
-          sessionDomain: sessionEmail.split("@")[1] ?? "unknown",
-        },
-      });
-      return apiError("Email destination must match your account email.", 403, {
-        code: "INVALID_DESTINATION",
-        retry: false,
-      });
-    }
+    const requestedToEmail = parsed.data.to?.toLowerCase().trim();
 
     let data: Awaited<ReturnType<typeof loadVisitExportData>>;
     try {
@@ -121,8 +97,19 @@ export const POST = withApiHandler<{ id: string }>(
     }
 
     const pdf = await generateVisitPdf(data);
+    let emailClaim: Awaited<
+      ReturnType<typeof authorizeVisitDeliveryFinalClaim>
+    >;
     try {
-      await authorizeVisitDeliveryFinalClaim({ visitId, actorUserId: userId });
+      emailClaim = await authorizeVisitDeliveryFinalClaim({
+        visitId,
+        actorUserId: userId,
+        emailDelivery: {
+          ...(requestedToEmail !== undefined
+            ? { targetEmail: requestedToEmail }
+            : {}),
+        },
+      });
     } catch (error) {
       if (error instanceof TemplateTwinDeliveryAuthorizationError) {
         return apiError(error.message, error.status, {
@@ -132,6 +119,38 @@ export const POST = withApiHandler<{ id: string }>(
       }
       throw error;
     }
+    const ordinaryToEmail =
+      requestedToEmail ?? sessionEmail.toLowerCase().trim();
+    if (
+      !emailClaim.templateTwin &&
+      ordinaryToEmail !== sessionEmail.toLowerCase().trim()
+    ) {
+      log.warn("api:visits:export:email", "destination blocked", {
+        userId,
+        visitId,
+        requestedDomain: ordinaryToEmail.split("@")[1] ?? "unknown",
+        sessionDomain: sessionEmail.split("@")[1] ?? "unknown",
+      });
+      void logAudit({
+        action: "EXPORT_EMAIL_BLOCKED_DESTINATION",
+        targetType: "TranscribeVisit",
+        targetId: visitId,
+        success: false,
+        errorCode: "INVALID_DESTINATION",
+        metadata: {
+          via: "export/email",
+          requestedDomain: ordinaryToEmail.split("@")[1] ?? "unknown",
+          sessionDomain: sessionEmail.split("@")[1] ?? "unknown",
+        },
+      });
+      return apiError("Email destination must match your account email.", 403, {
+        code: "INVALID_DESTINATION",
+        retry: false,
+      });
+    }
+    const toEmail = emailClaim.templateTwin
+      ? emailClaim.currentPhysicianEmail
+      : ordinaryToEmail;
     try {
       const result = await sendVisitPdfEmail({
         toEmail,

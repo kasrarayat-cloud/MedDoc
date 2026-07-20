@@ -115,6 +115,9 @@ function visitRow(over: Record<string, unknown> = {}) {
     soapVersion: 3,
     suggestedClaims: CLAIMS,
     templateTwinSyntheticQaRun: null,
+    noteTemplate: { templateKind: "structured" },
+    templateTwinFill: null,
+    templateTwinSyntheticQaAdmission: null,
     ...over,
   };
 }
@@ -420,6 +423,55 @@ describe("Template Twin staging provider-isolation gate", () => {
       expect(mocks.updateMany).not.toHaveBeenCalled();
       expect(mocks.transaction).not.toHaveBeenCalled();
       expect(mocks.logAudit).not.toHaveBeenCalled();
+    },
+  );
+});
+
+describe("durable Template Twin suggestion-action boundary", () => {
+  it.each([
+    [
+      "live Twin kind",
+      { noteTemplate: { templateKind: "template_twin_docx" } },
+    ],
+    [
+      "fill after template mutation",
+      {
+        noteTemplate: { templateKind: "structured" },
+        templateTwinFill: { id: "fill-1" },
+      },
+    ],
+    [
+      "fill after template detach",
+      { noteTemplate: null, templateTwinFill: { id: "fill-1" } },
+    ],
+    [
+      "pre-cert voice admission",
+      { templateTwinSyntheticQaAdmission: { id: "admission-1" } },
+    ],
+  ] as const)(
+    "blocks adopt and dismiss for %s before model/cache or mutation",
+    async (_label, provenance) => {
+      for (const operation of ["adopt", "dismiss"] as const) {
+        vi.clearAllMocks();
+        mocks.requireSession.mockResolvedValue({
+          user: { id: DOCTOR, practiceId: "p1", email: "doc@test.dev" },
+        });
+        mocks.findUnique.mockResolvedValue(visitRow(provenance));
+        mocks.pinStagingMutation.mockResolvedValue(null);
+
+        const result =
+          operation === "adopt"
+            ? await adoptSuggestionAction(VISIT, 0, claimsAt(0))
+            : await dismissSuggestionAction(VISIT, 0, claimsAt(0));
+
+        expect(result).toEqual({ ok: false, error: "Visit not found." });
+        expect(mocks.computeEmScore).not.toHaveBeenCalled();
+        expect(mocks.updateMany).not.toHaveBeenCalled();
+        expect(mocks.update).not.toHaveBeenCalled();
+        expect(mocks.transaction).not.toHaveBeenCalled();
+        expect(mocks.fillUpdateMany).not.toHaveBeenCalled();
+        expect(mocks.logAudit).not.toHaveBeenCalled();
+      }
     },
   );
 });

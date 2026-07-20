@@ -22,6 +22,9 @@ const mocks = vi.hoisted(() => ({
   verifyEvidence: vi.fn(),
   authorizeDelivery: vi.fn(),
   logDelivery: vi.fn(),
+  captureEditPattern: vi.fn(),
+  computeDisplayedEmCode: vi.fn(),
+  sendVisitPdfEmail: vi.fn(),
 }));
 
 vi.mock("next/server", () => {
@@ -86,14 +89,18 @@ vi.mock("@/lib/ehr-formatters", () => ({ formatForEhr: () => "formatted" }));
 vi.mock("@/lib/pdf-generator", () => ({
   generateVisitPdf: vi.fn(async () => Buffer.from("pdf")),
 }));
-vi.mock("@/lib/email", () => ({ sendVisitPdfEmail: vi.fn() }));
+vi.mock("@/lib/email", () => ({
+  sendVisitPdfEmail: mocks.sendVisitPdfEmail,
+}));
 vi.mock("@/lib/deliveries", () => ({ logDelivery: mocks.logDelivery }));
-vi.mock("@/lib/edit-tracking", () => ({ captureEditPattern: vi.fn() }));
+vi.mock("@/lib/edit-tracking", () => ({
+  captureEditPattern: mocks.captureEditPattern,
+}));
 vi.mock("@/lib/rx-warnings", () => ({
   criticalWarningRefs: mocks.criticalWarningRefs,
 }));
 vi.mock("@/lib/em-coding/displayed-level", () => ({
-  computeDisplayedEmCode: vi.fn(),
+  computeDisplayedEmCode: mocks.computeDisplayedEmCode,
 }));
 vi.mock("@/lib/template-twin/signing-gate", () => ({
   TEMPLATE_TWIN_SIGNING_VISIT_SELECT: {},
@@ -179,7 +186,7 @@ import { POST } from "../route";
 const VISIT_ID = "visit-1";
 const CLAIM_UPDATED_AT = new Date("2026-07-15T12:00:00.000Z");
 
-function visitRow() {
+function visitRow(overrides: Record<string, unknown> = {}) {
   return {
     id: VISIT_ID,
     userId: "doctor-1",
@@ -208,6 +215,7 @@ function visitRow() {
       outputSha256: "b".repeat(64),
       outputSizeBytes: 4096,
     },
+    ...overrides,
   };
 }
 
@@ -268,6 +276,7 @@ function call(
     host: "app.example.test",
     "sec-fetch-site": "same-origin",
   },
+  emailTo?: string,
 ) {
   const request = new Request(
     `https://app.example.test/api/visits/${VISIT_ID}/sign`,
@@ -277,7 +286,10 @@ function call(
         "content-type": "application/json",
         ...headers,
       },
-      body: JSON.stringify({ destinations }),
+      body: JSON.stringify({
+        destinations,
+        ...(emailTo !== undefined ? { emailTo } : {}),
+      }),
     },
   ) as unknown as NextRequest;
   return POST(request, { params: Promise.resolve({ id: VISIT_ID }) });
@@ -330,7 +342,12 @@ beforeEach(() => {
     role: "DOCTOR",
     practiceId: "practice-1",
   });
-  mocks.authorizeDelivery.mockResolvedValue({ templateTwin: true });
+  mocks.authorizeDelivery.mockResolvedValue({
+    templateTwin: true,
+    currentPhysicianEmail: "current-doctor@example.test",
+  });
+  mocks.computeDisplayedEmCode.mockResolvedValue("99213");
+  mocks.sendVisitPdfEmail.mockResolvedValue({ id: "message-1" });
   mocks.readTemplateTwinOutput.mockResolvedValue(
     Buffer.from("synthetic verified DOCX bytes"),
   );
@@ -392,7 +409,9 @@ beforeEach(() => {
         isActive: true,
       },
     ])
-    .mockResolvedValueOnce([{ id: "doctor-1" }])
+    .mockResolvedValueOnce([
+      { id: "doctor-1", email: "current-doctor@example.test" },
+    ])
     .mockResolvedValue([
       {
         id: VISIT_ID,
@@ -508,6 +527,7 @@ describe("POST /api/visits/[id]/sign — Template Twin server gate", () => {
         ...visitRow(),
         noteTemplate: { templateKind: "structured" },
         templateTwinFill: null,
+        cptCodes: { em: { code: "99213" } },
       })
       .mockResolvedValue({
         signedAt: new Date("2026-07-15T12:05:00.000Z"),
@@ -529,6 +549,127 @@ describe("POST /api/visits/[id]/sign — Template Twin server gate", () => {
     expect(mocks.freshDoctor).not.toHaveBeenCalled();
     expect(mocks.txVisitUpdateMany).toHaveBeenCalledTimes(1);
     expect(mocks.transaction).toHaveBeenCalledTimes(1);
+    expect(mocks.computeDisplayedEmCode).toHaveBeenCalledTimes(1);
+    expect(mocks.captureEditPattern).toHaveBeenCalledWith({
+      visitId: VISIT_ID,
+      doctorId: "doctor-1",
+    });
+  });
+
+  it("never calls generic E/M or edit-pattern providers while signing a live Twin", async () => {
+    mocks.findUnique.mockReset();
+    mocks.findUnique
+      .mockResolvedValueOnce(visitRow({ cptCodes: { em: { code: "99214" } } }))
+      .mockResolvedValue({
+        signedAt: new Date("2026-07-15T12:05:00.000Z"),
+        status: TranscribeVisitStatus.SIGNED,
+      });
+
+    const response = await call();
+
+    expect(response.status).toBe(200);
+    expect(mocks.computeDisplayedEmCode).not.toHaveBeenCalled();
+    expect(mocks.captureEditPattern).not.toHaveBeenCalled();
+    expect(mocks.txVisitUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          cptCodes: expect.objectContaining({
+            em: expect.objectContaining({ signedCode: "99214" }),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("keeps fill-only durable Twin provenance out of ordinary sign providers", async () => {
+    mocks.findUnique.mockReset();
+    mocks.findUnique
+      .mockResolvedValueOnce(
+        visitRow({
+          noteTemplate: { templateKind: "structured" },
+          cptCodes: { em: { code: "99214" } },
+        }),
+      )
+      .mockResolvedValue({
+        signedAt: new Date("2026-07-15T12:05:00.000Z"),
+        status: TranscribeVisitStatus.SIGNED,
+      });
+    mocks.assess.mockReturnValue({
+      applies: true,
+      ready: false,
+      blockerCodes: ["TEMPLATE_PROVENANCE_UNAVAILABLE"],
+      compiledVersionId: null,
+      fillManifestId: "fill-1",
+      claim: null,
+    });
+
+    const response = await call();
+
+    expect(response.status).toBe(422);
+    expect(mocks.freshDoctor).toHaveBeenCalledWith("doctor-1");
+    expect(mocks.computeDisplayedEmCode).not.toHaveBeenCalled();
+    expect(mocks.captureEditPattern).not.toHaveBeenCalled();
+  });
+
+  it("uses the newest locked physician email when it changes before Twin delivery", async () => {
+    vi.stubEnv("RESEND_API_KEY", "synthetic-test-key");
+    mocks.authorizeDelivery
+      .mockResolvedValueOnce({
+        templateTwin: true,
+        currentPhysicianEmail: "before-update@example.test",
+      })
+      .mockResolvedValueOnce({
+        templateTwin: true,
+        currentPhysicianEmail: "after-update@example.test",
+      });
+
+    const response = await call(["email"]);
+
+    expect(response.status).toBe(200);
+    expect(mocks.authorizeDelivery).toHaveBeenLastCalledWith({
+      visitId: VISIT_ID,
+      actorUserId: "doctor-1",
+      allowSyntheticOriginalTemplate: false,
+      emailDelivery: {},
+    });
+    expect(mocks.sendVisitPdfEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ toEmail: "after-update@example.test" }),
+    );
+    expect(mocks.sendVisitPdfEmail).not.toHaveBeenCalledWith(
+      expect.objectContaining({ toEmail: "doctor@example.test" }),
+    );
+  });
+
+  it("rejects an explicit stale-session Twin email before the signed claim", async () => {
+    vi.stubEnv("RESEND_API_KEY", "synthetic-test-key");
+
+    const response = await call(
+      ["email"],
+      {
+        origin: "https://app.example.test",
+        host: "app.example.test",
+        "sec-fetch-site": "same-origin",
+      },
+      "doctor@example.test",
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "INVALID_DESTINATION",
+      retry: false,
+    });
+    expect(mocks.txFillUpdateMany).not.toHaveBeenCalled();
+    expect(mocks.txVisitUpdateMany).not.toHaveBeenCalled();
+    expect(mocks.sendVisitPdfEmail).not.toHaveBeenCalled();
+    expect(mocks.enqueueAudit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        actorEmailSnapshot: "current-doctor@example.test",
+        metadata: expect.objectContaining({
+          reasonCode: "EMAIL_TARGET_MISMATCH",
+        }),
+      }),
+    );
   });
 
   it("blocks the transition and emits only PHI-safe blocker codes", async () => {

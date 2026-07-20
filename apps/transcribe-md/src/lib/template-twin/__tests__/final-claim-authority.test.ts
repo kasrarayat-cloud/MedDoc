@@ -7,18 +7,21 @@ import {
 
 describe("Template Twin current-physician final claim", () => {
   it("accepts exactly one locked current physician row", async () => {
-    const query = vi.fn().mockResolvedValue([{ id: "doctor-1" }]);
+    const query = vi
+      .fn()
+      .mockResolvedValue([{ id: "doctor-1", email: "current@example.test" }]);
 
     await expect(
       lockAndAssertCurrentTemplateTwinPhysician({
         tx: { $queryRaw: query },
         actor: { userId: "doctor-1", practiceId: "practice-1" },
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({ email: "current@example.test" });
 
     const sql = query.mock.calls[0]?.[0];
     const text = sql?.strings?.join(" ") ?? "";
     expect(text).toContain('actor."practiceId"');
+    expect(text).toContain('actor."email"');
     expect(text).toContain('actor."role"');
     expect(text).toContain('actor."isActive"');
     expect(text).toContain('actor."deactivatedAt" IS NULL');
@@ -30,8 +33,15 @@ describe("Template Twin current-physician final claim", () => {
 
   it.each([
     { rows: [] },
-    { rows: [{ id: "other-doctor" }] },
-    { rows: [{ id: "doctor-1" }, { id: "doctor-1" }] },
+    { rows: [{ id: "other-doctor", email: "other@example.test" }] },
+    { rows: [{ id: "doctor-1", email: null }] },
+    { rows: [{ id: "doctor-1", email: "" }] },
+    {
+      rows: [
+        { id: "doctor-1", email: "one@example.test" },
+        { id: "doctor-1", email: "two@example.test" },
+      ],
+    },
   ])(
     "fails closed for a missing, mismatched, or duplicate authority result",
     async ({ rows }) => {

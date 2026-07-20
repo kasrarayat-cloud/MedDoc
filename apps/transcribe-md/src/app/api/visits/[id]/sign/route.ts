@@ -41,6 +41,7 @@ import { auth } from "@/lib/nextauth";
 import { formatVisitDate } from "@/lib/visit-export";
 import { loadVisitExportData } from "@/lib/visit-export-server";
 import { computeDisplayedEmCode } from "@/lib/em-coding/displayed-level";
+import { hasTemplateTwinProvenance } from "@/lib/em-coding/template-twin-boundary";
 import { formatForEhr, type EhrFormat } from "@/lib/ehr-formatters";
 import { generateVisitPdf } from "@/lib/pdf-generator";
 import { sendVisitPdfEmail } from "@/lib/email";
@@ -167,13 +168,39 @@ export const POST = withApiHandler<{ id: string }>(
     if (!parsed.success) return apiError("invalid destinations payload", 400);
 
     // ── PHI exfiltration guard ─────────────────────────────────────
-    // If an 'email' destination is requested, `emailTo` MUST match
-    // the caller's own account email (case-insensitive). Same guard
-    // as /api/visits/[id]/export/email — prevents a session holder
-    // from co-delivering every signed SOAP to any external inbox in
-    // the same click that signs the visit.
-    if (parsed.data.destinations.includes("email")) {
-      const requestedTo = (parsed.data.emailTo ?? sessionEmail)
+    // The visit kind determines whether the effective target comes from the
+    // session (ordinary) or from current locked physician identity (Twin).
+    const wantsEmail = parsed.data.destinations.includes("email");
+    const explicitEmailTarget = parsed.data.emailTo?.trim();
+
+    // ── Sign ────────────────────────────────────────────────────────
+    // Use an atomic updateMany with a status guard so two concurrent
+    // submissions can't both "win" and double-sign.
+    const visit = await prisma.transcribeVisit.findUnique({
+      where: { id: visitId },
+      select: {
+        id: true,
+        userId: true,
+        status: true,
+        icdCodes: true,
+        rxDrafts: true,
+        cptCodes: true,
+        signedAt: true,
+        deletedAt: true,
+        archivedAt: true,
+        emPendingChange: true,
+        user: { select: { practiceId: true } },
+        templateTwinSyntheticQaAdmission: { select: { id: true } },
+        ...TEMPLATE_TWIN_SIGNING_VISIT_SELECT,
+      },
+    });
+    if (!visit || visit.userId !== userId) return apiError("not found", 404);
+    const isTemplateTwinVisit = hasTemplateTwinProvenance(visit);
+    // Ordinary visits retain the established session-email boundary. Twin
+    // email is checked against users.email under the final physician row lock
+    // below and again immediately before the external side effect.
+    if (wantsEmail && !isTemplateTwinVisit) {
+      const requestedTo = (explicitEmailTarget ?? sessionEmail)
         .toLowerCase()
         .trim();
       if (requestedTo !== sessionEmail.toLowerCase().trim()) {
@@ -202,32 +229,7 @@ export const POST = withApiHandler<{ id: string }>(
         );
       }
     }
-
-    // ── Sign ────────────────────────────────────────────────────────
-    // Use an atomic updateMany with a status guard so two concurrent
-    // submissions can't both "win" and double-sign.
-    const visit = await prisma.transcribeVisit.findUnique({
-      where: { id: visitId },
-      select: {
-        id: true,
-        userId: true,
-        status: true,
-        icdCodes: true,
-        rxDrafts: true,
-        cptCodes: true,
-        signedAt: true,
-        deletedAt: true,
-        archivedAt: true,
-        emPendingChange: true,
-        user: { select: { practiceId: true } },
-        ...TEMPLATE_TWIN_SIGNING_VISIT_SELECT,
-      },
-    });
-    if (!visit || visit.userId !== userId) return apiError("not found", 404);
-    if (
-      visit.noteTemplate?.templateKind === "template_twin_docx" &&
-      !isSameOriginTemplateTwinMutation(req)
-    ) {
+    if (isTemplateTwinVisit && !isSameOriginTemplateTwinMutation(req)) {
       return apiError("The signing request was not same-origin.", 403, {
         code: "TEMPLATE_TWIN_CROSS_SITE_MUTATION",
         retry: false,
@@ -258,7 +260,7 @@ export const POST = withApiHandler<{ id: string }>(
     let templateTwinRolloutToken: TemplateTwinRolloutToken | null = null;
     let stagingQaRunId: string | null = null;
     let stagingQaAttempt: number | null = null;
-    if (visit.noteTemplate?.templateKind === "template_twin_docx") {
+    if (isTemplateTwinVisit) {
       try {
         templateTwinPracticeId = (await requireFreshDoctorIdentity(userId))
           .practiceId;
@@ -670,10 +672,29 @@ export const POST = withApiHandler<{ id: string }>(
         cptBlob && cptBlob.em && typeof cptBlob.em === "object"
           ? (cptBlob.em as Record<string, unknown>)
           : null;
-      // The staging workflow never invokes the legacy direct Anthropic E/M
-      // judge. E/M scoring is outside DOCX compatibility QA and would violate
-      // the mocked-provider-only boundary.
-      if (emBlob && !stagingQaRunId) {
+      // Template Twin never invokes the generic E/M judge at sign time. Its
+      // signed code freezes only the persisted, already-owned L7 result or an
+      // explicit physician override. Ordinary visits retain recomputation.
+      if (emBlob && isTemplateTwinVisit) {
+        const override =
+          emBlob.override &&
+          typeof emBlob.override === "object" &&
+          !Array.isArray(emBlob.override)
+            ? (emBlob.override as Record<string, unknown>)
+            : null;
+        const signedCode =
+          typeof override?.code === "string"
+            ? override.code
+            : typeof emBlob.code === "string"
+              ? emBlob.code
+              : null;
+        if (signedCode) {
+          cptWrite = {
+            ...cptBlob,
+            em: { ...emBlob, signedCode },
+          } as Prisma.InputJsonValue;
+        }
+      } else if (emBlob) {
         try {
           const signedCode = await computeDisplayedEmCode(
             visit.soapFinal ?? "",
@@ -735,6 +756,7 @@ export const POST = withApiHandler<{ id: string }>(
           reason: string;
         } | null;
         evidenceRejected?: boolean;
+        emailTargetRejected?: boolean;
       };
       if (twinClaim) {
         if (!templateTwinRolloutToken) {
@@ -762,6 +784,7 @@ export const POST = withApiHandler<{ id: string }>(
               count: number;
               rolloutRejected?: { code: string; reason: string } | null;
               evidenceRejected?: boolean;
+              emailTargetRejected?: boolean;
             }> => {
               const finalRollout = await lockTemplateTwinRolloutForFinalClaim({
                 tx,
@@ -866,13 +889,40 @@ export const POST = withApiHandler<{ id: string }>(
                   },
                 });
               }
-              await lockAndAssertCurrentTemplateTwinPhysician({
-                tx,
-                actor: {
-                  userId,
+              const currentPhysician =
+                await lockAndAssertCurrentTemplateTwinPhysician({
+                  tx,
+                  actor: {
+                    userId,
+                    practiceId: templateTwinPracticeId,
+                  },
+                });
+              if (
+                wantsEmail &&
+                explicitEmailTarget !== undefined &&
+                explicitEmailTarget.toLowerCase() !==
+                  currentPhysician.email.trim().toLowerCase()
+              ) {
+                await enqueueTemplateTwinAudit(tx, {
+                  eventKey: `template-twin-sign-email-blocked:${visitId}:${randomUUID()}`,
                   practiceId: templateTwinPracticeId,
-                },
-              });
+                  actorId: userId,
+                  actorEmailSnapshot: currentPhysician.email,
+                  action: "TEMPLATE_TWIN_SIGN_BLOCKED",
+                  targetType: "TranscribeVisit",
+                  targetId: visitId,
+                  metadata: {
+                    reasonCode: "EMAIL_TARGET_MISMATCH",
+                    operation: "sign_email_final_claim",
+                    fillManifestId: twinClaim.id,
+                  },
+                });
+                return {
+                  count: 0,
+                  rolloutRejected: null,
+                  emailTargetRejected: true,
+                };
+              }
               // Keep the common lock order global -> practice -> staging run
               // -> visit -> fill. This prevents a retry that observed READY
               // before signing from overwriting SIGNED after waiting on the
@@ -904,7 +954,7 @@ export const POST = withApiHandler<{ id: string }>(
                   eventKey: `template-twin-sign-evidence-stale:${visitId}:${twinClaim.manifestVersion}:${randomUUID()}`,
                   practiceId: templateTwinPracticeId,
                   actorId: userId,
-                  actorEmailSnapshot: sessionEmail,
+                  actorEmailSnapshot: currentPhysician.email,
                   action: "TEMPLATE_TWIN_SIGN_BLOCKED",
                   targetType: "TranscribeVisit",
                   targetId: visitId,
@@ -1017,7 +1067,7 @@ export const POST = withApiHandler<{ id: string }>(
                 eventKey: `template-twin-signed:${visitId}:${twinClaim.manifestVersion}`,
                 practiceId: templateTwinPracticeId,
                 actorId: userId,
-                actorEmailSnapshot: sessionEmail,
+                actorEmailSnapshot: currentPhysician.email,
                 action: "VISIT_SIGNED",
                 targetType: "TranscribeVisit",
                 targetId: visitId,
@@ -1137,6 +1187,13 @@ export const POST = withApiHandler<{ id: string }>(
           },
         );
       }
+      if (updated.emailTargetRejected) {
+        return apiError(
+          "Email destination must match your current account email.",
+          403,
+          { code: "INVALID_DESTINATION", retry: false },
+        );
+      }
       if (updated.count === 0) {
         // Another concurrent request got there first. Re-read.
         const refreshed = await prisma.transcribeVisit.findUnique({
@@ -1157,10 +1214,10 @@ export const POST = withApiHandler<{ id: string }>(
         // winning transition — race losers already have a capture in
         // flight from the winner's handler, and the @unique visitId
         // constraint would reject a second insert anyway.
-        // Synthetic QA never sends SOAP/note text to the edit-pattern
-        // embedding path. That path is asynchronous and provider-backed; it
-        // is outside the deterministic staging contract.
-        if (!stagingQaRunId) {
+        // No Template Twin note (live or synthetic) sends SOAP/note text to
+        // the asynchronous provider-backed edit-pattern embedding path. Twin
+        // provider work is limited to its exact owned execution plan.
+        if (!isTemplateTwinVisit && !twinGate.applies) {
           void captureEditPattern({ visitId, doctorId: userId });
         }
       }
@@ -1219,12 +1276,21 @@ export const POST = withApiHandler<{ id: string }>(
         // destination side effect (or issuing a fetch URL). A suspension,
         // rollout revocation, or evidence mutation between destinations must
         // stop the remaining deliveries even when the first one succeeded.
-        await authorizeVisitDeliveryFinalClaim({
+        const destinationClaim = await authorizeVisitDeliveryFinalClaim({
           visitId,
           actorUserId: userId,
           allowSyntheticOriginalTemplate:
             parsed.data.destinations.length <= 1 &&
             dest === "docx_original_template",
+          ...(dest === "email"
+            ? {
+                emailDelivery: {
+                  ...(explicitEmailTarget !== undefined
+                    ? { targetEmail: explicitEmailTarget }
+                    : {}),
+                },
+              }
+            : {}),
         });
         if (dest === "pdf") {
           // The browser does the actual download; we return a URL so the
@@ -1246,10 +1312,12 @@ export const POST = withApiHandler<{ id: string }>(
               "email delivery is not configured on this environment";
             continue;
           }
-          // Guard above already enforced emailTo === sessionEmail
-          // when present. Resolve to sessionEmail explicitly to
-          // close the loop for any future refactor of the guard.
-          const to = sessionEmail;
+          // Twin delivery uses only the email returned by the immediately
+          // preceding locked final claim. Ordinary behavior remains session-
+          // email-only (the ordinary guard above already proved equality).
+          const to = destinationClaim.templateTwin
+            ? destinationClaim.currentPhysicianEmail
+            : sessionEmail;
           const pdf = await generateVisitPdf(data);
           await sendVisitPdfEmail({
             toEmail: to,

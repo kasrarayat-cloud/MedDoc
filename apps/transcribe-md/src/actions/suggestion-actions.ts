@@ -50,6 +50,7 @@ import { Prisma, TranscribeVisitStatus } from "@prisma/client";
 import { requireSession } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { computeDisplayedEmCode } from "@/lib/em-coding/displayed-level";
+import { hasTemplateTwinProvenance } from "@/lib/em-coding/template-twin-boundary";
 import {
   renumberOrderedLists,
   stripEmptySectionPlaceholder,
@@ -209,6 +210,9 @@ type LoadedVisit = {
   cptCodes: unknown;
   emPendingChange: unknown;
   templateTwinSyntheticQaRun: TemplateTwinStagingQaRunGuardRow | null;
+  noteTemplate: { templateKind: string } | null;
+  templateTwinFill: { id: string } | null;
+  templateTwinSyntheticQaAdmission: { id: string } | null;
 };
 
 /** Shared auth + ownership + lifecycle gate (mirrors actions/soap.ts). */
@@ -237,6 +241,9 @@ async function loadVisitForSuggestion(
       templateTwinSyntheticQaRun: {
         select: TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
       },
+      noteTemplate: { select: { templateKind: true } },
+      templateTwinFill: { select: { id: true } },
+      templateTwinSyntheticQaAdmission: { select: { id: true } },
     },
   })) as LoadedVisit | null;
 
@@ -398,6 +405,9 @@ export async function adoptSuggestionAction(
     } catch {
       return { ok: false, error: "Visit not found." };
     }
+    if (hasTemplateTwinProvenance(visit)) {
+      return { ok: false, error: "Visit not found." };
+    }
 
     const claims = parseClaims(visit.suggestedClaims);
     if (!claims || parsed.data.index >= claims.length) {
@@ -553,6 +563,9 @@ export async function dismissSuggestionAction(
       });
       if (stagingQaClaim) return { ok: false, error: "Visit not found." };
     } catch {
+      return { ok: false, error: "Visit not found." };
+    }
+    if (hasTemplateTwinProvenance(visit)) {
       return { ok: false, error: "Visit not found." };
     }
 

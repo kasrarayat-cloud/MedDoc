@@ -37,6 +37,10 @@ import {
   extractRxRows,
   extractEmOverride,
 } from "@/lib/em-coding/displayed-level";
+import {
+  hasTemplateTwinProvenance,
+  runProviderBackedEmForOrdinaryVisit,
+} from "@/lib/em-coding/template-twin-boundary";
 import { unacknowledgedEmChange } from "@/lib/em-pending-change";
 import {
   serializeTemplateTwinReview,
@@ -231,8 +235,10 @@ export default async function VisitPage({
     emPendingChange: unknown;
     patientSummary: string | null;
     confidenceScores: unknown;
+    noteTemplate: { templateKind: string } | null;
     templateTwinFill: TemplateTwinReviewRow | null;
     templateTwinSyntheticQaRun: TemplateTwinStagingQaRunGuardRow | null;
+    templateTwinSyntheticQaAdmission: { id: string } | null;
   };
 
   // Round 4 critical-Rx-override fix: pull existing override rows so
@@ -302,6 +308,7 @@ export default async function VisitPage({
         emPendingChange: true,
         patientSummary: true,
         confidenceScores: true,
+        noteTemplate: { select: { templateKind: true } },
         templateTwinFill: {
           select: {
             id: true,
@@ -355,6 +362,7 @@ export default async function VisitPage({
         templateTwinSyntheticQaRun: {
           select: TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
         },
+        templateTwinSyntheticQaAdmission: { select: { id: true } },
       },
     }),
     prisma.rxWarningOverride.findMany({
@@ -366,10 +374,7 @@ export default async function VisitPage({
   if (!user) redirect("/login");
   if (!visit || visit.userId !== session.user.id) notFound();
   let syntheticQaAuditPracticeId: string | null = null;
-  if (
-    visit.templateTwinSyntheticQaRun ||
-    isTemplateTwinStagingQaRequested()
-  ) {
+  if (visit.templateTwinSyntheticQaRun || isTemplateTwinStagingQaRequested()) {
     try {
       const doctor = await requireFreshDoctorIdentity(session.user.id);
       syntheticQaAuditPracticeId = doctor.practiceId;
@@ -416,6 +421,7 @@ export default async function VisitPage({
       }
     : null;
   const syntheticQaVisit = visit.templateTwinSyntheticQaRun !== null;
+  const templateTwinProvenance = hasTemplateTwinProvenance(visit);
 
   // Round 3 PR-C — §164.312(b) PHI-read audit (A05-P0-004). Single
   // visit detail page is the highest-volume PHI surface — every doctor
@@ -658,6 +664,7 @@ export default async function VisitPage({
           patientSummary={visit.patientSummary}
           confidenceScores={visit.confidenceScores}
           templateTwinReview={templateTwinReview}
+          templateTwinProvenance={templateTwinProvenance}
           syntheticQaMode={syntheticQaVisit}
           syntheticQaAttempt={visit.templateTwinSyntheticQaRun?.attempt ?? null}
           // Phase 5.1.1 — V4 Extras card-stream wiring
@@ -722,6 +729,8 @@ interface VisitBodyProps {
   patientSummary: string | null;
   confidenceScores: unknown;
   templateTwinReview: TemplateTwinReviewData | null;
+  /** Durable provenance is independent of current rollout/UI visibility. */
+  templateTwinProvenance: boolean;
   /** Exact persisted visit identity; staging-only UI never infers this from
    *  document availability or from client-visible labels. */
   syntheticQaMode: boolean;
@@ -886,24 +895,30 @@ async function VisitBody(props: VisitBodyProps) {
   // cold. The staging review does not need a billing recommendation.
   if (!emNotApplicable && !syntheticQaMode) {
     try {
-      const { computeEmScore } = await import("@/lib/em-coding/score");
-      const { engineToUiScore } = await import("@/lib/em-coding/to-ui-score");
-      const engineScore = await computeEmScore(soapText, {
-        practiceId: sessionPracticeId,
-        visitId: props.visitId,
-        userId: session?.user?.id,
-        icdCodes: extractIcdRows(props.icdCodes),
-        rxDrafts: extractRxRows(props.rxDrafts),
-      });
-      // Hydrate the doctor's previously-set override (if any) from
-      // cptCodes.em.override so the rail renders the doctor-set code on
-      // page load. The server route at POST /em-score/override writes
-      // here; this read is the round-trip back to the rail.
-      const existingOverride = extractEmOverride(props.cptCodes);
-      initialEmScore = engineToUiScore(
-        engineScore,
-        durationSec ?? 0,
-        existingOverride,
+      initialEmScore = await runProviderBackedEmForOrdinaryVisit(
+        props.templateTwinProvenance,
+        async () => {
+          const { computeEmScore } = await import("@/lib/em-coding/score");
+          const { engineToUiScore } =
+            await import("@/lib/em-coding/to-ui-score");
+          const engineScore = await computeEmScore(soapText, {
+            practiceId: sessionPracticeId,
+            visitId: props.visitId,
+            userId: session?.user?.id,
+            icdCodes: extractIcdRows(props.icdCodes),
+            rxDrafts: extractRxRows(props.rxDrafts),
+          });
+          // Hydrate the doctor's previously-set override (if any) from
+          // cptCodes.em.override so the rail renders the doctor-set code on
+          // page load. The server route at POST /em-score/override writes
+          // here; this read is the round-trip back to the rail.
+          const existingOverride = extractEmOverride(props.cptCodes);
+          return engineToUiScore(
+            engineScore,
+            durationSec ?? 0,
+            existingOverride,
+          );
+        },
       );
     } catch (e) {
       console.error("[em-score] initial render failed:", e);

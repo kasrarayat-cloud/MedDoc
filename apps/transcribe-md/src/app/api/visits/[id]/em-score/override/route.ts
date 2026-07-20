@@ -111,6 +111,9 @@ export const POST = withApiHandler<{ id: string }>(
         templateTwinSyntheticQaRun: {
           select: TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
         },
+        noteTemplate: { select: { templateKind: true } },
+        templateTwinFill: { select: { id: true } },
+        templateTwinSyntheticQaAdmission: { select: { id: true } },
       },
     });
     if (!visit || visit.userId !== userId) return apiError("not found", 404);
@@ -158,13 +161,19 @@ export const POST = withApiHandler<{ id: string }>(
           code: "TEMPLATE_TWIN_STAGING_QA_MUTATION_UNAVAILABLE",
         });
       }
+      if (visit.templateTwinSyntheticQaAdmission) {
+        return apiError("not found", 404, {
+          code: "TEMPLATE_TWIN_STAGING_QA_MUTATION_UNAVAILABLE",
+        });
+      }
     } catch {
       return apiError("not found", 404);
     }
 
     // Re-score against the current SOAP so the rail receives a fresh
-    // groups/bump payload with the override applied. Same fast-path
-    // (mdmCachedJudgement: null) the apply-additions route uses.
+    // groups/bump payload with the override applied. This route is the one
+    // intentionally permitted Twin E/M surface because null forces the
+    // deterministic fallback and cannot invoke a provider/cache judge.
     const icdCodes = extractIcdRows(visit.icdCodes);
     const rxDrafts = extractRxRows(visit.rxDrafts);
     const engineScore = await computeEmScore(currentSoap, {

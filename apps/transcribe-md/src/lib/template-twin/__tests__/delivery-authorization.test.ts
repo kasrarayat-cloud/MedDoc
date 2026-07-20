@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   lockAutomation: vi.fn(),
   assertStaging: vi.fn(),
   lockStaging: vi.fn(),
+  enqueueAudit: vi.fn(),
 }));
 
 vi.mock("@meddoc/db", () => ({
@@ -64,6 +65,9 @@ vi.mock("../staging-qa-visit-guard", () => ({
 }));
 vi.mock("../encounter-evidence-verification", () => ({
   persistedTemplateTwinEncounterEvidenceIsValid: mocks.verifyEncounter,
+}));
+vi.mock("../audit-outbox", () => ({
+  enqueueTemplateTwinAudit: mocks.enqueueAudit,
 }));
 
 import { AuthError } from "@/lib/auth";
@@ -197,7 +201,9 @@ beforeEach(() => {
     run ? { applies: true, runId: "run-1" } : { applies: false },
   );
   mocks.finalRollout.mockResolvedValue({ allowed: true, token: TOKEN });
-  mocks.lockPhysician.mockResolvedValue(undefined);
+  mocks.lockPhysician.mockResolvedValue({
+    email: "current-doctor@example.test",
+  });
   mocks.lockVisit.mockResolvedValue({
     id: "visit-1",
     userId: "doctor-1",
@@ -304,7 +310,10 @@ describe("Template Twin delivery final authorization", () => {
         visitId: "visit-1",
         actorUserId: "doctor-1",
       }),
-    ).resolves.toEqual({ templateTwin: true });
+    ).resolves.toEqual({
+      templateTwin: true,
+      currentPhysicianEmail: "current-doctor@example.test",
+    });
 
     expect(mocks.lockPhysician).toHaveBeenCalledWith({
       tx: expect.anything(),
@@ -313,6 +322,50 @@ describe("Template Twin delivery final authorization", () => {
     expect(mocks.lockAutomation).toHaveBeenCalledTimes(1);
     expect(mocks.findFill).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: "fill-1" } }),
+    );
+  });
+
+  it("returns the current locked physician email instead of a stale session snapshot", async () => {
+    await expect(
+      authorizeVisitDeliveryFinalClaim({
+        visitId: "visit-1",
+        actorUserId: "doctor-1",
+        emailDelivery: {},
+      }),
+    ).resolves.toEqual({
+      templateTwin: true,
+      currentPhysicianEmail: "current-doctor@example.test",
+    });
+    expect(mocks.enqueueAudit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        actorEmailSnapshot: "current-doctor@example.test",
+        action: "TEMPLATE_TWIN_DELIVERY_AUTHORIZED",
+      }),
+    );
+  });
+
+  it("fails closed when an explicit email target no longer matches the locked physician row", async () => {
+    await expect(
+      authorizeVisitDeliveryFinalClaim({
+        visitId: "visit-1",
+        actorUserId: "doctor-1",
+        emailDelivery: { targetEmail: "stale-session@example.test" },
+      }),
+    ).rejects.toMatchObject({
+      code: "TEMPLATE_TWIN_DELIVERY_BLOCKED",
+      status: 409,
+    });
+    expect(mocks.findFill).not.toHaveBeenCalled();
+    expect(mocks.enqueueAudit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        actorEmailSnapshot: "current-doctor@example.test",
+        action: "TEMPLATE_TWIN_DELIVERY_BLOCKED",
+        metadata: expect.objectContaining({
+          reasonCode: "EMAIL_TARGET_MISMATCH",
+        }),
+      }),
     );
   });
 
@@ -420,7 +473,10 @@ describe("Template Twin delivery final authorization", () => {
         actorUserId: "doctor-1",
         allowSyntheticOriginalTemplate: true,
       }),
-    ).resolves.toEqual({ templateTwin: true });
+    ).resolves.toEqual({
+      templateTwin: true,
+      currentPhysicianEmail: "current-doctor@example.test",
+    });
     expect(mocks.lockStaging).toHaveBeenCalledWith(
       expect.objectContaining({
         runId: "run-1",

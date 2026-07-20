@@ -26,6 +26,7 @@ import { computeEmScore } from "@/lib/em-coding/score";
 import { engineToUiScore } from "@/lib/em-coding/to-ui-score";
 import { extractIcdRows, extractRxRows } from "@/lib/em-coding/displayed-level";
 import { mergeAdditions } from "@/lib/em-coding/merge-additions";
+import { hasTemplateTwinProvenance } from "@/lib/em-coding/template-twin-boundary";
 import { logAudit } from "@/lib/audit";
 import { invalidateTemplateTwinAfterSoapEdit } from "@/lib/template-twin/soap-binding";
 import { isSameOriginTemplateTwinMutation } from "@/lib/template-twin/request-security";
@@ -100,6 +101,9 @@ export const POST = withApiHandler<{ id: string }>(
         templateTwinSyntheticQaRun: {
           select: TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
         },
+        noteTemplate: { select: { templateKind: true } },
+        templateTwinFill: { select: { id: true } },
+        templateTwinSyntheticQaAdmission: { select: { id: true } },
       },
     });
     if (!visit || visit.userId !== userId) return apiError("not found", 404);
@@ -152,6 +156,16 @@ export const POST = withApiHandler<{ id: string }>(
       }
     } catch {
       return apiError("not found", 404);
+    }
+    if (hasTemplateTwinProvenance(visit)) {
+      return apiError(
+        "Provider-backed E/M additions are unavailable for Template Twin visits.",
+        409,
+        {
+          code: "TEMPLATE_TWIN_PROVIDER_BACKED_EM_UNAVAILABLE",
+          retry: false,
+        },
+      );
     }
 
     // Merge the additions into the SOAP. Pure function — testable
