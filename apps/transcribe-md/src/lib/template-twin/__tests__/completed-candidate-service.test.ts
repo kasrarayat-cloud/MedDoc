@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   minimize: vi.fn(),
   convert: vi.fn(),
   finalRollout: vi.fn(),
+  currentPhysician: vi.fn(),
   claimObject: vi.fn(),
   audit: vi.fn(),
   assertOwner: vi.fn(),
@@ -87,6 +88,15 @@ vi.mock("../rollout", async (importOriginal) => {
   };
 });
 
+vi.mock("../final-claim-authority", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../final-claim-authority")>();
+  return {
+    ...actual,
+    lockAndAssertCurrentTemplateTwinPhysician: mocks.currentPhysician,
+  };
+});
+
 vi.mock("../audit-outbox", () => ({
   enqueueTemplateTwinAudit: mocks.audit,
 }));
@@ -102,6 +112,7 @@ vi.mock("../storage", async (importOriginal) => {
 
 import {
   createCompletedCandidate,
+  getCompletedCandidateReview,
   issueCompletedCandidateReviewPreview,
   readApprovedCompletedCandidate,
   reviewCompletedCandidate,
@@ -275,6 +286,75 @@ function approvedCandidate(bytes: Buffer) {
   };
 }
 
+function configureCompletedCandidateCreation() {
+  const sourceOne = Buffer.from("synthetic example one");
+  const sourceTwo = Buffer.from("synthetic example two");
+  mocks.begin
+    .mockResolvedValueOnce({ id: "q_one" })
+    .mockResolvedValueOnce({ id: "q_two" });
+  mocks.scan.mockResolvedValue(undefined);
+  mocks.minimize
+    .mockResolvedValueOnce({
+      document: Buffer.from("minimized one"),
+      evidence: { minimizedSha256: "1".repeat(64) },
+    })
+    .mockResolvedValueOnce({
+      document: Buffer.from("minimized two"),
+      evidence: { minimizedSha256: "2".repeat(64) },
+    });
+  const privacyReceipt = {
+    profileVersion:
+      "completed-candidate-local-synthetic-privacy/1.1.0" as const,
+    providerEgress: false as const,
+    exampleCount: 2,
+    sentinelVerified: true as const,
+    structuredIdentifierClasses: [] as const,
+    sourceBinding: "minimized-package-structure-visible-text-digests" as const,
+    exampleEvidenceSha256s: ["8".repeat(64), "9".repeat(64)],
+  };
+  mocks.convert.mockResolvedValue({
+    document: CANDIDATE_BYTES,
+    candidateSha256: CANDIDATE_SHA,
+    candidateStructureSha256: CANDIDATE_STRUCTURE_SHA,
+    inventorySha256: INVENTORY_SHA,
+    converterVersion: "completed-document-candidate/1.1.0",
+    exampleStructureSha256: EXAMPLE_STRUCTURE_SHA,
+    comparison: {
+      exampleCount: 2,
+      identicalStructure: true,
+      sourceBlockCount: 4,
+      candidateFieldCount: 1,
+      preservedStaticBlockCount: 3,
+      sourceSummary: "safe",
+      candidateSummary: "safe",
+    },
+    privacyEvidence: {
+      ...privacyReceipt,
+      evidenceSha256: canonicalSha256(privacyReceipt),
+    },
+    reviewProjection: PROJECTION,
+    reviewProjectionSha256: PROJECTION_SHA,
+    regions: [REGION],
+  });
+  const storeCandidateArtifact = vi.fn().mockResolvedValue({
+    bucket: "synthetic-private-bucket",
+    objectKey:
+      "practices/practice_synthetic_1/template-twin/candidates/candidate/v1/artifact/a.docx",
+    objectVersionId: "candidate-version-synthetic",
+    objectEtag: "candidate-etag-synthetic",
+    sha256: CANDIDATE_SHA,
+    mimeType:
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    sizeBytes: CANDIDATE_BYTES.byteLength,
+    created: true,
+  });
+  const storage = {
+    bucket: "synthetic-private-bucket",
+    storeCandidateArtifact,
+  } as unknown as TemplateTwinArtifactStore;
+  return { sourceOne, sourceTwo, storage, storeCandidateArtifact };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.transaction.mockImplementation(
@@ -286,6 +366,7 @@ beforeEach(() => {
   mocks.candidateUpdateMany.mockResolvedValue({ count: 1 });
   mocks.regionUpdateMany.mockResolvedValue({ count: 1 });
   mocks.finalRollout.mockResolvedValue({ allowed: true, code: "ALLOWED" });
+  mocks.currentPhysician.mockResolvedValue({ email: ACTOR.userEmail });
   mocks.claimObject.mockResolvedValue(undefined);
   mocks.audit.mockResolvedValue(undefined);
   mocks.isolate.mockResolvedValue(undefined);
@@ -306,6 +387,21 @@ beforeEach(() => {
 });
 
 describe("completed candidate service", () => {
+  it("projects no candidate review content for a stale physician identity", async () => {
+    mocks.currentPhysician.mockRejectedValueOnce(
+      new Error("synthetic current-authority revocation"),
+    );
+
+    await expect(
+      getCompletedCandidateReview({
+        candidateId: "candidate_synthetic",
+        actor: ACTOR,
+      }),
+    ).rejects.toThrow("synthetic current-authority revocation");
+
+    expect(mocks.candidateFindFirst).not.toHaveBeenCalled();
+  });
+
   it("quarantines and locally scans every example before deterministic conversion", async () => {
     const sourceOne = Buffer.from("synthetic example one");
     const sourceTwo = Buffer.from("synthetic example two");
@@ -406,6 +502,12 @@ describe("completed candidate service", () => {
       mocks.convert.mock.invocationCallOrder[0]!,
     );
     expect(mocks.isolate).toHaveBeenCalledTimes(2);
+    expect(mocks.finalRollout.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.currentPhysician.mock.invocationCallOrder[0]!,
+    );
+    expect(mocks.currentPhysician.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.candidateCreate.mock.invocationCallOrder[0]!,
+    );
     expect(mocks.claimObject).toHaveBeenCalledWith(
       tx,
       expect.objectContaining({
@@ -433,6 +535,37 @@ describe("completed candidate service", () => {
     ).toEqual(["8".repeat(64), "9".repeat(64)]);
   });
 
+  it("claims no generated candidate when physician authority is revoked before the final transaction", async () => {
+    const { sourceOne, sourceTwo, storage, storeCandidateArtifact } =
+      configureCompletedCandidateCreation();
+    mocks.currentPhysician.mockRejectedValueOnce(
+      new Error("synthetic current-authority revocation"),
+    );
+
+    await expect(
+      createCompletedCandidate({
+        examples: [sourceOne, sourceTwo],
+        identity: {
+          name: "Synthetic candidate",
+          encounterScope: "Synthetic follow-up",
+          versionDescription: "Two matching synthetic examples",
+        },
+        actor: ACTOR,
+        storage,
+      }),
+    ).rejects.toMatchObject({ code: "PERSISTENCE_FAILED" });
+
+    expect(storeCandidateArtifact).toHaveBeenCalledTimes(1);
+    expect(mocks.finalRollout.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.currentPhysician.mock.invocationCallOrder[0]!,
+    );
+    expect(mocks.candidateCreate).not.toHaveBeenCalled();
+    expect(mocks.isolate).not.toHaveBeenCalled();
+    expect(mocks.claimObject).not.toHaveBeenCalled();
+    expect(mocks.audit).not.toHaveBeenCalled();
+    expect(mocks.reject).toHaveBeenCalledTimes(2);
+  });
+
   it("issues a hashed 15-minute receipt only after rollout and candidate locks", async () => {
     mocks.candidateFindFirst.mockResolvedValue(pendingCandidate());
 
@@ -444,8 +577,35 @@ describe("completed candidate service", () => {
     expect(result.projection).toEqual(PROJECTION);
     expect(result.reviewReceipt).toMatch(/^[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/u);
     expect(mocks.finalRollout.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.currentPhysician.mock.invocationCallOrder[0]!,
+    );
+    expect(mocks.currentPhysician.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.queryRaw.mock.invocationCallOrder[0]!,
     );
+    const candidateLock = mocks.queryRaw.mock.calls[0]?.[0];
+    const candidateLockSql = candidateLock?.strings?.join(" ") ?? "";
+    expect(candidateLockSql).toContain('candidate."practiceId"');
+    expect(candidateLockSql).toContain('candidate."createdById"');
+    expect(candidateLock?.values).toEqual([
+      "candidate_synthetic",
+      ACTOR.practiceId,
+      ACTOR.userId,
+    ]);
+    expect(mocks.candidateFindFirst.mock.calls[0]![0].where).toMatchObject({
+      createdById: ACTOR.userId,
+      createdBy: {
+        is: {
+          id: ACTOR.userId,
+          practiceId: ACTOR.practiceId,
+          role: "DOCTOR",
+          isActive: true,
+          suspendedAt: null,
+          softDeletedAt: null,
+          products: { has: "TRANSCRIBE_MD" },
+          practice: { is: { id: ACTOR.practiceId, isActive: true } },
+        },
+      },
+    });
     const receiptData = mocks.receiptCreate.mock.calls[0]![0].data;
     expect(receiptData).toMatchObject({
       candidateId: "candidate_synthetic",
@@ -460,6 +620,23 @@ describe("completed candidate service", () => {
     expect(JSON.stringify(mocks.audit.mock.calls)).not.toContain(
       result.reviewReceipt,
     );
+  });
+
+  it("issues no preview receipt when current physician authority is revoked", async () => {
+    mocks.currentPhysician.mockRejectedValueOnce(
+      new Error("synthetic current-authority revocation"),
+    );
+
+    await expect(
+      issueCompletedCandidateReviewPreview({
+        candidateId: "candidate_synthetic",
+        actor: ACTOR,
+      }),
+    ).rejects.toThrow("synthetic current-authority revocation");
+
+    expect(mocks.candidateFindFirst).not.toHaveBeenCalled();
+    expect(mocks.receiptCreate).not.toHaveBeenCalled();
+    expect(mocks.audit).not.toHaveBeenCalled();
   });
 
   it("treats the stored projection as untrusted and issues no receipt when its binding is tampered", async () => {
@@ -544,6 +721,26 @@ describe("completed candidate service", () => {
     });
 
     expect(result).toEqual({ status: "REJECTED" });
+    const candidateLock = mocks.queryRaw.mock.calls[0]?.[0];
+    expect(candidateLock?.strings?.join(" ") ?? "").toContain(
+      'candidate."createdById"',
+    );
+    expect(candidateLock?.values).toEqual([
+      "candidate_synthetic",
+      ACTOR.practiceId,
+      ACTOR.userId,
+    ]);
+    const receiptLock = mocks.queryRaw.mock.calls[1]?.[0];
+    const receiptLockSql = receiptLock?.strings?.join(" ") ?? "";
+    expect(receiptLockSql).toContain('receipt."candidateId"');
+    expect(receiptLockSql).toContain('receipt."practiceId"');
+    expect(receiptLockSql).toContain('receipt."reviewedById"');
+    expect(receiptLock?.values).toEqual([
+      REVIEW_RECEIPT_ID,
+      "candidate_synthetic",
+      ACTOR.practiceId,
+      ACTOR.userId,
+    ]);
     expect(mocks.regionUpdateMany).toHaveBeenCalledTimes(1);
     expect(mocks.candidateUpdateMany).toHaveBeenCalledWith({
       where: { id: "candidate_synthetic", status: "PENDING_REVIEW" },
@@ -567,6 +764,29 @@ describe("completed candidate service", () => {
         }),
       }),
     );
+  });
+
+  it("writes no terminal review after current physician authority is revoked", async () => {
+    mocks.currentPhysician.mockRejectedValueOnce(
+      new Error("synthetic current-authority revocation"),
+    );
+
+    await expect(
+      reviewCompletedCandidate({
+        candidateId: "candidate_synthetic",
+        payload: {
+          decisions: [{ regionId: REGION_ONE, decision: "APPROVED" }],
+          physicianAttestation: true,
+          reviewReceipt: REVIEW_RECEIPT,
+        },
+        actor: ACTOR,
+      }),
+    ).rejects.toThrow("synthetic current-authority revocation");
+
+    expect(mocks.candidateFindFirst).not.toHaveBeenCalled();
+    expect(mocks.regionUpdateMany).not.toHaveBeenCalled();
+    expect(mocks.candidateUpdateMany).not.toHaveBeenCalled();
+    expect(mocks.audit).not.toHaveBeenCalled();
   });
 
   it("fails closed before persistence when a region decision is missing", async () => {
@@ -687,6 +907,30 @@ describe("completed candidate service", () => {
     ).rejects.toMatchObject({ code: "ROLLOUT_CHANGED" });
 
     expect(readCandidateArtifact).toHaveBeenCalledTimes(1);
+    expect(mocks.audit).not.toHaveBeenCalled();
+    expect(mocks.candidateFindFirst).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns no approved bytes when physician authority changes during the object read", async () => {
+    const bytes = CANDIDATE_BYTES;
+    mocks.candidateFindFirst.mockResolvedValueOnce(approvedCandidate(bytes));
+    const readCandidateArtifact = vi.fn().mockResolvedValue(bytes);
+    mocks.currentPhysician.mockRejectedValueOnce(
+      new Error("synthetic current-authority revocation"),
+    );
+
+    await expect(
+      readApprovedCompletedCandidate({
+        candidateId: "candidate_synthetic",
+        actor: ACTOR,
+        storage: {
+          readCandidateArtifact,
+        } as unknown as TemplateTwinArtifactStore,
+      }),
+    ).rejects.toThrow("synthetic current-authority revocation");
+
+    expect(readCandidateArtifact).toHaveBeenCalledTimes(1);
+    expect(mocks.finalRollout).toHaveBeenCalledTimes(1);
     expect(mocks.audit).not.toHaveBeenCalled();
     expect(mocks.candidateFindFirst).toHaveBeenCalledTimes(1);
   });

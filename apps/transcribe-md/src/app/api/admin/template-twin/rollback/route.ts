@@ -11,6 +11,7 @@ import {
   type TemplateTwinRollbackActor,
 } from "@/lib/template-twin/rollback-control";
 import { isSameOriginTemplateTwinMutation } from "@/lib/template-twin/request-security";
+import { isTemplateTwinAdminAppService } from "@/lib/template-twin/admin-app-service";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +56,7 @@ function actor(ctx: AdminContext): TemplateTwinRollbackActor | null {
     userId: ctx.session.user.id,
     userEmail: ctx.session.user.email,
     practiceId,
+    sessionId: ctx.verifiedSessionId,
   };
 }
 
@@ -81,7 +83,14 @@ function errorResponse(error: unknown): NextResponse {
   );
 }
 
+function rollbackProcessEnabled(): boolean {
+  return (
+    process.env.NODE_ENV !== "production" || isTemplateTwinAdminAppService()
+  );
+}
+
 export const GET = adminApi("template-twin:rollback:inspect", async () => {
+  if (!rollbackProcessEnabled()) return json({ error: "Not found." }, 404);
   try {
     return json({ ok: true, status: await inspectTemplateTwinRollback() });
   } catch (error) {
@@ -92,6 +101,7 @@ export const GET = adminApi("template-twin:rollback:inspect", async () => {
 export const POST = adminApi(
   "template-twin:rollback:mutate",
   async (req, ctx) => {
+    if (!rollbackProcessEnabled()) return json({ error: "Not found." }, 404);
     if (!isSameOriginTemplateTwinMutation(req)) {
       return json(
         { ok: false, error: "The rollback request was not same-origin." },

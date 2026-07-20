@@ -29,7 +29,7 @@ import { apiError, withApiHandler } from "@/lib/api-error";
 import { getSession } from "@/lib/auth";
 import { RATE_LIMITS, rateLimitOr429 } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
-import { TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID } from "@/lib/template-twin/synthetic-qa-patient";
+import { currentClinicalPatientReadAuthoritySql } from "@/lib/clinical-patient-authority";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -86,19 +86,25 @@ export const POST = withApiHandler("api:patients:fuzzy-match", async (req) => {
     );
   }
 
+  const patientAuthority = currentClinicalPatientReadAuthoritySql({
+    actor: {
+      userId: session.user.id,
+      practiceId: session.user.practiceId,
+    },
+    patientAlias: "p",
+  });
+
   const rows = await prisma.$queryRaw<MatchRow[]>`
     SELECT
-      id,
-      name,
-      "dateOfBirth",
-      "externalId",
-      similarity(LOWER(name), LOWER(${parsed.data.name})) AS score
-    FROM transcribe_md_patients
-    WHERE "practiceId" = ${session.user.practiceId}
-      AND "deletedAt" IS NULL
-      AND "externalId" IS DISTINCT FROM ${TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID}
-      AND similarity(LOWER(name), LOWER(${parsed.data.name})) > ${MIN_SIMILARITY}
-    ORDER BY score DESC, name ASC
+      p.id,
+      p.name,
+      p."dateOfBirth",
+      p."externalId",
+      similarity(LOWER(p.name), LOWER(${parsed.data.name})) AS score
+    FROM transcribe_md_patients p
+    WHERE ${patientAuthority}
+      AND similarity(LOWER(p.name), LOWER(${parsed.data.name})) > ${MIN_SIMILARITY}
+    ORDER BY score DESC, p.name ASC
     LIMIT ${MAX_RESULTS}
   `;
 

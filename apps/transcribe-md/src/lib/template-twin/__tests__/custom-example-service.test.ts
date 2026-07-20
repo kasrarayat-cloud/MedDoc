@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   outboxCreate: vi.fn(),
   transaction: vi.fn(),
   rollout: vi.fn(),
+  currentPhysician: vi.fn(),
+  queryRaw: vi.fn(),
   execute: vi.fn(),
   evaluate: vi.fn(),
 }));
@@ -17,6 +19,7 @@ const storedRows: Array<Record<string, unknown>> = [];
 
 vi.mock("@meddoc/db", () => {
   const tx = {
+    $queryRaw: mocks.queryRaw,
     noteTemplate: { findFirst: mocks.findTemplate },
     templateTwinCustomExampleExecution: {
       create: mocks.executionCreate,
@@ -40,8 +43,15 @@ vi.mock("../rollout", async (importOriginal) => ({
   lockTemplateTwinRolloutForFinalClaim: mocks.rollout,
 }));
 
+vi.mock("../final-claim-authority", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../final-claim-authority")>()),
+  lockAndAssertCurrentTemplateTwinPhysician: mocks.currentPhysician,
+}));
+
 vi.mock("../custom-concepts/example-coverage", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../custom-concepts/example-coverage")>()),
+  ...(await importOriginal<
+    typeof import("../custom-concepts/example-coverage")
+  >()),
   executeTemplateTwinCustomExamples: mocks.execute,
   evaluateTemplateTwinCustomExampleCoverage: mocks.evaluate,
 }));
@@ -50,6 +60,7 @@ import { buildSyntheticDocx } from "../../note-template-docx/__tests__/synthetic
 import { compileTemplateDocx } from "../../note-template-docx/compiler";
 import {
   acknowledgeTemplateTwinCustomExamples,
+  readTemplateTwinCustomExampleCoverage,
   runTemplateTwinCustomExamples,
 } from "../custom-example-service";
 import { certifyCustomFieldSpecification } from "../field-intent";
@@ -107,7 +118,8 @@ function execution(batchId = "batch-custom-service") {
     specificationSetSha256: "d".repeat(64),
     extractionSchemaSha256: "e".repeat(64),
     extractorVersion: "template-twin-custom-scalar-extractor/1.0.0" as const,
-    extractionSchemaVersion: "template-twin-custom-scalar-schema/1.0.0" as const,
+    extractionSchemaVersion:
+      "template-twin-custom-scalar-schema/1.0.0" as const,
     provider: "anthropic",
     providerSha256: "f".repeat(64),
     model: "synthetic-model-v1",
@@ -231,6 +243,8 @@ beforeEach(() => {
   storedRows.splice(0);
   mocks.findTemplate.mockResolvedValue(ownedRow);
   mocks.rollout.mockResolvedValue({ allowed: true, token: ACTOR.rolloutToken });
+  mocks.currentPhysician.mockResolvedValue({ email: ACTOR.userEmail });
+  mocks.queryRaw.mockResolvedValue([{ id: ACTOR.practiceId }]);
   mocks.execute.mockResolvedValue([execution()]);
   mocks.executionCreate.mockImplementation(async ({ data }) => {
     storedRows.push({ ...data, executedAt: new Date() });
@@ -242,7 +256,8 @@ beforeEach(() => {
   );
   mocks.executionUpdateMany.mockImplementation(async ({ where, data }) => {
     const row = storedRows.find(
-      (candidate) => candidate.id === where.id && candidate.acknowledgedAt == null,
+      (candidate) =>
+        candidate.id === where.id && candidate.acknowledgedAt == null,
     );
     if (!row) return { count: 0 };
     Object.assign(row, data);
@@ -272,10 +287,79 @@ beforeEach(() => {
 });
 
 describe("Template Twin custom-example service finality", () => {
+  it("projects no custom specification content for a stale physician identity", async () => {
+    mocks.currentPhysician.mockRejectedValueOnce(
+      new Error("synthetic current-authority revocation"),
+    );
+
+    await expect(
+      readTemplateTwinCustomExampleCoverage({
+        noteTemplateId: "template",
+        doctorId: ACTOR.userId,
+        practiceId: ACTOR.practiceId,
+      }),
+    ).rejects.toThrow("synthetic current-authority revocation");
+
+    expect(mocks.findTemplate).not.toHaveBeenCalled();
+    expect(mocks.executionFindFirst).not.toHaveBeenCalled();
+    expect(mocks.queryRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it("holds the active-practice lock before the actor and every coverage projection", async () => {
+    await readTemplateTwinCustomExampleCoverage({
+      noteTemplateId: "template",
+      doctorId: ACTOR.userId,
+      practiceId: ACTOR.practiceId,
+    });
+
+    expect(mocks.queryRaw).toHaveBeenCalledTimes(1);
+    const sql = mocks.queryRaw.mock.calls[0]?.[0];
+    expect(sql?.strings?.join(" ") ?? "").toContain('FROM "practices"');
+    expect(mocks.queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.currentPhysician.mock.invocationCallOrder[0]!,
+    );
+    expect(mocks.currentPhysician.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.findTemplate.mock.invocationCallOrder[0]!,
+    );
+    expect(mocks.findTemplate.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.executionFindFirst.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("binds content-bearing custom specification reads to the current lifecycle in the same query", async () => {
+    await expect(
+      readTemplateTwinCustomExampleCoverage({
+        noteTemplateId: "template",
+        doctorId: ACTOR.userId,
+        practiceId: ACTOR.practiceId,
+      }),
+    ).resolves.toMatchObject({ ready: false });
+
+    expect(mocks.findTemplate.mock.calls[0]![0].where).toMatchObject({
+      doctorId: ACTOR.userId,
+      doctor: {
+        is: {
+          id: ACTOR.userId,
+          practiceId: ACTOR.practiceId,
+          role: "DOCTOR",
+          isActive: true,
+          deactivatedAt: null,
+          suspendedAt: null,
+          softDeletedAt: null,
+          products: { has: "TRANSCRIBE_MD" },
+          practice: { is: { id: ACTOR.practiceId, isActive: true } },
+        },
+      },
+    });
+  });
+
   it("checks owner and practice before invoking the example provider", async () => {
     mocks.findTemplate.mockResolvedValueOnce(null);
     await expect(
-      runTemplateTwinCustomExamples({ noteTemplateId: "template", actor: ACTOR }),
+      runTemplateTwinCustomExamples({
+        noteTemplateId: "template",
+        actor: ACTOR,
+      }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
     expect(mocks.execute).not.toHaveBeenCalled();
     expect(storedRows).toHaveLength(0);
@@ -302,6 +386,32 @@ describe("Template Twin custom-example service finality", () => {
     expect(mocks.outboxCreate).not.toHaveBeenCalled();
   });
 
+  it("persists no provider result when current physician authority is revoked before the final claim", async () => {
+    let release!: (value: unknown) => void;
+    const barrier = new Promise((resolve) => {
+      release = resolve;
+    });
+    mocks.execute.mockReturnValueOnce(barrier);
+    const pending = runTemplateTwinCustomExamples({
+      noteTemplateId: "template",
+      actor: ACTOR,
+    });
+    await vi.waitFor(() => expect(mocks.execute).toHaveBeenCalledTimes(1));
+    mocks.currentPhysician.mockRejectedValueOnce(
+      new Error("synthetic current-authority revocation"),
+    );
+    release([execution()]);
+
+    await expect(pending).rejects.toThrow(
+      "synthetic current-authority revocation",
+    );
+    expect(mocks.rollout.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.currentPhysician.mock.invocationCallOrder[0]!,
+    );
+    expect(storedRows).toHaveLength(0);
+    expect(mocks.outboxCreate).not.toHaveBeenCalled();
+  });
+
   it("does not revive an old admission token after disable and re-enable", async () => {
     mocks.rollout.mockImplementation(async ({ pinnedToken }) =>
       pinnedToken.practiceGeneration === BigInt(4)
@@ -313,7 +423,10 @@ describe("Template Twin custom-example service finality", () => {
     );
 
     await expect(
-      runTemplateTwinCustomExamples({ noteTemplateId: "template", actor: ACTOR }),
+      runTemplateTwinCustomExamples({
+        noteTemplateId: "template",
+        actor: ACTOR,
+      }),
     ).rejects.toMatchObject({ code: "ROLLOUT_CHANGED" });
     expect(storedRows).toHaveLength(0);
 
@@ -344,16 +457,24 @@ describe("Template Twin custom-example service finality", () => {
       .mockResolvedValueOnce(ownedRow)
       .mockResolvedValueOnce(changed);
     await expect(
-      runTemplateTwinCustomExamples({ noteTemplateId: "template", actor: ACTOR }),
+      runTemplateTwinCustomExamples({
+        noteTemplateId: "template",
+        actor: ACTOR,
+      }),
     ).rejects.toMatchObject({ code: "STALE_CONFIGURATION" });
     expect(storedRows).toHaveLength(0);
     expect(mocks.outboxCreate).not.toHaveBeenCalled();
   });
 
   it("rolls back execution rows when the critical audit outbox fails", async () => {
-    mocks.outboxCreate.mockRejectedValueOnce(new Error("synthetic outbox down"));
+    mocks.outboxCreate.mockRejectedValueOnce(
+      new Error("synthetic outbox down"),
+    );
     await expect(
-      runTemplateTwinCustomExamples({ noteTemplateId: "template", actor: ACTOR }),
+      runTemplateTwinCustomExamples({
+        noteTemplateId: "template",
+        actor: ACTOR,
+      }),
     ).rejects.toThrow("synthetic outbox down");
     expect(storedRows).toHaveLength(0);
   });
@@ -377,8 +498,13 @@ describe("Template Twin custom-example service finality", () => {
   });
 
   it("rolls back acknowledgement when its audit outbox fails", async () => {
-    await runTemplateTwinCustomExamples({ noteTemplateId: "template", actor: ACTOR });
-    mocks.outboxCreate.mockRejectedValueOnce(new Error("synthetic ack audit down"));
+    await runTemplateTwinCustomExamples({
+      noteTemplateId: "template",
+      actor: ACTOR,
+    });
+    mocks.outboxCreate.mockRejectedValueOnce(
+      new Error("synthetic ack audit down"),
+    );
     await expect(
       acknowledgeTemplateTwinCustomExamples({
         noteTemplateId: "template",
@@ -389,8 +515,36 @@ describe("Template Twin custom-example service finality", () => {
     expect(storedRows[0]?.acknowledgedAt).toBeUndefined();
   });
 
+  it("cannot acknowledge a batch after the physician is suspended, demoted, transferred, or loses product access", async () => {
+    await runTemplateTwinCustomExamples({
+      noteTemplateId: "template",
+      actor: ACTOR,
+    });
+    mocks.currentPhysician.mockRejectedValueOnce(
+      new Error("synthetic current-authority revocation"),
+    );
+    const priorAuditCount = mocks.outboxCreate.mock.calls.length;
+
+    await expect(
+      acknowledgeTemplateTwinCustomExamples({
+        noteTemplateId: "template",
+        batchId: "batch-custom-service",
+        actor: ACTOR,
+      }),
+    ).rejects.toThrow("synthetic current-authority revocation");
+
+    expect(storedRows[0]?.acknowledgedAt).toBeUndefined();
+    expect(mocks.outboxCreate).toHaveBeenCalledTimes(priorAuditCount);
+    expect(mocks.rollout.mock.invocationCallOrder.at(-1)!).toBeLessThan(
+      mocks.currentPhysician.mock.invocationCallOrder.at(-1)!,
+    );
+  });
+
   it("allows exactly one winner in a concurrent acknowledgement CAS race", async () => {
-    await runTemplateTwinCustomExamples({ noteTemplateId: "template", actor: ACTOR });
+    await runTemplateTwinCustomExamples({
+      noteTemplateId: "template",
+      actor: ACTOR,
+    });
 
     const database = await import("@meddoc/db");
     const tx = (database as unknown as { __tx: unknown }).__tx;
@@ -410,7 +564,8 @@ describe("Template Twin custom-example service finality", () => {
       if (updateCalls === 2) bothArrived();
       await barrier;
       const row = storedRows.find(
-        (candidate) => candidate.id === where.id && candidate.acknowledgedAt == null,
+        (candidate) =>
+          candidate.id === where.id && candidate.acknowledgedAt == null,
       );
       if (!row) return { count: 0 };
       Object.assign(row, data);
@@ -431,7 +586,9 @@ describe("Template Twin custom-example service finality", () => {
     release();
     const results = await Promise.allSettled([first, second]);
 
-    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(
+      results.filter((result) => result.status === "fulfilled"),
+    ).toHaveLength(1);
     const rejected = results.find((result) => result.status === "rejected");
     expect(rejected).toMatchObject({
       status: "rejected",

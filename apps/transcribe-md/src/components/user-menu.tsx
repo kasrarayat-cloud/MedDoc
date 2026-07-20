@@ -13,6 +13,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Settings, LogOut } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import { toast } from 'sonner';
 
 import { signOutAction } from '@/actions/session';
 
@@ -142,9 +143,21 @@ export function UserMenu({ name, email }: UserMenuProps) {
           <DropdownMenu.Item
             onSelect={async (e) => {
               e.preventDefault();
-              await signOutAction();
-              router.push('/login');
-              router.refresh();
+              try {
+                const result = await signOutAction();
+                if (!result.ok) {
+                  toast.error('Sign-out was not completed', {
+                    description: result.message,
+                  });
+                  return;
+                }
+                router.push('/login');
+                router.refresh();
+              } catch {
+                toast.error('Sign-out was not completed', {
+                  description: 'Please check your connection and try again.',
+                });
+              }
             }}
             style={{
               display: 'flex',

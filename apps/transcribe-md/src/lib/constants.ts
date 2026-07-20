@@ -6,12 +6,11 @@
 // from apps/marketing so both surfaces stay in sync.
 // ============================================================================
 
-/** Public URL of the TranscribeMD app (where doctors sign up + work).
- *  Defaults to the VPS public IP on :9020 — updates once DNS + TLS land. */
+/** Public URL of the TranscribeMD physician app. Production startup also
+ * verifies this build-inlined value against the reviewed HTTPS origin. */
 export const APP_URL =
-  process.env.NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL ??
-  'http://5.231.107.93:9020';
+  process.env.NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL ?? "https://app.quillmd.com";
 
 /** Public URL of the marketing site. */
 export const MARKETING_URL =
-  process.env.NEXT_PUBLIC_MARKETING_URL ?? 'http://5.231.107.93:9010';
+  process.env.NEXT_PUBLIC_MARKETING_URL ?? "https://quillmd.com";

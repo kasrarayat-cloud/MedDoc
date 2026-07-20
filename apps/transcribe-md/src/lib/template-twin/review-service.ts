@@ -17,6 +17,7 @@ import {
 } from "@prisma/client";
 import prisma from "@meddoc/db";
 
+import { currentClinicalVisitActorWhere } from "@/lib/clinical-visit-authority";
 import { runSerializableTransactionWithRetry } from "@/lib/db/transaction-retry";
 import {
   assessVisitAutomationProof,
@@ -109,6 +110,7 @@ import {
   persistedTemplateTwinEncounterEvidenceIsValid,
 } from "./encounter-evidence-verification";
 import {
+  lockAndAssertCurrentTemplateTwinPatient,
   lockAndAssertCurrentTemplateTwinPhysician,
   TemplateTwinCurrentPhysicianAuthorityError,
 } from "./final-claim-authority";
@@ -211,6 +213,7 @@ interface OwnedReviewContext {
   resolverModelVersion: string | null;
   visit: {
     userId: string;
+    patientId: string;
     status: string;
     reviewReason: string | null;
     soapFinal: string | null;
@@ -309,6 +312,7 @@ interface CommitReviewPlan {
   expectedManifestSha256: string;
   expectedProviderOwnershipEvidence: unknown;
   expectedProviderOwnershipSha256: string;
+  expectedPatientId: string;
   expectedVisitInputMode: string;
   expectedManualRetryCount: number;
   prepared: PreparedTemplateTwinFill;
@@ -976,7 +980,15 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
         where: {
           visitId: input.visitId,
           practiceId: input.actor.practiceId,
-          visit: { userId: input.actor.userId },
+          visit: {
+            AND: [
+              currentClinicalVisitActorWhere(input.actor.userId),
+              {
+                userId: input.actor.userId,
+                patient: { is: { practiceId: input.actor.practiceId } },
+              },
+            ],
+          },
           compiledVersion: {
             noteTemplate: { doctorId: input.actor.userId },
           },
@@ -998,6 +1010,7 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
           visit: {
             select: {
               userId: true,
+              patientId: true,
               status: true,
               reviewReason: true,
               soapFinal: true,
@@ -1214,6 +1227,11 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
               practiceId: plan.practiceId,
             },
           });
+          await lockAndAssertCurrentTemplateTwinPatient({
+            tx,
+            patientId: plan.expectedPatientId,
+            practiceId: plan.practiceId,
+          });
           const lockedVisit = await lockCurrentTemplateTwinVisit(
             tx,
             plan.visitId,
@@ -1223,6 +1241,7 @@ export function createTemplateTwinReviewRepository(): TemplateTwinReviewReposito
             select: { manualRetryCount: true },
           });
           if (
+            lockedVisit?.patientId !== plan.expectedPatientId ||
             lockedVisit?.inputMode !== plan.expectedVisitInputMode ||
             currentRetry?.manualRetryCount !== plan.expectedManualRetryCount ||
             !visitMatchesPreparedSoap({
@@ -1982,6 +2001,7 @@ export async function reviewTemplateTwinField(
       expectedManifestSha256: context.manifestSha256,
       expectedProviderOwnershipEvidence: context.providerOwnershipEvidence,
       expectedProviderOwnershipSha256: context.providerOwnershipSha256,
+      expectedPatientId: context.visit.patientId,
       expectedVisitInputMode: context.visit.inputMode,
       expectedManualRetryCount: context.visit.manualRetryCount,
       prepared,

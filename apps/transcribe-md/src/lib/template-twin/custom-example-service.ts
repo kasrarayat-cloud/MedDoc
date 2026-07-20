@@ -29,6 +29,10 @@ import {
   lockTemplateTwinRolloutForFinalClaim,
   type TemplateTwinRolloutToken,
 } from "./rollout";
+import {
+  lockAndAssertActiveTemplateTwinPractice,
+  lockAndAssertCurrentTemplateTwinPhysician,
+} from "./final-claim-authority";
 
 export class TemplateTwinCustomExampleError extends Error {
   readonly code:
@@ -121,6 +125,21 @@ async function loadCurrentCustomExampleState(input: {
       id: input.noteTemplateId,
       doctorId: input.actor.userId,
       templateKind: "template_twin_docx",
+      doctor: {
+        is: {
+          id: input.actor.userId,
+          practiceId: input.actor.practiceId,
+          role: "DOCTOR",
+          isActive: true,
+          deactivatedAt: null,
+          suspendedAt: null,
+          softDeletedAt: null,
+          products: { has: "TRANSCRIBE_MD" },
+          practice: {
+            is: { id: input.actor.practiceId, isActive: true },
+          },
+        },
+      },
     },
     select: {
       status: true,
@@ -183,7 +202,11 @@ async function loadCurrentCustomExampleState(input: {
     },
   });
   const compiled = row?.templateTwinCompiledVersion;
-  if (!row || !compiled || compiled.sourceArtifact.practiceId !== input.actor.practiceId) {
+  if (
+    !row ||
+    !compiled ||
+    compiled.sourceArtifact.practiceId !== input.actor.practiceId
+  ) {
     throw new TemplateTwinCustomExampleError(
       "NOT_FOUND",
       "This Template Twin version is stale or unavailable. Refresh the certification workspace.",
@@ -219,30 +242,28 @@ async function loadCurrentCustomExampleState(input: {
       persisted.mapping as unknown as Record<string, unknown>,
     );
   });
-  const intents = ir.fields
-    .filter(fieldRequiresExplicitIntent)
-    .map((field) => {
-      const persisted = fieldById.get(field.fieldId);
-      if (!persisted) {
-        throw new TemplateTwinCustomExampleError(
-          "STALE_CONFIGURATION",
-          "The custom-field definition set is incomplete.",
-        );
-      }
-      const decision = persisted.intentDecisions[0];
-      return {
-        fieldId: field.fieldId,
-        definitionId: persisted.id,
-        decisionId: decision?.id ?? null,
-        intent: decision
-          ? parsePersistedFieldIntent({
-              ...decision,
-              fieldDefinitionId: persisted.id,
-              fieldId: field.fieldId,
-            } satisfies PersistedTemplateTwinFieldIntent)
-          : unresolvedFieldIntent(),
-      };
-    });
+  const intents = ir.fields.filter(fieldRequiresExplicitIntent).map((field) => {
+    const persisted = fieldById.get(field.fieldId);
+    if (!persisted) {
+      throw new TemplateTwinCustomExampleError(
+        "STALE_CONFIGURATION",
+        "The custom-field definition set is incomplete.",
+      );
+    }
+    const decision = persisted.intentDecisions[0];
+    return {
+      fieldId: field.fieldId,
+      definitionId: persisted.id,
+      decisionId: decision?.id ?? null,
+      intent: decision
+        ? parsePersistedFieldIntent({
+            ...decision,
+            fieldDefinitionId: persisted.id,
+            fieldId: field.fieldId,
+          } satisfies PersistedTemplateTwinFieldIntent)
+        : unresolvedFieldIntent(),
+    };
+  });
   const specifications = customConceptSpecifications(intents);
   if (specifications.length === 0) {
     throw new TemplateTwinCustomExampleError(
@@ -317,19 +338,15 @@ function persistedRow(
     modelSha256: String(row.modelSha256),
     resultStatus: String(row.resultStatus),
     resultValue: parsedScalar,
-    resultUnit:
-      typeof resultValue.unit === "string" ? resultValue.unit : null,
+    resultUnit: typeof resultValue.unit === "string" ? resultValue.unit : null,
     resultFactCount:
       typeof row.resultFactCount === "number" ? row.resultFactCount : -1,
     resultSummary,
     resultSha256: String(row.resultSha256),
     passed: row.passed === true,
-    failureCode:
-      typeof row.failureCode === "string" ? row.failureCode : null,
+    failureCode: typeof row.failureCode === "string" ? row.failureCode : null,
     acknowledgedById:
-      typeof row.acknowledgedById === "string"
-        ? row.acknowledgedById
-        : null,
+      typeof row.acknowledgedById === "string" ? row.acknowledgedById : null,
     acknowledgedAt:
       row.acknowledgedAt instanceof Date ? row.acknowledgedAt : null,
   };
@@ -354,37 +371,51 @@ export async function readTemplateTwinCustomExampleCoverage(input: {
   doctorId: string;
   practiceId: string;
 }): Promise<TemplateTwinCustomExampleCoverage | null> {
-  let state: CurrentCustomExampleState;
-  try {
-    state = await loadCurrentCustomExampleState({
-      db: prisma,
-      noteTemplateId: input.noteTemplateId,
-      actor: { userId: input.doctorId, practiceId: input.practiceId },
-      requireMutable: false,
+  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    // Canonical practice -> actor lock order. Both locks remain held until the
+    // content-bearing template and execution projections are assembled, so a
+    // practice deactivation cannot commit between those ReadCommitted
+    // statements and leak post-revocation custom-example content.
+    await lockAndAssertActiveTemplateTwinPractice({
+      tx,
+      practiceId: input.practiceId,
     });
-  } catch (error) {
-    if (
-      error instanceof TemplateTwinCustomExampleError &&
-      error.code === "NO_CUSTOM_FIELDS"
-    ) {
-      return null;
+    await lockAndAssertCurrentTemplateTwinPhysician({
+      tx,
+      actor: { userId: input.doctorId, practiceId: input.practiceId },
+    });
+    let state: CurrentCustomExampleState;
+    try {
+      state = await loadCurrentCustomExampleState({
+        db: tx,
+        noteTemplateId: input.noteTemplateId,
+        actor: { userId: input.doctorId, practiceId: input.practiceId },
+        requireMutable: false,
+      });
+    } catch (error) {
+      if (
+        error instanceof TemplateTwinCustomExampleError &&
+        error.code === "NO_CUSTOM_FIELDS"
+      ) {
+        return null;
+      }
+      throw error;
     }
-    throw error;
-  }
-  const latest = await prisma.templateTwinCustomExampleExecution.findFirst({
-    where: { compiledVersionId: state.compiledVersionId },
-    orderBy: { executedAt: "desc" },
-    select: { batchId: true },
-  });
-  const rows = latest
-    ? await rowsForBatch(prisma, state.compiledVersionId, latest.batchId)
-    : [];
-  return evaluateTemplateTwinCustomExampleCoverage({
-    specifications: state.specifications,
-    mappingsSha256: state.mappingsSha256,
-    fieldIntentsSha256: state.fieldIntentsSha256,
-    physicianUserId: input.doctorId,
-    rows,
+    const latest = await tx.templateTwinCustomExampleExecution.findFirst({
+      where: { compiledVersionId: state.compiledVersionId },
+      orderBy: { executedAt: "desc" },
+      select: { batchId: true },
+    });
+    const rows = latest
+      ? await rowsForBatch(tx, state.compiledVersionId, latest.batchId)
+      : [];
+    return evaluateTemplateTwinCustomExampleCoverage({
+      specifications: state.specifications,
+      mappingsSha256: state.mappingsSha256,
+      fieldIntentsSha256: state.fieldIntentsSha256,
+      physicianUserId: input.doctorId,
+      rows,
+    });
   });
 }
 
@@ -425,7 +456,7 @@ export async function runTemplateTwinCustomExamples(input: {
     );
   }
 
-  await prisma.$transaction(
+  return prisma.$transaction(
     async (tx: Prisma.TransactionClient) => {
       const rollout = await lockTemplateTwinRolloutForFinalClaim({
         tx,
@@ -438,6 +469,10 @@ export async function runTemplateTwinCustomExamples(input: {
           `${rollout.code}: Template Twin availability changed while the custom examples were running. Reload and try again.`,
         );
       }
+      const currentActor = await lockAndAssertCurrentTemplateTwinPhysician({
+        tx,
+        actor: input.actor,
+      });
       const current = await loadCurrentCustomExampleState({
         db: tx,
         noteTemplateId: input.noteTemplateId,
@@ -515,7 +550,7 @@ export async function runTemplateTwinCustomExamples(input: {
           eventKey: `template-twin:custom-example-executed:${execution.id}`,
           practiceId: input.actor.practiceId,
           actorId: input.actor.userId,
-          actorEmailSnapshot: input.actor.userEmail,
+          actorEmailSnapshot: currentActor.email,
           action: "TEMPLATE_TWIN_CUSTOM_EXAMPLE_EXECUTED",
           targetType: "TemplateTwinCustomExampleExecution",
           targetId: execution.id,
@@ -524,9 +559,7 @@ export async function runTemplateTwinCustomExamples(input: {
             fieldId: execution.definition.fieldId,
             conceptId: execution.definition.conceptId,
             exampleKind: execution.definition.kind,
-            exampleIdSha256: canonicalSha256(
-              execution.definition.exampleId,
-            ),
+            exampleIdSha256: canonicalSha256(execution.definition.exampleId),
             exampleDefinitionSha256: execution.definition.definitionSha256,
             specificationSha256: execution.definition.specificationSha256,
             extractionSchemaSha256: execution.extractionSchemaSha256,
@@ -538,17 +571,17 @@ export async function runTemplateTwinCustomExamples(input: {
           },
         });
       }
+      const rows = await rowsForBatch(tx, current.compiledVersionId, batchId);
+      return evaluateTemplateTwinCustomExampleCoverage({
+        specifications: current.specifications,
+        mappingsSha256: current.mappingsSha256,
+        fieldIntentsSha256: current.fieldIntentsSha256,
+        physicianUserId: input.actor.userId,
+        rows,
+      });
     },
     { isolationLevel: "Serializable" },
   );
-  const rows = await rowsForBatch(prisma, before.compiledVersionId, batchId);
-  return evaluateTemplateTwinCustomExampleCoverage({
-    specifications: before.specifications,
-    mappingsSha256: before.mappingsSha256,
-    fieldIntentsSha256: before.fieldIntentsSha256,
-    physicianUserId: input.actor.userId,
-    rows,
-  });
 }
 
 export async function acknowledgeTemplateTwinCustomExamples(input: {
@@ -569,6 +602,10 @@ export async function acknowledgeTemplateTwinCustomExamples(input: {
           `${rollout.code}: Template Twin availability changed before example review was recorded. Reload and try again.`,
         );
       }
+      const currentActor = await lockAndAssertCurrentTemplateTwinPhysician({
+        tx,
+        actor: input.actor,
+      });
       const state = await loadCurrentCustomExampleState({
         db: tx,
         noteTemplateId: input.noteTemplateId,
@@ -593,10 +630,7 @@ export async function acknowledgeTemplateTwinCustomExamples(input: {
         physicianUserId: input.actor.userId,
         rows,
       });
-      if (
-        coverage.stale ||
-        coverage.passedCount !== coverage.requiredCount
-      ) {
+      if (coverage.stale || coverage.passedCount !== coverage.requiredCount) {
         throw new TemplateTwinCustomExampleError(
           "EXAMPLES_FAILED",
           "Every current positive, negative, and ambiguity example must pass before physician review can be recorded.",
@@ -627,7 +661,7 @@ export async function acknowledgeTemplateTwinCustomExamples(input: {
           eventKey: `template-twin:custom-example-acknowledged:${row.id}`,
           practiceId: input.actor.practiceId,
           actorId: input.actor.userId,
-          actorEmailSnapshot: input.actor.userEmail,
+          actorEmailSnapshot: currentActor.email,
           action: "TEMPLATE_TWIN_CUSTOM_EXAMPLE_ACKNOWLEDGED",
           targetType: "TemplateTwinCustomExampleExecution",
           targetId: row.id,
@@ -661,17 +695,15 @@ export async function acknowledgeTemplateTwinCustomExamples(input: {
   );
 }
 
-export async function assertTemplateTwinCustomExamplesReadyForCertification(
-  input: {
-    tx: DbClient;
-    compiledVersionId: string;
-    specifications: readonly CertifiedTemplateFieldSpecification[];
-    mappingsSha256: string;
-    fieldIntentsSha256: string;
-    physicianUserId: string;
-    expectedModel?: string;
-  },
-): Promise<string | null> {
+export async function assertTemplateTwinCustomExamplesReadyForCertification(input: {
+  tx: DbClient;
+  compiledVersionId: string;
+  specifications: readonly CertifiedTemplateFieldSpecification[];
+  mappingsSha256: string;
+  fieldIntentsSha256: string;
+  physicianUserId: string;
+  expectedModel?: string;
+}): Promise<string | null> {
   if (input.specifications.length === 0) return null;
   const latest = await input.tx.templateTwinCustomExampleExecution.findFirst({
     where: { compiledVersionId: input.compiledVersionId },

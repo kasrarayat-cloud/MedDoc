@@ -61,11 +61,15 @@ enum AuditAction {
   LOGIN_SUCCESS
   LOGIN_FAILED
   LOGOUT
+  MFA_ENROLLMENT_STARTED
   MFA_ENABLED
   MFA_DISABLED
+  MFA_RECOVERY_CODES_ROTATED
+  MFA_CREDENTIALS_MIGRATED
   MFA_CHALLENGE_PASSED
   MFA_CHALLENGE_FAILED
   PASSWORD_CHANGED
+  EMAIL_VERIFIED
   PASSWORD_RESET_BY_ADMIN
   SESSION_EXPIRED
 
@@ -478,6 +482,22 @@ enum AuthTokenPurpose {
   PASSWORD_RESET
   EMAIL_VERIFICATION
   EMAIL_CHANGE
+}
+
+enum AuthEmailPurpose {
+  PASSWORD_RESET
+  EMAIL_VERIFICATION
+  EMAIL_CHANGE
+  ACCOUNT_EXISTS
+}
+
+enum AuthEmailOutboxStatus {
+  PENDING
+  CLAIMED
+  DELIVERED
+  AMBIGUOUS
+  NOOP
+  FAILED
 }
 
 /// Template Twin lifecycle values are enums because every transition is a
@@ -916,6 +936,48 @@ model AuthToken {
   @@index([userId, purpose])
   @@index([expiresAt])
   @@map("auth_tokens")
+}
+
+/// Durable, anti-enumeration delivery request. The normalized email address
+/// is used only inside the enqueue SECURITY DEFINER function and is never
+/// stored; the row retains a SHA-256 binding plus an optional candidate user.
+/// Raw bearer tokens are generated only in dispatcher memory and only their
+/// normal AuthToken hash is persisted.
+model AuthEmailOutbox {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  candidateUserId           String?
+  emailSha256               String                @db.Char(64)
+  sourceEmailSha256         String?               @db.Char(64)
+  recipientEmail            String?
+  authorityPracticeId       String?
+  authoritySessionSha256    String?               @db.Char(64)
+  authoritySessionCreatedAt DateTime?             @db.Timestamptz(6)
+  authoritySessionExpiresAt DateTime?             @db.Timestamptz(6)
+  purpose                   AuthEmailPurpose
+  status                    AuthEmailOutboxStatus @default(PENDING)
+
+  attemptCount          Int       @default(0)
+  availableAt           DateTime  @default(now()) @db.Timestamptz(6)
+  requestExpiresAt      DateTime  @db.Timestamptz(6)
+  claimedAt             DateTime? @db.Timestamptz(6)
+  leaseExpiresAt        DateTime? @db.Timestamptz(6)
+  claimToken            String?   @db.Uuid
+  tokenId               String?
+  providerReceiptSha256 String?   @db.Char(64)
+  lastErrorCode         String?
+  finishedAt            DateTime? @db.Timestamptz(6)
+  purgeAfter            DateTime  @default(dbgenerated("CURRENT_TIMESTAMP + INTERVAL '7 days'")) @db.Timestamptz(6)
+  createdAt             DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@index([status, availableAt], map: "auth_email_outbox_status_available_idx")
+  @@index([leaseExpiresAt], map: "auth_email_outbox_lease_expiry_idx")
+  @@index([requestExpiresAt], map: "auth_email_outbox_request_expiry_idx")
+  @@index([emailSha256, purpose, createdAt(sort: Desc)], map: "auth_email_outbox_recipient_budget_idx")
+  @@index([candidateUserId, purpose, authoritySessionSha256], map: "auth_email_outbox_change_authority_idx")
+  @@index([purgeAfter], map: "auth_email_outbox_purge_after_idx")
+  @@map("auth_email_outbox")
 }
 
 // ============================================================================

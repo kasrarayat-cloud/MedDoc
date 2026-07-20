@@ -15,6 +15,7 @@ import { z } from "zod";
 import { NextResponse } from "next/server";
 
 import prisma from "@meddoc/db";
+import { Prisma } from "@prisma/client";
 
 import { apiError, withApiHandler } from "@/lib/api-error";
 import { getSession } from "@/lib/auth";
@@ -23,20 +24,25 @@ import { RATE_LIMITS, rateLimitOr429 } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
 import {
   isTemplateTwinSyntheticQaPatient,
-  ordinaryClinicalVisitWhere,
   TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID,
 } from "@/lib/template-twin/synthetic-qa-patient";
+import { aggregateTemplateTwinVisibleVisits } from "@/lib/template-twin/read-authority";
+import {
+  ClinicalPatientAuthorityError,
+  currentClinicalPatientWhere,
+  lockAndReadCurrentClinicalPatient,
+  type CurrentClinicalPatientActor,
+} from "@/lib/clinical-patient-authority";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 async function loadPatientForSession(
   id: string,
-  practiceId: string,
-  { includeDeleted = false }: { includeDeleted?: boolean } = {},
+  actor: CurrentClinicalPatientActor,
 ) {
-  const patient = await prisma.transcribeMdPatient.findUnique({
-    where: { id },
+  const patient = await prisma.transcribeMdPatient.findFirst({
+    where: currentClinicalPatientWhere({ actor, patientId: id }),
     select: {
       id: true,
       practiceId: true,
@@ -51,14 +57,9 @@ async function loadPatientForSession(
       updatedAt: true,
     },
   });
-  if (
-    !patient ||
-    patient.practiceId !== practiceId ||
-    isTemplateTwinSyntheticQaPatient(patient)
-  ) {
+  if (!patient || isTemplateTwinSyntheticQaPatient(patient)) {
     return null;
   }
-  if (!includeDeleted && patient.deletedAt !== null) return null;
   return patient;
 }
 
@@ -72,19 +73,23 @@ export const GET = withApiHandler<{ id: string }>(
     if (blocked) return blocked;
 
     const { id } = await params;
-    const patient = await loadPatientForSession(id, session.user.practiceId);
+    const actor = {
+      userId: session.user.id,
+      practiceId: session.user.practiceId,
+    };
+    const patient = await loadPatientForSession(id, actor);
     if (!patient) return apiError("not found", 404);
 
     // Attach visit count + last-visit-at so the detail page doesn't
     // need a second round-trip.
-    const aggregate = await prisma.transcribeVisit.aggregate({
-      where: ordinaryClinicalVisitWhere({
+    const aggregate = await aggregateTemplateTwinVisibleVisits({
+      db: prisma,
+      actorUserId: session.user.id,
+      scope: {
         patientId: patient.id,
-        deletedAt: null,
-        archivedAt: null,
-      }),
-      _count: { _all: true },
-      _max: { createdAt: true },
+        deleted: "active",
+        archived: "active",
+      },
     });
 
     // Round 3 PR-C — §164.312(b) PHI-read audit (A05-P0-004).
@@ -106,8 +111,8 @@ export const GET = withApiHandler<{ id: string }>(
         problemList: patient.problemList,
         createdAt: patient.createdAt,
         updatedAt: patient.updatedAt,
-        visitCount: aggregate._count._all,
-        lastVisitAt: aggregate._max.createdAt,
+        visitCount: aggregate.count,
+        lastVisitAt: aggregate.maxCreatedAt,
       },
     });
   },
@@ -167,9 +172,6 @@ export const PATCH = withApiHandler<{ id: string }>(
     if (blocked) return blocked;
 
     const { id } = await params;
-    const existing = await loadPatientForSession(id, session.user.practiceId);
-    if (!existing) return apiError("not found", 404);
-
     let body: unknown;
     try {
       body = await req.json();
@@ -200,7 +202,7 @@ export const PATCH = withApiHandler<{ id: string }>(
       externalId?: string | null;
       mrn?: string | null;
       insurance?: string | null;
-      problemList?: unknown;
+      problemList?: Prisma.NullableJsonNullValueInput | Prisma.InputJsonValue;
     } = {};
     if (parsed.data.name !== undefined) data.name = parsed.data.name;
     if (parsed.data.dateOfBirth !== undefined) {
@@ -217,7 +219,10 @@ export const PATCH = withApiHandler<{ id: string }>(
       data.insurance = parsed.data.insurance;
     }
     if (parsed.data.problemList !== undefined) {
-      data.problemList = parsed.data.problemList;
+      data.problemList =
+        parsed.data.problemList === null
+          ? Prisma.DbNull
+          : parsed.data.problemList;
     }
 
     if (Object.keys(data).length === 0) {
@@ -227,31 +232,62 @@ export const PATCH = withApiHandler<{ id: string }>(
       );
     }
 
-    const updated = await prisma.transcribeMdPatient.update({
-      where: { id: existing.id },
-      data,
-      select: {
-        id: true,
-        name: true,
-        dateOfBirth: true,
-        externalId: true,
-        mrn: true,
-        insurance: true,
-        problemList: true,
-        updatedAt: true,
-      },
-    });
+    const actor = {
+      userId: session.user.id,
+      practiceId: session.user.practiceId,
+    };
+    try {
+      const updated = await prisma.$transaction(
+        async (tx: Prisma.TransactionClient) => {
+          const existing = await lockAndReadCurrentClinicalPatient({
+            tx,
+            actor,
+            patientId: id,
+          });
+          if (!existing) return null;
 
-    void logAudit({
-      action: "TM_PATIENT_UPDATED",
-      targetType: "TranscribeMdPatient",
-      targetId: updated.id,
-      metadata: {
-        changedFields: Object.keys(data),
-      },
-    });
+          const write = await tx.transcribeMdPatient.updateMany({
+            where: {
+              ...currentClinicalPatientWhere({ actor, patientId: id }),
+              updatedAt: existing.updatedAt,
+            },
+            data,
+          });
+          if (write.count !== 1) return null;
 
-    return NextResponse.json({ patient: updated });
+          return tx.transcribeMdPatient.findFirst({
+            where: currentClinicalPatientWhere({ actor, patientId: id }),
+            select: {
+              id: true,
+              name: true,
+              dateOfBirth: true,
+              externalId: true,
+              mrn: true,
+              insurance: true,
+              problemList: true,
+              updatedAt: true,
+            },
+          });
+        },
+      );
+      if (!updated) return apiError("not found", 404);
+
+      void logAudit({
+        action: "TM_PATIENT_UPDATED",
+        targetType: "TranscribeMdPatient",
+        targetId: updated.id,
+        metadata: {
+          changedFields: Object.keys(data),
+        },
+      });
+
+      return NextResponse.json({ patient: updated });
+    } catch (error) {
+      if (error instanceof ClinicalPatientAuthorityError) {
+        return apiError("not found", 404);
+      }
+      throw error;
+    }
   },
 );
 
@@ -265,29 +301,56 @@ export const DELETE = withApiHandler<{ id: string }>(
     if (blocked) return blocked;
 
     const { id } = await params;
-    // includeDeleted:true so a repeat call returns 200 (idempotent)
-    // instead of flipping to 404 after the first soft-delete.
-    const existing = await loadPatientForSession(id, session.user.practiceId, {
-      includeDeleted: true,
-    });
-    if (!existing) return apiError("not found", 404);
+    const actor = {
+      userId: session.user.id,
+      practiceId: session.user.practiceId,
+    };
+    try {
+      const result = await prisma.$transaction(
+        async (tx: Prisma.TransactionClient) => {
+          // includeDeleted:true preserves idempotent repeated DELETE while the
+          // same actor/practice/reserved-marker authority is still current.
+          const existing = await lockAndReadCurrentClinicalPatient({
+            tx,
+            actor,
+            patientId: id,
+            includeDeleted: true,
+          });
+          if (!existing) return null;
+          if (existing.deletedAt !== null) {
+            return { kind: "already-deleted" as const, id: existing.id };
+          }
 
-    if (existing.deletedAt !== null) {
-      return NextResponse.json({ ok: true, alreadyDeleted: true });
+          const write = await tx.transcribeMdPatient.updateMany({
+            where: {
+              ...currentClinicalPatientWhere({ actor, patientId: id }),
+              updatedAt: existing.updatedAt,
+            },
+            data: { deletedAt: new Date() },
+          });
+          return write.count === 1
+            ? { kind: "deleted" as const, id: existing.id }
+            : null;
+        },
+      );
+      if (!result) return apiError("not found", 404);
+      if (result.kind === "already-deleted") {
+        return NextResponse.json({ ok: true, alreadyDeleted: true });
+      }
+
+      void logAudit({
+        action: "TM_PATIENT_DELETED",
+        targetType: "TranscribeMdPatient",
+        targetId: result.id,
+        metadata: { mode: "soft" },
+      });
+
+      return NextResponse.json({ ok: true });
+    } catch (error) {
+      if (error instanceof ClinicalPatientAuthorityError) {
+        return apiError("not found", 404);
+      }
+      throw error;
     }
-
-    await prisma.transcribeMdPatient.update({
-      where: { id: existing.id },
-      data: { deletedAt: new Date() },
-    });
-
-    void logAudit({
-      action: "TM_PATIENT_DELETED",
-      targetType: "TranscribeMdPatient",
-      targetId: existing.id,
-      metadata: { mode: "soft" },
-    });
-
-    return NextResponse.json({ ok: true });
   },
 );

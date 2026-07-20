@@ -4,14 +4,13 @@ import { notFound, redirect } from "next/navigation";
 import * as Sentry from "@sentry/nextjs";
 
 import prisma from "@meddoc/db";
-import { TranscribeVisitStatus } from "@prisma/client";
+import { Prisma, TranscribeVisitStatus } from "@prisma/client";
 import {
   findSpecialty,
   isImagingReportSpecialty,
   ultrasoundSpecialtyEnabled,
 } from "@meddoc/shared/specialties";
 import { auth } from "@/lib/nextauth";
-import { AuthError, requireFreshDoctorIdentity } from "@/lib/auth";
 import { logAudit, logRequiredAudit } from "@/lib/audit";
 import { AppFrame } from "@/components/ui/app-frame";
 import { Ic } from "@/components/ui/icon";
@@ -51,14 +50,23 @@ import { evaluateTemplateTwinRollout } from "@/lib/template-twin/rollout";
 import {
   evaluateTemplateTwinStagingQaGate,
   isTemplateTwinStagingQaRequested,
-  TemplateTwinStagingQaDisabledError,
 } from "@/lib/template-twin/staging-qa-gate";
 import {
-  assertTemplateTwinStagingQaVisitGuard,
   TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
   type TemplateTwinStagingQaRunGuardRow,
-  TemplateTwinStagingQaVisitGuardError,
 } from "@/lib/template-twin/staging-qa-visit-guard";
+import {
+  requireTemplateTwinVisitReadAuthority,
+  TemplateTwinVisitReadAuthorityError,
+} from "@/lib/template-twin/read-authority";
+import { TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE } from "@/lib/template-twin/durable-visit-exclusion";
+import { currentClinicalVisitActorWhere } from "@/lib/clinical-visit-authority";
+import { lockAndAssertOrdinaryClinicalMutation } from "@/lib/template-twin/visit-mutation-authority";
+import {
+  requireTemplateTwinSyntheticReadAdmission,
+  type TemplateTwinSyntheticReadAdmission,
+  TemplateTwinSyntheticReadAdmissionError,
+} from "@/lib/template-twin/synthetic-read-admission";
 
 export const metadata: Metadata = { title: "Visit" };
 
@@ -170,11 +178,41 @@ export default async function VisitPage({
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  // Round 3 PR-H — A11-P1 Sentry context.
-  // PHI guard: visitId is a UUID — safe. NEVER set patient name, MRN,
-  // DOB, email, or transcript content as Sentry tags or context. The
-  // redactPhi beforeSend hook is a backstop; primary defense is
-  // never sending PHI in the first place.
+  let preReadAuthority;
+  try {
+    preReadAuthority = await requireTemplateTwinVisitReadAuthority({
+      db: prisma,
+      visitId: id,
+      actorUserId: session.user.id,
+    });
+  } catch (error) {
+    if (error instanceof TemplateTwinVisitReadAuthorityError) notFound();
+    throw error;
+  }
+  if (preReadAuthority.isTemplateTwin && !preReadAuthority.practiceId) {
+    notFound();
+  }
+  if (
+    isTemplateTwinStagingQaRequested() &&
+    !preReadAuthority.isSyntheticTemplateTwin
+  ) {
+    notFound();
+  }
+  let syntheticReadAdmission: TemplateTwinSyntheticReadAdmission | null;
+  try {
+    syntheticReadAdmission = await requireTemplateTwinSyntheticReadAdmission({
+      visitId: id,
+      actorUserId: session.user.id,
+      readDecision: preReadAuthority,
+    });
+  } catch (error) {
+    if (error instanceof TemplateTwinSyntheticReadAdmissionError) notFound();
+    throw error;
+  }
+
+  // Round 3 PR-H — A11-P1 Sentry context. Even an opaque visit UUID is
+  // PHI-linked metadata, so do not emit it until the minimal durable read
+  // authority boundary has accepted the request.
   Sentry.setTag("visitId", id);
   Sentry.setUser({ id: session.user.id });
 
@@ -187,6 +225,7 @@ export default async function VisitPage({
     id: string;
     userId: string;
     patientId: string;
+    noteTemplateId: string | null;
     patientName: string | null;
     specialty: string;
     chiefComplaint: string | null;
@@ -206,6 +245,7 @@ export default async function VisitPage({
       problemList: unknown;
     } | null;
     createdAt: Date;
+    updatedAt: Date;
     audioKey: string | null;
     audioDurationSec: number | null;
     dictationAudioKey: string | null;
@@ -235,10 +275,14 @@ export default async function VisitPage({
     emPendingChange: unknown;
     patientSummary: string | null;
     confidenceScores: unknown;
-    noteTemplate: { templateKind: string } | null;
+    noteTemplate: {
+      templateKind: string;
+      templateTwinCompiledVersion: { id: string } | null;
+    } | null;
     templateTwinFill: TemplateTwinReviewRow | null;
     templateTwinSyntheticQaRun: TemplateTwinStagingQaRunGuardRow | null;
     templateTwinSyntheticQaAdmission: { id: string } | null;
+    templateTwinProviderExecutions: Array<{ id: string }>;
   };
 
   // Round 4 critical-Rx-override fix: pull existing override rows so
@@ -254,12 +298,19 @@ export default async function VisitPage({
         practice: { select: { templateTwinEnabled: true } },
       },
     }),
-    prisma.transcribeVisit.findUnique({
-      where: { id },
+    prisma.transcribeVisit.findFirst({
+      where: {
+        id,
+        ...currentClinicalVisitActorWhere(session.user.id),
+        ...(preReadAuthority.isTemplateTwin
+          ? {}
+          : TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE),
+      },
       select: {
         id: true,
         userId: true,
         patientId: true,
+        noteTemplateId: true,
         patientName: true,
         specialty: true,
         chiefComplaint: true,
@@ -281,6 +332,7 @@ export default async function VisitPage({
           },
         },
         createdAt: true,
+        updatedAt: true,
         audioKey: true,
         audioDurationSec: true,
         dictationAudioKey: true,
@@ -308,7 +360,12 @@ export default async function VisitPage({
         emPendingChange: true,
         patientSummary: true,
         confidenceScores: true,
-        noteTemplate: { select: { templateKind: true } },
+        noteTemplate: {
+          select: {
+            templateKind: true,
+            templateTwinCompiledVersion: { select: { id: true } },
+          },
+        },
         templateTwinFill: {
           select: {
             id: true,
@@ -363,42 +420,75 @@ export default async function VisitPage({
           select: TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
         },
         templateTwinSyntheticQaAdmission: { select: { id: true } },
+        templateTwinProviderExecutions: {
+          select: { id: true },
+          take: 1,
+        },
       },
     }),
     prisma.rxWarningOverride.findMany({
-      where: { visitId: id },
+      where: {
+        visitId: id,
+        visit: {
+          is: {
+            ...currentClinicalVisitActorWhere(session.user.id),
+            ...(preReadAuthority.isTemplateTwin
+              ? {}
+              : TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE),
+          },
+        },
+      },
       select: { warningId: true },
     }),
   ])) as [UserRow | null, VisitRow | null, Array<{ warningId: string }>];
 
   if (!user) redirect("/login");
   if (!visit || visit.userId !== session.user.id) notFound();
-  let syntheticQaAuditPracticeId: string | null = null;
-  if (visit.templateTwinSyntheticQaRun || isTemplateTwinStagingQaRequested()) {
+  let readAuthority;
+  try {
+    readAuthority = await requireTemplateTwinVisitReadAuthority({
+      db: prisma,
+      visitId: id,
+      actorUserId: session.user.id,
+      ...(preReadAuthority.isTemplateTwin
+        ? {
+            expectedPracticeId: preReadAuthority.practiceId!,
+            requireTemplateTwin: true,
+          }
+        : {}),
+    });
+  } catch (error) {
+    if (error instanceof TemplateTwinVisitReadAuthorityError) notFound();
+    throw error;
+  }
+  let syntheticQaAuditPracticeId = syntheticReadAdmission?.practiceId ?? null;
+  if (syntheticReadAdmission) {
     try {
-      const doctor = await requireFreshDoctorIdentity(session.user.id);
-      syntheticQaAuditPracticeId = doctor.practiceId;
-      assertTemplateTwinStagingQaVisitGuard({
-        run: visit.templateTwinSyntheticQaRun,
-        actor: {
-          userId: session.user.id,
-          practiceId: doctor.practiceId,
-        },
-        currentRolloutToken: doctor.rolloutToken,
-      });
-    } catch (error) {
       if (
-        error instanceof AuthError ||
-        error instanceof TemplateTwinStagingQaDisabledError ||
-        error instanceof TemplateTwinStagingQaVisitGuardError
+        visit.templateTwinSyntheticQaRun?.id !== syntheticReadAdmission.runId ||
+        visit.templateTwinSyntheticQaRun.attempt !==
+          syntheticReadAdmission.attempt
       ) {
         notFound();
       }
+      syntheticReadAdmission = await requireTemplateTwinSyntheticReadAdmission({
+        visitId: id,
+        actorUserId: session.user.id,
+        readDecision: readAuthority,
+        expected: syntheticReadAdmission,
+      });
+      if (!syntheticReadAdmission) notFound();
+      syntheticQaAuditPracticeId = syntheticReadAdmission.practiceId;
+    } catch (error) {
+      if (error instanceof TemplateTwinSyntheticReadAdmissionError) notFound();
       throw error;
     }
   }
+  const currentPracticeTwinEnabled = readAuthority.isTemplateTwin
+    ? readAuthority.templateTwinEnabled === true
+    : user.practice.templateTwinEnabled;
   const serializedTemplateTwinReview = evaluateTemplateTwinRollout({
-    practiceEnabled: user.practice.templateTwinEnabled,
+    practiceEnabled: currentPracticeTwinEnabled,
   }).allowed
     ? serializeTemplateTwinReview(visit.templateTwinFill)
     : null;
@@ -432,13 +522,23 @@ export default async function VisitPage({
     targetType: "TranscribeVisit",
     metadata: { source: "rsc:/visits/[id]", status: visit.status },
   };
-  if (syntheticQaVisit) {
-    if (!syntheticQaAuditPracticeId) notFound();
-    await logRequiredAudit({
-      ...viewAudit,
-      userId: session.user.id,
-      practiceId: syntheticQaAuditPracticeId,
-    });
+  if (readAuthority.isTemplateTwin) {
+    const currentPracticeId =
+      syntheticQaAuditPracticeId ?? readAuthority.practiceId;
+    if (!currentPracticeId) notFound();
+    try {
+      await logRequiredAudit({
+        ...viewAudit,
+        userId: session.user.id,
+        practiceId: currentPracticeId,
+        templateTwinReadAuthority: {
+          expectedPracticeId: currentPracticeId,
+        },
+      });
+    } catch (error) {
+      if (error instanceof TemplateTwinVisitReadAuthorityError) notFound();
+      throw error;
+    }
   } else {
     void logAudit(viewAudit);
   }
@@ -452,6 +552,33 @@ export default async function VisitPage({
     visit.patient?.name ?? visit.patientName ?? "Patient";
   const statusLabel = visitStatusLabel(visit.status, visit.needsReview);
   const statusPillCls = visitStatusPillClass(visit.status, visit.needsReview);
+
+  if (syntheticReadAdmission) {
+    try {
+      const finalReadAuthority = await requireTemplateTwinVisitReadAuthority({
+        db: prisma,
+        visitId: id,
+        actorUserId: session.user.id,
+        expectedPracticeId: syntheticReadAdmission.practiceId,
+        requireTemplateTwin: true,
+      });
+      const finalAdmission = await requireTemplateTwinSyntheticReadAdmission({
+        visitId: id,
+        actorUserId: session.user.id,
+        readDecision: finalReadAuthority,
+        expected: syntheticReadAdmission,
+      });
+      if (!finalAdmission) notFound();
+    } catch (error) {
+      if (
+        error instanceof TemplateTwinVisitReadAuthorityError ||
+        error instanceof TemplateTwinSyntheticReadAdmissionError
+      ) {
+        notFound();
+      }
+      throw error;
+    }
+  }
 
   return (
     <AppFrame>
@@ -628,6 +755,9 @@ export default async function VisitPage({
         )}
         <VisitBody
           visitId={visit.id}
+          visitUpdatedAt={visit.updatedAt}
+          patientId={visit.patientId}
+          noteTemplateId={visit.noteTemplateId}
           doctorEmail={user.email}
           doctorName={user.name}
           specialty={specialtyLabel(visit.specialty)}
@@ -679,6 +809,9 @@ export default async function VisitPage({
 
 interface VisitBodyProps {
   visitId: string;
+  visitUpdatedAt: Date;
+  patientId: string;
+  noteTemplateId: string | null;
   doctorEmail: string;
   /** Batch H — display name of the signer (i.e., the visit owner who
    *  is the same person as the authed user per the ownership guard).
@@ -748,6 +881,28 @@ interface VisitBodyProps {
     problemList: unknown;
   } | null;
   createdAt: Date;
+}
+
+async function assertOrdinaryEmProviderFence(input: {
+  visitId: string;
+  actorUserId: string;
+  visitUpdatedAt: Date;
+  patientId: string;
+  noteTemplateId: string | null;
+}): Promise<void> {
+  await prisma.$transaction(
+    async (tx: Prisma.TransactionClient) => {
+      await lockAndAssertOrdinaryClinicalMutation({
+        tx,
+        visitId: input.visitId,
+        actorUserId: input.actorUserId,
+        admittedVisitUpdatedAt: input.visitUpdatedAt,
+        admittedPatientId: input.patientId,
+        admittedNoteTemplateId: input.noteTemplateId,
+      });
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+  );
 }
 
 async function VisitBody(props: VisitBodyProps) {
@@ -893,10 +1048,18 @@ async function VisitBody(props: VisitBodyProps) {
   // produced the bounded mocked facts used by Template Twin; an on-read E/M
   // score could otherwise fall through to a live judge when the cache is
   // cold. The staging review does not need a billing recommendation.
-  if (!emNotApplicable && !syntheticQaMode) {
+  if (!emNotApplicable && !syntheticQaMode && session?.user?.id) {
     try {
       initialEmScore = await runProviderBackedEmForOrdinaryVisit(
         props.templateTwinProvenance,
+        () =>
+          assertOrdinaryEmProviderFence({
+            visitId: props.visitId,
+            actorUserId: session.user.id,
+            visitUpdatedAt: props.visitUpdatedAt,
+            patientId: props.patientId,
+            noteTemplateId: props.noteTemplateId,
+          }),
         async () => {
           const { computeEmScore } = await import("@/lib/em-coding/score");
           const { engineToUiScore } =

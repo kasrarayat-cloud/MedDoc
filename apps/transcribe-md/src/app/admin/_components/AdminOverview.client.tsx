@@ -17,7 +17,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { signOut } from 'next-auth/react';
+import { toast } from 'sonner';
 import {
   Database,
   Server,
@@ -47,6 +47,7 @@ import type {
 } from '../_types';
 import AdminNav from './AdminNav.client';
 import { cls, summarizeHipaaFindings } from '../_lib/admin-format';
+import { signOutAction } from '@/actions/session';
 
 // ---------------------------------------------------------------------------
 // Top-level component
@@ -217,6 +218,7 @@ function DashboardHeader({
  *  Hand-rolled instead of pulling in a popover primitive — consistent
  *  with the rest of the admin surface (no Radix / no headlessui). */
 function UserMenu({ userEmail }: { userEmail: string }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -243,11 +245,20 @@ function UserMenu({ userEmail }: { userEmail: string }) {
     if (signingOut) return;
     setSigningOut(true);
     try {
-      // signOut from next-auth/react clears the JWT cookie + redirects.
-      // callbackUrl is host-relative on purpose: an admin signing out
-      // from admin.quillmd.com should land on admin.quillmd.com/login,
-      // not on app.quillmd.com (cookies are host-only).
-      await signOut({ callbackUrl: '/login', redirect: true });
+      const result = await signOutAction();
+      if (!result.ok) {
+        toast.error('Sign-out was not completed', {
+          description: result.message,
+        });
+        return;
+      }
+      // Host-relative navigation preserves the admin host-only boundary.
+      router.push('/login');
+      router.refresh();
+    } catch {
+      toast.error('Sign-out was not completed', {
+        description: 'Please check your connection and try again.',
+      });
     } finally {
       setSigningOut(false);
     }

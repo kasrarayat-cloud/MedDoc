@@ -3,12 +3,16 @@ import "server-only";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 
+import { TEMPLATE_TWIN_ADMIN_CONTROL_SERVICE_ROLE } from "./admin-app-service";
+
+export { TEMPLATE_TWIN_ADMIN_CONTROL_SERVICE_ROLE } from "./admin-app-service";
+
 const globalForReleaseControl = globalThis as unknown as {
   templateTwinReleaseControlPrisma?: PrismaClient;
 };
 
 export const TEMPLATE_TWIN_RELEASE_CONTROL_SERVICE_ROLE =
-  "template-twin-admin-control" as const;
+  TEMPLATE_TWIN_ADMIN_CONTROL_SERVICE_ROLE;
 
 export function templateTwinReleaseControlProcessEnabled(
   env: Readonly<Record<string, string | undefined>> = process.env,

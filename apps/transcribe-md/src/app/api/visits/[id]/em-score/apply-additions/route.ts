@@ -26,12 +26,18 @@ import { computeEmScore } from "@/lib/em-coding/score";
 import { engineToUiScore } from "@/lib/em-coding/to-ui-score";
 import { extractIcdRows, extractRxRows } from "@/lib/em-coding/displayed-level";
 import { mergeAdditions } from "@/lib/em-coding/merge-additions";
-import { hasTemplateTwinProvenance } from "@/lib/em-coding/template-twin-boundary";
+import { currentClinicalVisitActorWhere } from "@/lib/clinical-visit-authority";
+import { hasDurableTemplateTwinVisitProvenance } from "@/lib/template-twin/durable-visit-provenance";
+import { TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE } from "@/lib/template-twin/durable-visit-exclusion";
 import { logAudit } from "@/lib/audit";
 import { invalidateTemplateTwinAfterSoapEdit } from "@/lib/template-twin/soap-binding";
 import { isSameOriginTemplateTwinMutation } from "@/lib/template-twin/request-security";
-import { pinTemplateTwinStagingQaMutation } from "@/lib/template-twin/staging-qa-mutation";
-import { TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT } from "@/lib/template-twin/staging-qa-visit-guard";
+import {
+  hasDurableTemplateTwinClinicalMutationProvenance,
+  loadTemplateTwinClinicalMutationAdmissionTarget,
+  lockAndAssertOrdinaryClinicalMutation,
+  TemplateTwinClinicalMutationAuthorizationError,
+} from "@/lib/template-twin/visit-mutation-authority";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -67,6 +73,33 @@ export const POST = withApiHandler<{ id: string }>(
       });
     }
 
+    // Provider-backed additions are intentionally unsupported for every
+    // durable Twin state. Classify from PHI-minimal immutable lineage before
+    // reading the additions body or selecting SOAP/coding state.
+    const authorityTarget =
+      await loadTemplateTwinClinicalMutationAdmissionTarget({
+        visitId,
+        actorUserId: userId,
+      });
+    if (!authorityTarget || authorityTarget.userId !== userId) {
+      return apiError("not found", 404);
+    }
+    if (authorityTarget.templateTwinSyntheticQaRun) {
+      return apiError("not found", 404, {
+        code: "TEMPLATE_TWIN_STAGING_QA_MUTATION_UNAVAILABLE",
+      });
+    }
+    if (hasDurableTemplateTwinClinicalMutationProvenance(authorityTarget)) {
+      return apiError(
+        "Provider-backed E/M additions are unavailable for Template Twin visits.",
+        409,
+        {
+          code: "TEMPLATE_TWIN_PROVIDER_BACKED_EM_UNAVAILABLE",
+          retry: false,
+        },
+      );
+    }
+
     let body: unknown;
     try {
       body = await req.json();
@@ -82,7 +115,12 @@ export const POST = withApiHandler<{ id: string }>(
 
     // Ownership + status gates. 404 on mismatch — never leak existence.
     const visit = await prisma.transcribeVisit.findUnique({
-      where: { id: visitId },
+      where: {
+        id: visitId,
+        ...currentClinicalVisitActorWhere(userId),
+        updatedAt: authorityTarget.updatedAt,
+        ...TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE,
+      },
       select: {
         id: true,
         userId: true,
@@ -90,6 +128,7 @@ export const POST = withApiHandler<{ id: string }>(
         deletedAt: true,
         archivedAt: true,
         signedAt: true,
+        updatedAt: true,
         soapDraft: true,
         soapFinal: true,
         soapVersion: true,
@@ -98,15 +137,30 @@ export const POST = withApiHandler<{ id: string }>(
         inputMode: true,
         icdCodes: true,
         rxDrafts: true,
-        templateTwinSyntheticQaRun: {
-          select: TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
+        patient: { select: { externalId: true } },
+        templateTwinSyntheticQaRun: { select: { id: true } },
+        noteTemplate: {
+          select: {
+            templateKind: true,
+            templateTwinCompiledVersion: { select: { id: true } },
+          },
         },
-        noteTemplate: { select: { templateKind: true } },
         templateTwinFill: { select: { id: true } },
         templateTwinSyntheticQaAdmission: { select: { id: true } },
+        templateTwinProviderExecutions: { select: { id: true }, take: 1 },
       },
     });
     if (!visit || visit.userId !== userId) return apiError("not found", 404);
+    if (hasDurableTemplateTwinVisitProvenance(visit)) {
+      return apiError(
+        "Provider-backed E/M additions are unavailable for Template Twin visits.",
+        409,
+        {
+          code: "TEMPLATE_TWIN_PROVIDER_BACKED_EM_UNAVAILABLE",
+          retry: false,
+        },
+      );
+    }
     if (visit.deletedAt !== null || visit.archivedAt !== null) {
       return apiError("Visit is no longer active.", 400, {
         code: "VISIT_NOT_ACTIVE",
@@ -139,38 +193,36 @@ export const POST = withApiHandler<{ id: string }>(
       });
     }
 
-    try {
-      const stagingQaClaim = await pinTemplateTwinStagingQaMutation({
-        visitId,
-        userId,
-        run: visit.templateTwinSyntheticQaRun,
-      });
-      // This generic E/M surface may invoke a model-backed scoring path.
-      // Marked staging visits must use only the deterministic guided Twin
-      // workflow, so fail closed before scoring rather than risk provider
-      // escape or create a second clinical mutation path.
-      if (stagingQaClaim) {
-        return apiError("not found", 404, {
-          code: "TEMPLATE_TWIN_STAGING_QA_MUTATION_UNAVAILABLE",
-        });
-      }
-    } catch {
-      return apiError("not found", 404);
-    }
-    if (hasTemplateTwinProvenance(visit)) {
-      return apiError(
-        "Provider-backed E/M additions are unavailable for Template Twin visits.",
-        409,
-        {
-          code: "TEMPLATE_TWIN_PROVIDER_BACKED_EM_UNAVAILABLE",
-          retry: false,
-        },
-      );
-    }
-
     // Merge the additions into the SOAP. Pure function — testable
     // without the DB.
     const merge = mergeAdditions(currentSoap, parsed.data.additions);
+
+    // Re-establish the ordinary-only decision in a short linearizable claim
+    // immediately before model/cache egress. The admission projection alone
+    // cannot prevent a durable relation from appearing after its read.
+    try {
+      await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        await lockAndAssertOrdinaryClinicalMutation({
+          tx,
+          visitId,
+          actorUserId: userId,
+          admittedVisitUpdatedAt: authorityTarget.updatedAt,
+          admittedPatientId: authorityTarget.patientId,
+          admittedNoteTemplateId: authorityTarget.noteTemplateId,
+        });
+      });
+    } catch (error) {
+      if (error instanceof TemplateTwinClinicalMutationAuthorizationError) {
+        return apiError(
+          "The visit changed. Reload before applying additions.",
+          409,
+          {
+            code: "TEMPLATE_TWIN_MUTATION_CONFLICT",
+          },
+        );
+      }
+      throw error;
+    }
 
     // Re-score against the new SOAP using the LLM MDM judge path.
     //
@@ -203,6 +255,33 @@ export const POST = withApiHandler<{ id: string }>(
       priorSoap: currentSoap,
     });
 
+    // The provider result is usable only while the same ordinary-visit claim
+    // still holds. Re-check on return, then repeat once more inside the final
+    // write transaction to close both concurrency windows.
+    try {
+      await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        await lockAndAssertOrdinaryClinicalMutation({
+          tx,
+          visitId,
+          actorUserId: userId,
+          admittedVisitUpdatedAt: authorityTarget.updatedAt,
+          admittedPatientId: authorityTarget.patientId,
+          admittedNoteTemplateId: authorityTarget.noteTemplateId,
+        });
+      });
+    } catch (error) {
+      if (error instanceof TemplateTwinClinicalMutationAuthorizationError) {
+        return apiError(
+          "The visit changed. Reload before applying additions.",
+          409,
+          {
+            code: "TEMPLATE_TWIN_MUTATION_CONFLICT",
+          },
+        );
+      }
+      throw error;
+    }
+
     const durationSec =
       visit.inputMode === "voice_dictation"
         ? (visit.dictationDurationSec ?? 0)
@@ -215,26 +294,56 @@ export const POST = withApiHandler<{ id: string }>(
     // The pre-merge soapFinal is preserved as soapL6Original (set by
     // L6 polish; not touched here so the original-AI-output snapshot
     // remains immutable for the doctor-edit-pattern capture path).
-    const updated = await prisma.$transaction(
-      async (tx: Prisma.TransactionClient) => {
-        const saved = await tx.transcribeVisit.updateMany({
-          where: {
-            id: visitId,
-            status: TranscribeVisitStatus.READY,
-            soapVersion: visit.soapVersion,
+    let updated: { count: number };
+    try {
+      updated = await prisma.$transaction(
+        async (tx: Prisma.TransactionClient) => {
+          await lockAndAssertOrdinaryClinicalMutation({
+            tx,
+            visitId,
+            actorUserId: userId,
+            admittedVisitUpdatedAt: authorityTarget.updatedAt,
+            admittedPatientId: authorityTarget.patientId,
+            admittedNoteTemplateId: authorityTarget.noteTemplateId,
+          });
+          const saved = await tx.transcribeVisit.updateMany({
+            where: {
+              id: visitId,
+              userId,
+              status: TranscribeVisitStatus.READY,
+              deletedAt: null,
+              archivedAt: null,
+              signedAt: null,
+              updatedAt: visit.updatedAt,
+              soapDraft: visit.soapDraft,
+              soapFinal: visit.soapFinal,
+              soapVersion: visit.soapVersion,
+              ...TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE,
+            },
+            data: {
+              soapDraft: merge.newSoap,
+              soapFinal: merge.newSoap,
+              soapVersion: { increment: 1 },
+            },
+          });
+          if (saved.count === 1) {
+            await invalidateTemplateTwinAfterSoapEdit(tx, visitId);
+          }
+          return saved;
+        },
+      );
+    } catch (error) {
+      if (error instanceof TemplateTwinClinicalMutationAuthorizationError) {
+        return apiError(
+          "The visit changed. Reload before applying additions.",
+          409,
+          {
+            code: "TEMPLATE_TWIN_MUTATION_CONFLICT",
           },
-          data: {
-            soapDraft: merge.newSoap,
-            soapFinal: merge.newSoap,
-            soapVersion: { increment: 1 },
-          },
-        });
-        if (saved.count === 1) {
-          await invalidateTemplateTwinAfterSoapEdit(tx, visitId);
-        }
-        return saved;
-      },
-    );
+        );
+      }
+      throw error;
+    }
     if (updated.count !== 1) {
       return apiError(
         "The note changed in another tab. Reload before applying additions.",

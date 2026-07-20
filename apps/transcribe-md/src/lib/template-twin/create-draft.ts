@@ -41,6 +41,7 @@ import {
   runWithTemplateTwinProviderOwnershipContext,
   type TemplateTwinProviderOwnershipReceipt,
 } from './provider-ownership';
+import { lockAndAssertCurrentTemplateTwinPhysician } from './final-claim-authority';
 
 export class TemplateTwinDraftError extends Error {
   readonly code:
@@ -360,6 +361,14 @@ export async function createTemplateTwinDraft(
           `${finalRollout.code}: Template Twin availability changed while the template was being compiled. Upload it again.`,
         );
       }
+      // Rollout holds the global then practice locks (and proves the practice is
+      // active). Lock the exact actor only after that canonical lock order so a
+      // concurrent suspension, demotion, product revocation, or practice
+      // transfer cannot race this final source/configuration claim.
+      const currentActor = await lockAndAssertCurrentTemplateTwinPhysician({
+        tx,
+        actor: input.actor,
+      });
       await lockAndAssertTemplateTwinStaticAssetBindingsCurrent({
         practiceId: input.actor.practiceId,
         bindings: privacyScanEvidence.staticAssetApprovalBindings ?? [],
@@ -409,7 +418,7 @@ export async function createTemplateTwinDraft(
       await admitTemplateTwinQuarantine({
         tx,
         receipt: quarantine,
-        actor: input.actor,
+        actor: { ...input.actor, userEmail: currentActor.email },
         sourceArtifactId,
         metadataEvidence: minimizedSource.evidence,
       });
@@ -444,7 +453,7 @@ export async function createTemplateTwinDraft(
         eventKey: `template-twin:source-uploaded:${sourceArtifactId}:${stored.sha256}`,
         practiceId: input.actor.practiceId,
         actorId: input.actor.userId,
-        actorEmailSnapshot: input.actor.userEmail,
+        actorEmailSnapshot: currentActor.email,
         action: 'TEMPLATE_TWIN_SOURCE_UPLOADED',
         targetType: 'TemplateTwinSourceArtifact',
         targetId: sourceArtifactId,
@@ -479,7 +488,7 @@ export async function createTemplateTwinDraft(
           eventKey: `template-twin:static-asset-used:${sourceArtifactId}:${binding.decisionId}`,
           practiceId: input.actor.practiceId,
           actorId: input.actor.userId,
-          actorEmailSnapshot: input.actor.userEmail,
+          actorEmailSnapshot: currentActor.email,
           action: 'TEMPLATE_TWIN_STATIC_ASSET_USED',
           targetType: 'TemplateTwinStaticAsset',
           targetId: binding.assetId,
@@ -497,7 +506,7 @@ export async function createTemplateTwinDraft(
         eventKey: `template-twin:compiled:${compiledVersionId}:${ir.structureSha256}`,
         practiceId: input.actor.practiceId,
         actorId: input.actor.userId,
-        actorEmailSnapshot: input.actor.userEmail,
+        actorEmailSnapshot: currentActor.email,
         action: 'TEMPLATE_TWIN_COMPILED',
         targetType: 'TemplateTwinCompiledVersion',
         targetId: compiledVersionId,

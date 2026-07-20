@@ -91,8 +91,7 @@ function run(
           noteTemplateVersion: merged.noteTemplateVersion,
           visitId: merged.visitId,
           attempt: merged.attempt,
-          pinnedGlobalRolloutGeneration:
-            merged.pinnedGlobalRolloutGeneration,
+          pinnedGlobalRolloutGeneration: merged.pinnedGlobalRolloutGeneration,
           pinnedPracticeRolloutGeneration:
             merged.pinnedPracticeRolloutGeneration,
         },
@@ -118,6 +117,16 @@ function lockedClient(input: {
   };
   databaseNow?: Date;
   beforeRunLock?: () => Promise<void>;
+  actor?: Partial<{
+    id: string;
+    practiceId: string;
+    role: string;
+    isActive: boolean;
+    deactivatedAt: Date | null;
+    suspendedAt: Date | null;
+    softDeletedAt: Date | null;
+    products: string[];
+  }>;
 }) {
   const admissionPhase =
     input.lockedRun.status === "PROCESSING" ||
@@ -150,6 +159,11 @@ function lockedClient(input: {
           practiceId: "practice-synthetic-1",
           role: "DOCTOR",
           isActive: true,
+          deactivatedAt: null,
+          suspendedAt: null,
+          softDeletedAt: null,
+          products: ["TRANSCRIBE_MD"],
+          ...input.actor,
         },
       ];
     }
@@ -410,6 +424,7 @@ describe("synthetic QA visit admission", () => {
         tx: client,
         currentRolloutToken: token,
         claim: {
+          admissionId: "admission-synthetic-1",
           runId: "run-synthetic-1",
           visitId: "visit-synthetic-1",
           practiceId: "practice-synthetic-1",
@@ -423,6 +438,75 @@ describe("synthetic QA visit admission", () => {
         },
       }),
     ).resolves.toBeUndefined();
+    const actorLock = client.queryRaw.mock.calls
+      .map(([query]) =>
+        String((query as { strings?: readonly string[] }).strings?.join(" ")),
+      )
+      .find((sql) => sql.includes('FROM "users"'));
+    expect(actorLock).toContain('"deactivatedAt"');
+    expect(actorLock).toContain('"suspendedAt"');
+    expect(actorLock).toContain('"softDeletedAt"');
+    expect(actorLock).toContain('"products"');
+    expect(actorLock).toContain("FOR UPDATE");
+  });
+
+  it.each([
+    ["inactive state", { isActive: false }],
+    ["identity replacement", { id: "doctor-synthetic-foreign" }],
+    ["role change", { role: "PRACTICE_ADMIN" }],
+    ["suspension", { suspendedAt: new Date("2026-07-17T00:00:00Z") }],
+    ["deactivation", { deactivatedAt: new Date("2026-07-17T00:00:00Z") }],
+    ["soft deletion", { softDeletedAt: new Date("2026-07-17T00:00:00Z") }],
+    ["product removal", { products: ["MEDDOC_PRO"] }],
+    ["practice transfer", { practiceId: "practice-synthetic-foreign" }],
+  ])(
+    "rejects actor %s after admission but before a state-advancing final lock",
+    async (_label, actorDrift) => {
+      const client = lockedClient({
+        lockedRun: lockedRun(),
+        actor: actorDrift,
+      });
+      await expect(
+        lockAndAssertTemplateTwinStagingQaOperation({
+          tx: client,
+          runId: "run-synthetic-1",
+          expectedAdmissionId: "admission-synthetic-1",
+          expectedAttempt: 2,
+          actor: {
+            userId: "doctor-synthetic-1",
+            practiceId: "practice-synthetic-1",
+          },
+          currentRolloutToken: token,
+        }),
+      ).rejects.toMatchObject({
+        code: "TEMPLATE_TWIN_STAGING_QA_NOT_FOUND",
+      });
+    },
+  );
+
+  it("rejects a run whose durable admission differs from the worker capability", async () => {
+    const client = lockedClient({ lockedRun: lockedRun() });
+    await expect(
+      lockAndAssertTemplateTwinStagingQaAttempt({
+        tx: client,
+        currentRolloutToken: token,
+        claim: {
+          admissionId: "admission-replaced-1",
+          runId: "run-synthetic-1",
+          visitId: "visit-synthetic-1",
+          practiceId: "practice-synthetic-1",
+          doctorId: "doctor-synthetic-1",
+          fixtureVersion: "template-twin-staging-safe-docx/1.0.0",
+          requestSha256: "a".repeat(64),
+          attempt: 2,
+          workerClaimId: "11111111-1111-4111-8111-111111111111",
+          pinnedGlobalGeneration: BigInt(7),
+          pinnedPracticeGeneration: BigInt(11),
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "TEMPLATE_TWIN_STAGING_QA_ADMISSION_STALE",
+    });
   });
 
   it("rejects a terminal claim whose worker lease expired at database time", async () => {

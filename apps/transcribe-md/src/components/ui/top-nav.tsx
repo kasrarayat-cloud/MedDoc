@@ -18,9 +18,10 @@
 // values render the single Linear V1 chrome.
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { signOut } from 'next-auth/react';
+import { usePathname, useRouter } from 'next/navigation';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import { toast } from 'sonner';
+import { signOutAction } from '@/actions/session';
 import { Ic } from './icon';
 import { Avatar } from './avatar';
 
@@ -100,7 +101,26 @@ export function TopNav({
   userEmail,
 }: TopNavProps) {
   const pathname = usePathname() ?? '/';
+  const router = useRouter();
   const crumbs = deriveCrumbs(pathname);
+
+  const handleSignOut = async () => {
+    try {
+      const result = await signOutAction();
+      if (!result.ok) {
+        toast.error('Sign-out was not completed', {
+          description: result.message,
+        });
+        return;
+      }
+      router.push('/login');
+      router.refresh();
+    } catch {
+      toast.error('Sign-out was not completed', {
+        description: 'Please check your connection and try again.',
+      });
+    }
+  };
 
   return (
     <header className="qm-lin-chrome">
@@ -295,7 +315,7 @@ export function TopNav({
             <DropdownMenu.Item asChild>
               <button
                 type="button"
-                onClick={() => signOut({ callbackUrl: '/login' })}
+                onClick={handleSignOut}
                 style={{
                   display: 'flex',
                   alignItems: 'center',

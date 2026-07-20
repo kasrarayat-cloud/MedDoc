@@ -113,6 +113,11 @@ export interface TranscribeArgs extends AiLogContext {
    *  patient audio to OpenAI (which needs a countersigned BAA). The
    *  worker resolves this from `TRANSCRIBE_MD_WHISPER_FALLBACK_ENABLED`. */
   allowCrossProviderFallback?: boolean;
+  /** Server-owned authorization fence invoked immediately before every real
+   * Deepgram or fallback-provider attempt, including internal retries. */
+  beforeProviderAttempt?: () => Promise<void>;
+  /** Matching fence invoked after every real attempt before retry or return. */
+  afterProviderAttempt?: () => Promise<void>;
 }
 
 /** Unified result shape regardless of which provider succeeded. */
@@ -218,6 +223,8 @@ export async function transcribe(
       visitId: args.visitId,
       userId: args.userId,
       purpose: args.purpose,
+      beforeProviderAttempt: args.beforeProviderAttempt,
+      afterProviderAttempt: args.afterProviderAttempt,
       audio: dgAudio,
       mimeType: args.mimeType,
       language: args.language,
@@ -280,6 +287,8 @@ export async function transcribe(
     visitId: args.visitId,
     userId: args.userId,
     purpose: args.purpose,
+    beforeProviderAttempt: args.beforeProviderAttempt,
+    afterProviderAttempt: args.afterProviderAttempt,
     audio: whisperAudio,
     mimeType: args.mimeType,
     language: args.language,

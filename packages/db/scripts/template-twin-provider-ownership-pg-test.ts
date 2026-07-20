@@ -9,18 +9,56 @@ import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Prisma, PrismaClient } from "@prisma/client";
 
+import {
+  TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION,
+  TEMPLATE_TWIN_SYNTHETIC_QA_MODE,
+  TEMPLATE_TWIN_SYNTHETIC_QA_RESOURCE_ATTESTATION,
+  TEMPLATE_TWIN_SYNTHETIC_QA_TRANSCRIPT,
+} from "../../../packages/ai/src/synthetic-qa-context";
+import { runWithTemplateTwinSyntheticQaProviderContext } from "../../../packages/ai/src/synthetic-qa-context";
 import { canonicalSha256 } from "../../../apps/transcribe-md/src/lib/template-twin/canonical";
+import { templateTwinVisitProviderSubjectSha256 } from "../../../apps/transcribe-md/src/lib/template-twin/live-provider-ownership";
+import type {
+  ProviderOwnershipDbClient,
+  TemplateTwinProviderOwnershipContext,
+} from "../../../apps/transcribe-md/src/lib/template-twin/provider-ownership";
 import { assertNonProdDatabase } from "../src/db-guard";
 
 const databaseUrl =
-  process.env.TEMPLATE_TWIN_PROVIDER_OWNERSHIP_TEST_DATABASE_URL ??
+  process.env.TEMPLATE_TWIN_PROVIDER_OWNERSHIP_TEST_DATABASE_URL ||
   process.env.DATABASE_URL;
 if (!databaseUrl)
   throw new Error("Disposable provider-ownership test URL is required.");
 assertNonProdDatabase(databaseUrl);
+const verifiedDatabaseUrl = databaseUrl;
+const databaseTargetEnvironment = [
+  "DATABASE_URL",
+  "TEMPLATE_TWIN_RELEASE_CONTROL_TEST_DATABASE_URL",
+  "TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL",
+] as const;
+const providerDatabaseTargetEnvironment = [
+  "TEMPLATE_TWIN_PROVIDER_OWNERSHIP_TEST_DATABASE_URL",
+  ...databaseTargetEnvironment,
+] as const;
+const divergentDatabaseTarget = providerDatabaseTargetEnvironment.find(
+  (name) => {
+    const value = process.env[name];
+    return value && value !== verifiedDatabaseUrl;
+  },
+);
+if (divergentDatabaseTarget) {
+  throw new Error(
+    `${divergentDatabaseTarget} must exactly match the guarded disposable provider-ownership test URL.`,
+  );
+}
+process.env.TEMPLATE_TWIN_PROVIDER_OWNERSHIP_TEST_DATABASE_URL =
+  verifiedDatabaseUrl;
+for (const name of databaseTargetEnvironment) {
+  process.env[name] = verifiedDatabaseUrl;
+}
 
 function client(applicationName: string, assumedRole?: string): PrismaClient {
-  const url = new URL(databaseUrl!);
+  const url = new URL(verifiedDatabaseUrl);
   url.searchParams.set("application_name", applicationName);
   if (assumedRole) url.searchParams.set("options", `-c role=${assumedRole}`);
   return new PrismaClient({
@@ -643,14 +681,17 @@ async function createSyntheticAdmission(
   return id;
 }
 
-async function proveSyntheticStagingUploadAndPromotionFence(): Promise<{
+interface SyntheticStagingLineage {
+  readonly uploadAdmissionId: string;
   readonly sourceArtifactId: string;
   readonly compiledVersionId: string;
   readonly noteTemplateId: string;
   readonly sourceLineageId: string;
   readonly sourceLineageVersion: number;
   readonly sourceSha256: string;
-}> {
+}
+
+async function proveSyntheticStagingUploadAndPromotionFence(): Promise<SyntheticStagingLineage> {
   const rawSha256 =
     "9c917a831e661d5fdcf92a6e13cbc542adda9fb86a2292cf34689fc333c375d4";
   const rawSizeBytes = 4686;
@@ -687,6 +728,12 @@ async function proveSyntheticStagingUploadAndPromotionFence(): Promise<{
   const quarantineId = `quarantine-staging-positive-${suffix}`;
   const quarantineKey = `practices/${practiceA}/template-twin/quarantine/${quarantineId}.docx`;
   const sourceKey = `practices/${practiceA}/template-twin/sources/${scan.sourceArtifactId}.docx`;
+  const outputKey =
+    `practices/${practiceA}/template-twin/outputs/` +
+    `synthetic-current-${suffix}.docx`;
+  const outputVersionId = "synthetic-current-output-version";
+  const outputEtag = "synthetic-current-output-etag";
+  const outputSha256 = hash("synthetic-current-output");
   const scannedAt = new Date("2026-07-19T17:20:00.000Z");
   const malwareCore = {
     profileVersion: "template-twin-clamd-instream-v1",
@@ -829,8 +876,32 @@ async function proveSyntheticStagingUploadAndPromotionFence(): Promise<{
         staticContentSha256: hash("synthetic-static"),
         certificationStatus: "NEEDS_CONFIRMATION",
         blockingUnsupportedCount: 0,
+        latestSyntheticTestManifest: {},
+        latestTestMappingsSha256: hash("synthetic-current-mappings"),
+        latestTestOutputObjectKey: outputKey,
+        latestTestOutputVersionId: outputVersionId,
+        latestTestOutputEtag: outputEtag,
+        latestTestOutputSha256: outputSha256,
+        latestTestStaticContentSha256: hash("synthetic-static"),
+        latestTestRoundTrip: {},
+        latestTestVerifiedAt: new Date(),
         providerOwnershipEvidence: receipt as Prisma.InputJsonValue,
         providerOwnershipSha256: canonicalSha256(receipt),
+      },
+    });
+    await tx.templateTwinObjectLedger.create({
+      data: {
+        id: `ledger-synthetic-current-output-${suffix}`,
+        practiceId: practiceA,
+        objectKey: outputKey,
+        objectVersionId: outputVersionId,
+        objectEtag: outputEtag,
+        sha256: outputSha256,
+        sizeBytes: rawSizeBytes,
+        kind: "output",
+        state: "CLAIMED",
+        claimType: "compiled_test_output",
+        claimId: scan.compiledVersionId,
       },
     });
   });
@@ -871,7 +942,26 @@ async function proveSyntheticStagingUploadAndPromotionFence(): Promise<{
       }),
     /TEMPLATE_TWIN_ACTIVATION_LIVE_PROVIDER_RECEIPT_REQUIRED/u,
   );
+  const linkedAt = new Date();
+  await observer.templateTwinSyntheticQaAdmission.update({
+    where: { id: admissionId },
+    data: {
+      phase: "SOURCE_VERIFIED",
+      sourceArtifactId: scan.sourceArtifactId,
+      sourceVerifiedAt: linkedAt,
+    },
+  });
+  await observer.templateTwinSyntheticQaAdmission.update({
+    where: { id: admissionId },
+    data: {
+      phase: "TEMPLATE_LINKED",
+      noteTemplateId: scan.noteTemplateId,
+      noteTemplateVersion: 1,
+      templateLinkedAt: linkedAt,
+    },
+  });
   return {
+    uploadAdmissionId: admissionId,
     sourceArtifactId: scan.sourceArtifactId,
     compiledVersionId: scan.compiledVersionId,
     noteTemplateId: scan.noteTemplateId,
@@ -1360,6 +1450,517 @@ async function proveCrossPhysicianTemplateExecutionRejected(input: {
   );
 }
 
+interface SyntheticCurrentAuthorityFixture extends SyntheticStagingLineage {
+  readonly certificationId: string;
+  readonly admissionId: string;
+  readonly patientId: string;
+  readonly visitId: string;
+  readonly runId: string;
+  readonly requestSha256: string;
+  readonly payloadSha256: string;
+  readonly workerClaimId: string;
+}
+
+function configureSyntheticProviderProofEnvironment(): void {
+  Object.assign(process.env, {
+    DATABASE_URL: databaseUrl,
+    TEMPLATE_TWIN_STAGING_QA_ENABLED: "true",
+    TEMPLATE_TWIN_STAGING_QA_ENVIRONMENT: "test",
+    TEMPLATE_TWIN_STAGING_QA_RESOURCE_ATTESTATION:
+      TEMPLATE_TWIN_SYNTHETIC_QA_RESOURCE_ATTESTATION,
+    TEMPLATE_TWIN_STORAGE_PROFILE: "qa",
+    REDIS_URL: "redis://127.0.0.1/15",
+    MINIO_ENDPOINT: "127.0.0.1",
+    MINIO_USE_SSL: "false",
+    TRANSCRIBE_MD_MINIO_BUCKET: "meddoc-template-twin-qa-audio",
+    TRANSCRIBE_MD_TEMPLATE_BUCKET: "meddoc-template-twin-qa-template",
+    MOCK_AI_CALLS: "true",
+    MOCK_TEMPLATE_TWIN_E2E: "true",
+    APP_ENV: "test",
+    APPLICATION_ENV: "test",
+    DEPLOYMENT_ENV: "test",
+    ENVIRONMENT: "test",
+    SENTRY_ENVIRONMENT: "test",
+    NEXT_PUBLIC_SENTRY_ENVIRONMENT: "test",
+  });
+}
+
+async function createSyntheticCurrentAuthorityFixture(
+  lineage: SyntheticStagingLineage,
+): Promise<SyntheticCurrentAuthorityFixture> {
+  const certificationId = `certification-synthetic-current-${suffix}`;
+  const approvedMappingsSha256 = hash("synthetic-current-mappings");
+  await observer.templateTwinCompiledVersion.update({
+    where: { id: lineage.compiledVersionId },
+    data: { certificationStatus: "CERTIFIED" },
+  });
+  await observer.templateTwinCertification.create({
+    data: {
+      id: certificationId,
+      compiledVersionId: lineage.compiledVersionId,
+      certifiedById: actorA,
+      providerAuthorizationMode: "SYNTHETIC_QA",
+      providerAuthorizationAdmissionId: lineage.uploadAdmissionId,
+      compiledStructureSha256: hash("synthetic-structure"),
+      approvedMappingsSha256,
+      syntheticTestManifest: {},
+      testOutputObjectKey:
+        `practices/${practiceA}/template-twin/outputs/` +
+        `synthetic-current-${suffix}.docx`,
+      testOutputVersionId: "synthetic-current-output-version",
+      testOutputEtag: "synthetic-current-output-etag",
+      testOutputSha256: hash("synthetic-current-output"),
+    },
+  });
+  await observer.templateTwinSyntheticQaAdmission.update({
+    where: { id: lineage.uploadAdmissionId },
+    data: {
+      phase: "CERTIFIED",
+      certificationId,
+      mappingSha256: approvedMappingsSha256,
+      certifiedAt: new Date(),
+    },
+  });
+  await observer.noteTemplate.update({
+    where: { id: lineage.noteTemplateId },
+    data: { status: "active" },
+  });
+
+  const admissionId = `synthetic-current-admission-${suffix}`;
+  const patientId = `synthetic-current-patient-${suffix}`;
+  const visitId = `synthetic-current-visit-${suffix}`;
+  const runId = `synthetic-current-run-${suffix}`;
+  const requestSha256 = hash(`synthetic-current-request:${suffix}`);
+  const payloadSha256 = hash(`synthetic-current-payload:${suffix}`);
+  const workerClaimId = randomUUID();
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + 15 * 60 * 1_000);
+
+  await observer.templateTwinSyntheticQaAdmission.create({
+    data: {
+      id: admissionId,
+      practiceId: practiceA,
+      actorId: actorA,
+      parentAdmissionId: lineage.uploadAdmissionId,
+      sourceSha256: lineage.sourceSha256,
+      sourceSizeBytes: 4686,
+      fixtureVersion: TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION,
+      providerMode: "SYNTHETIC_TYPED",
+      purpose: "VISIT",
+      requestSha256,
+      payloadSha256,
+      pinnedGlobalRolloutGeneration: 1,
+      pinnedPracticeRolloutGeneration: 1,
+      sourceArtifactId: lineage.sourceArtifactId,
+      noteTemplateId: lineage.noteTemplateId,
+      noteTemplateVersion: 1,
+      certificationId,
+      mappingSha256: approvedMappingsSha256,
+      expiresAt,
+    },
+  });
+  await observer.templateTwinSyntheticQaAdmission.update({
+    where: { id: admissionId },
+    data: { phase: "SOURCE_VERIFIED", sourceVerifiedAt: now },
+  });
+  await observer.templateTwinSyntheticQaAdmission.update({
+    where: { id: admissionId },
+    data: { phase: "TEMPLATE_LINKED", templateLinkedAt: now },
+  });
+  await observer.templateTwinSyntheticQaAdmission.update({
+    where: { id: admissionId },
+    data: { phase: "CERTIFIED", certifiedAt: now },
+  });
+  await observer.transcribeMdPatient.create({
+    data: {
+      id: patientId,
+      practiceId: practiceA,
+      name: "Template Twin Synthetic QA",
+      externalId: "SYNTHETIC-QA-ONLY",
+      allergies: [],
+    },
+  });
+  await observer.transcribeVisit.create({
+    data: {
+      id: visitId,
+      userId: actorA,
+      patientId,
+      patientName: "Template Twin Synthetic QA",
+      specialty: "synthetic-template-review",
+      chiefComplaint: "Synthetic Template Twin QA only",
+      inputMode: "text_notes",
+      rawTextInput: TEMPLATE_TWIN_SYNTHETIC_QA_TRANSCRIPT,
+      status: "QUEUED",
+      noteTemplateId: lineage.noteTemplateId,
+      noteTemplateVersion: 1,
+    },
+  });
+  await observer.templateTwinSyntheticQaAdmission.update({
+    where: { id: admissionId },
+    data: { phase: "VISIT_LINKED", visitId, visitLinkedAt: now },
+  });
+  await observer.templateTwinSyntheticQaRun.create({
+    data: {
+      id: runId,
+      admissionId,
+      practiceId: practiceA,
+      doctorId: actorA,
+      visitId,
+      noteTemplateId: lineage.noteTemplateId,
+      noteTemplateVersion: 1,
+      requestSha256,
+      payloadSha256,
+      mode: "typed",
+      fixtureVersion: TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION,
+      pinnedGlobalRolloutGeneration: 1,
+      pinnedPracticeRolloutGeneration: 1,
+      status: "PENDING_ENQUEUE",
+      attempt: 1,
+    },
+  });
+  await observer.templateTwinSyntheticQaRun.update({
+    where: { id: runId },
+    data: { status: "ENQUEUED", enqueuedAt: now },
+  });
+  await observer.templateTwinSyntheticQaRun.update({
+    where: { id: runId },
+    data: {
+      status: "PROCESSING",
+      workerClaimId,
+      workerClaimedAt: now,
+      workerHeartbeatAt: now,
+      workerLeaseExpiresAt: new Date(now.getTime() + 5 * 60 * 1_000),
+      workerDeliveryCount: 1,
+    },
+  });
+  await observer.templateTwinSyntheticQaAdmission.update({
+    where: { id: admissionId },
+    data: { phase: "PROCESSING" },
+  });
+  return {
+    ...lineage,
+    certificationId,
+    admissionId,
+    patientId,
+    visitId,
+    runId,
+    requestSha256,
+    payloadSha256,
+    workerClaimId,
+  };
+}
+
+function syntheticCurrentAuthorityContext(
+  fixture: SyntheticCurrentAuthorityFixture,
+  overrides: Partial<
+    Pick<
+      TemplateTwinProviderOwnershipContext,
+      | "sourceArtifactId"
+      | "compiledVersionId"
+      | "noteTemplateId"
+      | "noteTemplateVersion"
+      | "sourceLineageId"
+      | "sourceLineageVersion"
+      | "sourceSha256"
+    >
+  > = {},
+): TemplateTwinProviderOwnershipContext {
+  const identity = {
+    sourceArtifactId: overrides.sourceArtifactId ?? fixture.sourceArtifactId,
+    compiledVersionId: overrides.compiledVersionId ?? fixture.compiledVersionId,
+    noteTemplateId: overrides.noteTemplateId ?? fixture.noteTemplateId,
+    noteTemplateVersion: overrides.noteTemplateVersion ?? 1,
+    sourceLineageId: overrides.sourceLineageId ?? fixture.sourceLineageId,
+    sourceLineageVersion:
+      overrides.sourceLineageVersion ?? fixture.sourceLineageVersion,
+    sourceSha256: overrides.sourceSha256 ?? fixture.sourceSha256,
+  };
+  return {
+    practiceId: practiceA,
+    actorUserId: actorA,
+    visitId: fixture.visitId,
+    visitInputMode: "text_notes",
+    scope: "VISIT_PIPELINE",
+    logicalAttempt: 1,
+    subjectId: fixture.visitId,
+    subjectSha256: templateTwinVisitProviderSubjectSha256({
+      practiceId: practiceA,
+      actorUserId: actorA,
+      visitId: fixture.visitId,
+      noteTemplateId: identity.noteTemplateId!,
+      noteTemplateVersion: identity.noteTemplateVersion!,
+      compiledVersionId: identity.compiledVersionId!,
+      sourceArtifactId: identity.sourceArtifactId!,
+      sourceLineageId: identity.sourceLineageId!,
+      sourceLineageVersion: identity.sourceLineageVersion!,
+      sourceSha256: identity.sourceSha256!,
+      logicalAttempt: 1,
+      visitInputMode: "text_notes",
+    }),
+    ...identity,
+    syntheticAdmissionId: fixture.admissionId,
+    rolloutToken: {
+      practiceId: practiceA,
+      globalGeneration: 1n,
+      practiceGeneration: 1n,
+    },
+  };
+}
+
+function syntheticProviderContextInput(
+  fixture: SyntheticCurrentAuthorityFixture,
+  overrides: Partial<{
+    admissionId: string;
+    runId: string;
+    visitId: string;
+    practiceId: string;
+    requestSha256: string;
+    attempt: number;
+    workerClaimId: string;
+    pinnedGlobalGeneration: bigint;
+    pinnedPracticeGeneration: bigint;
+  }> = {},
+) {
+  return {
+    mode: TEMPLATE_TWIN_SYNTHETIC_QA_MODE,
+    fixtureVersion: TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION,
+    admissionId: fixture.admissionId,
+    runId: fixture.runId,
+    visitId: fixture.visitId,
+    practiceId: practiceA,
+    requestSha256: fixture.requestSha256,
+    attempt: 1,
+    workerClaimId: fixture.workerClaimId,
+    pinnedGlobalGeneration: 1n,
+    pinnedPracticeGeneration: 1n,
+    evidenceText: TEMPLATE_TWIN_SYNTHETIC_QA_TRANSCRIPT,
+    ...overrides,
+  };
+}
+
+async function syntheticCurrentAuthority(input: {
+  readonly fixture: SyntheticCurrentAuthorityFixture;
+  readonly providerOverrides?: Parameters<
+    typeof syntheticProviderContextInput
+  >[1];
+  readonly authorityOverrides?: Parameters<
+    typeof syntheticCurrentAuthorityContext
+  >[1];
+}): Promise<boolean> {
+  return runWithTemplateTwinSyntheticQaProviderContext(
+    syntheticProviderContextInput(input.fixture, input.providerOverrides),
+    () =>
+      observer.$transaction((tx) =>
+        currentProviderAuthority({
+          tx,
+          context: syntheticCurrentAuthorityContext(
+            input.fixture,
+            input.authorityOverrides,
+          ),
+          mode: "SYNTHETIC_QA",
+        }),
+      ),
+    process.env,
+  );
+}
+
+async function expectSyntheticAuthorityDriftDenied(input: {
+  readonly fixture: SyntheticCurrentAuthorityFixture;
+  readonly mutate: (tx: Prisma.TransactionClient) => Promise<unknown>;
+}): Promise<void> {
+  await runWithTemplateTwinSyntheticQaProviderContext(
+    syntheticProviderContextInput(input.fixture),
+    async () => {
+      const expectedRollback = new Error(
+        "expected-synthetic-authority-probe-rollback",
+      );
+      try {
+        await observer.$transaction(async (tx) => {
+          await tx.$executeRawUnsafe(
+            "SET LOCAL session_replication_role = replica",
+          );
+          await input.mutate(tx);
+          assert.equal(
+            await currentProviderAuthority({
+              tx,
+              context: syntheticCurrentAuthorityContext(input.fixture),
+              mode: "SYNTHETIC_QA",
+            }),
+            false,
+          );
+          throw expectedRollback;
+        });
+      } catch (error) {
+        if (error !== expectedRollback) throw error;
+      }
+    },
+    process.env,
+  );
+}
+
+async function proveSyntheticCurrentProviderAuthority(
+  lineage: SyntheticStagingLineage,
+): Promise<void> {
+  configureSyntheticProviderProofEnvironment();
+  const fixture = await createSyntheticCurrentAuthorityFixture(lineage);
+  assert.equal(await syntheticCurrentAuthority({ fixture }), true);
+  assert.equal(
+    await syntheticCurrentAuthority({
+      fixture,
+      providerOverrides: { runId: `wrong-run-${suffix}` },
+    }),
+    false,
+  );
+  assert.equal(
+    await syntheticCurrentAuthority({
+      fixture,
+      providerOverrides: { workerClaimId: randomUUID() },
+    }),
+    false,
+  );
+  assert.equal(
+    await syntheticCurrentAuthority({
+      fixture,
+      providerOverrides: { attempt: 2 },
+    }),
+    false,
+  );
+  assert.equal(
+    await syntheticCurrentAuthority({
+      fixture,
+      providerOverrides: { pinnedGlobalGeneration: 2n },
+    }),
+    false,
+  );
+  assert.equal(
+    await syntheticCurrentAuthority({
+      fixture,
+      authorityOverrides: { sourceArtifactId: `wrong-source-${suffix}` },
+    }),
+    false,
+  );
+  assert.equal(
+    await syntheticCurrentAuthority({
+      fixture,
+      authorityOverrides: { noteTemplateId: `wrong-template-${suffix}` },
+    }),
+    false,
+  );
+
+  await expectSyntheticAuthorityDriftDenied({
+    fixture,
+    mutate: (tx) =>
+      tx.$executeRaw(Prisma.sql`
+        UPDATE "transcribe_md_patients"
+        SET "mrn" = 'synthetic-invalid-mrn'
+        WHERE "id" = ${fixture.patientId}
+      `),
+  });
+  await expectSyntheticAuthorityDriftDenied({
+    fixture,
+    mutate: (tx) =>
+      tx.$executeRaw(Prisma.sql`
+        UPDATE "template_twin_synthetic_qa_runs"
+        SET "workerClaimedAt" = clock_timestamp() - interval '3 seconds',
+          "workerHeartbeatAt" = clock_timestamp() - interval '2 seconds',
+          "workerLeaseExpiresAt" = clock_timestamp() - interval '1 second'
+        WHERE "id" = ${fixture.runId}
+      `),
+  });
+  await expectSyntheticAuthorityDriftDenied({
+    fixture,
+    mutate: (tx) =>
+      tx.$executeRaw(Prisma.sql`
+        UPDATE "template_twin_synthetic_qa_runs"
+        SET "status" = 'ENQUEUED', "workerClaimId" = NULL,
+          "workerClaimedAt" = NULL, "workerHeartbeatAt" = NULL,
+          "workerLeaseExpiresAt" = NULL, "workerDeliveryCount" = 0
+        WHERE "id" = ${fixture.runId}
+      `),
+  });
+  await expectSyntheticAuthorityDriftDenied({
+    fixture,
+    mutate: (tx) =>
+      tx.$executeRaw(Prisma.sql`
+        UPDATE "template_twin_synthetic_qa_runs"
+        SET "doctorId" = ${actorA2}
+        WHERE "id" = ${fixture.runId}
+      `),
+  });
+  await expectSyntheticAuthorityDriftDenied({
+    fixture,
+    mutate: (tx) =>
+      tx.$executeRaw(Prisma.sql`
+        UPDATE "template_twin_synthetic_qa_runs"
+        SET "pinnedGlobalRolloutGeneration" = 2
+        WHERE "id" = ${fixture.runId}
+      `),
+  });
+  await expectSyntheticAuthorityDriftDenied({
+    fixture,
+    mutate: (tx) =>
+      tx.$executeRaw(Prisma.sql`
+        UPDATE "template_twin_synthetic_qa_runs"
+        SET "noteTemplateVersion" = 2
+        WHERE "id" = ${fixture.runId}
+      `),
+  });
+  await expectSyntheticAuthorityDriftDenied({
+    fixture,
+    mutate: (tx) =>
+      tx.$executeRaw(Prisma.sql`
+        UPDATE "template_twin_synthetic_qa_admissions"
+        SET "phase" = 'VISIT_LINKED'
+        WHERE "id" = ${fixture.admissionId}
+      `),
+  });
+  await expectSyntheticAuthorityDriftDenied({
+    fixture,
+    mutate: (tx) =>
+      tx.$executeRaw(Prisma.sql`
+        UPDATE "template_twin_synthetic_qa_admissions"
+        SET "phase" = 'REVOKED', "revokedAt" = clock_timestamp()
+        WHERE "id" = ${fixture.uploadAdmissionId}
+      `),
+  });
+  await expectSyntheticAuthorityDriftDenied({
+    fixture,
+    mutate: (tx) =>
+      tx.$executeRaw(Prisma.sql`
+        UPDATE "template_twin_synthetic_qa_admissions"
+        SET "expiresAt" = clock_timestamp() - interval '1 second'
+        WHERE "id" = ${fixture.uploadAdmissionId}
+      `),
+  });
+  await expectSyntheticAuthorityDriftDenied({
+    fixture,
+    mutate: (tx) =>
+      tx.$executeRaw(Prisma.sql`
+        UPDATE "template_twin_certifications"
+        SET "certifiedById" = ${actorA2}
+        WHERE "id" = ${fixture.certificationId}
+      `),
+  });
+  await expectSyntheticAuthorityDriftDenied({
+    fixture,
+    mutate: (tx) =>
+      tx.$executeRaw(Prisma.sql`
+        UPDATE "template_twin_source_artifacts"
+        SET "practiceId" = ${practiceB}
+        WHERE "id" = ${fixture.sourceArtifactId}
+      `),
+  });
+  await expectSyntheticAuthorityDriftDenied({
+    fixture,
+    mutate: (tx) =>
+      tx.$executeRaw(Prisma.sql`
+        UPDATE "note_templates"
+        SET "templateKind" = 'structured'
+        WHERE "id" = ${fixture.noteTemplateId}
+      `),
+  });
+}
+
 async function proveRevokedAuthorityTerminalization(): Promise<void> {
   const reservedFailure = executionIdentity({
     marker: "authority-revoked-before-provider",
@@ -1733,6 +2334,7 @@ async function createLiveReleaseFixture(): Promise<LiveReleaseFixture> {
         products: ["SUPER_ADMIN"],
         practiceId: administratorPracticeId,
         mfaEnabled: true,
+        mfaSecret: "SYNTHETIC-PROVIDER-OWNERSHIP-RELEASE-MFA",
         mfaVerifiedAt: new Date(),
       },
     });
@@ -2030,6 +2632,7 @@ async function createLiveReleaseFixture(): Promise<LiveReleaseFixture> {
 
 interface LiveProviderVisitFixture {
   readonly release: LiveReleaseFixture;
+  readonly patientId: string;
   readonly visitId: string;
   readonly visitInputMode: "audio_upload";
   readonly sourceArtifactId: string;
@@ -2285,6 +2888,7 @@ async function createLiveProviderVisitFixture(
   });
   return {
     release,
+    patientId,
     visitId,
     visitInputMode: "audio_upload",
     sourceArtifactId: scan.sourceArtifactId,
@@ -2294,6 +2898,225 @@ async function createLiveProviderVisitFixture(
     sourceLineageVersion: 1,
     sourceSha256: scan.sourceSha256,
   };
+}
+
+function liveCurrentAuthorityContext(
+  fixture: LiveProviderVisitFixture,
+  overrides: Partial<
+    Pick<
+      TemplateTwinProviderOwnershipContext,
+      | "visitId"
+      | "visitInputMode"
+      | "sourceArtifactId"
+      | "compiledVersionId"
+      | "noteTemplateId"
+      | "noteTemplateVersion"
+      | "sourceLineageId"
+      | "sourceLineageVersion"
+      | "sourceSha256"
+    >
+  > = {},
+): TemplateTwinProviderOwnershipContext {
+  const identity = {
+    visitId: overrides.visitId ?? fixture.visitId,
+    visitInputMode: overrides.visitInputMode ?? fixture.visitInputMode,
+    sourceArtifactId: overrides.sourceArtifactId ?? fixture.sourceArtifactId,
+    compiledVersionId: overrides.compiledVersionId ?? fixture.compiledVersionId,
+    noteTemplateId: overrides.noteTemplateId ?? fixture.noteTemplateId,
+    noteTemplateVersion: overrides.noteTemplateVersion ?? 1,
+    sourceLineageId: overrides.sourceLineageId ?? fixture.sourceLineageId,
+    sourceLineageVersion:
+      overrides.sourceLineageVersion ?? fixture.sourceLineageVersion,
+    sourceSha256: overrides.sourceSha256 ?? fixture.sourceSha256,
+  };
+  const context: TemplateTwinProviderOwnershipContext = {
+    practiceId: practiceA,
+    actorUserId: actorA,
+    visitId: identity.visitId,
+    visitInputMode: identity.visitInputMode,
+    scope: "VISIT_PIPELINE",
+    logicalAttempt: 1,
+    subjectId: identity.visitId!,
+    subjectSha256: templateTwinVisitProviderSubjectSha256({
+      practiceId: practiceA,
+      actorUserId: actorA,
+      visitId: identity.visitId!,
+      noteTemplateId: identity.noteTemplateId!,
+      noteTemplateVersion: identity.noteTemplateVersion!,
+      compiledVersionId: identity.compiledVersionId!,
+      sourceArtifactId: identity.sourceArtifactId!,
+      sourceLineageId: identity.sourceLineageId!,
+      sourceLineageVersion: identity.sourceLineageVersion!,
+      sourceSha256: identity.sourceSha256!,
+      logicalAttempt: 1,
+      visitInputMode: identity.visitInputMode!,
+    }),
+    ...identity,
+    syntheticAdmissionId: null,
+    rolloutToken: {
+      practiceId: practiceA,
+      globalGeneration: fixture.release.authority.pinnedGlobalRolloutGeneration,
+      practiceGeneration:
+        fixture.release.authority.pinnedPracticeRolloutGeneration,
+      releaseId: fixture.release.authority.releaseId,
+      releaseIdentitySha256: fixture.release.authority.releaseIdentitySha256,
+      runtimeManifestSha256: fixture.release.authority.runtimeManifestSha256,
+      runtimeInstanceId: fixture.release.authority.runtimeInstanceId,
+    },
+  };
+  return context;
+}
+
+async function currentProviderAuthority(input: {
+  readonly tx: Prisma.TransactionClient;
+  readonly context: TemplateTwinProviderOwnershipContext;
+  readonly mode: "LIVE" | "SYNTHETIC_QA";
+}): Promise<boolean> {
+  const { isTemplateTwinProviderAuthorityCurrent } =
+    await import("../../../apps/transcribe-md/src/lib/template-twin/provider-ownership");
+  return isTemplateTwinProviderAuthorityCurrent({
+    tx: input.tx as unknown as ProviderOwnershipDbClient,
+    context: input.context,
+    mode: input.mode,
+  });
+}
+
+async function expectLiveAuthorityDriftDenied(input: {
+  readonly context: TemplateTwinProviderOwnershipContext;
+  readonly mutate: (tx: Prisma.TransactionClient) => Promise<unknown>;
+}): Promise<void> {
+  const expectedRollback = new Error("expected-live-authority-probe-rollback");
+  try {
+    await observer.$transaction(async (tx) => {
+      // Simulate durable corruption/drift without committing it. The proof is
+      // intentionally owner-only, transaction-local, and always rolled back.
+      await tx.$executeRawUnsafe(
+        "SET LOCAL session_replication_role = replica",
+      );
+      await input.mutate(tx);
+      assert.equal(
+        await currentProviderAuthority({
+          tx,
+          context: input.context,
+          mode: "LIVE",
+        }),
+        false,
+      );
+      throw expectedRollback;
+    });
+  } catch (error) {
+    if (error !== expectedRollback) throw error;
+  }
+}
+
+async function proveLiveCurrentProviderAuthority(
+  fixture: LiveProviderVisitFixture,
+): Promise<void> {
+  const context = liveCurrentAuthorityContext(fixture);
+  assert.equal(
+    await observer.$transaction((tx) =>
+      currentProviderAuthority({ tx, context, mode: "LIVE" }),
+    ),
+    true,
+  );
+
+  assert.equal(
+    await observer.$transaction((tx) =>
+      currentProviderAuthority({
+        tx,
+        context: liveCurrentAuthorityContext(fixture, {
+          sourceArtifactId: `wrong-source-${suffix}`,
+        }),
+        mode: "LIVE",
+      }),
+    ),
+    false,
+  );
+  assert.equal(
+    await observer.$transaction((tx) =>
+      currentProviderAuthority({
+        tx,
+        context: liveCurrentAuthorityContext(fixture, {
+          noteTemplateId: `wrong-template-${suffix}`,
+        }),
+        mode: "LIVE",
+      }),
+    ),
+    false,
+  );
+
+  await expectLiveAuthorityDriftDenied({
+    context,
+    mutate: (tx) =>
+      tx.$executeRaw(Prisma.sql`
+        UPDATE "transcribe_md_patients"
+        SET "practiceId" = ${practiceB}
+        WHERE "id" = ${fixture.patientId}
+      `),
+  });
+  await expectLiveAuthorityDriftDenied({
+    context,
+    mutate: (tx) =>
+      tx.$executeRaw(Prisma.sql`
+        UPDATE "transcribe_md_patients"
+        SET "deletedAt" = clock_timestamp()
+        WHERE "id" = ${fixture.patientId}
+      `),
+  });
+  await expectLiveAuthorityDriftDenied({
+    context,
+    mutate: (tx) =>
+      tx.$executeRaw(Prisma.sql`
+        UPDATE "transcribe_md_patients"
+        SET "externalId" = 'SYNTHETIC-QA-ONLY'
+        WHERE "id" = ${fixture.patientId}
+      `),
+  });
+  await expectLiveAuthorityDriftDenied({
+    context,
+    mutate: (tx) =>
+      tx.$executeRaw(Prisma.sql`
+        UPDATE "note_templates"
+        SET "doctorId" = ${actorA2}
+        WHERE "id" = ${fixture.noteTemplateId}
+      `),
+  });
+  await expectLiveAuthorityDriftDenied({
+    context,
+    mutate: (tx) =>
+      tx.$executeRaw(Prisma.sql`
+        UPDATE "note_templates"
+        SET "templateKind" = 'structured'
+        WHERE "id" = ${fixture.noteTemplateId}
+      `),
+  });
+  await expectLiveAuthorityDriftDenied({
+    context,
+    mutate: (tx) =>
+      tx.$executeRaw(Prisma.sql`
+        UPDATE "template_twin_compiled_versions"
+        SET "certificationStatus" = 'NEEDS_CONFIRMATION'
+        WHERE "id" = ${fixture.compiledVersionId}
+      `),
+  });
+  await expectLiveAuthorityDriftDenied({
+    context,
+    mutate: (tx) =>
+      tx.$executeRaw(Prisma.sql`
+        UPDATE "template_twin_source_artifacts"
+        SET "practiceId" = ${practiceB}
+        WHERE "id" = ${fixture.sourceArtifactId}
+      `),
+  });
+  await expectLiveAuthorityDriftDenied({
+    context,
+    mutate: (tx) =>
+      tx.$executeRaw(Prisma.sql`
+        UPDATE "template_twin_certifications"
+        SET "certifiedById" = ${actorA2}
+        WHERE "compiledVersionId" = ${fixture.compiledVersionId}
+      `),
+  });
 }
 
 async function insertLivePlanDecision(input: {
@@ -2402,6 +3225,7 @@ async function insertLivePlanDecision(input: {
 async function proveLivePlanDecisionAuthority(): Promise<void> {
   const release = await createLiveReleaseFixture();
   const fixture = await createLiveProviderVisitFixture(release);
+  await proveLiveCurrentProviderAuthority(fixture);
   const positiveId = await insertLivePlanDecision({
     fixture,
     operation: "L1B_TRANSCRIBE",
@@ -2631,7 +3455,66 @@ async function proveLivePlanDecisionAuthority(): Promise<void> {
   );
 }
 
+async function revokeInterruptedSyntheticReleaseFixture(): Promise<void> {
+  process.env.DATABASE_URL = databaseUrl;
+  process.env.TEMPLATE_TWIN_RELEASE_CONTROL_TEST_DATABASE_URL = databaseUrl;
+  process.env.TEMPLATE_TWIN_KILL_SWITCH = "false";
+  process.env.TEMPLATE_TWIN_RUNTIME_MODE = "standard";
+  const candidates = await observer.$queryRaw<
+    Array<{
+      id: string;
+      releaseIdentitySha256: string;
+      generation: bigint;
+      createdById: string;
+    }>
+  >(Prisma.sql`
+    SELECT "id"::TEXT, "releaseIdentitySha256", "generation", "createdById"
+    FROM "template_twin_release_candidates"
+    WHERE "status" = 'ROLLING_OUT'
+      AND "createdById" LIKE 'synthetic-provider-release-creator-%'
+    ORDER BY "createdAt"
+  `);
+  if (candidates.length === 0) return;
+  assert.equal(
+    candidates.length,
+    1,
+    "only one interrupted synthetic provider release may own global rollout",
+  );
+  const candidate = candidates[0]!;
+  const session = await observer.userSession.findFirst({
+    where: {
+      userId: candidate.createdById,
+      expiresAt: { gt: new Date() },
+    },
+    select: { sessionToken: true },
+    orderBy: { createdAt: "desc" },
+  });
+  assert(session, "interrupted synthetic release actor session is required");
+  const [global] = await observer.$queryRaw<Array<{ generation: bigint }>>(
+    Prisma.sql`
+      SELECT "generation"
+      FROM "template_twin_rollout_controls"
+      WHERE "id" = 'global'
+    `,
+  );
+  assert(global);
+  const releaseControl =
+    await import("../../../apps/transcribe-md/src/lib/template-twin/release-control");
+  await releaseControl.revokeTemplateTwinRelease({
+    actor: {
+      userId: candidate.createdById,
+      sessionId: session.sessionToken,
+    },
+    releaseId: candidate.id,
+    expectedReleaseGeneration: candidate.generation.toString(),
+    expectedGlobalGeneration: global.generation.toString(),
+    reasonCode: "SYNTHETIC_PROVIDER_PROOF_INTERRUPTED",
+    confirmation: `REVOKE ${candidate.releaseIdentitySha256.slice(0, 12)}`,
+  });
+}
+
 async function main(): Promise<void> {
+  await revokeInterruptedSyntheticReleaseFixture();
   await observer.practice.createMany({
     data: [
       { id: practiceA, name: "Synthetic Provider Practice A", slug: practiceA },
@@ -2914,6 +3797,7 @@ async function main(): Promise<void> {
   const stagingLineage = await proveSyntheticStagingUploadAndPromotionFence();
   await provePreCertificationVoiceAuthority(stagingLineage);
   await proveCrossPhysicianTemplateExecutionRejected(stagingLineage);
+  await proveSyntheticCurrentProviderAuthority(stagingLineage);
   await proveRevokedAuthorityTerminalization();
   await proveLivePlanDecisionAuthority();
 
@@ -3088,6 +3972,15 @@ async function main(): Promise<void> {
       preCertificationVoiceWrongAudioAttemptAndOperationRejected: true,
       preCertificationVoiceRevokedChildAndParentRejected: true,
       preCertificationVoiceVisitPatientAndAdmissionImmutable: true,
+      liveCurrentAuthorityAccepted: true,
+      livePatientTenantLifecycleAndReservedIdentityRejected: true,
+      liveSourceTemplateCompilationAndCertificationDriftRejected: true,
+      syntheticCurrentAuthorityAccepted: true,
+      syntheticReservedPatientPhiDriftRejected: true,
+      syntheticRunAdmissionAttemptClaimAndGenerationDriftRejected: true,
+      syntheticExpiredDatabaseLeaseRejected: true,
+      syntheticParentRevocationAndExpiryRejected: true,
+      syntheticSourceTemplateCompilationAndCertificationDriftRejected: true,
       result: "passed",
     })}\n`,
   );

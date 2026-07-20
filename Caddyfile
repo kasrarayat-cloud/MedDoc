@@ -21,6 +21,92 @@
 #   3. Then flip back to MODE A
 # ============================================================================
 
+# ─── Runtime request-error log policy ──────────────────────────────────────────
+# Access-log encoders are configured per site below. The default runtime
+# logger can also emit a request URI when an upstream fails, so it repeats the
+# same query filter instead of becoming a credential-bearing error-log bypass.
+{
+    # Public TLS terminates at the host nginx and reaches this container only
+    # through its loopback-bound :8443 listener. The published-port hop enters
+    # through the deterministic quillmd_ingress gateway; no application peer
+    # is trusted as a proxy. Resolve the client chain from right to left so a
+    # caller-supplied X-Forwarded-For value cannot become auth authority.
+    servers {
+        trusted_proxies static 172.31.252.1/32
+        client_ip_headers X-Forwarded-For X-Real-IP
+        trusted_proxies_strict
+    }
+
+    log default {
+        format filter {
+            request>headers>Referer delete
+            request>uri query {
+                replace token REDACTED
+                replace code REDACTED
+                replace state REDACTED
+                replace id_token REDACTED
+                replace access_token REDACTED
+                replace refresh_token REDACTED
+                replace secret REDACTED
+                replace password REDACTED
+                replace otp REDACTED
+                replace api_key REDACTED
+                replace apiKey REDACTED
+                replace auth REDACTED
+                replace authorization REDACTED
+                replace credential REDACTED
+                replace csrf REDACTED
+                replace session REDACTED
+                replace session_token REDACTED
+                replace verification_token REDACTED
+                replace reset_token REDACTED
+                replace mfa_code REDACTED
+                replace totp REDACTED
+                replace recovery_code REDACTED
+            }
+            wrap json
+        }
+    }
+}
+
+# ─── Shared access-log policy ───────────────────────────────────────────────────
+# Preserve path and parameter names for operations while replacing credential-
+# like query values before encoding. Caddy already redacts sensitive headers;
+# this filter closes the equivalent URL-query gap for every site logger.
+(redacted_access_log) {
+    log {
+        output stdout
+        format filter {
+            request>headers>Referer delete
+            request>uri query {
+                replace token REDACTED
+                replace code REDACTED
+                replace state REDACTED
+                replace id_token REDACTED
+                replace access_token REDACTED
+                replace refresh_token REDACTED
+                replace secret REDACTED
+                replace password REDACTED
+                replace otp REDACTED
+                replace api_key REDACTED
+                replace apiKey REDACTED
+                replace auth REDACTED
+                replace authorization REDACTED
+                replace credential REDACTED
+                replace csrf REDACTED
+                replace session REDACTED
+                replace session_token REDACTED
+                replace verification_token REDACTED
+                replace reset_token REDACTED
+                replace mfa_code REDACTED
+                replace totp REDACTED
+                replace recovery_code REDACTED
+            }
+            wrap console
+        }
+    }
+}
+
 # ─── Shared header snippet — MODE A (plaintext-safe) ──────────────────────
 # Kept so the rollback commented block below still parses. No active block
 # currently imports it.
@@ -54,6 +140,14 @@
     }
 }
 
+# Bearer-link pages use their query credential only to build a same-origin
+# POST body. They never need to emit the credential-bearing GET URL as a
+# Referer. Import this on every host that exposes account recovery.
+(auth_bearer_link_headers) {
+    @authBearerLink path /reset-password /api/auth/verify-email /api/auth/confirm-email
+    header @authBearerLink Referrer-Policy "no-referrer"
+}
+
 # ==========================================================================
 # MODE B — active
 # ==========================================================================
@@ -63,29 +157,24 @@
 # content regardless of whether they type the `www.` prefix. Caddy auto-
 # issues separate certs for each hostname.
 quillmd.com, www.quillmd.com {
-    log {
-        output stdout
-        format console
-    }
+    import redacted_access_log
 
     import security_headers_mode_b
 
     reverse_proxy marketing:3010 {
         header_up Host {host}
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
+        header_up X-Real-IP {client_ip}
+        header_up X-Forwarded-For {client_ip}
         header_up X-Forwarded-Proto {scheme}
     }
 }
 
 # ─── app.quillmd.com — TranscribeMD (pilot doctors log in here) ───────────
 app.quillmd.com {
-    log {
-        output stdout
-        format console
-    }
+    import redacted_access_log
 
     import security_headers_mode_b
+    import auth_bearer_link_headers
 
     # The physician host and platform-admin host share one Next.js process,
     # but not one authorization surface. Refuse admin pages and APIs before a
@@ -96,33 +185,23 @@ app.quillmd.com {
         respond "Not Found" 404
     }
 
-    # Temporary design-review preview. Serves /opt/meddoc-pro/_design-
-    # references/ at /_preview/*. `handle` is exclusive — these requests
-    # never hit the reverse_proxy below. Remove with the matching volume
-    # mount in docker-compose.yml when the review window closes.
-    handle /_preview/* {
-        root * /srv/_design-references
-        uri strip_prefix /_preview
-        file_server browse
-    }
-
     handle {
         reverse_proxy transcribe-md:3011 {
             header_up Host {host}
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {client_ip}
+            header_up X-Forwarded-For {client_ip}
             header_up X-Forwarded-Proto {scheme}
         }
     }
 }
 
 # ─── admin.quillmd.com — Platform admin dashboard (SUPER_ADMIN only) ──────
-# Reverse-proxies to transcribe-md (which now owns the admin code, moved
-# from meddoc-pro). The only path rewrite is `/` → `/admin` so the
-# dashboard renders at the bare host root without forcing the user to
-# type a path. Everything else (`/login`, `/api/auth/*`, `/api/admin/*`,
-# `/_next/*`) passes through unchanged — those routes already work at
-# their natural paths on the transcribe-md upstream.
+# Authentication and the exact practice-scoped static-asset workflow use the
+# route-denied `template-twin-admin-app` process. Exact release-control paths
+# use `template-twin-admin-control`. Broad legacy platform-admin pages and APIs
+# are retired at the edge; no admin-host request is routed to the physician
+# process. Caddy and each process repeat the boundary so a direct-container or
+# future proxy misroute fails closed.
 #
 # Cookie posture: host-only. A user logged in to app.quillmd.com (a
 # clinician) does NOT auto-inherit a session here — admin requires its
@@ -135,14 +214,12 @@ app.quillmd.com {
 # to HTTPS, but the HTTPS handshake will use a fallback cert (curl -k
 # tests work; browsers refuse).
 admin.quillmd.com {
-    log {
-        output stdout
-        format console
-    }
+    import redacted_access_log
 
     import security_headers_mode_b
+    import auth_bearer_link_headers
 
-    # ── Allowlist: only the routes a SUPER_ADMIN actually needs ──────
+    # ── Allowlist: platform admin plus exact practice-admin workflow ─
     # The first version of this block proxied EVERY path to the
     # transcribe-md upstream and only rewrote `/`. That meant a logged-
     # in clinician on admin.quillmd.com could navigate to /dashboard,
@@ -156,10 +233,10 @@ admin.quillmd.com {
     # /api/admin/* bucket it would 404.
     @auth path /api/auth/*
     handle @auth {
-        reverse_proxy transcribe-md:3011 {
+        reverse_proxy template-twin-admin-app:3011 {
             header_up Host {host}
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {client_ip}
+            header_up X-Forwarded-For {client_ip}
             header_up X-Forwarded-Proto {scheme}
         }
     }
@@ -167,12 +244,12 @@ admin.quillmd.com {
     # MFA recovery/enrollment is the sole physician-settings capability on the
     # admin host. A valid SUPER_ADMIN without MFA is routed here before any
     # administrative page can render.
-    @mfaApi path /api/mfa/enroll /api/mfa/verify-enrollment
+    @mfaApi path /api/mfa/enroll /api/mfa/verify-enrollment /api/mfa/recovery-codes/rotate
     handle @mfaApi {
-        reverse_proxy transcribe-md:3011 {
+        reverse_proxy template-twin-admin-app:3011 {
             header_up Host {host}
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {client_ip}
+            header_up X-Forwarded-For {client_ip}
             header_up X-Forwarded-Proto {scheme}
         }
     }
@@ -180,36 +257,64 @@ admin.quillmd.com {
     # Template Twin release mutations run in the isolated control-plane
     # process. The ordinary physician/admin application does not receive the
     # release-control database credential. Keep these exact routes ahead of
-    # the broad /api/admin/* and /admin/* handlers below.
+    # the explicit legacy-admin deny rules below.
     @templateTwinControlApi path /api/admin/template-twin/releases /api/admin/template-twin/releases/* /api/admin/template-twin/release-metrics /api/admin/template-twin/release-metrics/*
     handle @templateTwinControlApi {
         reverse_proxy template-twin-admin-control:3011 {
             header_up Host {host}
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {client_ip}
+            header_up X-Forwarded-For {client_ip}
             header_up X-Forwarded-Proto {scheme}
         }
     }
 
-    # Admin REST + SSE
-    @adminApi path /api/admin/*
-    handle @adminApi {
-        reverse_proxy transcribe-md:3011 {
+    # Practice-scoped reusable-image management uses a distinct admin cookie
+    # process with the ordinary runtime principal and provider credential. It
+    # never receives release-control authority. Keep this exact matcher after
+    # the control-plane matcher and before the legacy-admin API deny rule.
+    @templateTwinStaticAssetApi path /api/note-templates/template-twin/static-assets
+    handle @templateTwinStaticAssetApi {
+        reverse_proxy template-twin-admin-app:3011 {
             header_up Host {host}
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {client_ip}
+            header_up X-Forwarded-For {client_ip}
             header_up X-Forwarded-Proto {scheme}
         }
     }
 
-    # Next.js asset bundles + static files (icons, fonts). Without
-    # these the admin page would render unstyled.
-    @nextStatic path /_next/* /favicon.ico /favicon.svg /robots.txt /manifest.webmanifest
+    # The audited rollback fence remains an exact emergency operation on the
+    # isolated admin-app process. Its transaction re-verifies the current
+    # SUPER_ADMIN session, complete MFA, active practice, and entitlement under
+    # lock. No other legacy /api/admin route reaches this runtime principal.
+    @templateTwinRollbackApi path /api/admin/template-twin/rollback
+    handle @templateTwinRollbackApi {
+        reverse_proxy template-twin-admin-app:3011 {
+            header_up Host {host}
+            header_up X-Real-IP {client_ip}
+            header_up X-Forwarded-For {client_ip}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # The historical platform-admin API surface has not passed the isolated
+    # process and exact-head authority review. Retire it explicitly rather than
+    # falling through to the physician application. Reviewed Template Twin
+    # control endpoints above remain reachable because handles are exclusive
+    # and ordered.
+    @retiredLegacyAdminApi path /api/admin /api/admin/*
+    handle @retiredLegacyAdminApi {
+        respond "Not Found" 404
+    }
+
+    # Next.js asset bundles + static files (icons, fonts). Keep these on the
+    # same immutable admin-app image as the pages so rolling replacement cannot
+    # mix physician-build assets with admin-build HTML.
+    @nextStatic path /_next/static/* /favicon.ico /favicon.svg /robots.txt /manifest.webmanifest
     handle @nextStatic {
-        reverse_proxy transcribe-md:3011 {
+        reverse_proxy template-twin-admin-app:3011 {
             header_up Host {host}
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {client_ip}
+            header_up X-Forwarded-For {client_ip}
             header_up X-Forwarded-Proto {scheme}
         }
     }
@@ -219,20 +324,20 @@ admin.quillmd.com {
     # super-admins are provisioned out-of-band, never via self-service.
     @authPages path /login /forgot-password /reset-password /check-email
     handle @authPages {
-        reverse_proxy transcribe-md:3011 {
+        reverse_proxy template-twin-admin-app:3011 {
             header_up Host {host}
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {client_ip}
+            header_up X-Forwarded-For {client_ip}
             header_up X-Forwarded-Proto {scheme}
         }
     }
 
     @mfaPage path /settings/security/mfa
     handle @mfaPage {
-        reverse_proxy transcribe-md:3011 {
+        reverse_proxy template-twin-admin-app:3011 {
             header_up Host {host}
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {client_ip}
+            header_up X-Forwarded-For {client_ip}
             header_up X-Forwarded-Proto {scheme}
         }
     }
@@ -241,33 +346,29 @@ admin.quillmd.com {
     handle @templateTwinControlPage {
         reverse_proxy template-twin-admin-control:3011 {
             header_up Host {host}
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {client_ip}
+            header_up X-Forwarded-For {client_ip}
             header_up X-Forwarded-Proto {scheme}
         }
     }
 
-    # Admin pages — `/admin` itself + everything under it
-    @adminPath path /admin /admin/*
-    handle @adminPath {
-        reverse_proxy transcribe-md:3011 {
+    @templateTwinStaticAssetPage path /settings/note-format/static-assets
+    handle @templateTwinStaticAssetPage {
+        reverse_proxy template-twin-admin-app:3011 {
             header_up Host {host}
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {client_ip}
+            header_up X-Forwarded-For {client_ip}
             header_up X-Forwarded-Proto {scheme}
         }
     }
 
-    # Root → /admin (the bare host serves the dashboard).
-    @root path /
-    handle @root {
-        rewrite * /admin
-        reverse_proxy transcribe-md:3011 {
-            header_up Host {host}
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
-            header_up X-Forwarded-Proto {scheme}
-        }
+    # The corresponding legacy pages, including bare `/admin`, are retired.
+    # The reviewed workbench matcher above remains the only public `/admin/*`
+    # page. The bare host root now reaches the catch-all 404 instead of being
+    # rewritten into the retired dashboard.
+    @retiredLegacyAdminPage path /admin /admin/*
+    handle @retiredLegacyAdminPage {
+        respond "Not Found" 404
     }
 
     # Anything else (e.g. /dashboard, /patients, /visits, /settings,
@@ -282,10 +383,7 @@ admin.quillmd.com {
 
 # ─── pro.quillmd.com — MedDoc Pro CRM (internal admin) ────────────────────
 pro.quillmd.com {
-    log {
-        output stdout
-        format console
-    }
+    import redacted_access_log
 
     import security_headers_mode_b
 
@@ -299,8 +397,8 @@ pro.quillmd.com {
 
     reverse_proxy meddoc-pro:3000 {
         header_up Host {host}
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
+        header_up X-Real-IP {client_ip}
+        header_up X-Forwarded-For {client_ip}
         header_up X-Forwarded-Proto {scheme}
     }
 }
@@ -312,45 +410,36 @@ pro.quillmd.com {
 # emergency rollback. See the header warning about HSTS before uncommenting.
 #
 # :9010 {
-#     log {
-#         output stdout
-#         format console
-#     }
+#     import redacted_access_log
 #     import security_headers_mode_a
 #     reverse_proxy marketing:3010 {
 #         header_up Host {host}
-#         header_up X-Real-IP {remote_host}
-#         header_up X-Forwarded-For {remote_host}
+#         header_up X-Real-IP {client_ip}
+#         header_up X-Forwarded-For {client_ip}
 #         header_up X-Forwarded-Proto {scheme}
 #     }
 # }
 #
 # :9020 {
-#     log {
-#         output stdout
-#         format console
-#     }
+#     import redacted_access_log
 #     import security_headers_mode_a
 #     reverse_proxy transcribe-md:3011 {
 #         header_up Host {host}
-#         header_up X-Real-IP {remote_host}
-#         header_up X-Forwarded-For {remote_host}
+#         header_up X-Real-IP {client_ip}
+#         header_up X-Forwarded-For {client_ip}
 #         header_up X-Forwarded-Proto {scheme}
 #     }
 # }
 #
 # :80 {
-#     log {
-#         output stdout
-#         format console
-#     }
+#     import redacted_access_log
 #     import security_headers_mode_a
 #     @internal path /api/internal/*
 #     respond @internal 404
 #     reverse_proxy meddoc-pro:3000 {
 #         header_up Host {host}
-#         header_up X-Real-IP {remote_host}
-#         header_up X-Forwarded-For {remote_host}
+#         header_up X-Real-IP {client_ip}
+#         header_up X-Forwarded-For {client_ip}
 #         header_up X-Forwarded-Proto {scheme}
 #     }
 # }

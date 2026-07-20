@@ -15,11 +15,14 @@ const mocks = vi.hoisted(() => ({
   assertStaging: vi.fn(),
   lockStaging: vi.fn(),
   enqueueAudit: vi.fn(),
+  requireRead: vi.fn(),
+  requireSyntheticRead: vi.fn(),
+  claimOrdinaryActor: vi.fn(),
 }));
 
 vi.mock("@meddoc/db", () => ({
   default: {
-    transcribeVisit: { findUnique: mocks.findVisit },
+    transcribeVisit: { findFirst: mocks.findVisit },
   },
 }));
 vi.mock("@/lib/auth", () => ({
@@ -32,6 +35,13 @@ vi.mock("@/lib/auth", () => ({
     }
   },
   requireFreshDoctorIdentity: mocks.freshDoctor,
+}));
+vi.mock("@/lib/clinical-visit-authority", () => ({
+  currentClinicalVisitActorWhere: (actorUserId: string) => ({
+    userId: actorUserId,
+    user: { is: { id: actorUserId, isActive: true } },
+  }),
+  claimCurrentOrdinaryVisitDeliveryActor: mocks.claimOrdinaryActor,
 }));
 vi.mock("@/lib/db/transaction-retry", () => ({
   runSerializableTransactionWithRetry: mocks.runTransaction,
@@ -69,9 +79,19 @@ vi.mock("../encounter-evidence-verification", () => ({
 vi.mock("../audit-outbox", () => ({
   enqueueTemplateTwinAudit: mocks.enqueueAudit,
 }));
+vi.mock("../read-authority", () => ({
+  TemplateTwinVisitReadAuthorityError: class TemplateTwinVisitReadAuthorityError extends Error {},
+  requireTemplateTwinVisitReadAuthority: mocks.requireRead,
+}));
+vi.mock("../synthetic-read-admission", () => ({
+  TemplateTwinSyntheticReadAdmissionError: class TemplateTwinSyntheticReadAdmissionError extends Error {},
+  requireTemplateTwinSyntheticReadAdmission: mocks.requireSyntheticRead,
+}));
 
 import { AuthError } from "@/lib/auth";
 import { TemplateTwinCurrentPhysicianAuthorityError } from "../final-claim-authority";
+import { TemplateTwinVisitReadAuthorityError } from "../read-authority";
+import { TemplateTwinSyntheticReadAdmissionError } from "../synthetic-read-admission";
 import {
   authorizeVisitDeliveryFinalClaim,
   TemplateTwinDeliveryAuthorizationError,
@@ -183,6 +203,19 @@ function currentFill(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.requireRead.mockResolvedValue({
+    visitId: "visit-1",
+    isTemplateTwin: true,
+    isSyntheticTemplateTwin: false,
+    practiceId: "practice-1",
+    templateTwinEnabled: true,
+  });
+  mocks.requireSyntheticRead.mockResolvedValue(null);
+  mocks.claimOrdinaryActor.mockResolvedValue({
+    id: "doctor-1",
+    practiceId: "practice-1",
+    email: "current-doctor@example.test",
+  });
   mocks.findVisit.mockResolvedValue(visit());
   mocks.freshDoctor.mockResolvedValue({
     role: "DOCTOR",
@@ -234,7 +267,33 @@ beforeEach(() => {
 });
 
 describe("Template Twin delivery final authorization", () => {
+  it.each(["suspended", "product removed", "practice transferred"])(
+    "does not select signing/clinical payload when minimal authority is %s",
+    async () => {
+      mocks.requireRead.mockRejectedValue(
+        new TemplateTwinVisitReadAuthorityError(),
+      );
+
+      await expect(
+        authorizeVisitDeliveryFinalClaim({
+          visitId: "visit-1",
+          actorUserId: "doctor-1",
+        }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND", status: 404 });
+
+      expect(mocks.findVisit).not.toHaveBeenCalled();
+      expect(mocks.freshDoctor).not.toHaveBeenCalled();
+    },
+  );
+
   it("leaves an ordinary owned visit on the existing delivery path", async () => {
+    mocks.requireRead.mockResolvedValue({
+      visitId: "visit-1",
+      isTemplateTwin: false,
+      isSyntheticTemplateTwin: false,
+      practiceId: null,
+      templateTwinEnabled: null,
+    });
     mocks.findVisit.mockResolvedValue(
       visit({
         noteTemplate: { templateKind: "structured" },
@@ -247,10 +306,107 @@ describe("Template Twin delivery final authorization", () => {
         visitId: "visit-1",
         actorUserId: "doctor-1",
       }),
-    ).resolves.toEqual({ templateTwin: false });
+    ).resolves.toEqual({
+      templateTwin: false,
+      currentPhysicianEmail: "current-doctor@example.test",
+    });
+    expect(mocks.claimOrdinaryActor).toHaveBeenCalledWith({
+      visitId: "visit-1",
+      actorUserId: "doctor-1",
+    });
     expect(mocks.freshDoctor).not.toHaveBeenCalled();
     expect(mocks.runTransaction).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ["suspension", null],
+    [
+      "practice transfer",
+      {
+        id: "doctor-1",
+        practiceId: "practice-other",
+        email: "current-doctor@example.test",
+      },
+    ],
+  ])("blocks an ordinary delivery after current %s", async (_label, actor) => {
+    mocks.requireRead.mockResolvedValue({
+      visitId: "visit-1",
+      isTemplateTwin: false,
+      isSyntheticTemplateTwin: false,
+      practiceId: null,
+      templateTwinEnabled: null,
+    });
+    mocks.findVisit.mockResolvedValue(
+      visit({
+        noteTemplate: { templateKind: "structured" },
+        templateTwinFill: null,
+      }),
+    );
+    mocks.claimOrdinaryActor.mockResolvedValue(actor);
+
+    await expect(
+      authorizeVisitDeliveryFinalClaim({
+        visitId: "visit-1",
+        actorUserId: "doctor-1",
+      }),
+    ).rejects.toBeInstanceOf(TemplateTwinDeliveryAuthorizationError);
+  });
+
+  it("does not select signing PHI when durable lineage appears after ordinary classification", async () => {
+    mocks.requireRead.mockResolvedValue({
+      visitId: "visit-1",
+      isTemplateTwin: false,
+      isSyntheticTemplateTwin: false,
+      practiceId: null,
+      templateTwinEnabled: null,
+    });
+    mocks.findVisit.mockImplementationOnce(async (query) => {
+      expect(query.where).toMatchObject({ id: "visit-1" });
+      expect(JSON.stringify(query.where)).toContain(
+        "templateTwinCompiledVersion",
+      );
+      return null;
+    });
+
+    await expect(
+      authorizeVisitDeliveryFinalClaim({
+        visitId: "visit-1",
+        actorUserId: "doctor-1",
+      }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND", status: 404 });
+
+    expect(mocks.assessSigning).not.toHaveBeenCalled();
+    expect(mocks.runTransaction).not.toHaveBeenCalled();
+  });
+
+  it.each(["reserved-patient orphan", "admission-only synthetic state"])(
+    "denies %s before selecting signing or clinical PHI",
+    async () => {
+      mocks.requireRead.mockResolvedValue({
+        visitId: "visit-1",
+        isTemplateTwin: true,
+        isSyntheticTemplateTwin: true,
+        practiceId: "practice-1",
+        templateTwinEnabled: true,
+      });
+      mocks.requireSyntheticRead.mockRejectedValue(
+        new TemplateTwinSyntheticReadAdmissionError(),
+      );
+
+      await expect(
+        authorizeVisitDeliveryFinalClaim({
+          visitId: "visit-1",
+          actorUserId: "doctor-1",
+          allowSyntheticOriginalTemplate: true,
+        }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND", status: 404 });
+
+      expect(mocks.requireSyntheticRead).toHaveBeenCalledTimes(1);
+      expect(mocks.findVisit).not.toHaveBeenCalled();
+      expect(mocks.assessSigning).not.toHaveBeenCalled();
+      expect(mocks.runTransaction).not.toHaveBeenCalled();
+    },
+  );
 
   it("returns the same not-found boundary for a missing or cross-owner visit", async () => {
     for (const row of [null, visit({ userId: "other-doctor" })]) {
@@ -449,6 +605,19 @@ describe("Template Twin delivery final authorization", () => {
   );
 
   it("permits a synthetic visit only for the original-template path", async () => {
+    mocks.requireRead.mockResolvedValue({
+      visitId: "visit-1",
+      isTemplateTwin: true,
+      isSyntheticTemplateTwin: true,
+      practiceId: "practice-1",
+      templateTwinEnabled: true,
+    });
+    mocks.requireSyntheticRead.mockResolvedValue({
+      visitId: "visit-1",
+      practiceId: "practice-1",
+      runId: "run-1",
+      attempt: 2,
+    });
     mocks.findVisit.mockResolvedValue(
       visit({
         templateTwinSyntheticQaRun: {
@@ -465,6 +634,7 @@ describe("Template Twin delivery final authorization", () => {
         actorUserId: "doctor-1",
       }),
     ).rejects.toMatchObject({ code: "NOT_FOUND", status: 404 });
+    expect(mocks.findVisit).not.toHaveBeenCalled();
     expect(mocks.runTransaction).not.toHaveBeenCalled();
 
     await expect(
@@ -482,6 +652,18 @@ describe("Template Twin delivery final authorization", () => {
         runId: "run-1",
         expectedAttempt: 2,
         allowedAdmissionPhases: ["SIGNED"],
+      }),
+    );
+    expect(mocks.requireSyntheticRead).toHaveBeenCalledTimes(3);
+    expect(mocks.requireSyntheticRead).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        visitId: "visit-1",
+        expected: {
+          visitId: "visit-1",
+          practiceId: "practice-1",
+          runId: "run-1",
+          attempt: 2,
+        },
       }),
     );
   });

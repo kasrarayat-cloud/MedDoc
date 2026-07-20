@@ -9,6 +9,7 @@ import { z } from "zod";
 
 import { AuthError, requireDoctorSession } from "@/lib/auth";
 import { enqueueTemplateTwinAudit } from "@/lib/template-twin/audit-outbox";
+import { lockAndAssertCurrentTemplateTwinPhysician } from "@/lib/template-twin/final-claim-authority";
 import {
   lockTemplateTwinRolloutForFinalClaim,
   type TemplateTwinRolloutToken,
@@ -320,6 +321,17 @@ async function assertManagementRolloutFinality(
   }
 }
 
+async function lockAndAssertManagementAuthority(
+  tx: Prisma.TransactionClient,
+  actor: TemplateTwinActor,
+): Promise<{ email: string }> {
+  // assertManagementRolloutFinality has already acquired the canonical global
+  // then practice locks and proved that the practice is active. Take the actor
+  // lock last so a concurrent suspension, demotion, product revocation, or
+  // practice transfer is ordered against the same transaction as the write.
+  return lockAndAssertCurrentTemplateTwinPhysician({ tx, actor });
+}
+
 async function loadOwnedVersion(
   client: TemplateTwinReadClient,
   noteTemplateId: string,
@@ -461,6 +473,10 @@ export async function createTemplateTwinVersionAction(
               actor,
               "the new template version was being created",
             );
+            const currentActor = await lockAndAssertManagementAuthority(
+              tx,
+              actor,
+            );
             const source = await loadOwnedVersion(
               tx,
               input.data.sourceNoteTemplateId,
@@ -596,7 +612,7 @@ export async function createTemplateTwinVersionAction(
               tx,
               actor: {
                 userId: actor.userId,
-                userEmail: actor.userEmail,
+                userEmail: currentActor.email,
                 practiceId: actor.practiceId,
                 rolloutToken: actor.rolloutToken,
               },
@@ -627,7 +643,7 @@ export async function createTemplateTwinVersionAction(
               eventKey: `template-twin:compiled:${compiledVersionId}:v${nextVersion}`,
               practiceId: actor.practiceId,
               actorId: actor.userId,
-              actorEmailSnapshot: actor.userEmail,
+              actorEmailSnapshot: currentActor.email,
               action: "TEMPLATE_TWIN_COMPILED",
               targetType: "TemplateTwinCompiledVersion",
               targetId: compiledVersionId,
@@ -691,6 +707,10 @@ export async function activateTemplateTwinVersionAction(
               actor,
               "the template version was being activated",
             );
+            const currentActor = await lockAndAssertManagementAuthority(
+              tx,
+              actor,
+            );
             const target = await loadOwnedVersion(tx, id.data, actor);
             if (target.status === "retired") {
               throw new TemplateTwinManagementError(
@@ -747,7 +767,7 @@ export async function activateTemplateTwinVersionAction(
               eventKey: `template-twin:activated:${target.id}:${operationId}`,
               practiceId: actor.practiceId,
               actorId: actor.userId,
-              actorEmailSnapshot: actor.userEmail,
+              actorEmailSnapshot: currentActor.email,
               action: "TEMPLATE_TWIN_ACTIVATED",
               targetType: "NoteTemplate",
               targetId: target.id,
@@ -798,6 +818,10 @@ export async function deactivateTemplateTwinVersionAction(
               actor,
               "the template version was being deactivated",
             );
+            const currentActor = await lockAndAssertManagementAuthority(
+              tx,
+              actor,
+            );
             const target = await loadOwnedVersion(tx, id.data, actor);
             if (target.status === "retired") {
               throw new TemplateTwinManagementError(
@@ -830,7 +854,7 @@ export async function deactivateTemplateTwinVersionAction(
               eventKey: `template-twin:deactivated:${target.id}:${operationId}`,
               practiceId: actor.practiceId,
               actorId: actor.userId,
-              actorEmailSnapshot: actor.userEmail,
+              actorEmailSnapshot: currentActor.email,
               action: "TEMPLATE_TWIN_DEACTIVATED",
               targetType: "NoteTemplate",
               targetId: target.id,
@@ -881,6 +905,10 @@ export async function retireTemplateTwinVersionAction(
               actor,
               "the template version was being retired",
             );
+            const currentActor = await lockAndAssertManagementAuthority(
+              tx,
+              actor,
+            );
             const target = await loadOwnedVersion(tx, id.data, actor);
             if (target.status === "retired") return { changed: false };
             const wasActive = target.status === "active";
@@ -903,7 +931,7 @@ export async function retireTemplateTwinVersionAction(
                 eventKey: `template-twin:deactivated:${target.id}:${operationId}`,
                 practiceId: actor.practiceId,
                 actorId: actor.userId,
-                actorEmailSnapshot: actor.userEmail,
+                actorEmailSnapshot: currentActor.email,
                 action: "TEMPLATE_TWIN_DEACTIVATED",
                 targetType: "NoteTemplate",
                 targetId: target.id,
@@ -918,7 +946,7 @@ export async function retireTemplateTwinVersionAction(
               eventKey: `template-twin:retired:${target.id}:${operationId}`,
               practiceId: actor.practiceId,
               actorId: actor.userId,
-              actorEmailSnapshot: actor.userEmail,
+              actorEmailSnapshot: currentActor.email,
               action: "TEMPLATE_TWIN_RETIRED",
               targetType: "NoteTemplate",
               targetId: target.id,
@@ -1072,6 +1100,10 @@ export async function rollbackTemplateTwinVersionAction(
               actor,
               "the prior template version was being restored",
             );
+            const currentActor = await lockAndAssertManagementAuthority(
+              tx,
+              actor,
+            );
             const target = await loadOwnedVersion(tx, id.data, actor);
             if (target.status === "retired") {
               throw new TemplateTwinManagementError(
@@ -1136,7 +1168,7 @@ export async function rollbackTemplateTwinVersionAction(
               eventKey: `template-twin:rolled-back:${target.id}:${operationId}`,
               practiceId: actor.practiceId,
               actorId: actor.userId,
-              actorEmailSnapshot: actor.userEmail,
+              actorEmailSnapshot: currentActor.email,
               action: "TEMPLATE_TWIN_ROLLED_BACK",
               targetType: "NoteTemplate",
               targetId: target.id,
@@ -1151,7 +1183,7 @@ export async function rollbackTemplateTwinVersionAction(
               eventKey: `template-twin:activated:${target.id}:${operationId}`,
               practiceId: actor.practiceId,
               actorId: actor.userId,
-              actorEmailSnapshot: actor.userEmail,
+              actorEmailSnapshot: currentActor.email,
               action: "TEMPLATE_TWIN_ACTIVATED",
               targetType: "NoteTemplate",
               targetId: target.id,

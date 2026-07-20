@@ -144,8 +144,7 @@ export interface TemplateTwinStaticAssetInspection {
   readonly previewBytes: Uint8Array;
 }
 
-export interface TemplateTwinStaticAssetReview
-  extends TemplateTwinStaticAssetInspection {
+export interface TemplateTwinStaticAssetReview extends TemplateTwinStaticAssetInspection {
   /** Opaque 256-bit, single-use bearer proof. Never persist or render it. */
   readonly previewReviewReceipt: string;
   readonly previewReviewExpiresAtIso: string;
@@ -218,25 +217,25 @@ function hasExactStaticAssetProviderOwnership(asset: StaticAssetRow): boolean {
       : null;
   return Boolean(
     evidence &&
-      asset.providerOwnershipSha256 &&
-      SHA256_RE.test(asset.providerOwnershipSha256) &&
-      canonicalSha256(evidence) === asset.providerOwnershipSha256 &&
-      evidence.contractVersion ===
-        "template-twin-provider-ownership-receipt-v2" &&
-      evidence.practiceId === asset.practiceId &&
-      evidence.actorUserId === asset.createdById &&
-      evidence.providerMode === "LIVE" &&
-      evidence.syntheticAdmissionId === null &&
-      evidence.subjectId === asset.sha256 &&
-      evidence.subjectSha256 === asset.sha256 &&
-      evidence.visitId === null &&
-      evidence.sourceArtifactId === null &&
-      evidence.compiledVersionId === null &&
-      evidence.noteTemplateId === null &&
-      execution?.operation === "STATIC_ASSET_PRIVACY_SCAN" &&
-      typeof execution.executionId === "string" &&
-      typeof execution.resultSha256 === "string" &&
-      SHA256_RE.test(execution.resultSha256),
+    asset.providerOwnershipSha256 &&
+    SHA256_RE.test(asset.providerOwnershipSha256) &&
+    canonicalSha256(evidence) === asset.providerOwnershipSha256 &&
+    evidence.contractVersion ===
+      "template-twin-provider-ownership-receipt-v2" &&
+    evidence.practiceId === asset.practiceId &&
+    evidence.actorUserId === asset.createdById &&
+    evidence.providerMode === "LIVE" &&
+    evidence.syntheticAdmissionId === null &&
+    evidence.subjectId === asset.sha256 &&
+    evidence.subjectSha256 === asset.sha256 &&
+    evidence.visitId === null &&
+    evidence.sourceArtifactId === null &&
+    evidence.compiledVersionId === null &&
+    evidence.noteTemplateId === null &&
+    execution?.operation === "STATIC_ASSET_PRIVACY_SCAN" &&
+    typeof execution.executionId === "string" &&
+    typeof execution.resultSha256 === "string" &&
+    SHA256_RE.test(execution.resultSha256),
   );
 }
 
@@ -255,6 +254,30 @@ interface StaticAssetReviewReceiptRow {
   expiresAt: Date;
   consumedAt: Date | null;
   notExpired?: boolean;
+}
+
+interface CurrentStaticAssetAdminRow {
+  id: string;
+  email: string | null;
+  practiceId: string;
+  role: string;
+}
+
+interface StaticAssetAdminListProjectionRow {
+  authorizedAdminId: string;
+  assetId: string | null;
+  assetPracticeId: string | null;
+  sha256: string | null;
+  currentStatus: string | null;
+  mimeType: string | null;
+  width: number | null;
+  height: number | null;
+  sizeBytes: number | null;
+  scannerVersion: string | null;
+  ocrEngineVersion: string | null;
+  currentDecisionVersion: number | null;
+  createdAt: Date | null;
+  updatedAt: Date | null;
 }
 
 /**
@@ -312,7 +335,6 @@ export async function inspectTemplateTwinStaticAsset(input: {
   actor: TemplateTwinStaticAssetActor;
   ocr: LocalStaticAssetOcr;
   client?: Pick<ModelClient, "complete">;
-  ownershipOperationInstance?: "direct" | "review" | "decision";
 }): Promise<TemplateTwinStaticAssetInspection> {
   assertPracticeAdmin(input.actor);
   if (input.claimedMimeType.toLowerCase() !== "image/png") {
@@ -361,12 +383,11 @@ export async function inspectTemplateTwinStaticAsset(input: {
       "The image or its metadata may contain patient-specific or instruction-like text.",
     );
   }
-  const wrapped = wrapAsData(
+  const wrapped = wrapStaticAssetPrivacyEvidence(
     JSON.stringify({
       ocrText: ocrResult.text,
       metadataText: png.metadataText,
     }),
-    "transcript",
   );
   if (wrapped.injectionAttemptDetected) {
     throw new TemplateTwinStaticAssetError(
@@ -401,8 +422,7 @@ export async function inspectTemplateTwinStaticAsset(input: {
       async () => {
         const scan = await runTemplateTwinOwnedModelComplete({
           operation: "STATIC_ASSET_PRIVACY_SCAN",
-          operationInstance:
-            input.ownershipOperationInstance ?? "direct",
+          operationInstance: "primary",
           operationVersion: "template-twin-static-asset-privacy-scan-v1",
           client: input.client ?? modelClient,
           args: {
@@ -440,6 +460,7 @@ export async function inspectTemplateTwinStaticAsset(input: {
           expectedExecutionPlan: [
             {
               operation: "STATIC_ASSET_PRIVACY_SCAN",
+              operationInstance: "primary",
               disposition: "EXECUTED",
             },
           ],
@@ -514,36 +535,58 @@ export async function inspectTemplateTwinStaticAssetForReview(input: {
   db?: TemplateTwinStaticAssetDb;
 }): Promise<TemplateTwinStaticAssetReview> {
   try {
-    const inspection = await inspectTemplateTwinStaticAsset({
-      ...input,
-      ownershipOperationInstance: "review",
-    });
+    const inspection = await inspectTemplateTwinStaticAsset(input);
     const receiptId = randomUUID();
     const receiptSecret = randomBytes(32).toString("base64url");
     const previewReviewReceipt = `${receiptId}.${receiptSecret}`;
-    const expiresAt = new Date(Date.now() + REVIEW_RECEIPT_TTL_MS);
     const inspectionEvidenceSha256 = canonicalSha256(inspection.evidence);
     const db = input.db ?? defaultDb();
+    let expiresAt: Date;
     try {
-      await db.templateTwinStaticAssetReviewReceipt.create({
-        data: {
-          id: receiptId,
-          practiceId: input.actor.practiceId,
-          reviewedById: input.actor.userId,
-          tokenSha256: digestText(previewReviewReceipt),
-          assetSha256: inspection.evidence.sha256,
-          inspectionEvidenceSha256,
-          scannerVersion: inspection.evidence.scannerVersion,
-          ocrEngineVersion: inspection.evidence.ocrEngineVersion,
-          privacyEvidenceSha256: inspection.evidence.privacyEvidenceSha256,
-          globalRolloutGeneration:
-            input.actor.rolloutToken.globalGeneration,
-          practiceRolloutGeneration:
-            input.actor.rolloutToken.practiceGeneration,
-          expiresAt,
+      expiresAt = await db.$transaction(
+        async (tx) => {
+          await lockAndAssertStaticAssetWriteAuthority({
+            tx,
+            actor: input.actor,
+          });
+          const clock = await tx.$queryRaw<Array<{ createdAt: Date }>>(
+            Prisma.sql`SELECT CURRENT_TIMESTAMP AS "createdAt"`,
+          );
+          const createdAt = clock[0]?.createdAt;
+          if (
+            !(createdAt instanceof Date) ||
+            Number.isNaN(createdAt.getTime())
+          ) {
+            throw new Error("Static-asset review receipt clock unavailable.");
+          }
+          const receiptExpiresAt = new Date(
+            createdAt.getTime() + REVIEW_RECEIPT_TTL_MS,
+          );
+          await tx.templateTwinStaticAssetReviewReceipt.create({
+            data: {
+              id: receiptId,
+              practiceId: input.actor.practiceId,
+              reviewedById: input.actor.userId,
+              tokenSha256: digestText(previewReviewReceipt),
+              assetSha256: inspection.evidence.sha256,
+              inspectionEvidenceSha256,
+              scannerVersion: inspection.evidence.scannerVersion,
+              ocrEngineVersion: inspection.evidence.ocrEngineVersion,
+              privacyEvidenceSha256: inspection.evidence.privacyEvidenceSha256,
+              globalRolloutGeneration:
+                input.actor.rolloutToken.globalGeneration,
+              practiceRolloutGeneration:
+                input.actor.rolloutToken.practiceGeneration,
+              createdAt,
+              expiresAt: receiptExpiresAt,
+            },
+          });
+          return receiptExpiresAt;
         },
-      });
+        { isolationLevel: "ReadCommitted" },
+      );
     } catch (error) {
+      if (error instanceof TemplateTwinStaticAssetError) throw error;
       throw new TemplateTwinStaticAssetError(
         "TT_STATIC_ASSET_PREVIEW_RECEIPT_UNAVAILABLE",
         "The reviewed-image proof could not be stored. Review the image again before approval.",
@@ -558,7 +601,9 @@ export async function inspectTemplateTwinStaticAssetForReview(input: {
   } catch (error) {
     if (
       error instanceof TemplateTwinStaticAssetError &&
-      error.code !== "TT_STATIC_ASSET_PREVIEW_RECEIPT_UNAVAILABLE"
+      error.code !== "TT_STATIC_ASSET_PREVIEW_RECEIPT_UNAVAILABLE" &&
+      error.code !== "TT_STATIC_ASSET_ADMIN_REQUIRED" &&
+      error.code !== "TT_STATIC_ASSET_ROLLOUT_STALE"
     ) {
       await auditStaticAssetRejection({
         db: input.db,
@@ -581,10 +626,7 @@ async function inspectStaticAssetForDecision(input: {
   db?: TemplateTwinStaticAssetDb;
 }): Promise<TemplateTwinStaticAssetInspection> {
   try {
-    return await inspectTemplateTwinStaticAsset({
-      ...input,
-      ownershipOperationInstance: "decision",
-    });
+    return await inspectTemplateTwinStaticAsset(input);
   } catch (error) {
     if (error instanceof TemplateTwinStaticAssetError) {
       await auditStaticAssetRejection({
@@ -639,7 +681,10 @@ export async function approveTemplateTwinStaticAsset(input: {
   const db = input.db ?? defaultDb();
   return db.$transaction(
     async (tx) => {
-      await lockAndAssertStaticAssetRollout({ tx, actor: input.actor });
+      const currentAdmin = await lockAndAssertStaticAssetWriteAuthority({
+        tx,
+        actor: input.actor,
+      });
       const reviewReceiptId = await lockAndConsumePreviewReviewReceipt({
         tx,
         actor: input.actor,
@@ -661,20 +706,23 @@ export async function approveTemplateTwinStaticAsset(input: {
       });
       if (!asset) {
         asset = await tx.templateTwinStaticAsset.create({
-          data: staticAssetCreateData(inspection, input.actor),
+          data: staticAssetCreateData(inspection, {
+            ...input.actor,
+            userEmail: currentAdmin.email,
+            role: currentAdmin.role,
+          }),
         });
       } else {
         assertSameInspection(asset, inspection.evidence);
       }
       const version = asset.currentDecisionVersion + 1;
       const decisionId = randomUUID();
-      const auditEventKey =
-        `template-twin:static-asset-approved:${decisionId}`;
+      const auditEventKey = `template-twin:static-asset-approved:${decisionId}`;
       await enqueueTemplateTwinAudit(tx, {
         eventKey: auditEventKey,
         practiceId: input.actor.practiceId,
         actorId: input.actor.userId,
-        actorEmailSnapshot: input.actor.userEmail,
+        actorEmailSnapshot: currentAdmin.email,
         action: "TEMPLATE_TWIN_STATIC_ASSET_APPROVED",
         targetType: "TemplateTwinStaticAsset",
         targetId: asset.id,
@@ -743,7 +791,10 @@ export async function rejectTemplateTwinStaticAsset(input: {
   const db = input.db ?? defaultDb();
   await db.$transaction(
     async (tx) => {
-      await lockAndAssertStaticAssetRollout({ tx, actor: input.actor });
+      const currentAdmin = await lockAndAssertStaticAssetWriteAuthority({
+        tx,
+        actor: input.actor,
+      });
       await lockExistingStaticAsset({
         tx,
         practiceId: input.actor.practiceId,
@@ -759,7 +810,11 @@ export async function rejectTemplateTwinStaticAsset(input: {
       });
       if (!asset) {
         asset = await tx.templateTwinStaticAsset.create({
-          data: staticAssetCreateData(inspection, input.actor),
+          data: staticAssetCreateData(inspection, {
+            ...input.actor,
+            userEmail: currentAdmin.email,
+            role: currentAdmin.role,
+          }),
         });
       } else {
         assertSameInspection(asset, inspection.evidence);
@@ -773,13 +828,12 @@ export async function rejectTemplateTwinStaticAsset(input: {
       }
       const version = asset.currentDecisionVersion + 1;
       const decisionId = randomUUID();
-      const auditEventKey =
-        `template-twin:static-asset-rejected:${decisionId}`;
+      const auditEventKey = `template-twin:static-asset-rejected:${decisionId}`;
       await enqueueTemplateTwinAudit(tx, {
         eventKey: auditEventKey,
         practiceId: input.actor.practiceId,
         actorId: input.actor.userId,
-        actorEmailSnapshot: input.actor.userEmail,
+        actorEmailSnapshot: currentAdmin.email,
         action: "TEMPLATE_TWIN_STATIC_ASSET_REJECTED",
         targetType: "TemplateTwinStaticAsset",
         targetId: asset.id,
@@ -830,7 +884,10 @@ export async function revokeTemplateTwinStaticAsset(input: {
   const db = input.db ?? defaultDb();
   await db.$transaction(
     async (tx) => {
-      await lockAndAssertStaticAssetRollout({ tx, actor: input.actor });
+      const currentAdmin = await lockAndAssertStaticAssetWriteAuthority({
+        tx,
+        actor: input.actor,
+      });
       await lockExistingStaticAsset({
         tx,
         practiceId: input.practiceId,
@@ -859,13 +916,12 @@ export async function revokeTemplateTwinStaticAsset(input: {
       const current = await currentDecision(tx, asset);
       const version = asset.currentDecisionVersion + 1;
       const decisionId = randomUUID();
-      const auditEventKey =
-        `template-twin:static-asset-revoked:${decisionId}`;
+      const auditEventKey = `template-twin:static-asset-revoked:${decisionId}`;
       await enqueueTemplateTwinAudit(tx, {
         eventKey: auditEventKey,
         practiceId: input.practiceId,
         actorId: input.actor.userId,
-        actorEmailSnapshot: input.actor.userEmail,
+        actorEmailSnapshot: currentAdmin.email,
         action: "TEMPLATE_TWIN_STATIC_ASSET_REVOKED",
         targetType: "TemplateTwinStaticAsset",
         targetId: asset.id,
@@ -905,20 +961,99 @@ export async function listTemplateTwinStaticAssetsForPractice(input: {
 }): Promise<readonly TemplateTwinStaticAssetListItem[]> {
   assertPracticeAdmin(input.actor);
   const db = input.db ?? defaultDb();
-  const assets = await db.templateTwinStaticAsset.findMany({
-    where: { practiceId: input.actor.practiceId },
-    orderBy: [{ updatedAt: "desc" }, { sha256: "asc" }],
-    take: 100,
-  });
+  const rows = await db.$transaction(
+    async (tx) => {
+      await lockAndAssertStaticAssetRollout({ tx, actor: input.actor });
+      // Keep the admin authority predicate in the exact statement that
+      // projects management metadata. A separate request-start or helper read
+      // must never authorize a later asset projection.
+      return tx.$queryRaw<StaticAssetAdminListProjectionRow[]>(Prisma.sql`
+        WITH current_admin AS (
+          SELECT actor."id", actor."practiceId"
+          FROM "users" actor
+          INNER JOIN "practices" practice
+            ON practice."id" = actor."practiceId"
+          WHERE actor."id" = ${input.actor.userId}
+            AND actor."practiceId" = ${input.actor.practiceId}
+            AND actor."role" IN (
+              'ADMIN'::"UserRole",
+              'SUPER_ADMIN'::"UserRole"
+            )
+            AND actor."isActive" = true
+            AND actor."deactivatedAt" IS NULL
+            AND actor."suspendedAt" IS NULL
+            AND actor."softDeletedAt" IS NULL
+            AND btrim(actor."email") <> ''
+            AND 'TRANSCRIBE_MD'::"Product" = ANY(actor."products")
+            AND (
+              NOT ('SUPER_ADMIN'::"Product" = ANY(actor."products"))
+              OR (
+                actor."mfaEnabled" = true
+                AND regexp_replace(
+                  actor."mfaSecret",
+                  U&'[\\0009-\\000D\\0020\\00A0\\1680\\2000-\\200A\\2028\\2029\\202F\\205F\\3000\\FEFF]',
+                  '',
+                  'g'
+                ) <> ''
+                AND actor."mfaVerifiedAt" IS NOT NULL
+                AND actor."mfaVerifiedAt" <= CURRENT_TIMESTAMP
+              )
+            )
+            AND practice."isActive" = true
+            AND practice."templateTwinEnabled" = true
+        )
+        SELECT current_admin."id" AS "authorizedAdminId",
+          asset."id" AS "assetId",
+          asset."practiceId" AS "assetPracticeId",
+          asset."sha256", asset."currentStatus",
+          asset."mimeType", asset."width", asset."height",
+          asset."sizeBytes", asset."scannerVersion",
+          asset."ocrEngineVersion", asset."currentDecisionVersion",
+          asset."createdAt", asset."updatedAt"
+        FROM current_admin
+        LEFT JOIN LATERAL (
+          SELECT candidate.*
+          FROM "template_twin_static_assets" candidate
+          WHERE candidate."practiceId" = current_admin."practiceId"
+          ORDER BY candidate."updatedAt" DESC, candidate."sha256" ASC
+          LIMIT 100
+        ) asset ON true
+      `);
+    },
+    { isolationLevel: "ReadCommitted" },
+  );
+  if (
+    rows.length === 0 ||
+    rows.some((row) => row.authorizedAdminId !== input.actor.userId)
+  ) {
+    throw new TemplateTwinStaticAssetError(
+      "TT_STATIC_ASSET_ADMIN_REQUIRED",
+      "Current practice-administrator authorization is required for reusable image review.",
+    );
+  }
+
+  const assets = rows.filter(
+    (row): row is StaticAssetAdminListProjectionRow & { assetId: string } =>
+      typeof row.assetId === "string",
+  );
 
   return assets.map((asset) => {
     if (
-      asset.practiceId !== input.actor.practiceId ||
+      asset.assetPracticeId !== input.actor.practiceId ||
+      typeof asset.sha256 !== "string" ||
       !SHA256_RE.test(asset.sha256) ||
       asset.mimeType !== "image/png" ||
+      asset.width === null ||
       asset.width < 1 ||
+      asset.height === null ||
       asset.height < 1 ||
+      asset.sizeBytes === null ||
       asset.sizeBytes < 1 ||
+      typeof asset.scannerVersion !== "string" ||
+      asset.scannerVersion.length === 0 ||
+      typeof asset.ocrEngineVersion !== "string" ||
+      asset.ocrEngineVersion.length === 0 ||
+      asset.currentDecisionVersion === null ||
       !Number.isInteger(asset.currentDecisionVersion) ||
       asset.currentDecisionVersion < 0 ||
       !(asset.createdAt instanceof Date) ||
@@ -926,7 +1061,7 @@ export async function listTemplateTwinStaticAssetsForPractice(input: {
       !(asset.updatedAt instanceof Date) ||
       !Number.isFinite(asset.updatedAt.getTime()) ||
       !["PENDING_REVIEW", "APPROVED", "REJECTED", "REVOKED"].includes(
-        asset.currentStatus,
+        asset.currentStatus ?? "",
       )
     ) {
       throw new TemplateTwinStaticAssetError(
@@ -941,8 +1076,8 @@ export async function listTemplateTwinStaticAssetsForPractice(input: {
       width: asset.width,
       height: asset.height,
       sizeBytes: asset.sizeBytes,
-      scannerVersion: asset.scannerVersion,
-      ocrEngineVersion: asset.ocrEngineVersion,
+      scannerVersion: asset.scannerVersion!,
+      ocrEngineVersion: asset.ocrEngineVersion!,
       decisionVersion: asset.currentDecisionVersion,
       createdAtIso: asset.createdAt.toISOString(),
       updatedAtIso: asset.updatedAt.toISOString(),
@@ -1118,7 +1253,80 @@ async function lockAndAssertStaticAssetRollout(input: {
   }
 }
 
-/** Lock order is global rollout, practice rollout, review receipt, then asset. */
+/**
+ * Final current-admin fence. The caller must acquire the rollout global and
+ * practice locks first. The joined practice predicate reasserts the exact
+ * active tenant while `FOR UPDATE OF actor` orders concurrent lifecycle,
+ * product, role, and practice changes against the final write.
+ */
+async function lockAndAssertCurrentStaticAssetAdmin(input: {
+  tx: TemplateTwinStaticAssetDb;
+  actor: TemplateTwinStaticAssetActor;
+}): Promise<{ email: string; role: "ADMIN" | "SUPER_ADMIN" }> {
+  const rows = await input.tx.$queryRaw<
+    CurrentStaticAssetAdminRow[]
+  >(Prisma.sql`
+    SELECT actor."id", actor."email", actor."practiceId",
+      actor."role"::text AS "role"
+    FROM "users" actor
+    INNER JOIN "practices" practice
+      ON practice."id" = actor."practiceId"
+    WHERE actor."id" = ${input.actor.userId}
+      AND actor."practiceId" = ${input.actor.practiceId}
+      AND actor."role" IN (
+        'ADMIN'::"UserRole",
+        'SUPER_ADMIN'::"UserRole"
+      )
+      AND actor."isActive" = true
+      AND actor."deactivatedAt" IS NULL
+      AND actor."suspendedAt" IS NULL
+      AND actor."softDeletedAt" IS NULL
+      AND 'TRANSCRIBE_MD'::"Product" = ANY(actor."products")
+      AND (
+        NOT ('SUPER_ADMIN'::"Product" = ANY(actor."products"))
+        OR (
+          actor."mfaEnabled" = true
+          AND regexp_replace(
+            actor."mfaSecret",
+            U&'[\\0009-\\000D\\0020\\00A0\\1680\\2000-\\200A\\2028\\2029\\202F\\205F\\3000\\FEFF]',
+            '',
+            'g'
+          ) <> ''
+          AND actor."mfaVerifiedAt" IS NOT NULL
+          AND actor."mfaVerifiedAt" <= CURRENT_TIMESTAMP
+        )
+      )
+      AND practice."isActive" = true
+      AND practice."templateTwinEnabled" = true
+    FOR UPDATE OF actor
+  `);
+  const current = rows.length === 1 ? rows[0] : null;
+  if (
+    !current ||
+    current.id !== input.actor.userId ||
+    current.practiceId !== input.actor.practiceId ||
+    (current.role !== "ADMIN" && current.role !== "SUPER_ADMIN") ||
+    typeof current.email !== "string" ||
+    current.email.trim().length === 0
+  ) {
+    throw new TemplateTwinStaticAssetError(
+      "TT_STATIC_ASSET_ADMIN_REQUIRED",
+      "Current practice-administrator authorization is required for reusable image review.",
+    );
+  }
+  return { email: current.email, role: current.role };
+}
+
+async function lockAndAssertStaticAssetWriteAuthority(input: {
+  tx: TemplateTwinStaticAssetDb;
+  actor: TemplateTwinStaticAssetActor;
+}): Promise<{ email: string; role: "ADMIN" | "SUPER_ADMIN" }> {
+  // Lock order is load-bearing: rollout global -> practice -> actor.
+  await lockAndAssertStaticAssetRollout(input);
+  return lockAndAssertCurrentStaticAssetAdmin(input);
+}
+
+/** Lock order is global rollout, practice rollout, actor, receipt, then asset. */
 async function lockAndConsumePreviewReviewReceipt(input: {
   tx: TemplateTwinStaticAssetDb;
   actor: TemplateTwinStaticAssetActor;
@@ -1126,7 +1334,9 @@ async function lockAndConsumePreviewReviewReceipt(input: {
   evidence: TemplateTwinStaticAssetInspectionEvidence;
 }): Promise<string> {
   const parsed = parsePreviewReviewReceipt(input.token);
-  const rows = await input.tx.$queryRaw<StaticAssetReviewReceiptRow[]>(Prisma.sql`
+  const rows = await input.tx.$queryRaw<
+    StaticAssetReviewReceiptRow[]
+  >(Prisma.sql`
     SELECT receipt."id", receipt."practiceId", receipt."reviewedById",
       receipt."tokenSha256", receipt."assetSha256",
       receipt."inspectionEvidenceSha256", receipt."scannerVersion",
@@ -1218,11 +1428,15 @@ async function auditStaticAssetRejection(input: {
 }): Promise<void> {
   const db = input.db ?? defaultDb();
   await db.$transaction(async (tx) => {
+    const currentAdmin = await lockAndAssertStaticAssetWriteAuthority({
+      tx,
+      actor: input.actor,
+    });
     await enqueueTemplateTwinAudit(tx, {
       eventKey: `template-twin:static-asset-rejected:${input.sha256}:${randomUUID()}`,
       practiceId: input.actor.practiceId,
       actorId: input.actor.userId,
-      actorEmailSnapshot: input.actor.userEmail,
+      actorEmailSnapshot: currentAdmin.email,
       action: "TEMPLATE_TWIN_STATIC_ASSET_REJECTED",
       targetType: "TemplateTwinStaticAssetCandidate",
       targetId: input.sha256,
@@ -1599,6 +1813,30 @@ function digest(value: Uint8Array): string {
 
 function digestText(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+/**
+ * Provider ownership hashes the exact provider prompt. A random delimiter
+ * would therefore turn a byte-identical review/decision retry into identity
+ * drift. Static-asset evidence instead uses a domain-separated content digest
+ * as the delimiter: the actual prompt is byte-identical for identical local
+ * evidence, while finding a content value containing its own 256-bit closing
+ * delimiter requires a fixed-point preimage. The shared detector remains the
+ * source of truth for rejecting delimiter-shaped input before provider egress.
+ */
+function wrapStaticAssetPrivacyEvidence(content: string): {
+  readonly wrapped: string;
+  readonly injectionAttemptDetected: boolean;
+} {
+  const delimiterInspection = wrapAsData(content, "transcript");
+  const suffix = createHash("sha256")
+    .update("template-twin-static-asset-privacy-envelope-v1\0", "utf8")
+    .update(content, "utf8")
+    .digest("hex");
+  return {
+    wrapped: `<transcript_${suffix}>\n${content}\n</transcript_${suffix}>`,
+    injectionAttemptDetected: delimiterInspection.injectionAttemptDetected,
+  };
 }
 
 function readU32(bytes: Uint8Array, offset: number): number {

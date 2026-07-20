@@ -129,8 +129,11 @@ describe("dedicated Template Twin email final authorization", () => {
     expect(mocks.logDelivery).not.toHaveBeenCalled();
   });
 
-  it("preserves the ordinary session-email destination rule", async () => {
-    mocks.authorize.mockResolvedValue({ templateTwin: false });
+  it("requires an ordinary destination to match the current database email", async () => {
+    mocks.authorize.mockResolvedValue({
+      templateTwin: false,
+      currentPhysicianEmail: "current-db@example.test",
+    });
 
     const response = await POST(request("other@example.test"), context);
 
@@ -139,5 +142,19 @@ describe("dedicated Template Twin email final authorization", () => {
       code: "INVALID_DESTINATION",
     });
     expect(mocks.sendEmail).not.toHaveBeenCalled();
+  });
+
+  it("uses the current database email for ordinary delivery when no target is supplied", async () => {
+    mocks.authorize.mockResolvedValue({
+      templateTwin: false,
+      currentPhysicianEmail: "current-db@example.test",
+    });
+
+    const response = await POST(request(), context);
+
+    expect(response.status).toBe(200);
+    expect(mocks.sendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ toEmail: "current-db@example.test" }),
+    );
   });
 });

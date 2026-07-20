@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   authorizeDelivery: vi.fn(),
 }));
 vi.mock("@meddoc/db", () => ({
-  default: { transcribeVisit: { findUnique: mocks.findUnique } },
+  default: { transcribeVisit: { findFirst: mocks.findUnique } },
 }));
 vi.mock("@meddoc/shared/specialties", () => ({
   findSpecialty: (s: string) => ({ label: s, id: s }),
@@ -27,7 +27,10 @@ vi.mock("@/lib/template-twin/delivery-authorization", () => ({
   authorizeVisitDeliveryFinalClaim: mocks.authorizeDelivery,
 }));
 
-import { loadVisitExportData } from "../visit-export-server";
+import {
+  loadVisitExportData,
+  loadVisitExportObjectManifest,
+} from "../visit-export-server";
 import { projectDisplayedEmCode } from "../visit-export";
 
 const DOCTOR = "doc1";
@@ -71,12 +74,49 @@ beforeEach(() => {
 });
 
 describe("loadVisitExportData — printed E/M code === confirmed displayed level", () => {
+  it("does not select SOAP/codes/Rx before the shared delivery authority boundary", async () => {
+    mocks.authorizeDelivery.mockRejectedValue(
+      new Error("synthetic current authority denial"),
+    );
+
+    await expect(loadVisitExportData("v1", DOCTOR)).rejects.toThrow(
+      "synthetic current authority denial",
+    );
+    expect(mocks.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("does not project ordinary clinical data when durable lineage appears after delivery admission", async () => {
+    mocks.findUnique.mockImplementationOnce(async (query) => {
+      expect(query.where).toMatchObject({ id: "v1" });
+      expect(JSON.stringify(query.where)).toContain(
+        "templateTwinCompiledVersion",
+      );
+      return null;
+    });
+
+    await expect(loadVisitExportData("v1", DOCTOR)).resolves.toBeNull();
+    expect(mocks.authorizeDelivery).toHaveBeenCalledTimes(1);
+  });
+
   it("SIGNED visit prints the FROZEN signedCode, not the raw L7b suggestion (the obs#2 bug)", async () => {
     mocks.findUnique.mockResolvedValue(
       row({ cptCodes: { em: { ...EM, code: "99213", signedCode: "99214" } } }),
     );
     const data = await loadVisitExportData("v1", DOCTOR);
     expect(data?.em?.code).toBe("99214"); // confirmed, not 99213
+  });
+
+  it("does not return projected clinical data when the final post-load claim is revoked", async () => {
+    mocks.findUnique.mockResolvedValue(row());
+    mocks.authorizeDelivery
+      .mockResolvedValueOnce({ templateTwin: true })
+      .mockRejectedValueOnce(new Error("synthetic final claim revoked"));
+
+    await expect(loadVisitExportData("v1", DOCTOR)).rejects.toThrow(
+      "synthetic final claim revoked",
+    );
+    expect(mocks.findUnique).toHaveBeenCalledTimes(1);
+    expect(mocks.authorizeDelivery).toHaveBeenCalledTimes(2);
   });
 
   it("SIGNED visit with an override but NO signedCode (pre-fix) falls back to the override level", async () => {
@@ -134,6 +174,50 @@ describe("loadVisitExportData — printed E/M code === confirmed displayed level
       blockerCodes: ["VISIT_AUTOMATION_PROOF_MISSING"],
     });
     await expect(loadVisitExportData("v1", DOCTOR)).resolves.toBeNull();
+  });
+});
+
+describe("loadVisitExportObjectManifest — storage-key authority", () => {
+  it("does not select object keys before the first delivery claim", async () => {
+    mocks.authorizeDelivery.mockRejectedValue(new Error("revoked before key"));
+
+    await expect(loadVisitExportObjectManifest("v1", DOCTOR)).rejects.toThrow(
+      "revoked before key",
+    );
+    expect(mocks.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("does not project an ordinary object key when durable lineage appears after delivery admission", async () => {
+    mocks.findUnique.mockImplementationOnce(async (query) => {
+      expect(query.where).toMatchObject({ id: "v1" });
+      expect(JSON.stringify(query.where)).toContain(
+        "templateTwinCompiledVersion",
+      );
+      return null;
+    });
+
+    await expect(
+      loadVisitExportObjectManifest("v1", DOCTOR),
+    ).resolves.toBeNull();
+    expect(mocks.authorizeDelivery).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not return an object key when the post-load claim is revoked", async () => {
+    mocks.findUnique.mockResolvedValue(
+      row({
+        audioKey: "private/audio-key",
+        dictationAudioKey: "private/dictation-key",
+        audioMimeType: "audio/webm",
+      }),
+    );
+    mocks.authorizeDelivery
+      .mockResolvedValueOnce({ templateTwin: true })
+      .mockRejectedValueOnce(new Error("revoked after key"));
+
+    await expect(loadVisitExportObjectManifest("v1", DOCTOR)).rejects.toThrow(
+      "revoked after key",
+    );
+    expect(mocks.authorizeDelivery).toHaveBeenCalledTimes(2);
   });
 });
 

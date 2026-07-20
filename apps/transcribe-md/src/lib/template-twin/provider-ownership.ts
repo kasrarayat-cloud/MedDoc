@@ -6,6 +6,7 @@ import {
   type AnthropicCompleteTextResult,
   type CompleteArgs,
   type CompleteTextArgs,
+  SyntheticQaProviderContextError,
   type TranscribeArgs,
   type TranscribeResult,
 } from "@meddoc/ai";
@@ -16,6 +17,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import { canonicalSha256 } from "@/lib/template-twin/canonical";
+import { claimCurrentOrdinaryVisitDeliveryActor } from "@/lib/clinical-visit-authority";
 import {
   evaluateTemplateTwinRollout,
   lockTemplateTwinRolloutForFinalClaim,
@@ -26,6 +28,16 @@ import {
   getTemplateTwinProviderCensusDecision,
   templateTwinProviderOwnershipRequiredByCensus,
 } from "./provider-census";
+import { TemplateTwinStagingQaAdmissionError } from "./staging-qa-admission";
+import { TemplateTwinStagingQaDisabledError } from "./staging-qa-gate";
+import {
+  lockAndAssertTemplateTwinStagingQaAttempt,
+  TemplateTwinStagingQaVisitGuardError,
+} from "./staging-qa-visit-guard";
+import {
+  TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID,
+  TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_NAME,
+} from "./synthetic-qa-patient";
 
 export const TEMPLATE_TWIN_PROVIDER_RESULT_VERSION =
   "template-twin-provider-result-v1" as const;
@@ -237,6 +249,157 @@ function ownershipError(
   code: TemplateTwinProviderOwnershipErrorCode,
 ): TemplateTwinProviderOwnershipError {
   return new TemplateTwinProviderOwnershipError(code);
+}
+
+interface TemplateTwinProviderAttemptHistoryRow {
+  readonly logicalAttempt: number;
+  readonly status: string;
+  readonly failureCode: string | null;
+  readonly completedAt: Date | null;
+}
+
+export interface TemplateTwinProviderAttemptSeriesInput {
+  readonly practiceId: string;
+  readonly actorUserId: string;
+  readonly scope: TemplateTwinProviderScope;
+  readonly operation: TemplateTwinProviderOperation;
+  readonly operationInstance?: string;
+  readonly subjectId: string;
+  readonly subjectSha256: string;
+  /** Captured by the server when this business request entered the provider
+   * boundary. It prevents an already-started concurrent duplicate from
+   * advancing again after the first owner records a definite failure. */
+  readonly requestStartedAt: Date;
+}
+
+interface TemplateTwinProviderAttemptDependencies {
+  readonly readHistory: (
+    input: Omit<TemplateTwinProviderAttemptSeriesInput, "requestStartedAt"> & {
+      readonly operationInstance: string;
+    },
+  ) => Promise<readonly TemplateTwinProviderAttemptHistoryRow[]>;
+}
+
+const DEFINITE_PROVIDER_FAILURE_CODES = new Set(["PROVIDER_INVOCATION_FAILED"]);
+const TERMINAL_PROVIDER_ATTEMPT_STATUSES = new Set([
+  "SUCCEEDED",
+  "FAILED",
+  "UNKNOWN_OUTCOME",
+]);
+const NONTERMINAL_PROVIDER_ATTEMPT_STATUSES = new Set([
+  "RESERVED",
+  "IN_FLIGHT",
+]);
+
+/**
+ * Allocate the durable logical attempt used by a standalone provider scope.
+ *
+ * The execution row itself remains the unique durable owner. A committed
+ * success, in-flight execution, malformed failure, or ambiguous outcome is
+ * always reused (and therefore cannot egress twice). Only a clearly terminal
+ * FAILED row that completed before this server request began may advance to
+ * the next business attempt. Concurrent duplicates that were already running
+ * when that failure committed retain the same attempt, then converge on the
+ * execution ledger's unique ownership key.
+ */
+export async function resolveTemplateTwinProviderLogicalAttempt(
+  input: TemplateTwinProviderAttemptSeriesInput,
+  dependencies: TemplateTwinProviderAttemptDependencies = {
+    readHistory: async (series) =>
+      prisma.templateTwinProviderExecution.findMany({
+        where: {
+          practiceId: series.practiceId,
+          actorUserId: series.actorUserId,
+          scope: series.scope,
+          operation: series.operation,
+          operationInstance: series.operationInstance,
+          subjectId: series.subjectId,
+          subjectSha256: series.subjectSha256,
+        },
+        orderBy: [{ logicalAttempt: "desc" }, { createdAt: "desc" }],
+        take: 1_001,
+        select: {
+          logicalAttempt: true,
+          status: true,
+          failureCode: true,
+          completedAt: true,
+        },
+      }),
+  },
+): Promise<number> {
+  const operationInstance = input.operationInstance ?? "primary";
+  if (
+    input.practiceId.length === 0 ||
+    input.actorUserId.length === 0 ||
+    input.subjectId.length === 0 ||
+    input.subjectId.length > 200 ||
+    !SHA256.test(input.subjectSha256) ||
+    !OPERATION_INSTANCE.test(operationInstance) ||
+    !(input.requestStartedAt instanceof Date) ||
+    Number.isNaN(input.requestStartedAt.getTime())
+  ) {
+    throw ownershipError("TEMPLATE_TWIN_PROVIDER_CONTEXT_INVALID");
+  }
+
+  const history = await dependencies.readHistory({
+    practiceId: input.practiceId,
+    actorUserId: input.actorUserId,
+    scope: input.scope,
+    operation: input.operation,
+    operationInstance,
+    subjectId: input.subjectId,
+    subjectSha256: input.subjectSha256,
+  });
+  if (!Array.isArray(history) || history.length > 1_000) {
+    throw ownershipError("TEMPLATE_TWIN_PROVIDER_CONTEXT_INVALID");
+  }
+  if (history.length === 0) return 1;
+  for (let index = 0; index < history.length; index += 1) {
+    const row = history[index];
+    const expectedAttempt = history.length - index;
+    const validCompletedAt =
+      row?.completedAt instanceof Date &&
+      !Number.isNaN(row.completedAt.getTime());
+    const terminal =
+      !!row && TERMINAL_PROVIDER_ATTEMPT_STATUSES.has(row.status);
+    const nonterminal =
+      !!row && NONTERMINAL_PROVIDER_ATTEMPT_STATUSES.has(row.status);
+    const validFailureCode =
+      typeof row?.failureCode === "string" &&
+      /^[A-Z0-9_]{3,80}$/u.test(row.failureCode);
+    if (
+      !row ||
+      !Number.isInteger(row.logicalAttempt) ||
+      row.logicalAttempt !== expectedAttempt ||
+      (!terminal && !nonterminal) ||
+      (terminal && !validCompletedAt) ||
+      (nonterminal && row.completedAt !== null) ||
+      (row.status === "FAILED" || row.status === "UNKNOWN_OUTCOME"
+        ? !validFailureCode
+        : row.failureCode !== null) ||
+      // Every older row must itself prove why the following logical attempt
+      // was allowed to exist. A success, ambiguous outcome, or nonterminal
+      // predecessor can never authorize another provider egress.
+      (index > 0 &&
+        (row.status !== "FAILED" ||
+          !DEFINITE_PROVIDER_FAILURE_CODES.has(row.failureCode!)))
+    ) {
+      throw ownershipError("TEMPLATE_TWIN_PROVIDER_CONTEXT_INVALID");
+    }
+  }
+  const latest = history[0]!;
+
+  const definitelyFailedBeforeRequest =
+    latest.status === "FAILED" &&
+    latest.completedAt instanceof Date &&
+    !Number.isNaN(latest.completedAt.getTime()) &&
+    latest.completedAt.getTime() < input.requestStartedAt.getTime() &&
+    latest.failureCode !== null &&
+    DEFINITE_PROVIDER_FAILURE_CODES.has(latest.failureCode);
+
+  return definitelyFailedBeforeRequest && latest.logicalAttempt < 1_000
+    ? latest.logicalAttempt + 1
+    : latest.logicalAttempt;
 }
 
 function assertProviderOwnershipMayBeAbsent(): void {
@@ -1116,7 +1279,7 @@ interface ProviderExecutionDelegate {
   updateMany(args: unknown): Promise<{ count: number }>;
 }
 
-interface ProviderOwnershipDbClient {
+export interface ProviderOwnershipDbClient {
   readonly templateTwinProviderExecution: ProviderExecutionDelegate;
   $queryRaw<T>(query: Prisma.Sql): Promise<T>;
 }
@@ -1243,12 +1406,69 @@ async function defaultLockRollout(input: {
   );
 }
 
-async function defaultCurrentAuthority(input: {
+export async function isTemplateTwinProviderAuthorityCurrent(input: {
   readonly tx: ProviderOwnershipDbClient;
   readonly context: TemplateTwinProviderOwnershipContext;
   readonly mode: TemplateTwinProviderMode;
 }): Promise<boolean> {
   const context = input.context;
+  if (input.mode === "SYNTHETIC_QA" && context.scope === "VISIT_PIPELINE") {
+    const synthetic = getTemplateTwinSyntheticQaProviderContext();
+    if (
+      !synthetic ||
+      !context.syntheticAdmissionId ||
+      synthetic.admissionId !== context.syntheticAdmissionId ||
+      synthetic.visitId !== context.visitId ||
+      synthetic.practiceId !== context.practiceId ||
+      synthetic.attempt !== context.logicalAttempt ||
+      synthetic.pinnedGlobalGeneration !==
+        context.rolloutToken.globalGeneration ||
+      synthetic.pinnedPracticeGeneration !==
+        context.rolloutToken.practiceGeneration
+    ) {
+      return false;
+    }
+    try {
+      // The process-local lease bit detects a lease-renewal failure observed by
+      // this worker. The database guard below is the durable source of truth
+      // and rechecks the exact admission/run/attempt/claim under canonical
+      // rollout -> admission -> run -> actor locks at every provider fence.
+      assertTemplateTwinSyntheticQaWorkerLeaseHealthy();
+      await lockAndAssertTemplateTwinStagingQaAttempt({
+        tx: input.tx,
+        currentRolloutToken: context.rolloutToken,
+        claim: {
+          admissionId: synthetic.admissionId,
+          runId: synthetic.runId,
+          visitId: synthetic.visitId,
+          practiceId: synthetic.practiceId,
+          doctorId: context.actorUserId,
+          sourceArtifactId: context.sourceArtifactId ?? undefined,
+          noteTemplateId: context.noteTemplateId ?? undefined,
+          noteTemplateVersion: context.noteTemplateVersion ?? undefined,
+          fixtureVersion: synthetic.fixtureVersion,
+          requestSha256: synthetic.requestSha256,
+          attempt: synthetic.attempt,
+          workerClaimId: synthetic.workerClaimId,
+          pinnedGlobalGeneration: synthetic.pinnedGlobalGeneration,
+          pinnedPracticeGeneration: synthetic.pinnedPracticeGeneration,
+        },
+        allowedStatuses: ["PROCESSING"],
+        allowedAdmissionPhases: ["PROCESSING"],
+        requireLiveWorkerLease: true,
+      });
+    } catch (error) {
+      if (
+        error instanceof SyntheticQaProviderContextError ||
+        error instanceof TemplateTwinStagingQaAdmissionError ||
+        error instanceof TemplateTwinStagingQaDisabledError ||
+        error instanceof TemplateTwinStagingQaVisitGuardError
+      ) {
+        return false;
+      }
+      throw error;
+    }
+  }
   const actorRows = await input.tx.$queryRaw<
     Array<{
       practiceId: string;
@@ -1258,11 +1478,23 @@ async function defaultCurrentAuthority(input: {
       suspendedAt: Date | null;
       softDeletedAt: Date | null;
       products: string[];
+      platformMfaComplete: boolean;
     }>
   >(Prisma.sql`
     SELECT actor."practiceId", actor."role", actor."isActive",
       actor."deactivatedAt", actor."suspendedAt", actor."softDeletedAt",
-      actor."products"
+      actor."products",
+      (
+        actor."mfaEnabled" = TRUE
+        AND regexp_replace(
+          actor."mfaSecret",
+          U&'[\\0009-\\000D\\0020\\00A0\\1680\\2000-\\200A\\2028\\2029\\202F\\205F\\3000\\FEFF]',
+          '',
+          'g'
+        ) <> ''
+        AND actor."mfaVerifiedAt" IS NOT NULL
+        AND actor."mfaVerifiedAt" <= CURRENT_TIMESTAMP
+      ) AS "platformMfaComplete"
     FROM "users" actor
     WHERE actor."id" = ${context.actorUserId}
     FOR SHARE
@@ -1280,7 +1512,10 @@ async function defaultCurrentAuthority(input: {
     actor.deactivatedAt !== null ||
     actor.suspendedAt !== null ||
     actor.softDeletedAt !== null ||
-    !actor.products.includes("TRANSCRIBE_MD")
+    !actor.products.includes("TRANSCRIBE_MD") ||
+    (context.scope === "STATIC_ASSET" &&
+      actor.products.includes("SUPER_ADMIN") &&
+      !actor.platformMfaComplete)
   ) {
     return false;
   }
@@ -1322,24 +1557,6 @@ async function defaultCurrentAuthority(input: {
         certificationId: string | null;
         mappingSha256: string | null;
         consumedAt: Date | null;
-        parentPracticeId: string | null;
-        parentActorId: string | null;
-        parentProviderMode: string | null;
-        parentPurpose: string | null;
-        parentPhase: string | null;
-        parentSourceArtifactId: string | null;
-        parentNoteTemplateId: string | null;
-        parentNoteTemplateVersion: number | null;
-        parentCertificationId: string | null;
-        parentMappingSha256: string | null;
-        parentVisitId: string | null;
-        parentFailedAt: Date | null;
-        parentRevokedAt: Date | null;
-        parentConsumedAt: Date | null;
-        parentNotExpired: boolean | null;
-        parentPreCertificationVoiceEvidence: boolean | null;
-        parentPinnedGlobalRolloutGeneration: bigint | null;
-        parentPinnedPracticeRolloutGeneration: bigint | null;
         notExpired: boolean;
         failedAt: Date | null;
         revokedAt: Date | null;
@@ -1358,36 +1575,53 @@ async function defaultCurrentAuthority(input: {
         admission."audioMimeType", admission."audioObjectKey",
         admission."attempt", admission."certificationId",
         admission."mappingSha256", admission."consumedAt",
-        parent."practiceId" AS "parentPracticeId",
-        parent."actorId" AS "parentActorId",
-        parent."providerMode" AS "parentProviderMode",
-        parent."purpose" AS "parentPurpose",
-        parent."phase" AS "parentPhase",
-        parent."sourceArtifactId" AS "parentSourceArtifactId",
-        parent."noteTemplateId" AS "parentNoteTemplateId",
-        parent."noteTemplateVersion" AS "parentNoteTemplateVersion",
-        parent."certificationId" AS "parentCertificationId",
-        parent."mappingSha256" AS "parentMappingSha256",
-        parent."visitId" AS "parentVisitId",
-        parent."failedAt" AS "parentFailedAt",
-        parent."revokedAt" AS "parentRevokedAt",
-        parent."consumedAt" AS "parentConsumedAt",
-        parent."expiresAt" > CURRENT_TIMESTAMP AS "parentNotExpired",
-        parent."preCertificationVoiceEvidence" AS
-          "parentPreCertificationVoiceEvidence",
-        parent."pinnedGlobalRolloutGeneration" AS
-          "parentPinnedGlobalRolloutGeneration",
-        parent."pinnedPracticeRolloutGeneration" AS
-          "parentPinnedPracticeRolloutGeneration",
-        admission."expiresAt" > CURRENT_TIMESTAMP AS "notExpired",
+        admission."expiresAt" > clock_timestamp() AS "notExpired",
         admission."failedAt", admission."revokedAt"
       FROM "template_twin_synthetic_qa_admissions" admission
-      LEFT JOIN "template_twin_synthetic_qa_admissions" parent
-        ON parent."id" = admission."parentAdmissionId"
       WHERE admission."id" = ${context.syntheticAdmissionId}
-      FOR SHARE OF admission, parent
+      FOR SHARE OF admission
     `);
     const admission = admissions[0];
+    const parentAdmissions = admission?.parentAdmissionId
+      ? await input.tx.$queryRaw<
+          Array<{
+            id: string;
+            practiceId: string;
+            actorId: string;
+            providerMode: string;
+            purpose: string;
+            phase: string;
+            sourceArtifactId: string | null;
+            noteTemplateId: string | null;
+            noteTemplateVersion: number | null;
+            certificationId: string | null;
+            mappingSha256: string | null;
+            visitId: string | null;
+            failedAt: Date | null;
+            revokedAt: Date | null;
+            consumedAt: Date | null;
+            notExpired: boolean;
+            preCertificationVoiceEvidence: boolean;
+            pinnedGlobalRolloutGeneration: bigint;
+            pinnedPracticeRolloutGeneration: bigint;
+          }>
+        >(Prisma.sql`
+          SELECT parent."id", parent."practiceId", parent."actorId",
+            parent."providerMode", parent."purpose", parent."phase",
+            parent."sourceArtifactId", parent."noteTemplateId",
+            parent."noteTemplateVersion", parent."certificationId",
+            parent."mappingSha256", parent."visitId", parent."failedAt",
+            parent."revokedAt", parent."consumedAt",
+            parent."expiresAt" > clock_timestamp() AS "notExpired",
+            parent."preCertificationVoiceEvidence",
+            parent."pinnedGlobalRolloutGeneration",
+            parent."pinnedPracticeRolloutGeneration"
+          FROM "template_twin_synthetic_qa_admissions" parent
+          WHERE parent."id" = ${admission.parentAdmissionId}
+          FOR SHARE OF parent
+        `)
+      : [];
+    const parentAdmission = parentAdmissions[0];
     preCertificationVoice = admission?.preCertificationVoiceEvidence === true;
     if (preCertificationVoice && admission) {
       syntheticVoiceAuthority = {
@@ -1436,26 +1670,27 @@ async function defaultCurrentAuthority(input: {
             admission.noteTemplateId !== context.noteTemplateId ||
             admission.noteTemplateVersion !== context.noteTemplateVersion ||
             admission.sourceSha256 !== context.sourceSha256 ||
-            admission.parentPracticeId !== context.practiceId ||
-            admission.parentActorId !== context.actorUserId ||
-            admission.parentProviderMode !== "SYNTHETIC_LIFECYCLE" ||
-            admission.parentPurpose !== "UPLOAD" ||
-            admission.parentPhase !== "TEMPLATE_LINKED" ||
-            admission.parentSourceArtifactId !== context.sourceArtifactId ||
-            admission.parentNoteTemplateId !== context.noteTemplateId ||
-            admission.parentNoteTemplateVersion !==
+            !parentAdmission ||
+            parentAdmission.practiceId !== context.practiceId ||
+            parentAdmission.actorId !== context.actorUserId ||
+            parentAdmission.providerMode !== "SYNTHETIC_LIFECYCLE" ||
+            parentAdmission.purpose !== "UPLOAD" ||
+            parentAdmission.phase !== "TEMPLATE_LINKED" ||
+            parentAdmission.sourceArtifactId !== context.sourceArtifactId ||
+            parentAdmission.noteTemplateId !== context.noteTemplateId ||
+            parentAdmission.noteTemplateVersion !==
               context.noteTemplateVersion ||
-            admission.parentCertificationId !== null ||
-            admission.parentMappingSha256 !== null ||
-            admission.parentVisitId !== null ||
-            admission.parentFailedAt !== null ||
-            admission.parentRevokedAt !== null ||
-            admission.parentConsumedAt !== null ||
-            admission.parentNotExpired !== true ||
-            admission.parentPreCertificationVoiceEvidence !== false ||
-            admission.parentPinnedGlobalRolloutGeneration !==
+            parentAdmission.certificationId !== null ||
+            parentAdmission.mappingSha256 !== null ||
+            parentAdmission.visitId !== null ||
+            parentAdmission.failedAt !== null ||
+            parentAdmission.revokedAt !== null ||
+            parentAdmission.consumedAt !== null ||
+            parentAdmission.notExpired !== true ||
+            parentAdmission.preCertificationVoiceEvidence ||
+            parentAdmission.pinnedGlobalRolloutGeneration !==
               context.rolloutToken.globalGeneration ||
-            admission.parentPinnedPracticeRolloutGeneration !==
+            parentAdmission.pinnedPracticeRolloutGeneration !==
               context.rolloutToken.practiceGeneration
           : admission.purpose !== "VISIT" ||
             admission.preCertificationVoiceEvidence ||
@@ -1469,12 +1704,33 @@ async function defaultCurrentAuthority(input: {
               "REVIEW_READY",
             ].includes(admission.phase) ||
             admission.visitId !== context.visitId ||
-            (admission.sourceArtifactId !== null &&
-              admission.sourceArtifactId !== context.sourceArtifactId) ||
-            (admission.noteTemplateId !== null &&
-              admission.noteTemplateId !== context.noteTemplateId) ||
-            (admission.noteTemplateVersion !== null &&
-              admission.noteTemplateVersion !== context.noteTemplateVersion))
+            admission.sourceArtifactId !== context.sourceArtifactId ||
+            admission.noteTemplateId !== context.noteTemplateId ||
+            admission.noteTemplateVersion !== context.noteTemplateVersion ||
+            !admission.certificationId ||
+            !admission.mappingSha256 ||
+            !parentAdmission ||
+            parentAdmission.practiceId !== context.practiceId ||
+            parentAdmission.actorId !== context.actorUserId ||
+            parentAdmission.providerMode !== "SYNTHETIC_LIFECYCLE" ||
+            parentAdmission.purpose !== "UPLOAD" ||
+            parentAdmission.phase !== "CERTIFIED" ||
+            parentAdmission.sourceArtifactId !== context.sourceArtifactId ||
+            parentAdmission.noteTemplateId !== context.noteTemplateId ||
+            parentAdmission.noteTemplateVersion !==
+              context.noteTemplateVersion ||
+            parentAdmission.certificationId !== admission.certificationId ||
+            parentAdmission.mappingSha256 !== admission.mappingSha256 ||
+            parentAdmission.visitId !== null ||
+            parentAdmission.failedAt !== null ||
+            parentAdmission.revokedAt !== null ||
+            parentAdmission.consumedAt !== null ||
+            !parentAdmission.notExpired ||
+            parentAdmission.preCertificationVoiceEvidence ||
+            parentAdmission.pinnedGlobalRolloutGeneration !==
+              context.rolloutToken.globalGeneration ||
+            parentAdmission.pinnedPracticeRolloutGeneration !==
+              context.rolloutToken.practiceGeneration)
     ) {
       return false;
     }
@@ -1537,10 +1793,32 @@ async function defaultCurrentAuthority(input: {
       visit.inputMode !== context.visitInputMode ||
       visit.deletedAt !== null ||
       visit.archivedAt !== null ||
+      visit.patientPracticeId !== context.practiceId ||
+      visit.patientDeletedAt !== null ||
+      (input.mode === "LIVE" &&
+        visit.patientExternalId ===
+          TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID) ||
       (context.noteTemplateId !== null &&
         visit.noteTemplateId !== context.noteTemplateId) ||
       (context.noteTemplateVersion !== null &&
         visit.noteTemplateVersion !== context.noteTemplateVersion)
+    ) {
+      return false;
+    }
+    const requiresReservedSyntheticPatient =
+      input.mode === "SYNTHETIC_QA" &&
+      (context.scope === "VISIT_PIPELINE" || preCertificationVoice);
+    if (
+      requiresReservedSyntheticPatient &&
+      (visit.patientName !== TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_NAME ||
+        visit.patientExternalId !==
+          TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID ||
+        visit.patientDateOfBirth !== null ||
+        visit.patientMrn !== null ||
+        visit.patientInsurance !== null ||
+        visit.patientProblemList !== null ||
+        visit.patientWeightKg !== null ||
+        visit.patientAllergies.length !== 0)
     ) {
       return false;
     }
@@ -1552,17 +1830,7 @@ async function defaultCurrentAuthority(input: {
         visit.audioSizeBytes !== syntheticVoiceAuthority?.audioSizeBytes ||
         visit.rawTextInput !== null ||
         visit.dictationAudioKey !== null ||
-        visit.signedAt !== null ||
-        visit.patientPracticeId !== context.practiceId ||
-        visit.patientName !== "Template Twin Synthetic QA" ||
-        visit.patientExternalId !== "SYNTHETIC-QA-ONLY" ||
-        visit.patientDateOfBirth !== null ||
-        visit.patientMrn !== null ||
-        visit.patientInsurance !== null ||
-        visit.patientProblemList !== null ||
-        visit.patientWeightKg !== null ||
-        visit.patientAllergies.length !== 0 ||
-        visit.patientDeletedAt !== null)
+        visit.signedAt !== null)
     ) {
       return false;
     }
@@ -1584,7 +1852,57 @@ async function defaultCurrentAuthority(input: {
     return collisions[0]?.collision === false;
   }
 
+  if (
+    context.scope === "VISIT_PIPELINE" &&
+    (context.sourceArtifactId === null ||
+      context.compiledVersionId === null ||
+      context.noteTemplateId === null ||
+      context.noteTemplateVersion === null ||
+      context.sourceLineageId === null ||
+      context.sourceLineageVersion === null ||
+      context.sourceSha256 === null)
+  ) {
+    return false;
+  }
   if (context.sourceArtifactId !== null) {
+    const visitPipelineCompilationAuthority =
+      context.scope !== "VISIT_PIPELINE"
+        ? Prisma.sql`TRUE`
+        : input.mode === "LIVE"
+          ? Prisma.sql`
+              public.template_twin_live_provider_compilation_is_valid(
+                compiled."id", ${context.actorUserId}
+              )
+              AND EXISTS (
+                SELECT 1
+                FROM "template_twin_certifications" certification
+                WHERE certification."compiledVersionId" = compiled."id"
+                  AND certification."certifiedById" = ${context.actorUserId}
+                  AND certification."providerAuthorizationMode" = 'LIVE'
+                  AND certification."providerAuthorizationAdmissionId" IS NULL
+              )
+            `
+          : input.mode === "SYNTHETIC_QA"
+            ? Prisma.sql`
+                EXISTS (
+                  SELECT 1
+                  FROM "template_twin_synthetic_qa_admissions" admission
+                  JOIN "template_twin_certifications" certification
+                    ON certification."compiledVersionId" = compiled."id"
+                  WHERE admission."id" = ${context.syntheticAdmissionId}
+                    AND admission."parentAdmissionId" IS NOT NULL
+                    AND certification."certifiedById" = ${context.actorUserId}
+                    AND certification."providerAuthorizationMode" =
+                      'SYNTHETIC_QA'
+                    AND certification."providerAuthorizationAdmissionId" =
+                      admission."parentAdmissionId"
+                    AND public.template_twin_staging_provider_compilation_is_valid(
+                      compiled."id", ${context.actorUserId},
+                      admission."parentAdmissionId"
+                    )
+                )
+              `
+            : Prisma.sql`FALSE`;
     const artifacts = await input.tx.$queryRaw<Array<{ authorized: boolean }>>(
       Prisma.sql`
         SELECT EXISTS (
@@ -1605,8 +1923,16 @@ async function defaultCurrentAuthority(input: {
             AND source."sha256" = ${context.sourceSha256}
             AND source."validationStatus" = 'accepted'
             AND template."templateKind" = 'template_twin_docx'
+            AND (${context.scope !== "VISIT_PIPELINE"}
+              OR (
+                compiled."certificationStatus" = 'CERTIFIED'
+                AND compiled."providerOwnershipSha256" IS NOT NULL
+                AND source."providerOwnershipSha256" IS NOT NULL
+              )
+            )
             AND (${!preCertificationVoice}
               OR compiled."certificationStatus" <> 'CERTIFIED')
+            AND (${visitPipelineCompilationAuthority})
         ) AS "authorized"
       `,
     );
@@ -1661,7 +1987,7 @@ const DEFAULT_DEPENDENCIES: TemplateTwinProviderRuntimeDependencies = {
     return process.env.MOCK_AI_CALLS === "true" ? "DETERMINISTIC_MOCK" : "LIVE";
   },
   lockRollout: defaultLockRollout,
-  currentAuthority: defaultCurrentAuthority,
+  currentAuthority: isTemplateTwinProviderAuthorityCurrent,
   executionId: randomUUID,
   claimId: () => randomBytes(32).toString("hex"),
   now: () => new Date(),
@@ -2606,6 +2932,68 @@ async function assertCurrentProviderAuthority(input: {
   }
 }
 
+interface OrdinaryVisitProviderIdentity {
+  readonly practiceId: string;
+  readonly actorUserId: string;
+  readonly visitId: string;
+}
+
+function ordinaryVisitProviderIdentity(input: {
+  readonly practiceId: string;
+  readonly userId?: string | null;
+  readonly visitId?: string | null;
+}): OrdinaryVisitProviderIdentity | null {
+  if (input.visitId === null || input.visitId === undefined) return null;
+  if (
+    input.visitId.trim().length === 0 ||
+    typeof input.userId !== "string" ||
+    input.userId.trim().length === 0 ||
+    input.practiceId.trim().length === 0
+  ) {
+    throw ownershipError("TEMPLATE_TWIN_PROVIDER_AUTHORITY_REVOKED");
+  }
+  return {
+    practiceId: input.practiceId,
+    actorUserId: input.userId,
+    visitId: input.visitId,
+  };
+}
+
+async function assertCurrentOrdinaryVisitProviderAuthority(
+  identity: OrdinaryVisitProviderIdentity,
+): Promise<void> {
+  const actor = await claimCurrentOrdinaryVisitDeliveryActor({
+    visitId: identity.visitId,
+    actorUserId: identity.actorUserId,
+  });
+  if (!actor || actor.practiceId !== identity.practiceId) {
+    throw ownershipError("TEMPLATE_TWIN_PROVIDER_AUTHORITY_REVOKED");
+  }
+}
+
+async function runCurrentOrdinaryVisitProviderCall<T>(input: {
+  readonly identity: OrdinaryVisitProviderIdentity | null;
+  readonly invoke: (
+    beforeProviderAttempt?: () => Promise<void>,
+    afterProviderAttempt?: () => Promise<void>,
+  ) => Promise<T>;
+}): Promise<T> {
+  const identity = input.identity;
+  if (!identity) return input.invoke();
+  const beforeProviderAttempt = () =>
+    assertCurrentOrdinaryVisitProviderAuthority(identity);
+  const afterProviderAttempt = () =>
+    assertCurrentOrdinaryVisitProviderAuthority(identity);
+  const output = await input.invoke(
+    beforeProviderAttempt,
+    afterProviderAttempt,
+  );
+  // A suspension, practice transfer, patient transfer, or visit ownership
+  // change while the provider was running invalidates the returned PHI.
+  await assertCurrentOrdinaryVisitProviderAuthority(identity);
+  return output;
+}
+
 async function runTemplateTwinOwnedProviderInContext<T>(
   input: TemplateTwinOwnedProviderInput<T>,
   state: ProviderOwnershipState,
@@ -2748,7 +3136,15 @@ export async function runTemplateTwinOwnedModelComplete<T>(input: {
   const context = getTemplateTwinProviderOwnershipContext();
   if (!context) {
     assertProviderOwnershipMayBeAbsent();
-    return client.complete(input.args);
+    return runCurrentOrdinaryVisitProviderCall({
+      identity: ordinaryVisitProviderIdentity(input.args),
+      invoke: (beforeProviderAttempt, afterProviderAttempt) =>
+        client.complete({
+          ...input.args,
+          beforeProviderAttempt,
+          afterProviderAttempt,
+        }),
+    });
   }
   const providerCorrelationId = assertExactProviderLogIdentity({
     context,
@@ -2812,7 +3208,15 @@ export async function runTemplateTwinOwnedModelCompleteText(input: {
   const context = getTemplateTwinProviderOwnershipContext();
   if (!context) {
     assertProviderOwnershipMayBeAbsent();
-    return client.completeText(input.args);
+    return runCurrentOrdinaryVisitProviderCall({
+      identity: ordinaryVisitProviderIdentity(input.args),
+      invoke: (beforeProviderAttempt, afterProviderAttempt) =>
+        client.completeText({
+          ...input.args,
+          beforeProviderAttempt,
+          afterProviderAttempt,
+        }),
+    });
   }
   const providerCorrelationId = assertExactProviderLogIdentity({
     context,
@@ -2891,7 +3295,15 @@ export async function runTemplateTwinOwnedTranscribe(input: {
       throw ownershipError("TEMPLATE_TWIN_PROVIDER_CONTEXT_INVALID");
     }
     assertProviderOwnershipMayBeAbsent();
-    return invokeTranscription(input.args);
+    return runCurrentOrdinaryVisitProviderCall({
+      identity: ordinaryVisitProviderIdentity(input.args),
+      invoke: (beforeProviderAttempt, afterProviderAttempt) =>
+        invokeTranscription({
+          ...input.args,
+          beforeProviderAttempt,
+          afterProviderAttempt,
+        }),
+    });
   }
   if (
     input.operation === "SYNTHETIC_EVIDENCE_TRANSCRIPTION" &&

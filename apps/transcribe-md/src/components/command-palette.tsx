@@ -16,6 +16,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import * as Dialog from '@radix-ui/react-dialog';
 import { Command } from 'cmdk';
+import { toast } from 'sonner';
 import {
   Plus,
   LayoutDashboard,
@@ -87,9 +88,21 @@ export function CommandPalette({ authed }: CommandPaletteProps) {
   const signOut = useCallback(
     () =>
       run(async () => {
-        await signOutAction();
-        router.push('/login');
-        router.refresh();
+        try {
+          const result = await signOutAction();
+          if (!result.ok) {
+            toast.error('Sign-out was not completed', {
+              description: result.message,
+            });
+            return;
+          }
+          router.push('/login');
+          router.refresh();
+        } catch {
+          toast.error('Sign-out was not completed', {
+            description: 'Please check your connection and try again.',
+          });
+        }
       }),
     [router, run],
   );

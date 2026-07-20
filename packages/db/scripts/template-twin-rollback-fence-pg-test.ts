@@ -13,6 +13,7 @@ import { lockTemplateTwinRolloutForFinalClaim } from "../../../apps/transcribe-m
 const PRACTICE_ID = "synthetic-rollback-fence-practice";
 const OTHER_PRACTICE_ID = "synthetic-rollback-fence-other-practice";
 const ACTOR_ID = "synthetic-rollback-fence-admin";
+const ACTOR_SESSION_ID = "synthetic-rollback-current-admin-session";
 const PHYSICIAN_ID = "synthetic-rollback-fence-physician";
 const RACE_PHYSICIAN_ID = "synthetic-rollback-fence-race-physician";
 const SAME_PRACTICE_PHYSICIAN_ID =
@@ -170,15 +171,26 @@ async function main(): Promise<void> {
     await tx.$executeRaw`
       INSERT INTO "users" (
         "id", "email", "name", "passwordHash", "role", "isActive",
-        "practiceId", "products", "createdAt", "updatedAt"
+        "practiceId", "products", "mfaEnabled", "mfaSecret",
+        "mfaVerifiedAt", "createdAt", "updatedAt"
       ) VALUES (
         ${ACTOR_ID}, 'rollback-fence-admin@synthetic.test',
         'Synthetic Rollback Operator', 'INVALID_SYNTHETIC_PASSWORD_HASH',
         'ADMIN', true, ${PRACTICE_ID},
         ARRAY['TRANSCRIBE_MD', 'SUPER_ADMIN']::"Product"[],
+        true, 'SYNTHETIC-ROLLBACK-MFA-SECRET',
+        CURRENT_TIMESTAMP - INTERVAL '1 minute',
         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
       )
     `;
+    await tx.userSession.create({
+      data: {
+        userId: ACTOR_ID,
+        sessionToken: ACTOR_SESSION_ID,
+        createdAt: new Date(Date.now() - 60_000),
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      },
+    });
     await tx.$executeRaw`
       INSERT INTO "users" (
         "id", "email", "name", "passwordHash", "role", "isActive",
@@ -427,9 +439,39 @@ async function main(): Promise<void> {
 
   const actor = {
     userId: ACTOR_ID,
-    userEmail: "stale-session-value@synthetic.test",
+    userEmail: "rollback-fence-admin@synthetic.test",
     practiceId: PRACTICE_ID,
+    sessionId: ACTOR_SESSION_ID,
   };
+  await prisma.userSession.delete({
+    where: { sessionToken: ACTOR_SESSION_ID },
+  });
+  let revokedSessionAttempt: unknown;
+  try {
+    await prepareTemplateTwinRollback({
+      operationId: PREPARE_CANCEL_ID,
+      reasonCode: "DISPOSABLE_REHEARSAL",
+      changeId: "synthetic-change-revoked-session",
+      actor,
+    });
+  } catch (error) {
+    revokedSessionAttempt = error;
+  }
+  assert(
+    revokedSessionAttempt instanceof Error &&
+      "code" in revokedSessionAttempt &&
+      revokedSessionAttempt.code ===
+        "TEMPLATE_TWIN_ROLLBACK_OPERATOR_UNAUTHORIZED",
+    "A revoked admin session retained rollback authority.",
+  );
+  await prisma.userSession.create({
+    data: {
+      userId: ACTOR_ID,
+      sessionToken: ACTOR_SESSION_ID,
+      createdAt: new Date(Date.now() - 60_000),
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    },
+  });
   const cancelled = await prepareTemplateTwinRollback({
     operationId: PREPARE_CANCEL_ID,
     reasonCode: "DISPOSABLE_REHEARSAL",

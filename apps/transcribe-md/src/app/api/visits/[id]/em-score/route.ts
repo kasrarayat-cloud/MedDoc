@@ -24,15 +24,29 @@
 
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import type { Prisma } from "@prisma/client";
 
 import prisma from "@meddoc/db";
 import { auth } from "@/lib/nextauth";
 import { apiError, withApiHandler } from "@/lib/api-error";
 import { isOwnedTemplateTwinStagingQaVisit } from "@/lib/template-twin/staging-qa-access";
 import { isSameOriginTemplateTwinMutation } from "@/lib/template-twin/request-security";
+import {
+  requireTemplateTwinVisitReadAuthority,
+  TemplateTwinVisitReadAuthorityError,
+} from "@/lib/template-twin/read-authority";
 import { computeEmScore } from "@/lib/em-coding/score";
 import { engineToUiScore } from "@/lib/em-coding/to-ui-score";
-import { hasTemplateTwinProvenance } from "@/lib/em-coding/template-twin-boundary";
+import {
+  hasTemplateTwinProvenance,
+  runProviderBackedEmForOrdinaryVisit,
+} from "@/lib/em-coding/template-twin-boundary";
+import {
+  lockAndAssertOrdinaryClinicalMutation,
+  TemplateTwinClinicalMutationAuthorizationError,
+} from "@/lib/template-twin/visit-mutation-authority";
+import { TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE } from "@/lib/template-twin/durable-visit-exclusion";
+import { currentClinicalVisitActorWhere } from "@/lib/clinical-visit-authority";
 import {
   extractIcdRows,
   extractRxRows,
@@ -76,15 +90,48 @@ export const POST = withApiHandler<{ id: string }>(
     const parsed = BodySchema.safeParse(body);
     if (!parsed.success) return apiError("invalid soapText payload", 400);
 
-    // Ownership check — 404 on any mismatch (consistent with the rest
-    // of the visits API; never expose existence of a foreign visit).
+    let preReadAuthority;
+    try {
+      preReadAuthority = await requireTemplateTwinVisitReadAuthority({
+        db: prisma,
+        visitId,
+        actorUserId: userId,
+      });
+    } catch (error) {
+      if (error instanceof TemplateTwinVisitReadAuthorityError) {
+        return apiError("not found", 404);
+      }
+      throw error;
+    }
+    // No synthetic decision may reach the clinical projection below. This
+    // includes a full QA run as well as admission-only, pre-certification,
+    // provider-ledger, and reserved-patient orphan lineage.
+    if (
+      preReadAuthority.isSyntheticTemplateTwin ||
+      (preReadAuthority.isTemplateTwin && !preReadAuthority.practiceId)
+    ) {
+      return apiError("not found", 404);
+    }
+
+    // Clinical columns are projected only after the identifier-only durable
+    // provenance/current-physician admission above.
     const visit = await prisma.transcribeVisit.findUnique({
-      where: { id: visitId },
+      where: {
+        id: visitId,
+        ...currentClinicalVisitActorWhere(userId),
+        ...(!preReadAuthority.isTemplateTwin
+          ? TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE
+          : {}),
+      },
       select: {
         id: true,
         userId: true,
+        patientId: true,
+        noteTemplateId: true,
+        updatedAt: true,
         deletedAt: true,
         archivedAt: true,
+        patient: { select: { externalId: true } },
         // Pull these for the deterministic fallback's structured signals.
         icdCodes: true,
         rxDrafts: true,
@@ -96,19 +143,51 @@ export const POST = withApiHandler<{ id: string }>(
         // the doctor-set code after a re-score (matching page.tsx's
         // initial render path).
         cptCodes: true,
-        noteTemplate: { select: { templateKind: true } },
+        noteTemplate: {
+          select: {
+            templateKind: true,
+            templateTwinCompiledVersion: { select: { id: true } },
+          },
+        },
         templateTwinFill: { select: { id: true } },
         templateTwinSyntheticQaRun: { select: { id: true } },
         templateTwinSyntheticQaAdmission: { select: { id: true } },
+        templateTwinProviderExecutions: {
+          select: { id: true },
+          take: 1,
+        },
       },
     });
     if (!visit || visit.userId !== userId) return apiError("not found", 404);
+    let readAuthority;
+    try {
+      readAuthority = await requireTemplateTwinVisitReadAuthority({
+        db: prisma,
+        visitId,
+        actorUserId: userId,
+        ...(preReadAuthority.isTemplateTwin
+          ? {
+              expectedPracticeId: preReadAuthority.practiceId!,
+              requireTemplateTwin: true,
+            }
+          : {}),
+      });
+    } catch (error) {
+      if (error instanceof TemplateTwinVisitReadAuthorityError) {
+        return apiError("not found", 404);
+      }
+      throw error;
+    }
     if (visit.deletedAt !== null || visit.archivedAt !== null) {
       return apiError("Visit is no longer active.", 400, {
         code: "VISIT_NOT_ACTIVE",
       });
     }
-    if (hasTemplateTwinProvenance(visit)) {
+    const isTemplateTwinVisit = hasTemplateTwinProvenance(visit);
+    if (readAuthority.isTemplateTwin !== isTemplateTwinVisit) {
+      return apiError("not found", 404);
+    }
+    if (isTemplateTwinVisit) {
       return apiError(
         "Provider-backed E/M scoring is unavailable for Template Twin visits.",
         409,
@@ -125,13 +204,51 @@ export const POST = withApiHandler<{ id: string }>(
     const icdCodes = extractIcdRows(visit.icdCodes);
     const rxDrafts = extractRxRows(visit.rxDrafts);
 
-    const engineScore = await computeEmScore(parsed.data.soapText, {
-      practiceId,
-      visitId,
-      userId,
-      icdCodes,
-      rxDrafts,
-    });
+    const ordinaryProvenanceFence = () =>
+      prisma.$transaction((tx: Prisma.TransactionClient) =>
+        lockAndAssertOrdinaryClinicalMutation({
+          tx,
+          visitId,
+          actorUserId: userId,
+          admittedVisitUpdatedAt: visit.updatedAt,
+          admittedPatientId: visit.patientId,
+          admittedNoteTemplateId: visit.noteTemplateId,
+        }),
+      );
+    let engineScore;
+    try {
+      engineScore = await runProviderBackedEmForOrdinaryVisit(
+        isTemplateTwinVisit,
+        ordinaryProvenanceFence,
+        () =>
+          computeEmScore(parsed.data.soapText, {
+            practiceId,
+            visitId,
+            userId,
+            icdCodes,
+            rxDrafts,
+          }),
+      );
+    } catch (error) {
+      if (error instanceof TemplateTwinClinicalMutationAuthorizationError) {
+        return apiError(
+          "The visit changed before E/M scoring. Refresh and try again.",
+          409,
+          { code: "TEMPLATE_TWIN_MUTATION_CONFLICT", retry: true },
+        );
+      }
+      throw error;
+    }
+    if (!engineScore) {
+      return apiError(
+        "Provider-backed E/M scoring is unavailable for Template Twin visits.",
+        409,
+        {
+          code: "TEMPLATE_TWIN_PROVIDER_BACKED_EM_UNAVAILABLE",
+          retry: false,
+        },
+      );
+    }
 
     // Project engine → UI shape (matches page.tsx initial render +
     // override route + apply-additions route). Same three inputs as

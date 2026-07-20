@@ -1,16 +1,16 @@
 // ============================================================================
-// Reset-password emits PASSWORD_CHANGED (Security Audit P1-A, 2026-05-13)
+// Reset-password transactional PASSWORD_CHANGED audit
 // ----------------------------------------------------------------------------
-// HIPAA §164.312(b) requires credential-material change events to be
-// logged regardless of trigger. `/api/settings/change-password`
-// already emits PASSWORD_CHANGED; `/api/auth/reset-password` (the
-// token-redemption path) was the missing case. Source-pin so future
-// edits can't silently drop the audit emit.
+// The immutable audit receipt is part of the same Prisma transaction as the
+// credential mutation, token consumption, and session revocation. Awaiting it
+// before the callback returns means an audit insert failure rejects and rolls
+// back the whole transaction rather than leaving an unaudited password change.
 // ============================================================================
 
-import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+
+import { describe, expect, it } from 'vitest';
 
 const SRC = readFileSync(
   resolve(
@@ -22,34 +22,48 @@ const SRC = readFileSync(
     'api',
     'auth',
     'reset-password',
-    'route.ts',
+    'route.ts'
   ),
-  'utf-8',
+  'utf8'
 );
 
-describe('reset-password — PASSWORD_CHANGED audit (P1-A)', () => {
-  it("imports logAudit from '@/lib/audit'", () => {
+const transactionStart = SRC.indexOf('result = await prisma.$transaction');
+const transactionEnd = SRC.indexOf('\n    } catch (error)', transactionStart);
+const transaction = SRC.slice(transactionStart, transactionEnd);
+
+describe('reset-password transactional audit contract', () => {
+  it('imports the transaction-scoped auth mutation helper', () => {
     expect(SRC).toMatch(
-      /import\s+\{\s*logAudit\s*\}\s+from\s+['"]@\/lib\/audit['"]/,
+      /import\s+\{\s*appendAuthMutationAuditInTransaction\s*\}\s+from\s+['"]@\/lib\/audit['"]/
     );
   });
 
-  it('emits PASSWORD_CHANGED tagged via=reset_token after the transaction', () => {
-    // Whitespace-flexible to survive prop reordering. Must include
-    // both `action: 'PASSWORD_CHANGED'` AND `via: 'reset_token'`
-    // (distinguishes from change-password's same-action emit).
-    expect(SRC).toMatch(
-      /logAudit\s*\(\s*\{[\s\S]*?action:\s*['"]PASSWORD_CHANGED['"][\s\S]*?via:\s*['"]reset_token['"]/,
+  it('awaits the receipt inside the mutation transaction before returning', () => {
+    const auditAt = transaction.indexOf(
+      'await appendAuthMutationAuditInTransaction(tx'
     );
+    const callbackReturnAt = transaction.indexOf(
+      'return { userId: locked.user.id }'
+    );
+
+    expect(transactionStart).toBeGreaterThanOrEqual(0);
+    expect(transactionEnd).toBeGreaterThan(transactionStart);
+    expect(auditAt).toBeGreaterThan(
+      transaction.indexOf('await tx.user.update')
+    );
+    expect(auditAt).toBeGreaterThan(
+      transaction.indexOf('await consumeLockedAuthToken')
+    );
+    expect(callbackReturnAt).toBeGreaterThan(auditAt);
   });
 
-  it('passes targetId + userId override from the consumed token', () => {
-    // The reset endpoint runs WITHOUT an active session (user proved
-    // ownership via the token, hasn't signed in yet). The logAudit
-    // call must explicitly pass userId so the row isn't attributed
-    // to a null/sentinel userId.
-    expect(SRC).toMatch(
-      /logAudit\s*\(\s*\{[\s\S]*?userId:\s*consumed\.userId/,
+  it('binds the receipt to the exact locked user, practice, and reset-token provenance', () => {
+    expect(transaction).toMatch(
+      /appendAuthMutationAuditInTransaction\(tx,\s*\{[\s\S]*?action:\s*['"]PASSWORD_CHANGED['"][\s\S]*?userId:\s*locked\.user\.id[\s\S]*?userEmail:\s*locked\.user\.email[\s\S]*?practiceId:\s*locked\.user\.practiceId[\s\S]*?metadata:\s*\{\s*via:\s*['"]reset_token['"]\s*\}/
     );
+    expect(SRC.slice(transactionEnd)).not.toContain(
+      'appendAuthMutationAuditInTransaction'
+    );
+    expect(SRC).not.toMatch(/\blogAudit\s*\(/);
   });
 });

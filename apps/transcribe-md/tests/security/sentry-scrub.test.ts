@@ -74,6 +74,8 @@ describe('scrubSentryEvent — request headers / cookies', () => {
           Forwarded: 'for=192.0.2.43',
           'CF-Connecting-IP': '198.51.100.7',
           'True-Client-IP': '198.51.100.8',
+          Referer:
+            'https://app.quillmd.com/api/auth/verify-email?token=synthetic-secret',
           // Allowed (redacted, not dropped)
           'User-Agent': 'Mozilla/5.0',
         },
@@ -93,6 +95,7 @@ describe('scrubSentryEvent — request headers / cookies', () => {
     expect(h).not.toHaveProperty('Forwarded');
     expect(h).not.toHaveProperty('CF-Connecting-IP');
     expect(h).not.toHaveProperty('True-Client-IP');
+    expect(h).not.toHaveProperty('Referer');
     // Survivors are redacted, not removed
     expect(h['User-Agent']).toMatch(/^\[R:/);
   });

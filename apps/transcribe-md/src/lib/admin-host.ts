@@ -56,6 +56,28 @@ function configuredPhysicianHost(
     : null;
 }
 
+/**
+ * Exact physician-origin boundary for request-scoped clinical authorization.
+ * Production and explicitly configured environments require the reviewed
+ * physician hostname. Local development without a physician hostname remains
+ * usable, but an explicitly configured admin hostname is still excluded.
+ */
+export function isPhysicianRequestHost(
+  headers: Pick<Headers, "get">,
+  environment: HostEnvironment = process.env,
+): boolean {
+  if (adminSurfaceConfigurationError(environment)) return false;
+  const expected = configuredPhysicianHost(environment);
+  if (environment.PHYSICIAN_PUBLIC_HOST !== undefined && !expected) {
+    return false;
+  }
+  const actual = normalizeHost(headers.get("host"));
+  if (expected) return actual === expected;
+  if (environment.NODE_ENV === "production") return false;
+  const adminHost = configuredAdminHostUnchecked(environment);
+  return actual !== null && (!adminHost || actual !== adminHost);
+}
+
 function permitsSyntheticQaSharedHost(environment: HostEnvironment): boolean {
   return (
     environment.TEMPLATE_TWIN_STORAGE_PROFILE === "qa" &&
@@ -85,13 +107,23 @@ export function adminSurfaceConfigurationError(
     return "ADMIN_COOKIE_MUST_BE_HOST_ONLY";
   }
 
-  const qaSharedHost = permitsSyntheticQaSharedHost(environment);
+  const qaSharedHost =
+    permitsSyntheticQaSharedHost(environment) &&
+    adminHost !== null &&
+    adminHost === physicianHost;
   if (
     environment.NODE_ENV === "production" &&
     adminHost !== PRODUCTION_ADMIN_HOST &&
     !qaSharedHost
   ) {
     return "PRODUCTION_ADMIN_HOST_NOT_REVIEWED";
+  }
+  if (
+    environment.NODE_ENV === "production" &&
+    physicianHost !== PRODUCTION_PHYSICIAN_HOST &&
+    !qaSharedHost
+  ) {
+    return "PRODUCTION_PHYSICIAN_HOST_NOT_REVIEWED";
   }
   if (
     adminHost &&

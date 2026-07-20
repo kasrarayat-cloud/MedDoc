@@ -191,9 +191,9 @@ export function LoginForm() {
             id="recoveryCode"
             name="recoveryCode"
             type="text"
-            maxLength={20}
+            maxLength={40}
             autoComplete="off"
-            placeholder="ABCD-1234"
+            placeholder="ABCD-EFGH-JKLM-NPQR-STUV-WXYZ-2345"
             required
             autoFocus
             style={{

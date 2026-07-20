@@ -39,14 +39,15 @@ services:
     # runaway from OOM-killing its neighbours. See DEPLOYMENT_RUNBOOK
     # §8 for the host-memory breakdown.
     mem_limit: 512m
-    cpus: '1.0'
+    cpus: "1.0"
     environment:
       POSTGRES_DB: meddoc
       POSTGRES_USER: meddoc
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme_in_production}
-      DB_RUNTIME_PASSWORD: ${DB_RUNTIME_PASSWORD:-changeme_runtime_in_production}
-      DB_RELEASE_CONTROL_PASSWORD: ${DB_RELEASE_CONTROL_PASSWORD:-changeme_release_control_in_production}
-      DB_AUDIT_DISPATCHER_PASSWORD: ${DB_AUDIT_DISPATCHER_PASSWORD:-changeme_audit_dispatcher_in_production}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      DB_RUNTIME_PASSWORD: ${DB_RUNTIME_PASSWORD:?DB_RUNTIME_PASSWORD is required}
+      DB_RELEASE_CONTROL_PASSWORD: ${DB_RELEASE_CONTROL_PASSWORD:?DB_RELEASE_CONTROL_PASSWORD is required}
+      DB_AUDIT_DISPATCHER_PASSWORD: ${DB_AUDIT_DISPATCHER_PASSWORD:?DB_AUDIT_DISPATCHER_PASSWORD is required}
+      DB_AUTH_EMAIL_DISPATCHER_PASSWORD: ${DB_AUTH_EMAIL_DISPATCHER_PASSWORD:?DB_AUTH_EMAIL_DISPATCHER_PASSWORD is required}
       # Phase 6.1 (h8): PGDATA points at a subdir of the LUKS-encrypted
       # mount because ext4's `lost+found` at the mount root blocks
       # initdb. Standard postgres-image pattern when bind-mounting an
@@ -65,12 +66,15 @@ services:
       - /mnt/pgdata-encrypted:/var/lib/postgresql/data
       - ./infra/postgres/init-template-twin-roles.sh:/docker-entrypoint-initdb.d/20-template-twin-roles.sh:ro
     ports:
-      - "127.0.0.1:5432:5432"   # only accessible from localhost
+      - "127.0.0.1:5432:5432" # only accessible from localhost
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U meddoc"]
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - default
+      - auth_email_database
 
   # ── Next.js App (MedDoc Pro) ──
   meddoc-pro:
@@ -89,13 +93,14 @@ services:
         max-size: "10m"
         max-file: "3"
     mem_limit: 512m
-    cpus: '1.0'
+    cpus: "1.0"
     # T-M16.3: app-level health — hits /api/health which checks
     # postgres. 30s start_period covers Next cold-start + Prisma client
     # init; without it the first check fires before the app is ready
     # and the container reports "unhealthy" until a retry passes.
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "--spider", "http://127.0.0.1:3000/api/health"]
+      test:
+        ["CMD", "wget", "-qO-", "--spider", "http://127.0.0.1:3000/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -114,15 +119,22 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql://meddoc_runtime:${DB_RUNTIME_PASSWORD:-changeme_runtime_in_production}@postgres:5432/meddoc?schema=public
+      DATABASE_URL: postgresql://meddoc_runtime:${DB_RUNTIME_PASSWORD:?DB_RUNTIME_PASSWORD is required}@postgres:5432/meddoc?schema=public
       DB_PASSWORD: ""
       DB_RUNTIME_PASSWORD: ""
       DB_RELEASE_CONTROL_PASSWORD: ""
       DB_RELEASE_SECURITY_PASSWORD: ""
       TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL: ""
       DB_AUDIT_DISPATCHER_PASSWORD: ""
+      DB_AUTH_EMAIL_DISPATCHER_PASSWORD: ""
+      MFA_SECRET_ACTIVE_KEY_ID: ""
+      MFA_SECRET_KEYRING_FILE: ""
+      MFA_SECRET_LEGACY_READ_MODE: ""
+      MFA_SECRET_LEGACY_READ_UNTIL: ""
+      MFA_SECRET_LEGACY_READ_ATTESTATION: ""
       TEMPLATE_TWIN_APP_RUNTIME_ATTESTATION: ""
       TEMPLATE_TWIN_ADMIN_CONTROL_RUNTIME_ATTESTATION: ""
+      TEMPLATE_TWIN_ADMIN_APP_RUNTIME_ATTESTATION: ""
       TEMPLATE_TWIN_WORKER_RUNTIME_ATTESTATION: ""
       TEMPLATE_TWIN_RUNTIME_ATTESTATION: ""
       # Phase 1B v2 — explicit Redis URL for the audit-stream publish
@@ -137,12 +149,15 @@ services:
       # the browser — if they hit http://1.2.3.4 but AUTH_URL says
       # https://meddoc.example.com, the auth callback mismatches.
       AUTH_URL: ${PUBLIC_URL:-http://5.231.107.93}
-      NEXTAUTH_URL: ${PUBLIC_URL:-http://5.231.107.93}  # v4 compat name
-      AUTH_TRUST_HOST: "true"  # redundant (also hardcoded in auth.config.ts) — safe belt-and-braces
+      NEXTAUTH_URL: ${PUBLIC_URL:-http://5.231.107.93} # v4 compat name
+      AUTH_TRUST_HOST: "true" # redundant (also hardcoded in auth.config.ts) — safe belt-and-braces
     ports:
       # Bound to loopback only — public traffic goes through Caddy. Kept
       # for dev debugging (e.g., curl http://127.0.0.1:3001 from the host).
       - "127.0.0.1:3001:3000"
+    networks:
+      - default
+      - quillmd_ingress
 
   # ── Redis (BullMQ broker + ephemeral state) ──
   # Introduced in M2 for the batch pipeline. Internal-only — bound to
@@ -174,7 +189,7 @@ services:
       - --appendfsync
       - everysec
     mem_limit: 128m
-    cpus: '0.5'
+    cpus: "0.5"
     volumes:
       - redis_data:/data
     ports:
@@ -253,7 +268,7 @@ services:
     cap_drop:
       - ALL
     mem_limit: 256m
-    cpus: '0.5'
+    cpus: "0.5"
     # T-M16.4: MinIO holds many open sockets under concurrent uploads;
     # default 1024 FDs is tight once more than a couple doctors are
     # streaming audio simultaneously.
@@ -264,7 +279,7 @@ services:
     command: ["server", "/data", "--console-address", ":9001"]
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-meddoc}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-changeme_in_production}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
       # PR-M Path B: built-in single-key KMS for SSE-S3. Format is
       # `<key-name>:<base64-32-bytes>`. The key NAME (quillmd-master-key-1)
       # is referenced by every bucket's encryption config, so it must
@@ -273,12 +288,12 @@ services:
       # quillmd-master-key-2 alongside -1, `mc encrypt rotate`, then
       # deprecate -1 once existing objects are re-encrypted. See
       # docs/security-audits/minio-sse-bootstrap.md.
-      MINIO_KMS_SECRET_KEY: ${MINIO_KMS_SECRET_KEY}
+      MINIO_KMS_SECRET_KEY: ${MINIO_KMS_SECRET_KEY:?MINIO_KMS_SECRET_KEY is required}
     volumes:
       - minio_data:/data
     ports:
-      - "127.0.0.1:9000:9000"  # S3 API
-      - "127.0.0.1:9001:9001"  # Web console
+      - "127.0.0.1:9000:9000" # S3 API
+      - "127.0.0.1:9001:9001" # Web console
     healthcheck:
       # Config-independent liveness probe (2026-06-13). The previous
       # `mc ready local` probe depended on the container's mc alias
@@ -315,7 +330,7 @@ services:
         max-size: "10m"
         max-file: "3"
     mem_limit: 128m
-    cpus: '0.5'
+    cpus: "0.5"
     # T-M16.3 / Phase-6Z prep: hit Caddy's admin API on :2019. The
     # previous probe wget'd port 80 and got a 308 → https://127.0.0.1/,
     # then failed the TLS handshake because Caddy can't pick a cert
@@ -333,6 +348,7 @@ services:
       - meddoc-pro
       - marketing
       - transcribe-md
+      - template-twin-admin-app
       - template-twin-admin-control
     ports:
       # 2026-06-03 site-down recovery: a host-level nginx now owns :80/:443 on
@@ -357,13 +373,10 @@ services:
       # - "9020:9020"   # rollback: uncomment WITH Caddyfile MODE A :9020 block
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data       # persistent Let's Encrypt certs (when TLS on)
-      - caddy_config:/config   # Caddy's internal config cache
-      # Temporary: serve design-review HTML at /_preview/* on app.quillmd.com.
-      # Read-only mount; remove with the matching Caddyfile block when the
-      # review window closes. Same posture as fixtures/seeded-ids.json —
-      # host-side artifact, not in the production app surface.
-      - ./_design-references:/srv/_design-references:ro
+      - caddy_data:/data # persistent Let's Encrypt certs (when TLS on)
+      - caddy_config:/config # Caddy's internal config cache
+    networks:
+      - quillmd_ingress
 
   # ── TranscribeMD Marketing (T-M1) ──
   # Static Next.js landing site for the new standalone product. No DB,
@@ -383,8 +396,8 @@ services:
       # baked HTML. Defaults mirror the :-fallback pattern used by the
       # runtime `environment:` blocks below for the non-publics.
       args:
-        NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL: ${TRANSCRIBE_MD_AUTH_URL:-http://5.231.107.93:9020}
-        NEXT_PUBLIC_MARKETING_URL: ${MARKETING_URL:-http://5.231.107.93:9010}
+        NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL: ${TRANSCRIBE_MD_AUTH_URL:-https://app.quillmd.com}
+        NEXT_PUBLIC_MARKETING_URL: ${MARKETING_URL:-https://quillmd.com}
     restart: unless-stopped
     logging:
       driver: json-file
@@ -392,7 +405,7 @@ services:
         max-size: "10m"
         max-file: "3"
     mem_limit: 256m
-    cpus: '0.5'
+    cpus: "0.5"
     # T-M16.3: marketing has no API — hit the home page to confirm the
     # Next server is responding. Static content so 0 cost per tick.
     healthcheck:
@@ -407,6 +420,9 @@ services:
     ports:
       # Loopback only — all public traffic goes through Caddy on :9010.
       - "127.0.0.1:3010:3010"
+    networks:
+      - default
+      - quillmd_ingress
 
   # ── TranscribeMD worker (T-M4 — BullMQ consumer) ──
   # Runs the 6-layer audio → SOAP pipeline (Deepgram → speaker roles →
@@ -416,6 +432,9 @@ services:
   # the chunking step scribe-worker needs.
   transcribe-md-worker:
     image: ${TRANSCRIBE_MD_WORKER_IMAGE:-meddoc-pro-transcribe-md-worker:latest}
+    labels:
+      com.quillmd.rollback-runtime-managed: "true"
+      com.quillmd.rollback-runtime-artifact: worker
     build:
       context: .
       dockerfile: apps/transcribe-md/Dockerfile.worker
@@ -437,7 +456,7 @@ services:
     # renderer concurrently. 1 GB accommodates a peak PDF render
     # alongside a pipeline pass; bump to 1.5g if ops sees OOM-kills.
     mem_limit: 1g
-    cpus: '1.5'
+    cpus: "1.5"
     ulimits:
       nofile:
         soft: 65536
@@ -452,13 +471,19 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql://meddoc_runtime:${DB_RUNTIME_PASSWORD:-changeme_runtime_in_production}@postgres:5432/meddoc?schema=public
+      DATABASE_URL: postgresql://meddoc_runtime:${DB_RUNTIME_PASSWORD:?DB_RUNTIME_PASSWORD is required}@postgres:5432/meddoc?schema=public
       DB_PASSWORD: ""
       DB_RUNTIME_PASSWORD: ""
       DB_RELEASE_CONTROL_PASSWORD: ""
       DB_RELEASE_SECURITY_PASSWORD: ""
       TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL: ""
       DB_AUDIT_DISPATCHER_PASSWORD: ""
+      DB_AUTH_EMAIL_DISPATCHER_PASSWORD: ""
+      MFA_SECRET_ACTIVE_KEY_ID: ""
+      MFA_SECRET_KEYRING_FILE: ""
+      MFA_SECRET_LEGACY_READ_MODE: ""
+      MFA_SECRET_LEGACY_READ_UNTIL: ""
+      MFA_SECRET_LEGACY_READ_ATTESTATION: ""
       REDIS_URL: redis://redis:6379
       QUILLMD_REQUIRED_RUNTIME_PROTOCOL_EPOCH: template-twin-final-schema-v2
       TEMPLATE_TWIN_RUNTIME_MODE: ${TEMPLATE_TWIN_RUNTIME_MODE:-standard}
@@ -469,11 +494,12 @@ services:
       TEMPLATE_TWIN_MIGRATOR_IMAGE_DIGEST: ${TEMPLATE_TWIN_MIGRATOR_IMAGE_DIGEST:-}
       TEMPLATE_TWIN_APP_RUNTIME_ATTESTATION: ""
       TEMPLATE_TWIN_ADMIN_CONTROL_RUNTIME_ATTESTATION: ""
+      TEMPLATE_TWIN_ADMIN_APP_RUNTIME_ATTESTATION: ""
       TEMPLATE_TWIN_WORKER_RUNTIME_ATTESTATION: ""
       TEMPLATE_TWIN_RUNTIME_ATTESTATION: ${TEMPLATE_TWIN_WORKER_RUNTIME_ATTESTATION:-}
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-meddoc}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-changeme_in_production}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
       TRANSCRIBE_MD_MINIO_BUCKET: ${TRANSCRIBE_MD_MINIO_BUCKET:-transcribe-md-audio}
       MINIO_USE_SSL: "false"
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
@@ -527,6 +553,9 @@ services:
   # claim/deliver the durable outbox and append audit receipts.
   template-twin-audit-dispatcher:
     image: ${TRANSCRIBE_MD_WORKER_IMAGE:-meddoc-pro-transcribe-md-worker:latest}
+    labels:
+      com.quillmd.rollback-runtime-managed: "true"
+      com.quillmd.rollback-runtime-artifact: worker
     build:
       context: .
       dockerfile: apps/transcribe-md/Dockerfile.worker
@@ -534,27 +563,142 @@ services:
         QUILLMD_RELEASE_SHA: ${QUILLMD_RELEASE_SHA:-development}
     command: ["npx", "tsx", "src/audit-dispatcher.ts"]
     restart: unless-stopped
+    stop_grace_period: 45s
     cap_drop:
       - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
     mem_limit: 192m
-    cpus: '0.25'
+    cpus: "0.25"
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://meddoc_audit_dispatcher:${DB_AUDIT_DISPATCHER_PASSWORD:-changeme_audit_dispatcher_in_production}@postgres:5432/meddoc?schema=public
+      DATABASE_URL: postgresql://meddoc_audit_dispatcher:${DB_AUDIT_DISPATCHER_PASSWORD:?DB_AUDIT_DISPATCHER_PASSWORD is required}@postgres:5432/meddoc?schema=public
       DB_AUDIT_DISPATCHER_PASSWORD: ""
+      DB_AUTH_EMAIL_DISPATCHER_PASSWORD: ""
       DB_RELEASE_CONTROL_PASSWORD: ""
       DB_RELEASE_SECURITY_PASSWORD: ""
       TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL: ""
       QUILLMD_SERVICE_ROLE: template-twin-audit-dispatcher
+      MFA_SECRET_ACTIVE_KEY_ID: ""
+      MFA_SECRET_KEYRING_FILE: ""
+      MFA_SECRET_LEGACY_READ_MODE: ""
+      MFA_SECRET_LEGACY_READ_UNTIL: ""
+      MFA_SECRET_LEGACY_READ_ATTESTATION: ""
       TEMPLATE_TWIN_AUDIT_DISPATCH_INTERVAL_MS: ${TEMPLATE_TWIN_AUDIT_DISPATCH_INTERVAL_MS:-5000}
+      QUILLMD_REQUIRED_RUNTIME_PROTOCOL_EPOCH: template-twin-final-schema-v2
+      TEMPLATE_TWIN_RUNTIME_MODE: ${TEMPLATE_TWIN_RUNTIME_MODE:-standard}
+      TEMPLATE_TWIN_KILL_SWITCH: ${TEMPLATE_TWIN_KILL_SWITCH:-true}
+      NPM_CONFIG_CACHE: /tmp/.npm
       NODE_ENV: production
+    # A successful empty or non-empty drain writes the heartbeat. Failed or
+    # wedged database work cannot refresh it, so the runtime becomes unhealthy
+    # instead of claiming process-only liveness.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "test -f /tmp/template-twin-audit-dispatcher-heartbeat && [ $$(( $$(date +%s) - $$(stat -c %Y /tmp/template-twin-audit-dispatcher-heartbeat) )) -lt 90 ]"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  # Durable authentication-email delivery trust boundary. Requests are
+  # admitted by the physician app, but only this process may claim an outbox
+  # row, mint its bearer link, and submit it to the verified mail provider.
+  # It imports no wholesale .env and receives no runtime, release-control,
+  # audit-dispatcher, object-storage, queue, AI, or session credential.
+  auth-email-dispatcher:
+    image: ${TRANSCRIBE_MD_WORKER_IMAGE:-meddoc-pro-transcribe-md-worker:latest}
+    labels:
+      com.quillmd.rollback-runtime-managed: "true"
+      com.quillmd.rollback-runtime-artifact: worker
+    build:
+      context: .
+      dockerfile: apps/transcribe-md/Dockerfile.worker
+      args:
+        QUILLMD_RELEASE_SHA: ${QUILLMD_RELEASE_SHA:-development}
+    command: ["npm", "run", "auth-email-dispatcher"]
+    restart: unless-stopped
+    stop_grace_period: 45s
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    mem_limit: 192m
+    cpus: "0.25"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: []
+    environment:
+      DATABASE_URL: postgresql://meddoc_auth_email_dispatcher:${DB_AUTH_EMAIL_DISPATCHER_PASSWORD:?DB_AUTH_EMAIL_DISPATCHER_PASSWORD is required}@postgres:5432/meddoc?schema=public
+      QUILLMD_SERVICE_ROLE: auth-email-dispatcher
+      DB_PASSWORD: ""
+      DB_RUNTIME_PASSWORD: ""
+      DB_RELEASE_CONTROL_PASSWORD: ""
+      DB_RELEASE_SECURITY_PASSWORD: ""
+      DB_AUDIT_DISPATCHER_PASSWORD: ""
+      DB_AUTH_EMAIL_DISPATCHER_PASSWORD: ""
+      TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL: ""
+      AUTH_SECRET: ""
+      MFA_SECRET_ACTIVE_KEY_ID: ""
+      MFA_SECRET_KEYRING_FILE: ""
+      MFA_SECRET_LEGACY_READ_MODE: ""
+      MFA_SECRET_LEGACY_READ_UNTIL: ""
+      MFA_SECRET_LEGACY_READ_ATTESTATION: ""
+      ANTHROPIC_API_KEY: ""
+      OPENAI_API_KEY: ""
+      DEEPGRAM_API_KEY: ""
+      MINIO_ACCESS_KEY: ""
+      MINIO_SECRET_KEY: ""
+      REDIS_URL: ""
+      AUTH_URL: ${TRANSCRIBE_MD_AUTH_URL:-https://app.quillmd.com}
+      NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL: ${TRANSCRIBE_MD_AUTH_URL:-https://app.quillmd.com}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM: ${RESEND_FROM:-}
+      RESEND_REPLY_TO: ${RESEND_REPLY_TO:-support@quillmd.com}
+      RESEND_FROM_VERIFIED: ${RESEND_FROM_VERIFIED:-false}
+      AUTH_EMAIL_DISPATCH_INTERVAL_MS: ${AUTH_EMAIL_DISPATCH_INTERVAL_MS:-1000}
+      QUILLMD_REQUIRED_RUNTIME_PROTOCOL_EPOCH: template-twin-final-schema-v2
+      TEMPLATE_TWIN_RUNTIME_MODE: ${TEMPLATE_TWIN_RUNTIME_MODE:-standard}
+      TEMPLATE_TWIN_KILL_SWITCH: ${TEMPLATE_TWIN_KILL_SWITCH:-true}
+      NPM_CONFIG_CACHE: /tmp/.npm
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+    networks:
+      auth_email_database: {}
+      auth_email_egress:
+        gw_priority: 1
+    # The dispatcher writes this heartbeat only after startup gates and a
+    # successful empty drain and before/after each claimed item. The provider
+    # decision wait is bounded at 30 seconds, so a 90-second stale window
+    # catches a wedged loop without false-failing during normal delivery.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "test -f /tmp/auth-email-dispatcher-heartbeat && [ $$(( $$(date +%s) - $$(stat -c %Y /tmp/auth-email-dispatcher-heartbeat) )) -lt 90 ]"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
 
   # ── TranscribeMD Solo App (T-M2) ──
   # The real product surface — sign up, log in, create visits. Shares
@@ -566,6 +710,9 @@ services:
     # Phase 19 — h16-cap-drop. Next app, binds 3011 inside the
     # container, runs as uid 1001. No default cap required.
     image: ${TRANSCRIBE_MD_IMAGE:-meddoc-pro-transcribe-md:latest}
+    labels:
+      com.quillmd.rollback-runtime-managed: "true"
+      com.quillmd.rollback-runtime-artifact: app
     cap_drop:
       - ALL
     # The scanner socket is mode 0660 and owned by ClamAV gid 101. Grant only
@@ -579,8 +726,8 @@ services:
       # on that block for the rationale.
       args:
         QUILLMD_RELEASE_SHA: ${QUILLMD_RELEASE_SHA:-development}
-        NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL: ${TRANSCRIBE_MD_AUTH_URL:-http://5.231.107.93:9020}
-        NEXT_PUBLIC_MARKETING_URL: ${MARKETING_URL:-http://5.231.107.93:9010}
+        NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL: ${TRANSCRIBE_MD_AUTH_URL:-https://app.quillmd.com}
+        NEXT_PUBLIC_MARKETING_URL: ${MARKETING_URL:-https://quillmd.com}
         # T-M20.3: Pipeline tab gate. Build-time default is "false"
         # (host env not set → image ships with tab hidden). Runtime
         # override via the `environment:` block below — dev flips
@@ -612,7 +759,7 @@ services:
         max-size: "10m"
         max-file: "3"
     mem_limit: 512m
-    cpus: '1.0'
+    cpus: "1.0"
     # T-M16.4: 500 MB upload streams + MinIO SDK + NextAuth + BullMQ
     # keep a lot of sockets open; 1024 default FDs is tight.
     ulimits:
@@ -624,7 +771,8 @@ services:
     # is unreachable so the container reports unhealthy and Caddy can
     # (eventually) route around it once we wire that up.
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "--spider", "http://127.0.0.1:3011/api/health"]
+      test:
+        ["CMD", "wget", "-qO-", "--spider", "http://127.0.0.1:3011/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -638,27 +786,43 @@ services:
       - .env
     volumes:
       - clamav_socket:/var/run/quillmd-clamav:ro
+      - ${MFA_SECRET_KEYRING_FILE:?MFA_SECRET_KEYRING_FILE is required}:${MFA_SECRET_KEYRING_FILE:?MFA_SECRET_KEYRING_FILE is required}:ro
     environment: &transcribe_md_app_environment
-      DATABASE_URL: postgresql://meddoc_runtime:${DB_RUNTIME_PASSWORD:-changeme_runtime_in_production}@postgres:5432/meddoc?schema=public
+      DATABASE_URL: postgresql://meddoc_runtime:${DB_RUNTIME_PASSWORD:?DB_RUNTIME_PASSWORD is required}@postgres:5432/meddoc?schema=public
       QUILLMD_SERVICE_ROLE: physician-app
+      MFA_SECRET_ACTIVE_KEY_ID: ${MFA_SECRET_ACTIVE_KEY_ID:?MFA_SECRET_ACTIVE_KEY_ID is required}
+      MFA_SECRET_KEYRING_FILE: ${MFA_SECRET_KEYRING_FILE:?MFA_SECRET_KEYRING_FILE is required}
+      MFA_SECRET_LEGACY_READ_MODE: ${MFA_SECRET_LEGACY_READ_MODE:-strict}
+      MFA_SECRET_LEGACY_READ_UNTIL: ${MFA_SECRET_LEGACY_READ_UNTIL:-}
+      MFA_SECRET_LEGACY_READ_ATTESTATION: ${MFA_SECRET_LEGACY_READ_ATTESTATION:-}
       DB_PASSWORD: ""
       DB_RUNTIME_PASSWORD: ""
       DB_RELEASE_CONTROL_PASSWORD: ""
       DB_RELEASE_SECURITY_PASSWORD: ""
       TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL: ""
       DB_AUDIT_DISPATCHER_PASSWORD: ""
-      AUTH_URL: ${TRANSCRIBE_MD_AUTH_URL:-http://5.231.107.93:9020}
-      NEXTAUTH_URL: ${TRANSCRIBE_MD_AUTH_URL:-http://5.231.107.93:9020}
+      DB_AUTH_EMAIL_DISPATCHER_PASSWORD: ""
+      AUTH_URL: ${TRANSCRIBE_MD_AUTH_URL:-https://app.quillmd.com}
+      NEXTAUTH_URL: ${TRANSCRIBE_MD_AUTH_URL:-https://app.quillmd.com}
       AUTH_COOKIE_DOMAIN: ${AUTH_COOKIE_DOMAIN:-}
       AUTH_TRUST_HOST: "true"
+      # Production physician authentication never imports QA bypass switches
+      # from the wholesale application env_file. The isolated QA overlay must
+      # override its own service explicitly; these values are immutable here.
+      AUTH_USE_MOCK: "false"
+      EMAIL_AUTO_CONFIRM_DOMAINS: ""
+      EMAIL_AUTO_CONFIRM_ALLOW_IN_PROD: "false"
+      RATE_LIMIT_DISABLED: "false"
+      RATE_LIMIT_DISABLE_ALLOW_IN_PROD: "false"
+      MOCK_AI_CALLS: "false"
       ADMIN_PUBLIC_HOST: ${ADMIN_PUBLIC_HOST:-admin.quillmd.com}
       PHYSICIAN_PUBLIC_HOST: ${PHYSICIAN_PUBLIC_HOST:-app.quillmd.com}
-      NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL: ${TRANSCRIBE_MD_AUTH_URL:-http://5.231.107.93:9020}
-      NEXT_PUBLIC_MARKETING_URL: ${MARKETING_URL:-http://5.231.107.93:9010}
+      NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL: ${TRANSCRIBE_MD_AUTH_URL:-https://app.quillmd.com}
+      NEXT_PUBLIC_MARKETING_URL: ${MARKETING_URL:-https://quillmd.com}
       # T-M4 — web container enqueues jobs + stores uploaded audio.
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-meddoc}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-changeme_in_production}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
       TRANSCRIBE_MD_MINIO_BUCKET: ${TRANSCRIBE_MD_MINIO_BUCKET:-transcribe-md-audio}
       MINIO_USE_SSL: "false"
       REDIS_URL: redis://redis:6379
@@ -671,6 +835,7 @@ services:
       TEMPLATE_TWIN_MIGRATOR_IMAGE_DIGEST: ${TEMPLATE_TWIN_MIGRATOR_IMAGE_DIGEST:-}
       TEMPLATE_TWIN_APP_RUNTIME_ATTESTATION: ""
       TEMPLATE_TWIN_ADMIN_CONTROL_RUNTIME_ATTESTATION: ""
+      TEMPLATE_TWIN_ADMIN_APP_RUNTIME_ATTESTATION: ""
       TEMPLATE_TWIN_WORKER_RUNTIME_ATTESTATION: ""
       TEMPLATE_TWIN_RUNTIME_ATTESTATION: ${TEMPLATE_TWIN_APP_RUNTIME_ATTESTATION:-}
       TEMPLATE_TWIN_MALWARE_SCANNER_SOCKET: /var/run/quillmd-clamav/clamd.sock
@@ -688,39 +853,124 @@ services:
       # container — no rebuild needed because /visits/[id]/page.tsx
       # is a server component reading process.env at request time.
       NEXT_PUBLIC_SHOW_PIPELINE_TAB: ${NEXT_PUBLIC_SHOW_PIPELINE_TAB:-}
-      # Phase 7-QA: comma-separated allowlist of email domains whose
-      # signups skip the verification-email dispatch and stamp
-      # emailVerified immediately. Production should hold ONLY the
-      # RFC-6762 reserved test domain (`quillmd-test.local`) so the
-      # automated QA harness can complete the authenticated-flow
-      # sweep against a non-deliverable mailbox. Real-mail providers
-      # (gmail/outlook/yahoo/quillmd.com/etc) are hard-denylisted
-      # inside isAutoConfirmDomain() — listing them here will not
-      # bypass verification. Empty / unset ⇒ bypass never fires.
-      EMAIL_AUTO_CONFIRM_DOMAINS: ${EMAIL_AUTO_CONFIRM_DOMAINS:-}
     ports:
       # Loopback only — public traffic arrives via Caddy on :9020.
       - "127.0.0.1:3011:3011"
+    networks:
+      - default
+      - quillmd_ingress
+
+  # Isolated cookie/session and route surface for admin.quillmd.com. This
+  # process uses the existing application runtime principal because static
+  # asset review must atomically verify UserSession, practice rollout,
+  # provider ownership, audit-outbox, and asset-decision rows. It receives no
+  # release-control credential, exposes no host port, imports no wholesale
+  # .env, and its Next proxy denies every non-allowlisted route before auth.
+  template-twin-admin-app:
+    <<: *transcribe_md_app
+    labels:
+      com.quillmd.rollback-runtime-managed: "true"
+      com.quillmd.rollback-runtime-artifact: app
+    env_file: []
+    group_add: []
+    volumes:
+      - ${MFA_SECRET_KEYRING_FILE:?MFA_SECRET_KEYRING_FILE is required}:${MFA_SECRET_KEYRING_FILE:?MFA_SECRET_KEYRING_FILE is required}:ro
+    ports: []
+    environment:
+      DATABASE_URL: postgresql://meddoc_runtime:${DB_RUNTIME_PASSWORD:?DB_RUNTIME_PASSWORD is required}@postgres:5432/meddoc?schema=public
+      QUILLMD_SERVICE_ROLE: template-twin-admin-app
+      MFA_SECRET_ACTIVE_KEY_ID: ${MFA_SECRET_ACTIVE_KEY_ID:?MFA_SECRET_ACTIVE_KEY_ID is required}
+      MFA_SECRET_KEYRING_FILE: ${MFA_SECRET_KEYRING_FILE:?MFA_SECRET_KEYRING_FILE is required}
+      MFA_SECRET_LEGACY_READ_MODE: ${MFA_SECRET_LEGACY_READ_MODE:-strict}
+      MFA_SECRET_LEGACY_READ_UNTIL: ${MFA_SECRET_LEGACY_READ_UNTIL:-}
+      MFA_SECRET_LEGACY_READ_ATTESTATION: ${MFA_SECRET_LEGACY_READ_ATTESTATION:-}
+      DB_PASSWORD: ""
+      DB_RUNTIME_PASSWORD: ""
+      DB_RELEASE_CONTROL_PASSWORD: ""
+      DB_RELEASE_SECURITY_PASSWORD: ""
+      TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL: ""
+      DB_AUDIT_DISPATCHER_PASSWORD: ""
+      DB_AUTH_EMAIL_DISPATCHER_PASSWORD: ""
+      AUTH_URL: ${TEMPLATE_TWIN_ADMIN_APP_AUTH_URL:-https://admin.quillmd.com}
+      NEXTAUTH_URL: ${TEMPLATE_TWIN_ADMIN_APP_AUTH_URL:-https://admin.quillmd.com}
+      AUTH_SECRET: ${AUTH_SECRET:-}
+      AUTH_COOKIE_DOMAIN: ${AUTH_COOKIE_DOMAIN:-}
+      AUTH_TRUST_HOST: "true"
+      ADMIN_PUBLIC_HOST: ${ADMIN_PUBLIC_HOST:-admin.quillmd.com}
+      PHYSICIAN_PUBLIC_HOST: ${PHYSICIAN_PUBLIC_HOST:-app.quillmd.com}
+      NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL: ${TRANSCRIBE_MD_AUTH_URL:-https://app.quillmd.com}
+      NEXT_PUBLIC_MARKETING_URL: ${MARKETING_URL:-https://quillmd.com}
+      REDIS_URL: redis://redis:6379
+      QUILLMD_REQUIRED_RUNTIME_PROTOCOL_EPOCH: template-twin-final-schema-v2
+      TEMPLATE_TWIN_RUNTIME_MODE: ${TEMPLATE_TWIN_RUNTIME_MODE:-standard}
+      TEMPLATE_TWIN_KILL_SWITCH: ${TEMPLATE_TWIN_KILL_SWITCH:-true}
+      TEMPLATE_TWIN_RELEASE_COMMIT_SHA: ${TEMPLATE_TWIN_RELEASE_COMMIT_SHA:-}
+      TEMPLATE_TWIN_APP_IMAGE_DIGEST: ${TEMPLATE_TWIN_APP_IMAGE_DIGEST:-}
+      TEMPLATE_TWIN_WORKER_IMAGE_DIGEST: ${TEMPLATE_TWIN_WORKER_IMAGE_DIGEST:-}
+      TEMPLATE_TWIN_MIGRATOR_IMAGE_DIGEST: ${TEMPLATE_TWIN_MIGRATOR_IMAGE_DIGEST:-}
+      TEMPLATE_TWIN_APP_RUNTIME_ATTESTATION: ""
+      TEMPLATE_TWIN_ADMIN_CONTROL_RUNTIME_ATTESTATION: ""
+      TEMPLATE_TWIN_ADMIN_APP_RUNTIME_ATTESTATION: ""
+      TEMPLATE_TWIN_WORKER_RUNTIME_ATTESTATION: ""
+      TEMPLATE_TWIN_RUNTIME_ATTESTATION: ${TEMPLATE_TWIN_ADMIN_APP_RUNTIME_ATTESTATION:-}
+      TEMPLATE_TWIN_LOCAL_OCR_EXECUTABLE: /usr/bin/tesseract
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      TRANSCRIBE_MD_CLINICAL_MODEL: ${TRANSCRIBE_MD_CLINICAL_MODEL:-claude-opus-4-8}
+      DEEPGRAM_API_KEY: ""
+      OPENAI_API_KEY: ""
+      MINIO_ACCESS_KEY: ""
+      MINIO_SECRET_KEY: ""
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM: ${RESEND_FROM:-}
+      RESEND_FROM_VERIFIED: ${RESEND_FROM_VERIFIED:-false}
+      EMAIL_AUTO_CONFIRM_DOMAINS: ""
+      MOCK_AI_CALLS: "false"
+      RATE_LIMIT_DISABLED: "false"
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+      APP_VERSION: ${APP_VERSION:-}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "-qO-",
+          "--spider",
+          "http://127.0.0.1:3011/api/health/template-twin-admin-app",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   # Isolated control-plane process. The physician-facing app above never
   # receives the release-control credential. Route only the Template Twin
   # admin page/API paths on admin.quillmd.com to this loopback listener.
   template-twin-admin-control:
     <<: *transcribe_md_app
+    labels:
+      com.quillmd.rollback-runtime-managed: "true"
+      com.quillmd.rollback-runtime-artifact: app
     # Do not import the application .env wholesale. This process receives
     # neither the ordinary runtime principal nor provider/storage credentials.
     env_file: []
     group_add: []
     volumes: []
     environment:
-      DATABASE_URL: postgresql://meddoc_release_control:${DB_RELEASE_CONTROL_PASSWORD:-changeme_release_control_in_production}@postgres:5432/meddoc?schema=public
+      DATABASE_URL: postgresql://meddoc_release_control:${DB_RELEASE_CONTROL_PASSWORD:?DB_RELEASE_CONTROL_PASSWORD is required}@postgres:5432/meddoc?schema=public
       QUILLMD_SERVICE_ROLE: template-twin-admin-control
-      TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL: postgresql://meddoc_release_control:${DB_RELEASE_CONTROL_PASSWORD:-changeme_release_control_in_production}@postgres:5432/meddoc?schema=public
+      MFA_SECRET_ACTIVE_KEY_ID: ""
+      MFA_SECRET_KEYRING_FILE: ""
+      MFA_SECRET_LEGACY_READ_MODE: ""
+      MFA_SECRET_LEGACY_READ_UNTIL: ""
+      MFA_SECRET_LEGACY_READ_ATTESTATION: ""
+      TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL: postgresql://meddoc_release_control:${DB_RELEASE_CONTROL_PASSWORD:?DB_RELEASE_CONTROL_PASSWORD is required}@postgres:5432/meddoc?schema=public
       DB_PASSWORD: ""
       DB_RUNTIME_PASSWORD: ""
       DB_RELEASE_CONTROL_PASSWORD: ""
       DB_RELEASE_SECURITY_PASSWORD: ""
       DB_AUDIT_DISPATCHER_PASSWORD: ""
+      DB_AUTH_EMAIL_DISPATCHER_PASSWORD: ""
       AUTH_URL: ${TEMPLATE_TWIN_ADMIN_CONTROL_AUTH_URL:-https://admin.quillmd.com}
       NEXTAUTH_URL: ${TEMPLATE_TWIN_ADMIN_CONTROL_AUTH_URL:-https://admin.quillmd.com}
       AUTH_SECRET: ${AUTH_SECRET:-}
@@ -737,6 +987,7 @@ services:
       TEMPLATE_TWIN_MIGRATOR_IMAGE_DIGEST: ${TEMPLATE_TWIN_MIGRATOR_IMAGE_DIGEST:-}
       TEMPLATE_TWIN_APP_RUNTIME_ATTESTATION: ""
       TEMPLATE_TWIN_ADMIN_CONTROL_RUNTIME_ATTESTATION: ""
+      TEMPLATE_TWIN_ADMIN_APP_RUNTIME_ATTESTATION: ""
       TEMPLATE_TWIN_WORKER_RUNTIME_ATTESTATION: ""
       TEMPLATE_TWIN_RUNTIME_ATTESTATION: ""
       ANTHROPIC_API_KEY: ""
@@ -782,7 +1033,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://meddoc:${DB_PASSWORD:-changeme_in_production}@postgres:5432/meddoc?schema=public
+      DATABASE_URL: postgresql://meddoc:${DB_PASSWORD:?DB_PASSWORD is required}@postgres:5432/meddoc?schema=public
     working_dir: /app/packages/db
     entrypoint: ["npx", "--no-install", "prisma"]
     command: ["migrate", "deploy"]
@@ -817,7 +1068,7 @@ services:
     cap_drop:
       - ALL
     mem_limit: 128m
-    cpus: '0.5'
+    cpus: "0.5"
     depends_on:
       postgres:
         condition: service_healthy
@@ -825,7 +1076,7 @@ services:
       POSTGRES_HOST: postgres
       POSTGRES_DB: meddoc
       POSTGRES_USER: meddoc
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme_in_production}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
       POSTGRES_EXTRA_OPTS: "-Z6 --no-owner --no-acl"
       SCHEDULE: "@daily"
       BACKUP_KEEP_DAYS: "7"
@@ -890,6 +1141,22 @@ volumes:
   caddy_config:
 
 networks:
+  # The host-nginx published-port hop has the sole trusted proxy address on
+  # this deterministic bridge. Application peers remain untrusted even though
+  # Caddy can reach them as upstreams on the same network.
+  quillmd_ingress:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.31.252.0/24
+          gateway: 172.31.252.1
+  # The auth-email dispatcher can reach PostgreSQL only on this internal
+  # network. Its separate egress bridge has no application, Redis, object
+  # storage, or other service peers.
+  auth_email_database:
+    internal: true
+  auth_email_egress:
+    driver: bridge
   # Outbound-only update island. No application, database, queue, or object
   # service joins this network; admission traffic uses the Unix socket volume.
   template_twin_scanner:

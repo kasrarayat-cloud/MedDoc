@@ -37,14 +37,17 @@ import { AuditAction, Prisma } from "@prisma/client";
 
 import { apiError, withApiHandler } from "@/lib/api-error";
 import { auth } from "@/lib/nextauth";
-import { RATE_LIMITS, rateLimitOr429 } from "@/lib/rate-limit";
+import { RATE_LIMITS, sharedRateLimitOr429 } from "@/lib/rate-limit";
 import { deleteAudioObjectsByPrefix } from "@/lib/minio";
 import { sendAccountDeletedConfirmation } from "@/lib/email";
 import { MARKETING_URL } from "@/lib/constants";
-import { redactPhi } from "@meddoc/ai";
 import { log } from "@/lib/log";
 import { logAudit } from "@/lib/audit";
 import { enqueueTemplateTwinAudit } from "@/lib/template-twin/audit-outbox";
+import {
+  AccountMutationAuthorityError,
+  lockCurrentAccountMutationAuthority,
+} from "@/lib/account-mutation-authority";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -331,9 +334,13 @@ export const POST = withApiHandler(
   async (req) => {
     const session = await auth();
     const userId = session?.user?.id;
-    if (!userId) return apiError("unauthorized", 401);
+    const sessionId = session?.user?.sessionId;
+    const sessionPracticeId = session?.user?.practiceId;
+    if (!userId || !sessionId || !sessionPracticeId) {
+      return apiError("unauthorized", 401);
+    }
 
-    const blocked = rateLimitOr429(RATE_LIMITS.SETTINGS, userId);
+    const blocked = await sharedRateLimitOr429(RATE_LIMITS.SETTINGS, userId);
     if (blocked) return blocked;
 
     let body: unknown;
@@ -451,24 +458,24 @@ export const POST = withApiHandler(
         try {
           deletionResult = await prisma.$transaction(
             async (tx: Prisma.TransactionClient) => {
-              // Lock both FK roots before the second retained-record check.
-              // Inserts for practice-owned or physician-owned Twin evidence
-              // must obtain a conflicting FK key-share lock, so a racing write
-              // either commits before this check (and is observed) or waits for
-              // the atomic deletion outcome. Serializable isolation catches any
-              // remaining predicate race.
-              const lockedOwners = await tx.$queryRaw<
-                Array<{ userId: string }>
-              >(
-                Prisma.sql`
-                SELECT u."id" AS "userId"
-                FROM "practices" p
-                JOIN "users" u ON u."practiceId" = p."id"
-                WHERE p."id" = ${user.practiceId} AND u."id" = ${user.id}
-                FOR UPDATE OF p, u
-              `,
-              );
-              if (lockedOwners.length !== 1) {
+              // Re-establish the exact current session, tenant, product, role,
+              // lifecycle, email, and password proof under the canonical
+              // global -> practice -> user -> session lock order. Account
+              // deletion and the retained-record census remain in this same
+              // serializable transaction, so a reset, transfer, suspension,
+              // force-logout, or session revocation cannot race the delete.
+              const current = await lockCurrentAccountMutationAuthority(tx, {
+                userId,
+                sessionId,
+                expectedPracticeId: sessionPracticeId,
+                expectedPasswordHash: user.passwordHash,
+                expectedEmail: user.email,
+                surface: "physician",
+              });
+              if (
+                current.user.id !== user.id ||
+                current.user.practiceId !== user.practiceId
+              ) {
                 throw new TemplateTwinDeletionOwnershipConflict();
               }
 
@@ -523,6 +530,16 @@ export const POST = withApiHandler(
         return retainedTemplateTwinResponse();
       }
     } catch (err) {
+      if (err instanceof AccountMutationAuthorityError) {
+        return NextResponse.json(
+          {
+            error:
+              "Account authority changed. Sign in again before retrying deletion.",
+            code: "ACCOUNT_AUTHORITY_CHANGED",
+          },
+          { status: 409 },
+        );
+      }
       if (err instanceof TemplateTwinRetentionCensusError) {
         return NextResponse.json(
           {
@@ -588,10 +605,9 @@ export const POST = withApiHandler(
         }
         return retainedTemplateTwinResponse();
       }
-      console.error(
-        `[api:settings:delete-account] transaction failed user=${user.id}:`,
-        redactPhi(err instanceof Error ? err.message : err),
-      );
+      // Database-driver failures may embed credential-bearing connection
+      // strings. Account deletion logs use fixed operational codes only.
+      console.error("[api:settings:delete-account] transaction failed");
       return apiError(
         "Could not complete deletion. Please try again or contact support.",
         500,
@@ -631,10 +647,9 @@ export const POST = withApiHandler(
           `[api:settings:delete-account] minio: purged ${result.deleted} audio objects under ${user.id}/`,
         );
       }
-    } catch (err) {
+    } catch {
       console.error(
-        `[api:settings:delete-account] minio cleanup threw (T-M12 sweep will catch):`,
-        redactPhi(err instanceof Error ? err.message : err),
+        "[api:settings:delete-account] object cleanup failed; reconciliation required",
       );
     }
 
@@ -646,10 +661,9 @@ export const POST = withApiHandler(
           toEmail: user.email,
           userName: user.name,
         });
-      } catch (err) {
+      } catch {
         console.error(
-          `[api:settings:delete-account] goodbye email failed:`,
-          redactPhi(err instanceof Error ? err.message : err),
+          "[api:settings:delete-account] confirmation email failed",
         );
       }
     }

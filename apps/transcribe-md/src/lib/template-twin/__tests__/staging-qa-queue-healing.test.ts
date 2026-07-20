@@ -218,9 +218,7 @@ function installStatefulQueueHarness(
   mocks.enqueueAudit.mockResolvedValue(undefined);
   mocks.enqueueVisit.mockResolvedValue(undefined);
   mocks.txVisitUpdate.mockImplementation(
-    async (input: {
-      data: Partial<QueueRunState["visit"]>;
-    }) => {
+    async (input: { data: Partial<QueueRunState["visit"]> }) => {
       state = { ...state, visit: { ...state.visit, ...input.data } };
       return { ...state.visit };
     },
@@ -313,6 +311,45 @@ describe("Template Twin staging queue-admission healing", () => {
       ],
     ]);
   });
+
+  it.each([
+    ["enqueue replay", false, "ENQUEUED"],
+    ["explicit retry", true, "ENQUEUE_FAILED"],
+  ] as const)(
+    "blocks %s when current actor authority changed after admission",
+    async (_label, explicitRetry, status) => {
+      const harness = installStatefulQueueHarness(
+        baseRun({ status, attempt: 1, enqueuedAt: null }),
+      );
+      mocks.lockRun.mockRejectedValue(
+        new TemplateTwinStagingQaVisitGuardError(
+          "TEMPLATE_TWIN_STAGING_QA_NOT_FOUND",
+          "Synthetic QA visit not found.",
+        ),
+      );
+
+      await expect(
+        enqueueOwnedRun({
+          actor,
+          runId: "run-synthetic-queue-1",
+          explicitRetry,
+          ...(explicitRetry ? { expectedAttempt: 1 } : {}),
+        }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+      expect(mocks.lockRun).toHaveBeenCalledWith(
+        expect.objectContaining({
+          actor: {
+            userId: actor.userId,
+            practiceId: actor.practiceId,
+          },
+        }),
+      );
+      expect(harness.state()).toMatchObject({ status, attempt: 1 });
+      expect(mocks.txRunUpdateMany).not.toHaveBeenCalled();
+      expect(mocks.txAdmissionUpdateMany).not.toHaveBeenCalled();
+      expect(mocks.enqueueVisit).not.toHaveBeenCalled();
+    },
+  );
 
   it("leaves a queue-add failure retryable and advances only the subsequent retry", async () => {
     const harness = installStatefulQueueHarness(
@@ -438,9 +475,7 @@ describe("Template Twin staging queue-admission healing", () => {
     expect(harness.state().attempt).toBe(5);
     expect(mocks.txRunUpdateMany).toHaveBeenCalledTimes(1);
     expect(
-      new Set(
-        mocks.enqueueVisit.mock.calls.map(([input]) => input.attempt),
-      ),
+      new Set(mocks.enqueueVisit.mock.calls.map(([input]) => input.attempt)),
     ).toEqual(new Set([5]));
   });
 

@@ -23,9 +23,12 @@ import { Suspense } from "react";
 
 import prisma from "@meddoc/db";
 import {
-  ordinaryClinicalVisitWhere,
-  TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID,
-} from "@/lib/template-twin/synthetic-qa-patient";
+  aggregateTemplateTwinVisibleVisits,
+  countTemplateTwinVisibleVisitsByPatient,
+  readLatestTemplateTwinVisibleVisitByPatient,
+  readTemplateTwinVisibleVisitPage,
+} from "@/lib/template-twin/read-authority";
+import { currentClinicalPatientCollectionWhere } from "@/lib/clinical-patient-authority";
 import { TranscribeVisitStatus } from "@prisma/client";
 import { auth } from "@/lib/nextauth";
 import { logAudit } from "@/lib/audit";
@@ -117,68 +120,58 @@ async function DashboardBody({
   // Parallel stats queries. All scoped to the authed user — no cross-
   // tenant leakage possible because userId is from the session.
   const [
-    visitsThisMonth,
-    avgDraftedAgg,
-    pendingReview,
-    signedThisWeek,
+    visitsThisMonthAggregate,
+    avgDraftedAggregate,
+    pendingReviewAggregate,
+    signedThisWeekAggregate,
     patientCount,
-    activeVisitCount,
+    activeVisitAggregate,
   ] = await Promise.all([
-    prisma.transcribeVisit.count({
-      where: ordinaryClinicalVisitWhere({
-        userId,
-        deletedAt: null,
-        createdAt: { gte: startOfMonth },
-      }),
+    aggregateTemplateTwinVisibleVisits({
+      db: prisma,
+      actorUserId: userId,
+      scope: { deleted: "active", createdAtGte: startOfMonth },
     }),
-    prisma.transcribeVisit.aggregate({
-      where: ordinaryClinicalVisitWhere({
-        userId,
-        deletedAt: null,
-        draftedInSeconds: { not: null },
-      }),
-      _avg: { draftedInSeconds: true },
+    aggregateTemplateTwinVisibleVisits({
+      db: prisma,
+      actorUserId: userId,
+      scope: { deleted: "active", draftedInSeconds: "present" },
     }),
-    prisma.transcribeVisit.count({
-      where: ordinaryClinicalVisitWhere({
-        userId,
-        deletedAt: null,
-        archivedAt: null,
-        status: TranscribeVisitStatus.READY,
+    aggregateTemplateTwinVisibleVisits({
+      db: prisma,
+      actorUserId: userId,
+      scope: {
+        deleted: "active",
+        archived: "active",
+        statuses: [TranscribeVisitStatus.READY],
         needsReview: true,
-      }),
-    }),
-    prisma.transcribeVisit.count({
-      where: ordinaryClinicalVisitWhere({
-        userId,
-        status: TranscribeVisitStatus.SIGNED,
-        signedAt: { gte: startOfWeek },
-      }),
-    }),
-    prisma.transcribeMdPatient.count({
-      where: {
-        practiceId,
-        deletedAt: null,
-        OR: [
-          { externalId: null },
-          {
-            externalId: {
-              not: TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID,
-            },
-          },
-        ],
       },
     }),
-    prisma.transcribeVisit.count({
-      where: ordinaryClinicalVisitWhere({
-        userId,
-        deletedAt: null,
-        archivedAt: null,
+    aggregateTemplateTwinVisibleVisits({
+      db: prisma,
+      actorUserId: userId,
+      scope: {
+        statuses: [TranscribeVisitStatus.SIGNED],
+        signedAtGte: startOfWeek,
+      },
+    }),
+    prisma.transcribeMdPatient.count({
+      where: currentClinicalPatientCollectionWhere({
+        actor: { userId, practiceId },
       }),
+    }),
+    aggregateTemplateTwinVisibleVisits({
+      db: prisma,
+      actorUserId: userId,
+      scope: { deleted: "active", archived: "active" },
     }),
   ]);
 
-  const avgDraftedSec = avgDraftedAgg._avg.draftedInSeconds;
+  const visitsThisMonth = visitsThisMonthAggregate.count;
+  const pendingReview = pendingReviewAggregate.count;
+  const signedThisWeek = signedThisWeekAggregate.count;
+  const activeVisitCount = activeVisitAggregate.count;
+  const avgDraftedSec = avgDraftedAggregate.avgDraftedInSeconds;
   const avgDraftedMin =
     avgDraftedSec != null ? Math.round(avgDraftedSec / 60) : null;
 
@@ -371,6 +364,7 @@ async function PatientsTab({
 
   type LatestVisit = {
     id: string;
+    patientId: string;
     createdAt: Date;
     specialty: string;
     status: import("@prisma/client").TranscribeVisitStatus;
@@ -382,9 +376,7 @@ async function PatientsTab({
     id: string;
     name: string;
     dateOfBirth: Date | null;
-    transcribeVisits: LatestVisit[];
   };
-  type CountRow = { patientId: string; _count: { _all: number } };
   type DraftRow = {
     id: string;
     patientName: string | null;
@@ -397,35 +389,63 @@ async function PatientsTab({
     patient: { name: string } | null;
   };
 
-  const [rows, draftRows] = await Promise.all([
+  const [rows, authorizedDraftRows] = await Promise.all([
     prisma.transcribeMdPatient.findMany({
-      where: {
-        practiceId,
-        deletedAt: null,
-        OR: [
-          { externalId: null },
-          {
-            externalId: {
-              not: TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID,
-            },
-          },
-        ],
-      },
+      where: currentClinicalPatientCollectionWhere({
+        actor: { userId, practiceId },
+      }),
       orderBy: { updatedAt: "desc" },
       take: DASHBOARD_PATIENT_LIMIT,
       select: {
         id: true,
         name: true,
         dateOfBirth: true,
-        transcribeVisits: {
-          where: ordinaryClinicalVisitWhere({
-            deletedAt: null,
-            archivedAt: null,
-          }),
-          orderBy: { createdAt: "desc" },
-          take: 1,
+      },
+    }) as Promise<PatientRow[]>,
+    readTemplateTwinVisibleVisitPage<DraftRow>({
+      db: prisma,
+      actorUserId: userId,
+      query: {
+        scope: {
+          deleted: "active",
+          archived: "active",
+          statuses: [TranscribeVisitStatus.READY],
+          signed: "unsigned",
+        },
+        orderBy: "updatedAt",
+        direction: "desc",
+        take: DASHBOARD_DRAFT_LIMIT,
+      },
+      hydrate: (tx, visitIds) =>
+        tx.transcribeVisit.findMany({
+          where: { id: { in: [...visitIds] }, userId },
           select: {
             id: true,
+            patientName: true,
+            specialty: true,
+            needsReview: true,
+            updatedAt: true,
+            soapFinal: true,
+            soapDraft: true,
+            chiefComplaint: true,
+            patient: { select: { name: true } },
+          },
+        }) as Promise<DraftRow[]>,
+    }),
+  ]);
+  const patientIds = rows.map((r: PatientRow) => r.id);
+  const [authorizedLatestVisits, counts] = await Promise.all([
+    readLatestTemplateTwinVisibleVisitByPatient<LatestVisit>({
+      db: prisma,
+      actorUserId: userId,
+      patientIds,
+      scope: { deleted: "active", archived: "active" },
+      hydrate: (tx, visitIds) =>
+        tx.transcribeVisit.findMany({
+          where: { id: { in: [...visitIds] }, userId },
+          select: {
+            id: true,
+            patientId: true,
             createdAt: true,
             specialty: true,
             status: true,
@@ -433,52 +453,26 @@ async function PatientsTab({
             signedAt: true,
             chiefComplaint: true,
           },
-        },
-      },
-    }) as Promise<PatientRow[]>,
-    prisma.transcribeVisit.findMany({
-      where: ordinaryClinicalVisitWhere({
-        userId,
-        deletedAt: null,
-        archivedAt: null,
-        status: TranscribeVisitStatus.READY,
-        signedAt: null,
-      }),
-      orderBy: { updatedAt: "desc" },
-      take: DASHBOARD_DRAFT_LIMIT,
-      select: {
-        id: true,
-        patientName: true,
-        specialty: true,
-        needsReview: true,
-        updatedAt: true,
-        soapFinal: true,
-        soapDraft: true,
-        chiefComplaint: true,
-        patient: { select: { name: true } },
-      },
-    }) as Promise<DraftRow[]>,
+        }) as Promise<LatestVisit[]>,
+    }),
+    countTemplateTwinVisibleVisitsByPatient({
+      db: prisma,
+      actorUserId: userId,
+      patientIds,
+      scope: { deleted: "active", archived: "active" },
+    }),
   ]);
+  const latestByPatient = new Map(
+    authorizedLatestVisits.map((visit) => [visit.patientId, visit]),
+  );
 
-  const patientIds = rows.map((r: PatientRow) => r.id);
-  const counts: CountRow[] = patientIds.length
-    ? await prisma.transcribeVisit.groupBy({
-        by: ["patientId"],
-        where: ordinaryClinicalVisitWhere({
-          patientId: { in: patientIds },
-          deletedAt: null,
-          archivedAt: null,
-        }),
-        _count: { _all: true },
-      })
-    : [];
   const countByPatient = new Map<string, number>(
-    counts.map((c: CountRow) => [c.patientId, c._count._all]),
+    counts.map((count) => [count.patientId, count.count]),
   );
 
   const patients: DashboardListPatient[] = rows.map(
     (r: PatientRow): DashboardListPatient => {
-      const latest = r.transcribeVisits[0];
+      const latest = latestByPatient.get(r.id);
       return {
         id: r.id,
         name: r.name,
@@ -500,7 +494,7 @@ async function PatientsTab({
     },
   );
 
-  const drafts: DraftReadyVisit[] = draftRows.map(
+  const drafts: DraftReadyVisit[] = authorizedDraftRows.map(
     (v: DraftRow): DraftReadyVisit => ({
       id: v.id,
       patientName: v.patient?.name ?? null,
@@ -582,25 +576,30 @@ async function AllVisitsTab({
     audioDurationSec: number | null;
     patient: { name: string } | null;
   };
-  const rows: VisitRow[] = await prisma.transcribeVisit.findMany({
-    where: ordinaryClinicalVisitWhere({
-      userId,
-      deletedAt: null,
-      archivedAt: null,
-    }),
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    take: VISITS_PAGE_SIZE,
-    select: {
-      id: true,
-      patientName: true,
-      specialty: true,
-      status: true,
-      needsReview: true,
-      createdAt: true,
-      signedAt: true,
-      audioDurationSec: true,
-      patient: { select: { name: true } },
+  const rows = await readTemplateTwinVisibleVisitPage<VisitRow>({
+    db: prisma,
+    actorUserId: userId,
+    query: {
+      scope: { deleted: "active", archived: "active" },
+      orderBy: "createdAt",
+      direction: "desc",
+      take: VISITS_PAGE_SIZE,
     },
+    hydrate: (tx, visitIds) =>
+      tx.transcribeVisit.findMany({
+        where: { id: { in: [...visitIds] }, userId },
+        select: {
+          id: true,
+          patientName: true,
+          specialty: true,
+          status: true,
+          needsReview: true,
+          createdAt: true,
+          signedAt: true,
+          audioDurationSec: true,
+          patient: { select: { name: true } },
+        },
+      }) as Promise<VisitRow[]>,
   });
 
   const visits: DashboardVisit[] = rows.map(

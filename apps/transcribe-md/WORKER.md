@@ -15,13 +15,13 @@ QUEUED → TRANSCRIBING → EXTRACTING → DRAFTING → CRITIQUING → POLISHING
 Each status name corresponds to exactly one layer module in
 `src/worker/layers/`:
 
-| Status       | File                            | Purpose                                 |
-|--------------|---------------------------------|-----------------------------------------|
-| TRANSCRIBING | `01-transcribe.ts`              | Deepgram Nova-3 Medical batch ASR       |
-| EXTRACTING   | `02-speaker-roles.ts` + `03-…`  | Role map + structured entities          |
-| DRAFTING     | `04-generate-soap.ts`           | Markdown SOAP with specialty guidance   |
-| CRITIQUING   | `05-self-critique.ts`           | Independent audit for hallucinations    |
-| POLISHING    | `06-polish.ts`                  | Applies fixable critique issues         |
+| Status       | File                           | Purpose                               |
+| ------------ | ------------------------------ | ------------------------------------- |
+| TRANSCRIBING | `01-transcribe.ts`             | Deepgram Nova-3 Medical batch ASR     |
+| EXTRACTING   | `02-speaker-roles.ts` + `03-…` | Role map + structured entities        |
+| DRAFTING     | `04-generate-soap.ts`          | Markdown SOAP with specialty guidance |
+| CRITIQUING   | `05-self-critique.ts`          | Independent audit for hallucinations  |
+| POLISHING    | `06-polish.ts`                 | Applies fixable critique issues       |
 
 Each layer updates `TranscribeVisit.status` before it starts and
 persists its artifact (`transcriptRaw`, `speakerMap`, `entities`,
@@ -34,6 +34,7 @@ a failed mid-pipeline run leaves diagnostic breadcrumbs.
 All values flow in through `docker-compose.yml` and the repo's `.env`.
 
 Required:
+
 - `DATABASE_URL` — same Postgres as meddoc-pro / scribe.
 - `REDIS_URL` — shared BullMQ broker.
 - `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`.
@@ -41,6 +42,7 @@ Required:
 - `DEEPGRAM_API_KEY`.
 
 Optional:
+
 - `TRANSCRIBE_MD_MINIO_BUCKET` — default `transcribe-md-audio`.
 - `DEEPGRAM_MODEL` — default `nova-3-medical`.
 - `TRANSCRIBE_MD_WORKER_CONCURRENCY` — default `2`.
@@ -69,7 +71,7 @@ login credentials with your own):
    docker compose up -d transcribe-md transcribe-md-worker caddy
    docker compose logs -f transcribe-md-worker
    ```
-2. **Sign up** at `http://5.231.107.93:9020/signup`, or reuse an
+2. **Sign up** at `https://app.quillmd.com/signup`, or reuse an
    existing account.
 3. **Create a visit** on `/visits/new` with mode = "Upload audio".
 4. **Upload audio** — drag a `<real.mp3>` into the dropzone, click

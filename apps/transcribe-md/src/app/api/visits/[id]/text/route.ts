@@ -13,14 +13,28 @@ import { z } from "zod";
 
 import { auth } from "@/lib/nextauth";
 import prisma from "@meddoc/db";
-import { TranscribeVisitStatus } from "@prisma/client";
+import { Prisma, TranscribeVisitStatus } from "@prisma/client";
 import { enqueueProcessVisit } from "@/lib/queue";
 
 import { apiError, withApiHandler } from "@/lib/api-error";
 import { RATE_LIMITS, rateLimitOr429 } from "@/lib/rate-limit";
 import { redactPhi } from "@meddoc/ai";
 import { logAudit } from "@/lib/audit";
+import { currentClinicalVisitActorWhere } from "@/lib/clinical-visit-authority";
 import { isOwnedTemplateTwinStagingQaVisit } from "@/lib/template-twin/staging-qa-access";
+import { isSameOriginTemplateTwinMutation } from "@/lib/template-twin/request-security";
+import { TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE } from "@/lib/template-twin/durable-visit-exclusion";
+import {
+  hasDurableTemplateTwinClinicalMutationProvenance,
+  enqueueTemplateTwinClinicalMutationAudit,
+  loadTemplateTwinClinicalMutationAdmissionTarget,
+  lockAndAssertOrdinaryClinicalMutation,
+  lockAndAssertTemplateTwinClinicalMutation,
+  pinTemplateTwinClinicalMutation,
+  TEMPLATE_TWIN_CLINICAL_MUTATION_PROVENANCE_SELECT,
+  TemplateTwinClinicalMutationAuthorizationError,
+  type TemplateTwinClinicalMutationClaim,
+} from "@/lib/template-twin/visit-mutation-authority";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,6 +63,42 @@ export const POST = withApiHandler<{ id: string }>(
 
     const blocked = rateLimitOr429(RATE_LIMITS.UPLOAD, userId);
     if (blocked) return blocked;
+
+    // Inspect only PHI-free provenance before reading the caller's clinical
+    // text. Live Twin mutations require same-origin and a fresh physician /
+    // rollout admission; synthetic, pre-certification, and damaged lineage
+    // never consume the body through this generic route.
+    const authorityTarget =
+      await loadTemplateTwinClinicalMutationAdmissionTarget({
+        visitId,
+        actorUserId: userId,
+      });
+    if (!authorityTarget || authorityTarget.userId !== userId) {
+      return apiError("not found", 404);
+    }
+    let templateTwinMutationClaim: TemplateTwinClinicalMutationClaim | null =
+      null;
+    if (
+      authorityTarget?.userId === userId &&
+      hasDurableTemplateTwinClinicalMutationProvenance(authorityTarget)
+    ) {
+      if (!isSameOriginTemplateTwinMutation(req)) {
+        return apiError("not found", 404);
+      }
+      try {
+        templateTwinMutationClaim = await pinTemplateTwinClinicalMutation({
+          visitId,
+          actorUserId: userId,
+          admittedVisitUpdatedAt: authorityTarget.updatedAt,
+          provenance: authorityTarget,
+        });
+      } catch (error) {
+        if (error instanceof TemplateTwinClinicalMutationAuthorizationError) {
+          return apiError("not found", 404);
+        }
+        throw error;
+      }
+    }
 
     let body: unknown;
     try {
@@ -81,15 +131,24 @@ export const POST = withApiHandler<{ id: string }>(
     }
 
     const visit = await prisma.transcribeVisit.findUnique({
-      where: { id: visitId },
+      where: {
+        id: visitId,
+        ...currentClinicalVisitActorWhere(userId),
+        updatedAt: authorityTarget.updatedAt,
+        ...(templateTwinMutationClaim
+          ? {}
+          : TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE),
+      },
       select: {
         id: true,
         userId: true,
+        updatedAt: true,
         inputMode: true,
         status: true,
         rawTextInput: true,
         deletedAt: true,
         archivedAt: true,
+        ...TEMPLATE_TWIN_CLINICAL_MUTATION_PROVENANCE_SELECT,
       },
     });
     if (!visit || visit.userId !== userId) return apiError("not found", 404);
@@ -107,19 +166,95 @@ export const POST = withApiHandler<{ id: string }>(
     if (visit.status !== TranscribeVisitStatus.QUEUED) {
       return apiError("visit is already processing or finalized", 409);
     }
+    if (
+      !templateTwinMutationClaim &&
+      hasDurableTemplateTwinClinicalMutationProvenance(visit)
+    ) {
+      return apiError("The visit changed. Reload and retry.", 409, {
+        code: "TEMPLATE_TWIN_MUTATION_CONFLICT",
+      });
+    }
 
-    await prisma.transcribeVisit.update({
-      where: { id: visitId },
-      data: {
-        rawTextInput: parsed.data.text,
-        status: TranscribeVisitStatus.QUEUED,
-        needsReview: false,
-        reviewReason: null,
-        processingStartedAt: null,
-        processingFinishedAt: null,
-        processingCostCents: null,
-      },
-    });
+    const updateData = {
+      rawTextInput: parsed.data.text,
+      status: TranscribeVisitStatus.QUEUED,
+      needsReview: false,
+      reviewReason: null,
+      processingStartedAt: null,
+      processingFinishedAt: null,
+      processingCostCents: null,
+    } as const;
+    if (templateTwinMutationClaim) {
+      try {
+        const applied = await prisma.$transaction(
+          async (tx: Prisma.TransactionClient) => {
+            const locked = await lockAndAssertTemplateTwinClinicalMutation({
+              tx,
+              claim: templateTwinMutationClaim,
+            });
+            if (
+              locked.status !== TranscribeVisitStatus.QUEUED ||
+              locked.updatedAt.getTime() !== visit.updatedAt.getTime() ||
+              locked.inputMode !== "text_notes" ||
+              Boolean(locked.rawTextInput?.trim()) ||
+              locked.deletedAt !== null ||
+              locked.archivedAt !== null ||
+              locked.signedAt !== null
+            ) {
+              return false;
+            }
+            await tx.transcribeVisit.update({
+              where: { id: visitId },
+              data: updateData,
+            });
+            await enqueueTemplateTwinClinicalMutationAudit({
+              tx,
+              claim: templateTwinMutationClaim,
+              operation: "text_submit",
+              action: "EDITED_NOTE",
+              metadata: { inputMode: "text_notes" },
+            });
+            return true;
+          },
+        );
+        if (!applied) {
+          return apiError("The visit changed. Reload and retry.", 409, {
+            code: "TEMPLATE_TWIN_MUTATION_CONFLICT",
+          });
+        }
+      } catch (error) {
+        if (error instanceof TemplateTwinClinicalMutationAuthorizationError) {
+          return apiError("Template Twin authorization changed.", 409, {
+            code: "TEMPLATE_TWIN_AUTHORIZATION_CHANGED",
+          });
+        }
+        throw error;
+      }
+    } else {
+      try {
+        await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+          await lockAndAssertOrdinaryClinicalMutation({
+            tx,
+            visitId,
+            actorUserId: userId,
+            admittedVisitUpdatedAt: authorityTarget.updatedAt,
+            admittedPatientId: authorityTarget.patientId,
+            admittedNoteTemplateId: authorityTarget.noteTemplateId,
+          });
+          await tx.transcribeVisit.update({
+            where: { id: visitId },
+            data: updateData,
+          });
+        });
+      } catch (error) {
+        if (error instanceof TemplateTwinClinicalMutationAuthorizationError) {
+          return apiError("The visit changed. Reload and retry.", 409, {
+            code: "TEMPLATE_TWIN_MUTATION_CONFLICT",
+          });
+        }
+        throw error;
+      }
+    }
 
     try {
       await enqueueProcessVisit(visitId, userId);

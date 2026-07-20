@@ -1,3 +1,8 @@
+.adminSurface {
+  min-height: 100vh;
+  background: var(--color-linear-bg);
+}
+
 .shell {
   width: min(880px, 100%);
   margin: 0 auto;
@@ -6,22 +11,8 @@
   font-family: var(--font-sans);
 }
 
-.backLink {
-  display: inline-flex;
-  min-height: 44px;
-  align-items: center;
-  color: var(--color-linear-text-2);
-  font-size: 13px;
-  text-decoration: none;
-}
-
-.backLink:hover,
-.backLink:focus-visible {
-  color: var(--color-linear-text);
-}
-
 .header {
-  margin: 10px 0 24px;
+  margin: 0 0 24px;
 }
 
 .eyebrow {
@@ -214,7 +205,9 @@
     linear-gradient(45deg, rgba(255, 255, 255, 0.025) 25%, transparent 25%),
     linear-gradient(-45deg, rgba(255, 255, 255, 0.025) 25%, transparent 25%),
     var(--color-linear-surface-1);
-  background-position: 0 0, 8px 8px;
+  background-position:
+    0 0,
+    8px 8px;
   background-size: 16px 16px;
 }
 

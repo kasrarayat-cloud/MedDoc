@@ -41,7 +41,10 @@ import { auth } from "@/lib/nextauth";
 import { formatVisitDate } from "@/lib/visit-export";
 import { loadVisitExportData } from "@/lib/visit-export-server";
 import { computeDisplayedEmCode } from "@/lib/em-coding/displayed-level";
-import { hasTemplateTwinProvenance } from "@/lib/em-coding/template-twin-boundary";
+import {
+  hasTemplateTwinProvenance,
+  runProviderBackedEmForOrdinaryVisit,
+} from "@/lib/em-coding/template-twin-boundary";
 import { formatForEhr, type EhrFormat } from "@/lib/ehr-formatters";
 import { generateVisitPdf } from "@/lib/pdf-generator";
 import { sendVisitPdfEmail } from "@/lib/email";
@@ -73,6 +76,15 @@ import {
   type TemplateTwinRolloutToken,
 } from "@/lib/template-twin/rollout";
 import { isSameOriginTemplateTwinMutation } from "@/lib/template-twin/request-security";
+import {
+  requireTemplateTwinVisitReadAuthority,
+  TemplateTwinVisitReadAuthorityError,
+} from "@/lib/template-twin/read-authority";
+import {
+  requireTemplateTwinSyntheticReadAdmission,
+  type TemplateTwinSyntheticReadAdmission,
+  TemplateTwinSyntheticReadAdmissionError,
+} from "@/lib/template-twin/synthetic-read-admission";
 import { TemplateTwinStagingQaDisabledError } from "@/lib/template-twin/staging-qa-gate";
 import {
   lockAndAssertTemplateTwinStagingQaOperation,
@@ -98,6 +110,12 @@ import {
   authorizeVisitDeliveryFinalClaim,
   TemplateTwinDeliveryAuthorizationError,
 } from "@/lib/template-twin/delivery-authorization";
+import {
+  lockAndAssertOrdinaryClinicalMutation,
+  TemplateTwinClinicalMutationAuthorizationError,
+} from "@/lib/template-twin/visit-mutation-authority";
+import { TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE } from "@/lib/template-twin/durable-visit-exclusion";
+import { currentClinicalVisitActorWhere } from "@/lib/clinical-visit-authority";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -173,14 +191,62 @@ export const POST = withApiHandler<{ id: string }>(
     const wantsEmail = parsed.data.destinations.includes("email");
     const explicitEmailTarget = parsed.data.emailTo?.trim();
 
+    let preReadAuthority;
+    try {
+      preReadAuthority = await requireTemplateTwinVisitReadAuthority({
+        db: prisma,
+        visitId,
+        actorUserId: userId,
+      });
+    } catch (error) {
+      if (error instanceof TemplateTwinVisitReadAuthorityError) {
+        return apiError("not found", 404);
+      }
+      throw error;
+    }
+    if (preReadAuthority.isTemplateTwin && !preReadAuthority.practiceId) {
+      return apiError("not found", 404);
+    }
+
+    let syntheticReadAdmission: TemplateTwinSyntheticReadAdmission | null;
+    try {
+      syntheticReadAdmission = await requireTemplateTwinSyntheticReadAdmission({
+        visitId,
+        actorUserId: userId,
+        readDecision: preReadAuthority,
+      });
+    } catch (error) {
+      if (error instanceof TemplateTwinSyntheticReadAdmissionError) {
+        return apiError("not found", 404);
+      }
+      throw error;
+    }
+    if (
+      preReadAuthority.isTemplateTwin &&
+      !isSameOriginTemplateTwinMutation(req)
+    ) {
+      return apiError("The signing request was not same-origin.", 403, {
+        code: "TEMPLATE_TWIN_CROSS_SITE_MUTATION",
+        retry: false,
+      });
+    }
+
     // ── Sign ────────────────────────────────────────────────────────
     // Use an atomic updateMany with a status guard so two concurrent
     // submissions can't both "win" and double-sign.
     const visit = await prisma.transcribeVisit.findUnique({
-      where: { id: visitId },
+      where: {
+        id: visitId,
+        ...currentClinicalVisitActorWhere(userId),
+        ...(!preReadAuthority.isTemplateTwin
+          ? TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE
+          : {}),
+      },
       select: {
         id: true,
         userId: true,
+        patientId: true,
+        updatedAt: true,
         status: true,
         icdCodes: true,
         rxDrafts: true,
@@ -195,7 +261,91 @@ export const POST = withApiHandler<{ id: string }>(
       },
     });
     if (!visit || visit.userId !== userId) return apiError("not found", 404);
+    let readAuthority;
+    try {
+      readAuthority = await requireTemplateTwinVisitReadAuthority({
+        db: prisma,
+        visitId,
+        actorUserId: userId,
+        ...(preReadAuthority.isTemplateTwin
+          ? {
+              expectedPracticeId: preReadAuthority.practiceId!,
+              requireTemplateTwin: true,
+            }
+          : {}),
+      });
+    } catch (error) {
+      if (error instanceof TemplateTwinVisitReadAuthorityError) {
+        return apiError("not found", 404);
+      }
+      throw error;
+    }
     const isTemplateTwinVisit = hasTemplateTwinProvenance(visit);
+    if (readAuthority.isTemplateTwin !== isTemplateTwinVisit) {
+      return apiError("not found", 404);
+    }
+    if (
+      readAuthority.isSyntheticTemplateTwin !==
+      (syntheticReadAdmission !== null)
+    ) {
+      return apiError("not found", 404);
+    }
+    if (syntheticReadAdmission) {
+      if (
+        visit.templateTwinSyntheticQaRun?.id !== syntheticReadAdmission.runId ||
+        visit.templateTwinSyntheticQaRun.attempt !==
+          syntheticReadAdmission.attempt
+      ) {
+        return apiError("not found", 404);
+      }
+      try {
+        syntheticReadAdmission =
+          await requireTemplateTwinSyntheticReadAdmission({
+            visitId,
+            actorUserId: userId,
+            readDecision: readAuthority,
+            expected: syntheticReadAdmission,
+          });
+        if (!syntheticReadAdmission) return apiError("not found", 404);
+      } catch (error) {
+        if (error instanceof TemplateTwinSyntheticReadAdmissionError) {
+          return apiError("not found", 404);
+        }
+        throw error;
+      }
+    }
+    const reassertSyntheticReadAdmission = async (): Promise<void> => {
+      const expected = syntheticReadAdmission;
+      if (!expected) return;
+      const currentReadAuthority = await requireTemplateTwinVisitReadAuthority({
+        db: prisma,
+        visitId,
+        actorUserId: userId,
+        expectedPracticeId: expected.practiceId,
+        requireTemplateTwin: true,
+      });
+      const currentAdmission = await requireTemplateTwinSyntheticReadAdmission({
+        visitId,
+        actorUserId: userId,
+        readDecision: currentReadAuthority,
+        expected,
+      });
+      if (!currentAdmission) {
+        throw new TemplateTwinSyntheticReadAdmissionError();
+      }
+      syntheticReadAdmission = currentAdmission;
+    };
+    const ordinaryClinicalFence = () =>
+      prisma.$transaction((tx: Prisma.TransactionClient) =>
+        lockAndAssertOrdinaryClinicalMutation({
+          tx,
+          visitId,
+          actorUserId: userId,
+          admittedVisitUpdatedAt: visit.updatedAt,
+          admittedPatientId: visit.patientId,
+          admittedNoteTemplateId: visit.noteTemplateId,
+        }),
+      );
     // Ordinary visits retain the established session-email boundary. Twin
     // email is checked against users.email under the final physician row lock
     // below and again immediately before the external side effect.
@@ -228,12 +378,6 @@ export const POST = withApiHandler<{ id: string }>(
           { code: "INVALID_DESTINATION", retry: false },
         );
       }
-    }
-    if (isTemplateTwinVisit && !isSameOriginTemplateTwinMutation(req)) {
-      return apiError("The signing request was not same-origin.", 403, {
-        code: "TEMPLATE_TWIN_CROSS_SITE_MUTATION",
-        retry: false,
-      });
     }
     // T-M17.3: never silently sign a trashed / archived visit. Archived
     // SIGNED visits cannot be re-signed via this route — the operator
@@ -696,20 +840,33 @@ export const POST = withApiHandler<{ id: string }>(
         }
       } else if (emBlob) {
         try {
-          const signedCode = await computeDisplayedEmCode(
-            visit.soapFinal ?? "",
-            {
-              icdCodes: visit.icdCodes,
-              rxDrafts: visit.rxDrafts,
-              cptCodes: visit.cptCodes,
-            },
-            { practiceId: session?.user?.practiceId, visitId, userId },
+          const signedCode = await runProviderBackedEmForOrdinaryVisit(
+            false,
+            ordinaryClinicalFence,
+            () =>
+              computeDisplayedEmCode(
+                visit.soapFinal ?? "",
+                {
+                  icdCodes: visit.icdCodes,
+                  rxDrafts: visit.rxDrafts,
+                  cptCodes: visit.cptCodes,
+                },
+                { practiceId: session?.user?.practiceId, visitId, userId },
+              ),
           );
+          if (!signedCode) throw new TemplateTwinSignClaimConflict();
           cptWrite = {
             ...cptBlob,
             em: { ...emBlob, signedCode },
           } as Prisma.InputJsonValue;
         } catch (err) {
+          if (err instanceof TemplateTwinClinicalMutationAuthorizationError) {
+            return apiError(
+              "The visit changed before signing. Refresh and try again.",
+              409,
+              { code: "TEMPLATE_TWIN_MUTATION_CONFLICT", retry: true },
+            );
+          }
           log.warn(
             "api:visits:sign",
             "em signedCode freeze failed — export falls back to override ?? code",
@@ -1116,6 +1273,15 @@ export const POST = withApiHandler<{ id: string }>(
             visitId,
             userId,
             practiceId: visit.user.practiceId,
+            ordinaryBeforeVisitLock: (tx) =>
+              lockAndAssertOrdinaryClinicalMutation({
+                tx,
+                visitId,
+                actorUserId: userId,
+                admittedVisitUpdatedAt: visit.updatedAt,
+                admittedPatientId: visit.patientId,
+                admittedNoteTemplateId: visit.noteTemplateId,
+              }),
             transaction: async (tx, lockedVisit) => {
               if (
                 lockedVisit.status !== TranscribeVisitStatus.READY ||
@@ -1161,6 +1327,13 @@ export const POST = withApiHandler<{ id: string }>(
             },
           });
         } catch (error) {
+          if (error instanceof TemplateTwinClinicalMutationAuthorizationError) {
+            return apiError(
+              "The visit changed before signing. Refresh and try again.",
+              409,
+              { code: "TEMPLATE_TWIN_MUTATION_CONFLICT", retry: true },
+            );
+          }
           if (error instanceof VisitAutomationIncompleteError) {
             return apiError(
               "Required visit automation changed before signing. Retry processing.",
@@ -1197,7 +1370,7 @@ export const POST = withApiHandler<{ id: string }>(
       if (updated.count === 0) {
         // Another concurrent request got there first. Re-read.
         const refreshed = await prisma.transcribeVisit.findUnique({
-          where: { id: visitId },
+          where: { id: visitId, userId },
           select: { signedAt: true, status: true },
         });
         if (refreshed?.status !== TranscribeVisitStatus.SIGNED) {
@@ -1206,7 +1379,7 @@ export const POST = withApiHandler<{ id: string }>(
         signedAt = refreshed.signedAt;
       } else {
         const refreshed = await prisma.transcribeVisit.findUnique({
-          where: { id: visitId },
+          where: { id: visitId, userId },
           select: { signedAt: true },
         });
         signedAt = refreshed?.signedAt ?? new Date();
@@ -1226,6 +1399,20 @@ export const POST = withApiHandler<{ id: string }>(
     // ── Deliver ─────────────────────────────────────────────────────
     // loadVisitExportData reads the freshly-signed row so downstream
     // generators see signedSoap / signedAt set correctly.
+    // Reassert the shared, PHI-minimal full-run admission after the final
+    // signing claim and before loading freshly signed export fields.
+    try {
+      await reassertSyntheticReadAdmission();
+    } catch (error) {
+      if (
+        error instanceof TemplateTwinVisitReadAuthorityError ||
+        error instanceof TemplateTwinSyntheticReadAdmissionError
+      ) {
+        return apiError("not found", 404);
+      }
+      throw error;
+    }
+
     let data: Awaited<ReturnType<typeof loadVisitExportData>>;
     try {
       data = await loadVisitExportData(visitId, userId, {
@@ -1242,6 +1429,20 @@ export const POST = withApiHandler<{ id: string }>(
       throw error;
     }
     if (!data) return apiError("visit disappeared after signing", 500);
+
+    // The export loader necessarily projects clinical data. Do not release or
+    // transform any of it unless the same exact synthetic run remains current.
+    try {
+      await reassertSyntheticReadAdmission();
+    } catch (error) {
+      if (
+        error instanceof TemplateTwinVisitReadAuthorityError ||
+        error instanceof TemplateTwinSyntheticReadAdmissionError
+      ) {
+        return apiError("not found", 404);
+      }
+      throw error;
+    }
 
     const clipboardTexts: Record<string, string> = {};
     let pdfDownloadUrl: string | undefined;
@@ -1312,12 +1513,10 @@ export const POST = withApiHandler<{ id: string }>(
               "email delivery is not configured on this environment";
             continue;
           }
-          // Twin delivery uses only the email returned by the immediately
-          // preceding locked final claim. Ordinary behavior remains session-
-          // email-only (the ordinary guard above already proved equality).
-          const to = destinationClaim.templateTwin
-            ? destinationClaim.currentPhysicianEmail
-            : sessionEmail;
+          // Every delivery uses only the current database email returned by
+          // the immediately preceding final actor claim. The session/JWT email
+          // is an admission hint and may be stale after an account update.
+          const to = destinationClaim.currentPhysicianEmail;
           const pdf = await generateVisitPdf(data);
           await sendVisitPdfEmail({
             toEmail: to,

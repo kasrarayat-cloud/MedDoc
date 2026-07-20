@@ -43,6 +43,7 @@ import { TranscribeVisitStatus } from '@prisma/client';
 import { deleteAudioObject } from '@/lib/minio';
 import { log } from '@/lib/log';
 import { redactPhi } from '@meddoc/ai';
+import { TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE } from '@/lib/template-twin/durable-visit-exclusion';
 
 /** Default audio retention window. 90 days = 3 months.
  *  Rationale: the HIPAA 6-year minimum applies to the clinical
@@ -97,6 +98,7 @@ export async function runRetentionSweep(): Promise<RetentionSweepResult> {
       status: TranscribeVisitStatus.SIGNED,
       signedAt: { lt: cutoff },
       deletedAt: null,
+      ...TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE,
       OR: [
         { audioKey: { not: null } },
         { dictationAudioKey: { not: null } },
@@ -133,13 +135,22 @@ export async function runRetentionSweep(): Promise<RetentionSweepResult> {
   await Promise.all(
     targets.map(async (t: RetentionTarget) => {
       try {
-        await prisma.transcribeVisit.update({
-          where: { id: t.id },
+        const cleared = await prisma.transcribeVisit.updateMany({
+          where: {
+            id: t.id,
+            status: TranscribeVisitStatus.SIGNED,
+            signedAt: t.signedAt,
+            deletedAt: null,
+            audioKey: t.audioKey,
+            dictationAudioKey: t.dictationAudioKey,
+            ...TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE,
+          },
           data: {
             audioKey: null,
             dictationAudioKey: null,
           },
         });
+        if (cleared.count !== 1) return;
       } catch (err) {
         console.error(
           '[ops:retention-sweep] column clear failed:',

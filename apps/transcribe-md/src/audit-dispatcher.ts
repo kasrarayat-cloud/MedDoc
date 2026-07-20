@@ -1,9 +1,20 @@
+import { writeFile } from "node:fs/promises";
+
 import prisma from "@meddoc/db";
 
+import { assertQuillmdRuntimeProtocol } from "@/lib/runtime-protocol";
 import { drainTemplateTwinAuditOutbox } from "@/lib/template-twin/audit-outbox";
 
 const SERVICE_ROLE = "template-twin-audit-dispatcher";
 const DEFAULT_INTERVAL_MS = 5_000;
+const HEARTBEAT_PATH = "/tmp/template-twin-audit-dispatcher-heartbeat";
+
+async function writeHeartbeat(): Promise<void> {
+  await writeFile(HEARTBEAT_PATH, new Date().toISOString(), {
+    encoding: "utf8",
+    mode: 0o600,
+  });
+}
 
 function intervalMs(): number {
   const raw = process.env.TEMPLATE_TWIN_AUDIT_DISPATCH_INTERVAL_MS?.trim();
@@ -19,6 +30,7 @@ async function main(): Promise<void> {
   if (process.env.QUILLMD_SERVICE_ROLE !== SERVICE_ROLE) {
     throw new Error("Template Twin audit dispatcher service role is required.");
   }
+  assertQuillmdRuntimeProtocol(process.env);
   const delay = intervalMs();
   let stopping = false;
   const stop = () => {
@@ -33,6 +45,10 @@ async function main(): Promise<void> {
         prisma,
         limit: 100,
       });
+      // This is deliberately after the full drain. Both an empty successful
+      // census and a completed non-empty delivery pass prove database-backed
+      // progress; a failed or wedged drain must let the heartbeat go stale.
+      await writeHeartbeat();
       if (result.delivered > 0 || result.failed > 0) {
         process.stdout.write(
           `${JSON.stringify({

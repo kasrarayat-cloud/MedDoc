@@ -13,6 +13,7 @@ describe("admin-host MFA recovery contract", () => {
     const matcher = caddy.match(/@mfaApi path ([^\n]+)/u)?.[1] ?? "";
     expect(matcher).toContain("/api/mfa/enroll");
     expect(matcher).toContain("/api/mfa/verify-enrollment");
+    expect(matcher).toContain("/api/mfa/recovery-codes/rotate");
     expect(matcher).not.toContain("/api/mfa/disable");
   });
 
@@ -24,15 +25,23 @@ describe("admin-host MFA recovery contract", () => {
     const clinicianFrameReturn = page.lastIndexOf("<AppFrame>");
     expect(isolatedReturn).toBeGreaterThan(-1);
     expect(clinicianFrameReturn).toBeGreaterThan(isolatedReturn);
+    expect(page).toContain('href="/admin/template-twin-release"');
     expect(page).toMatch(
-      /completionHref=\{isAdminHost \? ["']\/admin["'] : ["']\/settings["']\}/u,
+      /isAdminHost \? ["']\/admin\/template-twin-release["'] : ["']\/settings["']/u,
     );
-    expect(page).toContain("isPlatformAdmin={user.products.includes");
+    expect(page).not.toContain('href="/admin"');
+    expect(page).not.toMatch(/isAdminHost\s*\?\s*["']\/admin["']/u);
+    const enrollmentPanel = read(
+      "apps/transcribe-md/src/app/settings/security/mfa/mfa-enrollment-panel.tsx",
+    );
+    expect(enrollmentPanel).toContain(
+      'completionHref?: "/admin/template-twin-release" | "/settings"',
+    );
+    expect(enrollmentPanel).toContain("router.push(completionHref)");
+    expect(page).toContain("isAdminHost || user.products.includes");
     expect(page).toContain("mfaSecret: true");
     expect(page).toContain("hasInconsistentMfaEnrollment");
-    expect(page).toContain(
-      "MFA configuration requires controlled repair",
-    );
+    expect(page).toContain("MFA configuration requires controlled repair");
   });
 
   it("uses the strict host validator for both post-login paths", () => {

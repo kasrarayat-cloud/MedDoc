@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   txVisitUpdate: vi.fn(),
   txVisitUpdateMany: vi.fn(),
   txFillUpdateMany: vi.fn(),
+  txQueryRaw: vi.fn(),
   requireSession: vi.fn(),
 }));
 
@@ -24,25 +25,61 @@ import { TranscribeVisitStatus } from "@prisma/client";
 import { saveSoapDraftAction } from "../soap";
 
 const VISIT_ID = "visit-soap-binding";
+const PATIENT_ID = "patient-soap-binding";
+const PRACTICE_ID = "practice-soap-binding";
+const UPDATED_AT = new Date("2026-07-20T00:00:00.000Z");
+
+function ordinaryVisit(overrides: Record<string, unknown> = {}) {
+  return {
+    id: VISIT_ID,
+    userId: "doctor-1",
+    updatedAt: UPDATED_AT,
+    status: TranscribeVisitStatus.READY,
+    deletedAt: null,
+    archivedAt: null,
+    signedAt: null,
+    soapFinal: "Synthetic SOAP before edit.",
+    soapVersion: 7,
+    patientId: PATIENT_ID,
+    patient: {
+      id: PATIENT_ID,
+      practiceId: PRACTICE_ID,
+      externalId: null,
+    },
+    noteTemplateId: null,
+    noteTemplateVersion: null,
+    noteTemplate: null,
+    templateTwinFill: null,
+    templateTwinSyntheticQaRun: null,
+    templateTwinSyntheticQaAdmission: null,
+    templateTwinProviderExecutions: [],
+    ...overrides,
+  };
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.requireSession.mockResolvedValue({
     user: { id: "doctor-1", email: "doctor@example.test" },
   });
-  mocks.findUnique.mockResolvedValue({
-    id: VISIT_ID,
-    userId: "doctor-1",
-    status: TranscribeVisitStatus.READY,
-    deletedAt: null,
-    archivedAt: null,
-  });
+  mocks.findUnique.mockResolvedValue(ordinaryVisit());
   mocks.txVisitUpdateMany.mockResolvedValue({ count: 1 });
   mocks.txVisitUpdate.mockResolvedValue({ soapVersion: 8 });
   mocks.txFillUpdateMany.mockResolvedValue({ count: 1 });
+  mocks.txQueryRaw.mockImplementation(async (query: { strings?: string[] }) => {
+    const sql = query.strings?.join(" ") ?? "";
+    if (sql.includes('FROM "practices"')) {
+      return [{ id: PRACTICE_ID, isActive: true }];
+    }
+    if (sql.includes('FROM "users"')) {
+      return [{ id: "doctor-1" }];
+    }
+    return [{ id: VISIT_ID }];
+  });
   mocks.transaction.mockImplementation(
     async (callback: (tx: unknown) => Promise<unknown>) =>
       callback({
+        $queryRaw: mocks.txQueryRaw,
         transcribeVisit: {
           update: mocks.txVisitUpdate,
           updateMany: mocks.txVisitUpdateMany,
@@ -99,13 +136,8 @@ describe("SOAP edit invalidates an existing Template Twin", () => {
   it("does not invalidate a Twin when the SOAP version claim loses", async () => {
     mocks.txVisitUpdateMany.mockResolvedValue({ count: 0 });
     mocks.findUnique
-      .mockResolvedValueOnce({
-        id: VISIT_ID,
-        userId: "doctor-1",
-        status: TranscribeVisitStatus.READY,
-        deletedAt: null,
-        archivedAt: null,
-      })
+      .mockResolvedValueOnce(ordinaryVisit())
+      .mockResolvedValueOnce(ordinaryVisit())
       .mockResolvedValueOnce({
         soapVersion: 9,
         soapFinal: "Newer synthetic SOAP.",

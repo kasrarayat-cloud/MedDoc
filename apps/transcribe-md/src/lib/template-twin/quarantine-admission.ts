@@ -19,6 +19,11 @@ import {
   type StoredTemplateTwinArtifact,
   type TemplateTwinArtifactStore,
 } from "./storage";
+import { lockAndAssertCurrentTemplateTwinPhysician } from "./final-claim-authority";
+import {
+  lockTemplateTwinRolloutForFinalClaim,
+  type TemplateTwinRolloutToken,
+} from "./rollout";
 
 export type TemplateTwinIntakeMode = "NATIVE_TEMPLATE" | "COMPLETED_EXAMPLE";
 
@@ -26,6 +31,7 @@ export interface TemplateTwinIntakeActor {
   readonly userId: string;
   readonly userEmail: string;
   readonly practiceId: string;
+  readonly rolloutToken: TemplateTwinRolloutToken;
 }
 
 export interface TemplateTwinQuarantineReceipt {
@@ -57,7 +63,10 @@ function asJson(value: unknown): Prisma.InputJsonValue {
 }
 
 function safeCode(value: string): string {
-  const normalized = value.trim().replace(/[^A-Z0-9_:-]/gi, "_").slice(0, 80);
+  const normalized = value
+    .trim()
+    .replace(/[^A-Z0-9_:-]/gi, "_")
+    .slice(0, 80);
   return normalized || "TEMPLATE_TWIN_INTAKE_REJECTED";
 }
 
@@ -87,6 +96,21 @@ export async function beginTemplateTwinQuarantine(input: {
 
   try {
     await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const rollout = await lockTemplateTwinRolloutForFinalClaim({
+        tx,
+        practiceId: input.actor.practiceId,
+        pinnedToken: input.actor.rolloutToken,
+      });
+      if (!rollout.allowed) {
+        throw new TemplateTwinQuarantineError(
+          "TEMPLATE_TWIN_QUARANTINE_STATE_CONFLICT",
+          "Template Twin availability changed before the upload could be captured in quarantine.",
+        );
+      }
+      const currentActor = await lockAndAssertCurrentTemplateTwinPhysician({
+        tx,
+        actor: input.actor,
+      });
       await tx.templateTwinQuarantineArtifact.create({
         data: {
           id,
@@ -115,7 +139,7 @@ export async function beginTemplateTwinQuarantine(input: {
         eventKey: `template-twin:quarantine-captured:${id}:${stored.sha256}`,
         practiceId: input.actor.practiceId,
         actorId: input.actor.userId,
-        actorEmailSnapshot: input.actor.userEmail,
+        actorEmailSnapshot: currentActor.email,
         action: "TEMPLATE_TWIN_QUARANTINED",
         targetType: "TemplateTwinQuarantineArtifact",
         targetId: id,
@@ -132,6 +156,7 @@ export async function beginTemplateTwinQuarantine(input: {
       });
     });
   } catch (error) {
+    if (error instanceof TemplateTwinQuarantineError) throw error;
     throw new TemplateTwinQuarantineError(
       "TEMPLATE_TWIN_QUARANTINE_PERSISTENCE_FAILED",
       "The upload could not be captured in private quarantine and was not admitted.",
@@ -160,6 +185,7 @@ async function recordScanUnavailable(input: {
         where: {
           id: input.receipt.id,
           practiceId: input.actor.practiceId,
+          createdById: input.actor.userId,
           status: "QUARANTINED",
           sha256: input.receipt.stored.sha256,
         },
@@ -175,7 +201,10 @@ async function recordScanUnavailable(input: {
         eventKey: `template-twin:malware-scan-blocked:${input.receipt.id}:${code}`,
         practiceId: input.actor.practiceId,
         actorId: input.actor.userId,
-        actorEmailSnapshot: input.actor.userEmail,
+        // Safety bookkeeping may finish after lifecycle revocation. The row
+        // predicate above proves the persisted owner; never trust a stale
+        // request-start email when recording that terminal outcome.
+        actorEmailSnapshot: null,
         action: "TEMPLATE_TWIN_SAFETY_GATE_BLOCKED",
         targetType: "TemplateTwinQuarantineArtifact",
         targetId: input.receipt.id,
@@ -217,6 +246,7 @@ export async function scanTemplateTwinQuarantine(input: {
             where: {
               id: input.receipt.id,
               practiceId: input.actor.practiceId,
+              createdById: input.actor.userId,
               status: "QUARANTINED",
               sha256: input.receipt.stored.sha256,
             },
@@ -237,7 +267,7 @@ export async function scanTemplateTwinQuarantine(input: {
             eventKey: `template-twin:malware-rejected:${input.receipt.id}:${error.evidence.attestationSha256}`,
             practiceId: input.actor.practiceId,
             actorId: input.actor.userId,
-            actorEmailSnapshot: input.actor.userEmail,
+            actorEmailSnapshot: null,
             action: "TEMPLATE_TWIN_MALWARE_SCANNED",
             targetType: "TemplateTwinQuarantineArtifact",
             targetId: input.receipt.id,
@@ -281,6 +311,7 @@ export async function scanTemplateTwinQuarantine(input: {
         where: {
           id: input.receipt.id,
           practiceId: input.actor.practiceId,
+          createdById: input.actor.userId,
           status: "QUARANTINED",
           sha256: input.receipt.stored.sha256,
         },
@@ -301,7 +332,7 @@ export async function scanTemplateTwinQuarantine(input: {
         eventKey: `template-twin:malware-clean:${input.receipt.id}:${evidence.attestationSha256}`,
         practiceId: input.actor.practiceId,
         actorId: input.actor.userId,
-        actorEmailSnapshot: input.actor.userEmail,
+        actorEmailSnapshot: null,
         action: "TEMPLATE_TWIN_MALWARE_SCANNED",
         targetType: "TemplateTwinQuarantineArtifact",
         targetId: input.receipt.id,
@@ -340,6 +371,7 @@ export async function rejectTemplateTwinQuarantine(input: {
         where: {
           id: input.receipt.id,
           practiceId: input.actor.practiceId,
+          createdById: input.actor.userId,
           status: { in: ["QUARANTINED", "MALWARE_CLEAN"] },
           sha256: input.receipt.stored.sha256,
         },
@@ -361,7 +393,7 @@ export async function rejectTemplateTwinQuarantine(input: {
         eventKey: `template-twin:intake-rejected:${input.receipt.id}:${rejectionCode}`,
         practiceId: input.actor.practiceId,
         actorId: input.actor.userId,
-        actorEmailSnapshot: input.actor.userEmail,
+        actorEmailSnapshot: null,
         action: "TEMPLATE_TWIN_SAFETY_GATE_BLOCKED",
         targetType: "TemplateTwinQuarantineArtifact",
         targetId: input.receipt.id,
@@ -391,11 +423,27 @@ export async function admitTemplateTwinQuarantine(input: {
   sourceArtifactId: string;
   metadataEvidence: TemplateTwinMetadataEvidence;
 }): Promise<void> {
+  const rollout = await lockTemplateTwinRolloutForFinalClaim({
+    tx: input.tx,
+    practiceId: input.actor.practiceId,
+    pinnedToken: input.actor.rolloutToken,
+  });
+  if (!rollout.allowed) {
+    throw new TemplateTwinQuarantineError(
+      "TEMPLATE_TWIN_QUARANTINE_STATE_CONFLICT",
+      "Template Twin availability changed before quarantine admission completed.",
+    );
+  }
+  const currentActor = await lockAndAssertCurrentTemplateTwinPhysician({
+    tx: input.tx,
+    actor: input.actor,
+  });
   const admittedAt = new Date();
   const updated = await input.tx.templateTwinQuarantineArtifact.updateMany({
     where: {
       id: input.receipt.id,
       practiceId: input.actor.practiceId,
+      createdById: input.actor.userId,
       status: "MALWARE_CLEAN",
       sha256: input.receipt.stored.sha256,
     },
@@ -416,7 +464,7 @@ export async function admitTemplateTwinQuarantine(input: {
     eventKey: `template-twin:metadata-minimized:${input.receipt.id}:${input.metadataEvidence.minimizedSha256}`,
     practiceId: input.actor.practiceId,
     actorId: input.actor.userId,
-    actorEmailSnapshot: input.actor.userEmail,
+    actorEmailSnapshot: currentActor.email,
     action: "TEMPLATE_TWIN_METADATA_MINIMIZED",
     targetType: "TemplateTwinQuarantineArtifact",
     targetId: input.receipt.id,
@@ -452,11 +500,27 @@ export async function isolateCompletedExampleQuarantine(input: {
       "Only a completed-document example can enter candidate isolation.",
     );
   }
+  const rollout = await lockTemplateTwinRolloutForFinalClaim({
+    tx: input.tx,
+    practiceId: input.actor.practiceId,
+    pinnedToken: input.actor.rolloutToken,
+  });
+  if (!rollout.allowed) {
+    throw new TemplateTwinQuarantineError(
+      "TEMPLATE_TWIN_QUARANTINE_STATE_CONFLICT",
+      "Template Twin availability changed before completed-example isolation.",
+    );
+  }
+  const currentActor = await lockAndAssertCurrentTemplateTwinPhysician({
+    tx: input.tx,
+    actor: input.actor,
+  });
   const isolatedAt = new Date();
   const updated = await input.tx.templateTwinQuarantineArtifact.updateMany({
     where: {
       id: input.receipt.id,
       practiceId: input.actor.practiceId,
+      createdById: input.actor.userId,
       status: "MALWARE_CLEAN",
       intakeMode: "COMPLETED_EXAMPLE",
       sha256: input.receipt.stored.sha256,
@@ -478,7 +542,7 @@ export async function isolateCompletedExampleQuarantine(input: {
     eventKey: `template-twin:completed-example-isolated:${input.receipt.id}:${input.metadataEvidence.minimizedSha256}`,
     practiceId: input.actor.practiceId,
     actorId: input.actor.userId,
-    actorEmailSnapshot: input.actor.userEmail,
+    actorEmailSnapshot: currentActor.email,
     action: "TEMPLATE_TWIN_METADATA_MINIMIZED",
     targetType: "TemplateTwinQuarantineArtifact",
     targetId: input.receipt.id,

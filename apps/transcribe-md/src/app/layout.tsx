@@ -1,13 +1,14 @@
-import type { Metadata, Viewport } from 'next';
-import { GeistSans } from 'geist/font/sans';
-import { GeistMono } from 'geist/font/mono';
-import { Inter, JetBrains_Mono } from 'next/font/google';
+import type { Metadata, Viewport } from "next";
+import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
+import { Inter, JetBrains_Mono } from "next/font/google";
 
-import { auth } from '@/lib/nextauth';
-import { CommandPalette } from '@/components/command-palette';
-import { GlobalShortcuts } from '@/components/global-shortcuts';
-import { Toaster } from '@/components/toaster';
-import './globals.css';
+import { auth } from "@/lib/nextauth";
+import { CommandPalette } from "@/components/command-palette";
+import { GlobalShortcuts } from "@/components/global-shortcuts";
+import { Toaster } from "@/components/toaster";
+import { isTranscribeMdPhysicianAppService } from "@/lib/template-twin/admin-app-service";
+import "./globals.css";
 
 // Phase 5 Linear V1 font pair. Source Serif 4 + Inter Tight have been
 // retired — Linear V1 is Inter for chrome + body and JetBrains Mono for
@@ -15,27 +16,27 @@ import './globals.css';
 // with `--font-sans` / `--font-mono` consumed by the @theme block in
 // globals.css and the ported .qm-lin-* utility classes.
 const sans = Inter({
-  subsets: ['latin'],
-  weight: ['400', '500', '600'],
-  variable: '--font-sans',
-  display: 'swap',
-  fallback: ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-sans",
+  display: "swap",
+  fallback: ["-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
 });
 const mono = JetBrains_Mono({
-  subsets: ['latin'],
-  weight: ['400', '500'],
-  variable: '--font-mono',
-  display: 'swap',
-  fallback: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  variable: "--font-mono",
+  display: "swap",
+  fallback: ["ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
 });
 
 export const metadata: Metadata = {
   title: {
-    default: 'QuillMD',
-    template: '%s · QuillMD',
+    default: "QuillMD",
+    template: "%s · QuillMD",
   },
   description:
-    'AI medical transcription for solo doctors. Send audio, get a signed note.',
+    "AI medical transcription for solo doctors. Send audio, get a signed note.",
   // app.quillmd.com is the authenticated surface. The marketing site
   // (quillmd.com) carries the public-facing content and should be
   // indexed; everything behind this layout sits behind session auth,
@@ -44,8 +45,8 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#08090a',
-  colorScheme: 'dark',
+  themeColor: "#08090a",
+  colorScheme: "dark",
 };
 
 export default async function RootLayout({
@@ -59,6 +60,7 @@ export default async function RootLayout({
   // enough for every navigation.
   const session = await auth();
   const authed = Boolean(session?.user?.id);
+  const physicianSurface = isTranscribeMdPhysicianAppService();
 
   return (
     <html
@@ -84,8 +86,12 @@ export default async function RootLayout({
           Skip to main content
         </a>
         {children}
-        <CommandPalette authed={authed} />
-        <GlobalShortcuts authed={authed} />
+        {physicianSurface ? (
+          <>
+            <CommandPalette authed={authed} />
+            <GlobalShortcuts authed={authed} />
+          </>
+        ) : null}
         <Toaster />
       </body>
     </html>

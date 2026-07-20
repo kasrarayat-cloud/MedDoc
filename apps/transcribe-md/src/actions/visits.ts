@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import prisma from "@meddoc/db";
-import { Prisma, type TranscribeVisitStatus } from "@prisma/client";
+import type { Prisma, TranscribeVisitStatus } from "@prisma/client";
 import { SPECIALTY_IDS } from "@meddoc/shared/specialties";
 import { requireSession } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
@@ -18,11 +18,17 @@ import {
   C3_INBOX_PAGE_SIZE,
   type C3InboxPageResult,
 } from "@/lib/c3-list-pagination";
+import { isTemplateTwinSyntheticQaPatient } from "@/lib/template-twin/synthetic-qa-patient";
 import {
-  isTemplateTwinSyntheticQaPatient,
-  ordinaryClinicalVisitWhere,
-  TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID,
-} from "@/lib/template-twin/synthetic-qa-patient";
+  aggregateTemplateTwinVisibleVisits,
+  readTemplateTwinVisibleVisitPage,
+} from "@/lib/template-twin/read-authority";
+import {
+  lockAndAssertCurrentClinicalPatientActor,
+  lockCurrentClinicalPatientAfterActor,
+  lockNamedCurrentClinicalPatientAfterActor,
+  type CurrentClinicalPatientActor,
+} from "@/lib/clinical-patient-authority";
 
 const INPUT_MODES = ["audio_upload", "voice_dictation", "text_notes"] as const;
 
@@ -87,27 +93,18 @@ const CreateVisitSchema = z.object({
  *  Throws on a bad patientId so the caller's try/catch surfaces the
  *  problem to the UI instead of silently dropping the relation. */
 async function resolvePatient(
-  practiceId: string,
+  tx: Prisma.TransactionClient,
+  actor: CurrentClinicalPatientActor,
   patientId: string | null,
   patientName: string | null,
 ): Promise<{ id: string; name: string }> {
   if (patientId) {
-    const patient = await prisma.transcribeMdPatient.findUnique({
-      where: { id: patientId },
-      select: {
-        id: true,
-        name: true,
-        practiceId: true,
-        deletedAt: true,
-        externalId: true,
-      },
+    const patient = await lockCurrentClinicalPatientAfterActor({
+      tx,
+      actor,
+      patientId,
     });
-    if (
-      !patient ||
-      patient.practiceId !== practiceId ||
-      patient.deletedAt !== null ||
-      isTemplateTwinSyntheticQaPatient(patient)
-    ) {
+    if (!patient || isTemplateTwinSyntheticQaPatient(patient)) {
       throw new Error("Invalid patient");
     }
     return { id: patient.id, name: patient.name };
@@ -115,36 +112,31 @@ async function resolvePatient(
 
   // Free-text name (or the fallback "Unknown patient" bucket).
   const canonicalName = patientName ?? UNKNOWN_PATIENT_NAME;
-  const existing = await prisma.transcribeMdPatient.findFirst({
-    where: {
-      practiceId,
-      deletedAt: null,
-      OR: [
-        { externalId: null },
-        {
-          externalId: {
-            not: TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID,
-          },
-        },
-      ],
-      name: { equals: canonicalName, mode: "insensitive" },
-    },
-    select: { id: true, name: true },
+  const existing = await lockNamedCurrentClinicalPatientAfterActor({
+    tx,
+    actor,
+    patientName: canonicalName,
   });
   if (existing) return existing;
 
-  const created = await prisma.transcribeMdPatient.create({
+  const created = await tx.transcribeMdPatient.create({
     data: {
-      practiceId,
+      practiceId: actor.practiceId,
       name: canonicalName,
       // dateOfBirth intentionally null — the doctor can set it later
       // from the Phase 3 Edit Patient UI. New-patient creation via
       // the explicit /api/patients POST requires DOB; this auto-
       // create path is the backward-compat safety net.
     },
-    select: { id: true, name: true },
+    select: { id: true },
   });
-  return created;
+  const lockedCreated = await lockCurrentClinicalPatientAfterActor({
+    tx,
+    actor,
+    patientId: created.id,
+  });
+  if (!lockedCreated) throw new Error("Invalid patient");
+  return { id: lockedCreated.id, name: lockedCreated.name };
 }
 
 export async function createVisitAction(formData: FormData): Promise<void> {
@@ -164,28 +156,38 @@ export async function createVisitAction(formData: FormData): Promise<void> {
     throw new Error("Invalid visit input");
   }
 
-  const patient = await resolvePatient(
-    session.user.practiceId,
-    parsed.data.patientId ?? null,
-    parsed.data.patientName ?? null,
-  );
-
-  const visit = await prisma.transcribeVisit.create({
-    data: {
-      userId: session.user.id,
-      patientId: patient.id,
-      // patientName column stays populated (schema.prisma notes its
-      // removal is deferred to a follow-up). Prefer the resolved
-      // patient's canonical name over whatever free-text the form
-      // sent, so the legacy column and the FK never disagree.
-      patientName: patient.name,
-      specialty: parsed.data.specialty,
-      chiefComplaint: parsed.data.chiefComplaint ?? null,
-      inputMode: parsed.data.inputMode,
-      interpreterMode: parsed.data.interpreterMode,
+  const actor = {
+    userId: session.user.id,
+    practiceId: session.user.practiceId,
+  };
+  const { patient, visit } = await prisma.$transaction(
+    async (tx: Prisma.TransactionClient) => {
+      await lockAndAssertCurrentClinicalPatientActor({ tx, actor });
+      const patient = await resolvePatient(
+        tx,
+        actor,
+        parsed.data.patientId ?? null,
+        parsed.data.patientName ?? null,
+      );
+      const visit = await tx.transcribeVisit.create({
+        data: {
+          userId: actor.userId,
+          patientId: patient.id,
+          // patientName column stays populated (schema.prisma notes its
+          // removal is deferred to a follow-up). Prefer the resolved
+          // patient's canonical name over whatever free-text the form
+          // sent, so the legacy column and the FK never disagree.
+          patientName: patient.name,
+          specialty: parsed.data.specialty,
+          chiefComplaint: parsed.data.chiefComplaint ?? null,
+          inputMode: parsed.data.inputMode,
+          interpreterMode: parsed.data.interpreterMode,
+        },
+        select: { id: true },
+      });
+      return { patient, visit };
     },
-    select: { id: true },
-  });
+  );
 
   // §164.312(b) — F-10 from QA agent v3.2 discovery report. Visit
   // creation was previously silent at write-time; only VIEWED_VISIT
@@ -243,29 +245,36 @@ export async function loadMoreVisitsAction(
   // T-M17.3: honour the caller's includeArchived flag so paging past
   // the first page keeps the same filter as the SSR'd initial
   // render.
-  const rows = await prisma.transcribeVisit.findMany({
-    where: ordinaryClinicalVisitWhere({
-      userId: session.user.id,
-      deletedAt: null,
-      ...(includeArchived ? {} : { archivedAt: null }),
-      OR: [
-        { createdAt: { lt: cursorDate } },
-        {
-          createdAt: cursorDate,
-          id: { lt: cursor.id },
-        },
-      ],
-    }),
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    take: DASHBOARD_PAGE_SIZE + 1,
-    select: {
-      id: true,
-      patientName: true,
-      specialty: true,
-      status: true,
-      createdAt: true,
-      archivedAt: true,
+  const rows = await readTemplateTwinVisibleVisitPage<
+    LoadMoreVisitsResult["visits"][number]
+  >({
+    db: prisma,
+    actorUserId: session.user.id,
+    query: {
+      scope: {
+        deleted: "active",
+        archived: includeArchived ? "any" : "active",
+      },
+      orderBy: "createdAt",
+      direction: "desc",
+      cursor: { value: cursorDate, id: cursor.id },
+      take: DASHBOARD_PAGE_SIZE + 1,
     },
+    hydrate: (tx, visitIds) =>
+      tx.transcribeVisit.findMany({
+        where: {
+          id: { in: [...visitIds] },
+          userId: session.user.id,
+        },
+        select: {
+          id: true,
+          patientName: true,
+          specialty: true,
+          status: true,
+          createdAt: true,
+          archivedAt: true,
+        },
+      }),
   });
 
   const hasMore = rows.length > DASHBOARD_PAGE_SIZE;
@@ -296,25 +305,19 @@ export async function searchInboxAction(
 ): Promise<C3InboxPageResult> {
   const session = await requireSession();
   const q = query.trim().slice(0, 100);
-
-  const where: Prisma.TranscribeVisitWhereInput = ordinaryClinicalVisitWhere({
-    userId: session.user.id,
-    deletedAt: null,
-    archivedAt: null,
-    status: "READY",
-    signedAt: null,
-    ...(q
-      ? {
-          OR: [
-            { patient: { is: { name: { contains: q, mode: "insensitive" } } } },
-            { patientName: { contains: q, mode: "insensitive" } },
-            { chiefComplaint: { contains: q, mode: "insensitive" } },
-          ],
-        }
-      : {}),
+  const scope = {
+    deleted: "active" as const,
+    archived: "active" as const,
+    statuses: ["READY"],
+    signed: "unsigned" as const,
+    ...(q ? { search: q } : {}),
+  };
+  const aggregate = await aggregateTemplateTwinVisibleVisits({
+    db: prisma,
+    actorUserId: session.user.id,
+    scope,
   });
-
-  const total = await prisma.transcribeVisit.count({ where });
+  const total = aggregate.count;
   const pageSize = C3_INBOX_PAGE_SIZE;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   // Clamp caller-supplied page into range (never trust client input to widen
@@ -333,22 +336,34 @@ export async function searchInboxAction(
     createdAt: Date;
     patient: { name: string } | null;
   };
-  const rows = (await prisma.transcribeVisit.findMany({
-    where,
-    orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-    skip: (safePage - 1) * pageSize,
-    take: pageSize,
-    select: {
-      id: true,
-      patientName: true,
-      specialty: true,
-      status: true,
-      needsReview: true,
-      chiefComplaint: true,
-      createdAt: true,
-      patient: { select: { name: true } },
+  const rows = await readTemplateTwinVisibleVisitPage<C3InboxRaw>({
+    db: prisma,
+    actorUserId: session.user.id,
+    query: {
+      scope,
+      orderBy: "updatedAt",
+      direction: "desc",
+      skip: (safePage - 1) * pageSize,
+      take: pageSize,
     },
-  })) as C3InboxRaw[];
+    hydrate: (tx, visitIds) =>
+      tx.transcribeVisit.findMany({
+        where: {
+          id: { in: [...visitIds] },
+          userId: session.user.id,
+        },
+        select: {
+          id: true,
+          patientName: true,
+          specialty: true,
+          status: true,
+          needsReview: true,
+          chiefComplaint: true,
+          createdAt: true,
+          patient: { select: { name: true } },
+        },
+      }) as Promise<C3InboxRaw[]>,
+  });
 
   return {
     rows: rows.map((r) => ({

@@ -35,6 +35,7 @@ import { SessionPanel } from "./session-panel";
 import { DeleteAccountDialog } from "./delete-account-dialog";
 import { ChangePasswordForm } from "./change-password-form";
 import { ChangeEmailDialog } from "./change-email-dialog";
+import { MfaSettingsCallout } from "./mfa-settings-callout";
 import { EmailChangeToast } from "./email-change-toast";
 import { isDataExportEnabled } from "@/lib/data-export-feature";
 import { templateTwinRuntimeEnabled } from "@/lib/runtime-protocol";
@@ -294,63 +295,7 @@ export default async function SettingsPage() {
         content: (
           <>
             <ChangePasswordForm />
-            <div style={{ marginTop: 20 }}>
-              <div
-                style={{
-                  padding: "14px 16px",
-                  borderRadius: 8,
-                  border: "1px dashed var(--color-linear-border-strong)",
-                  background: "var(--color-linear-row-hover)",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    marginBottom: 6,
-                  }}
-                >
-                  <Ic.shield
-                    width={14}
-                    height={14}
-                    style={{ color: "var(--color-linear-sage-bright)" }}
-                  />
-                  <span
-                    style={{
-                      fontFamily: "var(--font-sans)",
-                      fontSize: 13,
-                      fontWeight: 500,
-                      color: "var(--color-linear-text)",
-                    }}
-                  >
-                    Two-factor authentication
-                  </span>
-                  <span
-                    className={
-                      user.mfaEnabled
-                        ? "qm-lin-pill qm-lin-pill--ready"
-                        : "qm-lin-pill qm-lin-pill--review"
-                    }
-                  >
-                    {user.mfaEnabled ? "Enabled" : "Off"}
-                  </span>
-                </div>
-                <p
-                  style={{
-                    margin: 0,
-                    fontFamily: "var(--font-sans)",
-                    fontSize: 12.5,
-                    color: "var(--color-linear-text-2)",
-                    lineHeight: 1.55,
-                  }}
-                >
-                  TOTP setup + recovery codes UI lands in the next batch of
-                  Settings work. The database supports it today (mfaSecret,
-                  mfaBackupCodes[]).
-                </p>
-              </div>
-            </div>
+            <MfaSettingsCallout enabled={user.mfaEnabled} />
           </>
         ),
       },
@@ -705,63 +650,7 @@ export default async function SettingsPage() {
             subtitle="Change your password. Other devices are signed out; this one stays."
           >
             <ChangePasswordForm />
-            <div style={{ marginTop: 20 }}>
-              <div
-                style={{
-                  padding: "14px 16px",
-                  borderRadius: 8,
-                  border: "1px dashed var(--color-linear-border-strong)",
-                  background: "var(--color-linear-row-hover)",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    marginBottom: 6,
-                  }}
-                >
-                  <Ic.shield
-                    width={14}
-                    height={14}
-                    style={{ color: "var(--color-linear-sage-bright)" }}
-                  />
-                  <span
-                    style={{
-                      fontFamily: "var(--font-sans)",
-                      fontSize: 13,
-                      fontWeight: 500,
-                      color: "var(--color-linear-text)",
-                    }}
-                  >
-                    Two-factor authentication
-                  </span>
-                  <span
-                    className={
-                      user.mfaEnabled
-                        ? "qm-lin-pill qm-lin-pill--ready"
-                        : "qm-lin-pill qm-lin-pill--review"
-                    }
-                  >
-                    {user.mfaEnabled ? "Enabled" : "Off"}
-                  </span>
-                </div>
-                <p
-                  style={{
-                    margin: 0,
-                    fontFamily: "var(--font-sans)",
-                    fontSize: 12.5,
-                    color: "var(--color-linear-text-2)",
-                    lineHeight: 1.55,
-                  }}
-                >
-                  TOTP setup + recovery codes UI lands in the next batch of
-                  Settings work. The database supports it today (mfaSecret,
-                  mfaBackupCodes[]).
-                </p>
-              </div>
-            </div>
+            <MfaSettingsCallout enabled={user.mfaEnabled} />
           </Section>
 
           <Section

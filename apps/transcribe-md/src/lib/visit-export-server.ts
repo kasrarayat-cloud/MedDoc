@@ -27,6 +27,66 @@ import type {
 import { assessVisitAutomationProof } from "@/worker/automation-finalization";
 import { VISIT_AUTOMATION_MANIFEST_SELECT } from "@/worker/automation-manifest";
 import { authorizeVisitDeliveryFinalClaim } from "@/lib/template-twin/delivery-authorization";
+import { TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE } from "@/lib/template-twin/durable-visit-exclusion";
+import { currentClinicalVisitActorWhere } from "@/lib/clinical-visit-authority";
+
+export interface VisitExportObjectManifest {
+  id: string;
+  audioKey: string | null;
+  dictationAudioKey: string | null;
+  audioMimeType: string | null;
+  status: TranscribeVisitStatus;
+  createdAt: Date;
+}
+
+/**
+ * Object keys are PHI-linked storage locators. Load them only between two
+ * exact delivery claims so archive jobs never inventory Twin storage before
+ * current authorization and never retain a locator across a revoked claim.
+ */
+export async function loadVisitExportObjectManifest(
+  visitId: string,
+  userId: string,
+): Promise<VisitExportObjectManifest | null> {
+  const initialDeliveryClaim = await authorizeVisitDeliveryFinalClaim({
+    visitId,
+    actorUserId: userId,
+  });
+  const manifest = await prisma.transcribeVisit.findFirst({
+    where: {
+      id: visitId,
+      ...currentClinicalVisitActorWhere(userId),
+      ...(initialDeliveryClaim.templateTwin
+        ? {}
+        : TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE),
+    },
+    select: {
+      id: true,
+      userId: true,
+      audioKey: true,
+      dictationAudioKey: true,
+      audioMimeType: true,
+      status: true,
+      createdAt: true,
+    },
+  });
+  if (!manifest || manifest.userId !== userId) return null;
+  const finalDeliveryClaim = await authorizeVisitDeliveryFinalClaim({
+    visitId,
+    actorUserId: userId,
+  });
+  if (finalDeliveryClaim.templateTwin !== initialDeliveryClaim.templateTwin) {
+    throw new Error("Visit delivery authority changed.");
+  }
+  return {
+    id: manifest.id,
+    audioKey: manifest.audioKey,
+    dictationAudioKey: manifest.dictationAudioKey,
+    audioMimeType: manifest.audioMimeType,
+    status: manifest.status,
+    createdAt: manifest.createdAt,
+  };
+}
 
 /**
  * Auth + load. Returns null for "not found / not yours" so the route
@@ -38,8 +98,25 @@ export async function loadVisitExportData(
   userId: string,
   options: { allowSyntheticOriginalTemplate?: boolean } = {},
 ): Promise<VisitExportData | null> {
-  const visit = await prisma.transcribeVisit.findUnique({
-    where: { id: visitId },
+  // The shared authorizer begins with the identifier/provenance-only read
+  // boundary. Run it before selecting SOAP/codes/Rx so a stale Twin session
+  // cannot project clinical payload into application memory. It is a no-op
+  // beyond ownership for ordinary visits and retains the stricter signed,
+  // reviewed, provider-owned final claim for Twin delivery.
+  const initialDeliveryClaim = await authorizeVisitDeliveryFinalClaim({
+    visitId,
+    actorUserId: userId,
+    allowSyntheticOriginalTemplate:
+      options.allowSyntheticOriginalTemplate === true,
+  });
+  const visit = await prisma.transcribeVisit.findFirst({
+    where: {
+      id: visitId,
+      ...currentClinicalVisitActorWhere(userId),
+      ...(initialDeliveryClaim.templateTwin
+        ? {}
+        : TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE),
+    },
     select: {
       id: true,
       userId: true,
@@ -70,15 +147,6 @@ export async function loadVisitExportData(
     },
   });
   if (!visit || visit.userId !== userId) return null;
-  // Central delivery admission. This is a no-op for ordinary visits. Template
-  // Twin exports require the exact signed/reviewed/provider-owned final claim,
-  // so every current and future caller of this shared loader fails closed.
-  await authorizeVisitDeliveryFinalClaim({
-    visitId,
-    actorUserId: userId,
-    allowSyntheticOriginalTemplate:
-      options.allowSyntheticOriginalTemplate === true,
-  });
   const automation = assessVisitAutomationProof({
     visitId: visit.id,
     practiceId: visit.user.practiceId,
@@ -130,7 +198,7 @@ export async function loadVisitExportData(
     visit.status === "SIGNED",
   );
 
-  return {
+  const exportData: VisitExportData = {
     visitId: visit.id,
     patientName: visit.patientName,
     // PDF/DOCX/EHR formatters render `data.specialty` directly into
@@ -155,4 +223,17 @@ export async function loadVisitExportData(
     referrals: refBlob?.referrals ?? [],
     patientSummary: visit.patientSummary,
   };
+  // The first delivery claim authorized the clinical projection. Repeat the
+  // locked final claim immediately before returning it to a response/render
+  // caller so a revocation during load/formatting cannot escape as bytes.
+  const finalDeliveryClaim = await authorizeVisitDeliveryFinalClaim({
+    visitId,
+    actorUserId: userId,
+    allowSyntheticOriginalTemplate:
+      options.allowSyntheticOriginalTemplate === true,
+  });
+  if (finalDeliveryClaim.templateTwin !== initialDeliveryClaim.templateTwin) {
+    throw new Error("Visit delivery authority changed.");
+  }
+  return exportData;
 }

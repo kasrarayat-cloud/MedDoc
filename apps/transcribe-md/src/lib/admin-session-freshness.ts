@@ -22,12 +22,13 @@
 //   if (stale) notFound();                  // page
 // ============================================================================
 
-import prisma from '@meddoc/db';
-import { Prisma, Product, type UserRole } from '@prisma/client';
+import prisma from "@meddoc/db";
+import { Prisma, Product, type UserRole } from "@prisma/client";
+import { hasCompleteMfaEnrollment } from "@/lib/mfa-enrollment-state";
 
 import releaseControlDatabase, {
   TEMPLATE_TWIN_RELEASE_CONTROL_SERVICE_ROLE,
-} from '@/lib/template-twin/release-control-db';
+} from "@/lib/template-twin/release-control-db";
 
 /** Maximum age of an admin session, in hours. JWT row in user_sessions
  *  older than this is rejected for /admin/* (the cookie itself stays
@@ -46,6 +47,8 @@ export interface VerifiedPlatformAdminSession {
   sessionExpiresAt: Date;
   mfaEnabled: boolean;
   mfaVerifiedAt: Date | null;
+  /** Canonical complete-enrollment decision. The secret is never projected. */
+  mfaComplete: boolean;
 }
 
 interface VerifyPlatformAdminSessionInput {
@@ -71,7 +74,7 @@ export async function verifyFreshPlatformAdminSession(
 
   try {
     if (
-      process.env.NODE_ENV === 'production' &&
+      process.env.NODE_ENV === "production" &&
       process.env.QUILLMD_SERVICE_ROLE ===
         TEMPLATE_TWIN_RELEASE_CONTROL_SERVICE_ROLE
     ) {
@@ -103,6 +106,9 @@ export async function verifyFreshPlatformAdminSession(
         sessionExpiresAt: row.sessionExpiresAt,
         mfaEnabled: true,
         mfaVerifiedAt: row.mfaVerifiedAt,
+        // The bounded SQL verifier returns a row only after the exact complete
+        // MFA predicate, without exposing the secret to this process.
+        mfaComplete: true,
       };
     }
 
@@ -162,10 +168,8 @@ export async function verifyFreshPlatformAdminSession(
       return null;
     }
 
-    if (
-      input.requireMfa !== false &&
-      (!user.mfaEnabled || !user.mfaSecret || user.mfaVerifiedAt === null)
-    ) {
+    const mfaComplete = hasCompleteMfaEnrollment(user, now);
+    if (input.requireMfa !== false && !mfaComplete) {
       return null;
     }
 
@@ -179,12 +183,13 @@ export async function verifyFreshPlatformAdminSession(
       sessionExpiresAt: row.expiresAt,
       mfaEnabled: user.mfaEnabled,
       mfaVerifiedAt: user.mfaVerifiedAt,
+      mfaComplete,
     };
   } catch {
     // Do not log the Prisma error text here: connection errors can include a
     // credential-bearing URL. The caller receives only a closed decision.
     console.error(
-      '[admin-session-freshness] database verification failed; access denied',
+      "[admin-session-freshness] database verification failed; access denied",
     );
     return null;
   }
@@ -215,7 +220,7 @@ export async function isAdminSessionStale(
     // through on a transient outage. Symmetrical with the page-layout
     // gate's notFound() posture.
     console.error(
-      '[admin-session-freshness] database freshness read failed; treating as stale',
+      "[admin-session-freshness] database freshness read failed; treating as stale",
     );
     return true;
   }

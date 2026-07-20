@@ -25,7 +25,7 @@
 import { NextResponse } from "next/server";
 
 import prisma from "@meddoc/db";
-import { TranscribeVisitStatus } from "@prisma/client";
+import { Prisma, TranscribeVisitStatus } from "@prisma/client";
 
 import { apiError, withApiHandler } from "@/lib/api-error";
 import { AuthError, requireFreshDoctorIdentity } from "@/lib/auth";
@@ -36,6 +36,7 @@ import { redactPhi } from "@meddoc/ai";
 import { log } from "@/lib/log";
 import { logAudit } from "@/lib/audit";
 import { isSameOriginTemplateTwinMutation } from "@/lib/template-twin/request-security";
+import { TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE } from "@/lib/template-twin/durable-visit-exclusion";
 import { TemplateTwinStagingQaDisabledError } from "@/lib/template-twin/staging-qa-gate";
 import {
   retryTemplateTwinStagingQaRun,
@@ -46,6 +47,17 @@ import {
   readBoundedTemplateTwinStagingQaJson,
   TemplateTwinStagingQaRequestError,
 } from "@/lib/template-twin/staging-qa-request";
+import {
+  hasDurableTemplateTwinClinicalMutationProvenance,
+  enqueueTemplateTwinClinicalMutationAudit,
+  loadTemplateTwinClinicalMutationAdmissionTarget,
+  lockAndAssertOrdinaryClinicalMutation,
+  lockAndAssertTemplateTwinClinicalMutation,
+  pinTemplateTwinClinicalMutation,
+  TEMPLATE_TWIN_CLINICAL_MUTATION_PROVENANCE_SELECT,
+  TemplateTwinClinicalMutationAuthorizationError,
+  type TemplateTwinClinicalMutationClaim,
+} from "@/lib/template-twin/visit-mutation-authority";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -96,25 +108,22 @@ export const POST = withApiHandler<{ id: string }>(
     const blocked = rateLimitOr429(RATE_LIMITS.VISIT_OPS, userId);
     if (blocked) return blocked;
 
-    const visit = await prisma.transcribeVisit.findUnique({
-      where: { id: visitId },
-      select: {
-        id: true,
-        userId: true,
-        status: true,
-        updatedAt: true,
-        deletedAt: true,
-        archivedAt: true,
-        manualRetryCount: true,
-        templateTwinSyntheticQaRun: { select: { id: true } },
-      },
-    });
-    if (!visit || visit.userId !== userId) return apiError("not found", 404);
+    // Classify and admit from PHI-minimal lineage before selecting processing
+    // state or input metadata. Synthetic runs branch to their dedicated ledger
+    // without ever entering the generic clinical projection.
+    const authorityTarget =
+      await loadTemplateTwinClinicalMutationAdmissionTarget({
+        visitId,
+        actorUserId: userId,
+      });
+    if (!authorityTarget || authorityTarget.userId !== userId) {
+      return apiError("not found", 404);
+    }
 
     // A synthetic QA visit must never fall through to the normal retry queue:
     // doing so would drop its exact run/attempt admission and could select a
     // live provider. Route it through the durable staging run ledger instead.
-    if (visit.templateTwinSyntheticQaRun) {
+    if (authorityTarget.templateTwinSyntheticQaRun) {
       if (!isSameOriginTemplateTwinMutation(_req)) {
         return apiError("not found", 404);
       }
@@ -175,6 +184,58 @@ export const POST = withApiHandler<{ id: string }>(
         }
         throw error;
       }
+    }
+
+    let templateTwinMutationClaim: TemplateTwinClinicalMutationClaim | null =
+      null;
+    if (hasDurableTemplateTwinClinicalMutationProvenance(authorityTarget)) {
+      if (!isSameOriginTemplateTwinMutation(_req)) {
+        return apiError("not found", 404);
+      }
+      try {
+        templateTwinMutationClaim = await pinTemplateTwinClinicalMutation({
+          visitId,
+          actorUserId: userId,
+          admittedVisitUpdatedAt: authorityTarget.updatedAt,
+          provenance: authorityTarget,
+        });
+      } catch (error) {
+        if (error instanceof TemplateTwinClinicalMutationAuthorizationError) {
+          return apiError("not found", 404);
+        }
+        throw error;
+      }
+    }
+
+    const visit = await prisma.transcribeVisit.findUnique({
+      where: {
+        id: visitId,
+        userId,
+        updatedAt: authorityTarget.updatedAt,
+        ...(templateTwinMutationClaim
+          ? {}
+          : TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE),
+      },
+      select: {
+        id: true,
+        userId: true,
+        status: true,
+        inputMode: true,
+        updatedAt: true,
+        deletedAt: true,
+        archivedAt: true,
+        manualRetryCount: true,
+        ...TEMPLATE_TWIN_CLINICAL_MUTATION_PROVENANCE_SELECT,
+      },
+    });
+    if (!visit || visit.userId !== userId) return apiError("not found", 404);
+    if (
+      Boolean(templateTwinMutationClaim) !==
+      hasDurableTemplateTwinClinicalMutationProvenance(visit)
+    ) {
+      return apiError("The visit changed. Reload and retry.", 409, {
+        code: "TEMPLATE_TWIN_MUTATION_CONFLICT",
+      });
     }
 
     if (visit.manualRetryCount >= MANUAL_RETRY_BUDGET) {
@@ -238,17 +299,71 @@ export const POST = withApiHandler<{ id: string }>(
     // checks column presence; layers that already wrote their output
     // stay skipped, so this isn't a full re-run.
     try {
-      await prisma.transcribeVisit.update({
-        where: { id: visit.id },
-        data: {
-          status: TranscribeVisitStatus.QUEUED,
-          needsReview: false,
-          reviewReason: null,
-          failureCategory: null,
-          processingFinishedAt: null,
-          manualRetryCount: { increment: 1 },
-        },
-      });
+      const updateData = {
+        status: TranscribeVisitStatus.QUEUED,
+        needsReview: false,
+        reviewReason: null,
+        failureCategory: null,
+        processingFinishedAt: null,
+        manualRetryCount: { increment: 1 },
+      } as const;
+      if (templateTwinMutationClaim) {
+        const applied = await prisma.$transaction(
+          async (tx: Prisma.TransactionClient) => {
+            const locked = await lockAndAssertTemplateTwinClinicalMutation({
+              tx,
+              claim: templateTwinMutationClaim,
+            });
+            if (
+              locked.status !== visit.status ||
+              locked.updatedAt.getTime() !== visit.updatedAt.getTime() ||
+              locked.manualRetryCount !== visit.manualRetryCount ||
+              locked.inputMode !== visit.inputMode ||
+              locked.deletedAt !== null ||
+              locked.archivedAt !== null ||
+              locked.signedAt !== null
+            ) {
+              return false;
+            }
+            await tx.transcribeVisit.update({
+              where: { id: visit.id },
+              data: updateData,
+            });
+            await enqueueTemplateTwinClinicalMutationAudit({
+              tx,
+              claim: templateTwinMutationClaim,
+              operation: "retry",
+              action: "VISIT_RETRY",
+              discriminator: visit.manualRetryCount + 1,
+              metadata: {
+                previousStatus: visit.status,
+                retryCount: visit.manualRetryCount + 1,
+              },
+            });
+            return true;
+          },
+        );
+        if (!applied) {
+          return apiError("The visit changed. Reload and retry.", 409, {
+            code: "TEMPLATE_TWIN_MUTATION_CONFLICT",
+          });
+        }
+      } else {
+        await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+          await lockAndAssertOrdinaryClinicalMutation({
+            tx,
+            visitId: visit.id,
+            actorUserId: userId,
+            admittedVisitUpdatedAt: authorityTarget.updatedAt,
+            admittedPatientId: authorityTarget.patientId,
+            admittedNoteTemplateId: authorityTarget.noteTemplateId,
+          });
+          await tx.transcribeVisit.update({
+            where: { id: visit.id },
+            data: updateData,
+          });
+        });
+      }
       await enqueueProcessVisit(visitId, userId, { retry: true });
       void logAudit({
         action: "VISIT_RETRY",
@@ -262,6 +377,15 @@ export const POST = withApiHandler<{ id: string }>(
         prevStatus: visit.status,
       });
     } catch (err) {
+      if (err instanceof TemplateTwinClinicalMutationAuthorizationError) {
+        return templateTwinMutationClaim
+          ? apiError("Template Twin authorization changed.", 409, {
+              code: "TEMPLATE_TWIN_AUTHORIZATION_CHANGED",
+            })
+          : apiError("The visit changed. Reload and retry.", 409, {
+              code: "TEMPLATE_TWIN_MUTATION_CONFLICT",
+            });
+      }
       console.error(
         "[api:visits:retry] enqueue failed:",
         redactPhi(err instanceof Error ? err.message : err),

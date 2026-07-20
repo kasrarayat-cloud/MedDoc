@@ -4,9 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 
-interface Props {
-  email: string;
-}
+import { AuthFieldLabel } from '@/components/ui/auth-shell';
 
 // Phase 5 — Linear V1 Faithful check-email resend block.
 // /api/auth/resend-verification contract is unchanged: 200 on success,
@@ -19,18 +17,33 @@ const linkStyle: React.CSSProperties = {
   textDecoration: 'none',
 };
 
-export function CheckEmailResend({ email }: Props) {
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  height: 36,
+  padding: '0 12px',
+  background: 'var(--color-linear-surface-2)',
+  border: '1px solid var(--color-linear-border)',
+  borderRadius: 6,
+  color: 'var(--color-linear-text)',
+  fontFamily: 'var(--font-sans)',
+  fontSize: 13.5,
+};
+
+export function CheckEmailResend() {
+  const [email, setEmail] = useState('');
   const [pending, setPending] = useState(false);
   const [sent, setSent] = useState(false);
 
-  async function onResend() {
-    if (!email) return;
+  async function onResend(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) return;
     setPending(true);
     try {
       const res = await fetch('/api/auth/resend-verification', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: normalizedEmail }),
       });
       if (res.status === 429) {
         toast.error('Too many requests', {
@@ -56,10 +69,10 @@ export function CheckEmailResend({ email }: Props) {
     }
   }
 
-  const canSend = Boolean(email) && !pending && !sent;
+  const canSend = Boolean(email.trim()) && !pending && !sent;
 
   return (
-    <div style={{ marginTop: 18 }}>
+    <form style={{ marginTop: 18 }} onSubmit={onResend}>
       {/* Linear V1 envelope mark — outline glyph in linear-sage-bright. */}
       <div
         style={{
@@ -119,10 +132,29 @@ export function CheckEmailResend({ email }: Props) {
         Didn&apos;t get it? Check your spam folder — or resend below.
       </p>
 
+      <div style={{ marginBottom: 14 }}>
+        <AuthFieldLabel htmlFor="verification-email">Email</AuthFieldLabel>
+        <input
+          id="verification-email"
+          name="email"
+          type="email"
+          inputMode="email"
+          autoComplete="email"
+          spellCheck={false}
+          maxLength={254}
+          required
+          value={email}
+          onChange={(event) => {
+            setEmail(event.target.value);
+            setSent(false);
+          }}
+          style={{ ...inputStyle, marginTop: 6 }}
+        />
+      </div>
+
       <button
-        type="button"
+        type="submit"
         disabled={!canSend}
-        onClick={onResend}
         className="qm-lin-btn"
         style={{
           width: '100%',
@@ -152,6 +184,6 @@ export function CheckEmailResend({ email }: Props) {
           Back to sign in →
         </Link>
       </div>
-    </div>
+    </form>
   );
 }

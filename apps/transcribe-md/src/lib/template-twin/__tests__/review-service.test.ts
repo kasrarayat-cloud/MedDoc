@@ -88,6 +88,7 @@ import {
 } from "../review-service";
 import { validateTemplateTwin } from "../validation";
 import { VisitAutomationIncompleteError } from "@/worker/automation-finalization";
+import { currentClinicalVisitActorWhere } from "@/lib/clinical-visit-authority";
 import {
   DOCX_MIME_TYPE,
   type StoredTemplateTwinArtifact,
@@ -388,6 +389,7 @@ function context(definition = field()): ReviewContext {
     resolverModelVersion: null,
     visit: {
       userId: "doctor-1",
+      patientId: "patient-1",
       status: "READY",
       reviewReason: TEMPLATE_TWIN_REVIEW_REASON,
       soapFinal: REVIEWED_SOAP,
@@ -490,6 +492,7 @@ function lockedVisitRow(
   return {
     id: "visit-1",
     userId: "doctor-1",
+    patientId: "patient-1",
     status: overrides.status ?? "READY",
     deletedAt: null,
     archivedAt: null,
@@ -547,7 +550,10 @@ function mockRolloutAndVisitLocks(visit = lockedVisitRow()) {
       return [{ phase: "CONTRACTED" }];
     }
     if (text.includes('FROM "users" actor')) {
-      return [{ id: "doctor-1" }];
+      return [{ id: "doctor-1", email: actor.userEmail }];
+    }
+    if (text.includes('FROM "transcribe_md_patients" patient')) {
+      return [{ id: "patient-1", practiceId: "practice-1" }];
     }
     return [visit];
   });
@@ -724,6 +730,26 @@ beforeEach(async () => {
   database.lockActor.mockResolvedValue(undefined);
   database.currentVisitFind.mockResolvedValue({ manualRetryCount: 0 });
   mockRolloutAndVisitLocks();
+});
+
+describe("Template Twin review projection authority", () => {
+  it("requires current physician lifecycle and current patient tenant in the owning read", async () => {
+    const repo = createTemplateTwinReviewRepository();
+
+    await expect(
+      repo.loadOwned({ visitId: "visit-1", actor }),
+    ).resolves.toBeTruthy();
+
+    const where = database.manifestFindFirst.mock.calls[0]?.[0]?.where;
+    expect(where?.visit?.AND).toContainEqual(
+      currentClinicalVisitActorWhere(actor.userId),
+    );
+    expect(where?.visit?.AND).toContainEqual(
+      expect.objectContaining({
+        patient: { is: { practiceId: actor.practiceId } },
+      }),
+    );
+  });
 });
 
 describe("buildClinicianCorrection exact rules", () => {
@@ -903,6 +929,52 @@ describe("reviewTemplateTwinField lifecycle", () => {
     });
     expect(database.manifestUpdateMany).not.toHaveBeenCalled();
     expect(database.decisionCreate).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when the patient leaves the actor practice before correction commit", async () => {
+    const current = database.lockVisit.getMockImplementation();
+    database.lockVisit.mockImplementation(async (query: unknown) => {
+      const text = String(
+        (query as { strings?: readonly string[] }).strings?.join(" ") ?? "",
+      );
+      if (text.includes('FROM "transcribe_md_patients" patient')) return [];
+      return current?.(query);
+    });
+
+    await expect(
+      reviewTemplateTwinField(
+        {
+          visitId: "visit-1",
+          actor,
+          correction: correction(),
+          validationNow: NOW,
+        },
+        { storage: storage(), finalizeFill: fakeFinalize },
+      ),
+    ).rejects.toMatchObject({
+      code: "TEMPLATE_TWIN_CURRENT_PHYSICIAN_REQUIRED",
+      message: "Current physician authorization is required for Template Twin.",
+    });
+
+    const lockSql = database.lockVisit.mock.calls.map((call) =>
+      String(
+        (call[0] as { strings?: readonly string[] }).strings?.join(" ") ?? "",
+      ),
+    );
+    const patientLockIndex = lockSql.findIndex((sql) =>
+      sql.includes('FROM "transcribe_md_patients" patient'),
+    );
+    expect(patientLockIndex).toBeGreaterThanOrEqual(0);
+    expect(
+      lockSql
+        .slice(patientLockIndex + 1)
+        .some((sql) => sql.includes('FROM "transcribe_visits"')),
+    ).toBe(false);
+    expect(database.manifestUpdateMany).not.toHaveBeenCalled();
+    expect(database.decisionCreate).not.toHaveBeenCalled();
+    expect(database.ledgerUpdateMany).not.toHaveBeenCalled();
+    expect(database.outboxCreate).not.toHaveBeenCalled();
+    expect(audit).not.toHaveBeenCalled();
   });
 
   it("fails closed when the authenticated doctor/practice does not own the visit", async () => {
@@ -1193,7 +1265,7 @@ describe("reviewTemplateTwinField lifecycle", () => {
       });
 
       expect(artifacts.storeOutputArtifact).toHaveBeenCalledTimes(1);
-      expect(database.lockVisit).toHaveBeenCalledTimes(10);
+      expect(database.lockVisit).toHaveBeenCalledTimes(11);
       expect(database.manifestUpdateMany).toHaveBeenCalledTimes(1);
       expect(database.manifestUpdateMany).toHaveBeenCalledWith({
         where: {

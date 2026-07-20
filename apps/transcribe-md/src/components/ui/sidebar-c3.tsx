@@ -5,10 +5,11 @@
 // to ONE nav: wordmark · the single "+ New visit" primary · Home/Patients/Settings ·
 // a QUIET ⌘K search · account. No second nav, no loud 220px command pill.
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { signOut } from 'next-auth/react';
+import { usePathname, useRouter } from 'next/navigation';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import { toast } from 'sonner';
 import type { ComponentType, SVGProps } from 'react';
+import { signOutAction } from '@/actions/session';
 import { Ic } from './icon';
 import { Avatar } from './avatar';
 
@@ -31,6 +32,24 @@ function isActive(p: string, href: string) {
 
 export function SidebarC3({ userName, userEmail }: { userName: string; userEmail?: string }) {
   const pathname = usePathname() ?? '/';
+  const router = useRouter();
+  const handleSignOut = async () => {
+    try {
+      const result = await signOutAction();
+      if (!result.ok) {
+        toast.error('Sign-out was not completed', {
+          description: result.message,
+        });
+        return;
+      }
+      router.push('/login');
+      router.refresh();
+    } catch {
+      toast.error('Sign-out was not completed', {
+        description: 'Please check your connection and try again.',
+      });
+    }
+  };
   return (
     <aside className="qm-lin-sidebar qm-c3-sidebar" aria-label="Primary navigation" style={{ gap: 10 }}>
       <Link
@@ -86,7 +105,7 @@ export function SidebarC3({ userName, userEmail }: { userName: string; userEmail
               </Link>
             </DropdownMenu.Item>
             <DropdownMenu.Item asChild>
-              <button type="button" onClick={() => signOut({ callbackUrl: '/login' })} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 5, fontSize: 12.5, color: 'var(--color-linear-coral)', background: 'transparent', border: 'none', cursor: 'pointer', width: '100%', textAlign: 'left' }}>
+              <button type="button" onClick={handleSignOut} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 5, fontSize: 12.5, color: 'var(--color-linear-coral)', background: 'transparent', border: 'none', cursor: 'pointer', width: '100%', textAlign: 'left' }}>
                 <Ic.lock width={13} height={13} /> Sign out
               </button>
             </DropdownMenu.Item>

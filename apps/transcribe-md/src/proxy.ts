@@ -11,17 +11,55 @@
 // is for cheap cookie gating.
 // ============================================================================
 
-import NextAuth from 'next-auth';
-import authConfig from '@/lib/auth.config';
+import NextAuth, { type NextAuthRequest } from "next-auth";
+import type { NextFetchEvent, NextRequest } from "next/server";
+import { NextResponse } from "next/server";
+import authConfig from "@/lib/auth.config";
+import {
+  isTemplateTwinAdminControlPathAllowed,
+  isTemplateTwinAdminControlService,
+  isTemplateTwinAdminAppPathAllowed,
+  isTemplateTwinAdminAppService,
+  isTranscribeMdPhysicianProxyPath,
+} from "@/lib/template-twin/admin-app-service";
 
 const { auth } = NextAuth(authConfig);
+const authenticatedProxy = auth(
+  (request: NextAuthRequest, event: NextFetchEvent) => {
+    void request;
+    void event;
+    return NextResponse.next();
+  },
+);
 
-export default auth;
+export default function proxy(request: NextRequest, event: NextFetchEvent) {
+  const pathname = request.nextUrl.pathname;
+  const adminApp = isTemplateTwinAdminAppService();
+  const adminControl = isTemplateTwinAdminControlService();
+  if (adminApp || adminControl) {
+    const allowed = adminApp
+      ? isTemplateTwinAdminAppPathAllowed(pathname)
+      : isTemplateTwinAdminControlPathAllowed(pathname);
+    if (!allowed) {
+      return new NextResponse("Not Found", {
+        status: 404,
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+          "X-Content-Type-Options": "nosniff",
+        },
+      });
+    }
+    return authenticatedProxy(request, event);
+  }
+
+  // The matcher is intentionally broad so the same immutable image can close
+  // the admin process before routing. Preserve the physician process's prior
+  // auth-proxy census instead of decoding cookies on every public request.
+  return isTranscribeMdPhysicianProxyPath(pathname)
+    ? authenticatedProxy(request, event)
+    : NextResponse.next();
+}
 
 export const config = {
-  matcher: [
-    '/dashboard/:path*',
-    '/visits/:path*',
-    '/settings/:path*',
-  ],
+  matcher: ["/:path*"],
 };

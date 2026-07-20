@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   ledgerFind: vi.fn(),
   outboxCreate: vi.fn(),
   finalRollout: vi.fn(),
+  currentPractice: vi.fn(),
   currentDoctor: vi.fn(),
   syntheticEvidenceGate: vi.fn(),
 }));
@@ -105,6 +106,7 @@ vi.mock("@/lib/template-twin/rollout", async (importOriginal) => {
 
 vi.mock("@/lib/template-twin/final-claim-authority", () => ({
   TemplateTwinCurrentPhysicianAuthorityError: class extends Error {},
+  lockAndAssertActiveTemplateTwinPractice: mocks.currentPractice,
   lockAndAssertCurrentTemplateTwinPhysician: mocks.currentDoctor,
 }));
 
@@ -386,6 +388,11 @@ function inMemoryStorage(): TemplateTwinArtifactStore {
 
 function syntheticTransactionClient() {
   return {
+    noteTemplate: { findFirst: mocks.findTemplate },
+    templateTwinCustomExampleExecution: {
+      findFirst: vi.fn().mockResolvedValue(null),
+      findMany: vi.fn().mockResolvedValue([]),
+    },
     templateTwinCompiledVersion: {
       findUnique: mocks.findCompiled,
       update: mocks.updateCompiled,
@@ -444,6 +451,7 @@ beforeEach(() => {
     token: SESSION.templateTwinRolloutToken,
   });
   mocks.currentDoctor.mockResolvedValue({ email: SESSION.user.email });
+  mocks.currentPractice.mockResolvedValue(undefined);
   mocks.syntheticEvidenceGate.mockResolvedValue(undefined);
   mocks.rateLimitOr429.mockReturnValue(null);
   mocks.transcribe.mockResolvedValue({ transcript: SYNTHETIC_CONTEXT });

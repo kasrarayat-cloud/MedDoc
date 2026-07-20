@@ -6,6 +6,7 @@ import {
   assertAdminSurfaceRuntimeConfiguration,
   configuredAdminHost,
   isAdminRequestHost,
+  isPhysicianRequestHost,
 } from "../admin-host";
 
 function requestHeaders(
@@ -44,6 +45,25 @@ describe("platform-admin host boundary", () => {
     expect(isAdminRequestHost(requestHeaders(null), environment)).toBe(false);
   });
 
+  it("admits clinical authorization only on the exact physician host", () => {
+    const environment = { NODE_ENV: "production" as const };
+    expect(
+      isPhysicianRequestHost(requestHeaders("app.quillmd.com"), environment),
+    ).toBe(true);
+    expect(
+      isPhysicianRequestHost(
+        requestHeaders("admin.quillmd.com", "app.quillmd.com"),
+        environment,
+      ),
+    ).toBe(false);
+    expect(
+      isPhysicianRequestHost(requestHeaders("other.quillmd.com"), environment),
+    ).toBe(false);
+    expect(isPhysicianRequestHost(requestHeaders(null), environment)).toBe(
+      false,
+    );
+  });
+
   it("normalizes ports and configured case without accepting malformed hosts", () => {
     const environment = {
       NODE_ENV: "production" as const,
@@ -70,6 +90,23 @@ describe("platform-admin host boundary", () => {
       isAdminRequestHost(requestHeaders("admin.quillmd.com"), {
         NODE_ENV: "production",
         ADMIN_PUBLIC_HOST: "https://admin.quillmd.com",
+      }),
+    ).toBe(false);
+    expect(
+      isPhysicianRequestHost(requestHeaders("localhost:3010"), {
+        NODE_ENV: "development",
+      }),
+    ).toBe(true);
+    expect(
+      isPhysicianRequestHost(requestHeaders("admin.quillmd.com"), {
+        NODE_ENV: "development",
+        ADMIN_PUBLIC_HOST: "admin.quillmd.com",
+      }),
+    ).toBe(false);
+    expect(
+      isPhysicianRequestHost(requestHeaders("app.quillmd.com"), {
+        NODE_ENV: "production",
+        PHYSICIAN_PUBLIC_HOST: "https://app.quillmd.com",
       }),
     ).toBe(false);
   });
@@ -101,6 +138,26 @@ describe("platform-admin host boundary", () => {
     );
   });
 
+  it("rejects an unreviewed production physician hostname", () => {
+    const overridden = {
+      NODE_ENV: "production" as const,
+      ADMIN_PUBLIC_HOST: "admin.quillmd.com",
+      PHYSICIAN_PUBLIC_HOST: "physician.example.test",
+    };
+    expect(adminSurfaceConfigurationError(overridden)).toBe(
+      "PRODUCTION_PHYSICIAN_HOST_NOT_REVIEWED",
+    );
+    expect(
+      isPhysicianRequestHost(
+        requestHeaders("physician.example.test"),
+        overridden,
+      ),
+    ).toBe(false);
+    expect(() => assertAdminSurfaceRuntimeConfiguration(overridden)).toThrow(
+      "PRODUCTION_PHYSICIAN_HOST_NOT_REVIEWED",
+    );
+  });
+
   it("permits only the explicit isolated synthetic-QA shared-host exception", () => {
     const qa = {
       NODE_ENV: "production" as const,
@@ -119,5 +176,12 @@ describe("platform-admin host boundary", () => {
         ADMIN_SYNTHETIC_QA_SHARED_HOST_ATTESTATION: "unreviewed",
       }),
     ).toBe("PRODUCTION_ADMIN_HOST_NOT_REVIEWED");
+
+    expect(
+      adminSurfaceConfigurationError({
+        ...qa,
+        ADMIN_PUBLIC_HOST: "admin.quillmd.com",
+      }),
+    ).toBe("PRODUCTION_PHYSICIAN_HOST_NOT_REVIEWED");
   });
 });

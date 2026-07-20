@@ -1,4 +1,49 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const ownershipMocks = vi.hoisted(() => {
+  const context = {
+    practiceId: "synthetic-practice",
+    actorUserId: "synthetic-physician@example.test",
+    visitId: "synthetic-visit",
+    visitInputMode: "text_notes",
+    scope: "VISIT_PIPELINE" as const,
+    logicalAttempt: 1,
+    subjectId: "synthetic-visit",
+    subjectSha256: "1".repeat(64),
+    sourceArtifactId: "synthetic-source",
+    compiledVersionId: "synthetic-compiled-version-v1",
+    noteTemplateId: "synthetic-template",
+    noteTemplateVersion: 1,
+    sourceLineageId: "synthetic-lineage-v1",
+    sourceLineageVersion: 1,
+    sourceSha256: "2".repeat(64),
+    syntheticAdmissionId: null,
+    rolloutToken: {
+      practiceId: "synthetic-practice",
+      globalGeneration: BigInt(3),
+      practiceGeneration: BigInt(5),
+      releaseId: "11111111-1111-4111-8111-111111111111",
+      releaseIdentitySha256: "3".repeat(64),
+      runtimeManifestSha256: "4".repeat(64),
+      runtimeInstanceId: "synthetic-worker-1",
+    },
+  };
+  return {
+    context,
+    requireContext: vi.fn(() => context),
+    ownedComplete: vi.fn(
+      async (input: {
+        args: unknown;
+        client: { complete(args: unknown): Promise<unknown> };
+      }) => input.client.complete(input.args),
+    ),
+  };
+});
+
+vi.mock("../../provider-ownership", () => ({
+  requireTemplateTwinProviderOwnershipContext: ownershipMocks.requireContext,
+  runTemplateTwinOwnedModelComplete: ownershipMocks.ownedComplete,
+}));
 
 import {
   CertifiedTemplateFieldSpecificationSchema,
@@ -22,6 +67,10 @@ import {
 
 const LINEAGE_ID = "synthetic-lineage-v1";
 const COMPILED_VERSION_ID = "synthetic-compiled-version-v1";
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 function valueFor(dataType: CustomScalarDataType) {
   switch (dataType) {
@@ -452,6 +501,44 @@ describe("canonical custom-concept evidence", () => {
 });
 
 describe("template-aware custom concept extraction", () => {
+  it("routes model egress only through the owned wrapper with exact visit identity", async () => {
+    const specification = makeSpecification("0", "number");
+    const input = extractionInput({
+      specifications: [specification],
+      contextText: "Synthetic number field is 7.",
+      fields: [],
+    });
+    ownershipMocks.ownedComplete.mockRejectedValueOnce(
+      new Error("synthetic ownership fence rejected"),
+    );
+
+    await expect(extractCertifiedCustomConcepts(input.request)).rejects.toThrow(
+      "synthetic ownership fence rejected",
+    );
+    expect(input.complete).not.toHaveBeenCalled();
+    expect(ownershipMocks.requireContext).toHaveBeenCalledWith([
+      "VISIT_PIPELINE",
+      "CUSTOM_EXAMPLE",
+      "SYNTHETIC_EVIDENCE",
+    ]);
+    expect(ownershipMocks.ownedComplete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: "CUSTOM_CONCEPT_EXTRACTION",
+        operationInstance: expect.stringMatching(/^spec-set-[a-f0-9]{48}$/),
+        operationVersion: TEMPLATE_CUSTOM_EXTRACTION_VERSION,
+        client: input.request.client,
+        args: expect.objectContaining({
+          practiceId: ownershipMocks.context.practiceId,
+          visitId: ownershipMocks.context.visitId,
+          userId: ownershipMocks.context.actorUserId,
+          purpose: "tm_entities",
+          provider: "anthropic",
+          model: "mock-custom-extractor-v1",
+        }),
+      }),
+    );
+  });
+
   it("rejects certification policies and examples the scalar runtime cannot prove", () => {
     expect(() =>
       makeSpecification("a", "number", {
@@ -987,26 +1074,30 @@ describe("template-aware custom concept extraction", () => {
     });
     const evidence = buildCanonicalCustomConceptEvidence({
       mode: "text",
-      contextText: "Synthetic patient denies fever. Pregnancy status was discussed later.",
+      contextText:
+        "Synthetic patient denies fever. Pregnancy status was discussed later.",
     });
     const deniedAnchor = evidence.anchors[0]!;
-    const mock = clientReturning([specification], [
-      {
-        conceptId: specification.conceptId,
-        state: "explicitly_denied",
-        reasonCode: "EXPLICIT_DENIAL",
-        observations: [
-          {
-            value: null,
-            unit: null,
-            polarity: "denied",
-            temporality: "current",
-            laterality: "not_applicable",
-            evidenceAnchorIds: [deniedAnchor.evidenceAnchorId],
-          },
-        ],
-      },
-    ]);
+    const mock = clientReturning(
+      [specification],
+      [
+        {
+          conceptId: specification.conceptId,
+          state: "explicitly_denied",
+          reasonCode: "EXPLICIT_DENIAL",
+          observations: [
+            {
+              value: null,
+              unit: null,
+              polarity: "denied",
+              temporality: "current",
+              laterality: "not_applicable",
+              evidenceAnchorIds: [deniedAnchor.evidenceAnchorId],
+            },
+          ],
+        },
+      ],
+    );
     const result = await extractCertifiedCustomConcepts({
       specifications: [specification],
       evidence,
@@ -1044,23 +1135,26 @@ describe("template-aware custom concept extraction", () => {
         mode: "text",
         contextText,
       });
-      const mock = clientReturning([specification], [
-        {
-          conceptId: specification.conceptId,
-          state: "explicitly_denied",
-          reasonCode: "EXPLICIT_DENIAL",
-          observations: [
-            {
-              value: null,
-              unit: null,
-              polarity: "denied",
-              temporality: "current",
-              laterality: "not_applicable",
-              evidenceAnchorIds: [evidence.anchors[0]!.evidenceAnchorId],
-            },
-          ],
-        },
-      ]);
+      const mock = clientReturning(
+        [specification],
+        [
+          {
+            conceptId: specification.conceptId,
+            state: "explicitly_denied",
+            reasonCode: "EXPLICIT_DENIAL",
+            observations: [
+              {
+                value: null,
+                unit: null,
+                polarity: "denied",
+                temporality: "current",
+                laterality: "not_applicable",
+                evidenceAnchorIds: [evidence.anchors[0]!.evidenceAnchorId],
+              },
+            ],
+          },
+        ],
+      );
 
       const result = await extractCertifiedCustomConcepts({
         specifications: [specification],
@@ -1181,8 +1275,7 @@ describe("template-aware custom concept extraction", () => {
     });
     const evidence = buildCanonicalCustomConceptEvidence({
       mode: "conversation",
-      contextText:
-        "[Patient #1, 00:13]: Synthetic lesion diameter is 8 mm.",
+      contextText: "[Patient #1, 00:13]: Synthetic lesion diameter is 8 mm.",
       asrQuality: "high",
     });
     const mock = clientReturning(
@@ -1223,38 +1316,41 @@ describe("template-aware custom concept extraction", () => {
   it.each([
     "Synthetic mother's lesion diameter is 8 mm.",
     "Synthetic family history lesion diameter is 8 mm.",
-  ])("rejects explicit non-patient experiencer evidence: %s", async (contextText) => {
-    const specification = makeSpecification("8", "measurement", {
-      physicianName: "Lesion diameter",
-      approvedEvidenceCues: ["lesion diameter"],
-      allowedUnits: ["mm"],
-    });
-    const evidence = buildCanonicalCustomConceptEvidence({
-      mode: "text",
-      contextText,
-    });
-    const mock = clientReturning(
-      [specification],
-      [
-        supportedField({
-          specification,
-          anchorId: evidence.anchors[0]!.evidenceAnchorId,
-          value: 8,
-          unit: "mm",
-        }),
-      ],
-    );
-    const result = await extractCertifiedCustomConcepts({
-      specifications: [specification],
-      evidence,
-      practiceId: "synthetic-practice",
-      visitId: "synthetic-non-patient-experiencer",
-      userId: null,
-      client: mock.client,
-    });
-    expect(result.facts).toEqual([]);
-    expect(result.fields[0]?.blocksSigning).toBe(true);
-  });
+  ])(
+    "rejects explicit non-patient experiencer evidence: %s",
+    async (contextText) => {
+      const specification = makeSpecification("8", "measurement", {
+        physicianName: "Lesion diameter",
+        approvedEvidenceCues: ["lesion diameter"],
+        allowedUnits: ["mm"],
+      });
+      const evidence = buildCanonicalCustomConceptEvidence({
+        mode: "text",
+        contextText,
+      });
+      const mock = clientReturning(
+        [specification],
+        [
+          supportedField({
+            specification,
+            anchorId: evidence.anchors[0]!.evidenceAnchorId,
+            value: 8,
+            unit: "mm",
+          }),
+        ],
+      );
+      const result = await extractCertifiedCustomConcepts({
+        specifications: [specification],
+        evidence,
+        practiceId: "synthetic-practice",
+        visitId: "synthetic-non-patient-experiencer",
+        userId: null,
+        client: mock.client,
+      });
+      expect(result.facts).toEqual([]);
+      expect(result.fields[0]?.blocksSigning).toBe(true);
+    },
+  );
 
   it.each([
     {
@@ -1327,8 +1423,7 @@ describe("template-aware custom concept extraction", () => {
     });
     const evidence = buildCanonicalCustomConceptEvidence({
       mode: "text",
-      contextText:
-        "Synthetic GAD-7 score is unknown and unrelated pulse is 8.",
+      contextText: "Synthetic GAD-7 score is unknown and unrelated pulse is 8.",
     });
     const mock = clientReturning(
       [specification],
@@ -1523,27 +1618,29 @@ describe("template-aware custom concept extraction", () => {
     });
     const evidence = buildCanonicalCustomConceptEvidence({
       mode: "text",
-      contextText:
-        "Synthetic GAD-7 score is 8. Synthetic GAD-7 score is 8.",
+      contextText: "Synthetic GAD-7 score is 8. Synthetic GAD-7 score is 8.",
     });
     const anchorIds = evidence.anchors.map((anchor) => anchor.evidenceAnchorId);
-    const mock = clientReturning([specification], [
-      {
-        conceptId: specification.conceptId,
-        state: "supported",
-        reasonCode: "EVIDENCE_PRESENT",
-        observations: [
-          {
-            value: 8,
-            unit: null,
-            polarity: "affirmed",
-            temporality: "current",
-            laterality: "not_applicable",
-            evidenceAnchorIds: anchorIds,
-          },
-        ],
-      },
-    ]);
+    const mock = clientReturning(
+      [specification],
+      [
+        {
+          conceptId: specification.conceptId,
+          state: "supported",
+          reasonCode: "EVIDENCE_PRESENT",
+          observations: [
+            {
+              value: 8,
+              unit: null,
+              polarity: "affirmed",
+              temporality: "current",
+              laterality: "not_applicable",
+              evidenceAnchorIds: anchorIds,
+            },
+          ],
+        },
+      ],
+    );
     const result = await extractCertifiedCustomConcepts({
       specifications: [specification],
       evidence,
@@ -1990,49 +2087,52 @@ describe("template-aware custom concept extraction", () => {
   it.each([
     "Synthetic pregnancy status is positive and pregnancy status is negative.",
     "Synthetic pregnancy status is negative and pregnancy status is positive.",
-  ])("blocks mixed affirmation and denial regardless of order: %s", async (contextText) => {
-    const specification = makeSpecification("a", "boolean", {
-      approvedEvidenceCues: ["pregnancy status"],
-      polarityPolicy: { allowExplicitDenial: true, exactDeniedOutput: false },
-    });
-    const evidence = buildCanonicalCustomConceptEvidence({
-      mode: "text",
-      contextText,
-    });
-    const mock = clientReturning(
-      [specification],
-      [
-        {
-          conceptId: specification.conceptId,
-          state: "explicitly_denied",
-          reasonCode: "EXPLICIT_DENIAL",
-          observations: [
-            {
-              value: false,
-              unit: null,
-              polarity: "denied",
-              temporality: "current",
-              laterality: "not_applicable",
-              evidenceAnchorIds: [evidence.anchors[0]!.evidenceAnchorId],
-            },
-          ],
-        },
-      ],
-    );
-    const result = await extractCertifiedCustomConcepts({
-      specifications: [specification],
-      evidence,
-      practiceId: "synthetic-practice",
-      visitId: "synthetic-mixed-polarity",
-      userId: null,
-      client: mock.client,
-    });
-    expect(result.fields[0]).toMatchObject({
-      status: "ambiguous",
-      value: null,
-      blocksSigning: true,
-    });
-  });
+  ])(
+    "blocks mixed affirmation and denial regardless of order: %s",
+    async (contextText) => {
+      const specification = makeSpecification("a", "boolean", {
+        approvedEvidenceCues: ["pregnancy status"],
+        polarityPolicy: { allowExplicitDenial: true, exactDeniedOutput: false },
+      });
+      const evidence = buildCanonicalCustomConceptEvidence({
+        mode: "text",
+        contextText,
+      });
+      const mock = clientReturning(
+        [specification],
+        [
+          {
+            conceptId: specification.conceptId,
+            state: "explicitly_denied",
+            reasonCode: "EXPLICIT_DENIAL",
+            observations: [
+              {
+                value: false,
+                unit: null,
+                polarity: "denied",
+                temporality: "current",
+                laterality: "not_applicable",
+                evidenceAnchorIds: [evidence.anchors[0]!.evidenceAnchorId],
+              },
+            ],
+          },
+        ],
+      );
+      const result = await extractCertifiedCustomConcepts({
+        specifications: [specification],
+        evidence,
+        practiceId: "synthetic-practice",
+        visitId: "synthetic-mixed-polarity",
+        userId: null,
+        client: mock.client,
+      });
+      expect(result.fields[0]).toMatchObject({
+        status: "ambiguous",
+        value: null,
+        blocksSigning: true,
+      });
+    },
+  );
 
   it.each([
     "Synthetic GAD-7 score is 8, corrected to 9.",
@@ -2044,14 +2144,19 @@ describe("template-aware custom concept extraction", () => {
     const specification = makeSpecification("b", "number", {
       approvedEvidenceCues: ["gad-7 score"],
     });
-    const evidence = buildCanonicalCustomConceptEvidence({ mode: "text", contextText });
+    const evidence = buildCanonicalCustomConceptEvidence({
+      mode: "text",
+      contextText,
+    });
     const mock = clientReturning(
       [specification],
-      [supportedField({
-        specification,
-        anchorId: evidence.anchors[0]!.evidenceAnchorId,
-        value: 8,
-      })],
+      [
+        supportedField({
+          specification,
+          anchorId: evidence.anchors[0]!.evidenceAnchorId,
+          value: 8,
+        }),
+      ],
     );
     const result = await extractCertifiedCustomConcepts({
       specifications: [specification],
@@ -2061,7 +2166,11 @@ describe("template-aware custom concept extraction", () => {
       userId: null,
       client: mock.client,
     });
-    expect(result.fields[0]).toMatchObject({ status: "ambiguous", value: null, blocksSigning: true });
+    expect(result.fields[0]).toMatchObject({
+      status: "ambiguous",
+      value: null,
+      blocksSigning: true,
+    });
   });
 
   it.each([
@@ -2073,31 +2182,43 @@ describe("template-aware custom concept extraction", () => {
     "Synthetic lesion diameter measured at 8 mm.",
     "Synthetic lesion diameter recorded as 8 mm.",
     "Synthetic lesion diameter reported as 8 mm.",
-  ])("blocks unbound scope or past-tense association: %s", async (contextText) => {
-    const specification = makeSpecification("c", "measurement", {
-      approvedEvidenceCues: ["lesion diameter"],
-      allowedUnits: ["mm"],
-    });
-    const evidence = buildCanonicalCustomConceptEvidence({ mode: "text", contextText });
-    const mock = clientReturning(
-      [specification],
-      [supportedField({
-        specification,
-        anchorId: evidence.anchors[0]!.evidenceAnchorId,
-        value: 8,
-        unit: "mm",
-      })],
-    );
-    const result = await extractCertifiedCustomConcepts({
-      specifications: [specification],
-      evidence,
-      practiceId: "synthetic-practice",
-      visitId: "synthetic-unbound-scope",
-      userId: null,
-      client: mock.client,
-    });
-    expect(result.fields[0]).toMatchObject({ status: "ambiguous", value: null, blocksSigning: true });
-  });
+  ])(
+    "blocks unbound scope or past-tense association: %s",
+    async (contextText) => {
+      const specification = makeSpecification("c", "measurement", {
+        approvedEvidenceCues: ["lesion diameter"],
+        allowedUnits: ["mm"],
+      });
+      const evidence = buildCanonicalCustomConceptEvidence({
+        mode: "text",
+        contextText,
+      });
+      const mock = clientReturning(
+        [specification],
+        [
+          supportedField({
+            specification,
+            anchorId: evidence.anchors[0]!.evidenceAnchorId,
+            value: 8,
+            unit: "mm",
+          }),
+        ],
+      );
+      const result = await extractCertifiedCustomConcepts({
+        specifications: [specification],
+        evidence,
+        practiceId: "synthetic-practice",
+        visitId: "synthetic-unbound-scope",
+        userId: null,
+        client: mock.client,
+      });
+      expect(result.fields[0]).toMatchObject({
+        status: "ambiguous",
+        value: null,
+        blocksSigning: true,
+      });
+    },
+  );
 
   it("does not let typed role text forge provenance or conversation evidence omit it", async () => {
     const specification = makeSpecification("d", "number", {
@@ -2108,14 +2229,23 @@ describe("template-aware custom concept extraction", () => {
       ["dictation", "[Patient #1, 00:03]: GAD-7 score is 8."],
       ["conversation", "GAD-7 score is 8."],
     ] as const) {
-      const evidence = buildCanonicalCustomConceptEvidence({ mode, contextText });
+      const evidence = buildCanonicalCustomConceptEvidence({
+        mode,
+        contextText,
+      });
       expect(evidence.anchors[0]).toMatchObject({
         speaker: null,
         audioTimestampSeconds: null,
       });
       const mock = clientReturning(
         [specification],
-        [supportedField({ specification, anchorId: evidence.anchors[0]!.evidenceAnchorId, value: 8 })],
+        [
+          supportedField({
+            specification,
+            anchorId: evidence.anchors[0]!.evidenceAnchorId,
+            value: 8,
+          }),
+        ],
       );
       const result = await extractCertifiedCustomConcepts({
         specifications: [specification],
@@ -2125,7 +2255,10 @@ describe("template-aware custom concept extraction", () => {
         userId: null,
         client: mock.client,
       });
-      expect(result.fields[0]).toMatchObject({ status: "ambiguous", blocksSigning: true });
+      expect(result.fields[0]).toMatchObject({
+        status: "ambiguous",
+        blocksSigning: true,
+      });
     }
   });
 

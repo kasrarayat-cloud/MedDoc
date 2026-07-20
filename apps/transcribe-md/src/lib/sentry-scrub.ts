@@ -33,6 +33,7 @@ const HEADER_DROP_LIST = new Set([
   'proxy-authorization',
   'cookie',
   'set-cookie',
+  'referer',
   'x-csrf-token',
   'x-api-key',
   'x-amz-security-token',

@@ -8,7 +8,11 @@ import {
   runWithAutomationLayerEffectCapture,
   type CapturedAutomationLayerEffects,
 } from "@/worker/automation-layer-effects";
-import { runVisitAutomationTransaction } from "@/worker/automation-locks";
+import {
+  runVisitAutomationRevokedAuthorityTerminalization,
+  runVisitAutomationTransaction,
+  VisitAutomationLiveAuthorityRevokedError,
+} from "@/worker/automation-locks";
 import type { VisitAutomationAttempt } from "@/worker/automation-manifest";
 import type { VisitAutomationLayerId } from "@/worker/automation-policy";
 
@@ -52,9 +56,11 @@ interface ProviderExecutionRow {
   idempotencyKey: string;
   status: string;
   invocationCount: number;
+  claimId: string | null;
   resultPayload: Prisma.JsonValue | null;
   resultSha256: string | null;
   resultVersion: string | null;
+  failureCode: string | null;
 }
 
 const PROVIDER_EXECUTION_SAFE_SELECT = {
@@ -73,9 +79,11 @@ const PROVIDER_EXECUTION_SAFE_SELECT = {
   idempotencyKey: true,
   status: true,
   invocationCount: true,
+  claimId: true,
   resultPayload: true,
   resultSha256: true,
   resultVersion: true,
+  failureCode: true,
 } as const;
 
 type ProviderExecutionClaimResult =
@@ -244,14 +252,29 @@ async function lockProviderExecution(input: {
       "id", "practiceId", "visitId", "manifestId", "automationLayerId",
       "stagingAdmissionId", "stagingRunId", "inputSha256", "provider",
       "providerMode", "model", "operationVersion", "idempotencyKey",
-      "status", "invocationCount", "resultPayload", "resultSha256",
-      "resultVersion"
+      "status", "invocationCount", "claimId", "resultPayload",
+      "resultSha256", "resultVersion", "failureCode"
     FROM "visit_automation_provider_executions"
     WHERE "id" = ${input.row.id}
     FOR UPDATE
   `);
   const current = executions[0];
-  if (!current) {
+  if (
+    !current ||
+    current.id !== input.row.id ||
+    current.practiceId !== input.row.practiceId ||
+    current.visitId !== input.row.visitId ||
+    current.manifestId !== input.row.manifestId ||
+    current.automationLayerId !== input.row.automationLayerId ||
+    current.stagingAdmissionId !== input.row.stagingAdmissionId ||
+    current.stagingRunId !== input.row.stagingRunId ||
+    current.inputSha256 !== input.row.inputSha256 ||
+    current.provider !== input.row.provider ||
+    current.providerMode !== input.row.providerMode ||
+    current.model !== input.row.model ||
+    current.operationVersion !== input.row.operationVersion ||
+    current.idempotencyKey !== input.row.idempotencyKey
+  ) {
     throw new VisitAutomationProviderExecutionError(
       "VISIT_AUTOMATION_PROVIDER_EXECUTION_STALE",
     );
@@ -335,8 +358,8 @@ async function reserveExecution(input: {
           "id", "practiceId", "visitId", "manifestId", "automationLayerId",
           "stagingAdmissionId", "stagingRunId", "inputSha256", "provider",
           "providerMode", "model", "operationVersion", "idempotencyKey",
-          "status", "invocationCount", "resultPayload", "resultSha256",
-          "resultVersion"
+          "status", "invocationCount", "claimId", "resultPayload",
+          "resultSha256", "resultVersion", "failureCode"
       `);
       const row =
         inserted[0] ??
@@ -536,6 +559,119 @@ async function waitForProviderExecutionTerminal(
   );
 }
 
+async function terminalizeReservedAfterAuthorityRevocation(input: {
+  row: ProviderExecutionRow;
+  identity: LockedLayerExecutionIdentity;
+  visitId: string;
+  userId: string;
+  practiceId: string;
+  rejection: VisitAutomationLiveAuthorityRevokedError;
+}): Promise<void> {
+  await runVisitAutomationRevokedAuthorityTerminalization({
+    operation: "fail_visit_automation_provider_before_revoked_claim",
+    visitId: input.visitId,
+    userId: input.userId,
+    practiceId: input.practiceId,
+    rejection: input.rejection,
+    transaction: async (tx) => {
+      const current = await lockProviderExecution({
+        tx,
+        row: input.row,
+        identity: input.identity,
+      });
+      if (
+        current.status === "FAILED" &&
+        current.claimId === null &&
+        current.failureCode === "AUTHORITY_REVOKED_BEFORE_PROVIDER"
+      ) {
+        return;
+      }
+      if (current.status !== "RESERVED" || current.claimId !== null) {
+        throw new VisitAutomationProviderExecutionError(
+          "VISIT_AUTOMATION_PROVIDER_EXECUTION_STALE",
+        );
+      }
+      const updated = await tx.visitAutomationProviderExecution.updateMany({
+        where: {
+          id: current.id,
+          status: "RESERVED",
+          claimId: null,
+          invocationCount: 0,
+        },
+        data: {
+          status: "FAILED",
+          completedAt: new Date(),
+          failureCode: "AUTHORITY_REVOKED_BEFORE_PROVIDER",
+        },
+      });
+      if (updated.count !== 1) {
+        throw new VisitAutomationProviderExecutionError(
+          "VISIT_AUTOMATION_PROVIDER_EXECUTION_STALE",
+        );
+      }
+    },
+  });
+}
+
+async function terminalizeClaimedAfterAuthorityRevocation(input: {
+  row: ProviderExecutionRow;
+  identity: LockedLayerExecutionIdentity;
+  claim: Extract<ProviderExecutionClaimResult, { kind: "CLAIMED_BY_CALLER" }>;
+  visitId: string;
+  userId: string;
+  practiceId: string;
+  rejection: VisitAutomationLiveAuthorityRevokedError;
+}): Promise<void> {
+  await runVisitAutomationRevokedAuthorityTerminalization({
+    operation: "unknown_visit_automation_provider_after_authority_revoked",
+    visitId: input.visitId,
+    userId: input.userId,
+    practiceId: input.practiceId,
+    rejection: input.rejection,
+    transaction: async (tx) => {
+      const current = await lockProviderExecution({
+        tx,
+        row: input.row,
+        identity: input.identity,
+      });
+      if (
+        current.status === "UNKNOWN_OUTCOME" &&
+        current.claimId === input.claim.claimId &&
+        current.failureCode === "AUTHORITY_REVOKED_AFTER_PROVIDER"
+      ) {
+        return;
+      }
+      if (
+        current.status !== "IN_FLIGHT" ||
+        current.claimId !== input.claim.claimId ||
+        current.invocationCount !== 1
+      ) {
+        throw new VisitAutomationProviderExecutionError(
+          "VISIT_AUTOMATION_PROVIDER_EXECUTION_STALE",
+        );
+      }
+      const updated = await tx.visitAutomationProviderExecution.updateMany({
+        where: {
+          id: input.claim.executionId,
+          status: "IN_FLIGHT",
+          claimId: input.claim.claimId,
+          invocationCount: 1,
+        },
+        data: {
+          status: "UNKNOWN_OUTCOME",
+          completedAt: new Date(),
+          failureCode: "AUTHORITY_REVOKED_AFTER_PROVIDER",
+        },
+      });
+      if (updated.count !== 1) {
+        throw new VisitAutomationProviderExecutionError(
+          "VISIT_AUTOMATION_PROVIDER_EXECUTION_STALE",
+        );
+      }
+    },
+  });
+}
+
 async function transitionClaimedExecution(input: {
   row: ProviderExecutionRow;
   identity: LockedLayerExecutionIdentity;
@@ -720,13 +856,28 @@ export async function runDurableVisitAutomationProvider<T>(input: {
     return rejectTerminal(reserved.row);
   }
 
-  const claim = await claimProviderExecution({
-    row: reserved.row,
-    identity: reserved.identity,
-    visitId: input.visitId,
-    userId: input.userId,
-    practiceId: input.practiceId,
-  });
+  let claim: ProviderExecutionClaimResult;
+  try {
+    claim = await claimProviderExecution({
+      row: reserved.row,
+      identity: reserved.identity,
+      visitId: input.visitId,
+      userId: input.userId,
+      practiceId: input.practiceId,
+    });
+  } catch (error) {
+    if (error instanceof VisitAutomationLiveAuthorityRevokedError) {
+      await terminalizeReservedAfterAuthorityRevocation({
+        row: reserved.row,
+        identity: reserved.identity,
+        visitId: input.visitId,
+        userId: input.userId,
+        practiceId: input.practiceId,
+        rejection: error,
+      });
+    }
+    throw error;
+  }
   recordClaimDisposition(claim.kind);
   if (claim.kind !== "CLAIMED_BY_CALLER") {
     if (claim.kind === "FAILED" || claim.kind === "UNKNOWN_OUTCOME") {
@@ -766,35 +917,67 @@ export async function runDurableVisitAutomationProvider<T>(input: {
       callback: () => input.invoke(claim.idempotencyKey),
     });
   } catch (error) {
-    await transitionClaimedExecution({
-      row: reserved.row,
-      identity: reserved.identity,
-      claim,
-      visitId: input.visitId,
-      userId: input.userId,
-      practiceId: input.practiceId,
-      status:
-        reserved.row.providerMode === "LIVE" ? "UNKNOWN_OUTCOME" : "FAILED",
-      failureCode:
-        reserved.row.providerMode === "LIVE"
-          ? "PROVIDER_OUTCOME_AMBIGUOUS"
-          : "PROVIDER_EXECUTION_FAILED",
-    });
+    try {
+      await transitionClaimedExecution({
+        row: reserved.row,
+        identity: reserved.identity,
+        claim,
+        visitId: input.visitId,
+        userId: input.userId,
+        practiceId: input.practiceId,
+        status:
+          reserved.row.providerMode === "LIVE" ? "UNKNOWN_OUTCOME" : "FAILED",
+        failureCode:
+          reserved.row.providerMode === "LIVE"
+            ? "PROVIDER_OUTCOME_AMBIGUOUS"
+            : "PROVIDER_EXECUTION_FAILED",
+      });
+    } catch (transitionError) {
+      if (transitionError instanceof VisitAutomationLiveAuthorityRevokedError) {
+        await terminalizeClaimedAfterAuthorityRevocation({
+          row: reserved.row,
+          identity: reserved.identity,
+          claim,
+          visitId: input.visitId,
+          userId: input.userId,
+          practiceId: input.practiceId,
+          rejection: transitionError,
+        });
+      } else {
+        throw transitionError;
+      }
+    }
     throw error;
   }
   try {
     input.validate?.(captured.output);
   } catch (error) {
-    await transitionClaimedExecution({
-      row: reserved.row,
-      identity: reserved.identity,
-      claim,
-      visitId: input.visitId,
-      userId: input.userId,
-      practiceId: input.practiceId,
-      status: "FAILED",
-      failureCode: "PROVIDER_OUTPUT_INVALID",
-    });
+    try {
+      await transitionClaimedExecution({
+        row: reserved.row,
+        identity: reserved.identity,
+        claim,
+        visitId: input.visitId,
+        userId: input.userId,
+        practiceId: input.practiceId,
+        status: "FAILED",
+        failureCode: "PROVIDER_OUTPUT_INVALID",
+      });
+    } catch (transitionError) {
+      if (transitionError instanceof VisitAutomationLiveAuthorityRevokedError) {
+        await terminalizeClaimedAfterAuthorityRevocation({
+          row: reserved.row,
+          identity: reserved.identity,
+          claim,
+          visitId: input.visitId,
+          userId: input.userId,
+          practiceId: input.practiceId,
+          rejection: transitionError,
+        });
+      } else {
+        throw transitionError;
+      }
+    }
     throw error;
   }
   const envelope: ProviderResultEnvelope = {
@@ -814,6 +997,18 @@ export async function runDurableVisitAutomationProvider<T>(input: {
       envelope,
     });
   } catch (persistenceError) {
+    if (persistenceError instanceof VisitAutomationLiveAuthorityRevokedError) {
+      await terminalizeClaimedAfterAuthorityRevocation({
+        row: reserved.row,
+        identity: reserved.identity,
+        claim,
+        visitId: input.visitId,
+        userId: input.userId,
+        practiceId: input.practiceId,
+        rejection: persistenceError,
+      });
+      throw persistenceError;
+    }
     try {
       await transitionClaimedExecution({
         row: reserved.row,
@@ -826,6 +1021,18 @@ export async function runDurableVisitAutomationProvider<T>(input: {
         failureCode: "PROVIDER_RESULT_PERSISTENCE_AMBIGUOUS",
       });
     } catch (transitionError) {
+      if (transitionError instanceof VisitAutomationLiveAuthorityRevokedError) {
+        await terminalizeClaimedAfterAuthorityRevocation({
+          row: reserved.row,
+          identity: reserved.identity,
+          claim,
+          visitId: input.visitId,
+          userId: input.userId,
+          practiceId: input.practiceId,
+          rejection: transitionError,
+        });
+        throw persistenceError;
+      }
       throw new AggregateError(
         [persistenceError, transitionError],
         "Provider result persistence and ambiguity recording both failed.",

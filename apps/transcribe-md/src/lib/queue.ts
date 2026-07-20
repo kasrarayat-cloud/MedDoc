@@ -23,15 +23,12 @@ function getConnection(): IORedis {
   // (otherwise blocking commands throw after the retry limit).
   const opts: RedisOptions = { maxRetriesPerRequest: null };
   connection = new IORedis(redisUrl, opts);
-  connection.on("error", (err) => {
+  connection.on("error", () => {
     // T-M18.3 A17: redactPhi guard — the ioredis error is almost never
     // PHI-shaped, but the pipeline sometimes passes payloads through
     // the command arg trace on failures, so err.message could leak a
     // patient name or email on a rare shape. Cheap insurance.
-    console.error(
-      "[transcribe-md-queue] redis error:",
-      redactPhi(err instanceof Error ? err.message : err),
-    );
+    console.error("[transcribe-md-queue] redis unavailable");
   });
   return connection;
 }

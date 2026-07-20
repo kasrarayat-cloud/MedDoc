@@ -21,6 +21,7 @@
 // ============================================================================
 
 import prisma from '@meddoc/db';
+import { currentClinicalVisitActorWhere } from '@/lib/clinical-visit-authority';
 import type { LayerSkipState } from './layer-skip';
 
 /** Thrown by `loadResumeState` when a BullMQ retry attempt finds the
@@ -43,6 +44,8 @@ export class VisitNotFoundError extends Error {
  *  skips fire for completed layers.
  *
  *  @param visitId      — the visit being processed
+ *  @param actorUserId  — current queued owner; lifecycle and patient tenant
+ *                        are bound in this same PHI-bearing query
  *  @param attemptsMade — `job.attemptsMade` from BullMQ. 0 on first
  *                        attempt; >0 on retry. Disambiguates the
  *                        missing-row error class.
@@ -54,10 +57,14 @@ export class VisitNotFoundError extends Error {
  */
 export async function loadResumeState(
   visitId: string,
+  actorUserId: string,
   attemptsMade: number
 ): Promise<LayerSkipState> {
   const row = await prisma.transcribeVisit.findUnique({
-    where: { id: visitId },
+    where: {
+      id: visitId,
+      ...currentClinicalVisitActorWhere(actorUserId),
+    },
     select: {
       transcriptRaw: true,
       transcriptText: true,

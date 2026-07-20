@@ -23,6 +23,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import prisma from "@meddoc/db";
+import { Prisma } from "@prisma/client";
 import { auth } from "@/lib/nextauth";
 import { logAudit } from "@/lib/audit";
 import { isSkinBeta } from "@/config/skin-beta";
@@ -39,10 +40,16 @@ import {
   statusLabel,
   type ProblemStatus,
 } from "@/lib/problem-list";
+import { isTemplateTwinSyntheticQaPatient } from "@/lib/template-twin/synthetic-qa-patient";
 import {
-  isTemplateTwinSyntheticQaPatient,
-  ordinaryClinicalVisitWhere,
-} from "@/lib/template-twin/synthetic-qa-patient";
+  aggregateTemplateTwinVisibleVisits,
+  readTemplateTwinVisibleVisitPage,
+  templateTwinVisitReadVisibilitySql,
+} from "@/lib/template-twin/read-authority";
+import {
+  currentClinicalPatientReadAuthoritySql,
+  currentClinicalPatientWhere,
+} from "@/lib/clinical-patient-authority";
 import { EditPatientDialog } from "./edit-patient-dialog";
 import { DeletePatientDialog } from "./delete-patient-dialog";
 import { ProblemListDialog } from "./problem-list-dialog";
@@ -132,11 +139,21 @@ export default async function PatientPage({
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
+  const user = await prisma.user.findFirst({
+    where: {
+      id: session.user.id,
+      role: "DOCTOR",
+      isActive: true,
+      deactivatedAt: null,
+      suspendedAt: null,
+      softDeletedAt: null,
+      products: { has: "TRANSCRIBE_MD" },
+      practice: { is: { isActive: true } },
+    },
     select: { id: true, practiceId: true },
   });
   if (!user) redirect("/login");
+  const actor = { userId: user.id, practiceId: user.practiceId };
 
   type PatientRow = {
     id: string;
@@ -152,9 +169,13 @@ export default async function PatientPage({
     updatedAt: Date;
   };
 
-  const patient: PatientRow | null =
-    await prisma.transcribeMdPatient.findUnique({
-      where: { id },
+  const patient: PatientRow | null = await prisma.transcribeMdPatient.findFirst(
+    {
+      where: currentClinicalPatientWhere({
+        actor,
+        patientId: id,
+        includeDeleted: true,
+      }),
       select: {
         id: true,
         practiceId: true,
@@ -168,12 +189,9 @@ export default async function PatientPage({
         createdAt: true,
         updatedAt: true,
       },
-    });
-  if (
-    !patient ||
-    patient.practiceId !== user.practiceId ||
-    isTemplateTwinSyntheticQaPatient(patient)
-  ) {
+    },
+  );
+  if (!patient || isTemplateTwinSyntheticQaPatient(patient)) {
     notFound();
   }
 
@@ -189,49 +207,70 @@ export default async function PatientPage({
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  const [activeCount, trashCount, signedCount, visitsThisMonth, latestVisit] =
-    await Promise.all([
-      prisma.transcribeVisit.count({
-        where: ordinaryClinicalVisitWhere({
+  const [
+    activeAggregate,
+    trashAggregate,
+    signedAggregate,
+    monthAggregate,
+    latestVisits,
+  ] = await Promise.all([
+    aggregateTemplateTwinVisibleVisits({
+      db: prisma,
+      actorUserId: user.id,
+      scope: {
+        patientId: id,
+        deleted: "active",
+        archived: "active",
+      },
+    }),
+    aggregateTemplateTwinVisibleVisits({
+      db: prisma,
+      actorUserId: user.id,
+      scope: { patientId: id, deleted: "deleted" },
+    }),
+    aggregateTemplateTwinVisibleVisits({
+      db: prisma,
+      actorUserId: user.id,
+      scope: { patientId: id, statuses: ["SIGNED"] },
+    }),
+    aggregateTemplateTwinVisibleVisits({
+      db: prisma,
+      actorUserId: user.id,
+      scope: {
+        patientId: id,
+        deleted: "active",
+        createdAtGte: startOfMonth,
+      },
+    }),
+    readTemplateTwinVisibleVisitPage<{
+      id: string;
+      createdAt: Date;
+      specialty: string;
+    }>({
+      db: prisma,
+      actorUserId: user.id,
+      query: {
+        scope: {
           patientId: id,
-          userId: user.id,
-          deletedAt: null,
-          archivedAt: null,
+          deleted: "active",
+          archived: "active",
+        },
+        orderBy: "createdAt",
+        direction: "desc",
+        take: 1,
+      },
+      hydrate: (tx, visitIds) =>
+        tx.transcribeVisit.findMany({
+          where: { id: { in: [...visitIds] }, userId: user.id },
+          select: { id: true, createdAt: true, specialty: true },
         }),
-      }),
-      prisma.transcribeVisit.count({
-        where: ordinaryClinicalVisitWhere({
-          patientId: id,
-          userId: user.id,
-          deletedAt: { not: null },
-        }),
-      }),
-      prisma.transcribeVisit.count({
-        where: ordinaryClinicalVisitWhere({
-          patientId: id,
-          userId: user.id,
-          status: "SIGNED",
-        }),
-      }),
-      prisma.transcribeVisit.count({
-        where: ordinaryClinicalVisitWhere({
-          patientId: id,
-          userId: user.id,
-          deletedAt: null,
-          createdAt: { gte: startOfMonth },
-        }),
-      }),
-      prisma.transcribeVisit.findFirst({
-        where: ordinaryClinicalVisitWhere({
-          patientId: id,
-          userId: user.id,
-          deletedAt: null,
-          archivedAt: null,
-        }),
-        orderBy: { createdAt: "desc" },
-        select: { id: true, createdAt: true, specialty: true },
-      }),
-    ]);
+    }),
+  ]);
+  const activeCount = activeAggregate.count;
+  const trashCount = trashAggregate.count;
+  const signedCount = signedAggregate.count;
+  const visitsThisMonth = monthAggregate.count;
+  const latestVisit = latestVisits[0] ?? null;
 
   const activeTab = resolveTab(tabParam, trashCount);
   const dob = patient.dateOfBirth;
@@ -395,7 +434,11 @@ export default async function PatientPage({
           {activeCount === 0 ? (
             <VisitsEmpty deleted={isDeleted} patientId={patient.id} />
           ) : (
-            <VisitsTab patientId={patient.id} userId={user.id} />
+            <VisitsTab
+              patientId={patient.id}
+              userId={user.id}
+              practiceId={user.practiceId}
+            />
           )}
         </section>
 
@@ -413,7 +456,11 @@ export default async function PatientPage({
                 {trashCount}
               </span>
             </div>
-            <TrashTab patientId={patient.id} userId={user.id} />
+            <TrashTab
+              patientId={patient.id}
+              userId={user.id}
+              practiceId={user.practiceId}
+            />
           </section>
         )}
       </AppFrame>
@@ -487,11 +534,19 @@ export default async function PatientPage({
         (activeCount === 0 ? (
           <VisitsEmpty deleted={isDeleted} patientId={patient.id} />
         ) : (
-          <VisitsTab patientId={patient.id} userId={user.id} />
+          <VisitsTab
+            patientId={patient.id}
+            userId={user.id}
+            practiceId={user.practiceId}
+          />
         ))}
 
       {activeTab === "trash" && (
-        <TrashTab patientId={patient.id} userId={user.id} />
+        <TrashTab
+          patientId={patient.id}
+          userId={user.id}
+          practiceId={user.practiceId}
+        />
       )}
 
       {activeTab === "notes" && (
@@ -716,9 +771,11 @@ function TabBar({
 async function VisitsTab({
   patientId,
   userId,
+  practiceId,
 }: {
   patientId: string;
   userId: string;
+  practiceId: string;
 }) {
   type Row = {
     id: string;
@@ -730,25 +787,36 @@ async function VisitsTab({
     signedAt: Date | null;
     audioDurationSec: number | null;
   };
-  const rows: Row[] = await prisma.transcribeVisit.findMany({
-    where: ordinaryClinicalVisitWhere({
-      patientId,
-      userId,
-      deletedAt: null,
-      archivedAt: null,
-    }),
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    select: {
-      id: true,
-      patientName: true,
-      specialty: true,
-      status: true,
-      needsReview: true,
-      createdAt: true,
-      signedAt: true,
-      audioDurationSec: true,
-    },
+  const visibility = templateTwinVisitReadVisibilitySql({
+    actorUserId: userId,
+    visitAlias: "visit",
   });
+  const patientAuthority = currentClinicalPatientReadAuthoritySql({
+    actor: { userId, practiceId },
+    patientAlias: "patient",
+    includeDeleted: true,
+  });
+  const rows = (await prisma.$queryRaw(Prisma.sql`
+    SELECT
+      visit."id",
+      visit."patientName",
+      visit."specialty",
+      visit."status",
+      visit."needsReview",
+      visit."createdAt",
+      visit."signedAt",
+      visit."audioDurationSec"
+    FROM "transcribe_visits" visit
+    JOIN "transcribe_md_patients" patient
+      ON patient."id" = visit."patientId"
+    WHERE visit."userId" = ${userId}
+      AND visit."patientId" = ${patientId}
+      AND visit."deletedAt" IS NULL
+      AND visit."archivedAt" IS NULL
+      AND ${patientAuthority}
+      AND ${visibility}
+    ORDER BY visit."createdAt" DESC, visit."id" DESC
+  `)) as Row[];
   const visits: DashboardVisit[] = rows.map(
     (v: Row): DashboardVisit => ({
       id: v.id,
@@ -768,9 +836,11 @@ async function VisitsTab({
 async function TrashTab({
   patientId,
   userId,
+  practiceId,
 }: {
   patientId: string;
   userId: string;
+  practiceId: string;
 }) {
   type Row = {
     id: string;
@@ -780,22 +850,33 @@ async function TrashTab({
     createdAt: Date;
     deletedAt: Date | null;
   };
-  const rows: Row[] = await prisma.transcribeVisit.findMany({
-    where: ordinaryClinicalVisitWhere({
-      patientId,
-      userId,
-      deletedAt: { not: null },
-    }),
-    orderBy: [{ deletedAt: "desc" }, { id: "desc" }],
-    select: {
-      id: true,
-      patientName: true,
-      specialty: true,
-      status: true,
-      createdAt: true,
-      deletedAt: true,
-    },
+  const visibility = templateTwinVisitReadVisibilitySql({
+    actorUserId: userId,
+    visitAlias: "visit",
   });
+  const patientAuthority = currentClinicalPatientReadAuthoritySql({
+    actor: { userId, practiceId },
+    patientAlias: "patient",
+    includeDeleted: true,
+  });
+  const rows = (await prisma.$queryRaw(Prisma.sql`
+    SELECT
+      visit."id",
+      visit."patientName",
+      visit."specialty",
+      visit."status",
+      visit."createdAt",
+      visit."deletedAt"
+    FROM "transcribe_visits" visit
+    JOIN "transcribe_md_patients" patient
+      ON patient."id" = visit."patientId"
+    WHERE visit."userId" = ${userId}
+      AND visit."patientId" = ${patientId}
+      AND visit."deletedAt" IS NOT NULL
+      AND ${patientAuthority}
+      AND ${visibility}
+    ORDER BY visit."deletedAt" DESC, visit."id" DESC
+  `)) as Row[];
   if (rows.length === 0) {
     return (
       <div className="mx-auto my-16 max-w-[420px] text-center text-[13.5px] text-linear-text-3">

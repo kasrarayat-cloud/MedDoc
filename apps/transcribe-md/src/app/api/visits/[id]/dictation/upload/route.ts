@@ -17,15 +17,29 @@ import { Readable } from "node:stream";
 
 import { auth } from "@/lib/nextauth";
 import prisma from "@meddoc/db";
-import { TranscribeVisitStatus } from "@prisma/client";
-import { putAudioStream } from "@/lib/minio";
+import { Prisma, TranscribeVisitStatus } from "@prisma/client";
+import { deleteAudioObject, putAudioStream } from "@/lib/minio";
 import { enqueueProcessVisit } from "@/lib/queue";
 
 import { apiError, withApiHandler } from "@/lib/api-error";
 import { RATE_LIMITS, rateLimitOr429 } from "@/lib/rate-limit";
 import { redactPhi } from "@meddoc/ai";
 import { logAudit } from "@/lib/audit";
+import { currentClinicalVisitActorWhere } from "@/lib/clinical-visit-authority";
 import { isOwnedTemplateTwinStagingQaVisit } from "@/lib/template-twin/staging-qa-access";
+import { isSameOriginTemplateTwinMutation } from "@/lib/template-twin/request-security";
+import { TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE } from "@/lib/template-twin/durable-visit-exclusion";
+import {
+  hasDurableTemplateTwinClinicalMutationProvenance,
+  enqueueTemplateTwinClinicalMutationAudit,
+  loadTemplateTwinClinicalMutationAdmissionTarget,
+  lockAndAssertOrdinaryClinicalMutation,
+  lockAndAssertTemplateTwinClinicalMutation,
+  pinTemplateTwinClinicalMutation,
+  TEMPLATE_TWIN_CLINICAL_MUTATION_PROVENANCE_SELECT,
+  TemplateTwinClinicalMutationAuthorizationError,
+  type TemplateTwinClinicalMutationClaim,
+} from "@/lib/template-twin/visit-mutation-authority";
 import {
   sniffAudioMagicBytes,
   magicBytesMatchClaimedMime,
@@ -66,16 +80,56 @@ export const POST = withApiHandler<{ id: string }>(
     const blocked = rateLimitOr429(RATE_LIMITS.UPLOAD, userId);
     if (blocked) return blocked;
 
+    // Authorize a durable Twin from PHI-minimal lineage before selecting its
+    // current audio metadata or consuming the caller's recording bytes.
+    const authorityTarget =
+      await loadTemplateTwinClinicalMutationAdmissionTarget({
+        visitId,
+        actorUserId: userId,
+      });
+    if (!authorityTarget || authorityTarget.userId !== userId) {
+      return apiError("not found", 404);
+    }
+    let templateTwinMutationClaim: TemplateTwinClinicalMutationClaim | null =
+      null;
+    if (hasDurableTemplateTwinClinicalMutationProvenance(authorityTarget)) {
+      if (!isSameOriginTemplateTwinMutation(req)) {
+        return apiError("not found", 404);
+      }
+      try {
+        templateTwinMutationClaim = await pinTemplateTwinClinicalMutation({
+          visitId,
+          actorUserId: userId,
+          admittedVisitUpdatedAt: authorityTarget.updatedAt,
+          provenance: authorityTarget,
+        });
+      } catch (error) {
+        if (error instanceof TemplateTwinClinicalMutationAuthorizationError) {
+          return apiError("not found", 404);
+        }
+        throw error;
+      }
+    }
+
     const visit = await prisma.transcribeVisit.findUnique({
-      where: { id: visitId },
+      where: {
+        id: visitId,
+        ...currentClinicalVisitActorWhere(userId),
+        updatedAt: authorityTarget.updatedAt,
+        ...(templateTwinMutationClaim
+          ? {}
+          : TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE),
+      },
       select: {
         id: true,
         userId: true,
+        updatedAt: true,
         inputMode: true,
         status: true,
         dictationAudioKey: true,
         deletedAt: true,
         archivedAt: true,
+        ...TEMPLATE_TWIN_CLINICAL_MUTATION_PROVENANCE_SELECT,
       },
     });
     if (!visit || visit.userId !== userId) return apiError("not found", 404);
@@ -95,6 +149,14 @@ export const POST = withApiHandler<{ id: string }>(
     }
     if (visit.status !== TranscribeVisitStatus.QUEUED) {
       return apiError("visit is already processing or finalized", 409);
+    }
+    if (
+      Boolean(templateTwinMutationClaim) !==
+      hasDurableTemplateTwinClinicalMutationProvenance(visit)
+    ) {
+      return apiError("The visit changed. Reload and retry.", 409, {
+        code: "TEMPLATE_TWIN_MUTATION_CONFLICT",
+      });
     }
 
     const contentLengthHeader = req.headers.get("content-length");
@@ -199,6 +261,12 @@ export const POST = withApiHandler<{ id: string }>(
     // Object-key prefix distinguishes dictation from the bulk audio the
     // other route uses — simplifies bucket policy + debugging later.
     const objectKey = `${userId}/${visitId}/dictation-${Date.now()}.webm`;
+    if (objectKey === visit.dictationAudioKey) {
+      return apiError("Upload identity conflicted. Retry the recording.", 409, {
+        code: "UPLOAD_IDENTITY_CONFLICT",
+        retry: true,
+      });
+    }
 
     // Adapt the buffered body to a Node Readable for the MinIO SDK.
     const nodeReadable = Readable.from(bodyBuffer);
@@ -232,20 +300,125 @@ export const POST = withApiHandler<{ id: string }>(
       );
     }
 
-    await prisma.transcribeVisit.update({
-      where: { id: visitId },
-      data: {
-        dictationAudioKey: objectKey,
-        audioMimeType: mimeType,
-        audioUploadedAt: new Date(),
-        status: TranscribeVisitStatus.QUEUED,
-        needsReview: false,
-        reviewReason: null,
-        processingStartedAt: null,
-        processingFinishedAt: null,
-        processingCostCents: null,
-      },
-    });
+    const updateData = {
+      dictationAudioKey: objectKey,
+      audioMimeType: mimeType,
+      audioUploadedAt: new Date(),
+      status: TranscribeVisitStatus.QUEUED,
+      needsReview: false,
+      reviewReason: null,
+      processingStartedAt: null,
+      processingFinishedAt: null,
+      processingCostCents: null,
+    } as const;
+    if (templateTwinMutationClaim) {
+      try {
+        const applied = await prisma.$transaction(
+          async (tx: Prisma.TransactionClient) => {
+            const locked = await lockAndAssertTemplateTwinClinicalMutation({
+              tx,
+              claim: templateTwinMutationClaim,
+            });
+            if (
+              locked.status !== TranscribeVisitStatus.QUEUED ||
+              locked.inputMode !== "voice_dictation" ||
+              locked.updatedAt.getTime() !== visit.updatedAt.getTime() ||
+              locked.dictationAudioKey !== visit.dictationAudioKey ||
+              locked.deletedAt !== null ||
+              locked.archivedAt !== null ||
+              locked.signedAt !== null
+            ) {
+              return false;
+            }
+            await tx.transcribeVisit.update({
+              where: { id: visitId },
+              data: updateData,
+            });
+            await enqueueTemplateTwinClinicalMutationAudit({
+              tx,
+              claim: templateTwinMutationClaim,
+              operation: "dictation_upload",
+              action: "AUDIO_UPLOADED",
+              metadata: {
+                inputMode: "voice_dictation",
+                sizeBytes: bodyBuffer.byteLength,
+                mimeType,
+              },
+            });
+            return true;
+          },
+        );
+        if (!applied) {
+          await deleteAudioObject(objectKey);
+          return apiError("The visit changed. Reload and retry.", 409, {
+            code: "TEMPLATE_TWIN_MUTATION_CONFLICT",
+          });
+        }
+      } catch (error) {
+        try {
+          await deleteAudioObject(objectKey);
+        } catch (cleanupError) {
+          console.error(
+            "[api:visits:dictation:upload] rejected Twin cleanup failed:",
+            redactPhi(
+              cleanupError instanceof Error
+                ? cleanupError.message
+                : cleanupError,
+            ),
+          );
+          return apiError("Upload rollback requires operator attention.", 503, {
+            code: "UPLOAD_ROLLBACK_INCOMPLETE",
+            retry: false,
+          });
+        }
+        if (error instanceof TemplateTwinClinicalMutationAuthorizationError) {
+          return apiError("Template Twin authorization changed.", 409, {
+            code: "TEMPLATE_TWIN_AUTHORIZATION_CHANGED",
+          });
+        }
+        throw error;
+      }
+    } else {
+      try {
+        await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+          await lockAndAssertOrdinaryClinicalMutation({
+            tx,
+            visitId,
+            actorUserId: userId,
+            admittedVisitUpdatedAt: authorityTarget.updatedAt,
+            admittedPatientId: authorityTarget.patientId,
+            admittedNoteTemplateId: authorityTarget.noteTemplateId,
+          });
+          await tx.transcribeVisit.update({
+            where: { id: visitId },
+            data: updateData,
+          });
+        });
+      } catch (error) {
+        try {
+          await deleteAudioObject(objectKey);
+        } catch (cleanupError) {
+          console.error(
+            "[api:visits:dictation:upload] rejected ordinary cleanup failed:",
+            redactPhi(
+              cleanupError instanceof Error
+                ? cleanupError.message
+                : cleanupError,
+            ),
+          );
+          return apiError("Upload rollback requires operator attention.", 503, {
+            code: "UPLOAD_ROLLBACK_INCOMPLETE",
+            retry: false,
+          });
+        }
+        if (error instanceof TemplateTwinClinicalMutationAuthorizationError) {
+          return apiError("The visit changed. Reload and retry.", 409, {
+            code: "TEMPLATE_TWIN_MUTATION_CONFLICT",
+          });
+        }
+        throw error;
+      }
+    }
 
     void logAudit({
       action: "AUDIO_UPLOADED",

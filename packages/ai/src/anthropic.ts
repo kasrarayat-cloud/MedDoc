@@ -32,10 +32,15 @@ function createAnthropicMessage(
   client: Anthropic,
   params: Anthropic.Messages.MessageCreateParamsNonStreaming,
   idempotencyKey?: string,
+  disableTransportRetries = false,
 ): Promise<Anthropic.Messages.Message> {
-  if (!idempotencyKey) return client.messages.create(params);
+  if (!idempotencyKey && !disableTransportRetries) {
+    return client.messages.create(params);
+  }
   return client.messages.create(params, {
-    headers: { 'Idempotency-Key': idempotencyKey },
+    ...(idempotencyKey
+      ? { headers: { 'Idempotency-Key': idempotencyKey } }
+      : {}),
     // The exact-owner ledger owns the only retry decision. Anthropic's SDK
     // otherwise performs up to two hidden transport retries, which could turn
     // one claimed execution into three provider requests after an ambiguous
@@ -236,6 +241,10 @@ export interface AnthropicCompleteArgs<T> extends AiLogContext {
    *  Medical layers should pass low values for determinism. */
   temperature?: number;
   idempotencyKey?: string;
+  /** Internal: disable SDK-hidden transport retries when the caller owns a
+   * per-attempt authorization fence. The outer model client then owns every
+   * retry and invokes that fence before it. */
+  disableTransportRetries?: boolean;
   /** Extra messages appended for retry — e.g. the prior invalid response + error. */
   retryContext?: string;
   /** 2026-05-13 (cross-input-mode-audit Finding 1 hardening): when set,
@@ -306,7 +315,12 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
         ],
         tool_choice: { type: 'tool' as const, name: useToolUse.name },
       };
-      const response = await createAnthropicMessage(client, request, args.idempotencyKey);
+      const response = await createAnthropicMessage(
+        client,
+        request,
+        args.idempotencyKey,
+        args.disableTransportRetries,
+      );
 
       latencyMs = Date.now() - started;
       usage = extractUsage(response.usage);
@@ -388,7 +402,12 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
         system: args.system,
         messages: [{ role: 'user' as const, content: userContent }],
       };
-      const response = await createAnthropicMessage(client, request, args.idempotencyKey);
+      const response = await createAnthropicMessage(
+        client,
+        request,
+        args.idempotencyKey,
+        args.disableTransportRetries,
+      );
 
       latencyMs = Date.now() - started;
 
@@ -617,6 +636,8 @@ export interface AnthropicCompleteTextArgs extends AiLogContext {
   /** Durable server-generated execution key. The application ledger remains
    * authoritative when the provider does not honor the header. */
   idempotencyKey?: string;
+  /** Internal counterpart to the structured-completion retry fence. */
+  disableTransportRetries?: boolean;
   /** How many text tokens we want the model to be willing to produce.
    *  SOAP notes can run long — default 8192 rather than 4096. */
 }
@@ -647,6 +668,7 @@ export async function anthropicCompleteText(
         messages: [{ role: 'user', content: args.user }],
       },
       args.idempotencyKey,
+      args.disableTransportRetries,
     );
 
     const latencyMs = Date.now() - started;

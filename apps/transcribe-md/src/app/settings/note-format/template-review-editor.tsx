@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 // ============================================================================
 // Note-format customization — Phase 2b: review / edit a parsed (or existing)
@@ -8,92 +8,95 @@
 // Linear V1 tokens (inline style + --color-linear-*, the settings convention).
 // The default-text SAFETY callout + the per-default scaffold microcopy are
 // non-optional. The right column shows a LIVE sample note generated in the
-// doctor's format from a fixed SYNTHETIC demo visit (SamplePreview) — it
-// degrades to a structural outline on failure and NEVER blocks save. The save
-// payload is stripped to the strict schema shape (no defaultTextMode — the
-// server coerces it to scaffold_confirm).
+// doctor's format from a fixed SYNTHETIC demo visit (SamplePreview). Ordinary
+// rendering failures degrade to a structural outline; privacy rejection is
+// surfaced explicitly and the server independently blocks save/activation.
+// The save payload is stripped to the strict schema shape (no defaultTextMode
+// — the server coerces it to scaffold_confirm).
 // ============================================================================
 
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
-import { toast } from 'sonner';
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { toast } from "sonner";
 
-import { SPECIALTIES, SPECIALTY_IDS, visibleSpecialties } from '@meddoc/shared/specialties';
 import {
-  saveNoteTemplateAction,
-} from '@/actions/note-template-lifecycle';
-import { previewNoteTemplateAction } from '@/actions/preview-note-template';
-import { detectContextFields } from '@/lib/note-template-context';
+  SPECIALTIES,
+  SPECIALTY_IDS,
+  visibleSpecialties,
+} from "@meddoc/shared/specialties";
+import { saveNoteTemplateAction } from "@/actions/note-template-lifecycle";
+import { previewNoteTemplateAction } from "@/actions/preview-note-template";
+import { detectContextFields } from "@/lib/note-template-context";
 import type {
   NoteTemplateSection,
   SectionFormatHint,
-} from '@/lib/note-template-parse/note-template-schema';
-import type { TemplateReviewModel } from '@/lib/note-template-persist/types';
+} from "@/lib/note-template-parse/note-template-schema";
+import type { TemplateReviewModel } from "@/lib/note-template-persist/types";
 
 // ── tokens-as-style helpers (settings convention) ───────────────────────────
-const mono = 'var(--font-mono)';
-const sans = 'var(--font-sans)';
+const mono = "var(--font-mono)";
+const sans = "var(--font-sans)";
 const subLabel: React.CSSProperties = {
   fontFamily: mono,
   fontSize: 9.5,
-  letterSpacing: '0.06em',
-  textTransform: 'uppercase',
-  color: 'var(--color-linear-text-3)',
+  letterSpacing: "0.06em",
+  textTransform: "uppercase",
+  color: "var(--color-linear-text-3)",
   marginBottom: 5,
 };
 const input: React.CSSProperties = {
-  width: '100%',
+  width: "100%",
   height: 32,
-  padding: '0 10px',
-  background: 'var(--color-linear-surface-2)',
-  border: '1px solid var(--color-linear-border)',
+  padding: "0 10px",
+  background: "var(--color-linear-surface-2)",
+  border: "1px solid var(--color-linear-border)",
   borderRadius: 6,
-  color: 'var(--color-linear-text)',
+  color: "var(--color-linear-text)",
   fontFamily: sans,
   fontSize: 13,
-  outline: 'none',
+  outline: "none",
 };
 const textarea: React.CSSProperties = {
   ...input,
-  height: 'auto',
+  height: "auto",
   minHeight: 64,
-  padding: '8px 10px',
+  padding: "8px 10px",
   lineHeight: 1.5,
-  resize: 'vertical',
+  resize: "vertical",
 };
 const btn: React.CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
   gap: 6,
-  padding: '6px 12px',
+  padding: "6px 12px",
   borderRadius: 6,
   fontSize: 12,
   fontWeight: 500,
   fontFamily: sans,
-  cursor: 'pointer',
-  background: 'transparent',
-  color: 'var(--color-linear-text-2)',
-  border: '1px solid var(--color-linear-border)',
+  cursor: "pointer",
+  background: "transparent",
+  color: "var(--color-linear-text-2)",
+  border: "1px solid var(--color-linear-border)",
 };
 const btnPrimary: React.CSSProperties = {
   ...btn,
-  background: 'var(--color-linear-sage)',
-  color: '#0d1611',
-  border: 'none',
-  boxShadow: '0 0 0 1px rgba(122,166,140,0.3)',
+  background: "var(--color-linear-sage)",
+  color: "#0d1611",
+  border: "none",
+  boxShadow: "0 0 0 1px rgba(122,166,140,0.3)",
 };
 
 const FORMATS: { value: SectionFormatHint; label: string }[] = [
-  { value: 'prose', label: 'Prose' },
-  { value: 'bullets', label: 'Bullets' },
-  { value: 'numbered', label: 'Numbered' },
+  { value: "prose", label: "Prose" },
+  { value: "bullets", label: "Bullets" },
+  { value: "numbered", label: "Numbered" },
 ];
 
 // Encounter options: catch-all (null) + the live specialty taxonomy the worker
 // matches against (visit.specialty). 'unspecified' is dropped — null IS the
 // "applies to everything" choice.
 const ENCOUNTER_OPTIONS: { value: string; label: string }[] = [
-  { value: '', label: 'All my visits' },
+  { value: "", label: "All my visits" },
   // flag-aware: Ultrasound appears only when NEXT_PUBLIC_ULTRASOUND_SPECIALTY
   // is on; forVisitCreate drops 'unspecified' (null IS "applies to everything").
   ...visibleSpecialties({ forVisitCreate: true }).map((s) => ({
@@ -116,7 +119,7 @@ export interface TemplateReviewEditorProps {
   initial: TemplateReviewModel;
   parseFlags?: string[];
   onCancel: () => void;
-  onSaved: (status: 'draft' | 'active') => void;
+  onSaved: (status: "draft" | "active") => void;
 }
 
 export function TemplateReviewEditor({
@@ -135,14 +138,18 @@ export function TemplateReviewEditor({
   // opened in a flag-off build) are KEPT — never silently widened to
   // "All my visits" — and surfaced as an extra option so display = state.
   const [encounterType, setEncounterType] = useState<string>(() => {
-    const parsed = initial.encounterType ?? '';
-    return (SPECIALTY_IDS as readonly string[]).includes(parsed) ? parsed : '';
+    const parsed = initial.encounterType ?? "";
+    return (SPECIALTY_IDS as readonly string[]).includes(parsed) ? parsed : "";
   });
   const encounterOptions = useMemo(() => {
-    if (!encounterType || ENCOUNTER_OPTIONS.some((o) => o.value === encounterType)) {
+    if (
+      !encounterType ||
+      ENCOUNTER_OPTIONS.some((o) => o.value === encounterType)
+    ) {
       return ENCOUNTER_OPTIONS;
     }
-    const label = SPECIALTIES.find((s) => s.id === encounterType)?.label ?? encounterType;
+    const label =
+      SPECIALTIES.find((s) => s.id === encounterType)?.label ?? encounterType;
     return [...ENCOUNTER_OPTIONS, { value: encounterType, label }];
   }, [encounterType]);
   const [sections, setSections] = useState<EditableSection[]>(() =>
@@ -165,9 +172,9 @@ export function TemplateReviewEditor({
     () => detectContextFields(sections),
     [sections],
   );
-  const [contextDefaults, setContextDefaults] = useState<Record<string, string>>(
-    () => ({ ...(styleProfile.contextDefaults ?? {}) }),
-  );
+  const [contextDefaults, setContextDefaults] = useState<
+    Record<string, string>
+  >(() => ({ ...(styleProfile.contextDefaults ?? {}) }));
   const setContextDefault = (key: string, value: string) =>
     setContextDefaults((prev) => {
       const next = { ...prev };
@@ -177,7 +184,9 @@ export function TemplateReviewEditor({
     });
 
   function patch(uid: string, next: Partial<EditableSection>) {
-    setSections((prev) => prev.map((s) => (s._uid === uid ? { ...s, ...next } : s)));
+    setSections((prev) =>
+      prev.map((s) => (s._uid === uid ? { ...s, ...next } : s)),
+    );
   }
   function move(uid: string, dir: -1 | 1) {
     setSections((prev) => {
@@ -190,19 +199,21 @@ export function TemplateReviewEditor({
     });
   }
   function removeSection(uid: string) {
-    setSections((prev) => (prev.length <= 1 ? prev : prev.filter((s) => s._uid !== uid)));
+    setSections((prev) =>
+      prev.length <= 1 ? prev : prev.filter((s) => s._uid !== uid),
+    );
   }
   function addSection() {
     setSections((prev) => [
       ...prev,
       toEditable({
         key: `section_${prev.length + 1}`,
-        label: 'New section',
+        label: "New section",
         order: prev.length + 1,
-        formatHint: 'prose',
+        formatHint: "prose",
         styleInstructions: null,
         defaultText: null,
-        defaultTextMode: 'omit_unless_supported',
+        defaultTextMode: "omit_unless_supported",
       }),
     ]);
   }
@@ -216,7 +227,7 @@ export function TemplateReviewEditor({
       encounterType: encounterType ? encounterType : null,
       sections: sections.map((s, i) => ({
         key: s.key,
-        label: s.label.trim() || 'Section',
+        label: s.label.trim() || "Section",
         order: i + 1,
         formatHint: s.formatHint,
         styleInstructions: s.styleInstructions,
@@ -232,9 +243,12 @@ export function TemplateReviewEditor({
         // Only keep defaults for the NON-per-visit context fields the current
         // template actually has (drop stale keys if the template changed).
         contextDefaults: (() => {
-          const keys = new Set(contextFields.filter((f) => !f.perVisit).map((f) => f.key));
+          const keys = new Set(
+            contextFields.filter((f) => !f.perVisit).map((f) => f.key),
+          );
           const out: Record<string, string> = {};
-          for (const [k, v] of Object.entries(contextDefaults)) if (keys.has(k) && v) out[k] = v;
+          for (const [k, v] of Object.entries(contextDefaults))
+            if (keys.has(k) && v) out[k] = v;
           return Object.keys(out).length > 0 ? out : null;
         })(),
       },
@@ -243,28 +257,25 @@ export function TemplateReviewEditor({
 
   function save(activate: boolean) {
     if (!name.trim()) {
-      toast.error('Give your format a name');
+      toast.error("Give your format a name");
       return;
     }
     startTransition(async () => {
       const res = await saveNoteTemplateAction(buildPayload(), activate);
       if (res.ok) {
-        toast.success(
-          activate ? 'Format activated' : 'Draft saved',
-          {
-            description: activate
-              ? 'New visits that match will be written in this format.'
-              : 'Saved as a draft — activate it when you’re ready.',
-          },
-        );
+        toast.success(activate ? "Format activated" : "Draft saved", {
+          description: activate
+            ? "New visits that match will be written in this format."
+            : "Saved as a draft — activate it when you’re ready.",
+        });
         if (res.flags.length > 0) {
-          toast.message('A couple of defaults were tidied', {
+          toast.message("A couple of defaults were tidied", {
             description: res.flags[0],
           });
         }
         onSaved(res.status);
       } else {
-        toast.error('Could not save', { description: res.error });
+        toast.error("Could not save", { description: res.error });
       }
     });
   }
@@ -277,55 +288,117 @@ export function TemplateReviewEditor({
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 16,
+          flexWrap: "wrap",
+        }}
+      >
         <div>
-          <div style={{ ...subLabel, marginBottom: 6 }}>Review the parsed format</div>
-          <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: '-0.012em', color: 'var(--color-linear-text)' }}>
+          <div style={{ ...subLabel, marginBottom: 6 }}>
+            Review the parsed format
+          </div>
+          <div
+            style={{
+              fontSize: 18,
+              fontWeight: 500,
+              letterSpacing: "-0.012em",
+              color: "var(--color-linear-text)",
+            }}
+          >
             Here’s the format I understood — edit anything.
           </div>
         </div>
-        <button type="button" style={btn} onClick={onCancel} disabled={pending}>Cancel</button>
+        <button type="button" style={btn} onClick={onCancel} disabled={pending}>
+          Cancel
+        </button>
       </div>
 
       {/* Name + encounter type */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 14, margin: '16px 0 4px' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <label style={subLabel} htmlFor="nf-name">Template name</label>
-          <input id="nf-name" style={input} value={name} onChange={(e) => setName(e.target.value)} maxLength={120} />
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1.4fr 1fr",
+          gap: 14,
+          margin: "16px 0 4px",
+        }}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <label style={subLabel} htmlFor="nf-name">
+            Template name
+          </label>
+          <input
+            id="nf-name"
+            style={input}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={120}
+          />
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <label style={subLabel} htmlFor="nf-enc">Use for</label>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <label style={subLabel} htmlFor="nf-enc">
+            Use for
+          </label>
           <select
             id="nf-enc"
-            style={{ ...input, appearance: 'auto' }}
+            style={{ ...input, appearance: "auto" }}
             value={encounterType}
             onChange={(e) => setEncounterType(e.target.value)}
           >
             {encounterOptions.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
             ))}
           </select>
         </div>
       </div>
-      <p style={{ fontSize: 11.5, color: 'var(--color-linear-text-3)', margin: '2px 0 0', lineHeight: 1.5 }}>
-        QuillMD uses this format for visits whose specialty matches. “All my visits” applies it to every note that
-        doesn’t have a more specific match.
+      <p
+        style={{
+          fontSize: 11.5,
+          color: "var(--color-linear-text-3)",
+          margin: "2px 0 0",
+          lineHeight: 1.5,
+        }}
+      >
+        QuillMD uses this format for visits whose specialty matches. “All my
+        visits” applies it to every note that doesn’t have a more specific
+        match.
       </p>
 
       {/* DEFAULT-TEXT SAFETY CALLOUT (verbatim, non-optional) */}
       <SafetyCallout />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,400px)', gap: 16, marginTop: 16 }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0,1fr) minmax(0,400px)",
+          gap: 16,
+          marginTop: 16,
+        }}
+      >
         {/* LEFT — editor */}
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 8,
+            }}
+          >
             <span style={subLabel}>Sections · use ▲▼ to reorder</span>
-            <span style={{ fontSize: 11.5, color: 'var(--color-linear-text-3)' }}>
-              {sections.length} section{sections.length === 1 ? '' : 's'}
+            <span
+              style={{ fontSize: 11.5, color: "var(--color-linear-text-3)" }}
+            >
+              {sections.length} section{sections.length === 1 ? "" : "s"}
             </span>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {sections.map((s, i) => (
               <SectionCard
                 key={s._uid}
@@ -340,7 +413,11 @@ export function TemplateReviewEditor({
             ))}
           </div>
 
-          <button type="button" style={{ ...btn, marginTop: 10 }} onClick={addSection}>
+          <button
+            type="button"
+            style={{ ...btn, marginTop: 10 }}
+            onClick={addSection}
+          >
             + Add a section
           </button>
 
@@ -348,28 +425,59 @@ export function TemplateReviewEditor({
               settings, not the AI (feat/template-context-defaults). */}
           {contextFields.length > 0 && (
             <div style={{ marginTop: 22 }}>
-              <div style={{ ...subLabel, marginBottom: 4 }}>Context fields — filled from your settings, never from the recording</div>
-              <p style={{ fontSize: 11.5, color: 'var(--color-linear-text-3)', margin: '0 0 10px', lineHeight: 1.5 }}>
-                These never come from what you say. Pick a default for each; it fills automatically on every note. Sonographer changes per visit, so it stays blank for you to complete in the note.
+              <div style={{ ...subLabel, marginBottom: 4 }}>
+                Context fields — filled from your settings, never from the
+                recording
+              </div>
+              <p
+                style={{
+                  fontSize: 11.5,
+                  color: "var(--color-linear-text-3)",
+                  margin: "0 0 10px",
+                  lineHeight: 1.5,
+                }}
+              >
+                These never come from what you say. Pick a default for each; it
+                fills automatically on every note. Sonographer changes per
+                visit, so it stays blank for you to complete in the note.
               </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: 10 }}
+              >
                 {contextFields.map((f) => (
-                  <div key={f.key} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                    <label style={subLabel} htmlFor={`ctx-${f.key}`}>{f.fieldLabel}</label>
+                  <div
+                    key={f.key}
+                    style={{ display: "flex", flexDirection: "column", gap: 5 }}
+                  >
+                    <label style={subLabel} htmlFor={`ctx-${f.key}`}>
+                      {f.fieldLabel}
+                    </label>
                     {f.perVisit ? (
-                      <div style={{ ...input, display: 'flex', alignItems: 'center', color: 'var(--color-linear-text-3)', fontStyle: 'italic' }}>
+                      <div
+                        style={{
+                          ...input,
+                          display: "flex",
+                          alignItems: "center",
+                          color: "var(--color-linear-text-3)",
+                          fontStyle: "italic",
+                        }}
+                      >
                         Per visit — you complete this in the note
                       </div>
                     ) : (
                       <select
                         id={`ctx-${f.key}`}
-                        style={{ ...input, appearance: 'auto' }}
-                        value={contextDefaults[f.key] ?? ''}
-                        onChange={(e) => setContextDefault(f.key, e.target.value)}
+                        style={{ ...input, appearance: "auto" }}
+                        value={contextDefaults[f.key] ?? ""}
+                        onChange={(e) =>
+                          setContextDefault(f.key, e.target.value)
+                        }
                       >
                         <option value="">Leave blank ([not documented])</option>
                         {f.options.map((o) => (
-                          <option key={o} value={o}>{o}</option>
+                          <option key={o} value={o}>
+                            {o}
+                          </option>
                         ))}
                       </select>
                     )}
@@ -383,28 +491,39 @@ export function TemplateReviewEditor({
           {flags.length > 0 && (
             <div style={{ marginTop: 22 }}>
               <div style={{ ...subLabel, marginBottom: 9 }}>
-                Suggestions — you opt in by editing the sections yourself; nothing was pre-filled
+                Suggestions — you opt in by editing the sections yourself;
+                nothing was pre-filled
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {flags.map((f, idx) => (
                   <div
                     key={idx}
                     style={{
-                      display: 'grid',
-                      gridTemplateColumns: '1fr auto',
+                      display: "grid",
+                      gridTemplateColumns: "1fr auto",
                       gap: 11,
-                      alignItems: 'center',
-                      padding: '11px 13px',
-                      border: '1px solid rgba(122,166,140,0.22)',
+                      alignItems: "center",
+                      padding: "11px 13px",
+                      border: "1px solid rgba(122,166,140,0.22)",
                       borderRadius: 9,
-                      background: 'var(--color-linear-sage-tint)',
+                      background: "var(--color-linear-sage-tint)",
                     }}
                   >
-                    <div style={{ fontSize: 12, color: 'var(--color-linear-text-2)', lineHeight: 1.5 }}>{f}</div>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: "var(--color-linear-text-2)",
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      {f}
+                    </div>
                     <button
                       type="button"
                       style={btn}
-                      onClick={() => setFlags((prev) => prev.filter((_, j) => j !== idx))}
+                      onClick={() =>
+                        setFlags((prev) => prev.filter((_, j) => j !== idx))
+                      }
                       aria-label={`Dismiss suggestion: ${f}`}
                     >
                       Dismiss
@@ -423,28 +542,47 @@ export function TemplateReviewEditor({
       {/* Sticky action bar */}
       <div
         style={{
-          position: 'sticky',
+          position: "sticky",
           bottom: 0,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
           gap: 12,
-          padding: '14px 0 2px',
+          padding: "14px 0 2px",
           marginTop: 18,
-          borderTop: '1px solid var(--color-linear-hairline)',
-          background: 'linear-gradient(180deg, transparent, var(--color-linear-surface-1) 40%)',
+          borderTop: "1px solid var(--color-linear-hairline)",
+          background:
+            "linear-gradient(180deg, transparent, var(--color-linear-surface-1) 40%)",
         }}
       >
-        <div style={{ fontSize: 11.5, color: 'var(--color-linear-text-3)' }}>
-          {defaultCount} default{defaultCount === 1 ? '' : 's'} · confirmed at sign time
+        <div style={{ fontSize: 11.5, color: "var(--color-linear-text-3)" }}>
+          {defaultCount} default{defaultCount === 1 ? "" : "s"} · confirmed at
+          sign time
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" style={btn} onClick={onCancel} disabled={pending}>Cancel</button>
-          <button type="button" style={btn} onClick={() => save(false)} disabled={pending}>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            type="button"
+            style={btn}
+            onClick={onCancel}
+            disabled={pending}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            style={btn}
+            onClick={() => save(false)}
+            disabled={pending}
+          >
             Save as draft
           </button>
-          <button type="button" style={{ ...btnPrimary, padding: '9px 16px', fontSize: 13 }} onClick={() => save(true)} disabled={pending}>
-            {pending ? 'Saving…' : 'Save & activate'}
+          <button
+            type="button"
+            style={{ ...btnPrimary, padding: "9px 16px", fontSize: 13 }}
+            onClick={() => save(true)}
+            disabled={pending}
+          >
+            {pending ? "Saving…" : "Save & activate"}
           </button>
         </div>
       </div>
@@ -472,37 +610,99 @@ function SectionCard({
 }) {
   const hasDefault = !!section.defaultText?.trim();
   return (
-    <div style={{ border: '1px solid var(--color-linear-border)', borderRadius: 10, background: 'var(--color-linear-surface-2)', overflow: 'hidden' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'center', padding: '11px 12px' }}>
+    <div
+      style={{
+        border: "1px solid var(--color-linear-border)",
+        borderRadius: 10,
+        background: "var(--color-linear-surface-2)",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr auto",
+          gap: 10,
+          alignItems: "center",
+          padding: "11px 12px",
+        }}
+      >
         <div style={{ minWidth: 0 }}>
           <input
-            style={{ ...input, fontWeight: 500, fontSize: 14, border: '1px solid transparent', background: 'transparent', height: 28, padding: '4px 8px' }}
+            style={{
+              ...input,
+              fontWeight: 500,
+              fontSize: 14,
+              border: "1px solid transparent",
+              background: "transparent",
+              height: 28,
+              padding: "4px 8px",
+            }}
             value={section.label}
             aria-label="Section label"
             onChange={(e) => onPatch({ label: e.target.value })}
           />
-          <div style={{ fontFamily: mono, fontSize: 9.5, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-linear-text-4)', paddingLeft: 8, marginTop: 2 }}>
-            key: {section.key}{hasDefault ? ' · has default' : ''}
-            {section.structure?.kind === 'table'
-              ? ` · table: ${section.structure.columns.join(' | ')}${section.structure.rowLabels ? ` (${section.structure.rowLabels.length} fixed rows)` : ''}`
+          <div
+            style={{
+              fontFamily: mono,
+              fontSize: 9.5,
+              letterSpacing: "0.05em",
+              textTransform: "uppercase",
+              color: "var(--color-linear-text-4)",
+              paddingLeft: 8,
+              marginTop: 2,
+            }}
+          >
+            key: {section.key}
+            {hasDefault ? " · has default" : ""}
+            {section.structure?.kind === "table"
+              ? ` · table: ${section.structure.columns.join(" | ")}${section.structure.rowLabels ? ` (${section.structure.rowLabels.length} fixed rows)` : ""}`
               : null}
-            {section.structure?.kind === 'options'
-              ? ` · ${section.structure.multi ? 'check-all' : 'pick-one'}: ${section.structure.options.length} options`
+            {section.structure?.kind === "options"
+              ? ` · ${section.structure.multi ? "check-all" : "pick-one"}: ${section.structure.options.length} options`
               : null}
           </div>
-          {section.structure?.kind === 'options' ? (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, paddingLeft: 8, marginTop: 4 }}>
+          {section.structure?.kind === "options" ? (
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 4,
+                paddingLeft: 8,
+                marginTop: 4,
+              }}
+            >
               {section.structure.options.map((o) => (
-                <span key={o} style={{ fontSize: 11, padding: '1px 7px', borderRadius: 9, border: '1px solid var(--color-linear-border)', color: 'var(--color-linear-text-2)', background: 'var(--color-linear-surface-1)' }}>
+                <span
+                  key={o}
+                  style={{
+                    fontSize: 11,
+                    padding: "1px 7px",
+                    borderRadius: 9,
+                    border: "1px solid var(--color-linear-border)",
+                    color: "var(--color-linear-text-2)",
+                    background: "var(--color-linear-surface-1)",
+                  }}
+                >
                   {o}
                 </span>
               ))}
             </div>
           ) : null}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {/* format segmented toggle */}
-          <div role="group" aria-label={`Format for ${section.label}`} style={{ display: 'inline-flex', border: '1px solid var(--color-linear-border)', borderRadius: 7, overflow: 'hidden', background: 'var(--color-linear-surface-1)' }}>
+          <div
+            role="group"
+            aria-label={`Format for ${section.label}`}
+            style={{
+              display: "inline-flex",
+              border: "1px solid var(--color-linear-border)",
+              borderRadius: 7,
+              overflow: "hidden",
+              background: "var(--color-linear-surface-1)",
+            }}
+          >
             {FORMATS.map((f) => {
               const on = section.formatHint === f.value;
               return (
@@ -512,13 +712,17 @@ function SectionCard({
                   aria-pressed={on}
                   onClick={() => onPatch({ formatHint: f.value })}
                   style={{
-                    padding: '5px 9px',
+                    padding: "5px 9px",
                     fontSize: 11.5,
-                    border: 'none',
-                    borderRight: '1px solid var(--color-linear-border)',
-                    cursor: 'pointer',
-                    background: on ? 'var(--color-linear-sage-tint)' : 'transparent',
-                    color: on ? 'var(--color-linear-sage-bright)' : 'var(--color-linear-text-3)',
+                    border: "none",
+                    borderRight: "1px solid var(--color-linear-border)",
+                    cursor: "pointer",
+                    background: on
+                      ? "var(--color-linear-sage-tint)"
+                      : "transparent",
+                    color: on
+                      ? "var(--color-linear-sage-bright)"
+                      : "var(--color-linear-text-3)",
                   }}
                 >
                   {f.label}
@@ -527,33 +731,79 @@ function SectionCard({
             })}
           </div>
           {/* reorder */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <button type="button" aria-label={`Move ${section.label} up`} disabled={isFirst} onClick={() => onMove(-1)} style={{ ...miniBtn, opacity: isFirst ? 0.3 : 1 }}>▲</button>
-            <button type="button" aria-label={`Move ${section.label} down`} disabled={isLast} onClick={() => onMove(1)} style={{ ...miniBtn, opacity: isLast ? 0.3 : 1 }}>▼</button>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <button
+              type="button"
+              aria-label={`Move ${section.label} up`}
+              disabled={isFirst}
+              onClick={() => onMove(-1)}
+              style={{ ...miniBtn, opacity: isFirst ? 0.3 : 1 }}
+            >
+              ▲
+            </button>
+            <button
+              type="button"
+              aria-label={`Move ${section.label} down`}
+              disabled={isLast}
+              onClick={() => onMove(1)}
+              style={{ ...miniBtn, opacity: isLast ? 0.3 : 1 }}
+            >
+              ▼
+            </button>
           </div>
           {/* expand/collapse */}
-          <button type="button" aria-label={section._open ? `Collapse ${section.label}` : `Expand ${section.label}`} aria-expanded={section._open} onClick={() => onPatch({ _open: !section._open })} style={{ ...miniBtn, width: 24, height: 24 }}>
-            {section._open ? '▾' : '▸'}
+          <button
+            type="button"
+            aria-label={
+              section._open
+                ? `Collapse ${section.label}`
+                : `Expand ${section.label}`
+            }
+            aria-expanded={section._open}
+            onClick={() => onPatch({ _open: !section._open })}
+            style={{ ...miniBtn, width: 24, height: 24 }}
+          >
+            {section._open ? "▾" : "▸"}
           </button>
         </div>
       </div>
 
       {section._open && (
-        <div style={{ borderTop: '1px solid var(--color-linear-hairline)', padding: 12, display: 'flex', flexDirection: 'column', gap: 12, background: 'var(--color-linear-surface-1)' }}>
+        <div
+          style={{
+            borderTop: "1px solid var(--color-linear-hairline)",
+            padding: 12,
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+            background: "var(--color-linear-surface-1)",
+          }}
+        >
           <div>
             <div style={subLabel}>Style notes</div>
             <input
               style={input}
-              value={section.styleInstructions ?? ''}
+              value={section.styleInstructions ?? ""}
               placeholder="How this section is written (structure / tone) — format only, no patient details."
               aria-label={`Style notes for ${section.label}`}
-              onChange={(e) => onPatch({ styleInstructions: e.target.value || null })}
+              onChange={(e) =>
+                onPatch({ styleInstructions: e.target.value || null })
+              }
             />
           </div>
 
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
-              <div style={subLabel}>Default (“normal”) text · confirmed at sign time</div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 5,
+              }}
+            >
+              <div style={subLabel}>
+                Default (“normal”) text · confirmed at sign time
+              </div>
               {hasDefault && (
                 <span style={{ ...pillInfo }}>Scaffold · confirm</span>
               )}
@@ -561,23 +811,52 @@ function SectionCard({
             <textarea
               style={textarea}
               rows={3}
-              value={section.defaultText ?? ''}
+              value={section.defaultText ?? ""}
               placeholder="Optional boilerplate, e.g. a normal-exam line. Leave blank to write this section entirely from the visit."
               aria-label={`Default text for ${section.label}`}
               onChange={(e) => onPatch({ defaultText: e.target.value || null })}
             />
-            <div style={{ display: 'flex', gap: 7, alignItems: 'flex-start', fontSize: 11, color: 'var(--color-linear-text-3)', marginTop: 7, lineHeight: 1.5 }}>
-              <span aria-hidden style={{ color: 'var(--color-linear-info)' }}>ⓘ</span>
+            <div
+              style={{
+                display: "flex",
+                gap: 7,
+                alignItems: "flex-start",
+                fontSize: 11,
+                color: "var(--color-linear-text-3)",
+                marginTop: 7,
+                lineHeight: 1.5,
+              }}
+            >
+              <span aria-hidden style={{ color: "var(--color-linear-info)" }}>
+                ⓘ
+              </span>
               <span>
-                Lines here are a template, not a record. Any line the visit didn’t support is{' '}
-                <b style={{ color: 'var(--color-linear-text-2)', fontWeight: 500 }}>held back and flagged</b> on the
-                note for you to confirm or drop before signing.
+                Lines here are a template, not a record. Any line the visit
+                didn’t support is{" "}
+                <b
+                  style={{
+                    color: "var(--color-linear-text-2)",
+                    fontWeight: 500,
+                  }}
+                >
+                  held back and flagged
+                </b>{" "}
+                on the note for you to confirm or drop before signing.
               </span>
             </div>
           </div>
 
           {canRemove && (
-            <button type="button" style={{ ...btn, alignSelf: 'flex-start', color: 'var(--color-linear-text-3)' }} onClick={onRemove} aria-label={`Remove ${section.label}`}>
+            <button
+              type="button"
+              style={{
+                ...btn,
+                alignSelf: "flex-start",
+                color: "var(--color-linear-text-3)",
+              }}
+              onClick={onRemove}
+              aria-label={`Remove ${section.label}`}
+            >
               Remove section
             </button>
           )}
@@ -590,25 +869,25 @@ function SectionCard({
 const miniBtn: React.CSSProperties = {
   width: 22,
   height: 16,
-  border: '1px solid var(--color-linear-border)',
-  background: 'var(--color-linear-surface-1)',
+  border: "1px solid var(--color-linear-border)",
+  background: "var(--color-linear-surface-1)",
   borderRadius: 4,
-  color: 'var(--color-linear-text-3)',
-  cursor: 'pointer',
+  color: "var(--color-linear-text-3)",
+  cursor: "pointer",
   padding: 0,
   fontSize: 9,
   lineHeight: 1,
 };
 const pillInfo: React.CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  padding: '2px 8px',
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "2px 8px",
   borderRadius: 4,
   fontSize: 10,
   fontWeight: 500,
-  background: 'rgba(91,141,184,0.08)',
-  color: 'var(--color-linear-info)',
-  border: '1px solid rgba(91,141,184,0.25)',
+  background: "rgba(91,141,184,0.08)",
+  color: "var(--color-linear-info)",
+  border: "1px solid rgba(91,141,184,0.25)",
 };
 
 // ── Safety callout (verbatim from the mockup) ───────────────────────────────
@@ -617,28 +896,58 @@ function SafetyCallout() {
     <div
       role="note"
       style={{
-        position: 'relative',
-        border: '1px solid rgba(91,141,184,0.25)',
-        background: 'rgba(91,141,184,0.06)',
+        position: "relative",
+        border: "1px solid rgba(91,141,184,0.25)",
+        background: "rgba(91,141,184,0.06)",
         borderRadius: 9,
-        padding: '11px 13px 11px 15px',
-        display: 'flex',
+        padding: "11px 13px 11px 15px",
+        display: "flex",
         gap: 10,
-        alignItems: 'flex-start',
-        overflow: 'hidden',
+        alignItems: "flex-start",
+        overflow: "hidden",
         marginTop: 16,
       }}
     >
-      <span aria-hidden style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: 'var(--color-linear-info)' }} />
+      <span
+        aria-hidden
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: 3,
+          background: "var(--color-linear-info)",
+        }}
+      />
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--color-linear-text)', marginBottom: 2 }}>
+        <div
+          style={{
+            fontSize: 12.5,
+            fontWeight: 600,
+            color: "var(--color-linear-text)",
+            marginBottom: 2,
+          }}
+        >
           How your default (“normal”) text is used — safely
         </div>
-        <p style={{ margin: 0, fontSize: 11.5, color: 'var(--color-linear-text-2)', lineHeight: 1.55 }}>
-          Default text is a <b style={{ color: 'var(--color-linear-text)', fontWeight: 500 }}>starting point</b>. QuillMD only
-          states findings the visit actually supports —{' '}
-          <b style={{ color: 'var(--color-linear-text)', fontWeight: 500 }}>anything from your defaults that wasn’t discussed is flagged for your review before you sign</b>,
-          never silently asserted. You stay in control of every finding.
+        <p
+          style={{
+            margin: 0,
+            fontSize: 11.5,
+            color: "var(--color-linear-text-2)",
+            lineHeight: 1.55,
+          }}
+        >
+          Default text is a{" "}
+          <b style={{ color: "var(--color-linear-text)", fontWeight: 500 }}>
+            starting point
+          </b>
+          . QuillMD only states findings the visit actually supports —{" "}
+          <b style={{ color: "var(--color-linear-text)", fontWeight: 500 }}>
+            anything from your defaults that wasn’t discussed is flagged for
+            your review before you sign
+          </b>
+          , never silently asserted. You stay in control of every finding.
         </p>
       </div>
     </div>
@@ -648,15 +957,52 @@ function SafetyCallout() {
 // ── Structure outline rows (fallback shown while the sample renders) ─────────
 function StructureOutline({ sections }: { sections: EditableSection[] }) {
   return (
-    <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 460, overflow: 'auto' }}>
+    <div
+      style={{
+        padding: "14px 16px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 10,
+        maxHeight: 460,
+        overflow: "auto",
+      }}
+    >
       {sections.map((s, i) => (
-        <div key={s._uid} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-          <span style={{ fontFamily: mono, fontSize: 10, color: 'var(--color-linear-text-4)', marginTop: 2 }}>{String(i + 1).padStart(2, '0')}</span>
+        <div
+          key={s._uid}
+          style={{ display: "flex", gap: 10, alignItems: "flex-start" }}
+        >
+          <span
+            style={{
+              fontFamily: mono,
+              fontSize: 10,
+              color: "var(--color-linear-text-4)",
+              marginTop: 2,
+            }}
+          >
+            {String(i + 1).padStart(2, "0")}
+          </span>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-linear-text)' }}>{s.label || 'Section'}</div>
-            <div style={{ fontSize: 11, color: 'var(--color-linear-text-3)', marginTop: 1 }}>
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: "var(--color-linear-text)",
+              }}
+            >
+              {s.label || "Section"}
+            </div>
+            <div
+              style={{
+                fontSize: 11,
+                color: "var(--color-linear-text-3)",
+                marginTop: 1,
+              }}
+            >
               {s.formatHint}
-              {s.defaultText?.trim() ? ' · has a confirm-before-sign default' : ' · written from the visit'}
+              {s.defaultText?.trim()
+                ? " · has a confirm-before-sign default"
+                : " · written from the visit"}
             </div>
           </div>
         </div>
@@ -670,8 +1016,13 @@ function StructureOutline({ sections }: { sections: EditableSection[] }) {
 //    need headings + bold, nothing more (mirrors SoapSection's SoapMarkdown). ──
 function renderInlineBold(text: string, keyBase: string): React.ReactNode[] {
   return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
-    part.startsWith('**') && part.endsWith('**') ? (
-      <strong key={`${keyBase}-${i}`} style={{ fontWeight: 600, color: 'var(--color-linear-text)' }}>{part.slice(2, -2)}</strong>
+    part.startsWith("**") && part.endsWith("**") ? (
+      <strong
+        key={`${keyBase}-${i}`}
+        style={{ fontWeight: 600, color: "var(--color-linear-text)" }}
+      >
+        {part.slice(2, -2)}
+      </strong>
     ) : (
       <span key={`${keyBase}-${i}`}>{part}</span>
     ),
@@ -688,19 +1039,24 @@ const SAMPLE_TABLE_ROW_RE = /^\s*\|.*\|\s*$/;
 const SAMPLE_TABLE_SEPARATOR_ROW_RE = /^\s*\|[\s:|-]+\|\s*$/;
 const SAMPLE_TASK_LINE_RE = /^\s*[-*]\s+\[( |x|X)\]\s+(.*)$/;
 function splitSampleTableRow(line: string): string[] {
-  return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((c) => c.trim());
 }
 const sampleCellStyle: React.CSSProperties = {
-  padding: '4px 10px',
-  borderBottom: '1px solid var(--color-linear-hairline)',
+  padding: "4px 10px",
+  borderBottom: "1px solid var(--color-linear-hairline)",
   fontSize: 12,
   lineHeight: 1.5,
-  color: 'var(--color-linear-text-2)',
-  textAlign: 'left',
-  verticalAlign: 'top',
+  color: "var(--color-linear-text-2)",
+  textAlign: "left",
+  verticalAlign: "top",
 };
 function SampleMarkdown({ text }: { text: string }) {
-  const lines = text.split('\n');
+  const lines = text.split("\n");
   const out: React.ReactNode[] = [];
   let tableBuffer: string[] = [];
   const flushTable = (k: string) => {
@@ -718,14 +1074,33 @@ function SampleMarkdown({ text }: { text: string }) {
         key={`tbl-${k}`}
         tabIndex={0}
         role="region"
-        aria-label={header.filter(Boolean).join(' / ') || 'Sample table'}
-        style={{ overflowX: 'auto', margin: '6px 0', border: '1px solid var(--color-linear-border)', borderRadius: 6 }}
+        aria-label={header.filter(Boolean).join(" / ") || "Sample table"}
+        style={{
+          overflowX: "auto",
+          margin: "6px 0",
+          border: "1px solid var(--color-linear-border)",
+          borderRadius: 6,
+        }}
       >
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
               {header.map((cell, ci) => (
-                <th key={ci} style={{ ...sampleCellStyle, background: 'var(--color-linear-surface-2)', borderBottom: '1px solid var(--color-linear-border)', fontFamily: mono, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--color-linear-text-3)', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                <th
+                  key={ci}
+                  style={{
+                    ...sampleCellStyle,
+                    background: "var(--color-linear-surface-2)",
+                    borderBottom: "1px solid var(--color-linear-border)",
+                    fontFamily: mono,
+                    fontSize: 10,
+                    letterSpacing: "0.1em",
+                    textTransform: "uppercase",
+                    color: "var(--color-linear-text-3)",
+                    fontWeight: 500,
+                    whiteSpace: "nowrap",
+                  }}
+                >
                   {renderInlineBold(cell, `tbl-${k}-h${ci}`)}
                 </th>
               ))}
@@ -736,14 +1111,16 @@ function SampleMarkdown({ text }: { text: string }) {
               {body.map((cells, ri) => (
                 <tr key={ri}>
                   {cells.map((cell, ci) => (
-                    <td key={ci} style={sampleCellStyle}>{renderInlineBold(cell, `tbl-${k}-r${ri}c${ci}`)}</td>
+                    <td key={ci} style={sampleCellStyle}>
+                      {renderInlineBold(cell, `tbl-${k}-r${ri}c${ci}`)}
+                    </td>
                   ))}
                 </tr>
               ))}
             </tbody>
           ) : null}
         </table>
-      </div>
+      </div>,
     );
   };
   lines.forEach((raw, i) => {
@@ -756,35 +1133,110 @@ function SampleMarkdown({ text }: { text: string }) {
     flushTable(k);
     const task = l.match(SAMPLE_TASK_LINE_RE);
     if (task) {
-      const checked = task[1].toLowerCase() === 'x';
+      const checked = task[1].toLowerCase() === "x";
       out.push(
-        <div key={k} style={{ display: 'flex', gap: 6, alignItems: 'baseline', fontSize: 12, color: 'var(--color-linear-text-2)', lineHeight: 1.55 }}>
-          <span aria-hidden="true" style={{ flex: 'none', color: checked ? 'var(--color-linear-sage)' : 'var(--color-linear-text-3)' }}>{checked ? '☒' : '☐'}</span>
-          <span className="sr-only">{checked ? 'Checked:' : 'Not checked:'}</span>
+        <div
+          key={k}
+          style={{
+            display: "flex",
+            gap: 6,
+            alignItems: "baseline",
+            fontSize: 12,
+            color: "var(--color-linear-text-2)",
+            lineHeight: 1.55,
+          }}
+        >
+          <span
+            aria-hidden="true"
+            style={{
+              flex: "none",
+              color: checked
+                ? "var(--color-linear-sage)"
+                : "var(--color-linear-text-3)",
+            }}
+          >
+            {checked ? "☒" : "☐"}
+          </span>
+          <span className="sr-only">
+            {checked ? "Checked:" : "Not checked:"}
+          </span>
           <span>{renderInlineBold(task[2], k)}</span>
-        </div>
+        </div>,
       );
-    } else if (l.startsWith('## ')) {
-      out.push(<div key={k} style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--color-linear-text)', marginTop: i === 0 ? 0 : 12, marginBottom: 2 }}>{l.slice(3)}</div>);
-    } else if (l.startsWith('# ')) {
-      out.push(<div key={k} style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--color-linear-text)', marginTop: i === 0 ? 0 : 12 }}>{l.slice(2)}</div>);
-    } else if (l.startsWith('- ') || l.startsWith('* ')) {
-      out.push(<div key={k} style={{ display: 'flex', gap: 6, fontSize: 12, color: 'var(--color-linear-text-2)', lineHeight: 1.55 }}><span aria-hidden style={{ color: 'var(--color-linear-text-4)' }}>•</span><span>{renderInlineBold(l.slice(2), k)}</span></div>);
-    } else if (l === '') {
+    } else if (l.startsWith("## ")) {
+      out.push(
+        <div
+          key={k}
+          style={{
+            fontSize: 12.5,
+            fontWeight: 600,
+            color: "var(--color-linear-text)",
+            marginTop: i === 0 ? 0 : 12,
+            marginBottom: 2,
+          }}
+        >
+          {l.slice(3)}
+        </div>,
+      );
+    } else if (l.startsWith("# ")) {
+      out.push(
+        <div
+          key={k}
+          style={{
+            fontSize: 13.5,
+            fontWeight: 600,
+            color: "var(--color-linear-text)",
+            marginTop: i === 0 ? 0 : 12,
+          }}
+        >
+          {l.slice(2)}
+        </div>,
+      );
+    } else if (l.startsWith("- ") || l.startsWith("* ")) {
+      out.push(
+        <div
+          key={k}
+          style={{
+            display: "flex",
+            gap: 6,
+            fontSize: 12,
+            color: "var(--color-linear-text-2)",
+            lineHeight: 1.55,
+          }}
+        >
+          <span aria-hidden style={{ color: "var(--color-linear-text-4)" }}>
+            •
+          </span>
+          <span>{renderInlineBold(l.slice(2), k)}</span>
+        </div>,
+      );
+    } else if (l === "") {
       out.push(<div key={k} style={{ height: 6 }} />);
     } else {
-      out.push(<div key={k} style={{ fontSize: 12, color: 'var(--color-linear-text-2)', lineHeight: 1.55 }}>{renderInlineBold(l, k)}</div>);
+      out.push(
+        <div
+          key={k}
+          style={{
+            fontSize: 12,
+            color: "var(--color-linear-text-2)",
+            lineHeight: 1.55,
+          }}
+        >
+          {renderInlineBold(l, k)}
+        </div>,
+      );
     }
   });
-  flushTable('end');
-  return <div style={{ display: 'flex', flexDirection: 'column' }}>{out}</div>;
+  flushTable("end");
+  return <div style={{ display: "flex", flexDirection: "column" }}>{out}</div>;
 }
 
 // ── Live sample-note preview ─────────────────────────────────────────────────
 // Generates a sample note IN THE DOCTOR'S FORMAT from a FIXED SYNTHETIC demo
-// visit (never a real patient). ADDITIVE: a generation failure degrades to the
-// structural outline + a quiet message and NEVER blocks save/activate.
-type PreviewStatus = 'loading' | 'ready' | 'error';
+// visit (never a real patient). An ordinary generation failure degrades to the
+// structural outline. A privacy rejection is shown distinctly because the
+// same deterministic boundary also blocks server-side save/activation.
+type PreviewStatus = "loading" | "ready" | "error";
 function SamplePreview({
   sections,
   getPayload,
@@ -792,27 +1244,36 @@ function SamplePreview({
   sections: EditableSection[];
   getPayload: () => unknown;
 }) {
-  const [status, setStatus] = useState<PreviewStatus>('loading');
+  const [status, setStatus] = useState<PreviewStatus>("loading");
   const [markdown, setMarkdown] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState<{
+    message: string;
+    privacyRejected: boolean;
+  } | null>(null);
   const [, startPreview] = useTransition();
   // StrictMode double-invokes effects in dev; guard the initial auto-generate.
   const didInit = useRef(false);
 
   function generate() {
-    setStatus('loading');
+    setStatus("loading");
+    setPreviewError(null);
     startPreview(async () => {
       try {
         const res = await previewNoteTemplateAction(getPayload());
         if (res.ok) {
           setMarkdown(res.markdown);
-          setStatus('ready');
+          setStatus("ready");
         } else {
-          setStatus('error');
+          setPreviewError({
+            message: res.error,
+            privacyRejected: res.privacyRejected === true,
+          });
+          setStatus("error");
         }
       } catch {
         // The preview is additive — a thrown error must never reach the page
         // boundary or block the editor. Degrade to the outline.
-        setStatus('error');
+        setStatus("error");
       }
     });
   }
@@ -826,51 +1287,138 @@ function SamplePreview({
   }, []);
 
   return (
-    <div style={{ position: 'sticky', top: 64, alignSelf: 'start' }}>
-      <div style={{ border: '1px solid var(--color-linear-border)', borderRadius: 10, background: 'var(--color-linear-surface-1)', overflow: 'hidden' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 14px', borderBottom: '1px solid var(--color-linear-hairline)' }}>
-          <span style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--color-linear-text)' }}>Sample note in your format</span>
+    <div style={{ position: "sticky", top: 64, alignSelf: "start" }}>
+      <div
+        style={{
+          border: "1px solid var(--color-linear-border)",
+          borderRadius: 10,
+          background: "var(--color-linear-surface-1)",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "11px 14px",
+            borderBottom: "1px solid var(--color-linear-hairline)",
+          }}
+        >
+          <span
+            style={{
+              fontSize: 12.5,
+              fontWeight: 500,
+              color: "var(--color-linear-text)",
+            }}
+          >
+            Sample note in your format
+          </span>
           <span
             title="Generated from a synthetic demo visit — not a real patient."
-            style={{ fontFamily: mono, fontSize: 9.5, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-linear-sage)', border: '1px solid rgba(122,166,140,0.32)', borderRadius: 5, padding: '2px 6px' }}
+            style={{
+              fontFamily: mono,
+              fontSize: 9.5,
+              letterSpacing: "0.05em",
+              textTransform: "uppercase",
+              color: "var(--color-linear-sage)",
+              border: "1px solid rgba(122,166,140,0.32)",
+              borderRadius: 5,
+              padding: "2px 6px",
+            }}
           >
             Demo visit · synthetic
           </span>
         </div>
 
-        <div style={{ padding: status === 'ready' ? '14px 16px' : 0, maxHeight: 460, overflow: 'auto' }}>
-          {status === 'ready' && markdown ? (
+        <div
+          style={{
+            padding: status === "ready" ? "14px 16px" : 0,
+            maxHeight: 460,
+            overflow: "auto",
+          }}
+        >
+          {status === "ready" && markdown ? (
             <SampleMarkdown text={markdown} />
-          ) : status === 'loading' ? (
+          ) : status === "loading" ? (
             <>
-              <div style={{ padding: '10px 16px 0', fontSize: 11.5, color: 'var(--color-linear-text-3)', display: 'flex', alignItems: 'center', gap: 7 }}>
-                <span aria-hidden style={{ width: 11, height: 11, border: '1.5px solid var(--color-linear-text-4)', borderTopColor: 'var(--color-linear-sage)', borderRadius: '50%', display: 'inline-block', animation: 'qm-spin 1.1s linear infinite' }} />
+              <div
+                style={{
+                  padding: "10px 16px 0",
+                  fontSize: 11.5,
+                  color: "var(--color-linear-text-3)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 7,
+                }}
+              >
+                <span
+                  aria-hidden
+                  style={{
+                    width: 11,
+                    height: 11,
+                    border: "1.5px solid var(--color-linear-text-4)",
+                    borderTopColor: "var(--color-linear-sage)",
+                    borderRadius: "50%",
+                    display: "inline-block",
+                    animation: "qm-spin 1.1s linear infinite",
+                  }}
+                />
                 Rendering a sample in your format…
               </div>
               <StructureOutline sections={sections} />
             </>
           ) : (
             <>
-              <div style={{ padding: '10px 16px 0', fontSize: 11.5, color: 'var(--color-linear-text-3)' }}>
-                Couldn’t render a sample right now — your structure is below. This doesn’t affect saving or activating.
+              <div
+                role={previewError?.privacyRejected ? "alert" : undefined}
+                style={{
+                  padding: "10px 16px 0",
+                  fontSize: 11.5,
+                  color: previewError?.privacyRejected
+                    ? "var(--color-linear-danger)"
+                    : "var(--color-linear-text-3)",
+                }}
+              >
+                {previewError?.privacyRejected
+                  ? `Privacy check blocked this format. ${previewError.message}`
+                  : "Couldn’t render a sample right now — your structure is below. This does not affect saving or activating."}
               </div>
               <StructureOutline sections={sections} />
             </>
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderTop: '1px solid var(--color-linear-hairline)' }}>
-          <span style={{ fontSize: 11, color: 'var(--color-linear-text-3)', lineHeight: 1.45 }}>
-            <span aria-hidden style={{ color: 'var(--color-linear-info)' }}>ⓘ</span>{' '}
-            A synthetic demo visit — not a real patient. Default lines a visit doesn’t support are flagged, never asserted.
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "10px 14px",
+            borderTop: "1px solid var(--color-linear-hairline)",
+          }}
+        >
+          <span
+            style={{
+              fontSize: 11,
+              color: "var(--color-linear-text-3)",
+              lineHeight: 1.45,
+            }}
+          >
+            <span aria-hidden style={{ color: "var(--color-linear-info)" }}>
+              ⓘ
+            </span>{" "}
+            A synthetic demo visit — not a real patient. Default lines a visit
+            doesn’t support are flagged, never asserted.
           </span>
           <button
             type="button"
-            style={{ ...btn, padding: '4px 9px', fontSize: 11 }}
+            style={{ ...btn, padding: "4px 9px", fontSize: 11 }}
             onClick={generate}
-            disabled={status === 'loading'}
+            disabled={status === "loading"}
           >
-            {status === 'loading' ? 'Rendering…' : 'Regenerate'}
+            {status === "loading" ? "Rendering…" : "Regenerate"}
           </button>
         </div>
       </div>

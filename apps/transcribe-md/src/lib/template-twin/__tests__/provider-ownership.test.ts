@@ -12,6 +12,8 @@ import { z } from "zod";
 
 import {
   buildTemplateTwinProviderOwnershipReceipt,
+  isTemplateTwinProviderAuthorityCurrent,
+  resolveTemplateTwinProviderLogicalAttempt,
   runTemplateTwinOwnedModelComplete,
   runTemplateTwinOwnedModelCompleteText,
   runTemplateTwinOwnedProvider,
@@ -19,9 +21,13 @@ import {
   runWithTemplateTwinProviderOwnershipContext as runWithTemplateTwinProviderOwnershipContextRaw,
   TemplateTwinProviderOwnershipError,
   type TemplateTwinProviderOwnershipContext,
+  type ProviderOwnershipDbClient,
 } from "../provider-ownership";
 import { runWithTemplateTwinProviderCensus } from "../provider-census";
 import { TEMPLATE_TWIN_STAGING_QA_VOICE_TRANSCRIPT } from "../staging-qa-fixtures";
+
+const POSTGRES_ECMASCRIPT_TRIM_WHITESPACE_CLASS =
+  "U&'[\\0009-\\000D\\0020\\00A0\\1680\\2000-\\200A\\2028\\2029\\202F\\205F\\3000\\FEFF]'";
 
 interface StoredRow extends Record<string, unknown> {
   id: string;
@@ -154,6 +160,23 @@ const SYNTHETIC_VOICE_CONTEXT: TemplateTwinProviderOwnershipContext = {
   },
 };
 
+const STATIC_ASSET_CONTEXT: TemplateTwinProviderOwnershipContext = {
+  ...CONTEXT,
+  actorUserId: "admin-provider-owner",
+  visitId: null,
+  visitInputMode: null,
+  scope: "STATIC_ASSET",
+  subjectId: "6".repeat(64),
+  subjectSha256: "6".repeat(64),
+  sourceArtifactId: null,
+  compiledVersionId: null,
+  noteTemplateId: null,
+  noteTemplateVersion: null,
+  sourceLineageId: null,
+  sourceLineageVersion: null,
+  sourceSha256: null,
+};
+
 const SAFE_SYNTHETIC_ENV = {
   NODE_ENV: "production",
   TEMPLATE_TWIN_STAGING_QA_ENABLED: "true",
@@ -247,7 +270,7 @@ function dependencies(
   input: {
     mode?: "LIVE" | "DETERMINISTIC_MOCK" | "SYNTHETIC_QA";
     rolloutCurrent?: boolean;
-    authorityCurrent?: boolean | (() => boolean);
+    authorityCurrent?: boolean | (() => boolean | Promise<boolean>);
   } = {},
 ): NonNullable<Parameters<typeof runTemplateTwinOwnedProvider>[1]> {
   return {
@@ -256,7 +279,7 @@ function dependencies(
     lockRollout: async () => input.rolloutCurrent ?? true,
     currentAuthority: async () =>
       typeof input.authorityCurrent === "function"
-        ? input.authorityCurrent()
+        ? await input.authorityCurrent()
         : (input.authorityCurrent ?? true),
     executionId: () => `provider-execution-${++sequence}`,
     claimId: () => `${sequence.toString(16).padStart(64, "0")}`,
@@ -268,6 +291,223 @@ function dependencies(
   } as unknown as NonNullable<
     Parameters<typeof runTemplateTwinOwnedProvider>[1]
   >;
+}
+
+function currentLiveAuthorityDatabase(
+  input: {
+    patient?: Partial<{
+      practiceId: string;
+      name: string;
+      externalId: string | null;
+      dateOfBirth: Date | null;
+      mrn: string | null;
+      insurance: string | null;
+      problemList: unknown | null;
+      weightKg: number | null;
+      allergies: string[];
+      deletedAt: Date | null;
+    }>;
+    artifactAuthorized?: boolean;
+  } = {},
+): {
+  db: ProviderOwnershipDbClient;
+  queries: string[];
+} {
+  const patient = {
+    practiceId: CONTEXT.practiceId,
+    name: "Synthetic Unit Patient",
+    externalId: "ordinary-patient-1",
+    dateOfBirth: null,
+    mrn: null,
+    insurance: null,
+    problemList: null,
+    weightKg: null,
+    allergies: [] as string[],
+    deletedAt: null,
+    ...input.patient,
+  };
+  const queries: string[] = [];
+  const db = {
+    templateTwinProviderExecution: {} as never,
+    $queryRaw: vi.fn(async (query: { strings?: readonly string[] }) => {
+      const sql = query.strings?.join("?") ?? "";
+      queries.push(sql);
+      if (sql.includes('FROM "users" actor')) {
+        return [
+          {
+            practiceId: CONTEXT.practiceId,
+            role: "DOCTOR",
+            isActive: true,
+            deactivatedAt: null,
+            suspendedAt: null,
+            softDeletedAt: null,
+            products: ["TRANSCRIBE_MD"],
+          },
+        ];
+      }
+      if (sql.includes('FROM "transcribe_visits" visit')) {
+        return [
+          {
+            userId: CONTEXT.actorUserId,
+            inputMode: CONTEXT.visitInputMode,
+            noteTemplateId: CONTEXT.noteTemplateId,
+            noteTemplateVersion: CONTEXT.noteTemplateVersion,
+            deletedAt: null,
+            archivedAt: null,
+            status: "AUTOMATING",
+            audioKey: null,
+            audioMimeType: null,
+            audioSizeBytes: null,
+            rawTextInput: "synthetic non-PHI input",
+            dictationAudioKey: null,
+            signedAt: null,
+            patientPracticeId: patient.practiceId,
+            patientName: patient.name,
+            patientExternalId: patient.externalId,
+            patientDateOfBirth: patient.dateOfBirth,
+            patientMrn: patient.mrn,
+            patientInsurance: patient.insurance,
+            patientProblemList: patient.problemList,
+            patientWeightKg: patient.weightKg,
+            patientAllergies: patient.allergies,
+            patientDeletedAt: patient.deletedAt,
+          },
+        ];
+      }
+      if (sql.includes('FROM "template_twin_compiled_versions" compiled')) {
+        return [{ authorized: input.artifactAuthorized ?? true }];
+      }
+      throw new Error(`Unexpected current-authority query: ${sql}`);
+    }) as unknown as ProviderOwnershipDbClient["$queryRaw"],
+  } satisfies ProviderOwnershipDbClient;
+  return { db, queries };
+}
+
+function currentStaticAssetAuthorityDatabase(
+  input: {
+    products?: string[];
+    platformMfaComplete?: boolean;
+  } = {},
+): { db: ProviderOwnershipDbClient; queries: string[] } {
+  const queries: string[] = [];
+  const db = {
+    templateTwinProviderExecution: {} as never,
+    $queryRaw: vi.fn(async (query: { strings?: readonly string[] }) => {
+      const sql = query.strings?.join("?") ?? "";
+      queries.push(sql);
+      if (sql.includes('FROM "users" actor')) {
+        return [
+          {
+            practiceId: STATIC_ASSET_CONTEXT.practiceId,
+            role: "ADMIN",
+            isActive: true,
+            deactivatedAt: null,
+            suspendedAt: null,
+            softDeletedAt: null,
+            products: input.products ?? ["TRANSCRIBE_MD"],
+            platformMfaComplete: input.platformMfaComplete ?? false,
+          },
+        ];
+      }
+      throw new Error(`Unexpected static-authority query: ${sql}`);
+    }) as unknown as ProviderOwnershipDbClient["$queryRaw"],
+  } satisfies ProviderOwnershipDbClient;
+  return { db, queries };
+}
+
+function currentSyntheticVoiceAuthorityDatabase(
+  parent: Partial<{
+    revokedAt: Date | null;
+    notExpired: boolean;
+  }> = {},
+): { db: ProviderOwnershipDbClient; queries: string[] } {
+  const queries: string[] = [];
+  const db = {
+    templateTwinProviderExecution: {} as never,
+    $queryRaw: vi.fn(async (query: { strings?: readonly string[] }) => {
+      const sql = query.strings?.join("?") ?? "";
+      queries.push(sql);
+      if (sql.includes('FROM "users" actor')) {
+        return [
+          {
+            practiceId: SYNTHETIC_VOICE_CONTEXT.practiceId,
+            role: "DOCTOR",
+            isActive: true,
+            deactivatedAt: null,
+            suspendedAt: null,
+            softDeletedAt: null,
+            products: ["TRANSCRIBE_MD"],
+          },
+        ];
+      }
+      if (
+        sql.includes('FROM "template_twin_synthetic_qa_admissions" admission')
+      ) {
+        return [
+          {
+            id: SYNTHETIC_VOICE_CONTEXT.syntheticAdmissionId,
+            parentAdmissionId: "synthetic-voice-parent-1",
+            practiceId: SYNTHETIC_VOICE_CONTEXT.practiceId,
+            actorId: SYNTHETIC_VOICE_CONTEXT.actorUserId,
+            providerMode: "SYNTHETIC_MOCK_VOICE",
+            fixtureVersion: TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION,
+            purpose: "VISIT",
+            phase: "VISIT_LINKED",
+            pinnedGlobalRolloutGeneration:
+              SYNTHETIC_VOICE_CONTEXT.rolloutToken.globalGeneration,
+            pinnedPracticeRolloutGeneration:
+              SYNTHETIC_VOICE_CONTEXT.rolloutToken.practiceGeneration,
+            sourceArtifactId: SYNTHETIC_VOICE_CONTEXT.sourceArtifactId,
+            noteTemplateId: SYNTHETIC_VOICE_CONTEXT.noteTemplateId,
+            noteTemplateVersion: SYNTHETIC_VOICE_CONTEXT.noteTemplateVersion,
+            visitId: SYNTHETIC_VOICE_CONTEXT.visitId,
+            sourceSha256: SYNTHETIC_VOICE_CONTEXT.sourceSha256,
+            preCertificationVoiceEvidence: true,
+            audioSha256: SYNTHETIC_AUDIO_SHA256,
+            audioSizeBytes: SYNTHETIC_AUDIO.byteLength,
+            audioMimeType: "audio/webm",
+            audioObjectKey: "template-twin-synthetic-voice/exact-audio",
+            attempt: 1,
+            certificationId: null,
+            mappingSha256: null,
+            consumedAt: null,
+            notExpired: true,
+            failedAt: null,
+            revokedAt: null,
+          },
+        ];
+      }
+      if (sql.includes('FROM "template_twin_synthetic_qa_admissions" parent')) {
+        return [
+          {
+            id: "synthetic-voice-parent-1",
+            practiceId: SYNTHETIC_VOICE_CONTEXT.practiceId,
+            actorId: SYNTHETIC_VOICE_CONTEXT.actorUserId,
+            providerMode: "SYNTHETIC_LIFECYCLE",
+            purpose: "UPLOAD",
+            phase: "TEMPLATE_LINKED",
+            sourceArtifactId: SYNTHETIC_VOICE_CONTEXT.sourceArtifactId,
+            noteTemplateId: SYNTHETIC_VOICE_CONTEXT.noteTemplateId,
+            noteTemplateVersion: SYNTHETIC_VOICE_CONTEXT.noteTemplateVersion,
+            certificationId: null,
+            mappingSha256: null,
+            visitId: null,
+            failedAt: null,
+            revokedAt: parent.revokedAt ?? null,
+            consumedAt: null,
+            notExpired: parent.notExpired ?? true,
+            preCertificationVoiceEvidence: false,
+            pinnedGlobalRolloutGeneration:
+              SYNTHETIC_VOICE_CONTEXT.rolloutToken.globalGeneration,
+            pinnedPracticeRolloutGeneration:
+              SYNTHETIC_VOICE_CONTEXT.rolloutToken.practiceGeneration,
+          },
+        ];
+      }
+      throw new Error(`Unexpected synthetic current-authority query: ${sql}`);
+    }) as unknown as ProviderOwnershipDbClient["$queryRaw"],
+  } satisfies ProviderOwnershipDbClient;
+  return { db, queries };
 }
 
 function providerInput(invoke: () => Promise<{ facts: string[] }>) {
@@ -295,6 +535,61 @@ function providerInput(invoke: () => Promise<{ facts: string[] }>) {
   };
 }
 
+function attemptSeriesDependencies(database: MemoryProviderDatabase) {
+  return {
+    readHistory: async (series: {
+      practiceId: string;
+      actorUserId: string;
+      scope: string;
+      operation: string;
+      operationInstance: string;
+      subjectId: string;
+      subjectSha256: string;
+    }) => {
+      return [...database.rows.values()]
+        .filter(
+          (row) =>
+            row.practiceId === series.practiceId &&
+            row.actorUserId === series.actorUserId &&
+            row.scope === series.scope &&
+            row.operation === series.operation &&
+            row.operationInstance === series.operationInstance &&
+            row.subjectId === series.subjectId &&
+            row.subjectSha256 === series.subjectSha256,
+        )
+        .sort(
+          (left, right) =>
+            Number(right.logicalAttempt) - Number(left.logicalAttempt),
+        )
+        .map((row) => ({
+          logicalAttempt: Number(row.logicalAttempt),
+          status: String(row.status),
+          failureCode:
+            typeof row.failureCode === "string" ? row.failureCode : null,
+          completedAt: row.completedAt instanceof Date ? row.completedAt : null,
+        }));
+    },
+  };
+}
+
+function resolveAttempt(
+  database: MemoryProviderDatabase,
+  requestStartedAt: Date,
+): Promise<number> {
+  return resolveTemplateTwinProviderLogicalAttempt(
+    {
+      practiceId: CONTEXT.practiceId,
+      actorUserId: CONTEXT.actorUserId,
+      scope: CONTEXT.scope,
+      operation: "L3_EXTRACT_ENTITIES",
+      subjectId: CONTEXT.subjectId,
+      subjectSha256: CONTEXT.subjectSha256,
+      requestStartedAt,
+    },
+    attemptSeriesDependencies(database),
+  );
+}
+
 async function errorCode(promise: Promise<unknown>): Promise<string | null> {
   try {
     await promise;
@@ -311,6 +606,185 @@ beforeEach(() => {
 });
 
 describe("Template Twin exact provider ownership runtime", () => {
+  it("reasserts exact LIVE compilation/certification authority and current patient tenancy", async () => {
+    const harness = currentLiveAuthorityDatabase();
+    await expect(
+      isTemplateTwinProviderAuthorityCurrent({
+        tx: harness.db,
+        context: CONTEXT,
+        mode: "LIVE",
+      }),
+    ).resolves.toBe(true);
+    const artifactQuery = harness.queries.find((query) =>
+      query.includes('FROM "template_twin_compiled_versions" compiled'),
+    );
+    expect(artifactQuery).toContain(
+      "template_twin_live_provider_compilation_is_valid",
+    );
+    expect(artifactQuery).toContain(
+      "compiled.\"certificationStatus\" = 'CERTIFIED'",
+    );
+    expect(artifactQuery).toContain(
+      'compiled."providerOwnershipSha256" IS NOT NULL',
+    );
+    expect(artifactQuery).toContain(
+      'source."providerOwnershipSha256" IS NOT NULL',
+    );
+    expect(artifactQuery).toContain('certification."certifiedById"');
+    expect(artifactQuery).toContain(
+      "certification.\"providerAuthorizationMode\" = 'LIVE'",
+    );
+    expect(artifactQuery).toContain(
+      'certification."providerAuthorizationAdmissionId" IS NULL',
+    );
+  });
+
+  it("requires complete platform MFA at the STATIC_ASSET provider fence", async () => {
+    const practiceAdmin = currentStaticAssetAuthorityDatabase();
+    await expect(
+      isTemplateTwinProviderAuthorityCurrent({
+        tx: practiceAdmin.db,
+        context: STATIC_ASSET_CONTEXT,
+        mode: "LIVE",
+      }),
+    ).resolves.toBe(true);
+
+    const incompletePlatform = currentStaticAssetAuthorityDatabase({
+      products: ["TRANSCRIBE_MD", "SUPER_ADMIN"],
+      platformMfaComplete: false,
+    });
+    await expect(
+      isTemplateTwinProviderAuthorityCurrent({
+        tx: incompletePlatform.db,
+        context: STATIC_ASSET_CONTEXT,
+        mode: "LIVE",
+      }),
+    ).resolves.toBe(false);
+
+    const completePlatform = currentStaticAssetAuthorityDatabase({
+      products: ["TRANSCRIBE_MD", "SUPER_ADMIN"],
+      platformMfaComplete: true,
+    });
+    await expect(
+      isTemplateTwinProviderAuthorityCurrent({
+        tx: completePlatform.db,
+        context: STATIC_ASSET_CONTEXT,
+        mode: "LIVE",
+      }),
+    ).resolves.toBe(true);
+
+    const actorSql = completePlatform.queries.find((query) =>
+      query.includes('FROM "users" actor'),
+    );
+    expect(actorSql).toContain('actor."mfaEnabled" = TRUE');
+    expect(actorSql).toContain("regexp_replace(");
+    expect(actorSql).toContain('actor."mfaSecret",');
+    expect(actorSql).toContain(POSTGRES_ECMASCRIPT_TRIM_WHITESPACE_CLASS);
+    expect(actorSql).toMatch(/\)\s*<> ''/u);
+    expect(actorSql).not.toContain('btrim(actor."mfaSecret")');
+    expect(actorSql).not.toContain("[[:space:]]");
+    expect(actorSql).toContain('actor."mfaVerifiedAt" <= CURRENT_TIMESTAMP');
+    expect(actorSql).toContain("FOR SHARE");
+  });
+
+  it("blocks an incomplete platform MFA actor before STATIC_ASSET provider egress", async () => {
+    const authority = currentStaticAssetAuthorityDatabase({
+      products: ["TRANSCRIBE_MD", "SUPER_ADMIN"],
+      platformMfaComplete: false,
+    });
+    const database = new MemoryProviderDatabase();
+    const invoke = vi.fn(async () => ({ facts: ["must not egress"] }));
+
+    await expect(
+      runWithTemplateTwinProviderOwnershipContextRaw(STATIC_ASSET_CONTEXT, () =>
+        runTemplateTwinOwnedProvider(
+          {
+            ...providerInput(invoke),
+            operation: "STATIC_ASSET_PRIVACY_SCAN",
+            operationVersion: "static-asset-privacy-scan-v1",
+          },
+          dependencies(database, {
+            mode: "LIVE",
+            authorityCurrent: () =>
+              isTemplateTwinProviderAuthorityCurrent({
+                tx: authority.db,
+                context: STATIC_ASSET_CONTEXT,
+                mode: "LIVE",
+              }),
+          }),
+        ),
+      ),
+    ).rejects.toMatchObject({
+      code: "TEMPLATE_TWIN_PROVIDER_AUTHORITY_REVOKED",
+    });
+    expect(invoke).not.toHaveBeenCalled();
+    expect(database.rows.size).toBe(1);
+    expect([...database.rows.values()][0]).toMatchObject({
+      status: "FAILED",
+      invocationCount: 0,
+      failureCode: "AUTHORITY_REVOKED_BEFORE_PROVIDER",
+    });
+  });
+
+  it.each([
+    ["cross-tenant patient", { practiceId: "practice-foreign" }],
+    ["deleted patient", { deletedAt: new Date() }],
+    ["reserved synthetic identity", { externalId: "SYNTHETIC-QA-ONLY" }],
+  ])("rejects a current LIVE visit with %s", async (_label, patient) => {
+    const harness = currentLiveAuthorityDatabase({ patient });
+    await expect(
+      isTemplateTwinProviderAuthorityCurrent({
+        tx: harness.db,
+        context: CONTEXT,
+        mode: "LIVE",
+      }),
+    ).resolves.toBe(false);
+  });
+
+  it("rejects a LIVE compilation whose exact certification/hash authority is no longer valid", async () => {
+    const harness = currentLiveAuthorityDatabase({ artifactAuthorized: false });
+    await expect(
+      isTemplateTwinProviderAuthorityCurrent({
+        tx: harness.db,
+        context: CONTEXT,
+        mode: "LIVE",
+      }),
+    ).resolves.toBe(false);
+  });
+
+  it.each([
+    ["revoked", { revokedAt: new Date("2026-07-20T00:00:00.000Z") }],
+    ["expired", { notExpired: false }],
+  ])(
+    "locks child then parent separately and rejects a %s synthetic parent",
+    async (_label, parent) => {
+      const harness = currentSyntheticVoiceAuthorityDatabase(parent);
+      await expect(
+        isTemplateTwinProviderAuthorityCurrent({
+          tx: harness.db,
+          context: SYNTHETIC_VOICE_CONTEXT,
+          mode: "SYNTHETIC_QA",
+        }),
+      ).resolves.toBe(false);
+
+      const childQuery = harness.queries.find((query) =>
+        query.includes(
+          'FROM "template_twin_synthetic_qa_admissions" admission',
+        ),
+      );
+      const parentQuery = harness.queries.find((query) =>
+        query.includes('FROM "template_twin_synthetic_qa_admissions" parent'),
+      );
+      expect(childQuery).toContain("FOR SHARE OF admission");
+      expect(childQuery).not.toContain("LEFT JOIN");
+      expect(childQuery).not.toContain("FOR SHARE OF admission, parent");
+      expect(parentQuery).toContain("FOR SHARE OF parent");
+      expect(harness.queries.indexOf(childQuery!)).toBeLessThan(
+        harness.queries.indexOf(parentQuery!),
+      );
+    },
+  );
+
   it("rejects synthetic-evidence transcription without an exact ownership context before egress", async () => {
     const transcriber = vi.fn(
       async (): Promise<TranscribeResult> => ({
@@ -888,12 +1362,285 @@ describe("Template Twin exact provider ownership runtime", () => {
     expect(await errorCode(run())).toBe(
       "TEMPLATE_TWIN_PROVIDER_OUTCOME_UNKNOWN",
     );
+    await expect(
+      resolveAttempt(database, new Date("2026-07-19T17:20:00.001Z")),
+    ).resolves.toBe(1);
     expect(invoke).toHaveBeenCalledOnce();
     expect([...database.rows.values()][0]).toMatchObject({
       status: "UNKNOWN_OUTCOME",
       invocationCount: 1,
     });
   });
+
+  it("advances only after a definite failure and collapses concurrent fresh retries onto one new owner", async () => {
+    const database = new MemoryProviderDatabase();
+    const failedInvoke = vi.fn(async () => {
+      throw new Error("synthetic deterministic provider failure");
+    });
+    const firstRun = () =>
+      runWithTemplateTwinProviderOwnershipContext(CONTEXT, () =>
+        runTemplateTwinOwnedProvider(
+          providerInput(failedInvoke),
+          dependencies(database, { mode: "DETERMINISTIC_MOCK" }),
+        ),
+      );
+
+    expect(await errorCode(firstRun())).toBe(
+      "TEMPLATE_TWIN_PROVIDER_EXECUTION_FAILED",
+    );
+    expect(await errorCode(firstRun())).toBe(
+      "TEMPLATE_TWIN_PROVIDER_EXECUTION_FAILED",
+    );
+    expect(failedInvoke).toHaveBeenCalledOnce();
+    expect([...database.rows.values()][0]).toMatchObject({
+      logicalAttempt: 1,
+      status: "FAILED",
+      invocationCount: 1,
+      failureCode: "PROVIDER_INVOCATION_FAILED",
+    });
+    await expect(
+      resolveAttempt(database, new Date("2026-07-19T17:19:59.999Z")),
+    ).resolves.toBe(1);
+
+    const freshRequestStartedAt = new Date("2026-07-19T17:20:00.001Z");
+    await expect(
+      Promise.all([
+        resolveAttempt(database, freshRequestStartedAt),
+        resolveAttempt(database, freshRequestStartedAt),
+      ]),
+    ).resolves.toEqual([2, 2]);
+
+    let release!: () => void;
+    let started!: () => void;
+    const providerStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const providerReleased = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const freshInvoke = vi.fn(async () => {
+      started();
+      await providerReleased;
+      return { facts: ["fresh deterministic result"] };
+    });
+    const freshContext = { ...CONTEXT, logicalAttempt: 2 };
+    const freshRun = () =>
+      runWithTemplateTwinProviderOwnershipContext(freshContext, () =>
+        runTemplateTwinOwnedProvider(
+          providerInput(freshInvoke),
+          dependencies(database, { mode: "DETERMINISTIC_MOCK" }),
+        ),
+      );
+    const firstFresh = freshRun();
+    await providerStarted;
+    const duplicateFresh = freshRun();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    release();
+
+    await expect(Promise.all([firstFresh, duplicateFresh])).resolves.toEqual([
+      { facts: ["fresh deterministic result"] },
+      { facts: ["fresh deterministic result"] },
+    ]);
+    expect(freshInvoke).toHaveBeenCalledOnce();
+    expect([...database.rows.values()]).toHaveLength(2);
+    expect(
+      [...database.rows.values()].find((row) => row.logicalAttempt === 2),
+    ).toMatchObject({ status: "SUCCEEDED", invocationCount: 1 });
+  });
+
+  it.each([
+    "ROLLOUT_REVOKED",
+    "ROLLOUT_REVOKED_AFTER_PROVIDER",
+    "AUTHORITY_REVOKED_BEFORE_PROVIDER",
+    "AUTHORITY_REVOKED_AFTER_PROVIDER",
+  ])("does not advance a local authority failure %s", async (failureCode) => {
+    await expect(
+      resolveTemplateTwinProviderLogicalAttempt(
+        {
+          practiceId: CONTEXT.practiceId,
+          actorUserId: CONTEXT.actorUserId,
+          scope: CONTEXT.scope,
+          operation: "L3_EXTRACT_ENTITIES",
+          subjectId: CONTEXT.subjectId,
+          subjectSha256: CONTEXT.subjectSha256,
+          requestStartedAt: new Date("2026-07-19T17:20:00.001Z"),
+        },
+        {
+          readHistory: async () => [
+            {
+              logicalAttempt: 1,
+              status: "FAILED",
+              failureCode,
+              completedAt: new Date("2026-07-19T17:20:00.000Z"),
+            },
+          ],
+        },
+      ),
+    ).resolves.toBe(1);
+  });
+
+  it.each(["RESERVED", "IN_FLIGHT"])(
+    "reuses a valid nonterminal %s attempt without advancing",
+    async (status) => {
+      await expect(
+        resolveTemplateTwinProviderLogicalAttempt(
+          {
+            practiceId: CONTEXT.practiceId,
+            actorUserId: CONTEXT.actorUserId,
+            scope: CONTEXT.scope,
+            operation: "L3_EXTRACT_ENTITIES",
+            subjectId: CONTEXT.subjectId,
+            subjectSha256: CONTEXT.subjectSha256,
+            requestStartedAt: new Date("2026-07-19T17:20:00.001Z"),
+          },
+          {
+            readHistory: async () => [
+              {
+                logicalAttempt: 1,
+                status,
+                failureCode: null,
+                completedAt: null,
+              },
+            ],
+          },
+        ),
+      ).resolves.toBe(1);
+    },
+  );
+
+  it.each([
+    [
+      "duplicate attempt",
+      [
+        {
+          logicalAttempt: 1,
+          status: "FAILED",
+          failureCode: "PROVIDER_INVOCATION_FAILED",
+          completedAt: new Date("2026-07-19T17:20:00.000Z"),
+        },
+        {
+          logicalAttempt: 1,
+          status: "FAILED",
+          failureCode: "PROVIDER_INVOCATION_FAILED",
+          completedAt: new Date("2026-07-19T17:19:00.000Z"),
+        },
+      ],
+    ],
+    [
+      "attempt gap",
+      [
+        {
+          logicalAttempt: 2,
+          status: "FAILED",
+          failureCode: "PROVIDER_INVOCATION_FAILED",
+          completedAt: new Date("2026-07-19T17:20:00.000Z"),
+        },
+      ],
+    ],
+    [
+      "unknown status",
+      [
+        {
+          logicalAttempt: 1,
+          status: "CORRUPT",
+          failureCode: null,
+          completedAt: null,
+        },
+      ],
+    ],
+    [
+      "failed terminal row without completion",
+      [
+        {
+          logicalAttempt: 1,
+          status: "FAILED",
+          failureCode: "PROVIDER_INVOCATION_FAILED",
+          completedAt: null,
+        },
+      ],
+    ],
+    [
+      "failed terminal row with invalid completion",
+      [
+        {
+          logicalAttempt: 1,
+          status: "FAILED",
+          failureCode: "PROVIDER_INVOCATION_FAILED",
+          completedAt: new Date("invalid"),
+        },
+      ],
+    ],
+    [
+      "succeeded terminal row without completion",
+      [
+        {
+          logicalAttempt: 1,
+          status: "SUCCEEDED",
+          failureCode: null,
+          completedAt: null,
+        },
+      ],
+    ],
+    [
+      "unknown terminal row without failure identity",
+      [
+        {
+          logicalAttempt: 1,
+          status: "UNKNOWN_OUTCOME",
+          failureCode: null,
+          completedAt: new Date("2026-07-19T17:20:00.000Z"),
+        },
+      ],
+    ],
+    [
+      "nonterminal row with completion",
+      [
+        {
+          logicalAttempt: 1,
+          status: "IN_FLIGHT",
+          failureCode: null,
+          completedAt: new Date("2026-07-19T17:20:00.000Z"),
+        },
+      ],
+    ],
+    [
+      "new attempt after nonterminal predecessor",
+      [
+        {
+          logicalAttempt: 2,
+          status: "FAILED",
+          failureCode: "PROVIDER_INVOCATION_FAILED",
+          completedAt: new Date("2026-07-19T17:20:00.000Z"),
+        },
+        {
+          logicalAttempt: 1,
+          status: "IN_FLIGHT",
+          failureCode: null,
+          completedAt: null,
+        },
+      ],
+    ],
+  ])(
+    "fails closed on malformed provider attempt history: %s",
+    async (_label, history) => {
+      await expect(
+        resolveTemplateTwinProviderLogicalAttempt(
+          {
+            practiceId: CONTEXT.practiceId,
+            actorUserId: CONTEXT.actorUserId,
+            scope: CONTEXT.scope,
+            operation: "L3_EXTRACT_ENTITIES",
+            subjectId: CONTEXT.subjectId,
+            subjectSha256: CONTEXT.subjectSha256,
+            requestStartedAt: new Date("2026-07-19T17:20:00.001Z"),
+          },
+          { readHistory: async () => history },
+        ),
+      ).rejects.toMatchObject({
+        code: "TEMPLATE_TWIN_PROVIDER_CONTEXT_INVALID",
+      });
+    },
+  );
 
   it("terminalizes an ambiguous live outcome despite concurrent authority revocation and never replays it", async () => {
     const database = new MemoryProviderDatabase();
@@ -983,8 +1730,15 @@ describe("Template Twin exact provider ownership runtime", () => {
     "visit deletion",
     "visit reassignment",
     "visit input-mode drift",
+    "patient tenant or lifecycle drift",
+    "reserved patient identity drift",
     "artifact lineage drift",
+    "compiled/source ownership hash drift",
+    "certification actor, mode, or admission drift",
+    "canonical compilation receipt drift",
     "synthetic admission revocation",
+    "synthetic run, attempt, or worker-claim drift",
+    "synthetic status, phase, heartbeat, or lease drift",
   ])("blocks %s before provider egress", async () => {
     const database = new MemoryProviderDatabase();
     const invoke = vi.fn(async () => ({ facts: ["must not egress"] }));
@@ -1014,8 +1768,15 @@ describe("Template Twin exact provider ownership runtime", () => {
     "visit deletion",
     "visit reassignment",
     "visit input-mode drift",
+    "patient tenant or lifecycle drift",
+    "reserved patient identity drift",
     "artifact lineage drift",
+    "compiled/source ownership hash drift",
+    "certification actor, mode, or admission drift",
+    "canonical compilation receipt drift",
     "synthetic admission revocation",
+    "synthetic run, attempt, or worker-claim drift",
+    "synthetic status, phase, heartbeat, or lease drift",
   ])("rejects %s after provider return before success admission", async () => {
     const database = new MemoryProviderDatabase();
     const invoke = vi.fn(async () => ({ facts: ["unadmitted result"] }));
@@ -1070,7 +1831,16 @@ describe("Template Twin exact provider ownership runtime", () => {
     expect(invoke).toHaveBeenCalledOnce();
   });
 
-  it("rejects a committed result after current actor authority is revoked without new egress", async () => {
+  it.each([
+    "actor lifecycle drift",
+    "patient tenant or lifecycle drift",
+    "reserved patient identity drift",
+    "compiled/source ownership hash drift",
+    "certification actor, mode, or admission drift",
+    "canonical compilation receipt drift",
+    "synthetic run, attempt, or worker-claim drift",
+    "synthetic status, phase, heartbeat, or lease drift",
+  ])("rejects a committed result after %s without new egress", async () => {
     const database = new MemoryProviderDatabase();
     const invoke = vi.fn(async () => ({ facts: ["exact"] }));
     await runWithTemplateTwinProviderOwnershipContext(CONTEXT, () =>

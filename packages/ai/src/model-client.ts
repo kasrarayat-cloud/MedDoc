@@ -59,6 +59,13 @@ export interface CompleteArgs<T> extends AiLogContext {
     name: string;
     description: string;
   };
+  /** Server-owned authorization fence invoked immediately before each real
+   * provider attempt. Provider wrappers use this to revalidate current visit
+   * authority across schema retries; mock and synthetic paths never invoke it. */
+  beforeProviderAttempt?: () => Promise<void>;
+  /** Matching server-owned fence invoked after each real attempt, including
+   * malformed responses and provider errors, before retry or return. */
+  afterProviderAttempt?: () => Promise<void>;
 }
 
 export interface CompleteTextArgs extends AiLogContext {
@@ -72,6 +79,23 @@ export interface CompleteTextArgs extends AiLogContext {
   /** Durable server-generated execution key. Provider support is
    * best-effort; the application ownership ledger remains authoritative. */
   idempotencyKey?: string;
+  /** Server-owned authorization fence invoked immediately before real egress. */
+  beforeProviderAttempt?: () => Promise<void>;
+  /** Matching fence invoked after the real attempt before return or throw. */
+  afterProviderAttempt?: () => Promise<void>;
+}
+
+async function runAuthorizedProviderAttempt<T>(input: {
+  before?: () => Promise<void>;
+  after?: () => Promise<void>;
+  invoke: () => Promise<T>;
+}): Promise<T> {
+  await input.before?.();
+  try {
+    return await input.invoke();
+  } finally {
+    await input.after?.();
+  }
 }
 
 export const modelClient = {
@@ -99,13 +123,23 @@ export const modelClient = {
       );
     }
     const retryEnabled = args.retryOnSchemaFail ?? true;
+    const { beforeProviderAttempt, afterProviderAttempt, ...providerArgs } =
+      args;
     let retryContext: string | undefined;
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
-        return await anthropicComplete<T>({
-          ...args,
-          model: args.model,
-          retryContext,
+        return await runAuthorizedProviderAttempt({
+          before: beforeProviderAttempt,
+          after: afterProviderAttempt,
+          invoke: () =>
+            anthropicComplete<T>({
+              ...providerArgs,
+              model: providerArgs.model,
+              retryContext,
+              disableTransportRetries:
+                beforeProviderAttempt !== undefined ||
+                afterProviderAttempt !== undefined,
+            }),
         });
       } catch (err) {
         // FIND-P1-010 (2026-05-14): prefer instanceof over message scraping.
@@ -167,20 +201,30 @@ export const modelClient = {
         `completeText() with provider=${args.provider} is not wired yet — T-M4 only uses Anthropic.`,
       );
     }
-    return anthropicCompleteText({
-      practiceId: args.practiceId,
-      visitId: args.visitId,
-      // Phase 6F — userId was being silently dropped here, which made
-      // every api_usage_events row for completeText carry NULL userId
-      // even after the worker started passing userId in.
-      userId: args.userId ?? null,
-      purpose: args.purpose,
-      model: args.model,
-      system: args.system,
-      user: args.user,
-      maxTokens: args.maxTokens,
-      temperature: args.temperature,
-      idempotencyKey: args.idempotencyKey,
+    const { beforeProviderAttempt, afterProviderAttempt, ...providerArgs } =
+      args;
+    return runAuthorizedProviderAttempt({
+      before: beforeProviderAttempt,
+      after: afterProviderAttempt,
+      invoke: () =>
+        anthropicCompleteText({
+          practiceId: providerArgs.practiceId,
+          visitId: providerArgs.visitId,
+          // Phase 6F — userId was being silently dropped here, which made
+          // every api_usage_events row for completeText carry NULL userId
+          // even after the worker started passing userId in.
+          userId: providerArgs.userId ?? null,
+          purpose: providerArgs.purpose,
+          model: providerArgs.model,
+          system: providerArgs.system,
+          user: providerArgs.user,
+          maxTokens: providerArgs.maxTokens,
+          temperature: providerArgs.temperature,
+          idempotencyKey: providerArgs.idempotencyKey,
+          disableTransportRetries:
+            beforeProviderAttempt !== undefined ||
+            afterProviderAttempt !== undefined,
+        }),
     });
   },
 };

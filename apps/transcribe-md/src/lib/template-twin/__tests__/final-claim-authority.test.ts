@@ -1,11 +1,45 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  lockAndAssertActiveTemplateTwinPractice,
+  lockAndAssertCurrentTemplateTwinPatient,
   lockAndAssertCurrentTemplateTwinPhysician,
   TemplateTwinCurrentPhysicianAuthorityError,
 } from "../final-claim-authority";
 
 describe("Template Twin current-physician final claim", () => {
+  it("locks exactly one active practice before multi-statement authority work", async () => {
+    const query = vi.fn().mockResolvedValue([{ id: "practice-1" }]);
+
+    await expect(
+      lockAndAssertActiveTemplateTwinPractice({
+        tx: { $queryRaw: query },
+        practiceId: "practice-1",
+      }),
+    ).resolves.toBeUndefined();
+
+    const text = query.mock.calls[0]?.[0]?.strings?.join(" ") ?? "";
+    expect(text).toContain('FROM "practices"');
+    expect(text).toContain('practice."isActive" = true');
+    expect(text).toContain("FOR UPDATE");
+  });
+
+  it.each([
+    { rows: [] },
+    { rows: [{ id: "other-practice" }] },
+    { rows: [{ id: "practice-1" }, { id: "practice-1" }] },
+  ])(
+    "fails closed when the active-practice lock is absent, mismatched, or ambiguous",
+    async ({ rows }) => {
+      await expect(
+        lockAndAssertActiveTemplateTwinPractice({
+          tx: { $queryRaw: vi.fn().mockResolvedValue(rows) },
+          practiceId: "practice-1",
+        }),
+      ).rejects.toBeInstanceOf(TemplateTwinCurrentPhysicianAuthorityError);
+    },
+  );
+
   it("accepts exactly one locked current physician row", async () => {
     const query = vi
       .fn()
@@ -49,6 +83,48 @@ describe("Template Twin current-physician final claim", () => {
         lockAndAssertCurrentTemplateTwinPhysician({
           tx: { $queryRaw: vi.fn().mockResolvedValue(rows) },
           actor: { userId: "doctor-1", practiceId: "practice-1" },
+        }),
+      ).rejects.toBeInstanceOf(TemplateTwinCurrentPhysicianAuthorityError);
+    },
+  );
+
+  it("accepts exactly one locked patient in the actor practice", async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValue([{ id: "patient-1", practiceId: "practice-1" }]);
+
+    await expect(
+      lockAndAssertCurrentTemplateTwinPatient({
+        tx: { $queryRaw: query },
+        patientId: "patient-1",
+        practiceId: "practice-1",
+      }),
+    ).resolves.toBeUndefined();
+
+    const text = query.mock.calls[0]?.[0]?.strings?.join(" ") ?? "";
+    expect(text).toContain('FROM "transcribe_md_patients" patient');
+    expect(text).toContain('patient."practiceId"');
+    expect(text).toContain("FOR UPDATE");
+  });
+
+  it.each([
+    { rows: [] },
+    { rows: [{ id: "patient-1", practiceId: "other-practice" }] },
+    { rows: [{ id: "other-patient", practiceId: "practice-1" }] },
+    {
+      rows: [
+        { id: "patient-1", practiceId: "practice-1" },
+        { id: "patient-1", practiceId: "practice-1" },
+      ],
+    },
+  ])(
+    "fails closed when the patient lock is absent, moved, mismatched, or ambiguous",
+    async ({ rows }) => {
+      await expect(
+        lockAndAssertCurrentTemplateTwinPatient({
+          tx: { $queryRaw: vi.fn().mockResolvedValue(rows) },
+          patientId: "patient-1",
+          practiceId: "practice-1",
         }),
       ).rejects.toBeInstanceOf(TemplateTwinCurrentPhysicianAuthorityError);
     },

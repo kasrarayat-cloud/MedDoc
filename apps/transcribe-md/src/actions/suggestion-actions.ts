@@ -49,8 +49,10 @@ import prisma from "@meddoc/db";
 import { Prisma, TranscribeVisitStatus } from "@prisma/client";
 import { requireSession } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
+import { currentClinicalVisitActorWhere } from "@/lib/clinical-visit-authority";
 import { computeDisplayedEmCode } from "@/lib/em-coding/displayed-level";
-import { hasTemplateTwinProvenance } from "@/lib/em-coding/template-twin-boundary";
+import { hasDurableTemplateTwinVisitProvenance } from "@/lib/template-twin/durable-visit-provenance";
+import { TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE } from "@/lib/template-twin/durable-visit-exclusion";
 import {
   renumberOrderedLists,
   stripEmptySectionPlaceholder,
@@ -62,11 +64,12 @@ import {
   type EmPendingChange,
 } from "@/lib/em-pending-change";
 import { invalidateTemplateTwinAfterSoapEdit } from "@/lib/template-twin/soap-binding";
-import { pinTemplateTwinStagingQaMutation } from "@/lib/template-twin/staging-qa-mutation";
 import {
-  TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
-  type TemplateTwinStagingQaRunGuardRow,
-} from "@/lib/template-twin/staging-qa-visit-guard";
+  hasDurableTemplateTwinClinicalMutationProvenance,
+  loadTemplateTwinClinicalMutationAdmissionTarget,
+  lockAndAssertOrdinaryClinicalMutation,
+  TemplateTwinClinicalMutationAuthorizationError,
+} from "@/lib/template-twin/visit-mutation-authority";
 
 /** Mirror of the verifier's SuggestedClaim — duplicated here (rather than
  *  imported from the worker layer) so the server-action bundle never pulls
@@ -199,9 +202,13 @@ function appendClaimToSoap(
 type LoadedVisit = {
   id: string;
   userId: string;
+  patientId: string;
+  noteTemplateId: string | null;
   status: TranscribeVisitStatus;
+  signedAt: Date | null;
   deletedAt: Date | null;
   archivedAt: Date | null;
+  updatedAt: Date;
   soapFinal: string | null;
   soapVersion: number;
   suggestedClaims: unknown;
@@ -209,10 +216,15 @@ type LoadedVisit = {
   rxDrafts: unknown;
   cptCodes: unknown;
   emPendingChange: unknown;
-  templateTwinSyntheticQaRun: TemplateTwinStagingQaRunGuardRow | null;
-  noteTemplate: { templateKind: string } | null;
+  templateTwinSyntheticQaRun: { id: string } | null;
+  patient: { externalId: string | null };
+  noteTemplate: {
+    templateKind: string;
+    templateTwinCompiledVersion: { id: string } | null;
+  } | null;
   templateTwinFill: { id: string } | null;
   templateTwinSyntheticQaAdmission: { id: string } | null;
+  templateTwinProviderExecutions: Array<{ id: string }>;
 };
 
 /** Shared auth + ownership + lifecycle gate (mirrors actions/soap.ts). */
@@ -220,14 +232,35 @@ async function loadVisitForSuggestion(
   visitId: string,
   userId: string,
 ): Promise<{ visit: LoadedVisit } | { error: string }> {
+  const authorityTarget = await loadTemplateTwinClinicalMutationAdmissionTarget(
+    { visitId, actorUserId: userId },
+  );
+  if (!authorityTarget || authorityTarget.userId !== userId) {
+    return { error: "Visit not found." };
+  }
+  // Suggestions can invoke the E/M model and reinterpret clinical evidence.
+  // No generic suggestion workflow is supported for a durable Twin, so reject
+  // from immutable PHI-minimal lineage before SOAP or suggestions are read.
+  if (hasDurableTemplateTwinClinicalMutationProvenance(authorityTarget)) {
+    return { error: "Visit not found." };
+  }
   const visit = (await prisma.transcribeVisit.findUnique({
-    where: { id: visitId },
+    where: {
+      id: visitId,
+      ...currentClinicalVisitActorWhere(userId),
+      updatedAt: authorityTarget.updatedAt,
+      ...TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE,
+    },
     select: {
       id: true,
       userId: true,
+      patientId: true,
+      noteTemplateId: true,
       status: true,
+      signedAt: true,
       deletedAt: true,
       archivedAt: true,
+      updatedAt: true,
       soapFinal: true,
       soapVersion: true,
       suggestedClaims: true,
@@ -238,22 +271,33 @@ async function loadVisitForSuggestion(
       rxDrafts: true,
       cptCodes: true,
       emPendingChange: true,
-      templateTwinSyntheticQaRun: {
-        select: TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
+      templateTwinSyntheticQaRun: { select: { id: true } },
+      patient: { select: { externalId: true } },
+      noteTemplate: {
+        select: {
+          templateKind: true,
+          templateTwinCompiledVersion: { select: { id: true } },
+        },
       },
-      noteTemplate: { select: { templateKind: true } },
       templateTwinFill: { select: { id: true } },
       templateTwinSyntheticQaAdmission: { select: { id: true } },
+      templateTwinProviderExecutions: { select: { id: true }, take: 1 },
     },
   })) as LoadedVisit | null;
 
   if (!visit || visit.userId !== userId) {
     return { error: "Visit not found." };
   }
+  if (hasDurableTemplateTwinVisitProvenance(visit)) {
+    return { error: "Visit not found." };
+  }
   if (visit.deletedAt !== null || visit.archivedAt !== null) {
     return { error: "Visit is no longer active. Restore it first." };
   }
-  if (visit.status === TranscribeVisitStatus.SIGNED) {
+  if (
+    visit.status === TranscribeVisitStatus.SIGNED ||
+    visit.signedAt !== null
+  ) {
     return { error: "Signed notes cannot be changed." };
   }
   if (visit.status !== TranscribeVisitStatus.READY) {
@@ -391,24 +435,6 @@ export async function adoptSuggestionAction(
     if ("error" in loaded) return { ok: false, error: loaded.error };
     const { visit } = loaded;
 
-    try {
-      const stagingQaClaim = await pinTemplateTwinStagingQaMutation({
-        visitId: visit.id,
-        userId: session.user.id,
-        run: visit.templateTwinSyntheticQaRun,
-      });
-      // This generic action can invoke the E/M model while evaluating a
-      // suggestion. Synthetic QA visits are provider-isolated and therefore
-      // never enter this surface; their guided workflow uses the bounded
-      // Template Twin review/correction pipeline instead.
-      if (stagingQaClaim) return { ok: false, error: "Visit not found." };
-    } catch {
-      return { ok: false, error: "Visit not found." };
-    }
-    if (hasTemplateTwinProvenance(visit)) {
-      return { ok: false, error: "Visit not found." };
-    }
-
     const claims = parseClaims(visit.suggestedClaims);
     if (!claims || parsed.data.index >= claims.length) {
       return { ok: false, error: "Suggestion not found." };
@@ -424,6 +450,27 @@ export async function adoptSuggestionAction(
       claim.text,
     );
 
+    // The ordinary classification must still be linearizable immediately
+    // before provider egress. A durable relation can be committed after the
+    // PHI-minimal admission read without changing any bytes already loaded.
+    try {
+      await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        await lockAndAssertOrdinaryClinicalMutation({
+          tx,
+          visitId: visit.id,
+          actorUserId: session.user.id,
+          admittedVisitUpdatedAt: visit.updatedAt,
+          admittedPatientId: visit.patientId,
+          admittedNoteTemplateId: visit.noteTemplateId,
+        });
+      });
+    } catch (error) {
+      if (error instanceof TemplateTwinClinicalMutationAuthorizationError) {
+        return { ok: false, error: "The visit changed. Reload and try again." };
+      }
+      throw error;
+    }
+
     // E/M visible-confirm (prod smoke #311): did THIS adoption change the
     // computed level? Scored BEFORE the write so the pending-change record
     // lands in the SAME atomic update as the note — a crash between "note
@@ -438,6 +485,28 @@ export async function adoptSuggestionAction(
       rxDrafts: visit.rxDrafts,
       cptCodes: visit.cptCodes,
     });
+
+    // Re-check immediately after provider/cache return, before interpreting
+    // or persisting that result. The final transaction below repeats this
+    // fence so both the egress window and the post-return/write window fail
+    // closed if the visit acquires durable Template Twin provenance.
+    try {
+      await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        await lockAndAssertOrdinaryClinicalMutation({
+          tx,
+          visitId: visit.id,
+          actorUserId: session.user.id,
+          admittedVisitUpdatedAt: visit.updatedAt,
+          admittedPatientId: visit.patientId,
+          admittedNoteTemplateId: visit.noteTemplateId,
+        });
+      });
+    } catch (error) {
+      if (error instanceof TemplateTwinClinicalMutationAuthorizationError) {
+        return { ok: false, error: "The visit changed. Reload and try again." };
+      }
+      throw error;
+    }
     const priorPending = unacknowledgedEmChange(visit.emPendingChange);
     const emPendingWrite = mergeEmPendingChange(
       priorPending,
@@ -450,6 +519,14 @@ export async function adoptSuggestionAction(
     // means a section save (or another adopt) landed in between.
     const result = await prisma.$transaction(
       async (tx: Prisma.TransactionClient) => {
+        await lockAndAssertOrdinaryClinicalMutation({
+          tx,
+          visitId: visit.id,
+          actorUserId: session.user.id,
+          admittedVisitUpdatedAt: visit.updatedAt,
+          admittedPatientId: visit.patientId,
+          admittedNoteTemplateId: visit.noteTemplateId,
+        });
         const updated = await tx.transcribeVisit.updateMany({
           // status:READY too (auditor WARN-1): the LLM-scoring window between
           // this action's READY check and its write can straddle a concurrent
@@ -457,8 +534,18 @@ export async function adoptSuggestionAction(
           // mutate it or deposit an unacknowledgeable emPendingChange.
           where: {
             id: visit.id,
+            userId: session.user.id,
             soapVersion: visit.soapVersion,
             status: TranscribeVisitStatus.READY,
+            deletedAt: null,
+            archivedAt: null,
+            signedAt: null,
+            updatedAt: visit.updatedAt,
+            soapFinal: visit.soapFinal,
+            suggestedClaims: {
+              equals: visit.suggestedClaims as Prisma.InputJsonValue,
+            },
+            ...TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE,
           },
           data: {
             soapFinal: newSoap,
@@ -555,20 +642,6 @@ export async function dismissSuggestionAction(
     if ("error" in loaded) return { ok: false, error: loaded.error };
     const { visit } = loaded;
 
-    try {
-      const stagingQaClaim = await pinTemplateTwinStagingQaMutation({
-        visitId: visit.id,
-        userId: session.user.id,
-        run: visit.templateTwinSyntheticQaRun,
-      });
-      if (stagingQaClaim) return { ok: false, error: "Visit not found." };
-    } catch {
-      return { ok: false, error: "Visit not found." };
-    }
-    if (hasTemplateTwinProvenance(visit)) {
-      return { ok: false, error: "Visit not found." };
-    }
-
     const claims = parseClaims(visit.suggestedClaims);
     if (!claims || parsed.data.index >= claims.length) {
       return { ok: false, error: "Suggestion not found." };
@@ -603,18 +676,52 @@ export async function dismissSuggestionAction(
 
     // updateMany + status:READY (auditor WARN-1): a dismiss racing the
     // sign transition must miss the signed row entirely.
-    const dismissResult = await prisma.transcribeVisit.updateMany({
-      where: { id: visit.id, status: TranscribeVisitStatus.READY },
-      data: {
-        suggestedClaims:
-          remaining.length > 0
-            ? (remaining as unknown as Prisma.InputJsonValue)
-            : Prisma.DbNull,
-        ...(emPendingWrite !== undefined
-          ? { emPendingChange: emPendingWrite }
-          : {}),
-      },
-    });
+    let dismissResult: { count: number };
+    try {
+      dismissResult = await prisma.$transaction(
+        async (tx: Prisma.TransactionClient) => {
+          await lockAndAssertOrdinaryClinicalMutation({
+            tx,
+            visitId: visit.id,
+            actorUserId: session.user.id,
+            admittedVisitUpdatedAt: visit.updatedAt,
+            admittedPatientId: visit.patientId,
+            admittedNoteTemplateId: visit.noteTemplateId,
+          });
+          return tx.transcribeVisit.updateMany({
+            where: {
+              id: visit.id,
+              userId: session.user.id,
+              status: TranscribeVisitStatus.READY,
+              deletedAt: null,
+              archivedAt: null,
+              signedAt: null,
+              updatedAt: visit.updatedAt,
+              soapFinal: visit.soapFinal,
+              soapVersion: visit.soapVersion,
+              suggestedClaims: {
+                equals: visit.suggestedClaims as Prisma.InputJsonValue,
+              },
+              ...TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE,
+            },
+            data: {
+              suggestedClaims:
+                remaining.length > 0
+                  ? (remaining as unknown as Prisma.InputJsonValue)
+                  : Prisma.DbNull,
+              ...(emPendingWrite !== undefined
+                ? { emPendingChange: emPendingWrite }
+                : {}),
+            },
+          });
+        },
+      );
+    } catch (error) {
+      if (error instanceof TemplateTwinClinicalMutationAuthorizationError) {
+        return { ok: false, error: "The visit changed. Reload and try again." };
+      }
+      throw error;
+    }
     if (dismissResult.count === 0) {
       return {
         ok: false,

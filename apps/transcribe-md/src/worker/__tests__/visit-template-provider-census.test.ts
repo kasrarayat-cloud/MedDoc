@@ -14,11 +14,13 @@ const ordinary = {
   id: "ordinary-v1",
   version: 1,
   templateKind: "structured",
+  templateTwinCompiledVersion: null,
 };
 const twin = {
   id: "twin-v2",
   version: 2,
   templateKind: "template_twin_docx",
+  templateTwinCompiledVersion: { id: "compiled-v2" },
 };
 const ordinaryProvenance = {
   patient: { externalId: null },
@@ -51,6 +53,7 @@ describe("visit template provider census", () => {
     expect(preflight).toContain("templateTwinSyntheticQaRun:");
     expect(preflight).toContain("templateTwinSyntheticQaAdmission:");
     expect(preflight).toContain("templateTwinProviderExecutions:");
+    expect(preflight).toContain("templateTwinCompiledVersion:");
     expect(preflight).toContain("durableProvenance: visit");
     expect(preflight.indexOf("durableProvenance: visit")).toBeLessThan(
       preflight.indexOf("processVisitPipelineCore(job"),
@@ -72,7 +75,7 @@ describe("visit template provider census", () => {
   });
 
   it("pins an ordinary preflight result even when the active template becomes a Twin before L4", async () => {
-    let active = ordinary;
+    let active: typeof ordinary | typeof twin = ordinary;
     const resolve = vi.fn(async () => ({
       template: active,
       templateTwinRolloutToken:
@@ -82,6 +85,7 @@ describe("visit template provider census", () => {
     const decision = await resolveVisitTemplateProviderCensus({
       runtimeEnabled: true,
       pinnedOrdinary: false,
+      syntheticQaContextActive: false,
       durableProvenance: ordinaryProvenance,
       resolve,
     });
@@ -108,6 +112,7 @@ describe("visit template provider census", () => {
       resolveVisitTemplateProviderCensus({
         runtimeEnabled: true,
         pinnedOrdinary: false,
+        syntheticQaContextActive: false,
         durableProvenance: ordinaryProvenance,
         resolve,
       }),
@@ -120,6 +125,7 @@ describe("visit template provider census", () => {
     const decision = await resolveVisitTemplateProviderCensus({
       runtimeEnabled: true,
       pinnedOrdinary: false,
+      syntheticQaContextActive: false,
       durableProvenance: ordinaryProvenance,
       resolve: async () => ({
         template: { ...mutable },
@@ -144,6 +150,7 @@ describe("visit template provider census", () => {
       resolveVisitTemplateProviderCensus({
         runtimeEnabled: false,
         pinnedOrdinary: false,
+        syntheticQaContextActive: false,
         durableProvenance: ordinaryProvenance,
         resolve,
       }),
@@ -152,6 +159,23 @@ describe("visit template provider census", () => {
   });
 
   it.each([
+    [
+      "compiled lineage after mutable kind drift",
+      {
+        ...ordinaryProvenance,
+        noteTemplate: {
+          ...ordinary,
+          templateTwinCompiledVersion: { id: "compiled-drift" },
+        },
+      },
+    ],
+    [
+      "missing patient relation",
+      {
+        ...ordinaryProvenance,
+        patient: null,
+      },
+    ],
     [
       "reserved synthetic patient-only",
       {
@@ -203,6 +227,7 @@ describe("visit template provider census", () => {
         resolveVisitTemplateProviderCensus({
           runtimeEnabled: true,
           pinnedOrdinary: false,
+          syntheticQaContextActive: false,
           durableProvenance,
           resolve,
         }),
@@ -225,10 +250,11 @@ describe("visit template provider census", () => {
         resolveVisitTemplateProviderCensus({
           runtimeEnabled,
           pinnedOrdinary: false,
+          syntheticQaContextActive: false,
           durableProvenance: {
             ...ordinaryProvenance,
             patient: { externalId: "SYNTHETIC-QA-ONLY" },
-            noteTemplate: null,
+            noteTemplate: twin,
           },
           resolve,
         }),
@@ -238,6 +264,30 @@ describe("visit template provider census", () => {
       expect(resolve).not.toHaveBeenCalled();
     },
   );
+
+  it("admits an exact synthetic context only with reserved patient, run, admission, Twin pin, and rollout", async () => {
+    await expect(
+      resolveVisitTemplateProviderCensus({
+        runtimeEnabled: true,
+        pinnedOrdinary: false,
+        syntheticQaContextActive: true,
+        durableProvenance: {
+          ...twinProvenance,
+          patient: { externalId: "SYNTHETIC-QA-ONLY" },
+          templateTwinSyntheticQaRun: { id: "run-1" },
+          templateTwinSyntheticQaAdmission: { id: "admission-1" },
+        },
+        resolve: async () => ({
+          template: twin,
+          templateTwinRolloutToken: { generation: 5 },
+        }),
+      }),
+    ).resolves.toEqual({
+      kind: "RESOLVED_TEMPLATE_TWIN",
+      template: twin,
+      rolloutToken: { generation: 5 },
+    });
+  });
 
   it("fails a durable Twin closed when the active resolver returns an ordinary or different template", async () => {
     const resolve = vi.fn(async () => ({
@@ -249,6 +299,7 @@ describe("visit template provider census", () => {
       resolveVisitTemplateProviderCensus({
         runtimeEnabled: true,
         pinnedOrdinary: false,
+        syntheticQaContextActive: false,
         durableProvenance: twinProvenance,
         resolve,
       }),
@@ -265,6 +316,7 @@ describe("visit template provider census", () => {
       resolveVisitTemplateProviderCensus({
         runtimeEnabled: false,
         pinnedOrdinary: false,
+        syntheticQaContextActive: false,
         durableProvenance: twinProvenance,
         resolve,
       }),
@@ -279,6 +331,7 @@ describe("visit template provider census", () => {
       resolveVisitTemplateProviderCensus({
         runtimeEnabled: true,
         pinnedOrdinary: false,
+        syntheticQaContextActive: false,
         durableProvenance: {
           ...twinProvenance,
           templateTwinProviderExecutions: [{ id: "execution-1" }],

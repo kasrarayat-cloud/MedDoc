@@ -17,7 +17,8 @@ function productionTypeScriptFiles(directory: string): string[] {
         ? []
         : productionTypeScriptFiles(absolute);
     }
-    return /\.(?:ts|tsx)$/u.test(entry.name) && !/\.test\.[^.]+$/u.test(entry.name)
+    return /\.(?:ts|tsx)$/u.test(entry.name) &&
+      !/\.test\.[^.]+$/u.test(entry.name)
       ? [absolute]
       : [];
   });
@@ -116,8 +117,10 @@ describe("synthetic QA server-boundary architecture", () => {
       "app/api/visits/[id]/status/route.ts",
     ]) {
       const routeSource = source(route);
-      expect(routeSource).toContain("assertTemplateTwinStagingQaVisitGuard");
-      expect(routeSource).toContain("TemplateTwinStagingQaDisabledError");
+      expect(routeSource).toContain(
+        "requireTemplateTwinSyntheticReadAdmission",
+      );
+      expect(routeSource).toContain("TemplateTwinSyntheticReadAdmissionError");
     }
   });
 
@@ -148,8 +151,9 @@ describe("synthetic QA server-boundary architecture", () => {
     expect(worker).toContain("getTemplateTwinSyntheticQaProviderContext()");
 
     const sign = source("app/api/visits/[id]/sign/route.ts");
-    expect(sign).toContain("if (emBlob && !stagingQaRunId)");
-    expect(sign).toContain("if (!stagingQaRunId)");
+    expect(sign).toContain("if (emBlob && isTemplateTwinVisit)");
+    expect(sign).toContain("else if (emBlob)");
+    expect(sign).toContain("if (!isTemplateTwinVisit && !twinGate.applies)");
     expect(sign).toContain("captureEditPattern");
 
     const queue = source("lib/queue.ts");
@@ -157,7 +161,16 @@ describe("synthetic QA server-boundary architecture", () => {
       /enqueueTemplateTwinSyntheticQaVisit[\s\S]*attempts: 3[\s\S]*backoff:/u,
     );
     expect(source("worker/cleanup/stuck-visit-watchdog.ts")).toContain(
-      "templateTwinSyntheticQaRun: { is: null }",
+      "TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE",
+    );
+    const exclusion = source("lib/template-twin/durable-visit-exclusion.ts");
+    expect(exclusion).toContain("templateTwinSyntheticQaRun: { is: null }");
+    expect(exclusion).toContain(
+      "templateTwinSyntheticQaAdmission: { is: null }",
+    );
+    expect(exclusion).toContain("templateTwinProviderExecutions: { none: {} }");
+    expect(exclusion).toContain(
+      "TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID",
     );
   });
 
@@ -205,9 +218,7 @@ describe("synthetic QA server-boundary architecture", () => {
       "providerVisitId",
     );
 
-    const boundary = source(
-      "lib/template-twin/staging-qa-lifecycle-guard.ts",
-    );
+    const boundary = source("lib/template-twin/staging-qa-lifecycle-guard.ts");
     expect(boundary.indexOf("confirmMappings({")).toBeLessThan(
       boundary.indexOf("assertTemplateTwinStagingQaGate(env)"),
     );
@@ -228,16 +239,32 @@ describe("synthetic QA server-boundary architecture", () => {
     const voiceRoute = source(
       "app/api/note-templates/template-twin/[id]/synthetic-test-voice/route.ts",
     );
-    expect(voiceRoute).toContain(
+    expect(voiceRoute).toContain("transcribeTemplateTwinSyntheticVoice");
+    expect(voiceRoute).not.toContain(
       "runWithTemplateTwinStagingQaCertificationProvider",
     );
-    expect(voiceRoute).toContain("sourceArtifact.sha256");
-    expect(voiceRoute).toMatch(/sourceArtifact\s*\.sizeBytes/u);
-    expect(voiceRoute).toContain("visitId: providerVisitId");
+    expect(voiceRoute).not.toMatch(/\btranscribe\s*\(/u);
 
-    const boundary = source(
-      "lib/template-twin/staging-qa-lifecycle-guard.ts",
+    const voiceProvider = source(
+      "lib/template-twin/synthetic-voice-provider.ts",
     );
+    const reservation = voiceProvider.indexOf("reserveSyntheticVoice({");
+    const ownedProvider = voiceProvider.indexOf(
+      "runTemplateTwinOwnedTranscribe({",
+      reservation,
+    );
+    expect(reservation).toBeGreaterThan(0);
+    expect(ownedProvider).toBeGreaterThan(reservation);
+    expect(voiceProvider).toContain("preCertificationVoiceEvidence: true");
+    expect(voiceProvider).toContain(
+      'operation: "SYNTHETIC_EVIDENCE_TRANSCRIPTION"',
+    );
+    expect(voiceProvider).toContain("lockAndAssertSyntheticVoiceFinalClaim");
+    expect(voiceProvider).toContain(
+      "buildTemplateTwinProviderOwnershipReceipt",
+    );
+
+    const boundary = source("lib/template-twin/staging-qa-lifecycle-guard.ts");
     expect(boundary).toContain("assertTemplateTwinStagingQaGate");
     expect(boundary).toContain(
       "assertTemplateTwinSyntheticQaProviderEnvironment",

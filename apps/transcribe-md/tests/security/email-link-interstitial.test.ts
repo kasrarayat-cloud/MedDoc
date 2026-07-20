@@ -5,7 +5,7 @@
 // the email link while another tab held a hostile origin would leak
 // the (single-use, but unredeemed) token via Referer. The fix moves
 // the mutation to a POST handler and renders an HTML interstitial on
-// GET that auto-submits a same-origin POST.
+// GET that auto-submits a same-origin POST while suppressing Referer.
 //
 // Verifies: (a) the interstitial helper produces well-formed HTML
 // with the expected escaping + Referrer-Policy + noscript fallback;
@@ -28,7 +28,9 @@ describe('emailLinkInterstitialHtml — helper output', () => {
   });
 
   it('renders a POST form to the configured actionPath', () => {
-    expect(html).toMatch(/<form[^>]+action="\/api\/auth\/verify-email"[^>]+method="POST"/);
+    expect(html).toMatch(
+      /<form[^>]+action="\/api\/auth\/verify-email"[^>]+method="POST"/
+    );
   });
 
   it('includes the token in a hidden input', () => {
@@ -36,11 +38,15 @@ describe('emailLinkInterstitialHtml — helper output', () => {
   });
 
   it('auto-submits after a short delay (anti-prefetch)', () => {
-    expect(html).toMatch(/setTimeout\(function\s*\(\)\s*\{[\s\S]*?\.submit\(\)/);
+    expect(html).toMatch(
+      /setTimeout\(function\s*\(\)\s*\{[\s\S]*?\.submit\(\)/
+    );
   });
 
   it('includes a <noscript> fallback button', () => {
-    expect(html).toMatch(/<noscript>[\s\S]*?<button type="submit">[\s\S]*?<\/noscript>/);
+    expect(html).toMatch(
+      /<noscript>[\s\S]*?<button type="submit">[\s\S]*?<\/noscript>/
+    );
   });
 
   it('escapes HTML metacharacters in headline/detail/token (XSS guard)', () => {
@@ -67,7 +73,9 @@ function readRoute(rel: string): string {
 }
 
 describe('verify-email route — GET = interstitial, POST = mutation', () => {
-  const src = readRoute('apps/transcribe-md/src/app/api/auth/verify-email/route.ts');
+  const src = readRoute(
+    'apps/transcribe-md/src/app/api/auth/verify-email/route.ts'
+  );
 
   it('exports BOTH GET and POST handlers', () => {
     expect(src).toMatch(/export\s+const\s+GET\s*=/);
@@ -78,23 +86,26 @@ describe('verify-email route — GET = interstitial, POST = mutation', () => {
     // The GET handler must NOT call prisma.user.update.
     const getBlock = src.slice(
       src.indexOf('export const GET ='),
-      src.indexOf('export const POST ='),
+      src.indexOf('export const POST =')
     );
     expect(getBlock).not.toMatch(/prisma\.user\.update/);
     expect(getBlock).toMatch(/emailLinkInterstitialHtml/);
-    expect(getBlock).toMatch(/Referrer-Policy['"]\s*:\s*['"]same-origin/);
+    expect(getBlock).toMatch(/Referrer-Policy['"]\s*:\s*['"]no-referrer/);
   });
 
-  it('POST is what consumes the token + updates emailVerified', () => {
+  it('POST locks and consumes the token in the emailVerified transaction', () => {
     const postBlock = src.slice(src.indexOf('export const POST ='));
-    expect(postBlock).toMatch(/consumeAuthToken/);
-    expect(postBlock).toMatch(/prisma\.user\.update/);
-    expect(postBlock).toMatch(/emailVerified:\s*new Date\(\)/);
+    expect(postBlock).toMatch(/lockCurrentAuthTokenForMutation/);
+    expect(postBlock).toMatch(/consumeLockedAuthToken/);
+    expect(postBlock).toMatch(/tx\.user\.update/);
+    expect(postBlock).toMatch(/emailVerified:\s*locked\.now/);
   });
 });
 
 describe('confirm-email route — GET = interstitial, POST = mutation', () => {
-  const src = readRoute('apps/transcribe-md/src/app/api/auth/confirm-email/route.ts');
+  const src = readRoute(
+    'apps/transcribe-md/src/app/api/auth/confirm-email/route.ts'
+  );
 
   it('exports BOTH GET and POST handlers', () => {
     expect(src).toMatch(/export\s+const\s+GET\s*=/);
@@ -104,16 +115,20 @@ describe('confirm-email route — GET = interstitial, POST = mutation', () => {
   it('GET returns the interstitial HTML (no Prisma update)', () => {
     const getBlock = src.slice(
       src.indexOf('export const GET ='),
-      src.indexOf('export const POST ='),
+      src.indexOf('export const POST =')
     );
     expect(getBlock).not.toMatch(/prisma\.user\.update/);
     expect(getBlock).toMatch(/emailLinkInterstitialHtml/);
+    expect(getBlock).toMatch(/Referrer-Policy['"]\s*:\s*['"]no-referrer/);
   });
 
-  it('POST consumes the EMAIL_CHANGE token + updates the email', () => {
+  it('POST consumes EMAIL_CHANGE in the identity-mutation transaction', () => {
     const postBlock = src.slice(src.indexOf('export const POST ='));
     expect(postBlock).toMatch(/AuthTokenPurpose\.EMAIL_CHANGE/);
-    expect(postBlock).toMatch(/prisma\.user\.update/);
+    expect(postBlock).toMatch(/lockCurrentAuthTokenForMutation/);
+    expect(postBlock).toMatch(/consumeLockedAuthToken/);
+    expect(postBlock).toMatch(/tx\.user\.update/);
     expect(postBlock).toMatch(/email:\s*newEmail/);
+    expect(postBlock).toMatch(/oldEmail\s*!==\s*locked\.user\.email/);
   });
 });

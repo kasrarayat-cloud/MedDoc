@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3011",
-    "build": "next build",
+    "build": "next build && npm run verify:server-actions",
     "start": "next start -p 3011",
     "lint": "eslint",
     "test:unit": "vitest run",
@@ -13,10 +13,13 @@
     "test:e2e:debug": "playwright test --debug",
     "test:e2e:install": "playwright install chromium",
     "worker": "tsx src/worker.ts",
+    "auth-email-dispatcher": "tsx src/auth-email-dispatcher.ts",
+    "mfa-secret:backfill": "tsx scripts/mfa-secret-backfill.ts",
     "minio:cleanup": "tsx scripts/minio-cleanup.ts",
     "patients:backfill": "tsx scripts/backfill-patients.ts",
     "patients:fix-drift": "tsx scripts/fix-patientname-drift.ts",
-    "eval:primock57": "tsx scripts/eval/primock57-run.ts"
+    "eval:primock57": "tsx scripts/eval/primock57-run.ts",
+    "verify:server-actions": "node scripts/server-action-manifest-gate.mjs"
   },
   "dependencies": {
     "@meddoc/ai": "*",

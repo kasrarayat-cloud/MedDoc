@@ -66,6 +66,42 @@ jobs:
           node-version: 22
           cache: npm
 
+      # The app intentionally runs with NODE_ENV=production in the synthetic
+      # QA stack, so it enforces the same external keyring ownership/mode as
+      # production. Generate a job-scoped random key outside the checkout;
+      # never print or persist the bytes in an artifact. The non-QA names are
+      # also exported because the production compose file is parsed while
+      # building the exact application image.
+      - name: Provision ephemeral synthetic MFA keyring
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          keyring_dir="$RUNNER_TEMP/quillmd-ci-mfa"
+          keyring_path="$keyring_dir/keyring.json"
+          install -d -m 0700 "$keyring_dir"
+          KEYRING_PATH="$keyring_path" node <<'NODE'
+          const { randomBytes } = require("node:crypto");
+          const { writeFileSync } = require("node:fs");
+          const destination = process.env.KEYRING_PATH;
+          if (!destination) process.exit(1);
+          const keyBase64Url = randomBytes(32).toString("base64url");
+          writeFileSync(
+            destination,
+            JSON.stringify({
+              version: 1,
+              keys: [{ id: "ci-synthetic-v1", keyBase64Url }],
+            }),
+            { mode: 0o600 },
+          );
+          NODE
+          sudo chown root:1001 "$keyring_path"
+          sudo chmod 0440 "$keyring_path"
+          printf 'QA_MFA_SECRET_ACTIVE_KEY_ID=ci-synthetic-v1\n' >> "$GITHUB_ENV"
+          printf 'QA_MFA_SECRET_KEYRING_FILE=%s\n' "$keyring_path" >> "$GITHUB_ENV"
+          printf 'MFA_SECRET_ACTIVE_KEY_ID=ci-synthetic-v1\n' >> "$GITHUB_ENV"
+          printf 'MFA_SECRET_KEYRING_FILE=%s\n' "$keyring_path" >> "$GITHUB_ENV"
+
       # ── Build the real images from the PR (app build = the OOM-sensitive
       #    step; the Dockerfile bakes --max-old-space-size=6144 + the
       #    unpdf/mammoth bundle-assert, both of which run here). The 16 GB
@@ -276,3 +312,13 @@ jobs:
       - name: Tear down the qa stack (volumes too)
         if: always()
         run: docker compose -f docker-compose.qa.yml down -v
+
+      - name: Remove ephemeral synthetic MFA keyring
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          keyring_dir="$RUNNER_TEMP/quillmd-ci-mfa"
+          keyring_path="$keyring_dir/keyring.json"
+          sudo rm -f -- "$keyring_path"
+          rmdir "$keyring_dir" 2>/dev/null || true

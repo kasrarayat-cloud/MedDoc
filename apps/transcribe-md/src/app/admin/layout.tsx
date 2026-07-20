@@ -59,7 +59,7 @@ export default async function AdminLayout({
   // point + already known to be SUPER_ADMIN). DB read is fresh — we
   // don't trust a JWT-cached mfaEnabled flag because enrollment
   // happens in-session.
-  if (!verified.mfaEnabled || !verified.mfaVerifiedAt) {
+  if (!verified.mfaComplete) {
     redirect("/settings/security/mfa?reason=super_admin_required");
   }
 

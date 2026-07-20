@@ -13,11 +13,13 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TranscribeVisitStatus } from "@prisma/client";
+import { currentClinicalVisitActorWhere } from "@/lib/clinical-visit-authority";
 
 const mocks = vi.hoisted(() => ({
   visitFindUnique: vi.fn(),
   visitUpdateMany: vi.fn(),
   twinUpdateMany: vi.fn(),
+  queryRaw: vi.fn(),
   transaction: vi.fn(),
   auth: vi.fn(),
   logAudit: vi.fn(),
@@ -51,10 +53,29 @@ import { POST } from "@/app/api/visits/[id]/em-score/apply-additions/route";
 const FAKE_USER = "u1";
 const FAKE_PRACTICE = "p1";
 const FAKE_VISIT = "cmotxxxxx";
+const FAKE_PATIENT = "patient-1";
+const UPDATED_AT = new Date("2026-07-20T00:00:00.000Z");
+
+const ORDINARY_PROVENANCE = {
+  patientId: FAKE_PATIENT,
+  patient: {
+    id: FAKE_PATIENT,
+    practiceId: FAKE_PRACTICE,
+    externalId: null,
+  },
+  noteTemplateId: null,
+  noteTemplateVersion: null,
+  noteTemplate: null,
+  templateTwinFill: null,
+  templateTwinSyntheticQaRun: null,
+  templateTwinSyntheticQaAdmission: null,
+  templateTwinProviderExecutions: [],
+} as const;
 
 const READY_VISIT = {
   id: FAKE_VISIT,
   userId: FAKE_USER,
+  updatedAt: UPDATED_AT,
   status: TranscribeVisitStatus.READY,
   deletedAt: null,
   archivedAt: null,
@@ -77,6 +98,7 @@ Symptomatic care.`,
   inputMode: "audio_upload",
   icdCodes: { codes: [{ code: "J06.9" }] },
   rxDrafts: { drafts: [] },
+  ...ORDINARY_PROVENANCE,
 };
 
 function makeReq(body: unknown) {
@@ -99,18 +121,33 @@ const ctx = { params: Promise.resolve({ id: FAKE_VISIT }) };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.visitFindUnique.mockResolvedValue(READY_VISIT);
   mocks.visitUpdateMany.mockResolvedValue({ count: 1 });
   mocks.twinUpdateMany.mockResolvedValue({ count: 1 });
+  mocks.queryRaw.mockImplementation(
+    async (query: { strings?: readonly string[] }) => {
+      const sql = query.strings?.join(" ") ?? "";
+      if (sql.includes('FROM "practices" practice')) {
+        return [{ id: FAKE_PRACTICE, isActive: true }];
+      }
+      if (sql.includes('FROM "users" actor')) {
+        return [{ id: FAKE_USER }];
+      }
+      return [{ id: FAKE_VISIT }];
+    },
+  );
   mocks.transaction.mockImplementation(
     async (
       callback: (tx: {
         transcribeVisit: { updateMany: typeof mocks.visitUpdateMany };
         templateTwinFillManifest: { updateMany: typeof mocks.twinUpdateMany };
+        $queryRaw: typeof mocks.queryRaw;
       }) => Promise<unknown>,
     ) =>
       callback({
         transcribeVisit: { updateMany: mocks.visitUpdateMany },
         templateTwinFillManifest: { updateMany: mocks.twinUpdateMany },
+        $queryRaw: mocks.queryRaw,
       }),
   );
   // engineToUiScore returns a stub UI score per call; tests assert
@@ -242,6 +279,13 @@ describe("POST /api/visits/[id]/em-score/apply-additions", () => {
     expect(body.ok).toBe(true);
     expect(body.newScore.suggestedCode).toBe("99214");
     expect(body.applied).toBe(2);
+
+    const clinicalProjection = mocks.visitFindUnique.mock.calls.find(
+      ([args]) => args?.select?.soapDraft === true,
+    );
+    expect(clinicalProjection?.[0].where).toEqual(
+      expect.objectContaining(currentClinicalVisitActorWhere(FAKE_USER)),
+    );
 
     // Persisted: soapDraft + soapFinal both updated.
     expect(mocks.visitUpdateMany).toHaveBeenCalledTimes(1);

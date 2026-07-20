@@ -50,6 +50,7 @@ beforeEach(() => {
     sessionExpiresAt: new Date("2026-07-19T20:00:00.000Z"),
     mfaEnabled: true,
     mfaVerifiedAt: new Date("2026-07-19T07:00:00.000Z"),
+    mfaComplete: true,
   });
   mocks.requiredAudit.mockResolvedValue(undefined);
   mocks.recordControlAccess.mockResolvedValue(undefined);

@@ -14,6 +14,7 @@ vi.mock("../../provider-ownership", () => ({
   runWithTemplateTwinProviderOwnershipContext: vi.fn(
     async (_context: unknown, callback: () => Promise<unknown>) => callback(),
   ),
+  resolveTemplateTwinProviderLogicalAttempt: vi.fn(async () => 1),
   buildTemplateTwinProviderOwnershipReceipt: vi.fn(() => ({
     evidence: {
       contractVersion: "template-twin-provider-ownership-receipt-v2",

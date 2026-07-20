@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   ledgerFind: vi.fn(),
   outboxCreate: vi.fn(),
   finalRollout: vi.fn(),
+  currentPhysician: vi.fn(),
 }));
 
 vi.mock('@meddoc/ai', () => ({
@@ -82,6 +83,10 @@ vi.mock('../rollout', async (importOriginal) => {
     lockTemplateTwinRolloutForFinalClaim: mocks.finalRollout,
   };
 });
+
+vi.mock('../final-claim-authority', () => ({
+  lockAndAssertCurrentTemplateTwinPhysician: mocks.currentPhysician,
+}));
 
 import { createTemplateTwinDraft } from '../create-draft';
 import { DOCX_TEMPLATE_COMPILER } from '../artifact-compiler';
@@ -175,6 +180,7 @@ beforeEach(() => {
     allowed: true,
     token: ACTOR.rolloutToken,
   });
+  mocks.currentPhysician.mockResolvedValue({ email: ACTOR.userEmail });
   mocks.transaction.mockImplementation(
     async (callback: (client: unknown) => Promise<unknown>) =>
       callback({
@@ -291,6 +297,13 @@ describe('Template Twin upload/compile proposal orchestration', () => {
     expect(mocks.transaction).toHaveBeenCalledWith(expect.any(Function), {
       isolationLevel: 'ReadCommitted',
     });
+    expect(mocks.currentPhysician).toHaveBeenCalledWith({
+      tx: expect.any(Object),
+      actor: ACTOR,
+    });
+    expect(mocks.finalRollout.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.currentPhysician.mock.invocationCallOrder[0]!,
+    );
     expect(mocks.noteTemplateCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({
         doctorId: 'doctor-synthetic-1',
@@ -429,16 +442,21 @@ describe('Template Twin upload/compile proposal orchestration', () => {
       },
     );
     const storage = syntheticStorage(fixture.source);
-    mocks.finalRollout.mockResolvedValueOnce({
-      allowed: false,
-      code: 'TEMPLATE_TWIN_PRACTICE_GENERATION_STALE',
-      reason: 'Synthetic practice generation changed.',
-      currentToken: {
-        practiceId: ACTOR.practiceId,
-        globalGeneration: BigInt(3),
-        practiceGeneration: BigInt(8),
-      },
-    });
+    mocks.finalRollout
+      .mockResolvedValueOnce({
+        allowed: true,
+        token: ACTOR.rolloutToken,
+      })
+      .mockResolvedValueOnce({
+        allowed: false,
+        code: 'TEMPLATE_TWIN_PRACTICE_GENERATION_STALE',
+        reason: 'Synthetic practice generation changed.',
+        currentToken: {
+          practiceId: ACTOR.practiceId,
+          globalGeneration: BigInt(3),
+          practiceGeneration: BigInt(8),
+        },
+      });
 
     await expect(
       createTemplateTwinDraft({
@@ -469,6 +487,68 @@ describe('Template Twin upload/compile proposal orchestration', () => {
       }),
     );
     expect(mocks.outboxCreate).toHaveBeenCalledTimes(2);
+  });
+
+  it('leaves uploaded bytes unclaimed when physician authority is revoked after provider work', async () => {
+    const fixture = await buildTemplateTwinIntegrationFixture();
+    const admittedIr = DOCX_TEMPLATE_COMPILER.compile(
+      (await minimizeTemplateTwinSourceMetadata(fixture.source)).document,
+    );
+    mocks.modelComplete.mockImplementation(
+      async (request: { purpose: string }) => {
+        if (request.purpose === 'tm_template_phi_scan') {
+          return { phiFields: [], anyUncertain: false };
+        }
+        if (request.purpose === 'tm_template_parse') {
+          return {
+            mappings: fixture.mappings.map((mapping, index) => ({
+              ...mapping,
+              fieldId: admittedIr.fields[index]!.fieldId,
+              status: 'recognized',
+              practiceDefault: null,
+            })),
+          };
+        }
+        throw new Error('Unexpected synthetic model purpose');
+      },
+    );
+    const storage = syntheticStorage(fixture.source);
+    mocks.currentPhysician
+      .mockResolvedValueOnce({ email: ACTOR.userEmail })
+      .mockRejectedValueOnce(
+        new Error('synthetic physician authority revoked'),
+      );
+
+    await expect(
+      createTemplateTwinDraft({
+        source: fixture.source,
+        identity: {
+          name: 'Synthetic revoked-authority intake',
+          encounterType: 'Synthetic initial visit',
+          versionDescription: 'Synthetic final authority race proof',
+        },
+        actor: ACTOR,
+        storage: storage.value,
+        malwareScanner: cleanScanner(fixture.source),
+      }),
+    ).rejects.toMatchObject({ code: 'PERSISTENCE_FAILED' });
+
+    expect(mocks.modelComplete).toHaveBeenCalledTimes(2);
+    expect(storage.storeSourceArtifact).toHaveBeenCalledTimes(1);
+    expect(mocks.finalRollout).toHaveBeenCalledTimes(2);
+    expect(mocks.currentPhysician).toHaveBeenCalledTimes(2);
+    expect(mocks.finalRollout.mock.invocationCallOrder[1]).toBeLessThan(
+      mocks.currentPhysician.mock.invocationCallOrder[1]!,
+    );
+    expect(mocks.noteTemplateCreate).not.toHaveBeenCalled();
+    expect(mocks.sourceArtifactCreate).not.toHaveBeenCalled();
+    expect(mocks.compiledVersionCreate).not.toHaveBeenCalled();
+    expect(mocks.ledgerUpdate).toHaveBeenCalledTimes(1);
+    expect(mocks.ledgerUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ claimType: 'quarantine_artifact' }),
+      }),
+    );
   });
 
   it('fails the upload transaction when its durable audit event cannot be enqueued', async () => {

@@ -1,101 +1,89 @@
 // ============================================================================
-// Scenario 21 — Note-format file upload → REAL text extraction → parse → review
+// Scenario 21 — legacy blank-outline text upload boundary
 // ----------------------------------------------------------------------------
-// Scenario 5 covers the paste path; this covers FILE uploads. The LLM parse is
-// mocked, but the file→text extraction is REAL code (txt = UTF-8 decode, pdf =
-// unpdf, docx = mammoth) — the exact class the 2026-06-04 PDF incident broke. A
-// successful extraction produces non-empty text that the (mocked) parser turns
-// into the fixture template, landing on the review editor; a failed/empty
-// extraction falls back to the entry view with a clear message.
-//   • .txt / .pdf (text layer) / .docx → review editor reached.
-//   • image-only .pdf (no text layer) → graceful "couldn't read" fallback.
-//
-// Reaching the review editor (name pre-filled with the mock fixture) is the
-// proof extraction yielded text — under MOCK the parser is only reached with a
-// non-empty extracted string. Gated on NOTE_FORMAT_E2E=1.
+// Scenario 5 covers paste; this locks the only legacy file path that remains:
+// UTF-8 .txt/.md. Office/PDF files are refused at the client affordance and at
+// the server action before bytes are read; DOCX belongs in quarantined Template
+// Twin intake. Provider non-invocation is locked by focused action tests.
 // ============================================================================
 
-import { resolve } from 'node:path';
+import { resolve } from "node:path";
 
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from "@playwright/test";
 
-import { cleanupTestUsers } from '../helpers/cleanup';
-import { signupFreshUser } from '../helpers/signup';
-import { gotoNoteFormat } from '../helpers/noteFormat';
+import { cleanupTestUsers } from "../helpers/cleanup";
+import { signupFreshUser } from "../helpers/signup";
+import { gotoNoteFormat } from "../helpers/noteFormat";
 
-const GATE = process.env.NOTE_FORMAT_E2E !== '1';
+const GATE = process.env.NOTE_FORMAT_E2E !== "1";
 const GATE_MSG =
-  'Needs an app image built with the note-format mock fixtures. Run with NOTE_FORMAT_E2E=1 against a fresh build.';
+  "Needs an app image built with the note-format mock fixtures. Run with NOTE_FORMAT_E2E=1 against a fresh build.";
 
-const FIX = (f: string) => resolve(__dirname, '../fixtures/notes', f);
-const TXT = FIX('clinical-notes.txt');
-const PDF = FIX('sample-note.pdf'); // 2-page PDF with a real text layer
-const DOCX = FIX('sample-note.docx'); // minimal OOXML, mammoth-readable
-const SCANNED_PDF = FIX('scanned-no-text.pdf'); // no text layer → empty extraction
+const FIX = (f: string) => resolve(__dirname, "../fixtures/notes", f);
+const TXT = FIX("clinical-notes.txt");
+const PDF = FIX("sample-note.pdf"); // 2-page PDF with a real text layer
+const DOCX = FIX("sample-note.docx"); // minimal OOXML, mammoth-readable
 
 test.afterEach(() => {
   cleanupTestUsers();
 });
 
-/** Drive the upload exactly as a user does: click the visible "Upload a file"
+/** Drive the upload exactly as a user does: click the visible text-upload
  *  button (which programmatically opens the hidden <input type=file>) and feed
  *  the file via the intercepted chooser. The real-dialog path reliably fires the
  *  input's onChange; a direct setInputFiles on this aria-hidden display:none
  *  input does not. */
 async function uploadFile(page: Page, file: string): Promise<void> {
   const [chooser] = await Promise.all([
-    page.waitForEvent('filechooser'),
-    page.getByRole('button', { name: /upload a file/i }).click(),
+    page.waitForEvent("filechooser"),
+    page.getByRole("button", { name: /upload \.txt or \.md/i }).click(),
   ]);
   await chooser.setFiles(file);
 }
 
-/** Upload a file and assert the extraction + (mocked) parse landed on the
- *  review editor with the fixture template. */
-async function uploadAndExpectReview(page: Page, file: string): Promise<void> {
+/** Upload a populated file and assert extraction lands in the local fail-closed
+ *  boundary instead of the review editor. */
+async function uploadAndExpectLocalRejection(
+  page: Page,
+  file: string,
+): Promise<void> {
   await uploadFile(page, file);
-  await expect(page.getByRole('button', { name: /save & activate/i })).toBeVisible({
-    timeout: 20_000,
-  });
-  await expect(page.locator('#nf-name')).toHaveValue('[MOCK] General Follow-up');
+  await expect(page.getByRole("alert")).toBeVisible({ timeout: 20_000 });
+  await expect(
+    page.getByText(/accepts only a blank text outline/i),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /save & activate/i }),
+  ).toBeHidden();
 }
 
-test('scenario 21: .txt upload → extract → parse → review (MOCK)', async ({ page }) => {
-  test.skip(GATE, GATE_MSG);
-  await signupFreshUser(page, 's21txt');
-  await gotoNoteFormat(page);
-  await uploadAndExpectReview(page, TXT);
-});
-
-test('scenario 21: .pdf (text layer) upload → unpdf extract → parse → review (MOCK)', async ({
+test("scenario 21: populated .txt upload → extract → local rejection", async ({
   page,
 }) => {
   test.skip(GATE, GATE_MSG);
-  await signupFreshUser(page, 's21pdf');
+  await signupFreshUser(page, "s21txt");
   await gotoNoteFormat(page);
-  await uploadAndExpectReview(page, PDF);
+  await uploadAndExpectLocalRejection(page, TXT);
 });
 
-test('scenario 21: .docx upload → mammoth extract → parse → review (MOCK)', async ({
-  page,
-}) => {
-  test.skip(GATE, GATE_MSG);
-  await signupFreshUser(page, 's21docx');
-  await gotoNoteFormat(page);
-  await uploadAndExpectReview(page, DOCX);
-});
+for (const [label, user, file] of [
+  ["PDF", "s21pdf", PDF],
+  ["DOCX", "s21docx", DOCX],
+] as const) {
+  test(`scenario 21: ${label} is refused by the legacy shortcut`, async ({
+    page,
+  }) => {
+    test.skip(GATE, GATE_MSG);
+    await signupFreshUser(page, user);
+    await gotoNoteFormat(page);
 
-test('scenario 21: image-only .pdf (no text layer) → graceful fallback (MOCK)', async ({
-  page,
-}) => {
-  test.skip(GATE, GATE_MSG);
-  await signupFreshUser(page, 's21blank');
-  await gotoNoteFormat(page);
-
-  await uploadFile(page, SCANNED_PDF);
-  // Empty extraction → "Could not read that file" toast, stays on entry (paste
-  // box still visible), never reaches the review editor.
-  await expect(page.getByText('Could not read that file')).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByLabel('Paste a note')).toBeVisible();
-  await expect(page.getByRole('button', { name: /save & activate/i })).toBeHidden();
-});
+    const input = page.locator('input[type="file"][accept*=".txt"]');
+    expect(await input.getAttribute("accept")).not.toMatch(/pdf|docx/i);
+    await uploadFile(page, file);
+    await expect(page.getByText("Use a blank text outline")).toBeVisible();
+    await expect(page.getByLabel("Paste a blank outline")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /save & activate/i }),
+    ).toBeHidden();
+  });
+}

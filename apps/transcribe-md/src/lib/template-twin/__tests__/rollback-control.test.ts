@@ -14,6 +14,7 @@ const actor = {
   userId: "synthetic-super-admin",
   userEmail: "rollback-operator@synthetic.test",
   practiceId: "synthetic-operator-practice",
+  sessionId: "synthetic-current-admin-session",
 };
 
 function emptyInventory(
@@ -431,9 +432,9 @@ describe("Template Twin rollback fence operation", () => {
       dependencies: store.dependencies(),
     });
     expect(missingReceipt.status.rollbackComplete).toBe(false);
-    expect(
-      missingReceipt.status.inventory.missingRollbackAuditReceipts,
-    ).toBe(2);
+    expect(missingReceipt.status.inventory.missingRollbackAuditReceipts).toBe(
+      2,
+    );
 
     store.inventory = {
       ...store.inventory,

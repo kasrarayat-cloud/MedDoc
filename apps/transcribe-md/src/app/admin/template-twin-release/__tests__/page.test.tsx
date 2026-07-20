@@ -49,6 +49,7 @@ const verified = {
   sessionExpiresAt: new Date("2026-07-19T20:00:00.000Z"),
   mfaEnabled: true,
   mfaVerifiedAt: new Date("2026-07-19T12:00:00.000Z"),
+  mfaComplete: true,
 };
 const control = {
   global: {

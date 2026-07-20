@@ -17,12 +17,16 @@ const {
   mockUserFind,
   mockEditCreate,
   mockExecuteRaw,
+  mockTransaction,
+  mockLockOrdinary,
   mockEmbedText,
 } = vi.hoisted(() => ({
   mockVisitFind: vi.fn(),
   mockUserFind: vi.fn(),
   mockEditCreate: vi.fn(),
   mockExecuteRaw: vi.fn(),
+  mockTransaction: vi.fn(),
+  mockLockOrdinary: vi.fn(),
   mockEmbedText: vi.fn(),
 }));
 
@@ -32,6 +36,7 @@ vi.mock('@meddoc/db', () => ({
     user: { findUnique: mockUserFind },
     doctorEditPattern: { create: mockEditCreate },
     $executeRaw: mockExecuteRaw,
+    $transaction: mockTransaction,
   },
 }));
 
@@ -43,14 +48,32 @@ vi.mock('@meddoc/ai', () => ({
   redactPhi: (v: unknown) => v,
 }));
 
+vi.mock('@/lib/template-twin/visit-mutation-authority', () => ({
+  lockAndAssertOrdinaryClinicalMutation: mockLockOrdinary,
+}));
+
 // Import AFTER the mocks so the module picks them up.
 import { captureEditPattern } from '@/lib/edit-tracking';
 
 const ORIGINAL = '## Subjective\n[AI] Patient reports headache.\n';
 const EDITED = '## Subjective\nPt reports headache, resolving.\n';
+const ORDINARY_AUTHORITY = {
+  patientId: 'patient-1',
+  noteTemplateId: null,
+  updatedAt: new Date('2026-07-20T00:00:00.000Z'),
+  user: { practiceId: 'p1' },
+} as const;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockLockOrdinary.mockResolvedValue(undefined);
+  mockTransaction.mockImplementation(
+    async (callback: (tx: unknown) => Promise<unknown>) =>
+      callback({
+        doctorEditPattern: { create: mockEditCreate },
+        $executeRaw: mockExecuteRaw,
+      }),
+  );
   // Silence expected console output during tests; re-enable in the one
   // test that asserts on logs if we ever need it.
   vi.spyOn(console, 'info').mockImplementation(() => {});
@@ -64,6 +87,7 @@ describe('captureEditPattern — happy path', () => {
       soapL6Original: ORIGINAL,
       signedSoap: EDITED,
       userId: 'u1',
+      ...ORDINARY_AUTHORITY,
     });
     mockUserFind.mockResolvedValueOnce({ practiceId: 'p1' });
     mockEditCreate.mockResolvedValueOnce({ id: 'dep1' });
@@ -99,6 +123,15 @@ describe('captureEditPattern — happy path', () => {
       purpose: 'tm_embed',
     });
     expect(mockExecuteRaw).toHaveBeenCalledTimes(1);
+    expect(mockLockOrdinary).toHaveBeenCalledTimes(3);
+    expect(mockLockOrdinary).toHaveBeenCalledWith({
+      tx: expect.any(Object),
+      visitId: 'v1',
+      actorUserId: 'u1',
+      admittedVisitUpdatedAt: ORDINARY_AUTHORITY.updatedAt,
+      admittedPatientId: ORDINARY_AUTHORITY.patientId,
+      admittedNoteTemplateId: ORDINARY_AUTHORITY.noteTemplateId,
+    });
   });
 
   it('editDistance is 0 when the doctor did not edit', async () => {
@@ -106,6 +139,7 @@ describe('captureEditPattern — happy path', () => {
       soapL6Original: ORIGINAL,
       signedSoap: ORIGINAL,
       userId: 'u1',
+      ...ORDINARY_AUTHORITY,
     });
     mockUserFind.mockResolvedValueOnce({ practiceId: 'p1' });
     mockEditCreate.mockResolvedValueOnce({ id: 'dep1' });
@@ -128,6 +162,7 @@ describe('captureEditPattern — skip conditions', () => {
       soapL6Original: null,
       signedSoap: EDITED,
       userId: 'u1',
+      ...ORDINARY_AUTHORITY,
     });
     mockUserFind.mockResolvedValueOnce({ practiceId: 'p1' });
 
@@ -143,6 +178,7 @@ describe('captureEditPattern — skip conditions', () => {
       soapL6Original: ORIGINAL,
       signedSoap: null,
       userId: 'u1',
+      ...ORDINARY_AUTHORITY,
     });
     mockUserFind.mockResolvedValueOnce({ practiceId: 'p1' });
 
@@ -163,12 +199,9 @@ describe('captureEditPattern — skip conditions', () => {
   });
 
   it('skips when doctor is gone', async () => {
-    mockVisitFind.mockResolvedValueOnce({
-      soapL6Original: ORIGINAL,
-      signedSoap: EDITED,
-      userId: 'u1',
-    });
-    mockUserFind.mockResolvedValueOnce(null);
+    // The actor lifecycle/tenant predicate is part of this same PHI-bearing
+    // visit query, so a missing current doctor produces no visit projection.
+    mockVisitFind.mockResolvedValueOnce(null);
 
     await captureEditPattern({ visitId: 'v1', doctorId: 'u_deleted' });
 
@@ -182,6 +215,7 @@ describe('captureEditPattern — partial failures degrade gracefully', () => {
       soapL6Original: ORIGINAL,
       signedSoap: EDITED,
       userId: 'u1',
+      ...ORDINARY_AUTHORITY,
     });
     mockUserFind.mockResolvedValueOnce({ practiceId: 'p1' });
     mockEditCreate.mockResolvedValueOnce({ id: 'dep1' });
@@ -200,6 +234,7 @@ describe('captureEditPattern — partial failures degrade gracefully', () => {
       soapL6Original: ORIGINAL,
       signedSoap: EDITED,
       userId: 'u1',
+      ...ORDINARY_AUTHORITY,
     });
     mockUserFind.mockResolvedValueOnce({ practiceId: 'p1' });
     mockEditCreate.mockResolvedValueOnce({ id: 'dep1' });
@@ -222,6 +257,7 @@ describe('captureEditPattern — partial failures degrade gracefully', () => {
       soapL6Original: ORIGINAL,
       signedSoap: EDITED,
       userId: 'u1',
+      ...ORDINARY_AUTHORITY,
     });
     mockUserFind.mockResolvedValueOnce({ practiceId: 'p1' });
     mockEditCreate.mockRejectedValueOnce(

@@ -37,6 +37,7 @@ import {
   redactPhi,
 } from "@meddoc/ai";
 import { log } from "@/lib/log";
+import { currentClinicalVisitActorWhere } from "@/lib/clinical-visit-authority";
 import { shouldMarkVisitFailed } from "./worker/retry-decision";
 import { categorizeError, type ErrorCategory } from "./worker/error-categorize";
 import { loadResumeState, VisitNotFoundError } from "./worker/resume-state";
@@ -273,7 +274,10 @@ async function processVisit(
   workerDeliveryNumber?: number,
 ): Promise<void> {
   const admission = await prisma.transcribeVisit.findUnique({
-    where: { id: job.data.visitId },
+    where: {
+      id: job.data.visitId,
+      ...currentClinicalVisitActorWhere(job.data.userId),
+    },
     select: {
       id: true,
       userId: true,
@@ -494,7 +498,10 @@ async function processVisitPipeline(
 ): Promise<void> {
   const runtimeEnabled = templateTwinRuntimeEnabled(process.env);
   const visit = await prisma.transcribeVisit.findUnique({
-    where: { id: job.data.visitId },
+    where: {
+      id: job.data.visitId,
+      ...currentClinicalVisitActorWhere(job.data.userId),
+    },
     select: {
       id: true,
       userId: true,
@@ -505,7 +512,12 @@ async function processVisitPipeline(
       noteTemplateId: true,
       noteTemplateVersion: true,
       noteTemplate: {
-        select: { id: true, version: true, templateKind: true },
+        select: {
+          id: true,
+          version: true,
+          templateKind: true,
+          templateTwinCompiledVersion: { select: { id: true } },
+        },
       },
       templateTwinFill: {
         select: { noteTemplateId: true, noteTemplateVersion: true },
@@ -531,6 +543,9 @@ async function processVisitPipeline(
   const census = await resolveVisitTemplateProviderCensus({
     runtimeEnabled,
     pinnedOrdinary: false,
+    syntheticQaContextActive: Boolean(
+      getTemplateTwinSyntheticQaProviderContext(),
+    ),
     durableProvenance: visit,
     resolve: () =>
       resolveVisitTemplateAdmission({
@@ -610,7 +625,10 @@ async function processVisitPipelineCore(
   let currentLayer: string = "init";
 
   const visit = await prisma.transcribeVisit.findUnique({
-    where: { id: visitId },
+    where: {
+      id: visitId,
+      ...currentClinicalVisitActorWhere(job.data.userId),
+    },
     select: {
       id: true,
       userId: true,
@@ -697,7 +715,11 @@ async function processVisitPipelineCore(
   // columns — the checks below short-circuit those and the retry
   // resumes at the first non-populated layer.
   const attempt = job.attemptsMade + 1;
-  const resumeState = await loadResumeState(visitId, job.attemptsMade);
+  const resumeState = await loadResumeState(
+    visitId,
+    job.data.userId,
+    job.attemptsMade,
+  );
   const skipped: PipelineLayer[] = [];
   const providerOwnedTwin =
     getTemplateTwinProviderOwnershipContext()?.scope === "VISIT_PIPELINE";
@@ -772,7 +794,10 @@ async function processVisitPipelineCore(
       // Always re-read transcriptRaw — whether L1 ran or was skipped,
       // downstream layers need the utterances.
       const withTranscript = await prisma.transcribeVisit.findUnique({
-        where: { id: visitId },
+        where: {
+          id: visitId,
+          ...currentClinicalVisitActorWhere(visit.userId),
+        },
         select: {
           transcriptRaw: true,
           speakerMap: true,
@@ -922,7 +947,10 @@ async function processVisitPipelineCore(
       // null today since L1b runs Deepgram with utterances disabled,
       // but the wiring is parallel to the audio_upload branch).
       const withDictationDuration = await prisma.transcribeVisit.findUnique({
-        where: { id: visitId },
+        where: {
+          id: visitId,
+          ...currentClinicalVisitActorWhere(visit.userId),
+        },
         select: {
           dictationDurationSec: true,
           audioConfidenceStats: true,
@@ -1212,7 +1240,10 @@ async function processVisitPipelineCore(
       }
       assertSyntheticQaResolvedRolloutToken(selectedTemplateRolloutToken);
       const currentSoap = await prisma.transcribeVisit.findUnique({
-        where: { id: visitId },
+        where: {
+          id: visitId,
+          ...currentClinicalVisitActorWhere(visit.userId),
+        },
         select: { soapFinal: true, soapVersion: true },
       });
       if (!currentSoap?.soapFinal?.trim()) {
@@ -1469,7 +1500,10 @@ async function processVisitPipelineCore(
     });
 
     const automationSoap = await prisma.transcribeVisit.findUnique({
-      where: { id: visitId },
+      where: {
+        id: visitId,
+        ...currentClinicalVisitActorWhere(visit.userId),
+      },
       select: { soapFinal: true, soapVersion: true },
     });
     if (!automationSoap?.soapFinal) {

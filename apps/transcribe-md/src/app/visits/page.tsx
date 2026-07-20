@@ -7,28 +7,32 @@
 // middle-click preserves the selection.
 // ============================================================================
 
-import type { Metadata } from 'next';
-import Link from 'next/link';
-import { redirect } from 'next/navigation';
+import type { Metadata } from "next";
+import Link from "next/link";
+import { redirect } from "next/navigation";
 
-import prisma from '@meddoc/db';
-import { TranscribeVisitStatus } from '@prisma/client';
-import { auth } from '@/lib/nextauth';
-import { logAudit } from '@/lib/audit';
-import { ordinaryClinicalVisitWhere } from '@/lib/template-twin/synthetic-qa-patient';
-import { AppFrame } from '@/components/ui/app-frame';
-import { EmptyState } from '@/components/ui/empty-state';
-import { Ic } from '@/components/ui/icon';
-import { PageHeader } from '@/components/ui/page-header';
+import prisma from "@meddoc/db";
+import { TranscribeVisitStatus } from "@prisma/client";
+import { auth } from "@/lib/nextauth";
+import { logAudit } from "@/lib/audit";
+import {
+  aggregateTemplateTwinVisibleVisits,
+  readTemplateTwinVisibleVisitPage,
+  type TemplateTwinVisibleVisitScope,
+} from "@/lib/template-twin/read-authority";
+import { AppFrame } from "@/components/ui/app-frame";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Ic } from "@/components/ui/icon";
+import { PageHeader } from "@/components/ui/page-header";
 import {
   VisitList,
   type DashboardVisit,
-} from '@/components/dashboard/visit-list';
+} from "@/components/dashboard/visit-list";
 
-export const metadata: Metadata = { title: 'Visits' };
+export const metadata: Metadata = { title: "Visits" };
 
 type SearchParams = Record<string, string | string[] | undefined>;
-type Filter = 'all' | 'ready' | 'review' | 'signed' | 'processing';
+type Filter = "all" | "ready" | "review" | "signed" | "processing";
 
 const PROCESSING: ReadonlyArray<TranscribeVisitStatus> = [
   TranscribeVisitStatus.TRANSCRIBING,
@@ -40,19 +44,19 @@ const PROCESSING: ReadonlyArray<TranscribeVisitStatus> = [
 ];
 
 function resolveFilter(raw: string | undefined): Filter {
-  if (raw === 'ready') return 'ready';
-  if (raw === 'review') return 'review';
-  if (raw === 'signed') return 'signed';
-  if (raw === 'processing') return 'processing';
-  return 'all';
+  if (raw === "ready") return "ready";
+  if (raw === "review") return "review";
+  if (raw === "signed") return "signed";
+  if (raw === "processing") return "processing";
+  return "all";
 }
 
 const FILTER_LABEL: Record<Filter, string> = {
-  all: 'All',
-  ready: 'Ready',
-  review: 'Needs review',
-  signed: 'Signed',
-  processing: 'Processing',
+  all: "All",
+  ready: "Ready",
+  review: "Needs review",
+  signed: "Signed",
+  processing: "Processing",
 };
 
 const PAGE_SIZE = 80;
@@ -63,7 +67,7 @@ export default async function VisitsPage({
   searchParams: Promise<SearchParams>;
 }) {
   const session = await auth();
-  if (!session?.user?.id) redirect('/login');
+  if (!session?.user?.id) redirect("/login");
 
   const sp = await searchParams;
   const filterParam = Array.isArray(sp.filter) ? sp.filter[0] : sp.filter;
@@ -72,17 +76,17 @@ export default async function VisitsPage({
   // Status-predicate for the active filter. All queries share the base
   // `userId + deletedAt:null + archivedAt:null` clause so any filter
   // stays scoped to non-trashed, non-archived visits.
-  const statusFilter: import('@prisma/client').Prisma.TranscribeVisitWhereInput = (() => {
+  const statusScope: TemplateTwinVisibleVisitScope = (() => {
     switch (filter) {
-      case 'ready':
-        return { status: TranscribeVisitStatus.READY, needsReview: false };
-      case 'review':
-        return { status: TranscribeVisitStatus.READY, needsReview: true };
-      case 'signed':
-        return { status: TranscribeVisitStatus.SIGNED };
-      case 'processing':
-        return { status: { in: [...PROCESSING] } };
-      case 'all':
+      case "ready":
+        return { statuses: [TranscribeVisitStatus.READY], needsReview: false };
+      case "review":
+        return { statuses: [TranscribeVisitStatus.READY], needsReview: true };
+      case "signed":
+        return { statuses: [TranscribeVisitStatus.SIGNED] };
+      case "processing":
+        return { statuses: PROCESSING };
+      case "all":
       default:
         return {};
     }
@@ -100,45 +104,55 @@ export default async function VisitsPage({
     patient: { name: string } | null;
   };
 
-  const [rows, totalCount] = (await Promise.all([
-    prisma.transcribeVisit.findMany({
-      where: ordinaryClinicalVisitWhere({
-        userId: session.user.id,
-        deletedAt: null,
-        archivedAt: null,
-        ...statusFilter,
-      }),
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      take: PAGE_SIZE,
-      select: {
-        id: true,
-        patientName: true,
-        specialty: true,
-        status: true,
-        needsReview: true,
-        createdAt: true,
-        signedAt: true,
-        audioDurationSec: true,
-        patient: { select: { name: true } },
+  const [rows, totalAggregate] = await Promise.all([
+    readTemplateTwinVisibleVisitPage<VisitRow>({
+      db: prisma,
+      actorUserId: session.user.id,
+      query: {
+        scope: {
+          deleted: "active",
+          archived: "active",
+          ...statusScope,
+        },
+        orderBy: "createdAt",
+        direction: "desc",
+        take: PAGE_SIZE,
       },
+      hydrate: (tx, visitIds) =>
+        tx.transcribeVisit.findMany({
+          where: {
+            id: { in: [...visitIds] },
+            userId: session.user.id,
+          },
+          select: {
+            id: true,
+            patientName: true,
+            specialty: true,
+            status: true,
+            needsReview: true,
+            createdAt: true,
+            signedAt: true,
+            audioDurationSec: true,
+            patient: { select: { name: true } },
+          },
+        }) as Promise<VisitRow[]>,
     }),
-    prisma.transcribeVisit.count({
-      where: ordinaryClinicalVisitWhere({
-        userId: session.user.id,
-        deletedAt: null,
-        archivedAt: null,
-      }),
+    aggregateTemplateTwinVisibleVisits({
+      db: prisma,
+      actorUserId: session.user.id,
+      scope: { deleted: "active", archived: "active" },
     }),
-  ])) as [VisitRow[], number];
+  ]);
+  const totalCount = totalAggregate.count;
 
   // Round 3 PR-C — §164.312(b) PHI-read audit (A05-P0-004). RSC reads
   // PHI directly via prisma; the audit row records the doctor seeing
   // the visit list, with the active filter as searchable metadata.
   void logAudit({
-    action: 'VIEWED_VISIT_LIST',
-    targetType: 'TranscribeVisit',
+    action: "VIEWED_VISIT_LIST",
+    targetType: "TranscribeVisit",
     metadata: {
-      source: 'rsc:/visits',
+      source: "rsc:/visits",
       filter,
       count: rows.length,
       totalCount,
@@ -157,7 +171,7 @@ export default async function VisitsPage({
       // Batch H: surfaces "Signed · {date}" pill on the visit-list row.
       signedAt: v.signedAt ? v.signedAt.toISOString() : null,
       audioDurationSec: v.audioDurationSec,
-    })
+    }),
   );
 
   const hasAny = totalCount > 0;
@@ -169,14 +183,14 @@ export default async function VisitsPage({
         title="All visits"
         subtitle={
           hasAny
-            ? `${totalCount} active visit${totalCount === 1 ? '' : 's'} · most recent first`
-            : 'No visits yet — start one below.'
+            ? `${totalCount} active visit${totalCount === 1 ? "" : "s"} · most recent first`
+            : "No visits yet — start one below."
         }
         actions={
           <Link
             href="/visits/new"
             className="qm-lin-btn-primary"
-            style={{ textDecoration: 'none' }}
+            style={{ textDecoration: "none" }}
           >
             <Ic.plus width={14} height={14} />
             New visit
@@ -194,7 +208,7 @@ export default async function VisitsPage({
             <Link
               href="/visits/new"
               className="qm-lin-btn-primary"
-              style={{ textDecoration: 'none' }}
+              style={{ textDecoration: "none" }}
             >
               <Ic.plus width={14} height={14} />
               Start a visit
@@ -207,15 +221,15 @@ export default async function VisitsPage({
           {visits.length === 0 ? (
             <div
               style={{
-                margin: '40px auto',
+                margin: "40px auto",
                 maxWidth: 420,
-                textAlign: 'center',
+                textAlign: "center",
                 fontSize: 13,
-                color: 'var(--color-linear-text-3)',
+                color: "var(--color-linear-text-3)",
               }}
             >
-              No visits match{' '}
-              <strong style={{ color: 'var(--color-linear-text)' }}>
+              No visits match{" "}
+              <strong style={{ color: "var(--color-linear-text)" }}>
                 {FILTER_LABEL[filter]}
               </strong>
               .
@@ -231,14 +245,14 @@ export default async function VisitsPage({
 
 function FilterBar({ active }: { active: Filter }) {
   const chips: { id: Filter; label: string; href: string }[] = [
-    { id: 'all', label: 'All', href: '/visits' },
-    { id: 'ready', label: 'Ready', href: '/visits?filter=ready' },
-    { id: 'review', label: 'Needs review', href: '/visits?filter=review' },
-    { id: 'signed', label: 'Signed', href: '/visits?filter=signed' },
+    { id: "all", label: "All", href: "/visits" },
+    { id: "ready", label: "Ready", href: "/visits?filter=ready" },
+    { id: "review", label: "Needs review", href: "/visits?filter=review" },
+    { id: "signed", label: "Signed", href: "/visits?filter=signed" },
     {
-      id: 'processing',
-      label: 'Processing',
-      href: '/visits?filter=processing',
+      id: "processing",
+      label: "Processing",
+      href: "/visits?filter=processing",
     },
   ];
   // Linear V1 filter chips: each pill is a standard `.qm-lin-pill` on
@@ -247,22 +261,22 @@ function FilterBar({ active }: { active: Filter }) {
   return (
     <div
       style={{
-        padding: '14px 24px 4px',
-        display: 'flex',
+        padding: "14px 24px 4px",
+        display: "flex",
         gap: 8,
-        flexWrap: 'wrap',
-        alignItems: 'center',
-        borderBottom: '1px solid var(--color-linear-hairline)',
+        flexWrap: "wrap",
+        alignItems: "center",
+        borderBottom: "1px solid var(--color-linear-hairline)",
       }}
     >
       <span
         style={{
-          fontFamily: 'var(--font-mono)',
+          fontFamily: "var(--font-mono)",
           fontSize: 10.5,
           fontWeight: 500,
-          letterSpacing: '0.07em',
-          textTransform: 'uppercase',
-          color: 'var(--color-linear-text-3)',
+          letterSpacing: "0.07em",
+          textTransform: "uppercase",
+          color: "var(--color-linear-text-3)",
           marginRight: 4,
         }}
       >
@@ -277,13 +291,13 @@ function FilterBar({ active }: { active: Filter }) {
             scroll={false}
             className={
               isActive
-                ? 'qm-lin-pill qm-lin-pill--sage qm-tap-44'
-                : 'qm-lin-pill qm-tap-44'
+                ? "qm-lin-pill qm-lin-pill--sage qm-tap-44"
+                : "qm-lin-pill qm-tap-44"
             }
-            aria-current={isActive ? 'page' : undefined}
+            aria-current={isActive ? "page" : undefined}
             style={{
-              textDecoration: 'none',
-              cursor: 'pointer',
+              textDecoration: "none",
+              cursor: "pointer",
             }}
           >
             {c.label}

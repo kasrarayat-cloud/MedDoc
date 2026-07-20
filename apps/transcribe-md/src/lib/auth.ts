@@ -8,48 +8,70 @@
 // as apps/scribe/src/lib/auth.ts.
 // ============================================================================
 
-import { auth } from '@/lib/nextauth';
-import prisma from '@meddoc/db';
-import { AuthError, type Session, type UserRole } from '@meddoc/auth';
+import { auth } from "@/lib/nextauth";
+import { headers } from "next/headers";
+import prisma from "@meddoc/db";
+import {
+  AuthError,
+  validateSession,
+  type Session,
+  type UserRole,
+} from "@meddoc/auth";
 import {
   evaluateTemplateTwinRollout,
   pinTemplateTwinRollout,
   TemplateTwinRolloutError,
   type TemplateTwinRolloutToken,
-} from '@/lib/template-twin/rollout';
+} from "@/lib/template-twin/rollout";
+import { isPhysicianRequestHost } from "@/lib/admin-host";
+import { isTranscribeMdPhysicianAppService } from "@/lib/template-twin/admin-app-service";
 
 export { AuthError };
 export type { Session, UserRole };
 
+async function assertPhysicianRequestContext(): Promise<void> {
+  if (!isTranscribeMdPhysicianAppService()) {
+    throw new AuthError(
+      "FORBIDDEN",
+      "Clinical access is unavailable on the administrative service.",
+    );
+  }
+  try {
+    if (isPhysicianRequestHost(await headers())) return;
+  } catch (error) {
+    if (error instanceof AuthError) throw error;
+  }
+  throw new AuthError(
+    "FORBIDDEN",
+    "Clinical access is unavailable on this host.",
+  );
+}
+
 export async function getSession(): Promise<Session | null> {
   try {
+    await assertPhysicianRequestContext();
     const nextAuthSession = await auth();
-    if (!nextAuthSession?.user?.id) return null;
+    const userId = nextAuthSession?.user?.id;
+    const sessionId = nextAuthSession?.user?.sessionId;
+    const claimedPracticeId = nextAuthSession?.user?.practiceId;
+    if (!userId || !sessionId || !claimedPracticeId) return null;
 
-    let role = nextAuthSession.user.role as UserRole | undefined;
-    let practiceId = nextAuthSession.user.practiceId as string | undefined;
-
-    try {
-      const dbUser = await prisma.user.findUnique({
-        where: { id: nextAuthSession.user.id },
-        select: { role: true, isActive: true, practiceId: true },
-      });
-      if (!dbUser || !dbUser.isActive) return null;
-      if (!role && dbUser.role) role = dbUser.role as UserRole;
-      if (dbUser.practiceId) practiceId = dbUser.practiceId;
-    } catch {
-      // DB unreachable — fall through with JWT-claimed values.
-    }
-
-    if (!role || !practiceId) return null;
+    const current = await validateSession({
+      sessionToken: sessionId,
+      expectedUserId: userId,
+      expectedPracticeId: claimedPracticeId,
+      allowedRoles: ["DOCTOR"],
+      requiredProducts: ["TRANSCRIBE_MD"],
+    });
+    if (!current) return null;
 
     return {
       user: {
-        id: nextAuthSession.user.id,
-        email: nextAuthSession.user.email ?? '',
-        fullName: nextAuthSession.user.name ?? 'Unknown',
-        role,
-        practiceId,
+        id: current.user.id,
+        email: current.user.email,
+        fullName: current.user.name ?? "Unknown",
+        role: current.user.role as UserRole,
+        practiceId: current.user.practiceId,
       },
     };
   } catch {
@@ -59,23 +81,25 @@ export async function getSession(): Promise<Session | null> {
 
 export async function requireSession(): Promise<Session> {
   const s = await getSession();
-  if (!s) throw new AuthError('UNAUTHENTICATED', 'You must be logged in.');
+  if (!s) throw new AuthError("UNAUTHENTICATED", "You must be logged in.");
   return s;
 }
 
-/** Fresh, fail-closed role evidence for physician-only clinical surfaces.
- * `getSession()` intentionally tolerates a transient DB failure for legacy
- * session continuity, so a JWT role must never be the final authorization
- * decision for Template Twin. */
+/** Fresh, fail-closed role evidence for physician-only clinical surfaces. */
 export async function requireFreshDoctorIdentity(userId: string): Promise<{
-  role: 'DOCTOR';
+  role: "DOCTOR";
   practiceId: string;
+  email: string;
+  fullName: string;
   rolloutToken: TemplateTwinRolloutToken;
 }> {
   try {
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: {
+        id: true,
+        email: true,
+        name: true,
         role: true,
         isActive: true,
         practiceId: true,
@@ -83,29 +107,34 @@ export async function requireFreshDoctorIdentity(userId: string): Promise<{
         suspendedAt: true,
         softDeletedAt: true,
         products: true,
-        practice: { select: { templateTwinEnabled: true } },
+        practice: {
+          select: { id: true, isActive: true, templateTwinEnabled: true },
+        },
       },
     });
     if (
       !user ||
+      user.id !== userId ||
       !user.isActive ||
-      user.role !== 'DOCTOR' ||
+      user.role !== "DOCTOR" ||
       !user.practiceId ||
+      user.practice.id !== user.practiceId ||
+      !user.practice.isActive ||
       user.deactivatedAt !== null ||
       user.suspendedAt !== null ||
       user.softDeletedAt !== null ||
-      !user.products.includes('TRANSCRIBE_MD')
+      !user.products.includes("TRANSCRIBE_MD")
     ) {
       throw new AuthError(
-        'FORBIDDEN',
-        'An active physician account is required for Template Twin.',
+        "FORBIDDEN",
+        "An active physician account is required for Template Twin.",
       );
     }
     const rollout = evaluateTemplateTwinRollout({
       practiceEnabled: user.practice.templateTwinEnabled,
     });
     if (!rollout.allowed) {
-      throw new AuthError('FORBIDDEN', rollout.reason);
+      throw new AuthError("FORBIDDEN", rollout.reason);
     }
     let rolloutToken: TemplateTwinRolloutToken;
     try {
@@ -114,13 +143,15 @@ export async function requireFreshDoctorIdentity(userId: string): Promise<{
       });
     } catch (error) {
       if (error instanceof TemplateTwinRolloutError) {
-        throw new AuthError('FORBIDDEN', error.message);
+        throw new AuthError("FORBIDDEN", error.message);
       }
       throw error;
     }
     return {
-      role: 'DOCTOR',
+      role: "DOCTOR",
       practiceId: user.practiceId,
+      email: user.email,
+      fullName: user.name ?? "Unknown",
       rolloutToken,
     };
   } catch (error) {
@@ -128,8 +159,8 @@ export async function requireFreshDoctorIdentity(userId: string): Promise<{
     // Role evidence is mandatory on this boundary. Do not fall back to a
     // potentially stale JWT when the database cannot confirm the role.
     throw new AuthError(
-      'FORBIDDEN',
-      'An active physician account is required for Template Twin.',
+      "FORBIDDEN",
+      "An active physician account is required for Template Twin.",
     );
   }
 }
@@ -145,29 +176,37 @@ export type TemplateTwinDoctorSession = Session & {
 };
 
 export async function requireDoctorSession(): Promise<TemplateTwinDoctorSession> {
+  await assertPhysicianRequestContext();
   const nextAuthSession = await auth();
-  if (!nextAuthSession?.user?.id) {
-    throw new AuthError('UNAUTHENTICATED', 'You must be logged in.');
+  if (
+    !nextAuthSession?.user?.id ||
+    !nextAuthSession.user.sessionId ||
+    !nextAuthSession.user.practiceId
+  ) {
+    throw new AuthError("UNAUTHENTICATED", "You must be logged in.");
   }
   const doctor = await requireFreshDoctorIdentity(nextAuthSession.user.id);
+  if (doctor.practiceId !== nextAuthSession.user.practiceId) {
+    throw new AuthError(
+      "FORBIDDEN",
+      "Your session tenant is no longer current. Sign in again.",
+    );
+  }
   return {
     templateTwinRolloutToken: doctor.rolloutToken,
     user: {
       id: nextAuthSession.user.id,
-      email: nextAuthSession.user.email ?? '',
-      fullName: nextAuthSession.user.name ?? 'Unknown',
+      email: doctor.email,
+      fullName: doctor.fullName,
       role: doctor.role,
       practiceId: doctor.practiceId,
     },
   };
 }
 
-/** Read the current NextAuth session cookie and return the JWT's
- *  sessionId claim (if present). Used by the /settings page to show
- *  the active UserSession row. Returns null when the user isn't
- *  signed in or their token pre-dates T-M2 (no sessionId yet). */
+/** Read the current NextAuth session cookie and return its required
+ * UserSession binding. Missing bindings are unauthenticated. */
 export async function getCurrentSessionId(): Promise<string | null> {
   const session = await auth();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (session?.user as any)?.sessionId ?? null;
+  return session?.user?.sessionId ?? null;
 }

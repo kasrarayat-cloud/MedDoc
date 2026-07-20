@@ -191,16 +191,32 @@ describe("logAudit session resolution — worker-context safety", () => {
   });
 
   it("never throws — even when prisma itself fails (T-M2 contract)", async () => {
-    mocks.prismaCreate.mockRejectedValue(new Error("db down"));
+    const sensitiveFailure =
+      "db down doctor@synthetic.invalid target=synthetic-visit-secret";
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.prismaCreate.mockRejectedValue(new Error(sensitiveFailure));
     const { logAudit } = await import("@/lib/audit");
-    await expect(
-      logAudit({
-        action: "VISIT_SIGNED",
-        targetId: "visit_1",
-        userId: "u",
-        practiceId: "p",
-      }),
-    ).resolves.toBeUndefined();
+    try {
+      await expect(
+        logAudit({
+          action: "VISIT_SIGNED",
+          targetId: "synthetic-visit-secret",
+          userId: "u",
+          practiceId: "p",
+        }),
+      ).resolves.toBeUndefined();
+      expect(errorSpy).toHaveBeenCalledOnce();
+      expect(errorSpy).toHaveBeenCalledWith("[audit] write failed");
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(
+        sensitiveFailure,
+      );
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(
+        "synthetic-visit-secret",
+      );
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain("VISIT_SIGNED");
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 
   it("required synthetic audit retries a complete transaction before succeeding", async () => {

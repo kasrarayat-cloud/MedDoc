@@ -16,11 +16,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TranscribeVisitStatus } from "@prisma/client";
 
 const mocks = vi.hoisted(() => ({
+  visitFindFirst: vi.fn(),
   visitFindUnique: vi.fn(),
   visitUpdate: vi.fn(),
   userFindUnique: vi.fn(),
   patientFindUnique: vi.fn(),
   stagingRunFindFirst: vi.fn(),
+  readQueryRaw: vi.fn(),
+  txQueryRaw: vi.fn(),
+  transaction: vi.fn(),
   auth: vi.fn(),
   rateLimitOr429: vi.fn(),
 }));
@@ -28,12 +32,15 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@meddoc/db", () => ({
   default: {
     transcribeVisit: {
+      findFirst: mocks.visitFindFirst,
       findUnique: mocks.visitFindUnique,
       update: mocks.visitUpdate,
     },
     user: { findUnique: mocks.userFindUnique },
     transcribeMdPatient: { findUnique: mocks.patientFindUnique },
     templateTwinSyntheticQaRun: { findFirst: mocks.stagingRunFindFirst },
+    $queryRaw: mocks.readQueryRaw,
+    $transaction: mocks.transaction,
   },
 }));
 
@@ -51,9 +58,59 @@ vi.mock("@/lib/log", () => ({
 }));
 
 import { GET, PATCH } from "@/app/api/visits/[id]/route";
+import { TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE } from "@/lib/template-twin/durable-visit-exclusion";
 
 const FAKE_USER_ID = "user_owner_1";
 const FAKE_VISIT_ID = "cmoqn96fe001501l543vfe1u2";
+const FAKE_PATIENT_ID = "pat_1";
+const FAKE_PRACTICE_ID = "practice_1";
+const UPDATED_AT = new Date("2026-07-20T00:00:00.000Z");
+
+const ORDINARY_PROVENANCE = {
+  patientId: FAKE_PATIENT_ID,
+  patient: {
+    id: FAKE_PATIENT_ID,
+    practiceId: FAKE_PRACTICE_ID,
+    externalId: null,
+  },
+  noteTemplateId: null,
+  noteTemplateVersion: null,
+  noteTemplate: null,
+  templateTwinFill: null,
+  templateTwinSyntheticQaRun: null,
+  templateTwinSyntheticQaAdmission: null,
+  templateTwinProviderExecutions: [],
+} as const;
+
+function ordinaryDraft(overrides: Record<string, unknown> = {}) {
+  return {
+    id: FAKE_VISIT_ID,
+    userId: FAKE_USER_ID,
+    updatedAt: UPDATED_AT,
+    status: TranscribeVisitStatus.QUEUED,
+    signedAt: null,
+    audioKey: null,
+    dictationAudioKey: null,
+    rawTextInput: null,
+    deletedAt: null,
+    archivedAt: null,
+    specialty: "primary-care",
+    chiefComplaint: "initial CC",
+    inputMode: "audio_upload",
+    ...ORDINARY_PROVENANCE,
+    ...overrides,
+  };
+}
+
+const ORDINARY_READ_AUTHORITY = {
+  visitId: FAKE_VISIT_ID,
+  isTemplateTwin: false,
+  isSyntheticTemplateTwin: false,
+  isInternalPreCertification: false,
+  authorized: true,
+  practiceId: null,
+  templateTwinEnabled: null,
+} as const;
 
 function makeReq(method: string, body?: unknown) {
   const init: RequestInit = { method };
@@ -73,15 +130,24 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.rateLimitOr429.mockReturnValue(null);
   mocks.stagingRunFindFirst.mockResolvedValue(null);
+  mocks.readQueryRaw.mockResolvedValue([ORDINARY_READ_AUTHORITY]);
+  mocks.txQueryRaw.mockResolvedValue([{ id: FAKE_VISIT_ID }]);
+  mocks.transaction.mockImplementation(
+    async (callback: (tx: unknown) => Promise<unknown>) =>
+      callback({
+        $queryRaw: mocks.txQueryRaw,
+        transcribeVisit: { update: mocks.visitUpdate },
+      }),
+  );
 });
 
 describe("GET /api/visits/[id]", () => {
   it("returns 200 + visit JSON for the owner", async () => {
     mocks.auth.mockResolvedValue({ user: { id: FAKE_USER_ID } });
-    mocks.visitFindUnique.mockResolvedValue({
+    mocks.visitFindFirst.mockResolvedValue({
       id: FAKE_VISIT_ID,
       userId: FAKE_USER_ID,
-      patientId: "pat_1",
+      patientId: FAKE_PATIENT_ID,
       patientName: "Smoke Patient",
       specialty: "primary-care",
       chiefComplaint: "chest pain",
@@ -96,11 +162,12 @@ describe("GET /api/visits/[id]", () => {
       cptCodes: { codes: [] },
       rxDrafts: { prescriptions: [] },
       patient: {
-        id: "pat_1",
+        id: FAKE_PATIENT_ID,
         name: "Smoke Patient",
         dateOfBirth: new Date("1965-03-15"),
       },
       createdAt: new Date("2026-05-04T03:32:46.155Z"),
+      updatedAt: UPDATED_AT,
       deletedAt: null,
       archivedAt: null,
     });
@@ -116,7 +183,8 @@ describe("GET /api/visits/[id]", () => {
 
   it("returns 404 for a foreign visit (anti-enumeration: same code as not-found)", async () => {
     mocks.auth.mockResolvedValue({ user: { id: FAKE_USER_ID } });
-    mocks.visitFindUnique.mockResolvedValue({
+    mocks.readQueryRaw.mockResolvedValue([]);
+    mocks.visitFindFirst.mockResolvedValue({
       id: FAKE_VISIT_ID,
       userId: "user_owner_2", // different owner
       patientId: "pat_2",
@@ -133,7 +201,8 @@ describe("GET /api/visits/[id]", () => {
 
   it("returns 404 when the visit row does not exist", async () => {
     mocks.auth.mockResolvedValue({ user: { id: FAKE_USER_ID } });
-    mocks.visitFindUnique.mockResolvedValue(null);
+    mocks.readQueryRaw.mockResolvedValue([]);
+    mocks.visitFindFirst.mockResolvedValue(null);
 
     const res = await GET(makeReq("GET"), ctx);
     expect(res.status).toBe(404);
@@ -144,25 +213,20 @@ describe("GET /api/visits/[id]", () => {
 
     const res = await GET(makeReq("GET"), ctx);
     expect(res.status).toBe(401);
-    expect(mocks.visitFindUnique).not.toHaveBeenCalled();
+    expect(mocks.visitFindFirst).not.toHaveBeenCalled();
+    expect(mocks.readQueryRaw).not.toHaveBeenCalled();
   });
 });
 
 describe("PATCH /api/visits/[id] (regression)", () => {
   it("updates the chief complaint of a draft visit", async () => {
     mocks.auth.mockResolvedValue({ user: { id: FAKE_USER_ID } });
-    mocks.userFindUnique.mockResolvedValue({ practiceId: "practice_1" });
-    mocks.visitFindUnique.mockResolvedValue({
-      id: FAKE_VISIT_ID,
-      userId: FAKE_USER_ID,
-      status: TranscribeVisitStatus.QUEUED,
-      audioKey: null,
-      dictationAudioKey: null,
-      rawTextInput: null,
-      deletedAt: null,
-      archivedAt: null,
-      patientId: "pat_1",
-    });
+    mocks.userFindUnique.mockResolvedValue({ practiceId: FAKE_PRACTICE_ID });
+    mocks.visitFindUnique.mockResolvedValue(ordinaryDraft());
+    mocks.txQueryRaw
+      .mockResolvedValueOnce([{ id: FAKE_PRACTICE_ID, isActive: true }])
+      .mockResolvedValueOnce([{ id: FAKE_USER_ID }])
+      .mockResolvedValueOnce([{ id: FAKE_VISIT_ID }]);
     mocks.visitUpdate.mockResolvedValue({
       id: FAKE_VISIT_ID,
       patientId: "pat_1",
@@ -179,5 +243,14 @@ describe("PATCH /api/visits/[id] (regression)", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { visit: { chiefComplaint: string } };
     expect(body.visit.chiefComplaint).toBe("updated CC");
+    expect(mocks.visitFindUnique).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: expect.objectContaining(
+          TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE,
+        ),
+      }),
+    );
+    expect(mocks.txQueryRaw).toHaveBeenCalledTimes(3);
   });
 });

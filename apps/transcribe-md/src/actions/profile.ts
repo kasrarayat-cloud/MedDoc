@@ -70,8 +70,8 @@ export async function updateProfileAction(
         timeZone: orNull(parsed.data.timeZone),
       },
     });
-  } catch (err) {
-    console.error('[profile] update failed:', err);
+  } catch {
+    console.error('[profile] update failed');
     return { ok: false, errors: { _form: 'Could not save. Try again.' } };
   }
 

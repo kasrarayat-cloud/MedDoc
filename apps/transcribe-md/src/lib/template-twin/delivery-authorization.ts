@@ -4,6 +4,10 @@ import prisma from "@meddoc/db";
 import { Prisma, TranscribeVisitStatus } from "@prisma/client";
 
 import { AuthError, requireFreshDoctorIdentity } from "@/lib/auth";
+import {
+  claimCurrentOrdinaryVisitDeliveryActor,
+  currentClinicalVisitActorWhere,
+} from "@/lib/clinical-visit-authority";
 import { runSerializableTransactionWithRetry } from "@/lib/db/transaction-retry";
 import {
   lockAndAssertVisitAutomationProof,
@@ -12,6 +16,7 @@ import {
 
 import { canonicalSha256 } from "./canonical";
 import { enqueueTemplateTwinAudit } from "./audit-outbox";
+import { TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE } from "./durable-visit-exclusion";
 import { persistedTemplateTwinEncounterEvidenceIsValid } from "./encounter-evidence-verification";
 import {
   lockAndAssertCurrentTemplateTwinPhysician,
@@ -32,6 +37,16 @@ import {
   lockAndAssertTemplateTwinStagingQaOperation,
   TemplateTwinStagingQaVisitGuardError,
 } from "./staging-qa-visit-guard";
+import {
+  requireTemplateTwinVisitReadAuthority,
+  type TemplateTwinVisitReadDecision,
+  TemplateTwinVisitReadAuthorityError,
+} from "./read-authority";
+import {
+  requireTemplateTwinSyntheticReadAdmission,
+  type TemplateTwinSyntheticReadAdmission,
+  TemplateTwinSyntheticReadAdmissionError,
+} from "./synthetic-read-admission";
 
 export type TemplateTwinDeliveryAuthorizationCode =
   | "NOT_FOUND"
@@ -67,8 +82,78 @@ function normalizedEmail(email: string): string {
 }
 
 export type TemplateTwinDeliveryFinalClaim =
-  | { templateTwin: false }
+  | { templateTwin: false; currentPhysicianEmail: string }
   | { templateTwin: true; currentPhysicianEmail: string };
+
+interface TemplateTwinDeliveryReadBoundaryClaim {
+  decision: TemplateTwinVisitReadDecision;
+  syntheticAdmission: TemplateTwinSyntheticReadAdmission | null;
+}
+
+async function requireDeliveryReadBoundary(input: {
+  visitId: string;
+  actorUserId: string;
+  allowSyntheticOriginalTemplate: boolean;
+  expected?: TemplateTwinDeliveryReadBoundaryClaim;
+}): Promise<TemplateTwinDeliveryReadBoundaryClaim> {
+  let decision: TemplateTwinVisitReadDecision;
+  try {
+    decision = await requireTemplateTwinVisitReadAuthority({
+      db: prisma,
+      visitId: input.visitId,
+      actorUserId: input.actorUserId,
+    });
+  } catch (error) {
+    if (error instanceof TemplateTwinVisitReadAuthorityError) {
+      throw new TemplateTwinDeliveryAuthorizationError("NOT_FOUND", 404);
+    }
+    throw error;
+  }
+
+  if (
+    input.expected &&
+    (decision.visitId !== input.expected.decision.visitId ||
+      decision.isTemplateTwin !== input.expected.decision.isTemplateTwin ||
+      decision.isSyntheticTemplateTwin !==
+        input.expected.decision.isSyntheticTemplateTwin ||
+      decision.practiceId !== input.expected.decision.practiceId)
+  ) {
+    throw new TemplateTwinDeliveryAuthorizationError("NOT_FOUND", 404);
+  }
+
+  if (!decision.isSyntheticTemplateTwin) {
+    if (input.expected?.syntheticAdmission) {
+      throw new TemplateTwinDeliveryAuthorizationError("NOT_FOUND", 404);
+    }
+    return { decision, syntheticAdmission: null };
+  }
+  if (
+    input.allowSyntheticOriginalTemplate !== true ||
+    (input.expected !== undefined && !input.expected.syntheticAdmission)
+  ) {
+    throw new TemplateTwinDeliveryAuthorizationError("NOT_FOUND", 404);
+  }
+
+  try {
+    const syntheticAdmission = await requireTemplateTwinSyntheticReadAdmission({
+      visitId: input.visitId,
+      actorUserId: input.actorUserId,
+      readDecision: decision,
+      ...(input.expected?.syntheticAdmission
+        ? { expected: input.expected.syntheticAdmission }
+        : {}),
+    });
+    if (!syntheticAdmission) {
+      throw new TemplateTwinDeliveryAuthorizationError("NOT_FOUND", 404);
+    }
+    return { decision, syntheticAdmission };
+  } catch (error) {
+    if (error instanceof TemplateTwinSyntheticReadAdmissionError) {
+      throw new TemplateTwinDeliveryAuthorizationError("NOT_FOUND", 404);
+    }
+    throw error;
+  }
+}
 
 /**
  * Final authorization claim for every generic visit delivery surface.
@@ -88,8 +173,23 @@ export async function authorizeVisitDeliveryFinalClaim(input: {
    */
   emailDelivery?: { targetEmail?: string };
 }): Promise<TemplateTwinDeliveryFinalClaim> {
-  const visit = await prisma.transcribeVisit.findUnique({
-    where: { id: input.visitId },
+  // This classifier reads only identifiers and provenance. It must run before
+  // TEMPLATE_TWIN_SIGNING_VISIT_SELECT projects SOAP/transcript/evidence into
+  // application memory. Ordinary owned visits retain their existing path.
+  const initialReadClaim = await requireDeliveryReadBoundary({
+    visitId: input.visitId,
+    actorUserId: input.actorUserId,
+    allowSyntheticOriginalTemplate:
+      input.allowSyntheticOriginalTemplate === true,
+  });
+  const visit = await prisma.transcribeVisit.findFirst({
+    where: {
+      id: input.visitId,
+      ...currentClinicalVisitActorWhere(input.actorUserId),
+      ...(initialReadClaim.decision.isTemplateTwin
+        ? {}
+        : TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE),
+    },
     select: {
       id: true,
       userId: true,
@@ -104,12 +204,37 @@ export async function authorizeVisitDeliveryFinalClaim(input: {
     throw new TemplateTwinDeliveryAuthorizationError("NOT_FOUND", 404);
   }
 
+  // Rebind the identifier/provenance claim immediately after the clinical
+  // projection. Synthetic run/admission, tenant, and template transitions may
+  // never survive into a returned or delivered payload.
+  const projectedReadClaim = await requireDeliveryReadBoundary({
+    visitId: input.visitId,
+    actorUserId: input.actorUserId,
+    allowSyntheticOriginalTemplate:
+      input.allowSyntheticOriginalTemplate === true,
+    expected: initialReadClaim,
+  });
+
   const isTwin = visit.noteTemplate?.templateKind === "template_twin_docx";
   if (!isTwin) {
     // A fill attached to a non-Twin template is inconsistent clinical state,
     // not an ordinary visit that may inherit the legacy delivery behavior.
     if (visit.templateTwinFill) blocked();
-    return { templateTwin: false };
+    const currentActor = await claimCurrentOrdinaryVisitDeliveryActor({
+      visitId: input.visitId,
+      actorUserId: input.actorUserId,
+    });
+    if (!currentActor) {
+      throw new TemplateTwinDeliveryAuthorizationError(
+        "TEMPLATE_TWIN_CURRENT_PHYSICIAN_REQUIRED",
+        403,
+      );
+    }
+    if (visit.user.practiceId !== currentActor.practiceId) blocked();
+    return {
+      templateTwin: false,
+      currentPhysicianEmail: currentActor.email,
+    };
   }
   if (
     visit.templateTwinSyntheticQaRun &&
@@ -395,6 +520,13 @@ export async function authorizeVisitDeliveryFinalClaim(input: {
       },
     });
     if (decision === false || decision.allowed !== true) blocked();
+    await requireDeliveryReadBoundary({
+      visitId: input.visitId,
+      actorUserId: input.actorUserId,
+      allowSyntheticOriginalTemplate:
+        input.allowSyntheticOriginalTemplate === true,
+      expected: projectedReadClaim,
+    });
     return {
       templateTwin: true,
       currentPhysicianEmail: decision.currentPhysicianEmail,

@@ -13,14 +13,21 @@ vi.mock('@meddoc/ai', async () => {
   const actual = await vi.importActual<typeof import('@meddoc/ai')>('@meddoc/ai');
   return { ...actual, modelClient: { complete: vi.fn(), completeText: mocks.modelCompleteText } };
 });
-vi.mock('@meddoc/db', () => ({ default: { transcribeVisit: { update: vi.fn() } } }));
+vi.mock('@meddoc/db', () => ({
+  default: {
+    $queryRaw: vi.fn().mockResolvedValue([
+      { id: 'u', practiceId: 'p', email: 'synthetic@example.test' },
+    ]),
+    transcribeVisit: { update: vi.fn() },
+  },
+}));
 vi.mock('@/lib/audit', () => ({ logAudit: vi.fn() }));
 
 import { runAnchorVerify } from '../04b-anchor-verify';
 import { buildTemplateScaffold } from '../../note-templates/template-scaffold';
 import type { NoteTemplateSection } from '../../note-templates/system-default-template';
 
-const IDS = { visitId: 'v', practiceId: 'p', userId: null as string | null };
+const IDS = { visitId: 'v', practiceId: 'p', userId: 'u' };
 
 /** Capture the CLAIM lines sent to the judge; respond entailed unless the
  *  claim matches a `reject` predicate (models a real judge rejecting an

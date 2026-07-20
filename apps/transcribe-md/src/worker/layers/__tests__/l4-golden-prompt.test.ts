@@ -38,7 +38,16 @@ vi.mock("@meddoc/ai", async () => {
   };
 });
 vi.mock("@meddoc/db", () => ({
-  default: { transcribeVisit: { update: mocks.prismaUpdate } },
+  default: {
+    $queryRaw: vi.fn().mockResolvedValue([
+      {
+        id: "golden-doctor",
+        practiceId: "golden-practice",
+        email: "synthetic@example.test",
+      },
+    ]),
+    transcribeVisit: { update: mocks.prismaUpdate },
+  },
 }));
 vi.mock("@/lib/audit", () => ({ logAudit: mocks.logAudit }));
 vi.mock("@/worker/worker-audit", () => ({ logWorkerAudit: mocks.logAudit }));

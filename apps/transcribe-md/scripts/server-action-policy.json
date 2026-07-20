@@ -1,0 +1,174 @@
+{
+  "schemaVersion": 2,
+  "nextMajor": 16,
+  "expectedModuleCount": 14,
+  "expectedActionCount": 30,
+  "expectedCompiledActionCount": 28,
+  "expectedCompiledExclusions": [
+    {
+      "module": "src/actions/patients.ts",
+      "exportedName": "loadMorePatientsAction"
+    },
+    {
+      "module": "src/actions/visits.ts",
+      "exportedName": "loadMoreVisitsAction"
+    }
+  ],
+  "expectedClassificationCounts": {
+    "AUTH_ENTRYPOINT": 2,
+    "SELF_SESSION": 3,
+    "PHYSICIAN_CLINICAL": 25
+  },
+  "actions": [
+    {
+      "module": "src/actions/auth.ts",
+      "exportedName": "loginAction",
+      "classification": "AUTH_ENTRYPOINT"
+    },
+    {
+      "module": "src/actions/auth.ts",
+      "exportedName": "signupAction",
+      "classification": "AUTH_ENTRYPOINT"
+    },
+    {
+      "module": "src/actions/command-palette.ts",
+      "exportedName": "getRecentVisits",
+      "classification": "PHYSICIAN_CLINICAL"
+    },
+    {
+      "module": "src/actions/extract-note-file.ts",
+      "exportedName": "extractNoteFileAction",
+      "classification": "PHYSICIAN_CLINICAL"
+    },
+    {
+      "module": "src/actions/note-template-lifecycle.ts",
+      "exportedName": "activateNoteTemplateAction",
+      "classification": "PHYSICIAN_CLINICAL"
+    },
+    {
+      "module": "src/actions/note-template-lifecycle.ts",
+      "exportedName": "deleteNoteTemplateAction",
+      "classification": "PHYSICIAN_CLINICAL"
+    },
+    {
+      "module": "src/actions/note-template-lifecycle.ts",
+      "exportedName": "duplicateNoteTemplateAction",
+      "classification": "PHYSICIAN_CLINICAL"
+    },
+    {
+      "module": "src/actions/note-template-lifecycle.ts",
+      "exportedName": "getNoteTemplateForEditAction",
+      "classification": "PHYSICIAN_CLINICAL"
+    },
+    {
+      "module": "src/actions/note-template-lifecycle.ts",
+      "exportedName": "saveNoteTemplateAction",
+      "classification": "PHYSICIAN_CLINICAL"
+    },
+    {
+      "module": "src/actions/parse-note-template.ts",
+      "exportedName": "parseNoteTemplateAction",
+      "classification": "PHYSICIAN_CLINICAL"
+    },
+    {
+      "module": "src/actions/patients.ts",
+      "exportedName": "loadMorePatientsAction",
+      "classification": "PHYSICIAN_CLINICAL"
+    },
+    {
+      "module": "src/actions/patients.ts",
+      "exportedName": "searchPatientsAction",
+      "classification": "PHYSICIAN_CLINICAL"
+    },
+    {
+      "module": "src/actions/preview-note-template.ts",
+      "exportedName": "previewNoteTemplateAction",
+      "classification": "PHYSICIAN_CLINICAL"
+    },
+    {
+      "module": "src/actions/profile.ts",
+      "exportedName": "updateProfileAction",
+      "classification": "SELF_SESSION"
+    },
+    {
+      "module": "src/actions/session.ts",
+      "exportedName": "signOutAction",
+      "classification": "SELF_SESSION"
+    },
+    {
+      "module": "src/actions/session.ts",
+      "exportedName": "signOutAllDevicesAction",
+      "classification": "SELF_SESSION"
+    },
+    {
+      "module": "src/actions/soap.ts",
+      "exportedName": "reassignSpeakerAction",
+      "classification": "PHYSICIAN_CLINICAL"
+    },
+    {
+      "module": "src/actions/soap.ts",
+      "exportedName": "saveSoapDraftAction",
+      "classification": "PHYSICIAN_CLINICAL"
+    },
+    {
+      "module": "src/actions/suggestion-actions.ts",
+      "exportedName": "adoptSuggestionAction",
+      "classification": "PHYSICIAN_CLINICAL"
+    },
+    {
+      "module": "src/actions/suggestion-actions.ts",
+      "exportedName": "dismissSuggestionAction",
+      "classification": "PHYSICIAN_CLINICAL"
+    },
+    {
+      "module": "src/actions/template-twin-management.ts",
+      "exportedName": "activateTemplateTwinVersionAction",
+      "classification": "PHYSICIAN_CLINICAL"
+    },
+    {
+      "module": "src/actions/template-twin-management.ts",
+      "exportedName": "createTemplateTwinVersionAction",
+      "classification": "PHYSICIAN_CLINICAL"
+    },
+    {
+      "module": "src/actions/template-twin-management.ts",
+      "exportedName": "deactivateTemplateTwinVersionAction",
+      "classification": "PHYSICIAN_CLINICAL"
+    },
+    {
+      "module": "src/actions/template-twin-management.ts",
+      "exportedName": "inspectTemplateTwinLineageAction",
+      "classification": "PHYSICIAN_CLINICAL"
+    },
+    {
+      "module": "src/actions/template-twin-management.ts",
+      "exportedName": "retireTemplateTwinVersionAction",
+      "classification": "PHYSICIAN_CLINICAL"
+    },
+    {
+      "module": "src/actions/template-twin-management.ts",
+      "exportedName": "rollbackTemplateTwinVersionAction",
+      "classification": "PHYSICIAN_CLINICAL"
+    },
+    {
+      "module": "src/actions/visits.ts",
+      "exportedName": "createVisitAction",
+      "classification": "PHYSICIAN_CLINICAL"
+    },
+    {
+      "module": "src/actions/visits.ts",
+      "exportedName": "loadMoreVisitsAction",
+      "classification": "PHYSICIAN_CLINICAL"
+    },
+    {
+      "module": "src/actions/visits.ts",
+      "exportedName": "searchInboxAction",
+      "classification": "PHYSICIAN_CLINICAL"
+    },
+    {
+      "module": "src/lib/rx-warning-audit.ts",
+      "exportedName": "recordOverride",
+      "classification": "PHYSICIAN_CLINICAL"
+    }
+  ]
+}

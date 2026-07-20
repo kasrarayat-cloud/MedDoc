@@ -34,9 +34,10 @@ import {
   type C3PatientRow,
 } from "@/lib/c3-list-pagination";
 import {
-  ordinaryClinicalVisitWhere,
-  TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID,
-} from "@/lib/template-twin/synthetic-qa-patient";
+  countTemplateTwinVisibleVisitsByPatient,
+  readLatestTemplateTwinVisibleVisitByPatient,
+} from "@/lib/template-twin/read-authority";
+import { currentClinicalPatientCollectionWhere } from "@/lib/clinical-patient-authority";
 
 export const metadata: Metadata = { title: "Patients" };
 
@@ -51,6 +52,10 @@ export default async function PatientsPage() {
     select: { practiceId: true },
   });
   if (!user) redirect("/login");
+  const actor = {
+    userId: session.user.id,
+    practiceId: user.practiceId,
+  };
 
   // ── C3 calm-skin patients list (flag-gated) ───────────────────────────────
   // SKIN-ONLY re-layout: same practice-scoped roster + same VIEWED_PATIENT_LIST
@@ -63,28 +68,10 @@ export default async function PatientsPage() {
       name: string;
       dateOfBirth: Date | null;
       updatedAt: Date;
-      transcribeVisits: Array<{
-        createdAt: Date;
-        specialty: string;
-        status: import("@prisma/client").TranscribeVisitStatus;
-        needsReview: boolean;
-        signedAt: Date | null;
-      }>;
     };
     const [firstRaw, total] = (await Promise.all([
       prisma.transcribeMdPatient.findMany({
-        where: {
-          practiceId: user.practiceId,
-          deletedAt: null,
-          OR: [
-            { externalId: null },
-            {
-              externalId: {
-                not: TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID,
-              },
-            },
-          ],
-        },
+        where: currentClinicalPatientCollectionWhere({ actor }),
         orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
         take: C3_PATIENTS_PAGE_SIZE + 1,
         select: {
@@ -92,36 +79,10 @@ export default async function PatientsPage() {
           name: true,
           dateOfBirth: true,
           updatedAt: true,
-          transcribeVisits: {
-            where: ordinaryClinicalVisitWhere({
-              deletedAt: null,
-              archivedAt: null,
-            }),
-            orderBy: { createdAt: "desc" },
-            take: 1,
-            select: {
-              createdAt: true,
-              specialty: true,
-              status: true,
-              needsReview: true,
-              signedAt: true,
-            },
-          },
         },
       }),
       prisma.transcribeMdPatient.count({
-        where: {
-          practiceId: user.practiceId,
-          deletedAt: null,
-          OR: [
-            { externalId: null },
-            {
-              externalId: {
-                not: TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID,
-              },
-            },
-          ],
-        },
+        where: currentClinicalPatientCollectionWhere({ actor }),
       }),
     ])) as [C3PatientRaw[], number];
 
@@ -139,25 +100,53 @@ export default async function PatientsPage() {
       ? firstRaw.slice(0, C3_PATIENTS_PAGE_SIZE)
       : firstRaw;
     const ids = firstPage.map((p) => p.id);
-    const counts = ids.length
-      ? await prisma.transcribeVisit.groupBy({
-          by: ["patientId"],
-          where: ordinaryClinicalVisitWhere({
-            patientId: { in: ids },
-            deletedAt: null,
-            archivedAt: null,
-          }),
-          _count: { _all: true },
-        })
-      : [];
+    type LatestC3Visit = {
+      id: string;
+      patientId: string;
+      createdAt: Date;
+      specialty: string;
+      status: import("@prisma/client").TranscribeVisitStatus;
+      needsReview: boolean;
+      signedAt: Date | null;
+    };
+    const [latestVisits, counts] = await Promise.all([
+      readLatestTemplateTwinVisibleVisitByPatient<LatestC3Visit>({
+        db: prisma,
+        actorUserId: session.user.id,
+        patientIds: ids,
+        scope: { deleted: "active", archived: "active" },
+        hydrate: (tx, visitIds) =>
+          tx.transcribeVisit.findMany({
+            where: {
+              id: { in: [...visitIds] },
+              userId: session.user.id,
+            },
+            select: {
+              id: true,
+              patientId: true,
+              createdAt: true,
+              specialty: true,
+              status: true,
+              needsReview: true,
+              signedAt: true,
+            },
+          }) as Promise<LatestC3Visit[]>,
+      }),
+      countTemplateTwinVisibleVisitsByPatient({
+        db: prisma,
+        actorUserId: session.user.id,
+        patientIds: ids,
+        scope: { deleted: "active", archived: "active" },
+      }),
+    ]);
+    const latestByPatient = new Map(
+      latestVisits.map((visit) => [visit.patientId, visit]),
+    );
     const countBy = new Map<string, number>(
-      counts.map((c: { patientId: string; _count: { _all: number } }) => [
-        c.patientId,
-        c._count._all,
-      ]),
+      counts.map((count) => [count.patientId, count.count]),
     );
     const firstRows: C3PatientRow[] = firstPage.map((p) => {
-      const lv = p.transcribeVisits[0];
+      const lv = latestByPatient.get(p.id);
       return {
         id: p.id,
         name: p.name,
@@ -228,6 +217,8 @@ export default async function PatientsPage() {
   }
 
   type LatestVisit = {
+    id: string;
+    patientId: string;
     createdAt: Date;
     specialty: string;
     status: import("@prisma/client").TranscribeVisitStatus;
@@ -237,60 +228,54 @@ export default async function PatientsPage() {
     id: string;
     name: string;
     dateOfBirth: Date | null;
-    transcribeVisits: LatestVisit[];
   };
-  type CountRow = { patientId: string; _count: { _all: number } };
 
   const rows: PatientRow[] = await prisma.transcribeMdPatient.findMany({
-    where: {
-      practiceId: user.practiceId,
-      deletedAt: null,
-      OR: [
-        { externalId: null },
-        {
-          externalId: {
-            not: TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID,
-          },
-        },
-      ],
-    },
+    where: currentClinicalPatientCollectionWhere({ actor }),
     orderBy: { updatedAt: "desc" },
     take: PAGE_SIZE,
     select: {
       id: true,
       name: true,
       dateOfBirth: true,
-      transcribeVisits: {
-        where: ordinaryClinicalVisitWhere({
-          deletedAt: null,
-          archivedAt: null,
-        }),
-        orderBy: { createdAt: "desc" },
-        take: 1,
-        select: {
-          createdAt: true,
-          specialty: true,
-          status: true,
-          needsReview: true,
-        },
-      },
     },
   });
 
   const patientIds = rows.map((r: PatientRow) => r.id);
-  const counts: CountRow[] = patientIds.length
-    ? await prisma.transcribeVisit.groupBy({
-        by: ["patientId"],
-        where: ordinaryClinicalVisitWhere({
-          patientId: { in: patientIds },
-          deletedAt: null,
-          archivedAt: null,
-        }),
-        _count: { _all: true },
-      })
-    : [];
+  const [latestVisits, counts] = await Promise.all([
+    readLatestTemplateTwinVisibleVisitByPatient<LatestVisit>({
+      db: prisma,
+      actorUserId: session.user.id,
+      patientIds,
+      scope: { deleted: "active", archived: "active" },
+      hydrate: (tx, visitIds) =>
+        tx.transcribeVisit.findMany({
+          where: {
+            id: { in: [...visitIds] },
+            userId: session.user.id,
+          },
+          select: {
+            id: true,
+            patientId: true,
+            createdAt: true,
+            specialty: true,
+            status: true,
+            needsReview: true,
+          },
+        }) as Promise<LatestVisit[]>,
+    }),
+    countTemplateTwinVisibleVisitsByPatient({
+      db: prisma,
+      actorUserId: session.user.id,
+      patientIds,
+      scope: { deleted: "active", archived: "active" },
+    }),
+  ]);
+  const latestByPatient = new Map(
+    latestVisits.map((visit) => [visit.patientId, visit]),
+  );
   const countByPatient = new Map<string, number>(
-    counts.map((c: CountRow) => [c.patientId, c._count._all]),
+    counts.map((count) => [count.patientId, count.count]),
   );
 
   // Round 3 PR-C — §164.312(b) PHI-read audit (A05-P0-004). Patients
@@ -306,7 +291,7 @@ export default async function PatientsPage() {
 
   const patients: DashboardPatient[] = rows.map(
     (r: PatientRow): DashboardPatient => {
-      const latest = r.transcribeVisits[0];
+      const latest = latestByPatient.get(r.id);
       return {
         id: r.id,
         name: r.name,

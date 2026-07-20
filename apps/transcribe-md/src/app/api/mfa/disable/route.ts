@@ -23,11 +23,22 @@ import { z } from "zod";
 import bcrypt from "bcryptjs";
 
 import prisma from "@meddoc/db";
-import { Product } from "@prisma/client";
+import { Product, type Prisma } from "@prisma/client";
 import { apiError, withApiHandler } from "@/lib/api-error";
-import { verifyTotpToken, findMatchingRecoveryHash } from "@/lib/mfa";
-import { logAudit } from "@/lib/audit";
+import {
+  verifyStoredMfaTotpToken,
+  findMatchingRecoveryHash,
+} from "@/lib/mfa";
+import {
+  appendAuthMutationAuditInTransaction,
+  logAudit,
+} from "@/lib/audit";
 import { resolveMfaRequestActor } from "@/lib/mfa-request-actor";
+import { RATE_LIMITS, sharedRateLimitOr429 } from "@/lib/rate-limit";
+import {
+  AccountMutationAuthorityError,
+  lockCurrentAccountMutationAuthority,
+} from "@/lib/account-mutation-authority";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,10 +49,17 @@ const BodySchema = z.object({
   recoveryCode: z.string().min(8).max(40).optional(),
 });
 
+class MfaDisableStateChangedError extends Error {}
+class PlatformAdminMfaRequiredError extends Error {}
+
 export const POST = withApiHandler("api:mfa:disable", async (req) => {
   const actor = await resolveMfaRequestActor(req.headers);
   if (!actor || actor.isAdminHost) return apiError("not found", 404);
   const userId = actor.userId;
+  const currentSessionId = actor.sessionId;
+  if (!currentSessionId) return apiError("unauthorized", 401);
+  const blocked = await sharedRateLimitOr429(RATE_LIMITS.MFA, userId);
+  if (blocked) return blocked;
 
   let body: unknown;
   try {
@@ -70,10 +88,12 @@ export const POST = withApiHandler("api:mfa:disable", async (req) => {
       passwordHash: true,
       mfaEnabled: true,
       mfaSecret: true,
+      mfaVerifiedAt: true,
       mfaBackupCodes: true,
     },
   });
   if (!user) return apiError("not found", 404);
+  if (user.practiceId !== actor.practiceId) return apiError("not found", 404);
 
   if (!user.mfaEnabled || !user.mfaSecret) {
     return apiError("MFA is not enabled.", 400, {
@@ -122,7 +142,11 @@ export const POST = withApiHandler("api:mfa:disable", async (req) => {
   let secondFactorOk = false;
   let usedRecovery = false;
   if (parsed.data.token) {
-    secondFactorOk = verifyTotpToken(user.mfaSecret, parsed.data.token);
+    secondFactorOk = verifyStoredMfaTotpToken(
+      user.id,
+      user.mfaSecret,
+      parsed.data.token,
+    );
   } else if (parsed.data.recoveryCode) {
     const matched = findMatchingRecoveryHash(
       parsed.data.recoveryCode,
@@ -149,24 +173,79 @@ export const POST = withApiHandler("api:mfa:disable", async (req) => {
     });
   }
 
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
-      mfaEnabled: false,
-      mfaSecret: null,
-      mfaVerifiedAt: null,
-      mfaBackupCodes: [],
-    },
-  });
-
-  void logAudit({
-    action: "MFA_DISABLED",
-    userId: user.id,
-    userEmail: user.email,
-    practiceId: user.practiceId,
-    success: true,
-    metadata: { method: usedRecovery ? "recovery_code" : "totp" },
-  });
+  try {
+    await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const current = await lockCurrentAccountMutationAuthority(tx, {
+        userId,
+        sessionId: currentSessionId,
+        expectedPracticeId: actor.practiceId,
+        expectedPasswordHash: user.passwordHash,
+        expectedEmail: user.email,
+        surface: "physician",
+      });
+      if (
+        current.user.role === "SUPER_ADMIN" ||
+        current.user.products.includes(Product.SUPER_ADMIN)
+      ) {
+        throw new PlatformAdminMfaRequiredError();
+      }
+      const sameVerifiedAt =
+        current.user.mfaVerifiedAt?.getTime() ===
+        user.mfaVerifiedAt?.getTime();
+      const sameBackupCodes =
+        current.user.mfaBackupCodes.length === user.mfaBackupCodes.length &&
+        current.user.mfaBackupCodes.every(
+          (code, index) => code === user.mfaBackupCodes[index],
+        );
+      if (
+        current.user.mfaEnabled !== user.mfaEnabled ||
+        current.user.mfaSecret !== user.mfaSecret ||
+        !sameVerifiedAt ||
+        !sameBackupCodes
+      ) {
+        throw new MfaDisableStateChangedError();
+      }
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          mfaEnabled: false,
+          mfaSecret: null,
+          mfaVerifiedAt: null,
+          mfaBackupCodes: [],
+        },
+      });
+      await tx.userSession.deleteMany({
+        where: {
+          userId,
+          NOT: { sessionToken: currentSessionId },
+        },
+      });
+      await appendAuthMutationAuditInTransaction(tx, {
+        action: "MFA_DISABLED",
+        userId: current.user.id,
+        userEmail: current.user.email,
+        practiceId: current.user.practiceId,
+        metadata: { method: usedRecovery ? "recovery_code" : "totp" },
+      });
+    });
+  } catch (error) {
+    if (error instanceof PlatformAdminMfaRequiredError) {
+      return apiError(
+        "Platform-admin accounts cannot disable MFA. Revoke the platform-admin entitlement first.",
+        403,
+        { code: "PLATFORM_ADMIN_MFA_REQUIRED" },
+      );
+    }
+    if (
+      error instanceof AccountMutationAuthorityError ||
+      error instanceof MfaDisableStateChangedError
+    ) {
+      return apiError("MFA state changed. Try again.", 409, {
+        code: "MFA_STATE_CHANGED",
+      });
+    }
+    throw error;
+  }
 
   return NextResponse.json({ ok: true }, { status: 200 });
 });

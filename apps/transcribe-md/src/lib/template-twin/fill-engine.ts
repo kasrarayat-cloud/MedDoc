@@ -431,6 +431,7 @@ function asJson(value: unknown): Prisma.InputJsonValue {
 export interface LockedTemplateTwinVisit {
   id: string;
   userId: string;
+  patientId: string;
   status: string;
   deletedAt: Date | null;
   archivedAt: Date | null;
@@ -459,6 +460,7 @@ export async function lockCurrentTemplateTwinVisit(
     SELECT
       "id",
       "userId",
+      "patientId",
       "status"::text AS "status",
       "deletedAt",
       "archivedAt",
@@ -596,12 +598,12 @@ export async function processTemplateTwinVisit(
     );
   }
   const syntheticParentAdmissionId = syntheticQaContext
-    ? (
+    ? ((
         await prisma.templateTwinSyntheticQaAdmission.findUnique({
           where: { id: syntheticQaContext.admissionId },
           select: { parentAdmissionId: true },
         })
-      )?.parentAdmissionId ?? null
+      )?.parentAdmissionId ?? null)
     : null;
   if (syntheticQaContext && !syntheticParentAdmissionId) {
     throw new TemplateTwinFillError(
@@ -793,30 +795,27 @@ export async function processTemplateTwinVisit(
             compiled.sourceArtifact.providerOwnershipEvidence,
           sourceProviderOwnershipSha256:
             compiled.sourceArtifact.providerOwnershipSha256,
-          compiledProviderOwnershipEvidence:
-            compiled.providerOwnershipEvidence,
-          compiledProviderOwnershipSha256:
-            compiled.providerOwnershipSha256,
+          compiledProviderOwnershipEvidence: compiled.providerOwnershipEvidence,
+          compiledProviderOwnershipSha256: compiled.providerOwnershipSha256,
           expectedSyntheticAdmissionId: syntheticParentAdmissionId!,
         })
       : isTemplateTwinLiveProviderCompilationOwned({
-        practiceId: input.practiceId,
-        actorUserId: input.doctorId,
-        noteTemplateId: row.id,
-        noteTemplateVersion: row.version,
-        compiledVersionId: compiled.id,
-        sourceArtifactId: compiled.sourceArtifact.id,
-        sourceLineageId: compiled.sourceArtifact.lineageId,
-        sourceLineageVersion: compiled.sourceArtifact.lineageVersion,
-        sourceSha256: compiled.sourceArtifact.sha256,
-        sourceProviderOwnershipEvidence:
-          compiled.sourceArtifact.providerOwnershipEvidence,
-        sourceProviderOwnershipSha256:
-          compiled.sourceArtifact.providerOwnershipSha256,
-        compiledProviderOwnershipEvidence:
-          compiled.providerOwnershipEvidence,
-        compiledProviderOwnershipSha256: compiled.providerOwnershipSha256,
-      })) ||
+          practiceId: input.practiceId,
+          actorUserId: input.doctorId,
+          noteTemplateId: row.id,
+          noteTemplateVersion: row.version,
+          compiledVersionId: compiled.id,
+          sourceArtifactId: compiled.sourceArtifact.id,
+          sourceLineageId: compiled.sourceArtifact.lineageId,
+          sourceLineageVersion: compiled.sourceArtifact.lineageVersion,
+          sourceSha256: compiled.sourceArtifact.sha256,
+          sourceProviderOwnershipEvidence:
+            compiled.sourceArtifact.providerOwnershipEvidence,
+          sourceProviderOwnershipSha256:
+            compiled.sourceArtifact.providerOwnershipSha256,
+          compiledProviderOwnershipEvidence: compiled.providerOwnershipEvidence,
+          compiledProviderOwnershipSha256: compiled.providerOwnershipSha256,
+        })) ||
     !isTemplateTwinSourceAdmissionCurrent(compiled.sourceArtifact) ||
     !sourceProvenanceValid ||
     !compiled.sourceArtifact.objectKey ||

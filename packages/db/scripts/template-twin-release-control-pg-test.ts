@@ -13,16 +13,7 @@ import { createHmac, randomBytes, randomUUID } from "node:crypto";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Prisma, PrismaClient } from "@prisma/client";
 
-import {
-  activateTemplateTwinReleaseCheckpoint,
-  createTemplateTwinReleaseCandidate,
-  freezeTemplateTwinReleaseCandidate,
-  recordTemplateTwinReleaseApproval,
-  recordTemplateTwinReleaseMetricSnapshot,
-  passTemplateTwinReleaseCheckpoint,
-  revokeTemplateTwinRelease,
-  type TemplateTwinReleaseActor,
-} from "../../../apps/transcribe-md/src/lib/template-twin/release-control";
+import type { TemplateTwinReleaseActor } from "../../../apps/transcribe-md/src/lib/template-twin/release-control";
 import {
   TEMPLATE_TWIN_METRIC_DEFINITIONS,
   TEMPLATE_TWIN_RELEASE_DISCIPLINES,
@@ -35,18 +26,69 @@ import {
   type TemplateTwinReleaseStage,
   type TemplateTwinRuntimeComponent,
 } from "../../../apps/transcribe-md/src/lib/template-twin/release-control-contracts";
-import { setTemplateTwinGlobalRollout } from "../../../apps/transcribe-md/src/lib/template-twin/rollout";
-import { drainTemplateTwinAuditOutbox } from "../../../apps/transcribe-md/src/lib/template-twin/audit-outbox";
 import { assertNonProdDatabase } from "../src/db-guard";
 
 const databaseUrl =
-  process.env.TEMPLATE_TWIN_RELEASE_CONTROL_TEST_DATABASE_URL ??
+  process.env.TEMPLATE_TWIN_RELEASE_CONTROL_TEST_DATABASE_URL ||
   process.env.DATABASE_URL;
 if (!databaseUrl) {
   throw new Error("Disposable release-control test URL is required.");
 }
 assertNonProdDatabase(databaseUrl);
 const disposableDatabaseUrl = databaseUrl;
+const databaseTargetEnvironment = [
+  "DATABASE_URL",
+  "TEMPLATE_TWIN_RELEASE_CONTROL_TEST_DATABASE_URL",
+  "TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL",
+] as const;
+const divergentDatabaseTarget = databaseTargetEnvironment.find((name) => {
+  const value = process.env[name];
+  return value && value !== disposableDatabaseUrl;
+});
+if (divergentDatabaseTarget) {
+  throw new Error(
+    `${divergentDatabaseTarget} must exactly match the guarded disposable release-control test URL.`,
+  );
+}
+for (const name of databaseTargetEnvironment) {
+  process.env[name] = disposableDatabaseUrl;
+}
+
+type ReleaseControlModule =
+  typeof import("../../../apps/transcribe-md/src/lib/template-twin/release-control");
+type RolloutModule =
+  typeof import("../../../apps/transcribe-md/src/lib/template-twin/rollout");
+type AuditOutboxModule =
+  typeof import("../../../apps/transcribe-md/src/lib/template-twin/audit-outbox");
+
+let activateTemplateTwinReleaseCheckpoint!: ReleaseControlModule["activateTemplateTwinReleaseCheckpoint"];
+let createTemplateTwinReleaseCandidate!: ReleaseControlModule["createTemplateTwinReleaseCandidate"];
+let freezeTemplateTwinReleaseCandidate!: ReleaseControlModule["freezeTemplateTwinReleaseCandidate"];
+let recordTemplateTwinReleaseApproval!: ReleaseControlModule["recordTemplateTwinReleaseApproval"];
+let recordTemplateTwinReleaseMetricSnapshot!: ReleaseControlModule["recordTemplateTwinReleaseMetricSnapshot"];
+let passTemplateTwinReleaseCheckpoint!: ReleaseControlModule["passTemplateTwinReleaseCheckpoint"];
+let revokeTemplateTwinRelease!: ReleaseControlModule["revokeTemplateTwinRelease"];
+let setTemplateTwinGlobalRollout!: RolloutModule["setTemplateTwinGlobalRollout"];
+let drainTemplateTwinAuditOutbox!: AuditOutboxModule["drainTemplateTwinAuditOutbox"];
+
+async function loadDatabaseBearingModules(): Promise<void> {
+  const [releaseControl, rollout, auditOutbox] = await Promise.all([
+    import("../../../apps/transcribe-md/src/lib/template-twin/release-control"),
+    import("../../../apps/transcribe-md/src/lib/template-twin/rollout"),
+    import("../../../apps/transcribe-md/src/lib/template-twin/audit-outbox"),
+  ]);
+  ({
+    activateTemplateTwinReleaseCheckpoint,
+    createTemplateTwinReleaseCandidate,
+    freezeTemplateTwinReleaseCandidate,
+    recordTemplateTwinReleaseApproval,
+    recordTemplateTwinReleaseMetricSnapshot,
+    passTemplateTwinReleaseCheckpoint,
+    revokeTemplateTwinRelease,
+  } = releaseControl);
+  ({ setTemplateTwinGlobalRollout } = rollout);
+  ({ drainTemplateTwinAuditOutbox } = auditOutbox);
+}
 
 process.env.TEMPLATE_TWIN_KILL_SWITCH = "false";
 process.env.TEMPLATE_TWIN_RUNTIME_MODE = "standard";
@@ -434,7 +476,9 @@ async function expectExactlyOneFulfilled(
       (result): result is PromiseRejectedResult => result.status === "rejected",
     )
     .map(({ reason }) =>
-      reason instanceof Error ? (reason.stack ?? reason.message) : String(reason),
+      reason instanceof Error
+        ? (reason.stack ?? reason.message)
+        : String(reason),
     );
   assert.equal(
     results.filter(({ status }) => status === "fulfilled").length,
@@ -468,7 +512,11 @@ async function proveDatabaseRoleBoundaries(): Promise<void> {
   assert.equal(roleAttributes.length, 4);
   for (const role of roleAttributes) {
     assert.equal(role.rolsuper, false, `${role.rolname} must not be superuser`);
-    assert.equal(role.rolcreatedb, false, `${role.rolname} must not create DBs`);
+    assert.equal(
+      role.rolcreatedb,
+      false,
+      `${role.rolname} must not create DBs`,
+    );
     assert.equal(
       role.rolcreaterole,
       false,
@@ -517,7 +565,11 @@ async function proveDatabaseRoleBoundaries(): Promise<void> {
       `${role.rolname} must not create roles`,
     );
     assert.equal(role.rolcanlogin, true, `${role.rolname} must be LOGIN`);
-    assert.equal(role.rolinherit, true, `${role.rolname} must inherit one role`);
+    assert.equal(
+      role.rolinherit,
+      true,
+      `${role.rolname} must inherit one role`,
+    );
     assert.equal(
       role.rolreplication,
       false,
@@ -820,13 +872,15 @@ async function proveUnconfiguredRuntimeAttestation(): Promise<void> {
     "a valid signed image absent from every eligible manifest is not configured",
   );
   const envelope = decodeRuntimeEnvelope(unconfiguredRuntimeEnv);
-  await expectRejected("invalid signature is checked before manifest absence", () =>
-    submitRuntimeEnvelope(
-      replaceRuntimeEnvelope(unconfiguredRuntimeEnv!, {
-        ...envelope,
-        signature: "0".repeat(64),
-      }),
-    ),
+  await expectRejected(
+    "invalid signature is checked before manifest absence",
+    () =>
+      submitRuntimeEnvelope(
+        replaceRuntimeEnvelope(unconfiguredRuntimeEnv!, {
+          ...envelope,
+          signature: "0".repeat(64),
+        }),
+      ),
   );
 }
 
@@ -885,6 +939,7 @@ async function seedSyntheticAuthorities(): Promise<void> {
         products: ["SUPER_ADMIN"],
         practiceId: administratorPracticeId,
         mfaEnabled: true,
+        mfaSecret: "SYNTHETIC-RELEASE-CONTROL-SECRET",
         mfaVerifiedAt: new Date(),
       },
     });
@@ -933,7 +988,9 @@ async function createApprovedRelease(marker: string): Promise<ApprovedRelease> {
   const evidence = releaseEvidence(marker);
   const appInstanceId = `app-${marker}-${suffix}`;
   const workerInstanceId = `worker-${marker}-${suffix}`;
-  process.stderr.write(`[template-twin-control-plane] release-${marker}:create\n`);
+  process.stderr.write(
+    `[template-twin-control-plane] release-${marker}:create\n`,
+  );
   const created = await createTemplateTwinReleaseCandidate({
     actor: creator,
     confirmation: "CREATE EXACT RELEASE",
@@ -954,7 +1011,9 @@ async function createApprovedRelease(marker: string): Promise<ApprovedRelease> {
       },
     ],
   });
-  process.stderr.write(`[template-twin-control-plane] release-${marker}:freeze\n`);
+  process.stderr.write(
+    `[template-twin-control-plane] release-${marker}:freeze\n`,
+  );
   let generation = (
     await freezeTemplateTwinReleaseCandidate({
       actor: creator,
@@ -1890,13 +1949,22 @@ async function main(): Promise<void> {
     proveUnconfiguredRuntimeAttestation,
   );
   await runProof("database-role-boundaries", proveDatabaseRoleBoundaries);
-  await runProof("advance-race-and-capability-replay", proveAdvanceRaceAndCapabilityReplay);
+  await runProof(
+    "advance-race-and-capability-replay",
+    proveAdvanceRaceAndCapabilityReplay,
+  );
   await runProof("global-kill-race", proveGlobalKillRace);
   await runProof("approval-revoke-race", proveApprovalRevokeRace);
   await runProof("operational-revoke-race", proveOperationalRevokeRace);
   await runProof("critical-guardrail-revoke", proveCriticalGuardrailRevoke);
-  await runProof("critical-guardrail-pass-race", proveCriticalGuardrailPassRace);
-  await runProof("live-user-lifecycle-revocation", proveLiveUserLifecycleRevocation);
+  await runProof(
+    "critical-guardrail-pass-race",
+    proveCriticalGuardrailPassRace,
+  );
+  await runProof(
+    "live-user-lifecycle-revocation",
+    proveLiveUserLifecycleRevocation,
+  );
   await runProof("isolated-audit-dispatcher", proveAuditDispatcherBoundary);
   const releaseAuditEventTotal = await assertAuditCensus();
   const releaseAuditEventCount =
@@ -1941,7 +2009,12 @@ async function main(): Promise<void> {
   );
 }
 
-void main()
+async function run(): Promise<void> {
+  await loadDatabaseBearingModules();
+  await main();
+}
+
+void run()
   .catch((error: unknown) => {
     process.stderr.write(
       `${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`,

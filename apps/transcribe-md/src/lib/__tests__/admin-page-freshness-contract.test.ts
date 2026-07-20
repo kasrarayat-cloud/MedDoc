@@ -29,6 +29,10 @@ describe("admin page fresh-authorization contract", () => {
   it("keeps the layout as routing defense instead of claiming reusable-layout authorization", () => {
     const layout = readFileSync(path.join(SRC, "app/admin/layout.tsx"), "utf8");
     expect(layout).toContain("every page invokes the fresh");
+    expect(layout).toContain("if (!verified.mfaComplete)");
+    expect(layout).not.toContain(
+      "!verified.mfaEnabled || !verified.mfaVerifiedAt",
+    );
     expect(layout).not.toContain("void logAudit");
   });
 });

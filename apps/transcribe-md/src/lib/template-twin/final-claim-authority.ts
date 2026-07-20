@@ -18,6 +18,32 @@ interface TemplateTwinAuthorityLockClient {
 }
 
 /**
+ * Acquire the tenant row before the physician row whenever a transaction
+ * needs authority to remain current across more than one content-bearing
+ * statement. Holding this lock prevents practice deactivation from committing
+ * between an authority-bound source query and a later projection.
+ */
+export async function lockAndAssertActiveTemplateTwinPractice(input: {
+  tx: TemplateTwinAuthorityLockClient;
+  practiceId: string;
+}): Promise<void> {
+  const rows = await input.tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT practice."id"
+    FROM "practices" practice
+    WHERE practice."id" = ${input.practiceId}
+      AND practice."isActive" = true
+    FOR UPDATE
+  `);
+  if (
+    !Array.isArray(rows) ||
+    rows.length !== 1 ||
+    rows[0]?.id !== input.practiceId
+  ) {
+    throw new TemplateTwinCurrentPhysicianAuthorityError();
+  }
+}
+
+/**
  * Linearizable final-claim authority fence.
  *
  * The session/JWT and the route's initial database read are admission hints,
@@ -57,4 +83,37 @@ export async function lockAndAssertCurrentTemplateTwinPhysician(input: {
   }
 
   return { email: rows[0].email };
+}
+
+/**
+ * Locks the admitted patient after the actor and before the visit row.
+ *
+ * A current physician claim alone does not authorize a patient that moved to
+ * another practice after the initial clinical projection. Callers must use
+ * actor -> patient -> visit ordering in the transaction that owns the final
+ * review, correction, signature, or delivery claim.
+ */
+export async function lockAndAssertCurrentTemplateTwinPatient(input: {
+  tx: TemplateTwinAuthorityLockClient;
+  patientId: string;
+  practiceId: string;
+}): Promise<void> {
+  const rows = await input.tx.$queryRaw<
+    Array<{ id: string; practiceId: string }>
+  >(Prisma.sql`
+    SELECT patient."id", patient."practiceId"
+    FROM "transcribe_md_patients" patient
+    WHERE patient."id" = ${input.patientId}
+      AND patient."practiceId" = ${input.practiceId}
+    FOR UPDATE
+  `);
+
+  if (
+    !Array.isArray(rows) ||
+    rows.length !== 1 ||
+    rows[0]?.id !== input.patientId ||
+    rows[0].practiceId !== input.practiceId
+  ) {
+    throw new TemplateTwinCurrentPhysicianAuthorityError();
+  }
 }

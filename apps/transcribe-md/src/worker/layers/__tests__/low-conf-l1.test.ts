@@ -34,6 +34,13 @@ const updateCalls: Captured[] = [];
 
 vi.mock("@meddoc/db", () => ({
   default: {
+    $queryRaw: vi.fn().mockResolvedValue([
+      {
+        id: "user-test",
+        practiceId: "practice-test",
+        email: "synthetic@example.test",
+      },
+    ]),
     transcribeVisit: {
       update: vi.fn(async (args: Captured) => {
         updateCalls.push(args);

@@ -112,6 +112,15 @@ ENV QUILLMD_RUNTIME_PROTOCOL_EPOCH=template-twin-final-schema-v2
 ENV QUILLMD_IMAGE_REVISION=${QUILLMD_RELEASE_SHA}
 ENV QUILLMD_RUNTIME_COMPONENT=APP
 
+# Template Twin static practice assets require bounded, local-only OCR before
+# any extracted text may reach the independent privacy scan. Pin both the
+# executable and English data to the reviewed Alpine 3.23 package revision;
+# a repository drift removes the package and fails the image build closed.
+RUN apk add --no-cache \
+      tesseract-ocr=5.5.1-r0 \
+      tesseract-ocr-data-eng=5.5.1-r0 && \
+    test "$(tesseract --version | sed -n '1s/^tesseract //p')" = "5.5.1"
+
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 

@@ -17,7 +17,7 @@ import { Readable } from "node:stream";
 
 import { auth } from "@/lib/nextauth";
 import prisma from "@meddoc/db";
-import { TranscribeVisitStatus } from "@prisma/client";
+import { Prisma, TranscribeVisitStatus } from "@prisma/client";
 import {
   buildAudioObjectKey,
   deleteAudioObject,
@@ -29,7 +29,21 @@ import { apiError, withApiHandler } from "@/lib/api-error";
 import { RATE_LIMITS, rateLimitOr429 } from "@/lib/rate-limit";
 import { redactPhi } from "@meddoc/ai";
 import { logAudit } from "@/lib/audit";
+import { currentClinicalVisitActorWhere } from "@/lib/clinical-visit-authority";
 import { isOwnedTemplateTwinStagingQaVisit } from "@/lib/template-twin/staging-qa-access";
+import { isSameOriginTemplateTwinMutation } from "@/lib/template-twin/request-security";
+import { TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE } from "@/lib/template-twin/durable-visit-exclusion";
+import {
+  hasDurableTemplateTwinClinicalMutationProvenance,
+  enqueueTemplateTwinClinicalMutationAudit,
+  loadTemplateTwinClinicalMutationAdmissionTarget,
+  lockAndAssertOrdinaryClinicalMutation,
+  lockAndAssertTemplateTwinClinicalMutation,
+  pinTemplateTwinClinicalMutation,
+  TEMPLATE_TWIN_CLINICAL_MUTATION_PROVENANCE_SELECT,
+  TemplateTwinClinicalMutationAuthorizationError,
+  type TemplateTwinClinicalMutationClaim,
+} from "@/lib/template-twin/visit-mutation-authority";
 import {
   sniffAudioMagicBytes,
   magicBytesMatchClaimedMime,
@@ -77,11 +91,51 @@ export const POST = withApiHandler<{ id: string }>(
     const blocked = rateLimitOr429(RATE_LIMITS.UPLOAD, userId);
     if (blocked) return blocked;
 
+    // Establish live-Twin authority using identifiers and immutable lineage
+    // only.  Do not select an existing audio object key (or consume upload
+    // bytes) until the current physician/rollout admission succeeds.
+    const authorityTarget =
+      await loadTemplateTwinClinicalMutationAdmissionTarget({
+        visitId,
+        actorUserId: userId,
+      });
+    if (!authorityTarget || authorityTarget.userId !== userId) {
+      return apiError("not found", 404);
+    }
+    let templateTwinMutationClaim: TemplateTwinClinicalMutationClaim | null =
+      null;
+    if (hasDurableTemplateTwinClinicalMutationProvenance(authorityTarget)) {
+      if (!isSameOriginTemplateTwinMutation(req)) {
+        return apiError("not found", 404);
+      }
+      try {
+        templateTwinMutationClaim = await pinTemplateTwinClinicalMutation({
+          visitId,
+          actorUserId: userId,
+          admittedVisitUpdatedAt: authorityTarget.updatedAt,
+          provenance: authorityTarget,
+        });
+      } catch (error) {
+        if (error instanceof TemplateTwinClinicalMutationAuthorizationError) {
+          return apiError("not found", 404);
+        }
+        throw error;
+      }
+    }
+
     const visit = await prisma.transcribeVisit.findUnique({
-      where: { id: visitId },
+      where: {
+        id: visitId,
+        ...currentClinicalVisitActorWhere(userId),
+        updatedAt: authorityTarget.updatedAt,
+        ...(templateTwinMutationClaim
+          ? {}
+          : TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE),
+      },
       select: {
         id: true,
         userId: true,
+        updatedAt: true,
         inputMode: true,
         status: true,
         deletedAt: true,
@@ -89,6 +143,7 @@ export const POST = withApiHandler<{ id: string }>(
         // T-M18.2 A9: pulled so we can sweep a stale MinIO object
         // left by a previous failed-then-reuploaded attempt.
         audioKey: true,
+        ...TEMPLATE_TWIN_CLINICAL_MUTATION_PROVENANCE_SELECT,
       },
     });
     if (!visit || visit.userId !== userId) return apiError("not found", 404);
@@ -111,6 +166,14 @@ export const POST = withApiHandler<{ id: string }>(
       visit.status !== TranscribeVisitStatus.FAILED
     ) {
       return apiError("visit is already processing or finalized", 409);
+    }
+    if (
+      Boolean(templateTwinMutationClaim) !==
+      hasDurableTemplateTwinClinicalMutationProvenance(visit)
+    ) {
+      return apiError("The visit changed. Reload and retry.", 409, {
+        code: "TEMPLATE_TWIN_MUTATION_CONFLICT",
+      });
     }
 
     // Early content-length check. A client that lies about size will hit
@@ -160,6 +223,12 @@ export const POST = withApiHandler<{ id: string }>(
     const filename = req.headers.get("x-tm-filename")?.trim() || "audio-upload";
 
     const objectKey = buildAudioObjectKey(userId, visitId, filename);
+    if (objectKey === visit.audioKey) {
+      return apiError("Upload identity conflicted. Retry the upload.", 409, {
+        code: "UPLOAD_IDENTITY_CONFLICT",
+        retry: true,
+      });
+    }
 
     if (!req.body) return apiError("empty body", 400);
 
@@ -260,24 +329,130 @@ export const POST = withApiHandler<{ id: string }>(
 
     // Persist upload metadata + flip back to QUEUED (covers the "retry
     // after FAILED" path) before enqueuing the worker job.
-    await prisma.transcribeVisit.update({
-      where: { id: visitId },
-      data: {
-        audioKey: objectKey,
-        audioMimeType: mimeType.split(";")[0]!.trim(),
-        // Round 3 PR-J — record the actual byte count, not the
-        // client's content-length header. They match for honest
-        // clients; for a lying client we already rejected above.
-        audioSizeBytes: bodyBuffer.byteLength,
-        audioUploadedAt: new Date(),
-        status: TranscribeVisitStatus.QUEUED,
-        needsReview: false,
-        reviewReason: null,
-        processingStartedAt: null,
-        processingFinishedAt: null,
-        processingCostCents: null,
-      },
-    });
+    const updateData = {
+      audioKey: objectKey,
+      audioMimeType: mimeType.split(";")[0]!.trim(),
+      // Round 3 PR-J — record the actual byte count, not the
+      // client's content-length header. They match for honest
+      // clients; for a lying client we already rejected above.
+      audioSizeBytes: bodyBuffer.byteLength,
+      audioUploadedAt: new Date(),
+      status: TranscribeVisitStatus.QUEUED,
+      needsReview: false,
+      reviewReason: null,
+      processingStartedAt: null,
+      processingFinishedAt: null,
+      processingCostCents: null,
+    } as const;
+    if (templateTwinMutationClaim) {
+      try {
+        const applied = await prisma.$transaction(
+          async (tx: Prisma.TransactionClient) => {
+            const locked = await lockAndAssertTemplateTwinClinicalMutation({
+              tx,
+              claim: templateTwinMutationClaim,
+            });
+            if (
+              (locked.status !== TranscribeVisitStatus.QUEUED &&
+                locked.status !== TranscribeVisitStatus.FAILED) ||
+              locked.inputMode !== "audio_upload" ||
+              locked.updatedAt.getTime() !== visit.updatedAt.getTime() ||
+              locked.audioKey !== visit.audioKey ||
+              locked.deletedAt !== null ||
+              locked.archivedAt !== null ||
+              locked.signedAt !== null
+            ) {
+              return false;
+            }
+            await tx.transcribeVisit.update({
+              where: { id: visitId },
+              data: updateData,
+            });
+            await enqueueTemplateTwinClinicalMutationAudit({
+              tx,
+              claim: templateTwinMutationClaim,
+              operation: "audio_upload",
+              action: "AUDIO_UPLOADED",
+              metadata: {
+                inputMode: "audio_upload",
+                sizeBytes: bodyBuffer.byteLength,
+                mimeType: mimeType.split(";")[0]!.trim(),
+              },
+            });
+            return true;
+          },
+        );
+        if (!applied) {
+          await deleteAudioObject(objectKey);
+          return apiError("The visit changed. Reload and retry.", 409, {
+            code: "TEMPLATE_TWIN_MUTATION_CONFLICT",
+          });
+        }
+      } catch (error) {
+        try {
+          await deleteAudioObject(objectKey);
+        } catch (cleanupError) {
+          console.error(
+            "[api:visits:upload] rejected Twin upload cleanup failed:",
+            redactPhi(
+              cleanupError instanceof Error
+                ? cleanupError.message
+                : cleanupError,
+            ),
+          );
+          return apiError("Upload rollback requires operator attention.", 503, {
+            code: "UPLOAD_ROLLBACK_INCOMPLETE",
+            retry: false,
+          });
+        }
+        if (error instanceof TemplateTwinClinicalMutationAuthorizationError) {
+          return apiError("Template Twin authorization changed.", 409, {
+            code: "TEMPLATE_TWIN_AUTHORIZATION_CHANGED",
+          });
+        }
+        throw error;
+      }
+    } else {
+      try {
+        await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+          await lockAndAssertOrdinaryClinicalMutation({
+            tx,
+            visitId,
+            actorUserId: userId,
+            admittedVisitUpdatedAt: authorityTarget.updatedAt,
+            admittedPatientId: authorityTarget.patientId,
+            admittedNoteTemplateId: authorityTarget.noteTemplateId,
+          });
+          await tx.transcribeVisit.update({
+            where: { id: visitId },
+            data: updateData,
+          });
+        });
+      } catch (error) {
+        try {
+          await deleteAudioObject(objectKey);
+        } catch (cleanupError) {
+          console.error(
+            "[api:visits:upload] rejected ordinary upload cleanup failed:",
+            redactPhi(
+              cleanupError instanceof Error
+                ? cleanupError.message
+                : cleanupError,
+            ),
+          );
+          return apiError("Upload rollback requires operator attention.", 503, {
+            code: "UPLOAD_ROLLBACK_INCOMPLETE",
+            retry: false,
+          });
+        }
+        if (error instanceof TemplateTwinClinicalMutationAuthorizationError) {
+          return apiError("The visit changed. Reload and retry.", 409, {
+            code: "TEMPLATE_TWIN_MUTATION_CONFLICT",
+          });
+        }
+        throw error;
+      }
+    }
 
     // T-M18.2 A9: if this was a re-upload (FAILED → new upload), the
     // old audioKey is now orphaned in MinIO. Best-effort delete so

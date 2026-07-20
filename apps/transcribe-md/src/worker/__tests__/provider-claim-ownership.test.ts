@@ -1,10 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({
-  context: vi.fn(),
-  rootFind: vi.fn(),
-  transaction: vi.fn(),
-}));
+const mocks = vi.hoisted(() => {
+  class LiveAuthorityRevokedError extends Error {}
+  return {
+    context: vi.fn(),
+    rootFind: vi.fn(),
+    transaction: vi.fn(),
+    terminalize: vi.fn(),
+    LiveAuthorityRevokedError,
+  };
+});
 
 vi.mock("@meddoc/ai", () => ({
   getTemplateTwinSyntheticQaProviderContext: mocks.context,
@@ -18,6 +23,8 @@ vi.mock("@meddoc/db", () => ({
 
 vi.mock("../automation-locks", () => ({
   runVisitAutomationTransaction: mocks.transaction,
+  runVisitAutomationRevokedAuthorityTerminalization: mocks.terminalize,
+  VisitAutomationLiveAuthorityRevokedError: mocks.LiveAuthorityRevokedError,
 }));
 
 import {

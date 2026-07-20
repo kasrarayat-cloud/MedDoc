@@ -18,6 +18,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   visitCreate: vi.fn(),
+  transaction: vi.fn(),
+  queryRaw: vi.fn(),
   patientFindUnique: vi.fn(),
   patientFindFirst: vi.fn(),
   patientCreate: vi.fn(),
@@ -35,6 +37,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@meddoc/db", () => ({
   default: {
+    $transaction: mocks.transaction,
     transcribeVisit: { create: mocks.visitCreate },
     transcribeMdPatient: {
       findUnique: mocks.patientFindUnique,
@@ -78,6 +81,37 @@ beforeEach(() => {
     name: "QA Test Patient",
   });
   mocks.visitCreate.mockResolvedValue({ id: FAKE_VISIT });
+  mocks.queryRaw.mockImplementation(async (query: { strings?: string[] }) => {
+    const sql = query.strings?.join(" ") ?? "";
+    if (sql.includes('FROM "practices" practice')) {
+      return [{ id: FAKE_PRACTICE }];
+    }
+    if (sql.includes('FROM "users" actor')) return [{ id: FAKE_USER }];
+    if (sql.includes('FROM "transcribe_md_patients" patient')) {
+      const patient = await mocks.patientFindUnique();
+      if (!patient) return [];
+      return [
+        {
+          ...patient,
+          dateOfBirth: null,
+          mrn: null,
+          insurance: null,
+          problemList: null,
+          createdAt: new Date("2026-07-20T00:00:00.000Z"),
+          updatedAt: new Date("2026-07-20T00:00:00.000Z"),
+        },
+      ];
+    }
+    return [];
+  });
+  mocks.transaction.mockImplementation(
+    async (callback: (tx: unknown) => Promise<unknown>) =>
+      callback({
+        $queryRaw: mocks.queryRaw,
+        transcribeVisit: { create: mocks.visitCreate },
+        transcribeMdPatient: { create: mocks.patientCreate },
+      }),
+  );
 });
 
 function makeFormData(overrides: Record<string, string> = {}) {

@@ -36,6 +36,7 @@ const mocks = vi.hoisted(() => ({
   logAudit: vi.fn(),
   computeEmScore: vi.fn(),
   pinStagingMutation: vi.fn(),
+  lockOrdinary: vi.fn(),
 }));
 
 vi.mock("@meddoc/db", () => {
@@ -55,6 +56,15 @@ vi.mock("@/lib/audit", () => ({ logAudit: mocks.logAudit }));
 vi.mock("@/lib/template-twin/staging-qa-mutation", () => ({
   pinTemplateTwinStagingQaMutation: mocks.pinStagingMutation,
 }));
+vi.mock(
+  "@/lib/template-twin/visit-mutation-authority",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("@/lib/template-twin/visit-mutation-authority")
+    >()),
+    lockAndAssertOrdinaryClinicalMutation: mocks.lockOrdinary,
+  }),
+);
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 // E/M visible-confirm — mock the scoring engine (the real one would pull
 // the Redis client + Anthropic SDK into the test graph and make network
@@ -66,6 +76,9 @@ vi.mock("@/lib/em-coding/score", () => ({
 }));
 
 import { Prisma, TranscribeVisitStatus } from "@prisma/client";
+import { currentClinicalVisitActorWhere } from "@/lib/clinical-visit-authority";
+import { TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE } from "@/lib/template-twin/durable-visit-exclusion";
+import { TemplateTwinClinicalMutationAuthorizationError } from "@/lib/template-twin/visit-mutation-authority";
 
 import {
   adoptSuggestionAction,
@@ -108,16 +121,29 @@ function visitRow(over: Record<string, unknown> = {}) {
   return {
     id: VISIT,
     userId: DOCTOR,
+    patientId: "patient-1",
+    noteTemplateId: "ordinary-template-1",
+    noteTemplateVersion: 1,
     status: TranscribeVisitStatus.READY,
+    signedAt: null,
     deletedAt: null,
     archivedAt: null,
+    updatedAt: new Date("2026-07-20T00:00:00.000Z"),
     soapFinal: SOAP,
     soapVersion: 3,
     suggestedClaims: CLAIMS,
+    patient: { id: "patient-1", practiceId: "p1", externalId: null },
     templateTwinSyntheticQaRun: null,
-    noteTemplate: { templateKind: "structured" },
+    noteTemplate: {
+      id: "ordinary-template-1",
+      doctorId: DOCTOR,
+      version: 1,
+      templateKind: "structured",
+      templateTwinCompiledVersion: null,
+    },
     templateTwinFill: null,
     templateTwinSyntheticQaAdmission: null,
+    templateTwinProviderExecutions: [],
     ...over,
   };
 }
@@ -143,6 +169,7 @@ beforeEach(() => {
   );
   mocks.update.mockResolvedValue({ id: VISIT });
   mocks.pinStagingMutation.mockResolvedValue(null);
+  mocks.lockOrdinary.mockResolvedValue(undefined);
   // Default: every SOAP body scores the same code → no E/M level change.
   mocks.computeEmScore.mockResolvedValue({ code: "99213" });
 });
@@ -157,6 +184,24 @@ function scoreByMarker(marker: string, baseCode: string, withCode: string) {
 }
 
 describe("adoptSuggestionAction — append + filter + version bump", () => {
+  it("returns no suggestion/clinical snapshot when durable lineage appears after admission", async () => {
+    mocks.findUnique
+      .mockResolvedValueOnce(visitRow())
+      .mockResolvedValueOnce(null);
+
+    await expect(
+      adoptSuggestionAction(VISIT, 0, claimsAt(0)),
+    ).resolves.toMatchObject({ ok: false });
+    expect(mocks.findUnique.mock.calls[1]?.[0].where).toEqual(
+      expect.objectContaining({
+        ...currentClinicalVisitActorWhere(DOCTOR),
+        ...TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE,
+      }),
+    );
+    expect(mocks.computeEmScore).not.toHaveBeenCalled();
+    expect(mocks.updateMany).not.toHaveBeenCalled();
+  });
+
   it("appends the claim text verbatim INSIDE its section heading block", async () => {
     const r = await adoptSuggestionAction(VISIT, 0, claimsAt(0));
     expect(r.ok).toBe(true);
@@ -169,8 +214,16 @@ describe("adoptSuggestionAction — append + filter + version bump", () => {
     // never mutate a signed row or deposit an unacknowledgeable record.
     expect(args.where).toEqual({
       id: VISIT,
+      userId: DOCTOR,
       soapVersion: 3,
       status: TranscribeVisitStatus.READY,
+      deletedAt: null,
+      archivedAt: null,
+      signedAt: null,
+      updatedAt: new Date("2026-07-20T00:00:00.000Z"),
+      soapFinal: SOAP,
+      suggestedClaims: { equals: CLAIMS },
+      ...TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE,
     });
     expect(args.data.soapVersion).toEqual({ increment: 1 });
 
@@ -306,7 +359,16 @@ describe("dismissSuggestionAction — filter only, never the note", () => {
     const args = mocks.updateMany.mock.calls[0][0];
     expect(args.where).toEqual({
       id: VISIT,
+      userId: DOCTOR,
       status: TranscribeVisitStatus.READY,
+      deletedAt: null,
+      archivedAt: null,
+      signedAt: null,
+      updatedAt: new Date("2026-07-20T00:00:00.000Z"),
+      soapFinal: SOAP,
+      soapVersion: 3,
+      suggestedClaims: { equals: CLAIMS },
+      ...TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE,
     });
     expect(args.data.suggestedClaims).toEqual([CLAIMS[0]]);
     expect("soapFinal" in args.data).toBe(false);
@@ -395,11 +457,7 @@ describe("Template Twin staging provider-isolation gate", () => {
           : await dismissSuggestionAction(VISIT, 0, claimsAt(0));
 
       expect(result).toEqual({ ok: false, error: "Visit not found." });
-      expect(mocks.pinStagingMutation).toHaveBeenCalledWith({
-        visitId: VISIT,
-        userId: DOCTOR,
-        run: stagingRun,
-      });
+      expect(mocks.pinStagingMutation).not.toHaveBeenCalled();
       expect(mocks.computeEmScore).not.toHaveBeenCalled();
       expect(mocks.updateMany).not.toHaveBeenCalled();
       expect(mocks.transaction).not.toHaveBeenCalled();
@@ -448,6 +506,14 @@ describe("durable Template Twin suggestion-action boundary", () => {
       "pre-cert voice admission",
       { templateTwinSyntheticQaAdmission: { id: "admission-1" } },
     ],
+    [
+      "detached provider execution",
+      { templateTwinProviderExecutions: [{ id: "execution-1" }] },
+    ],
+    [
+      "orphaned reserved synthetic patient",
+      { patient: { externalId: "SYNTHETIC-QA-ONLY" } },
+    ],
   ] as const)(
     "blocks adopt and dismiss for %s before model/cache or mutation",
     async (_label, provenance) => {
@@ -474,6 +540,74 @@ describe("durable Template Twin suggestion-action boundary", () => {
       }
     },
   );
+});
+
+describe("ordinary suggestion final-write race fence", () => {
+  it("blocks adopt before provider egress when ordinary provenance changes", async () => {
+    mocks.lockOrdinary.mockRejectedValueOnce(
+      new TemplateTwinClinicalMutationAuthorizationError(
+        "TEMPLATE_TWIN_MUTATION_TARGET_CHANGED",
+      ),
+    );
+
+    const result = await adoptSuggestionAction(VISIT, 0, claimsAt(0));
+
+    expect(result.ok).toBe(false);
+    expect(mocks.computeEmScore).not.toHaveBeenCalled();
+    expect(mocks.updateMany).not.toHaveBeenCalled();
+    expect(mocks.logAudit).not.toHaveBeenCalled();
+  });
+
+  it("discards an adopt provider result when provenance changes before final commit", async () => {
+    mocks.lockOrdinary
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(
+        new TemplateTwinClinicalMutationAuthorizationError(
+          "TEMPLATE_TWIN_MUTATION_TARGET_CHANGED",
+        ),
+      );
+
+    const result = await adoptSuggestionAction(VISIT, 0, claimsAt(0));
+
+    expect(result.ok).toBe(false);
+    expect(mocks.computeEmScore).toHaveBeenCalledTimes(2);
+    expect(mocks.updateMany).not.toHaveBeenCalled();
+    expect(mocks.logAudit).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "durable relation or Twin template appeared",
+    "owner changed",
+    "visit was archived or deleted",
+    "visit was signed",
+    "SOAP or version changed",
+    "suggestion lane changed",
+  ])("adopt discards its provider result when %s", async () => {
+    mocks.updateMany.mockResolvedValueOnce({ count: 0 });
+
+    const result = await adoptSuggestionAction(VISIT, 0, claimsAt(0));
+
+    expect(result.ok).toBe(false);
+    expect(mocks.computeEmScore).toHaveBeenCalledTimes(2);
+    expect(mocks.logAudit).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "durable relation or Twin template appeared",
+    "owner changed",
+    "visit was archived or deleted",
+    "visit was signed",
+    "SOAP or version changed",
+    "suggestion lane changed",
+  ])("dismiss fails closed when %s", async () => {
+    mocks.updateMany.mockResolvedValueOnce({ count: 0 });
+
+    const result = await dismissSuggestionAction(VISIT, 0, claimsAt(0));
+
+    expect(result.ok).toBe(false);
+    expect(mocks.computeEmScore).not.toHaveBeenCalled();
+    expect(mocks.logAudit).not.toHaveBeenCalled();
+  });
 });
 
 describe("cross-tab index drift — content-identity check", () => {

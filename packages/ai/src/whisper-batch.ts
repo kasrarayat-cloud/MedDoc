@@ -56,6 +56,10 @@ export interface WhisperBatchArgs extends AiLogContext {
   /** Network timeout in ms. Default 5 min — Whisper batches a 30 min
    *  file in ~30s wall-clock. */
   timeoutMs?: number;
+  /** Server-owned authorization fence run immediately before network egress. */
+  beforeProviderAttempt?: () => Promise<void>;
+  /** Matching fence run after network response or failure. */
+  afterProviderAttempt?: () => Promise<void>;
 }
 
 /** Word-level segment from Whisper's verbose_json response. */
@@ -238,6 +242,7 @@ async function whisperBatchTranscribeOnce(
   });
 
   let response: WhisperBatchResponse;
+  await args.beforeProviderAttempt?.();
   try {
     response = (await client.audio.transcriptions.create(
       {
@@ -246,7 +251,12 @@ async function whisperBatchTranscribeOnce(
         language: args.language,
         response_format: 'verbose_json',
       },
-      { timeout: args.timeoutMs ?? 5 * 60 * 1000 }
+      {
+        timeout: args.timeoutMs ?? 5 * 60 * 1000,
+        ...(args.beforeProviderAttempt || args.afterProviderAttempt
+          ? { maxRetries: 0 }
+          : {}),
+      },
     )) as unknown as WhisperBatchResponse;
   } catch (err) {
     void logAiCall({
@@ -262,6 +272,8 @@ async function whisperBatchTranscribeOnce(
           : 'unknown',
     });
     throw err;
+  } finally {
+    await args.afterProviderAttempt?.();
   }
 
   const durationSec = response.duration ?? 0;

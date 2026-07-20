@@ -13,14 +13,29 @@
 // message. Nothing throws.
 //
 // Dev preview route (/dev/rx-warnings) passes visitId="dev-preview"
-// so the modal flow can be exercised without writing to the DB; this
-// action short-circuits for that sentinel.
+// so an authenticated physician can exercise the modal flow without a
+// warning write. The sentinel is never an authentication bypass.
 // ============================================================================
 
 import prisma from "@meddoc/db";
+import { Prisma, TranscribeVisitStatus } from "@prisma/client";
 import { getSession } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { resolveWarning, mapWorkerSeverity } from "@/lib/rx-warnings";
+import { currentClinicalVisitActorWhere } from "@/lib/clinical-visit-authority";
+import { canonicalSha256 } from "@/lib/template-twin/canonical";
+import { TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE } from "@/lib/template-twin/durable-visit-exclusion";
+import {
+  hasDurableTemplateTwinClinicalMutationProvenance,
+  enqueueTemplateTwinClinicalMutationAudit,
+  loadTemplateTwinClinicalMutationAdmissionTarget,
+  lockAndAssertOrdinaryClinicalMutation,
+  lockAndAssertTemplateTwinClinicalMutation,
+  pinTemplateTwinClinicalMutation,
+  TEMPLATE_TWIN_CLINICAL_MUTATION_PROVENANCE_SELECT,
+  TemplateTwinClinicalMutationAuthorizationError,
+  type TemplateTwinClinicalMutationClaim,
+} from "@/lib/template-twin/visit-mutation-authority";
 
 export interface RecordOverrideInput {
   visitId: string;
@@ -43,7 +58,15 @@ export async function recordOverride(
   input: RecordOverrideInput,
 ): Promise<RecordOverrideResult> {
   try {
-    // ── 0. Validate input shape before any auth/DB work ──
+    // Server Actions are direct request surfaces. Authenticate before input
+    // handling or the development sentinel so every branch shares the exact
+    // physician process/Host/current-session boundary in getSession().
+    const session = await getSession();
+    if (!session) {
+      return { ok: false, error: "Not signed in." };
+    }
+
+    // ── 0. Validate bounded input shape before clinical DB work ──
     const trimmedReason = (input.reason ?? "").trim();
     if (trimmedReason.length < REASON_MIN) {
       return {
@@ -67,38 +90,70 @@ export async function recordOverride(
       return { ok: false, error: "Invalid Rx line number." };
     }
 
-    // ── 1. Dev preview short-circuit (no auth, no DB write) ──
+    // ── 1. Authenticated dev preview short-circuit (no warning DB write) ──
     if (input.visitId === DEV_PREVIEW_VISIT_ID) {
       return { ok: true, auditId: "dev-preview-audit" };
     }
 
-    // ── 2. Auth + visit ownership check ──
-    const session = await getSession();
-    if (!session) {
-      return { ok: false, error: "Not signed in." };
+    // ── 2. Visit ownership check ──
+    // Gate from identifiers and immutable lineage before selecting persisted
+    // medication warnings. This prevents a revoked Twin physician from using
+    // the generic action as a clinical-data read surface.
+    const authorityTarget =
+      await loadTemplateTwinClinicalMutationAdmissionTarget({
+        visitId: input.visitId,
+        actorUserId: session.user.id,
+      });
+    if (!authorityTarget || authorityTarget.userId !== session.user.id) {
+      return { ok: false, error: "Visit not found." };
+    }
+    if (authorityTarget.templateTwinSyntheticQaRun) {
+      return { ok: false, error: "Visit not found." };
+    }
+    let templateTwinMutationClaim: TemplateTwinClinicalMutationClaim | null =
+      null;
+    try {
+      templateTwinMutationClaim = await pinTemplateTwinClinicalMutation({
+        visitId: input.visitId,
+        actorUserId: session.user.id,
+        admittedVisitUpdatedAt: authorityTarget.updatedAt,
+        provenance: authorityTarget,
+      });
+    } catch (error) {
+      if (error instanceof TemplateTwinClinicalMutationAuthorizationError) {
+        return { ok: false, error: "Visit not found." };
+      }
+      throw error;
     }
 
-    type VisitRow = {
-      userId: string;
-      rxDrafts: unknown;
-      templateTwinSyntheticQaRun?: { id: string } | null;
-    } | null;
-    const visit: VisitRow = await prisma.transcribeVisit.findUnique({
-      where: { id: input.visitId },
+    const visit = await prisma.transcribeVisit.findUnique({
+      where: {
+        id: input.visitId,
+        ...currentClinicalVisitActorWhere(session.user.id),
+        updatedAt: authorityTarget.updatedAt,
+        ...(templateTwinMutationClaim
+          ? {}
+          : TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE),
+      },
       select: {
         userId: true,
+        updatedAt: true,
         rxDrafts: true,
-        templateTwinSyntheticQaRun: { select: { id: true } },
+        status: true,
+        deletedAt: true,
+        archivedAt: true,
+        signedAt: true,
+        ...TEMPLATE_TWIN_CLINICAL_MUTATION_PROVENANCE_SELECT,
       },
     });
     if (!visit || visit.userId !== session.user.id) {
       return { ok: false, error: "Visit not found." };
     }
-    // Staging facts and warnings are immutable outputs of the bounded mock
-    // pipeline. A generic override would create an unpinned clinical mutation
-    // outside the synthetic run's rollout/attempt contract.
-    if (visit.templateTwinSyntheticQaRun) {
-      return { ok: false, error: "Visit not found." };
+    if (
+      Boolean(templateTwinMutationClaim) !==
+      hasDurableTemplateTwinClinicalMutationProvenance(visit)
+    ) {
+      return { ok: false, error: "The visit changed. Reload and try again." };
     }
 
     // ── 2.5 Correlate the override to a REAL warning ──
@@ -134,43 +189,143 @@ export async function recordOverride(
     // trail integrity) rather than overwrite with the second-click
     // data.
     type CreatedRow = { id: string };
-    let created: CreatedRow;
-    try {
-      created = await prisma.rxWarningOverride.create({
-        data: {
-          visitId: input.visitId,
-          rxLineNumber: input.rxLineNumber,
-          warningId: input.warningId,
-          severity: input.severity,
-          headline: input.headline,
-          reason: trimmedReason,
-          overriddenBy: session.user.id,
-        },
-        select: { id: true },
-      });
-    } catch (err: unknown) {
-      // P2002 = Prisma unique-constraint violation. Treat as
-      // idempotent: fetch the existing row and return its id. Any
-      // other error re-throws into the outer try/catch.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const code = (err as any)?.code;
-      if (code !== "P2002") throw err;
-      const existing = await prisma.rxWarningOverride.findUnique({
-        where: {
-          rx_warning_overrides_visit_warning_unique: {
-            visitId: input.visitId,
-            warningId: input.warningId,
+    let created: CreatedRow | null;
+    if (templateTwinMutationClaim) {
+      try {
+        created = await prisma.$transaction(
+          async (tx: Prisma.TransactionClient) => {
+            const locked = await lockAndAssertTemplateTwinClinicalMutation({
+              tx,
+              claim: templateTwinMutationClaim,
+            });
+            const lockedWarning = resolveWarning(
+              locked.rxDrafts,
+              input.warningId,
+            );
+            if (
+              locked.status !== TranscribeVisitStatus.READY ||
+              locked.deletedAt !== null ||
+              locked.archivedAt !== null ||
+              locked.signedAt !== null ||
+              locked.updatedAt.getTime() !== visit.updatedAt.getTime() ||
+              canonicalSha256(locked.rxDrafts ?? null) !==
+                canonicalSha256(visit.rxDrafts ?? null) ||
+              !lockedWarning ||
+              input.severity !== mapWorkerSeverity(lockedWarning.severity)
+            ) {
+              return null;
+            }
+            const persisted = await persistRxWarningOverride({
+              client: tx,
+              visitId: input.visitId,
+              warningId: input.warningId,
+              rxLineNumber: input.rxLineNumber,
+              severity: input.severity,
+              headline: input.headline,
+              reason: trimmedReason,
+              actorUserId: session.user.id,
+            });
+            if (!persisted) return null;
+            await enqueueTemplateTwinClinicalMutationAudit({
+              tx,
+              claim: templateTwinMutationClaim,
+              operation: "rx_warning_override",
+              action: "RX_OVERRIDE_RECORDED",
+              discriminator: input.warningId,
+              metadata: {
+                warningId: input.warningId,
+                rxLineNumber: input.rxLineNumber,
+                severity: input.severity,
+              },
+            });
+            return persisted;
           },
-        },
-        select: { id: true },
-      });
-      if (!existing) {
+        );
+      } catch (error) {
+        if (error instanceof TemplateTwinClinicalMutationAuthorizationError) {
+          return {
+            ok: false,
+            error: "Template Twin authorization changed. Reload and try again.",
+          };
+        }
+        throw error;
+      }
+      if (!created) {
+        return {
+          ok: false,
+          error: "The visit warnings changed. Reload and try again.",
+        };
+      }
+    } else {
+      try {
+        created = await prisma.$transaction(
+          async (tx: Prisma.TransactionClient) => {
+            await lockAndAssertOrdinaryClinicalMutation({
+              tx,
+              visitId: input.visitId,
+              actorUserId: session.user.id,
+              admittedVisitUpdatedAt: authorityTarget.updatedAt,
+              admittedPatientId: authorityTarget.patientId,
+              admittedNoteTemplateId: authorityTarget.noteTemplateId,
+            });
+            const locked = await tx.transcribeVisit.findUnique({
+              where: {
+                id: input.visitId,
+                AND: [currentClinicalVisitActorWhere(session.user.id)],
+              },
+              select: {
+                status: true,
+                deletedAt: true,
+                archivedAt: true,
+                signedAt: true,
+                updatedAt: true,
+                rxDrafts: true,
+              },
+            });
+            const lockedWarning = locked
+              ? resolveWarning(locked.rxDrafts, input.warningId)
+              : null;
+            if (
+              !locked ||
+              locked.status !== TranscribeVisitStatus.READY ||
+              locked.deletedAt !== null ||
+              locked.archivedAt !== null ||
+              locked.signedAt !== null ||
+              locked.updatedAt.getTime() !== visit.updatedAt.getTime() ||
+              canonicalSha256(locked.rxDrafts ?? null) !==
+                canonicalSha256(visit.rxDrafts ?? null) ||
+              !lockedWarning ||
+              input.severity !== mapWorkerSeverity(lockedWarning.severity)
+            ) {
+              return null;
+            }
+            return persistRxWarningOverride({
+              client: tx,
+              visitId: input.visitId,
+              warningId: input.warningId,
+              rxLineNumber: input.rxLineNumber,
+              severity: input.severity,
+              headline: input.headline,
+              reason: trimmedReason,
+              actorUserId: session.user.id,
+            });
+          },
+        );
+      } catch (error) {
+        if (error instanceof TemplateTwinClinicalMutationAuthorizationError) {
+          return {
+            ok: false,
+            error: "The visit changed. Reload and try again.",
+          };
+        }
+        throw error;
+      }
+      if (!created) {
         return {
           ok: false,
           error: "Override write conflicted; please retry.",
         };
       }
-      created = existing;
     }
 
     // HIPAA audit row. The domain-specific `rx_warning_overrides`
@@ -200,5 +355,49 @@ export async function recordOverride(
       ok: false,
       error: "Could not record override. Please try again.",
     };
+  }
+}
+
+type RxWarningOverrideClient = Pick<
+  Prisma.TransactionClient,
+  "rxWarningOverride"
+>;
+
+async function persistRxWarningOverride(input: {
+  client: RxWarningOverrideClient;
+  visitId: string;
+  warningId: string;
+  rxLineNumber: number;
+  severity: string;
+  headline: string;
+  reason: string;
+  actorUserId: string;
+}): Promise<{ id: string } | null> {
+  try {
+    return await input.client.rxWarningOverride.create({
+      data: {
+        visitId: input.visitId,
+        rxLineNumber: input.rxLineNumber,
+        warningId: input.warningId,
+        severity: input.severity,
+        headline: input.headline,
+        reason: input.reason,
+        overriddenBy: input.actorUserId,
+      },
+      select: { id: true },
+    });
+  } catch (error: unknown) {
+    // Preserve the first immutable audit row under a retry/double-click.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((error as any)?.code !== "P2002") throw error;
+    return input.client.rxWarningOverride.findUnique({
+      where: {
+        rx_warning_overrides_visit_warning_unique: {
+          visitId: input.visitId,
+          warningId: input.warningId,
+        },
+      },
+      select: { id: true },
+    });
   }
 }

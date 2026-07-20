@@ -14,10 +14,13 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TranscribeVisitStatus } from "@prisma/client";
+import { currentClinicalVisitActorWhere } from "@/lib/clinical-visit-authority";
 
 const mocks = vi.hoisted(() => ({
   visitFindUnique: vi.fn(),
   visitUpdate: vi.fn(),
+  queryRaw: vi.fn(),
+  transaction: vi.fn(),
   auth: vi.fn(),
   logAudit: vi.fn(),
   computeEmScore: vi.fn(),
@@ -30,6 +33,7 @@ vi.mock("@meddoc/db", () => ({
       findUnique: mocks.visitFindUnique,
       update: mocks.visitUpdate,
     },
+    $transaction: mocks.transaction,
   },
 }));
 
@@ -50,10 +54,29 @@ import { POST } from "@/app/api/visits/[id]/em-score/override/route";
 const FAKE_USER = "u1";
 const FAKE_PRACTICE = "p1";
 const FAKE_VISIT = "cmot_override_test";
+const FAKE_PATIENT = "patient-override-1";
+const UPDATED_AT = new Date("2026-07-20T00:00:00.000Z");
+
+const ORDINARY_PROVENANCE = {
+  patientId: FAKE_PATIENT,
+  patient: {
+    id: FAKE_PATIENT,
+    practiceId: FAKE_PRACTICE,
+    externalId: null,
+  },
+  noteTemplateId: null,
+  noteTemplateVersion: null,
+  noteTemplate: null,
+  templateTwinFill: null,
+  templateTwinSyntheticQaRun: null,
+  templateTwinSyntheticQaAdmission: null,
+  templateTwinProviderExecutions: [],
+} as const;
 
 const READY_VISIT = {
   id: FAKE_VISIT,
   userId: FAKE_USER,
+  updatedAt: UPDATED_AT,
   status: TranscribeVisitStatus.READY,
   deletedAt: null,
   archivedAt: null,
@@ -76,6 +99,7 @@ Symptomatic care.`,
   icdCodes: { codes: [{ code: "J06.9" }] },
   cptCodes: null,
   rxDrafts: { drafts: [] },
+  ...ORDINARY_PROVENANCE,
 };
 
 function makeReq(body: unknown) {
@@ -98,6 +122,32 @@ const ctx = { params: Promise.resolve({ id: FAKE_VISIT }) };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.visitFindUnique.mockResolvedValue(READY_VISIT);
+  mocks.visitUpdate.mockResolvedValue({});
+  mocks.queryRaw.mockImplementation(
+    async (query: { strings?: readonly string[] }) => {
+      const sql = query.strings?.join(" ") ?? "";
+      if (sql.includes('FROM "practices" practice')) {
+        return [{ id: FAKE_PRACTICE, isActive: true }];
+      }
+      if (sql.includes('FROM "users" actor')) {
+        return [{ id: FAKE_USER }];
+      }
+      return [{ id: FAKE_VISIT }];
+    },
+  );
+  mocks.transaction.mockImplementation(
+    async (
+      callback: (tx: {
+        transcribeVisit: { update: typeof mocks.visitUpdate };
+        $queryRaw: typeof mocks.queryRaw;
+      }) => Promise<unknown>,
+    ) =>
+      callback({
+        transcribeVisit: { update: mocks.visitUpdate },
+        $queryRaw: mocks.queryRaw,
+      }),
+  );
   mocks.computeEmScore.mockResolvedValue({
     code: "99213",
     bumpableTo: "99214",
@@ -240,6 +290,13 @@ describe("POST /api/visits/[id]/em-score/override", () => {
       "Higher MDM than the AI captured.",
     );
     expect(typeof body.newScore.override?.overriddenAt).toBe("string");
+
+    const clinicalProjection = mocks.visitFindUnique.mock.calls.find(
+      ([args]) => args?.select?.soapDraft === true,
+    );
+    expect(clinicalProjection?.[0].where).toEqual(
+      expect.objectContaining(currentClinicalVisitActorWhere(FAKE_USER)),
+    );
 
     // Persisted: cptCodes.em.override is set on the visit row.
     expect(mocks.visitUpdate).toHaveBeenCalledTimes(1);

@@ -110,9 +110,9 @@ const TEMPLATE_TWIN_STAGING_QA_VERSION_DESCRIPTION =
   "Reviewed synthetic staging fixture v1";
 type TwinUploadMode = "generic" | "synthetic_staging";
 
-/** Which uploadable formats this image can actually extract. Computed server-
- *  side (see SettingsPage.getUploadCaps) so the UI never advertises a format
- *  whose extractor isn't loadable. .txt/.md need no lib and are always on. */
+/** Backward-compatible server capability shape. The legacy convenience path
+ * deliberately ignores Office/PDF availability and accepts text outlines only;
+ * DOCX admission is owned by the quarantined Template Twin workflow. */
 export interface UploadCaps {
   pdf: boolean;
   docx: boolean;
@@ -120,7 +120,6 @@ export interface UploadCaps {
 
 export function NoteFormatManager({
   templates,
-  uploadCaps,
   templateTwinSyntheticQaState,
   templateTwinStagingQaRequested,
   templateTwinUiEnabled,
@@ -221,7 +220,7 @@ export function NoteFormatManager({
   function onParseClick() {
     const text = pasteText.trim();
     if (text.length === 0) {
-      toast.error("Paste a note first");
+      toast.error("Paste a blank outline first");
       return;
     }
     // Mirror the server's 50k-char cap (parse-note-template.ts MAX_NOTE_CHARS)
@@ -231,7 +230,7 @@ export function NoteFormatManager({
     if (text.length > 50_000) {
       toast.error("Note is too long", {
         description:
-          "Max 50,000 characters — paste a single representative note.",
+          "Max 50,000 characters — paste a single blank clinical outline.",
       });
       return;
     }
@@ -242,10 +241,18 @@ export function NoteFormatManager({
     const file = e.target.files?.[0];
     e.target.value = ""; // allow re-selecting the same file
     if (!file) return;
+    const lowerName = file.name.toLowerCase();
+    if (!lowerName.endsWith(".txt") && !lowerName.endsWith(".md")) {
+      toast.error("Use a blank text outline", {
+        description:
+          "This shortcut accepts .txt or .md only. Use the quarantined Template Twin workflow for an original blank DOCX; PDF and completed documents are not accepted.",
+      });
+      return;
+    }
     if (file.size > UPLOAD_ACTION_BODY_LIMIT_BYTES) {
       toast.error("Could not read that file", {
         description:
-          "That file is larger than 1 MB. Upload a single representative note, or paste the note text instead.",
+          "That file is larger than 1 MB. Upload a blank template through the supported Word workflow, or paste a short blank outline instead.",
       });
       return;
     }
@@ -655,7 +662,6 @@ export function NoteFormatManager({
           onBack={hasTemplates ? () => setView("home") : undefined}
           pending={pending}
           fileRef={fileRef}
-          uploadCaps={uploadCaps}
           onTwinUploadClick={openTwinUpload}
           templateTwinSyntheticQaState={templateTwinSyntheticQaState}
           templateTwinStagingQaRequested={templateTwinStagingQaRequested}
@@ -766,7 +772,7 @@ export function NoteFormatManager({
             onClick={() => setView("entry")}
             disabled={pending}
           >
-            + Bring a note
+            + Add format
           </button>
         </div>
       </div>
@@ -1792,7 +1798,6 @@ function EntryState({
   onBack,
   pending,
   fileRef,
-  uploadCaps,
   onTwinUploadClick,
   templateTwinSyntheticQaState,
   templateTwinStagingQaRequested,
@@ -1807,25 +1812,17 @@ function EntryState({
   onBack?: () => void;
   pending: boolean;
   fileRef: React.RefObject<HTMLInputElement | null>;
-  uploadCaps: UploadCaps;
   onTwinUploadClick: (mode: TwinUploadMode) => void;
   templateTwinSyntheticQaState: "enabled" | "unavailable" | "hidden";
   templateTwinStagingQaRequested: boolean;
   templateTwinUiEnabled: boolean;
 }) {
-  // Only offer a format whose extractor actually loads in this image (incident
-  // 2026-06-04). .txt/.md always available; .pdf/.docx gated on uploadCaps so we
-  // never advertise-then-fail. Drives both the label and the <input accept>.
+  // The legacy convenience path accepts plain-text outlines only. Office/PDF
+  // files require quarantine and package-security admission in Template Twin.
   const uploadKinds = [
-    uploadCaps.pdf && { label: ".pdf", accept: ".pdf,application/pdf" },
-    uploadCaps.docx && {
-      label: ".docx",
-      accept:
-        ".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    },
     { label: ".txt", accept: ".txt,text/plain" },
-    { label: ".md", accept: ".md,.markdown,text/markdown" },
-  ].filter(Boolean) as { label: string; accept: string }[];
+    { label: ".md", accept: ".md,text/markdown" },
+  ];
   const uploadSubLabel = ["Paste", ...uploadKinds.map((k) => k.label)].join(
     " · ",
   );
@@ -1850,9 +1847,9 @@ function EntryState({
           maxWidth: "70ch",
         }}
       >
-        Bring a note you’ve already written and QuillMD will draft your future
-        notes in that format — your sections, your order, your wording. Or stay
-        on the standard format; you can change this anytime.
+        Start from a blank outline, preserve a supported blank Word template, or
+        stay on the standard format. Completed or patient-populated notes are
+        not accepted by this legacy outline workflow.
       </p>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
@@ -1873,7 +1870,7 @@ function EntryState({
               color: "var(--color-linear-text)",
             }}
           >
-            Bring your own note
+            Start from a blank outline
           </div>
           <div
             style={{
@@ -1883,8 +1880,8 @@ function EntryState({
               marginTop: 8,
             }}
           >
-            Paste one of your notes, or upload a file. QuillMD reads the format
-            and shows you what it understood — you edit and confirm.
+            Paste recognized clinical headings with empty placeholders only.
+            Populated or ambiguous text fails closed before provider egress.
           </div>
           <div style={{ ...subLabel, marginTop: 12 }}>{uploadSubLabel}</div>
         </div>
@@ -2082,14 +2079,16 @@ function EntryState({
 
       <div style={{ marginTop: 16 }}>
         <label style={{ ...subLabel }} htmlFor="nf-paste">
-          Paste a note
+          Paste a blank outline
         </label>
         <textarea
           id="nf-paste"
           value={pasteText}
           onChange={(e) => setPasteText(e.target.value)}
           rows={5}
-          placeholder="Paste one representative note here — e.g. a recent follow-up you wrote. Patient details are fine; they’re removed automatically and never saved."
+          placeholder={
+            "SUBJECTIVE:\n[blank]\nOBJECTIVE:\n[blank]\nASSESSMENT:\n[blank]\nPLAN:\n[blank]"
+          }
           style={{
             width: "100%",
             marginTop: 6,
@@ -2120,7 +2119,7 @@ function EntryState({
             onClick={onParse}
             disabled={pending}
           >
-            Read my format
+            Read blank outline
           </button>
           <span style={{ color: "var(--color-linear-text-3)", fontSize: 11.5 }}>
             or
@@ -2131,7 +2130,7 @@ function EntryState({
             onClick={onUploadClick}
             disabled={pending}
           >
-            Upload a file
+            Upload .txt or .md
           </button>
           <input
             ref={fileRef}
@@ -2169,16 +2168,17 @@ function EntryState({
             lineHeight: 1.55,
           }}
         >
-          Your note is read{" "}
+          Your blank outline is checked{" "}
           <b style={{ color: "var(--color-linear-text)", fontWeight: 500 }}>
-            for format only
+            locally before provider use
           </b>
-          . Patient details — names, dates, findings — are removed automatically
-          before anything is shown, and{" "}
+          . Completed notes, patient-like prose, names, dates, and populated
+          findings are rejected rather than sent. For an original blank DOCX,
+          use the quarantined Template Twin intake;{" "}
           <b style={{ color: "var(--color-linear-text)", fontWeight: 500 }}>
-            the note itself is never saved
+            this outline is never saved
           </b>
-          . QuillMD keeps your structure, not your patients.
+          .
         </p>
       </div>
     </div>
@@ -2261,7 +2261,7 @@ function ParsingState() {
           animation: "qm-spin 1.1s linear infinite",
         }}
         role="status"
-        aria-label="Reading your note format"
+        aria-label="Checking your blank outline"
       />
       <div
         style={{
@@ -2270,7 +2270,7 @@ function ParsingState() {
           color: "var(--color-linear-text)",
         }}
       >
-        Reading your note format…
+        Checking your blank outline…
       </div>
       <p
         style={{
@@ -2281,8 +2281,9 @@ function ParsingState() {
           lineHeight: 1.55,
         }}
       >
-        Finding your sections, order, and wording — and stripping any patient
-        details. This stays private and isn’t saved.
+        Confirming recognized empty sections and current physician access.
+        Populated or patient-like text is rejected before provider use and is
+        never saved.
       </p>
       <style>{`@keyframes qm-spin { to { transform: rotate(360deg); } }`}</style>
     </div>
@@ -2309,7 +2310,7 @@ function RejectedState({
           color: "var(--color-linear-text)",
         }}
       >
-        We couldn’t safely read this note
+        We couldn’t accept this outline
       </div>
       <div
         role="alert"
@@ -2342,7 +2343,7 @@ function RejectedState({
               color: "var(--color-linear-text)",
             }}
           >
-            This note has details we can’t fully separate
+            This isn’t an admitted blank outline
           </div>
           <div
             style={{
@@ -2353,15 +2354,15 @@ function RejectedState({
               maxWidth: "64ch",
             }}
           >
-            {reason} To keep your patients safe, QuillMD won’t build a format it
-            isn’t sure is clean. Nothing was saved.
+            {reason} QuillMD won’t return or persist a format it can’t clear.
+            Nothing was saved.
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button type="button" style={btnPrimary} onClick={onStandard}>
               Start from the standard format
             </button>
             <button type="button" style={btn} onClick={onRetry}>
-              Remove patient details &amp; try again
+              Edit blank outline &amp; try again
             </button>
           </div>
         </div>
@@ -2390,11 +2391,13 @@ function RejectedState({
             lineHeight: 1.55,
           }}
         >
-          The note you pasted was{" "}
+          The submitted text was{" "}
           <b style={{ color: "var(--color-linear-text)", fontWeight: 500 }}>
             not saved
-          </b>{" "}
-          — it was discarded the moment we finished reading it.
+          </b>
+          . Content rejected by the local blank-outline check is never sent to
+          an AI provider; if a later privacy scan is uncertain, its response is
+          discarded.
         </p>
       </div>
     </div>

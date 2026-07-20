@@ -15,6 +15,15 @@ export async function register(): Promise<void> {
     const { assertAdminSurfaceRuntimeConfiguration } =
       await import("./lib/admin-host");
     assertAdminSurfaceRuntimeConfiguration(process.env);
+    const [{ assertAuthOriginRuntimeConfiguration }, { APP_URL }] =
+      await Promise.all([
+        import("./lib/auth-origin"),
+        import("./lib/constants"),
+    ]);
+    assertAuthOriginRuntimeConfiguration(process.env, APP_URL);
+    const { assertMfaSecretRuntimeConfiguration } =
+      await import("./lib/mfa-secret-envelope");
+    assertMfaSecretRuntimeConfiguration(process.env);
   } catch (error) {
     const { terminateForFatalStartupConfiguration } =
       await import("./lib/fatal-startup");

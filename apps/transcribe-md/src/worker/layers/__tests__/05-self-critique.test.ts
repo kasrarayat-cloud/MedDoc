@@ -45,6 +45,9 @@ vi.mock("@meddoc/ai", async () => {
 
 vi.mock("@meddoc/db", () => ({
   default: {
+    $queryRaw: vi.fn().mockResolvedValue([
+      { id: "u1", practiceId: "p1", email: "synthetic@example.test" },
+    ]),
     transcribeVisit: { update: mocks.prismaUpdate },
   },
 }));

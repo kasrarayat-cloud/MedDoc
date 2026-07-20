@@ -15,8 +15,14 @@ import { downloadAudio } from "@/lib/minio";
 
 import { apiError, withApiHandler } from "@/lib/api-error";
 import { redactPhi } from "@meddoc/ai";
-import { logAudit } from "@/lib/audit";
+import { logAudit, logRequiredAudit } from "@/lib/audit";
 import { isOwnedTemplateTwinStagingQaVisit } from "@/lib/template-twin/staging-qa-access";
+import {
+  requireTemplateTwinVisitReadAuthority,
+  TemplateTwinVisitReadAuthorityError,
+} from "@/lib/template-twin/read-authority";
+import { TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE } from "@/lib/template-twin/durable-visit-exclusion";
+import { currentClinicalVisitActorWhere } from "@/lib/clinical-visit-authority";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,8 +39,38 @@ export const GET = withApiHandler<{ id: string }>(
       return apiError("not found", 404);
     }
 
-    const visit = await prisma.transcribeVisit.findUnique({
-      where: { id: visitId },
+    // Classify before resolving an object key or touching storage. Full
+    // synthetic QA is already denied above; this durable check also catches
+    // pre-certification voice admissions (which intentionally have no run)
+    // and malformed synthetic execution provenance.
+    let preReadAuthority;
+    try {
+      preReadAuthority = await requireTemplateTwinVisitReadAuthority({
+        db: prisma,
+        visitId,
+        actorUserId: userId,
+      });
+      if (preReadAuthority.isSyntheticTemplateTwin) {
+        return apiError("not found", 404);
+      }
+    } catch (error) {
+      if (error instanceof TemplateTwinVisitReadAuthorityError) {
+        return apiError("not found", 404);
+      }
+      throw error;
+    }
+    if (preReadAuthority.isTemplateTwin && !preReadAuthority.practiceId) {
+      return apiError("not found", 404);
+    }
+
+    const visit = await prisma.transcribeVisit.findFirst({
+      where: {
+        id: visitId,
+        ...currentClinicalVisitActorWhere(userId),
+        ...(preReadAuthority.isTemplateTwin
+          ? {}
+          : TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE),
+      },
       select: {
         userId: true,
         dictationAudioKey: true,
@@ -57,11 +93,35 @@ export const GET = withApiHandler<{ id: string }>(
       return apiError("storage read failed", 502);
     }
 
+    // Reclassify and authorize after the storage read, immediately before
+    // bytes can leave the server. A stale session may therefore never race a
+    // suspension, role/product change, practice transfer, or newly discovered
+    // durable Twin marker into an audio response.
+    let readAuthority;
+    try {
+      readAuthority = await requireTemplateTwinVisitReadAuthority({
+        db: prisma,
+        visitId,
+        actorUserId: userId,
+        ...(preReadAuthority.isTemplateTwin
+          ? {
+              expectedPracticeId: preReadAuthority.practiceId!,
+              requireTemplateTwin: true,
+            }
+          : {}),
+      });
+    } catch (error) {
+      if (error instanceof TemplateTwinVisitReadAuthorityError) {
+        return apiError("not found", 404);
+      }
+      throw error;
+    }
+
     // Round 3 PR-C — §164.312(b) PHI-read audit (A05-P0-004). Audio
     // download is the highest-risk PHI-read surface: full patient voice
     // exits the server. Audited even though the session+ownership gate
     // already protects it.
-    void logAudit({
+    const audioAudit = {
       action: "VIEWED_VISIT_AUDIO",
       targetId: visitId,
       targetType: "TranscribeVisit",
@@ -70,7 +130,27 @@ export const GET = withApiHandler<{ id: string }>(
         bytes: buf.byteLength,
         mimeType: visit.audioMimeType ?? "audio/webm",
       },
-    });
+    } as const;
+    if (readAuthority.isTemplateTwin) {
+      if (!readAuthority.practiceId) return apiError("not found", 404);
+      try {
+        await logRequiredAudit({
+          ...audioAudit,
+          userId,
+          practiceId: readAuthority.practiceId,
+          templateTwinReadAuthority: {
+            expectedPracticeId: readAuthority.practiceId,
+          },
+        });
+      } catch (error) {
+        if (error instanceof TemplateTwinVisitReadAuthorityError) {
+          return apiError("not found", 404);
+        }
+        throw error;
+      }
+    } else {
+      void logAudit(audioAudit);
+    }
 
     // For 10-min webm clips we return the whole buffer — cheaper to
     // render in one shot than to stream for the browser's audio element.

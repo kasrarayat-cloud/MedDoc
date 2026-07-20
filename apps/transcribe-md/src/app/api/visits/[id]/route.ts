@@ -37,31 +37,53 @@ import { z } from "zod";
 import { NextResponse } from "next/server";
 
 import prisma from "@meddoc/db";
-import { TranscribeVisitStatus } from "@prisma/client";
+import { Prisma, TranscribeVisitStatus } from "@prisma/client";
 import { SPECIALTY_IDS } from "@meddoc/shared/specialties";
 
 import { apiError, withApiHandler } from "@/lib/api-error";
-import { isTemplateTwinSyntheticQaPatient } from "@/lib/template-twin/synthetic-qa-patient";
 import { auth } from "@/lib/nextauth";
 import { RATE_LIMITS, rateLimitOr429 } from "@/lib/rate-limit";
 import { log } from "@/lib/log";
 import { logAudit, logRequiredAudit } from "@/lib/audit";
-import { AuthError, requireFreshDoctorIdentity } from "@/lib/auth";
-import {
-  isTemplateTwinStagingQaRequested,
-  TemplateTwinStagingQaDisabledError,
-} from "@/lib/template-twin/staging-qa-gate";
+import { isTemplateTwinStagingQaRequested } from "@/lib/template-twin/staging-qa-gate";
 import { isOwnedTemplateTwinStagingQaVisit } from "@/lib/template-twin/staging-qa-access";
+import { TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT } from "@/lib/template-twin/staging-qa-visit-guard";
 import {
-  assertTemplateTwinStagingQaVisitGuard,
-  TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
-  TemplateTwinStagingQaVisitGuardError,
-} from "@/lib/template-twin/staging-qa-visit-guard";
+  requireTemplateTwinVisitReadAuthority,
+  TemplateTwinVisitReadAuthorityError,
+} from "@/lib/template-twin/read-authority";
+import {
+  requireTemplateTwinSyntheticReadAdmission,
+  type TemplateTwinSyntheticReadAdmission,
+  TemplateTwinSyntheticReadAdmissionError,
+} from "@/lib/template-twin/synthetic-read-admission";
+import { TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE } from "@/lib/template-twin/durable-visit-exclusion";
+import { currentClinicalVisitActorWhere } from "@/lib/clinical-visit-authority";
+import { lockCurrentClinicalPatientAfterActor } from "@/lib/clinical-patient-authority";
+import { isSameOriginTemplateTwinMutation } from "@/lib/template-twin/request-security";
+import {
+  enqueueTemplateTwinClinicalMutationAudit,
+  hasDurableTemplateTwinClinicalMutationProvenance,
+  loadTemplateTwinClinicalMutationAdmissionTarget,
+  lockAndAssertOrdinaryClinicalMutation,
+  lockAndAssertTemplateTwinClinicalMutation,
+  pinTemplateTwinClinicalMutation,
+  TEMPLATE_TWIN_CLINICAL_MUTATION_PROVENANCE_SELECT,
+  TemplateTwinClinicalMutationAuthorizationError,
+  type TemplateTwinClinicalMutationClaim,
+} from "@/lib/template-twin/visit-mutation-authority";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const INPUT_MODES = ["audio_upload", "voice_dictation", "text_notes"] as const;
+
+class InvalidPatientSelectionError extends Error {
+  constructor() {
+    super("Selected patient is not available.");
+    this.name = "InvalidPatientSelectionError";
+  }
+}
 
 const BodySchema = z.object({
   patientId: z.string().trim().min(1).optional(),
@@ -86,8 +108,50 @@ export const GET = withApiHandler<{ id: string }>(
     const userId = session?.user?.id;
     if (!userId) return apiError("unauthorized", 401);
 
-    const visit = await prisma.transcribeVisit.findUnique({
-      where: { id: visitId },
+    let preReadAuthority;
+    try {
+      preReadAuthority = await requireTemplateTwinVisitReadAuthority({
+        db: prisma,
+        visitId,
+        actorUserId: userId,
+      });
+    } catch (error) {
+      if (error instanceof TemplateTwinVisitReadAuthorityError) {
+        return apiError("not found", 404);
+      }
+      throw error;
+    }
+    if (preReadAuthority.isTemplateTwin && !preReadAuthority.practiceId) {
+      return apiError("not found", 404);
+    }
+    if (
+      isTemplateTwinStagingQaRequested() &&
+      !preReadAuthority.isSyntheticTemplateTwin
+    ) {
+      return apiError("not found", 404);
+    }
+    let syntheticReadAdmission: TemplateTwinSyntheticReadAdmission | null;
+    try {
+      syntheticReadAdmission = await requireTemplateTwinSyntheticReadAdmission({
+        visitId,
+        actorUserId: userId,
+        readDecision: preReadAuthority,
+      });
+    } catch (error) {
+      if (error instanceof TemplateTwinSyntheticReadAdmissionError) {
+        return apiError("not found", 404);
+      }
+      throw error;
+    }
+
+    const visit = await prisma.transcribeVisit.findFirst({
+      where: {
+        id: visitId,
+        ...currentClinicalVisitActorWhere(userId),
+        ...(preReadAuthority.isTemplateTwin
+          ? {}
+          : TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE),
+      },
       select: {
         id: true,
         userId: true,
@@ -149,25 +213,47 @@ export const GET = withApiHandler<{ id: string }>(
     });
     // 404 on both "not found" AND "not yours" prevents ID enumeration.
     if (!visit || visit.userId !== userId) return apiError("not found", 404);
-    let syntheticQaAuditPracticeId: string | null = null;
-    if (
-      visit.templateTwinSyntheticQaRun ||
-      isTemplateTwinStagingQaRequested()
-    ) {
+    let readAuthority;
+    try {
+      readAuthority = await requireTemplateTwinVisitReadAuthority({
+        db: prisma,
+        visitId,
+        actorUserId: userId,
+        ...(preReadAuthority.isTemplateTwin
+          ? {
+              expectedPracticeId: preReadAuthority.practiceId!,
+              requireTemplateTwin: true,
+            }
+          : {}),
+      });
+    } catch (error) {
+      if (error instanceof TemplateTwinVisitReadAuthorityError) {
+        return apiError("not found", 404);
+      }
+      throw error;
+    }
+    let syntheticQaAuditPracticeId = syntheticReadAdmission?.practiceId ?? null;
+    if (syntheticReadAdmission) {
       try {
-        const doctor = await requireFreshDoctorIdentity(userId);
-        syntheticQaAuditPracticeId = doctor.practiceId;
-        assertTemplateTwinStagingQaVisitGuard({
-          run: visit.templateTwinSyntheticQaRun,
-          actor: { userId, practiceId: doctor.practiceId },
-          currentRolloutToken: doctor.rolloutToken,
-        });
-      } catch (error) {
         if (
-          error instanceof AuthError ||
-          error instanceof TemplateTwinStagingQaDisabledError ||
-          error instanceof TemplateTwinStagingQaVisitGuardError
+          visit.templateTwinSyntheticQaRun?.id !==
+            syntheticReadAdmission.runId ||
+          visit.templateTwinSyntheticQaRun.attempt !==
+            syntheticReadAdmission.attempt
         ) {
+          return apiError("not found", 404);
+        }
+        syntheticReadAdmission =
+          await requireTemplateTwinSyntheticReadAdmission({
+            visitId,
+            actorUserId: userId,
+            readDecision: readAuthority,
+            expected: syntheticReadAdmission,
+          });
+        if (!syntheticReadAdmission) return apiError("not found", 404);
+        syntheticQaAuditPracticeId = syntheticReadAdmission.practiceId;
+      } catch (error) {
+        if (error instanceof TemplateTwinSyntheticReadAdmissionError) {
           return apiError("not found", 404);
         }
         throw error;
@@ -183,15 +269,54 @@ export const GET = withApiHandler<{ id: string }>(
       targetType: "TranscribeVisit",
       metadata: { source: "api:GET /api/visits/[id]" },
     } as const;
-    if (visit.templateTwinSyntheticQaRun) {
-      if (!syntheticQaAuditPracticeId) return apiError("not found", 404);
-      await logRequiredAudit({
-        ...viewAudit,
-        userId,
-        practiceId: syntheticQaAuditPracticeId,
-      });
+    if (readAuthority.isTemplateTwin) {
+      const currentPracticeId =
+        syntheticQaAuditPracticeId ?? readAuthority.practiceId;
+      if (!currentPracticeId) return apiError("not found", 404);
+      try {
+        await logRequiredAudit({
+          ...viewAudit,
+          userId,
+          practiceId: currentPracticeId,
+          templateTwinReadAuthority: {
+            expectedPracticeId: currentPracticeId,
+          },
+        });
+      } catch (error) {
+        if (error instanceof TemplateTwinVisitReadAuthorityError) {
+          return apiError("not found", 404);
+        }
+        throw error;
+      }
     } else {
       void logAudit(viewAudit);
+    }
+
+    if (syntheticReadAdmission) {
+      try {
+        const finalReadAuthority = await requireTemplateTwinVisitReadAuthority({
+          db: prisma,
+          visitId,
+          actorUserId: userId,
+          expectedPracticeId: syntheticReadAdmission.practiceId,
+          requireTemplateTwin: true,
+        });
+        const finalAdmission = await requireTemplateTwinSyntheticReadAdmission({
+          visitId,
+          actorUserId: userId,
+          readDecision: finalReadAuthority,
+          expected: syntheticReadAdmission,
+        });
+        if (!finalAdmission) return apiError("not found", 404);
+      } catch (error) {
+        if (
+          error instanceof TemplateTwinVisitReadAuthorityError ||
+          error instanceof TemplateTwinSyntheticReadAdmissionError
+        ) {
+          return apiError("not found", 404);
+        }
+        throw error;
+      }
     }
 
     const visitDto = { ...visit, templateTwinSyntheticQaRun: undefined };
@@ -214,6 +339,39 @@ export const PATCH = withApiHandler<{ id: string }>(
     const blocked = rateLimitOr429(RATE_LIMITS.VISIT_OPS, userId);
     if (blocked) return blocked;
 
+    // Classify from identifiers, reserved synthetic identity, and immutable
+    // Twin lineage before consuming any requested clinical metadata. Live
+    // Twin edits require a current physician/rollout admission and same-origin
+    // request; damaged/synthetic lineage remains unavailable here.
+    const authorityTarget =
+      await loadTemplateTwinClinicalMutationAdmissionTarget({
+        visitId,
+        actorUserId: userId,
+      });
+    if (!authorityTarget || authorityTarget.userId !== userId) {
+      return apiError("not found", 404);
+    }
+    let templateTwinMutationClaim: TemplateTwinClinicalMutationClaim | null =
+      null;
+    if (hasDurableTemplateTwinClinicalMutationProvenance(authorityTarget)) {
+      if (!isSameOriginTemplateTwinMutation(req)) {
+        return apiError("not found", 404);
+      }
+      try {
+        templateTwinMutationClaim = await pinTemplateTwinClinicalMutation({
+          visitId,
+          actorUserId: userId,
+          admittedVisitUpdatedAt: authorityTarget.updatedAt,
+          provenance: authorityTarget,
+        });
+      } catch (error) {
+        if (error instanceof TemplateTwinClinicalMutationAuthorizationError) {
+          return apiError("not found", 404);
+        }
+        throw error;
+      }
+    }
+
     let body: unknown;
     try {
       body = await req.json();
@@ -230,28 +388,41 @@ export const PATCH = withApiHandler<{ id: string }>(
       );
     }
 
-    // Need the caller's practiceId to gate patient-FK changes. Cheap.
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { practiceId: true },
-    });
-    if (!user) return apiError("user not found", 404);
-
     const visit = await prisma.transcribeVisit.findUnique({
-      where: { id: visitId },
+      where: {
+        id: visitId,
+        ...currentClinicalVisitActorWhere(userId),
+        updatedAt: authorityTarget.updatedAt,
+        ...(templateTwinMutationClaim
+          ? {}
+          : TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE),
+      },
       select: {
         id: true,
         userId: true,
+        updatedAt: true,
         status: true,
+        signedAt: true,
         audioKey: true,
         dictationAudioKey: true,
         rawTextInput: true,
         deletedAt: true,
         archivedAt: true,
-        patientId: true,
+        specialty: true,
+        chiefComplaint: true,
+        inputMode: true,
+        ...TEMPLATE_TWIN_CLINICAL_MUTATION_PROVENANCE_SELECT,
       },
     });
     if (!visit || visit.userId !== userId) return apiError("not found", 404);
+    if (
+      Boolean(templateTwinMutationClaim) !==
+      hasDurableTemplateTwinClinicalMutationProvenance(visit)
+    ) {
+      return apiError("The visit changed. Reload and retry.", 409, {
+        code: "TEMPLATE_TWIN_MUTATION_CONFLICT",
+      });
+    }
 
     if (visit.deletedAt !== null) {
       return NextResponse.json(
@@ -279,7 +450,11 @@ export const PATCH = withApiHandler<{ id: string }>(
       visit.dictationAudioKey === null &&
       (visit.rawTextInput === null || visit.rawTextInput.length === 0);
 
-    if (visit.status !== TranscribeVisitStatus.QUEUED || !noInput) {
+    if (
+      visit.status !== TranscribeVisitStatus.QUEUED ||
+      visit.signedAt !== null ||
+      !noInput
+    ) {
       return NextResponse.json(
         {
           error:
@@ -288,37 +463,6 @@ export const PATCH = withApiHandler<{ id: string }>(
         },
         { status: 400 },
       );
-    }
-
-    // If patientId is being changed, validate against caller's practice.
-    if (
-      parsed.data.patientId !== undefined &&
-      parsed.data.patientId !== visit.patientId
-    ) {
-      const newPatient = await prisma.transcribeMdPatient.findUnique({
-        where: { id: parsed.data.patientId },
-        select: {
-          id: true,
-          name: true,
-          practiceId: true,
-          deletedAt: true,
-          externalId: true,
-        },
-      });
-      if (
-        !newPatient ||
-        newPatient.practiceId !== user.practiceId ||
-        newPatient.deletedAt !== null ||
-        isTemplateTwinSyntheticQaPatient(newPatient)
-      ) {
-        return NextResponse.json(
-          {
-            error: "Selected patient is not available.",
-            code: "INVALID_PATIENT",
-          },
-          { status: 400 },
-        );
-      }
     }
 
     const data: {
@@ -333,14 +477,6 @@ export const PATCH = withApiHandler<{ id: string }>(
       parsed.data.patientId !== visit.patientId
     ) {
       data.patientId = parsed.data.patientId;
-      // Denormalised legacy column; keep it in sync with the FK so
-      // anywhere that still reads `visit.patientName` agrees with
-      // the linked patient's name.
-      const newPatient = await prisma.transcribeMdPatient.findUnique({
-        where: { id: parsed.data.patientId },
-        select: { name: true },
-      });
-      if (newPatient) data.patientName = newPatient.name;
     }
     if (parsed.data.specialty !== undefined) {
       data.specialty = parsed.data.specialty;
@@ -359,18 +495,123 @@ export const PATCH = withApiHandler<{ id: string }>(
       );
     }
 
-    const updated = await prisma.transcribeVisit.update({
-      where: { id: visit.id },
-      data,
-      select: {
-        id: true,
-        patientId: true,
-        specialty: true,
-        chiefComplaint: true,
-        inputMode: true,
-        updatedAt: true,
-      },
-    });
+    let updated: {
+      id: string;
+      patientId: string;
+      specialty: string;
+      chiefComplaint: string | null;
+      inputMode: string;
+      updatedAt: Date;
+    } | null = null;
+    try {
+      updated = await prisma.$transaction(
+        async (tx: Prisma.TransactionClient) => {
+          if (templateTwinMutationClaim) {
+            const locked = await lockAndAssertTemplateTwinClinicalMutation({
+              tx,
+              claim: templateTwinMutationClaim,
+            });
+            if (
+              locked.status !== TranscribeVisitStatus.QUEUED ||
+              locked.signedAt !== null ||
+              locked.deletedAt !== null ||
+              locked.archivedAt !== null ||
+              locked.updatedAt.getTime() !== visit.updatedAt.getTime() ||
+              locked.audioKey !== visit.audioKey ||
+              locked.dictationAudioKey !== visit.dictationAudioKey ||
+              locked.rawTextInput !== visit.rawTextInput ||
+              locked.patientId !== visit.patientId ||
+              locked.specialty !== visit.specialty ||
+              locked.chiefComplaint !== visit.chiefComplaint ||
+              locked.inputMode !== visit.inputMode
+            ) {
+              return null;
+            }
+          } else {
+            await lockAndAssertOrdinaryClinicalMutation({
+              tx,
+              visitId,
+              actorUserId: userId,
+              admittedVisitUpdatedAt: authorityTarget.updatedAt,
+              admittedPatientId: authorityTarget.patientId,
+              admittedNoteTemplateId: authorityTarget.noteTemplateId,
+            });
+          }
+
+          const writeData = { ...data };
+          if (data.patientId && data.patientId !== visit.patientId) {
+            const expectedPracticeId =
+              templateTwinMutationClaim?.practiceId ?? session.user.practiceId;
+            const targetPatient = await lockCurrentClinicalPatientAfterActor({
+              tx,
+              actor: { userId, practiceId: expectedPracticeId },
+              patientId: data.patientId,
+            });
+            if (!targetPatient) throw new InvalidPatientSelectionError();
+            // Denormalised legacy column remains consistent with the exact
+            // target patient row held under the same transaction lock.
+            writeData.patientName = targetPatient.name;
+          }
+
+          const saved = await tx.transcribeVisit.update({
+            where: {
+              id: visit.id,
+              userId,
+              updatedAt: visit.updatedAt,
+              status: TranscribeVisitStatus.QUEUED,
+            },
+            data: writeData,
+            select: {
+              id: true,
+              patientId: true,
+              specialty: true,
+              chiefComplaint: true,
+              inputMode: true,
+              updatedAt: true,
+            },
+          });
+          if (templateTwinMutationClaim) {
+            await enqueueTemplateTwinClinicalMutationAudit({
+              tx,
+              claim: templateTwinMutationClaim,
+              operation: "generic_patch",
+              action: "EDITED_NOTE",
+              metadata: { changedKeys: Object.keys(data).sort() },
+            });
+          }
+          return saved;
+        },
+      );
+    } catch (error) {
+      if (error instanceof InvalidPatientSelectionError) {
+        return NextResponse.json(
+          {
+            error: error.message,
+            code: "INVALID_PATIENT",
+          },
+          { status: 400 },
+        );
+      }
+      if (error instanceof TemplateTwinClinicalMutationAuthorizationError) {
+        return apiError(
+          templateTwinMutationClaim
+            ? "Template Twin authorization changed. Reload and retry."
+            : "The visit changed. Reload and retry.",
+          409,
+          {
+            code: templateTwinMutationClaim
+              ? "TEMPLATE_TWIN_AUTHORIZATION_CHANGED"
+              : "TEMPLATE_TWIN_MUTATION_CONFLICT",
+          },
+        );
+      }
+      throw error;
+    }
+    if (!updated) {
+      return apiError("The visit changed. Reload and retry.", 409, {
+        code: "TEMPLATE_TWIN_MUTATION_CONFLICT",
+      });
+    }
 
     log.info("api:visits:edit", "draft edited", {
       userId,

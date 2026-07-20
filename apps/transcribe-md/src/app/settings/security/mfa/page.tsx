@@ -22,10 +22,11 @@ import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 
 import prisma from "@meddoc/db";
-import { Product } from "@prisma/client";
+import { Prisma, Product } from "@prisma/client";
 import { auth } from "@/lib/nextauth";
 import { isAdminRequestHost } from "@/lib/admin-host";
 import { requireFreshPlatformAdminPage } from "@/lib/admin-page-gate";
+import { hasCompleteMfaEnrollment } from "@/lib/mfa-enrollment-state";
 import { AppFrame } from "@/components/ui/app-frame";
 import { MfaEnrollmentPanel } from "./mfa-enrollment-panel";
 import { MfaManagementPanel } from "./mfa-management-panel";
@@ -74,13 +75,40 @@ export default async function MfaSettingsPage({
   }
 
   const params = await searchParams;
-  const hasCompleteMfaEnrollment =
-    user.mfaEnabled && !!user.mfaSecret && user.mfaVerifiedAt !== null;
+  const completeMfaEnrollment = hasCompleteMfaEnrollment(user);
+  let usableRecoveryCodeCount: number | null = null;
+  if (completeMfaEnrollment) {
+    try {
+      const rows = (await prisma.$queryRaw(Prisma.sql`
+        SELECT (
+          SELECT COUNT(*)::integer
+          FROM unnest(u."mfaBackupCodes") AS recovery(verifier)
+          WHERE verifier ~ '^qmfa-recovery:v2:sha256:[0-9a-f]{64}$'
+        ) AS "usableRecoveryCodeCount"
+        FROM "users" u
+        WHERE u."id" = ${user.id}
+      `)) as Array<{ usableRecoveryCodeCount: number }>;
+      const count = rows[0]?.usableRecoveryCodeCount;
+      if (
+        rows.length === 1 &&
+        typeof count === "number" &&
+        Number.isSafeInteger(count) &&
+        count >= 0 &&
+        count <= 100
+      ) {
+        usableRecoveryCodeCount = count;
+      }
+    } catch {
+      // Count uncertainty must never be represented as usable recovery
+      // credentials. The management panel renders the urgent rotation state.
+      usableRecoveryCodeCount = null;
+    }
+  }
   const hasInconsistentMfaEnrollment =
-    user.mfaEnabled && !hasCompleteMfaEnrollment;
+    user.mfaEnabled && !completeMfaEnrollment;
   const isSuperAdminGated =
     isAdminHost ||
-    (params.reason === "super_admin_required" && !hasCompleteMfaEnrollment);
+    (params.reason === "super_admin_required" && !completeMfaEnrollment);
 
   const content = (
     <div
@@ -90,7 +118,7 @@ export default async function MfaSettingsPage({
         padding: "24px 24px 80px",
       }}
     >
-      {isSuperAdminGated && !hasCompleteMfaEnrollment && (
+      {isSuperAdminGated && !completeMfaEnrollment && (
         <div
           role="alert"
           style={{
@@ -172,43 +200,55 @@ export default async function MfaSettingsPage({
           >
             Administrative access remains blocked because the enrolled-factor
             record is incomplete. Sign out and contact the designated security
-            or operations owner. This page cannot disable, replace, or infer
-            the missing factor.
+            or operations owner. This page cannot disable, replace, or infer the
+            missing factor.
           </p>
         </section>
-      ) : isAdminHost && hasCompleteMfaEnrollment ? (
-        <section
-          style={{
-            background: "var(--color-linear-surface-1)",
-            border: "1px solid var(--color-linear-border)",
-            borderRadius: 10,
-            padding: 22,
-          }}
-        >
-          <p
-            style={{
-              margin: "0 0 16px",
-              color: "var(--color-linear-text-2)",
-              fontFamily: "var(--font-sans)",
-              fontSize: 13,
-            }}
-          >
-            MFA is enrolled. Administrative MFA cannot be disabled from this
-            recovery surface.
-          </p>
-          <Link href="/admin" className="qm-lin-btn-primary">
-            Continue to admin
-          </Link>
-        </section>
-      ) : hasCompleteMfaEnrollment ? (
-        <MfaManagementPanel
-          isPlatformAdmin={user.products.includes(Product.SUPER_ADMIN)}
-          verifiedAt={user.mfaVerifiedAt?.toISOString() ?? null}
-        />
+      ) : completeMfaEnrollment ? (
+        <>
+          <MfaManagementPanel
+            isPlatformAdmin={
+              isAdminHost || user.products.includes(Product.SUPER_ADMIN)
+            }
+            usableRecoveryCodeCount={usableRecoveryCodeCount}
+            verifiedAt={user.mfaVerifiedAt?.toISOString() ?? null}
+          />
+          {isAdminHost && (
+            <section
+              style={{
+                marginTop: 16,
+                background: "var(--color-linear-surface-1)",
+                border: "1px solid var(--color-linear-border)",
+                borderRadius: 10,
+                padding: 22,
+              }}
+            >
+              <p
+                style={{
+                  margin: "0 0 16px",
+                  color: "var(--color-linear-text-2)",
+                  fontFamily: "var(--font-sans)",
+                  fontSize: 13,
+                }}
+              >
+                Administrative MFA cannot be disabled from this recovery
+                surface.
+              </p>
+              <Link
+                href="/admin/template-twin-release"
+                className="qm-lin-btn-primary"
+              >
+                Continue to release control
+              </Link>
+            </section>
+          )}
+        </>
       ) : (
         <MfaEnrollmentPanel
           userEmail={user.email}
-          completionHref={isAdminHost ? "/admin" : "/settings"}
+          completionHref={
+            isAdminHost ? "/admin/template-twin-release" : "/settings"
+          }
         />
       )}
     </div>

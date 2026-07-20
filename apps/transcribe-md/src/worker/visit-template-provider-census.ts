@@ -2,6 +2,7 @@ import {
   hasDurableTemplateTwinVisitProvenance,
   type TemplateTwinDurableVisitProvenance,
 } from "@/lib/template-twin/durable-visit-provenance";
+import { isTemplateTwinSyntheticQaPatient } from "@/lib/template-twin/synthetic-qa-patient";
 
 export interface VisitTemplateProviderCandidate {
   readonly id: string;
@@ -9,8 +10,13 @@ export interface VisitTemplateProviderCandidate {
   readonly templateKind: string;
 }
 
+interface VisitTemplateProviderPinnedCandidate
+  extends VisitTemplateProviderCandidate {
+  readonly templateTwinCompiledVersion: unknown | null;
+}
+
 export interface VisitTemplateProviderCensusProvenance extends TemplateTwinDurableVisitProvenance {
-  readonly noteTemplate: VisitTemplateProviderCandidate | null;
+  readonly noteTemplate: VisitTemplateProviderPinnedCandidate | null;
 }
 
 export class VisitTemplateProviderCensusProvenanceError extends Error {
@@ -67,6 +73,7 @@ export async function resolveVisitTemplateProviderCensus<
 >(input: {
   readonly runtimeEnabled: boolean;
   readonly pinnedOrdinary: boolean;
+  readonly syntheticQaContextActive: boolean;
   readonly durableProvenance: VisitTemplateProviderCensusProvenance;
   readonly resolve: () => Promise<{
     readonly template: T;
@@ -76,6 +83,27 @@ export async function resolveVisitTemplateProviderCensus<
   const hasDurableTwinProvenance = hasDurableTemplateTwinVisitProvenance(
     input.durableProvenance,
   );
+  const reservedSyntheticPatient = isTemplateTwinSyntheticQaPatient(
+    input.durableProvenance.patient,
+  );
+  const hasSyntheticRun = Boolean(
+    input.durableProvenance.templateTwinSyntheticQaRun,
+  );
+  const hasSyntheticAdmission = Boolean(
+    input.durableProvenance.templateTwinSyntheticQaAdmission,
+  );
+  const hasSyntheticProvenance =
+    reservedSyntheticPatient || hasSyntheticRun || hasSyntheticAdmission;
+  if (
+    (hasSyntheticProvenance &&
+      (!input.syntheticQaContextActive ||
+        !reservedSyntheticPatient ||
+        !hasSyntheticRun ||
+        !hasSyntheticAdmission)) ||
+    (input.syntheticQaContextActive && !hasSyntheticProvenance)
+  ) {
+    throw new VisitTemplateProviderCensusProvenanceError();
+  }
   if (hasDurableTwinProvenance) {
     const pinnedTemplate = input.durableProvenance.noteTemplate;
     if (

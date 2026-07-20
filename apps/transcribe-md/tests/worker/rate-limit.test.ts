@@ -104,6 +104,8 @@ describe('RATE_LIMITS presets', () => {
       'AUTH_EMAIL',
       'CLIENT_ERRORS',
       'LOGIN',
+      'LOGIN_PREFLIGHT',
+      'MFA',
       'PATIENT_CREATE',
       'PATIENT_OPS',
       'PATIENT_READ',
@@ -112,6 +114,16 @@ describe('RATE_LIMITS presets', () => {
       'UPLOAD',
       'VISIT_OPS',
     ]);
+  });
+
+  it('shares a bounded MFA challenge budget across every factor endpoint', () => {
+    expect(RATE_LIMITS.MFA).toEqual({
+      bucket: 'mfa-auth',
+      windows: [
+        { label: 'burst_5min', limit: 10, windowMs: 5 * 60 * 1000 },
+        { label: 'hourly', limit: 30, windowMs: 60 * 60 * 1000 },
+      ],
+    });
   });
 
   it('every preset has a sane bucket + at least one window with positive limit + ≥1s window', () => {

@@ -24,43 +24,51 @@
 // The Settings-page button is also hidden server-side when off.
 // ============================================================================
 
-import { NextResponse } from 'next/server';
-import { PassThrough, Readable } from 'node:stream';
-import archiver from 'archiver';
+import { NextResponse } from "next/server";
+import { PassThrough, Readable } from "node:stream";
+import archiver from "archiver";
 
-import prisma from '@meddoc/db';
-import { apiError, withApiHandler } from '@/lib/api-error';
-import { auth } from '@/lib/nextauth';
-import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
-import { downloadAudio } from '@/lib/minio';
-import { loadVisitExportData } from '@/lib/visit-export-server';
-import { generateVisitPdf } from '@/lib/pdf-generator';
-import { redactPhi } from '@meddoc/ai';
-import { log } from '@/lib/log';
-import { isDataExportEnabled } from '@/lib/data-export-feature';
-import { ordinaryClinicalVisitWhere } from '@/lib/template-twin/synthetic-qa-patient';
+import prisma from "@meddoc/db";
+import { apiError, withApiHandler } from "@/lib/api-error";
+import { auth } from "@/lib/nextauth";
+import { RATE_LIMITS, rateLimitOr429 } from "@/lib/rate-limit";
+import { downloadAudio } from "@/lib/minio";
+import {
+  loadVisitExportData,
+  loadVisitExportObjectManifest,
+} from "@/lib/visit-export-server";
+import { generateVisitPdf } from "@/lib/pdf-generator";
+import { redactPhi } from "@meddoc/ai";
+import { log } from "@/lib/log";
+import { isDataExportEnabled } from "@/lib/data-export-feature";
+import { listTemplateTwinVisibleVisitIdentities } from "@/lib/template-twin/read-authority";
 import {
   authorizeVisitDeliveryFinalClaim,
   TemplateTwinDeliveryAuthorizationError,
-} from '@/lib/template-twin/delivery-authorization';
+} from "@/lib/template-twin/delivery-authorization";
+import { loadCurrentVisitExportActor } from "@/lib/visit-export-authority";
+import { TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE } from "@/lib/template-twin/durable-visit-exclusion";
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 // Heavy users with lots of visits + audio can push past the default
 // 60s. Cap at 300s which matches Playwright's own job timeout.
 export const maxDuration = 300;
 
-export const GET = withApiHandler('api:settings:export-data', async () => {
+export const GET = withApiHandler("api:settings:export-data", async () => {
   if (!isDataExportEnabled()) {
-    return apiError('Data export is disabled on this deployment.', 503);
+    return apiError("Data export is disabled on this deployment.", 503);
   }
 
   const session = await auth();
   const userId = session?.user?.id;
-  if (!userId) return apiError('unauthorized', 401);
+  if (!userId) return apiError("unauthorized", 401);
 
   const blocked = rateLimitOr429(RATE_LIMITS.SETTINGS, userId);
   if (blocked) return blocked;
+
+  const exportActor = await loadCurrentVisitExportActor(userId);
+  if (!exportActor) return apiError("not found", 404);
 
   // Load user profile (strict PII only — no secrets).
   const user = await prisma.user.findUnique({
@@ -76,38 +84,13 @@ export const GET = withApiHandler('api:settings:export-data', async () => {
       emailVerified: true,
     },
   });
-  if (!user) return apiError('user not found', 404);
+  if (!user) return apiError("user not found", 404);
 
-  // Light visit list — we fetch full bytes per-visit as we stream.
-  const visits = await prisma.transcribeVisit.findMany({
-    where: ordinaryClinicalVisitWhere({
-      userId,
-      // Synthetic staging visits have one narrow, verified Original Template
-      // DOCX delivery path. They must never leak through the generic account
-      // archive as JSON, audio, or a newly generated PDF.
-    }),
-    select: {
-      id: true,
-      audioKey: true,
-      dictationAudioKey: true,
-      audioMimeType: true,
-      status: true,
-      createdAt: true,
-    },
-    orderBy: { createdAt: 'asc' },
-  });
-
-  const editPatterns = await prisma.doctorEditPattern.findMany({
-    where: { doctorId: userId },
-    select: {
-      id: true,
-      visitId: true,
-      originalSoap: true,
-      editedSoap: true,
-      editDistance: true,
-      createdAt: true,
-    },
-    orderBy: { createdAt: 'asc' },
+  // Identifier-only, query-native exact census. Object keys, SOAP, and edit
+  // pairs are loaded per visit only between current delivery claims below.
+  const visits = await listTemplateTwinVisibleVisitIdentities({
+    db: prisma,
+    actorUserId: userId,
   });
 
   // Do not begin a streaming 200 response until every Template Twin visit in
@@ -130,25 +113,25 @@ export const GET = withApiHandler('api:settings:export-data', async () => {
     throw error;
   }
 
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const filename = `transcribemd-export-${userId}-${stamp}.zip`;
 
-  const archive = archiver('zip', { zlib: { level: 6 } });
+  const archive = archiver("zip", { zlib: { level: 6 } });
   // Pipe archiver into a PassThrough we can wrap as a Web stream.
   const passThrough = new PassThrough();
   archive.pipe(passThrough);
 
   // Archiver's 'warning' is non-fatal (missing file, etc.); 'error' is.
-  archive.on('warning', (err) => {
+  archive.on("warning", (err) => {
     console.warn(
       `[api:settings:export-data] archiver warning user=${userId}:`,
-      redactPhi(err.message)
+      redactPhi(err.message),
     );
   });
-  archive.on('error', (err) => {
+  archive.on("error", (err) => {
     console.error(
       `[api:settings:export-data] archiver error user=${userId}:`,
-      redactPhi(err.message)
+      redactPhi(err.message),
     );
     passThrough.destroy(err);
   });
@@ -158,96 +141,143 @@ export const GET = withApiHandler('api:settings:export-data', async () => {
   // passThrough as content gets appended.
   void (async () => {
     try {
+      // Revoke the stream before its first byte if the physician or practice
+      // lifecycle changed after enumeration/preflight.
+      const currentExportActor = await loadCurrentVisitExportActor(userId);
+      if (
+        !currentExportActor ||
+        currentExportActor.practiceId !== exportActor.practiceId
+      ) {
+        throw new Error("Current physician authorization changed.");
+      }
+
       // README (inventory + format notes)
       archive.append(
         readmeText({
           userId,
           email: user.email,
           visitCount: visits.length,
-          editPatternCount: editPatterns.length,
           generatedAt: new Date().toISOString(),
         }),
-        { name: 'README.txt' }
+        { name: "README.txt" },
       );
 
       // user.json
       archive.append(JSON.stringify(user, null, 2), {
-        name: 'user.json',
-      });
-
-      // doctor_edit_patterns.json
-      archive.append(JSON.stringify(editPatterns, null, 2), {
-        name: 'doctor_edit_patterns.json',
+        name: "user.json",
       });
 
       // Per-visit: JSON metadata + audio blobs + signed PDF.
       for (const v of visits) {
+        const manifest = await loadVisitExportObjectManifest(v.id, userId);
+        if (!manifest) {
+          throw new Error("Visit export object manifest is unavailable.");
+        }
+
         const exportData = await loadVisitExportData(v.id, userId);
-        if (exportData) {
-          archive.append(JSON.stringify(exportData, null, 2), {
-            name: `visits/${v.id}.json`,
+        if (!exportData) {
+          throw new Error("Visit export data is unavailable.");
+        }
+        await authorizeVisitDeliveryFinalClaim({
+          visitId: v.id,
+          actorUserId: userId,
+        });
+        archive.append(JSON.stringify(exportData, null, 2), {
+          name: `visits/${v.id}.json`,
+        });
+
+        const editPatterns = await loadAuthorizedEditPatterns(v.id, userId);
+        if (editPatterns.length > 0) {
+          archive.append(JSON.stringify(editPatterns, null, 2), {
+            name: `visits/${v.id}/doctor_edit_patterns.json`,
           });
         }
 
-        if (v.audioKey) {
+        if (manifest.audioKey) {
           try {
-            const buf = await downloadAudio(v.audioKey);
-            const ext = inferAudioExt(v.audioMimeType, 'audio');
+            await authorizeVisitDeliveryFinalClaim({
+              visitId: v.id,
+              actorUserId: userId,
+            });
+            const buf = await downloadAudio(manifest.audioKey);
+            await authorizeVisitDeliveryFinalClaim({
+              visitId: v.id,
+              actorUserId: userId,
+            });
+            const ext = inferAudioExt(manifest.audioMimeType, "audio");
             archive.append(buf, {
               name: `visits/${v.id}/audio.${ext}`,
             });
           } catch (err) {
+            if (err instanceof TemplateTwinDeliveryAuthorizationError) {
+              throw err;
+            }
             console.warn(
               `[api:settings:export-data] audio download failed visit=${v.id}:`,
-              redactPhi(err instanceof Error ? err.message : err)
+              redactPhi(err instanceof Error ? err.message : err),
             );
           }
         }
 
-        if (v.dictationAudioKey) {
+        if (manifest.dictationAudioKey) {
           try {
-            const buf = await downloadAudio(v.dictationAudioKey);
-            const ext = inferAudioExt(null, 'dictation');
+            await authorizeVisitDeliveryFinalClaim({
+              visitId: v.id,
+              actorUserId: userId,
+            });
+            const buf = await downloadAudio(manifest.dictationAudioKey);
+            await authorizeVisitDeliveryFinalClaim({
+              visitId: v.id,
+              actorUserId: userId,
+            });
+            const ext = inferAudioExt(null, "dictation");
             archive.append(buf, {
               name: `visits/${v.id}/dictation.${ext}`,
             });
           } catch (err) {
+            if (err instanceof TemplateTwinDeliveryAuthorizationError) {
+              throw err;
+            }
             console.warn(
               `[api:settings:export-data] dictation download failed visit=${v.id}:`,
-              redactPhi(err instanceof Error ? err.message : err)
+              redactPhi(err instanceof Error ? err.message : err),
             );
           }
         }
 
-        if (v.status === 'SIGNED' && exportData) {
+        if (manifest.status === "SIGNED" && exportData) {
           try {
             const pdf = await generateVisitPdf(exportData);
+            await authorizeVisitDeliveryFinalClaim({
+              visitId: v.id,
+              actorUserId: userId,
+            });
             archive.append(pdf, {
               name: `visits/${v.id}/signed.pdf`,
             });
           } catch (err) {
+            if (err instanceof TemplateTwinDeliveryAuthorizationError) {
+              throw err;
+            }
             console.warn(
               `[api:settings:export-data] pdf render failed visit=${v.id}:`,
-              redactPhi(err instanceof Error ? err.message : err)
+              redactPhi(err instanceof Error ? err.message : err),
             );
           }
         }
       }
 
       await archive.finalize();
-      log.info('api:settings:export-data', 'archive finalized', {
+      log.info("api:settings:export-data", "archive finalized", {
         userId,
         visitCount: visits.length,
-        editPatternCount: editPatterns.length,
       });
     } catch (err) {
       console.error(
         `[api:settings:export-data] unhandled user=${userId}:`,
-        redactPhi(err instanceof Error ? err.message : err)
+        redactPhi(err instanceof Error ? err.message : err),
       );
-      passThrough.destroy(
-        err instanceof Error ? err : new Error(String(err))
-      );
+      passThrough.destroy(err instanceof Error ? err : new Error(String(err)));
     }
   })();
 
@@ -258,9 +288,9 @@ export const GET = withApiHandler('api:settings:export-data', async () => {
   return new NextResponse(webStream, {
     status: 200,
     headers: {
-      'Content-Type': 'application/zip',
-      'Content-Disposition': `attachment; filename="${filename}"`,
-      'Cache-Control': 'no-store, no-cache, must-revalidate',
+      "Content-Type": "application/zip",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Cache-Control": "no-store, no-cache, must-revalidate",
     },
   });
 });
@@ -269,74 +299,108 @@ export const GET = withApiHandler('api:settings:export-data', async () => {
 // helpers
 // ---------------------------------------------------------------------------
 
+async function loadAuthorizedEditPatterns(visitId: string, userId: string) {
+  const initialDeliveryClaim = await authorizeVisitDeliveryFinalClaim({
+    visitId,
+    actorUserId: userId,
+  });
+  const patterns = await prisma.doctorEditPattern.findMany({
+    where: {
+      doctorId: userId,
+      visitId,
+      ...(initialDeliveryClaim.templateTwin
+        ? {}
+        : {
+            visit: { is: TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE },
+          }),
+    },
+    select: {
+      id: true,
+      visitId: true,
+      originalSoap: true,
+      editedSoap: true,
+      editDistance: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: "asc" },
+  });
+  const finalDeliveryClaim = await authorizeVisitDeliveryFinalClaim({
+    visitId,
+    actorUserId: userId,
+  });
+  if (finalDeliveryClaim.templateTwin !== initialDeliveryClaim.templateTwin) {
+    throw new Error("Visit delivery authority changed.");
+  }
+  return patterns;
+}
+
 function inferAudioExt(mime: string | null, fallback: string): string {
   if (!mime) {
     // Dictations are always webm from the browser's MediaRecorder.
-    return fallback === 'dictation' ? 'webm' : 'bin';
+    return fallback === "dictation" ? "webm" : "bin";
   }
   const m = mime.toLowerCase();
-  if (m.includes('webm')) return 'webm';
-  if (m.includes('mp4')) return 'm4a';
-  if (m.includes('mpeg') || m.includes('mp3')) return 'mp3';
-  if (m.includes('wav')) return 'wav';
-  if (m.includes('ogg')) return 'ogg';
-  return 'bin';
+  if (m.includes("webm")) return "webm";
+  if (m.includes("mp4")) return "m4a";
+  if (m.includes("mpeg") || m.includes("mp3")) return "mp3";
+  if (m.includes("wav")) return "wav";
+  if (m.includes("ogg")) return "ogg";
+  return "bin";
 }
 
 interface ReadmeArgs {
   userId: string;
   email: string;
   visitCount: number;
-  editPatternCount: number;
   generatedAt: string;
 }
 
 function readmeText(a: ReadmeArgs): string {
   return [
-    'QuillMD — data export',
-    '================================',
-    '',
+    "QuillMD — data export",
+    "================================",
+    "",
     `Generated:          ${a.generatedAt}`,
     `Account:            ${a.email} (${a.userId})`,
     `Visits included:    ${a.visitCount}`,
-    `Edit patterns:      ${a.editPatternCount}`,
-    '',
-    'Contents',
-    '--------',
-    '  user.json                     — Your profile. No passwords, no',
-    '                                   MFA secrets — those are never',
-    '                                   exported.',
-    '',
-    '  visits/<id>.json              — Visit metadata + SOAP text (raw',
-    '                                   + signed), ICD/CPT codes, Rx',
-    '                                   drafts, referrals, patient',
-    '                                   summary. When the visit is',
-    '                                   SIGNED the signedSoap is the',
-    '                                   one-source-of-truth copy.',
-    '',
-    '  visits/<id>/audio.<ext>       — Original uploaded audio, if any.',
-    '  visits/<id>/dictation.<ext>   — Voice-dictation audio, if any.',
-    '  visits/<id>/signed.pdf        — Final PDF for SIGNED visits.',
-    '',
-    '  doctor_edit_patterns.json     — Per-visit pairs of (AI original,',
-    '                                   your edit) captured at sign',
-    '                                   time. Used locally to improve',
-    '                                   prompting for your account.',
-    '                                   The vector embeddings are NOT',
-    '                                   exported (re-computable from',
-    '                                   originalSoap if you need them).',
-    '',
-    'Format',
-    '------',
-    '  JSON files: UTF-8, human-readable (2-space indent).',
-    '  Audio:      Byte-identical to what was uploaded or recorded.',
+    "",
+    "Contents",
+    "--------",
+    "  user.json                     — Your profile. No passwords, no",
+    "                                   MFA secrets — those are never",
+    "                                   exported.",
+    "",
+    "  visits/<id>.json              — Visit metadata + SOAP text (raw",
+    "                                   + signed), ICD/CPT codes, Rx",
+    "                                   drafts, referrals, patient",
+    "                                   summary. When the visit is",
+    "                                   SIGNED the signedSoap is the",
+    "                                   one-source-of-truth copy.",
+    "",
+    "  visits/<id>/audio.<ext>       — Original uploaded audio, if any.",
+    "  visits/<id>/dictation.<ext>   — Voice-dictation audio, if any.",
+    "  visits/<id>/signed.pdf        — Final PDF for SIGNED visits.",
+    "",
+    "  visits/<id>/doctor_edit_patterns.json",
+    "                                — Per-visit pairs of (AI original,",
+    "                                   your edit) captured at sign",
+    "                                   time. Used locally to improve",
+    "                                   prompting for your account.",
+    "                                   The vector embeddings are NOT",
+    "                                   exported (re-computable from",
+    "                                   originalSoap if you need them).",
+    "",
+    "Format",
+    "------",
+    "  JSON files: UTF-8, human-readable (2-space indent).",
+    "  Audio:      Byte-identical to what was uploaded or recorded.",
     '  PDF:        Byte-identical to what "Download PDF" would produce',
-    '              for the same signed visit.',
-    '',
-    'This export is complete as of the Generated timestamp above.',
-    'New activity after that point is not included. Request a fresh',
-    'export any time from Settings → Your data.',
-    '',
-    'Questions: privacy@ashtechgroup.com',
-  ].join('\n');
+    "              for the same signed visit.",
+    "",
+    "This export is complete as of the Generated timestamp above.",
+    "New activity after that point is not included. Request a fresh",
+    "export any time from Settings → Your data.",
+    "",
+    "Questions: privacy@ashtechgroup.com",
+  ].join("\n");
 }

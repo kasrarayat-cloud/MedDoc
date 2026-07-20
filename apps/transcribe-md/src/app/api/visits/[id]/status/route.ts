@@ -15,16 +15,20 @@ import { TranscribeVisitStatus } from "@prisma/client";
 
 import { apiError, withApiHandler } from "@/lib/api-error";
 import { parseSoapSections } from "@/lib/parse-soap-sections";
-import { AuthError, requireFreshDoctorIdentity } from "@/lib/auth";
+import { isTemplateTwinStagingQaRequested } from "@/lib/template-twin/staging-qa-gate";
+import { TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT } from "@/lib/template-twin/staging-qa-visit-guard";
 import {
-  isTemplateTwinStagingQaRequested,
-  TemplateTwinStagingQaDisabledError,
-} from "@/lib/template-twin/staging-qa-gate";
+  reassertTemplateTwinVisitReadAuthority,
+  requireTemplateTwinVisitReadAuthority,
+  TemplateTwinVisitReadAuthorityError,
+} from "@/lib/template-twin/read-authority";
 import {
-  assertTemplateTwinStagingQaVisitGuard,
-  TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
-  TemplateTwinStagingQaVisitGuardError,
-} from "@/lib/template-twin/staging-qa-visit-guard";
+  requireTemplateTwinSyntheticReadAdmission,
+  type TemplateTwinSyntheticReadAdmission,
+  TemplateTwinSyntheticReadAdmissionError,
+} from "@/lib/template-twin/synthetic-read-admission";
+import { TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE } from "@/lib/template-twin/durable-visit-exclusion";
+import { currentClinicalVisitActorWhere } from "@/lib/clinical-visit-authority";
 
 // Truncation budget for SOAP-section preview. Sized from the live
 // READY-visit distribution (P95 per-section = 2,661 chars). The 3200
@@ -76,8 +80,50 @@ export const GET = withApiHandler<{ id: string }>(
     const userId = session?.user?.id;
     if (!userId) return apiError("unauthorized", 401);
 
-    const visit = await prisma.transcribeVisit.findUnique({
-      where: { id: visitId },
+    let preReadAuthority;
+    try {
+      preReadAuthority = await requireTemplateTwinVisitReadAuthority({
+        db: prisma,
+        visitId,
+        actorUserId: userId,
+      });
+    } catch (error) {
+      if (error instanceof TemplateTwinVisitReadAuthorityError) {
+        return apiError("not found", 404);
+      }
+      throw error;
+    }
+    if (preReadAuthority.isTemplateTwin && !preReadAuthority.practiceId) {
+      return apiError("not found", 404);
+    }
+    if (
+      isTemplateTwinStagingQaRequested() &&
+      !preReadAuthority.isSyntheticTemplateTwin
+    ) {
+      return apiError("not found", 404);
+    }
+    let syntheticReadAdmission: TemplateTwinSyntheticReadAdmission | null;
+    try {
+      syntheticReadAdmission = await requireTemplateTwinSyntheticReadAdmission({
+        visitId,
+        actorUserId: userId,
+        readDecision: preReadAuthority,
+      });
+    } catch (error) {
+      if (error instanceof TemplateTwinSyntheticReadAdmissionError) {
+        return apiError("not found", 404);
+      }
+      throw error;
+    }
+
+    const visit = await prisma.transcribeVisit.findFirst({
+      where: {
+        id: visitId,
+        ...currentClinicalVisitActorWhere(userId),
+        ...(preReadAuthority.isTemplateTwin
+          ? {}
+          : TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE),
+      },
       select: {
         id: true,
         userId: true,
@@ -108,23 +154,47 @@ export const GET = withApiHandler<{ id: string }>(
     });
     // 404 on both "not found" AND "not yours" prevents ID enumeration.
     if (!visit || visit.userId !== userId) return apiError("not found", 404);
-    if (
-      visit.templateTwinSyntheticQaRun ||
-      isTemplateTwinStagingQaRequested()
-    ) {
+    let readAuthority;
+    try {
+      readAuthority = await requireTemplateTwinVisitReadAuthority({
+        db: prisma,
+        visitId,
+        actorUserId: userId,
+        ...(preReadAuthority.isTemplateTwin
+          ? {
+              expectedPracticeId: preReadAuthority.practiceId!,
+              requireTemplateTwin: true,
+            }
+          : {}),
+      });
+    } catch (error) {
+      if (error instanceof TemplateTwinVisitReadAuthorityError) {
+        return apiError("not found", 404);
+      }
+      throw error;
+    }
+    let syntheticQaPracticeId = syntheticReadAdmission?.practiceId ?? null;
+    if (syntheticReadAdmission) {
       try {
-        const doctor = await requireFreshDoctorIdentity(userId);
-        assertTemplateTwinStagingQaVisitGuard({
-          run: visit.templateTwinSyntheticQaRun,
-          actor: { userId, practiceId: doctor.practiceId },
-          currentRolloutToken: doctor.rolloutToken,
-        });
-      } catch (error) {
         if (
-          error instanceof AuthError ||
-          error instanceof TemplateTwinStagingQaDisabledError ||
-          error instanceof TemplateTwinStagingQaVisitGuardError
+          visit.templateTwinSyntheticQaRun?.id !==
+            syntheticReadAdmission.runId ||
+          visit.templateTwinSyntheticQaRun.attempt !==
+            syntheticReadAdmission.attempt
         ) {
+          return apiError("not found", 404);
+        }
+        syntheticReadAdmission =
+          await requireTemplateTwinSyntheticReadAdmission({
+            visitId,
+            actorUserId: userId,
+            readDecision: readAuthority,
+            expected: syntheticReadAdmission,
+          });
+        if (!syntheticReadAdmission) return apiError("not found", 404);
+        syntheticQaPracticeId = syntheticReadAdmission.practiceId;
+      } catch (error) {
+        if (error instanceof TemplateTwinSyntheticReadAdmissionError) {
           return apiError("not found", 404);
         }
         throw error;
@@ -162,6 +232,43 @@ export const GET = withApiHandler<{ id: string }>(
         assessment: clipForPreview(byKey.A, PREVIEW_SOAP_SECTION_MAX),
         plan: clipForPreview(byKey.P, PREVIEW_SOAP_SECTION_MAX),
       };
+    }
+
+    if (readAuthority.isTemplateTwin) {
+      const currentPracticeId =
+        syntheticQaPracticeId ?? readAuthority.practiceId;
+      if (!currentPracticeId) return apiError("not found", 404);
+      try {
+        // The enclosing visit page carries the durable VIEWED_VISIT audit.
+        // Polling every 1.5s must still reassert authority at the response
+        // boundary, but must not create an unbounded duplicate audit stream.
+        const finalReadAuthority = await reassertTemplateTwinVisitReadAuthority(
+          {
+            db: prisma,
+            visitId,
+            actorUserId: userId,
+            expectedPracticeId: currentPracticeId,
+          },
+        );
+        if (syntheticReadAdmission) {
+          const finalAdmission =
+            await requireTemplateTwinSyntheticReadAdmission({
+              visitId,
+              actorUserId: userId,
+              readDecision: finalReadAuthority,
+              expected: syntheticReadAdmission,
+            });
+          if (!finalAdmission) return apiError("not found", 404);
+        }
+      } catch (error) {
+        if (
+          error instanceof TemplateTwinVisitReadAuthorityError ||
+          error instanceof TemplateTwinSyntheticReadAdmissionError
+        ) {
+          return apiError("not found", 404);
+        }
+        throw error;
+      }
     }
 
     return NextResponse.json(

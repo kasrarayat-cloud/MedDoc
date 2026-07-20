@@ -14,17 +14,24 @@
 // Linear V1 visual migration.
 // ============================================================================
 
-import type { Metadata } from 'next';
-import { notFound, redirect } from 'next/navigation';
+import type { Metadata } from "next";
+import { notFound, redirect } from "next/navigation";
 
-import prisma from '@meddoc/db';
-import { auth } from '@/lib/nextauth';
-import { isSkinBeta } from '@/config/skin-beta';
-import { AppFrame } from '@/components/ui/app-frame';
-import { RecordingClient } from './recording-client';
-import { RecordingClientC3 } from './recording-client-c3';
+import prisma from "@meddoc/db";
+import { auth } from "@/lib/nextauth";
+import { logRequiredAudit } from "@/lib/audit";
+import {
+  requireTemplateTwinVisitReadAuthority,
+  TemplateTwinVisitReadAuthorityError,
+} from "@/lib/template-twin/read-authority";
+import { TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE } from "@/lib/template-twin/durable-visit-exclusion";
+import { currentClinicalVisitActorWhere } from "@/lib/clinical-visit-authority";
+import { isSkinBeta } from "@/config/skin-beta";
+import { AppFrame } from "@/components/ui/app-frame";
+import { RecordingClient } from "./recording-client";
+import { RecordingClientC3 } from "./recording-client-c3";
 
-export const metadata: Metadata = { title: 'Recording' };
+export const metadata: Metadata = { title: "Recording" };
 
 export default async function RecordVisitPage({
   params,
@@ -33,7 +40,25 @@ export default async function RecordVisitPage({
 }) {
   const { id } = await params;
   const session = await auth();
-  if (!session?.user?.id) redirect('/login');
+  if (!session?.user?.id) redirect("/login");
+
+  let preReadAuthority;
+  try {
+    preReadAuthority = await requireTemplateTwinVisitReadAuthority({
+      db: prisma,
+      visitId: id,
+      actorUserId: session.user.id,
+    });
+  } catch (error) {
+    if (error instanceof TemplateTwinVisitReadAuthorityError) notFound();
+    throw error;
+  }
+  if (
+    preReadAuthority.isSyntheticTemplateTwin ||
+    (preReadAuthority.isTemplateTwin && !preReadAuthority.practiceId)
+  ) {
+    notFound();
+  }
 
   type VisitRow = {
     id: string;
@@ -42,8 +67,14 @@ export default async function RecordVisitPage({
     patient: { name: string } | null;
     specialty: string;
   };
-  const visit: VisitRow | null = await prisma.transcribeVisit.findUnique({
-    where: { id },
+  const visit: VisitRow | null = await prisma.transcribeVisit.findFirst({
+    where: {
+      id,
+      ...currentClinicalVisitActorWhere(session.user.id),
+      ...(preReadAuthority.isTemplateTwin
+        ? {}
+        : TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE),
+    },
     select: {
       id: true,
       userId: true,
@@ -54,9 +85,49 @@ export default async function RecordVisitPage({
   });
   if (!visit || visit.userId !== session.user.id) notFound();
 
+  let readAuthority;
+  try {
+    readAuthority = await requireTemplateTwinVisitReadAuthority({
+      db: prisma,
+      visitId: id,
+      actorUserId: session.user.id,
+      ...(preReadAuthority.isTemplateTwin
+        ? {
+            expectedPracticeId: preReadAuthority.practiceId!,
+            requireTemplateTwin: true,
+          }
+        : {}),
+    });
+  } catch (error) {
+    if (error instanceof TemplateTwinVisitReadAuthorityError) notFound();
+    throw error;
+  }
+  // Synthetic QA owns its own admitted execution/review surface; the generic
+  // live recorder must never expose or mutate a synthetic encounter.
+  if (readAuthority.isSyntheticTemplateTwin) notFound();
+  if (readAuthority.isTemplateTwin) {
+    if (!readAuthority.practiceId) notFound();
+    try {
+      await logRequiredAudit({
+        action: "VIEWED_VISIT",
+        targetId: visit.id,
+        targetType: "TranscribeVisit",
+        userId: session.user.id,
+        practiceId: readAuthority.practiceId,
+        metadata: { source: "rsc:/visits/[id]/record" },
+        templateTwinReadAuthority: {
+          expectedPracticeId: readAuthority.practiceId,
+        },
+      });
+    } catch (error) {
+      if (error instanceof TemplateTwinVisitReadAuthorityError) notFound();
+      throw error;
+    }
+  }
+
   // Only QUEUED visits are eligible for recording. Anything further
   // along the pipeline sends the doctor to the regular visit page.
-  if (visit.status !== 'QUEUED') {
+  if (visit.status !== "QUEUED") {
     redirect(`/visits/${id}`);
   }
 
@@ -68,13 +139,13 @@ export default async function RecordVisitPage({
         // the presentation differs. Old UI is the default.
         <RecordingClientC3
           visitId={visit.id}
-          patientName={visit.patient?.name ?? 'Patient'}
+          patientName={visit.patient?.name ?? "Patient"}
           specialty={visit.specialty}
         />
       ) : (
         <RecordingClient
           visitId={visit.id}
-          patientName={visit.patient?.name ?? 'Patient'}
+          patientName={visit.patient?.name ?? "Patient"}
           specialty={visit.specialty}
         />
       )}

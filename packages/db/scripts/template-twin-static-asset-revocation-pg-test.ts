@@ -6,24 +6,23 @@
 // uses database-observed lock blocking instead of timing sleeps, and refuses
 // any database that is not positively identified as disposable QA/test.
 
-import { createHash } from "node:crypto";
+import assert from "node:assert/strict";
+import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import { deflateSync } from "node:zlib";
 
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 
-import {
-  approveTemplateTwinStaticAsset,
-  inspectTemplateTwinStaticAssetForReview,
-  lockAndAssertTemplateTwinStaticAssetBindingsCurrent,
-  revokeTemplateTwinStaticAsset,
-  TEMPLATE_TWIN_STATIC_ASSET_SCANNER,
-  type TemplateTwinStaticAssetApprovalBinding,
-  type TemplateTwinStaticAssetClaimDb,
-  type TemplateTwinStaticAssetDb,
-  type TemplateTwinStaticAssetActor,
+import type {
+  TemplateTwinStaticAssetActor,
+  TemplateTwinStaticAssetApprovalBinding,
+  TemplateTwinStaticAssetClaimDb,
+  TemplateTwinStaticAssetDb,
 } from "../../../apps/transcribe-md/src/lib/template-twin/static-assets";
 import { assertNonProdDatabase } from "../src/db-guard";
+
+type StaticAssetsModule =
+  typeof import("../../../apps/transcribe-md/src/lib/template-twin/static-assets");
 
 const databaseUrl =
   process.env.TEMPLATE_TWIN_STATIC_ASSET_TEST_DATABASE_URL ??
@@ -33,27 +32,85 @@ if (!databaseUrl) {
   throw new Error("A disposable static-asset test database URL is required.");
 }
 const verifiedDatabaseUrl = databaseUrl;
+const alternateDatabaseTargets = [
+  ["DATABASE_URL", process.env.DATABASE_URL],
+  [
+    "TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL",
+    process.env.TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL,
+  ],
+  [
+    "TEMPLATE_TWIN_RELEASE_CONTROL_TEST_DATABASE_URL",
+    process.env.TEMPLATE_TWIN_RELEASE_CONTROL_TEST_DATABASE_URL,
+  ],
+] as const;
+const divergentDatabaseTarget = alternateDatabaseTargets.find(
+  ([, value]) => value && value !== verifiedDatabaseUrl,
+);
+if (divergentDatabaseTarget) {
+  throw new Error(
+    `${divergentDatabaseTarget[0]} must exactly match the guarded disposable static-asset test URL.`,
+  );
+}
+process.env.DATABASE_URL = verifiedDatabaseUrl;
+process.env.TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL = verifiedDatabaseUrl;
+process.env.TEMPLATE_TWIN_RELEASE_CONTROL_TEST_DATABASE_URL =
+  verifiedDatabaseUrl;
+process.env.TEMPLATE_TWIN_KILL_SWITCH = "false";
+process.env.TEMPLATE_TWIN_RUNTIME_MODE = "standard";
+
+const staticAssetsModulePromise: Promise<StaticAssetsModule> =
+  import("../../../apps/transcribe-md/src/lib/template-twin/static-assets");
+let staticAssetsModule: StaticAssetsModule;
 
 const suffix = `${process.pid}-${Date.now()}`;
 const practiceId = `synthetic-static-asset-practice-${suffix}`;
 const adminId = `synthetic-static-asset-admin-${suffix}`;
 const adminEmail = `static-asset-${suffix}@synthetic.test`;
+const physicianId = `synthetic-static-asset-physician-${suffix}`;
+const releaseAdministratorPracticeId = `synthetic-static-release-admin-practice-${suffix}`;
+const releaseCreatorId = `synthetic-static-release-creator-${suffix}`;
+const releaseCreatorSession = `synthetic-static-release-session-${suffix}`;
+const runtimeKeyId = `synthetic-static-runtime-${suffix}`;
+const runtimeSigningSecret = randomBytes(32);
 const revokerApplicationName = `tt-static-asset-revoker-${suffix}`;
 let assetId = "";
 let digest = "";
 let inspectionDigest = "";
 let privacyDigest = "";
-process.env.TEMPLATE_TWIN_KILL_SWITCH = "false";
+let syntheticPrivacyProviderCalls = 0;
+let exactProviderExecutionReuse = false;
+let changedBytesDistinctProviderExecution = false;
+let whitespaceMfaListDenied = false;
+let whitespaceMfaWriteDeniedBeforeProvider = false;
+let whitespaceMfaMutationPreservedRelease = false;
 let globalRolloutGeneration = BigInt(1);
 let practiceRolloutGeneration = BigInt(1);
+
+interface SyntheticReleaseLifecycle {
+  readonly releaseId: string;
+  readonly releaseIdentitySha256: string;
+  readonly actor: { readonly userId: string; readonly sessionId: string };
+}
+
+interface SyntheticReleaseAuthority extends SyntheticReleaseLifecycle {
+  readonly runtimeManifestSha256: string;
+  readonly runtimeInstanceId: string;
+  readonly runtimeEnvironment: Readonly<Record<string, string>>;
+}
+
+let syntheticReleaseLifecycle: SyntheticReleaseLifecycle | null = null;
+let syntheticReleaseAuthority: SyntheticReleaseAuthority | null = null;
 
 interface RawSqlDb {
   $executeRawUnsafe(query: string, ...values: unknown[]): Promise<number>;
 }
 
-function client(applicationName: string): PrismaClient {
+function client(applicationName: string, assumedRole?: string): PrismaClient {
   const url = new URL(verifiedDatabaseUrl);
   url.searchParams.set("application_name", applicationName);
+  if (assumedRole) {
+    url.searchParams.set("options", `-c role=${assumedRole}`);
+  }
   return new PrismaClient({
     adapter: new PrismaPg({
       connectionString: url.toString(),
@@ -74,10 +131,17 @@ function latch(): { promise: Promise<void>; release: () => void } {
 const claimant = client(`tt-static-asset-claimant-${suffix}`);
 const revoker = client(revokerApplicationName);
 const observer = client(`tt-static-asset-observer-${suffix}`);
+const runtimeRegistrar = client(
+  `tt-static-asset-runtime-${suffix}`,
+  "quillmd_runtime",
+);
 
 let binding: TemplateTwinStaticAssetApprovalBinding;
 
 function staticAssetActor(): TemplateTwinStaticAssetActor {
+  if (!syntheticReleaseAuthority) {
+    throw new Error("Synthetic release authority has not been established.");
+  }
   return {
     userId: adminId,
     userEmail: adminEmail,
@@ -87,6 +151,10 @@ function staticAssetActor(): TemplateTwinStaticAssetActor {
       practiceId,
       globalGeneration: globalRolloutGeneration,
       practiceGeneration: practiceRolloutGeneration,
+      releaseId: syntheticReleaseAuthority.releaseId,
+      releaseIdentitySha256: syntheticReleaseAuthority.releaseIdentitySha256,
+      runtimeManifestSha256: syntheticReleaseAuthority.runtimeManifestSha256,
+      runtimeInstanceId: syntheticReleaseAuthority.runtimeInstanceId,
     },
   };
 }
@@ -104,6 +172,7 @@ const syntheticOcr = {
 
 const syntheticPrivacyClient = {
   async complete() {
+    syntheticPrivacyProviderCalls += 1;
     return { phiFields: [], anyUncertain: false };
   },
 };
@@ -131,6 +200,453 @@ async function waitUntilRevocationBlocked(): Promise<{
   );
 }
 
+let directRolloutEnableRejected = false;
+let releaseControlActivated = false;
+let releaseControlRevoked = false;
+
+function syntheticReleaseEvidence() {
+  return {
+    sourceCommitSha: "a".repeat(40),
+    baseCommitSha: "b".repeat(40),
+    appImageDigest: `sha256:${"c".repeat(64)}`,
+    workerImageDigest: `sha256:${"d".repeat(64)}`,
+    migratorImageDigest: `sha256:${"e".repeat(64)}`,
+    testCensusEvidenceSha256: "1".repeat(64),
+    independentReviewEvidenceSha256: "2".repeat(64),
+    securityEvidenceSha256: "3".repeat(64),
+    migrationRestoreEvidenceSha256: "4".repeat(64),
+    officeWordEvidenceSha256: "5".repeat(64),
+  };
+}
+
+function syntheticRuntimeEnvironment(input: {
+  readonly releaseIdentitySha256: string;
+  readonly instanceId: string;
+  readonly component: "APP" | "WORKER";
+  readonly imageDigest: string;
+}) {
+  const evidence = syntheticReleaseEvidence();
+  const issuedAtEpochSeconds = Math.floor(Date.now() / 1_000) - 1;
+  const expiresAtEpochSeconds = issuedAtEpochSeconds + 3_600;
+  const nonce = randomUUID();
+  const message = [
+    "template-twin-runtime-attestation-v1",
+    runtimeKeyId,
+    nonce,
+    input.releaseIdentitySha256,
+    input.instanceId,
+    input.component,
+    evidence.sourceCommitSha,
+    input.imageDigest,
+    String(issuedAtEpochSeconds),
+    String(expiresAtEpochSeconds),
+  ].join("\n");
+  const envelope = {
+    version: "template-twin-runtime-attestation-v1",
+    keyId: runtimeKeyId,
+    nonce,
+    releaseIdentitySha256: input.releaseIdentitySha256,
+    instanceId: input.instanceId,
+    component: input.component,
+    sourceCommitSha: evidence.sourceCommitSha,
+    imageDigest: input.imageDigest,
+    issuedAtEpochSeconds,
+    expiresAtEpochSeconds,
+    signature: createHmac("sha256", runtimeSigningSecret)
+      .update(message)
+      .digest("hex"),
+  };
+  return {
+    envelope,
+    env: {
+      TEMPLATE_TWIN_KILL_SWITCH: "false",
+      TEMPLATE_TWIN_RUNTIME_MODE: "standard",
+      TEMPLATE_TWIN_RELEASE_COMMIT_SHA: evidence.sourceCommitSha,
+      TEMPLATE_TWIN_APP_IMAGE_DIGEST: evidence.appImageDigest,
+      TEMPLATE_TWIN_WORKER_IMAGE_DIGEST: evidence.workerImageDigest,
+      TEMPLATE_TWIN_MIGRATOR_IMAGE_DIGEST: evidence.migratorImageDigest,
+      QUILLMD_IMAGE_REVISION: evidence.sourceCommitSha,
+      QUILLMD_RUNTIME_COMPONENT: input.component,
+      TEMPLATE_TWIN_RUNTIME_ATTESTATION: Buffer.from(
+        JSON.stringify(envelope),
+        "utf8",
+      ).toString("base64url"),
+    },
+  };
+}
+
+async function registerSyntheticRuntime(
+  input: ReturnType<typeof syntheticRuntimeEnvironment>,
+): Promise<void> {
+  const envelope = input.envelope;
+  const rows = await runtimeRegistrar.$queryRaw<
+    Array<{ receiptId: string | null }>
+  >(Prisma.sql`
+    SELECT template_twin_register_runtime_attestation(
+      ${envelope.version}, ${envelope.keyId}, ${envelope.nonce}::UUID,
+      ${envelope.releaseIdentitySha256}::CHAR(64), ${envelope.instanceId},
+      ${envelope.component}, ${envelope.sourceCommitSha}::CHAR(40),
+      ${envelope.imageDigest}, ${envelope.issuedAtEpochSeconds}::BIGINT,
+      ${envelope.expiresAtEpochSeconds}::BIGINT,
+      ${envelope.signature}::CHAR(64)
+    ) AS "receiptId"
+  `);
+  assert(rows[0]?.receiptId, "Synthetic runtime attestation must be admitted.");
+}
+
+async function revokeSyntheticReleaseIfActive(input: {
+  readonly lifecycle: SyntheticReleaseLifecycle;
+  readonly reasonCode: string;
+}): Promise<boolean> {
+  const [state] = await observer.$queryRaw<
+    Array<{
+      releaseStatus: string;
+      releaseGeneration: bigint;
+      globalGeneration: bigint;
+    }>
+  >(Prisma.sql`
+    SELECT candidate."status" AS "releaseStatus",
+      candidate."generation" AS "releaseGeneration",
+      control."generation" AS "globalGeneration"
+    FROM "template_twin_release_candidates" candidate
+    CROSS JOIN "template_twin_rollout_controls" control
+    WHERE candidate."id" = ${input.lifecycle.releaseId}::UUID
+      AND control."id" = 'global'
+  `);
+  if (!state || state.releaseStatus !== "ROLLING_OUT") return false;
+  const releaseControl =
+    await import("../../../apps/transcribe-md/src/lib/template-twin/release-control");
+  await releaseControl.revokeTemplateTwinRelease({
+    actor: input.lifecycle.actor,
+    releaseId: input.lifecycle.releaseId,
+    expectedReleaseGeneration: state.releaseGeneration.toString(),
+    expectedGlobalGeneration: state.globalGeneration.toString(),
+    reasonCode: input.reasonCode,
+    confirmation: `REVOKE ${input.lifecycle.releaseIdentitySha256.slice(0, 12)}`,
+  });
+  const [terminal] = await observer.$queryRaw<
+    Array<{
+      releaseStatus: string;
+      globalEnabled: boolean;
+      practiceEnabled: boolean;
+    }>
+  >(Prisma.sql`
+    SELECT candidate."status" AS "releaseStatus",
+      control."enabled" AS "globalEnabled",
+      practice."templateTwinEnabled" AS "practiceEnabled"
+    FROM "template_twin_release_candidates" candidate
+    CROSS JOIN "template_twin_rollout_controls" control
+    JOIN "practices" practice ON practice."id" = ${practiceId}
+    WHERE candidate."id" = ${input.lifecycle.releaseId}::UUID
+      AND control."id" = 'global'
+  `);
+  assert.deepEqual(terminal, {
+    releaseStatus: "REVOKED",
+    globalEnabled: false,
+    practiceEnabled: false,
+  });
+  return true;
+}
+
+async function revokeInterruptedSyntheticRelease(): Promise<void> {
+  const candidates = await observer.$queryRaw<
+    Array<{
+      id: string;
+      releaseIdentitySha256: string;
+      createdById: string;
+    }>
+  >(Prisma.sql`
+    SELECT "id"::TEXT, "releaseIdentitySha256", "createdById"
+    FROM "template_twin_release_candidates"
+    WHERE "status" = 'ROLLING_OUT'
+      AND "createdById" LIKE 'synthetic-static-release-creator-%'
+    ORDER BY "createdAt"
+  `);
+  assert(
+    candidates.length <= 1,
+    "Only one interrupted synthetic static-asset release may own rollout.",
+  );
+  const candidate = candidates[0];
+  if (!candidate) return;
+  const session = await observer.userSession.findFirst({
+    where: {
+      userId: candidate.createdById,
+      expiresAt: { gt: new Date() },
+    },
+    select: { sessionToken: true },
+    orderBy: { createdAt: "desc" },
+  });
+  assert(session, "Interrupted synthetic release actor session is required.");
+  await revokeSyntheticReleaseIfActive({
+    lifecycle: {
+      releaseId: candidate.id,
+      releaseIdentitySha256: candidate.releaseIdentitySha256,
+      actor: {
+        userId: candidate.createdById,
+        sessionId: session.sessionToken,
+      },
+    },
+    reasonCode: "SYNTHETIC_STATIC_ASSET_PROOF_INTERRUPTED",
+  });
+}
+
+async function activateSyntheticReleaseControl(): Promise<void> {
+  const releaseControl =
+    await import("../../../apps/transcribe-md/src/lib/template-twin/release-control");
+  const contracts =
+    await import("../../../apps/transcribe-md/src/lib/template-twin/release-control-contracts");
+  const reviewerIds = new Map<string, string>();
+  const reviewerSessions = new Map<string, string>();
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1_000);
+  await observer.practice.create({
+    data: {
+      id: releaseAdministratorPracticeId,
+      name: "Synthetic static-asset release administration",
+      slug: releaseAdministratorPracticeId,
+    },
+  });
+  const administrators = [
+    {
+      id: releaseCreatorId,
+      email: `${releaseCreatorId}@synthetic.test`,
+      session: releaseCreatorSession,
+      discipline: null,
+    },
+    ...contracts.TEMPLATE_TWIN_RELEASE_DISCIPLINES.map((discipline) => {
+      const id = `synthetic-static-release-reviewer-${discipline.toLowerCase()}-${suffix}`;
+      const session = `synthetic-static-release-reviewer-session-${discipline.toLowerCase()}-${suffix}`;
+      reviewerIds.set(discipline, id);
+      reviewerSessions.set(discipline, session);
+      return {
+        id,
+        email: `${id}@synthetic.test`,
+        session,
+        discipline,
+      };
+    }),
+  ];
+  for (const administrator of administrators) {
+    await observer.user.create({
+      data: {
+        id: administrator.id,
+        email: administrator.email,
+        passwordHash: "synthetic-not-a-login-credential",
+        role: "ADMIN",
+        products: ["SUPER_ADMIN"],
+        practiceId: releaseAdministratorPracticeId,
+        mfaEnabled: true,
+        mfaSecret: "SYNTHETIC-STATIC-ASSET-RELEASE-MFA",
+        mfaVerifiedAt: new Date(),
+      },
+    });
+    await observer.userSession.create({
+      data: {
+        userId: administrator.id,
+        sessionToken: administrator.session,
+        expiresAt,
+      },
+    });
+    if (administrator.discipline) {
+      await observer.$executeRaw(Prisma.sql`
+        INSERT INTO "template_twin_release_authorities" (
+          "id", "userId", "discipline", "sourceRef"
+        ) VALUES (
+          ${randomUUID()}::UUID, ${administrator.id},
+          ${administrator.discipline},
+          ${`synthetic-static-asset-pg/${administrator.discipline.toLowerCase()}`}
+        )
+      `);
+    }
+  }
+  await observer.$executeRaw(Prisma.sql`
+    INSERT INTO "template_twin_release_attestation_keys" (
+      "keyId", "purpose", "secret", "principalUserId",
+      "effectiveAt", "expiresAt"
+    ) VALUES (
+      ${runtimeKeyId}, 'RUNTIME', ${runtimeSigningSecret}, NULL,
+      clock_timestamp() - interval '1 minute',
+      clock_timestamp() + interval '2 hours'
+    )
+  `);
+
+  const evidence = syntheticReleaseEvidence();
+  const criticalMetrics = new Set([
+    "unsafe_bypass_attempt_count",
+    "provider_ambiguous_outcome_count",
+    "critical_field_accuracy",
+    "hallucination_rate",
+    "evidence_anchor_validity",
+    "exact_dropdown_accuracy",
+    "negation_accuracy",
+    "laterality_accuracy",
+    "table_placement_accuracy",
+  ]);
+  const guardrailPolicy = {
+    schemaVersion: "template-twin-guardrails-v1" as const,
+    maxObservationAgeSeconds: 3_600,
+    minimumBakeSecondsByStage: {
+      CANARY: 1,
+      PERCENT_10: 1,
+      PERCENT_25: 1,
+      PERCENT_50: 1,
+      PERCENT_100: 1,
+    },
+    minimumSampleCountByStage: {
+      CANARY: 1,
+      PERCENT_10: 1,
+      PERCENT_25: 1,
+      PERCENT_50: 1,
+      PERCENT_100: 1,
+    },
+    metrics: Object.fromEntries(
+      Object.entries(contracts.TEMPLATE_TWIN_METRIC_DEFINITIONS).map(
+        ([key, definition]) => [
+          key,
+          {
+            direction: definition.direction,
+            threshold:
+              definition.direction === "MAX" ? definition.min : definition.max,
+            critical: criticalMetrics.has(key),
+          },
+        ],
+      ),
+    ),
+  };
+  const appInstanceId = `static-asset-app-${suffix}`;
+  const workerInstanceId = `static-asset-worker-${suffix}`;
+  const releaseActor = {
+    userId: releaseCreatorId,
+    sessionId: releaseCreatorSession,
+  };
+  const created = await releaseControl.createTemplateTwinReleaseCandidate({
+    actor: releaseActor,
+    confirmation: "CREATE EXACT RELEASE",
+    evidence,
+    guardrailPolicy,
+    authorizedPracticeIds: [practiceId],
+    canaryPracticeIds: [practiceId],
+    runtimeInstances: [
+      {
+        instanceId: appInstanceId,
+        component: "APP",
+        imageDigest: evidence.appImageDigest,
+      },
+      {
+        instanceId: workerInstanceId,
+        component: "WORKER",
+        imageDigest: evidence.workerImageDigest,
+      },
+    ],
+  });
+  syntheticReleaseLifecycle = {
+    releaseId: created.releaseId,
+    releaseIdentitySha256: created.releaseIdentitySha256,
+    actor: releaseActor,
+  };
+  let releaseGeneration = (
+    await releaseControl.freezeTemplateTwinReleaseCandidate({
+      actor: releaseActor,
+      releaseId: created.releaseId,
+      expectedReleaseGeneration: created.generation,
+      confirmation: `FREEZE ${created.releaseIdentitySha256.slice(0, 12)}`,
+    })
+  ).generation;
+  for (const [
+    index,
+    discipline,
+  ] of contracts.TEMPLATE_TWIN_RELEASE_DISCIPLINES.entries()) {
+    const decision = await releaseControl.recordTemplateTwinReleaseApproval({
+      actor: {
+        userId: reviewerIds.get(discipline)!,
+        sessionId: reviewerSessions.get(discipline)!,
+      },
+      releaseId: created.releaseId,
+      expectedReleaseGeneration: releaseGeneration,
+      discipline,
+      decision: "APPROVE",
+      evidenceSha256: String(index + 6).repeat(64),
+      confirmation: contracts.templateTwinApprovalConfirmation({
+        decision: "APPROVE",
+        discipline,
+        releaseIdentitySha256: created.releaseIdentitySha256,
+      }),
+    });
+    releaseGeneration = decision.generation;
+  }
+
+  const appRuntime = syntheticRuntimeEnvironment({
+    releaseIdentitySha256: created.releaseIdentitySha256,
+    instanceId: appInstanceId,
+    component: "APP",
+    imageDigest: evidence.appImageDigest,
+  });
+  const workerRuntime = syntheticRuntimeEnvironment({
+    releaseIdentitySha256: created.releaseIdentitySha256,
+    instanceId: workerInstanceId,
+    component: "WORKER",
+    imageDigest: evidence.workerImageDigest,
+  });
+  await registerSyntheticRuntime(appRuntime);
+  await registerSyntheticRuntime(workerRuntime);
+  const [globalBefore] = await observer.$queryRaw<
+    Array<{ generation: bigint }>
+  >(Prisma.sql`
+    SELECT "generation" FROM "template_twin_rollout_controls"
+    WHERE "id" = 'global'
+  `);
+  assert(globalBefore, "Synthetic global rollout control is required.");
+  await releaseControl.activateTemplateTwinReleaseCheckpoint({
+    actor: releaseActor,
+    releaseId: created.releaseId,
+    stage: "CANARY",
+    expectedReleaseGeneration: releaseGeneration,
+    expectedGlobalGeneration: globalBefore.generation.toString(),
+    confirmation: contracts.templateTwinCheckpointConfirmation({
+      verb: "ACTIVATE",
+      stage: "CANARY",
+      releaseIdentitySha256: created.releaseIdentitySha256,
+    }),
+    env: appRuntime.env,
+  });
+  const [current] = await observer.$queryRaw<
+    Array<{
+      releaseStatus: string;
+      releaseIdentitySha256: string;
+      runtimeManifestSha256: string;
+      globalEnabled: boolean;
+      practiceEnabled: boolean;
+      globalGeneration: bigint;
+      practiceGeneration: bigint;
+    }>
+  >(Prisma.sql`
+    SELECT candidate."status" AS "releaseStatus",
+      candidate."releaseIdentitySha256", candidate."runtimeManifestSha256",
+      control."enabled" AS "globalEnabled",
+      practice."templateTwinEnabled" AS "practiceEnabled",
+      control."generation" AS "globalGeneration",
+      practice."templateTwinRolloutGeneration" AS "practiceGeneration"
+    FROM "template_twin_release_candidates" candidate
+    CROSS JOIN "template_twin_rollout_controls" control
+    JOIN "practices" practice ON practice."id" = ${practiceId}
+    WHERE candidate."id" = ${created.releaseId}::UUID
+      AND control."id" = 'global'
+  `);
+  assert(current, "Activated synthetic release state is required.");
+  assert.equal(current.releaseStatus, "ROLLING_OUT");
+  assert.equal(current.globalEnabled, true);
+  assert.equal(current.practiceEnabled, true);
+  globalRolloutGeneration = current.globalGeneration;
+  practiceRolloutGeneration = current.practiceGeneration;
+  syntheticReleaseAuthority = {
+    ...syntheticReleaseLifecycle,
+    runtimeManifestSha256: current.runtimeManifestSha256,
+    runtimeInstanceId: appInstanceId,
+    runtimeEnvironment: appRuntime.env,
+  };
+  Object.assign(process.env, appRuntime.env);
+  releaseControlActivated = true;
+}
+
 async function createSyntheticFixture(): Promise<void> {
   const lineage = await observer.$queryRawUnsafe<Array<{ phase: string }>>(
     `SELECT "phase"
@@ -155,36 +671,128 @@ async function createSyntheticFixture(): Promise<void> {
       email: adminEmail,
       passwordHash: "synthetic-not-a-login-credential",
       role: "ADMIN",
+      products: ["TRANSCRIBE_MD"],
       practiceId,
     },
   });
-  const [globalRollout, practiceRollout] = await observer.$transaction([
-    observer.templateTwinRolloutControl.update({
-      where: { id: "global" },
-      data: { enabled: true, generation: { increment: 1 } },
-      select: { generation: true },
-    }),
-    observer.practice.update({
-      where: { id: practiceId },
-      data: {
-        templateTwinEnabled: true,
-        templateTwinRolloutGeneration: { increment: 1 },
-      },
-      select: { templateTwinRolloutGeneration: true },
-    }),
-  ]);
-  globalRolloutGeneration = globalRollout.generation;
-  practiceRolloutGeneration =
-    practiceRollout.templateTwinRolloutGeneration;
-  const bytes = syntheticPng();
-  const review = await inspectTemplateTwinStaticAssetForReview({
-    bytes,
-    claimedMimeType: "image/png",
-    actor: staticAssetActor(),
-    ocr: syntheticOcr,
-    client: syntheticPrivacyClient,
-    db: observer as unknown as TemplateTwinStaticAssetDb,
+  await observer.user.create({
+    data: {
+      id: physicianId,
+      email: `${physicianId}@synthetic.test`,
+      passwordHash: "synthetic-not-a-login-credential",
+      role: "DOCTOR",
+      products: ["TRANSCRIBE_MD"],
+      practiceId,
+    },
   });
+  await expectDatabaseRejection(
+    "direct rollout enable without release capability",
+    /production enablement requires an active release capability/u,
+    () =>
+      observer.templateTwinRolloutControl.update({
+        where: { id: "global" },
+        data: { enabled: true, generation: { increment: 1 } },
+      }),
+  );
+  directRolloutEnableRejected = true;
+  await activateSyntheticReleaseControl();
+  await observer.user.update({
+    where: { id: adminId },
+    data: {
+      products: { set: ["TRANSCRIBE_MD", "SUPER_ADMIN"] },
+      mfaEnabled: true,
+      mfaSecret: "\u00a0\u2007\u202f\ufeff",
+      mfaVerifiedAt: new Date(),
+    },
+  });
+  const providerCallsBeforeWhitespaceProof = syntheticPrivacyProviderCalls;
+  const whitespaceMfaBytes = syntheticPng(0x5f);
+  const whitespaceMfaSubjectSha256 = createHash("sha256")
+    .update(whitespaceMfaBytes)
+    .digest("hex");
+  try {
+    await staticAssetsModule.listTemplateTwinStaticAssetsForPractice({
+      actor: staticAssetActor(),
+      db: observer as unknown as TemplateTwinStaticAssetDb,
+    });
+  } catch (error) {
+    whitespaceMfaListDenied =
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "TT_STATIC_ASSET_ADMIN_REQUIRED";
+  }
+  try {
+    await staticAssetsModule.inspectTemplateTwinStaticAssetForReview({
+      bytes: whitespaceMfaBytes,
+      claimedMimeType: "image/png",
+      actor: staticAssetActor(),
+      ocr: syntheticOcr,
+      client: syntheticPrivacyClient,
+      db: observer as unknown as TemplateTwinStaticAssetDb,
+    });
+  } catch (error) {
+    whitespaceMfaWriteDeniedBeforeProvider =
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "TT_STATIC_ASSET_ADMIN_REQUIRED";
+  }
+  assert.equal(whitespaceMfaListDenied, true);
+  assert.equal(whitespaceMfaWriteDeniedBeforeProvider, true);
+  assert.equal(
+    syntheticPrivacyProviderCalls,
+    providerCallsBeforeWhitespaceProof,
+    "Unicode-whitespace-only platform MFA must deny before provider egress.",
+  );
+  await observer.user.update({
+    where: { id: adminId },
+    data: {
+      products: { set: ["TRANSCRIBE_MD"] },
+      mfaEnabled: false,
+      mfaSecret: null,
+      mfaVerifiedAt: null,
+    },
+  });
+  assert(syntheticReleaseLifecycle, "Synthetic release lifecycle is required.");
+  const [releaseAfterMfaMutation] = await observer.$queryRaw<
+    Array<{
+      releaseStatus: string;
+      globalEnabled: boolean;
+      practiceEnabled: boolean;
+      globalGeneration: bigint;
+      practiceGeneration: bigint;
+    }>
+  >(Prisma.sql`
+    SELECT candidate."status" AS "releaseStatus",
+      control."enabled" AS "globalEnabled",
+      practice."templateTwinEnabled" AS "practiceEnabled",
+      control."generation" AS "globalGeneration",
+      practice."templateTwinRolloutGeneration" AS "practiceGeneration"
+    FROM "template_twin_release_candidates" candidate
+    CROSS JOIN "template_twin_rollout_controls" control
+    JOIN "practices" practice ON practice."id" = ${practiceId}
+    WHERE candidate."id" = ${syntheticReleaseLifecycle.releaseId}::UUID
+      AND control."id" = 'global'
+  `);
+  assert.deepEqual(releaseAfterMfaMutation, {
+    releaseStatus: "ROLLING_OUT",
+    globalEnabled: true,
+    practiceEnabled: true,
+    globalGeneration: globalRolloutGeneration,
+    practiceGeneration: practiceRolloutGeneration,
+  });
+  whitespaceMfaMutationPreservedRelease = true;
+  const bytes = syntheticPng();
+  const review =
+    await staticAssetsModule.inspectTemplateTwinStaticAssetForReview({
+      bytes,
+      claimedMimeType: "image/png",
+      actor: staticAssetActor(),
+      ocr: syntheticOcr,
+      client: syntheticPrivacyClient,
+      db: observer as unknown as TemplateTwinStaticAssetDb,
+    });
   const reviewReceiptId = review.previewReviewReceipt.split(".")[0]!;
   const beforeApproval =
     await observer.templateTwinStaticAssetReviewReceipt.findUniqueOrThrow({
@@ -194,7 +802,7 @@ async function createSyntheticFixture(): Promise<void> {
   if (beforeApproval.consumedAt !== null) {
     throw new Error("Production inspection persisted a pre-consumed receipt.");
   }
-  binding = await approveTemplateTwinStaticAsset({
+  binding = await staticAssetsModule.approveTemplateTwinStaticAsset({
     bytes,
     claimedMimeType: "image/png",
     actor: staticAssetActor(),
@@ -222,16 +830,17 @@ async function createSyntheticFixture(): Promise<void> {
     throw new Error("Production approval did not consume a valid receipt.");
   }
 
-  const repeatReview = await inspectTemplateTwinStaticAssetForReview({
-    bytes,
-    claimedMimeType: "image/png",
-    actor: staticAssetActor(),
-    ocr: syntheticOcr,
-    client: syntheticPrivacyClient,
-    db: observer as unknown as TemplateTwinStaticAssetDb,
-  });
+  const repeatReview =
+    await staticAssetsModule.inspectTemplateTwinStaticAssetForReview({
+      bytes,
+      claimedMimeType: "image/png",
+      actor: staticAssetActor(),
+      ocr: syntheticOcr,
+      client: syntheticPrivacyClient,
+      db: observer as unknown as TemplateTwinStaticAssetDb,
+    });
   const repeatReceiptId = repeatReview.previewReviewReceipt.split(".")[0]!;
-  binding = await approveTemplateTwinStaticAsset({
+  binding = await staticAssetsModule.approveTemplateTwinStaticAsset({
     bytes,
     claimedMimeType: "image/png",
     actor: staticAssetActor(),
@@ -257,9 +866,79 @@ async function createSyntheticFixture(): Promise<void> {
       "A repeat production approval did not append a decision and consume its fresh receipt.",
     );
   }
+
+  const changedBytes = syntheticPng(0x6f);
+  const changedReview =
+    await staticAssetsModule.inspectTemplateTwinStaticAssetForReview({
+      bytes: changedBytes,
+      claimedMimeType: "image/png",
+      actor: staticAssetActor(),
+      ocr: syntheticOcr,
+      client: syntheticPrivacyClient,
+      db: observer as unknown as TemplateTwinStaticAssetDb,
+    });
+  if (changedReview.evidence.sha256 === digest) {
+    throw new Error(
+      "Changed synthetic bytes reused the original subject hash.",
+    );
+  }
+  const executions = await observer.$queryRaw<
+    Array<{
+      subjectSha256: string;
+      operationInstance: string;
+      status: string;
+      invocationCount: number;
+      resultSha256: string | null;
+      failureCode: string | null;
+    }>
+  >(Prisma.sql`
+    SELECT "subjectSha256", "operationInstance", "status",
+      "invocationCount", "resultSha256", "failureCode"
+    FROM "template_twin_provider_executions"
+    WHERE "practiceId" = ${practiceId}
+      AND "actorUserId" = ${adminId}
+      AND "scope" = 'STATIC_ASSET'
+      AND "operation" = 'STATIC_ASSET_PRIVACY_SCAN'
+    ORDER BY "subjectSha256"
+  `);
+  const originalExecutions = executions.filter(
+    (execution) => execution.subjectSha256 === digest,
+  );
+  const changedExecutions = executions.filter(
+    (execution) => execution.subjectSha256 === changedReview.evidence.sha256,
+  );
+  const whitespaceMfaExecutions = executions.filter(
+    (execution) => execution.subjectSha256 === whitespaceMfaSubjectSha256,
+  );
+  const successfulExecutions = [...originalExecutions, ...changedExecutions];
+  if (
+    syntheticPrivacyProviderCalls !== 2 ||
+    originalExecutions.length !== 1 ||
+    changedExecutions.length !== 1 ||
+    whitespaceMfaExecutions.length !== 1 ||
+    whitespaceMfaExecutions[0]?.operationInstance !== "primary" ||
+    whitespaceMfaExecutions[0]?.status !== "FAILED" ||
+    whitespaceMfaExecutions[0]?.invocationCount !== 0 ||
+    whitespaceMfaExecutions[0]?.resultSha256 !== null ||
+    whitespaceMfaExecutions[0]?.failureCode !==
+      "AUTHORITY_REVOKED_BEFORE_PROVIDER" ||
+    successfulExecutions.some(
+      (execution) =>
+        execution.operationInstance !== "primary" ||
+        execution.status !== "SUCCEEDED" ||
+        execution.invocationCount !== 1 ||
+        !execution.resultSha256,
+    )
+  ) {
+    throw new Error(
+      "Static-asset provider execution reuse did not remain exact and subject-bound.",
+    );
+  }
+  exactProviderExecutionReuse = true;
+  changedBytesDistinctProviderExecution = true;
 }
 
-function syntheticPng(): Uint8Array {
+function syntheticPng(fillByte = 0x7f): Uint8Array {
   const width = 2;
   const height = 2;
   const ihdr = new Uint8Array(13);
@@ -270,7 +949,7 @@ function syntheticPng(): Uint8Array {
   for (let row = 0; row < height; row += 1) {
     scanlines[row * (width * 4 + 1)] = 0;
     scanlines.fill(
-      0x7f,
+      fillByte,
       row * (width * 4 + 1) + 1,
       (row + 1) * (width * 4 + 1),
     );
@@ -338,18 +1017,22 @@ async function expectDatabaseRejection(
   throw new Error(`${label} unexpectedly passed.`);
 }
 
-async function insertRawReceipt(input: {
-  id: string;
-  inspectionEvidenceSha256?: string;
-  scannerVersion?: string;
-  ocrEngineVersion?: string;
-  privacyEvidenceSha256?: string;
-  globalGeneration?: bigint;
-  practiceGeneration?: bigint;
-  expiresSql?: string;
-  consumedSql?: string;
-}, db: RawSqlDb = observer as unknown as RawSqlDb): Promise<void> {
-  const expiresSql = input.expiresSql ?? "CURRENT_TIMESTAMP + INTERVAL '10 minutes'";
+async function insertRawReceipt(
+  input: {
+    id: string;
+    inspectionEvidenceSha256?: string;
+    scannerVersion?: string;
+    ocrEngineVersion?: string;
+    privacyEvidenceSha256?: string;
+    globalGeneration?: bigint;
+    practiceGeneration?: bigint;
+    expiresSql?: string;
+    consumedSql?: string;
+  },
+  db: RawSqlDb = observer as unknown as RawSqlDb,
+): Promise<void> {
+  const expiresSql =
+    input.expiresSql ?? "CURRENT_TIMESTAMP + INTERVAL '10 minutes'";
   const consumedSql = input.consumedSql ?? "NULL";
   await db.$executeRawUnsafe(
     `INSERT INTO "template_twin_static_asset_review_receipts" (
@@ -364,7 +1047,8 @@ async function insertRawReceipt(input: {
     createHash("sha256").update(input.id).digest("hex"),
     digest,
     input.inspectionEvidenceSha256 ?? inspectionDigest,
-    input.scannerVersion ?? TEMPLATE_TWIN_STATIC_ASSET_SCANNER,
+    input.scannerVersion ??
+      staticAssetsModule.TEMPLATE_TWIN_STATIC_ASSET_SCANNER,
     input.ocrEngineVersion ?? "synthetic-local-ocr/1.0",
     input.privacyEvidenceSha256 ?? privacyDigest,
     input.globalGeneration ?? globalRolloutGeneration,
@@ -517,11 +1201,7 @@ async function runReceiptAdversarialProofs(): Promise<string[]> {
     await expectDatabaseRejection(
       "decision without audit outbox",
       /TT_STATIC_ASSET_AUDIT_OUTBOX_INVALID/,
-      () =>
-        attemptRawApproval(
-          missingOutboxReceiptId,
-          "missing-outbox",
-        ),
+      () => attemptRawApproval(missingOutboxReceiptId, "missing-outbox"),
     ),
   );
 
@@ -628,6 +1308,8 @@ async function proveSelfConsistentDirectSqlApproval(): Promise<string> {
 }
 
 async function main(): Promise<void> {
+  staticAssetsModule = await staticAssetsModulePromise;
+  await revokeInterruptedSyntheticRelease();
   await createSyntheticFixture();
   const directSqlReceiptRejections = await runReceiptAdversarialProofs();
   const directSqlAuditedDecisionId =
@@ -640,11 +1322,13 @@ async function main(): Promise<void> {
   const claim = claimant
     .$transaction(
       async (tx) => {
-        await lockAndAssertTemplateTwinStaticAssetBindingsCurrent({
-          practiceId,
-          bindings: [binding],
-          db: tx as unknown as TemplateTwinStaticAssetClaimDb,
-        });
+        await staticAssetsModule.lockAndAssertTemplateTwinStaticAssetBindingsCurrent(
+          {
+            practiceId,
+            bindings: [binding],
+            db: tx as unknown as TemplateTwinStaticAssetClaimDb,
+          },
+        );
         claimHasLocked.release();
         await releaseClaim.promise;
       },
@@ -655,25 +1339,17 @@ async function main(): Promise<void> {
     });
 
   await claimHasLocked.promise;
-  const revocation = revokeTemplateTwinStaticAsset({
-    practiceId,
-    sha256: digest,
-    actor: {
-      userId: adminId,
-      userEmail: adminEmail,
+  const revocation = staticAssetsModule
+    .revokeTemplateTwinStaticAsset({
       practiceId,
-      role: "ADMIN",
-      rolloutToken: {
-        practiceId,
-        globalGeneration: globalRolloutGeneration,
-        practiceGeneration: practiceRolloutGeneration,
-      },
-    },
-    reason: "Synthetic concurrent revocation proof.",
-    db: revoker as unknown as TemplateTwinStaticAssetDb,
-  }).then(() => {
-    commitOrder.push("revocation");
-  });
+      sha256: digest,
+      actor: staticAssetActor(),
+      reason: "Synthetic concurrent revocation proof.",
+      db: revoker as unknown as TemplateTwinStaticAssetDb,
+    })
+    .then(() => {
+      commitOrder.push("revocation");
+    });
 
   const blocked = await waitUntilRevocationBlocked();
   releaseClaim.release();
@@ -689,7 +1365,7 @@ async function main(): Promise<void> {
   try {
     await claimant.$transaction(
       (tx) =>
-        lockAndAssertTemplateTwinStaticAssetBindingsCurrent({
+        staticAssetsModule.lockAndAssertTemplateTwinStaticAssetBindingsCurrent({
           practiceId,
           bindings: [binding],
           db: tx as unknown as TemplateTwinStaticAssetClaimDb,
@@ -737,17 +1413,44 @@ async function main(): Promise<void> {
     throw new Error("Revocation state and durable audit evidence diverged.");
   }
 
+  assert(syntheticReleaseLifecycle, "Synthetic release lifecycle is required.");
+  releaseControlRevoked = await revokeSyntheticReleaseIfActive({
+    lifecycle: syntheticReleaseLifecycle,
+    reasonCode: "SYNTHETIC_STATIC_ASSET_PROOF_COMPLETE",
+  });
+  assert.equal(releaseControlRevoked, true);
+
   process.stdout.write(
     `${JSON.stringify({
+      verdict: "PASS",
       profile: "template-twin-static-asset-receipt-and-revocation-postgres-v2",
       synthetic: true,
       databaseGuard: "passed",
       productionHelpersExercised: [
+        "createTemplateTwinReleaseCandidate",
+        "freezeTemplateTwinReleaseCandidate",
+        "recordTemplateTwinReleaseApproval",
+        "activateTemplateTwinReleaseCheckpoint",
         "lockAndAssertTemplateTwinStaticAssetBindingsCurrent",
         "inspectTemplateTwinStaticAssetForReview",
         "approveTemplateTwinStaticAsset",
         "revokeTemplateTwinStaticAsset",
+        "revokeTemplateTwinRelease",
       ],
+      directRolloutEnableRejected,
+      releaseControlActivated,
+      releaseControlRevoked,
+      rolloutCleanup: "revoked-via-release-control",
+      signedRuntimeReplicaBarrier: true,
+      releaseCapabilityBypassUsed: false,
+      exactProviderExecutionReuse,
+      changedBytesDistinctProviderExecution,
+      whitespaceMfaListDenied,
+      whitespaceMfaWriteDeniedBeforeProvider,
+      unicodeWhitespaceMfaRejectedBeforeProvider:
+        whitespaceMfaListDenied && whitespaceMfaWriteDeniedBeforeProvider,
+      whitespaceMfaMutationPreservedRelease,
+      syntheticPrivacyProviderCalls,
       productionLikeReceiptFlow: true,
       directSqlReceiptRejections,
       durableApprovalAudit: approvalAuditCount === 3,
@@ -769,10 +1472,26 @@ async function main(): Promise<void> {
 }
 
 void main()
-  .catch((error: unknown) => {
+  .catch(async (error: unknown) => {
+    let cleanupError: unknown = null;
+    if (syntheticReleaseLifecycle) {
+      try {
+        await revokeSyntheticReleaseIfActive({
+          lifecycle: syntheticReleaseLifecycle,
+          reasonCode: "SYNTHETIC_STATIC_ASSET_PROOF_FAILED",
+        });
+      } catch (cause) {
+        cleanupError = cause;
+      }
+    }
     process.stderr.write(
       `${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`,
     );
+    if (cleanupError) {
+      process.stderr.write(
+        `Synthetic release cleanup failed: ${cleanupError instanceof Error ? (cleanupError.stack ?? cleanupError.message) : String(cleanupError)}\n`,
+      );
+    }
     process.exitCode = 1;
   })
   .finally(async () => {
@@ -780,5 +1499,6 @@ void main()
       claimant.$disconnect(),
       revoker.$disconnect(),
       observer.$disconnect(),
+      runtimeRegistrar.$disconnect(),
     ]);
   });

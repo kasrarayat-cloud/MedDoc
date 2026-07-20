@@ -30,6 +30,7 @@ import { TranscribeVisitStatus } from '@prisma/client';
 import { deleteAudioObject } from '@/lib/minio';
 import { log } from '@/lib/log';
 import { redactPhi } from '@meddoc/ai';
+import { TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE } from '@/lib/template-twin/durable-visit-exclusion';
 
 /** Abandoned-QUEUED age threshold. Shorter than the trash window —
  *  a draft with zero input is either mis-clicked (doctor bails out
@@ -69,9 +70,30 @@ async function purgeTargets(
   let deleted = 0;
   try {
     const result = await prisma.$transaction(async (tx: typeof prisma) => {
-      await tx.aiCall.deleteMany({ where: { visitId: { in: ids } } });
+      const stillOrdinary = await tx.transcribeVisit.findMany({
+        where: {
+          id: { in: ids },
+          ...TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE,
+        },
+        select: { id: true },
+      });
+      const stillOrdinaryIds = stillOrdinary.map(
+        ({ id }: { id: string }) => id,
+      );
+      if (stillOrdinaryIds.length !== ids.length) {
+        throw new Error("cleanup target provenance changed");
+      }
       const d = await tx.transcribeVisit.deleteMany({
-        where: { id: { in: ids } },
+        where: {
+          id: { in: stillOrdinaryIds },
+          ...TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE,
+        },
+      });
+      if (d.count !== stillOrdinaryIds.length) {
+        throw new Error("cleanup target provenance changed");
+      }
+      await tx.aiCall.deleteMany({
+        where: { visitId: { in: stillOrdinaryIds } },
       });
       return d.count;
     });
@@ -121,7 +143,7 @@ async function sweepAbandonedQueued(): Promise<SweepResult> {
       dictationAudioKey: null,
       OR: [{ rawTextInput: null }, { rawTextInput: '' }],
       createdAt: { lt: cutoff },
-      templateTwinSyntheticQaRun: { is: null },
+      ...TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE,
     },
     select: {
       id: true,
@@ -148,7 +170,7 @@ async function sweepExpiredTrash(): Promise<SweepResult> {
   const targets = await prisma.transcribeVisit.findMany({
     where: {
       deletedAt: { lt: cutoff },
-      templateTwinSyntheticQaRun: { is: null },
+      ...TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE,
     },
     select: {
       id: true,

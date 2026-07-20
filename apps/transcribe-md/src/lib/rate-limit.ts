@@ -32,7 +32,12 @@
 // and the Redis-backed fix path.
 // ============================================================================
 
-import { NextResponse } from 'next/server';
+import crypto from "node:crypto";
+
+import { NextResponse } from "next/server";
+import { isExactSyntheticQaRuntimeProfile } from "@meddoc/auth";
+
+import { ensureAuthRateLimitRedisReady } from "@/lib/auth-rate-limit-redis";
 
 interface Bucket {
   count: number;
@@ -40,6 +45,37 @@ interface Bucket {
 }
 
 const buckets = new Map<string, Bucket>();
+
+const SHARED_RATE_LIMIT_SCRIPT = `
+local worst_ttl = 0
+local worst_index = 0
+for index, key in ipairs(KEYS) do
+  local arg = (index - 1) * 2
+  local limit = tonumber(ARGV[arg + 1])
+  local current = tonumber(redis.call('GET', key) or '0')
+  if current >= limit then
+    local ttl = tonumber(redis.call('PTTL', key))
+    if ttl < 1 then
+      ttl = tonumber(ARGV[arg + 2])
+      redis.call('PEXPIRE', key, ttl)
+    end
+    if ttl > worst_ttl then
+      worst_ttl = ttl
+      worst_index = index
+    end
+  end
+end
+if worst_index ~= 0 then
+  return {0, worst_ttl, worst_index}
+end
+for index, key in ipairs(KEYS) do
+  local arg = (index - 1) * 2
+  local window = tonumber(ARGV[arg + 2])
+  local current = redis.call('INCR', key)
+  if current == 1 then redis.call('PEXPIRE', key, window) end
+end
+return {1, 0, 0}
+`;
 
 export interface RateLimitResult {
   allowed: boolean;
@@ -81,7 +117,11 @@ const SEC = 1000;
 const MIN = 60 * SEC;
 const HOUR = 60 * MIN;
 
-const w = (label: string, limit: number, windowMs: number): RateLimitWindow => ({
+const w = (
+  label: string,
+  limit: number,
+  windowMs: number,
+): RateLimitWindow => ({
   limit,
   windowMs,
   label,
@@ -96,8 +136,18 @@ const w = (label: string, limit: number, windowMs: number): RateLimitWindow => (
 //                  across all five endpoints so an attacker mixing them
 //                  can't bypass by round-robin.
 //
-//   LOGIN:         login action. Per-IP, NOT per-email — per-email would
-//                  leak account existence on the second attempt.
+//   MFA:           enroll, verify-enrollment, and disable. Per authenticated
+//                  user and shared across physician/admin processes so a
+//                  stolen session cannot brute-force password, TOTP, or
+//                  recovery-code checks by mixing endpoints or replicas.
+//
+//   LOGIN:         canonical credential attempt, including direct Auth.js
+//                  callbacks. Per-IP, NOT per-email — per-email would leak
+//                  account existence on the second attempt.
+//
+//   LOGIN_PREFLIGHT: server-action parsing/UX precheck. Kept separate so the
+//                  action can hand one attempt to Auth.js without consuming
+//                  the canonical LOGIN bucket twice.
 //
 //   SIGNUP:        signup action. Per-IP. Stops automated signup farms.
 //
@@ -137,62 +187,64 @@ const w = (label: string, limit: number, windowMs: number): RateLimitWindow => (
 //
 export const RATE_LIMITS = {
   AUTH_EMAIL: {
-    bucket: 'auth-email',
-    windows: [w('hourly', 5, HOUR)],
+    bucket: "auth-email",
+    windows: [w("hourly", 5, HOUR)],
+  },
+  MFA: {
+    bucket: "mfa-auth",
+    windows: [w("burst_5min", 10, 5 * MIN), w("hourly", 30, HOUR)],
   },
   LOGIN: {
-    bucket: 'login',
-    windows: [w('hourly', 10, HOUR)],
+    bucket: "login",
+    windows: [w("hourly", 10, HOUR)],
+  },
+  LOGIN_PREFLIGHT: {
+    bucket: "login-preflight",
+    windows: [w("hourly", 10, HOUR)],
   },
   SIGNUP: {
-    bucket: 'signup',
-    windows: [w('hourly', 5, HOUR)],
+    bucket: "signup",
+    windows: [w("hourly", 5, HOUR)],
   },
   UPLOAD: {
-    bucket: 'upload',
+    bucket: "upload",
     windows: [
-      w('burst_30s', 5, 30 * SEC),
-      w('sustained_5min', 15, 5 * MIN),
-      w('hourly', 50, HOUR),
+      w("burst_30s", 5, 30 * SEC),
+      w("sustained_5min", 15, 5 * MIN),
+      w("hourly", 50, HOUR),
     ],
   },
   CLIENT_ERRORS: {
-    bucket: 'client-errors',
-    windows: [w('hourly', 30, HOUR)],
+    bucket: "client-errors",
+    windows: [w("hourly", 30, HOUR)],
   },
   SETTINGS: {
-    bucket: 'settings',
-    windows: [w('hourly', 10, HOUR)],
+    bucket: "settings",
+    windows: [w("hourly", 10, HOUR)],
   },
   PATIENT_READ: {
-    bucket: 'patient-read',
+    bucket: "patient-read",
     windows: [
-      w('burst_30s', 30, 30 * SEC),
-      w('sustained_5min', 60, 5 * MIN),
-      w('hourly', 200, HOUR),
+      w("burst_30s", 30, 30 * SEC),
+      w("sustained_5min", 60, 5 * MIN),
+      w("hourly", 200, HOUR),
     ],
   },
   PATIENT_CREATE: {
-    bucket: 'patient-create',
+    bucket: "patient-create",
     windows: [
-      w('burst_30s', 10, 30 * SEC),
-      w('sustained_5min', 20, 5 * MIN),
-      w('hourly', 60, HOUR),
+      w("burst_30s", 10, 30 * SEC),
+      w("sustained_5min", 20, 5 * MIN),
+      w("hourly", 60, HOUR),
     ],
   },
   PATIENT_OPS: {
-    bucket: 'patient-ops',
-    windows: [
-      w('sustained_5min', 20, 5 * MIN),
-      w('hourly', 60, HOUR),
-    ],
+    bucket: "patient-ops",
+    windows: [w("sustained_5min", 20, 5 * MIN), w("hourly", 60, HOUR)],
   },
   VISIT_OPS: {
-    bucket: 'visit-ops',
-    windows: [
-      w('burst_30s', 10, 30 * SEC),
-      w('hourly', 60, HOUR),
-    ],
+    bucket: "visit-ops",
+    windows: [w("burst_30s", 10, 30 * SEC), w("hourly", 60, HOUR)],
   },
 } satisfies Record<string, RateLimitRule>;
 
@@ -207,7 +259,7 @@ export const RATE_LIMITS = {
 export function tryConsume(
   key: string,
   limit: number,
-  windowMs: number
+  windowMs: number,
 ): RateLimitResult {
   const now = Date.now();
   const existing = buckets.get(key);
@@ -262,6 +314,15 @@ export function __resetForTests(): void {
   buckets.clear();
 }
 
+function rateLimitBypassed(): boolean {
+  return (
+    process.env.RATE_LIMIT_DISABLED === "true" &&
+    (process.env.NODE_ENV !== "production" ||
+      (process.env.RATE_LIMIT_DISABLE_ALLOW_IN_PROD === "true" &&
+        isExactSyntheticQaRuntimeProfile(process.env)))
+  );
+}
+
 // ---------------------------------------------------------------------------
 // High-level helpers — the shape every caller should prefer.
 // ---------------------------------------------------------------------------
@@ -282,7 +343,7 @@ export function __resetForTests(): void {
  */
 export function checkRateLimit(
   rule: RateLimitRule,
-  identifier: string
+  identifier: string,
 ): RateLimitResult {
   // TEST-ONLY bypass. The E2E suite drives many signups/uploads from a SINGLE
   // runner IP, which trips these per-IP limits and makes the CI gate flaky.
@@ -295,11 +356,7 @@ export function checkRateLimit(
   // qa/CI stack (docker-compose.qa.yml). Unset (the default) ⇒ every window is
   // enforced exactly as before. This is the central choke point:
   // actionRateLimitOrError (signup) + rateLimitOr429 (API routes) funnel here.
-  if (
-    process.env.RATE_LIMIT_DISABLED === 'true' &&
-    (process.env.NODE_ENV !== 'production' ||
-      process.env.RATE_LIMIT_DISABLE_ALLOW_IN_PROD === 'true')
-  ) {
+  if (rateLimitBypassed()) {
     return { allowed: true, retryAfterSec: 0 };
   }
 
@@ -336,6 +393,81 @@ export function checkRateLimit(
   return { allowed: true, retryAfterSec: 0 };
 }
 
+/**
+ * Atomic cross-process limiter for authentication surfaces. Production has
+ * multiple isolated Next processes, so process-local Maps cannot enforce one
+ * logical login/recovery budget. Development and unit tests retain the local
+ * implementation; production fails closed if the shared Redis authority is
+ * unavailable.
+ */
+export async function checkSharedRateLimit(
+  rule: RateLimitRule,
+  identifier: string,
+): Promise<RateLimitResult> {
+  if (rateLimitBypassed()) return { allowed: true, retryAfterSec: 0 };
+  if (process.env.NODE_ENV !== "production") {
+    return checkRateLimit(rule, identifier);
+  }
+
+  const identifierHash = crypto
+    .createHash("sha256")
+    .update(identifier)
+    .digest("hex");
+  const keys = rule.windows.map(
+    (window) =>
+      `quillmd:rate-limit:v1:${rule.bucket}:${window.windowMs}:${identifierHash}`,
+  );
+  const args = rule.windows.flatMap((window) => [
+    String(window.limit),
+    String(window.windowMs),
+  ]);
+  try {
+    const redis = await ensureAuthRateLimitRedisReady();
+    const raw = await redis.eval(
+      SHARED_RATE_LIMIT_SCRIPT,
+      keys.length,
+      ...keys,
+      ...args,
+    );
+    if (!Array.isArray(raw) || raw.length !== 3) {
+      throw new Error("invalid shared rate-limit response");
+    }
+    const allowedFlag = Number(raw[0]);
+    const ttlValue = Number(raw[1]);
+    const indexValue = Number(raw[2]);
+    if (
+      (allowedFlag !== 0 && allowedFlag !== 1) ||
+      !Number.isSafeInteger(ttlValue) ||
+      !Number.isSafeInteger(indexValue)
+    ) {
+      throw new Error("invalid shared rate-limit values");
+    }
+    const allowed = allowedFlag === 1;
+    if (allowed) return { allowed: true, retryAfterSec: 0 };
+    if (ttlValue < 1 || indexValue < 1 || indexValue > rule.windows.length) {
+      throw new Error("invalid shared rate-limit rejection");
+    }
+    const ttlMs = ttlValue;
+    const index = indexValue - 1;
+    const window = rule.windows[index];
+    return {
+      allowed: false,
+      retryAfterSec: Math.max(1, Math.ceil(ttlMs / SEC)),
+      resetAtMs: Date.now() + ttlMs,
+      limitType: window?.label ?? `${window?.windowMs ?? 0}ms`,
+    };
+  } catch {
+    // Authentication attempts do not fall back to a process-local counter in
+    // production: that would silently reopen the multi-process bypass.
+    return {
+      allowed: false,
+      retryAfterSec: 60,
+      resetAtMs: Date.now() + 60 * SEC,
+      limitType: "shared_limiter_unavailable",
+    };
+  }
+}
+
 /** Route-handler-friendly one-shot: check the limit, return a
  *  429 NextResponse if exceeded, null if OK. Pattern:
  *
@@ -349,7 +481,7 @@ export function checkRateLimit(
  */
 export function rateLimitOr429(
   rule: RateLimitRule,
-  identifier: string
+  identifier: string,
 ): NextResponse | null {
   const rl = checkRateLimit(rule, identifier);
   if (rl.allowed) return null;
@@ -359,8 +491,9 @@ export function rateLimitOr429(
   return NextResponse.json(
     {
       ok: false,
-      code: 'RATE_LIMITED',
-      error: "You're working faster than the system allows — please pause briefly and retry.",
+      code: "RATE_LIMITED",
+      error:
+        "You're working faster than the system allows — please pause briefly and retry.",
       retryAfterSec: rl.retryAfterSec,
       limitType: rl.limitType ?? null,
       resetAtIso,
@@ -368,10 +501,41 @@ export function rateLimitOr429(
     {
       status: 429,
       headers: {
-        'Cache-Control': 'no-store, private',
-        'Retry-After': String(rl.retryAfterSec),
+        "Cache-Control": "no-store, private",
+        "Retry-After": String(rl.retryAfterSec),
       },
-    }
+    },
+  );
+}
+
+export async function sharedRateLimitOr429(
+  rule: RateLimitRule,
+  identifier: string,
+): Promise<NextResponse | null> {
+  const rl = await checkSharedRateLimit(rule, identifier);
+  if (rl.allowed) return null;
+  const resetAtIso = new Date(
+    rl.resetAtMs ?? Date.now() + rl.retryAfterSec * SEC,
+  ).toISOString();
+  return NextResponse.json(
+    {
+      ok: false,
+      code: "RATE_LIMITED",
+      error:
+        "You're working faster than the system allows — please pause briefly and retry.",
+      retryAfterSec: rl.retryAfterSec,
+      limitType: rl.limitType ?? null,
+      resetAtIso,
+    },
+    {
+      status: 429,
+      headers: {
+        "Cache-Control": "no-store, private",
+        "Retry-After": String(rl.retryAfterSec),
+        "X-RateLimit-Limit-Type": rl.limitType ?? "unknown",
+        "X-RateLimit-Reset": resetAtIso,
+      },
+    },
   );
 }
 
@@ -383,12 +547,12 @@ export function rateLimitOr429(
 
 /** Extract a client IP from a Headers object. Used by server actions. */
 export function clientIpFromHeaders(headers: Headers): string {
-  const xff = headers.get('x-forwarded-for');
+  const xff = headers.get("x-forwarded-for");
   if (xff) {
-    const first = xff.split(',')[0]?.trim();
+    const first = xff.split(",")[0]?.trim();
     if (first) return first;
   }
-  return headers.get('x-real-ip') || 'unknown';
+  return headers.get("x-real-ip") || "unknown";
 }
 
 /** Shortcut for route handlers. */

@@ -4,7 +4,12 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 
 import { auth } from "@/lib/nextauth";
+import prisma from "@meddoc/db";
 import { isAdminRequestHost } from "@/lib/admin-host";
+import {
+  TEMPLATE_TWIN_STATIC_ASSET_ADMIN_PATH,
+  templateTwinAdminLandingPath,
+} from "@/lib/template-twin/admin-app-service";
 import { AuthShell } from "@/components/ui/auth-shell";
 import { LoginForm } from "./login-form";
 import { VerifyToast } from "./verify-toast";
@@ -19,13 +24,27 @@ export const metadata: Metadata = {
 export default async function LoginPage() {
   const session = await auth();
   if (session?.user?.id) {
-    // Host-aware redirect: a SUPER_ADMIN landing on admin.quillmd.com/login
-    // while already signed in goes to `/admin`, not the clinician
-    // `/dashboard`. The strict Caddy block on admin.quillmd.com returns
-    // 404 for `/dashboard`, so without this branch the user would land
-    // on a blank page after a refresh.
+    // Host-aware redirect: an admin-process session lands on one of the two
+    // exact isolated surfaces selected from fresh role/product authority,
+    // never the broad physician `/admin` or `/dashboard` routes.
     const h = await headers();
-    redirect(isAdminRequestHost(h) ? "/admin" : "/dashboard");
+    if (isAdminRequestHost(h)) {
+      const currentUser = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: {
+          role: true,
+          products: true,
+          mfaEnabled: true,
+          mfaSecret: true,
+          mfaVerifiedAt: true,
+        },
+      });
+      redirect(
+        (currentUser && templateTwinAdminLandingPath(currentUser)) ??
+          TEMPLATE_TWIN_STATIC_ASSET_ADMIN_PATH,
+      );
+    }
+    redirect("/dashboard");
   }
 
   return (

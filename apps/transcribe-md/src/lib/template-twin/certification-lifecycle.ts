@@ -74,6 +74,7 @@ import {
   lockTemplateTwinRolloutForFinalClaim,
   type TemplateTwinRolloutToken,
 } from "./rollout";
+import { lockAndAssertCurrentTemplateTwinPhysician } from "./final-claim-authority";
 import {
   assertTemplateTwinAuthoredCorpusPhiFree,
   TemplateTwinSyntheticEvidenceRejectedError,
@@ -140,7 +141,7 @@ async function assertConfigurationRolloutFinality(
   tx: Prisma.TransactionClient,
   actor: TemplateTwinActor,
   operation: string,
-): Promise<void> {
+): Promise<{ email: string }> {
   const decision = await lockTemplateTwinRolloutForFinalClaim({
     tx,
     practiceId: actor.practiceId,
@@ -152,6 +153,11 @@ async function assertConfigurationRolloutFinality(
       `${decision.code}: Template Twin availability changed while ${operation}. Reload and try again.`,
     );
   }
+  // The rollout fence owns the global -> practice lock order and proves the
+  // practice is active. Lock the exact physician last, in this same final
+  // persistence transaction, so lifecycle or product revocation cannot race
+  // a mapping, certification, or activation claim.
+  return lockAndAssertCurrentTemplateTwinPhysician({ tx, actor });
 }
 
 interface PersistedMappingRow {
@@ -979,7 +985,7 @@ export async function updateTemplateTwinMappings(input: {
     async (tx: Prisma.TransactionClient) => {
       // Lock order is load-bearing: rollout global -> practice must precede
       // every template/configuration row touched by this final transaction.
-      await assertConfigurationRolloutFinality(
+      const currentActor = await assertConfigurationRolloutFinality(
         tx,
         input.actor,
         "the mapping and field intent were being saved",
@@ -1358,7 +1364,7 @@ export async function updateTemplateTwinMappings(input: {
           eventKey: `template-twin:field-intent:${compiled.id}:${intent.fieldId}:v1`,
           practiceId: input.actor.practiceId,
           actorId: input.actor.userId,
-          actorEmailSnapshot: input.actor.userEmail,
+          actorEmailSnapshot: currentActor.email,
           action: "TEMPLATE_TWIN_FIELD_INTENT_RECORDED",
           targetType: "TemplateTwinFieldDefinition",
           targetId: intent.definitionId,
@@ -1399,7 +1405,7 @@ export async function updateTemplateTwinMappings(input: {
         eventKey: `template-twin:mapping-updated:${compiled.id}:${afterHash}`,
         practiceId: input.actor.practiceId,
         actorId: input.actor.userId,
-        actorEmailSnapshot: input.actor.userEmail,
+        actorEmailSnapshot: currentActor.email,
         action: "TEMPLATE_TWIN_MAPPING_UPDATED",
         targetType: "TemplateTwinCompiledVersion",
         targetId: compiled.id,
@@ -1443,7 +1449,7 @@ export async function certifyAndActivateTemplateTwin(input: {
     async (tx: Prisma.TransactionClient) => {
       // Certification activates a document version. Its rollout epoch is
       // revalidated under the same global -> practice locks as disable.
-      await assertConfigurationRolloutFinality(
+      const currentActor = await assertConfigurationRolloutFinality(
         tx,
         input.actor,
         "the template was being certified",
@@ -1818,7 +1824,7 @@ export async function certifyAndActivateTemplateTwin(input: {
           eventKey: `template-twin:field-test-waived:${compiled.id}:${waiver.fieldId}:${mappingHash}`,
           practiceId: input.actor.practiceId,
           actorId: input.actor.userId,
-          actorEmailSnapshot: input.actor.userEmail,
+          actorEmailSnapshot: currentActor.email,
           action: "TEMPLATE_TWIN_FIELD_TEST_WAIVED",
           targetType: "TemplateTwinFieldDefinition",
           targetId: persistedFieldById.get(waiver.fieldId)!.id,
@@ -1835,7 +1841,7 @@ export async function certifyAndActivateTemplateTwin(input: {
         eventKey: `template-twin:certified:${compiled.id}:${mappingHash}`,
         practiceId: input.actor.practiceId,
         actorId: input.actor.userId,
-        actorEmailSnapshot: input.actor.userEmail,
+        actorEmailSnapshot: currentActor.email,
         action: "TEMPLATE_TWIN_CERTIFIED",
         targetType: "TemplateTwinCompiledVersion",
         targetId: compiled.id,
@@ -1859,7 +1865,7 @@ export async function certifyAndActivateTemplateTwin(input: {
         eventKey: `template-twin:activated:${template.id}:v${template.version}`,
         practiceId: input.actor.practiceId,
         actorId: input.actor.userId,
-        actorEmailSnapshot: input.actor.userEmail,
+        actorEmailSnapshot: currentActor.email,
         action: "TEMPLATE_TWIN_ACTIVATED",
         targetType: "NoteTemplate",
         targetId: template.id,

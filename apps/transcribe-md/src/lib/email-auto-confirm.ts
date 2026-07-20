@@ -29,36 +29,38 @@
 
 /** Common real-mail providers + our own production domain. The bypass
  *  refuses to fire for these even if mistakenly listed in the env var. */
+import { isExactSyntheticQaRuntimeProfile } from "@meddoc/auth";
+
 const REAL_MAIL_DENYLIST: ReadonlySet<string> = new Set([
   // Big consumer providers
-  'gmail.com',
-  'googlemail.com',
-  'outlook.com',
-  'hotmail.com',
-  'hotmail.co.uk',
-  'live.com',
-  'msn.com',
-  'yahoo.com',
-  'yahoo.co.uk',
-  'ymail.com',
-  'rocketmail.com',
-  'icloud.com',
-  'me.com',
-  'mac.com',
-  'protonmail.com',
-  'proton.me',
-  'aol.com',
-  'fastmail.com',
-  'pm.me',
-  'zoho.com',
-  'mail.com',
-  'gmx.com',
-  'gmx.de',
-  'web.de',
+  "gmail.com",
+  "googlemail.com",
+  "outlook.com",
+  "hotmail.com",
+  "hotmail.co.uk",
+  "live.com",
+  "msn.com",
+  "yahoo.com",
+  "yahoo.co.uk",
+  "ymail.com",
+  "rocketmail.com",
+  "icloud.com",
+  "me.com",
+  "mac.com",
+  "protonmail.com",
+  "proton.me",
+  "aol.com",
+  "fastmail.com",
+  "pm.me",
+  "zoho.com",
+  "mail.com",
+  "gmx.com",
+  "gmx.de",
+  "web.de",
   // Our own surfaces — production verification must NEVER be bypassed
   // for these even if env is misconfigured
-  'quillmd.com',
-  'ashtechgroup.com',
+  "quillmd.com",
+  "ashtechgroup.com",
 ]);
 
 /**
@@ -74,18 +76,21 @@ const REAL_MAIL_DENYLIST: ReadonlySet<string> = new Set([
  *  - domain not explicitly listed in the env allowlist
  */
 export function isAutoConfirmDomain(email: string): boolean {
-  if (typeof email !== 'string') return false;
-  const at = email.lastIndexOf('@');
+  if (typeof email !== "string") return false;
+  const at = email.lastIndexOf("@");
   if (at < 1 || at === email.length - 1) return false;
 
-  const domain = email.slice(at + 1).trim().toLowerCase();
+  const domain = email
+    .slice(at + 1)
+    .trim()
+    .toLowerCase();
   if (!domain) return false;
 
   // Defensive: even if the operator set EMAIL_AUTO_CONFIRM_DOMAINS=gmail.com,
   // refuse to bypass for real-mail domains.
   if (REAL_MAIL_DENYLIST.has(domain)) return false;
 
-  const raw = process.env.EMAIL_AUTO_CONFIRM_DOMAINS ?? '';
+  const raw = process.env.EMAIL_AUTO_CONFIRM_DOMAINS ?? "";
   if (!raw.trim()) return false;
 
   // Round 3 PR-F (A02-P0-001) — production safety gate.
@@ -99,16 +104,22 @@ export function isAutoConfirmDomain(email: string): boolean {
   // env entry left over from staging cannot fire by accident. Outside
   // production (test, development), behaviour is unchanged so dev/QA
   // workflows keep working.
-  if (process.env.NODE_ENV === 'production') {
+  if (process.env.NODE_ENV === "production") {
     const allowInProd = process.env.EMAIL_AUTO_CONFIRM_ALLOW_IN_PROD;
-    if (allowInProd !== 'true') return false;
+    if (
+      allowInProd !== "true" ||
+      !isExactSyntheticQaRuntimeProfile(process.env) ||
+      (domain !== "synthetic.test" && domain !== "example.test")
+    ) {
+      return false;
+    }
   }
 
   const allowlist = new Set(
     raw
-      .split(',')
+      .split(",")
       .map((d) => d.trim().toLowerCase())
-      .filter((d) => d.length > 0)
+      .filter((d) => d.length > 0),
   );
 
   return allowlist.has(domain);

@@ -1,17 +1,27 @@
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { deflateSync } from "node:zlib";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { canonicalSha256 } from "../canonical";
+import {
+  buildTemplateTwinProviderOwnershipReceipt,
+  runTemplateTwinOwnedModelComplete,
+} from "../provider-ownership";
 
 const aiMocks = vi.hoisted(() => ({ complete: vi.fn() }));
+const delimiterMocks = vi.hoisted(() => ({
+  injectionAttemptDetected: false,
+}));
 
 vi.mock("@meddoc/ai", () => ({
   delimiterSystemSuffix: () => "",
   wrapAsData: (value: string) => ({
     wrapped: value,
-    injectionAttemptDetected: false,
+    suffix: "0123456789abcdef",
+    injectionAttemptDetected: delimiterMocks.injectionAttemptDetected,
   }),
   modelClient: { complete: aiMocks.complete },
 }));
@@ -77,6 +87,9 @@ import {
   type TemplateTwinStaticAssetActor,
   type TemplateTwinStaticAssetClaimDb,
 } from "../static-assets";
+
+const POSTGRES_ECMASCRIPT_TRIM_WHITESPACE_CLASS =
+  "U&'[\\0009-\\000D\\0020\\00A0\\1680\\2000-\\200A\\2028\\2029\\202F\\205F\\3000\\FEFF]'";
 
 const RELEASE_ID = "0eb13c1b-0893-4cb0-bbd6-68b3e544baac";
 const RELEASE_IDENTITY_SHA256 = "1".repeat(64);
@@ -205,6 +218,7 @@ interface MemoryReceipt {
   privacyEvidenceSha256: string;
   globalRolloutGeneration: bigint;
   practiceRolloutGeneration: bigint;
+  createdAt: Date;
   expiresAt: Date;
   consumedAt: Date | null;
 }
@@ -220,6 +234,21 @@ function memoryDb() {
     globalGeneration: BigInt(1),
     practiceEnabled: true,
     practiceGeneration: BigInt(1),
+  };
+  const authority = {
+    id: ACTOR.userId,
+    email: ACTOR.userEmail,
+    practiceId: ACTOR.practiceId,
+    role: "ADMIN",
+    isActive: true,
+    deactivatedAt: null as Date | null,
+    suspendedAt: null as Date | null,
+    softDeletedAt: null as Date | null,
+    products: ["TRANSCRIBE_MD"],
+    mfaEnabled: false,
+    mfaSecret: null as string | null,
+    mfaVerifiedAt: null as Date | null,
+    practiceActive: true,
   };
   const faults = { auditOutbox: false };
   const db: TemplateTwinStaticAssetClaimDb = {
@@ -289,8 +318,7 @@ function memoryDb() {
         if (row.version !== asset.currentDecisionVersion + 1) {
           throw new Error("TT_STATIC_ASSET_DECISION_CONFLICT");
         }
-        const expectedAction =
-          `TEMPLATE_TWIN_STATIC_ASSET_${row.decision}`;
+        const expectedAction = `TEMPLATE_TWIN_STATIC_ASSET_${row.decision}`;
         const audit = outbox.find(
           (item) => item.eventKey === row.auditEventKey,
         );
@@ -301,8 +329,8 @@ function memoryDb() {
           audit.actorId !== row.decidedById ||
           audit.targetType !== "TemplateTwinStaticAsset" ||
           audit.targetId !== asset.id ||
-          (audit.metadata as { decisionId?: string } | undefined)?.decisionId !==
-            row.id ||
+          (audit.metadata as { decisionId?: string } | undefined)
+            ?.decisionId !== row.id ||
           audit.status !== "PENDING"
         ) {
           throw new Error("TT_STATIC_ASSET_AUDIT_OUTBOX_INVALID");
@@ -350,6 +378,9 @@ function memoryDb() {
       const sql =
         (query as { strings?: readonly string[] }).strings?.join("?") ?? "";
       const values = (query as { values?: unknown[] }).values ?? [];
+      if (sql.includes('SELECT CURRENT_TIMESTAMP AS "createdAt"')) {
+        return [{ createdAt: new Date() }] as T;
+      }
       if (sql.includes('FROM "template_twin_rollout_controls"')) {
         return [
           {
@@ -382,17 +413,96 @@ function memoryDb() {
       if (sql.includes('FROM "template_twin_lineage_migration_progress"')) {
         return [{ phase: "CONTRACTED" }] as T;
       }
-      if (
-        sql.includes('FROM "template_twin_static_asset_review_receipts"')
-      ) {
-        const receipt = receipts.find((item) => item.id === values[0]);
-        return (receipt
-          ? [{ ...receipt, notExpired: receipt.expiresAt > new Date() }]
-          : []) as T;
+      const currentAuthority =
+        authority.id === values[0] &&
+        authority.practiceId === values[1] &&
+        (authority.role === "ADMIN" || authority.role === "SUPER_ADMIN") &&
+        authority.isActive &&
+        authority.deactivatedAt === null &&
+        authority.suspendedAt === null &&
+        authority.softDeletedAt === null &&
+        authority.products.includes("TRANSCRIBE_MD") &&
+        (!authority.products.includes("SUPER_ADMIN") ||
+          (authority.mfaEnabled &&
+            typeof authority.mfaSecret === "string" &&
+            authority.mfaSecret.trim().length > 0 &&
+            authority.mfaVerifiedAt instanceof Date &&
+            authority.mfaVerifiedAt.getTime() <= Date.now())) &&
+        authority.practiceActive &&
+        rollout.practiceEnabled;
+      if (sql.includes("WITH current_admin AS")) {
+        if (!currentAuthority) return [] as T;
+        const scoped = assets
+          .filter((asset) => asset.practiceId === authority.practiceId)
+          .sort(
+            (left, right) =>
+              right.updatedAt.getTime() - left.updatedAt.getTime() ||
+              left.sha256.localeCompare(right.sha256),
+          )
+          .slice(0, 100);
+        if (scoped.length === 0) {
+          return [
+            {
+              authorizedAdminId: authority.id,
+              assetId: null,
+              assetPracticeId: null,
+              sha256: null,
+              currentStatus: null,
+              mimeType: null,
+              width: null,
+              height: null,
+              sizeBytes: null,
+              scannerVersion: null,
+              ocrEngineVersion: null,
+              currentDecisionVersion: null,
+              createdAt: null,
+              updatedAt: null,
+            },
+          ] as T;
+        }
+        return scoped.map((asset) => ({
+          authorizedAdminId: authority.id,
+          assetId: asset.id,
+          assetPracticeId: asset.practiceId,
+          sha256: asset.sha256,
+          currentStatus: asset.currentStatus,
+          mimeType: asset.mimeType,
+          width: asset.width,
+          height: asset.height,
+          sizeBytes: asset.sizeBytes,
+          scannerVersion: asset.scannerVersion,
+          ocrEngineVersion: asset.ocrEngineVersion,
+          currentDecisionVersion: asset.currentDecisionVersion,
+          createdAt: asset.createdAt,
+          updatedAt: asset.updatedAt,
+        })) as T;
       }
       if (
-        sql.includes('UPDATE "template_twin_static_asset_review_receipts"')
+        sql.includes('FROM "users" actor') &&
+        sql.includes("FOR UPDATE OF actor")
       ) {
+        return (
+          currentAuthority
+            ? [
+                {
+                  id: authority.id,
+                  email: authority.email,
+                  practiceId: authority.practiceId,
+                  role: authority.role,
+                },
+              ]
+            : []
+        ) as T;
+      }
+      if (sql.includes('FROM "template_twin_static_asset_review_receipts"')) {
+        const receipt = receipts.find((item) => item.id === values[0]);
+        return (
+          receipt
+            ? [{ ...receipt, notExpired: receipt.expiresAt > new Date() }]
+            : []
+        ) as T;
+      }
+      if (sql.includes('UPDATE "template_twin_static_asset_review_receipts"')) {
         const receipt = receipts.find((item) => item.id === values[0]);
         if (!receipt || receipt.consumedAt || receipt.expiresAt <= new Date()) {
           return [] as T;
@@ -429,6 +539,7 @@ function memoryDb() {
     outbox,
     queryRawCalls,
     rollout,
+    authority,
     faults,
   };
 }
@@ -452,6 +563,9 @@ beforeEach(() => {
   vi.stubEnv("TEMPLATE_TWIN_KILL_SWITCH", "false");
   aiMocks.complete.mockReset();
   aiMocks.complete.mockResolvedValue({ phiFields: [], anyUncertain: false });
+  delimiterMocks.injectionAttemptDetected = false;
+  vi.mocked(buildTemplateTwinProviderOwnershipReceipt).mockClear();
+  vi.mocked(runTemplateTwinOwnedModelComplete).mockClear();
 });
 
 afterEach(() => {
@@ -522,6 +636,137 @@ describe("practice-scoped static image approval", () => {
     expect(listed).not.toHaveProperty("ocrTextSha256");
     expect(listed).not.toHaveProperty("privacyScanModel");
     expect(listed).not.toHaveProperty("reason");
+    const listSql = state.queryRawCalls
+      .map(
+        (query) =>
+          (query as { strings?: readonly string[] }).strings?.join(" ") ?? "",
+      )
+      .find((sql) => sql.includes("WITH current_admin AS"));
+    expect(listSql).toContain('actor."practiceId"');
+    expect(listSql).toContain('actor."role" IN');
+    expect(listSql).toContain('actor."deactivatedAt" IS NULL');
+    expect(listSql).toContain('actor."suspendedAt" IS NULL');
+    expect(listSql).toContain('actor."softDeletedAt" IS NULL');
+    expect(listSql).toContain('ANY(actor."products")');
+    expect(listSql).toContain("NOT ('SUPER_ADMIN'::\"Product\"");
+    expect(listSql).toContain('actor."mfaEnabled" = true');
+    expect(listSql).toContain("regexp_replace(");
+    expect(listSql).toContain('actor."mfaSecret",');
+    expect(listSql).toContain(POSTGRES_ECMASCRIPT_TRIM_WHITESPACE_CLASS);
+    expect(listSql).toMatch(/\)\s*<> ''/u);
+    expect(listSql).not.toContain('btrim(actor."mfaSecret")');
+    expect(listSql).not.toContain("[[:space:]]");
+    expect(listSql).toContain('actor."mfaVerifiedAt" <= CURRENT_TIMESTAMP');
+    expect(listSql).toContain('practice."isActive" = true');
+  });
+
+  it("returns an authorized empty index instead of confusing it with denied authority", async () => {
+    const state = memoryDb();
+
+    await expect(
+      listTemplateTwinStaticAssetsForPractice({ actor: ACTOR, db: state.db }),
+    ).resolves.toEqual([]);
+    expect(
+      state.queryRawCalls.some((query) =>
+        (
+          (query as { strings?: readonly string[] }).strings?.join(" ") ?? ""
+        ).includes("WITH current_admin AS"),
+      ),
+    ).toBe(true);
+  });
+
+  it("returns an authorized empty index when only another practice has assets", async () => {
+    const state = memoryDb();
+    state.assets.push({
+      id: "asset_other_practice_only",
+      practiceId: "practice_other_synthetic",
+      createdById: "admin_other_synthetic",
+      sha256: "e".repeat(64),
+      mimeType: "image/png",
+      width: 320,
+      height: 80,
+      sizeBytes: 2048,
+      scannerVersion: "template-twin-static-png/1.0.0",
+      ocrEngineVersion: "synthetic-local-ocr/1.0",
+      ocrTextSha256: "1".repeat(64),
+      metadataEvidenceSha256: "2".repeat(64),
+      privacyEvidenceSha256: "3".repeat(64),
+      privacyScanProvider: "anthropic",
+      privacyScanModel: "synthetic-model",
+      inspectionEvidenceSha256: "4".repeat(64),
+      inspectionEvidence: {},
+      providerOwnershipEvidence: {},
+      providerOwnershipSha256: "5".repeat(64),
+      currentStatus: "APPROVED",
+      currentDecisionVersion: 1,
+      createdAt: new Date("2026-07-20T00:00:00.000Z"),
+      updatedAt: new Date("2026-07-20T00:00:00.000Z"),
+    });
+
+    await expect(
+      listTemplateTwinStaticAssetsForPractice({ actor: ACTOR, db: state.db }),
+    ).resolves.toEqual([]);
+  });
+
+  it.each([
+    ["deactivation", { isActive: false }],
+    ["lifecycle deactivation", { deactivatedAt: new Date() }],
+    ["suspension", { suspendedAt: new Date() }],
+    ["soft deletion", { softDeletedAt: new Date() }],
+    ["demotion", { role: "STAFF" }],
+    ["product loss", { products: [] }],
+    ["platform MFA absence", { products: ["TRANSCRIBE_MD", "SUPER_ADMIN"] }],
+    ["practice transfer", { practiceId: "practice_other_synthetic" }],
+    ["practice deactivation", { practiceActive: false }],
+  ])(
+    "denies the asset list after current-admin %s",
+    async (_label, mutation) => {
+      const state = memoryDb();
+      Object.assign(state.authority, mutation);
+
+      await expect(
+        listTemplateTwinStaticAssetsForPractice({ actor: ACTOR, db: state.db }),
+      ).rejects.toMatchObject({ code: "TT_STATIC_ASSET_ADMIN_REQUIRED" });
+    },
+  );
+
+  it("admits a dual-entitled current admin list only with complete MFA", async () => {
+    const state = memoryDb();
+    state.authority.products = ["TRANSCRIBE_MD", "SUPER_ADMIN"];
+    state.authority.mfaEnabled = true;
+    state.authority.mfaSecret = "SYNTHETIC-SECRET";
+    state.authority.mfaVerifiedAt = new Date("2020-01-01T00:00:00.000Z");
+
+    await expect(
+      listTemplateTwinStaticAssetsForPractice({ actor: ACTOR, db: state.db }),
+    ).resolves.toEqual([]);
+  });
+
+  it.each(["\t", "\n", "\r\n\t", "\u00a0", "\u2007", "\u202f", "\ufeff"])(
+    "rejects a dual-entitled asset list with a whitespace-only MFA secret %j",
+    async (mfaSecret) => {
+      const state = memoryDb();
+      state.authority.products = ["TRANSCRIBE_MD", "SUPER_ADMIN"];
+      state.authority.mfaEnabled = true;
+      state.authority.mfaSecret = mfaSecret;
+      state.authority.mfaVerifiedAt = new Date("2020-01-01T00:00:00.000Z");
+
+      await expect(
+        listTemplateTwinStaticAssetsForPractice({ actor: ACTOR, db: state.db }),
+      ).rejects.toMatchObject({ code: "TT_STATIC_ASSET_ADMIN_REQUIRED" });
+    },
+  );
+
+  it("uses the same true non-whitespace SQL predicate in list and write fences", () => {
+    const source = readFileSync(
+      path.resolve(__dirname, "../static-assets.ts"),
+      "utf8",
+    );
+    expect(
+      source.match(/regexp_replace\(\s*actor\."mfaSecret"/gu),
+    ).toHaveLength(2);
+    expect(source).not.toContain('btrim(actor."mfaSecret")');
+    expect(source).not.toContain("[[:space:]]");
   });
 
   it("validates bytes, bounded pixels, local OCR, metadata, and returns an ephemeral preview", async () => {
@@ -553,6 +798,16 @@ describe("practice-scoped static image approval", () => {
       ocr: localOcr(),
       db: state.db,
     });
+    const reviewProviderInput = vi
+      .mocked(runTemplateTwinOwnedModelComplete)
+      .mock.calls.at(-1)?.[0];
+    expect(reviewProviderInput).toMatchObject({
+      operation: "STATIC_ASSET_PRIVACY_SCAN",
+      operationInstance: "primary",
+    });
+    expect(reviewProviderInput?.args.user).toMatch(
+      /^Locally extracted static-image evidence:\n<transcript_[a-f0-9]{64}>/u,
+    );
     expect(review.previewReviewReceipt).toMatch(
       /^[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/,
     );
@@ -569,6 +824,17 @@ describe("practice-scoped static image approval", () => {
       practiceRolloutGeneration: BigInt(1),
       consumedAt: null,
     });
+    expect(
+      state.receipts[0]!.expiresAt.getTime() -
+        state.receipts[0]!.createdAt.getTime(),
+    ).toBe(15 * 60 * 1_000);
+    expect(
+      state.queryRawCalls.some((query) =>
+        (
+          (query as { strings?: readonly string[] }).strings?.join(" ") ?? ""
+        ).includes('SELECT CURRENT_TIMESTAMP AS "createdAt"'),
+      ),
+    ).toBe(true);
     expect(state.receipts[0]?.tokenSha256).toBe(
       createHash("sha256")
         .update(review.previewReviewReceipt, "utf8")
@@ -577,6 +843,173 @@ describe("practice-scoped static image approval", () => {
     expect(
       Object.values(state.receipts[0]!).map(String).join("|"),
     ).not.toContain(review.previewReviewReceipt);
+  });
+
+  it("binds review and decision receipts to the database-enforced primary operation instance", async () => {
+    const state = memoryDb();
+    const bytes = syntheticPng();
+    const review = await inspectTemplateTwinStaticAssetForReview({
+      bytes,
+      claimedMimeType: "image/png",
+      actor: ACTOR,
+      ocr: localOcr(),
+      db: state.db,
+    });
+    const reviewProviderInput = vi
+      .mocked(runTemplateTwinOwnedModelComplete)
+      .mock.calls.at(-1)?.[0];
+    expect(buildTemplateTwinProviderOwnershipReceipt).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        expectedExecutionPlan: [
+          {
+            operation: "STATIC_ASSET_PRIVACY_SCAN",
+            operationInstance: "primary",
+            disposition: "EXECUTED",
+          },
+        ],
+      }),
+    );
+
+    await approveTemplateTwinStaticAsset({
+      bytes,
+      claimedMimeType: "image/png",
+      actor: ACTOR,
+      ocr: localOcr(),
+      previewReviewReceipt: review.previewReviewReceipt,
+      attestedReusableBlankAsset: true,
+      reason: "Reusable synthetic practice mark.",
+      db: state.db,
+    });
+    const decisionProviderInput = vi
+      .mocked(runTemplateTwinOwnedModelComplete)
+      .mock.calls.at(-1)?.[0];
+    expect(decisionProviderInput?.args.user).toBe(
+      reviewProviderInput?.args.user,
+    );
+    expect(buildTemplateTwinProviderOwnershipReceipt).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        expectedExecutionPlan: [
+          {
+            operation: "STATIC_ASSET_PRIVACY_SCAN",
+            operationInstance: "primary",
+            disposition: "EXECUTED",
+          },
+        ],
+      }),
+    );
+  });
+
+  it("retains delimiter-attempt rejection before static-asset provider egress", async () => {
+    delimiterMocks.injectionAttemptDetected = true;
+
+    await expect(
+      inspectTemplateTwinStaticAsset({
+        bytes: syntheticPng(),
+        claimedMimeType: "image/png",
+        actor: ACTOR,
+        ocr: localOcr(),
+      }),
+    ).rejects.toMatchObject({ code: "TT_STATIC_ASSET_PRIVACY_REJECTED" });
+    expect(runTemplateTwinOwnedModelComplete).not.toHaveBeenCalled();
+    expect(aiMocks.complete).not.toHaveBeenCalled();
+  });
+
+  it("fails preview and decision writes closed after current admin authority changes", async () => {
+    const bytes = syntheticPng();
+
+    const whitespaceMfaPreview = memoryDb();
+    whitespaceMfaPreview.authority.products = ["TRANSCRIBE_MD", "SUPER_ADMIN"];
+    whitespaceMfaPreview.authority.mfaEnabled = true;
+    whitespaceMfaPreview.authority.mfaSecret = "\ufeff";
+    whitespaceMfaPreview.authority.mfaVerifiedAt = new Date(
+      "2020-01-01T00:00:00.000Z",
+    );
+    await expect(
+      inspectTemplateTwinStaticAssetForReview({
+        bytes,
+        claimedMimeType: "image/png",
+        actor: ACTOR,
+        ocr: localOcr(),
+        db: whitespaceMfaPreview.db,
+      }),
+    ).rejects.toMatchObject({ code: "TT_STATIC_ASSET_ADMIN_REQUIRED" });
+    expect(whitespaceMfaPreview.receipts).toHaveLength(0);
+    expect(whitespaceMfaPreview.outbox).toHaveLength(0);
+
+    const suspendedPreview = memoryDb();
+    suspendedPreview.authority.suspendedAt = new Date();
+    await expect(
+      inspectTemplateTwinStaticAssetForReview({
+        bytes,
+        claimedMimeType: "image/png",
+        actor: ACTOR,
+        ocr: localOcr(),
+        db: suspendedPreview.db,
+      }),
+    ).rejects.toMatchObject({ code: "TT_STATIC_ASSET_ADMIN_REQUIRED" });
+    expect(suspendedPreview.receipts).toHaveLength(0);
+    expect(suspendedPreview.outbox).toHaveLength(0);
+
+    const demotedApproval = memoryDb();
+    const approvalReceipt = await reviewedReceipt(demotedApproval, bytes);
+    demotedApproval.authority.role = "STAFF";
+    await expect(
+      approveTemplateTwinStaticAsset({
+        bytes,
+        claimedMimeType: "image/png",
+        actor: ACTOR,
+        ocr: localOcr(),
+        previewReviewReceipt: approvalReceipt,
+        attestedReusableBlankAsset: true,
+        reason: "Reusable synthetic practice mark.",
+        db: demotedApproval.db,
+      }),
+    ).rejects.toMatchObject({ code: "TT_STATIC_ASSET_ADMIN_REQUIRED" });
+    expect(demotedApproval.receipts[0]?.consumedAt).toBeNull();
+    expect(demotedApproval.assets).toHaveLength(0);
+    expect(demotedApproval.decisions).toHaveLength(0);
+    expect(demotedApproval.outbox).toHaveLength(0);
+
+    const productRevokedRejection = memoryDb();
+    productRevokedRejection.authority.products = [];
+    await expect(
+      rejectTemplateTwinStaticAsset({
+        bytes,
+        claimedMimeType: "image/png",
+        actor: ACTOR,
+        ocr: localOcr(),
+        reason: "Reject this synthetic reusable practice mark.",
+        db: productRevokedRejection.db,
+      }),
+    ).rejects.toMatchObject({ code: "TT_STATIC_ASSET_ADMIN_REQUIRED" });
+    expect(productRevokedRejection.assets).toHaveLength(0);
+    expect(productRevokedRejection.decisions).toHaveLength(0);
+    expect(productRevokedRejection.outbox).toHaveLength(0);
+
+    const transferredRevocation = memoryDb();
+    const approved = await approveTemplateTwinStaticAsset({
+      bytes,
+      claimedMimeType: "image/png",
+      actor: ACTOR,
+      ocr: localOcr(),
+      previewReviewReceipt: await reviewedReceipt(transferredRevocation, bytes),
+      attestedReusableBlankAsset: true,
+      reason: "Reusable synthetic practice mark.",
+      db: transferredRevocation.db,
+    });
+    transferredRevocation.authority.practiceId = "practice_other_synthetic";
+    await expect(
+      revokeTemplateTwinStaticAsset({
+        practiceId: ACTOR.practiceId,
+        sha256: approved.sha256,
+        actor: ACTOR,
+        reason: "Revoke the transferred synthetic practice mark.",
+        db: transferredRevocation.db,
+      }),
+    ).rejects.toMatchObject({ code: "TT_STATIC_ASSET_ADMIN_REQUIRED" });
+    expect(transferredRevocation.assets[0]?.currentStatus).toBe("APPROVED");
+    expect(transferredRevocation.decisions).toHaveLength(1);
+    expect(transferredRevocation.outbox).toHaveLength(1);
   });
 
   it("rejects forged, cross-user, changed-byte, and replayed preview proofs", async () => {
@@ -613,7 +1046,7 @@ describe("practice-scoped static image approval", () => {
         db: crossUserState.db,
       }),
     ).rejects.toMatchObject({
-      code: "TT_STATIC_ASSET_PREVIEW_RECEIPT_INVALID",
+      code: "TT_STATIC_ASSET_ADMIN_REQUIRED",
     });
 
     const changedState = memoryDb();
@@ -710,28 +1143,31 @@ describe("practice-scoped static image approval", () => {
     ["global generation change", { globalGeneration: BigInt(2) }],
     ["practice disable", { practiceEnabled: false }],
     ["practice generation change", { practiceGeneration: BigInt(2) }],
-  ])("rejects approval after %s and leaves the receipt unconsumed", async (_label, mutation) => {
-    const state = memoryDb();
-    const bytes = syntheticPng();
-    const receipt = await reviewedReceipt(state, bytes);
-    Object.assign(state.rollout, mutation);
-    await expect(
-      approveTemplateTwinStaticAsset({
-        bytes,
-        claimedMimeType: "image/png",
-        actor: ACTOR,
-        ocr: localOcr(),
-        previewReviewReceipt: receipt,
-        attestedReusableBlankAsset: true,
-        reason: "Reusable synthetic practice mark.",
-        db: state.db,
-      }),
-    ).rejects.toMatchObject({ code: "TT_STATIC_ASSET_ROLLOUT_STALE" });
-    expect(state.receipts[0]?.consumedAt).toBeNull();
-    expect(state.assets).toHaveLength(0);
-    expect(state.decisions).toHaveLength(0);
-    expect(state.outbox).toHaveLength(0);
-  });
+  ])(
+    "rejects approval after %s and leaves the receipt unconsumed",
+    async (_label, mutation) => {
+      const state = memoryDb();
+      const bytes = syntheticPng();
+      const receipt = await reviewedReceipt(state, bytes);
+      Object.assign(state.rollout, mutation);
+      await expect(
+        approveTemplateTwinStaticAsset({
+          bytes,
+          claimedMimeType: "image/png",
+          actor: ACTOR,
+          ocr: localOcr(),
+          previewReviewReceipt: receipt,
+          attestedReusableBlankAsset: true,
+          reason: "Reusable synthetic practice mark.",
+          db: state.db,
+        }),
+      ).rejects.toMatchObject({ code: "TT_STATIC_ASSET_ROLLOUT_STALE" });
+      expect(state.receipts[0]?.consumedAt).toBeNull();
+      expect(state.assets).toHaveLength(0);
+      expect(state.decisions).toHaveLength(0);
+      expect(state.outbox).toHaveLength(0);
+    },
+  );
 
   it("rolls back receipt consumption and clinical state when durable audit enqueue fails", async () => {
     const state = memoryDb();
@@ -768,10 +1204,11 @@ describe("practice-scoped static image approval", () => {
     ).resolves.toMatchObject({ decisionVersion: 1 });
   });
 
-  it("uses the global-practice-receipt-asset lock order and revalidates reject and revoke", async () => {
+  it("uses the global-practice-admin-receipt-asset lock order and revalidates reject and revoke", async () => {
     const state = memoryDb();
     const bytes = syntheticPng();
     const receipt = await reviewedReceipt(state, bytes);
+    state.queryRawCalls.length = 0;
     await approveTemplateTwinStaticAsset({
       bytes,
       claimedMimeType: "image/png",
@@ -786,13 +1223,16 @@ describe("practice-scoped static image approval", () => {
       (query) =>
         (query as { strings?: readonly string[] }).strings?.join(" ") ?? "",
     );
-    expect(lockSql.slice(0, 7)).toEqual([
-      expect.stringContaining('template_twin_rollout_controls'),
+    expect(lockSql.slice(0, 8)).toEqual([
+      expect.stringContaining("template_twin_rollout_controls"),
       expect.stringContaining('FROM "practices"'),
       expect.stringContaining("template_twin_current_runtime_release"),
-      expect.stringContaining('template_twin_lineage_migration_progress'),
-      expect.stringContaining('template_twin_static_asset_review_receipts'),
-      expect.stringContaining('UPDATE "template_twin_static_asset_review_receipts"'),
+      expect.stringContaining("template_twin_lineage_migration_progress"),
+      expect.stringContaining('FROM "users" actor'),
+      expect.stringContaining("template_twin_static_asset_review_receipts"),
+      expect.stringContaining(
+        'UPDATE "template_twin_static_asset_review_receipts"',
+      ),
       expect.stringContaining('FROM "template_twin_static_assets" asset'),
     ]);
 
@@ -936,6 +1376,7 @@ describe("practice-scoped static image approval", () => {
 
   it("records an immutable approval, scopes it to one practice, and audits use-ready evidence", async () => {
     const state = memoryDb();
+    state.authority.email = "current-admin@synthetic.test";
     const bytes = syntheticPng();
     const binding = await approveTemplateTwinStaticAsset({
       bytes,
@@ -966,6 +1407,9 @@ describe("practice-scoped static image approval", () => {
     expect(state.outbox.map((row) => row.action)).toEqual([
       "TEMPLATE_TWIN_STATIC_ASSET_APPROVED",
     ]);
+    expect(state.outbox[0]?.actorEmailSnapshot).toBe(
+      "current-admin@synthetic.test",
+    );
   });
 
   it("records an explicit administrator rejection as an append-only decision", async () => {

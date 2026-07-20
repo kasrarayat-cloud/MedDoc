@@ -27,14 +27,13 @@ import archiver from "archiver";
 
 import prisma from "@meddoc/db";
 import { apiError, withApiHandler } from "@/lib/api-error";
-import {
-  isTemplateTwinSyntheticQaPatient,
-  ordinaryClinicalVisitWhere,
-} from "@/lib/template-twin/synthetic-qa-patient";
 import { auth } from "@/lib/nextauth";
 import { RATE_LIMITS, rateLimitOr429 } from "@/lib/rate-limit";
 import { downloadAudio } from "@/lib/minio";
-import { loadVisitExportData } from "@/lib/visit-export-server";
+import {
+  loadVisitExportData,
+  loadVisitExportObjectManifest,
+} from "@/lib/visit-export-server";
 import { generateVisitPdf } from "@/lib/pdf-generator";
 import { redactPhi } from "@meddoc/ai";
 import { log } from "@/lib/log";
@@ -42,10 +41,40 @@ import {
   authorizeVisitDeliveryFinalClaim,
   TemplateTwinDeliveryAuthorizationError,
 } from "@/lib/template-twin/delivery-authorization";
+import { listTemplateTwinVisibleVisitIdentities } from "@/lib/template-twin/read-authority";
+import { loadCurrentVisitExportActor } from "@/lib/visit-export-authority";
+import {
+  currentClinicalPatientWhere,
+  type CurrentClinicalPatientActor,
+} from "@/lib/clinical-patient-authority";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
+
+const PATIENT_EXPORT_SELECT = {
+  id: true,
+  practiceId: true,
+  name: true,
+  dateOfBirth: true,
+  externalId: true,
+  deletedAt: true,
+  createdAt: true,
+} as const;
+
+async function loadCurrentPatientExportRecord(
+  patientId: string,
+  actor: CurrentClinicalPatientActor,
+) {
+  return prisma.transcribeMdPatient.findFirst({
+    where: currentClinicalPatientWhere({
+      actor,
+      patientId,
+      includeDeleted: true,
+    }),
+    select: PATIENT_EXPORT_SELECT,
+  });
+}
 
 export const GET = withApiHandler<{ id: string }>(
   "api:patients:export",
@@ -59,52 +88,20 @@ export const GET = withApiHandler<{ id: string }>(
 
     const { id: patientId } = await params;
 
-    // Resolve the caller's practiceId so we can gate the patient
-    // lookup on it. Cheaper than pulling the full session helper.
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { practiceId: true },
-    });
-    if (!user) return apiError("user not found", 404);
+    const identity = await loadCurrentVisitExportActor(userId);
+    if (!identity) return apiError("not found", 404);
 
-    const patient = await prisma.transcribeMdPatient.findUnique({
-      where: { id: patientId },
-      select: {
-        id: true,
-        practiceId: true,
-        name: true,
-        dateOfBirth: true,
-        externalId: true,
-        deletedAt: true,
-        createdAt: true,
-      },
+    const patient = await loadCurrentPatientExportRecord(patientId, {
+      userId,
+      practiceId: identity.practiceId,
     });
-    if (
-      !patient ||
-      patient.practiceId !== user.practiceId ||
-      isTemplateTwinSyntheticQaPatient(patient)
-    ) {
-      return apiError("not found", 404);
-    }
+    if (!patient) return apiError("not found", 404);
 
-    const visits = await prisma.transcribeVisit.findMany({
-      where: ordinaryClinicalVisitWhere({
-        patientId,
-        userId,
-        deletedAt: null,
-        archivedAt: null,
-        // Synthetic staging visits remain downloadable only through their
-        // stored-byte-verified Original Template DOCX route.
-      }),
-      select: {
-        id: true,
-        audioKey: true,
-        dictationAudioKey: true,
-        audioMimeType: true,
-        status: true,
-        createdAt: true,
-      },
-      orderBy: { createdAt: "asc" },
+    const visits = await listTemplateTwinVisibleVisitIdentities({
+      db: prisma,
+      actorUserId: userId,
+      patientId,
+      activeOnly: true,
     });
 
     try {
@@ -125,8 +122,7 @@ export const GET = withApiHandler<{ id: string }>(
     }
 
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const safeName = patient.name.replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, 40);
-    const filename = `patient-${safeName}-${patient.id}-${stamp}.zip`;
+    const filename = `patient-${patient.id}-${stamp}.zip`;
 
     const archive = archiver("zip", { zlib: { level: 6 } });
     const passThrough = new PassThrough();
@@ -148,10 +144,30 @@ export const GET = withApiHandler<{ id: string }>(
 
     void (async () => {
       try {
+        const currentIdentity = await loadCurrentVisitExportActor(userId);
+        if (
+          !currentIdentity ||
+          currentIdentity.practiceId !== patient.practiceId
+        ) {
+          throw new Error("Current physician authorization changed.");
+        }
+
+        // Re-read the tenant, reserved identity, and deletion epoch after visit
+        // enumeration and immediately before the first patient PHI byte.
+        const currentPatient = await loadCurrentPatientExportRecord(patientId, {
+          userId,
+          practiceId: currentIdentity.practiceId,
+        });
+        if (
+          !currentPatient ||
+          currentPatient.deletedAt?.getTime() !== patient.deletedAt?.getTime()
+        ) {
+          throw new Error("Current patient authorization changed.");
+        }
         archive.append(
           readmeText({
-            patientName: patient.name,
-            patientId: patient.id,
+            patientName: currentPatient.name,
+            patientId: currentPatient.id,
             visitCount: visits.length,
             generatedAt: new Date().toISOString(),
           }),
@@ -161,12 +177,12 @@ export const GET = withApiHandler<{ id: string }>(
         archive.append(
           JSON.stringify(
             {
-              id: patient.id,
-              name: patient.name,
-              dateOfBirth: patient.dateOfBirth,
-              externalId: patient.externalId,
-              deletedAt: patient.deletedAt,
-              createdAt: patient.createdAt,
+              id: currentPatient.id,
+              name: currentPatient.name,
+              dateOfBirth: currentPatient.dateOfBirth,
+              externalId: currentPatient.externalId,
+              deletedAt: currentPatient.deletedAt,
+              createdAt: currentPatient.createdAt,
             },
             null,
             2,
@@ -175,19 +191,40 @@ export const GET = withApiHandler<{ id: string }>(
         );
 
         for (const v of visits) {
-          const exportData = await loadVisitExportData(v.id, userId);
-          if (exportData) {
-            archive.append(JSON.stringify(exportData, null, 2), {
-              name: `visits/${v.id}.json`,
-            });
+          const manifest = await loadVisitExportObjectManifest(v.id, userId);
+          if (!manifest) {
+            throw new Error("Visit export object manifest is unavailable.");
           }
 
-          if (v.audioKey) {
+          const exportData = await loadVisitExportData(v.id, userId);
+          if (!exportData) {
+            throw new Error("Visit export data is unavailable.");
+          }
+          await authorizeVisitDeliveryFinalClaim({
+            visitId: v.id,
+            actorUserId: userId,
+          });
+          archive.append(JSON.stringify(exportData, null, 2), {
+            name: `visits/${v.id}.json`,
+          });
+
+          if (manifest.audioKey) {
             try {
-              const buf = await downloadAudio(v.audioKey);
-              const ext = inferAudioExt(v.audioMimeType, "audio");
+              await authorizeVisitDeliveryFinalClaim({
+                visitId: v.id,
+                actorUserId: userId,
+              });
+              const buf = await downloadAudio(manifest.audioKey);
+              await authorizeVisitDeliveryFinalClaim({
+                visitId: v.id,
+                actorUserId: userId,
+              });
+              const ext = inferAudioExt(manifest.audioMimeType, "audio");
               archive.append(buf, { name: `visits/${v.id}/audio.${ext}` });
             } catch (err) {
+              if (err instanceof TemplateTwinDeliveryAuthorizationError) {
+                throw err;
+              }
               console.warn(
                 `[api:patients:export] audio download failed visit=${v.id}:`,
                 redactPhi(err instanceof Error ? err.message : err),
@@ -195,14 +232,25 @@ export const GET = withApiHandler<{ id: string }>(
             }
           }
 
-          if (v.dictationAudioKey) {
+          if (manifest.dictationAudioKey) {
             try {
-              const buf = await downloadAudio(v.dictationAudioKey);
+              await authorizeVisitDeliveryFinalClaim({
+                visitId: v.id,
+                actorUserId: userId,
+              });
+              const buf = await downloadAudio(manifest.dictationAudioKey);
+              await authorizeVisitDeliveryFinalClaim({
+                visitId: v.id,
+                actorUserId: userId,
+              });
               const ext = inferAudioExt(null, "dictation");
               archive.append(buf, {
                 name: `visits/${v.id}/dictation.${ext}`,
               });
             } catch (err) {
+              if (err instanceof TemplateTwinDeliveryAuthorizationError) {
+                throw err;
+              }
               console.warn(
                 `[api:patients:export] dictation download failed visit=${v.id}:`,
                 redactPhi(err instanceof Error ? err.message : err),
@@ -210,11 +258,18 @@ export const GET = withApiHandler<{ id: string }>(
             }
           }
 
-          if (v.status === "SIGNED" && exportData) {
+          if (manifest.status === "SIGNED" && exportData) {
             try {
               const pdf = await generateVisitPdf(exportData);
+              await authorizeVisitDeliveryFinalClaim({
+                visitId: v.id,
+                actorUserId: userId,
+              });
               archive.append(pdf, { name: `visits/${v.id}/signed.pdf` });
             } catch (err) {
+              if (err instanceof TemplateTwinDeliveryAuthorizationError) {
+                throw err;
+              }
               console.warn(
                 `[api:patients:export] pdf render failed visit=${v.id}:`,
                 redactPhi(err instanceof Error ? err.message : err),

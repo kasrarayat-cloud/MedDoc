@@ -28,11 +28,15 @@
 //     metadata { prevStatus, elapsedSec, processingStartedAt }.
 // ============================================================================
 
-import prisma from '@meddoc/db';
-import { TranscribeVisitStatus } from '@prisma/client';
+import prisma from "@meddoc/db";
+import { Prisma, TranscribeVisitStatus } from "@prisma/client";
 
-import { log } from '@/lib/log';
-import { logAudit } from '@/lib/audit';
+import { log } from "@/lib/log";
+import { runSerializableTransactionWithRetry } from "@/lib/db/transaction-retry";
+import { canonicalSha256 } from "@/lib/template-twin/canonical";
+import { TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE } from "@/lib/template-twin/durable-visit-exclusion";
+import { hasDurableTemplateTwinVisitProvenance } from "@/lib/template-twin/durable-visit-provenance";
+import { enqueueIdempotentTemplateTwinAudit } from "@/lib/template-twin/audit-outbox";
 
 /** Force-fail threshold. The Kasra incident's stuck visit was at 146 min
  *  elapsed when discovered; 15 min is the global JOB_TIMEOUT_MS cap and
@@ -82,10 +86,9 @@ export async function runStuckVisitWatchdog(opts?: {
       status: { in: IN_FLIGHT_STATUSES },
       processingStartedAt: { lt: cutoff },
       deletedAt: null,
-      // Staging attempts are DB-exclusive and deliberately have no
-      // Promise.race cancellation. Only their attempt ledger may publish a
-      // terminal state; the generic watchdog must never race that claim.
-      templateTwinSyntheticQaRun: { is: null },
+      // Every durable Twin marker is excluded. The canonical provider and
+      // staging ledgers own their own ambiguity-aware terminal transitions.
+      ...TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE,
     },
     select: {
       id: true,
@@ -93,6 +96,20 @@ export async function runStuckVisitWatchdog(opts?: {
       userId: true,
       user: { select: { practiceId: true } },
       processingStartedAt: true,
+      patient: { select: { externalId: true } },
+      noteTemplate: {
+        select: {
+          templateKind: true,
+          templateTwinCompiledVersion: { select: { id: true } },
+        },
+      },
+      templateTwinFill: { select: { id: true } },
+      templateTwinSyntheticQaRun: { select: { id: true } },
+      templateTwinSyntheticQaAdmission: { select: { id: true } },
+      templateTwinProviderExecutions: {
+        select: { id: true },
+        take: 1,
+      },
     },
   });
 
@@ -100,73 +117,148 @@ export async function runStuckVisitWatchdog(opts?: {
   let errors = 0;
 
   for (const v of stuck) {
-    const elapsedMs = now.getTime() - (v.processingStartedAt?.getTime() ?? now.getTime());
+    const elapsedMs =
+      now.getTime() - (v.processingStartedAt?.getTime() ?? now.getTime());
     const elapsedMin = Math.round(elapsedMs / 60_000);
     const prevStatus = v.status;
 
-    // Defensive re-read inside the update: if the worker has just
-    // (within the last few ms) finished and transitioned the row, the
-    // updateMany's WHERE constraint prevents us from clobbering its
-    // result. Belt-and-braces against a race we'd otherwise never see.
-    try {
-      const upd = await prisma.transcribeVisit.updateMany({
-        where: {
-          id: v.id,
-          status: { in: IN_FLIGHT_STATUSES },
-          processingStartedAt: { lt: cutoff },
-        },
-        data: {
-          status: TranscribeVisitStatus.FAILED,
-          failureCategory: 'transient',
-          needsReview: true,
-          reviewReason:
-            `Visit processing exceeded ${Math.round(thresholdMs / 60_000)}-min global timeout ` +
-            `(was ${prevStatus} for ${elapsedMin} min) — likely pipeline stall, retry to reprocess.`,
-          processingFinishedAt: now,
-        },
+    if (hasDurableTemplateTwinVisitProvenance(v)) {
+      errors += 1;
+      log.error("ops:stuck-visit-watchdog", "durable Twin candidate rejected", {
+        visitId: v.id,
+        prevStatus,
       });
+      continue;
+    }
 
-      if (upd.count > 0) {
-        rescued += 1;
-        log.info('ops:stuck-visit-watchdog', 'rescued', {
-          visitId: v.id,
-          prevStatus,
-          elapsedMin,
-        });
+    // The canonical visit lock serializes this ordinary-only re-census with
+    // provider ownership. The status transition and required outbox audit
+    // commit together; an outbox failure rolls the transition back.
+    try {
+      const outcome = await runSerializableTransactionWithRetry({
+        prisma,
+        operation: "stuck_visit_watchdog",
+        context: { visitId: v.id, practiceId: v.user.practiceId },
+        transaction: async (tx) => {
+          const practices = await tx.$queryRaw<Array<{ id: string }>>(
+            Prisma.sql`
+              SELECT "id" FROM "practices"
+              WHERE "id" = ${v.user.practiceId}
+              FOR UPDATE
+            `,
+          );
+          const actors = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+            SELECT "id" FROM "users"
+            WHERE "id" = ${v.userId}
+              AND "practiceId" = ${v.user.practiceId}
+            FOR UPDATE
+          `);
+          const visits = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+            SELECT "id" FROM "transcribe_visits"
+            WHERE "id" = ${v.id}
+              AND "userId" = ${v.userId}
+            FOR UPDATE
+          `);
+          if (
+            practices.length !== 1 ||
+            actors.length !== 1 ||
+            visits.length !== 1
+          ) {
+            return "RACE_LOST" as const;
+          }
+          const current = await tx.transcribeVisit.findUnique({
+            where: { id: v.id },
+            select: {
+              id: true,
+              status: true,
+              processingStartedAt: true,
+              patient: { select: { externalId: true } },
+              noteTemplate: {
+                select: {
+                  templateKind: true,
+                  templateTwinCompiledVersion: { select: { id: true } },
+                },
+              },
+              templateTwinFill: { select: { id: true } },
+              templateTwinSyntheticQaRun: { select: { id: true } },
+              templateTwinSyntheticQaAdmission: { select: { id: true } },
+              templateTwinProviderExecutions: {
+                select: { id: true },
+                take: 1,
+              },
+            },
+          });
+          if (!current || hasDurableTemplateTwinVisitProvenance(current)) {
+            return "TWIN_REJECTED" as const;
+          }
+          if (
+            !IN_FLIGHT_STATUSES.includes(current.status) ||
+            !current.processingStartedAt ||
+            current.processingStartedAt >= cutoff
+          ) {
+            return "RACE_LOST" as const;
+          }
 
-        // Audit-row write is best-effort — a failure here shouldn't
-        // un-rescue the visit. The visit row itself carries the
-        // reviewReason; the audit row is for admin forensics.
-        try {
-          await logAudit({
-            action: 'VISIT_PROCESSING_TIMEOUT',
+          const upd = await tx.transcribeVisit.updateMany({
+            where: {
+              id: v.id,
+              status: { in: IN_FLIGHT_STATUSES },
+              processingStartedAt: { lt: cutoff },
+              ...TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE,
+            },
+            data: {
+              status: TranscribeVisitStatus.FAILED,
+              failureCategory: "transient",
+              needsReview: true,
+              reviewReason:
+                `Visit processing exceeded ${Math.round(thresholdMs / 60_000)}-min global timeout ` +
+                `(was ${prevStatus} for ${elapsedMin} min) — likely pipeline stall, retry to reprocess.`,
+              processingFinishedAt: now,
+            },
+          });
+          if (upd.count !== 1) return "RACE_LOST" as const;
+
+          const processingStartedAt = current.processingStartedAt.toISOString();
+          await enqueueIdempotentTemplateTwinAudit(tx, {
+            eventKey: `visit-processing-timeout:${canonicalSha256({
+              visitId: v.id,
+              prevStatus,
+              processingStartedAt,
+            })}`,
+            practiceId: v.user.practiceId,
+            actorId: v.userId,
+            action: "VISIT_PROCESSING_TIMEOUT",
             targetId: v.id,
-            targetType: 'TranscribeVisit',
-            userId: v.userId,
-            practiceId: v.user?.practiceId ?? null,
-            success: false,
+            targetType: "TranscribeVisit",
             metadata: {
               prevStatus,
               elapsedMin,
               thresholdMin: Math.round(thresholdMs / 60_000),
-              processingStartedAt: v.processingStartedAt?.toISOString() ?? null,
+              processingStartedAt,
             },
           });
-        } catch (auditErr) {
-          // Worker context — logAudit's auth() pull may fail outside
-          // a request scope. The visit transition succeeded; just
-          // note the audit gap.
-          errors += 1;
-          log.warn('ops:stuck-visit-watchdog', 'audit write failed', {
-            visitId: v.id,
-            err: auditErr instanceof Error ? auditErr.message : String(auditErr),
-          });
-        }
+          return "RESCUED" as const;
+        },
+      });
+
+      if (outcome === "TWIN_REJECTED") {
+        errors += 1;
+        log.error(
+          "ops:stuck-visit-watchdog",
+          "durable Twin appeared under lock",
+          { visitId: v.id, prevStatus },
+        );
+      } else if (outcome === "RESCUED") {
+        rescued += 1;
+        log.info("ops:stuck-visit-watchdog", "rescued", {
+          visitId: v.id,
+          prevStatus,
+          elapsedMin,
+        });
       }
-      // upd.count === 0 means the worker won the race — no action needed.
     } catch (err) {
       errors += 1;
-      log.error('ops:stuck-visit-watchdog', 'rescue failed', {
+      log.error("ops:stuck-visit-watchdog", "rescue failed", {
         visitId: v.id,
         prevStatus,
         elapsedMin,

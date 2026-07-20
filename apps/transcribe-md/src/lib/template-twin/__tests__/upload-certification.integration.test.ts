@@ -1,7 +1,7 @@
-import { createHash } from 'node:crypto';
+import { createHash } from "node:crypto";
 
-import { Prisma } from '@prisma/client';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { Prisma } from "@prisma/client";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   audit: vi.fn(),
@@ -26,14 +26,19 @@ const mocks = vi.hoisted(() => ({
   ledgerFind: vi.fn(),
   outboxCreate: vi.fn(),
   finalRollout: vi.fn(),
+  providerLogicalAttempt: vi.fn(),
+  providerOwnershipContext: vi.fn(() => null),
+  providerOwnershipRun: vi.fn(
+    async (_context: unknown, callback: () => Promise<unknown>) => callback(),
+  ),
 }));
 
-vi.mock('@meddoc/ai', () => ({
+vi.mock("@meddoc/ai", () => ({
   TEMPLATE_TWIN_SYNTHETIC_QA_FIXTURE_VERSION:
-    'template-twin-staging-safe-docx/1.0.0',
+    "template-twin-staging-safe-docx/1.0.0",
   TEMPLATE_TWIN_SYNTHETIC_QA_TRANSCRIPT:
-    'Chief concern is synthetic wrist discomfort.',
-  delimiterSystemSuffix: () => '',
+    "Chief concern is synthetic wrist discomfort.",
+  delimiterSystemSuffix: () => "",
   getTemplateTwinSyntheticQaProviderContext: () => null,
   modelClient: { complete: mocks.modelComplete },
   wrapAsData: (value: string) => ({
@@ -42,30 +47,30 @@ vi.mock('@meddoc/ai', () => ({
   }),
 }));
 
-vi.mock('../provider-ownership', () => ({
+vi.mock("../provider-ownership", () => ({
+  getTemplateTwinProviderOwnershipContext: mocks.providerOwnershipContext,
   requireTemplateTwinProviderOwnershipContext: vi.fn(),
+  resolveTemplateTwinProviderLogicalAttempt: mocks.providerLogicalAttempt,
   runTemplateTwinOwnedModelComplete: vi.fn(
     async (input: {
       args: unknown;
       client: { complete(args: unknown): Promise<unknown> };
     }) => input.client.complete(input.args),
   ),
-  runWithTemplateTwinProviderOwnershipContext: vi.fn(
-    async (_context: unknown, callback: () => Promise<unknown>) => callback(),
-  ),
+  runWithTemplateTwinProviderOwnershipContext: mocks.providerOwnershipRun,
   buildTemplateTwinProviderOwnershipReceipt: vi.fn(() => ({
     evidence: {
-      contractVersion: 'template-twin-provider-ownership-receipt-v2',
-      practiceId: 'practice-stateful-synthetic',
-      actorUserId: 'doctor-stateful-synthetic',
-      providerMode: 'LIVE',
+      contractVersion: "template-twin-provider-ownership-receipt-v2",
+      practiceId: "practice-stateful-synthetic",
+      actorUserId: "doctor-stateful-synthetic",
+      providerMode: "LIVE",
       executions: [],
     },
-    sha256: 'c'.repeat(64),
+    sha256: "c".repeat(64),
   })),
 }));
 
-vi.mock('@meddoc/db', () => ({
+vi.mock("@meddoc/db", () => ({
   default: {
     $transaction: mocks.transaction,
     noteTemplate: {
@@ -98,14 +103,14 @@ vi.mock('@meddoc/db', () => ({
   },
 }));
 
-vi.mock('@/lib/audit', () => ({ logAudit: mocks.audit }));
-vi.mock('@/worker/layers/03-extract-entities', () => ({
+vi.mock("@/lib/audit", () => ({ logAudit: mocks.audit }));
+vi.mock("@/worker/layers/03-extract-entities", () => ({
   extractTemplateTwinDictationEntities: mocks.extractDictation,
   extractTemplateTwinTextEntities: mocks.extractText,
 }));
 
-vi.mock('../rollout', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../rollout')>();
+vi.mock("../rollout", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../rollout")>();
   return {
     ...actual,
     lockTemplateTwinRolloutForFinalClaim: mocks.finalRollout,
@@ -115,42 +120,42 @@ vi.mock('../rollout', async (importOriginal) => {
 import {
   certifyAndActivateTemplateTwin,
   updateTemplateTwinMappings,
-} from '../certification-lifecycle';
-import { createTemplateTwinDraft } from '../create-draft';
-import type { SemanticMapping } from '../ir';
-import { templateTwinMappingsSha256 } from '../mapping-hash';
+} from "../certification-lifecycle";
+import { createTemplateTwinDraft } from "../create-draft";
+import type { SemanticMapping } from "../ir";
+import { templateTwinMappingsSha256 } from "../mapping-hash";
 import {
   createTemplateTwinArtifactStore,
   type TemplateTwinObjectClient,
-} from '../storage';
-import { runTemplateTwinSyntheticTest } from '../synthetic-test';
-import { TemplateTwinSyntheticEvidenceScanUnavailableError } from '../synthetic-evidence-gate';
-import { readTemplateTwinWorkspace } from '../workspace-read';
-import { TEMPLATE_TWIN_QA_STORAGE_EXCEPTION_ATTESTATION } from '../storage/readiness';
+} from "../storage";
+import { runTemplateTwinSyntheticTest } from "../synthetic-test";
+import { TemplateTwinSyntheticEvidenceScanUnavailableError } from "../synthetic-evidence-gate";
+import { readTemplateTwinWorkspace } from "../workspace-read";
+import { TEMPLATE_TWIN_QA_STORAGE_EXCEPTION_ATTESTATION } from "../storage/readiness";
 import {
   TEMPLATE_TWIN_MALWARE_SCAN_PROFILE,
   type TemplateTwinMalwareScanEvidence,
   type TemplateTwinMalwareScanner,
-} from '../malware-scan';
-import { minimizeTemplateTwinSourceMetadata } from '../source-metadata';
-import { compileTemplateDocx } from '../../note-template-docx/compiler';
+} from "../malware-scan";
+import { minimizeTemplateTwinSourceMetadata } from "../source-metadata";
+import { compileTemplateDocx } from "../../note-template-docx/compiler";
 import {
   buildTemplateTwinIntegrationFixture,
   SYNTHETIC_CONTEXT,
   SYNTHETIC_ENTITIES,
-} from './integration-fixture';
+} from "./integration-fixture";
 
 const ACTOR = {
-  userId: 'doctor-stateful-synthetic',
-  userEmail: 'stateful-doctor@synthetic.test',
-  practiceId: 'practice-stateful-synthetic',
+  userId: "doctor-stateful-synthetic",
+  userEmail: "stateful-doctor@synthetic.test",
+  practiceId: "practice-stateful-synthetic",
   rolloutToken: {
-    practiceId: 'practice-stateful-synthetic',
+    practiceId: "practice-stateful-synthetic",
     globalGeneration: BigInt(13),
     practiceGeneration: BigInt(21),
   },
 };
-const PRIOR_TEMPLATE_ID = 'prior-structured-template';
+const PRIOR_TEMPLATE_ID = "prior-structured-template";
 
 interface MemoryMapping {
   id: string;
@@ -306,8 +311,8 @@ interface StoredObject {
 let database: MemoryDatabase;
 
 function record(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('Expected synthetic Prisma record');
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Expected synthetic Prisma record");
   }
   return value as Record<string, unknown>;
 }
@@ -317,21 +322,21 @@ function nullableDatabaseValue(value: unknown): unknown {
 }
 
 function sha256(value: Uint8Array | string): string {
-  return createHash('sha256').update(value).digest('hex');
+  return createHash("sha256").update(value).digest("hex");
 }
 
 function cleanMalwareScanner(source: Uint8Array): TemplateTwinMalwareScanner {
   const unsigned = {
     profileVersion: TEMPLATE_TWIN_MALWARE_SCAN_PROFILE,
-    scanner: 'clamav-clamd' as const,
-    transport: 'unix-domain-socket' as const,
-    engineVersion: '1.4.3',
-    signatureVersion: '27888',
+    scanner: "clamav-clamd" as const,
+    transport: "unix-domain-socket" as const,
+    engineVersion: "1.4.3",
+    signatureVersion: "27888",
     sourceSha256: sha256(source),
     sourceSizeBytes: source.byteLength,
-    verdict: 'clean' as const,
+    verdict: "clean" as const,
     threatNameSha256: null,
-    scannedAt: '2026-07-19T00:00:00.000Z',
+    scannedAt: "2026-07-19T00:00:00.000Z",
   };
   const evidence: TemplateTwinMalwareScanEvidence = {
     ...unsigned,
@@ -340,31 +345,36 @@ function cleanMalwareScanner(source: Uint8Array): TemplateTwinMalwareScanner {
   return { scan: vi.fn().mockResolvedValue(evidence) };
 }
 
-function templateForQuery(args: unknown): MemoryTemplate | null | Record<string, unknown> {
+function templateForQuery(
+  args: unknown,
+): MemoryTemplate | null | Record<string, unknown> {
   const where = record(record(args).where);
   if (where.isSystemDefault === true) {
     return {
-      sections: [{ key: 'subjective', label: 'Subjective', order: 1 }],
-      styleProfile: { tone: 'concise' },
+      sections: [{ key: "subjective", label: "Subjective", order: 1 }],
+      styleProfile: { tone: "concise" },
       specialtyBaseline: null,
     };
   }
-  const id = typeof where.id === 'string' ? where.id : null;
-  const template = id ? database.templates.get(id) ?? null : null;
+  const id = typeof where.id === "string" ? where.id : null;
+  const template = id ? (database.templates.get(id) ?? null) : null;
   if (!template) return null;
-  if (typeof where.doctorId === 'string' && template.doctorId !== where.doctorId) {
+  if (
+    typeof where.doctorId === "string" &&
+    template.doctorId !== where.doctorId
+  ) {
     return null;
   }
   if (
-    typeof where.templateKind === 'string' &&
+    typeof where.templateKind === "string" &&
     template.templateKind !== where.templateKind
   ) {
     return null;
   }
-  if (typeof where.status === 'string' && template.status !== where.status) {
+  if (typeof where.status === "string" && template.status !== where.status) {
     return null;
   }
-  if (typeof where.version === 'number' && template.version !== where.version) {
+  if (typeof where.version === "number" && template.version !== where.version) {
     return null;
   }
   return template;
@@ -386,7 +396,7 @@ function configureInMemoryPrisma(): void {
     const quarantine = database.quarantines.get(
       String(data.quarantineArtifactId),
     );
-    if (!quarantine) throw new Error('Synthetic quarantine relation missing');
+    if (!quarantine) throw new Error("Synthetic quarantine relation missing");
     const source = {
       ...data,
       quarantineArtifact: quarantine,
@@ -414,21 +424,18 @@ function configureInMemoryPrisma(): void {
     if (!quarantine) return { count: 0 };
     const expectedStatus = where.status;
     if (
-      typeof expectedStatus === 'string' &&
+      typeof expectedStatus === "string" &&
       quarantine.status !== expectedStatus
     ) {
       return { count: 0 };
     }
     if (
       expectedStatus &&
-      typeof expectedStatus === 'object' &&
+      typeof expectedStatus === "object" &&
       !Array.isArray(expectedStatus)
     ) {
       const statuses = record(expectedStatus).in;
-      if (
-        Array.isArray(statuses) &&
-        !statuses.includes(quarantine.status)
-      ) {
+      if (Array.isArray(statuses) && !statuses.includes(quarantine.status)) {
         return { count: 0 };
       }
     }
@@ -439,23 +446,30 @@ function configureInMemoryPrisma(): void {
     const data = record(record(args).data);
     const source = database.sources.get(String(data.sourceArtifactId));
     const template = database.templates.get(String(data.noteTemplateId));
-    if (!source || !template) throw new Error('Synthetic relation missing');
+    if (!source || !template) throw new Error("Synthetic relation missing");
     const nestedFields = record(data.fields).create;
-    if (!Array.isArray(nestedFields)) throw new Error('Synthetic fields missing');
+    if (!Array.isArray(nestedFields))
+      throw new Error("Synthetic fields missing");
     const compiledId = String(data.id);
     const fields = nestedFields.map((rawField, index): MemoryField => {
       const field = record(rawField);
       const mappingData = record(record(field.mapping).create);
       const fieldId = `field-stateful-${index + 1}`;
       const mapping: MemoryMapping = {
-        ...(mappingData as unknown as Omit<MemoryMapping, 'id' | 'fieldDefinitionId'>),
+        ...(mappingData as unknown as Omit<
+          MemoryMapping,
+          "id" | "fieldDefinitionId"
+        >),
         id: `mapping-stateful-${index + 1}`,
         fieldDefinitionId: fieldId,
         approvedById: null,
         approvedAt: null,
       };
       return {
-        ...(field as unknown as Omit<MemoryField, 'id' | 'compiledVersionId' | 'mapping'>),
+        ...(field as unknown as Omit<
+          MemoryField,
+          "id" | "compiledVersionId" | "mapping"
+        >),
         id: fieldId,
         compiledVersionId: compiledId,
         intentDecisions: [],
@@ -465,22 +479,22 @@ function configureInMemoryPrisma(): void {
     const compiled: MemoryCompiled = {
       ...(data as unknown as Omit<
         MemoryCompiled,
-        | 'compiledAt'
-        | 'latestSyntheticTestManifest'
-        | 'latestTestMappingsSha256'
-        | 'latestTestFieldIntentsSha256'
-        | 'latestTestOutputObjectKey'
-        | 'latestTestOutputVersionId'
-        | 'latestTestOutputEtag'
-        | 'latestTestOutputSha256'
-        | 'latestTestStaticContentSha256'
-        | 'latestTestRoundTrip'
-        | 'latestTestVerifiedAt'
-        | 'sourceArtifact'
-        | 'fields'
-        | 'certification'
+        | "compiledAt"
+        | "latestSyntheticTestManifest"
+        | "latestTestMappingsSha256"
+        | "latestTestFieldIntentsSha256"
+        | "latestTestOutputObjectKey"
+        | "latestTestOutputVersionId"
+        | "latestTestOutputEtag"
+        | "latestTestOutputSha256"
+        | "latestTestStaticContentSha256"
+        | "latestTestRoundTrip"
+        | "latestTestVerifiedAt"
+        | "sourceArtifact"
+        | "fields"
+        | "certification"
       >),
-      compiledAt: new Date('2026-07-15T10:00:00.000Z'),
+      compiledAt: new Date("2026-07-15T10:00:00.000Z"),
       latestSyntheticTestManifest: null,
       latestTestMappingsSha256: null,
       latestTestFieldIntentsSha256: null,
@@ -511,7 +525,7 @@ function configureInMemoryPrisma(): void {
       Object.assign(field.mapping, data);
       return field.mapping;
     }
-    throw new Error('Synthetic mapping not found');
+    throw new Error("Synthetic mapping not found");
   });
   mocks.compiledFindUnique.mockImplementation(async (args: unknown) => {
     const id = String(record(record(args).where).id);
@@ -521,7 +535,7 @@ function configureInMemoryPrisma(): void {
     const input = record(args);
     const id = String(record(input.where).id);
     const compiled = database.compiled.get(id);
-    if (!compiled) throw new Error('Synthetic compilation not found');
+    if (!compiled) throw new Error("Synthetic compilation not found");
     for (const [key, value] of Object.entries(record(input.data))) {
       (compiled as unknown as Record<string, unknown>)[key] =
         nullableDatabaseValue(value);
@@ -560,18 +574,18 @@ function configureInMemoryPrisma(): void {
     const input = record(args);
     const id = String(record(input.where).id);
     const template = database.templates.get(id);
-    if (!template) throw new Error('Synthetic template not found');
+    if (!template) throw new Error("Synthetic template not found");
     Object.assign(template, record(input.data));
     return template;
   });
   mocks.certificationCreate.mockImplementation(async (args: unknown) => {
     const data = record(record(args).data);
     const compiled = database.compiled.get(String(data.compiledVersionId));
-    if (!compiled) throw new Error('Synthetic compilation not found');
+    if (!compiled) throw new Error("Synthetic compilation not found");
     const certification: MemoryCertification = {
-      ...(data as unknown as Omit<MemoryCertification, 'id' | 'certifiedAt'>),
-      id: 'certification-stateful-synthetic',
-      certifiedAt: new Date('2026-07-15T12:00:00.000Z'),
+      ...(data as unknown as Omit<MemoryCertification, "id" | "certifiedAt">),
+      id: "certification-stateful-synthetic",
+      certifiedAt: new Date("2026-07-15T12:00:00.000Z"),
     };
     compiled.certification = certification;
     database.certifications.set(certification.id, certification);
@@ -580,6 +594,15 @@ function configureInMemoryPrisma(): void {
   mocks.transaction.mockImplementation(
     async (callback: (client: unknown) => Promise<unknown>) =>
       callback({
+        $queryRaw: vi.fn().mockImplementation(
+          async (query: { strings?: readonly string[] }) => {
+            const sql = query.strings?.join(" ") ?? "";
+            if (sql.includes('FROM "practices" practice')) {
+              return [{ id: ACTOR.practiceId, isActive: true }];
+            }
+            return [{ id: ACTOR.userId, email: ACTOR.userEmail }];
+          },
+        ),
         noteTemplate: {
           create: mocks.noteCreate,
           findFirst: mocks.noteFindFirst,
@@ -611,28 +634,32 @@ function configureInMemoryPrisma(): void {
 function createInMemoryObjectClient() {
   const objects = new Map<string, StoredObject>();
   let putCount = 0;
-  const missing = () => Object.assign(new Error('Synthetic object missing'), { code: 'NotFound' });
+  const missing = () =>
+    Object.assign(new Error("Synthetic object missing"), { code: "NotFound" });
   const client: TemplateTwinObjectClient = {
     async bucketExists() {
       return true;
     },
     async getBucketPolicy() {
-      throw Object.assign(new Error('Synthetic bucket has no anonymous policy'), {
-        code: 'NoSuchBucketPolicy',
-      });
+      throw Object.assign(
+        new Error("Synthetic bucket has no anonymous policy"),
+        {
+          code: "NoSuchBucketPolicy",
+        },
+      );
     },
     async getBucketVersioning() {
-      return { Status: 'Enabled' };
+      return { Status: "Enabled" };
     },
     async getObjectLockConfig() {
-      return { objectLockEnabled: 'Enabled' };
+      return { objectLockEnabled: "Enabled" };
     },
     async statObject(_bucket, objectKey, options) {
       const item = objects.get(objectKey);
       if (!item) throw missing();
       if (options?.versionId && options.versionId !== item.versionId) {
-        throw Object.assign(new Error('Synthetic object version missing'), {
-          code: 'NoSuchVersion',
+        throw Object.assign(new Error("Synthetic object version missing"), {
+          code: "NoSuchVersion",
         });
       }
       return {
@@ -644,8 +671,8 @@ function createInMemoryObjectClient() {
     },
     async putObject(_bucket, objectKey, bytes, _sizeBytes, metadata) {
       if (objects.has(objectKey)) {
-        throw Object.assign(new Error('Synthetic put-once collision'), {
-          code: 'PreconditionFailed',
+        throw Object.assign(new Error("Synthetic put-once collision"), {
+          code: "PreconditionFailed",
           statusCode: 412,
         });
       }
@@ -664,8 +691,8 @@ function createInMemoryObjectClient() {
       const item = objects.get(objectKey);
       if (!item) throw missing();
       if (options?.versionId && options.versionId !== item.versionId) {
-        throw Object.assign(new Error('Synthetic object version missing'), {
-          code: 'NoSuchVersion',
+        throw Object.assign(new Error("Synthetic object version missing"), {
+          code: "NoSuchVersion",
         });
       }
       return (async function* stream() {
@@ -679,14 +706,15 @@ function createInMemoryObjectClient() {
 function proposalMappings(mappings: readonly SemanticMapping[]) {
   return mappings.map((mapping) => ({
     ...mapping,
-    status: 'recognized' as const,
+    status: "recognized" as const,
     practiceDefault: null,
   }));
 }
 
 function compiledForTemplate(noteTemplateId: string): MemoryCompiled {
-  const compiled = database.templates.get(noteTemplateId)?.templateTwinCompiledVersion;
-  if (!compiled) throw new Error('Synthetic compiled version missing');
+  const compiled =
+    database.templates.get(noteTemplateId)?.templateTwinCompiledVersion;
+  if (!compiled) throw new Error("Synthetic compiled version missing");
   return compiled;
 }
 
@@ -696,6 +724,7 @@ beforeEach(() => {
     allowed: true,
     token: ACTOR.rolloutToken,
   });
+  mocks.providerLogicalAttempt.mockResolvedValue(1);
   database = {
     templates: new Map(),
     sources: new Map(),
@@ -706,24 +735,24 @@ beforeEach(() => {
   database.templates.set(PRIOR_TEMPLATE_ID, {
     id: PRIOR_TEMPLATE_ID,
     doctorId: ACTOR.userId,
-    name: 'Prior structured template',
-    encounterType: 'Synthetic stateful visit',
+    name: "Prior structured template",
+    encounterType: "Synthetic stateful visit",
     sections: [],
     styleProfile: {},
     specialtyBaseline: null,
     version: 1,
-    status: 'active',
+    status: "active",
     isSystemDefault: false,
-    lineageId: 'prior-structured-lineage',
+    lineageId: "prior-structured-lineage",
     parentVersionId: null,
-    templateKind: 'structured',
+    templateKind: "structured",
     templateTwinCompiledVersion: null,
   });
   configureInMemoryPrisma();
   mocks.audit.mockResolvedValue(undefined);
   mocks.ledgerUpdate.mockResolvedValue({ count: 1 });
   mocks.ledgerFind.mockResolvedValue(null);
-  mocks.outboxCreate.mockResolvedValue({ id: 'outbox-stateful-synthetic' });
+  mocks.outboxCreate.mockResolvedValue({ id: "outbox-stateful-synthetic" });
   mocks.extractText.mockResolvedValue({
     contextText: SYNTHETIC_CONTEXT,
     entities: SYNTHETIC_ENTITIES,
@@ -734,8 +763,8 @@ beforeEach(() => {
   });
 });
 
-describe('Template Twin stateful upload-to-certification integration', () => {
-  it('carries one immutable DOCX through real compile, mapping, proof invalidation, rerender, and activation', async () => {
+describe("Template Twin stateful upload-to-certification integration", () => {
+  it("carries one immutable DOCX through real compile, mapping, proof invalidation, rerender, and activation", async () => {
     const fixture = await buildTemplateTwinIntegrationFixture();
     const minimizedFixture = await minimizeTemplateTwinSourceMetadata(
       fixture.source,
@@ -747,29 +776,31 @@ describe('Template Twin stateful upload-to-certification integration', () => {
     }));
     mocks.modelComplete.mockImplementation(
       async (request: { purpose: string }) => {
-        if (request.purpose === 'tm_template_phi_scan') {
+        if (request.purpose === "tm_template_phi_scan") {
           return { phiFields: [], anyUncertain: false };
         }
-        if (request.purpose === 'tm_template_synthetic_phi_scan') {
+        if (request.purpose === "tm_template_synthetic_phi_scan") {
           return {
             directIdentifierClasses: [],
             appearsExplicitlySynthetic: true,
             anyUncertain: false,
           };
         }
-        if (request.purpose === 'tm_template_parse') {
+        if (request.purpose === "tm_template_parse") {
           return { mappings: proposalMappings(admittedMappings) };
         }
-        throw new Error(`Unexpected synthetic model purpose: ${request.purpose}`);
+        throw new Error(
+          `Unexpected synthetic model purpose: ${request.purpose}`,
+        );
       },
     );
     const memory = createInMemoryObjectClient();
     const storage = createTemplateTwinArtifactStore({
-      bucket: 'synthetic-template-artifacts-qa',
+      bucket: "synthetic-template-artifacts-qa",
       clientFactory: () => memory.client,
-      idFactory: () => 'immutable-synthetic-artifact',
+      idFactory: () => "immutable-synthetic-artifact",
       readinessEnv: {
-        TEMPLATE_TWIN_STORAGE_PROFILE: 'qa',
+        TEMPLATE_TWIN_STORAGE_PROFILE: "qa",
         TEMPLATE_TWIN_QA_STORAGE_ENCRYPTION_AT_REST_ATTESTATION:
           TEMPLATE_TWIN_QA_STORAGE_EXCEPTION_ATTESTATION,
         TEMPLATE_TWIN_QA_STORAGE_TLS_EXPECTATION_ATTESTATION:
@@ -780,8 +811,8 @@ describe('Template Twin stateful upload-to-certification integration', () => {
           TEMPLATE_TWIN_QA_STORAGE_EXCEPTION_ATTESTATION,
         TEMPLATE_TWIN_QA_STORAGE_BACKUP_RESTORE_ATTESTATION:
           TEMPLATE_TWIN_QA_STORAGE_EXCEPTION_ATTESTATION,
-        MOCK_AI_CALLS: 'true',
-        DATABASE_URL: 'postgresql://synthetic@postgres/meddoc_qa_test',
+        MOCK_AI_CALLS: "true",
+        DATABASE_URL: "postgresql://synthetic@postgres/meddoc_qa_test",
       },
       objectLedgerClient: null,
     });
@@ -789,9 +820,9 @@ describe('Template Twin stateful upload-to-certification integration', () => {
     const draft = await createTemplateTwinDraft({
       source: fixture.source,
       identity: {
-        name: 'Synthetic stateful intake',
-        encounterType: 'Synthetic stateful visit',
-        versionDescription: 'Initial synthetic QA version',
+        name: "Synthetic stateful intake",
+        encounterType: "Synthetic stateful visit",
+        versionDescription: "Initial synthetic QA version",
       },
       actor: ACTOR,
       storage,
@@ -804,7 +835,7 @@ describe('Template Twin stateful upload-to-certification integration', () => {
     });
     expect(draftWorkspace).not.toBeNull();
     expect(draftWorkspace).toMatchObject({
-      template: { status: 'draft', certificationStatus: 'needs_confirmation' },
+      template: { status: "draft", certificationStatus: "needs_confirmation" },
       stats: {
         totalFields: admittedIr.fields.length,
         dropdowns: 1,
@@ -817,7 +848,7 @@ describe('Template Twin stateful upload-to-certification integration', () => {
     expect(draftWorkspace!.fields.map((item) => item.field.fieldId)).toEqual(
       admittedIr.fields.map((field) => field.fieldId),
     );
-    expect(database.templates.get(PRIOR_TEMPLATE_ID)?.status).toBe('active');
+    expect(database.templates.get(PRIOR_TEMPLATE_ID)?.status).toBe("active");
 
     await expect(
       certifyAndActivateTemplateTwin({
@@ -826,8 +857,8 @@ describe('Template Twin stateful upload-to-certification integration', () => {
         expectedMappingsSha256: draftWorkspace!.mappingsSha256,
         expectedFieldIntentsSha256: draftWorkspace!.fieldIntentsSha256,
       }),
-    ).rejects.toMatchObject({ code: 'CERTIFICATION_BLOCKED' });
-    expect(database.templates.get(draft.noteTemplateId)?.status).toBe('draft');
+    ).rejects.toMatchObject({ code: "CERTIFICATION_BLOCKED" });
+    expect(database.templates.get(draft.noteTemplateId)?.status).toBe("draft");
     expect(database.certifications.size).toBe(0);
 
     const confirmed = await updateTemplateTwinMappings({
@@ -841,10 +872,14 @@ describe('Template Twin stateful upload-to-certification integration', () => {
     expect(confirmed.mappingsSha256).toBe(
       templateTwinMappingsSha256(admittedMappings),
     );
-    expect(confirmed.fields.every((item) => item.mapping.status === 'certified')).toBe(true);
+    expect(
+      confirmed.fields.every((item) => item.mapping.status === "certified"),
+    ).toBe(true);
 
+    const ownershipRunsBeforeFailedScan =
+      mocks.providerOwnershipRun.mock.calls.length;
     mocks.modelComplete.mockRejectedValueOnce(
-      new Error('synthetic privacy provider unavailable'),
+      new Error("synthetic privacy provider unavailable"),
     );
     await expect(
       runTemplateTwinSyntheticTest({
@@ -853,12 +888,17 @@ describe('Template Twin stateful upload-to-certification integration', () => {
         expectedMappingsSha256: confirmed.mappingsSha256,
         expectedFieldIntentsSha256: confirmed.fieldIntentsSha256,
         encounterText: SYNTHETIC_CONTEXT,
-        encounterMode: 'text',
+        encounterMode: "text",
         storage,
       }),
-    ).rejects.toBeInstanceOf(
-      TemplateTwinSyntheticEvidenceScanUnavailableError,
-    );
+    ).rejects.toBeInstanceOf(TemplateTwinSyntheticEvidenceScanUnavailableError);
+    expect(
+      mocks.providerOwnershipRun.mock.calls[ownershipRunsBeforeFailedScan]?.[0],
+    ).toMatchObject({ logicalAttempt: 1 });
+    // A definite terminal failure is never replayed. The next explicit
+    // physician action receives a fresh durable business attempt; subsequent
+    // duplicate/replayed requests keep that same attempt identity.
+    mocks.providerLogicalAttempt.mockResolvedValue(2);
     expect(compiledForTemplate(draft.noteTemplateId)).toMatchObject({
       latestSyntheticTestManifest: null,
       latestTestOutputObjectKey: null,
@@ -872,14 +912,15 @@ describe('Template Twin stateful upload-to-certification integration', () => {
         expectedMappingsSha256: confirmed.mappingsSha256,
         expectedFieldIntentsSha256: confirmed.fieldIntentsSha256,
       }),
-    ).rejects.toMatchObject({ code: 'CERTIFICATION_BLOCKED' });
-    expect(database.templates.get(draft.noteTemplateId)?.status).toBe('draft');
+    ).rejects.toMatchObject({ code: "CERTIFICATION_BLOCKED" });
+    expect(database.templates.get(draft.noteTemplateId)?.status).toBe("draft");
 
-    const sourceClaimCallsBeforeStaleProof = mocks.ledgerUpdate.mock.calls.length;
+    const sourceClaimCallsBeforeStaleProof =
+      mocks.ledgerUpdate.mock.calls.length;
     mocks.finalRollout.mockResolvedValueOnce({
       allowed: false,
-      code: 'TEMPLATE_TWIN_GLOBAL_GENERATION_STALE',
-      reason: 'Synthetic global generation changed.',
+      code: "TEMPLATE_TWIN_GLOBAL_GENERATION_STALE",
+      reason: "Synthetic global generation changed.",
       currentToken: {
         practiceId: ACTOR.practiceId,
         globalGeneration: BigInt(14),
@@ -893,14 +934,15 @@ describe('Template Twin stateful upload-to-certification integration', () => {
         expectedMappingsSha256: confirmed.mappingsSha256,
         expectedFieldIntentsSha256: confirmed.fieldIntentsSha256,
         encounterText: SYNTHETIC_CONTEXT,
-        encounterMode: 'text',
+        encounterMode: "text",
         storage,
       }),
     ).rejects.toMatchObject({
-      code: 'ROLLOUT_CHANGED',
-      message: expect.stringContaining(
-        'TEMPLATE_TWIN_GLOBAL_GENERATION_STALE',
-      ),
+      code: "ROLLOUT_CHANGED",
+      message: expect.stringContaining("TEMPLATE_TWIN_GLOBAL_GENERATION_STALE"),
+    });
+    expect(mocks.providerOwnershipRun.mock.calls.at(-1)?.[0]).toMatchObject({
+      logicalAttempt: 2,
     });
     expect(compiledForTemplate(draft.noteTemplateId)).toMatchObject({
       latestSyntheticTestManifest: null,
@@ -917,18 +959,20 @@ describe('Template Twin stateful upload-to-certification integration', () => {
       expectedMappingsSha256: confirmed.mappingsSha256,
       expectedFieldIntentsSha256: confirmed.fieldIntentsSha256,
       encounterText: SYNTHETIC_CONTEXT,
-      encounterMode: 'text',
+      encounterMode: "text",
       storage,
     });
     expect(firstProof.latestSyntheticTest).toMatchObject({
       mappingsSha256: confirmed.mappingsSha256,
       roundTripVerified: true,
     });
-    expect(compiledForTemplate(draft.noteTemplateId).latestTestRoundTrip).toMatchObject({
+    expect(
+      compiledForTemplate(draft.noteTemplateId).latestTestRoundTrip,
+    ).toMatchObject({
       verified: true,
-      packageCheck: 'verified',
-      fieldCheck: 'verified',
-      staticRegionCheck: 'verified',
+      packageCheck: "verified",
+      fieldCheck: "verified",
+      staticRegionCheck: "verified",
       sourceSha256: admittedIr.source.sha256,
     });
 
@@ -936,7 +980,10 @@ describe('Template Twin stateful upload-to-certification integration', () => {
       index === 0
         ? {
             ...item.mapping,
-            approvedSynonyms: [...item.mapping.approvedSynonyms, 'chief_concern'],
+            approvedSynonyms: [
+              ...item.mapping.approvedSynonyms,
+              "chief_concern",
+            ],
           }
         : item.mapping,
     );
@@ -970,10 +1017,10 @@ describe('Template Twin stateful upload-to-certification integration', () => {
         expectedMappingsSha256: firstProof.mappingsSha256,
         expectedFieldIntentsSha256: firstProof.fieldIntentsSha256,
         encounterText: SYNTHETIC_CONTEXT,
-        encounterMode: 'text',
+        encounterMode: "text",
         storage,
       }),
-    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    ).rejects.toMatchObject({ code: "CONFLICT" });
     await expect(
       certifyAndActivateTemplateTwin({
         noteTemplateId: draft.noteTemplateId,
@@ -981,8 +1028,8 @@ describe('Template Twin stateful upload-to-certification integration', () => {
         expectedMappingsSha256: changedHash,
         expectedFieldIntentsSha256: invalidated.fieldIntentsSha256,
       }),
-    ).rejects.toMatchObject({ code: 'CERTIFICATION_BLOCKED' });
-    expect(database.templates.get(draft.noteTemplateId)?.status).toBe('draft');
+    ).rejects.toMatchObject({ code: "CERTIFICATION_BLOCKED" });
+    expect(database.templates.get(draft.noteTemplateId)?.status).toBe("draft");
 
     const refreshedProof = await runTemplateTwinSyntheticTest({
       noteTemplateId: draft.noteTemplateId,
@@ -990,7 +1037,7 @@ describe('Template Twin stateful upload-to-certification integration', () => {
       expectedMappingsSha256: changedHash,
       expectedFieldIntentsSha256: invalidated.fieldIntentsSha256,
       encounterText: SYNTHETIC_CONTEXT,
-      encounterMode: 'text',
+      encounterMode: "text",
       storage,
     });
     expect(refreshedProof.latestSyntheticTest).toMatchObject({
@@ -1007,26 +1054,28 @@ describe('Template Twin stateful upload-to-certification integration', () => {
         refreshedProof.latestSyntheticTest!.provenanceSha256,
     });
     expect(certified.template).toMatchObject({
-      status: 'active',
-      certificationStatus: 'certified',
+      status: "active",
+      certificationStatus: "certified",
     });
     expect(certified.canEdit).toBe(false);
-    expect(database.templates.get(PRIOR_TEMPLATE_ID)?.status).toBe('inactive');
+    expect(database.templates.get(PRIOR_TEMPLATE_ID)?.status).toBe("inactive");
     expect(database.certifications.size).toBe(1);
-    expect(compiledForTemplate(draft.noteTemplateId).certification).toMatchObject({
+    expect(
+      compiledForTemplate(draft.noteTemplateId).certification,
+    ).toMatchObject({
       compiledStructureSha256: admittedIr.structureSha256,
       approvedMappingsSha256: changedHash,
       testOutputSha256: refreshedProof.latestSyntheticTest!.outputSha256,
     });
 
     const sourceObjects = [...memory.objects.entries()].filter(([key]) =>
-      key.includes('/sources/'),
+      key.includes("/sources/"),
     );
     const quarantineObjects = [...memory.objects.entries()].filter(([key]) =>
-      key.includes('/quarantine/'),
+      key.includes("/quarantine/"),
     );
     const outputObjects = [...memory.objects.entries()].filter(([key]) =>
-      key.includes('/outputs/'),
+      key.includes("/outputs/"),
     );
     expect(quarantineObjects).toHaveLength(1);
     expect(quarantineObjects[0]![1].bytes).toEqual(fixture.source);
@@ -1038,33 +1087,36 @@ describe('Template Twin stateful upload-to-certification integration', () => {
       outputObjects.every(([, artifact]) => artifact.bytes.byteLength > 0),
     ).toBe(true);
     expect(memory.getPutCount()).toBe(5);
-    expect(mocks.modelComplete.mock.calls.map((call) => call[0].purpose)).toEqual([
-      'tm_template_phi_scan',
-      'tm_template_parse',
-      'tm_template_synthetic_phi_scan',
-      'tm_template_synthetic_phi_scan',
-      'tm_template_synthetic_phi_scan',
-      'tm_template_synthetic_phi_scan',
+    expect(
+      mocks.modelComplete.mock.calls.map((call) => call[0].purpose),
+    ).toEqual([
+      "tm_template_phi_scan",
+      "tm_template_parse",
+      "tm_template_synthetic_phi_scan",
+      "tm_template_synthetic_phi_scan",
+      "tm_template_synthetic_phi_scan",
+      "tm_template_synthetic_phi_scan",
     ]);
     expect(mocks.extractText).toHaveBeenCalledTimes(3);
     const syntheticAuditRows = mocks.outboxCreate.mock.calls
       .map((call) => record(call[0]).data)
       .map(record)
-      .filter(
-        (data) => data.action === 'TEMPLATE_TWIN_SYNTHETIC_TESTED',
-      );
+      .filter((data) => data.action === "TEMPLATE_TWIN_SYNTHETIC_TESTED");
     expect(syntheticAuditRows).toHaveLength(2);
-    expect(
-      new Set(syntheticAuditRows.map((data) => data.eventKey)).size,
-    ).toBe(2);
+    expect(new Set(syntheticAuditRows.map((data) => data.eventKey)).size).toBe(
+      2,
+    );
     expect(syntheticAuditRows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           practiceId: ACTOR.practiceId,
           actorId: ACTOR.userId,
           actorEmailSnapshot: ACTOR.userEmail,
-          targetType: 'TemplateTwinCompiledVersion',
-          metadata: expect.objectContaining({ verified: true, inputMode: 'text' }),
+          targetType: "TemplateTwinCompiledVersion",
+          metadata: expect.objectContaining({
+            verified: true,
+            inputMode: "text",
+          }),
         }),
       ]),
     );

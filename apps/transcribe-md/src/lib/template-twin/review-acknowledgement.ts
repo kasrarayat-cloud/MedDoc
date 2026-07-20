@@ -1,6 +1,7 @@
 import { Prisma, TranscribeVisitStatus } from "@prisma/client";
 import prisma from "@meddoc/db";
 
+import { currentClinicalVisitActorWhere } from "@/lib/clinical-visit-authority";
 import { runSerializableTransactionWithRetry } from "@/lib/db/transaction-retry";
 import {
   assessVisitAutomationProof,
@@ -34,6 +35,7 @@ import {
   persistedTemplateTwinEncounterEvidenceIsValid,
 } from "./encounter-evidence-verification";
 import {
+  lockAndAssertCurrentTemplateTwinPatient,
   lockAndAssertCurrentTemplateTwinPhysician,
   TemplateTwinCurrentPhysicianAuthorityError,
 } from "./final-claim-authority";
@@ -83,10 +85,17 @@ export async function acknowledgeTemplateTwinReview(input: {
   const visit = await prisma.transcribeVisit.findFirst({
     where: {
       id: input.visitId,
-      userId: input.actor.userId,
-      user: { practiceId: input.actor.practiceId },
+      AND: [
+        currentClinicalVisitActorWhere(input.actor.userId),
+        {
+          userId: input.actor.userId,
+          user: { is: { practiceId: input.actor.practiceId } },
+          patient: { is: { practiceId: input.actor.practiceId } },
+        },
+      ],
     },
     select: {
+      patientId: true,
       status: true,
       soapVersion: true,
       manualRetryCount: true,
@@ -457,6 +466,11 @@ export async function acknowledgeTemplateTwinReview(input: {
           practiceId: input.actor.practiceId,
         },
       });
+      await lockAndAssertCurrentTemplateTwinPatient({
+        tx,
+        patientId: visit.patientId,
+        practiceId: input.actor.practiceId,
+      });
       const lockedVisit = await lockCurrentTemplateTwinVisit(tx, input.visitId);
       const currentRetry = await tx.transcribeVisit.findUnique({
         where: { id: input.visitId },
@@ -465,6 +479,7 @@ export async function acknowledgeTemplateTwinReview(input: {
       if (
         !lockedVisit ||
         lockedVisit.userId !== input.actor.userId ||
+        lockedVisit.patientId !== visit.patientId ||
         lockedVisit.status !== TranscribeVisitStatus.READY ||
         lockedVisit.deletedAt !== null ||
         lockedVisit.archivedAt !== null ||

@@ -27,20 +27,31 @@ export function MfaEnrollmentPanel({
   completionHref = "/settings",
 }: {
   userEmail: string;
-  completionHref?: "/admin" | "/settings";
+  completionHref?: "/admin/template-twin-release" | "/settings";
 }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("scan");
   const [artifact, setArtifact] = useState<EnrollmentArtifact | null>(null);
+  const [password, setPassword] = useState("");
   const [token, setToken] = useState("");
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [tokenError, setTokenError] = useState<string | null>(null);
+  const [enrollmentError, setEnrollmentError] = useState<string | null>(null);
 
   async function startEnrollment() {
+    if (!password) {
+      setEnrollmentError("Enter your current password.");
+      return;
+    }
     setLoading(true);
+    setEnrollmentError(null);
     try {
-      const res = await fetch("/api/mfa/enroll", { method: "POST" });
+      const res = await fetch("/api/mfa/enroll", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
       const json = await res.json();
       if (!res.ok || !json.ok) {
         toast.error("Could not start enrollment", { description: json.error });
@@ -50,6 +61,7 @@ export function MfaEnrollmentPanel({
         otpauthUri: json.otpauthUri,
         qrPngDataUrl: json.qrPngDataUrl,
       });
+      setPassword("");
       setStep("verify");
     } catch {
       toast.error("Network error");
@@ -128,11 +140,42 @@ export function MfaEnrollmentPanel({
           <p style={panelBody}>
             Open your authenticator app (1Password, Authy, Google Authenticator,
             etc.) and add a new account. The button below generates a fresh
-            secret tied to your email.
+            secret tied to your email. Re-enter your password before the secret
+            is created.
           </p>
+          <label htmlFor="mfa-enrollment-password" style={fieldLabel}>
+            Current password
+          </label>
+          <input
+            id="mfa-enrollment-password"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            style={{
+              ...inputStyle,
+              width: "100%",
+              maxWidth: 360,
+              fontFamily: "var(--font-sans)",
+              fontSize: 13,
+              letterSpacing: "normal",
+            }}
+            aria-describedby={
+              enrollmentError ? "mfa-enrollment-password-error" : undefined
+            }
+          />
+          {enrollmentError && (
+            <p
+              id="mfa-enrollment-password-error"
+              role="alert"
+              style={errorStyle}
+            >
+              {enrollmentError}
+            </p>
+          )}
           <button
             type="button"
-            disabled={loading}
+            disabled={loading || !password}
             onClick={startEnrollment}
             className="qm-lin-btn-primary"
             style={{ marginTop: 16 }}
@@ -423,4 +466,11 @@ const inputStyle: React.CSSProperties = {
   fontSize: 16,
   letterSpacing: "2px",
   outline: "none",
+};
+
+const errorStyle: React.CSSProperties = {
+  margin: "6px 0 0",
+  color: "var(--color-linear-danger, #e78284)",
+  fontFamily: "var(--font-sans)",
+  fontSize: 12,
 };

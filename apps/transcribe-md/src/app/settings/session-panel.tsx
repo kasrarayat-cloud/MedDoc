@@ -26,19 +26,43 @@ export function SessionPanel(props: SessionPanelProps) {
   const router = useRouter();
 
   async function doSignOut() {
-    await signOutAction();
-    toast.success('Signed out');
-    router.push('/login');
-    router.refresh();
+    try {
+      const result = await signOutAction();
+      if (!result.ok) {
+        toast.error('Sign-out was not completed', {
+          description: result.message,
+        });
+        return;
+      }
+      toast.success('Signed out');
+      router.push('/login');
+      router.refresh();
+    } catch {
+      toast.error('Sign-out was not completed', {
+        description: 'Please check your connection and try again.',
+      });
+    }
   }
 
   async function doSignOutAll() {
-    await signOutAllDevicesAction();
-    toast.success('Signed out from all devices', {
-      description: 'Every active session has been revoked.',
-    });
-    router.push('/login');
-    router.refresh();
+    try {
+      const result = await signOutAllDevicesAction();
+      if (!result.ok) {
+        toast.error('Sessions were not revoked', {
+          description: result.message,
+        });
+        return;
+      }
+      toast.success('Signed out from all devices', {
+        description: 'Every active session has been revoked.',
+      });
+      router.push('/login');
+      router.refresh();
+    } catch {
+      toast.error('Sessions were not revoked', {
+        description: 'Please check your connection and try again.',
+      });
+    }
   }
 
   return (

@@ -2,11 +2,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { captureAutomationLayerVisitMutation } from "../automation-layer-effects";
 
-const mocks = vi.hoisted(() => ({
-  context: vi.fn(),
-  rootFind: vi.fn(),
-  transaction: vi.fn(),
-}));
+const mocks = vi.hoisted(() => {
+  class LiveAuthorityRevokedError extends Error {}
+  return {
+    context: vi.fn(),
+    rootFind: vi.fn(),
+    transaction: vi.fn(),
+    terminalize: vi.fn(),
+    LiveAuthorityRevokedError,
+  };
+});
 
 vi.mock("@meddoc/ai", () => ({
   getTemplateTwinSyntheticQaProviderContext: mocks.context,
@@ -20,6 +25,8 @@ vi.mock("@meddoc/db", () => ({
 
 vi.mock("../automation-locks", () => ({
   runVisitAutomationTransaction: mocks.transaction,
+  runVisitAutomationRevokedAuthorityTerminalization: mocks.terminalize,
+  VisitAutomationLiveAuthorityRevokedError: mocks.LiveAuthorityRevokedError,
 }));
 
 import {
@@ -57,11 +64,13 @@ interface MemoryExecution {
   resultPayload: unknown;
   resultSha256: string | null;
   resultVersion: string | null;
+  failureCode: string | null;
 }
 
 function harness() {
   let execution: MemoryExecution | null = null;
   let failResultPersistence = false;
+  const authorityRejectedOperations = new Set<string>();
   const trace: string[] = [];
   const layer = {
     layerRowId: "layer-synthetic-1",
@@ -107,6 +116,7 @@ function harness() {
             resultPayload: null,
             resultSha256: null,
             resultVersion: null,
+            failureCode: null,
           };
           return [{ ...execution }];
         }
@@ -188,6 +198,7 @@ function harness() {
           resultPayload: null,
           resultSha256: null,
           resultVersion: null,
+          failureCode: null,
         };
         return { ...execution };
       }),
@@ -232,6 +243,9 @@ function harness() {
   );
   mocks.transaction.mockImplementation(async (input) => {
     trace.push(`transaction:${input.operation}`);
+    if (authorityRejectedOperations.has(input.operation)) {
+      throw new mocks.LiveAuthorityRevokedError();
+    }
     if (
       input.operation === "persist_visit_automation_provider_result" &&
       failResultPersistence
@@ -242,11 +256,18 @@ function harness() {
     }
     return input.transaction(tx);
   });
+  mocks.terminalize.mockImplementation(async (input) => input.transaction(tx));
   return {
     trace,
     execution: () => execution,
     failResultPersistence: () => {
       failResultPersistence = true;
+    },
+    rejectAuthorityAt: (operation: string) => {
+      authorityRejectedOperations.add(operation);
+    },
+    restoreAuthority: () => {
+      authorityRejectedOperations.clear();
     },
   };
 }
@@ -327,5 +348,122 @@ describe("durable automation provider execution", () => {
     ).rejects.toBeInstanceOf(VisitAutomationProviderExecutionError);
     expect(provider).toHaveBeenCalledTimes(1);
     expect(state.execution()?.status).toBe("UNKNOWN_OUTCOME");
+  });
+
+  it("terminalizes a reserved row when exact compilation authority is revoked before claim", async () => {
+    const state = harness();
+    state.rejectAuthorityAt("claim_visit_automation_provider_execution");
+    const provider = vi.fn().mockResolvedValue({ codes: [{ code: "Z00.00" }] });
+    const input = {
+      attempt: ATTEMPT,
+      layerId: "icd_coding" as const,
+      visitId: "visit-synthetic-1",
+      userId: "doctor-synthetic-1",
+      practiceId: "practice-synthetic-1",
+      descriptor: {
+        provider: "anthropic" as const,
+        model: "synthetic-model-v1",
+        operationVersion: "l7a-v1",
+      },
+      invoke: provider,
+    };
+
+    await expect(
+      runDurableVisitAutomationProvider(input),
+    ).rejects.toBeInstanceOf(mocks.LiveAuthorityRevokedError);
+    expect(provider).not.toHaveBeenCalled();
+    expect(state.trace).toContain(
+      "transaction:claim_visit_automation_provider_execution",
+    );
+    expect(state.execution()).toMatchObject({
+      status: "FAILED",
+      invocationCount: 0,
+      claimId: null,
+      failureCode: "AUTHORITY_REVOKED_BEFORE_PROVIDER",
+      resultPayload: null,
+    });
+
+    state.restoreAuthority();
+    await expect(
+      runDurableVisitAutomationProvider(input),
+    ).rejects.toBeInstanceOf(VisitAutomationProviderExecutionError);
+    expect(provider).not.toHaveBeenCalled();
+  });
+
+  it("marks the caller-owned invocation unknown when source/receipt authority changes after provider return", async () => {
+    const state = harness();
+    state.rejectAuthorityAt("persist_visit_automation_provider_result");
+    const provider = vi.fn().mockResolvedValue({ codes: [{ code: "Z00.00" }] });
+    const input = {
+      attempt: ATTEMPT,
+      layerId: "icd_coding" as const,
+      visitId: "visit-synthetic-1",
+      userId: "doctor-synthetic-1",
+      practiceId: "practice-synthetic-1",
+      descriptor: {
+        provider: "anthropic" as const,
+        model: "synthetic-model-v1",
+        operationVersion: "l7a-v1",
+      },
+      invoke: provider,
+    };
+
+    await expect(
+      runDurableVisitAutomationProvider(input),
+    ).rejects.toBeInstanceOf(mocks.LiveAuthorityRevokedError);
+    expect(provider).toHaveBeenCalledTimes(1);
+    expect(state.trace).toContain(
+      "transaction:persist_visit_automation_provider_result",
+    );
+    expect(state.execution()).toMatchObject({
+      status: "UNKNOWN_OUTCOME",
+      invocationCount: 1,
+      failureCode: "AUTHORITY_REVOKED_AFTER_PROVIDER",
+      resultPayload: null,
+      resultSha256: null,
+    });
+
+    state.restoreAuthority();
+    await expect(
+      runDurableVisitAutomationProvider(input),
+    ).rejects.toBeInstanceOf(VisitAutomationProviderExecutionError);
+    expect(provider).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses committed-result reuse while compilation authority is revoked", async () => {
+    const state = harness();
+    const provider = vi.fn().mockResolvedValue({ codes: [{ code: "Z00.00" }] });
+    const input = {
+      attempt: ATTEMPT,
+      layerId: "icd_coding" as const,
+      visitId: "visit-synthetic-1",
+      userId: "doctor-synthetic-1",
+      practiceId: "practice-synthetic-1",
+      descriptor: {
+        provider: "anthropic" as const,
+        model: "synthetic-model-v1",
+        operationVersion: "l7a-v1",
+      },
+      invoke: provider,
+    };
+    await expect(
+      runDurableVisitAutomationProvider(input),
+    ).resolves.toMatchObject({ reused: false });
+
+    state.rejectAuthorityAt("reserve_visit_automation_provider_execution");
+    await expect(
+      runDurableVisitAutomationProvider(input),
+    ).rejects.toBeInstanceOf(mocks.LiveAuthorityRevokedError);
+    expect(provider).toHaveBeenCalledTimes(1);
+    expect(state.trace).toContain(
+      "transaction:reserve_visit_automation_provider_execution",
+    );
+    expect(state.execution()?.status).toBe("SUCCEEDED");
+
+    state.restoreAuthority();
+    await expect(
+      runDurableVisitAutomationProvider(input),
+    ).resolves.toMatchObject({ reused: true });
+    expect(provider).toHaveBeenCalledTimes(1);
   });
 });

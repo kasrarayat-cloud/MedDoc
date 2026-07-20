@@ -10,10 +10,9 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import prisma from "@meddoc/db";
-import {
-  isTemplateTwinSyntheticQaPatient,
-  ordinaryClinicalVisitWhere,
-} from "@/lib/template-twin/synthetic-qa-patient";
+import { isTemplateTwinSyntheticQaPatient } from "@/lib/template-twin/synthetic-qa-patient";
+import { readTemplateTwinVisibleVisitPage } from "@/lib/template-twin/read-authority";
+import { currentClinicalPatientWhere } from "@/lib/clinical-patient-authority";
 import { auth } from "@/lib/nextauth";
 import { isSkinBeta } from "@/config/skin-beta";
 import { AppFrame } from "@/components/ui/app-frame";
@@ -41,24 +40,35 @@ export default async function NewVisitPage({
     email: string;
     practiceId: string;
   };
-  type MinimalVisit = { specialty: string } | null;
+  type MinimalVisit = { id: string; specialty: string };
 
-  const [user, mostRecentVisit] = (await Promise.all([
+  const [user, mostRecentVisits] = await Promise.all([
     prisma.user.findUnique({
       where: { id: session.user.id },
       select: { name: true, email: true, practiceId: true },
     }),
-    prisma.transcribeVisit.findFirst({
-      where: ordinaryClinicalVisitWhere({
-        userId: session.user.id,
-        deletedAt: null,
-        archivedAt: null,
-      }),
-      orderBy: { createdAt: "desc" },
-      select: { specialty: true },
+    readTemplateTwinVisibleVisitPage<MinimalVisit>({
+      db: prisma,
+      actorUserId: session.user.id,
+      query: {
+        scope: { deleted: "active", archived: "active" },
+        orderBy: "createdAt",
+        direction: "desc",
+        take: 1,
+      },
+      hydrate: (tx, visitIds) =>
+        tx.transcribeVisit.findMany({
+          where: {
+            id: { in: [...visitIds] },
+            userId: session.user.id,
+          },
+          select: { id: true, specialty: true },
+        }) as Promise<MinimalVisit[]>,
     }),
-  ])) as [MinimalUser | null, MinimalVisit];
-  if (!user) redirect("/login");
+  ]);
+  const mostRecentVisit = mostRecentVisits[0] ?? null;
+  const typedUser = user as MinimalUser | null;
+  if (!typedUser) redirect("/login");
 
   const params = await searchParams;
   const patientIdParam = Array.isArray(params.patientId)
@@ -76,8 +86,14 @@ export default async function NewVisitPage({
       deletedAt: Date | null;
     };
     const patient: PatientRow | null =
-      await prisma.transcribeMdPatient.findUnique({
-        where: { id: patientIdParam },
+      await prisma.transcribeMdPatient.findFirst({
+        where: currentClinicalPatientWhere({
+          actor: {
+            userId: session.user.id,
+            practiceId: typedUser.practiceId,
+          },
+          patientId: patientIdParam,
+        }),
         select: {
           id: true,
           practiceId: true,
@@ -87,12 +103,7 @@ export default async function NewVisitPage({
           deletedAt: true,
         },
       });
-    if (
-      !patient ||
-      patient.practiceId !== user.practiceId ||
-      patient.deletedAt !== null ||
-      isTemplateTwinSyntheticQaPatient(patient)
-    ) {
+    if (!patient || isTemplateTwinSyntheticQaPatient(patient)) {
       redirect("/visits/new");
     }
     initialPatient = {

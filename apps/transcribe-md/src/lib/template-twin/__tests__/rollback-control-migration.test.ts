@@ -101,6 +101,24 @@ describe("Template Twin rollback-control migration contract", () => {
     }
   });
 
+  it("binds every rollback mutation to the exact current admin session and complete MFA", () => {
+    for (const evidence of [
+      'JOIN "user_sessions" session',
+      'session."sessionToken" = ${actor.sessionId}',
+      'practice."isActive" = true',
+      'account."mfaEnabled" = true',
+      'account."mfaVerifiedAt" <= CURRENT_TIMESTAMP',
+      `'SUPER_ADMIN'::"Product" = ANY(account."products")`,
+      'session."expiresAt" > clock_timestamp()',
+      'session."createdAt" > account."forceLogoutAt"',
+      "FOR SHARE OF practice, account, session",
+    ]) {
+      expect(service).toContain(evidence);
+    }
+    expect(route).toContain("sessionId: ctx.verifiedSessionId");
+    expect(route).toContain("isTemplateTwinAdminAppService()");
+  });
+
   it("commit-fences the singleton, operation state, audit evidence, and active versions", () => {
     expect(integrityMigration).toMatch(/\bBEGIN;[\s\S]*\bCOMMIT;\s*$/u);
     for (const evidence of [
@@ -137,9 +155,7 @@ describe("Template Twin rollback-control migration contract", () => {
   });
 
   it("linearizes every drain-inventory entry path with the rollback control", () => {
-    expect(linearizationMigration).toMatch(
-      /\bBEGIN;[\s\S]*\bCOMMIT;\s*$/u,
-    );
+    expect(linearizationMigration).toMatch(/\bBEGIN;[\s\S]*\bCOMMIT;\s*$/u);
     for (const evidence of [
       "template_twin_acquire_rollback_linearization_lock",
       "pg_advisory_xact_lock(73119, 20260719)",

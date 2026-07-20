@@ -109,6 +109,10 @@ interface LockedStagingQaActorRow {
   practiceId: string;
   role: string;
   isActive: boolean;
+  deactivatedAt: Date | null;
+  suspendedAt: Date | null;
+  softDeletedAt: Date | null;
+  products: string[];
 }
 
 export async function lockAndAssertTemplateTwinStagingQaActor(input: {
@@ -116,7 +120,8 @@ export async function lockAndAssertTemplateTwinStagingQaActor(input: {
   actor: { userId: string; practiceId: string };
 }): Promise<void> {
   const actors = await input.tx.$queryRaw<LockedStagingQaActorRow[]>(Prisma.sql`
-    SELECT "id", "practiceId", "role"::text AS "role", "isActive"
+    SELECT "id", "practiceId", "role"::text AS "role", "isActive",
+      "deactivatedAt", "suspendedAt", "softDeletedAt", "products"
     FROM "users"
     WHERE "id" = ${input.actor.userId}
     FOR UPDATE
@@ -124,9 +129,14 @@ export async function lockAndAssertTemplateTwinStagingQaActor(input: {
   const actor = actors[0] ?? null;
   if (
     !actor ||
+    actor.id !== input.actor.userId ||
     actor.practiceId !== input.actor.practiceId ||
     actor.role !== "DOCTOR" ||
-    actor.isActive !== true
+    actor.isActive !== true ||
+    actor.deactivatedAt !== null ||
+    actor.suspendedAt !== null ||
+    actor.softDeletedAt !== null ||
+    !actor.products.includes("TRANSCRIBE_MD")
   ) {
     throw new TemplateTwinStagingQaVisitGuardError(
       "TEMPLATE_TWIN_STAGING_QA_NOT_FOUND",
@@ -136,10 +146,15 @@ export async function lockAndAssertTemplateTwinStagingQaActor(input: {
 }
 
 export interface TemplateTwinSyntheticQaAttemptClaim {
+  /** Exact durable admission that minted this run/worker capability. */
+  admissionId?: string;
   runId: string;
   visitId: string;
   practiceId: string;
   doctorId: string;
+  sourceArtifactId?: string;
+  noteTemplateId?: string;
+  noteTemplateVersion?: number;
   fixtureVersion: string;
   requestSha256: string;
   attempt: number;
@@ -240,6 +255,7 @@ export async function lockTemplateTwinStagingQaAdmissionThenRun(input: {
 export async function lockAndAssertTemplateTwinStagingQaRun(input: {
   tx: StagingQaRunLockClient;
   runId: string;
+  expectedAdmissionId?: string;
   expectedAttempt?: number;
   actor: { userId: string; practiceId: string };
   currentRolloutToken: TemplateTwinRolloutToken;
@@ -248,6 +264,7 @@ export async function lockAndAssertTemplateTwinStagingQaRun(input: {
   const locked = await lockTemplateTwinStagingQaAdmissionThenRun({
     tx: input.tx,
     runId: input.runId,
+    expectedAdmissionId: input.expectedAdmissionId,
   });
   const admission = await lockAndAssertTemplateTwinStagingQaAdmission({
     tx: input.tx,
@@ -289,6 +306,7 @@ export async function lockAndAssertTemplateTwinStagingQaRun(input: {
 export async function lockAndAssertTemplateTwinStagingQaOperation(input: {
   tx: StagingQaRunLockClient;
   runId: string;
+  expectedAdmissionId?: string;
   expectedAttempt: number;
   actor: { userId: string; practiceId: string };
   currentRolloutToken: TemplateTwinRolloutToken;
@@ -328,6 +346,7 @@ export async function lockAndAssertTemplateTwinStagingQaAttempt(input: {
   const run = await lockAndAssertTemplateTwinStagingQaOperation({
     tx: input.tx,
     runId: input.claim.runId,
+    expectedAdmissionId: input.claim.admissionId,
     expectedAttempt: input.claim.attempt,
     actor: {
       userId: input.claim.doctorId,
@@ -339,6 +358,12 @@ export async function lockAndAssertTemplateTwinStagingQaAttempt(input: {
   });
   if (
     run.visitId !== input.claim.visitId ||
+    (input.claim.sourceArtifactId !== undefined &&
+      run.admission?.sourceArtifactId !== input.claim.sourceArtifactId) ||
+    (input.claim.noteTemplateId !== undefined &&
+      run.noteTemplateId !== input.claim.noteTemplateId) ||
+    (input.claim.noteTemplateVersion !== undefined &&
+      run.noteTemplateVersion !== input.claim.noteTemplateVersion) ||
     run.requestSha256 !== input.claim.requestSha256 ||
     run.workerClaimId !== input.claim.workerClaimId ||
     run.fixtureVersion !== input.claim.fixtureVersion ||

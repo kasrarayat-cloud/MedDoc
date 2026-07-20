@@ -8,8 +8,16 @@ template creates in code before the final lineage protocol do not provide the
 required lineage, and those images do not carry the final automation,
 provider-ownership, queue, or audit contracts.
 
-The only supported application rollback is a reviewed image built from current
-final-schema-compatible code and started with:
+The only supported application rollback is a reviewed app/worker image pair
+built from one exact current final-schema-compatible SHA. It must recreate all
+six long-lived processes that run those artifacts:
+
+- app image: `transcribe-md`, `template-twin-admin-app`, and
+  `template-twin-admin-control`;
+- worker image: `transcribe-md-worker`,
+  `template-twin-audit-dispatcher`, and `auth-email-dispatcher`.
+
+Every process starts with:
 
 ```text
 TEMPLATE_TWIN_RUNTIME_MODE=rollback-compat-v2
@@ -54,8 +62,7 @@ preconditions have not been met. Direct SQL is not an acceptable substitute.
 2. While the current rollout tokens are still valid, deactivate every active
    Template Twin version through its reviewed lifecycle. Do not let a generic
    lifecycle action mutate a Twin row.
-3. Activate the process kill switch in both target app and worker
-   configurations.
+3. Activate the process kill switch in all six target runtime configurations.
 4. Revoke every practice rollout and then the persisted global rollout through
    the controlled audited operation.
 5. Drain both the visit and maintenance workers' active queues. Resolve every
@@ -74,7 +81,9 @@ preconditions have not been met. Direct SQL is not an acceptable substitute.
    - its exact component label; and
    - `org.opencontainers.image.revision=<accepted exact SHA>`.
 
-8. Run the checked deployment guard from the immutable release directory.
+8. Prepare an absolute, operator-owned state directory outside the release
+   checkout. It must not be group- or world-writable. Run the checked deployment
+   guard from the immutable release directory.
    Both image arguments must be a local `sha256:<image-id>` or a repository
    reference pinned with `@sha256:<manifest-digest>`; tags are rejected:
 
@@ -82,21 +91,56 @@ preconditions have not been met. Direct SQL is not an acceptable substitute.
    scripts/template-twin-runtime-swap.sh \
      --app-image '<immutable-app-ref>' \
      --worker-image '<immutable-worker-ref>' \
-     --release-sha '<accepted-40-hex-sha>'
+     --release-sha '<accepted-40-hex-sha>' \
+     --state-dir '/var/lib/quillmd/rollback-state'
    ```
 
    This first invocation is read-only. Preserve its safe output in the release
    evidence. Then repeat the exact command with `--execute`. The executable
-   path rechecks image identity immediately before the swap, stops the drained
-   worker, recreates only app/worker with bridge mode and the kill switch, and
-   verifies the running container image IDs and health.
+   path rechecks image identity immediately before the swap and creates a
+   content-addressed mode-`0444` Compose overlay in the state directory. The
+   overlay contains only non-secret release SHA, exact image IDs, fixed service
+   roles, protocol epoch, bridge mode, and active kill-switch state. It
+   explicitly blanks the generic and service-specific standard-mode runtime
+   attestation envelopes: those envelopes are instance/image bound and cannot
+   be reused by a rollback container. With the kill switch active,
+   `NOT_CONFIGURED` is the intended bridge attestation state. The overlay
+   excludes credentials and the one-shot `db-migrate` service.
 
-Raw `docker compose up`, a mutable `latest` tag, and rebuilding an old Git SHA
-are prohibited for this post-contract rollback. The script is a verifiable
-deployment guard for the documented path; it is not claimed to be a
-host/cluster admission allowlist. Privileged operators can bypass repository
-scripts, so production change control must restrict direct Docker authority and
-retain the command/evidence record.
+   The guard validates the static same-artifact census, verifies exactly one
+   current container for every expected service, then stops all six before a
+   single explicit six-service recreate. This ordering prevents a partial
+   Compose failure from leaving an old standard-mode process serving beside a
+   bridge process. It verifies every recreated container's exact image ID,
+   Compose service identity, service role where defined, protocol mode, kill
+   switch, release SHA, and health before reporting success. Both dispatcher
+   health checks require a fresh database-backed successful drain; process-only
+   liveness is insufficient.
+
+9. Record the returned overlay path and SHA-256 in rollback evidence. Every
+   later Compose operation touching any of the six services must include the
+   recorded base and overlay pair, for example:
+
+   ```bash
+   docker compose \
+     -f /immutable/release/docker-compose.yml \
+     -f /var/lib/quillmd/rollback-state/<recorded>.override.yml \
+     up -d --no-build --no-deps \
+     transcribe-md template-twin-admin-app template-twin-admin-control \
+     transcribe-md-worker template-twin-audit-dispatcher auth-email-dispatcher
+   ```
+
+   Do not edit, replace, or copy values out of the content-addressed overlay.
+   If any stop, recreate, identity, or health check fails, keep rollout revoked,
+   retain the overlay, and recover only through the same overlay and an accepted
+   compatible image. Do not start the migrator and do not attempt a downmigration.
+
+Raw `docker compose up` without the recorded overlay, a mutable `latest` tag,
+and rebuilding an old Git SHA are prohibited for this post-contract rollback.
+The script is a verifiable deployment guard for the documented path; it is not
+claimed to be a host/cluster admission allowlist. Privileged operators can
+bypass repository scripts, so production change control must restrict direct
+Docker authority and retain the command/evidence record.
 
 ## Verification and rollback of the bridge
 
@@ -105,7 +149,11 @@ Require all of the following before returning ordinary traffic:
 - `/api/health` reports `runtime_protocol_epoch` as
   `template-twin-final-schema-v2` and `runtime_mode` as
   `rollback-compat-v2`;
-- app and worker image IDs equal those accepted by the guard;
+- all three app-image services and all three worker-image services have the
+  exact image IDs accepted by the guard, exact fixed roles where defined,
+  bridge mode, an active kill switch, and healthy container status;
+- the audit and authentication-email dispatcher heartbeats were refreshed only
+  after a successful empty or non-empty database-backed drain;
 - Template Twin upload, list, certification, selection, processing, review,
   signing, and original-DOCX download fail closed using only reserved
   synthetic identities;
@@ -126,4 +174,5 @@ not improvise schema drops or lineage trigger recreation.
 Exiting bridge mode requires a new accepted image pair, exact-head review,
 healthy generic smoke tests, and the normal Template Twin human and rollout
 gates. Merely setting `TEMPLATE_TWIN_RUNTIME_MODE=standard` is not production
-authorization.
+authorization. Recreate and verify the full six-service census when leaving the
+bridge; never update only the physician app and primary worker.

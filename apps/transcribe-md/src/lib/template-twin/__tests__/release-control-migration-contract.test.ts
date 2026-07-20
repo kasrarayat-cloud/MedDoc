@@ -237,9 +237,7 @@ describe("Template Twin production control-plane migration contract", () => {
       'CREATE TABLE "template_twin_release_coupling_receipts"',
     );
     expect(hardeningMigration).toContain('"backendPid" = pg_backend_pid()');
-    expect(hardeningMigration).toContain(
-      '"transactionId" = txid_current()',
-    );
+    expect(hardeningMigration).toContain('"transactionId" = txid_current()');
     expect(hardeningMigration).not.toContain(
       "meddoc.template_twin_release_coupling_verified_tx",
     );
@@ -359,37 +357,42 @@ describe("Template Twin release admin route boundary", () => {
   it("routes only exact control paths to the credential-isolated process", () => {
     expect(caddy).toContain("@templateTwinControlApi path");
     expect(caddy).toContain("@templateTwinControlPage path");
-    expect(caddy).toContain(
-      "reverse_proxy template-twin-admin-control:3011",
-    );
+    expect(caddy).toContain("reverse_proxy template-twin-admin-control:3011");
     expect(caddy.indexOf("@templateTwinControlApi path")).toBeLessThan(
-      caddy.indexOf("@adminApi path"),
+      caddy.indexOf("@retiredLegacyAdminApi path"),
     );
     expect(caddy.indexOf("@templateTwinControlPage path")).toBeLessThan(
-      caddy.indexOf("@adminPath path"),
+      caddy.indexOf("@retiredLegacyAdminPage path"),
     );
+    const adminHost = caddy.slice(
+      caddy.indexOf("admin.quillmd.com {"),
+      caddy.indexOf("pro.quillmd.com {"),
+    );
+    expect(adminHost).not.toContain("reverse_proxy transcribe-md:3011");
+    expect(adminHost).not.toContain("rewrite * /admin");
     expect(compose).toContain("template-twin-admin-control:");
     expect(compose).toContain("template-twin-audit-dispatcher:");
     expect(compose).toContain(
-      'QUILLMD_SERVICE_ROLE: template-twin-admin-control',
+      "QUILLMD_SERVICE_ROLE: template-twin-admin-control",
     );
     expect(compose).toContain(
-      'QUILLMD_SERVICE_ROLE: template-twin-audit-dispatcher',
+      "QUILLMD_SERVICE_ROLE: template-twin-audit-dispatcher",
     );
     expect(compose).toContain('TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL: ""');
-    expect(compose.match(/^\s+DB_PASSWORD: ""$/gmu)).toHaveLength(4);
-    expect(compose.match(/^\s+DB_RUNTIME_PASSWORD: ""$/gmu)).toHaveLength(4);
+    expect(compose.match(/^\s+DB_PASSWORD: ""$/gmu)).toHaveLength(6);
+    expect(compose.match(/^\s+DB_RUNTIME_PASSWORD: ""$/gmu)).toHaveLength(6);
     expect(
       compose.match(/^\s+DB_RELEASE_SECURITY_PASSWORD: ""$/gmu),
-    ).toHaveLength(5);
+    ).toHaveLength(7);
     for (const variable of [
       "TEMPLATE_TWIN_APP_RUNTIME_ATTESTATION",
       "TEMPLATE_TWIN_ADMIN_CONTROL_RUNTIME_ATTESTATION",
+      "TEMPLATE_TWIN_ADMIN_APP_RUNTIME_ATTESTATION",
       "TEMPLATE_TWIN_WORKER_RUNTIME_ATTESTATION",
     ]) {
       expect(
         compose.match(new RegExp(`^\\s+${variable}: ""$`, "gmu")),
-      ).toHaveLength(4);
+      ).toHaveLength(5);
     }
     const adminBlock = compose.slice(
       compose.indexOf("  template-twin-admin-control:"),
@@ -407,12 +410,8 @@ describe("Template Twin release admin route boundary", () => {
     expect(adminBlock).not.toContain("${ANTHROPIC_API_KEY}");
     expect(adminBlock).not.toContain("${DEEPGRAM_API_KEY}");
     expect(adminBlock).toContain("/api/admin/template-twin/control-health");
-    expect(roleBootstrap).toContain(
-      "DB_RELEASE_CONTROL_PASSWORD is required",
-    );
-    expect(roleBootstrap).toContain(
-      "DB_AUDIT_DISPATCHER_PASSWORD is required",
-    );
+    expect(roleBootstrap).toContain("DB_RELEASE_CONTROL_PASSWORD is required");
+    expect(roleBootstrap).toContain("DB_AUDIT_DISPATCHER_PASSWORD is required");
     expect(releaseSecurityBootstrap).toContain(
       "DB_RELEASE_SECURITY_PASSWORD is required",
     );

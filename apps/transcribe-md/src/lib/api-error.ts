@@ -70,6 +70,12 @@ export interface ApiRouteContext<P extends Record<string, string>> {
   params: Promise<P>;
 }
 
+export interface ApiHandlerOptions {
+  /** Anonymous account-recovery routes suppress precise server timings so
+   * response metadata cannot become an account-state oracle. */
+  exposeTimingHeaders?: boolean;
+}
+
 /** Wraps a route handler with a top-level try/catch. An unexpected
  *  throw becomes a logged 500 with a uniform JSON body. Use for
  *  every route handler so the log-prefix + shape stays consistent.
@@ -82,7 +88,8 @@ export function withApiHandler<P extends Record<string, string>>(
   handler: (
     req: NextRequest,
     ctx: ApiRouteContext<P>
-  ) => Promise<NextResponse>
+  ) => Promise<NextResponse>,
+  options: ApiHandlerOptions = {}
 ): (req: NextRequest, ctx: ApiRouteContext<P>) => Promise<NextResponse> {
   return async (req, ctx) => {
     // Performance Auditor Phase 4 (PERFORMANCE_FINDING_002 closure):
@@ -94,8 +101,10 @@ export function withApiHandler<P extends Record<string, string>>(
     try {
       const response = await handler(req, ctx);
       const ms = Date.now() - t0;
-      response.headers.set('X-Response-Time', `${ms}ms`);
-      response.headers.set('Server-Timing', `app;dur=${ms}`);
+      if (options.exposeTimingHeaders !== false) {
+        response.headers.set('X-Response-Time', `${ms}ms`);
+        response.headers.set('Server-Timing', `app;dur=${ms}`);
+      }
       return response;
     } catch (err) {
       // T-M18.1 A1: scrub before stdout. `err` here is whatever slipped
@@ -113,8 +122,10 @@ export function withApiHandler<P extends Record<string, string>>(
         redactPhi(err instanceof Error ? err.message : err)
       );
       const response = apiError('internal server error', 500);
-      response.headers.set('X-Response-Time', `${ms}ms`);
-      response.headers.set('Server-Timing', `app;dur=${ms}`);
+      if (options.exposeTimingHeaders !== false) {
+        response.headers.set('X-Response-Time', `${ms}ms`);
+        response.headers.set('Server-Timing', `app;dur=${ms}`);
+      }
       return response;
     }
   };

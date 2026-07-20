@@ -103,8 +103,11 @@ function isStagingFixtureTemplate(
 function hasCurrentTemplateTwinSourceAdmission(
   template: TemplateWithSourceProvenance,
 ): boolean {
-  if (template.templateKind !== 'template_twin_docx') return true;
-  const source = template.templateTwinCompiledVersion?.sourceArtifact;
+  const compiled = template.templateTwinCompiledVersion;
+  // Immutable compiled lineage and mutable kind must agree in both
+  // directions. A kind-drifted compiled Twin is never an ordinary candidate.
+  if (template.templateKind !== 'template_twin_docx') return compiled == null;
+  const source = compiled?.sourceArtifact;
   return Boolean(source && isTemplateTwinSourceAdmissionCurrent(source));
 }
 

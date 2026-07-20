@@ -3,10 +3,10 @@
 // ----------------------------------------------------------------------------
 // Body: { email: string }
 //
-// Re-mints an EMAIL_VERIFICATION token + emails the link, same shape
+// Enqueues a durable EMAIL_VERIFICATION delivery intent, same shape
 // as /api/auth/forgot-password: anti-enumeration always-200 response,
-// shared 5/hour/IP rate-limit bucket ("auth-email:<ip>"), dev-escape
-// when RESEND_API_KEY is unset.
+// shared 5/hour/IP rate-limit bucket ("auth-email:<ip>"). When verified
+// delivery is unavailable, no bearer token is minted.
 //
 // Behavior matrix:
 //   - User exists + unverified: issue token + send email.
@@ -16,107 +16,69 @@
 //   - User doesn't exist: silently succeed.
 // ============================================================================
 
-import { z } from 'zod';
-import { NextResponse } from 'next/server';
+import { z } from "zod";
+import { NextResponse } from "next/server";
 
-import prisma from '@meddoc/db';
-import { AuthTokenPurpose } from '@prisma/client';
+import { AuthEmailPurpose } from "@prisma/client";
 
-import { apiError, withApiHandler } from '@/lib/api-error';
-import { createAuthToken } from '@/lib/auth-tokens';
+import { apiError, withApiHandler } from "@/lib/api-error";
+import { enqueueAuthEmailRequest } from "@/lib/auth-email-outbox";
 import {
   RATE_LIMITS,
   clientIpFromRequest,
-  rateLimitOr429,
-} from '@/lib/rate-limit';
-import { sendEmailVerification } from '@/lib/email';
-import { APP_URL } from '@/lib/constants';
-import { redactPhi } from '@meddoc/ai';
+  sharedRateLimitOr429,
+} from "@/lib/rate-limit";
+import { isEmailDeliveryEnabled } from "@/lib/email-enabled";
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 const BodySchema = z.object({
   email: z.string().email().max(254),
 });
 
-const VERIFY_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const GENERIC_OK_BODY = {
+  ok: true,
+  message:
+    "If an unverified account exists for that email, we've sent a new verification link.",
+} as const;
 
 export const POST = withApiHandler(
-  'api:auth:resend-verification',
+  "api:auth:resend-verification",
   async (req) => {
     const ip = clientIpFromRequest(req);
     // AUTH_EMAIL shared bucket — see forgot-password/route.ts for why.
-    const blocked = rateLimitOr429(RATE_LIMITS.AUTH_EMAIL, ip);
+    const blocked = await sharedRateLimitOr429(RATE_LIMITS.AUTH_EMAIL, ip);
     if (blocked) return blocked;
 
     let body: unknown;
     try {
       body = await req.json();
     } catch {
-      return apiError('invalid JSON body', 400);
+      return apiError("invalid JSON body", 400);
     }
     const parsed = BodySchema.safeParse(body);
-    if (!parsed.success) return apiError('invalid email', 400);
+    if (!parsed.success) return apiError("invalid email", 400);
 
     const email = parsed.data.email.trim().toLowerCase();
 
-    try {
-      const user = await prisma.user.findUnique({
-        where: { email },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          isActive: true,
-          emailVerified: true,
-        },
-      });
-
-      if (user?.isActive && user.emailVerified === null) {
-        const { token } = await createAuthToken({
-          userId: user.id,
-          purpose: AuthTokenPurpose.EMAIL_VERIFICATION,
-          expiresInMs: VERIFY_TTL_MS,
-        });
-        const verifyUrl = `${APP_URL}/api/auth/verify-email?token=${encodeURIComponent(token)}`;
-
-        if (process.env.RESEND_API_KEY) {
-          await sendEmailVerification({
-            toEmail: user.email,
-            verifyUrl,
-            userName: user.name,
-          });
-          console.info(
-            `[auth:resend-verification] sent ip=${ip} user=${user.id}`
-          );
-        } else {
-          console.warn(
-            `[auth:resend-verification] RESEND_API_KEY unset — dev-only link: ${verifyUrl}`
-          );
-        }
-      } else {
-        // Either no matching user, user is inactive, or already
-        // verified. All three map to "silent success" so the caller
-        // can't enumerate accounts or verification states.
-        console.info(
-          `[auth:resend-verification] no-op (unknown/verified/inactive) ip=${ip}`
-        );
-      }
-    } catch (err) {
-      console.error(
-        `[auth:resend-verification] unhandled ip=${ip}:`,
-        redactPhi(err instanceof Error ? err.message : err)
+    if (!isEmailDeliveryEnabled()) {
+      console.info(
+        "[auth:resend-verification] request suppressed — delivery unavailable",
       );
+      return NextResponse.json(GENERIC_OK_BODY, { status: 200 });
     }
 
-    return NextResponse.json(
-      {
-        ok: true,
-        message:
-          "If an unverified account exists for that email, we've sent a new verification link.",
-      },
-      { status: 200 }
-    );
-  }
+    try {
+      await enqueueAuthEmailRequest({
+        email,
+        purpose: AuthEmailPurpose.EMAIL_VERIFICATION,
+      });
+    } catch {
+      console.error("[auth:resend-verification] durable enqueue failed");
+    }
+
+    return NextResponse.json(GENERIC_OK_BODY, { status: 200 });
+  },
+  { exposeTimingHeaders: false },
 );

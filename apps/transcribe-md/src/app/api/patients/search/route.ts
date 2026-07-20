@@ -26,7 +26,8 @@ import { apiError, withApiHandler } from "@/lib/api-error";
 import { getSession } from "@/lib/auth";
 import { RATE_LIMITS, rateLimitOr429 } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
-import { TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID } from "@/lib/template-twin/synthetic-qa-patient";
+import { templateTwinVisitReadVisibilitySql } from "@/lib/template-twin/read-authority";
+import { currentClinicalPatientReadAuthoritySql } from "@/lib/clinical-patient-authority";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -75,6 +76,17 @@ export const POST = withApiHandler("api:patients:search", async (req) => {
     );
   }
   const search = parsed.data.search;
+  const visitVisibility = templateTwinVisitReadVisibilitySql({
+    actorUserId: session.user.id,
+    visitAlias: "v",
+  });
+  const patientAuthority = currentClinicalPatientReadAuthoritySql({
+    actor: {
+      userId: session.user.id,
+      practiceId: session.user.practiceId,
+    },
+    patientAlias: "p",
+  });
 
   const rows = await prisma.$queryRaw<PatientListRow[]>`
     SELECT
@@ -89,14 +101,8 @@ export const POST = withApiHandler("api:patients:search", async (req) => {
     LEFT JOIN transcribe_visits v ON v."patientId" = p.id
       AND v."deletedAt" IS NULL
       AND v."archivedAt" IS NULL
-      AND NOT EXISTS (
-        SELECT 1
-        FROM template_twin_synthetic_qa_runs qa
-        WHERE qa."visitId" = v.id
-      )
-    WHERE p."practiceId" = ${session.user.practiceId}
-      AND p."deletedAt" IS NULL
-      AND p."externalId" IS DISTINCT FROM ${TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID}
+      AND ${visitVisibility}
+    WHERE ${patientAuthority}
       AND (
         similarity(LOWER(p.name), LOWER(${search})) > ${SEARCH_SIMILARITY_THRESHOLD}
         OR p."externalId" ILIKE ${"%" + search + "%"}

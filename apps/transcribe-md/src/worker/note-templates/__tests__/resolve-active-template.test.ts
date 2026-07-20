@@ -463,6 +463,25 @@ describe('resolveVisitTemplate — immutable retry provenance', () => {
     expect(rolloutMocks.pin).not.toHaveBeenCalled();
   });
 
+  it('excludes an active kind-drifted template that retains compiled lineage', async () => {
+    const compiled = admittedTwin({
+      id: 'kind-drift-active',
+      doctorId: 'doc1',
+      encounterType: 'cardiology',
+    });
+    const kindDrifted = { ...compiled, templateKind: 'structured' };
+    vi.mocked(prisma.noteTemplate.findMany).mockResolvedValueOnce([
+      systemDefault,
+      kindDrifted,
+    ] as never);
+
+    await expect(
+      resolveActiveTemplate({ doctorId: 'doc1', encounterType: 'cardiology' })
+    ).resolves.toBe(systemDefault);
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    expect(rolloutMocks.pin).not.toHaveBeenCalled();
+  });
+
   it('rejects a pinned legacy Twin without current source admission', async () => {
     const admitted = admittedTwin({
       id: 'twin-legacy-pinned',
@@ -487,6 +506,27 @@ describe('resolveVisitTemplate — immutable retry provenance', () => {
         pinnedTemplateId: legacy.id,
         pinnedTemplateVersion: legacy.version,
       }),
+    ).rejects.toBeInstanceOf(PinnedTemplateUnavailableError);
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    expect(rolloutMocks.pin).not.toHaveBeenCalled();
+  });
+
+  it('rejects a pinned kind-drifted template that retains compiled lineage', async () => {
+    const compiled = admittedTwin({
+      id: 'kind-drift-pinned',
+      doctorId: 'doc1',
+    });
+    const kindDrifted = { ...compiled, templateKind: 'structured' };
+    vi.mocked(prisma.noteTemplate.findFirst).mockResolvedValueOnce(
+      kindDrifted as never
+    );
+
+    await expect(
+      resolveVisitTemplate({
+        doctorId: 'doc1',
+        pinnedTemplateId: kindDrifted.id,
+        pinnedTemplateVersion: kindDrifted.version,
+      })
     ).rejects.toBeInstanceOf(PinnedTemplateUnavailableError);
     expect(prisma.user.findUnique).not.toHaveBeenCalled();
     expect(rolloutMocks.pin).not.toHaveBeenCalled();

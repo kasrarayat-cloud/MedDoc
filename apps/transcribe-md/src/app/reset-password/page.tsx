@@ -1,11 +1,14 @@
-import type { Metadata } from 'next';
-import { redirect } from 'next/navigation';
+import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
-import { auth } from '@/lib/nextauth';
-import { AuthShell } from '@/components/ui/auth-shell';
-import { ResetPasswordForm } from './reset-password-form';
+import { auth } from "@/lib/nextauth";
+import { AuthShell } from "@/components/ui/auth-shell";
+import { ResetPasswordForm } from "./reset-password-form";
 
-export const metadata: Metadata = { title: 'Set new password' };
+export const metadata: Metadata = {
+  title: "Set new password",
+  referrer: "no-referrer",
+};
 
 interface PageProps {
   searchParams: Promise<{ token?: string | string[] }>;
@@ -13,11 +16,11 @@ interface PageProps {
 
 export default async function ResetPasswordPage({ searchParams }: PageProps) {
   const session = await auth();
-  if (session?.user?.id) redirect('/dashboard');
+  if (session?.user?.id) redirect("/dashboard");
 
   const sp = await searchParams;
   const rawToken = Array.isArray(sp.token) ? sp.token[0] : sp.token;
-  const token = typeof rawToken === 'string' ? rawToken : '';
+  const token = typeof rawToken === "string" ? rawToken : "";
 
   return (
     <AuthShell

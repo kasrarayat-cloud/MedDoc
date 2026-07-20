@@ -12,18 +12,18 @@
 // user-scoping, same fire-and-forget audit row). No server action, gate, or
 // pipeline behavior changes. Visit rows link to the EXISTING /visits/[id].
 // ============================================================================
-import Link from 'next/link';
-import prisma from '@meddoc/db';
-import { TranscribeVisitStatus } from '@prisma/client';
-import { logAudit } from '@/lib/audit';
-import { ordinaryClinicalVisitWhere } from '@/lib/template-twin/synthetic-qa-patient';
-import { Greeting } from './greeting';
-import { c3Status } from '@/lib/visit-status-c3';
-import { DashboardInboxC3 } from './dashboard-inbox-c3';
+import Link from "next/link";
+import prisma from "@meddoc/db";
+import { TranscribeVisitStatus } from "@prisma/client";
+import { logAudit } from "@/lib/audit";
 import {
-  C3_INBOX_PAGE_SIZE,
-  type C3InboxRow,
-} from '@/lib/c3-list-pagination';
+  aggregateTemplateTwinVisibleVisits,
+  readTemplateTwinVisibleVisitPage,
+} from "@/lib/template-twin/read-authority";
+import { Greeting } from "./greeting";
+import { c3Status } from "@/lib/visit-status-c3";
+import { DashboardInboxC3 } from "./dashboard-inbox-c3";
+import { C3_INBOX_PAGE_SIZE, type C3InboxRow } from "@/lib/c3-list-pagination";
 
 const INPROGRESS_LIMIT = 10;
 
@@ -77,52 +77,78 @@ export async function DashboardC3Body({
     d.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow));
     return d;
   })();
+  const inboxScope = {
+    deleted: "active" as const,
+    archived: "active" as const,
+    statuses: [TranscribeVisitStatus.READY],
+    signed: "unsigned" as const,
+  };
 
-  const inboxWhere = ordinaryClinicalVisitWhere({
-    userId,
-    deletedAt: null,
-    archivedAt: null,
-    status: TranscribeVisitStatus.READY,
-    signedAt: null,
-  });
-
-  const [inboxRaw, inboxTotal, inProgress, visitsThisMonth, signedThisWeek] =
-    await Promise.all([
-      // First bounded page (offset). Later pages load via the read-only
-      // searchInboxAction (Page X of N) — the list never renders all rows.
-      prisma.transcribeVisit.findMany({
-        where: inboxWhere,
-        orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+  const [
+    inboxRaw,
+    inboxAggregate,
+    inProgress,
+    monthAggregate,
+    signedWeekAggregate,
+  ] = await Promise.all([
+    // First bounded page (offset). Later pages load via the read-only
+    // searchInboxAction (Page X of N) — the list never renders all rows.
+    readTemplateTwinVisibleVisitPage<Row>({
+      db: prisma,
+      actorUserId: userId,
+      query: {
+        scope: inboxScope,
+        orderBy: "updatedAt",
+        direction: "desc",
         take: C3_INBOX_PAGE_SIZE,
-        select: ROW_SELECT,
-      }) as Promise<Row[]>,
-      prisma.transcribeVisit.count({ where: inboxWhere }),
-      prisma.transcribeVisit.findMany({
-        where: ordinaryClinicalVisitWhere({
-          userId,
-          deletedAt: null,
-          archivedAt: null,
-          status: { in: PROCESSING_STATUSES },
-        }),
-        orderBy: { updatedAt: 'desc' },
+      },
+      hydrate: (tx, visitIds) =>
+        tx.transcribeVisit.findMany({
+          where: { id: { in: [...visitIds] }, userId },
+          select: ROW_SELECT,
+        }) as Promise<Row[]>,
+    }),
+    aggregateTemplateTwinVisibleVisits({
+      db: prisma,
+      actorUserId: userId,
+      scope: inboxScope,
+    }),
+    readTemplateTwinVisibleVisitPage<Row>({
+      db: prisma,
+      actorUserId: userId,
+      query: {
+        scope: {
+          deleted: "active",
+          archived: "active",
+          statuses: PROCESSING_STATUSES,
+        },
+        orderBy: "updatedAt",
+        direction: "desc",
         take: INPROGRESS_LIMIT,
-        select: ROW_SELECT,
-      }) as Promise<Row[]>,
-      prisma.transcribeVisit.count({
-        where: ordinaryClinicalVisitWhere({
-          userId,
-          deletedAt: null,
-          createdAt: { gte: startOfMonth },
-        }),
-      }),
-      prisma.transcribeVisit.count({
-        where: ordinaryClinicalVisitWhere({
-          userId,
-          status: TranscribeVisitStatus.SIGNED,
-          signedAt: { gte: startOfWeek },
-        }),
-      }),
-    ]);
+      },
+      hydrate: (tx, visitIds) =>
+        tx.transcribeVisit.findMany({
+          where: { id: { in: [...visitIds] }, userId },
+          select: ROW_SELECT,
+        }) as Promise<Row[]>,
+    }),
+    aggregateTemplateTwinVisibleVisits({
+      db: prisma,
+      actorUserId: userId,
+      scope: { deleted: "active", createdAtGte: startOfMonth },
+    }),
+    aggregateTemplateTwinVisibleVisits({
+      db: prisma,
+      actorUserId: userId,
+      scope: {
+        statuses: [TranscribeVisitStatus.SIGNED],
+        signedAtGte: startOfWeek,
+      },
+    }),
+  ]);
+  const inboxTotal = inboxAggregate.count;
+  const visitsThisMonth = monthAggregate.count;
+  const signedThisWeek = signedWeekAggregate.count;
 
   const inboxRows: C3InboxRow[] = inboxRaw.map((v) => ({
     id: v.id,
@@ -133,28 +159,40 @@ export async function DashboardC3Body({
     chiefComplaint: v.chiefComplaint,
     createdAt: v.createdAt.toISOString(),
   }));
-  const inboxTotalPages = Math.max(1, Math.ceil(inboxTotal / C3_INBOX_PAGE_SIZE));
+  const inboxTotalPages = Math.max(
+    1,
+    Math.ceil(inboxTotal / C3_INBOX_PAGE_SIZE),
+  );
 
   // Same fire-and-forget §164.312(b) audit row as the existing dashboard.
   void logAudit({
-    action: 'VIEWED_DASHBOARD',
-    targetType: 'User',
+    action: "VIEWED_DASHBOARD",
+    targetType: "User",
     targetId: userId,
-    metadata: { source: 'rsc:/dashboard:c3', toSign: inboxTotal, inProgress: inProgress.length },
+    metadata: {
+      source: "rsc:/dashboard:c3",
+      toSign: inboxTotal,
+      inProgress: inProgress.length,
+    },
   });
 
   const firstName = userName ? (userName.trim().split(/\s+/)[0] ?? null) : null;
   const subtitle = (
     <>
-      {visitsThisMonth} visit{visitsThisMonth === 1 ? '' : 's'} this month · {signedThisWeek} signed this week
+      {visitsThisMonth} visit{visitsThisMonth === 1 ? "" : "s"} this month ·{" "}
+      {signedThisWeek} signed this week
     </>
   );
 
   return (
-    <div style={{ maxWidth: 880, margin: '0 auto', padding: '22px 24px 80px' }}>
+    <div style={{ maxWidth: 880, margin: "0 auto", padding: "22px 24px 80px" }}>
       <Greeting firstName={firstName} subtitle={subtitle} />
 
-      <Section title="Ready to sign" count={inboxTotal} style={{ marginTop: 26 }}>
+      <Section
+        title="Ready to sign"
+        count={inboxTotal}
+        style={{ marginTop: 26 }}
+      >
         {inboxTotal === 0 ? (
           <EmptyInbox />
         ) : (
@@ -167,7 +205,11 @@ export async function DashboardC3Body({
       </Section>
 
       {inProgress.length > 0 && (
-        <Section title="In progress" count={inProgress.length} style={{ marginTop: 26, opacity: 0.9 }}>
+        <Section
+          title="In progress"
+          count={inProgress.length}
+          style={{ marginTop: 26, opacity: 0.9 }}
+        >
           <div className="qm-c3-list">
             {inProgress.map((v) => (
               <VisitRow key={v.id} v={v} interactive />
@@ -192,15 +234,22 @@ function Section({
 }) {
   return (
     <section style={style} aria-label={title}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          marginBottom: 10,
+        }}
+      >
         <h2
           style={{
             margin: 0,
-            fontFamily: 'var(--font-sans)',
+            fontFamily: "var(--font-sans)",
             fontSize: 12,
-            letterSpacing: '0.12em',
-            textTransform: 'uppercase',
-            color: 'var(--color-linear-text-3)',
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
+            color: "var(--color-linear-text-3)",
             fontWeight: 500,
           }}
         >
@@ -208,14 +257,14 @@ function Section({
         </h2>
         <span
           style={{
-            fontFamily: 'var(--font-mono)',
+            fontFamily: "var(--font-mono)",
             fontSize: 11,
-            color: 'var(--color-linear-text-3)',
-            background: 'var(--color-linear-surface-2)',
-            border: '1px solid var(--color-linear-border)',
+            color: "var(--color-linear-text-3)",
+            background: "var(--color-linear-surface-2)",
+            border: "1px solid var(--color-linear-border)",
             borderRadius: 999,
-            padding: '0 7px',
-            lineHeight: '17px',
+            padding: "0 7px",
+            lineHeight: "17px",
           }}
         >
           {count}
@@ -228,26 +277,64 @@ function Section({
 
 function VisitRow({ v, interactive }: { v: Row; interactive?: boolean }) {
   const s = c3Status(v.status, v.needsReview);
-  const name = v.patient?.name ?? v.patientName ?? 'Unknown patient';
-  const meta = [v.specialty, v.chiefComplaint?.replace(/\s+/g, ' ').trim()].filter(Boolean).join(' · ');
+  const name = v.patient?.name ?? v.patientName ?? "Unknown patient";
+  const meta = [v.specialty, v.chiefComplaint?.replace(/\s+/g, " ").trim()]
+    .filter(Boolean)
+    .join(" · ");
   const inner = (
     <>
-      <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-        <span style={{ fontSize: 13.5, color: 'var(--color-linear-text)', fontWeight: 500 }}>{name}</span>
+      <span
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 2,
+          minWidth: 0,
+        }}
+      >
+        <span
+          style={{
+            fontSize: 13.5,
+            color: "var(--color-linear-text)",
+            fontWeight: 500,
+          }}
+        >
+          {name}
+        </span>
         {meta && (
-          <span style={{ fontSize: 12, color: 'var(--color-linear-text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span
+            style={{
+              fontSize: 12,
+              color: "var(--color-linear-text-3)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
             {meta}
           </span>
         )}
       </span>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 'none' }}>
+      <span
+        style={{ display: "flex", alignItems: "center", gap: 12, flex: "none" }}
+      >
         <span className={s.pillClass}>{s.label}</span>
-        {interactive && <span aria-hidden style={{ color: 'var(--color-linear-text-3)', fontSize: 13 }}>→</span>}
+        {interactive && (
+          <span
+            aria-hidden
+            style={{ color: "var(--color-linear-text-3)", fontSize: 13 }}
+          >
+            →
+          </span>
+        )}
       </span>
     </>
   );
   return (
-    <Link href={`/visits/${v.id}`} className="qm-c3-row qm-tap-44" style={{ textDecoration: 'none' }}>
+    <Link
+      href={`/visits/${v.id}`}
+      className="qm-c3-row qm-tap-44"
+      style={{ textDecoration: "none" }}
+    >
       {inner}
     </Link>
   );
@@ -257,19 +344,38 @@ function EmptyInbox() {
   return (
     <div
       style={{
-        padding: '26px 18px',
-        textAlign: 'center',
-        border: '1px solid var(--color-linear-border)',
+        padding: "26px 18px",
+        textAlign: "center",
+        border: "1px solid var(--color-linear-border)",
         borderRadius: 11,
-        background: 'var(--color-linear-surface-1)',
+        background: "var(--color-linear-surface-1)",
       }}
     >
-      <span aria-hidden style={{ color: 'var(--color-linear-sage-bright)', fontSize: 15 }}>✓</span>
-      <p style={{ margin: '8px 0 0', fontSize: 13.5, color: 'var(--color-linear-text-2)' }}>You’re all caught up.</p>
+      <span
+        aria-hidden
+        style={{ color: "var(--color-linear-sage-bright)", fontSize: 15 }}
+      >
+        ✓
+      </span>
+      <p
+        style={{
+          margin: "8px 0 0",
+          fontSize: 13.5,
+          color: "var(--color-linear-text-2)",
+        }}
+      >
+        You’re all caught up.
+      </p>
       <Link
         href="/visits/new"
         className="qm-lin-btn-primary"
-        style={{ marginTop: 16, textDecoration: 'none', height: 32, padding: '0 14px', fontSize: 13 }}
+        style={{
+          marginTop: 16,
+          textDecoration: "none",
+          height: 32,
+          padding: "0 14px",
+          fontSize: 13,
+        }}
       >
         Start a visit
       </Link>

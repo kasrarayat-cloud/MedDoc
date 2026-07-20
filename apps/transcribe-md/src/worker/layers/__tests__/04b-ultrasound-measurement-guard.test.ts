@@ -23,7 +23,14 @@ vi.mock('@meddoc/ai', async () => {
   const actual = await vi.importActual<typeof import('@meddoc/ai')>('@meddoc/ai');
   return { ...actual, modelClient: { complete: vi.fn(), completeText: mocks.modelCompleteText } };
 });
-vi.mock('@meddoc/db', () => ({ default: { transcribeVisit: { update: mocks.prismaUpdate } } }));
+vi.mock('@meddoc/db', () => ({
+  default: {
+    $queryRaw: vi.fn().mockResolvedValue([
+      { id: 'u1', practiceId: 'p1', email: 'synthetic@example.test' },
+    ]),
+    transcribeVisit: { update: mocks.prismaUpdate },
+  },
+}));
 vi.mock('@/lib/audit', () => ({ logAudit: mocks.logAudit }));
 
 import { runAnchorVerify } from '../04b-anchor-verify';

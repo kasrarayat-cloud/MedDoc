@@ -56,6 +56,7 @@ TEMPLATE_TWIN_WORKER_IMAGE_DIGEST=sha256:<64-lowercase-hex>
 TEMPLATE_TWIN_MIGRATOR_IMAGE_DIGEST=sha256:<64-lowercase-hex>
 TEMPLATE_TWIN_RUNTIME_MODE=standard
 TEMPLATE_TWIN_KILL_SWITCH=true
+TEMPLATE_TWIN_ADMIN_APP_RUNTIME_ATTESTATION=<distinct-signed-APP-envelope>
 ```
 
 The deployment authority must also issue a short-lived, signed runtime envelope
@@ -67,6 +68,11 @@ share a nonce between replicas. Register the public verification key through a
 reviewed migration-owner change. Keys are append-only, may only be revoked, and
 must not be deleted or rewritten.
 
+The deployment environment supplies the isolated practice-admin APP envelope
+through `TEMPLATE_TWIN_ADMIN_APP_RUNTIME_ATTESTATION`; Compose maps it to that
+process's `TEMPLATE_TWIN_RUNTIME_ATTESTATION`. It must be distinct from every
+physician APP envelope even when both processes use the same immutable image.
+
 The release service verifies the signatures and compares all four identities
 before every activate/pass operation. Missing, expired, revoked, replayed, or
 mismatched attestations fail closed. Switch the process kill switch to `false`
@@ -75,7 +81,20 @@ only inside the approved Canary window; a database gate still remains required.
 ## Process and ingress isolation
 
 - `transcribe-md` and the worker connect only as `meddoc_runtime`; explicitly
-  blank the control and dispatcher DSNs in those containers.
+  blank the control, audit-dispatcher, and auth-email-dispatcher credentials in
+  those containers.
+- `template-twin-admin-app` is a separately attested, unexposed same-image
+  process that also connects as `meddoc_runtime`. It receives no release-control
+  or object-storage credential. It receives only the provider credential needed
+  for the bounded static-image privacy scan. Caddy routes its exact auth/MFA,
+  reusable-image page/API and `/_next/static/*`/public-asset paths to this
+  process; the process repeats that deny-by-default allowlist before auth.
+  Compose probes the exact health route directly inside the container. Caddy
+  does not expose that route on the public admin host; the process allowlist
+  admits it only for the internal container probe.
+  Practice access requires current ADMIN/SUPER_ADMIN + TRANSCRIBE_MD authority,
+  and every page or inventory disclosure requires a durable fail-closed access
+  audit after rollout, active-practice, and current-actor fences.
 - `template-twin-admin-control` is the only HTTP process receiving the
   `meddoc_release_control` DSN. Caddy routes only the release workbench page and
   its exact release/metric endpoints to it. It does not load the application
@@ -86,8 +105,42 @@ only inside the approved Canary window; a database gate still remains required.
 - `template-twin-audit-dispatcher` connects only as
   `meddoc_audit_dispatcher`, receives no provider credential or control DSN,
   and is the only process allowed to claim and deliver release outbox rows.
-- The broad admin and physician routes continue to use the ordinary app
-  process. Validate both Caddy and Compose before every deployment.
+- `auth-email-dispatcher` connects only as `meddoc_auth_email_dispatcher`,
+  imports no wholesale `.env`, and receives only verified mail-provider
+  settings plus the exact physician-app URL. Its procedure-only database role
+  cannot read ordinary application tables directly. Operate and roll it back
+  through `auth-email-dispatcher.md`.
+- Every Caddy site imports the shared access-log filter. The default runtime
+  logger repeats it because upstream failures can also emit request URIs. Both
+  preserve query parameter names but replace credential-like values, including
+  `token`, `code`, `state`, `id_token`, `access_token`, `refresh_token`,
+  `secret`, `password`, and `otp`, before encoding. Validate this policy against
+  the exact release Caddy image with synthetic markers only.
+- Broad legacy `/admin`, `/admin/*`, `/api/admin`, and `/api/admin/*` routes are
+  retired on `admin.quillmd.com` and return `404` at Caddy. No admin-host route
+  is proxied to the physician `transcribe-md` process, and the bare `/` no
+  longer rewrites to `/admin`. Exact Template Twin control matchers are ordered
+  before the explicit legacy denies; every other non-allowlisted path reaches
+  the catch-all `404`.
+
+The public admin-host allowlist is deliberately small:
+
+| Surface                                            | Exact public path boundary                                                                                  | Process                       |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| Sign-in/session                                    | `/api/auth/*`; `/login`, `/forgot-password`, `/reset-password`, `/check-email`                              | `template-twin-admin-app`     |
+| Required MFA enrollment and recovery-code rotation | `/api/mfa/enroll`, `/api/mfa/verify-enrollment`, `/api/mfa/recovery-codes/rotate`, `/settings/security/mfa` | `template-twin-admin-app`     |
+| Practice static assets                             | `/api/note-templates/template-twin/static-assets`, `/settings/note-format/static-assets`                    | `template-twin-admin-app`     |
+| Release workbench                                  | `/admin/template-twin-release` and children                                                                 | `template-twin-admin-control` |
+| Release API                                        | `/api/admin/template-twin/releases` and children; `/api/admin/template-twin/release-metrics` and children   | `template-twin-admin-control` |
+| Build/public assets                                | `/_next/static/*`, favicon, robots, and manifest files                                                      | `template-twin-admin-app`     |
+
+The admin-app and control health endpoints remain internal container probes;
+Caddy does not expose either on the public admin host. Before every deployment,
+validate the mounted configuration in the resolved image with
+`docker compose exec caddy caddy validate --config /etc/caddy/Caddyfile`, then
+repeat the edge path and access-log redaction contract tests. A failed config,
+an unredacted synthetic marker, a legacy route that does not return `404`, or
+any admin-host route targeting `transcribe-md` is a deployment blocker.
 
 ## Database privileges
 
@@ -96,21 +149,22 @@ principals already exist with the expected attributes and memberships:
 
 - NOLOGIN/NOINHERIT groups: `quillmd_runtime`,
   `quillmd_release_control`, `quillmd_release_security`, and
-  `quillmd_audit_dispatcher`;
+  `quillmd_audit_dispatcher`, plus `quillmd_auth_email_dispatcher`;
 - LOGIN/INHERIT principals with exactly one membership each:
   `meddoc_runtime` → `quillmd_runtime`, `meddoc_release_control` →
   `quillmd_release_control`, `meddoc_release_security` →
   `quillmd_release_security`, and `meddoc_audit_dispatcher` →
-  `quillmd_audit_dispatcher`.
+  `quillmd_audit_dispatcher`, plus `meddoc_auth_email_dispatcher` →
+  `quillmd_auth_email_dispatcher`.
 
-For a brand-new database, supply three distinct generated credentials to
+For a brand-new database, supply four distinct generated credentials to
 `infra/postgres/init-template-twin-roles.sh` through the container secret
 environment before first initialization. An existing production data volume
 does not rerun entrypoint initialization: a database administrator must apply
 the same reviewed role-provisioning block before `prisma migrate deploy`, then
 verify attributes and exact membership without recording credential values.
 
-After all production-control migrations have committed, provision the fourth,
+After all production-control migrations have committed, provision the fifth,
 procedure-only security login with
 `infra/postgres/provision-template-twin-release-security.sh`. Supply its unique
 credential through `DB_RELEASE_SECURITY_PASSWORD` and the normal protected
@@ -226,6 +280,13 @@ Then follow `template-twin-audited-rollback-control.md` and
 Never delete release, decision, metric, capability, checkpoint, or outbox
 evidence.
 
+The exact audited rollback-fence API remains
+`/api/admin/template-twin/rollback`. Caddy routes only that path to the
+isolated admin-app process; broad legacy `/api/admin/*` remains retired. Every
+rollback mutation requires a fresh host-only admin session, complete current
+MFA, current `SUPER_ADMIN`, an active practice, same-origin confirmation, and a
+second transaction-final session/identity check under the rollback lock.
+
 ## Verification
 
 On a fresh disposable PostgreSQL database, apply all migrations and run:
@@ -258,8 +319,13 @@ delivered release outbox row must pair with exactly one database-generated
 
 ## Emergency disable and credential boundary rollback
 
-1. Set `TEMPLATE_TWIN_KILL_SWITCH=true` on APP and WORKER instances and restart
-   them from the last accepted immutable image.
+1. Set `TEMPLATE_TWIN_KILL_SWITCH=true` on all six same-artifact runtimes and
+   restart them from the last accepted immutable app/worker image pair through
+   `template-twin-runtime-swap.sh`: physician app, practice-admin app,
+   release-control app, primary worker, audit dispatcher, and authentication
+   email dispatcher. Preserve and reuse the generated content-addressed
+   rollback overlay for every later Compose operation. Never include the
+   one-shot database migrator and never run a downmigration.
 2. Use the fresh-session workbench revoke action for the exact release. If the
    control process is unavailable, Operations uses the separately reviewed
    database emergency procedure; never issue a direct enabling update.

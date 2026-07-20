@@ -9,13 +9,13 @@
 // in T-M7.
 // ============================================================================
 
-import { Resend } from 'resend';
+import { Resend } from "resend";
 
 // Phase 6Z (PHASE-6Z-07): Resend wraps were never wired to logApiUsage,
 // so api_usage_events had no `provider='resend'` rows and the /admin/usage
 // breakdown silently undercounted total spend. Wired below at the two
 // success-path return points (sendOne + sendVisitPdfEmail).
-import { logApiUsage, buildResendUsage } from '@meddoc/ai';
+import { logApiUsage, buildResendUsage } from "@meddoc/ai";
 
 /** Thrown when Resend rejects the send because the deployment isn't
  *  set up correctly (domain not verified, API key revoked, etc.) —
@@ -23,10 +23,10 @@ import { logApiUsage, buildResendUsage } from '@meddoc/ai';
  *  transient error. Callers can distinguish this from "delivery
  *  failed" and surface it more prominently. */
 export class EmailNotConfiguredError extends Error {
-  readonly code = 'EMAIL_NOT_CONFIGURED' as const;
+  readonly code = "EMAIL_NOT_CONFIGURED" as const;
   constructor(message: string) {
     super(message);
-    this.name = 'EmailNotConfiguredError';
+    this.name = "EmailNotConfiguredError";
   }
 }
 
@@ -37,7 +37,7 @@ function getClient(): Resend {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
     throw new EmailNotConfiguredError(
-      'RESEND_API_KEY is not set — email delivery is disabled on this deployment.'
+      "RESEND_API_KEY is not set — email delivery is disabled on this deployment.",
     );
   }
   clientSingleton = new Resend(apiKey);
@@ -51,7 +51,7 @@ function getClient(): Resend {
  *  a different sender (e.g. support@quillmd.com for support mail).
  *  The override wins; this constant is just the fallback for a
  *  deploy that forgot to set RESEND_FROM. */
-const DEFAULT_FROM = 'QuillMD <noreply@quillmd.com>';
+const DEFAULT_FROM = "QuillMD <noreply@quillmd.com>";
 
 export interface SendVisitPdfEmailArgs {
   toEmail: string;
@@ -72,18 +72,18 @@ export interface SendVisitPdfEmailResult {
 }
 
 export async function sendVisitPdfEmail(
-  args: SendVisitPdfEmailArgs
+  args: SendVisitPdfEmailArgs,
 ): Promise<SendVisitPdfEmailResult> {
   const client = getClient();
   const from = process.env.RESEND_FROM?.trim() || DEFAULT_FROM;
 
   const subjectTail = args.patientName?.trim()
     ? ` — ${args.patientName.trim()}`
-    : ' — signed visit';
+    : " — signed visit";
   const subject = `Your QuillMD visit note${subjectTail}`;
   const greeting = args.doctorName?.trim()
     ? `Hi ${args.doctorName.trim()},`
-    : 'Hi,';
+    : "Hi,";
 
   const html = [
     `<p>${greeting}</p>`,
@@ -91,18 +91,18 @@ export async function sendVisitPdfEmail(
     `<p style="color:#666;font-size:13px;">This email is for your records. Do not forward to patients — QuillMD does not handle patient-facing delivery yet. For patient hand-off, download the PDF and share through your usual secure channel.</p>`,
     `<hr style="border:none;border-top:1px solid #eee;margin:24px 0;" />`,
     `<p style="color:#999;font-size:12px;">QuillMD · signed ${args.visitDate}</p>`,
-  ].join('\n');
+  ].join("\n");
 
   const text = [
     greeting,
-    '',
-    'Your signed visit note is attached as a PDF.',
-    '',
-    'This email is for your records. Do not forward to patients — QuillMD does not handle patient-facing delivery yet. For patient hand-off, download the PDF and share through your usual secure channel.',
-    '',
+    "",
+    "Your signed visit note is attached as a PDF.",
+    "",
+    "This email is for your records. Do not forward to patients — QuillMD does not handle patient-facing delivery yet. For patient hand-off, download the PDF and share through your usual secure channel.",
+    "",
     `—`,
     `QuillMD · signed ${args.visitDate}`,
-  ].join('\n');
+  ].join("\n");
 
   const filename = `visit-${args.visitId}-${args.visitDate}.pdf`;
 
@@ -113,7 +113,7 @@ export async function sendVisitPdfEmail(
     subject,
     html,
     text,
-    headers: buildDeliverabilityHeaders({ category: 'visit_pdf' }),
+    headers: buildDeliverabilityHeaders({ category: "visit_pdf" }),
     attachments: [
       {
         filename,
@@ -130,9 +130,9 @@ export async function sendVisitPdfEmail(
   const error = (result as any)?.error;
   if (error) {
     const message =
-      typeof error === 'string'
+      typeof error === "string"
         ? error
-        : error.message ?? JSON.stringify(error);
+        : (error.message ?? JSON.stringify(error));
     // Classify setup-level errors so callers can show them as a LOUD
     // "email isn't configured" banner rather than a per-message blip.
     // Known Resend setup-error phrases as of 2026-04 — extend the
@@ -144,14 +144,13 @@ export async function sendVisitPdfEmail(
       /from.*not.*allowed/i.test(message)
     ) {
       console.error(
-        '[OPS] [email] Resend setup error — email delivery is broken until fixed:',
-        message
+        "[OPS] [email] provider setup error — email delivery is unavailable",
       );
       throw new EmailNotConfiguredError(
-        `Email delivery isn't set up on this deployment: ${message}. Contact the admin.`
+        "Email delivery isn't set up on this deployment. Contact the admin.",
       );
     }
-    throw new Error(`Resend rejected the message: ${message}`);
+    throw new Error("Email provider rejected the message.");
   }
   // Phase 6Z (PHASE-6Z-07): one usage row per successful send. We don't
   // know userId/practiceId at this layer (callers don't pass them),
@@ -159,9 +158,9 @@ export async function sendVisitPdfEmail(
   // logApiUsage internals never throw.
   logApiUsage(
     buildResendUsage(
-      { metadata: { kind: 'visit_pdf', visitId: args.visitId } },
-      1
-    )
+      { metadata: { kind: "visit_pdf", visitId: args.visitId } },
+      1,
+    ),
   );
   return { id, toEmail: args.toEmail };
 }
@@ -185,6 +184,12 @@ interface SenderResult {
   toEmail: string;
 }
 
+export interface TransactionalEmailOptions {
+  trackUsage?: boolean;
+  /** Stable provider-side deduplication key. Never include an email or token. */
+  idempotencyKey?: string;
+}
+
 function resendFrom(): string {
   return process.env.RESEND_FROM?.trim() || DEFAULT_FROM;
 }
@@ -192,7 +197,7 @@ function resendFrom(): string {
 /** Reply-To address. Defaults to support@quillmd.com so doctor replies
  *  go to a real inbox instead of bouncing off `noreply@`. Override via
  *  RESEND_REPLY_TO in .env (e.g., for a per-tenant routing inbox). */
-const DEFAULT_REPLY_TO = 'support@quillmd.com';
+const DEFAULT_REPLY_TO = "support@quillmd.com";
 
 function resendReplyTo(): string {
   return process.env.RESEND_REPLY_TO?.trim() || DEFAULT_REPLY_TO;
@@ -205,8 +210,8 @@ function resendReplyTo(): string {
  *  production mail, we'd be quietly degrading deliverability. */
 function appUrl(): string {
   const raw =
-    process.env.AUTH_URL?.replace(/\/$/, '') ?? 'https://app.quillmd.com';
-  if (!raw.startsWith('https://')) return 'https://app.quillmd.com';
+    process.env.AUTH_URL?.replace(/\/$/, "") ?? "https://app.quillmd.com";
+  if (!raw.startsWith("https://")) return "https://app.quillmd.com";
   return raw;
 }
 
@@ -241,34 +246,43 @@ export function buildDeliverabilityHeaders(args: {
     args.category,
   )}`;
   return {
-    'List-Unsubscribe': `<${unsubMailto}>, <${unsubUrl}>`,
-    'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-    'X-Entity-Ref-ID': randomRefId(),
+    "List-Unsubscribe": `<${unsubMailto}>, <${unsubUrl}>`,
+    "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    "X-Entity-Ref-ID": randomRefId(),
   };
 }
 
 function randomRefId(): string {
   // 96 bits of randomness, base36; ~20 chars. Not cryptographically
   // load-bearing — just an opaque correlation ID per send.
-  let out = '';
+  let out = "";
   for (let i = 0; i < 4; i++) {
     out += Math.random().toString(36).slice(2, 10);
   }
   return out.slice(0, 20);
 }
 
-async function sendOne(args: {
-  to: string;
-  subject: string;
-  html: string;
-  text: string;
-  /** Short slug identifying which transactional template this is.
-   *  Used in the List-Unsubscribe URL so an unsubscribe click can
-   *  scope to the category (verification, reset, etc.). */
-  category: string;
-}): Promise<SenderResult> {
+async function sendOne(
+  args: {
+    to: string;
+    subject: string;
+    html: string;
+    text: string;
+    /** Short slug identifying which transactional template this is.
+     *  Used in the List-Unsubscribe URL so an unsubscribe click can
+     *  scope to the category (verification, reset, etc.). */
+    category: string;
+  },
+  options: TransactionalEmailOptions = {},
+): Promise<SenderResult> {
   const client = getClient();
-  const result = await client.emails.send({
+  if (
+    options.idempotencyKey !== undefined &&
+    !/^[A-Za-z0-9_-]{1,128}$/.test(options.idempotencyKey)
+  ) {
+    throw new TypeError("Email idempotency key is invalid.");
+  }
+  const message = {
     from: resendFrom(),
     to: args.to,
     replyTo: resendReplyTo(),
@@ -276,16 +290,21 @@ async function sendOne(args: {
     html: args.html,
     text: args.text,
     headers: buildDeliverabilityHeaders({ category: args.category }),
-  });
+  };
+  const result = options.idempotencyKey
+    ? await client.emails.send(message, {
+        idempotencyKey: options.idempotencyKey,
+      })
+    : await client.emails.send(message);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const id = ((result as any)?.data?.id as string | undefined) ?? null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const error = (result as any)?.error;
   if (error) {
     const message =
-      typeof error === 'string'
+      typeof error === "string"
         ? error
-        : error.message ?? JSON.stringify(error);
+        : (error.message ?? JSON.stringify(error));
     if (
       /domain is not verified/i.test(message) ||
       /api key.*restricted/i.test(message) ||
@@ -293,31 +312,41 @@ async function sendOne(args: {
       /from.*not.*allowed/i.test(message)
     ) {
       console.error(
-        '[OPS] [email] Resend setup error — email delivery is broken until fixed:',
-        message
+        "[OPS] [email] provider setup error — email delivery is unavailable",
       );
       throw new EmailNotConfiguredError(
-        `Email delivery isn't set up on this deployment: ${message}. Contact the admin.`
+        "Email delivery isn't set up on this deployment. Contact the admin.",
       );
     }
-    throw new Error(`Resend rejected the message: ${message}`);
+    throw new Error("Email provider rejected the message.");
   }
   // Phase 6Z (PHASE-6Z-07): track the auth/account email send in
   // api_usage_events. Same caveat as sendVisitPdfEmail — no userId
   // attribution from this layer. Subject is captured in metadata for
   // operator-facing diagnostics.
-  logApiUsage(
-    buildResendUsage(
-      { metadata: { kind: 'transactional', subject: args.subject } },
-      1
-    )
-  );
+  if (options.trackUsage !== false) {
+    logApiUsage(
+      buildResendUsage(
+        { metadata: { kind: "transactional", subject: args.subject } },
+        1,
+      ),
+    );
+  }
   return { id, toEmail: args.to };
 }
 
 function greetingFor(name: string | null | undefined): string {
   const trimmed = name?.trim();
-  return trimmed ? `Hi ${trimmed},` : 'Hi,';
+  return trimmed ? `Hi ${trimmed},` : "Hi,";
+}
+
+function escapeEmailHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 // ---------------------------------------------------------------------------
@@ -331,30 +360,42 @@ export interface SendPasswordResetArgs {
 }
 
 export async function sendPasswordResetEmail(
-  args: SendPasswordResetArgs
+  args: SendPasswordResetArgs,
+  options: TransactionalEmailOptions = {},
 ): Promise<SenderResult> {
   const greeting = greetingFor(args.userName);
-  const subject = 'Reset your QuillMD password';
+  const htmlGreeting = escapeEmailHtml(greeting);
+  const resetHref = escapeEmailHtml(args.resetUrl);
+  const subject = "Reset your QuillMD password";
   const html = [
-    `<p>${greeting}</p>`,
+    `<p>${htmlGreeting}</p>`,
     `<p>Someone (hopefully you) asked to reset the password on your QuillMD account. Click the link below to set a new one:</p>`,
-    `<p><a href="${args.resetUrl}" style="display:inline-block;padding:10px 18px;background:#7C3AED;color:#fff;border-radius:6px;text-decoration:none;">Reset my password</a></p>`,
+    `<p><a href="${resetHref}" style="display:inline-block;padding:10px 18px;background:#7C3AED;color:#fff;border-radius:6px;text-decoration:none;">Reset my password</a></p>`,
     `<p style="color:#666;font-size:13px;">The link expires in 1 hour and can only be used once. If you didn't request this, you can safely ignore this email — your password stays the same.</p>`,
     `<hr style="border:none;border-top:1px solid #eee;margin:24px 0;" />`,
     `<p style="color:#999;font-size:12px;">QuillMD · account security</p>`,
-  ].join('\n');
+  ].join("\n");
   const text = [
     greeting,
-    '',
-    'Someone asked to reset the password on your QuillMD account. Open this link to set a new one:',
-    '',
+    "",
+    "Someone asked to reset the password on your QuillMD account. Open this link to set a new one:",
+    "",
     args.resetUrl,
-    '',
+    "",
     "The link expires in 1 hour and can only be used once. If you didn't request this, ignore this email — your password stays the same.",
-    '',
-    '— QuillMD',
-  ].join('\n');
-  return sendOne({ to: args.toEmail, subject, html, text, category: 'password_reset' });
+    "",
+    "— QuillMD",
+  ].join("\n");
+  return sendOne(
+    {
+      to: args.toEmail,
+      subject,
+      html,
+      text,
+      category: "password_reset",
+    },
+    options,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -368,30 +409,42 @@ export interface SendEmailVerificationArgs {
 }
 
 export async function sendEmailVerification(
-  args: SendEmailVerificationArgs
+  args: SendEmailVerificationArgs,
+  options: TransactionalEmailOptions = {},
 ): Promise<SenderResult> {
   const greeting = greetingFor(args.userName);
-  const subject = 'Verify your QuillMD email';
+  const htmlGreeting = escapeEmailHtml(greeting);
+  const verifyHref = escapeEmailHtml(args.verifyUrl);
+  const subject = "Verify your QuillMD email";
   const html = [
-    `<p>${greeting}</p>`,
+    `<p>${htmlGreeting}</p>`,
     `<p>Welcome to QuillMD. Please confirm this email address so we know we can reach you:</p>`,
-    `<p><a href="${args.verifyUrl}" style="display:inline-block;padding:10px 18px;background:#7C3AED;color:#fff;border-radius:6px;text-decoration:none;">Verify my email</a></p>`,
+    `<p><a href="${verifyHref}" style="display:inline-block;padding:10px 18px;background:#7C3AED;color:#fff;border-radius:6px;text-decoration:none;">Verify my email</a></p>`,
     `<p style="color:#666;font-size:13px;">The link expires in 24 hours. If you didn't sign up for QuillMD, you can ignore this email.</p>`,
     `<hr style="border:none;border-top:1px solid #eee;margin:24px 0;" />`,
     `<p style="color:#999;font-size:12px;">QuillMD · account security</p>`,
-  ].join('\n');
+  ].join("\n");
   const text = [
     greeting,
-    '',
-    'Welcome to QuillMD. Please confirm this email address by opening the link below:',
-    '',
+    "",
+    "Welcome to QuillMD. Please confirm this email address by opening the link below:",
+    "",
     args.verifyUrl,
-    '',
+    "",
     "The link expires in 24 hours. If you didn't sign up for QuillMD, you can ignore this email.",
-    '',
-    '— QuillMD',
-  ].join('\n');
-  return sendOne({ to: args.toEmail, subject, html, text, category: 'verify_email' });
+    "",
+    "— QuillMD",
+  ].join("\n");
+  return sendOne(
+    {
+      to: args.toEmail,
+      subject,
+      html,
+      text,
+      category: "verify_email",
+    },
+    options,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -410,30 +463,42 @@ export interface SendAccountExistsArgs {
 }
 
 export async function sendAccountExistsEmail(
-  args: SendAccountExistsArgs
+  args: SendAccountExistsArgs,
+  options: TransactionalEmailOptions = {},
 ): Promise<SenderResult> {
   const greeting = greetingFor(args.userName);
-  const subject = 'You already have a QuillMD account';
+  const htmlGreeting = escapeEmailHtml(greeting);
+  const signInHref = escapeEmailHtml(args.signInUrl);
+  const subject = "You already have a QuillMD account";
   const html = [
-    `<p>${greeting}</p>`,
+    `<p>${htmlGreeting}</p>`,
     `<p>Someone (hopefully you) just tried to sign up for QuillMD with this email — but you already have an account here. There's no new account to verify; just sign in with the password you set when you first registered:</p>`,
-    `<p><a href="${args.signInUrl}" style="display:inline-block;padding:10px 18px;background:#7C3AED;color:#fff;border-radius:6px;text-decoration:none;">Sign in</a></p>`,
+    `<p><a href="${signInHref}" style="display:inline-block;padding:10px 18px;background:#7C3AED;color:#fff;border-radius:6px;text-decoration:none;">Sign in</a></p>`,
     `<p style="color:#666;font-size:13px;">If you don't remember your password, use the "Forgot password" link on the sign-in page. If you didn't try to sign up, you can safely ignore this email — your account is unchanged.</p>`,
     `<hr style="border:none;border-top:1px solid #eee;margin:24px 0;" />`,
     `<p style="color:#999;font-size:12px;">QuillMD · account security</p>`,
-  ].join('\n');
+  ].join("\n");
   const text = [
     greeting,
-    '',
+    "",
     "Someone (hopefully you) just tried to sign up for QuillMD with this email — but you already have an account. Sign in with the password you set when you first registered:",
-    '',
+    "",
     args.signInUrl,
-    '',
-    'If you don\'t remember your password, use the "Forgot password" link on the sign-in page. If you didn\'t try to sign up, you can safely ignore this email.',
-    '',
-    '— QuillMD',
-  ].join('\n');
-  return sendOne({ to: args.toEmail, subject, html, text, category: 'account_exists' });
+    "",
+    "If you don't remember your password, use the \"Forgot password\" link on the sign-in page. If you didn't try to sign up, you can safely ignore this email.",
+    "",
+    "— QuillMD",
+  ].join("\n");
+  return sendOne(
+    {
+      to: args.toEmail,
+      subject,
+      html,
+      text,
+      category: "account_exists",
+    },
+    options,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -447,30 +512,42 @@ export interface SendEmailChangeRequestArgs {
 }
 
 export async function sendEmailChangeRequestEmail(
-  args: SendEmailChangeRequestArgs
+  args: SendEmailChangeRequestArgs,
+  options: TransactionalEmailOptions = {},
 ): Promise<SenderResult> {
   const greeting = greetingFor(args.userName);
-  const subject = 'Confirm your new QuillMD email';
+  const htmlGreeting = escapeEmailHtml(greeting);
+  const confirmHref = escapeEmailHtml(args.confirmUrl);
+  const subject = "Confirm your new QuillMD email";
   const html = [
-    `<p>${greeting}</p>`,
+    `<p>${htmlGreeting}</p>`,
     `<p>You asked to change the email address on your QuillMD account to this one. Click below to confirm:</p>`,
-    `<p><a href="${args.confirmUrl}" style="display:inline-block;padding:10px 18px;background:#7C3AED;color:#fff;border-radius:6px;text-decoration:none;">Confirm new email</a></p>`,
+    `<p><a href="${confirmHref}" style="display:inline-block;padding:10px 18px;background:#7C3AED;color:#fff;border-radius:6px;text-decoration:none;">Confirm new email</a></p>`,
     `<p style="color:#666;font-size:13px;">The link expires in 24 hours. Until you confirm, you'll keep signing in with your old email. If you didn't request this change, ignore this email.</p>`,
     `<hr style="border:none;border-top:1px solid #eee;margin:24px 0;" />`,
     `<p style="color:#999;font-size:12px;">QuillMD · account security</p>`,
-  ].join('\n');
+  ].join("\n");
   const text = [
     greeting,
-    '',
-    'You asked to change the email address on your QuillMD account to this one. Confirm by opening the link below:',
-    '',
+    "",
+    "You asked to change the email address on your QuillMD account to this one. Confirm by opening the link below:",
+    "",
     args.confirmUrl,
-    '',
+    "",
     "The link expires in 24 hours. Until you confirm, you'll keep signing in with your old email. If you didn't request this change, ignore this email.",
-    '',
-    '— QuillMD',
-  ].join('\n');
-  return sendOne({ to: args.toEmail, subject, html, text, category: 'email_change_request' });
+    "",
+    "— QuillMD",
+  ].join("\n");
+  return sendOne(
+    {
+      to: args.toEmail,
+      subject,
+      html,
+      text,
+      category: "email_change_request",
+    },
+    options,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -484,27 +561,35 @@ export interface SendEmailChangedNotificationArgs {
 }
 
 export async function sendEmailChangedNotification(
-  args: SendEmailChangedNotificationArgs
+  args: SendEmailChangedNotificationArgs,
 ): Promise<SenderResult> {
   const greeting = greetingFor(args.userName);
-  const subject = 'Your QuillMD email was changed';
+  const htmlGreeting = escapeEmailHtml(greeting);
+  const htmlNewEmail = escapeEmailHtml(args.newEmail);
+  const subject = "Your QuillMD email was changed";
   const html = [
-    `<p>${greeting}</p>`,
-    `<p>The email address on your QuillMD account was just changed to <strong>${args.newEmail}</strong>.</p>`,
+    `<p>${htmlGreeting}</p>`,
+    `<p>The email address on your QuillMD account was just changed to <strong>${htmlNewEmail}</strong>.</p>`,
     `<p style="color:#666;font-size:13px;">If you made this change, nothing else is required. If you didn't, reply to this email from <em>this</em> address immediately — we can roll it back before the session expires.</p>`,
     `<hr style="border:none;border-top:1px solid #eee;margin:24px 0;" />`,
     `<p style="color:#999;font-size:12px;">QuillMD · account security</p>`,
-  ].join('\n');
+  ].join("\n");
   const text = [
     greeting,
-    '',
+    "",
     `The email address on your QuillMD account was just changed to ${args.newEmail}.`,
-    '',
+    "",
     "If you made this change, nothing else is required. If you didn't, reply to this email from THIS address immediately — we can roll it back before the session expires.",
-    '',
-    '— QuillMD',
-  ].join('\n');
-  return sendOne({ to: args.toEmail, subject, html, text, category: 'email_changed_notification' });
+    "",
+    "— QuillMD",
+  ].join("\n");
+  return sendOne({
+    to: args.toEmail,
+    subject,
+    html,
+    text,
+    category: "email_changed_notification",
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -517,25 +602,32 @@ export interface SendAccountDeletedArgs {
 }
 
 export async function sendAccountDeletedConfirmation(
-  args: SendAccountDeletedArgs
+  args: SendAccountDeletedArgs,
 ): Promise<SenderResult> {
   const greeting = greetingFor(args.userName);
-  const subject = 'Your QuillMD account was deleted';
+  const htmlGreeting = escapeEmailHtml(greeting);
+  const subject = "Your QuillMD account was deleted";
   const html = [
-    `<p>${greeting}</p>`,
+    `<p>${htmlGreeting}</p>`,
     `<p>Your QuillMD account and all associated data have been deleted. This can't be undone.</p>`,
     `<p style="color:#666;font-size:13px;">We keep a minimal compliance record (email, deletion date, visit count at deletion time) for 90 days and then erase that too. If you ever want to come back, you can sign up again from scratch.</p>`,
     `<hr style="border:none;border-top:1px solid #eee;margin:24px 0;" />`,
     `<p style="color:#999;font-size:12px;">QuillMD · goodbye</p>`,
-  ].join('\n');
+  ].join("\n");
   const text = [
     greeting,
-    '',
+    "",
     "Your QuillMD account and all associated data have been deleted. This can't be undone.",
-    '',
-    'We keep a minimal compliance record (email, deletion date, visit count) for 90 days, then erase that too. If you ever want to come back, you can sign up again from scratch.',
-    '',
-    '— QuillMD',
-  ].join('\n');
-  return sendOne({ to: args.toEmail, subject, html, text, category: 'account_deleted' });
+    "",
+    "We keep a minimal compliance record (email, deletion date, visit count) for 90 days, then erase that too. If you ever want to come back, you can sign up again from scratch.",
+    "",
+    "— QuillMD",
+  ].join("\n");
+  return sendOne({
+    to: args.toEmail,
+    subject,
+    html,
+    text,
+    category: "account_deleted",
+  });
 }

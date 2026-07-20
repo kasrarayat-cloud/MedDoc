@@ -1,8 +1,8 @@
-'use server';
+"use server";
 
-import prisma from '@meddoc/db';
-import { auth } from '@/lib/nextauth';
-import { ordinaryClinicalVisitWhere } from '@/lib/template-twin/synthetic-qa-patient';
+import prisma from "@meddoc/db";
+import { getSession } from "@/lib/auth";
+import { readTemplateTwinVisibleVisitPage } from "@/lib/template-twin/read-authority";
 
 export interface RecentVisitItem {
   id: string;
@@ -16,26 +16,40 @@ export interface RecentVisitItem {
  *  section in that case. Dates are serialised to ISO strings to stay
  *  RSC-friendly. */
 export async function getRecentVisits(): Promise<RecentVisitItem[]> {
-  const session = await auth();
+  const session = await getSession();
   if (!session?.user?.id) return [];
 
-  const rows = await prisma.transcribeVisit.findMany({
-    where: ordinaryClinicalVisitWhere({
-      userId: session.user.id,
-      deletedAt: null,
-      archivedAt: null,
-    }),
-    orderBy: { createdAt: 'desc' },
-    take: 10,
-    select: {
-      id: true,
-      patientName: true,
-      specialty: true,
-      createdAt: true,
+  type RecentVisitRow = {
+    id: string;
+    patientName: string | null;
+    specialty: string;
+    createdAt: Date;
+  };
+  const rows = await readTemplateTwinVisibleVisitPage<RecentVisitRow>({
+    db: prisma,
+    actorUserId: session.user.id,
+    query: {
+      scope: { deleted: "active", archived: "active" },
+      orderBy: "createdAt",
+      direction: "desc",
+      take: 10,
     },
+    hydrate: (tx, visitIds) =>
+      tx.transcribeVisit.findMany({
+        where: {
+          id: { in: [...visitIds] },
+          userId: session.user.id,
+        },
+        select: {
+          id: true,
+          patientName: true,
+          specialty: true,
+          createdAt: true,
+        },
+      }) as Promise<RecentVisitRow[]>,
   });
 
-  return rows.map((r: { id: string; patientName: string | null; specialty: string; createdAt: Date }) => ({
+  return rows.map((r) => ({
     id: r.id,
     patientName: r.patientName,
     specialty: r.specialty,

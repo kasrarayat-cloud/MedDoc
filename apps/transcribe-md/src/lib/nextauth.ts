@@ -15,18 +15,49 @@
 // spreading authConfig below.
 // ============================================================================
 
-import NextAuth from 'next-auth';
-import Credentials from 'next-auth/providers/credentials';
-import bcrypt from 'bcryptjs';
-import * as Sentry from '@sentry/nextjs';
+import NextAuth from "next-auth";
+import Credentials from "next-auth/providers/credentials";
+import { headers as requestHeaders } from "next/headers";
+import bcrypt from "bcryptjs";
+import * as Sentry from "@sentry/nextjs";
 
-import authConfig from '@/lib/auth.config';
-import prisma from '@meddoc/db';
-import { revokeSession, revokeAllUserSessions, type UserRole } from '@meddoc/auth';
-import { Product } from '@prisma/client';
-import { redactPhi } from '@meddoc/ai';
-import { isEmailDeliveryEnabled } from '@/lib/email-enabled';
-import { logAudit } from '@/lib/audit';
+import authConfig from "@/lib/auth.config";
+import prisma from "@meddoc/db";
+import {
+  createSessionValidationJwtCallback,
+  computeDeviceFingerprint,
+  randomSessionToken,
+  revokeSession,
+  revokeAllUserSessions,
+  type UserRole,
+} from "@meddoc/auth";
+import { Product, type Prisma } from "@prisma/client";
+import { isEmailVerificationRequired } from "@/lib/email-enabled";
+import { hasCompleteMfaEnrollment } from "@/lib/mfa-enrollment-state";
+import {
+  isLoginRequestAllowed,
+  isSessionRequestAllowed,
+} from "@/lib/auth-surface";
+import { logAudit } from "@/lib/audit";
+import {
+  hasTemplateTwinAdminAppAccess,
+  isTemplateTwinAdminAppService,
+  transcribeMdSessionPolicyForService,
+} from "@/lib/template-twin/admin-app-service";
+import {
+  CredentialSessionAuthorityError,
+  finalizeCredentialSession,
+  recordCredentialFailure,
+  type CredentialSecondFactorProof,
+  type CredentialSessionSurface,
+  type CredentialUserSnapshot,
+} from "@/lib/credential-session-authority";
+import {
+  RATE_LIMITS,
+  checkSharedRateLimit,
+  clientIpFromHeaders,
+} from "@/lib/rate-limit";
+import { readSignedSessionAuthority } from "@/lib/signed-session-authority";
 
 /** 7 days. Longer than meddoc-pro (8hr) because TranscribeMD is a solo
  *  consumer surface, not a PHI-heavy clinical tool. */
@@ -38,15 +69,52 @@ const SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
  *  doesn't matter — bcrypt.compare against this hash returns false for
  *  every realistic input. Computed once at module load (~100 ms). */
 const DUMMY_PASSWORD_HASH = bcrypt.hashSync(
-  'timing-equalizer-never-matches',
-  12
+  "timing-equalizer-never-matches",
+  12,
 );
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+async function runDummyPasswordCheck(password: string): Promise<void> {
+  await bcrypt.compare(password, DUMMY_PASSWORD_HASH).catch(() => false);
+}
+
+function credentialSnapshot(
+  user: CredentialUserSnapshot,
+): CredentialUserSnapshot {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    practiceId: user.practiceId,
+    passwordHash: user.passwordHash,
+    role: user.role,
+    products: [...user.products],
+    emailVerified: user.emailVerified,
+    mfaEnabled: user.mfaEnabled,
+    mfaSecret: user.mfaSecret,
+    mfaVerifiedAt: user.mfaVerifiedAt,
+    mfaBackupCodes: [...user.mfaBackupCodes],
+  };
+}
+
+async function registerCredentialFailure(
+  snapshot: CredentialUserSnapshot,
+  surface: CredentialSessionSurface,
+) {
+  try {
+    return await prisma.$transaction((tx: Prisma.TransactionClient) =>
+      recordCredentialFailure(tx, { snapshot, surface }),
+    );
+  } catch {
+    console.error("[auth] credential failure authority could not be recorded");
+    return null;
+  }
+}
+
+const nextAuth = NextAuth({
   ...authConfig,
 
   session: {
-    strategy: 'jwt',
+    strategy: "jwt",
     maxAge: SESSION_MAX_AGE_SECONDS,
     // Refresh the JWT on activity — when the user is active within this
     // window, their cookie is re-signed with a bumped expiry. 1 day picked
@@ -54,51 +122,81 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     updateAge: 24 * 60 * 60,
   },
 
+  // Raw auth() is the authorization entry point for many server components
+  // and route handlers. Apply the physician product/role policy in the JWT
+  // callback itself so those paths receive the same current database fence as
+  // getSession(), including revocation after demotion or product removal.
+  callbacks: {
+    ...authConfig.callbacks,
+    jwt: createSessionValidationJwtCallback(
+      transcribeMdSessionPolicyForService(),
+      { acceptPrevalidatedSession: true },
+    ),
+  },
+
   providers: [
     Credentials({
-      name: 'Email + Password',
+      name: "Email + Password",
       credentials: {
-        email: { label: 'Email', type: 'email' },
-        password: { label: 'Password', type: 'password' },
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
         // MFA — set when the user has mfaEnabled=true. Either a 6-digit
         // TOTP token OR a one-time recovery code is required (validated
         // below after the password check). loginAction handles the
         // two-step UX; authorize re-validates here as defense in depth
         // — even a direct signIn() call from somewhere else has to
         // include the second factor or it fails.
-        totpToken: { label: 'TOTP', type: 'text' },
-        recoveryCode: { label: 'Recovery', type: 'text' },
+        totpToken: { label: "TOTP", type: "text" },
+        recoveryCode: { label: "Recovery", type: "text" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
+        if (!request?.headers || !isLoginRequestAllowed(request.headers)) {
+          return null;
+        }
+        const rateLimit = await checkSharedRateLimit(
+          RATE_LIMITS.LOGIN,
+          clientIpFromHeaders(request.headers),
+        );
+        if (!rateLimit.allowed) return null;
+
         const email =
-          typeof credentials?.email === 'string'
+          typeof credentials?.email === "string"
             ? credentials.email.trim().toLowerCase()
-            : '';
+            : "";
         const password =
-          typeof credentials?.password === 'string' ? credentials.password : '';
-        if (!email || !password) return null;
+          typeof credentials?.password === "string" ? credentials.password : "";
+        if (!email || !password) {
+          await runDummyPasswordCheck(password);
+          return null;
+        }
         const totpToken =
-          typeof credentials?.totpToken === 'string'
+          typeof credentials?.totpToken === "string"
             ? credentials.totpToken
-            : '';
+            : "";
         const recoveryCode =
-          typeof credentials?.recoveryCode === 'string'
+          typeof credentials?.recoveryCode === "string"
             ? credentials.recoveryCode
-            : '';
+            : "";
+        const sessionSurface: CredentialSessionSurface =
+          isTemplateTwinAdminAppService() ? "admin" : "physician";
 
         let user;
         try {
           user = await prisma.user.findUnique({ where: { email } });
-        } catch (err) {
-          // T-M18.3 A17: Prisma errors can echo column values.
-          console.error(
-            '[auth] user lookup failed:',
-            redactPhi(err instanceof Error ? err.message : err)
-          );
+        } catch {
+          await runDummyPasswordCheck(password);
+          // Database-driver errors can embed connection URLs and credentials.
+          console.error("[auth] user lookup failed; login denied");
           return null;
         }
-        if (!user) return null;
-        if (!user.isActive) return null;
+        if (!user) {
+          await runDummyPasswordCheck(password);
+          return null;
+        }
+        if (!user.isActive) {
+          await runDummyPasswordCheck(password);
+          return null;
+        }
         // Phase 6Z (PHASE-6Z-08): reject suspended/soft-deleted users at the
         // login form rather than letting them complete authorize() and then
         // having validateSession reject their first authenticated request.
@@ -106,83 +204,74 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // findUnique above selects everything by default).
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if ((user as any).suspendedAt) {
+          await runDummyPasswordCheck(password);
           void logAudit({
-            action: 'LOGIN_FAILED',
+            action: "LOGIN_FAILED",
             userId: user.id,
             userEmail: user.email,
             practiceId: user.practiceId,
             success: false,
-            errorCode: 'ACCOUNT_SUSPENDED',
+            errorCode: "ACCOUNT_SUSPENDED",
           });
           return null;
         }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if ((user as any).softDeletedAt) {
+          await runDummyPasswordCheck(password);
           void logAudit({
-            action: 'LOGIN_FAILED',
+            action: "LOGIN_FAILED",
             userId: user.id,
             userEmail: user.email,
             practiceId: user.practiceId,
             success: false,
-            errorCode: 'ACCOUNT_SOFT_DELETED',
+            errorCode: "ACCOUNT_SOFT_DELETED",
           });
           return null;
         }
-        if (user.lockedUntil && user.lockedUntil > new Date()) return null;
+        if (user.lockedUntil && user.lockedUntil > new Date()) {
+          await runDummyPasswordCheck(password);
+          return null;
+        }
 
-        // T-M16.2 defense-in-depth: the email-verification gate is
+        // T-M16.2 defense-in-depth: the email-verification policy is
         // primarily enforced in loginAction (which can return a
         // dedicated "needsVerificationFor" state to surface the resend
         // affordance to the user). If someone bypasses the action and
         // hits NextAuth signIn directly, we still block here. No
         // counter increment — this isn't a failed credential, it's a
-        // state gate.
+        // state gate. This policy is deliberately separate from provider
+        // delivery health, so losing Resend configuration cannot weaken auth.
         //
         // T-M18.3 A18: run a no-op bcrypt.compare before early-return
         // so this path takes the same wall-clock time as the verified
         // path (which hits the real bcrypt below). Prevents an attacker
         // from distinguishing "email exists + unverified" via response
         // timing.
-        if (isEmailDeliveryEnabled() && user.emailVerified === null) {
-          await bcrypt.compare(password, DUMMY_PASSWORD_HASH).catch(() => false);
+        if (isEmailVerificationRequired() && user.emailVerified === null) {
+          await runDummyPasswordCheck(password);
           return null;
         }
 
         const valid = await bcrypt.compare(password, user.passwordHash);
         if (!valid) {
-          // Mirror meddoc-pro's brute-force guard so a shared email can't
-          // be attacked at the TranscribeMD surface to bypass the guard.
-          const LOCKOUT_THRESHOLD = 5;
-          const LOCKOUT_MINUTES = 15;
-          const nextCount = user.failedLoginCount + 1;
-          const shouldLock = nextCount >= LOCKOUT_THRESHOLD;
-          const lockUntil = shouldLock
-            ? new Date(Date.now() + LOCKOUT_MINUTES * 60 * 1000)
-            : null;
-          await prisma.user
-            .update({
-              where: { id: user.id },
-              data: {
-                failedLoginCount: { increment: 1 },
-                ...(lockUntil ? { lockedUntil: lockUntil } : {}),
-              },
-            })
-            .catch((err: unknown) => {
-              console.error(
-                '[auth] failed-login counter update failed:',
-                redactPhi(err instanceof Error ? err.message : err)
-              );
-            });
+          // The direct Auth.js endpoint does not traverse loginAction's rate
+          // limiter. Serialize thresholding on the current user row so
+          // parallel password attempts cannot step past the lock boundary.
+          const failure = await registerCredentialFailure(
+            credentialSnapshot(user),
+            sessionSurface,
+          );
           void logAudit({
-            action: 'LOGIN_FAILED',
+            action: "LOGIN_FAILED",
             userId: user.id,
             userEmail: user.email,
             practiceId: user.practiceId,
             success: false,
-            errorCode: shouldLock ? 'ACCOUNT_LOCKED_NOW' : 'CREDENTIALS_MISMATCH',
+            errorCode: failure?.locked
+              ? "ACCOUNT_LOCKED_NOW"
+              : "CREDENTIALS_MISMATCH",
             metadata: {
-              failedLoginCount: nextCount,
-              lockedUntil: lockUntil?.toISOString() ?? null,
+              failedLoginCount: failure?.failedLoginCount ?? null,
             },
           });
           return null;
@@ -203,109 +292,138 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const tmHasSuperAdmin = user.products.includes(Product.SUPER_ADMIN);
         if (!tmHasTranscribe && !tmHasSuperAdmin) {
           void logAudit({
-            action: 'LOGIN_FAILED',
+            action: "LOGIN_FAILED",
             userId: user.id,
             userEmail: user.email,
             practiceId: user.practiceId,
             success: false,
-            errorCode: 'NO_TRANSCRIBE_MD_ENTITLEMENT',
+            errorCode: "NO_TRANSCRIBE_MD_ENTITLEMENT",
           });
           return null;
         }
 
-        // MFA gate (closes shadow-audit HIPAA_FINDING_001). When a user
-        // has mfaEnabled=true, the password alone is not sufficient —
-        // they must provide either a valid 6-digit TOTP token OR a
-        // one-time recovery code. loginAction's MFA preflight is the
-        // primary path users take; this block is defense-in-depth for
-        // any direct signIn() that bypasses the action layer.
-        if (user.mfaEnabled && user.mfaSecret) {
+        // admin.quillmd.com has a separately routed process and host-only
+        // cookie. Reject ordinary physicians before UserSession rotation;
+        // route-level gates still re-check the narrower current authority.
+        if (
+          isTemplateTwinAdminAppService() &&
+          !hasTemplateTwinAdminAppAccess({
+            role: user.role,
+            products: user.products,
+          })
+        ) {
+          void logAudit({
+            action: "LOGIN_FAILED",
+            userId: user.id,
+            userEmail: user.email,
+            practiceId: user.practiceId,
+            success: false,
+            errorCode: "NO_ADMIN_SURFACE_AUTHORITY",
+          });
+          return null;
+        }
+
+        // Verify the expensive second-factor proof against the request-start
+        // snapshot, but do not consume recovery state yet. The transaction
+        // below re-locks and compares this exact credential/MFA snapshot,
+        // consumes a recovery code, resets lockout state, rotates sessions,
+        // and creates the new UserSession as one linearized operation.
+        let secondFactor: CredentialSecondFactorProof = { kind: "none" };
+        let mfaFailureCode: string | null = null;
+        if (user.mfaEnabled) {
+          if (!hasCompleteMfaEnrollment(user)) {
+            void logAudit({
+              action: "MFA_CHALLENGE_FAILED",
+              userId: user.id,
+              userEmail: user.email,
+              practiceId: user.practiceId,
+              success: false,
+              errorCode: "MFA_ENROLLMENT_INCOMPLETE",
+              metadata: { stage: "login" },
+            });
+            return null;
+          }
           // Lazy-import the MFA verifier so the edge bundle never pulls
           // it in (mfa.ts uses node:crypto + otplib).
-          const {
-            verifyTotpToken,
-            findMatchingRecoveryHash,
-          } = await import('@/lib/mfa');
+          const { verifyStoredMfaTotpToken, findMatchingRecoveryHash } =
+            await import("@/lib/mfa");
 
-          let mfaPassed = false;
-          let usedRecovery = false;
           if (totpToken) {
-            mfaPassed = verifyTotpToken(user.mfaSecret, totpToken);
+            if (
+              verifyStoredMfaTotpToken(user.id, user.mfaSecret, totpToken)
+            ) {
+              secondFactor = { kind: "totp" };
+            } else {
+              mfaFailureCode = "INVALID_TOTP";
+            }
           } else if (recoveryCode) {
             const matched = findMatchingRecoveryHash(
               recoveryCode,
               user.mfaBackupCodes,
             );
             if (matched) {
-              mfaPassed = true;
-              usedRecovery = true;
-              // Drop the consumed recovery code from the array. Best
-              // effort — if this update fails we still let the login
-              // proceed (the alternative is locking the user out
-              // because we couldn't update the audit trail).
-              await prisma.user
-                .update({
-                  where: { id: user.id },
-                  data: {
-                    mfaBackupCodes: {
-                      set: user.mfaBackupCodes.filter(
-                        (h: string) => h !== matched,
-                      ),
-                    },
-                  },
-                })
-                .catch((err: unknown) => {
-                  console.error(
-                    '[auth] recovery-code consumption failed:',
-                    redactPhi(err instanceof Error ? err.message : err),
-                  );
-                });
+              secondFactor = { kind: "recovery", matchedHash: matched };
+            } else {
+              mfaFailureCode = "INVALID_RECOVERY_CODE";
             }
+          } else {
+            mfaFailureCode = "TOTP_REQUIRED";
           }
 
-          if (!mfaPassed) {
+          if (mfaFailureCode) {
+            const failure = await registerCredentialFailure(
+              credentialSnapshot(user),
+              sessionSurface,
+            );
             void logAudit({
-              action: 'MFA_CHALLENGE_FAILED',
+              action: "MFA_CHALLENGE_FAILED",
               userId: user.id,
               userEmail: user.email,
               practiceId: user.practiceId,
               success: false,
-              errorCode: totpToken
-                ? 'INVALID_TOTP'
-                : recoveryCode
-                  ? 'INVALID_RECOVERY_CODE'
-                  : 'TOTP_REQUIRED',
-              metadata: { stage: 'login' },
+              errorCode: mfaFailureCode,
+              metadata: {
+                stage: "login",
+                failedLoginCount: failure?.failedLoginCount ?? null,
+                locked: failure?.locked ?? null,
+              },
             });
             return null;
           }
-
-          void logAudit({
-            action: 'MFA_CHALLENGE_PASSED',
-            userId: user.id,
-            userEmail: user.email,
-            practiceId: user.practiceId,
-            success: true,
-            metadata: { method: usedRecovery ? 'recovery_code' : 'totp' },
-          });
         }
 
-        // Successful login — clear lockout + brute-force counters.
-        await prisma.user
-          .update({
-            where: { id: user.id },
-            data: {
-              lastLogin: new Date(),
-              failedLoginCount: 0,
-              lockedUntil: null,
-            },
-          })
-          .catch((err: unknown) => {
+        const ipAddress =
+          request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+          request.headers.get("x-real-ip") ??
+          null;
+        const userAgent = request.headers.get("user-agent");
+        const acceptLanguage = request.headers.get("accept-language");
+        const prevalidatedSessionId = randomSessionToken();
+
+        try {
+          await prisma.$transaction((tx: Prisma.TransactionClient) =>
+            finalizeCredentialSession(tx, {
+              snapshot: credentialSnapshot(user),
+              surface: sessionSurface,
+              secondFactor,
+              requireVerifiedEmail: isEmailVerificationRequired(),
+              sessionToken: prevalidatedSessionId,
+              ipAddress,
+              userAgent,
+              deviceFingerprint: computeDeviceFingerprint(
+                userAgent,
+                acceptLanguage,
+              ),
+            }),
+          );
+        } catch (error) {
+          if (!(error instanceof CredentialSessionAuthorityError)) {
             console.error(
-              '[auth] lastLogin update failed:',
-              redactPhi(err instanceof Error ? err.message : err)
+              "[auth] credential session finalization failed; login denied",
             );
-          });
+          }
+          return null;
+        }
 
         return {
           id: user.id,
@@ -313,6 +431,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           name: user.name,
           role: user.role as UserRole,
           practiceId: user.practiceId,
+          prevalidatedSessionId,
         };
       },
     }),
@@ -321,35 +440,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   events: {
     async signIn({ user }) {
       if (!user?.id) return;
-      // user.practiceId comes from authorize()'s returned shape. We
-      // pass it through explicitly because auth() inside logAudit
-      // returns null here — the session cookie isn't on the outgoing
-      // response yet. Same pattern as apps/meddoc-pro/src/lib/nextauth.ts.
+      // The immutable LOGIN_SUCCESS receipt was required inside the same
+      // transaction as UserSession issuance. This event only establishes
+      // non-PHI observability context after Auth.js accepts that transaction.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const practiceId = (user as any).practiceId as string | undefined;
-      void logAudit({
-        action: 'LOGIN_SUCCESS',
-        userId: user.id,
-        userEmail: user.email ?? null,
-        practiceId: practiceId ?? null,
-      });
-      // Round 3 PR-H — A11-P1 Sentry user context.
-      // PHI guard: pass IDs only — never email, name, MRN, DOB. Sentry
-      // is BAA-pending (compliance register) and the redactPhi
-      // beforeSend hook will scrub strings, but the right defense is
-      // never sending PHI in the first place. user.id is a UUID; it
-      // can be cross-referenced server-side via /api/admin if ops
-      // needs to map an event back to a user.
       Sentry.setUser({ id: user.id });
-      if (practiceId) Sentry.setTag('practiceId', practiceId);
+      if (practiceId) Sentry.setTag("practiceId", practiceId);
     },
     async signOut(message) {
       // next-auth v5's signOut event fires with a discriminated union.
       // Pull userId when it's available; tolerate the other shapes.
-      const token =
-        'token' in message ? message.token : null;
+      const token = "token" in message ? message.token : null;
       const userId =
-        token && typeof token === 'object' && 'sub' in token
+        token && typeof token === "object" && "sub" in token
           ? ((token as { sub?: string }).sub ?? null)
           : null;
       // Revoke the server-side UserSession row on sign-out. Without this only
@@ -360,20 +464,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // sessionId claim, with a userId fallback. Fires for EVERY sign-out path
       // (TopNav signOut(), the menu, the API route).
       const sessionId =
-        token && typeof token === 'object' && 'sessionId' in token
+        token && typeof token === "object" && "sessionId" in token
           ? ((token as { sessionId?: string }).sessionId ?? null)
           : null;
       try {
         if (sessionId) await revokeSession(sessionId);
         else if (userId) await revokeAllUserSessions(userId);
-      } catch (err) {
-        console.error(
-          '[auth:signOut] session revoke failed',
-          redactPhi(err instanceof Error ? err.message : String(err)),
-        );
+      } catch {
+        console.error("[auth:signOut] session revoke failed");
       }
       if (userId) {
-        void logAudit({ action: 'LOGOUT', userId });
+        void logAudit({ action: "LOGOUT", userId });
       }
       // Round 3 PR-H — clear Sentry user scope on signout so a
       // subsequent error from this process doesn't carry the
@@ -382,3 +483,79 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
 });
+
+function deniedAuthHandlerResponse(): Response {
+  return new Response("Not Found", {
+    status: 404,
+    headers: {
+      "Cache-Control": "no-store, no-cache, must-revalidate",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
+}
+
+function sessionRevocationUnavailableResponse(): Response {
+  return new Response("Secure sign-out is temporarily unavailable.", {
+    status: 503,
+    headers: {
+      "Cache-Control": "no-store, no-cache, must-revalidate",
+      "Retry-After": "5",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
+}
+
+async function handleAuthorizedAuthPost(
+  request: Parameters<typeof nextAuth.handlers.POST>[0],
+): Promise<Response> {
+  if (new URL(request.url).pathname !== "/api/auth/signout") {
+    return nextAuth.handlers.POST(request);
+  }
+
+  // Auth.js clears its cookie even when the signOut event throws. Establish
+  // durable revocation independently from the DB-backed auth() callback and
+  // refuse to hand the request to Auth.js until that row is gone.
+  const authority = await readSignedSessionAuthority(request.headers);
+  if (authority.cookiePresent) {
+    if (!authority.sessionId) return sessionRevocationUnavailableResponse();
+    try {
+      await revokeSession(authority.sessionId);
+    } catch {
+      console.error("[auth:signOut] durable pre-revocation failed");
+      return sessionRevocationUnavailableResponse();
+    }
+  }
+  return nextAuth.handlers.POST(request);
+}
+
+/**
+ * Bind every Auth.js HTTP endpoint to the same exact process/origin pair as
+ * raw server-side session reads. This runs before Auth.js parses a cookie or
+ * invokes the database-backed JWT callback.
+ */
+export const handlers = {
+  GET: (request: Parameters<typeof nextAuth.handlers.GET>[0]) =>
+    isSessionRequestAllowed(request.headers)
+      ? nextAuth.handlers.GET(request)
+      : Promise.resolve(deniedAuthHandlerResponse()),
+  POST: (request: Parameters<typeof nextAuth.handlers.POST>[0]) =>
+    isSessionRequestAllowed(request.headers)
+      ? handleAuthorizedAuthPost(request)
+      : Promise.resolve(deniedAuthHandlerResponse()),
+};
+
+/**
+ * Central Node request-context fence for every raw auth() call. Missing
+ * request context, an unknown process identity, or a host/process mismatch
+ * returns no session without asking Auth.js to resolve the cookie.
+ */
+export async function auth() {
+  try {
+    if (!isSessionRequestAllowed(await requestHeaders())) return null;
+  } catch {
+    return null;
+  }
+  return nextAuth.auth();
+}
+
+export const { signIn, signOut } = nextAuth;

@@ -59,6 +59,7 @@ import { templateTwinFieldIntentsSha256 } from "../field-intent";
 import { processTemplateTwinVisit } from "../fill-engine";
 import { canonicalSha256 } from "../canonical";
 import { canonicalSoapSha256 } from "../soap-binding";
+import { templateTwinVisitProviderSubjectSha256 } from "../live-provider-ownership";
 import type { TemplateTwinArtifactStore } from "../storage";
 import {
   buildTemplateTwinIntegrationFixture,
@@ -71,6 +72,7 @@ import { sourceProviderOwnershipFixture } from "./provider-ownership-fixture";
 const PRACTICE_ID = "practice-fill-concurrency";
 const DOCTOR_ID = "doctor-fill-concurrency";
 const VISIT_ID = "visit-fill-concurrency";
+const PATIENT_ID = "patient-fill-concurrency";
 const TEMPLATE_ID = "template-fill-concurrency";
 const COMPILED_ID = "compiled-fill-concurrency";
 const SOURCE_ID = "source-fill-concurrency";
@@ -179,6 +181,7 @@ function lockedVisitRow(
 ) {
   return {
     id: VISIT_ID,
+    patientId: PATIENT_ID,
     userId: DOCTOR_ID,
     status: overrides.status ?? "READY",
     deletedAt: null,
@@ -186,8 +189,11 @@ function lockedVisitRow(
     soapVersion: overrides.soapVersion ?? 1,
     soapFinal:
       overrides.soapFinal === undefined ? CURRENT_SOAP : overrides.soapFinal,
+    reviewReason: null,
+    inputMode: "text_notes",
     noteTemplateId: TEMPLATE_ID,
     noteTemplateVersion: 1,
+    manualRetryCount: 0,
   };
 }
 
@@ -236,12 +242,113 @@ function mockRolloutAndVisitLocks(visit = lockedVisitRow()) {
         {
           id: DOCTOR_ID,
           practiceId: PRACTICE_ID,
+          role: "DOCTOR",
           isActive: true,
+          deactivatedAt: null,
+          suspendedAt: null,
+          softDeletedAt: null,
+          products: ["TRANSCRIBE_MD"],
+        },
+      ];
+    }
+    if (text.includes('FROM "note_templates"')) {
+      return [
+        {
+          id: TEMPLATE_ID,
+          version: 1,
+          doctorId: DOCTOR_ID,
+          templateKind: "template_twin_docx",
+          status: "active",
+        },
+      ];
+    }
+    if (text.includes('FROM "template_twin_compiled_versions"')) {
+      return [
+        {
+          id: COMPILED_ID,
+          noteTemplateId: TEMPLATE_ID,
+          sourceArtifactId: SOURCE_ID,
+          certificationStatus: "CERTIFIED",
+          providerOwnershipSha256: "a".repeat(64),
+        },
+      ];
+    }
+    if (text.includes('FROM "template_twin_source_artifacts"')) {
+      return [
+        {
+          id: SOURCE_ID,
+          practiceId: PRACTICE_ID,
+          createdById: DOCTOR_ID,
+          lineageId: "lineage-fill-concurrency",
+          lineageVersion: 1,
+          sha256: fixture.ir.source.sha256,
+          validationStatus: "accepted",
+          providerOwnershipSha256: "b".repeat(64),
+        },
+      ];
+    }
+    if (text.includes('FROM "template_twin_certifications"')) {
+      return [
+        {
+          id: "certification-fill-concurrency",
+          compiledVersionId: COMPILED_ID,
+          certifiedById: DOCTOR_ID,
+          providerAuthorizationMode: "LIVE",
+          providerAuthorizationAdmissionId: null,
+        },
+      ];
+    }
+    if (text.includes("template_twin_live_provider_compilation_is_valid")) {
+      return [{ valid: true }];
+    }
+    if (text.includes('FROM "transcribe_md_patients"')) {
+      return [
+        {
+          id: PATIENT_ID,
+          practiceId: PRACTICE_ID,
+          externalId: "synthetic-unit-patient",
+          deletedAt: null,
         },
       ];
     }
     return [visit];
   });
+}
+
+function providerContext(
+  globalGeneration = BigInt(1),
+  practiceGeneration = BigInt(1),
+) {
+  const identity = {
+    practiceId: PRACTICE_ID,
+    actorUserId: DOCTOR_ID,
+    visitId: VISIT_ID,
+    visitInputMode: "text_notes" as const,
+    sourceArtifactId: SOURCE_ID,
+    compiledVersionId: COMPILED_ID,
+    noteTemplateId: TEMPLATE_ID,
+    noteTemplateVersion: 1,
+    sourceLineageId: "lineage-fill-concurrency",
+    sourceLineageVersion: 1,
+    sourceSha256: fixture.ir.source.sha256,
+    logicalAttempt: 1,
+  };
+  return {
+    ...identity,
+    scope: "VISIT_PIPELINE" as const,
+    subjectId: VISIT_ID,
+    subjectSha256: templateTwinVisitProviderSubjectSha256(identity),
+    syntheticAdmissionId: null,
+    rolloutToken: {
+      practiceId: PRACTICE_ID,
+      globalGeneration,
+      practiceGeneration,
+      releaseId: RELEASE_ID,
+      releaseIdentitySha256: RELEASE_IDENTITY_SHA256,
+      runtimeManifestSha256: RUNTIME_MANIFEST_SHA256,
+      runtimeInstanceId: RUNTIME_INSTANCE_ID,
+    },
+  };
 }
 
 function storage(
@@ -345,19 +452,7 @@ beforeEach(() => {
   mocks.ledgerUpdate.mockResolvedValue({ count: 1 });
   mocks.ledgerFind.mockResolvedValue(null);
   mocks.outboxCreate.mockResolvedValue({ id: "render-audit-outbox" });
-  mocks.getProviderContext.mockReturnValue({
-    practiceId: PRACTICE_ID,
-    actorUserId: DOCTOR_ID,
-    visitId: VISIT_ID,
-    visitInputMode: "text_notes",
-    scope: "VISIT_PIPELINE",
-    subjectId: VISIT_ID,
-    subjectSha256: "d".repeat(64),
-    sourceArtifactId: SOURCE_ID,
-    compiledVersionId: COMPILED_ID,
-    noteTemplateId: TEMPLATE_ID,
-    noteTemplateVersion: 1,
-  });
+  mocks.getProviderContext.mockReturnValue(providerContext());
   mocks.getPlanDisposition.mockImplementation(
     ({ operation, operationInstance = "primary" }) => {
       if (operation === "L4_ANCHOR_VERIFY") {
@@ -582,9 +677,11 @@ describe("Template Twin worker provenance and manifest concurrency", () => {
         rolloutToken: admittedAtTemplateSelection,
       }),
     ).rejects.toMatchObject({
-      code: "TEMPLATE_TWIN_GLOBAL_GENERATION_STALE",
+      code: "VISIT_AUTOMATION_LOCK_REJECTED",
     });
-    expect(outputWrites).toBe(1);
+    // The live provider authority fence now rejects the stale selection at
+    // the first owned database mutation, before source/output object I/O.
+    expect(outputWrites).toBe(0);
     expect(mocks.createFill).not.toHaveBeenCalled();
     expect(mocks.updateFill).not.toHaveBeenCalled();
     expect(mocks.ledgerUpdate).not.toHaveBeenCalled();
@@ -593,6 +690,9 @@ describe("Template Twin worker provenance and manifest concurrency", () => {
   it("admits and claims a new worker operation at the re-enabled generation", async () => {
     globalRolloutGeneration = BigInt(3);
     practiceRolloutGeneration = BigInt(3);
+    mocks.getProviderContext.mockReturnValue(
+      providerContext(BigInt(3), BigInt(3)),
+    );
     mocks.findFill.mockResolvedValue(null);
 
     await expect(
@@ -926,11 +1026,27 @@ describe("Template Twin worker provenance and manifest concurrency", () => {
     });
 
     expect(outputWrites).toBe(1);
-    // practice + actor + visit protect the initial provenance pin, followed
-    // by global + practice + exact runtime release + lineage + visit in the
-    // final output transaction.
-    // Neither transaction replaces the selection admission token.
-    expect(mocks.lockVisit).toHaveBeenCalledTimes(8);
+    // Both the provenance pin and the final output claim traverse the full
+    // live-authority lock set. Keep this additive so a future authority row
+    // cannot make an otherwise-correct concurrency test brittle.
+    const authorityLockSql = mocks.lockVisit.mock.calls
+      .map(([query]) =>
+        String(
+          (query as { strings?: readonly string[] }).strings?.join(" ") ?? "",
+        ),
+      )
+      .join("\n");
+    expect(mocks.lockVisit.mock.calls.length).toBeGreaterThanOrEqual(16);
+    for (const table of [
+      '"users"',
+      '"note_templates"',
+      '"template_twin_compiled_versions"',
+      '"template_twin_source_artifacts"',
+      '"template_twin_certifications"',
+      '"transcribe_visits"',
+    ]) {
+      expect(authorityLockSql).toContain(table);
+    }
     expect(mocks.createFill).not.toHaveBeenCalled();
     expect(mocks.updateFill).not.toHaveBeenCalled();
     expect(mocks.ledgerUpdate).toHaveBeenCalledWith({

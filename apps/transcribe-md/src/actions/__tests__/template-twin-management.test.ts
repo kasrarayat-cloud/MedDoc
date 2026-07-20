@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   transaction: vi.fn(),
   revalidatePath: vi.fn(),
   finalRollout: vi.fn(),
+  currentPhysician: vi.fn(),
   lifecycleGuard: vi.fn(async (input: { operation: () => unknown }) =>
     input.operation(),
   ),
@@ -41,6 +42,10 @@ vi.mock("@/lib/template-twin/rollout", async (importOriginal) => {
     lockTemplateTwinRolloutForFinalClaim: mocks.finalRollout,
   };
 });
+
+vi.mock("@/lib/template-twin/final-claim-authority", () => ({
+  lockAndAssertCurrentTemplateTwinPhysician: mocks.currentPhysician,
+}));
 
 vi.mock("@/lib/template-twin/staging-qa-lifecycle-guard", () => ({
   TemplateTwinStagingQaLifecycleGuardError: class TemplateTwinStagingQaLifecycleGuardError extends Error {},
@@ -183,6 +188,7 @@ beforeEach(() => {
       practiceGeneration: BigInt(17),
     },
   });
+  mocks.currentPhysician.mockResolvedValue({ email: EMAIL });
   mocks.lifecycleGuard.mockImplementation(
     async (input: { operation: () => unknown }) => input.operation(),
   );
@@ -235,6 +241,54 @@ describe("staging lifecycle management boundary", () => {
     });
     expect(mocks.transaction).not.toHaveBeenCalled();
   });
+});
+
+describe("final current-physician authority", () => {
+  const versionInput = {
+    sourceNoteTemplateId: "template-v1",
+    name: "Synthetic primary care template",
+    encounterType: "primary-care",
+    versionDescription: "Synthetic current-authority race proof",
+  };
+
+  it.each([
+    ["create version", () => createTemplateTwinVersionAction(versionInput)],
+    ["activate", () => activateTemplateTwinVersionAction("template-v1")],
+    ["deactivate", () => deactivateTemplateTwinVersionAction("template-v1")],
+    ["retire", () => retireTemplateTwinVersionAction("template-v1")],
+    ["rollback", () => rollbackTemplateTwinVersionAction("template-v1")],
+  ])(
+    "fails %s closed when physician authority is revoked after request admission",
+    async (_operation, invoke) => {
+      mocks.currentPhysician.mockRejectedValueOnce(
+        new Error("synthetic current physician authority revoked"),
+      );
+
+      await expect(invoke()).resolves.toMatchObject({
+        ok: false,
+        code: "PERSISTENCE_FAILED",
+      });
+
+      expect(mocks.transaction).toHaveBeenCalledTimes(1);
+      expect(mocks.finalRollout).toHaveBeenCalledTimes(1);
+      expect(mocks.currentPhysician).toHaveBeenCalledWith({
+        tx: expect.any(Object),
+        actor: expect.objectContaining({
+          userId: DOCTOR_ID,
+          practiceId: PRACTICE_ID,
+        }),
+      });
+      expect(mocks.finalRollout.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.currentPhysician.mock.invocationCallOrder[0]!,
+      );
+      expect(mocks.noteTemplateFindFirst).not.toHaveBeenCalled();
+      expect(mocks.noteTemplateCreate).not.toHaveBeenCalled();
+      expect(mocks.noteTemplateUpdateMany).not.toHaveBeenCalled();
+      expect(mocks.compiledCreate).not.toHaveBeenCalled();
+      expect(mocks.versionAdmission).not.toHaveBeenCalled();
+      expect(mocks.outboxCreate).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe("createTemplateTwinVersionAction", () => {

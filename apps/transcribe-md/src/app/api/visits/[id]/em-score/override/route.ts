@@ -24,16 +24,28 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import prisma from "@meddoc/db";
-import { TranscribeVisitStatus } from "@prisma/client";
+import { Prisma, TranscribeVisitStatus } from "@prisma/client";
 import { auth } from "@/lib/nextauth";
 import { apiError, withApiHandler } from "@/lib/api-error";
 import { computeEmScore } from "@/lib/em-coding/score";
 import { engineToUiScore } from "@/lib/em-coding/to-ui-score";
 import { extractIcdRows, extractRxRows } from "@/lib/em-coding/displayed-level";
+import { currentClinicalVisitActorWhere } from "@/lib/clinical-visit-authority";
 import { logAudit } from "@/lib/audit";
 import { isSameOriginTemplateTwinMutation } from "@/lib/template-twin/request-security";
-import { pinTemplateTwinStagingQaMutation } from "@/lib/template-twin/staging-qa-mutation";
-import { TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT } from "@/lib/template-twin/staging-qa-visit-guard";
+import { canonicalSha256 } from "@/lib/template-twin/canonical";
+import { TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE } from "@/lib/template-twin/durable-visit-exclusion";
+import {
+  hasDurableTemplateTwinClinicalMutationProvenance,
+  enqueueTemplateTwinClinicalMutationAudit,
+  loadTemplateTwinClinicalMutationAdmissionTarget,
+  lockAndAssertOrdinaryClinicalMutation,
+  lockAndAssertTemplateTwinClinicalMutation,
+  pinTemplateTwinClinicalMutation,
+  TEMPLATE_TWIN_CLINICAL_MUTATION_PROVENANCE_SELECT,
+  TemplateTwinClinicalMutationAuthorizationError,
+  type TemplateTwinClinicalMutationClaim,
+} from "@/lib/template-twin/visit-mutation-authority";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -77,6 +89,41 @@ export const POST = withApiHandler<{ id: string }>(
       });
     }
 
+    // Resolve only ownership and immutable lineage before the request body or
+    // any SOAP / coding state is consumed.  Synthetic and pre-certification
+    // visits remain on their dedicated immutable evidence paths.
+    const authorityTarget =
+      await loadTemplateTwinClinicalMutationAdmissionTarget({
+        visitId,
+        actorUserId: userId,
+      });
+    if (!authorityTarget || authorityTarget.userId !== userId) {
+      return apiError("not found", 404);
+    }
+    if (
+      authorityTarget.templateTwinSyntheticQaRun ||
+      authorityTarget.templateTwinSyntheticQaAdmission
+    ) {
+      return apiError("not found", 404, {
+        code: "TEMPLATE_TWIN_STAGING_QA_MUTATION_UNAVAILABLE",
+      });
+    }
+    let templateTwinMutationClaim: TemplateTwinClinicalMutationClaim | null =
+      null;
+    try {
+      templateTwinMutationClaim = await pinTemplateTwinClinicalMutation({
+        visitId,
+        actorUserId: userId,
+        admittedVisitUpdatedAt: authorityTarget.updatedAt,
+        provenance: authorityTarget,
+      });
+    } catch (error) {
+      if (error instanceof TemplateTwinClinicalMutationAuthorizationError) {
+        return apiError("not found", 404);
+      }
+      throw error;
+    }
+
     let body: unknown;
     try {
       body = await req.json();
@@ -92,7 +139,14 @@ export const POST = withApiHandler<{ id: string }>(
 
     // Ownership + status gates. 404 on mismatch — never leak existence.
     const visit = await prisma.transcribeVisit.findUnique({
-      where: { id: visitId },
+      where: {
+        id: visitId,
+        ...currentClinicalVisitActorWhere(userId),
+        updatedAt: authorityTarget.updatedAt,
+        ...(templateTwinMutationClaim
+          ? {}
+          : TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE),
+      },
       select: {
         id: true,
         userId: true,
@@ -100,6 +154,7 @@ export const POST = withApiHandler<{ id: string }>(
         deletedAt: true,
         archivedAt: true,
         signedAt: true,
+        updatedAt: true,
         soapDraft: true,
         soapFinal: true,
         audioDurationSec: true,
@@ -108,15 +163,19 @@ export const POST = withApiHandler<{ id: string }>(
         icdCodes: true,
         cptCodes: true,
         rxDrafts: true,
-        templateTwinSyntheticQaRun: {
-          select: TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
-        },
-        noteTemplate: { select: { templateKind: true } },
-        templateTwinFill: { select: { id: true } },
-        templateTwinSyntheticQaAdmission: { select: { id: true } },
+        soapVersion: true,
+        ...TEMPLATE_TWIN_CLINICAL_MUTATION_PROVENANCE_SELECT,
       },
     });
     if (!visit || visit.userId !== userId) return apiError("not found", 404);
+    if (
+      Boolean(templateTwinMutationClaim) !==
+      hasDurableTemplateTwinClinicalMutationProvenance(visit)
+    ) {
+      return apiError("The visit changed. Reload and retry.", 409, {
+        code: "TEMPLATE_TWIN_MUTATION_CONFLICT",
+      });
+    }
     if (visit.deletedAt !== null || visit.archivedAt !== null) {
       return apiError("Visit is no longer active.", 400, {
         code: "VISIT_NOT_ACTIVE",
@@ -148,26 +207,6 @@ export const POST = withApiHandler<{ id: string }>(
       return apiError("Visit has no SOAP draft to score.", 400, {
         code: "NO_SOAP_DRAFT",
       });
-    }
-
-    try {
-      const stagingQaClaim = await pinTemplateTwinStagingQaMutation({
-        visitId,
-        userId,
-        run: visit.templateTwinSyntheticQaRun,
-      });
-      if (stagingQaClaim) {
-        return apiError("not found", 404, {
-          code: "TEMPLATE_TWIN_STAGING_QA_MUTATION_UNAVAILABLE",
-        });
-      }
-      if (visit.templateTwinSyntheticQaAdmission) {
-        return apiError("not found", 404, {
-          code: "TEMPLATE_TWIN_STAGING_QA_MUTATION_UNAVAILABLE",
-        });
-      }
-    } catch {
-      return apiError("not found", 404);
     }
 
     // Re-score against the current SOAP so the rail receives a fresh
@@ -210,10 +249,82 @@ export const POST = withApiHandler<{ id: string }>(
       em: { ...existingEm, override: overrideRecord },
     };
 
-    await prisma.transcribeVisit.update({
-      where: { id: visitId },
-      data: { cptCodes: nextCpt },
-    });
+    if (templateTwinMutationClaim) {
+      try {
+        const applied = await prisma.$transaction(
+          async (tx: Prisma.TransactionClient) => {
+            const locked = await lockAndAssertTemplateTwinClinicalMutation({
+              tx,
+              claim: templateTwinMutationClaim,
+            });
+            if (
+              locked.status !== TranscribeVisitStatus.READY ||
+              locked.deletedAt !== null ||
+              locked.archivedAt !== null ||
+              locked.signedAt !== null ||
+              emOverrideTargetSha256(locked) !== emOverrideTargetSha256(visit)
+            ) {
+              return false;
+            }
+            await tx.transcribeVisit.update({
+              where: { id: visitId },
+              data: { cptCodes: nextCpt },
+            });
+            await enqueueTemplateTwinClinicalMutationAudit({
+              tx,
+              claim: templateTwinMutationClaim,
+              operation: "em_override",
+              action: "EM_OVERRIDE_APPLIED",
+              discriminator: parsed.data.overrideToCode,
+              metadata: { overrideCode: parsed.data.overrideToCode },
+            });
+            return true;
+          },
+        );
+        if (!applied) {
+          return apiError(
+            "The visit changed before the override was saved. Reload and retry.",
+            409,
+            { code: "TEMPLATE_TWIN_MUTATION_CONFLICT" },
+          );
+        }
+      } catch (error) {
+        if (error instanceof TemplateTwinClinicalMutationAuthorizationError) {
+          return apiError(
+            "Template Twin authorization changed. Reload and retry.",
+            409,
+            { code: "TEMPLATE_TWIN_AUTHORIZATION_CHANGED" },
+          );
+        }
+        throw error;
+      }
+    } else {
+      try {
+        await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+          await lockAndAssertOrdinaryClinicalMutation({
+            tx,
+            visitId,
+            actorUserId: userId,
+            admittedVisitUpdatedAt: authorityTarget.updatedAt,
+            admittedPatientId: authorityTarget.patientId,
+            admittedNoteTemplateId: authorityTarget.noteTemplateId,
+          });
+          await tx.transcribeVisit.update({
+            where: { id: visitId },
+            data: { cptCodes: nextCpt },
+          });
+        });
+      } catch (error) {
+        if (error instanceof TemplateTwinClinicalMutationAuthorizationError) {
+          return apiError(
+            "The visit changed before the override was saved. Reload and retry.",
+            409,
+            { code: "TEMPLATE_TWIN_MUTATION_CONFLICT" },
+          );
+        }
+        throw error;
+      }
+    }
 
     void logAudit({
       action: "EM_OVERRIDE_APPLIED",
@@ -239,6 +350,40 @@ export const POST = withApiHandler<{ id: string }>(
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+function emOverrideTargetSha256(visit: {
+  status: TranscribeVisitStatus;
+  deletedAt: Date | null;
+  archivedAt: Date | null;
+  signedAt: Date | null;
+  updatedAt: Date;
+  soapDraft: string | null;
+  soapFinal: string | null;
+  soapVersion: number;
+  inputMode: string;
+  audioDurationSec: number | null;
+  dictationDurationSec: number | null;
+  icdCodes: unknown;
+  cptCodes: unknown;
+  rxDrafts: unknown;
+}): string {
+  return canonicalSha256({
+    status: visit.status,
+    deletedAt: visit.deletedAt?.toISOString() ?? null,
+    archivedAt: visit.archivedAt?.toISOString() ?? null,
+    signedAt: visit.signedAt?.toISOString() ?? null,
+    updatedAt: visit.updatedAt.toISOString(),
+    soapDraft: visit.soapDraft,
+    soapFinal: visit.soapFinal,
+    soapVersion: visit.soapVersion,
+    inputMode: visit.inputMode,
+    audioDurationSec: visit.audioDurationSec,
+    dictationDurationSec: visit.dictationDurationSec,
+    icdCodes: visit.icdCodes ?? null,
+    cptCodes: visit.cptCodes ?? null,
+    rxDrafts: visit.rxDrafts ?? null,
+  });
 }
 
 // E/M signal extractors now come from @/lib/em-coding/displayed-level

@@ -14,6 +14,7 @@ import {
   buildTemplateTwinProviderOwnershipReceipt,
   getTemplateTwinProviderOwnershipContext,
   requireTemplateTwinProviderOwnershipContext,
+  resolveTemplateTwinProviderLogicalAttempt,
   runTemplateTwinOwnedModelComplete,
   runWithTemplateTwinProviderOwnershipContext,
 } from "@/lib/template-twin/provider-ownership";
@@ -157,6 +158,7 @@ export async function assertTemplateTwinSyntheticEvidencePhiFree(input: {
   providerVisitId?: string | null;
   client?: Pick<ModelClient, "complete">;
 }): Promise<void> {
+  const requestStartedAt = new Date();
   const encounterText = assertTemplateTwinSyntheticEvidenceLocallySafe(
     input.encounterText,
   );
@@ -176,25 +178,25 @@ export async function assertTemplateTwinSyntheticEvidencePhiFree(input: {
       providerCorrelationId: input.providerVisitId ?? null,
       client: input.client ?? modelClient,
       args: {
-      practiceId: input.practiceId,
-      visitId: input.providerVisitId ?? null,
-      userId: input.userId,
-      purpose: "tm_template_synthetic_phi_scan",
-      provider: "anthropic",
-      model: MODEL,
-      system: SYNTHETIC_SCAN_SYSTEM,
-      user: ["Certification-test encounter evidence:", wrapped.wrapped].join(
-        "\n",
-      ),
-      schema: SyntheticEvidencePrivacyScanSchema,
-      maxTokens: 512,
-      temperature: 0,
-      retryOnSchemaFail: true,
-      useToolUse: {
-        name: "submit_template_twin_synthetic_privacy_scan",
-        description:
-          "Classify whether certification evidence is unmistakably synthetic and free of patient identifiers.",
-      },
+        practiceId: input.practiceId,
+        visitId: input.providerVisitId ?? null,
+        userId: input.userId,
+        purpose: "tm_template_synthetic_phi_scan",
+        provider: "anthropic",
+        model: MODEL,
+        system: SYNTHETIC_SCAN_SYSTEM,
+        user: ["Certification-test encounter evidence:", wrapped.wrapped].join(
+          "\n",
+        ),
+        schema: SyntheticEvidencePrivacyScanSchema,
+        maxTokens: 512,
+        temperature: 0,
+        retryOnSchemaFail: true,
+        useToolUse: {
+          name: "submit_template_twin_synthetic_privacy_scan",
+          description:
+            "Classify whether certification evidence is unmistakably synthetic and free of patient identifiers.",
+        },
       },
     });
     if (
@@ -214,6 +216,16 @@ export async function assertTemplateTwinSyntheticEvidencePhiFree(input: {
       return;
     }
     const stagingContext = getTemplateTwinSyntheticQaProviderContext();
+    const subjectId = `synthetic-evidence:${subjectSha256}`;
+    const logicalAttempt = await resolveTemplateTwinProviderLogicalAttempt({
+      practiceId: input.practiceId,
+      actorUserId: input.userId,
+      scope: "SYNTHETIC_EVIDENCE",
+      operation: "SYNTHETIC_EVIDENCE_PRIVACY_SCAN",
+      subjectId,
+      subjectSha256,
+      requestStartedAt,
+    });
     await runWithTemplateTwinProviderOwnershipContext(
       {
         practiceId: input.practiceId,
@@ -221,8 +233,8 @@ export async function assertTemplateTwinSyntheticEvidencePhiFree(input: {
         visitId: null,
         visitInputMode: null,
         scope: "SYNTHETIC_EVIDENCE",
-        logicalAttempt: 1,
-        subjectId: `synthetic-evidence:${subjectSha256}`,
+        logicalAttempt,
+        subjectId,
         subjectSha256,
         sourceArtifactId: null,
         compiledVersionId: null,
@@ -238,7 +250,7 @@ export async function assertTemplateTwinSyntheticEvidencePhiFree(input: {
         await executeScan();
         buildTemplateTwinProviderOwnershipReceipt({
           projection: {
-            subjectId: `synthetic-evidence:${subjectSha256}`,
+            subjectId,
             subjectSha256,
             visitId: null,
             sourceArtifactId: null,

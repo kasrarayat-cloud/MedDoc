@@ -34,6 +34,9 @@ const mocks = vi.hoisted(() => ({
   computeDisplayedEmCode: vi.fn(),
   enqueueAudit: vi.fn(),
   authorizeDelivery: vi.fn(),
+  requireRead: vi.fn(),
+  transaction: vi.fn(),
+  lockOrdinary: vi.fn(),
 }));
 
 // Minimal NextResponse stand-in — deterministic across vitest
@@ -65,6 +68,7 @@ vi.mock("@meddoc/db", () => {
       updateMany: mocks.updateMany,
     },
     rxWarningOverride: { findMany: mocks.rxOverrideFindMany },
+    $transaction: mocks.transaction,
   };
   return { default: prisma, prisma };
 });
@@ -103,21 +107,22 @@ vi.mock("@/worker/automation-finalization", () => ({
 }));
 vi.mock("@/worker/automation-locks", () => ({
   runVisitAutomationTransaction: async (input: {
+    ordinaryBeforeVisitLock?: (tx: unknown) => Promise<void>;
     transaction: (tx: unknown, visit: unknown) => Promise<unknown>;
-  }) =>
-    input.transaction(
-      { transcribeVisit: { updateMany: mocks.updateMany } },
-      {
-        id: "visit-1",
-        userId: "doc1",
-        status: "READY",
-        soapVersion: 1,
-        soapFinal: "## Subjective\nElbow pain.\n\n## Plan\nNSAIDs.",
-        reviewReason: null,
-        deletedAt: null,
-        archivedAt: null,
-      },
-    ),
+  }) => {
+    const tx = { transcribeVisit: { updateMany: mocks.updateMany } };
+    await input.ordinaryBeforeVisitLock?.(tx);
+    return input.transaction(tx, {
+      id: "visit-1",
+      userId: "doc1",
+      status: "READY",
+      soapVersion: 1,
+      soapFinal: "## Subjective\nElbow pain.\n\n## Plan\nNSAIDs.",
+      reviewReason: null,
+      deletedAt: null,
+      archivedAt: null,
+    });
+  },
 }));
 vi.mock("@/lib/template-twin/audit-outbox", () => ({
   enqueueTemplateTwinAudit: mocks.enqueueAudit,
@@ -133,9 +138,18 @@ vi.mock("@/lib/template-twin/delivery-authorization", () => ({
   },
   authorizeVisitDeliveryFinalClaim: mocks.authorizeDelivery,
 }));
+vi.mock("@/lib/template-twin/read-authority", () => ({
+  TemplateTwinVisitReadAuthorityError: class TemplateTwinVisitReadAuthorityError extends Error {},
+  requireTemplateTwinVisitReadAuthority: mocks.requireRead,
+}));
+vi.mock("@/lib/template-twin/visit-mutation-authority", () => ({
+  TemplateTwinClinicalMutationAuthorizationError: class TemplateTwinClinicalMutationAuthorizationError extends Error {},
+  lockAndAssertOrdinaryClinicalMutation: mocks.lockOrdinary,
+}));
 
 import type { NextRequest } from "next/server";
 import { TranscribeVisitStatus } from "@prisma/client";
+import { TemplateTwinClinicalMutationAuthorizationError } from "@/lib/template-twin/visit-mutation-authority";
 
 import { POST } from "../route";
 
@@ -156,6 +170,9 @@ function visitRow(over: Record<string, unknown> = {}) {
   return {
     id: VISIT,
     userId: DOCTOR,
+    patientId: "patient-1",
+    noteTemplateId: null,
+    updatedAt: new Date("2026-07-20T03:00:00.000Z"),
     status: TranscribeVisitStatus.READY,
     soapVersion: 1,
     soapFinal: "## Subjective\nElbow pain.\n\n## Plan\nNSAIDs.",
@@ -163,8 +180,12 @@ function visitRow(over: Record<string, unknown> = {}) {
     signedAt: null,
     deletedAt: null,
     archivedAt: null,
+    patient: { externalId: null },
     automationManifest: null,
     templateTwinSyntheticQaRun: null,
+    templateTwinSyntheticQaAdmission: null,
+    templateTwinFill: null,
+    templateTwinProviderExecutions: [],
     noteTemplate: null,
     user: { practiceId: "p1" },
     emPendingChange: null,
@@ -182,7 +203,18 @@ beforeEach(() => {
   mocks.auth.mockResolvedValue({
     user: { id: DOCTOR, email: "doc@test.dev", practiceId: "p1" },
   });
+  mocks.requireRead.mockResolvedValue({
+    visitId: VISIT,
+    isTemplateTwin: false,
+    isSyntheticTemplateTwin: false,
+    practiceId: null,
+    templateTwinEnabled: null,
+  });
   mocks.findUnique.mockResolvedValue(visitRow());
+  mocks.transaction.mockImplementation(
+    async (callback: (tx: unknown) => Promise<unknown>) => callback({}),
+  );
+  mocks.lockOrdinary.mockResolvedValue(undefined);
   mocks.updateMany.mockResolvedValue({ count: 1 });
   mocks.rxOverrideFindMany.mockResolvedValue([]);
   mocks.criticalWarningRefs.mockReturnValue([]);
@@ -381,6 +413,69 @@ describe("sign — E/M parity freeze (#315 obs#2): the confirmed displayed level
     expect(data.cptCodes.em.code).toBe("99213");
     // It rode the SAME atomic transition that flips status → SIGNED.
     expect(data.status).toBe(TranscribeVisitStatus.SIGNED);
+    expect(mocks.lockOrdinary).toHaveBeenCalledTimes(3);
+  });
+
+  it("blocks an ordinary-to-Twin transition immediately before the sign-time E/M provider", async () => {
+    mocks.findUnique.mockResolvedValueOnce(visitRow({ cptCodes: EM_BLOB }));
+    mocks.lockOrdinary.mockRejectedValueOnce(
+      new TemplateTwinClinicalMutationAuthorizationError(
+        "TEMPLATE_TWIN_MUTATION_TARGET_CHANGED",
+      ),
+    );
+
+    const res = await call({ destinations: [] });
+
+    expect(res.status).toBe(409);
+    expect((await res.json()).code).toBe("TEMPLATE_TWIN_MUTATION_CONFLICT");
+    expect(mocks.computeDisplayedEmCode).not.toHaveBeenCalled();
+    expect(mocks.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("discards the E/M provider result when provenance changes after return", async () => {
+    mocks.findUnique.mockResolvedValueOnce(visitRow({ cptCodes: EM_BLOB }));
+    mocks.lockOrdinary
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(
+        new TemplateTwinClinicalMutationAuthorizationError(
+          "TEMPLATE_TWIN_MUTATION_TARGET_CHANGED",
+        ),
+      );
+
+    const res = await call({ destinations: [] });
+
+    expect(res.status).toBe(409);
+    expect(mocks.computeDisplayedEmCode).toHaveBeenCalledTimes(1);
+    expect(mocks.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("re-fences the exact ordinary snapshot inside the final sign transaction", async () => {
+    const admitted = visitRow({ cptCodes: EM_BLOB });
+    mocks.findUnique.mockResolvedValueOnce(admitted);
+    mocks.lockOrdinary
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(
+        new TemplateTwinClinicalMutationAuthorizationError(
+          "TEMPLATE_TWIN_MUTATION_TARGET_CHANGED",
+        ),
+      );
+
+    const res = await call({ destinations: [] });
+
+    expect(res.status).toBe(409);
+    expect(mocks.computeDisplayedEmCode).toHaveBeenCalledTimes(1);
+    expect(mocks.lockOrdinary).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        visitId: VISIT,
+        actorUserId: DOCTOR,
+        admittedVisitUpdatedAt: admitted.updatedAt,
+        admittedPatientId: admitted.patientId,
+        admittedNoteTemplateId: admitted.noteTemplateId,
+      }),
+    );
+    expect(mocks.updateMany).not.toHaveBeenCalled();
   });
 
   it("an OVERRIDDEN visit freezes the override level (computeDisplayedEmCode returns override ?? engine)", async () => {

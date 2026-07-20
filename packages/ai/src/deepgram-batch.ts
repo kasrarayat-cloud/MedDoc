@@ -79,6 +79,10 @@ export interface DeepgramBatchArgs extends AiLogContext {
    *  from apps/transcribe-md/src/lib/deepgram-vocabulary.ts.
    *  SDK @4.11.3 docs: https://developers.deepgram.com/docs/keyterm */
   keyterms?: readonly string[];
+  /** Server-owned authorization fence run immediately before network egress. */
+  beforeProviderAttempt?: () => Promise<void>;
+  /** Matching fence run after network response or failure. */
+  afterProviderAttempt?: () => Promise<void>;
 }
 
 export interface DeepgramWord {
@@ -277,6 +281,7 @@ async function deepgramBatchTranscribeOnce(
   const promptHash = `batch:${sizeBytes}b`;
 
   const timeoutMs = args.timeoutMs ?? 10 * 60 * 1000; // 10 min ceiling.
+  await args.beforeProviderAttempt?.();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -313,6 +318,9 @@ async function deepgramBatchTranscribeOnce(
           : "NETWORK_ERROR",
     });
     throw err;
+  } finally {
+    clearTimeout(timer);
+    await args.afterProviderAttempt?.();
   }
   clearTimeout(timer);
 

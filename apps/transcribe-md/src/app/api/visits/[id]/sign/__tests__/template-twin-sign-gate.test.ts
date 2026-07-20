@@ -25,6 +25,9 @@ const mocks = vi.hoisted(() => ({
   captureEditPattern: vi.fn(),
   computeDisplayedEmCode: vi.fn(),
   sendVisitPdfEmail: vi.fn(),
+  requireRead: vi.fn(),
+  requireSynthetic: vi.fn(),
+  lockOrdinary: vi.fn(),
 }));
 
 vi.mock("next/server", () => {
@@ -106,6 +109,18 @@ vi.mock("@/lib/template-twin/signing-gate", () => ({
   TEMPLATE_TWIN_SIGNING_VISIT_SELECT: {},
   assessTemplateTwinSigning: mocks.assess,
 }));
+vi.mock("@/lib/template-twin/read-authority", () => ({
+  TemplateTwinVisitReadAuthorityError: class TemplateTwinVisitReadAuthorityError extends Error {},
+  requireTemplateTwinVisitReadAuthority: mocks.requireRead,
+}));
+vi.mock("@/lib/template-twin/synthetic-read-admission", () => ({
+  TemplateTwinSyntheticReadAdmissionError: class TemplateTwinSyntheticReadAdmissionError extends Error {},
+  requireTemplateTwinSyntheticReadAdmission: mocks.requireSynthetic,
+}));
+vi.mock("@/lib/template-twin/visit-mutation-authority", () => ({
+  TemplateTwinClinicalMutationAuthorizationError: class TemplateTwinClinicalMutationAuthorizationError extends Error {},
+  lockAndAssertOrdinaryClinicalMutation: mocks.lockOrdinary,
+}));
 vi.mock("@/lib/template-twin/delivery-authorization", () => ({
   TemplateTwinDeliveryAuthorizationError: class TemplateTwinDeliveryAuthorizationError extends Error {
     constructor(
@@ -133,10 +148,12 @@ vi.mock("@/worker/automation-finalization", () => ({
 }));
 vi.mock("@/worker/automation-locks", () => ({
   runVisitAutomationTransaction: async (input: {
+    ordinaryBeforeVisitLock?: (tx: unknown) => Promise<void>;
     transaction: (tx: unknown, visit: unknown) => Promise<unknown>;
   }) =>
-    mocks.transaction((tx: unknown) =>
-      input.transaction(tx, {
+    mocks.transaction(async (tx: unknown) => {
+      await input.ordinaryBeforeVisitLock?.(tx);
+      return input.transaction(tx, {
         id: "visit-1",
         userId: "doctor-1",
         status: "READY",
@@ -145,8 +162,8 @@ vi.mock("@/worker/automation-locks", () => ({
         reviewReason: null,
         deletedAt: null,
         archivedAt: null,
-      }),
-    ),
+      });
+    }),
 }));
 vi.mock("@/lib/template-twin/fill-engine", () => ({
   lockCurrentTemplateTwinVisit: async (tx: {
@@ -180,6 +197,9 @@ import { TranscribeVisitStatus } from "@prisma/client";
 import { AuthError } from "@/lib/auth";
 import { TemplateTwinStorageUnavailableError } from "@/lib/template-twin/storage";
 import { TemplateTwinDeliveryAuthorizationError } from "@/lib/template-twin/delivery-authorization";
+import { TemplateTwinVisitReadAuthorityError } from "@/lib/template-twin/read-authority";
+import { TemplateTwinSyntheticReadAdmissionError } from "@/lib/template-twin/synthetic-read-admission";
+import { TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE } from "@/lib/template-twin/durable-visit-exclusion";
 
 import { POST } from "../route";
 
@@ -190,6 +210,8 @@ function visitRow(overrides: Record<string, unknown> = {}) {
   return {
     id: VISIT_ID,
     userId: "doctor-1",
+    patientId: "patient-1",
+    updatedAt: new Date("2026-07-20T03:00:00.000Z"),
     status: TranscribeVisitStatus.READY,
     soapFinal: "Synthetic SOAP note.",
     soapVersion: 7,
@@ -199,12 +221,16 @@ function visitRow(overrides: Record<string, unknown> = {}) {
     signedAt: null,
     deletedAt: null,
     archivedAt: null,
+    patient: { externalId: null },
     emPendingChange: null,
     user: { practiceId: "practice-1" },
     automationManifest: null,
     noteTemplateId: "template-1",
     noteTemplateVersion: 1,
-    noteTemplate: { templateKind: "template_twin_docx" },
+    noteTemplate: {
+      templateKind: "template_twin_docx",
+      templateTwinCompiledVersion: { id: "compiled-1" },
+    },
     templateTwinFill: {
       id: "fill-1",
       outputObjectKey:
@@ -215,6 +241,9 @@ function visitRow(overrides: Record<string, unknown> = {}) {
       outputSha256: "b".repeat(64),
       outputSizeBytes: 4096,
     },
+    templateTwinSyntheticQaRun: null,
+    templateTwinSyntheticQaAdmission: null,
+    templateTwinProviderExecutions: [],
     ...overrides,
   };
 }
@@ -328,6 +357,7 @@ beforeEach(() => {
     mocks.finalRollout,
     mocks.enqueueAudit,
     mocks.verifyEvidence,
+    mocks.requireSynthetic,
   ]) {
     mock.mockReset();
   }
@@ -342,11 +372,20 @@ beforeEach(() => {
     role: "DOCTOR",
     practiceId: "practice-1",
   });
+  mocks.requireRead.mockResolvedValue({
+    visitId: VISIT_ID,
+    isTemplateTwin: true,
+    isSyntheticTemplateTwin: false,
+    practiceId: "practice-1",
+    templateTwinEnabled: true,
+  });
+  mocks.requireSynthetic.mockResolvedValue(null);
   mocks.authorizeDelivery.mockResolvedValue({
     templateTwin: true,
     currentPhysicianEmail: "current-doctor@example.test",
   });
   mocks.computeDisplayedEmCode.mockResolvedValue("99213");
+  mocks.lockOrdinary.mockResolvedValue(undefined);
   mocks.sendVisitPdfEmail.mockResolvedValue({ id: "message-1" });
   mocks.readTemplateTwinOutput.mockResolvedValue(
     Buffer.from("synthetic verified DOCX bytes"),
@@ -407,6 +446,10 @@ beforeEach(() => {
         practiceId: "practice-1",
         role: "DOCTOR",
         isActive: true,
+        deactivatedAt: null,
+        suspendedAt: null,
+        softDeletedAt: null,
+        products: ["TRANSCRIBE_MD"],
       },
     ])
     .mockResolvedValueOnce([
@@ -448,6 +491,155 @@ beforeEach(() => {
 });
 
 describe("POST /api/visits/[id]/sign — Template Twin server gate", () => {
+  it("denies revoked Twin read authority before projecting signing or clinical evidence", async () => {
+    mocks.requireRead.mockRejectedValueOnce(
+      new TemplateTwinVisitReadAuthorityError(),
+    );
+
+    const response = await call();
+
+    expect(response.status).toBe(404);
+    expect(mocks.findUnique).not.toHaveBeenCalled();
+    expect(mocks.freshDoctor).not.toHaveBeenCalled();
+    expect(mocks.assess).not.toHaveBeenCalled();
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "admission-only or pre-certification lineage",
+    "reserved-patient or provider-ledger orphan lineage",
+  ])("denies %s before projecting signing or clinical evidence", async () => {
+    mocks.requireRead.mockResolvedValue({
+      visitId: VISIT_ID,
+      isTemplateTwin: true,
+      isSyntheticTemplateTwin: true,
+      practiceId: "practice-1",
+      templateTwinEnabled: true,
+    });
+    mocks.requireSynthetic.mockRejectedValueOnce(
+      new TemplateTwinSyntheticReadAdmissionError(),
+    );
+
+    const response = await call();
+
+    expect(response.status).toBe(404);
+    expect(mocks.requireSynthetic).toHaveBeenCalledTimes(1);
+    expect(mocks.findUnique).not.toHaveBeenCalled();
+    expect(mocks.freshDoctor).not.toHaveBeenCalled();
+    expect(mocks.assess).not.toHaveBeenCalled();
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
+  it("admits a full synthetic run through the shared boundary before projecting signing fields", async () => {
+    for (const [key, value] of Object.entries({
+      TEMPLATE_TWIN_STAGING_QA_ENABLED: "true",
+      TEMPLATE_TWIN_STAGING_QA_ENVIRONMENT: "test",
+      TEMPLATE_TWIN_STAGING_QA_RESOURCE_ATTESTATION:
+        "isolated-disposable-qa-v1",
+      TEMPLATE_TWIN_STORAGE_PROFILE: "qa",
+      MOCK_AI_CALLS: "true",
+      MOCK_TEMPLATE_TWIN_E2E: "true",
+      DATABASE_URL:
+        "postgresql://synthetic:synthetic@localhost/template_twin_test",
+      REDIS_URL: "redis://redis:6379/15",
+      MINIO_ENDPOINT: "minio:9000",
+      MINIO_USE_SSL: "false",
+      TRANSCRIBE_MD_MINIO_BUCKET: "transcribe-md-audio-qa",
+      TRANSCRIBE_MD_TEMPLATE_BUCKET: "transcribe-md-template-artifacts-qa",
+    })) {
+      vi.stubEnv(key, value);
+    }
+    const readDecision = {
+      visitId: VISIT_ID,
+      isTemplateTwin: true,
+      isSyntheticTemplateTwin: true,
+      practiceId: "practice-1",
+      templateTwinEnabled: true,
+    };
+    const admission = {
+      practiceId: "practice-1",
+      runId: "staging-run-1",
+      attempt: 1,
+    };
+    mocks.requireRead.mockResolvedValue(readDecision);
+    mocks.requireSynthetic.mockResolvedValue(admission);
+    mocks.findUnique.mockReset();
+    mocks.findUnique.mockResolvedValue({
+      ...visitRow(),
+      templateTwinSyntheticQaRun: stagingRun(),
+    });
+
+    const response = await call(["pdf"]);
+
+    expect(response.status).toBe(403);
+    expect(mocks.requireSynthetic).toHaveBeenNthCalledWith(1, {
+      visitId: VISIT_ID,
+      actorUserId: "doctor-1",
+      readDecision,
+    });
+    expect(mocks.requireSynthetic).toHaveBeenNthCalledWith(2, {
+      visitId: VISIT_ID,
+      actorUserId: "doctor-1",
+      readDecision,
+      expected: admission,
+    });
+    expect(mocks.requireSynthetic.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.findUnique.mock.invocationCallOrder[0]!,
+    );
+    expect(mocks.assess).not.toHaveBeenCalled();
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when Twin read authority changes after the clinical select", async () => {
+    mocks.requireRead
+      .mockResolvedValueOnce({
+        visitId: VISIT_ID,
+        isTemplateTwin: true,
+        isSyntheticTemplateTwin: false,
+        practiceId: "practice-1",
+        templateTwinEnabled: true,
+      })
+      .mockRejectedValueOnce(new TemplateTwinVisitReadAuthorityError());
+
+    const response = await call();
+
+    expect(response.status).toBe(404);
+    expect(mocks.findUnique).toHaveBeenCalledTimes(1);
+    expect(mocks.freshDoctor).not.toHaveBeenCalled();
+    expect(mocks.assess).not.toHaveBeenCalled();
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
+  it.each(["a durable relation marker", "compiled-version lineage"])(
+    "keeps %s races out of the ordinary signing PHI projection",
+    async () => {
+      mocks.requireRead.mockResolvedValue({
+        visitId: VISIT_ID,
+        isTemplateTwin: false,
+        isSyntheticTemplateTwin: false,
+        practiceId: null,
+        templateTwinEnabled: null,
+      });
+      mocks.findUnique.mockReset();
+      mocks.findUnique.mockResolvedValue(null);
+
+      const response = await call();
+
+      expect(response.status).toBe(404);
+      expect(mocks.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            id: VISIT_ID,
+            userId: "doctor-1",
+            ...TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE,
+          }),
+        }),
+      );
+      expect(mocks.assess).not.toHaveBeenCalled();
+      expect(mocks.transaction).not.toHaveBeenCalled();
+    },
+  );
+
   it("rejects a cross-site Template Twin signing mutation before any clinical claim", async () => {
     const response = await call([], {
       origin: "https://cross-site.synthetic.test",
@@ -460,6 +652,7 @@ describe("POST /api/visits/[id]/sign — Template Twin server gate", () => {
       code: "TEMPLATE_TWIN_CROSS_SITE_MUTATION",
       retry: false,
     });
+    expect(mocks.findUnique).not.toHaveBeenCalled();
     expect(mocks.assess).not.toHaveBeenCalled();
     expect(mocks.transaction).not.toHaveBeenCalled();
   });
@@ -521,11 +714,21 @@ describe("POST /api/visits/[id]/sign — Template Twin server gate", () => {
   );
 
   it("keeps legacy non-Template-Twin signing outside the fresh role gate", async () => {
+    mocks.requireRead.mockResolvedValue({
+      visitId: VISIT_ID,
+      isTemplateTwin: false,
+      isSyntheticTemplateTwin: false,
+      practiceId: null,
+      templateTwinEnabled: null,
+    });
     mocks.findUnique.mockReset();
     mocks.findUnique
       .mockResolvedValueOnce({
         ...visitRow(),
-        noteTemplate: { templateKind: "structured" },
+        noteTemplate: {
+          templateKind: "structured",
+          templateTwinCompiledVersion: null,
+        },
         templateTwinFill: null,
         cptCodes: { em: { code: "99213" } },
       })
@@ -548,7 +751,8 @@ describe("POST /api/visits/[id]/sign — Template Twin server gate", () => {
     expect(response.status).toBe(200);
     expect(mocks.freshDoctor).not.toHaveBeenCalled();
     expect(mocks.txVisitUpdateMany).toHaveBeenCalledTimes(1);
-    expect(mocks.transaction).toHaveBeenCalledTimes(1);
+    expect(mocks.transaction).toHaveBeenCalledTimes(3);
+    expect(mocks.lockOrdinary).toHaveBeenCalledTimes(3);
     expect(mocks.computeDisplayedEmCode).toHaveBeenCalledTimes(1);
     expect(mocks.captureEditPattern).toHaveBeenCalledWith({
       visitId: VISIT_ID,
@@ -586,7 +790,10 @@ describe("POST /api/visits/[id]/sign — Template Twin server gate", () => {
     mocks.findUnique
       .mockResolvedValueOnce(
         visitRow({
-          noteTemplate: { templateKind: "structured" },
+          noteTemplate: {
+            templateKind: "structured",
+            templateTwinCompiledVersion: null,
+          },
           cptCodes: { em: { code: "99214" } },
         }),
       )
@@ -960,6 +1167,10 @@ describe("POST /api/visits/[id]/sign — Template Twin server gate", () => {
           practiceId: "practice-1",
           role: "DOCTOR",
           isActive: true,
+          deactivatedAt: null,
+          suspendedAt: null,
+          softDeletedAt: null,
+          products: ["TRANSCRIBE_MD"],
         },
       ])
       .mockResolvedValueOnce([]);

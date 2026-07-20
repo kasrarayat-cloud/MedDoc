@@ -55,6 +55,7 @@ import {
 const SHA256 = /^[a-f0-9]{64}$/;
 
 export const TEMPLATE_TWIN_SIGNING_VISIT_SELECT = {
+  patient: { select: { externalId: true } },
   soapFinal: true,
   soapVersion: true,
   manualRetryCount: true,
@@ -65,6 +66,10 @@ export const TEMPLATE_TWIN_SIGNING_VISIT_SELECT = {
   speakerMap: true,
   templateTwinSyntheticQaRun: {
     select: TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
+  },
+  templateTwinProviderExecutions: {
+    select: { id: true },
+    take: 1,
   },
   automationManifest: { select: VISIT_AUTOMATION_MANIFEST_SELECT },
   noteTemplateId: true,
@@ -187,6 +192,7 @@ export const TEMPLATE_TWIN_SIGNING_VISIT_SELECT = {
     select: {
       id: true,
       practiceId: true,
+      visitId: true,
       compiledVersionId: true,
       noteTemplateId: true,
       noteTemplateVersion: true,

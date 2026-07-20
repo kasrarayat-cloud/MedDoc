@@ -56,6 +56,7 @@ import { canonicalSoapSha256 } from "../soap-binding";
 import { prepareTemplateTwinFill } from "../fill-engine";
 import { acknowledgeTemplateTwinReview } from "../review-acknowledgement";
 import { VisitAutomationIncompleteError } from "@/worker/automation-finalization";
+import { currentClinicalVisitActorWhere } from "@/lib/clinical-visit-authority";
 import {
   buildTemplateTwinIntegrationFixture,
   factsForMode,
@@ -131,6 +132,7 @@ beforeAll(async () => {
 
 function visitRow(overrides: Record<string, unknown> = {}) {
   return {
+    patientId: "patient-review-ack",
     status: "READY",
     soapVersion: 4,
     manualRetryCount: 0,
@@ -217,6 +219,7 @@ beforeEach(() => {
   mocks.lockVisit.mockResolvedValue({
     id: "visit-review-ack",
     userId: ACTOR.userId,
+    patientId: "patient-review-ack",
     status: "READY",
     deletedAt: null,
     archivedAt: null,
@@ -228,7 +231,15 @@ beforeEach(() => {
     transcriptRaw: null,
     speakerMap: null,
   });
-  mocks.lockCurrentPhysician.mockResolvedValue([{ id: ACTOR.userId }]);
+  mocks.lockCurrentPhysician.mockImplementation(
+    async (query: { strings?: readonly string[] }) => {
+      const sql = query.strings?.join(" ") ?? "";
+      if (sql.includes('FROM "transcribe_md_patients" patient')) {
+        return [{ id: "patient-review-ack", practiceId: ACTOR.practiceId }];
+      }
+      return [{ id: ACTOR.userId, email: ACTOR.userEmail }];
+    },
+  );
   mocks.findCurrentVisit.mockResolvedValue({ manualRetryCount: 0 });
   mocks.findCurrentFill.mockResolvedValue({ id: "fill-review-ack" });
   mocks.transaction.mockImplementation(
@@ -246,6 +257,30 @@ beforeEach(() => {
 });
 
 describe("whole-manifest Template Twin review acknowledgement", () => {
+  it("projects no review data after current physician authority is revoked", async () => {
+    mocks.findVisit.mockResolvedValueOnce(null);
+
+    await expect(
+      acknowledgeTemplateTwinReview({
+        visitId: "visit-review-ack",
+        expectedManifestVersion: 3,
+        expectedManifestSha256: manifestSha256,
+        actor: ACTOR,
+      }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+    const where = mocks.findVisit.mock.calls[0]?.[0]?.where;
+    expect(where?.AND).toContainEqual(
+      currentClinicalVisitActorWhere(ACTOR.userId),
+    );
+    expect(where?.AND).toContainEqual(
+      expect.objectContaining({
+        patient: { is: { practiceId: ACTOR.practiceId } },
+      }),
+    );
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
   it("blocks review confirmation when the canonical encounter source is missing", async () => {
     mocks.findVisit.mockResolvedValue(visitRow({ rawTextInput: null }));
 
@@ -264,6 +299,7 @@ describe("whole-manifest Template Twin review acknowledgement", () => {
     mocks.lockVisit.mockResolvedValue({
       id: "visit-review-ack",
       userId: ACTOR.userId,
+      patientId: "patient-review-ack",
       status: "READY",
       deletedAt: null,
       archivedAt: null,
@@ -399,6 +435,32 @@ describe("whole-manifest Template Twin review acknowledgement", () => {
       code: "TEMPLATE_TWIN_CURRENT_PHYSICIAN_REQUIRED",
       message: "Current physician authorization is required for Template Twin.",
     });
+    expect(mocks.updateFill).not.toHaveBeenCalled();
+    expect(mocks.outboxCreate).not.toHaveBeenCalled();
+  });
+
+  it("fails closed before the visit lock when the patient leaves the actor practice", async () => {
+    mocks.lockCurrentPhysician.mockImplementation(
+      async (query: { strings?: readonly string[] }) => {
+        const sql = query.strings?.join(" ") ?? "";
+        if (sql.includes('FROM "transcribe_md_patients" patient')) return [];
+        return [{ id: ACTOR.userId, email: ACTOR.userEmail }];
+      },
+    );
+
+    await expect(
+      acknowledgeTemplateTwinReview({
+        visitId: "visit-review-ack",
+        expectedManifestVersion: 3,
+        expectedManifestSha256: manifestSha256,
+        actor: ACTOR,
+      }),
+    ).rejects.toMatchObject({
+      code: "TEMPLATE_TWIN_CURRENT_PHYSICIAN_REQUIRED",
+      message: "Current physician authorization is required for Template Twin.",
+    });
+
+    expect(mocks.lockVisit).not.toHaveBeenCalled();
     expect(mocks.updateFill).not.toHaveBeenCalled();
     expect(mocks.outboxCreate).not.toHaveBeenCalled();
   });

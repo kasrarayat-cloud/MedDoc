@@ -29,6 +29,7 @@ export interface TemplateTwinRollbackActor {
   readonly userId: string;
   readonly userEmail: string | null;
   readonly practiceId: string;
+  readonly sessionId: string;
 }
 
 export interface TemplateTwinRollbackInventory {
@@ -970,14 +971,39 @@ function prismaTransaction(client: PrismaRollbackClient): RollbackTransaction {
       const rows = await client.$queryRaw<TemplateTwinRollbackActor[]>(
         Prisma.sql`
           SELECT
-            "id" AS "userId", "email" AS "userEmail",
-            "practiceId"
-          FROM "users"
-          WHERE "id" = ${actor.userId}
-            AND "practiceId" = ${actor.practiceId}
-            AND "isActive" = true
-            AND 'SUPER_ADMIN'::"Product" = ANY("products")
-          FOR SHARE
+            account."id" AS "userId", account."email" AS "userEmail",
+            account."practiceId", session."sessionToken" AS "sessionId"
+          FROM "practices" practice
+          JOIN "users" account ON account."practiceId" = practice."id"
+          JOIN "user_sessions" session ON session."userId" = account."id"
+          WHERE account."id" = ${actor.userId}
+            AND account."email" IS NOT DISTINCT FROM ${actor.userEmail}
+            AND account."practiceId" = ${actor.practiceId}
+            AND session."sessionToken" = ${actor.sessionId}
+            AND practice."isActive" = true
+            AND account."isActive" = true
+            AND account."deactivatedAt" IS NULL
+            AND account."suspendedAt" IS NULL
+            AND account."softDeletedAt" IS NULL
+            AND account."mfaEnabled" = true
+            AND account."mfaSecret" IS NOT NULL
+            AND regexp_replace(
+              account."mfaSecret",
+              U&'[\\0009-\\000D\\0020\\00A0\\1680\\2000-\\200A\\2028\\2029\\202F\\205F\\3000\\FEFF]',
+              '',
+              'g'
+            ) <> ''
+            AND account."mfaVerifiedAt" IS NOT NULL
+            AND account."mfaVerifiedAt" <= CURRENT_TIMESTAMP
+            AND 'SUPER_ADMIN'::"Product" = ANY(account."products")
+            AND session."createdAt" <= clock_timestamp()
+            AND session."createdAt" > clock_timestamp() - INTERVAL '12 hours'
+            AND session."expiresAt" > clock_timestamp()
+            AND (
+              account."forceLogoutAt" IS NULL
+              OR session."createdAt" > account."forceLogoutAt"
+            )
+          FOR SHARE OF practice, account, session
         `,
       );
       if (!rows[0]) {

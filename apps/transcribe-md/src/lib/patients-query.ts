@@ -12,13 +12,15 @@
 // ============================================================================
 
 import prisma from "@meddoc/db";
+import { Prisma } from "@prisma/client";
 import {
   PATIENTS_PAGE_SIZE,
   type PatientsCursor,
   type PatientListItem,
   type LoadMorePatientsResult,
 } from "@/lib/patients-pagination";
-import { TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID } from "@/lib/template-twin/synthetic-qa-patient";
+import { templateTwinVisitReadVisibilitySql } from "@/lib/template-twin/read-authority";
+import { currentClinicalPatientReadAuthoritySql } from "@/lib/clinical-patient-authority";
 
 interface RawRow {
   id: string;
@@ -32,12 +34,25 @@ interface RawRow {
 
 async function fetchRows(
   practiceId: string,
+  actorUserId: string,
   cursor: PatientsCursor | null,
 ): Promise<RawRow[]> {
   const take = PATIENTS_PAGE_SIZE + 1;
+  const visibleV = templateTwinVisitReadVisibilitySql({
+    actorUserId,
+    visitAlias: "v",
+  });
+  const visibleV2 = templateTwinVisitReadVisibilitySql({
+    actorUserId,
+    visitAlias: "v2",
+  });
+  const patientAuthority = currentClinicalPatientReadAuthoritySql({
+    actor: { userId: actorUserId, practiceId },
+    patientAlias: "p",
+  });
 
   if (cursor === null) {
-    return prisma.$queryRaw<RawRow[]>`
+    return prisma.$queryRaw(Prisma.sql`
       SELECT
         p.id,
         p.name,
@@ -51,11 +66,7 @@ async function fetchRows(
           WHERE v2."patientId" = p.id
             AND v2."deletedAt" IS NULL
             AND v2."archivedAt" IS NULL
-            AND NOT EXISTS (
-              SELECT 1
-              FROM template_twin_synthetic_qa_runs qa2
-              WHERE qa2."visitId" = v2.id
-            )
+            AND ${visibleV2}
           ORDER BY v2."createdAt" DESC
           LIMIT 1
         ) AS "lastVisitSpecialty"
@@ -63,24 +74,18 @@ async function fetchRows(
       LEFT JOIN transcribe_visits v ON v."patientId" = p.id
         AND v."deletedAt" IS NULL
         AND v."archivedAt" IS NULL
-        AND NOT EXISTS (
-          SELECT 1
-          FROM template_twin_synthetic_qa_runs qa
-          WHERE qa."visitId" = v.id
-        )
-      WHERE p."practiceId" = ${practiceId}
-        AND p."deletedAt" IS NULL
-        AND p."externalId" IS DISTINCT FROM ${TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID}
+        AND ${visibleV}
+      WHERE ${patientAuthority}
       GROUP BY p.id
       ORDER BY MAX(v."createdAt") DESC NULLS LAST, p.id DESC
       LIMIT ${take}
-    `;
+    `) as Promise<RawRow[]>;
   }
 
   if (cursor.lastVisitAt === null) {
     // Cursor anchored in the "no visits yet" tail — only null-
     // lastVisitAt rows with a smaller id remain.
-    return prisma.$queryRaw<RawRow[]>`
+    return prisma.$queryRaw(Prisma.sql`
       SELECT
         p.id,
         p.name,
@@ -94,11 +99,7 @@ async function fetchRows(
           WHERE v2."patientId" = p.id
             AND v2."deletedAt" IS NULL
             AND v2."archivedAt" IS NULL
-            AND NOT EXISTS (
-              SELECT 1
-              FROM template_twin_synthetic_qa_runs qa2
-              WHERE qa2."visitId" = v2.id
-            )
+            AND ${visibleV2}
           ORDER BY v2."createdAt" DESC
           LIMIT 1
         ) AS "lastVisitSpecialty"
@@ -106,20 +107,14 @@ async function fetchRows(
       LEFT JOIN transcribe_visits v ON v."patientId" = p.id
         AND v."deletedAt" IS NULL
         AND v."archivedAt" IS NULL
-        AND NOT EXISTS (
-          SELECT 1
-          FROM template_twin_synthetic_qa_runs qa
-          WHERE qa."visitId" = v.id
-        )
-      WHERE p."practiceId" = ${practiceId}
-        AND p."deletedAt" IS NULL
-        AND p."externalId" IS DISTINCT FROM ${TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID}
+        AND ${visibleV}
+      WHERE ${patientAuthority}
         AND p.id < ${cursor.id}
       GROUP BY p.id
       HAVING MAX(v."createdAt") IS NULL
       ORDER BY p.id DESC
       LIMIT ${take}
-    `;
+    `) as Promise<RawRow[]>;
   }
 
   // Cursor anchored on a row with visits. Next-page candidates:
@@ -127,7 +122,7 @@ async function fetchRows(
   //       tied on lastVisitAt with smaller id, or
   //   (b) any null-lastVisitAt row (those come AFTER non-null rows).
   const cursorDate = new Date(cursor.lastVisitAt);
-  return prisma.$queryRaw<RawRow[]>`
+  return prisma.$queryRaw(Prisma.sql`
     SELECT
       p.id,
       p.name,
@@ -141,24 +136,16 @@ async function fetchRows(
         WHERE v2."patientId" = p.id
           AND v2."deletedAt" IS NULL
           AND v2."archivedAt" IS NULL
-          AND NOT EXISTS (
-            SELECT 1
-            FROM template_twin_synthetic_qa_runs qa2
-            WHERE qa2."visitId" = v2.id
-          )
+          AND ${visibleV2}
         ORDER BY v2."createdAt" DESC
         LIMIT 1
       ) AS "lastVisitSpecialty"
     FROM transcribe_md_patients p
     LEFT JOIN transcribe_visits v ON v."patientId" = p.id
-      AND NOT EXISTS (
-        SELECT 1
-        FROM template_twin_synthetic_qa_runs qa
-        WHERE qa."visitId" = v.id
-      )
-    WHERE p."practiceId" = ${practiceId}
-      AND p."deletedAt" IS NULL
-      AND p."externalId" IS DISTINCT FROM ${TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID}
+      AND v."deletedAt" IS NULL
+      AND v."archivedAt" IS NULL
+      AND ${visibleV}
+    WHERE ${patientAuthority}
     GROUP BY p.id
     HAVING
       MAX(v."createdAt") IS NULL
@@ -166,14 +153,15 @@ async function fetchRows(
       OR (MAX(v."createdAt") = ${cursorDate} AND p.id < ${cursor.id})
     ORDER BY MAX(v."createdAt") DESC NULLS LAST, p.id DESC
     LIMIT ${take}
-  `;
+  `) as Promise<RawRow[]>;
 }
 
 export async function fetchPatientsPage(
   practiceId: string,
+  actorUserId: string,
   cursor: PatientsCursor | null,
 ): Promise<LoadMorePatientsResult> {
-  const rows = await fetchRows(practiceId, cursor);
+  const rows = await fetchRows(practiceId, actorUserId, cursor);
   const hasMore = rows.length > PATIENTS_PAGE_SIZE;
   const page = hasMore ? rows.slice(0, PATIENTS_PAGE_SIZE) : rows;
   const items: PatientListItem[] = page.map((r) => ({

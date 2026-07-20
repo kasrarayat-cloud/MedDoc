@@ -4,6 +4,7 @@ import type { NextRequest } from "next/server";
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   compare: vi.fn(),
+  sharedRateLimit: vi.fn(),
   transaction: vi.fn(),
   userFind: vi.fn(),
   visitCount: vi.fn(),
@@ -36,13 +37,15 @@ const mocks = vi.hoisted(() => ({
   practiceDelete: vi.fn(),
   deleteAudio: vi.fn(),
   sendEmail: vi.fn(),
+  accountAuthority: vi.fn(),
+  AccountAuthorityError: class extends Error {},
 }));
 
 vi.mock("@/lib/nextauth", () => ({ auth: mocks.auth }));
 vi.mock("bcryptjs", () => ({ default: { compare: mocks.compare } }));
 vi.mock("@/lib/rate-limit", () => ({
   RATE_LIMITS: { SETTINGS: {} },
-  rateLimitOr429: vi.fn(() => null),
+  sharedRateLimitOr429: mocks.sharedRateLimit,
 }));
 vi.mock("@/lib/api-error", () => ({
   apiError: (error: string, status: number) =>
@@ -63,7 +66,10 @@ vi.mock("@/lib/log", () => ({
   log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 vi.mock("@/lib/audit", () => ({ logAudit: vi.fn() }));
-vi.mock("@meddoc/ai", () => ({ redactPhi: (value: unknown) => String(value) }));
+vi.mock("@/lib/account-mutation-authority", () => ({
+  AccountMutationAuthorityError: mocks.AccountAuthorityError,
+  lockCurrentAccountMutationAuthority: mocks.accountAuthority,
+}));
 vi.mock("@meddoc/db", () => ({
   default: {
     user: { findUnique: mocks.userFind },
@@ -124,7 +130,13 @@ function request(): NextRequest {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.auth.mockResolvedValue({ user: { id: "doctor-1" } });
+  mocks.auth.mockResolvedValue({
+    user: {
+      id: "doctor-1",
+      practiceId: "practice-1",
+      sessionId: "session-current",
+    },
+  });
   mocks.userFind.mockResolvedValue({
     id: "doctor-1",
     email: "doctor@example.test",
@@ -133,6 +145,7 @@ beforeEach(() => {
     practiceId: "practice-1",
   });
   mocks.compare.mockResolvedValue(true);
+  mocks.sharedRateLimit.mockResolvedValue(null);
   mocks.visitCount.mockResolvedValue(0);
   mocks.visitFind.mockResolvedValue(null);
   mocks.sourceCount.mockResolvedValue(0);
@@ -158,6 +171,10 @@ beforeEach(() => {
   mocks.auditLogCount.mockResolvedValue(0);
   mocks.outboxCreate.mockResolvedValue({ id: "outbox-1" });
   mocks.ownerLock.mockResolvedValue([{ userId: "doctor-1" }]);
+  mocks.accountAuthority.mockResolvedValue({
+    user: { id: "doctor-1", practiceId: "practice-1" },
+    session: { userId: "doctor-1" },
+  });
   mocks.transactionRaw.mockImplementation((query: unknown) => {
     const sql =
       query && typeof query === "object" && "strings" in query
@@ -222,6 +239,38 @@ beforeEach(() => {
 });
 
 describe("delete account with retained Template Twin records", () => {
+  it("fails closed before credential or destructive work when the shared limiter is unavailable", async () => {
+    mocks.sharedRateLimit.mockResolvedValueOnce(
+      Response.json(
+        {
+          ok: false,
+          code: "RATE_LIMITED",
+          limitType: "shared_limiter_unavailable",
+        },
+        { status: 429 },
+      ),
+    );
+
+    const response = await POST(request(), { params: Promise.resolve({}) });
+
+    expect(response.status).toBe(429);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "RATE_LIMITED",
+      limitType: "shared_limiter_unavailable",
+    });
+    expect(mocks.sharedRateLimit).toHaveBeenCalledWith({}, "doctor-1");
+    expect(mocks.userFind).not.toHaveBeenCalled();
+    expect(mocks.compare).not.toHaveBeenCalled();
+    expect(mocks.sourceCount).not.toHaveBeenCalled();
+    expect(mocks.transaction).not.toHaveBeenCalled();
+    expect(mocks.accountDeletionCreate).not.toHaveBeenCalled();
+    expect(mocks.aiCallDeleteMany).not.toHaveBeenCalled();
+    expect(mocks.userDelete).not.toHaveBeenCalled();
+    expect(mocks.practiceDelete).not.toHaveBeenCalled();
+    expect(mocks.deleteAudio).not.toHaveBeenCalled();
+    expect(mocks.sendEmail).not.toHaveBeenCalled();
+  });
+
   it("returns a deterministic 409 before any transaction or object deletion", async () => {
     mocks.certificationCount.mockResolvedValue(1);
 
@@ -244,11 +293,87 @@ describe("delete account with retained Template Twin records", () => {
     expect(mocks.transaction.mock.calls[0]?.[1]).toEqual({
       isolationLevel: "Serializable",
     });
-    expect(mocks.ownerLock).toHaveBeenCalledTimes(1);
+    expect(mocks.accountAuthority).toHaveBeenCalledWith(expect.anything(), {
+      userId: "doctor-1",
+      sessionId: "session-current",
+      expectedPracticeId: "practice-1",
+      expectedPasswordHash: "synthetic-hash",
+      expectedEmail: "doctor@example.test",
+      surface: "physician",
+    });
     expect(mocks.accountDeletionCreate).toHaveBeenCalledTimes(1);
     expect(mocks.userDelete).toHaveBeenCalledTimes(1);
     expect(mocks.practiceDelete).toHaveBeenCalledTimes(1);
     expect(mocks.deleteAudio).toHaveBeenCalledWith("doctor-1/");
+  });
+
+  it("never logs credential-bearing transaction failures", async () => {
+    const sensitive =
+      "postgresql://synthetic-user:synthetic-password@db.invalid/meddoc?api_key=synthetic-key";
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.transaction.mockRejectedValueOnce(new Error(sensitive));
+
+    try {
+      const response = await POST(request(), { params: Promise.resolve({}) });
+
+      expect(response.status).toBe(500);
+      const serializedLogs = JSON.stringify(error.mock.calls);
+      expect(serializedLogs).toContain(
+        "[api:settings:delete-account] transaction failed",
+      );
+      expect(serializedLogs).not.toContain(sensitive);
+      expect(serializedLogs).not.toContain("synthetic-password");
+      expect(serializedLogs).not.toContain("synthetic-key");
+    } finally {
+      error.mockRestore();
+    }
+  });
+
+  it("never logs credential-bearing cleanup or mail-provider failures", async () => {
+    const sensitive =
+      "https://synthetic-user:synthetic-password@service.invalid/path?api_key=synthetic-key";
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.deleteAudio.mockRejectedValueOnce(new Error(sensitive));
+    mocks.sendEmail.mockRejectedValueOnce(new Error(sensitive));
+    vi.stubEnv("RESEND_API_KEY", "synthetic-present-marker");
+
+    try {
+      const response = await POST(request(), { params: Promise.resolve({}) });
+
+      expect(response.status).toBe(200);
+      const serializedLogs = JSON.stringify(error.mock.calls);
+      expect(serializedLogs).toContain(
+        "[api:settings:delete-account] object cleanup failed; reconciliation required",
+      );
+      expect(serializedLogs).toContain(
+        "[api:settings:delete-account] confirmation email failed",
+      );
+      expect(serializedLogs).not.toContain(sensitive);
+      expect(serializedLogs).not.toContain("synthetic-password");
+      expect(serializedLogs).not.toContain("synthetic-key");
+    } finally {
+      vi.unstubAllEnvs();
+      error.mockRestore();
+    }
+  });
+
+  it("fails closed when final session or credential authority changed", async () => {
+    mocks.accountAuthority.mockRejectedValueOnce(
+      new mocks.AccountAuthorityError("synthetic stale authority"),
+    );
+
+    const response = await POST(request(), { params: Promise.resolve({}) });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      error:
+        "Account authority changed. Sign in again before retrying deletion.",
+      code: "ACCOUNT_AUTHORITY_CHANGED",
+    });
+    expect(mocks.accountDeletionCreate).not.toHaveBeenCalled();
+    expect(mocks.userDelete).not.toHaveBeenCalled();
+    expect(mocks.practiceDelete).not.toHaveBeenCalled();
+    expect(mocks.deleteAudio).not.toHaveBeenCalled();
   });
 
   it("rechecks after locking and blocks a retained row that races the initial check", async () => {
@@ -261,7 +386,7 @@ describe("delete account with retained Template Twin records", () => {
       code: "TEMPLATE_TWIN_RETENTION_POLICY_REQUIRED",
     });
     expect(mocks.transaction).toHaveBeenCalledTimes(1);
-    expect(mocks.ownerLock).toHaveBeenCalledTimes(1);
+    expect(mocks.accountAuthority).toHaveBeenCalledTimes(1);
     expect(mocks.accountDeletionCreate).not.toHaveBeenCalled();
     expect(mocks.userDelete).not.toHaveBeenCalled();
     expect(mocks.practiceDelete).not.toHaveBeenCalled();

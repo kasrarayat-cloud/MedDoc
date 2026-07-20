@@ -18,170 +18,238 @@
 // same-origin-only Referer policy closes that vector.
 // ============================================================================
 
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
+import { z } from "zod";
 
-import prisma from '@meddoc/db';
-import { AuthTokenPurpose } from '@prisma/client';
+import prisma from "@meddoc/db";
+import { AuthTokenPurpose, type Prisma } from "@prisma/client";
 
-import { apiError, withApiHandler } from '@/lib/api-error';
-import { consumeAuthToken } from '@/lib/auth-tokens';
+import { apiError, withApiHandler } from "@/lib/api-error";
+import {
+  AuthTokenAuthorityError,
+  consumeLockedAuthToken,
+  findAuthTokenCandidate,
+  lockCurrentAuthTokenForMutation,
+} from "@/lib/auth-tokens";
 import {
   RATE_LIMITS,
   clientIpFromRequest,
-  rateLimitOr429,
-} from '@/lib/rate-limit';
-import { sendEmailChangedNotification } from '@/lib/email';
-import { APP_URL } from '@/lib/constants';
-import { redactPhi } from '@meddoc/ai';
-import { log } from '@/lib/log';
-import { logAudit } from '@/lib/audit';
-import { emailLinkInterstitialHtml } from '@/lib/email-link-interstitial';
+  sharedRateLimitOr429,
+} from "@/lib/rate-limit";
+import { sendEmailChangedNotification } from "@/lib/email";
+import { isEmailDeliveryEnabled } from "@/lib/email-enabled";
+import { APP_URL } from "@/lib/constants";
+import { log } from "@/lib/log";
+import { appendAuthMutationAuditInTransaction } from "@/lib/audit";
+import { emailLinkInterstitialHtml } from "@/lib/email-link-interstitial";
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+const EmailChangeMetadataSchema = z
+  .object({
+    newEmail: z.string().email().max(254),
+    oldEmail: z.string().email().max(254),
+  })
+  .strict();
+
+class EmailChangeConflictError extends Error {}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "P2002"
+  );
+}
 
 function redirectToSettings(reason: string): NextResponse {
   // See verify-email's matching helper — strip Referer so the spent
   // token doesn't land in /settings access logs.
   return NextResponse.redirect(
     `${APP_URL}/settings?emailChange=${encodeURIComponent(reason)}`,
-    { status: 303, headers: { 'Referrer-Policy': 'no-referrer' } }
+    { status: 303, headers: { "Referrer-Policy": "no-referrer" } },
   );
 }
 
-export const GET = withApiHandler('api:auth:confirm-email', async (req) => {
+export const GET = withApiHandler("api:auth:confirm-email", async (req) => {
   // GET is read-only — see verify-email's matching handler.
   const url = new URL(req.url);
-  const token = url.searchParams.get('token');
-  if (!token) return apiError('missing token', 400);
+  const token = url.searchParams.get("token");
+  if (!token) return apiError("missing token", 400);
 
   const html = emailLinkInterstitialHtml({
-    actionPath: '/api/auth/confirm-email',
+    actionPath: "/api/auth/confirm-email",
     token,
-    headline: 'Confirming your email change…',
+    headline: "Confirming your email change…",
     detail:
       "Hold on — we're finishing the email change. This will only take a moment.",
   });
   return new NextResponse(html, {
     status: 200,
     headers: {
-      'Content-Type': 'text/html; charset=utf-8',
-      'Referrer-Policy': 'same-origin',
-      'X-Robots-Tag': 'noindex, nofollow',
+      "Content-Type": "text/html; charset=utf-8",
+      "Referrer-Policy": "no-referrer",
+      "X-Robots-Tag": "noindex, nofollow",
     },
   });
 });
 
-export const POST = withApiHandler('api:auth:confirm-email', async (req) => {
-  const blocked = rateLimitOr429(
-    RATE_LIMITS.AUTH_EMAIL,
-    clientIpFromRequest(req)
-  );
-  if (blocked) return blocked;
+export const POST = withApiHandler(
+  "api:auth:confirm-email",
+  async (req) => {
+    const blocked = await sharedRateLimitOr429(
+      RATE_LIMITS.AUTH_EMAIL,
+      clientIpFromRequest(req),
+    );
+    if (blocked) return blocked;
 
-  // Accept either a JSON body or the interstitial's HTML form post.
-  let token: string | null = null;
-  const contentType = req.headers.get('content-type') ?? '';
-  if (contentType.includes('application/json')) {
-    try {
-      const body = (await req.json()) as { token?: unknown };
-      if (typeof body.token === 'string') token = body.token;
-    } catch {
-      return apiError('invalid JSON body', 400);
+    // Accept either a JSON body or the interstitial's HTML form post.
+    let token: string | null = null;
+    const contentType = req.headers.get("content-type") ?? "";
+    if (contentType.includes("application/json")) {
+      try {
+        const body = (await req.json()) as { token?: unknown };
+        if (typeof body.token === "string") token = body.token;
+      } catch {
+        return apiError("invalid JSON body", 400);
+      }
+    } else {
+      const form = await req.formData().catch(() => null);
+      const raw = form?.get("token");
+      if (typeof raw === "string") token = raw;
     }
-  } else {
-    const form = await req.formData().catch(() => null);
-    const raw = form?.get('token');
-    if (typeof raw === 'string') token = raw;
-  }
-  if (!token) return apiError('missing token', 400);
+    if (!token) return apiError("missing token", 400);
 
-  const consumed = await consumeAuthToken({
-    token,
-    purpose: AuthTokenPurpose.EMAIL_CHANGE,
-  });
-  if (!consumed) {
-    return redirectToSettings('invalid-or-expired');
-  }
-
-  const meta = consumed.metadata as
-    | { newEmail?: string; oldEmail?: string }
-    | null;
-  const newEmail = typeof meta?.newEmail === 'string' ? meta.newEmail : null;
-  const oldEmail = typeof meta?.oldEmail === 'string' ? meta.oldEmail : null;
-  if (!newEmail) {
-    console.warn(
-      `[api:auth:confirm-email] token consumed but metadata.newEmail missing user=${consumed.userId}`
-    );
-    return redirectToSettings('invalid-or-expired');
-  }
-
-  // Race guard: someone may have signed up with this email in the 24-hour
-  // window since the change was requested. Early return (no update) and
-  // let the user try again with a different address.
-  const conflict = await prisma.user.findUnique({
-    where: { email: newEmail },
-    select: { id: true },
-  });
-  if (conflict && conflict.id !== consumed.userId) {
-    console.warn(
-      `[api:auth:confirm-email] target email now taken user=${consumed.userId}`
-    );
-    return redirectToSettings('conflict');
-  }
-
-  try {
-    const updated = await prisma.user.update({
-      where: { id: consumed.userId },
-      data: {
-        email: newEmail,
-        // If email-verification gate is enforced, the new email is
-        // already "verified" by virtue of having received and clicked
-        // this link — stamp it so the login gate doesn't re-require it.
-        emailVerified: new Date(),
-      },
-      select: { name: true },
+    const candidate = await findAuthTokenCandidate({
+      token,
+      purpose: AuthTokenPurpose.EMAIL_CHANGE,
     });
+    if (!candidate) {
+      return redirectToSettings("invalid-or-expired");
+    }
 
-    log.info('api:auth:confirm-email', 'email updated', {
-      userId: consumed.userId,
-    });
-    // The confirm endpoint runs from the NEW email's click — there's
-    // typically no active session yet, so override the userId/email
-    // explicitly from the consumed token.
-    void logAudit({
-      action: 'EMAIL_CHANGE_CONFIRMED',
-      targetType: 'User',
-      targetId: consumed.userId,
-      userId: consumed.userId,
-      userEmail: newEmail,
-      metadata: {
-        newEmailDomain: newEmail.split('@')[1] ?? 'unknown',
-        oldEmailDomain: oldEmail?.split('@')[1] ?? 'unknown',
-      },
-    });
+    let updated: {
+      userId: string;
+      name: string | null;
+      oldEmail: string;
+      newEmail: string;
+    };
+    try {
+      updated = await prisma.$transaction(
+        async (tx: Prisma.TransactionClient) => {
+          const locked = await lockCurrentAuthTokenForMutation(tx, {
+            token,
+            purpose: AuthTokenPurpose.EMAIL_CHANGE,
+            candidate,
+          });
+          const metadata = EmailChangeMetadataSchema.safeParse(
+            locked.token.metadata,
+          );
+          if (!metadata.success) throw new AuthTokenAuthorityError();
 
-    // Fire-and-forget notification to the old address. Never fail the
-    // redirect on email hiccup.
-    if (oldEmail && process.env.RESEND_API_KEY) {
+          const oldEmail = metadata.data.oldEmail;
+          const newEmail = metadata.data.newEmail.trim().toLowerCase();
+          if (
+            metadata.data.newEmail !== newEmail ||
+            oldEmail !== locked.user.email ||
+            newEmail === oldEmail
+          ) {
+            throw new AuthTokenAuthorityError();
+          }
+
+          // Recheck the target only after locking the exact token owner. The
+          // unique index remains the final cross-user race arbiter.
+          const conflict = await tx.user.findUnique({
+            where: { email: newEmail },
+            select: { id: true },
+          });
+          if (conflict && conflict.id !== locked.user.id) {
+            throw new EmailChangeConflictError();
+          }
+
+          // Mark the exact bearer used before changing security state. The
+          // database security-state trigger retires every still-unused email
+          // authority; consuming first lets this one transaction complete
+          // while any rollback restores both the bearer and identity.
+          await consumeLockedAuthToken(tx, locked.token.id, locked.now);
+          const current = await tx.user.update({
+            where: { id: locked.user.id },
+            data: {
+              email: newEmail,
+              emailVerified: locked.now,
+            },
+            select: { name: true },
+          });
+          await tx.userSession.deleteMany({
+            where: { userId: locked.user.id },
+          });
+          await tx.authToken.updateMany({
+            where: {
+              userId: locked.user.id,
+              purpose: {
+                in: [
+                  AuthTokenPurpose.PASSWORD_RESET,
+                  AuthTokenPurpose.EMAIL_VERIFICATION,
+                  AuthTokenPurpose.EMAIL_CHANGE,
+                ],
+              },
+              usedAt: null,
+            },
+            data: { usedAt: locked.now },
+          });
+          await appendAuthMutationAuditInTransaction(tx, {
+            action: "EMAIL_CHANGE_CONFIRMED",
+            userId: locked.user.id,
+            userEmail: newEmail,
+            practiceId: locked.user.practiceId,
+            metadata: {
+              newEmailDomain: newEmail.split("@")[1] ?? "unknown",
+              oldEmailDomain: oldEmail.split("@")[1] ?? "unknown",
+            },
+          });
+          return {
+            userId: locked.user.id,
+            name: current.name,
+            oldEmail,
+            newEmail,
+          };
+        },
+      );
+    } catch (error) {
+      if (error instanceof AuthTokenAuthorityError) {
+        return redirectToSettings("invalid-or-expired");
+      }
+      if (
+        error instanceof EmailChangeConflictError ||
+        isUniqueConstraintError(error)
+      ) {
+        return redirectToSettings("conflict");
+      }
+      console.error("[api:auth:confirm-email] identity mutation failed");
+      return redirectToSettings("error");
+    }
+
+    log.info("api:auth:confirm-email", "email updated", {
+      userId: updated.userId,
+    });
+    // Delivery is deliberately outside the database transaction. A failure
+    // cannot roll the identity change back; it is recorded without provider
+    // response content, recipient data, or URL/token material.
+    if (isEmailDeliveryEnabled()) {
       void sendEmailChangedNotification({
-        toEmail: oldEmail,
-        newEmail,
+        toEmail: updated.oldEmail,
+        newEmail: updated.newEmail,
         userName: updated.name,
-      }).catch((err) => {
+      }).catch(() => {
         console.error(
-          `[api:auth:confirm-email] old-email notification failed user=${consumed.userId}:`,
-          redactPhi(err instanceof Error ? err.message : err)
+          "[api:auth:confirm-email] old-email notification delivery failed",
         );
       });
     }
-  } catch (err) {
-    console.error(
-      `[api:auth:confirm-email] update failed user=${consumed.userId}:`,
-      redactPhi(err instanceof Error ? err.message : err)
-    );
-    return redirectToSettings('error');
-  }
 
-  return redirectToSettings('ok');
-});
+    return redirectToSettings("ok");
+  },
+  { exposeTimingHeaders: false },
+);

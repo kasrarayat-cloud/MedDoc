@@ -51,11 +51,16 @@ describe('loadResumeState — happy path', () => {
     };
     mocks.findUnique.mockResolvedValue(row);
 
-    const result = await loadResumeState(VISIT_ID, 0);
+    const result = await loadResumeState(VISIT_ID, "user-1", 0);
 
     expect(result).toEqual(row);
     expect(mocks.findUnique).toHaveBeenCalledWith({
-      where: { id: VISIT_ID },
+      where: expect.objectContaining({
+        id: VISIT_ID,
+        userId: 'user-1',
+        user: expect.any(Object),
+        patient: expect.any(Object),
+      }),
       select: expect.objectContaining({
         transcriptRaw: true,
         soapFinal: true,
@@ -82,7 +87,7 @@ describe('loadResumeState — happy path', () => {
     };
     mocks.findUnique.mockResolvedValue(row);
 
-    const result = await loadResumeState(VISIT_ID, 1);
+    const result = await loadResumeState(VISIT_ID, "user-1", 1);
 
     expect(result).toEqual(row);
   });
@@ -92,13 +97,13 @@ describe('loadResumeState — missing row branches (FIND-P1-011)', () => {
   it('throws VisitNotFoundError on RETRY (attemptsMade > 0) when row is gone', async () => {
     mocks.findUnique.mockResolvedValue(null);
 
-    await expect(loadResumeState(VISIT_ID, 1)).rejects.toThrow(
+    await expect(loadResumeState(VISIT_ID, "user-1", 1)).rejects.toThrow(
       VisitNotFoundError
     );
 
     // Verify the error carries the visit id for downstream logging.
     try {
-      await loadResumeState(VISIT_ID, 1);
+      await loadResumeState(VISIT_ID, "user-1", 1);
     } catch (err) {
       expect(err).toBeInstanceOf(VisitNotFoundError);
       expect((err as VisitNotFoundError).visitId).toBe(VISIT_ID);
@@ -109,7 +114,7 @@ describe('loadResumeState — missing row branches (FIND-P1-011)', () => {
   it('throws VisitNotFoundError on later retries too (attemptsMade=5)', async () => {
     mocks.findUnique.mockResolvedValue(null);
 
-    await expect(loadResumeState(VISIT_ID, 5)).rejects.toThrow(
+    await expect(loadResumeState(VISIT_ID, "user-1", 5)).rejects.toThrow(
       VisitNotFoundError
     );
   });
@@ -122,7 +127,7 @@ describe('loadResumeState — missing row branches (FIND-P1-011)', () => {
     // the "deleted during retry" case. Surface as a plain Error so
     // Sentry catches it (worker outer catch falls through to the
     // normal FAILED-state path, which is the right move on a race).
-    await expect(loadResumeState(VISIT_ID, 0)).rejects.toThrow(
+    await expect(loadResumeState(VISIT_ID, "user-1", 0)).rejects.toThrow(
       /disappeared between top-level find and resume-state load/
     );
 
@@ -130,7 +135,7 @@ describe('loadResumeState — missing row branches (FIND-P1-011)', () => {
     // VisitNotFoundError short-circuit must not fire on first-attempt
     // races.
     try {
-      await loadResumeState(VISIT_ID, 0);
+      await loadResumeState(VISIT_ID, "user-1", 0);
     } catch (err) {
       expect(err).not.toBeInstanceOf(VisitNotFoundError);
       expect(err).toBeInstanceOf(Error);

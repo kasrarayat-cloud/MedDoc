@@ -23,6 +23,10 @@ import prisma from "@meddoc/db";
 import { Prisma } from "@prisma/client";
 import { auth } from "@/lib/nextauth";
 import { runSerializableTransactionWithRetry } from "@/lib/db/transaction-retry";
+import {
+  requireTemplateTwinVisitReadAuthority,
+  TemplateTwinVisitReadAuthorityError,
+} from "@/lib/template-twin/read-authority";
 import { getRedis, isRedisReady, ADMIN_AUDIT_STREAM_CHANNEL } from "./redis";
 
 // AuditAction is a Prisma enum — we mirror the relevant slice for
@@ -35,11 +39,15 @@ export type AuditAction =
   | "LOGIN_FAILED"
   | "LOGOUT"
   | "PASSWORD_CHANGED"
+  | "EMAIL_VERIFIED"
   | "SESSION_EXPIRED"
   // MFA — added closing shadow-audit HIPAA_FINDING_001. Already in
   // the Prisma AuditAction enum; surfaced here so call sites typecheck.
+  | "MFA_ENROLLMENT_STARTED"
   | "MFA_ENABLED"
   | "MFA_DISABLED"
+  | "MFA_RECOVERY_CODES_ROTATED"
+  | "MFA_CREDENTIALS_MIGRATED"
   | "MFA_CHALLENGE_PASSED"
   | "MFA_CHALLENGE_FAILED"
   // Admin
@@ -220,6 +228,66 @@ export interface AuditLogInput {
    *  otherwise resolved from the session. Falls back to
    *  'clinic_main' (same sentinel as meddoc-pro). */
   practiceId?: string | null;
+  /**
+   * Makes this audit row the final, serializable authorization boundary for
+   * a generic Template Twin PHI read. The transaction reclassifies durable
+   * provenance and reasserts exact current physician/practice authority
+   * before the audit row commits. Ordinary best-effort audits omit this.
+   */
+  templateTwinReadAuthority?: { expectedPracticeId: string };
+}
+
+export interface AuthMutationAuditInput {
+  action:
+    | "PASSWORD_CHANGED"
+    | "EMAIL_VERIFIED"
+    | "EMAIL_CHANGE_REQUESTED"
+    | "EMAIL_CHANGE_CONFIRMED"
+    | "MFA_ENROLLMENT_STARTED"
+    | "MFA_ENABLED"
+    | "MFA_DISABLED"
+    | "MFA_RECOVERY_CODES_ROTATED"
+    | "MFA_CREDENTIALS_MIGRATED";
+  userId: string;
+  userEmail: string;
+  practiceId: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Append the immutable security receipt inside the same transaction as a
+ * credential or identity mutation. Request/session discovery and Redis
+ * publication are deliberately excluded: the caller supplies identity that
+ * was re-established under the transaction's canonical account lock, and a
+ * failed insert must roll the mutation back.
+ */
+export async function appendAuthMutationAuditInTransaction(
+  tx: Prisma.TransactionClient,
+  input: AuthMutationAuditInput,
+): Promise<void> {
+  if (
+    !input.userId ||
+    !input.userEmail ||
+    !input.practiceId ||
+    input.userEmail.length > 254
+  ) {
+    throw new Error("Auth mutation audit identity is incomplete.");
+  }
+  await tx.auditLog.create({
+    data: {
+      userId: input.userId,
+      userEmailSnapshot: input.userEmail,
+      action: input.action,
+      targetId: input.userId,
+      targetType: "User",
+      metadata: input.metadata
+        ? (input.metadata as Prisma.InputJsonValue)
+        : undefined,
+      success: true,
+      practiceId: input.practiceId,
+      timestamp: new Date(),
+    },
+  });
 }
 
 async function getRequestContext(): Promise<{
@@ -334,20 +402,19 @@ export async function logRequiredAudit(input: AuditLogInput): Promise<void> {
   ) {
     throw new Error("Required visit audit identity is incomplete.");
   }
+  const targetId = entry.targetId;
   await runSerializableTransactionWithRetry({
     prisma,
     operation: "required_audit_log_create",
-    // This transaction records a read event; it does not derive or advance
-    // clinical state. READ COMMITTED plus explicit ordered row locks avoids
-    // manufacturing serialization aborts while the worker legitimately
-    // advances the same visit, while the shared wrapper still retries a
-    // genuine 40P01 deadlock as one complete idempotent transaction.
-    isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+    // A Template Twin response uses this transaction as its final authority
+    // boundary. SERIALIZABLE makes a concurrent provenance/tenant mutation
+    // retry the complete classification + audit claim. Existing non-Twin
+    // required audits retain their lower-contention READ COMMITTED behavior.
+    isolationLevel: input.templateTwinReadAuthority
+      ? Prisma.TransactionIsolationLevel.Serializable
+      : Prisma.TransactionIsolationLevel.ReadCommitted,
     context: {
-      visitId:
-        entry.targetType === "TranscribeVisit"
-          ? (entry.targetId ?? undefined)
-          : undefined,
+      visitId: entry.targetType === "TranscribeVisit" ? targetId : undefined,
       practiceId: entry.practiceId,
     },
     transaction: async (tx) => {
@@ -363,33 +430,68 @@ export async function logRequiredAudit(input: AuditLogInput): Promise<void> {
         FOR KEY SHARE
       `);
       if (practices.length !== 1) {
+        if (input.templateTwinReadAuthority) {
+          throw new TemplateTwinVisitReadAuthorityError();
+        }
         throw new Error("Required visit audit practice is unavailable.");
       }
       const actors = await tx.$queryRaw<
-        Array<{ id: string; practiceId: string; isActive: boolean }>
+        Array<{
+          id: string;
+          practiceId: string;
+          role: string;
+          isActive: boolean;
+          deactivatedAt: Date | null;
+          suspendedAt: Date | null;
+          softDeletedAt: Date | null;
+          products: string[];
+        }>
       >(Prisma.sql`
-        SELECT "id", "practiceId", "isActive"
+        SELECT "id", "practiceId", "role"::text AS "role", "isActive",
+          "deactivatedAt", "suspendedAt", "softDeletedAt", "products"
         FROM "users"
         WHERE "id" = ${entry.userId}
-        FOR KEY SHARE
+        FOR SHARE
       `);
       if (
         actors.length !== 1 ||
         actors[0]?.practiceId !== entry.practiceId ||
-        actors[0]?.isActive !== true
+        actors[0]?.isActive !== true ||
+        (input.templateTwinReadAuthority !== undefined &&
+          (actors[0]?.role !== "DOCTOR" ||
+            actors[0]?.deactivatedAt !== null ||
+            actors[0]?.suspendedAt !== null ||
+            actors[0]?.softDeletedAt !== null ||
+            !actors[0]?.products.includes("TRANSCRIBE_MD")))
       ) {
+        if (input.templateTwinReadAuthority) {
+          throw new TemplateTwinVisitReadAuthorityError();
+        }
         throw new Error("Required visit audit actor is unavailable.");
       }
       const visits = await tx.$queryRaw<Array<{ id: string; userId: string }>>(
         Prisma.sql`
           SELECT "id", "userId"
           FROM "transcribe_visits"
-          WHERE "id" = ${entry.targetId}
-          FOR KEY SHARE
+          WHERE "id" = ${targetId}
+          FOR SHARE
         `,
       );
       if (visits.length !== 1 || visits[0]?.userId !== entry.userId) {
+        if (input.templateTwinReadAuthority) {
+          throw new TemplateTwinVisitReadAuthorityError();
+        }
         throw new Error("Required visit audit target is unavailable.");
+      }
+      if (input.templateTwinReadAuthority) {
+        await requireTemplateTwinVisitReadAuthority({
+          db: tx,
+          visitId: targetId,
+          actorUserId: entry.userId,
+          expectedPracticeId:
+            input.templateTwinReadAuthority.expectedPracticeId,
+          requireTemplateTwin: true,
+        });
       }
       // Prisma's shared barrel exports `any` (see memory note on typing).
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -475,14 +577,11 @@ export async function logAudit(input: AuditLogInput): Promise<void> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await prisma.auditLog.create({ data: entry as any });
     publishAuditEntry(entry);
-  } catch (err) {
+  } catch {
     // Audit logging must never break the calling request. A Prisma
     // failure here likely means the audit_logs table is unreachable —
     // fall back to a single-line stderr so the event isn't lost in
     // a downstream log-parse.
-    console.error(
-      `[audit] write failed action=${input.action} target=${input.targetType ?? "-"}:${input.targetId ?? "-"}`,
-      err instanceof Error ? err.message : err,
-    );
+    console.error("[audit] write failed");
   }
 }

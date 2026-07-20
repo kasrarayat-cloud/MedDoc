@@ -43,6 +43,7 @@ import {
   lockTemplateTwinRolloutForFinalClaim,
   type TemplateTwinRolloutToken,
 } from "./rollout";
+import { lockAndAssertCurrentTemplateTwinPhysician } from "./final-claim-authority";
 import { minimizeTemplateTwinSourceMetadata } from "./source-metadata";
 import {
   assertTemplateTwinRecordOwner,
@@ -123,6 +124,29 @@ interface CompletedCandidateReviewReceiptRow {
 
 export interface CompletedCandidateActor extends TemplateTwinIntakeActor {
   readonly rolloutToken: TemplateTwinRolloutToken;
+}
+
+function currentCompletedCandidateOwnerWhere(actor: {
+  userId: string;
+  practiceId: string;
+}) {
+  return {
+    createdById: actor.userId,
+    createdBy: {
+      is: {
+        id: actor.userId,
+        practiceId: actor.practiceId,
+        role: "DOCTOR" as const,
+        isActive: true,
+        deactivatedAt: null,
+        suspendedAt: null,
+        softDeletedAt: null,
+        products: { has: "TRANSCRIBE_MD" as const },
+        practice: { is: { id: actor.practiceId, isActive: true } },
+      },
+    },
+    practice: { is: { id: actor.practiceId, isActive: true } },
+  };
 }
 
 export interface CreateCompletedCandidateInput {
@@ -511,6 +535,10 @@ export async function createCompletedCandidate(
           `${rollout.code}: Template Twin availability changed while the candidate was being generated.`,
         );
       }
+      const currentActor = await lockAndAssertCurrentTemplateTwinPhysician({
+        tx,
+        actor: input.actor,
+      });
       await tx.templateTwinCompletedCandidate.create({
         data: {
           id: candidateId,
@@ -579,7 +607,7 @@ export async function createCompletedCandidate(
         eventKey: `template-twin:completed-candidate-created:${candidateId}:${converted.inventorySha256}`,
         practiceId: input.actor.practiceId,
         actorId: input.actor.userId,
-        actorEmailSnapshot: input.actor.userEmail,
+        actorEmailSnapshot: currentActor.email,
         action: "TEMPLATE_TWIN_COMPLETED_CANDIDATE_CREATED",
         targetType: "TemplateTwinCompletedCandidate",
         targetId: candidateId,
@@ -652,114 +680,120 @@ export async function getCompletedCandidateReview(input: {
   candidateId: string;
   actor: { userId: string; practiceId: string };
 }): Promise<CompletedCandidateReviewDto> {
-  const row = await prisma.templateTwinCompletedCandidate.findFirst({
-    where: {
-      id: input.candidateId,
-      practiceId: input.actor.practiceId,
-      createdById: input.actor.userId,
-    },
-    select: {
-      id: true,
-      practiceId: true,
-      createdById: true,
-      name: true,
-      encounterScope: true,
-      versionDescription: true,
-      status: true,
-      candidateSha256: true,
-      candidateStructureSha256: true,
-      inventorySha256: true,
-      converterVersion: true,
-      comparisonEvidence: true,
-      privacyEvidence: true,
-      reviewProjection: true,
-      reviewProjectionSha256: true,
-      examples: {
-        orderBy: { ordinal: "asc" },
-        select: {
-          ordinal: true,
-          minimizedSha256: true,
-          documentStructureSha256: true,
+  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    await lockAndAssertCurrentTemplateTwinPhysician({
+      tx,
+      actor: input.actor,
+    });
+    const row = await tx.templateTwinCompletedCandidate.findFirst({
+      where: {
+        id: input.candidateId,
+        practiceId: input.actor.practiceId,
+        ...currentCompletedCandidateOwnerWhere(input.actor),
+      },
+      select: {
+        id: true,
+        practiceId: true,
+        createdById: true,
+        name: true,
+        encounterScope: true,
+        versionDescription: true,
+        status: true,
+        candidateSha256: true,
+        candidateStructureSha256: true,
+        inventorySha256: true,
+        converterVersion: true,
+        comparisonEvidence: true,
+        privacyEvidence: true,
+        reviewProjection: true,
+        reviewProjectionSha256: true,
+        examples: {
+          orderBy: { ordinal: "asc" },
+          select: {
+            ordinal: true,
+            minimizedSha256: true,
+            documentStructureSha256: true,
+          },
+        },
+        regions: {
+          orderBy: { displayOrder: "asc" },
+          select: {
+            regionId: true,
+            displayOrder: true,
+            label: true,
+            evidenceType: true,
+            partName: true,
+            tableIndex: true,
+            rowIndex: true,
+            cellIndex: true,
+            candidateTag: true,
+            candidateSdtId: true,
+            sourceEvidenceSha256: true,
+            decision: true,
+          },
         },
       },
-      regions: {
-        orderBy: { displayOrder: "asc" },
-        select: {
-          regionId: true,
-          displayOrder: true,
-          label: true,
-          evidenceType: true,
-          partName: true,
-          tableIndex: true,
-          rowIndex: true,
-          cellIndex: true,
-          candidateTag: true,
-          candidateSdtId: true,
-          sourceEvidenceSha256: true,
-          decision: true,
-        },
-      },
-    },
+    });
+    if (!row) {
+      throw new CompletedCandidateServiceError(
+        "NOT_FOUND",
+        "Candidate not found.",
+      );
+    }
+    assertTemplateTwinRecordOwner(input.actor, {
+      practiceId: row.practiceId,
+      uploadedById: row.createdById,
+    });
+    if (
+      !["PENDING_REVIEW", "APPROVED", "REJECTED"].includes(row.status) ||
+      row.regions.length < 1 ||
+      row.regions.some(
+        (region: CompletedCandidateRegionRow) =>
+          region.evidenceType !== "stable_label_changed_scalar_cell" ||
+          !["PENDING", "APPROVED", "REJECTED"].includes(region.decision),
+      )
+    ) {
+      throw new CompletedCandidateServiceError(
+        "PERSISTENCE_FAILED",
+        "The candidate field inventory is invalid.",
+      );
+    }
+    requireProjectionBinding({
+      projection: row.reviewProjection,
+      projectionSha256: row.reviewProjectionSha256,
+      converterVersion: row.converterVersion,
+      candidateSha256: row.candidateSha256,
+      candidateStructureSha256: row.candidateStructureSha256,
+      inventorySha256: row.inventorySha256,
+      examples: row.examples,
+      regions: row.regions,
+    });
+    return {
+      id: row.id,
+      name: row.name,
+      encounterScope: row.encounterScope,
+      versionDescription: row.versionDescription,
+      status: row.status as CompletedCandidateReviewDto["status"],
+      candidateSha256: row.candidateSha256,
+      inventorySha256: row.inventorySha256,
+      comparison: requireComparison(row.comparisonEvidence),
+      privacy: requirePrivacy(row.privacyEvidence),
+      regions: row.regions.map((region: CompletedCandidateRegionRow) => ({
+        regionId: region.regionId,
+        displayOrder: region.displayOrder,
+        label: region.label,
+        evidenceType: region.evidenceType as "stable_label_changed_scalar_cell",
+        location: `Table ${region.tableIndex + 1}, row ${region.rowIndex + 1}, column ${region.cellIndex + 1}`,
+        candidateTag: region.candidateTag,
+        sourceEvidenceSha256: region.sourceEvidenceSha256,
+        sourceDescription:
+          "Values changed beside this stable label; example values are withheld and hash-bound.",
+        candidateDescription:
+          "Blank Word text control with a stable QuillMD binding.",
+        decision: region.decision as "PENDING" | "APPROVED" | "REJECTED",
+      })),
+    };
   });
-  if (!row) {
-    throw new CompletedCandidateServiceError(
-      "NOT_FOUND",
-      "Candidate not found.",
-    );
-  }
-  assertTemplateTwinRecordOwner(input.actor, {
-    practiceId: row.practiceId,
-    uploadedById: row.createdById,
-  });
-  if (
-    !["PENDING_REVIEW", "APPROVED", "REJECTED"].includes(row.status) ||
-    row.regions.length < 1 ||
-    row.regions.some(
-      (region: CompletedCandidateRegionRow) =>
-        region.evidenceType !== "stable_label_changed_scalar_cell" ||
-        !["PENDING", "APPROVED", "REJECTED"].includes(region.decision),
-    )
-  ) {
-    throw new CompletedCandidateServiceError(
-      "PERSISTENCE_FAILED",
-      "The candidate field inventory is invalid.",
-    );
-  }
-  requireProjectionBinding({
-    projection: row.reviewProjection,
-    projectionSha256: row.reviewProjectionSha256,
-    converterVersion: row.converterVersion,
-    candidateSha256: row.candidateSha256,
-    candidateStructureSha256: row.candidateStructureSha256,
-    inventorySha256: row.inventorySha256,
-    examples: row.examples,
-    regions: row.regions,
-  });
-  return {
-    id: row.id,
-    name: row.name,
-    encounterScope: row.encounterScope,
-    versionDescription: row.versionDescription,
-    status: row.status as CompletedCandidateReviewDto["status"],
-    candidateSha256: row.candidateSha256,
-    inventorySha256: row.inventorySha256,
-    comparison: requireComparison(row.comparisonEvidence),
-    privacy: requirePrivacy(row.privacyEvidence),
-    regions: row.regions.map((region: CompletedCandidateRegionRow) => ({
-      regionId: region.regionId,
-      displayOrder: region.displayOrder,
-      label: region.label,
-      evidenceType: region.evidenceType as "stable_label_changed_scalar_cell",
-      location: `Table ${region.tableIndex + 1}, row ${region.rowIndex + 1}, column ${region.cellIndex + 1}`,
-      candidateTag: region.candidateTag,
-      sourceEvidenceSha256: region.sourceEvidenceSha256,
-      sourceDescription:
-        "Values changed beside this stable label; example values are withheld and hash-bound.",
-      candidateDescription:
-        "Blank Word text control with a stable QuillMD binding.",
-      decision: region.decision as "PENDING" | "APPROVED" | "REJECTED",
-    })),
-  };
 }
 
 export async function issueCompletedCandidateReviewPreview(input: {
@@ -786,12 +820,23 @@ export async function issueCompletedCandidateReviewPreview(input: {
           `${rollout.code}: Template Twin availability changed before the comparison was opened.`,
         );
       }
-      await tx.$queryRaw`SELECT "id" FROM "template_twin_completed_candidates" WHERE "id" = ${input.candidateId} FOR UPDATE`;
+      const currentActor = await lockAndAssertCurrentTemplateTwinPhysician({
+        tx,
+        actor: input.actor,
+      });
+      await tx.$queryRaw(Prisma.sql`
+        SELECT candidate."id"
+        FROM "template_twin_completed_candidates" candidate
+        WHERE candidate."id" = ${input.candidateId}
+          AND candidate."practiceId" = ${input.actor.practiceId}
+          AND candidate."createdById" = ${input.actor.userId}
+        FOR UPDATE
+      `);
       const candidate = await tx.templateTwinCompletedCandidate.findFirst({
         where: {
           id: input.candidateId,
           practiceId: input.actor.practiceId,
-          createdById: input.actor.userId,
+          ...currentCompletedCandidateOwnerWhere(input.actor),
         },
         select: {
           id: true,
@@ -885,7 +930,7 @@ export async function issueCompletedCandidateReviewPreview(input: {
         eventKey: `template-twin:completed-candidate-review-previewed:${candidate.id}:${receiptId}`,
         practiceId: input.actor.practiceId,
         actorId: input.actor.userId,
-        actorEmailSnapshot: input.actor.userEmail,
+        actorEmailSnapshot: currentActor.email,
         action: "TEMPLATE_TWIN_COMPLETED_CANDIDATE_REVIEW_PREVIEWED",
         targetType: "TemplateTwinCompletedCandidate",
         targetId: candidate.id,
@@ -952,12 +997,23 @@ export async function reviewCompletedCandidate(input: {
           `${rollout.code}: Template Twin availability changed before review was saved.`,
         );
       }
-      await tx.$queryRaw`SELECT "id" FROM "template_twin_completed_candidates" WHERE "id" = ${input.candidateId} FOR UPDATE`;
+      const currentActor = await lockAndAssertCurrentTemplateTwinPhysician({
+        tx,
+        actor: input.actor,
+      });
+      await tx.$queryRaw(Prisma.sql`
+        SELECT candidate."id"
+        FROM "template_twin_completed_candidates" candidate
+        WHERE candidate."id" = ${input.candidateId}
+          AND candidate."practiceId" = ${input.actor.practiceId}
+          AND candidate."createdById" = ${input.actor.userId}
+        FOR UPDATE
+      `);
       const candidate = await tx.templateTwinCompletedCandidate.findFirst({
         where: {
           id: input.candidateId,
           practiceId: input.actor.practiceId,
-          createdById: input.actor.userId,
+          ...currentCompletedCandidateOwnerWhere(input.actor),
         },
         select: {
           id: true,
@@ -1055,6 +1111,9 @@ export async function reviewCompletedCandidate(input: {
           receipt."expiresAt" > clock_timestamp() AS "notExpired"
         FROM "template_twin_completed_candidate_review_receipts" receipt
         WHERE receipt."id" = ${receiptId}
+          AND receipt."candidateId" = ${candidate.id}
+          AND receipt."practiceId" = ${input.actor.practiceId}
+          AND receipt."reviewedById" = ${input.actor.userId}
         FOR UPDATE
       `);
       const receipt = receiptRows[0];
@@ -1142,7 +1201,7 @@ export async function reviewCompletedCandidate(input: {
         eventKey: `template-twin:completed-candidate-reviewed:${candidate.id}:${receipt.id}:${status}`,
         practiceId: input.actor.practiceId,
         actorId: input.actor.userId,
-        actorEmailSnapshot: input.actor.userEmail,
+        actorEmailSnapshot: currentActor.email,
         action: "TEMPLATE_TWIN_COMPLETED_CANDIDATE_REVIEWED",
         targetType: "TemplateTwinCompletedCandidate",
         targetId: candidate.id,
@@ -1175,7 +1234,7 @@ export async function readApprovedCompletedCandidate(input: {
     where: {
       id: input.candidateId,
       practiceId: input.actor.practiceId,
-      createdById: input.actor.userId,
+      ...currentCompletedCandidateOwnerWhere(input.actor),
       status: "APPROVED",
       converterVersion: COMPLETED_CANDIDATE_CONVERTER_VERSION,
       reviewProjectionSha256: { not: null },
@@ -1340,11 +1399,15 @@ export async function readApprovedCompletedCandidate(input: {
         `${rollout.code}: Template Twin availability changed before the candidate download was authorized.`,
       );
     }
+    const currentActor = await lockAndAssertCurrentTemplateTwinPhysician({
+      tx,
+      actor: input.actor,
+    });
     const current = await tx.templateTwinCompletedCandidate.findFirst({
       where: {
         id: candidate.id,
         practiceId: input.actor.practiceId,
-        createdById: input.actor.userId,
+        ...currentCompletedCandidateOwnerWhere(input.actor),
         status: "APPROVED",
         candidateSha256: candidate.candidateSha256,
         converterVersion: COMPLETED_CANDIDATE_CONVERTER_VERSION,
@@ -1373,7 +1436,7 @@ export async function readApprovedCompletedCandidate(input: {
       eventKey: `template-twin:completed-candidate-downloaded:${candidate.id}:${randomUUID()}`,
       practiceId: input.actor.practiceId,
       actorId: input.actor.userId,
-      actorEmailSnapshot: input.actor.userEmail,
+      actorEmailSnapshot: currentActor.email,
       action: "EXPORT_TEMPLATE_TWIN_CANDIDATE_DOCX_DOWNLOADED",
       targetType: "TemplateTwinCompletedCandidate",
       targetId: candidate.id,

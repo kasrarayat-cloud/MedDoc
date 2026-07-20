@@ -79,6 +79,26 @@ function renderManager(
 }
 
 describe("Template Twin synthetic upload dialog", () => {
+  it("advertises only the blank-outline legacy boundary", () => {
+    renderManager("hidden", false);
+
+    expect(screen.getByLabelText("Paste a blank outline")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Upload .txt or .md" }),
+    ).toBeInTheDocument();
+    const legacyUpload = document.querySelector<HTMLInputElement>(
+      'input[type="file"][accept*=".txt"]',
+    );
+    expect(legacyUpload?.accept).toMatch(/\.txt|\.md/i);
+    expect(legacyUpload?.accept).not.toMatch(/pdf|docx|\.markdown/i);
+    expect(
+      screen.getByText(/populated or ambiguous text fails closed/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/patient details are fine/i),
+    ).not.toBeInTheDocument();
+  });
+
   it("preserves the existing generic Template Twin upload when staging is hidden", async () => {
     renderManager("hidden", false);
 

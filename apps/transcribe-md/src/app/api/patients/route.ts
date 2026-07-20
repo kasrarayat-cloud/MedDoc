@@ -17,12 +17,19 @@ import { z } from "zod";
 import { NextResponse } from "next/server";
 
 import prisma from "@meddoc/db";
+import { Prisma } from "@prisma/client";
 
 import { apiError, withApiHandler } from "@/lib/api-error";
 import { getSession } from "@/lib/auth";
 import { RATE_LIMITS, rateLimitOr429 } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID } from "@/lib/template-twin/synthetic-qa-patient";
+import { templateTwinVisitReadVisibilitySql } from "@/lib/template-twin/read-authority";
+import {
+  ClinicalPatientAuthorityError,
+  currentClinicalPatientReadAuthoritySql,
+  lockAndAssertCurrentClinicalPatientActor,
+} from "@/lib/clinical-patient-authority";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -59,6 +66,17 @@ export const GET = withApiHandler("api:patients:list", async (req) => {
   const rawSearch = url.searchParams.get("search");
   const search =
     rawSearch && rawSearch.trim().length > 0 ? rawSearch.trim() : null;
+  const visitVisibility = templateTwinVisitReadVisibilitySql({
+    actorUserId: session.user.id,
+    visitAlias: "v",
+  });
+  const patientAuthority = currentClinicalPatientReadAuthoritySql({
+    actor: {
+      userId: session.user.id,
+      practiceId: session.user.practiceId,
+    },
+    patientAlias: "p",
+  });
 
   // Raw SQL so the per-patient visit count + last-visit timestamp
   // aggregate lands in one query and the server-side sort on the
@@ -78,14 +96,8 @@ export const GET = withApiHandler("api:patients:list", async (req) => {
         LEFT JOIN transcribe_visits v ON v."patientId" = p.id
           AND v."deletedAt" IS NULL
           AND v."archivedAt" IS NULL
-          AND NOT EXISTS (
-            SELECT 1
-            FROM template_twin_synthetic_qa_runs qa
-            WHERE qa."visitId" = v.id
-          )
-        WHERE p."practiceId" = ${session.user.practiceId}
-          AND p."deletedAt" IS NULL
-          AND p."externalId" IS DISTINCT FROM ${TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID}
+          AND ${visitVisibility}
+        WHERE ${patientAuthority}
           AND (
             similarity(LOWER(p.name), LOWER(${search})) > ${SEARCH_SIMILARITY_THRESHOLD}
             OR p."externalId" ILIKE ${"%" + search + "%"}
@@ -107,14 +119,8 @@ export const GET = withApiHandler("api:patients:list", async (req) => {
         LEFT JOIN transcribe_visits v ON v."patientId" = p.id
           AND v."deletedAt" IS NULL
           AND v."archivedAt" IS NULL
-          AND NOT EXISTS (
-            SELECT 1
-            FROM template_twin_synthetic_qa_runs qa
-            WHERE qa."visitId" = v.id
-          )
-        WHERE p."practiceId" = ${session.user.practiceId}
-          AND p."deletedAt" IS NULL
-          AND p."externalId" IS DISTINCT FROM ${TEMPLATE_TWIN_SYNTHETIC_QA_PATIENT_EXTERNAL_ID}
+          AND ${visitVisibility}
+        WHERE ${patientAuthority}
         GROUP BY p.id
         ORDER BY MAX(v."createdAt") DESC NULLS LAST, p.id DESC
         LIMIT ${LIST_LIMIT}
@@ -186,21 +192,44 @@ export const POST = withApiHandler("api:patients:create", async (req) => {
     return apiError("invalid external ID", 400);
   }
 
-  const patient = await prisma.transcribeMdPatient.create({
-    data: {
-      practiceId: session.user.practiceId,
-      name: parsed.data.name,
-      dateOfBirth: new Date(parsed.data.dateOfBirth),
-      externalId: parsed.data.externalId,
-    },
-    select: {
-      id: true,
-      name: true,
-      dateOfBirth: true,
-      externalId: true,
-      createdAt: true,
-    },
-  });
+  const actor = {
+    userId: session.user.id,
+    practiceId: session.user.practiceId,
+  };
+  let patient: {
+    id: string;
+    name: string;
+    dateOfBirth: Date | null;
+    externalId: string | null;
+    createdAt: Date;
+  };
+  try {
+    patient = await prisma.$transaction(
+      async (tx: Prisma.TransactionClient) => {
+        await lockAndAssertCurrentClinicalPatientActor({ tx, actor });
+        return tx.transcribeMdPatient.create({
+          data: {
+            practiceId: actor.practiceId,
+            name: parsed.data.name,
+            dateOfBirth: new Date(parsed.data.dateOfBirth),
+            externalId: parsed.data.externalId,
+          },
+          select: {
+            id: true,
+            name: true,
+            dateOfBirth: true,
+            externalId: true,
+            createdAt: true,
+          },
+        });
+      },
+    );
+  } catch (error) {
+    if (error instanceof ClinicalPatientAuthorityError) {
+      return apiError("not found", 404);
+    }
+    throw error;
+  }
 
   void logAudit({
     action: "TM_PATIENT_CREATED",

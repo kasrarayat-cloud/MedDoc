@@ -5,6 +5,7 @@ import prisma from "@meddoc/db";
 import { Prisma, TranscribeVisitStatus } from "@prisma/client";
 import { apiError, withApiHandler } from "@/lib/api-error";
 import { AuthError, requireFreshDoctorIdentity } from "@/lib/auth";
+import { currentClinicalVisitActorWhere } from "@/lib/clinical-visit-authority";
 import { logDelivery } from "@/lib/deliveries";
 import { log } from "@/lib/log";
 import { auth } from "@/lib/nextauth";
@@ -29,10 +30,14 @@ import {
   TemplateTwinRolloutError,
   type TemplateTwinRolloutToken,
 } from "@/lib/template-twin/rollout";
-import { TemplateTwinStagingQaDisabledError } from "@/lib/template-twin/staging-qa-gate";
+import {
+  isTemplateTwinStagingQaRequested,
+  TemplateTwinStagingQaDisabledError,
+} from "@/lib/template-twin/staging-qa-gate";
 import {
   assertTemplateTwinStagingQaVisitGuard,
   lockAndAssertTemplateTwinStagingQaOperation,
+  type LockedStagingQaRunRow,
   TemplateTwinStagingQaVisitGuardError,
 } from "@/lib/template-twin/staging-qa-visit-guard";
 import {
@@ -42,10 +47,21 @@ import {
 } from "@/worker/automation-finalization";
 import { persistedTemplateTwinEncounterEvidenceIsValid } from "@/lib/template-twin/encounter-evidence-verification";
 import {
+  lockAndAssertCurrentTemplateTwinPatient,
   lockAndAssertCurrentTemplateTwinPhysician,
   TemplateTwinCurrentPhysicianAuthorityError,
 } from "@/lib/template-twin/final-claim-authority";
 import { canonicalSha256 } from "@/lib/template-twin/canonical";
+import {
+  requireTemplateTwinVisitReadAuthority,
+  TemplateTwinVisitReadAuthorityError,
+} from "@/lib/template-twin/read-authority";
+import {
+  requireTemplateTwinSyntheticReadAdmission,
+  type TemplateTwinSyntheticReadAdmission,
+  TemplateTwinSyntheticReadAdmissionError,
+} from "@/lib/template-twin/synthetic-read-admission";
+import { TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE } from "@/lib/template-twin/durable-visit-exclusion";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,6 +80,51 @@ export const GET = withApiHandler<{ id: string }>(
     const session = await auth();
     const userId = session?.user?.id;
     if (!userId) return apiError("unauthorized", 401);
+
+    // This classifier projects identifiers and durable provenance only. It
+    // must run before the signing select below can load SOAP, transcripts, or
+    // other clinical evidence into application memory.
+    let preReadAuthority;
+    try {
+      preReadAuthority = await requireTemplateTwinVisitReadAuthority({
+        db: prisma,
+        visitId,
+        actorUserId: userId,
+      });
+    } catch (error) {
+      if (error instanceof TemplateTwinVisitReadAuthorityError) {
+        return apiError("not found", 404);
+      }
+      throw error;
+    }
+    // This endpoint has no ordinary-visit behavior: the stored Original
+    // Template DOCX exists only for an admitted Twin. Stop an ordinary visit
+    // before the signing projection rather than loading clinical columns that
+    // can only be rejected later.
+    if (!preReadAuthority.isTemplateTwin || !preReadAuthority.practiceId) {
+      return apiError("not found", 404);
+    }
+    if (
+      isTemplateTwinStagingQaRequested() &&
+      !preReadAuthority.isSyntheticTemplateTwin
+    ) {
+      return apiError("not found", 404);
+    }
+
+    let syntheticReadAdmission: TemplateTwinSyntheticReadAdmission | null;
+    try {
+      syntheticReadAdmission = await requireTemplateTwinSyntheticReadAdmission({
+        visitId,
+        actorUserId: userId,
+        readDecision: preReadAuthority,
+      });
+    } catch (error) {
+      if (error instanceof TemplateTwinSyntheticReadAdmissionError) {
+        return apiError("not found", 404);
+      }
+      throw error;
+    }
+
     let practiceId: string;
     let rolloutToken: TemplateTwinRolloutToken;
     try {
@@ -76,6 +137,14 @@ export const GET = withApiHandler<{ id: string }>(
         });
       }
       throw error;
+    }
+    if (
+      (preReadAuthority.isTemplateTwin &&
+        preReadAuthority.practiceId !== practiceId) ||
+      (syntheticReadAdmission &&
+        syntheticReadAdmission.practiceId !== practiceId)
+    ) {
+      return apiError("not found", 404);
     }
 
     try {
@@ -91,17 +160,84 @@ export const GET = withApiHandler<{ id: string }>(
     const visit = await prisma.transcribeVisit.findFirst({
       where: {
         id: visitId,
-        userId,
+        AND: [
+          currentClinicalVisitActorWhere(userId),
+          { patient: { is: { practiceId } } },
+        ],
         status: TranscribeVisitStatus.SIGNED,
         deletedAt: null,
+        ...(preReadAuthority.isTemplateTwin
+          ? {}
+          : TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE),
       },
       select: {
         id: true,
+        patientId: true,
         status: true,
         ...TEMPLATE_TWIN_SIGNING_VISIT_SELECT,
       },
     });
     if (!visit) return apiError("not found", 404);
+
+    // Rebind the exact identifier/provenance decision immediately after the
+    // clinical projection. The ordinary predicate above prevents a durable
+    // Twin marker committed between admission and SELECT from being projected;
+    // this recheck also closes transitions committed immediately afterward.
+    let projectedReadAuthority;
+    try {
+      projectedReadAuthority = await requireTemplateTwinVisitReadAuthority({
+        db: prisma,
+        visitId,
+        actorUserId: userId,
+        ...(preReadAuthority.isTemplateTwin
+          ? {
+              expectedPracticeId: preReadAuthority.practiceId!,
+              requireTemplateTwin: true,
+            }
+          : {}),
+      });
+    } catch (error) {
+      if (error instanceof TemplateTwinVisitReadAuthorityError) {
+        return apiError("not found", 404);
+      }
+      throw error;
+    }
+    if (
+      projectedReadAuthority.visitId !== preReadAuthority.visitId ||
+      projectedReadAuthority.isTemplateTwin !==
+        preReadAuthority.isTemplateTwin ||
+      projectedReadAuthority.isSyntheticTemplateTwin !==
+        preReadAuthority.isSyntheticTemplateTwin ||
+      projectedReadAuthority.practiceId !== preReadAuthority.practiceId
+    ) {
+      return apiError("not found", 404);
+    }
+    if (syntheticReadAdmission) {
+      try {
+        if (
+          visit.templateTwinSyntheticQaRun?.id !==
+            syntheticReadAdmission.runId ||
+          visit.templateTwinSyntheticQaRun.attempt !==
+            syntheticReadAdmission.attempt
+        ) {
+          return apiError("not found", 404);
+        }
+        syntheticReadAdmission =
+          await requireTemplateTwinSyntheticReadAdmission({
+            visitId,
+            actorUserId: userId,
+            readDecision: projectedReadAuthority,
+            expected: syntheticReadAdmission,
+          });
+        if (!syntheticReadAdmission) return apiError("not found", 404);
+      } catch (error) {
+        if (error instanceof TemplateTwinSyntheticReadAdmissionError) {
+          return apiError("not found", 404);
+        }
+        throw error;
+      }
+    }
+
     let stagingQaRunId: string | null = null;
     let stagingQaAttempt: number | null = null;
     try {
@@ -378,23 +514,97 @@ export const GET = withApiHandler<{ id: string }>(
               reason: finalRollout.reason,
             };
           }
+          let lockedStagingRun: LockedStagingQaRunRow | null = null;
           if (stagingQaRunId) {
             try {
-              if (stagingQaAttempt === null) {
+              const expectedStagingRun = visit.templateTwinSyntheticQaRun;
+              if (
+                stagingQaAttempt === null ||
+                !expectedStagingRun?.admissionId
+              ) {
                 throw new TemplateTwinStagingQaVisitGuardError(
                   "TEMPLATE_TWIN_STAGING_QA_ATTEMPT_STALE",
                   "Synthetic QA attempt identity is unavailable.",
                 );
               }
-              await lockAndAssertTemplateTwinStagingQaOperation({
-                tx,
-                runId: stagingQaRunId,
-                expectedAttempt: stagingQaAttempt,
-                actor: { userId, practiceId },
-                currentRolloutToken: finalRollout.token,
-                allowedStatuses: ["COMPLETED"],
-                allowedAdmissionPhases: ["SIGNED"],
-              });
+              lockedStagingRun =
+                await lockAndAssertTemplateTwinStagingQaOperation({
+                  tx,
+                  runId: stagingQaRunId,
+                  expectedAdmissionId: expectedStagingRun.admissionId,
+                  expectedAttempt: stagingQaAttempt,
+                  actor: { userId, practiceId },
+                  currentRolloutToken: finalRollout.token,
+                  allowedStatuses: ["COMPLETED"],
+                  allowedAdmissionPhases: ["SIGNED"],
+                });
+              if (
+                !syntheticReadAdmission ||
+                !expectedStagingRun.admission ||
+                !lockedStagingRun.admission ||
+                lockedStagingRun.id !== expectedStagingRun.id ||
+                lockedStagingRun.id !== syntheticReadAdmission.runId ||
+                lockedStagingRun.admissionId !==
+                  expectedStagingRun.admissionId ||
+                lockedStagingRun.visitId !== visit.id ||
+                lockedStagingRun.visitId !== syntheticReadAdmission.visitId ||
+                lockedStagingRun.practiceId !== practiceId ||
+                lockedStagingRun.practiceId !==
+                  syntheticReadAdmission.practiceId ||
+                lockedStagingRun.doctorId !== userId ||
+                lockedStagingRun.noteTemplateId !== visit.noteTemplateId ||
+                lockedStagingRun.noteTemplateVersion !==
+                  visit.noteTemplateVersion ||
+                lockedStagingRun.requestSha256 !==
+                  expectedStagingRun.requestSha256 ||
+                lockedStagingRun.payloadSha256 !==
+                  expectedStagingRun.payloadSha256 ||
+                lockedStagingRun.mode !== expectedStagingRun.mode ||
+                lockedStagingRun.fixtureVersion !==
+                  expectedStagingRun.fixtureVersion ||
+                lockedStagingRun.pinnedGlobalRolloutGeneration !==
+                  expectedStagingRun.pinnedGlobalRolloutGeneration ||
+                lockedStagingRun.pinnedPracticeRolloutGeneration !==
+                  expectedStagingRun.pinnedPracticeRolloutGeneration ||
+                lockedStagingRun.attempt !== syntheticReadAdmission.attempt ||
+                lockedStagingRun.admission.id !==
+                  expectedStagingRun.admissionId ||
+                lockedStagingRun.admission.id !==
+                  expectedStagingRun.admission.id ||
+                lockedStagingRun.admission.visitId !== visit.id ||
+                lockedStagingRun.admission.practiceId !== practiceId ||
+                lockedStagingRun.admission.actorId !== userId ||
+                lockedStagingRun.admission.parentAdmissionId !==
+                  expectedStagingRun.admission.parentAdmissionId ||
+                lockedStagingRun.admission.requestSha256 !==
+                  expectedStagingRun.admission.requestSha256 ||
+                lockedStagingRun.admission.payloadSha256 !==
+                  expectedStagingRun.admission.payloadSha256 ||
+                lockedStagingRun.admission.providerMode !==
+                  expectedStagingRun.admission.providerMode ||
+                lockedStagingRun.admission.purpose !==
+                  expectedStagingRun.admission.purpose ||
+                lockedStagingRun.admission.sourceSha256 !==
+                  expectedStagingRun.admission.sourceSha256 ||
+                lockedStagingRun.admission.sourceSizeBytes !==
+                  expectedStagingRun.admission.sourceSizeBytes ||
+                lockedStagingRun.admission.sourceArtifactId !==
+                  expectedStagingRun.admission.sourceArtifactId ||
+                lockedStagingRun.admission.noteTemplateId !==
+                  visit.noteTemplateId ||
+                lockedStagingRun.admission.noteTemplateVersion !==
+                  visit.noteTemplateVersion ||
+                lockedStagingRun.admission.certificationId !==
+                  expectedStagingRun.admission.certificationId ||
+                lockedStagingRun.admission.mappingSha256 !==
+                  expectedStagingRun.admission.mappingSha256 ||
+                lockedStagingRun.admission.attempt !== stagingQaAttempt
+              ) {
+                throw new TemplateTwinStagingQaVisitGuardError(
+                  "TEMPLATE_TWIN_STAGING_QA_ATTEMPT_STALE",
+                  "Synthetic QA authority changed before download authorization.",
+                );
+              }
             } catch (error) {
               if (
                 error instanceof TemplateTwinStagingQaDisabledError ||
@@ -430,14 +640,43 @@ export const GET = withApiHandler<{ id: string }>(
             tx,
             actor: { userId, practiceId },
           });
+          await lockAndAssertCurrentTemplateTwinPatient({
+            tx,
+            patientId: visit.patientId,
+            practiceId,
+          });
 
           const lockedVisit = await lockCurrentTemplateTwinVisit(tx, visitId);
+          const currentVisitIdentity = await tx.transcribeVisit.findUnique({
+            where: { id: visitId },
+            select: { manualRetryCount: true },
+          });
           if (
             !lockedVisit ||
+            !currentVisitIdentity ||
+            lockedVisit.id !== visit.id ||
             lockedVisit.userId !== userId ||
+            lockedVisit.patientId !== visit.patientId ||
             lockedVisit.status !== TranscribeVisitStatus.SIGNED ||
             lockedVisit.soapVersion !== visit.soapVersion ||
             lockedVisit.soapFinal !== visit.soapFinal ||
+            lockedVisit.noteTemplateId !== visit.noteTemplateId ||
+            lockedVisit.noteTemplateVersion !== visit.noteTemplateVersion ||
+            currentVisitIdentity.manualRetryCount !== visit.manualRetryCount ||
+            canonicalSha256({
+              inputMode: lockedVisit.inputMode,
+              rawTextInput: lockedVisit.rawTextInput,
+              transcriptText: lockedVisit.transcriptText,
+              transcriptRaw: lockedVisit.transcriptRaw,
+              speakerMap: lockedVisit.speakerMap,
+            }) !==
+              canonicalSha256({
+                inputMode: visit.inputMode,
+                rawTextInput: visit.rawTextInput,
+                transcriptText: visit.transcriptText,
+                transcriptRaw: visit.transcriptRaw,
+                speakerMap: visit.speakerMap,
+              }) ||
             lockedVisit.deletedAt !== null ||
             lockedVisit.archivedAt !== null
           ) {
@@ -480,11 +719,10 @@ export const GET = withApiHandler<{ id: string }>(
             practiceId,
             soapVersion: lockedVisit.soapVersion,
             soapFinal: lockedVisit.soapFinal,
-            staging: stagingQaRunId
+            staging: lockedStagingRun
               ? {
-                  admissionId:
-                    visit.templateTwinSyntheticQaRun!.admissionId ?? "",
-                  runId: stagingQaRunId,
+                  admissionId: lockedStagingRun.admissionId ?? "",
+                  runId: lockedStagingRun.id,
                   globalGeneration: finalRollout.token.globalGeneration,
                   practiceGeneration: finalRollout.token.practiceGeneration,
                 }
@@ -494,6 +732,11 @@ export const GET = withApiHandler<{ id: string }>(
           const currentFill = await tx.templateTwinFillManifest.findUnique({
             where: { id: fill.id },
             select: {
+              practiceId: true,
+              visitId: true,
+              compiledVersionId: true,
+              noteTemplateId: true,
+              noteTemplateVersion: true,
               status: true,
               signedDecisionAt: true,
               outputObjectKey: true,
@@ -511,6 +754,16 @@ export const GET = withApiHandler<{ id: string }>(
           });
           if (
             !currentFill ||
+            currentFill.practiceId !== practiceId ||
+            currentFill.practiceId !== fill.practiceId ||
+            currentFill.visitId !== visit.id ||
+            currentFill.visitId !== fill.visitId ||
+            currentFill.compiledVersionId !== assessment.compiledVersionId ||
+            currentFill.compiledVersionId !== fill.compiledVersionId ||
+            currentFill.noteTemplateId !== visit.noteTemplateId ||
+            currentFill.noteTemplateId !== fill.noteTemplateId ||
+            currentFill.noteTemplateVersion !== visit.noteTemplateVersion ||
+            currentFill.noteTemplateVersion !== fill.noteTemplateVersion ||
             currentFill.status !== "SIGNED" ||
             currentFill.signedDecisionAt === null ||
             currentFill.outputObjectKey !== fill.outputObjectKey ||

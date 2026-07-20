@@ -7,7 +7,9 @@ import prisma from "@meddoc/db";
 import { Prisma, TranscribeVisitStatus } from "@prisma/client";
 import { requireSession } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
+import { currentClinicalVisitActorWhere } from "@/lib/clinical-visit-authority";
 import { invalidateTemplateTwinAfterSoapEdit } from "@/lib/template-twin/soap-binding";
+import { TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE } from "@/lib/template-twin/durable-visit-exclusion";
 import {
   assertTemplateTwinStagingQaSoapEdit,
   enqueueTemplateTwinStagingQaMutationAudit,
@@ -17,6 +19,17 @@ import {
 } from "@/lib/template-twin/staging-qa-mutation";
 import { TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT } from "@/lib/template-twin/staging-qa-visit-guard";
 import { isOwnedTemplateTwinStagingQaVisit } from "@/lib/template-twin/staging-qa-access";
+import {
+  hasDurableTemplateTwinClinicalMutationProvenance,
+  enqueueTemplateTwinClinicalMutationAudit,
+  loadTemplateTwinClinicalMutationAdmissionTarget,
+  lockAndAssertOrdinaryClinicalMutation,
+  lockAndAssertTemplateTwinClinicalMutation,
+  pinTemplateTwinClinicalMutation,
+  TEMPLATE_TWIN_CLINICAL_MUTATION_PROVENANCE_SELECT,
+  TemplateTwinClinicalMutationAuthorizationError,
+  type TemplateTwinClinicalMutationClaim,
+} from "@/lib/template-twin/visit-mutation-authority";
 
 const SaveSoapSchema = z.object({
   visitId: z.string().min(1),
@@ -95,14 +108,86 @@ export async function saveSoapDraftAction(
     return { ok: false, error: "Invalid input." };
   }
 
+  // Admission is deliberately PHI-minimal: establish ownership, immutable
+  // Twin lineage, fresh physician authority, and rollout state before SOAP is
+  // selected from the visit row.
+  const authorityTarget = await loadTemplateTwinClinicalMutationAdmissionTarget(
+    {
+      visitId,
+      actorUserId: session.user.id,
+    },
+  );
+  if (!authorityTarget || authorityTarget.userId !== session.user.id) {
+    return { ok: false, error: "Visit not found." };
+  }
+  let stagingRun: Parameters<
+    typeof pinTemplateTwinStagingQaMutation
+  >[0]["run"] = null;
+  if (authorityTarget.templateTwinSyntheticQaRun) {
+    const stagingAuthorityTarget = await prisma.transcribeVisit.findUnique({
+      where: {
+        id: visitId,
+        userId: session.user.id,
+        updatedAt: authorityTarget.updatedAt,
+      },
+      select: {
+        templateTwinSyntheticQaRun: {
+          select: TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
+        },
+      },
+    });
+    if (!stagingAuthorityTarget?.templateTwinSyntheticQaRun) {
+      return { ok: false, error: "Visit not found." };
+    }
+    stagingRun = stagingAuthorityTarget.templateTwinSyntheticQaRun;
+  }
+  let stagingQaClaim: TemplateTwinStagingQaMutationClaim | null;
+  try {
+    stagingQaClaim = await pinTemplateTwinStagingQaMutation({
+      visitId,
+      userId: session.user.id,
+      run: stagingRun,
+    });
+  } catch {
+    return { ok: false, error: "Visit not found." };
+  }
+  let templateTwinMutationClaim: TemplateTwinClinicalMutationClaim | null =
+    null;
+  if (!stagingQaClaim) {
+    try {
+      templateTwinMutationClaim = await pinTemplateTwinClinicalMutation({
+        visitId,
+        actorUserId: session.user.id,
+        admittedVisitUpdatedAt: authorityTarget.updatedAt,
+        provenance: authorityTarget,
+      });
+    } catch (error) {
+      if (error instanceof TemplateTwinClinicalMutationAuthorizationError) {
+        return { ok: false, error: "Visit not found." };
+      }
+      throw error;
+    }
+  }
+
   const visit = await prisma.transcribeVisit.findUnique({
-    where: { id: visitId },
+    where: {
+      id: visitId,
+      ...currentClinicalVisitActorWhere(session.user.id),
+      updatedAt: authorityTarget.updatedAt,
+      ...(!stagingQaClaim && !templateTwinMutationClaim
+        ? TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE
+        : {}),
+    },
     select: {
       id: true,
       userId: true,
+      updatedAt: true,
       status: true,
       deletedAt: true,
       archivedAt: true,
+      soapFinal: true,
+      soapVersion: true,
+      ...TEMPLATE_TWIN_CLINICAL_MUTATION_PROVENANCE_SELECT,
       templateTwinSyntheticQaRun: {
         select: TEMPLATE_TWIN_STAGING_QA_RUN_GUARD_SELECT,
       },
@@ -110,6 +195,13 @@ export async function saveSoapDraftAction(
   });
   if (!visit || visit.userId !== session.user.id) {
     return { ok: false, error: "Visit not found." };
+  }
+  if (
+    !stagingQaClaim &&
+    Boolean(templateTwinMutationClaim) !==
+      hasDurableTemplateTwinClinicalMutationProvenance(visit)
+  ) {
+    return { ok: false, error: "Visit changed. Reload and retry." };
   }
   // T-M17.3: reject writes on trashed / archived visits. The UI
   // already hides these from the default dashboard but a stale tab
@@ -123,20 +215,18 @@ export async function saveSoapDraftAction(
   if (visit.status !== TranscribeVisitStatus.READY) {
     return { ok: false, error: "Note is still processing." };
   }
-  let stagingQaClaim: TemplateTwinStagingQaMutationClaim | null;
-  try {
-    stagingQaClaim = await pinTemplateTwinStagingQaMutation({
-      visitId,
-      userId: session.user.id,
-      run: visit.templateTwinSyntheticQaRun,
-    });
-  } catch {
-    return { ok: false, error: "Visit not found." };
-  }
   if (stagingQaClaim && parsed.data.expectedVersion === undefined) {
     return {
       ok: false,
-      error: "Synthetic QA requires the current SOAP version. Reload and retry.",
+      error:
+        "Synthetic QA requires the current SOAP version. Reload and retry.",
+    };
+  }
+  if (templateTwinMutationClaim && parsed.data.expectedVersion === undefined) {
+    return {
+      ok: false,
+      error:
+        "Template Twin requires the current SOAP version. Reload and retry.",
     };
   }
 
@@ -153,11 +243,41 @@ export async function saveSoapDraftAction(
             tx,
             claim: stagingQaClaim,
           });
+          if (!stagingQaClaim && !templateTwinMutationClaim) {
+            await lockAndAssertOrdinaryClinicalMutation({
+              tx,
+              visitId,
+              actorUserId: session.user.id,
+              admittedVisitUpdatedAt: authorityTarget.updatedAt,
+              admittedPatientId: authorityTarget.patientId,
+              admittedNoteTemplateId: authorityTarget.noteTemplateId,
+            });
+          }
+          const lockedTemplateTwinVisit = templateTwinMutationClaim
+            ? await lockAndAssertTemplateTwinClinicalMutation({
+                tx,
+                claim: templateTwinMutationClaim,
+              })
+            : null;
           if (stagingQaClaim) {
             assertTemplateTwinStagingQaSoapEdit({
               currentSoap: lockedStagingVisit?.soapFinal ?? null,
               nextSoap: parsed.data.text,
             });
+          }
+          if (
+            lockedTemplateTwinVisit &&
+            (lockedTemplateTwinVisit.status !== TranscribeVisitStatus.READY ||
+              lockedTemplateTwinVisit.deletedAt !== null ||
+              lockedTemplateTwinVisit.archivedAt !== null ||
+              lockedTemplateTwinVisit.signedAt !== null ||
+              lockedTemplateTwinVisit.updatedAt.getTime() !==
+                visit.updatedAt.getTime() ||
+              lockedTemplateTwinVisit.soapVersion !==
+                parsed.data.expectedVersion ||
+              lockedTemplateTwinVisit.soapFinal !== visit.soapFinal)
+          ) {
+            return { count: 0 };
           }
           const updated = await tx.transcribeVisit.updateMany({
             where: {
@@ -165,6 +285,13 @@ export async function saveSoapDraftAction(
               userId: session.user.id,
               soapVersion: parsed.data.expectedVersion,
               status: TranscribeVisitStatus.READY,
+              ...(templateTwinMutationClaim
+                ? {
+                    deletedAt: null,
+                    archivedAt: null,
+                    signedAt: null,
+                  }
+                : {}),
             },
             data: {
               soapFinal: parsed.data.text,
@@ -173,6 +300,18 @@ export async function saveSoapDraftAction(
           });
           if (updated.count === 1) {
             await invalidateTemplateTwinAfterSoapEdit(tx, visitId);
+            if (templateTwinMutationClaim) {
+              await enqueueTemplateTwinClinicalMutationAudit({
+                tx,
+                claim: templateTwinMutationClaim,
+                operation: "soap_save",
+                action: "EDITED_NOTE",
+                discriminator: parsed.data.expectedVersion! + 1,
+                metadata: {
+                  nextVersion: parsed.data.expectedVersion! + 1,
+                },
+              });
+            }
             await enqueueTemplateTwinStagingQaMutationAudit({
               tx,
               claim: stagingQaClaim,
@@ -185,19 +324,44 @@ export async function saveSoapDraftAction(
         },
       );
     } catch (error) {
-      if (stagingQaClaim) {
+      if (
+        !stagingQaClaim &&
+        !templateTwinMutationClaim &&
+        error instanceof TemplateTwinClinicalMutationAuthorizationError
+      ) {
+        return { ok: false, error: "conflict" };
+      }
+      if (
+        stagingQaClaim ||
+        (templateTwinMutationClaim &&
+          error instanceof TemplateTwinClinicalMutationAuthorizationError)
+      ) {
         return {
           ok: false,
-          error: "Synthetic QA authorization changed. Reload and try again.",
+          error: stagingQaClaim
+            ? "Synthetic QA authorization changed. Reload and try again."
+            : "Template Twin authorization changed. Reload and try again.",
         };
       }
       throw error;
     }
     if (result.count === 0) {
+      if (templateTwinMutationClaim || stagingQaClaim) {
+        // The final claim may have been lost after the CAS miss. Do not issue
+        // the legacy conflict loader (which returns current SOAP) without a
+        // fresh read-authority claim; the client can safely reload instead.
+        return { ok: false, error: "conflict" };
+      }
       // Conflict: another save landed first. Surface current version
       // + text so the client can show a "reload to see latest" prompt.
       const current = await prisma.transcribeVisit.findUnique({
-        where: { id: visitId },
+        where: {
+          id: visitId,
+          ...currentClinicalVisitActorWhere(session.user.id),
+          ...(!stagingQaClaim && !templateTwinMutationClaim
+            ? TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE
+            : {}),
+        },
         select: { soapVersion: true, soapFinal: true },
       });
       return {
@@ -221,6 +385,16 @@ export async function saveSoapDraftAction(
     updated = await prisma.$transaction(
       async (tx: Prisma.TransactionClient) => {
         await lockTemplateTwinStagingQaMutation({ tx, claim: stagingQaClaim });
+        if (!stagingQaClaim) {
+          await lockAndAssertOrdinaryClinicalMutation({
+            tx,
+            visitId,
+            actorUserId: session.user.id,
+            admittedVisitUpdatedAt: authorityTarget.updatedAt,
+            admittedPatientId: authorityTarget.patientId,
+            admittedNoteTemplateId: authorityTarget.noteTemplateId,
+          });
+        }
         const saved = await tx.transcribeVisit.update({
           where: {
             id: visitId,
@@ -245,6 +419,9 @@ export async function saveSoapDraftAction(
       },
     );
   } catch (error) {
+    if (error instanceof TemplateTwinClinicalMutationAuthorizationError) {
+      return { ok: false, error: "conflict" };
+    }
     if (stagingQaClaim) {
       return {
         ok: false,
@@ -306,15 +483,42 @@ export async function reassignSpeakerAction(
     return { ok: false, error: "Visit not found." };
   }
 
+  const authorityTarget = await loadTemplateTwinClinicalMutationAdmissionTarget(
+    {
+      visitId,
+      actorUserId: session.user.id,
+    },
+  );
+  if (!authorityTarget || authorityTarget.userId !== session.user.id) {
+    return { ok: false, error: "Visit not found." };
+  }
+  // Speaker reassignment changes evidence interpretation, but this generic
+  // action cannot regenerate the downstream Twin manifest. Reject from the
+  // PHI-minimal projection before speakerMap is selected.
+  if (hasDurableTemplateTwinClinicalMutationProvenance(authorityTarget)) {
+    return {
+      ok: false,
+      error:
+        "Speaker reassignment is unavailable for Template Twin visits. Regenerate the visit from corrected source evidence.",
+    };
+  }
+
   const visit = await prisma.transcribeVisit.findUnique({
-    where: { id: visitId },
+    where: {
+      id: visitId,
+      ...currentClinicalVisitActorWhere(session.user.id),
+      updatedAt: authorityTarget.updatedAt,
+      ...TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE,
+    },
     select: {
       id: true,
       userId: true,
+      updatedAt: true,
       status: true,
       speakerMap: true,
       deletedAt: true,
       archivedAt: true,
+      ...TEMPLATE_TWIN_CLINICAL_MUTATION_PROVENANCE_SELECT,
     },
   });
   if (!visit || visit.userId !== session.user.id) {
@@ -326,9 +530,19 @@ export async function reassignSpeakerAction(
   if (visit.status === TranscribeVisitStatus.SIGNED) {
     return { ok: false, error: "Signed notes cannot be edited." };
   }
+  // Defend the relation-race boundary as well: if durable provenance appeared
+  // after the minimal admission, do not interpret or persist the map.
+  if (hasDurableTemplateTwinClinicalMutationProvenance(visit)) {
+    return {
+      ok: false,
+      error:
+        "Speaker reassignment is unavailable for Template Twin visits. Regenerate the visit from corrected source evidence.",
+    };
+  }
 
   // Prisma Json typing is loose; treat as record + write back.
-  const map =
+  const admittedSpeakerMap = visit.speakerMap;
+  const originalMap =
     (visit.speakerMap as Record<
       string,
       {
@@ -337,6 +551,7 @@ export async function reassignSpeakerAction(
         reasoning: string;
       }
     > | null) ?? {};
+  const map = { ...originalMap };
   // Capture the previous role BEFORE mutating the map — feeds the
   // audit metadata below so forensics can see what changed without
   // reading DB row history.
@@ -350,10 +565,52 @@ export async function reassignSpeakerAction(
     reasoning: `Manually reassigned by ${session.user.email}.`,
   };
 
-  await prisma.transcribeVisit.update({
-    where: { id: visitId },
-    data: { speakerMap: map as unknown as object },
-  });
+  let updated: { count: number };
+  try {
+    updated = await prisma.$transaction(
+      async (tx: Prisma.TransactionClient) => {
+        await lockAndAssertOrdinaryClinicalMutation({
+          tx,
+          visitId,
+          actorUserId: session.user.id,
+          admittedVisitUpdatedAt: authorityTarget.updatedAt,
+          admittedPatientId: authorityTarget.patientId,
+          admittedNoteTemplateId: authorityTarget.noteTemplateId,
+        });
+        return tx.transcribeVisit.updateMany({
+          where: {
+            id: visitId,
+            userId: session.user.id,
+            updatedAt: authorityTarget.updatedAt,
+            deletedAt: null,
+            archivedAt: null,
+            signedAt: null,
+            status: { not: TranscribeVisitStatus.SIGNED },
+            speakerMap:
+              admittedSpeakerMap === null
+                ? { equals: Prisma.DbNull }
+                : { equals: admittedSpeakerMap as Prisma.InputJsonValue },
+            ...TEMPLATE_TWIN_DURABLE_VISIT_EXCLUSION_WHERE,
+          },
+          data: { speakerMap: map as unknown as object },
+        });
+      },
+    );
+  } catch (error) {
+    if (error instanceof TemplateTwinClinicalMutationAuthorizationError) {
+      return {
+        ok: false,
+        error: "The visit changed in another tab. Reload and try again.",
+      };
+    }
+    throw error;
+  }
+  if (updated.count !== 1) {
+    return {
+      ok: false,
+      error: "The visit changed in another tab. Reload and try again.",
+    };
+  }
 
   // FIND-P1-003 (2026-05-14) — HIPAA §164.312(b) audit row. The
   // speakerMap mutation affects the SOAP note's history-vs-plan

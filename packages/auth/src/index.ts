@@ -5,12 +5,19 @@ export {
   recordSessionLogin,
   validateSession,
   revokeSession,
+  revokeAllUserSessionsFromCurrentSession,
   revokeAllUserSessions,
   getUserSessions,
   randomSessionToken,
   computeDeviceFingerprint,
 } from "./user-session";
-export type { RecordSessionLoginInput } from "./user-session";
+export type {
+  RecordSessionLoginInput,
+  RevokeAllUserSessionsFromCurrentSessionInput,
+  SessionValidationGrant,
+  SessionValidationPolicy,
+  ValidateSessionInput,
+} from "./user-session";
 
 // ============================================================================
 // @meddoc/auth — shared auth surface for apps/meddoc-pro and apps/scribe
@@ -23,6 +30,7 @@ export type { RecordSessionLoginInput } from "./user-session";
 // ============================================================================
 
 import type { NextAuthConfig } from "next-auth";
+import type { SessionValidationPolicy } from "./user-session";
 // Bring the jwt submodule into this compilation unit so the
 // `declare module 'next-auth/jwt'` augmentation at the bottom of this file
 // can resolve it. Without this, tsc (NodeNext/bundler resolution) reports
@@ -59,6 +67,41 @@ export class AuthError extends Error {
   }
 }
 
+type SyntheticQaRuntimeEnvironment = Partial<
+  Pick<
+    NodeJS.ProcessEnv,
+    | "NODE_ENV"
+    | "QUILLMD_SERVICE_ROLE"
+    | "AUTH_URL"
+    | "NEXTAUTH_URL"
+    | "ADMIN_PUBLIC_HOST"
+    | "PHYSICIAN_PUBLIC_HOST"
+    | "TEMPLATE_TWIN_STORAGE_PROFILE"
+    | "ADMIN_SYNTHETIC_QA_SHARED_HOST_ATTESTATION"
+  >
+>;
+
+/**
+ * Exact runtime identity for the disposable localhost synthetic-QA stack.
+ * Production bypasses may reference this predicate, but cannot weaken it with
+ * an independent pair of feature flags.
+ */
+export function isExactSyntheticQaRuntimeProfile(
+  environment: SyntheticQaRuntimeEnvironment,
+): boolean {
+  return (
+    environment.NODE_ENV === "production" &&
+    environment.QUILLMD_SERVICE_ROLE === "physician-app" &&
+    environment.TEMPLATE_TWIN_STORAGE_PROFILE === "qa" &&
+    environment.ADMIN_SYNTHETIC_QA_SHARED_HOST_ATTESTATION ===
+      "accepted-isolated-synthetic-qa-shared-host" &&
+    environment.ADMIN_PUBLIC_HOST === "localhost" &&
+    environment.PHYSICIAN_PUBLIC_HOST === "localhost" &&
+    environment.AUTH_URL === "http://localhost:9020" &&
+    environment.NEXTAUTH_URL === "http://localhost:9020"
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Shared edge-safe NextAuth config
 // ----------------------------------------------------------------------------
@@ -79,9 +122,119 @@ export class AuthError extends Error {
 const cookieDomain = process.env.AUTH_COOKIE_DOMAIN?.trim();
 function usesDedicatedTemplateTwinSessionVerifier(): boolean {
   return (
-    process.env.NODE_ENV === 'production' &&
-    process.env.QUILLMD_SERVICE_ROLE === 'template-twin-admin-control'
+    process.env.NODE_ENV === "production" &&
+    process.env.QUILLMD_SERVICE_ROLE === "template-twin-admin-control"
   );
+}
+
+type SessionJwtCallback = NonNullable<
+  NonNullable<NextAuthConfig["callbacks"]>["jwt"]
+>;
+
+/**
+ * Build the Node-side JWT callback with the consuming application's current
+ * role/product policy. The shared config uses the base lifecycle/tenant
+ * policy; physician TranscribeMD supplies DOCTOR + TRANSCRIBE_MD below its
+ * Node-only NextAuth configuration.
+ */
+export function createSessionValidationJwtCallback(
+  policy: SessionValidationPolicy = {},
+  options: { acceptPrevalidatedSession?: boolean } = {},
+): SessionJwtCallback {
+  return async ({ token, user }) => {
+    if (user) {
+      token.id = user.id;
+      token.role = user.role;
+      token.practiceId = user.practiceId;
+
+      const prevalidatedSessionId =
+        options.acceptPrevalidatedSession &&
+        typeof user.prevalidatedSessionId === "string" &&
+        user.prevalidatedSessionId.length >= 16
+          ? user.prevalidatedSessionId
+          : null;
+      if (prevalidatedSessionId) {
+        token.sessionId = prevalidatedSessionId;
+      } else {
+        try {
+          const [headersMod, sessionMod] = await Promise.all([
+            import("next/headers"),
+            import("./user-session"),
+          ]);
+          const h = await headersMod.headers();
+          const ipAddress =
+            h.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+            h.get("x-real-ip") ??
+            null;
+          const userAgent = h.get("user-agent") ?? null;
+          const acceptLanguage = h.get("accept-language") ?? null;
+          const sessionToken = sessionMod.randomSessionToken();
+          await sessionMod.recordSessionLogin({
+            userId: user.id,
+            sessionToken,
+            ipAddress,
+            userAgent,
+            deviceFingerprint: sessionMod.computeDeviceFingerprint(
+              userAgent,
+              acceptLanguage,
+            ),
+          });
+          token.sessionId = sessionToken;
+        } catch {
+          console.error("[auth] UserSession record failed; sign-in denied.");
+          return null;
+        }
+      }
+    }
+
+    const sessionId = token.sessionId;
+    const claimedUserId =
+      typeof token.id === "string" && token.id.length > 0
+        ? token.id
+        : typeof token.sub === "string" && token.sub.length > 0
+          ? token.sub
+          : null;
+    const claimedPracticeId =
+      typeof token.practiceId === "string" && token.practiceId.length > 0
+        ? token.practiceId
+        : null;
+    if (!sessionId || !claimedUserId || !claimedPracticeId) return null;
+
+    // The isolated Template Twin control process deliberately has no raw
+    // user_sessions privilege. Its route gate immediately re-verifies these
+    // exact user/session claims through a narrow SECURITY DEFINER function.
+    if (usesDedicatedTemplateTwinSessionVerifier()) return token;
+
+    try {
+      const { validateSession } = await import("./user-session");
+      const current = await validateSession({
+        sessionToken: sessionId,
+        expectedUserId: claimedUserId,
+        expectedPracticeId: claimedPracticeId,
+        allowedRoles: policy.allowedRoles,
+        requiredProducts: policy.requiredProducts,
+        ...(policy.anyOf !== undefined ? { anyOf: policy.anyOf } : {}),
+      });
+      if (!current) return null;
+
+      // Current database identity is authoritative. Email/name may change
+      // without revoking a session; role and tenant claims are refreshed only
+      // after the exact role policy and tenant binding above remain valid.
+      token.id = current.user.id;
+      token.sub = current.user.id;
+      token.email = current.user.email;
+      token.name = current.user.name;
+      token.role = current.user.role;
+      token.practiceId = current.user.practiceId;
+      token.sessionId = sessionId;
+      return token;
+    } catch {
+      // Session validation is authorization evidence. A database or validator
+      // error cannot preserve a previously trusted JWT in any environment.
+      console.error("[auth] UserSession validation failed; session denied.");
+      return null;
+    }
+  };
 }
 
 // app.quillmd.com and admin.quillmd.com intentionally use separate host-only
@@ -136,6 +289,11 @@ export const authConfig: NextAuthConfig = {
 
   trustHost: true,
 
+  // This explicit switch controls every Auth.js auxiliary cookie (callback,
+  // CSRF, PKCE, state, nonce, and WebAuthn challenge), not just the session
+  // override below. The production startup gate separately requires HTTPS.
+  useSecureCookies: process.env.NODE_ENV === "production",
+
   // Security audit P1-H (2026-05-13): always emit the cookie
   // hardening flags. Previously this whole block was gated on
   // `cookieDomain` being set; with AUTH_COOKIE_DOMAIN unset (the
@@ -169,7 +327,13 @@ export const authConfig: NextAuthConfig = {
      * triggers an automatic redirect to `pages.signIn`.
      */
     authorized({ auth, request: { nextUrl } }) {
-      if (process.env.AUTH_USE_MOCK === "true") return true;
+      if (
+        process.env.AUTH_USE_MOCK === "true" &&
+        (process.env.NODE_ENV !== "production" ||
+          isExactSyntheticQaRuntimeProfile(process.env))
+      ) {
+        return true;
+      }
 
       const isLoggedIn = !!auth?.user;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -199,94 +363,16 @@ export const authConfig: NextAuthConfig = {
       return true;
     },
 
-    async jwt({ token, user }) {
-      // ── Sign-in path — `user` is the object returned by authorize() ──
-      if (user) {
-        token.id = user.id as string;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        token.role = (user as any).role;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        token.practiceId = (user as any).practiceId;
-
-        // T-M2: record this login as a UserSession row, revoking any
-        // prior rows for the user so older JWTs stop resolving. Done via
-        // dynamic import so the edge middleware bundle (which loads
-        // authConfig at module parse time) doesn't pull next/headers or
-        // @meddoc/db for this callback's body.
-        try {
-          const [headersMod, sessionMod] = await Promise.all([
-            import("next/headers"),
-            import("./user-session"),
-          ]);
-          const h = await headersMod.headers();
-          const ipAddress =
-            h.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-            h.get("x-real-ip") ??
-            null;
-          const userAgent = h.get("user-agent") ?? null;
-          const acceptLanguage = h.get("accept-language") ?? null;
-          const sessionToken = sessionMod.randomSessionToken();
-          await sessionMod.recordSessionLogin({
-            userId: user.id as string,
-            sessionToken,
-            ipAddress,
-            userAgent,
-            deviceFingerprint: sessionMod.computeDeviceFingerprint(
-              userAgent,
-              acceptLanguage,
-            ),
-          });
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (token as any).sessionId = sessionToken;
-        } catch (err) {
-          // Fail OPEN: login succeeds even if session tracking fails.
-          // The alternative (blocking login on a DB hiccup) would be a
-          // worse UX than a temporarily-unenforced single-session rule.
-          console.error("[auth] UserSession record on sign-in failed:", err);
-        }
-        return token;
-      }
-
-      // ── Subsequent-request path — validate the existing sessionId ──
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const sessionId = (token as any).sessionId as string | undefined;
-      // The isolated Template Twin control process deliberately has no raw
-      // user_sessions privilege. Its route gate immediately re-verifies this
-      // claim through a narrow SECURITY DEFINER function that cannot enumerate
-      // or mutate sessions. Do not make the shared callback request the broad
-      // runtime database credential merely to duplicate that closed check.
-      if (sessionId && !usesDedicatedTemplateTwinSessionVerifier()) {
-        try {
-          const { validateSession } = await import("./user-session");
-          const valid = await validateSession(sessionId);
-          if (!valid) {
-            // Row is gone (revoked by a newer login on another device)
-            // or expired. Returning null invalidates the JWT — the next
-            // request sees no session and the authorized() middleware
-            // redirects to /login.
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            return null as any;
-          }
-        } catch (err) {
-          // Fail OPEN on DB errors — don't kick users off for a transient
-          // outage; the row will be re-validated on the next request.
-          console.error("[auth] UserSession validate failed:", err);
-        }
-      }
-      // Legacy tokens (minted before T-M2) have no sessionId — they pass
-      // through until their natural JWT expiry, then re-login gains one.
-      return token;
-    },
+    jwt: createSessionValidationJwtCallback(),
 
     async session({ session, token }) {
       if (session.user && token) {
         session.user.id = token.id as string;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        session.user.role = token.role as any;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        session.user.practiceId = (token as any).practiceId;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (session.user as any).sessionId = (token as any).sessionId;
+        session.user.email = token.email ?? "";
+        session.user.name = token.name ?? null;
+        session.user.role = token.role;
+        session.user.practiceId = token.practiceId;
+        session.user.sessionId = token.sessionId;
       }
       return session;
     },
@@ -359,9 +445,8 @@ declare module "next-auth" {
       id: string;
       role: UserRole;
       practiceId: string;
-      /** T-M2: opaque token matching a row in user_sessions. Absent on
-       *  pre-T-M2 JWTs (those ride out their original TTL and re-enter
-       *  the single-session regime on the next login). */
+      /** Opaque token matching an exact current row in user_sessions.
+       * Runtime authentication rejects sessions when this is absent. */
       sessionId?: string;
     } & import("next-auth").DefaultSession["user"];
   }
@@ -372,6 +457,9 @@ declare module "next-auth" {
     name?: string | null;
     role: UserRole;
     practiceId: string;
+    /** Server-only handoff from a credential transaction that atomically
+     * created the exact UserSession before Auth.js JWT issuance. */
+    prevalidatedSessionId?: string;
   }
 }
 
