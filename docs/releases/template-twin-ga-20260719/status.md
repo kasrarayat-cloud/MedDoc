@@ -1,6 +1,6 @@
 # QuillMD Template Twin GA release-program status
 
-Last updated: 2026-07-21T07:48:57Z
+Last updated: 2026-07-21T10:36:20Z
 
 ## Production verdict
 
@@ -10,22 +10,24 @@ PHI-bearing test. Template Twin remains unauthorized for production use.
 
 ## Exact source records
 
-| Record                                        | Exact value                                                                                                                                                                                                                                | Status |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ |
-| Local `origin/main` reference                 | `1be101912f01293de3b8fddae722c823ecc86f29`; last remotely verified 2026-07-21                                                                                                                                                              | PASS   |
-| Accepted remediation                          | `79c04e88785a16e8e3b37b58544e107e3a16996e`; parent `b46c62f97544a0193c60929d5ac8e8870b20dc4b`                                                                                                                                              | PASS   |
-| Lossless stack integration                    | Merge `719eea4b27c68cc76e6bf485612c833705cef913`; accepted tree preserved                                                                                                                                                                  | PASS   |
-| Provider-ownership head                       | `db1cab904ac5c8d6c7f25878f59d71e1b094a223`                                                                                                                                                                                                 | PASS   |
-| Authentication/authorization implementation   | `9a1ded49055d1aef153864b28267c81ab1b0506d`                                                                                                                                                                                                 | PASS   |
-| Current committed auth/runtime implementation | `fix/template-twin-provider-ownership-b017-v1` at `25047df1fe095e47610b9e9eda4e25bb2b821d46`; tree `58c7d400886ad4e745e47c6883ad4ddbba9924b3`; parent `50286004f9bc7f940602206e50b24679ab1c2b38`                                           | PASS   |
-| Independent review of `50286004`              | **REJECT**. Core auth/operator fixes reproduced successfully; one P1 obsolete raw-migration instruction and P2 release-record, actual-PostgreSQL regression, cleanup, strict-parser, diff-whitespace, and dependency-debt items remained   | FAIL   |
-| Independent security review of `3a915158`     | **REJECT**. Every executable security gate passed; two P2 evidence-document defects remained: an unbound current-scan claim and malformed escaped approval blanks                                                                          | FAIL   |
-| Lead formatting gate of `b016bfe`             | **REJECT**. Both prior documentation P2s and their regression test passed, but four changed files were not Prettier-clean while every corresponding parent blob was clean                                                                  | FAIL   |
-| Exact-head review payload                     | Auth/runtime implementation `25047df1`, `3a915158` records, `b016bfe` evidence correction/test, and this additive formatting closure. A commit cannot contain its own hash; final identity and hashes are recorded externally after commit | PASS   |
-| Current exact-head review verdict             | The `b016bfe` formatting debt is corrected here, but a fresh detached review of the resulting exact commit is mandatory; no ACCEPT exists yet                                                                                              | FAIL   |
-| Consolidated draft PR                         | PR #371 targets `main`, but its last recorded published head `9088f74f17e11ff3f7e5869e5a56b6c5d36796fd` does not contain this series                                                                                                       | FAIL   |
-| Frozen release candidate                      | Not created                                                                                                                                                                                                                                | FAIL   |
-| Current production Git SHA                    | Not reproducible from a clean commit at the last authorized inventory                                                                                                                                                                      | FAIL   |
+| Record                                      | Exact value                                                                                                                                                                                                                                                        | Status |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ |
+| Local `origin/main` reference               | `1be101912f01293de3b8fddae722c823ecc86f29`; last remotely verified 2026-07-21                                                                                                                                                                                      | PASS   |
+| Accepted remediation                        | `79c04e88785a16e8e3b37b58544e107e3a16996e`; parent `b46c62f97544a0193c60929d5ac8e8870b20dc4b`                                                                                                                                                                      | PASS   |
+| Lossless stack integration                  | Merge `719eea4b27c68cc76e6bf485612c833705cef913`; accepted tree preserved                                                                                                                                                                                          | PASS   |
+| Provider-ownership head                     | `db1cab904ac5c8d6c7f25878f59d71e1b094a223`                                                                                                                                                                                                                         | PASS   |
+| Authentication/authorization implementation | `9a1ded49055d1aef153864b28267c81ab1b0506d`                                                                                                                                                                                                                         | PASS   |
+| Core auth/runtime implementation            | `fix/template-twin-provider-ownership-b017-v1` at `25047df1fe095e47610b9e9eda4e25bb2b821d46`; tree `58c7d400886ad4e745e47c6883ad4ddbba9924b3`; parent `50286004f9bc7f940602206e50b24679ab1c2b38`                                                                   | PASS   |
+| Independent review of `50286004`            | **REJECT**. Core auth/operator fixes reproduced successfully; one P1 obsolete raw-migration instruction and P2 release-record, actual-PostgreSQL regression, cleanup, strict-parser, diff-whitespace, and dependency-debt items remained                           | FAIL   |
+| Independent security review of `3a915158`   | **REJECT**. Every executable security gate passed; two P2 evidence-document defects remained: an unbound current-scan claim and malformed escaped approval blanks                                                                                                  | FAIL   |
+| Lead formatting gate of `b016bfe`           | **REJECT**. Both prior documentation P2s and their regression test passed, but four changed files were not Prettier-clean while every corresponding parent blob was clean                                                                                          | FAIL   |
+| Accepted pre-CI exact head                  | `fc08599533f75dbd7bdf878a9d23595ab83d4be0`; tree `445709204e165da4f82b88b6a21cc8adba106027`; three fresh detached reviewers returned ACCEPT with no P0/P1/P2                                                                                                       | PASS   |
+| Historical CI/rollback hardening            | `6f8f3e108fe57bb5f8686ec7a4079624ea629a79`; tree `4b1602311a0a75198aa1f27f70d474410c1b8971`; parent `fc08599533f75dbd7bdf878a9d23595ab83d4be0`. Auth/security and test-census reviewers **REJECTED** it for two P1 defects; rollback review accepted its own scope | FAIL   |
+| Additive authentication/CI closure          | `a7488ba8cc755beeedef56eb27f828d5d86e037b`; tree `2104af1c07283540f6c459fdccad6e7ed4ee62db`; parent `6f8f3e108fe57bb5f8686ec7a4079624ea629a79`. Three independent precommit code reviews returned ACCEPT with no P0/P1/P2                                          | PASS   |
+| Current exact-head review verdict           | This records-only descendant of `a7488ba` is not independently accepted. Its post-commit exact identity must receive fresh detached review and an external receipt before publication                                                                              | FAIL   |
+| Consolidated draft PR                       | PR #371 targets `main`, remains draft and blocked, and is published at `fc08599533f75dbd7bdf878a9d23595ab83d4be0`; local descendants through `a7488ba` and this records-only descendant remain intentionally unpushed pending exact-head review                    | FAIL   |
+| Frozen release candidate                    | Not created                                                                                                                                                                                                                                                        | FAIL   |
+| Current production Git SHA                  | Not reproducible from a clean commit at the last authorized inventory                                                                                                                                                                                              | FAIL   |
 
 The candidate contains **97 ordered Prisma migrations**; the ordered-name
 manifest SHA-256 is
@@ -40,17 +42,17 @@ is not authorization or proof of current production state.
 
 ## Phase status
 
-| Phase                                             | Status        | Evidence / blocking condition                                                                                                                                                                                                                                                                          |
-| ------------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 0 — Preflight and inventory                       | FAIL          | The equivalent preflight and read-only inventory exist, but deployed provenance, least-privilege production identities, PITR, complete restore, internal transport, capacity, monitoring, and credential-rotation gates remain open.                                                                   |
-| 1 — Consolidated implementation                   | FAIL          | Accepted history is preserved. Auth/runtime closure is at `25047df1`; the `3a915158` documentation P2s were corrected at `b016bfe`, which failed only its new-diff formatting gate. This additive formatting closure still requires a fresh detached exact-head verdict.                               |
-| 2 — Production template intake                    | FAIL          | Misplaced Word-control remediation and completed-document conversion are integrated; production scanner readiness, final compatibility evidence, and combined exact-head review remain open. Unsupported structures continue to fail closed.                                                           |
-| 3 — Extraction quality                            | FAIL          | Provider ownership now covers the released path technically, but the release-head live-provider clinical cohort remains `n=0` and Clinical Safety approval is HUMAN PENDING.                                                                                                                           |
-| 4 — Microsoft Office compatibility                | FAIL          | Office evidence binding and misplaced-control remediation are integrated. Final-SHA corpus generation and returned desktop Word evidence remain mandatory; Word approval is HUMAN PENDING.                                                                                                             |
-| 5 — Infrastructure and operations                 | FAIL          | Two fresh zero-state 97-migration release replays, candidate exact-principal/RI-tamper proof, and historical backup-role dump/restore/re-provision pass. Production identities, immutable image digests, real six-container rollback, PITR/object/queue recovery, and named ownership remain unproven. |
-| 6 — Privacy/Legal, Clinical, Operations approvals | HUMAN PENDING | No implementation agent may supply these decisions.                                                                                                                                                                                                                                                    |
-| 7 — Final release candidate                       | FAIL          | The auth/runtime closure is at `25047df1`; the two `3a915158` P2s were corrected at `b016bfe`, whose introduced formatting debt is corrected here. The replacement exact head has not received independent ACCEPT. No frozen or accepted RC exists.                                                    |
-| 8 — Production deployment and 100% rollout        | FAIL          | No production authority has been exercised; rollout is 0%.                                                                                                                                                                                                                                             |
+| Phase                                             | Status        | Evidence / blocking condition                                                                                                                                                                                                                                                                                               |
+| ------------------------------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0 — Preflight and inventory                       | FAIL          | The equivalent preflight and read-only inventory exist, but deployed provenance, least-privilege production identities, PITR, complete restore, internal transport, capacity, monitoring, and credential-rotation gates remain open.                                                                                        |
+| 1 — Consolidated implementation                   | FAIL          | Accepted history is preserved and exact `fc08599` received three independent ACCEPT verdicts. Exact `6f8f3e1` was then rejected for two P1 regressions; additive `a7488ba` closes both. This records-only descendant remains local until fresh exact-head review and new PR CI.                                             |
+| 2 — Production template intake                    | FAIL          | Misplaced Word-control remediation and completed-document conversion are integrated; production scanner readiness, final compatibility evidence, and combined exact-head review remain open. Unsupported structures continue to fail closed.                                                                                |
+| 3 — Extraction quality                            | FAIL          | Provider ownership now covers the released path technically, but the release-head live-provider clinical cohort remains `n=0` and Clinical Safety approval is HUMAN PENDING.                                                                                                                                                |
+| 4 — Microsoft Office compatibility                | FAIL          | Office evidence binding and misplaced-control remediation are integrated. Final-SHA corpus generation and returned desktop Word evidence remain mandatory; Word approval is HUMAN PENDING.                                                                                                                                  |
+| 5 — Infrastructure and operations                 | FAIL          | Exact `6f8f3e1` adds immutable QA image binding and merged-Compose rollback proof; exact `a7488ba` adds least-privilege MFA keyring reader groups, an immutable-image read probe, and package-level helper typechecking. Production identities/digests, a real six-container swap, recovery, and ownership remain unproven. |
+| 6 — Privacy/Legal, Clinical, Operations approvals | HUMAN PENDING | No implementation agent may supply these decisions.                                                                                                                                                                                                                                                                         |
+| 7 — Final release candidate                       | FAIL          | The pre-CI head `fc08599` is independently accepted, but its published CI failed. Rejected `6f8f3e1` and corrective `a7488ba` preserve the additive audit trail. The records-bearing descendant, hosted CI rerun, and full final-RC gates remain pending; no frozen or accepted RC exists.                                  |
+| 8 — Production deployment and 100% rollout        | FAIL          | No production authority has been exercised; rollout is 0%.                                                                                                                                                                                                                                                                  |
 
 ## Historical scoped verification at rejected `e7b3864`
 
@@ -74,6 +76,43 @@ These scoped passes did not close the review finding. See
 
 ## Current committed and follow-up evidence
 
+- Exact `fc08599` received three fresh detached ACCEPT verdicts with no
+  P0/P1/P2 findings. Its mode-0600 exact-head receipt has SHA-256
+  `90cd5159724a34069adf907a98d4546ff72192f8c0bc90a5a2080509a649ffe3`.
+- Published `fc08599` CI exposed missing immutable PostgreSQL input, an
+  unresolved short-form MFA mount parse failure, and a shared synthetic
+  migration helper failure. The E2E job also rendered job-only disposable
+  synthetic credentials before service startup; its exact raw logs were
+  deleted, and the sanitized mode-0600 incident receipt has SHA-256
+  `bbe39384e28108d692a4b19774453dc4044e4499cde3a3f1db3d762cf3ecac6e`.
+- Exact implementation `6f8f3e1` synchronously masks all generated CI secret
+  components before use, freezes the shared secret set, binds QA services to
+  exact local image IDs, converts MFA keyring mounts to fail-closed long form,
+  and accepts Compose's real array-form rollback model without accepting
+  malformed or duplicate entries.
+- The `6f8f3e1` tree passes full TranscribeMD TypeScript, **428/428 files and
+  5,783/5,783 tests**, focused **8 files / 187 tests**, production principal
+  and rollback static censuses, real base-plus-generated-overlay validation,
+  exact-patch offline and verified-only scans with zero findings, and a closed
+  **97/97** synthetic release replay with zero labeled residue. Those technical
+  passes did not close review: auth/security and test-census reviewers
+  **REJECTED** exact `6f8f3e1` because the uid-1001 application runtimes could
+  not read the root:1001/0440 MFA keyring and the package-level helper failed
+  TypeScript with `TS2345`. The rollback/infrastructure reviewer accepted only
+  its scoped rollback changes.
+- Additive exact implementation `a7488ba` grants gid 1001 only to the two
+  keyring consumers, preserves scanner gid 101 only for the physician app,
+  proves the immutable application image has the exact expected runtime group
+  set before reading the keyring without emitting bytes, and adds a dedicated
+  no-emit package typecheck to both helper-using CI paths.
+- Exact `a7488ba` passes full application and package TypeScript, **428/428
+  files and 5,788/5,788 tests**, focused **8 files / 192 tests**, all **60**
+  workflow shell blocks and **3** embedded Node blocks, production **7-service**
+  and QA **2-service** principal censuses, the **6-service** rollback census,
+  diff/format checks, and exact staged-patch offline and verified-only scans
+  with zero findings. Three independent precommit code reviews returned ACCEPT
+  with no P0/P1/P2; these are not substitutes for the required fresh detached
+  review of the records-bearing exact head.
 - Two independent disposable zero-state executions completed the closed release
   path, all **97/97 migrations**, auth and lineage transitions, six exact-
   principal preflights, and labeled cleanup: **PASS** twice.
@@ -143,10 +182,10 @@ These scoped passes did not close the review finding. See
   Only a fresh detached review of the replacement exact head may decide whether
   the findings are closed.
 
-This is implementation-side evidence for exact `25047df1` plus subsequent
-records and evidence-document descendants, not exact-head acceptance. It does
-not replace detached review, identical-manifest RC census, PR CI, Office return,
-provider-quality evaluation, or production infrastructure and human gates.
+This is implementation-side evidence through exact `a7488ba` plus subsequent
+records. It does not replace fresh detached exact-head review, identical-
+manifest RC census, PR CI, Office return, provider-quality evaluation, or
+production infrastructure and human gates.
 
 ## Production and rollback provenance
 
@@ -162,10 +201,11 @@ recreating all six long-lived services with the reviewed bridge protocol.
 Release agents issued no writes to `/opt/meddoc-pro`; its branch and SHA remain
 `feat/template-twin-docx-v1` and
 `bb1c828189ee95f85136c7ebd79d07e52467782a`. Its NUL-delimited status
-fingerprint changed from
-`f442687419e7b111b02f5ee90394330c9df5a4ca4aedd54f908573ba64851946`
-to `f2426a8fb327fcc6c5ae5721eb6a5f3823ef723eacc72856636eac81054da461`.
-No task-current mtimes were observed, but the change is unattributed and may be
-concurrent user activity. Exact fingerprint continuity is therefore not proven;
-the protected worktree must remain untouched and receive a final read-only
-reconciliation before reporting.
+fingerprint recorded by the accepted `fc08599` receipt was
+`f2426a8fb327fcc6c5ae5721eb6a5f3823ef723eacc72856636eac81054da461`.
+An intermediate read-only observation returned `7d4a543…`; the latest
+2026-07-21T10:36:20Z read-only observation again returns the full accepted
+`f2426a8…` fingerprint. That transient concurrent delta is unattributed;
+release agents did not write there. Temporal fingerprint continuity is not
+proven, so the protected worktree remains untouched and requires a final
+read-only reconciliation before reporting.
