@@ -43,6 +43,14 @@ const e2eWorkflow = readFileSync(
   resolve(repositoryRoot, ".github/workflows/e2e.yml"),
   "utf8",
 );
+const qaCompose = readFileSync(
+  resolve(repositoryRoot, "docker-compose.qa.yml"),
+  "utf8",
+);
+const productionCompose = readFileSync(
+  resolve(repositoryRoot, "docker-compose.yml"),
+  "utf8",
+);
 
 describe("data-bearing database role graph guards", () => {
   it("generates isolated strong CI database credentials before Compose parsing", () => {
@@ -61,6 +69,7 @@ describe("data-bearing database role graph guards", () => {
     expect(provisioning).toContain('install -d -m 0700 "$credential_dir"');
     expect(provisioning).toContain('chmod 0444 "$backup_path"');
     expect(provisioning).toContain("{ mode: 0o600 }");
+    expect(provisioning).toContain("set +x");
     for (const name of [
       "QA_DB_RUNTIME_PASSWORD",
       "QA_DB_RELEASE_CONTROL_PASSWORD",
@@ -68,15 +77,151 @@ describe("data-bearing database role graph guards", () => {
       "QA_DB_AUDIT_DISPATCHER_PASSWORD",
       "QA_DB_AUTH_EMAIL_DISPATCHER_PASSWORD",
       "QA_DB_BACKUP_PASSWORD_FILE",
+      "DB_PASSWORD",
       "DB_RUNTIME_PASSWORD",
       "DB_RELEASE_CONTROL_PASSWORD",
       "DB_AUDIT_DISPATCHER_PASSWORD",
       "DB_AUTH_EMAIL_DISPATCHER_PASSWORD",
       "DB_BACKUP_PASSWORD_FILE",
+      "MINIO_ROOT_PASSWORD",
+      "MINIO_KMS_SECRET_KEY",
     ]) {
       expect(provisioning).toContain(name);
     }
+    const maskRegistration = provisioning.indexOf(
+      "for (const [name, value] of Object.entries({",
+    );
+    const backupWrite = provisioning.indexOf("writeFileSync(backupPath");
+    const environmentWrite = provisioning.indexOf(
+      "appendFileSync(\n            environmentPath",
+    );
+    expect(provisioning).toContain("const maskedSecrets = new Set()");
+    expect(provisioning).toContain("maskedSecrets.has(value)");
+    expect(provisioning).toContain("writeSync(1, command)");
+    expect(provisioning).toContain("Buffer.byteLength(command)");
+    expect(provisioning).toContain("::add-mask::${value}");
+    expect(provisioning).toContain(
+      'const minioKmsSecret = randomBytes(32).toString("hex")',
+    );
+    expect(provisioning).toContain("minioKmsSecret,");
+    expect(provisioning).toContain("value.length === 0");
+    expect(provisioning).toContain("/[\\r\\n]/u.test(value)");
+    expect(maskRegistration).toBeGreaterThan(-1);
+    expect(backupWrite).toBeGreaterThan(maskRegistration);
+    expect(environmentWrite).toBeGreaterThan(maskRegistration);
+    const maskBlock = provisioning.slice(maskRegistration, backupWrite);
+    for (const input of [
+      "...qa,",
+      "owner,",
+      "minioRoot,",
+      "minioKmsSecret,",
+      "minioKms,",
+    ]) {
+      expect(maskBlock).toContain(input);
+    }
     expect(provisioning).not.toContain("qa_test_pw");
+  });
+
+  it("pins exact checkout-built images before the first disposable QA startup", () => {
+    const credentialProvisioning = e2eWorkflow.indexOf(
+      "- name: Provision ephemeral synthetic database credentials",
+    );
+    const postgresBuild = e2eWorkflow.indexOf(
+      "- name: Build and pin synthetic QA PostgreSQL image",
+    );
+    const appBuild = e2eWorkflow.indexOf("- name: Build app + worker images");
+    const migratorBuild = e2eWorkflow.indexOf(
+      "- name: Build db-migrate image (prisma CLI)",
+    );
+    const applicationPin = e2eWorkflow.indexOf(
+      "- name: Pin exact synthetic QA application images",
+    );
+    const firstQaUp = e2eWorkflow.indexOf(
+      "docker compose -f docker-compose.qa.yml up",
+    );
+
+    expect(e2eWorkflow).toContain(
+      "QUILLMD_RELEASE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}",
+    );
+    expect(e2eWorkflow).toContain("- name: Verify authored checkout identity");
+    expect(e2eWorkflow).toContain(
+      '[[ "$(git rev-parse HEAD)" == "$EXPECTED_RELEASE_SHA" ]]',
+    );
+    expect(e2eWorkflow).toContain(
+      '[[ "$QUILLMD_RELEASE_SHA" == "$EXPECTED_RELEASE_SHA" ]]',
+    );
+    expect(postgresBuild).toBeGreaterThan(credentialProvisioning);
+    expect(appBuild).toBeGreaterThan(postgresBuild);
+    expect(migratorBuild).toBeGreaterThan(appBuild);
+    expect(applicationPin).toBeGreaterThan(migratorBuild);
+    expect(firstQaUp).toBeGreaterThan(applicationPin);
+
+    const postgresPin = e2eWorkflow.slice(postgresBuild, appBuild);
+    expect(postgresPin).toContain(
+      "docker compose -f docker-compose.qa.yml build postgres",
+    );
+    expect(postgresPin).toContain(
+      "docker compose -f docker-compose.qa.yml config --images postgres",
+    );
+    expect(postgresPin).toContain('image_name_output="$(');
+    expect(postgresPin).toContain(
+      'mapfile -t image_names <<< "$image_name_output"',
+    );
+    expect(postgresPin).not.toContain("mapfile -t image_names < <(");
+    expect(postgresPin).toContain(
+      "docker image inspect --format '{{.Id}}' \"${image_names[0]}\"",
+    );
+    expect(postgresPin).toContain('[[ "${#image_names[@]}" -eq 1 ]]');
+    expect(postgresPin).toContain("^sha256:[a-f0-9]{64}$");
+    expect(postgresPin).toContain("QUILLMD_POSTGRES_IMAGE=%s");
+    expect(postgresPin).toContain("QA_POSTGRES_IMAGE=%s");
+    expect(postgresPin).not.toContain("pgvector/pgvector:");
+    expect(qaCompose).toContain(
+      "image: ${QA_POSTGRES_IMAGE:-meddoc-qa-postgres:latest}",
+    );
+
+    const exactApplicationPin = e2eWorkflow.slice(applicationPin, firstQaUp);
+    expect(exactApplicationPin).toContain(
+      "docker image inspect --format '{{.Id}}' \"$expected_image\"",
+    );
+    expect(exactApplicationPin).not.toContain("docker compose");
+    expect(exactApplicationPin).not.toContain(".env");
+    expect(exactApplicationPin).toContain("^sha256:[a-f0-9]{64}$");
+    expect(exactApplicationPin).toContain(
+      "pin_image meddoc-pro-transcribe-md:latest QA_TRANSCRIBE_MD_IMAGE",
+    );
+    expect(exactApplicationPin).toContain(
+      "pin_image meddoc-pro-transcribe-md-worker:latest QA_TRANSCRIBE_MD_WORKER_IMAGE",
+    );
+    expect(exactApplicationPin).toContain(
+      "pin_image meddoc-pro-db-migrate QA_DB_MIGRATE_IMAGE",
+    );
+    expect(productionCompose).toContain(
+      "image: ${TRANSCRIBE_MD_IMAGE:-meddoc-pro-transcribe-md:latest}",
+    );
+    expect(productionCompose).toContain(
+      "image: ${TRANSCRIBE_MD_WORKER_IMAGE:-meddoc-pro-transcribe-md-worker:latest}",
+    );
+    expect(productionCompose).toContain("db-migrate:");
+  });
+
+  it("always removes the job-scoped database credential file", () => {
+    const cleanup = e2eWorkflow.indexOf(
+      "- name: Remove ephemeral synthetic database credentials",
+    );
+    expect(cleanup).toBeGreaterThan(-1);
+    const cleanupStep = e2eWorkflow.slice(cleanup);
+    expect(cleanupStep).toContain("if: always()");
+    expect(cleanupStep).toContain("set +x");
+    expect(cleanupStep).toContain(
+      'credential_dir="$RUNNER_TEMP/quillmd-ci-database"',
+    );
+    expect(cleanupStep).toContain('if [[ -d "$credential_dir" ]]');
+    expect(cleanupStep).toContain('rm -f -- "$backup_path"');
+    expect(cleanupStep).toContain('rmdir "$credential_dir"');
+    expect(cleanupStep).not.toContain(
+      'rmdir "$credential_dir" 2>/dev/null || true',
+    );
   });
 
   it("makes v4 require the exact three-login/four-boundary graph", () => {

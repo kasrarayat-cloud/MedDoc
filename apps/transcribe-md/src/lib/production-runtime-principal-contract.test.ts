@@ -35,6 +35,8 @@ const meddocDockerfile = read("apps/meddoc-pro/Dockerfile");
 const transcribePackage = read("apps/transcribe-md/package.json");
 const meddocPackage = read("apps/meddoc-pro/package.json");
 const runtimeIdentity = read("packages/auth/src/runtime-identity.ts");
+const STATIC_COMPOSE_CENSUS_FLAGS =
+  "config --no-interpolate --no-env-resolution --format json";
 
 describe("production runtime principal startup contract", () => {
   it("runs the exact-principal gate from both Next startup hooks", () => {
@@ -234,6 +236,33 @@ describe("production runtime principal startup contract", () => {
       "node scripts/database-principal-runtime-census.mjs",
     );
     expect(runtimeSwap).not.toContain("database-principal-runtime-census.mjs");
+  });
+
+  it("keeps full Compose consistency validation in static census pipelines", () => {
+    const censusStepStart = humanReleaseWorkflow.indexOf(
+      "- name: Enforce production database-principal runtime census",
+    );
+    const censusStepEnd = humanReleaseWorkflow.indexOf(
+      "\n      - name:",
+      censusStepStart + 1,
+    );
+    const censusStep = humanReleaseWorkflow.slice(
+      censusStepStart,
+      censusStepEnd,
+    );
+
+    expect(censusStepStart).toBeGreaterThan(-1);
+    expect(censusStepEnd).toBeGreaterThan(censusStepStart);
+    expect(censusStep).toContain("set -euo pipefail");
+    expect(censusStep).toContain(STATIC_COMPOSE_CENSUS_FLAGS);
+    expect(censusStep).toMatch(
+      /--no-env-resolution --format json \|\s+node scripts\/database-principal-runtime-census\.mjs \\\s+--static-unresolved/u,
+    );
+    expect(humanReleaseWorkflow).not.toContain("--no-consistency");
+
+    expect(runtimeSwap).toMatch(/^#!\/usr\/bin\/env bash\nset -euo pipefail/u);
+    expect(runtimeSwap.split(STATIC_COMPOSE_CENSUS_FLAGS)).toHaveLength(3);
+    expect(runtimeSwap).not.toContain("--no-consistency");
   });
 
   it("exports one shared mapping and exact-principal implementation", () => {

@@ -72,7 +72,59 @@ function fail(message) {
   process.exit(65);
 }
 
-function artifactFor(service) {
+function isValidComposeMapKey(key) {
+  return (
+    key.length > 0 && key.trim() === key && !/[=\u0000-\u001f\u007f]/u.test(key)
+  );
+}
+
+function normalizeComposeMap(value) {
+  const normalized = Object.create(null);
+  if (value === undefined || value === null) return normalized;
+
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      if (typeof entry !== "string") return null;
+      const separator = entry.indexOf("=");
+      if (separator <= 0) return null;
+      const key = entry.slice(0, separator);
+      if (!isValidComposeMapKey(key) || Object.hasOwn(normalized, key)) {
+        return null;
+      }
+      normalized[key] = entry.slice(separator + 1);
+    }
+    return normalized;
+  }
+
+  if (
+    typeof value !== "object" ||
+    (Object.getPrototypeOf(value) !== Object.prototype &&
+      Object.getPrototypeOf(value) !== null)
+  ) {
+    return null;
+  }
+  for (const [key, entryValue] of Object.entries(value)) {
+    if (
+      !isValidComposeMapKey(key) ||
+      typeof entryValue !== "string" ||
+      Object.hasOwn(normalized, key)
+    ) {
+      return null;
+    }
+    normalized[key] = entryValue;
+  }
+  return normalized;
+}
+
+function normalizedServiceMap(name, service, field) {
+  const normalized = normalizeComposeMap(service?.[field]);
+  if (normalized === null) {
+    fail(`${name} has malformed or duplicate Compose ${field}`);
+  }
+  return normalized;
+}
+
+function artifactFor(service, labels) {
   const dockerfile = service?.build?.dockerfile;
   if (dockerfile === "apps/transcribe-md/Dockerfile.worker") return "worker";
   if (
@@ -84,14 +136,14 @@ function artifactFor(service) {
   if (
     (expectedWorkerImage !== null && service?.image === expectedWorkerImage) ||
     service?.image?.includes("TRANSCRIBE_MD_WORKER_IMAGE") ||
-    service?.labels?.[ARTIFACT_LABEL] === "worker"
+    labels[ARTIFACT_LABEL] === "worker"
   ) {
     return "worker";
   }
   if (
     (expectedAppImage !== null && service?.image === expectedAppImage) ||
     service?.image?.includes("TRANSCRIBE_MD_IMAGE") ||
-    service?.labels?.[ARTIFACT_LABEL] === "app"
+    labels[ARTIFACT_LABEL] === "app"
   ) {
     return "app";
   }
@@ -113,8 +165,17 @@ if (!services || typeof services !== "object" || Array.isArray(services)) {
   fail("resolved Compose service map is unavailable");
 }
 
+const normalizedLabels = new Map(
+  Object.entries(services).map(([name, service]) => [
+    name,
+    normalizedServiceMap(name, service, "labels"),
+  ]),
+);
+
 const discovered = Object.entries(services)
-  .filter(([, service]) => artifactFor(service) !== null)
+  .filter(([name, service]) =>
+    Boolean(artifactFor(service, normalizedLabels.get(name))),
+  )
   .map(([name]) => name)
   .sort();
 const expectedNames = [...expectedServices.keys()].sort();
@@ -126,9 +187,9 @@ if (JSON.stringify(discovered) !== JSON.stringify(expectedNames)) {
 
 for (const [name, expected] of expectedServices) {
   const service = services[name];
-  const labels = service?.labels ?? {};
-  const environment = service?.environment ?? {};
-  if (artifactFor(service) !== expected.artifact) {
+  const labels = normalizedLabels.get(name);
+  const environment = normalizedServiceMap(name, service, "environment");
+  if (artifactFor(service, labels) !== expected.artifact) {
     fail(`${name} uses an unexpected build artifact`);
   }
   if (
@@ -225,7 +286,7 @@ if (
   !migrator ||
   migrator?.build?.dockerfile !== "apps/transcribe-md/Dockerfile" ||
   migrator?.build?.target !== "builder" ||
-  migrator?.labels?.[MANAGED_LABEL] === "true"
+  normalizedLabels.get("db-migrate")?.[MANAGED_LABEL] === "true"
 ) {
   fail("the one-shot database migrator boundary drifted");
 }

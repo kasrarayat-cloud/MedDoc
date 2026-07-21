@@ -16,6 +16,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 const ROOT = path.resolve(__dirname, "../../../..");
 const SWAP = path.join(ROOT, "scripts/template-twin-runtime-swap.sh");
+const CENSUS = path.join(ROOT, "scripts/template-twin-runtime-census.mjs");
 const COMPOSE = path.join(ROOT, "docker-compose.yml");
 const APP_ID = `sha256:${"a".repeat(64)}`;
 const WORKER_ID = `sha256:${"b".repeat(64)}`;
@@ -140,6 +141,49 @@ function composeModel(
   return JSON.stringify({ services: modelServices });
 }
 
+function asComposeList(value: Record<string, string>): string[] {
+  return Object.entries(value).map(
+    ([key, entryValue]) => `${key}=${entryValue}`,
+  );
+}
+
+function arrayMapComposeModel(): {
+  services: Record<
+    string,
+    {
+      labels?: Record<string, string> | string[];
+      environment?: Record<string, string> | string[];
+    }
+  >;
+} {
+  const model = JSON.parse(composeModel(true));
+  for (const [name] of services) {
+    const service = model.services[name];
+    service.labels = asComposeList(service.labels);
+    service.environment = asComposeList(service.environment);
+  }
+  return model;
+}
+
+function runBridgeCensus(model: unknown) {
+  return spawnSync(
+    process.execPath,
+    [
+      CENSUS,
+      "--expected-app-image",
+      APP_ID,
+      "--expected-worker-image",
+      WORKER_ID,
+      "--require-bridge",
+    ],
+    {
+      cwd: ROOT,
+      encoding: "utf8",
+      input: JSON.stringify(model),
+    },
+  );
+}
+
 function fixture(options?: {
   drift?: boolean;
   mode?: string;
@@ -151,6 +195,7 @@ function fixture(options?: {
   const bin = path.join(root, "bin");
   const state = path.join(root, "state");
   const log = path.join(root, "docker.log");
+  const configLog = path.join(root, "docker-config.log");
   const baseModel = path.join(root, "base.json");
   const bridgeModel = path.join(root, "bridge.json");
   mkdirSync(bin, { mode: 0o700 });
@@ -170,6 +215,7 @@ set -euo pipefail
 args=" $* "
 if [[ "\${1:-}" == "compose" ]]; then
   if [[ "$args" == *" config "* ]]; then
+    printf '%s\\n' "$args" >> "$FAKE_CONFIG_LOG"
     if [[ "$args" == *".override.yml"* ]]; then
       command cat "$FAKE_BRIDGE_MODEL"
     else
@@ -323,17 +369,117 @@ exit 97
         FAKE_RELEASE_SHA: RELEASE_SHA,
         FAKE_BASE_MODEL: baseModel,
         FAKE_BRIDGE_MODEL: bridgeModel,
+        FAKE_CONFIG_LOG: configLog,
         FAKE_LOG: log,
         FAKE_MODE: options?.mode ?? "ok",
       },
     },
   );
-  return { result, state, log };
+  return { result, state, log, configLog };
 }
 
 describe("six-service rollback runtime swap", () => {
+  it("accepts the real Compose base plus generated rollback overlay", () => {
+    const { result, state } = fixture();
+    expect(result.status).toBe(0);
+
+    const composeRoot = path.join(path.dirname(state), "real-compose");
+    const composePath = path.join(composeRoot, "docker-compose.yml");
+    mkdirSync(composeRoot, { mode: 0o700 });
+    writeFileSync(composePath, readFileSync(COMPOSE, "utf8"));
+    writeFileSync(path.join(composeRoot, ".env"), "");
+
+    const overlays = readdirSync(state);
+    expect(overlays).toHaveLength(1);
+    const merged = spawnSync(
+      "docker",
+      [
+        "compose",
+        "--project-directory",
+        composeRoot,
+        "-f",
+        composePath,
+        "-f",
+        path.join(state, overlays[0]),
+        "config",
+        "--no-interpolate",
+        "--no-env-resolution",
+        "--format",
+        "json",
+      ],
+      { cwd: composeRoot, encoding: "utf8" },
+    );
+    expect(merged.status, merged.stderr).toBe(0);
+
+    const model = JSON.parse(merged.stdout);
+    for (const [name] of services) {
+      expect(Array.isArray(model.services[name].labels)).toBe(true);
+      expect(Array.isArray(model.services[name].environment)).toBe(true);
+    }
+
+    const census = spawnSync(
+      process.execPath,
+      [
+        CENSUS,
+        "--expected-app-image",
+        APP_ID,
+        "--expected-worker-image",
+        WORKER_ID,
+        "--require-bridge",
+      ],
+      {
+        cwd: ROOT,
+        encoding: "utf8",
+        input: merged.stdout,
+      },
+    );
+    expect(census.status, census.stderr).toBe(0);
+    expect(census.stdout).toContain("services=6 migrator=excluded");
+  });
+
+  it("normalizes array entries on the first equals sign and preserves empty values", () => {
+    const model = arrayMapComposeModel();
+    const environment = model.services["transcribe-md"].environment;
+    if (!Array.isArray(environment)) {
+      throw new Error("array-form environment fixture was not created");
+    }
+    environment.push("UNREVIEWED_SYNTHETIC_VALUE=left=middle=right");
+
+    const result = runBridgeCensus(model);
+    expect(result.status, result.stderr).toBe(0);
+  });
+
+  it.each([
+    ["labels", "duplicate"],
+    ["labels", "malformed"],
+    ["environment", "duplicate"],
+    ["environment", "malformed"],
+  ] as const)(
+    "rejects %s arrays with a %s entry without reflecting its value",
+    (field, defect) => {
+      const model = arrayMapComposeModel();
+      const entries = model.services["transcribe-md"][field];
+      if (!Array.isArray(entries)) {
+        throw new Error(`array-form ${field} fixture was not created`);
+      }
+      if (defect === "duplicate") {
+        const firstKey = entries[0].slice(0, entries[0].indexOf("="));
+        entries.push(`${firstKey}=SENSITIVE_SENTINEL`);
+      } else {
+        entries.push("SENSITIVE_SENTINEL");
+      }
+
+      const result = runBridgeCensus(model);
+      expect(result.status).toBe(65);
+      expect(result.stderr).toContain(
+        `transcribe-md has malformed or duplicate Compose ${field}`,
+      );
+      expect(result.stderr).not.toContain("SENSITIVE_SENTINEL");
+    },
+  );
+
   it("persists a credential-free immutable overlay and recreates the exact census", () => {
-    const { result, state, log } = fixture();
+    const { result, state, log, configLog } = fixture();
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("services=6 migrator=excluded");
     expect(result.stdout).toContain("immutable rollback state ready");
@@ -392,11 +538,26 @@ describe("six-service rollback runtime swap", () => {
     );
     expect(overlay).not.toContain("db-migrate:");
 
+    const configInvocations = readFileSync(configLog, "utf8")
+      .trim()
+      .split("\n");
+    expect(configInvocations).toHaveLength(2);
+    for (const invocation of configInvocations) {
+      expect(invocation).toContain(
+        " config --no-interpolate --no-env-resolution --format json",
+      );
+      expect(invocation).not.toContain("--no-consistency");
+      expect(invocation).not.toMatch(/\b(?:up|stop)\b/u);
+    }
+    expect(configInvocations[0]).not.toContain(".override.yml");
+    expect(configInvocations[1]).toContain(".override.yml");
+
     const operations = readFileSync(log, "utf8");
     expect(operations).toContain(" stop ");
     expect(operations).toContain(" up ");
     for (const [service] of services) expect(operations).toContain(service);
     expect(operations).not.toContain("db-migrate");
+    expect(operations).not.toContain("--no-consistency");
   });
 
   it.each([

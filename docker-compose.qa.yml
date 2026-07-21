@@ -26,6 +26,7 @@ x-qa-secret: &qa-secret "qa-throwaway-secret-not-used-in-prod-000000000000000="
 
 services:
   postgres:
+    image: ${QA_POSTGRES_IMAGE:-meddoc-qa-postgres:latest}
     build:
       context: ./infra/postgres
       dockerfile: Dockerfile
@@ -288,7 +289,12 @@ services:
       TRANSCRIBE_MD_CLINICAL_MODEL: "${TRANSCRIBE_MD_CLINICAL_MODEL:-}"
     volumes:
       - qa_clamav_socket:/var/run/quillmd-clamav:ro
-      - ${QA_MFA_SECRET_KEYRING_FILE:?QA_MFA_SECRET_KEYRING_FILE is required}:${QA_MFA_SECRET_KEYRING_FILE:?QA_MFA_SECRET_KEYRING_FILE is required}:ro
+      - type: bind
+        source: ${QA_MFA_SECRET_KEYRING_FILE:?QA_MFA_SECRET_KEYRING_FILE is required}
+        target: ${QA_MFA_SECRET_KEYRING_FILE:?QA_MFA_SECRET_KEYRING_FILE is required}
+        read_only: true
+        bind:
+          create_host_path: false
     healthcheck:
       test:
         ["CMD", "wget", "-qO-", "--spider", "http://127.0.0.1:3011/api/health"]

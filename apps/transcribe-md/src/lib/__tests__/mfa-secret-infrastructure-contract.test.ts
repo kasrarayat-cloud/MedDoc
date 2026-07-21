@@ -49,7 +49,16 @@ describe("MFA secret infrastructure boundary", () => {
       expect(block).toContain("MFA_SECRET_ACTIVE_KEY_ID:");
       expect(block).toContain("MFA_SECRET_KEYRING_FILE:");
       expect(block).toContain("MFA_SECRET_KEYRING_FILE is required}");
-      expect(block).toContain(":ro");
+      expect(block).toContain("type: bind");
+      expect(block).toContain(
+        "source: ${MFA_SECRET_KEYRING_FILE:?MFA_SECRET_KEYRING_FILE is required}",
+      );
+      expect(block).toContain(
+        "target: ${MFA_SECRET_KEYRING_FILE:?MFA_SECRET_KEYRING_FILE is required}",
+      );
+      expect(block).toContain("read_only: true");
+      expect(block).toContain("create_host_path: false");
+      expect(block).not.toContain("required}:${MFA_SECRET_KEYRING_FILE");
     }
 
     for (const service of [
@@ -71,6 +80,16 @@ describe("MFA secret infrastructure boundary", () => {
     const worker = serviceBlock(qaCompose, "transcribe-md-worker");
     expect(app).toContain("QA_MFA_SECRET_ACTIVE_KEY_ID is required");
     expect(app).toContain("QA_MFA_SECRET_KEYRING_FILE is required");
+    expect(app).toContain("type: bind");
+    expect(app).toContain(
+      "source: ${QA_MFA_SECRET_KEYRING_FILE:?QA_MFA_SECRET_KEYRING_FILE is required}",
+    );
+    expect(app).toContain(
+      "target: ${QA_MFA_SECRET_KEYRING_FILE:?QA_MFA_SECRET_KEYRING_FILE is required}",
+    );
+    expect(app).toContain("read_only: true");
+    expect(app).toContain("create_host_path: false");
+    expect(app).not.toContain("required}:${QA_MFA_SECRET_KEYRING_FILE");
     expect(worker).toContain('MFA_SECRET_KEYRING_FILE: ""');
     expect(worker).not.toContain("QA_MFA_SECRET_KEYRING_FILE is required");
   });
@@ -157,6 +176,30 @@ describe("MFA secret infrastructure boundary", () => {
     expect(e2eWorkflow).toContain("QA_MFA_SECRET_KEYRING_FILE=%s");
     expect(e2eWorkflow).toContain("MFA_SECRET_ACTIVE_KEY_ID=");
     expect(e2eWorkflow).toContain("MFA_SECRET_KEYRING_FILE=%s");
+    const keyringProvisioning = e2eWorkflow.slice(
+      e2eWorkflow.indexOf("- name: Provision ephemeral synthetic MFA keyring"),
+      e2eWorkflow.indexOf(
+        "- name: Provision ephemeral synthetic database credentials",
+      ),
+    );
+    const maskRegistration = keyringProvisioning.indexOf(
+      'maskSecret("MFA key", keyBase64Url)',
+    );
+    const keyringWrite = keyringProvisioning.indexOf("writeFileSync(");
+    const environmentWrite = keyringProvisioning.indexOf(
+      "printf 'QA_MFA_SECRET_ACTIVE_KEY_ID=",
+    );
+    expect(keyringProvisioning).toContain("set +x");
+    expect(keyringProvisioning).toContain("const maskedSecrets = new Set()");
+    expect(keyringProvisioning).toContain("maskedSecrets.has(value)");
+    expect(keyringProvisioning).toContain("writeSync(1, command)");
+    expect(keyringProvisioning).toContain("Buffer.byteLength(command)");
+    expect(keyringProvisioning).toContain("::add-mask::${value}");
+    expect(keyringProvisioning).toContain("value.length === 0");
+    expect(keyringProvisioning).toContain("/[\\r\\n]/u.test(value)");
+    expect(maskRegistration).toBeGreaterThan(-1);
+    expect(keyringWrite).toBeGreaterThan(maskRegistration);
+    expect(environmentWrite).toBeGreaterThan(keyringWrite);
     expect(e2eWorkflow).toContain("Remove ephemeral synthetic MFA keyring");
     expect(e2eWorkflow).toContain('sudo rm -f -- "$keyring_path"');
     expect(e2eWorkflow).not.toMatch(

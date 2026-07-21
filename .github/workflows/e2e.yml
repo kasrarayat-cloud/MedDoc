@@ -48,6 +48,9 @@ jobs:
       TRANSCRIBE_MD_AUTH_URL: http://localhost:9020
       MARKETING_URL: http://localhost:9010
       DOCKER_BUILDKIT: "1"
+      # Bind every build and synthetic evidence artifact to the authored PR
+      # head (or the exact main-push commit), never the ephemeral merge ref.
+      QUILLMD_RELEASE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       # NOTE: the build steps pass `-p meddoc-pro` so the built images are named
       # `meddoc-pro-transcribe-md{,-worker,-db-migrate}` (the prod compose has no
       # `name:`, so the project would otherwise default to the checkout dir).
@@ -60,6 +63,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Verify authored checkout identity
+        shell: bash
+        env:
+          EXPECTED_RELEASE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_RELEASE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$(git rev-parse HEAD)" == "$EXPECTED_RELEASE_SHA" ]]
+          [[ "$QUILLMD_RELEASE_SHA" == "$EXPECTED_RELEASE_SHA" ]]
 
       - uses: actions/setup-node@v4
         with:
@@ -76,16 +89,30 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          set +x
           umask 077
           keyring_dir="$RUNNER_TEMP/quillmd-ci-mfa"
           keyring_path="$keyring_dir/keyring.json"
           install -d -m 0700 "$keyring_dir"
           KEYRING_PATH="$keyring_path" node <<'NODE'
           const { randomBytes } = require("node:crypto");
-          const { writeFileSync } = require("node:fs");
+          const { writeFileSync, writeSync } = require("node:fs");
           const destination = process.env.KEYRING_PATH;
           if (!destination) process.exit(1);
           const keyBase64Url = randomBytes(32).toString("base64url");
+          const maskedSecrets = new Set();
+          const maskSecret = (name, value) => {
+            if (typeof value !== "string" || value.length === 0 || /[\r\n]/u.test(value)) {
+              throw new Error(`${name} must be a non-empty single-line value`);
+            }
+            if (maskedSecrets.has(value)) return;
+            const command = `::add-mask::${value}\n`;
+            if (writeSync(1, command) !== Buffer.byteLength(command)) {
+              throw new Error("MFA mask command write failed");
+            }
+            maskedSecrets.add(value);
+          };
+          maskSecret("MFA key", keyBase64Url);
           writeFileSync(
             destination,
             JSON.stringify({
@@ -104,9 +131,9 @@ jobs:
 
       # The exact principal bootstrap refuses defaults and short/fixed
       # passwords. Generate isolated job-only credentials before either
-      # Compose file is parsed. Values are written directly to GITHUB_ENV and
-      # a read-only bootstrap file inside a 0700 job-only directory; they are
-      # never printed or uploaded. The file itself is world-readable only
+      # Compose file is parsed. Values are registered with the runner masking
+      # channel before GITHUB_ENV or a read-only bootstrap file is written;
+      # neither credential file is uploaded. The backup file is readable only
       # after exact-path bind mounting because the unprivileged PostgreSQL UID
       # cannot read a runner-owned 0600 bind source; the parent prevents host
       # traversal by every other non-root user.
@@ -114,18 +141,24 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          set +x
           umask 077
           credential_dir="$RUNNER_TEMP/quillmd-ci-database"
           backup_path="$credential_dir/backup-password"
           install -d -m 0700 "$credential_dir"
           GITHUB_ENV_PATH="$GITHUB_ENV" BACKUP_PATH="$backup_path" node <<'NODE'
           const { randomBytes } = require("node:crypto");
-          const { appendFileSync, writeFileSync } = require("node:fs");
+          const { appendFileSync, writeFileSync, writeSync } = require("node:fs");
           const environmentPath = process.env.GITHUB_ENV_PATH;
           const backupPath = process.env.BACKUP_PATH;
           if (!environmentPath || !backupPath) process.exit(1);
 
           const secret = () => randomBytes(32).toString("base64url");
+          const assertSafeValue = (name, value) => {
+            if (typeof value !== "string" || value.length === 0 || /[\r\n]/u.test(value)) {
+              throw new Error(`${name} must be a non-empty single-line value`);
+            }
+          };
           const qa = {
             runtime: secret(),
             releaseControl: secret(),
@@ -134,7 +167,10 @@ jobs:
             authEmailDispatcher: secret(),
             backup: secret(),
           };
-          writeFileSync(backupPath, qa.backup, { mode: 0o444 });
+          const owner = secret();
+          const minioRoot = secret();
+          const minioKmsSecret = randomBytes(32).toString("hex");
+          const minioKms = `ci-synthetic-key:${minioKmsSecret}`;
 
           const values = {
             QA_DB_RUNTIME_PASSWORD: qa.runtime,
@@ -143,15 +179,42 @@ jobs:
             QA_DB_AUDIT_DISPATCHER_PASSWORD: qa.auditDispatcher,
             QA_DB_AUTH_EMAIL_DISPATCHER_PASSWORD: qa.authEmailDispatcher,
             QA_DB_BACKUP_PASSWORD_FILE: backupPath,
-            DB_PASSWORD: secret(),
+            DB_PASSWORD: owner,
             DB_RUNTIME_PASSWORD: qa.runtime,
             DB_RELEASE_CONTROL_PASSWORD: qa.releaseControl,
             DB_AUDIT_DISPATCHER_PASSWORD: qa.auditDispatcher,
             DB_AUTH_EMAIL_DISPATCHER_PASSWORD: qa.authEmailDispatcher,
             DB_BACKUP_PASSWORD_FILE: backupPath,
-            MINIO_ROOT_PASSWORD: secret(),
-            MINIO_KMS_SECRET_KEY: `ci-synthetic-key:${randomBytes(32).toString("hex")}`,
+            MINIO_ROOT_PASSWORD: minioRoot,
+            MINIO_KMS_SECRET_KEY: minioKms,
           };
+          for (const [name, value] of Object.entries(values)) {
+            assertSafeValue(name, value);
+          }
+
+          // Register every distinct generated value before the first file or
+          // GITHUB_ENV write. Aliased runtime credentials are masked once.
+          const maskedSecrets = new Set();
+          const maskSecret = (name, value) => {
+            assertSafeValue(name, value);
+            if (maskedSecrets.has(value)) return;
+            const command = `::add-mask::${value}\n`;
+            if (writeSync(1, command) !== Buffer.byteLength(command)) {
+              throw new Error("database mask command write failed");
+            }
+            maskedSecrets.add(value);
+          };
+          for (const [name, value] of Object.entries({
+            ...qa,
+            owner,
+            minioRoot,
+            minioKmsSecret,
+            minioKms,
+          })) {
+            maskSecret(name, value);
+          }
+
+          writeFileSync(backupPath, qa.backup, { mode: 0o444 });
           appendFileSync(
             environmentPath,
             Object.entries(values)
@@ -161,6 +224,33 @@ jobs:
           );
           NODE
           chmod 0444 "$backup_path"
+
+      # Build the repository-owned PostgreSQL image from this exact checkout.
+      # Production Compose requires an immutable image ID even when only the
+      # application targets are built, so resolve the single Compose-derived
+      # local tag and export its exact sha256 ID before parsing that file.
+      - name: Build and pin synthetic QA PostgreSQL image
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          docker compose -f docker-compose.qa.yml build postgres
+
+          image_name_output="$(
+            docker compose -f docker-compose.qa.yml config --images postgres
+          )"
+          mapfile -t image_names <<< "$image_name_output"
+          [[ "${#image_names[@]}" -eq 1 ]]
+          [[ -n "${image_names[0]}" && ! "${image_names[0]}" =~ [[:space:]] ]]
+
+          image_id_output="$(
+            docker image inspect --format '{{.Id}}' "${image_names[0]}"
+          )"
+          mapfile -t image_ids <<< "$image_id_output"
+          [[ "${#image_ids[@]}" -eq 1 ]]
+          [[ "${image_ids[0]}" =~ ^sha256:[a-f0-9]{64}$ ]]
+          printf 'QUILLMD_POSTGRES_IMAGE=%s\n' "${image_ids[0]}" >> "$GITHUB_ENV"
+          printf 'QA_POSTGRES_IMAGE=%s\n' "${image_ids[0]}" >> "$GITHUB_ENV"
 
       # ── Build the real images from the PR (app build = the OOM-sensitive
       #    step; the Dockerfile bakes --max-old-space-size=6144 + the
@@ -174,10 +264,46 @@ jobs:
       - name: Build app + worker images
         env:
           NEXT_PUBLIC_SKIN_BETA: "false"
-        run: docker compose -p meddoc-pro -f docker-compose.yml build transcribe-md transcribe-md-worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          docker compose -p meddoc-pro -f docker-compose.yml build transcribe-md transcribe-md-worker
 
       - name: Build db-migrate image (prisma CLI)
-        run: docker compose -p meddoc-pro -f docker-compose.yml --profile migrations build db-migrate
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          docker compose -p meddoc-pro -f docker-compose.yml --profile migrations build db-migrate
+
+      # The QA Compose defaults are developer conveniences only. The hosted
+      # runner is isolated and the immediately preceding exact-checkout builds
+      # must create these three reviewed production tags. Resolve them directly
+      # so this pinning step never depends on an uncommitted environment file.
+      - name: Pin exact synthetic QA application images
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+
+          pin_image() {
+            local expected_image="$1"
+            local environment_name="$2"
+            local -a image_ids=()
+            local image_id_output
+            image_id_output="$(
+              docker image inspect --format '{{.Id}}' "$expected_image"
+            )"
+            mapfile -t image_ids <<< "$image_id_output"
+            [[ "${#image_ids[@]}" -eq 1 ]]
+            [[ "${image_ids[0]}" =~ ^sha256:[a-f0-9]{64}$ ]]
+            printf '%s=%s\n' "$environment_name" "${image_ids[0]}" >> "$GITHUB_ENV"
+          }
+
+          pin_image meddoc-pro-transcribe-md:latest QA_TRANSCRIBE_MD_IMAGE
+          pin_image meddoc-pro-transcribe-md-worker:latest QA_TRANSCRIBE_MD_WORKER_IMAGE
+          pin_image meddoc-pro-db-migrate QA_DB_MIGRATE_IMAGE
 
       # ── Bring up the isolated qa stack from the committed recipe. ──
       - name: Start qa infra (postgres + redis + minio)
@@ -663,3 +789,16 @@ jobs:
           keyring_path="$keyring_dir/keyring.json"
           sudo rm -f -- "$keyring_path"
           rmdir "$keyring_dir" 2>/dev/null || true
+
+      - name: Remove ephemeral synthetic database credentials
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          credential_dir="$RUNNER_TEMP/quillmd-ci-database"
+          backup_path="$credential_dir/backup-password"
+          if [[ -d "$credential_dir" ]]; then
+            rm -f -- "$backup_path"
+            rmdir "$credential_dir"
+          fi

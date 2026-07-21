@@ -70,6 +70,31 @@ describe("closed synthetic CI database release path", () => {
     expect(provisioner).not.toContain("prisma migrate deploy");
   });
 
+  it("registers generated raw credentials before any file or child use", () => {
+    expect(provisioner).toContain(
+      "registerGithubSecretMasks(values, writeCommand)",
+    );
+    expect(provisioner).toContain("writeSync(1, command)");
+    expect(provisioner).toContain("Buffer.byteLength(command)");
+    const generation = provisioner.indexOf(
+      "const secrets = generateMaskedSyntheticDatabaseSecrets();",
+    );
+    const firstFileUse = provisioner.indexOf(
+      "writeFileSync(backupPath, secrets.backup",
+    );
+    const firstChildUse = provisioner.indexOf(
+      "POSTGRES_PASSWORD: secrets.owner",
+    );
+    const environmentPublish = provisioner.indexOf(
+      "appendGithubEnvironment(\n      boundary.githubEnvironment",
+    );
+
+    expect(generation).toBeGreaterThan(-1);
+    expect(firstFileUse).toBeGreaterThan(generation);
+    expect(firstChildUse).toBeGreaterThan(generation);
+    expect(environmentPublish).toBeGreaterThan(generation);
+  });
+
   it("creates only immutable labelled resources with validated cleanup", () => {
     expect(provisioner).toContain('"infra/postgres/Dockerfile"');
     expect(provisioner).toContain('state.imageTag,\n        "infra/postgres"');

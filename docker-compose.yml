@@ -853,7 +853,12 @@ services:
       - .env
     volumes:
       - clamav_socket:/var/run/quillmd-clamav:ro
-      - ${MFA_SECRET_KEYRING_FILE:?MFA_SECRET_KEYRING_FILE is required}:${MFA_SECRET_KEYRING_FILE:?MFA_SECRET_KEYRING_FILE is required}:ro
+      - type: bind
+        source: ${MFA_SECRET_KEYRING_FILE:?MFA_SECRET_KEYRING_FILE is required}
+        target: ${MFA_SECRET_KEYRING_FILE:?MFA_SECRET_KEYRING_FILE is required}
+        read_only: true
+        bind:
+          create_host_path: false
     environment: &transcribe_md_app_environment
       DATABASE_URL: "postgresql://meddoc_runtime:${DB_RUNTIME_PASSWORD:?DB_RUNTIME_PASSWORD is required}@postgres:5432/meddoc?schema=public&options=-c%20search_path%3Dpg_catalog%2Cpublic"
       QUILLMD_SERVICE_ROLE: physician-app
@@ -948,7 +953,12 @@ services:
     env_file: []
     group_add: []
     volumes:
-      - ${MFA_SECRET_KEYRING_FILE:?MFA_SECRET_KEYRING_FILE is required}:${MFA_SECRET_KEYRING_FILE:?MFA_SECRET_KEYRING_FILE is required}:ro
+      - type: bind
+        source: ${MFA_SECRET_KEYRING_FILE:?MFA_SECRET_KEYRING_FILE is required}
+        target: ${MFA_SECRET_KEYRING_FILE:?MFA_SECRET_KEYRING_FILE is required}
+        read_only: true
+        bind:
+          create_host_path: false
     ports: []
     environment:
       DATABASE_URL: "postgresql://meddoc_runtime:${DB_RUNTIME_PASSWORD:?DB_RUNTIME_PASSWORD is required}@postgres:5432/meddoc?schema=public&options=-c%20search_path%3Dpg_catalog%2Cpublic"

@@ -24,7 +24,10 @@ const BACKUP_IMAGE =
   "prodrigestivill/postgres-backup-local@sha256:a0103fbce0c48ccc7693ddbb2a2bfa733048db845354f635efef9e4566de185d";
 const STATIC_POSTGRES_IMAGE =
   "${QUILLMD_POSTGRES_IMAGE:?QUILLMD_POSTGRES_IMAGE must be an immutable sha256 digest}";
+const STATIC_QA_POSTGRES_IMAGE =
+  "${QA_POSTGRES_IMAGE:-meddoc-qa-postgres:latest}";
 const APPROVED_POSTGRES_IMAGE = `registry.invalid/quillmd/postgres@sha256:${"f".repeat(64)}`;
+const APPROVED_QA_POSTGRES_IMAGE = `sha256:${"e".repeat(64)}`;
 const POSTGRES_HBA_PATH = "/etc/postgresql/quillmd-pg_hba.conf";
 const POSTGRES_HBA_VERIFIER_PATH = "/opt/quillmd/verify-quillmd-host-auth.sh";
 const POSTGRES_ENTRYPOINT_PATH =
@@ -230,6 +233,7 @@ function exactPostgresService() {
 
 function exactQaPostgresService() {
   return {
+    image: STATIC_QA_POSTGRES_IMAGE,
     build: {
       context: path.join(ROOT, "infra/postgres"),
       dockerfile: "Dockerfile",
@@ -556,21 +560,21 @@ function productionModel(
               volume: {},
             },
             {
+              bind: { create_host_path: false },
               read_only: true,
-              source: mfaPlaceholder,
+              source: path.join(ROOT, mfaPlaceholder),
               target: mfaPlaceholder,
-              type: "volume",
-              volume: {},
+              type: "bind",
             },
           ]
         : name === "template-twin-admin-app"
           ? [
               {
+                bind: { create_host_path: false },
                 read_only: true,
-                source: mfaPlaceholder,
+                source: path.join(ROOT, mfaPlaceholder),
                 target: mfaPlaceholder,
-                type: "volume",
-                volume: {},
+                type: "bind",
               },
             ]
           : name === "template-twin-admin-control"
@@ -836,16 +840,15 @@ function resolvedProductionModel(keyringPath = APPROVED_KEYRING_PATH) {
     if (Array.isArray(service.volumes)) {
       for (const volume of service.volumes) {
         if (
-          volume.source ===
+          volume.target ===
           "${MFA_SECRET_KEYRING_FILE:?MFA_SECRET_KEYRING_FILE is required}"
         ) {
           Object.assign(volume, {
-            bind: { create_host_path: true },
+            bind: {},
             source: keyringPath,
             target: keyringPath,
             type: "bind",
           });
-          delete volume.volume;
         }
       }
     }
@@ -934,11 +937,11 @@ function exactQaModel() {
             volume: {},
           },
           {
+            bind: { create_host_path: false },
             read_only: true,
-            source: mfaPlaceholder,
+            source: path.join(ROOT, mfaPlaceholder),
             target: mfaPlaceholder,
-            type: "volume",
-            volume: {},
+            type: "bind",
           },
         ],
         environment: {
@@ -1032,6 +1035,7 @@ function resolvedQaModel(keyringPath = APPROVED_KEYRING_PATH) {
   const postgres = model.services.postgres as Record<string, unknown> & {
     environment: Record<string, string>;
   };
+  postgres.image = APPROVED_QA_POSTGRES_IMAGE;
   postgres.cpus = 1;
   postgres.mem_limit = "536870912";
   postgres.command = [...POSTGRES_HBA_COMMAND];
@@ -1050,12 +1054,11 @@ function resolvedQaModel(keyringPath = APPROVED_KEYRING_PATH) {
   app.command = null;
   app.entrypoint = null;
   Object.assign(app.volumes[1], {
-    bind: { create_host_path: true },
+    bind: {},
     source: keyringPath,
     target: keyringPath,
     type: "bind",
   });
-  delete app.volumes[1].volume;
   app.environment.DATABASE_URL = app.environment.DATABASE_URL.replace(
     staticQaCredential("meddoc_runtime"),
     RESOLVED_CREDENTIAL_BY_LOGIN.meddoc_runtime,
@@ -1094,6 +1097,7 @@ function runResolvedQa(model: unknown) {
     env: {
       ...process.env,
       QUILLMD_APPROVED_QA_DB_MIGRATE_IMAGE: APPROVED_QA_MIGRATOR_IMAGE,
+      QUILLMD_APPROVED_QA_POSTGRES_IMAGE: APPROVED_QA_POSTGRES_IMAGE,
       QUILLMD_APPROVED_QA_DB_BACKUP_PASSWORD_FILE:
         APPROVED_QA_BACKUP_PASSWORD_PATH,
       QUILLMD_APPROVED_QA_MFA_SECRET_KEYRING_FILE: APPROVED_KEYRING_PATH,
@@ -1110,6 +1114,88 @@ describe("database-principal runtime census", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain(
       "profile=production mode=static-unresolved services=7",
+    );
+  });
+
+  it("accepts the actual static Compose model without resolving environment files", () => {
+    const compose = spawnSync(
+      "docker",
+      [
+        "compose",
+        "--profile",
+        "*",
+        "-f",
+        "docker-compose.yml",
+        "config",
+        "--no-interpolate",
+        "--no-env-resolution",
+        "--format",
+        "json",
+      ],
+      {
+        cwd: ROOT,
+        encoding: "utf8",
+        env: Object.fromEntries(
+          ["PATH", "DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_CONFIG"]
+            .filter((key) => process.env[key] !== undefined)
+            .map((key) => [key, process.env[key]]),
+        ) as NodeJS.ProcessEnv,
+      },
+    );
+    expect(compose.status, compose.stderr).toBe(0);
+
+    const model = JSON.parse(compose.stdout) as {
+      services: Record<
+        string,
+        {
+          environment?: Record<string, string | null>;
+          volumes?: Array<Record<string, unknown>>;
+        }
+      >;
+    };
+    expect(
+      model.services["transcribe-md"]?.environment?.DATABASE_URL,
+    ).toContain("${DB_RUNTIME_PASSWORD:?DB_RUNTIME_PASSWORD is required}");
+
+    const census = run(model);
+    expect(census.status, census.stderr).toBe(0);
+    expect(census.stdout).toContain(
+      "profile=production mode=static-unresolved services=7",
+    );
+
+    const driftedModel = JSON.parse(compose.stdout) as typeof model;
+    const driftedEnvironment =
+      driftedModel.services["transcribe-md"]?.environment;
+    if (!driftedEnvironment) {
+      throw new Error("actual static Compose model omitted transcribe-md env");
+    }
+    driftedEnvironment.QUILLMD_DATABASE_PRINCIPAL_PROFILE =
+      "synthetic-disposable-qa-v1";
+    const driftedCensus = run(driftedModel);
+    expect(driftedCensus.status).not.toBe(0);
+    expect(driftedCensus.stderr).toContain(
+      "transcribe-md has an unexpected database-principal profile",
+    );
+
+    const keyringDriftModel = JSON.parse(compose.stdout) as typeof model;
+    const physicianVolumes =
+      keyringDriftModel.services["transcribe-md"]?.volumes;
+    const worker = keyringDriftModel.services["transcribe-md-worker"];
+    const keyringMount = physicianVolumes?.find(
+      (volume) =>
+        typeof volume.source === "string" &&
+        volume.source.includes("MFA_SECRET_KEYRING_FILE"),
+    );
+    if (!worker || !keyringMount) {
+      throw new Error(
+        "actual static Compose model omitted the MFA keyring mount",
+      );
+    }
+    worker.volumes = [structuredClone(keyringMount)];
+    const keyringDriftCensus = run(keyringDriftModel);
+    expect(keyringDriftCensus.status).not.toBe(0);
+    expect(keyringDriftCensus.stderr).toContain(
+      "transcribe-md-worker has an unexpected runtime authority contract: volume mounts",
     );
   });
 
@@ -2520,19 +2606,71 @@ describe("database-principal runtime census", () => {
     keyring.services["unreviewed-keyring-reader"] = {
       volumes: [
         {
+          bind: { create_host_path: false },
           read_only: true,
-          source:
+          source: path.join(
+            ROOT,
             "${MFA_SECRET_KEYRING_FILE:?MFA_SECRET_KEYRING_FILE is required}",
+          ),
           target:
             "${MFA_SECRET_KEYRING_FILE:?MFA_SECRET_KEYRING_FILE is required}",
-          type: "volume",
-          volume: {},
+          type: "bind",
         },
       ],
     };
     expect(run(keyring).stderr).toContain(
       "MFA keyring consumer census drifted",
     );
+  });
+
+  it.each([
+    "type",
+    "source",
+    "target",
+    "read_only",
+    "missing_read_only",
+    "create_host_path",
+    "extra_bind_option",
+  ])(
+    "rejects %s drift in both static and resolved MFA keyring mounts",
+    (drift) => {
+      const applyDrift = (model: ReturnType<typeof productionModel>): void => {
+        const service = model.services["template-twin-admin-app"] as {
+          volumes: Array<Record<string, unknown>>;
+        };
+        const mount = service.volumes[0];
+        if (!mount) throw new Error("fixture omitted admin MFA keyring mount");
+        if (drift === "type") mount.type = "volume";
+        else if (drift === "source") mount.source = "/unreviewed/keyring";
+        else if (drift === "target") mount.target = "/unreviewed/keyring";
+        else if (drift === "read_only") mount.read_only = false;
+        else if (drift === "missing_read_only") delete mount.read_only;
+        else if (drift === "create_host_path") {
+          const bind = mount.bind as Record<string, unknown>;
+          bind.create_host_path = true;
+        } else {
+          const bind = mount.bind as Record<string, unknown>;
+          bind.propagation = "rprivate";
+        }
+      };
+
+      const staticModel = productionModel();
+      applyDrift(staticModel);
+      expect(run(staticModel).status).not.toBe(0);
+
+      const resolvedModel = resolvedProductionModel();
+      applyDrift(resolvedModel);
+      expect(runResolved(resolvedModel).status).not.toBe(0);
+    },
+  );
+
+  it("rejects an omitted static no-create keyring bind contract", () => {
+    const model = productionModel();
+    const service = model.services["template-twin-admin-app"] as {
+      volumes: Array<{ bind: Record<string, unknown> }>;
+    };
+    delete service.volumes[0].bind.create_host_path;
+    expect(run(model).status).not.toBe(0);
   });
 
   it("rejects non-disposable or aliased QA resources and consumers", () => {
@@ -2748,6 +2886,7 @@ describe("database-principal runtime census", () => {
             .map((key) => [key, process.env[key]]),
         ),
         QA_DB_MIGRATE_IMAGE: APPROVED_QA_MIGRATOR_IMAGE,
+        QA_POSTGRES_IMAGE: APPROVED_QA_POSTGRES_IMAGE,
         QA_DB_RUNTIME_PASSWORD: RESOLVED_CREDENTIAL_BY_LOGIN.meddoc_runtime,
         QA_DB_RELEASE_CONTROL_PASSWORD:
           RESOLVED_CREDENTIAL_BY_LOGIN.meddoc_release_control,
@@ -2786,6 +2925,7 @@ describe("database-principal runtime census", () => {
         env: {
           ...process.env,
           QUILLMD_APPROVED_QA_DB_MIGRATE_IMAGE: APPROVED_QA_MIGRATOR_IMAGE,
+          QUILLMD_APPROVED_QA_POSTGRES_IMAGE: APPROVED_QA_POSTGRES_IMAGE,
           QUILLMD_APPROVED_QA_DB_BACKUP_PASSWORD_FILE:
             APPROVED_QA_BACKUP_PASSWORD_PATH,
           QUILLMD_APPROVED_QA_MFA_SECRET_KEYRING_FILE: APPROVED_KEYRING_PATH,

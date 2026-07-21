@@ -42,6 +42,10 @@ const POSTGRES_BASE_IMAGE =
 const STATIC_POSTGRES_IMAGE =
   "${QUILLMD_POSTGRES_IMAGE:?QUILLMD_POSTGRES_IMAGE must be an immutable sha256 digest}";
 const APPROVED_POSTGRES_IMAGE_ENVIRONMENT = "QUILLMD_APPROVED_POSTGRES_IMAGE";
+const STATIC_QA_POSTGRES_IMAGE =
+  "${QA_POSTGRES_IMAGE:-meddoc-qa-postgres:latest}";
+const APPROVED_QA_POSTGRES_IMAGE_ENVIRONMENT =
+  "QUILLMD_APPROVED_QA_POSTGRES_IMAGE";
 const POSTGRES_DOCKERFILE = "infra/postgres/Dockerfile";
 const POSTGRES_DOCKERIGNORE = "infra/postgres/.dockerignore";
 const POSTGRES_DOCKERIGNORE_SHA256 =
@@ -805,20 +809,20 @@ function isExactKeyringMount(volume, qa) {
   const environmentName = qa
     ? "QA_MFA_SECRET_KEYRING_FILE"
     : "MFA_SECRET_KEYRING_FILE";
-  if (staticUnresolved) {
-    const source = `\${${environmentName}:?${environmentName} is required}`;
-    return isExactNamedVolume(volume, source, source, true);
-  }
-  const approved = approvedKeyringPath(qa);
+  const marker = `\${${environmentName}:?${environmentName} is required}`;
+  const approved = staticUnresolved ? marker : approvedKeyringPath(qa);
+  const source = staticUnresolved ? path.join(process.cwd(), marker) : approved;
   return (
     approved !== null &&
     hasExactKeys(volume, ["bind", "read_only", "source", "target", "type"]) &&
     volume.type === "bind" &&
     volume.read_only === true &&
-    volume.source === approved &&
+    volume.source === source &&
     volume.target === approved &&
-    hasExactKeys(volume.bind, ["create_host_path"]) &&
-    volume.bind.create_host_path === true
+    (staticUnresolved
+      ? hasExactKeys(volume.bind, ["create_host_path"]) &&
+        volume.bind.create_host_path === false
+      : hasExactKeys(volume.bind, []))
   );
 }
 
@@ -1407,6 +1411,16 @@ function hasExactProductionPostgresImage(image) {
     typeof approved === "string" &&
     approved !== POSTGRES_BASE_IMAGE &&
     /@sha256:[a-f0-9]{64}$/u.test(approved) &&
+    image === approved
+  );
+}
+
+function hasExactQaPostgresImage(image) {
+  if (staticUnresolved) return image === STATIC_QA_POSTGRES_IMAGE;
+  const approved = process.env[APPROVED_QA_POSTGRES_IMAGE_ENVIRONMENT];
+  return (
+    typeof approved === "string" &&
+    /^sha256:[a-f0-9]{64}$/u.test(approved) &&
     image === approved
   );
 }
@@ -2215,7 +2229,8 @@ function isExactDatabaseServer(name, service, inspection, qa) {
   const shared =
     name === "postgres" &&
     (qa
-      ? service?.image === undefined && hasExactQaPostgresBuild(service?.build)
+      ? hasExactQaPostgresImage(service?.image) &&
+        hasExactQaPostgresBuild(service?.build)
       : service?.build === undefined &&
         hasExactProductionPostgresImage(service?.image)) &&
     hasExactPostgresHostAuthenticationSources() &&
@@ -2245,6 +2260,7 @@ function isExactDatabaseServer(name, service, inspection, qa) {
         "cpus",
         "environment",
         "healthcheck",
+        "image",
         "mem_limit",
         "networks",
         "read_only",

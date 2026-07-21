@@ -17,6 +17,7 @@ import {
   readFileSync,
   rmSync,
   writeFileSync,
+  writeSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -42,6 +43,18 @@ interface CommandOptions {
 }
 
 type JsonObject = Record<string, unknown>;
+
+export interface SyntheticDatabaseSecrets {
+  readonly owner: string;
+  readonly runtime: string;
+  readonly releaseControl: string;
+  readonly releaseSecurity: string;
+  readonly auditDispatcher: string;
+  readonly authEmailDispatcher: string;
+  readonly backup: string;
+}
+
+type GithubWorkflowCommandWriter = (command: string) => void;
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryRoot = resolve(packageRoot, "../..");
@@ -200,6 +213,69 @@ function randomSecret(): string {
   const value = randomBytes(32).toString("base64url");
   assert.match(value, /^[A-Za-z0-9_-]{43}$/u);
   return value;
+}
+
+function writeGithubWorkflowCommand(command: string): void {
+  const expectedBytes = Buffer.byteLength(command);
+  if (writeSync(1, command) !== expectedBytes) {
+    fail("SYNTHETIC_CI_DATABASE_RELEASE_SECRET_MASK_WRITE_FAILED");
+  }
+}
+
+function escapeGithubWorkflowCommandData(value: string): string {
+  return value.replaceAll("%", "%25");
+}
+
+export function registerGithubSecretMasks(
+  values: readonly unknown[],
+  writeCommand: GithubWorkflowCommandWriter = writeGithubWorkflowCommand,
+): void {
+  const distinctValues: string[] = [];
+  const seen = new Set<string>();
+
+  // Validate the complete batch before emitting a partial masking contract.
+  // Failure codes intentionally contain no caller-supplied value.
+  for (const value of values) {
+    if (
+      typeof value !== "string" ||
+      value.length === 0 ||
+      /[\r\n]/u.test(value)
+    ) {
+      fail("SYNTHETIC_CI_DATABASE_RELEASE_SECRET_MASK_INVALID");
+    }
+    if (!seen.has(value)) {
+      seen.add(value);
+      distinctValues.push(value);
+    }
+  }
+
+  for (const value of distinctValues) {
+    try {
+      writeCommand(`::add-mask::${escapeGithubWorkflowCommandData(value)}\n`);
+    } catch {
+      fail("SYNTHETIC_CI_DATABASE_RELEASE_SECRET_MASK_WRITE_FAILED");
+    }
+  }
+}
+
+export function generateMaskedSyntheticDatabaseSecrets(
+  writeCommand: GithubWorkflowCommandWriter = writeGithubWorkflowCommand,
+): SyntheticDatabaseSecrets {
+  const secrets: SyntheticDatabaseSecrets = Object.freeze({
+    owner: randomSecret(),
+    runtime: randomSecret(),
+    releaseControl: randomSecret(),
+    releaseSecurity: randomSecret(),
+    auditDispatcher: randomSecret(),
+    authEmailDispatcher: randomSecret(),
+    backup: randomSecret(),
+  });
+  const values = Object.values(secrets);
+  if (new Set(values).size !== values.length) {
+    fail("SYNTHETIC_CI_DATABASE_RELEASE_SECRET_COLLISION");
+  }
+  registerGithubSecretMasks(values, writeCommand);
+  return secrets;
 }
 
 function internalDatabaseUrl(login: string, secret: string): string {
@@ -974,15 +1050,10 @@ function provision(
   chmodSync(state.temporaryDirectory, 0o700);
   writeState(boundary.statePath, state);
 
-  const secrets = {
-    owner: randomSecret(),
-    runtime: randomSecret(),
-    releaseControl: randomSecret(),
-    releaseSecurity: randomSecret(),
-    auditDispatcher: randomSecret(),
-    authEmailDispatcher: randomSecret(),
-    backup: randomSecret(),
-  };
+  // This helper cannot return until every distinct raw credential is masked.
+  // Registering the raw components also protects URLs and pgpass records that
+  // embed them later in the release sequence.
+  const secrets = generateMaskedSyntheticDatabaseSecrets();
   const backupPath = join(state.temporaryDirectory, "backup-password");
   writeFileSync(backupPath, secrets.backup, { mode: 0o444 });
   chmodSync(backupPath, 0o444);
