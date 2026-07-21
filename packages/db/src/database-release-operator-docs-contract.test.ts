@@ -28,9 +28,7 @@ const humanApprovalPackets = [
   source(
     "docs/releases/template-twin-ga-20260719/operations-approval-packet.md",
   ),
-  source(
-    "docs/releases/template-twin-ga-20260719/physician-review-packet.md",
-  ),
+  source("docs/releases/template-twin-ga-20260719/physician-review-packet.md"),
   source(
     "docs/releases/template-twin-ga-20260719/privacy-legal-approval-packet.md",
   ),
@@ -502,9 +500,7 @@ describe("closed database-release operator documentation contract", () => {
         .split("\n")
         .filter((line) => line.startsWith("- "));
 
-      expect(fields[0]).toBe(
-        "- Decision: `APPROVE` / `REJECT` / `REVISE`",
-      );
+      expect(fields[0]).toBe("- Decision: `APPROVE` / `REJECT` / `REVISE`");
       expect(fields.length).toBeGreaterThan(1);
       for (const field of fields.slice(1)) {
         expect(field).toMatch(/: \*\*UNFILLED — HUMAN REQUIRED\*\*$/u);
