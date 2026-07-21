@@ -136,6 +136,9 @@ describe("data-bearing database role graph guards", () => {
     const applicationPin = e2eWorkflow.indexOf(
       "- name: Pin exact synthetic QA application images",
     );
+    const keyringReadProbe = e2eWorkflow.indexOf(
+      "- name: Verify app runtime can read the MFA keyring",
+    );
     const firstQaUp = e2eWorkflow.indexOf(
       "docker compose -f docker-compose.qa.yml up",
     );
@@ -154,7 +157,8 @@ describe("data-bearing database role graph guards", () => {
     expect(appBuild).toBeGreaterThan(postgresBuild);
     expect(migratorBuild).toBeGreaterThan(appBuild);
     expect(applicationPin).toBeGreaterThan(migratorBuild);
-    expect(firstQaUp).toBeGreaterThan(applicationPin);
+    expect(keyringReadProbe).toBeGreaterThan(applicationPin);
+    expect(firstQaUp).toBeGreaterThan(keyringReadProbe);
 
     const postgresPin = e2eWorkflow.slice(postgresBuild, appBuild);
     expect(postgresPin).toContain(
@@ -180,7 +184,10 @@ describe("data-bearing database role graph guards", () => {
       "image: ${QA_POSTGRES_IMAGE:-meddoc-qa-postgres:latest}",
     );
 
-    const exactApplicationPin = e2eWorkflow.slice(applicationPin, firstQaUp);
+    const exactApplicationPin = e2eWorkflow.slice(
+      applicationPin,
+      keyringReadProbe,
+    );
     expect(exactApplicationPin).toContain(
       "docker image inspect --format '{{.Id}}' \"$expected_image\"",
     );

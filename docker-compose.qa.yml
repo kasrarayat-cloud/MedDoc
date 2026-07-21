@@ -189,6 +189,9 @@ services:
     cpus: "1.0"
     group_add:
       - "101"
+      # The runtime user's primary gid is 65533; the synthetic keyring mirrors
+      # production root:1001/0440 permissions.
+      - "1001"
     depends_on:
       postgres:
         condition: service_healthy

@@ -17,6 +17,7 @@
     "migrate:dev": "prisma migrate dev",
     "database-release:migrate": "tsx scripts/prisma-migrate-segment.ts",
     "database-release:synthetic-ci": "tsx scripts/synthetic-ci-database-release.ts",
+    "database-release:synthetic-ci:typecheck": "tsc -p tsconfig.synthetic-ci-release.json",
     "lineage:online": "tsx scripts/template-twin-lineage-online.ts",
     "lineage:scale-test": "tsx scripts/template-twin-lineage-scale-test.ts",
     "rollout:pg-test": "tsx scripts/template-twin-rollout-pg-test.ts",

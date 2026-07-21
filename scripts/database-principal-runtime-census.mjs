@@ -117,7 +117,7 @@ const productionServices = new Map([
       boundary: "quillmd_runtime",
       connectionMechanisms: ["url:DATABASE_URL"],
       envFile: "repository",
-      groupAdd: ["101"],
+      groupAdd: ["101", "1001"],
       command: "absent",
       securityOpt: "absent",
       volumes: "physician-app",
@@ -131,7 +131,7 @@ const productionServices = new Map([
       boundary: "quillmd_runtime",
       connectionMechanisms: ["url:DATABASE_URL"],
       envFile: "empty",
-      groupAdd: "empty",
+      groupAdd: ["1001"],
       command: "absent",
       securityOpt: "absent",
       volumes: "admin-keyring",
@@ -207,7 +207,7 @@ const qaServices = new Map([
       boundary: "quillmd_runtime",
       connectionMechanisms: ["url:DATABASE_URL"],
       envFile: "absent",
-      groupAdd: ["101"],
+      groupAdd: ["101", "1001"],
       command: "absent",
       securityOpt: "absent",
       volumes: "qa-physician-app",
@@ -1993,12 +1993,12 @@ function assertExclusiveBackupResources(model, services, qa) {
       ) && exactArray(service?.security_opt, ["no-new-privileges:true"]);
     const exactSupplementalGroups =
       name === "transcribe-md"
-        ? exactArray(service?.group_add, ["101"])
-        : ["template-twin-admin-app", "template-twin-admin-control"].includes(
-              name,
-            ) && staticUnresolved
-          ? service?.group_add === null
-          : service?.group_add === undefined;
+        ? exactArray(service?.group_add, ["101", "1001"])
+        : name === "template-twin-admin-app"
+          ? exactArray(service?.group_add, ["1001"])
+          : name === "template-twin-admin-control" && staticUnresolved
+            ? service?.group_add === null
+            : service?.group_add === undefined;
     if (
       service?.privileged === true ||
       ["0", "0:0", "root", "root:root"].includes(service?.user) ||

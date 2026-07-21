@@ -41,6 +41,20 @@ function serviceBlock(source: string, service: string): string {
   return source.slice(start, next < 0 ? source.length : start + 1 + next);
 }
 
+function supplementalGroups(block: string): string[] {
+  const start = block.search(/^    group_add:/mu);
+  if (start < 0) return [];
+  const remainder = block.slice(start + 1);
+  const next = remainder.search(/^    [a-zA-Z0-9_-]+:/mu);
+  const groupBlock = block.slice(
+    start,
+    next < 0 ? block.length : start + 1 + next,
+  );
+  return [...groupBlock.matchAll(/^      - "([0-9]+)"$/gmu)].map(
+    (match) => match[1],
+  );
+}
+
 describe("MFA secret infrastructure boundary", () => {
   it("mounts the keyring only into physician and admin-app services", () => {
     const physician = serviceBlock(compose, "transcribe-md");
@@ -60,6 +74,8 @@ describe("MFA secret infrastructure boundary", () => {
       expect(block).toContain("create_host_path: false");
       expect(block).not.toContain("required}:${MFA_SECRET_KEYRING_FILE");
     }
+    expect(supplementalGroups(physician)).toEqual(["101", "1001"]);
+    expect(supplementalGroups(adminApp)).toEqual(["1001"]);
 
     for (const service of [
       "meddoc-pro",
@@ -72,6 +88,7 @@ describe("MFA secret infrastructure boundary", () => {
       expect(block).toContain('MFA_SECRET_ACTIVE_KEY_ID: ""');
       expect(block).toContain('MFA_SECRET_KEYRING_FILE: ""');
       expect(block).not.toContain("MFA_SECRET_KEYRING_FILE is required}");
+      expect(supplementalGroups(block)).not.toContain("1001");
     }
   });
 
@@ -90,8 +107,10 @@ describe("MFA secret infrastructure boundary", () => {
     expect(app).toContain("read_only: true");
     expect(app).toContain("create_host_path: false");
     expect(app).not.toContain("required}:${QA_MFA_SECRET_KEYRING_FILE");
+    expect(supplementalGroups(app)).toEqual(["101", "1001"]);
     expect(worker).toContain('MFA_SECRET_KEYRING_FILE: ""');
     expect(worker).not.toContain("QA_MFA_SECRET_KEYRING_FILE is required");
+    expect(supplementalGroups(worker)).not.toContain("1001");
   });
 
   it("makes startup validation and the operator key contract explicit", () => {
@@ -205,6 +224,39 @@ describe("MFA secret infrastructure boundary", () => {
     expect(e2eWorkflow).not.toMatch(
       /keyBase64Url:\s*["'][A-Za-z0-9_-]{43}["']/u,
     );
+  });
+
+  it("proves the exact non-root app image can read the mounted keyring without printing it", () => {
+    const probeStart = e2eWorkflow.indexOf(
+      "- name: Verify app runtime can read the MFA keyring",
+    );
+    expect(probeStart).toBeGreaterThan(-1);
+    const probe = e2eWorkflow.slice(
+      probeStart,
+      e2eWorkflow.indexOf("- name: Start qa infra", probeStart),
+    );
+    expect(probe).toContain("--network none");
+    expect(probe).toContain("--read-only");
+    expect(probe).toContain("--cap-drop ALL");
+    expect(probe).toContain("--group-add 101");
+    expect(probe).toContain("--group-add 1001");
+    expect(probe).toContain(
+      '[[ "$QA_TRANSCRIBE_MD_IMAGE" =~ ^sha256:[a-f0-9]{64}$ ]]',
+    );
+    expect(probe).toContain('"$QA_TRANSCRIBE_MD_IMAGE" -');
+    expect(probe).toContain("process.getuid() !== 1001");
+    expect(probe).toContain("process.getgid() !== 65533");
+    expect(probe).toContain("const expectedGroups = [101, 1001, 65533]");
+    expect(probe).toContain("groups.length !== expectedGroups.length");
+    expect(probe).toContain(
+      "groups.some((group, index) => group !== expectedGroups[index])",
+    );
+    expect(probe).toContain("stat.uid !== 0");
+    expect(probe).toContain("stat.gid !== 1001");
+    expect(probe).toContain("(stat.mode & 0o777) !== 0o440");
+    expect(probe).toContain('readFileSync(path, "utf8")');
+    expect(probe).not.toContain("console.log");
+    expect(probe).not.toContain("process.stdout");
   });
 
   it("has a disposable PostgreSQL contention proof for the shared lock order", () => {

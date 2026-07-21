@@ -782,10 +782,12 @@ services:
       com.quillmd.rollback-runtime-artifact: app
     cap_drop:
       - ALL
-    # The scanner socket is mode 0660 and owned by ClamAV gid 101. Grant only
-    # this web container the supplementary group required to connect.
+    # The scanner socket is mode 0660 and owned by ClamAV gid 101. The MFA
+    # keyring is root:1001/0440 while the image user has primary gid 65533, so
+    # grant exactly the two groups this physician process must read.
     group_add:
       - "101"
+      - "1001"
     build:
       context: .
       dockerfile: apps/transcribe-md/Dockerfile
@@ -951,7 +953,10 @@ services:
       com.quillmd.rollback-runtime-managed: "true"
       com.quillmd.rollback-runtime-artifact: app
     env_file: []
-    group_add: []
+    # This process reads the root:1001/0440 MFA keyring but receives neither
+    # the scanner group nor any other supplemental authority.
+    group_add:
+      - "1001"
     volumes:
       - type: bind
         source: ${MFA_SECRET_KEYRING_FILE:?MFA_SECRET_KEYRING_FILE is required}

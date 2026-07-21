@@ -584,12 +584,12 @@ function productionModel(
       ...exactProductionRuntimeSurface(name),
       cap_drop: ["ALL"],
       ...(name === "transcribe-md"
-        ? { group_add: ["101"] }
-        : ["template-twin-admin-app", "template-twin-admin-control"].includes(
-              name,
-            )
-          ? { group_add: null }
-          : {}),
+        ? { group_add: ["101", "1001"] }
+        : name === "template-twin-admin-app"
+          ? { group_add: ["1001"] }
+          : name === "template-twin-admin-control"
+            ? { group_add: null }
+            : {}),
       ...(command ? { command } : {}),
       ...(["template-twin-audit-dispatcher", "auth-email-dispatcher"].includes(
         name,
@@ -797,9 +797,7 @@ function resolvedProductionModel(keyringPath = APPROVED_KEYRING_PATH) {
     ) {
       service.command = null;
     }
-    if (
-      ["template-twin-admin-app", "template-twin-admin-control"].includes(name)
-    ) {
+    if (name === "template-twin-admin-control") {
       delete service.group_add;
     }
     if (name === "template-twin-admin-app") delete service.ports;
@@ -912,7 +910,7 @@ function exactQaModel() {
         cap_drop: ["ALL"],
         cpus: "1.0",
         mem_limit: "512m",
-        group_add: ["101"],
+        group_add: ["101", "1001"],
         networks: { default: null },
         ports: [exactPort("9020", 3011)],
         healthcheck: {
@@ -1149,6 +1147,7 @@ describe("database-principal runtime census", () => {
         string,
         {
           environment?: Record<string, string | null>;
+          group_add?: string[] | null;
           volumes?: Array<Record<string, unknown>>;
         }
       >;
@@ -1156,6 +1155,11 @@ describe("database-principal runtime census", () => {
     expect(
       model.services["transcribe-md"]?.environment?.DATABASE_URL,
     ).toContain("${DB_RUNTIME_PASSWORD:?DB_RUNTIME_PASSWORD is required}");
+    expect(model.services["transcribe-md"]?.group_add).toEqual(["101", "1001"]);
+    expect(model.services["template-twin-admin-app"]?.group_add).toEqual([
+      "1001",
+    ]);
+    expect(model.services["template-twin-admin-control"]?.group_add).toBeNull();
 
     const census = run(model);
     expect(census.status, census.stderr).toBe(0);
@@ -2673,6 +2677,47 @@ describe("database-principal runtime census", () => {
     expect(run(model).status).not.toBe(0);
   });
 
+  it.each([
+    ["transcribe-md", [null, ["101"], ["1001"], ["101", "1001", "2000"]]],
+    ["template-twin-admin-app", [null, [], ["2000"], ["1001", "2000"]]],
+  ] as const)(
+    "rejects omitted, wrong, or extra MFA reader groups for %s",
+    (serviceName, driftedGroups) => {
+      for (const groupAdd of driftedGroups) {
+        for (const [model, execute] of [
+          [productionModel(), run],
+          [resolvedProductionModel(), runResolved],
+        ] as const) {
+          const service = model.services[serviceName] as Record<
+            string,
+            unknown
+          >;
+          service.group_add = groupAdd;
+          const result = execute(model);
+          expect(result.status).not.toBe(0);
+          expect(result.stderr).toContain(serviceName);
+        }
+      }
+    },
+  );
+
+  it("rejects MFA keyring gid 1001 on every non-consumer runtime", () => {
+    for (const serviceName of [
+      "meddoc-pro",
+      "template-twin-admin-control",
+      "transcribe-md-worker",
+      "template-twin-audit-dispatcher",
+      "auth-email-dispatcher",
+    ]) {
+      const model = productionModel();
+      const service = model.services[serviceName] as Record<string, unknown>;
+      service.group_add = ["1001"];
+      const result = run(model);
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain(serviceName);
+    }
+  });
+
   it("rejects non-disposable or aliased QA resources and consumers", () => {
     const external = exactQaModel();
     (external.volumes.qa_pgdata as Record<string, unknown>).external = true;
@@ -2838,6 +2883,24 @@ describe("database-principal runtime census", () => {
     );
   });
 
+  it("rejects omitted, wrong, or extra MFA reader groups in QA", () => {
+    for (const groupAdd of [null, ["101"], ["1001"], ["101", "1001", "2000"]]) {
+      for (const [model, execute] of [
+        [exactQaModel(), (value: unknown) => run(value, "--qa")],
+        [resolvedQaModel(), runResolvedQa],
+      ] as const) {
+        const service = model.services["transcribe-md"] as Record<
+          string,
+          unknown
+        >;
+        service.group_add = groupAdd;
+        const result = execute(model);
+        expect(result.status).not.toBe(0);
+        expect(result.stderr).toContain("transcribe-md");
+      }
+    }
+  });
+
   it("rejects QA PostgreSQL Dockerfile or rootfs drift", () => {
     const buildDrift = exactQaModel();
     (
@@ -2919,6 +2982,13 @@ describe("database-principal runtime census", () => {
         },
       );
       expect(compose.status, compose.stderr).toBe(0);
+      const resolvedModel = JSON.parse(compose.stdout) as {
+        services: Record<string, { group_add?: string[] }>;
+      };
+      expect(resolvedModel.services["transcribe-md"]?.group_add).toEqual([
+        "101",
+        "1001",
+      ]);
       const census = spawnSync("node", [CENSUS, "--qa"], {
         cwd: directory,
         encoding: "utf8",

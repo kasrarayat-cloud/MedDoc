@@ -924,7 +924,7 @@ function provisionReleaseSecurity(state: SyntheticState, secret: string): void {
 
 function proveExactPrincipals(
   state: SyntheticState,
-  secrets: Record<string, string>,
+  secrets: SyntheticDatabaseSecrets,
 ): void {
   const profiles = [
     ["runtime", "meddoc_runtime", secrets.runtime],

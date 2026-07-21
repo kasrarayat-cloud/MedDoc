@@ -73,6 +73,9 @@ jobs:
       - name: Generate Prisma client
         run: npm run db:generate
 
+      - name: Typecheck the synthetic release helper and masking contract
+        run: npm run database-release:synthetic-ci:typecheck -w @meddoc/db
+
       # Creates its own immutable, marker-named database on the local Docker
       # daemon; accepts no target URL or production acknowledgement. It runs
       # all four closed segments, both online protocols, release-security

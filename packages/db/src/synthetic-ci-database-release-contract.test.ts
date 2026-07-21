@@ -35,6 +35,19 @@ describe("closed synthetic CI database release path", () => {
     expect(databasePackage.scripts["database-release:synthetic-ci"]).toBe(
       "tsx scripts/synthetic-ci-database-release.ts",
     );
+    expect(
+      databasePackage.scripts["database-release:synthetic-ci:typecheck"],
+    ).toBe("tsc -p tsconfig.synthetic-ci-release.json");
+    for (const workflow of [testWorkflow, accessibilityWorkflow]) {
+      const typecheck = workflow.indexOf(
+        "npm run database-release:synthetic-ci:typecheck -w @meddoc/db",
+      );
+      const provision = workflow.indexOf(
+        "npm run db:migrate:synthetic-ci -- --phase provision",
+      );
+      expect(typecheck).toBeGreaterThan(-1);
+      expect(provision).toBeGreaterThan(typecheck);
+    }
   });
 
   it("keeps the helper synthetic-only by construction", () => {

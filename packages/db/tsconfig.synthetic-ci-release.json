@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "allowJs": false,
+    "incremental": false,
+    "target": "ES2022",
+    "types": ["node", "vitest/globals"]
+  },
+  "include": [
+    "scripts/synthetic-ci-database-release.ts",
+    "src/synthetic-ci-database-release-contract.test.ts",
+    "src/synthetic-ci-database-release-secret-masking.test.ts"
+  ],
+  "exclude": ["node_modules"]
+}

@@ -305,6 +305,51 @@ jobs:
           pin_image meddoc-pro-transcribe-md-worker:latest QA_TRANSCRIBE_MD_WORKER_IMAGE
           pin_image meddoc-pro-db-migrate QA_DB_MIGRATE_IMAGE
 
+      # The app image deliberately runs uid 1001 with primary gid 65533. The
+      # keyring stays root:1001/0440, so only the two reviewed MFA consumers
+      # receive supplemental gid 1001 through Compose. Prove the exact image
+      # can read the exact mounted file without emitting its bytes.
+      - name: Verify app runtime can read the MFA keyring
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          [[ "$MFA_SECRET_KEYRING_FILE" == "$QA_MFA_SECRET_KEYRING_FILE" ]]
+          [[ "$QA_TRANSCRIBE_MD_IMAGE" =~ ^sha256:[a-f0-9]{64}$ ]]
+          docker run --rm -i \
+            --network none \
+            --read-only \
+            --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            --group-add 101 \
+            --group-add 1001 \
+            --mount "type=bind,src=$MFA_SECRET_KEYRING_FILE,dst=$MFA_SECRET_KEYRING_FILE,readonly" \
+            --env MFA_SECRET_KEYRING_FILE \
+            --entrypoint node \
+            "$QA_TRANSCRIBE_MD_IMAGE" - <<'NODE'
+          const { readFileSync, statSync } = require("node:fs");
+          const path = process.env.MFA_SECRET_KEYRING_FILE;
+          if (!path || process.getuid() !== 1001 || process.getgid() !== 65533) {
+            throw new Error("MFA runtime identity mismatch");
+          }
+          const groups = [...new Set(process.getgroups())].sort((left, right) => left - right);
+          const expectedGroups = [101, 1001, 65533];
+          if (
+            groups.length !== expectedGroups.length ||
+            groups.some((group, index) => group !== expectedGroups[index])
+          ) {
+            throw new Error("MFA runtime supplemental group mismatch");
+          }
+          const stat = statSync(path);
+          if (stat.uid !== 0 || stat.gid !== 1001 || (stat.mode & 0o777) !== 0o440) {
+            throw new Error("MFA keyring ownership or mode mismatch");
+          }
+          const document = JSON.parse(readFileSync(path, "utf8"));
+          if (document.version !== 1 || document.keys?.[0]?.id !== "ci-synthetic-v1") {
+            throw new Error("MFA keyring structure mismatch");
+          }
+          NODE
+
       # ── Bring up the isolated qa stack from the committed recipe. ──
       - name: Start qa infra (postgres + redis + minio)
         run: docker compose -f docker-compose.qa.yml up -d --wait postgres redis minio

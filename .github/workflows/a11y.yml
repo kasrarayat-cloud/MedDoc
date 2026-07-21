@@ -107,6 +107,9 @@ jobs:
       - name: Generate Prisma client
         run: npm run db:generate
 
+      - name: Typecheck the synthetic release helper and masking contract
+        run: npm run database-release:synthetic-ci:typecheck -w @meddoc/db
+
       - name: Apply witnessed migrations to isolated synthetic database
         run: npm run db:migrate:synthetic-ci -- --phase provision
         env:
