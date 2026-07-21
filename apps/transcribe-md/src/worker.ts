@@ -51,6 +51,7 @@ import {
   templateTwinRuntimeEnabled,
 } from "@/lib/runtime-protocol";
 import { refreshTemplateTwinRuntimeAttestation } from "@/lib/template-twin/runtime-attestation";
+import { assertTranscribeMdWorkerRuntimeIdentity } from "@/worker/runtime-identity";
 
 import {
   QUEUE_NAME,
@@ -2159,6 +2160,7 @@ async function startHeartbeat(
 }
 
 async function main() {
+  assertTranscribeMdWorkerRuntimeIdentity(process.env);
   const runtimeProtocol = assertQuillmdRuntimeProtocol(process.env);
   await assertProductionRuntimeDatabasePrincipal({
     prisma,
