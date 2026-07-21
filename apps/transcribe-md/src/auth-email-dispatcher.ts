@@ -1,78 +1,18 @@
 import { writeFile } from "node:fs/promises";
 
 import prisma from "@meddoc/db";
-import { Prisma } from "@prisma/client";
+import { QUILLMD_EXACT_PRODUCTION_DATABASE_PRINCIPAL_PROFILE } from "@meddoc/db/production-runtime-principal";
 
 import { drainAuthEmailOutbox } from "@/lib/auth-email-delivery";
 import { isEmailDeliveryEnabled } from "@/lib/email-enabled";
 import { APP_URL } from "@/lib/constants";
+import { assertExactDatabasePrincipal } from "@/lib/exact-database-principal";
 import { assertQuillmdRuntimeProtocol } from "@/lib/runtime-protocol";
 
 const SERVICE_ROLE = "auth-email-dispatcher";
 const DEFAULT_INTERVAL_MS = 1_000;
 const HEARTBEAT_PATH = "/tmp/auth-email-dispatcher-heartbeat";
 const PRODUCTION_APP_URL = "https://app.quillmd.com";
-
-interface DispatcherDatabasePrincipal {
-  role: string;
-  canLogin: boolean;
-  superuser: boolean;
-  createDb: boolean;
-  createRole: boolean;
-  inherits: boolean;
-  replication: boolean;
-  bypassRls: boolean;
-  memberships: string[];
-  hasAdminMembership: boolean;
-}
-
-async function assertDispatcherDatabasePrincipal(): Promise<void> {
-  const rows = (await prisma.$queryRaw(Prisma.sql`
-    SELECT current_user::text AS "role",
-      role.rolcanlogin AS "canLogin",
-      role.rolsuper AS "superuser",
-      role.rolcreatedb AS "createDb",
-      role.rolcreaterole AS "createRole",
-      role.rolinherit AS "inherits",
-      role.rolreplication AS "replication",
-      role.rolbypassrls AS "bypassRls",
-      ARRAY(
-        SELECT granted.rolname::text
-        FROM pg_catalog.pg_auth_members membership
-        JOIN pg_catalog.pg_roles granted
-          ON granted.oid = membership.roleid
-        WHERE membership.member = role.oid
-        ORDER BY granted.rolname
-      ) AS "memberships",
-      EXISTS(
-        SELECT 1
-        FROM pg_catalog.pg_auth_members membership
-        WHERE membership.member = role.oid
-          AND membership.admin_option = TRUE
-      ) AS "hasAdminMembership"
-    FROM pg_catalog.pg_roles role
-    WHERE role.rolname = current_user
-  `)) as DispatcherDatabasePrincipal[];
-  const principal = rows[0];
-  if (
-    rows.length !== 1 ||
-    principal?.role !== "meddoc_auth_email_dispatcher" ||
-    principal.canLogin !== true ||
-    principal.superuser ||
-    principal.createDb ||
-    principal.createRole ||
-    principal.inherits !== true ||
-    principal.replication ||
-    principal.bypassRls ||
-    principal.hasAdminMembership ||
-    principal.memberships.length !== 1 ||
-    principal.memberships[0] !== "quillmd_auth_email_dispatcher"
-  ) {
-    throw new Error(
-      "Exact auth email dispatcher database principal is required.",
-    );
-  }
-}
 
 async function writeHeartbeat(): Promise<void> {
   await writeFile(HEARTBEAT_PATH, new Date().toISOString(), {
@@ -96,15 +36,23 @@ async function main(): Promise<void> {
     throw new Error("Auth email dispatcher service role is required.");
   }
   assertQuillmdRuntimeProtocol(process.env);
-  if (process.env.NODE_ENV === "production") {
-    if (APP_URL !== PRODUCTION_APP_URL) {
-      throw new Error("Exact production physician origin is required.");
-    }
-    if (!isEmailDeliveryEnabled()) {
-      throw new Error("Verified auth email delivery is required.");
-    }
-    await assertDispatcherDatabasePrincipal();
+  if (
+    process.env.QUILLMD_DATABASE_PRINCIPAL_PROFILE !==
+    QUILLMD_EXACT_PRODUCTION_DATABASE_PRINCIPAL_PROFILE
+  ) {
+    throw new Error("Exact production database-principal profile is required.");
   }
+  if (APP_URL !== PRODUCTION_APP_URL) {
+    throw new Error("Exact production physician origin is required.");
+  }
+  if (!isEmailDeliveryEnabled()) {
+    throw new Error("Verified auth email delivery is required.");
+  }
+  await assertExactDatabasePrincipal({
+    prisma,
+    loginRole: "meddoc_auth_email_dispatcher",
+    boundaryRole: "quillmd_auth_email_dispatcher",
+  });
   const delay = intervalMs();
   let stopping = false;
   let lastHealthLogAt = 0;

@@ -93,6 +93,7 @@ const migrationSql = readFileSync(
   ),
   "utf8",
 );
+const graphProbeRole = `synthetic_mfa_v4_graph_${process.pid}`;
 const suffix = `${process.pid}-${Date.now()}`;
 const administratorPracticeId = `synthetic-mfa-admin-${suffix}`;
 const physicianPracticeId = `synthetic-mfa-practice-${suffix}`;
@@ -209,6 +210,76 @@ async function applyMfaMigration(): Promise<void> {
     await client.connect();
     await client.query(migrationSql);
   } finally {
+    await client.end().catch(() => undefined);
+  }
+}
+
+async function expectMigrationRoleGraphRejected(label: string): Promise<void> {
+  let rejected = false;
+  try {
+    await applyMfaMigration();
+  } catch {
+    rejected = true;
+  }
+  assert(rejected, `${label} must reject v4 before any side effect commits`);
+}
+
+async function proveMigrationRoleGraphGuard(): Promise<void> {
+  assert.match(graphProbeRole, /^[a-z0-9_]+$/u);
+  const client = new Client({ connectionString: verifiedDatabaseUrl });
+  try {
+    await client.connect();
+    await client.query(`CREATE ROLE "${graphProbeRole}" NOLOGIN`);
+
+    await client.query(
+      `GRANT "${graphProbeRole}" TO quillmd_audit_dispatcher
+       WITH ADMIN FALSE, INHERIT TRUE, SET FALSE`,
+    );
+    await expectMigrationRoleGraphRejected("outgoing boundary membership");
+    await client.query(
+      `REVOKE "${graphProbeRole}" FROM quillmd_audit_dispatcher`,
+    );
+
+    await client.query(
+      `GRANT meddoc_audit_dispatcher TO "${graphProbeRole}"
+       WITH ADMIN FALSE, INHERIT TRUE, SET FALSE`,
+    );
+    await expectMigrationRoleGraphRejected("inbound trusted-login membership");
+    await client.query(
+      `REVOKE meddoc_audit_dispatcher FROM "${graphProbeRole}"`,
+    );
+
+    await client.query(
+      `GRANT "${graphProbeRole}" TO meddoc_audit_dispatcher
+       WITH ADMIN FALSE, INHERIT TRUE, SET FALSE`,
+    );
+    await expectMigrationRoleGraphRejected("extra login membership");
+    await client.query(
+      `REVOKE "${graphProbeRole}" FROM meddoc_audit_dispatcher`,
+    );
+
+    await client.query(
+      `GRANT quillmd_audit_dispatcher TO meddoc_audit_dispatcher
+       WITH ADMIN FALSE, INHERIT TRUE, SET TRUE`,
+    );
+    await expectMigrationRoleGraphRejected("SET ROLE membership option");
+    await client.query(
+      `GRANT quillmd_audit_dispatcher TO meddoc_audit_dispatcher
+       WITH ADMIN FALSE, INHERIT TRUE, SET FALSE`,
+    );
+  } finally {
+    await client
+      .query(`REVOKE "${graphProbeRole}" FROM quillmd_audit_dispatcher`)
+      .catch(() => undefined);
+    await client
+      .query(`REVOKE meddoc_audit_dispatcher FROM "${graphProbeRole}"`)
+      .catch(() => undefined);
+    await client
+      .query(`REVOKE "${graphProbeRole}" FROM meddoc_audit_dispatcher`)
+      .catch(() => undefined);
+    await client
+      .query(`DROP ROLE IF EXISTS "${graphProbeRole}"`)
+      .catch(() => undefined);
     await client.end().catch(() => undefined);
   }
 }
@@ -719,6 +790,8 @@ async function main(): Promise<Record<string, unknown>> {
     authorities: BigInt(0),
   });
 
+  await proveMigrationRoleGraphGuard();
+
   const release = await seedPreV4Release();
   assert.equal(await approvalsAreCurrent(release), true);
   const decisionsBefore = await observer.$queryRaw<Array<{ count: bigint }>>(
@@ -840,6 +913,11 @@ async function main(): Promise<Record<string, unknown>> {
     definerSearchPathAndGrantsVerified: true,
     rawSecretProjectionRejected: true,
     migrationSqlRepeatIdempotent: true,
+    unsafeOutgoingBoundaryMembershipRejected: true,
+    inboundTrustedLoginMembershipRejected: true,
+    extraLoginMembershipRejected: true,
+    membershipSetOptionRejected: true,
+    cleanRoleGraphAccepted: true,
   };
 }
 

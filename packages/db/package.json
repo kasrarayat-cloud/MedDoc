@@ -6,7 +6,9 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./guard": "./src/db-guard.ts"
+    "./guard": "./src/db-guard.ts",
+    "./exact-database-principal": "./src/exact-database-principal.ts",
+    "./production-runtime-principal": "./src/production-runtime-principal.ts"
   },
   "scripts": {
     "generate": "prisma generate",
@@ -27,6 +29,17 @@
     "clinical-patient-authority:pg-test": "tsx --tsconfig ../../apps/transcribe-md/tsconfig.json scripts/transcribe-md-clinical-patient-authority-pg-test.ts",
     "user-session-concurrency:pg-test": "tsx scripts/user-session-concurrency-pg-test.ts",
     "mfa-secret-lock-order:pg-test": "tsx scripts/mfa-secret-backfill-lock-order-pg-test.ts",
+    "auth-token-linearization:online": "tsx scripts/auth-token-linearization-online.ts",
+    "auth-token-linearization:pg-test": "tsx scripts/auth-token-linearization-pg-test.ts",
+    "database-principal:preflight": "tsx scripts/exact-database-principal-preflight.ts",
+    "database-principal:pg-test": "tsx scripts/exact-database-principal-pg-test.ts",
+    "database-principal:manifest-export": "tsx scripts/exact-database-principal-manifest-export.ts",
+    "database-principal:bootstrap-log-pg-test": "tsx scripts/database-principal-bootstrap-log-pg-test.ts",
+    "database-principal:v9-check": "tsx scripts/generate-exact-database-principal-v9.ts",
+    "database-principal:v9-generate": "tsx scripts/generate-exact-database-principal-v9.ts --write",
+    "database-connection-options:pg-test": "tsx scripts/database-connection-options-pg-test.ts",
+    "postgres-backup-principal:pg-test": "tsx scripts/postgres-backup-principal-pg-test.ts",
+    "auth-email-role-graph:pg-test": "tsx scripts/auth-email-role-graph-migration-pg-test.ts",
     "auth-email-outbox:pg-test": "tsx scripts/auth-email-outbox-pg-test.ts",
     "completed-candidate-review:pg-test": "tsx --tsconfig ../../apps/transcribe-md/tsconfig.json scripts/template-twin-completed-candidate-review-concurrency-pg-test.ts",
     "placeholder-schema:pg-test": "tsx scripts/template-twin-placeholder-schema-drift-test.ts",

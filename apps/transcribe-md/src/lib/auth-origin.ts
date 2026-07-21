@@ -5,19 +5,7 @@ export const PHYSICIAN_PRODUCTION_ORIGIN = "https://app.quillmd.com" as const;
 export const ADMIN_PRODUCTION_ORIGIN = "https://admin.quillmd.com" as const;
 export const SYNTHETIC_QA_PHYSICIAN_ORIGIN = "http://localhost:9020" as const;
 
-type OriginEnvironment = Partial<
-  Pick<
-    NodeJS.ProcessEnv,
-    | "NODE_ENV"
-    | "QUILLMD_SERVICE_ROLE"
-    | "AUTH_URL"
-    | "NEXTAUTH_URL"
-    | "ADMIN_PUBLIC_HOST"
-    | "PHYSICIAN_PUBLIC_HOST"
-    | "TEMPLATE_TWIN_STORAGE_PROFILE"
-    | "ADMIN_SYNTHETIC_QA_SHARED_HOST_ATTESTATION"
-  >
->;
+type OriginEnvironment = Readonly<Record<string, string | undefined>>;
 
 export type AuthOriginConfigurationError =
   | "AUTH_SERVICE_ROLE_NOT_REVIEWED"

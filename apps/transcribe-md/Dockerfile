@@ -104,6 +104,7 @@ WORKDIR /app
 ARG QUILLMD_RELEASE_SHA=development
 LABEL org.opencontainers.image.revision="${QUILLMD_RELEASE_SHA}" \
       com.quillmd.runtime-protocol-epoch="template-twin-final-schema-v2" \
+      com.quillmd.rollback-runtime-capability="six-runtime-v1" \
       com.quillmd.runtime-component="transcribe-md-app"
 
 ENV NODE_ENV=production
@@ -127,6 +128,7 @@ RUN addgroup --system --gid 1001 nodejs && \
 COPY --from=builder /app/apps/transcribe-md/public ./apps/transcribe-md/public
 COPY --from=builder /app/apps/transcribe-md/.next/standalone ./
 COPY --from=builder /app/apps/transcribe-md/.next/static ./apps/transcribe-md/.next/static
+COPY --from=builder /app/scripts/quillmd-next-runtime-entrypoint.mjs ./scripts/quillmd-next-runtime-entrypoint.mjs
 
 # T-M21: PDF generator embeds Charter (body) + Inter Tight (labels)
 # at request time via pdfkit's registerFont. The font files must be
@@ -178,4 +180,4 @@ ENV HOSTNAME="0.0.0.0"
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD wget --quiet --tries=1 --spider http://127.0.0.1:3011/api/health || exit 1
 
-CMD ["node", "apps/transcribe-md/server.js"]
+CMD ["node", "scripts/quillmd-next-runtime-entrypoint.mjs", "node", "apps/transcribe-md/server.js"]

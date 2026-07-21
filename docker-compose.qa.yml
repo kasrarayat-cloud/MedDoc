@@ -20,12 +20,13 @@
 # ============================================================================
 name: meddoc-qa
 
-x-qa-db-url: &qa-db-url postgresql://meddoc:qa_test_pw@postgres:5432/meddoc_qa_test?schema=public
+x-qa-owner-db-url: &qa-owner-db-url postgresql://meddoc:qa_test_pw@postgres:5432/meddoc_qa_test?schema=public&options=-c%20search_path%3Dpg_catalog%2Cpublic
+x-qa-runtime-db-url: &qa-runtime-db-url "postgresql://meddoc_runtime:${QA_DB_RUNTIME_PASSWORD:?QA_DB_RUNTIME_PASSWORD is required}@postgres:5432/meddoc_qa_test?schema=public&options=-c%20search_path%3Dpg_catalog%2Cpublic"
 x-qa-secret: &qa-secret "qa-throwaway-secret-not-used-in-prod-000000000000000="
 
 services:
   postgres:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:pg16@sha256:7d400e340efb42f4d8c9c12c6427adb253f726881a9985d2a471bf0eed824dff
     restart: "no"
     mem_limit: 512m
     cpus: "1.0"
@@ -34,8 +35,16 @@ services:
       POSTGRES_USER: meddoc
       POSTGRES_PASSWORD: qa_test_pw
       PGDATA: /var/lib/postgresql/data/pgdata
+      DB_RUNTIME_PASSWORD: ${QA_DB_RUNTIME_PASSWORD:?QA_DB_RUNTIME_PASSWORD is required}
+      DB_RELEASE_CONTROL_PASSWORD: ${QA_DB_RELEASE_CONTROL_PASSWORD:?QA_DB_RELEASE_CONTROL_PASSWORD is required}
+      DB_AUDIT_DISPATCHER_PASSWORD: ${QA_DB_AUDIT_DISPATCHER_PASSWORD:?QA_DB_AUDIT_DISPATCHER_PASSWORD is required}
+      DB_AUTH_EMAIL_DISPATCHER_PASSWORD: ${QA_DB_AUTH_EMAIL_DISPATCHER_PASSWORD:?QA_DB_AUTH_EMAIL_DISPATCHER_PASSWORD is required}
+      DB_BACKUP_PASSWORD_FILE: /run/secrets/qa_postgres_backup_password
     volumes:
       - qa_pgdata:/var/lib/postgresql/data # FRESH isolated volume (NOT prod)
+      - ./infra/postgres/init-template-twin-roles.sh:/docker-entrypoint-initdb.d/20-quillmd-exact-principals.sh:ro
+    secrets:
+      - qa_postgres_backup_password
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U meddoc"]
       interval: 5s
@@ -134,12 +143,13 @@ services:
   # Invoke: docker compose -f docker-compose.qa.yml run --rm db-migrate
   db-migrate:
     image: ${QA_DB_MIGRATE_IMAGE:-meddoc-pro-db-migrate:latest}
+    profiles: ["migrations"]
     restart: "no"
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: *qa-db-url
+      DATABASE_URL: *qa-owner-db-url
     working_dir: /app/packages/db
     entrypoint: ["npx", "--no-install", "prisma"]
     command: ["migrate", "deploy"]
@@ -147,6 +157,8 @@ services:
   transcribe-md:
     image: ${QA_TRANSCRIBE_MD_IMAGE:-meddoc-pro-transcribe-md:latest}
     restart: "no"
+    cap_drop:
+      - ALL
     mem_limit: 512m
     cpus: "1.0"
     group_add:
@@ -159,9 +171,11 @@ services:
       minio-template-init:
         condition: service_completed_successfully
     environment:
-      DATABASE_URL: *qa-db-url
+      DATABASE_URL: *qa-runtime-db-url
       REDIS_URL: redis://redis:6379/15
       QUILLMD_SERVICE_ROLE: physician-app
+      QUILLMD_DATABASE_PRINCIPAL_PROFILE: synthetic-disposable-qa-v1
+      QUILLMD_AUTH_SESSION_VERIFIER_PROFILE: ""
       MFA_SECRET_ACTIVE_KEY_ID: ${QA_MFA_SECRET_ACTIVE_KEY_ID:?QA_MFA_SECRET_ACTIVE_KEY_ID is required}
       MFA_SECRET_KEYRING_FILE: ${QA_MFA_SECRET_KEYRING_FILE:?QA_MFA_SECRET_KEYRING_FILE is required}
       MFA_SECRET_LEGACY_READ_MODE: strict
@@ -175,6 +189,7 @@ services:
       ADMIN_SYNTHETIC_QA_SHARED_HOST_ATTESTATION: accepted-isolated-synthetic-qa-shared-host
       AUTH_SECRET: *qa-secret
       NEXTAUTH_SECRET: *qa-secret
+      AUTH_USE_MOCK: "${AUTH_USE_MOCK:-false}"
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: qa_minio
       MINIO_SECRET_KEY: qa_minio_pw
@@ -199,12 +214,12 @@ services:
       TEMPLATE_TWIN_KILL_SWITCH: "false"
       TEMPLATE_TWIN_MALWARE_SCANNER_SOCKET: /var/run/quillmd-clamav/clamd.sock
       TEMPLATE_TWIN_MALWARE_SCANNER_READINESS_FILE: /var/run/quillmd-clamav/readiness.json
-      # Authenticated synthetic staging UI. Both values default empty, so the
-      # UI and every server mutation remain unavailable unless a QA operator
-      # deliberately enables the dedicated Playwright profile.
+      # Authenticated synthetic staging UI. Resource identity is fixed to this
+      # disposable QA stack, but the enable flag defaults empty, so the UI and
+      # every staging mutation remain unavailable unless a QA operator opts in.
       TEMPLATE_TWIN_STAGING_QA_ENABLED: "${TEMPLATE_TWIN_STAGING_QA_ENABLED:-}"
-      TEMPLATE_TWIN_STAGING_QA_ENVIRONMENT: "${TEMPLATE_TWIN_STAGING_QA_ENVIRONMENT:-}"
-      TEMPLATE_TWIN_STAGING_QA_RESOURCE_ATTESTATION: "${TEMPLATE_TWIN_STAGING_QA_RESOURCE_ATTESTATION:-}"
+      TEMPLATE_TWIN_STAGING_QA_ENVIRONMENT: qa
+      TEMPLATE_TWIN_STAGING_QA_RESOURCE_ATTESTATION: isolated-disposable-qa-v1
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
       # E2E signups use reserved synthetic-only domains; auto-confirm needs BOTH the allowlist and
@@ -261,6 +276,8 @@ services:
   transcribe-md-worker:
     image: ${QA_TRANSCRIBE_MD_WORKER_IMAGE:-meddoc-pro-transcribe-md-worker:latest}
     restart: "no"
+    cap_drop:
+      - ALL
     mem_limit: 1g
     cpus: "1.0"
     depends_on:
@@ -273,7 +290,11 @@ services:
       minio-template-init:
         condition: service_completed_successfully
     environment:
-      DATABASE_URL: *qa-db-url
+      DATABASE_URL: *qa-runtime-db-url
+      NODE_ENV: production
+      QUILLMD_SERVICE_ROLE: transcribe-md-worker
+      QUILLMD_DATABASE_PRINCIPAL_PROFILE: synthetic-disposable-qa-v1
+      QUILLMD_AUTH_SESSION_VERIFIER_PROFILE: ""
       MFA_SECRET_ACTIVE_KEY_ID: ""
       MFA_SECRET_KEYRING_FILE: ""
       MFA_SECRET_LEGACY_READ_MODE: ""
@@ -303,8 +324,8 @@ services:
       TEMPLATE_TWIN_RUNTIME_MODE: standard
       TEMPLATE_TWIN_KILL_SWITCH: "false"
       TEMPLATE_TWIN_STAGING_QA_ENABLED: "${TEMPLATE_TWIN_STAGING_QA_ENABLED:-}"
-      TEMPLATE_TWIN_STAGING_QA_ENVIRONMENT: "${TEMPLATE_TWIN_STAGING_QA_ENVIRONMENT:-}"
-      TEMPLATE_TWIN_STAGING_QA_RESOURCE_ATTESTATION: "${TEMPLATE_TWIN_STAGING_QA_RESOURCE_ATTESTATION:-}"
+      TEMPLATE_TWIN_STAGING_QA_ENVIRONMENT: qa
+      TEMPLATE_TWIN_STAGING_QA_RESOURCE_ATTESTATION: isolated-disposable-qa-v1
       TRANSCRIBE_MD_WORKER_CONCURRENCY: "2"
       MOCK_AI_CALLS: "${MOCK_AI_CALLS:-true}"
       MOCK_TEMPLATE_TWIN_E2E: "${MOCK_TEMPLATE_TWIN_E2E:-}"
@@ -344,6 +365,10 @@ services:
       start_period: 20s
     ports:
       - "127.0.0.1:9010:3010"
+
+secrets:
+  qa_postgres_backup_password:
+    file: ${QA_DB_BACKUP_PASSWORD_FILE:?QA_DB_BACKUP_PASSWORD_FILE is required}
 
 volumes:
   qa_pgdata:

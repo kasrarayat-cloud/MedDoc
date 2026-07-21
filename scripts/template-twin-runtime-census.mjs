@@ -5,6 +5,22 @@ import process from "node:process";
 const EXPECTED_EPOCH = "template-twin-final-schema-v2";
 const MANAGED_LABEL = "com.quillmd.rollback-runtime-managed";
 const ARTIFACT_LABEL = "com.quillmd.rollback-runtime-artifact";
+const CAPABILITY_LABEL = "com.quillmd.rollback-runtime-capability";
+const EXPECTED_ROLLBACK_CAPABILITY = "six-runtime-v1";
+const deterministicProviderEnvironments = [
+  "MOCK_AI_CALLS",
+  "MOCK_TEMPLATE_TWIN_E2E",
+  "MOCK_TEMPLATE_PHI_FLAG",
+  "MOCK_RX_WARNINGS",
+];
+const inactiveSyntheticAuthEnvironments = new Map([
+  ["AUTH_USE_MOCK", "false"],
+  ["EMAIL_AUTO_CONFIRM_DOMAINS", ""],
+  ["EMAIL_AUTO_CONFIRM_ALLOW_IN_PROD", "false"],
+  ["RATE_LIMIT_DISABLED", "false"],
+  ["RATE_LIMIT_DISABLE_ALLOW_IN_PROD", "false"],
+]);
+const ADMIN_CONTROL_SESSION_VERIFIER_PROFILE = "template-twin-admin-control-v1";
 
 const expectedServices = new Map([
   ["transcribe-md", { artifact: "app", role: "physician-app" }],
@@ -16,7 +32,10 @@ const expectedServices = new Map([
     "template-twin-admin-control",
     { artifact: "app", role: "template-twin-admin-control" },
   ],
-  ["transcribe-md-worker", { artifact: "worker", role: null }],
+  [
+    "transcribe-md-worker",
+    { artifact: "worker", role: "transcribe-md-worker" },
+  ],
   [
     "template-twin-audit-dispatcher",
     { artifact: "worker", role: "template-twin-audit-dispatcher" },
@@ -100,7 +119,9 @@ const discovered = Object.entries(services)
   .sort();
 const expectedNames = [...expectedServices.keys()].sort();
 if (JSON.stringify(discovered) !== JSON.stringify(expectedNames)) {
-  fail("same-artifact service census drifted from the reviewed six-service set");
+  fail(
+    "same-artifact service census drifted from the reviewed six-service set",
+  );
 }
 
 for (const [name, expected] of expectedServices) {
@@ -123,15 +144,17 @@ for (const [name, expected] of expectedServices) {
     fail(`${name} has an unexpected service role`);
   }
   if (
-    environment.QUILLMD_REQUIRED_RUNTIME_PROTOCOL_EPOCH !== EXPECTED_EPOCH
+    environment.QUILLMD_DATABASE_PRINCIPAL_PROFILE !== "exact-production-v1"
   ) {
+    fail(`${name} lacks the exact production database-principal profile`);
+  }
+  if (environment.QUILLMD_REQUIRED_RUNTIME_PROTOCOL_EPOCH !== EXPECTED_EPOCH) {
     fail(`${name} lacks the required runtime protocol epoch`);
   }
   if (
-    ![
-      "${TEMPLATE_TWIN_RUNTIME_MODE:-standard}",
-      "rollback-compat-v2",
-    ].includes(environment.TEMPLATE_TWIN_RUNTIME_MODE)
+    !["${TEMPLATE_TWIN_RUNTIME_MODE:-standard}", "rollback-compat-v2"].includes(
+      environment.TEMPLATE_TWIN_RUNTIME_MODE,
+    )
   ) {
     fail(`${name} has an unexpected runtime mode contract`);
   }
@@ -141,6 +164,26 @@ for (const [name, expected] of expectedServices) {
     )
   ) {
     fail(`${name} has an unexpected kill-switch contract`);
+  }
+  for (const key of deterministicProviderEnvironments) {
+    if (environment[key] !== "false") {
+      fail(`${name} does not force ${key} off`);
+    }
+  }
+  for (const [key, expectedValue] of inactiveSyntheticAuthEnvironments) {
+    if (environment[key] !== expectedValue) {
+      fail(`${name} does not force ${key} to its production-safe value`);
+    }
+  }
+  const expectedSessionVerifier =
+    expected.role === "template-twin-admin-control"
+      ? ADMIN_CONTROL_SESSION_VERIFIER_PROFILE
+      : "";
+  if (
+    environment.QUILLMD_AUTH_SESSION_VERIFIER_PROFILE !==
+    expectedSessionVerifier
+  ) {
+    fail(`${name} has an unexpected authentication session-verifier profile`);
   }
   if (expectedAppImage !== null) {
     const expectedImage =
@@ -155,6 +198,12 @@ for (const [name, expected] of expectedServices) {
       environment.TEMPLATE_TWIN_KILL_SWITCH !== "true")
   ) {
     fail(`${name} does not resolve to the fail-closed rollback state`);
+  }
+  if (
+    requireBridge &&
+    labels[CAPABILITY_LABEL] !== EXPECTED_ROLLBACK_CAPABILITY
+  ) {
+    fail(`${name} lacks the reviewed six-runtime rollback capability`);
   }
   if (requireBridge) {
     for (const attestationEnvironment of [

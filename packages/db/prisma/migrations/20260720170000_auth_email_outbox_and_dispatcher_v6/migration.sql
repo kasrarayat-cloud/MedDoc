@@ -138,24 +138,169 @@ CREATE INDEX "auth_email_outbox_change_authority_idx"
 CREATE INDEX "auth_email_outbox_purge_after_idx"
   ON "auth_email_outbox" ("purgeAfter");
 
+-- Roles are cluster principals and must be provisioned out of band before a
+-- data-bearing migration. Validate the complete expected graph, including the
+-- absence of every outgoing edge from a trusted NOLOGIN boundary. A direct
+-- login -> boundary grant is unsafe if that boundary inherits another role,
+-- and no other principal may inherit or SET ROLE to a trusted LOGIN role. The
+-- separately provisioned release-security login is allowed to be absent or to
+-- have its sole exact login -> boundary edge.
+-- PostgreSQL 16 records direct ownership, ACL, default-ACL, policy, and other
+-- role-to-object dependencies in pg_shdepend. Role and database settings live
+-- separately in pg_db_role_setting/rolconfig. A trusted LOGIN must have none;
+-- permissions belong only on its reviewed NOLOGIN boundary.
+CREATE OR REPLACE FUNCTION pg_temp.quillmd_login_has_direct_authority(
+  principal_oid OID
+)
+RETURNS BOOLEAN LANGUAGE sql STABLE
+SET search_path = pg_catalog
+AS $direct_authority$
+  SELECT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_shdepend dependency
+    WHERE dependency.refclassid =
+        'pg_catalog.pg_authid'::pg_catalog.regclass
+      AND dependency.refobjid = principal_oid
+  ) OR EXISTS (
+    SELECT 1 FROM pg_catalog.pg_db_role_setting setting
+    WHERE setting.setrole = principal_oid
+  ) OR EXISTS (
+    SELECT 1 FROM pg_catalog.pg_roles role
+    WHERE role.oid = principal_oid AND role.rolconfig IS NOT NULL
+  );
+$direct_authority$;
+
 DO $roles$
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_roles WHERE rolname = 'quillmd_auth_email_dispatcher'
-  ) THEN
-    CREATE ROLE quillmd_auth_email_dispatcher
-      NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT
-      NOREPLICATION NOBYPASSRLS;
-  END IF;
-  IF EXISTS (
-    SELECT 1 FROM pg_roles
-    WHERE rolname = 'quillmd_auth_email_dispatcher'
-      AND (
-        rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole OR rolinherit
-        OR rolreplication OR rolbypassrls
+  IF (
+    SELECT COUNT(*) FROM pg_catalog.pg_roles
+    WHERE rolname IN (
+      'quillmd_runtime', 'quillmd_release_control',
+      'quillmd_release_security', 'quillmd_audit_dispatcher',
+      'quillmd_auth_email_dispatcher'
+    )
+      AND rolcanlogin = FALSE AND rolsuper = FALSE
+      AND rolcreatedb = FALSE AND rolcreaterole = FALSE
+      AND rolinherit = FALSE AND rolreplication = FALSE
+      AND rolbypassrls = FALSE AND rolconnlimit = -1
+      AND rolvaliduntil IS NULL AND rolconfig IS NULL
+  ) <> 5 OR (
+    SELECT COUNT(*) FROM pg_catalog.pg_roles
+    WHERE rolname IN (
+      'meddoc_runtime', 'meddoc_release_control',
+      'meddoc_audit_dispatcher', 'meddoc_auth_email_dispatcher'
+    )
+      AND rolcanlogin = TRUE AND rolsuper = FALSE
+      AND rolcreatedb = FALSE AND rolcreaterole = FALSE
+      AND rolinherit = TRUE AND rolreplication = FALSE
+      AND rolbypassrls = FALSE AND rolconnlimit = -1
+      AND rolvaliduntil IS NULL
+  ) <> 4 OR (
+    SELECT COUNT(*) FROM pg_catalog.pg_roles
+    WHERE rolname = 'meddoc_release_security'
+      AND rolcanlogin = TRUE AND rolsuper = FALSE
+      AND rolcreatedb = FALSE AND rolcreaterole = FALSE
+      AND rolinherit = TRUE AND rolreplication = FALSE
+      AND rolbypassrls = FALSE AND rolconnlimit = -1
+      AND rolvaliduntil IS NULL
+  ) <> (
+    SELECT COUNT(*) FROM pg_catalog.pg_roles
+    WHERE rolname = 'meddoc_release_security'
+  ) OR EXISTS (
+    SELECT 1
+    FROM (
+      VALUES
+        ('meddoc_runtime', 'quillmd_runtime'),
+        ('meddoc_release_control', 'quillmd_release_control'),
+        ('meddoc_audit_dispatcher', 'quillmd_audit_dispatcher'),
+        ('meddoc_auth_email_dispatcher', 'quillmd_auth_email_dispatcher')
+    ) AS expected(member_name, boundary_name)
+    LEFT JOIN pg_catalog.pg_roles member_role
+      ON member_role.rolname = expected.member_name
+    LEFT JOIN pg_catalog.pg_roles boundary_role
+      ON boundary_role.rolname = expected.boundary_name
+    WHERE (
+      SELECT COUNT(*)
+      FROM pg_catalog.pg_auth_members membership
+      JOIN pg_catalog.pg_roles grantor
+        ON grantor.oid = membership.grantor
+      WHERE membership.member = member_role.oid
+        AND membership.roleid = boundary_role.oid
+        AND membership.admin_option = FALSE
+        AND membership.inherit_option = TRUE
+        AND membership.set_option = FALSE
+        AND grantor.rolsuper = TRUE
+    ) <> 1
+  ) OR (
+    EXISTS (
+      SELECT 1 FROM pg_catalog.pg_roles
+      WHERE rolname = 'meddoc_release_security'
+    ) AND (
+      SELECT COUNT(*)
+      FROM pg_catalog.pg_auth_members membership
+      JOIN pg_catalog.pg_roles member_role
+        ON member_role.oid = membership.member
+      JOIN pg_catalog.pg_roles granted_role
+        ON granted_role.oid = membership.roleid
+      JOIN pg_catalog.pg_roles grantor
+        ON grantor.oid = membership.grantor
+      WHERE member_role.rolname = 'meddoc_release_security'
+        AND granted_role.rolname = 'quillmd_release_security'
+        AND membership.admin_option = FALSE
+        AND membership.inherit_option = TRUE
+        AND membership.set_option = FALSE
+        AND grantor.rolsuper = TRUE
+    ) <> 1
+  ) OR EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_auth_members membership
+    JOIN pg_catalog.pg_roles member_role
+      ON member_role.oid = membership.member
+    JOIN pg_catalog.pg_roles granted_role
+      ON granted_role.oid = membership.roleid
+    JOIN pg_catalog.pg_roles grantor
+      ON grantor.oid = membership.grantor
+    WHERE (
+      member_role.rolname IN (
+        'meddoc_runtime', 'meddoc_release_control',
+        'meddoc_release_security', 'meddoc_audit_dispatcher',
+        'meddoc_auth_email_dispatcher',
+        'quillmd_runtime', 'quillmd_release_control',
+        'quillmd_release_security', 'quillmd_audit_dispatcher',
+        'quillmd_auth_email_dispatcher'
+      ) OR granted_role.rolname IN (
+        'meddoc_runtime', 'meddoc_release_control',
+        'meddoc_release_security', 'meddoc_audit_dispatcher',
+        'meddoc_auth_email_dispatcher',
+        'quillmd_runtime', 'quillmd_release_control',
+        'quillmd_release_security', 'quillmd_audit_dispatcher',
+        'quillmd_auth_email_dispatcher'
       )
+    ) AND (
+      membership.admin_option = TRUE
+      OR membership.inherit_option = FALSE
+      OR membership.set_option = TRUE
+      OR grantor.rolsuper = FALSE OR NOT (
+        (member_role.rolname = 'meddoc_runtime'
+          AND granted_role.rolname = 'quillmd_runtime')
+        OR (member_role.rolname = 'meddoc_release_control'
+          AND granted_role.rolname = 'quillmd_release_control')
+        OR (member_role.rolname = 'meddoc_audit_dispatcher'
+          AND granted_role.rolname = 'quillmd_audit_dispatcher')
+        OR (member_role.rolname = 'meddoc_auth_email_dispatcher'
+          AND granted_role.rolname = 'quillmd_auth_email_dispatcher')
+        OR (member_role.rolname = 'meddoc_release_security'
+          AND granted_role.rolname = 'quillmd_release_security')
+      )
+    )
+  ) OR EXISTS (
+    SELECT 1 FROM pg_catalog.pg_roles login_role
+    WHERE login_role.rolname IN (
+      'meddoc_runtime', 'meddoc_release_control',
+      'meddoc_release_security', 'meddoc_audit_dispatcher',
+      'meddoc_auth_email_dispatcher'
+    ) AND pg_temp.quillmd_login_has_direct_authority(login_role.oid)
   ) THEN
-    RAISE EXCEPTION 'Refusing non-exact auth email dispatcher role';
+    RAISE EXCEPTION 'Refusing non-exact auth email dispatcher database role graph';
   END IF;
 END
 $roles$;

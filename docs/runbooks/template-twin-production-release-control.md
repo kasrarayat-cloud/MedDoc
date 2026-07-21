@@ -144,25 +144,39 @@ any admin-host route targeting `transcribe-md` is a deployment blocker.
 
 ## Database privileges
 
-The hardening migration deliberately refuses to run unless these exact
-principals already exist with the expected attributes and memberships:
+The hardening migrations deliberately refuse to run unless these exact
+principal attributes and graph edges are present:
 
 - NOLOGIN/NOINHERIT groups: `quillmd_runtime`,
   `quillmd_release_control`, `quillmd_release_security`, and
   `quillmd_audit_dispatcher`, plus `quillmd_auth_email_dispatcher`;
-- LOGIN/INHERIT principals with exactly one membership each:
+- required LOGIN/INHERIT principals with exactly one membership each:
   `meddoc_runtime` → `quillmd_runtime`, `meddoc_release_control` →
-  `quillmd_release_control`, `meddoc_release_security` →
-  `quillmd_release_security`, and `meddoc_audit_dispatcher` →
-  `quillmd_audit_dispatcher`, plus `meddoc_auth_email_dispatcher` →
-  `quillmd_auth_email_dispatcher`.
+  `quillmd_release_control`, `meddoc_audit_dispatcher` →
+  `quillmd_audit_dispatcher`, and `meddoc_auth_email_dispatcher` →
+  `quillmd_auth_email_dispatcher`; and
+- one optional lifecycle principal, `meddoc_release_security` →
+  `quillmd_release_security`. It may be absent during initial migrations. If
+  already provisioned on a data-bearing upgrade, its attributes and sole edge
+  must be exact.
+
+Every permitted membership is `ADMIN FALSE, INHERIT TRUE, SET FALSE`. No
+trusted NOLOGIN boundary may itself be a member of another role, no unexpected
+principal may be a member of a boundary, no trusted login may have an extra
+membership, and no principal may be a member of a trusted login. Both
+dispatcher processes additionally require `session_user = current_user =` the
+expected dedicated login at startup, so a broader authenticated principal
+cannot enter with `SET ROLE` and later `RESET ROLE`.
 
 For a brand-new database, supply four distinct generated credentials to
 `infra/postgres/init-template-twin-roles.sh` through the container secret
 environment before first initialization. An existing production data volume
 does not rerun entrypoint initialization: a database administrator must apply
-the same reviewed role-provisioning block before `prisma migrate deploy`, then
-verify attributes and exact membership without recording credential values.
+the same reviewed role-provisioning block before `prisma migrate deploy`,
+including re-granting the four required edges with explicit `ADMIN FALSE,
+INHERIT TRUE, SET FALSE`. Verify the complete incoming and outgoing graph
+without recording credential values. A legacy default `SET TRUE` grant is a
+migration blocker even when its role names look correct.
 
 After all production-control migrations have committed, provision the fifth,
 procedure-only security login with
@@ -171,8 +185,10 @@ credential through `DB_RELEASE_SECURITY_PASSWORD` and the normal protected
 `PG*` connection environment; never put either password on a command line or
 in evidence. This step intentionally follows migration v2, whose precondition
 verifies the original three-login boundary before v3 makes authority revocation
-operational. The release-control PostgreSQL proof must pass only after the
-fourth login and its exact single membership exist.
+operational. If it already exists during a later data-bearing upgrade, the
+migrations accept only its exact attributes and `ADMIN FALSE, INHERIT TRUE,
+SET FALSE` edge. The release-control PostgreSQL proof must pass only after the
+security login and its exact single membership exist.
 
 The migration itself installs the least-privilege grants. Runtime cannot read
 control receipts or mutate immutable evidence. Release control cannot read
@@ -180,6 +196,15 @@ attestation keys/session secrets or dispatch audit rows. The dispatcher cannot
 mutate rollout state. Capability, action, coupling, and metric receipts are
 transaction/backend-bound and immutable. Do not add application grants in an
 operations hotfix; any privilege change requires a new reviewed migration.
+
+The corrected v4/v5/v6 migrations were unpublished and never authorized for
+production before this hardening. Their checksums intentionally differ from
+the earlier e7-era disposable/staging copies. Any synthetic or disposable
+database that applied an older checksum is invalidated and must be destroyed
+and rebuilt from the accepted history. Never edit `_prisma_migrations`, copy a
+checksum, or add a post-side-effect guard that falsely represents these
+preconditions as having run. The supported data-bearing rehearsal begins from
+an authentic pre-v4/pre-v5/pre-v6 boundary and applies the corrected history.
 
 ## Human authority assignment
 

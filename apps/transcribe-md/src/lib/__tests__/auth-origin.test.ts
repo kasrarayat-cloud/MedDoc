@@ -9,6 +9,8 @@ import {
 } from "../auth-origin";
 import { ADMIN_SYNTHETIC_QA_SHARED_HOST_ATTESTATION } from "../admin-host";
 
+const SYNTHETIC_QA_DATABASE_CREDENTIAL = "s".repeat(43);
+
 const physician = {
   NODE_ENV: "production",
   QUILLMD_SERVICE_ROLE: "physician-app",
@@ -85,11 +87,21 @@ describe("production authentication origin startup gate", () => {
     const qa = {
       NODE_ENV: "production" as const,
       QUILLMD_SERVICE_ROLE: "physician-app",
+      QUILLMD_DATABASE_PRINCIPAL_PROFILE: "synthetic-disposable-qa-v1",
+      TEMPLATE_TWIN_STAGING_QA_ENVIRONMENT: "qa",
+      TEMPLATE_TWIN_STAGING_QA_RESOURCE_ATTESTATION:
+        "isolated-disposable-qa-v1",
       AUTH_URL: SYNTHETIC_QA_PHYSICIAN_ORIGIN,
       NEXTAUTH_URL: SYNTHETIC_QA_PHYSICIAN_ORIGIN,
       ADMIN_PUBLIC_HOST: "localhost",
       PHYSICIAN_PUBLIC_HOST: "localhost",
       TEMPLATE_TWIN_STORAGE_PROFILE: "qa",
+      DATABASE_URL: `postgresql://meddoc_runtime:${SYNTHETIC_QA_DATABASE_CREDENTIAL}@postgres:5432/meddoc_qa_test?schema=public&options=-c%20search_path%3Dpg_catalog%2Cpublic`,
+      REDIS_URL: "redis://redis:6379/15",
+      MINIO_ENDPOINT: "minio:9000",
+      MINIO_USE_SSL: "false",
+      TRANSCRIBE_MD_MINIO_BUCKET: "transcribe-md-audio-qa",
+      TRANSCRIBE_MD_TEMPLATE_BUCKET: "transcribe-md-template-artifacts-qa",
       ADMIN_SYNTHETIC_QA_SHARED_HOST_ATTESTATION:
         ADMIN_SYNTHETIC_QA_SHARED_HOST_ATTESTATION,
     };

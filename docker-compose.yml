@@ -12,13 +12,16 @@
 #                   requests from localhost will NOT carry X-Forwarded-For
 #                   and the admin UI will show "--" for the IP. Expected.)
 
+name: meddoc-pro
+
 services:
   # ── PostgreSQL Database ──
   postgres:
-    # T-M14.1: pgvector/pgvector:pg16 is the stock postgres:16 image
+    # T-M14.1: reviewed PostgreSQL 16.13 + pgvector image. Keep this digest
+    # aligned with the exact database-principal catalog manifest.
     # with the `vector` extension compiled in. Same PG 16 major → same
     # on-disk format → the existing `pgdata` volume mounts unchanged.
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:pg16@sha256:7d400e340efb42f4d8c9c12c6427adb253f726881a9985d2a471bf0eed824dff
     restart: unless-stopped
     # Phase 13 — H4: non-root containers. The pgvector image's
     # `postgres` user is uid 999 and the data dir was already owned
@@ -48,6 +51,7 @@ services:
       DB_RELEASE_CONTROL_PASSWORD: ${DB_RELEASE_CONTROL_PASSWORD:?DB_RELEASE_CONTROL_PASSWORD is required}
       DB_AUDIT_DISPATCHER_PASSWORD: ${DB_AUDIT_DISPATCHER_PASSWORD:?DB_AUDIT_DISPATCHER_PASSWORD is required}
       DB_AUTH_EMAIL_DISPATCHER_PASSWORD: ${DB_AUTH_EMAIL_DISPATCHER_PASSWORD:?DB_AUTH_EMAIL_DISPATCHER_PASSWORD is required}
+      DB_BACKUP_PASSWORD_FILE: /run/secrets/postgres_backup_password
       # Phase 6.1 (h8): PGDATA points at a subdir of the LUKS-encrypted
       # mount because ext4's `lost+found` at the mount root blocks
       # initdb. Standard postgres-image pattern when bind-mounting an
@@ -65,6 +69,9 @@ services:
     volumes:
       - /mnt/pgdata-encrypted:/var/lib/postgresql/data
       - ./infra/postgres/init-template-twin-roles.sh:/docker-entrypoint-initdb.d/20-template-twin-roles.sh:ro
+      - ./infra/postgres/provision-postgres-backup-principal.sh:/opt/quillmd/provision-postgres-backup-principal.sh:ro
+    secrets:
+      - postgres_backup_password
     ports:
       - "127.0.0.1:5432:5432" # only accessible from localhost
     healthcheck:
@@ -75,6 +82,7 @@ services:
     networks:
       - default
       - auth_email_database
+      - backup_database
 
   # ── Next.js App (MedDoc Pro) ──
   meddoc-pro:
@@ -119,7 +127,12 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql://meddoc_runtime:${DB_RUNTIME_PASSWORD:?DB_RUNTIME_PASSWORD is required}@postgres:5432/meddoc?schema=public
+      DATABASE_URL: "postgresql://meddoc_runtime:${DB_RUNTIME_PASSWORD:?DB_RUNTIME_PASSWORD is required}@postgres:5432/meddoc?schema=public&options=-c%20search_path%3Dpg_catalog%2Cpublic"
+      NODE_ENV: production
+      QUILLMD_SERVICE_ROLE: meddoc-pro-app
+      QUILLMD_DATABASE_PRINCIPAL_PROFILE: exact-production-v1
+      QUILLMD_AUTH_SESSION_VERIFIER_PROFILE: ""
+      AUTH_USE_MOCK: "false"
       DB_PASSWORD: ""
       DB_RUNTIME_PASSWORD: ""
       DB_RELEASE_CONTROL_PASSWORD: ""
@@ -127,6 +140,7 @@ services:
       TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL: ""
       DB_AUDIT_DISPATCHER_PASSWORD: ""
       DB_AUTH_EMAIL_DISPATCHER_PASSWORD: ""
+      DB_BACKUP_PASSWORD_FILE: ""
       MFA_SECRET_ACTIVE_KEY_ID: ""
       MFA_SECRET_KEYRING_FILE: ""
       MFA_SECRET_LEGACY_READ_MODE: ""
@@ -471,7 +485,11 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql://meddoc_runtime:${DB_RUNTIME_PASSWORD:?DB_RUNTIME_PASSWORD is required}@postgres:5432/meddoc?schema=public
+      DATABASE_URL: "postgresql://meddoc_runtime:${DB_RUNTIME_PASSWORD:?DB_RUNTIME_PASSWORD is required}@postgres:5432/meddoc?schema=public&options=-c%20search_path%3Dpg_catalog%2Cpublic"
+      NODE_ENV: production
+      QUILLMD_SERVICE_ROLE: transcribe-md-worker
+      QUILLMD_DATABASE_PRINCIPAL_PROFILE: exact-production-v1
+      QUILLMD_AUTH_SESSION_VERIFIER_PROFILE: ""
       DB_PASSWORD: ""
       DB_RUNTIME_PASSWORD: ""
       DB_RELEASE_CONTROL_PASSWORD: ""
@@ -479,6 +497,7 @@ services:
       TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL: ""
       DB_AUDIT_DISPATCHER_PASSWORD: ""
       DB_AUTH_EMAIL_DISPATCHER_PASSWORD: ""
+      DB_BACKUP_PASSWORD_FILE: ""
       MFA_SECRET_ACTIVE_KEY_ID: ""
       MFA_SECRET_KEYRING_FILE: ""
       MFA_SECRET_LEGACY_READ_MODE: ""
@@ -511,12 +530,17 @@ services:
       CLAUDE_SONNET_46_OUTPUT_CENTS_PER_M: ${CLAUDE_SONNET_46_OUTPUT_CENTS_PER_M:-1500}
       DEEPGRAM_COST_PER_MIN_CENTS: ${DEEPGRAM_COST_PER_MIN_CENTS:-1.45}
       TRANSCRIBE_MD_WORKER_CONCURRENCY: ${TRANSCRIBE_MD_WORKER_CONCURRENCY:-2}
-      # T-M10: when set to "true", every @meddoc/ai call (modelClient,
-      # deepgramBatchTranscribe) returns a canned fixture instead of
-      # hitting the provider. Used by the Playwright E2E suite so
-      # pipeline runs complete in ~1-2 sec. Default "false" — never
-      # touch this in a production deployment.
-      MOCK_AI_CALLS: ${MOCK_AI_CALLS:-false}
+      # Production cannot inherit deterministic provider/test fixtures from
+      # the wholesale env_file. The isolated QA Compose owns its exceptions.
+      MOCK_AI_CALLS: "false"
+      MOCK_TEMPLATE_TWIN_E2E: "false"
+      MOCK_TEMPLATE_PHI_FLAG: "false"
+      MOCK_RX_WARNINGS: "false"
+      AUTH_USE_MOCK: "false"
+      EMAIL_AUTO_CONFIRM_DOMAINS: ""
+      EMAIL_AUTO_CONFIRM_ALLOW_IN_PROD: "false"
+      RATE_LIMIT_DISABLED: "false"
+      RATE_LIMIT_DISABLE_ALLOW_IN_PROD: "false"
       # T-M12: scheduled MinIO orphan cleanup. DISABLED by default;
       # flip ENABLED=true in .env when ops is ready. First production
       # run should stay in DRY_RUN mode (the default when enabled)
@@ -582,13 +606,16 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://meddoc_audit_dispatcher:${DB_AUDIT_DISPATCHER_PASSWORD:?DB_AUDIT_DISPATCHER_PASSWORD is required}@postgres:5432/meddoc?schema=public
+      DATABASE_URL: "postgresql://meddoc_audit_dispatcher:${DB_AUDIT_DISPATCHER_PASSWORD:?DB_AUDIT_DISPATCHER_PASSWORD is required}@postgres:5432/meddoc?schema=public&options=-c%20search_path%3Dpg_catalog%2Cpublic"
       DB_AUDIT_DISPATCHER_PASSWORD: ""
       DB_AUTH_EMAIL_DISPATCHER_PASSWORD: ""
       DB_RELEASE_CONTROL_PASSWORD: ""
       DB_RELEASE_SECURITY_PASSWORD: ""
       TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL: ""
+      DB_BACKUP_PASSWORD_FILE: ""
       QUILLMD_SERVICE_ROLE: template-twin-audit-dispatcher
+      QUILLMD_DATABASE_PRINCIPAL_PROFILE: exact-production-v1
+      QUILLMD_AUTH_SESSION_VERIFIER_PROFILE: ""
       MFA_SECRET_ACTIVE_KEY_ID: ""
       MFA_SECRET_KEYRING_FILE: ""
       MFA_SECRET_LEGACY_READ_MODE: ""
@@ -598,6 +625,15 @@ services:
       QUILLMD_REQUIRED_RUNTIME_PROTOCOL_EPOCH: template-twin-final-schema-v2
       TEMPLATE_TWIN_RUNTIME_MODE: ${TEMPLATE_TWIN_RUNTIME_MODE:-standard}
       TEMPLATE_TWIN_KILL_SWITCH: ${TEMPLATE_TWIN_KILL_SWITCH:-true}
+      MOCK_AI_CALLS: "false"
+      MOCK_TEMPLATE_TWIN_E2E: "false"
+      MOCK_TEMPLATE_PHI_FLAG: "false"
+      MOCK_RX_WARNINGS: "false"
+      AUTH_USE_MOCK: "false"
+      EMAIL_AUTO_CONFIRM_DOMAINS: ""
+      EMAIL_AUTO_CONFIRM_ALLOW_IN_PROD: "false"
+      RATE_LIMIT_DISABLED: "false"
+      RATE_LIMIT_DISABLE_ALLOW_IN_PROD: "false"
       NPM_CONFIG_CACHE: /tmp/.npm
       NODE_ENV: production
     # A successful empty or non-empty drain writes the heartbeat. Failed or
@@ -649,8 +685,10 @@ services:
         condition: service_healthy
     env_file: []
     environment:
-      DATABASE_URL: postgresql://meddoc_auth_email_dispatcher:${DB_AUTH_EMAIL_DISPATCHER_PASSWORD:?DB_AUTH_EMAIL_DISPATCHER_PASSWORD is required}@postgres:5432/meddoc?schema=public
+      DATABASE_URL: "postgresql://meddoc_auth_email_dispatcher:${DB_AUTH_EMAIL_DISPATCHER_PASSWORD:?DB_AUTH_EMAIL_DISPATCHER_PASSWORD is required}@postgres:5432/meddoc?schema=public&options=-c%20search_path%3Dpg_catalog%2Cpublic"
       QUILLMD_SERVICE_ROLE: auth-email-dispatcher
+      QUILLMD_DATABASE_PRINCIPAL_PROFILE: exact-production-v1
+      QUILLMD_AUTH_SESSION_VERIFIER_PROFILE: ""
       DB_PASSWORD: ""
       DB_RUNTIME_PASSWORD: ""
       DB_RELEASE_CONTROL_PASSWORD: ""
@@ -658,6 +696,7 @@ services:
       DB_AUDIT_DISPATCHER_PASSWORD: ""
       DB_AUTH_EMAIL_DISPATCHER_PASSWORD: ""
       TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL: ""
+      DB_BACKUP_PASSWORD_FILE: ""
       AUTH_SECRET: ""
       MFA_SECRET_ACTIVE_KEY_ID: ""
       MFA_SECRET_KEYRING_FILE: ""
@@ -680,6 +719,15 @@ services:
       QUILLMD_REQUIRED_RUNTIME_PROTOCOL_EPOCH: template-twin-final-schema-v2
       TEMPLATE_TWIN_RUNTIME_MODE: ${TEMPLATE_TWIN_RUNTIME_MODE:-standard}
       TEMPLATE_TWIN_KILL_SWITCH: ${TEMPLATE_TWIN_KILL_SWITCH:-true}
+      MOCK_AI_CALLS: "false"
+      MOCK_TEMPLATE_TWIN_E2E: "false"
+      MOCK_TEMPLATE_PHI_FLAG: "false"
+      MOCK_RX_WARNINGS: "false"
+      AUTH_USE_MOCK: "false"
+      EMAIL_AUTO_CONFIRM_DOMAINS: ""
+      EMAIL_AUTO_CONFIRM_ALLOW_IN_PROD: "false"
+      RATE_LIMIT_DISABLED: "false"
+      RATE_LIMIT_DISABLE_ALLOW_IN_PROD: "false"
       NPM_CONFIG_CACHE: /tmp/.npm
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
@@ -788,8 +836,10 @@ services:
       - clamav_socket:/var/run/quillmd-clamav:ro
       - ${MFA_SECRET_KEYRING_FILE:?MFA_SECRET_KEYRING_FILE is required}:${MFA_SECRET_KEYRING_FILE:?MFA_SECRET_KEYRING_FILE is required}:ro
     environment: &transcribe_md_app_environment
-      DATABASE_URL: postgresql://meddoc_runtime:${DB_RUNTIME_PASSWORD:?DB_RUNTIME_PASSWORD is required}@postgres:5432/meddoc?schema=public
+      DATABASE_URL: "postgresql://meddoc_runtime:${DB_RUNTIME_PASSWORD:?DB_RUNTIME_PASSWORD is required}@postgres:5432/meddoc?schema=public&options=-c%20search_path%3Dpg_catalog%2Cpublic"
       QUILLMD_SERVICE_ROLE: physician-app
+      QUILLMD_DATABASE_PRINCIPAL_PROFILE: exact-production-v1
+      QUILLMD_AUTH_SESSION_VERIFIER_PROFILE: ""
       MFA_SECRET_ACTIVE_KEY_ID: ${MFA_SECRET_ACTIVE_KEY_ID:?MFA_SECRET_ACTIVE_KEY_ID is required}
       MFA_SECRET_KEYRING_FILE: ${MFA_SECRET_KEYRING_FILE:?MFA_SECRET_KEYRING_FILE is required}
       MFA_SECRET_LEGACY_READ_MODE: ${MFA_SECRET_LEGACY_READ_MODE:-strict}
@@ -802,6 +852,7 @@ services:
       TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL: ""
       DB_AUDIT_DISPATCHER_PASSWORD: ""
       DB_AUTH_EMAIL_DISPATCHER_PASSWORD: ""
+      DB_BACKUP_PASSWORD_FILE: ""
       AUTH_URL: ${TRANSCRIBE_MD_AUTH_URL:-https://app.quillmd.com}
       NEXTAUTH_URL: ${TRANSCRIBE_MD_AUTH_URL:-https://app.quillmd.com}
       AUTH_COOKIE_DOMAIN: ${AUTH_COOKIE_DOMAIN:-}
@@ -815,6 +866,9 @@ services:
       RATE_LIMIT_DISABLED: "false"
       RATE_LIMIT_DISABLE_ALLOW_IN_PROD: "false"
       MOCK_AI_CALLS: "false"
+      MOCK_TEMPLATE_TWIN_E2E: "false"
+      MOCK_TEMPLATE_PHI_FLAG: "false"
+      MOCK_RX_WARNINGS: "false"
       ADMIN_PUBLIC_HOST: ${ADMIN_PUBLIC_HOST:-admin.quillmd.com}
       PHYSICIAN_PUBLIC_HOST: ${PHYSICIAN_PUBLIC_HOST:-app.quillmd.com}
       NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL: ${TRANSCRIBE_MD_AUTH_URL:-https://app.quillmd.com}
@@ -877,8 +931,10 @@ services:
       - ${MFA_SECRET_KEYRING_FILE:?MFA_SECRET_KEYRING_FILE is required}:${MFA_SECRET_KEYRING_FILE:?MFA_SECRET_KEYRING_FILE is required}:ro
     ports: []
     environment:
-      DATABASE_URL: postgresql://meddoc_runtime:${DB_RUNTIME_PASSWORD:?DB_RUNTIME_PASSWORD is required}@postgres:5432/meddoc?schema=public
+      DATABASE_URL: "postgresql://meddoc_runtime:${DB_RUNTIME_PASSWORD:?DB_RUNTIME_PASSWORD is required}@postgres:5432/meddoc?schema=public&options=-c%20search_path%3Dpg_catalog%2Cpublic"
       QUILLMD_SERVICE_ROLE: template-twin-admin-app
+      QUILLMD_DATABASE_PRINCIPAL_PROFILE: exact-production-v1
+      QUILLMD_AUTH_SESSION_VERIFIER_PROFILE: ""
       MFA_SECRET_ACTIVE_KEY_ID: ${MFA_SECRET_ACTIVE_KEY_ID:?MFA_SECRET_ACTIVE_KEY_ID is required}
       MFA_SECRET_KEYRING_FILE: ${MFA_SECRET_KEYRING_FILE:?MFA_SECRET_KEYRING_FILE is required}
       MFA_SECRET_LEGACY_READ_MODE: ${MFA_SECRET_LEGACY_READ_MODE:-strict}
@@ -891,6 +947,7 @@ services:
       TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL: ""
       DB_AUDIT_DISPATCHER_PASSWORD: ""
       DB_AUTH_EMAIL_DISPATCHER_PASSWORD: ""
+      DB_BACKUP_PASSWORD_FILE: ""
       AUTH_URL: ${TEMPLATE_TWIN_ADMIN_APP_AUTH_URL:-https://admin.quillmd.com}
       NEXTAUTH_URL: ${TEMPLATE_TWIN_ADMIN_APP_AUTH_URL:-https://admin.quillmd.com}
       AUTH_SECRET: ${AUTH_SECRET:-}
@@ -923,9 +980,15 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       RESEND_FROM: ${RESEND_FROM:-}
       RESEND_FROM_VERIFIED: ${RESEND_FROM_VERIFIED:-false}
+      AUTH_USE_MOCK: "false"
       EMAIL_AUTO_CONFIRM_DOMAINS: ""
+      EMAIL_AUTO_CONFIRM_ALLOW_IN_PROD: "false"
       MOCK_AI_CALLS: "false"
+      MOCK_TEMPLATE_TWIN_E2E: "false"
+      MOCK_TEMPLATE_PHI_FLAG: "false"
+      MOCK_RX_WARNINGS: "false"
       RATE_LIMIT_DISABLED: "false"
+      RATE_LIMIT_DISABLE_ALLOW_IN_PROD: "false"
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
       APP_VERSION: ${APP_VERSION:-}
@@ -957,20 +1020,23 @@ services:
     group_add: []
     volumes: []
     environment:
-      DATABASE_URL: postgresql://meddoc_release_control:${DB_RELEASE_CONTROL_PASSWORD:?DB_RELEASE_CONTROL_PASSWORD is required}@postgres:5432/meddoc?schema=public
+      DATABASE_URL: "postgresql://meddoc_release_control:${DB_RELEASE_CONTROL_PASSWORD:?DB_RELEASE_CONTROL_PASSWORD is required}@postgres:5432/meddoc?schema=public&options=-c%20search_path%3Dpg_catalog%2Cpublic"
       QUILLMD_SERVICE_ROLE: template-twin-admin-control
+      QUILLMD_DATABASE_PRINCIPAL_PROFILE: exact-production-v1
+      QUILLMD_AUTH_SESSION_VERIFIER_PROFILE: template-twin-admin-control-v1
       MFA_SECRET_ACTIVE_KEY_ID: ""
       MFA_SECRET_KEYRING_FILE: ""
       MFA_SECRET_LEGACY_READ_MODE: ""
       MFA_SECRET_LEGACY_READ_UNTIL: ""
       MFA_SECRET_LEGACY_READ_ATTESTATION: ""
-      TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL: postgresql://meddoc_release_control:${DB_RELEASE_CONTROL_PASSWORD:?DB_RELEASE_CONTROL_PASSWORD is required}@postgres:5432/meddoc?schema=public
+      TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL: "postgresql://meddoc_release_control:${DB_RELEASE_CONTROL_PASSWORD:?DB_RELEASE_CONTROL_PASSWORD is required}@postgres:5432/meddoc?schema=public&options=-c%20search_path%3Dpg_catalog%2Cpublic"
       DB_PASSWORD: ""
       DB_RUNTIME_PASSWORD: ""
       DB_RELEASE_CONTROL_PASSWORD: ""
       DB_RELEASE_SECURITY_PASSWORD: ""
       DB_AUDIT_DISPATCHER_PASSWORD: ""
       DB_AUTH_EMAIL_DISPATCHER_PASSWORD: ""
+      DB_BACKUP_PASSWORD_FILE: ""
       AUTH_URL: ${TEMPLATE_TWIN_ADMIN_CONTROL_AUTH_URL:-https://admin.quillmd.com}
       NEXTAUTH_URL: ${TEMPLATE_TWIN_ADMIN_CONTROL_AUTH_URL:-https://admin.quillmd.com}
       AUTH_SECRET: ${AUTH_SECRET:-}
@@ -992,6 +1058,15 @@ services:
       TEMPLATE_TWIN_RUNTIME_ATTESTATION: ""
       ANTHROPIC_API_KEY: ""
       DEEPGRAM_API_KEY: ""
+      MOCK_AI_CALLS: "false"
+      MOCK_TEMPLATE_TWIN_E2E: "false"
+      MOCK_TEMPLATE_PHI_FLAG: "false"
+      MOCK_RX_WARNINGS: "false"
+      AUTH_USE_MOCK: "false"
+      EMAIL_AUTO_CONFIRM_DOMAINS: ""
+      EMAIL_AUTO_CONFIRM_ALLOW_IN_PROD: "false"
+      RATE_LIMIT_DISABLED: "false"
+      RATE_LIMIT_DISABLE_ALLOW_IN_PROD: "false"
       MINIO_ACCESS_KEY: ""
       MINIO_SECRET_KEY: ""
       NODE_ENV: production
@@ -1033,35 +1108,26 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://meddoc:${DB_PASSWORD:?DB_PASSWORD is required}@postgres:5432/meddoc?schema=public
+      DATABASE_URL: postgresql://meddoc:${DB_PASSWORD:?DB_PASSWORD is required}@postgres:5432/meddoc?schema=public&options=-c%20search_path%3Dpg_catalog%2Cpublic
     working_dir: /app/packages/db
     entrypoint: ["npx", "--no-install", "prisma"]
     command: ["migrate", "deploy"]
 
-  # ── Postgres backup (T-M16.4) ──
-  # Sidecar container runs pg_dump on a schedule and writes rotated
-  # gzipped dumps to /opt/meddoc-pro/backups on the host. Image is
-  # prodrigestivill/postgres-backup-local — a tiny pg_dump + cron
-  # wrapper used by many teams at this scale. PITR (wal-g /
-  # pgBackRest) is out of scope for the pilot; daily logical dumps
-  # are enough.
-  #
-  # Filename pattern: <prefix>-<db>-<date>.sql.gz where <prefix> is
-  # "daily"|"weekly"|"monthly"|"last". Our pre-milestone manual
-  # dumps use a different prefix (pre_<label>) and coexist cleanly.
-  #
-  # Ops task (documented in DEPLOYMENT_RUNBOOK.md §9): configure an
-  # off-host mirror via rsync / borgbackup so a VPS loss doesn't
-  # lose the dumps too.
+  # ── Postgres backup (dedicated read-only principal) ──
+  # The pinned image runs pg_dump through the exact pre-backup hook. It has
+  # database-only networking, receives no owner credential, and writes custom
+  # archives with ACLs intact. Production provisioning/restore evidence remains
+  # an explicit operations gate; see docs/runbooks/postgres-backup-principal.md.
   postgres-backup:
-    image: prodrigestivill/postgres-backup-local:16
+    image: prodrigestivill/postgres-backup-local@sha256:a0103fbce0c48ccc7693ddbb2a2bfa733048db845354f635efef9e4566de185d
+    # Production activation is forbidden until the storage, transport,
+    # restore, alerting, and named-ownership gates in the runbook are approved.
+    profiles: ["backup-ops-approved"]
     restart: unless-stopped
-    # Phase 13 — H4: non-root containers. The backup runs pg_dump
-    # over TCP (no filesystem access to postgres's data volume) and
-    # writes gzipped dumps to /backups (bind-mounted from
-    # /opt/meddoc-pro/backups). The host backups dir was chowned
-    # to 999:999 once before this user: directive landed; subsequent
-    # runs inherit ownership. Same uid as postgres for symmetry.
+    # Non-root pg_dump over TCP has no access to PostgreSQL's data volume.
+    # Custom archives are written only to the dedicated pgbackups named
+    # volume. Production encryption and restore approval remain explicit
+    # Operations gates in docs/runbooks/postgres-backup-principal.md.
     user: "999:999"
     # Phase 19 — h16-cap-drop. pg_dump over TCP + curl + sha256sum +
     # mc binary execution; none need elevated caps.
@@ -1074,34 +1140,19 @@ services:
         condition: service_healthy
     environment:
       POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
       POSTGRES_DB: meddoc
-      POSTGRES_USER: meddoc
-      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
-      POSTGRES_EXTRA_OPTS: "-Z6 --no-owner --no-acl"
+      POSTGRES_USER: meddoc_backup
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_backup_password
+      PGAPPNAME: meddoc-postgres-backup
+      POSTGRES_CLUSTER: "FALSE"
+      POSTGRES_EXTRA_OPTS: "--format=custom --compress=6 --no-owner --create --large-objects --lock-wait-timeout=60s"
+      BACKUP_SUFFIX: ".dump"
       SCHEDULE: "@daily"
       BACKUP_KEEP_DAYS: "7"
       BACKUP_KEEP_WEEKS: "4"
       BACKUP_KEEP_MONTHS: "6"
       HEALTHCHECK_PORT: "8080"
-      # Phase 17 (h16-offsite-backup): postscript no-ops when these
-      # are unset, so it's safe to land before the bucket is
-      # provisioned. Runbook: docs/H16_OFFSITE_BACKUP_PROCEDURE.md
-      POST_BACKUP_COMMAND: "/scripts/postscript.sh"
-      REMOTE_BACKUP_S3_ENDPOINT: "${REMOTE_BACKUP_S3_ENDPOINT:-}"
-      REMOTE_BACKUP_S3_BUCKET: "${REMOTE_BACKUP_S3_BUCKET:-}"
-      REMOTE_BACKUP_S3_ACCESS_KEY: "${REMOTE_BACKUP_S3_ACCESS_KEY:-}"
-      REMOTE_BACKUP_S3_SECRET_KEY: "${REMOTE_BACKUP_S3_SECRET_KEY:-}"
-      REMOTE_BACKUP_S3_REGION: "${REMOTE_BACKUP_S3_REGION:-us-east-1}"
-      REMOTE_BACKUP_PREFIX: "${REMOTE_BACKUP_PREFIX:-}"
-      # Phase 3 Wave 1 (h16-offsite-backup, encrypted variant): credentials
-      # for the Backblaze B2 path used by infra/backup-offsite-sync.sh.
-      # Empty defaults so the container starts even before the operator
-      # populates them; the script itself exits 78 / EX_CONFIG when the
-      # values are blank, leaving the local pg_dump unaffected. See
-      # docs/RUNBOOK_OFFSITE_BACKUP.md for the BAA + key-population flow.
-      BACKBLAZE_KEY_ID: "${BACKBLAZE_KEY_ID:-}"
-      BACKBLAZE_APPLICATION_KEY: "${BACKBLAZE_APPLICATION_KEY:-}"
-      BACKBLAZE_BUCKET: "${BACKBLAZE_BUCKET:-}"
     volumes:
       # 2026-06-08 backup-fix: destination is a named volume, NOT the in-repo
       # ./backups bind-mount. The bind-mount lived inside the repo tree; a
@@ -1111,22 +1162,21 @@ services:
       # single backup. A named volume lives outside the tree, is owned 999:999,
       # and is immune to repo chown/checkout. Historical dumps stay in ./backups.
       - pgbackups:/backups
-      - ./infra/postgres-backup/postscript.sh:/scripts/postscript.sh:ro
-      - ./infra/backup-offsite-sync.sh:/scripts/backup-offsite-sync.sh:ro
-      # h16-offsite-backup (encrypted): host-resident age keypair lives in
-      # /etc/meddoc on the VPS; mounted read-only so the script can read
-      # the public key for encryption. The private key never leaves the
-      # host filesystem (operator copies it offline for restoration).
-      - /etc/meddoc:/etc/meddoc:ro
-      # Run log destination — bind-mounted so logs survive container
-      # restarts and can be tail'd from the host without `docker logs`.
-      - /var/log/meddoc:/var/log/meddoc
+      - ./infra/postgres-backup/hooks:/hooks:ro
+    secrets:
+      - postgres_backup_password
+    networks:
+      - backup_database
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080"]
       interval: 60s
       timeout: 5s
       retries: 3
       start_period: 10s
+
+secrets:
+  postgres_backup_password:
+    file: ${DB_BACKUP_PASSWORD_FILE:?DB_BACKUP_PASSWORD_FILE is required}
 
 volumes:
   pgdata:
@@ -1157,6 +1207,10 @@ networks:
     internal: true
   auth_email_egress:
     driver: bridge
+  # The backup sidecar contains readable clinical data by design. It can reach
+  # PostgreSQL only; offsite replication is a separate, approved operator flow.
+  backup_database:
+    internal: true
   # Outbound-only update island. No application, database, queue, or object
   # service joins this network; admission traffic uses the Unix socket volume.
   template_twin_scanner:

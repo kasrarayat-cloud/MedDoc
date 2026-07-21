@@ -37,6 +37,14 @@ import type { SessionValidationPolicy } from "./user-session";
 // TS2664 on the augmentation in downstream apps.
 import type {} from "next-auth/jwt";
 import prisma from "@meddoc/db";
+import { isExactSyntheticQaRuntimeProfile } from "./synthetic-qa-runtime-profile";
+
+export { isExactSyntheticQaRuntimeProfile } from "./synthetic-qa-runtime-profile";
+export {
+  hasConfiguredQuillmdRuntimeIdentity,
+  isUnconfiguredNextProductionBuild,
+  requiresExactQuillmdRuntimeIdentity,
+} from "./runtime-identity";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -67,41 +75,6 @@ export class AuthError extends Error {
   }
 }
 
-type SyntheticQaRuntimeEnvironment = Partial<
-  Pick<
-    NodeJS.ProcessEnv,
-    | "NODE_ENV"
-    | "QUILLMD_SERVICE_ROLE"
-    | "AUTH_URL"
-    | "NEXTAUTH_URL"
-    | "ADMIN_PUBLIC_HOST"
-    | "PHYSICIAN_PUBLIC_HOST"
-    | "TEMPLATE_TWIN_STORAGE_PROFILE"
-    | "ADMIN_SYNTHETIC_QA_SHARED_HOST_ATTESTATION"
-  >
->;
-
-/**
- * Exact runtime identity for the disposable localhost synthetic-QA stack.
- * Production bypasses may reference this predicate, but cannot weaken it with
- * an independent pair of feature flags.
- */
-export function isExactSyntheticQaRuntimeProfile(
-  environment: SyntheticQaRuntimeEnvironment,
-): boolean {
-  return (
-    environment.NODE_ENV === "production" &&
-    environment.QUILLMD_SERVICE_ROLE === "physician-app" &&
-    environment.TEMPLATE_TWIN_STORAGE_PROFILE === "qa" &&
-    environment.ADMIN_SYNTHETIC_QA_SHARED_HOST_ATTESTATION ===
-      "accepted-isolated-synthetic-qa-shared-host" &&
-    environment.ADMIN_PUBLIC_HOST === "localhost" &&
-    environment.PHYSICIAN_PUBLIC_HOST === "localhost" &&
-    environment.AUTH_URL === "http://localhost:9020" &&
-    environment.NEXTAUTH_URL === "http://localhost:9020"
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Shared edge-safe NextAuth config
 // ----------------------------------------------------------------------------
@@ -120,10 +93,18 @@ export function isExactSyntheticQaRuntimeProfile(
 // ---------------------------------------------------------------------------
 
 const cookieDomain = process.env.AUTH_COOKIE_DOMAIN?.trim();
+export const QUILLMD_AUTH_SESSION_VERIFIER_PROFILE_ENV =
+  "QUILLMD_AUTH_SESSION_VERIFIER_PROFILE" as const;
+export const QUILLMD_TEMPLATE_TWIN_ADMIN_CONTROL_SESSION_VERIFIER_PROFILE =
+  "template-twin-admin-control-v1" as const;
+
 function usesDedicatedTemplateTwinSessionVerifier(): boolean {
   return (
     process.env.NODE_ENV === "production" &&
-    process.env.QUILLMD_SERVICE_ROLE === "template-twin-admin-control"
+    process.env.QUILLMD_SERVICE_ROLE === "template-twin-admin-control" &&
+    process.env.QUILLMD_DATABASE_PRINCIPAL_PROFILE === "exact-production-v1" &&
+    process.env[QUILLMD_AUTH_SESSION_VERIFIER_PROFILE_ENV] ===
+      QUILLMD_TEMPLATE_TWIN_ADMIN_CONTROL_SESSION_VERIFIER_PROFILE
   );
 }
 

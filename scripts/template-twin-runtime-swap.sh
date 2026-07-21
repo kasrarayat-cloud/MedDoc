@@ -9,6 +9,7 @@ set -euo pipefail
 readonly EXPECTED_EPOCH="template-twin-final-schema-v2"
 readonly BRIDGE_MODE="rollback-compat-v2"
 readonly ROLLBACK_STATE_VERSION="six-runtime-v1"
+readonly ROLLBACK_CAPABILITY_LABEL="com.quillmd.rollback-runtime-capability"
 readonly PRE_STACK_APP_ID="sha256:95f57158e3fe56acc832793be3f5da972cc1fdc6c3b85166f8387b3a103f1f90"
 readonly PRE_STACK_WORKER_ID="sha256:412dd3157475fd60a77d417a6db6880343d58755aaf76f044be035fba4acf44e"
 
@@ -20,6 +21,20 @@ readonly RUNTIME_SERVICES=(
   template-twin-audit-dispatcher
   auth-email-dispatcher
 )
+readonly DETERMINISTIC_PROVIDER_ENVIRONMENTS=(
+  MOCK_AI_CALLS
+  MOCK_TEMPLATE_TWIN_E2E
+  MOCK_TEMPLATE_PHI_FLAG
+  MOCK_RX_WARNINGS
+)
+readonly PRODUCTION_SAFE_AUTH_ENVIRONMENTS=(
+  AUTH_USE_MOCK
+  EMAIL_AUTO_CONFIRM_DOMAINS
+  EMAIL_AUTO_CONFIRM_ALLOW_IN_PROD
+  RATE_LIMIT_DISABLED
+  RATE_LIMIT_DISABLE_ALLOW_IN_PROD
+)
+readonly ADMIN_CONTROL_SESSION_VERIFIER_PROFILE="template-twin-admin-control-v1"
 declare -Ar SERVICE_ARTIFACT=(
   [transcribe-md]="app"
   [template-twin-admin-app]="app"
@@ -32,7 +47,7 @@ declare -Ar SERVICE_ROLE=(
   [transcribe-md]="physician-app"
   [template-twin-admin-app]="template-twin-admin-app"
   [template-twin-admin-control]="template-twin-admin-control"
-  [transcribe-md-worker]=""
+  [transcribe-md-worker]="transcribe-md-worker"
   [template-twin-audit-dispatcher]="template-twin-audit-dispatcher"
   [auth-email-dispatcher]="auth-email-dispatcher"
 )
@@ -179,7 +194,7 @@ image_label() {
 verify_image() {
   local ref="$1"
   local component="$2"
-  local resolved_id epoch revision actual_component
+  local resolved_id epoch revision actual_component rollback_capability
   resolved_id="$(image_id "$ref")"
   case "$resolved_id" in
     "$PRE_STACK_APP_ID"|"$PRE_STACK_WORKER_ID")
@@ -194,6 +209,7 @@ verify_image() {
   epoch="$(image_label "$ref" com.quillmd.runtime-protocol-epoch)"
   revision="$(image_label "$ref" org.opencontainers.image.revision)"
   actual_component="$(image_label "$ref" com.quillmd.runtime-component)"
+  rollback_capability="$(image_label "$ref" "$ROLLBACK_CAPABILITY_LABEL")"
   if [[ "$epoch" != "$EXPECTED_EPOCH" ]]; then
     printf 'runtime-swap: %s image lacks the required protocol epoch\n' "$component" >&2
     return 1
@@ -204,6 +220,10 @@ verify_image() {
   fi
   if [[ "$actual_component" != "$component" ]]; then
     printf 'runtime-swap: image component mismatch for %s\n' "$component" >&2
+    return 1
+  fi
+  if [[ "$rollback_capability" != "$ROLLBACK_STATE_VERSION" ]]; then
+    printf 'runtime-swap: %s image lacks the reviewed six-runtime rollback capability\n' "$component" >&2
     return 1
   fi
   printf '%s' "$resolved_id"
@@ -237,7 +257,7 @@ container_env_exact() {
 }
 
 verify_current_runtime_census() {
-  local service artifact role container current_image component epoch revision
+  local service artifact role container current_image component epoch revision mock_environment auth_environment expected_auth_value expected_session_verifier
   for service in "${RUNTIME_SERVICES[@]}"; do
     artifact="${SERVICE_ARTIFACT[$service]}"
     role="${SERVICE_ROLE[$service]}"
@@ -284,6 +304,34 @@ verify_current_runtime_census() {
     fi
     if [[ -n "$role" ]] && ! container_env_exact "$container" "QUILLMD_SERVICE_ROLE=$role"; then
       printf 'runtime-swap: %s current service role is invalid\n' "$service" >&2
+      return 1
+    fi
+    if ! container_env_exact "$container" "QUILLMD_DATABASE_PRINCIPAL_PROFILE=exact-production-v1"; then
+      printf 'runtime-swap: %s current database-principal profile is unsafe\n' "$service" >&2
+      return 1
+    fi
+    for mock_environment in "${DETERMINISTIC_PROVIDER_ENVIRONMENTS[@]}"; do
+      if ! container_env_exact "$container" "$mock_environment=false"; then
+        printf 'runtime-swap: %s current deterministic provider state is unsafe\n' "$service" >&2
+        return 1
+      fi
+    done
+    for auth_environment in "${PRODUCTION_SAFE_AUTH_ENVIRONMENTS[@]}"; do
+      expected_auth_value="false"
+      if [[ "$auth_environment" == "EMAIL_AUTO_CONFIRM_DOMAINS" ]]; then
+        expected_auth_value=""
+      fi
+      if ! container_env_exact "$container" "$auth_environment=$expected_auth_value"; then
+        printf 'runtime-swap: %s current synthetic authentication state is unsafe\n' "$service" >&2
+        return 1
+      fi
+    done
+    expected_session_verifier=""
+    if [[ "$role" == "template-twin-admin-control" ]]; then
+      expected_session_verifier="$ADMIN_CONTROL_SESSION_VERIFIER_PROFILE"
+    fi
+    if ! container_env_exact "$container" "QUILLMD_AUTH_SESSION_VERIFIER_PROFILE=$expected_session_verifier"; then
+      printf 'runtime-swap: %s current authentication verifier profile is unsafe\n' "$service" >&2
       return 1
     fi
   done
@@ -371,14 +419,31 @@ write_state_overlay() {
         '      com.quillmd.rollback-runtime-managed: "true"'
       printf '      com.quillmd.rollback-runtime-artifact: "%s"\n' "$artifact"
       printf '      com.quillmd.rollback-state-version: "%s"\n' "$ROLLBACK_STATE_VERSION"
+      printf '      com.quillmd.rollback-runtime-capability: "%s"\n' "$ROLLBACK_STATE_VERSION"
       printf '      com.quillmd.rollback-release-sha: "%s"\n' "$release_sha"
       printf '%s\n' '    environment:'
       if [[ -n "$role" ]]; then
         printf '      QUILLMD_SERVICE_ROLE: "%s"\n' "$role"
       fi
+      printf '%s\n' '      QUILLMD_DATABASE_PRINCIPAL_PROFILE: "exact-production-v1"'
       printf '      QUILLMD_REQUIRED_RUNTIME_PROTOCOL_EPOCH: "%s"\n' "$EXPECTED_EPOCH"
       printf '      TEMPLATE_TWIN_RUNTIME_MODE: "%s"\n' "$BRIDGE_MODE"
       printf '%s\n' '      TEMPLATE_TWIN_KILL_SWITCH: "true"'
+      printf '%s\n' \
+        '      MOCK_AI_CALLS: "false"' \
+        '      MOCK_TEMPLATE_TWIN_E2E: "false"' \
+        '      MOCK_TEMPLATE_PHI_FLAG: "false"' \
+        '      MOCK_RX_WARNINGS: "false"' \
+        '      AUTH_USE_MOCK: "false"' \
+        '      EMAIL_AUTO_CONFIRM_DOMAINS: ""' \
+        '      EMAIL_AUTO_CONFIRM_ALLOW_IN_PROD: "false"' \
+        '      RATE_LIMIT_DISABLED: "false"' \
+        '      RATE_LIMIT_DISABLE_ALLOW_IN_PROD: "false"'
+      if [[ "$role" == "template-twin-admin-control" ]]; then
+        printf '      QUILLMD_AUTH_SESSION_VERIFIER_PROFILE: "%s"\n' "$ADMIN_CONTROL_SESSION_VERIFIER_PROFILE"
+      else
+        printf '%s\n' '      QUILLMD_AUTH_SESSION_VERIFIER_PROFILE: ""'
+      fi
       printf '      TEMPLATE_TWIN_RELEASE_COMMIT_SHA: "%s"\n' "$release_sha"
       printf '      TEMPLATE_TWIN_APP_IMAGE_DIGEST: "%s"\n' "$app_id"
       printf '      TEMPLATE_TWIN_WORKER_IMAGE_DIGEST: "%s"\n' "$worker_id"
@@ -494,6 +559,7 @@ for service in "${RUNTIME_SERVICES[@]}"; do
         "$(docker inspect --format '{{ index .Config.Labels "com.quillmd.rollback-runtime-managed" }}' "$container")" != "true" ||
         "$(docker inspect --format '{{ index .Config.Labels "com.quillmd.rollback-runtime-artifact" }}' "$container")" != "$artifact" ||
         "$(docker inspect --format '{{ index .Config.Labels "com.quillmd.rollback-state-version" }}' "$container")" != "$ROLLBACK_STATE_VERSION" ||
+        "$(docker inspect --format '{{ index .Config.Labels "com.quillmd.rollback-runtime-capability" }}' "$container")" != "$ROLLBACK_STATE_VERSION" ||
         "$(docker inspect --format '{{ index .Config.Labels "com.quillmd.rollback-release-sha" }}' "$container")" != "$release_sha" ]]; then
     printf 'runtime-swap: %s running identity or rollback labels are invalid\n' "$service" >&2
     exit 70
@@ -501,6 +567,7 @@ for service in "${RUNTIME_SERVICES[@]}"; do
   if ! container_env_exact "$container" "QUILLMD_REQUIRED_RUNTIME_PROTOCOL_EPOCH=$EXPECTED_EPOCH" ||
      ! container_env_exact "$container" "TEMPLATE_TWIN_RUNTIME_MODE=$BRIDGE_MODE" ||
      ! container_env_exact "$container" "TEMPLATE_TWIN_KILL_SWITCH=true" ||
+     ! container_env_exact "$container" "QUILLMD_DATABASE_PRINCIPAL_PROFILE=exact-production-v1" ||
      ! container_env_exact "$container" "TEMPLATE_TWIN_RELEASE_COMMIT_SHA=$release_sha" ||
      ! container_env_exact "$container" "TEMPLATE_TWIN_RUNTIME_ATTESTATION=" ||
      ! container_env_exact "$container" "TEMPLATE_TWIN_APP_RUNTIME_ATTESTATION=" ||
@@ -512,6 +579,30 @@ for service in "${RUNTIME_SERVICES[@]}"; do
   fi
   if [[ -n "$role" ]] && ! container_env_exact "$container" "QUILLMD_SERVICE_ROLE=$role"; then
     printf 'runtime-swap: %s running service role is invalid\n' "$service" >&2
+    exit 70
+  fi
+  for mock_environment in "${DETERMINISTIC_PROVIDER_ENVIRONMENTS[@]}"; do
+    if ! container_env_exact "$container" "$mock_environment=false"; then
+      printf 'runtime-swap: %s running deterministic provider state is unsafe\n' "$service" >&2
+      exit 70
+    fi
+  done
+  for auth_environment in "${PRODUCTION_SAFE_AUTH_ENVIRONMENTS[@]}"; do
+    expected_auth_value="false"
+    if [[ "$auth_environment" == "EMAIL_AUTO_CONFIRM_DOMAINS" ]]; then
+      expected_auth_value=""
+    fi
+    if ! container_env_exact "$container" "$auth_environment=$expected_auth_value"; then
+      printf 'runtime-swap: %s running synthetic authentication state is unsafe\n' "$service" >&2
+      exit 70
+    fi
+  done
+  expected_session_verifier=""
+  if [[ "$role" == "template-twin-admin-control" ]]; then
+    expected_session_verifier="$ADMIN_CONTROL_SESSION_VERIFIER_PROFILE"
+  fi
+  if ! container_env_exact "$container" "QUILLMD_AUTH_SESSION_VERIFIER_PROFILE=$expected_session_verifier"; then
+    printf 'runtime-swap: %s running authentication verifier profile is unsafe\n' "$service" >&2
     exit 70
   fi
 done

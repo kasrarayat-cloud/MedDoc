@@ -55,6 +55,7 @@ RUN addgroup --system --gid 1001 nodejs && \
 COPY --from=builder /app/apps/meddoc-pro/public ./public
 COPY --from=builder /app/apps/meddoc-pro/.next/standalone ./
 COPY --from=builder /app/apps/meddoc-pro/.next/static ./apps/meddoc-pro/.next/static
+COPY --from=builder /app/scripts/quillmd-next-runtime-entrypoint.mjs ./scripts/quillmd-next-runtime-entrypoint.mjs
 
 # Prisma schema + generated client for migrate deploy at boot.
 COPY --from=builder /app/packages/db/prisma ./packages/db/prisma
@@ -78,4 +79,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
 
 # Standalone output puts server.js at apps/meddoc-pro/server.js when the
 # source app lives under apps/meddoc-pro in the workspace.
-CMD ["node", "apps/meddoc-pro/server.js"]
+CMD ["node", "scripts/quillmd-next-runtime-entrypoint.mjs", "node", "apps/meddoc-pro/server.js"]

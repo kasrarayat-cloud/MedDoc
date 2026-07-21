@@ -1,19 +1,14 @@
+import {
+  ADMIN_SYNTHETIC_QA_SHARED_HOST_ATTESTATION as SHARED_QA_HOST_ATTESTATION,
+  isExactSyntheticQaRuntimeProfile,
+} from "@meddoc/auth/synthetic-qa-runtime-profile";
+
 const PRODUCTION_ADMIN_HOST = "admin.quillmd.com";
 const PRODUCTION_PHYSICIAN_HOST = "app.quillmd.com";
 export const ADMIN_SYNTHETIC_QA_SHARED_HOST_ATTESTATION =
-  "accepted-isolated-synthetic-qa-shared-host";
+  SHARED_QA_HOST_ATTESTATION;
 
-type HostEnvironment = Partial<
-  Pick<
-    NodeJS.ProcessEnv,
-    | "ADMIN_PUBLIC_HOST"
-    | "PHYSICIAN_PUBLIC_HOST"
-    | "AUTH_COOKIE_DOMAIN"
-    | "ADMIN_SYNTHETIC_QA_SHARED_HOST_ATTESTATION"
-    | "TEMPLATE_TWIN_STORAGE_PROFILE"
-    | "NODE_ENV"
-  >
->;
+type HostEnvironment = Readonly<Record<string, string | undefined>>;
 
 function normalizeHost(value: string | null | undefined): string | null {
   const raw = value?.trim().toLowerCase().replace(/\.$/u, "");
@@ -79,11 +74,7 @@ export function isPhysicianRequestHost(
 }
 
 function permitsSyntheticQaSharedHost(environment: HostEnvironment): boolean {
-  return (
-    environment.TEMPLATE_TWIN_STORAGE_PROFILE === "qa" &&
-    environment.ADMIN_SYNTHETIC_QA_SHARED_HOST_ATTESTATION ===
-      ADMIN_SYNTHETIC_QA_SHARED_HOST_ATTESTATION
-  );
+  return isExactSyntheticQaRuntimeProfile(environment);
 }
 
 /**

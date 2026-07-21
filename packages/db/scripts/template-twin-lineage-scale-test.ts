@@ -41,8 +41,11 @@ const ROW_COUNT = Number(process.env.TEMPLATE_TWIN_SCALE_ROWS ?? "1000000");
 const EVIDENCE_PATH =
   process.env.TEMPLATE_TWIN_SCALE_EVIDENCE_PATH ??
   "/tmp/template-twin-lineage-scale-evidence.json";
-const IMAGE = process.env.TEMPLATE_TWIN_SCALE_POSTGRES_IMAGE ?? "pgvector/pgvector:pg16";
-const KEEP_FAILED_INFRA = process.env.TEMPLATE_TWIN_SCALE_KEEP_FAILED_INFRA === "true";
+const IMAGE =
+  process.env.TEMPLATE_TWIN_SCALE_POSTGRES_IMAGE ??
+  "pgvector/pgvector:pg16@sha256:7d400e340efb42f4d8c9c12c6427adb253f726881a9985d2a471bf0eed824dff";
+const KEEP_FAILED_INFRA =
+  process.env.TEMPLATE_TWIN_SCALE_KEEP_FAILED_INFRA === "true";
 const CONTAINER = `meddoc-lineage-scale-${process.pid}`;
 const DATABASE = "meddoc_lineage_scale_test";
 const SYNTHETIC_PASSWORD = "synthetic-lineage-scale-only";
@@ -80,7 +83,7 @@ function summarizeDiff(sql: string) {
         sql,
       ),
     requiresLineageUniqueIndex: sql.includes(
-      'note_templates_lineageId_version_key',
+      "note_templates_lineageId_version_key",
     ),
   };
 }
@@ -91,7 +94,10 @@ function summarizeBatchDurations(stdout: string) {
     .filter(Boolean)
     .flatMap((line) => {
       try {
-        const value = JSON.parse(line) as { event?: string; durationMs?: number };
+        const value = JSON.parse(line) as {
+          event?: string;
+          durationMs?: number;
+        };
         return value.event === "batch" && typeof value.durationMs === "number"
           ? [value.durationMs]
           : [];
@@ -103,7 +109,12 @@ function summarizeBatchDurations(stdout: string) {
   const percentile = (fraction: number) =>
     durations.length === 0
       ? null
-      : durations[Math.min(durations.length - 1, Math.ceil(durations.length * fraction) - 1)]!;
+      : durations[
+          Math.min(
+            durations.length - 1,
+            Math.ceil(durations.length * fraction) - 1,
+          )
+        ]!;
   return {
     samples: durations.length,
     p50Ms: percentile(0.5),
@@ -137,8 +148,14 @@ async function prismaDiff(
 }
 
 function requireSafeScale(): void {
-  if (!Number.isInteger(ROW_COUNT) || ROW_COUNT < 10_000 || ROW_COUNT > 5_000_000) {
-    throw new Error("TEMPLATE_TWIN_SCALE_ROWS must be an integer from 10,000 to 5,000,000");
+  if (
+    !Number.isInteger(ROW_COUNT) ||
+    ROW_COUNT < 10_000 ||
+    ROW_COUNT > 5_000_000
+  ) {
+    throw new Error(
+      "TEMPLATE_TWIN_SCALE_ROWS must be an integer from 10,000 to 5,000,000",
+    );
   }
   if (!path.isAbsolute(EVIDENCE_PATH) || !EVIDENCE_PATH.startsWith("/tmp/")) {
     throw new Error("Scale evidence must be written beneath /tmp");
@@ -187,13 +204,18 @@ async function checked(
   if (result.code !== 0) {
     // No connection string is included in command arguments. Limit captured
     // diagnostics so a synthetic load failure cannot create an unbounded log.
-    const diagnostic = result.stderr.slice(-2_000).replaceAll(SYNTHETIC_PASSWORD, "[redacted]");
+    const diagnostic = result.stderr
+      .slice(-2_000)
+      .replaceAll(SYNTHETIC_PASSWORD, "[redacted]");
     throw new Error(`${command} failed (${result.code}): ${diagnostic}`);
   }
   return result;
 }
 
-function makeClient(databaseUrl: string, applicationName: string): TransactionalRawSqlClient & {
+function makeClient(
+  databaseUrl: string,
+  applicationName: string,
+): TransactionalRawSqlClient & {
   $disconnect(): Promise<void>;
 } {
   const url = new URL(databaseUrl);
@@ -206,7 +228,9 @@ function makeClient(databaseUrl: string, applicationName: string): Transactional
     max: 4,
     connectionTimeoutMillis: 10_000,
   });
-  return new PrismaClient({ adapter }) as unknown as TransactionalRawSqlClient & {
+  return new PrismaClient({
+    adapter,
+  }) as unknown as TransactionalRawSqlClient & {
     $disconnect(): Promise<void>;
   };
 }
@@ -301,7 +325,12 @@ async function startWorkload(
       await operation();
       metrics[`${kind}s` as "reads" | "inserts" | "updates"] += 1;
     } catch (error) {
-      metrics[`${kind}Failures` as "readFailures" | "insertFailures" | "updateFailures"] += 1;
+      metrics[
+        `${kind}Failures` as
+          | "readFailures"
+          | "insertFailures"
+          | "updateFailures"
+      ] += 1;
       recordFailure(error);
     } finally {
       const duration = performance.now() - started;
@@ -364,7 +393,9 @@ async function startWorkload(
   const lockSampling = (async () => {
     while (running) {
       try {
-        const rows = await sampler.$queryRawUnsafe<Array<{ waitMs: number | string }>>(
+        const rows = await sampler.$queryRawUnsafe<
+          Array<{ waitMs: number | string }>
+        >(
           `SELECT COALESCE(MAX(
              EXTRACT(EPOCH FROM (clock_timestamp() - query_start)) * 1000
            ), 0)::float8 AS "waitMs"
@@ -391,7 +422,12 @@ async function startWorkload(
       running = false;
       await Promise.all([workload, lockSampling]);
       await Promise.all([client.$disconnect(), sampler.$disconnect()]);
-      for (const key of ["maxReadMs", "maxInsertMs", "maxUpdateMs", "maxObservedDatabaseLockWaitMs"] as const) {
+      for (const key of [
+        "maxReadMs",
+        "maxInsertMs",
+        "maxUpdateMs",
+        "maxObservedDatabaseLockWaitMs",
+      ] as const) {
         metrics[key] = Math.round(metrics[key] * 100) / 100;
       }
     },
@@ -430,7 +466,10 @@ async function runOperator(
 }
 
 async function interruptBackfill(databaseUrl: string) {
-  const barrierClient = makeClient(databaseUrl, "lineage_scale_interrupt_barrier");
+  const barrierClient = makeClient(
+    databaseUrl,
+    "lineage_scale_interrupt_barrier",
+  );
   const child = spawn(
     path.join(ROOT, "node_modules/.bin/tsx"),
     [
@@ -456,7 +495,9 @@ async function interruptBackfill(databaseUrl: string) {
   child.stderr.on("data", (chunk) => {
     stderr += String(chunk);
   });
-  const closed = new Promise<number | null>((resolve) => child.once("close", resolve));
+  const closed = new Promise<number | null>((resolve) =>
+    child.once("close", resolve),
+  );
   const killOperatorGroup = () => {
     if (child.pid === undefined) return;
     try {
@@ -476,14 +517,18 @@ async function interruptBackfill(databaseUrl: string) {
   if (beforeKill.batchCount < 5 || beforeKill.phase !== "BACKFILLING") {
     killOperatorGroup();
     await barrierClient.$disconnect();
-    throw new Error(`Backfill did not reach interruption barrier: ${stderr.slice(-500)}`);
+    throw new Error(
+      `Backfill did not reach interruption barrier: ${stderr.slice(-500)}`,
+    );
   }
   killOperatorGroup();
   const exit = await closed;
   const afterKill = await readLineageMigrationProgress(barrierClient);
   await barrierClient.$disconnect();
   if (afterKill.phase !== "BACKFILLING" || afterKill.rowsProcessed < 1) {
-    throw new Error("Killed backfill did not retain a resumable committed cursor");
+    throw new Error(
+      "Killed backfill did not retain a resumable committed cursor",
+    );
   }
   return { exit, beforeKill, afterKill };
 }
@@ -491,13 +536,18 @@ async function interruptBackfill(databaseUrl: string) {
 async function main(): Promise<void> {
   requireSafeScale();
   mkdirSync(path.dirname(EVIDENCE_PATH), { recursive: true });
-  const temporary = mkdtempSync(path.join(tmpdir(), "template-twin-lineage-scale-"));
+  const temporary = mkdtempSync(
+    path.join(tmpdir(), "template-twin-lineage-scale-"),
+  );
   const evidence: Record<string, unknown> = {
     generatedAt: new Date().toISOString(),
     syntheticOnly: true,
     baseSha: BASE_SHA,
     requestedRows: ROW_COUNT,
-    scaleClassification: ROW_COUNT >= 1_000_000 ? "million_row_synthetic" : "sub_million_synthetic",
+    scaleClassification:
+      ROW_COUNT >= 1_000_000
+        ? "million_row_synthetic"
+        : "sub_million_synthetic",
     postgresImage: IMAGE,
   };
   let workload: Awaited<ReturnType<typeof startWorkload>> | null = null;
@@ -505,7 +555,9 @@ async function main(): Promise<void> {
   let succeeded = false;
 
   try {
-    await checked("git", ["cat-file", "-e", `${BASE_SHA}^{commit}`], { cwd: ROOT });
+    await checked("git", ["cat-file", "-e", `${BASE_SHA}^{commit}`], {
+      cwd: ROOT,
+    });
     await checked("docker", [
       "run",
       "--rm",
@@ -527,29 +579,33 @@ async function main(): Promise<void> {
     if (!port) throw new Error("Could not resolve disposable PostgreSQL port");
     const databaseUrl = `postgresql://meddoc:${SYNTHETIC_PASSWORD}@127.0.0.1:${port}/${DATABASE}?schema=public`;
     const shadowDatabase = "meddoc_lineage_shadow_test";
-    await checked(
-      "docker",
-      [
-        "exec",
-        CONTAINER,
-        "psql",
-        "-X",
-        "-v",
-        "ON_ERROR_STOP=1",
-        "-U",
-        "meddoc",
-        "-d",
-        "postgres",
-        "-c",
-        `CREATE DATABASE ${shadowDatabase}`,
-      ],
-    );
+    await checked("docker", [
+      "exec",
+      CONTAINER,
+      "psql",
+      "-X",
+      "-v",
+      "ON_ERROR_STOP=1",
+      "-U",
+      "meddoc",
+      "-d",
+      "postgres",
+      "-c",
+      `CREATE DATABASE ${shadowDatabase}`,
+    ]);
     const shadowUrl = `postgresql://meddoc:${SYNTHETIC_PASSWORD}@127.0.0.1:${port}/${shadowDatabase}?schema=public`;
 
     const archive = path.join(temporary, "base-prisma.tar");
     await checked(
       "git",
-      ["archive", "--format=tar", "-o", archive, BASE_SHA, "packages/db/prisma"],
+      [
+        "archive",
+        "--format=tar",
+        "-o",
+        archive,
+        BASE_SHA,
+        "packages/db/prisma",
+      ],
       { cwd: ROOT },
     );
     await checked("tar", ["-xf", archive, "-C", temporary]);
@@ -559,10 +615,7 @@ async function main(): Promise<void> {
         ROOT,
         "packages/db/prisma/migrations/20260715162000_template_twin_docx_v1",
       ),
-      path.join(
-        tempPrisma,
-        "migrations/20260715162000_template_twin_docx_v1",
-      ),
+      path.join(tempPrisma, "migrations/20260715162000_template_twin_docx_v1"),
       { recursive: true },
     );
     const configPath = path.join(temporary, "prisma.config.js");
@@ -624,12 +677,15 @@ async function main(): Promise<void> {
     const afterExpand = await readLineageMigrationStatus(client);
     evidence.afterExpand = afterExpand;
     if (afterExpand.nullRows < ROW_COUNT || afterExpand.phase !== "EXPANDED") {
-      throw new Error("Expand unexpectedly backfilled or advanced existing rows");
+      throw new Error(
+        "Expand unexpectedly backfilled or advanced existing rows",
+      );
     }
 
     const lockPoolA = new Pool({ connectionString: databaseUrl, max: 1 });
     const lockPoolB = new Pool({ connectionString: databaseUrl, max: 1 });
-    const firstOperatorLock = await acquireLineageOperatorSessionLock(lockPoolA);
+    const firstOperatorLock =
+      await acquireLineageOperatorSessionLock(lockPoolA);
     let opposingOperatorCode = "NO_FAILURE";
     try {
       await acquireLineageOperatorSessionLock(lockPoolB);
@@ -637,7 +693,8 @@ async function main(): Promise<void> {
       opposingOperatorCode = safeCode(error);
     }
     await firstOperatorLock.release();
-    const secondOperatorLock = await acquireLineageOperatorSessionLock(lockPoolB);
+    const secondOperatorLock =
+      await acquireLineageOperatorSessionLock(lockPoolB);
     await secondOperatorLock.release();
     await Promise.all([lockPoolA.end(), lockPoolB.end()]);
     evidence.opposingOperatorSerialization = {
@@ -668,7 +725,9 @@ async function main(): Promise<void> {
       prematureContractCode = safeCode(error);
     }
     evidence.prematureContractCode = prematureContractCode;
-    if (prematureContractCode !== "LINEAGE_MIGRATION_CONTRACT_REQUIRES_VALIDATION") {
+    if (
+      prematureContractCode !== "LINEAGE_MIGRATION_CONTRACT_REQUIRES_VALIDATION"
+    ) {
       throw new Error("Premature contract did not fail closed");
     }
 
@@ -769,14 +828,9 @@ async function main(): Promise<void> {
       throw new Error("Contended contract did not fail closed at VALIDATED");
     }
 
-    const contract = await runOperator(
-      databaseUrl,
-      "contract",
-      [],
-      {
-        TEMPLATE_TWIN_LINEAGE_CONTRACT_ACK: `note_templates_lineage_v1:${DATABASE}`,
-      },
-    );
+    const contract = await runOperator(databaseUrl, "contract", [], {
+      TEMPLATE_TWIN_LINEAGE_CONTRACT_ACK: `note_templates_lineage_v1:${DATABASE}`,
+    });
     evidence.contractDurationMs = contract.durationMs;
 
     await workload.stop();
@@ -828,7 +882,9 @@ async function main(): Promise<void> {
     evidence.contractedProgressMutationRejected =
       contractedProgressMutationRejected;
     if (!contractedProgressMutationRejected) {
-      throw new Error("Contracted progress record accepted a terminal-state mutation");
+      throw new Error(
+        "Contracted progress record accepted a terminal-state mutation",
+      );
     }
 
     let omittedLineageRejected = false;
@@ -844,7 +900,8 @@ async function main(): Promise<void> {
       omittedLineageRejected = true;
     }
     evidence.omittedLineageRejectedAfterContract = omittedLineageRejected;
-    if (!omittedLineageRejected) throw new Error("NOT NULL contract accepted an omitted lineage");
+    if (!omittedLineageRejected)
+      throw new Error("NOT NULL contract accepted an omitted lineage");
 
     await client.$executeRawUnsafe(
       `INSERT INTO "note_templates" (
@@ -868,17 +925,25 @@ async function main(): Promise<void> {
     if (workload) await workload.stop().catch(() => undefined);
     if (client) await client.$disconnect().catch(() => undefined);
     if (succeeded || !KEEP_FAILED_INFRA) {
-      await runCommand("docker", ["rm", "-f", CONTAINER]).catch(() => undefined);
-      if (existsSync(temporary)) rmSync(temporary, { recursive: true, force: true });
+      await runCommand("docker", ["rm", "-f", CONTAINER]).catch(
+        () => undefined,
+      );
+      if (existsSync(temporary))
+        rmSync(temporary, { recursive: true, force: true });
     } else {
-      process.stderr.write(`Preserved synthetic debug container ${CONTAINER}\n`);
+      process.stderr.write(
+        `Preserved synthetic debug container ${CONTAINER}\n`,
+      );
       process.stderr.write(`Preserved synthetic debug files ${temporary}\n`);
     }
   }
 }
 
 void main().catch((error) => {
-  const message = error instanceof Error ? error.message : "Unknown scale-test failure";
-  process.stderr.write(`${message.replaceAll(SYNTHETIC_PASSWORD, "[redacted]")}\n`);
+  const message =
+    error instanceof Error ? error.message : "Unknown scale-test failure";
+  process.stderr.write(
+    `${message.replaceAll(SYNTHETIC_PASSWORD, "[redacted]")}\n`,
+  );
   process.exitCode = 1;
 });

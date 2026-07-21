@@ -1,0 +1,1013 @@
+#!/bin/sh
+set -eu
+set +x
+umask 077
+
+# postgres-backup-local invokes /hooks through run-parts. This pre-backup hook
+# intentionally emits only a fixed PASS/FAIL line: catalog names, tenant data,
+# and connection details must not enter backup-service logs.
+
+fail() {
+  printf '%s\n' 'postgres-backup-preflight: FAIL' >&2
+  exit 1
+}
+
+case "${1:-}" in
+  pre-backup) ;;
+  post-backup|error) exit 0 ;;
+  *) fail ;;
+esac
+[ -n "${POSTGRES_HOST:-}" ] || fail
+[ -n "${POSTGRES_DB:-}" ] || fail
+[ "${POSTGRES_USER:-}" = 'meddoc_backup' ] || fail
+[ -n "${POSTGRES_PASSWORD_FILE:-}" ] || fail
+[ -f "$POSTGRES_PASSWORD_FILE" ] || fail
+[ -r "$POSTGRES_PASSWORD_FILE" ] || fail
+
+secret_size=$(wc -c 2>/dev/null < "$POSTGRES_PASSWORD_FILE") || fail
+secret_size=$(printf '%s' "$secret_size" | tr -d '[:space:]')
+case "$secret_size" in
+  ''|*[!0-9]*) fail ;;
+esac
+[ "$secret_size" -ge 43 ] || fail
+[ "$secret_size" -le 128 ] || fail
+LC_ALL=C grep -Eq '^[A-Za-z0-9_-]{43,128}$' \
+  "$POSTGRES_PASSWORD_FILE" 2>/dev/null || fail
+stripped_size=$(LC_ALL=C tr -d '\000\r\n' 2>/dev/null < "$POSTGRES_PASSWORD_FILE" | wc -c) || fail
+stripped_size=$(printf '%s' "$stripped_size" | tr -d '[:space:]')
+[ "$stripped_size" = "$secret_size" ] || fail
+
+postgres_port=${POSTGRES_PORT:-5432}
+case "$postgres_port" in
+  ''|*[!0-9]*) fail ;;
+esac
+
+result=$(
+  psql -X --no-psqlrc --quiet --tuples-only --no-align \
+    --set ON_ERROR_STOP=1 \
+    --host "$POSTGRES_HOST" \
+    --port "$postgres_port" \
+    --username "$POSTGRES_USER" \
+    --dbname "$POSTGRES_DB" \
+    2>/dev/null <<'SQL'
+\set ECHO none
+\getenv expected_database POSTGRES_DB
+
+-- Coordinate with v9 and the role provisioner before taking the catalog
+-- snapshot. Contention fails immediately; the session lock is released when
+-- this one-shot psql process exits. The psql conditionals are protocol
+-- sequencing boundaries: PostgreSQL never receives a ledger predicate or a
+-- call to the SECURITY DEFINER helper before the preceding catalog proof.
+SELECT pg_catalog.pg_try_advisory_lock(73119, 2026072001)
+  AS release_lock_acquired \gset
+\if :release_lock_acquired
+BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;
+SET LOCAL search_path = pg_catalog;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '60s';
+
+-- Attest the migration ledger using catalogs only before any predicate is
+-- parsed against its user-controlled columns.  This excludes alternate types,
+-- casts, collations, generated columns, rules, triggers, and partitions from
+-- running under the backup preflight identity.
+WITH migration_relation AS (
+  SELECT pg_catalog.to_regclass('public._prisma_migrations') AS oid
+), expected_attribute(
+  attnum, attname, atttypid, atttypmod, attnotnull, atthasdef,
+  attcollation
+) AS (
+  VALUES
+    (1, 'id', 'pg_catalog.varchar'::pg_catalog.regtype, 40, TRUE, FALSE,
+      pg_catalog.to_regcollation('pg_catalog."default"')),
+    (2, 'checksum', 'pg_catalog.varchar'::pg_catalog.regtype, 68, TRUE,
+      FALSE, pg_catalog.to_regcollation('pg_catalog."default"')),
+    (3, 'finished_at', 'pg_catalog.timestamptz'::pg_catalog.regtype, -1,
+      FALSE, FALSE, 0::pg_catalog.oid),
+    (4, 'migration_name', 'pg_catalog.varchar'::pg_catalog.regtype, 259,
+      TRUE, FALSE, pg_catalog.to_regcollation('pg_catalog."default"')),
+    (5, 'logs', 'pg_catalog.text'::pg_catalog.regtype, -1, FALSE, FALSE,
+      pg_catalog.to_regcollation('pg_catalog."default"')),
+    (6, 'rolled_back_at', 'pg_catalog.timestamptz'::pg_catalog.regtype, -1,
+      FALSE, FALSE, 0::pg_catalog.oid),
+    (7, 'started_at', 'pg_catalog.timestamptz'::pg_catalog.regtype, -1,
+      TRUE, TRUE, 0::pg_catalog.oid),
+    (8, 'applied_steps_count', 'pg_catalog.int4'::pg_catalog.regtype, -1,
+      TRUE, TRUE, 0::pg_catalog.oid)
+)
+SELECT (
+  EXISTS (
+    SELECT 1
+    FROM migration_relation
+    JOIN pg_catalog.pg_class relation
+      ON relation.oid = migration_relation.oid
+    JOIN pg_catalog.pg_namespace namespace_object
+      ON namespace_object.oid = relation.relnamespace
+    JOIN pg_catalog.pg_database database_object
+      ON database_object.datname = pg_catalog.current_database()
+    JOIN pg_catalog.pg_am access_method
+      ON access_method.oid = relation.relam
+    WHERE namespace_object.nspname = 'public'
+      AND relation.relname = '_prisma_migrations'
+      AND relation.relkind = 'r'
+      AND relation.relpersistence = 'p'
+      AND relation.relowner = database_object.datdba
+      AND access_method.amname = 'heap'
+      AND relation.relrowsecurity = FALSE
+      AND relation.relforcerowsecurity = FALSE
+      AND relation.relhasrules = FALSE
+      AND relation.relhastriggers = FALSE
+      AND relation.relhassubclass = FALSE
+      AND relation.relispartition = FALSE
+      AND relation.relpartbound IS NULL
+      AND relation.reloftype = 0
+      AND relation.reloptions IS NULL
+      AND relation.relreplident = 'd'
+  )
+  AND (
+    SELECT pg_catalog.count(*)
+    FROM migration_relation
+    JOIN pg_catalog.pg_attribute attribute
+      ON attribute.attrelid = migration_relation.oid
+    WHERE attribute.attnum > 0
+      AND attribute.attisdropped = FALSE
+  ) = 8
+  AND NOT EXISTS (
+    SELECT 1
+    FROM expected_attribute expected
+    CROSS JOIN migration_relation
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_attribute attribute
+      WHERE attribute.attrelid = migration_relation.oid
+        AND attribute.attnum = expected.attnum
+        AND attribute.attname = expected.attname
+        AND attribute.atttypid = expected.atttypid
+        AND attribute.atttypmod = expected.atttypmod
+        AND attribute.attnotnull = expected.attnotnull
+        AND attribute.atthasdef = expected.atthasdef
+        AND attribute.attcollation = expected.attcollation
+        AND attribute.attisdropped = FALSE
+        AND attribute.attislocal
+        AND attribute.attinhcount = 0
+        AND attribute.attidentity = ''
+        AND attribute.attgenerated = ''
+        AND attribute.atthasmissing = FALSE
+        AND attribute.attacl IS NULL
+        AND attribute.attoptions IS NULL
+        AND attribute.attfdwoptions IS NULL
+    )
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM migration_relation
+    JOIN pg_catalog.pg_trigger trigger_object
+      ON trigger_object.tgrelid = migration_relation.oid
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM migration_relation
+    JOIN pg_catalog.pg_rewrite rule
+      ON rule.ev_class = migration_relation.oid
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM migration_relation
+    JOIN pg_catalog.pg_policy policy
+      ON policy.polrelid = migration_relation.oid
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM migration_relation
+    JOIN pg_catalog.pg_inherits inheritance
+      ON inheritance.inhrelid = migration_relation.oid
+      OR inheritance.inhparent = migration_relation.oid
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM migration_relation
+    JOIN pg_catalog.pg_partitioned_table partitioned
+      ON partitioned.partrelid = migration_relation.oid
+  )
+  AND (
+    SELECT pg_catalog.count(*)
+    FROM migration_relation
+    JOIN pg_catalog.pg_index index_object
+      ON index_object.indrelid = migration_relation.oid
+  ) = 1
+  AND (
+    SELECT pg_catalog.count(*)
+    FROM migration_relation
+    JOIN pg_catalog.pg_constraint constraint_object
+      ON constraint_object.conrelid = migration_relation.oid
+  ) = 1
+  AND EXISTS (
+    SELECT 1
+    FROM migration_relation
+    JOIN pg_catalog.pg_index index_object
+      ON index_object.indrelid = migration_relation.oid
+    JOIN pg_catalog.pg_class index_relation
+      ON index_relation.oid = index_object.indexrelid
+    JOIN pg_catalog.pg_namespace index_namespace
+      ON index_namespace.oid = index_relation.relnamespace
+    JOIN pg_catalog.pg_am index_access_method
+      ON index_access_method.oid = index_relation.relam
+    JOIN pg_catalog.pg_opclass operator_class
+      ON operator_class.oid = index_object.indclass[0]
+    JOIN pg_catalog.pg_namespace operator_namespace
+      ON operator_namespace.oid = operator_class.opcnamespace
+    JOIN pg_catalog.pg_database database_object
+      ON database_object.datname = pg_catalog.current_database()
+    JOIN pg_catalog.pg_constraint constraint_object
+      ON constraint_object.conrelid = migration_relation.oid
+     AND constraint_object.conindid = index_relation.oid
+    WHERE index_relation.relname = '_prisma_migrations_pkey'
+      AND index_namespace.nspname = 'public'
+      AND index_relation.relowner = database_object.datdba
+      AND index_relation.relkind = 'i'
+      AND index_relation.relpersistence = 'p'
+      AND index_relation.relispartition = FALSE
+      AND index_relation.reloptions IS NULL
+      AND index_access_method.amname = 'btree'
+      AND index_object.indisunique
+      AND index_object.indisprimary
+      AND index_object.indisvalid
+      AND index_object.indisready
+      AND index_object.indislive
+      AND index_object.indisreplident = FALSE
+      AND index_object.indimmediate
+      AND index_object.indisclustered = FALSE
+      AND index_object.indcheckxmin = FALSE
+      AND index_object.indnatts = 1
+      AND index_object.indnkeyatts = 1
+      AND index_object.indkey::TEXT = '1'
+      AND index_object.indcollation[0] =
+        pg_catalog.to_regcollation('pg_catalog."default"')
+      AND operator_namespace.nspname = 'pg_catalog'
+      AND operator_class.opcname = 'text_ops'
+      AND index_object.indoption[0] = 0
+      AND index_object.indexprs IS NULL
+      AND index_object.indpred IS NULL
+      AND constraint_object.conname = '_prisma_migrations_pkey'
+      AND constraint_object.contype = 'p'
+      AND constraint_object.condeferrable = FALSE
+      AND constraint_object.condeferred = FALSE
+      AND constraint_object.convalidated
+      AND constraint_object.connoinherit
+      AND constraint_object.conislocal
+      AND constraint_object.coninhcount = 0
+      AND constraint_object.conparentid = 0
+      AND constraint_object.confrelid = 0
+      AND constraint_object.conkey = ARRAY[1]::SMALLINT[]
+      AND constraint_object.conbin IS NULL
+  )
+) AS ledger_catalog_exact \gset
+
+\if :ledger_catalog_exact
+WITH selected_database AS (
+  SELECT database_object.oid AS database_oid,
+    database_object.datdba AS database_owner_oid,
+    database_owner.rolsuper AS database_owner_superuser
+  FROM pg_catalog.pg_database database_object
+  JOIN pg_catalog.pg_roles database_owner
+    ON database_owner.oid = database_object.datdba
+  WHERE database_object.datname = pg_catalog.current_database()
+), helper AS (
+  SELECT routine.oid, routine.proacl,
+    routine.proowner = selected_database.database_owner_oid AS owner_is_exact,
+    pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(
+      pg_catalog.jsonb_build_array(
+        CASE
+          WHEN routine.proowner = selected_database.database_owner_oid
+            THEN '<current-db-owner>'
+          ELSE COALESCE(owner_role.rolname, '<unknown-owner>')
+        END,
+        language_object.lanname,
+        routine.prokind,
+        routine.prosecdef,
+        routine.proleakproof,
+        routine.proisstrict,
+        routine.proretset,
+        routine.provolatile,
+        routine.proparallel,
+        COALESCE((
+          SELECT pg_catalog.jsonb_agg(
+            setting ORDER BY setting COLLATE "C"
+          )
+          FROM pg_catalog.unnest(routine.proconfig) setting
+        ), '[]'::pg_catalog.jsonb),
+        extension_object.extname,
+        extension_object.extversion,
+        pg_catalog.pg_get_functiondef(routine.oid)
+      )::TEXT,
+      'UTF8'
+    )), 'hex') AS semantic_sha256
+  FROM selected_database
+  JOIN pg_catalog.pg_proc routine
+    ON routine.oid = pg_catalog.to_regprocedure(
+      'public.quillmd_boundary_password_is_null(text)'
+    )
+  LEFT JOIN pg_catalog.pg_roles owner_role
+    ON owner_role.oid = routine.proowner
+  JOIN pg_catalog.pg_language language_object
+    ON language_object.oid = routine.prolang
+  LEFT JOIN pg_catalog.pg_depend extension_dependency
+    ON extension_dependency.classid =
+      'pg_catalog.pg_proc'::pg_catalog.regclass
+   AND extension_dependency.objid = routine.oid
+   AND extension_dependency.objsubid = 0
+   AND extension_dependency.refclassid =
+      'pg_catalog.pg_extension'::pg_catalog.regclass
+   AND extension_dependency.deptype = 'e'
+  LEFT JOIN pg_catalog.pg_extension extension_object
+    ON extension_object.oid = extension_dependency.refobjid
+), helper_acl AS (
+  SELECT privilege.*
+  FROM helper
+  CROSS JOIN LATERAL pg_catalog.aclexplode(helper.proacl) privilege
+), expected_helper_grantees AS (
+  SELECT role.oid
+  FROM pg_catalog.pg_roles role
+  WHERE role.rolname IN (
+    'quillmd_runtime',
+    'quillmd_release_control',
+    'quillmd_release_security',
+    'quillmd_audit_dispatcher',
+    'quillmd_auth_email_dispatcher',
+    'quillmd_backup'
+  )
+  UNION
+  SELECT selected_database.database_owner_oid FROM selected_database
+), helper_contract AS (
+  SELECT (
+    (SELECT pg_catalog.count(*) FROM helper) = 1
+    AND NOT EXISTS (
+      SELECT 1 FROM helper WHERE helper.owner_is_exact IS DISTINCT FROM TRUE
+    )
+    AND NOT EXISTS (
+      SELECT 1 FROM helper
+      WHERE helper.semantic_sha256 <>
+        '61db58de71d232b29e38044cd4c4c7b310209e90be50377039b80ec19900c30e'
+    )
+    AND (SELECT pg_catalog.count(*) FROM expected_helper_grantees) = 7
+    AND (SELECT pg_catalog.count(*) FROM helper_acl) = 7
+    AND NOT EXISTS (
+      SELECT 1
+      FROM helper_acl
+      CROSS JOIN selected_database
+      WHERE helper_acl.grantor <>
+          selected_database.database_owner_oid
+         OR helper_acl.privilege_type <> 'EXECUTE'
+         OR helper_acl.is_grantable
+         OR NOT EXISTS (
+              SELECT 1 FROM expected_helper_grantees
+              WHERE expected_helper_grantees.oid = helper_acl.grantee
+            )
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM expected_helper_grantees
+      WHERE NOT EXISTS (
+        SELECT 1 FROM helper_acl
+        WHERE helper_acl.grantee = expected_helper_grantees.oid
+      )
+    )
+  ) AS is_exact
+)
+SELECT CASE WHEN
+  SESSION_USER = 'meddoc_backup'
+  AND CURRENT_USER = 'meddoc_backup'
+  AND pg_catalog.current_database() = :'expected_database'
+  AND pg_catalog.pg_is_in_recovery() = FALSE
+  AND (
+    SELECT selected_database.database_owner_superuser
+    FROM selected_database
+  ) IS TRUE
+  AND EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_class relation
+    JOIN pg_catalog.pg_namespace namespace_object
+      ON namespace_object.oid = relation.relnamespace
+    JOIN selected_database
+      ON relation.relowner = selected_database.database_owner_oid
+    WHERE relation.oid = pg_catalog.to_regclass(
+        'public._prisma_migrations'
+      )
+      AND namespace_object.nspname = 'public'
+      AND relation.relname = '_prisma_migrations'
+      AND relation.relkind = 'r'
+      AND relation.relpersistence = 'p'
+      AND relation.relrowsecurity = FALSE
+      AND relation.relforcerowsecurity = FALSE
+  )
+  AND (
+    SELECT pg_catalog.count(*)
+    FROM public."_prisma_migrations"
+    WHERE migration_name =
+      '20260720213000_exact_database_principal_closure_v9'
+  ) = 1
+  AND (
+    SELECT pg_catalog.count(*)
+    FROM public."_prisma_migrations"
+    WHERE migration_name =
+        '20260720213000_exact_database_principal_closure_v9'
+      AND checksum =
+        '8d2c4fe1075490085b34397cdecde3d8c6e50b3e21c778ac9d491da071faf404'
+      AND started_at IS NOT NULL
+      AND finished_at IS NOT NULL
+      AND finished_at >= started_at
+      AND rolled_back_at IS NULL
+      AND logs IS NULL
+      AND applied_steps_count = 1
+  ) = 1
+  AND (SELECT helper_contract.is_exact FROM helper_contract)
+  AND (
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_shdepend dependency
+    JOIN selected_database
+      ON dependency.dbid = selected_database.database_oid
+    WHERE dependency.classid =
+        'pg_catalog.pg_proc'::pg_catalog.regclass
+      AND dependency.objid = pg_catalog.to_regprocedure(
+        'public.quillmd_boundary_password_is_null(text)'
+      )
+      AND dependency.objsubid = 0
+      AND dependency.refclassid =
+        'pg_catalog.pg_authid'::pg_catalog.regclass
+      AND dependency.refobjid =
+        'quillmd_backup'::pg_catalog.regrole
+      AND dependency.deptype = 'a'
+  ) = 1
+  AND (
+    SELECT COUNT(*) FROM pg_catalog.pg_roles role
+    WHERE role.rolname = 'meddoc_backup'
+      AND role.rolcanlogin
+      AND role.rolsuper = FALSE
+      AND role.rolcreatedb = FALSE
+      AND role.rolcreaterole = FALSE
+      AND role.rolinherit
+      AND role.rolreplication = FALSE
+      AND role.rolbypassrls
+      AND role.rolconnlimit = 1
+      AND role.rolconfig IS NULL
+      AND role.rolvaliduntil IS NULL
+  ) = 1
+  AND (
+    SELECT COUNT(*) FROM pg_catalog.pg_roles role
+    WHERE role.rolname IN (
+      'quillmd_runtime',
+      'quillmd_release_control',
+      'quillmd_release_security',
+      'quillmd_audit_dispatcher',
+      'quillmd_auth_email_dispatcher'
+    )
+      AND role.rolcanlogin = FALSE
+      AND role.rolsuper = FALSE
+      AND role.rolcreatedb = FALSE
+      AND role.rolcreaterole = FALSE
+      AND role.rolinherit = FALSE
+      AND role.rolreplication = FALSE
+      AND role.rolbypassrls = FALSE
+      AND role.rolconnlimit = -1
+      AND role.rolconfig IS NULL
+      AND role.rolvaliduntil IS NULL
+  ) = 5
+  AND (
+    SELECT COUNT(*) FROM pg_catalog.pg_roles role
+    WHERE role.rolname IN (
+      'meddoc_runtime',
+      'meddoc_release_control',
+      'meddoc_audit_dispatcher',
+      'meddoc_auth_email_dispatcher'
+    )
+      AND role.rolcanlogin
+      AND role.rolsuper = FALSE
+      AND role.rolcreatedb = FALSE
+      AND role.rolcreaterole = FALSE
+      AND role.rolinherit
+      AND role.rolreplication = FALSE
+      AND role.rolbypassrls = FALSE
+      AND role.rolconnlimit = -1
+      AND role.rolconfig IS NULL
+      AND role.rolvaliduntil IS NULL
+  ) = 4
+  AND NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_roles role
+    WHERE role.rolname = 'meddoc_release_security'
+      AND (
+        role.rolcanlogin = FALSE OR role.rolsuper OR role.rolcreatedb
+        OR role.rolcreaterole OR role.rolinherit = FALSE
+        OR role.rolreplication OR role.rolbypassrls
+        OR role.rolconnlimit <> -1 OR role.rolconfig IS NOT NULL
+        OR role.rolvaliduntil IS NOT NULL
+      )
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_roles login_role
+    WHERE login_role.rolname IN (
+      'meddoc_runtime',
+      'meddoc_release_control',
+      'meddoc_release_security',
+      'meddoc_audit_dispatcher',
+      'meddoc_auth_email_dispatcher'
+    ) AND (
+      EXISTS (
+        SELECT 1 FROM pg_catalog.pg_db_role_setting setting
+        WHERE setting.setrole = login_role.oid
+      ) OR EXISTS (
+        SELECT 1 FROM pg_catalog.pg_shdepend dependency
+        WHERE dependency.refclassid =
+            'pg_catalog.pg_authid'::pg_catalog.regclass
+          AND dependency.refobjid = login_role.oid
+      )
+    )
+  )
+  AND (
+    SELECT COUNT(*)
+    FROM pg_catalog.pg_auth_members membership
+    JOIN pg_catalog.pg_roles member_role
+      ON member_role.oid = membership.member
+    JOIN pg_catalog.pg_roles granted_role
+      ON granted_role.oid = membership.roleid
+    JOIN pg_catalog.pg_roles grantor_role
+      ON grantor_role.oid = membership.grantor
+    WHERE (member_role.rolname, granted_role.rolname) IN (
+      ('meddoc_runtime', 'quillmd_runtime'),
+      ('meddoc_release_control', 'quillmd_release_control'),
+      ('meddoc_audit_dispatcher', 'quillmd_audit_dispatcher'),
+      ('meddoc_auth_email_dispatcher', 'quillmd_auth_email_dispatcher')
+    )
+      AND membership.admin_option = FALSE
+      AND membership.inherit_option = TRUE
+      AND membership.set_option = FALSE
+      AND grantor_role.rolsuper
+  ) = 4
+  AND (
+    SELECT COUNT(*)
+    FROM pg_catalog.pg_auth_members membership
+    JOIN pg_catalog.pg_roles member_role
+      ON member_role.oid = membership.member
+    JOIN pg_catalog.pg_roles granted_role
+      ON granted_role.oid = membership.roleid
+    JOIN pg_catalog.pg_roles grantor_role
+      ON grantor_role.oid = membership.grantor
+    WHERE member_role.rolname = 'meddoc_release_security'
+      AND granted_role.rolname = 'quillmd_release_security'
+      AND membership.admin_option = FALSE
+      AND membership.inherit_option = TRUE
+      AND membership.set_option = FALSE
+      AND grantor_role.rolsuper
+  ) = (
+    SELECT COUNT(*) FROM pg_catalog.pg_roles role
+    WHERE role.rolname = 'meddoc_release_security'
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_auth_members membership
+    JOIN pg_catalog.pg_roles member_role
+      ON member_role.oid = membership.member
+    JOIN pg_catalog.pg_roles granted_role
+      ON granted_role.oid = membership.roleid
+    JOIN pg_catalog.pg_roles grantor_role
+      ON grantor_role.oid = membership.grantor
+    WHERE (
+      member_role.rolname IN (
+        'meddoc_runtime',
+        'meddoc_release_control',
+        'meddoc_release_security',
+        'meddoc_audit_dispatcher',
+        'meddoc_auth_email_dispatcher',
+        'quillmd_runtime',
+        'quillmd_release_control',
+        'quillmd_release_security',
+        'quillmd_audit_dispatcher',
+        'quillmd_auth_email_dispatcher'
+      ) OR granted_role.rolname IN (
+        'meddoc_runtime',
+        'meddoc_release_control',
+        'meddoc_release_security',
+        'meddoc_audit_dispatcher',
+        'meddoc_auth_email_dispatcher',
+        'quillmd_runtime',
+        'quillmd_release_control',
+        'quillmd_release_security',
+        'quillmd_audit_dispatcher',
+        'quillmd_auth_email_dispatcher'
+      ) OR grantor_role.rolname IN (
+        'meddoc_runtime',
+        'meddoc_release_control',
+        'meddoc_release_security',
+        'meddoc_audit_dispatcher',
+        'meddoc_auth_email_dispatcher',
+        'quillmd_runtime',
+        'quillmd_release_control',
+        'quillmd_release_security',
+        'quillmd_audit_dispatcher',
+        'quillmd_auth_email_dispatcher'
+      )
+    ) AND NOT (
+      membership.admin_option = FALSE
+      AND membership.inherit_option = TRUE
+      AND membership.set_option = FALSE
+      AND grantor_role.rolsuper
+      AND (
+        (member_role.rolname, granted_role.rolname) IN (
+          ('meddoc_runtime', 'quillmd_runtime'),
+          ('meddoc_release_control', 'quillmd_release_control'),
+          ('meddoc_audit_dispatcher', 'quillmd_audit_dispatcher'),
+          ('meddoc_auth_email_dispatcher', 'quillmd_auth_email_dispatcher')
+        ) OR (
+          member_role.rolname = 'meddoc_release_security'
+          AND granted_role.rolname = 'quillmd_release_security'
+        )
+      )
+    )
+  )
+  AND (
+    SELECT COUNT(*) FROM pg_catalog.pg_roles role
+    WHERE role.rolname = 'quillmd_backup'
+      AND role.rolcanlogin = FALSE
+      AND role.rolsuper = FALSE
+      AND role.rolcreatedb = FALSE
+      AND role.rolcreaterole = FALSE
+      AND role.rolinherit = FALSE
+      AND role.rolreplication = FALSE
+      AND role.rolbypassrls = FALSE
+      AND role.rolconnlimit = -1
+      AND role.rolconfig IS NULL
+      AND role.rolvaliduntil IS NULL
+  ) = 1
+  AND (
+    SELECT COUNT(*) FROM pg_catalog.pg_roles role
+    WHERE role.rolname = 'pg_read_all_data'
+      AND role.rolcanlogin = FALSE
+      AND role.rolsuper = FALSE
+      AND role.rolcreatedb = FALSE
+      AND role.rolcreaterole = FALSE
+      AND role.rolinherit = TRUE
+      AND role.rolreplication = FALSE
+      AND role.rolbypassrls = FALSE
+      AND role.rolconnlimit = -1
+      AND role.rolconfig IS NULL
+      AND role.rolvaliduntil IS NULL
+  ) = 1
+  AND (
+    SELECT COUNT(*)
+    FROM pg_catalog.pg_auth_members membership
+    JOIN pg_catalog.pg_roles member_role
+      ON member_role.oid = membership.member
+    JOIN pg_catalog.pg_roles granted_role
+      ON granted_role.oid = membership.roleid
+    JOIN pg_catalog.pg_roles grantor_role
+      ON grantor_role.oid = membership.grantor
+    WHERE (
+      member_role.rolname IN (
+        'meddoc_backup', 'quillmd_backup', 'pg_read_all_data'
+      ) OR granted_role.rolname IN (
+        'meddoc_backup', 'quillmd_backup', 'pg_read_all_data'
+      ) OR grantor_role.rolname IN (
+        'meddoc_backup', 'quillmd_backup', 'pg_read_all_data'
+      )
+    )
+      AND membership.admin_option = FALSE
+      AND membership.inherit_option = TRUE
+      AND membership.set_option = FALSE
+      AND grantor_role.rolsuper
+      AND (
+        (
+          member_role.rolname = 'meddoc_backup'
+          AND granted_role.rolname = 'quillmd_backup'
+        ) OR (
+          member_role.rolname = 'quillmd_backup'
+          AND granted_role.rolname = 'pg_read_all_data'
+        )
+      )
+  ) = 2
+  AND (
+    SELECT COUNT(*)
+    FROM pg_catalog.pg_auth_members membership
+    JOIN pg_catalog.pg_roles member_role
+      ON member_role.oid = membership.member
+    JOIN pg_catalog.pg_roles granted_role
+      ON granted_role.oid = membership.roleid
+    JOIN pg_catalog.pg_roles grantor_role
+      ON grantor_role.oid = membership.grantor
+    WHERE member_role.rolname IN (
+      'meddoc_backup', 'quillmd_backup', 'pg_read_all_data'
+    ) OR granted_role.rolname IN (
+      'meddoc_backup', 'quillmd_backup', 'pg_read_all_data'
+    ) OR grantor_role.rolname IN (
+      'meddoc_backup', 'quillmd_backup', 'pg_read_all_data'
+    )
+  ) = 2
+  AND NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_db_role_setting setting
+    WHERE setting.setrole IN (
+      'meddoc_backup'::pg_catalog.regrole,
+      'quillmd_backup'::pg_catalog.regrole
+    )
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_shdepend dependency
+    WHERE dependency.refclassid =
+        'pg_catalog.pg_authid'::pg_catalog.regclass
+      AND dependency.refobjid = 'meddoc_backup'::pg_catalog.regrole
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_shdepend dependency
+    WHERE dependency.refclassid =
+        'pg_catalog.pg_authid'::pg_catalog.regclass
+      AND dependency.refobjid = 'quillmd_backup'::pg_catalog.regrole
+      AND NOT (
+        dependency.deptype = 'a'
+        AND dependency.objsubid = 0
+        AND (
+          (
+            dependency.dbid = 0
+            AND dependency.classid =
+              'pg_catalog.pg_database'::pg_catalog.regclass
+            AND dependency.objid = (
+              SELECT selected_database.database_oid FROM selected_database
+            )
+          ) OR (
+            dependency.dbid = (
+              SELECT selected_database.database_oid FROM selected_database
+            )
+            AND dependency.classid =
+              'pg_catalog.pg_proc'::pg_catalog.regclass
+            AND dependency.objid = pg_catalog.to_regprocedure(
+              'public.quillmd_boundary_password_is_null(text)'
+            )
+            AND (SELECT helper_contract.is_exact FROM helper_contract)
+          )
+        )
+      )
+  )
+  AND (
+    SELECT COUNT(*)
+    FROM pg_catalog.pg_database database_object
+    CROSS JOIN LATERAL pg_catalog.aclexplode(database_object.datacl) privilege
+    JOIN pg_catalog.pg_roles grantee_role
+      ON grantee_role.oid = privilege.grantee
+    JOIN pg_catalog.pg_roles grantor_role
+      ON grantor_role.oid = privilege.grantor
+    WHERE grantee_role.rolname IN (
+      'quillmd_runtime',
+      'quillmd_release_control',
+      'quillmd_release_security',
+      'quillmd_audit_dispatcher',
+      'quillmd_auth_email_dispatcher',
+      'quillmd_backup'
+    )
+      AND database_object.datname = pg_catalog.current_database()
+      AND privilege.privilege_type = 'CONNECT'
+      AND privilege.is_grantable = FALSE
+      AND grantor_role.rolsuper
+  ) = 6
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_database database_object
+    CROSS JOIN LATERAL pg_catalog.aclexplode(database_object.datacl) privilege
+    JOIN pg_catalog.pg_roles grantee_role
+      ON grantee_role.oid = privilege.grantee
+    WHERE grantee_role.rolname IN (
+      'quillmd_runtime',
+      'quillmd_release_control',
+      'quillmd_release_security',
+      'quillmd_audit_dispatcher',
+      'quillmd_auth_email_dispatcher',
+      'quillmd_backup'
+    )
+      AND NOT (
+        database_object.datname = pg_catalog.current_database()
+        AND privilege.privilege_type = 'CONNECT'
+        AND privilege.is_grantable = FALSE
+        AND EXISTS (
+          SELECT 1 FROM pg_catalog.pg_roles grantor_role
+          WHERE grantor_role.oid = privilege.grantor
+            AND grantor_role.rolsuper
+        )
+      )
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_database database_object
+    CROSS JOIN LATERAL pg_catalog.aclexplode(database_object.datacl) privilege
+    JOIN pg_catalog.pg_roles backup_role
+      ON backup_role.oid = privilege.grantor
+    WHERE backup_role.rolname IN ('meddoc_backup', 'quillmd_backup')
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_database database_object
+    CROSS JOIN LATERAL pg_catalog.aclexplode(database_object.datacl) privilege
+    WHERE privilege.grantee = 'meddoc_backup'::pg_catalog.regrole
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_database database_object
+    WHERE pg_catalog.has_database_privilege(
+        'meddoc_backup', database_object.oid, 'CONNECT'
+      ) IS DISTINCT FROM (
+        database_object.datname = pg_catalog.current_database()
+      )
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_database database_object
+    WHERE (
+        pg_catalog.has_database_privilege(
+          'meddoc_backup', database_object.oid, 'CREATE'
+        ) OR pg_catalog.has_database_privilege(
+          'meddoc_backup', database_object.oid, 'TEMPORARY'
+        )
+      )
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_database database_object
+    CROSS JOIN LATERAL pg_catalog.aclexplode(database_object.datacl) privilege
+    WHERE privilege.grantee = 0
+      AND privilege.privilege_type IN ('CONNECT', 'CREATE', 'TEMPORARY')
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_namespace namespace_object
+    WHERE namespace_object.nspname NOT IN ('pg_catalog', 'information_schema')
+      AND namespace_object.nspname !~ '^pg_toast'
+      AND namespace_object.nspname !~ '^pg_temp'
+      AND (
+        pg_catalog.has_schema_privilege(
+          CURRENT_USER, namespace_object.oid, 'USAGE'
+        ) = FALSE
+        OR pg_catalog.has_schema_privilege(
+          CURRENT_USER, namespace_object.oid, 'CREATE'
+        )
+      )
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_class relation
+    JOIN pg_catalog.pg_namespace namespace_object
+      ON namespace_object.oid = relation.relnamespace
+    WHERE namespace_object.nspname NOT IN ('pg_catalog', 'information_schema')
+      AND namespace_object.nspname !~ '^pg_toast'
+      AND namespace_object.nspname !~ '^pg_temp'
+      AND relation.relkind IN ('r', 'p', 'v', 'm')
+      AND (
+        pg_catalog.has_table_privilege(CURRENT_USER, relation.oid, 'SELECT') = FALSE
+        OR pg_catalog.has_table_privilege(
+          CURRENT_USER,
+          relation.oid,
+          'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'
+        )
+      )
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_class sequence_object
+    JOIN pg_catalog.pg_namespace namespace_object
+      ON namespace_object.oid = sequence_object.relnamespace
+    WHERE namespace_object.nspname NOT IN ('pg_catalog', 'information_schema')
+      AND namespace_object.nspname !~ '^pg_toast'
+      AND namespace_object.nspname !~ '^pg_temp'
+      AND sequence_object.relkind = 'S'
+      AND (
+        pg_catalog.has_sequence_privilege(
+          CURRENT_USER, sequence_object.oid, 'SELECT'
+        ) = FALSE
+        OR pg_catalog.has_sequence_privilege(
+          CURRENT_USER, sequence_object.oid, 'USAGE,UPDATE'
+        )
+      )
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_proc routine
+    JOIN pg_catalog.pg_namespace namespace_object
+      ON namespace_object.oid = routine.pronamespace
+    WHERE namespace_object.nspname NOT IN ('pg_catalog', 'information_schema')
+      AND namespace_object.nspname !~ '^pg_toast'
+      AND namespace_object.nspname !~ '^pg_temp'
+      AND routine.prosecdef
+      AND pg_catalog.has_function_privilege(
+        CURRENT_USER, routine.oid, 'EXECUTE'
+      )
+      AND NOT (
+        routine.oid = pg_catalog.to_regprocedure(
+          'public.quillmd_boundary_password_is_null(text)'
+        )
+        AND (SELECT helper_contract.is_exact FROM helper_contract)
+      )
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_class foreign_relation
+    JOIN pg_catalog.pg_namespace namespace_object
+      ON namespace_object.oid = foreign_relation.relnamespace
+    WHERE namespace_object.nspname NOT IN ('pg_catalog', 'information_schema')
+      AND namespace_object.nspname !~ '^pg_toast'
+      AND namespace_object.nspname !~ '^pg_temp'
+      AND foreign_relation.relkind = 'f'
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_largeobject_metadata
+  )
+  AND (
+    SELECT COUNT(*)
+    FROM (
+      VALUES
+        ('pg_catalog.lo_creat(integer)'),
+        ('pg_catalog.lo_create(oid)'),
+        ('pg_catalog.lo_from_bytea(oid,bytea)'),
+        ('pg_catalog.lo_open(oid,integer)'),
+        ('pg_catalog.lo_put(oid,bigint,bytea)'),
+        ('pg_catalog.lo_truncate(integer,integer)'),
+        ('pg_catalog.lo_truncate64(integer,bigint)'),
+        ('pg_catalog.lo_unlink(oid)'),
+        ('pg_catalog.lowrite(integer,bytea)'),
+        ('pg_catalog.lo_import(text)'),
+        ('pg_catalog.lo_import(text,oid)'),
+        ('pg_catalog.lo_export(oid,text)')
+    ) AS expected(signature)
+    WHERE pg_catalog.to_regprocedure(expected.signature) IS NOT NULL
+  ) = 12
+  AND NOT EXISTS (
+    SELECT 1
+    FROM (
+      VALUES
+        ('pg_catalog.lo_creat(integer)'),
+        ('pg_catalog.lo_create(oid)'),
+        ('pg_catalog.lo_from_bytea(oid,bytea)'),
+        ('pg_catalog.lo_open(oid,integer)'),
+        ('pg_catalog.lo_put(oid,bigint,bytea)'),
+        ('pg_catalog.lo_truncate(integer,integer)'),
+        ('pg_catalog.lo_truncate64(integer,bigint)'),
+        ('pg_catalog.lo_unlink(oid)'),
+        ('pg_catalog.lowrite(integer,bytea)'),
+        ('pg_catalog.lo_import(text)'),
+        ('pg_catalog.lo_import(text,oid)'),
+        ('pg_catalog.lo_export(oid,text)')
+    ) AS expected(signature)
+    WHERE pg_catalog.has_function_privilege(
+      CURRENT_USER,
+      pg_catalog.to_regprocedure(expected.signature),
+      'EXECUTE'
+    )
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_subscription
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_index index_object
+    JOIN pg_catalog.pg_class relation
+      ON relation.oid = index_object.indrelid
+    JOIN pg_catalog.pg_namespace namespace_object
+      ON namespace_object.oid = relation.relnamespace
+    WHERE namespace_object.nspname NOT IN ('pg_catalog', 'information_schema')
+      AND namespace_object.nspname !~ '^pg_toast'
+      AND namespace_object.nspname !~ '^pg_temp'
+      AND (
+        index_object.indisvalid = FALSE
+        OR index_object.indisready = FALSE
+      )
+  )
+THEN TRUE ELSE FALSE END AS structural_exact \gset
+
+\if :structural_exact
+  SELECT NOT EXISTS (
+    SELECT 1
+    FROM (
+      VALUES
+        ('meddoc_backup'),
+        ('quillmd_runtime'),
+        ('quillmd_release_control'),
+        ('quillmd_release_security'),
+        ('quillmd_audit_dispatcher'),
+        ('quillmd_auth_email_dispatcher'),
+        ('quillmd_backup')
+    ) expected_boundary(boundary_name)
+    WHERE public.quillmd_boundary_password_is_null(
+      expected_boundary.boundary_name
+    ) IS DISTINCT FROM TRUE
+  ) AS helper_result_exact \gset
+  \if :helper_result_exact
+    COMMIT;
+    \echo PASS
+  \else
+    ROLLBACK;
+    \echo FAIL
+  \endif
+\else
+  ROLLBACK;
+  \echo FAIL
+\endif
+\else
+  ROLLBACK;
+  \echo FAIL
+\endif
+\else
+  \echo FAIL
+\endif
+SQL
+) || fail
+
+[ "$result" = 'PASS' ] || fail
+printf '%s\n' 'postgres-backup-preflight: PASS'

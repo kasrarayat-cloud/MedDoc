@@ -339,6 +339,13 @@ describe("Template Twin production control-plane migration contract", () => {
       "template_twin_verify_release_admin_session",
     );
     expect(sharedAuth).toContain("usesDedicatedTemplateTwinSessionVerifier");
+    expect(sharedAuth).toContain('"template-twin-admin-control-v1" as const');
+    expect(sharedAuth).toContain(
+      "process.env[QUILLMD_AUTH_SESSION_VERIFIER_PROFILE_ENV]",
+    );
+    expect(compose).toContain(
+      "QUILLMD_AUTH_SESSION_VERIFIER_PROFILE: template-twin-admin-control-v1",
+    );
   });
 });
 
@@ -404,7 +411,7 @@ describe("Template Twin release admin route boundary", () => {
     expect(adminBlock).toContain("env_file: []");
     expect(adminBlock).not.toContain("<<: *transcribe_md_app_environment");
     expect(adminBlock).toContain(
-      "DATABASE_URL: postgresql://meddoc_release_control:",
+      'DATABASE_URL: "postgresql://meddoc_release_control:',
     );
     expect(adminBlock).not.toContain("postgresql://meddoc_runtime:");
     expect(adminBlock).not.toContain("${ANTHROPIC_API_KEY}");

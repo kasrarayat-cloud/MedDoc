@@ -49,17 +49,25 @@ approval remain required gates.
    ORDER BY rolname;
 
    SELECT member_role.rolname AS member_role,
-          granted_role.rolname AS granted_role
+          granted_role.rolname AS granted_role,
+          membership.admin_option, membership.inherit_option,
+          membership.set_option
    FROM pg_auth_members membership
    JOIN pg_roles member_role ON member_role.oid = membership.member
    JOIN pg_roles granted_role ON granted_role.oid = membership.roleid
    WHERE member_role.rolname IN ('quillmd_auth_email_dispatcher',
                                  'meddoc_auth_email_dispatcher')
+      OR granted_role.rolname IN ('quillmd_auth_email_dispatcher',
+                                  'meddoc_auth_email_dispatcher')
    ORDER BY member_role.rolname, granted_role.rolname;
    ```
 
-   The group must be NOLOGIN/NOINHERIT with no memberships. The login must be
-   LOGIN/INHERIT, non-privileged, and have exactly the one expected membership.
+   The group must be NOLOGIN/NOINHERIT with no outgoing memberships and exactly
+   one incoming edge from the dedicated login. The login must be LOGIN/INHERIT,
+   non-privileged, have no incoming members, and have exactly that one outgoing
+   edge with `admin_option=false`, `inherit_option=true`, and
+   `set_option=false`. Startup also requires the authenticated `session_user`
+   and effective `current_user` to both be `meddoc_auth_email_dispatcher`.
 
 5. Apply the reviewed migration with the verified migrator. Its transaction
    must commit before the dispatcher starts; do not hot-grant around a failure.

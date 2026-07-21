@@ -1,100 +1,133 @@
 # QuillMD Template Twin GA release-program status
 
-Last updated: 2026-07-19T17:54:54Z
+Last updated: 2026-07-21T00:55:17Z
 
 ## Production verdict
 
-**NOT RELEASED.** Template Twin remains synthetic-staging-only. No production migration, deployment, flag change, provider call, or PHI-bearing test has been performed by this program.
+**NOT RELEASED.** Production availability remains **0%**. This hardening series
+performed no production migration, deployment, flag change, provider call, or
+PHI-bearing test. Template Twin remains unauthorized for production use.
 
 ## Exact source records
 
-| Record | Exact value | Status |
-|---|---|---|
-| Current `origin/main` | `1be101912f01293de3b8fddae722c823ecc86f29` | PASS |
-| Accepted remediation | `fix/template-twin-manual-certification-remediation-v1` at `79c04e88785a16e8e3b37b58544e107e3a16996e` | PASS |
-| Accepted parent | `b46c62f97544a0193c60929d5ac8e8870b20dc4b` | PASS |
-| Stacked PRs | #362–#370, all open drafts, exact heads verified linear | PASS |
-| Consolidated release branch | `release/template-twin-ga-20260719` at local additive head `1685e35aef0d26048e031920a0f6e5da4bc79b1b` | PASS |
-| Published draft-PR head | `9088f74f17e11ff3f7e5869e5a56b6c5d36796fd`; intentionally stale while additive reviews run | FAIL |
-| Lossless stack integration | Merge `719eea4b27c68cc76e6bf485612c833705cef913` | PASS |
-| Consolidated release PR | Draft PR #371 targeting `main` | PASS |
-| Frozen release candidate | Not created | FAIL |
-| Current production Git SHA | Not reproducible from a clean commit | FAIL |
+| Record                                      | Exact value                                                                                                                                   | Status |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| Local `origin/main` reference               | `1be101912f01293de3b8fddae722c823ecc86f29`; last remotely verified 2026-07-19                                                                 | PASS   |
+| Accepted remediation                        | `79c04e88785a16e8e3b37b58544e107e3a16996e`; parent `b46c62f97544a0193c60929d5ac8e8870b20dc4b`                                                 | PASS   |
+| Lossless stack integration                  | Merge `719eea4b27c68cc76e6bf485612c833705cef913`; accepted tree preserved                                                                     | PASS   |
+| Provider-ownership head                     | `db1cab904ac5c8d6c7f25878f59d71e1b094a223`                                                                                                    | PASS   |
+| Authentication/authorization implementation | `9a1ded49055d1aef153864b28267c81ab1b0506d`                                                                                                    | PASS   |
+| Current committed baseline                  | `fix/template-twin-provider-ownership-b017-v1` at `e7b3864dc6d61d7d36755f59f87909bb7394740d`; tree `4a9f0bf06dbfc86ef94e03c515b910bd4ac47379` | PASS   |
+| Independent review of committed baseline    | **REJECT**; the reviewer found a P1 incomplete production runtime-identity census                                                             | FAIL   |
+| Current remediation candidate               | Uncommitted additive working tree based on `e7b3864`; a read-only pre-commit audit returned ACCEPT with no P0/P1/P2, but no exact SHA/tree or detached exact-head review exists yet | FAIL   |
+| Consolidated draft PR                       | PR #371 targets `main`, but its last recorded published head `9088f74f17e11ff3f7e5869e5a56b6c5d36796fd` does not contain this series          | FAIL   |
+| Frozen release candidate                    | Not created                                                                                                                                   | FAIL   |
+| Current production Git SHA                  | Not reproducible from a clean commit at the last authorized inventory                                                                         | FAIL   |
 
-`origin/main` is an ancestor of the accepted remediation; the accepted stack is 82 commits ahead and `git merge-tree` reports no integration conflict. Merge commit `719eea4b27c68cc76e6bf485612c833705cef913` has exactly two parents (`1be1019` and `79c04e8`), and its tree `1450b6fe4acdd78f0d6c46df5ef276e86735ab93` is byte-for-byte identical to the accepted remediation tree. The accepted stack adds ten ordered Prisma migrations. Additive intake, rollback, completed-candidate, and fill-lineage work now brings the local repository total to 87 while production remains at the preceding 67. No local migration result is production authorization.
-
-## Current production provenance
-
-The running production containers are healthy, but their images have no source-revision labels or registry digests. The running worker source manifest matches `origin/main` except for six uncommitted files from the protected worktree; it therefore cannot be assigned a truthful Git SHA.
-
-| Runtime | Immutable running image ID | Preserved local rollback tag |
-|---|---|---|
-| Physician app | `sha256:95f57158e3fe56acc832793be3f5da972cc1fdc6c3b85166f8387b3a103f1f90` | `meddoc-pro-transcribe-md:rollback-template-twin-ga-20260719-95f57158` |
-| Worker | `sha256:412dd3157475fd60a77d417a6db6880343d58755aaf76f044be035fba4acf44e` | `meddoc-pro-transcribe-md-worker:rollback-template-twin-ga-20260719-412dd315` |
-
-The two exact images were exported without runtime secrets to a mode-0600 local archive outside the repository:
-
-- Path: `/home/claude/release-evidence/meddoc-template-twin-ga-20260719/rollback/pre-release-production-images-20260719T0602Z.tar.gz`
-- SHA-256: `73bde836cc4983e7803caf2bda605955023e7eb2ad26f045d5b0fb9d87af8b3a`
-- Size: 593,964,098 bytes
+The candidate contains **97 ordered Prisma migrations**; the ordered-name
+manifest SHA-256 is
+`62efcdab3aea04ad635a1c01d0dab21f360e27a78cb87aab32cbeb3b8ca6040f`.
+A fresh disposable synthetic PostgreSQL installation applied all 97 migrations
+and passed the MedDoc suite. This is working-tree evidence, not a committed
+final-head receipt. The 96/96 authentication-email and MFA receipts below
+remain historical evidence from `e7b3864`. Production was last observed at 67
+migrations; that dated inventory is not authorization or proof of current
+production state.
 
 ## Phase status
 
-| Phase | Status | Evidence / blocking condition |
-|---|---|---|
-| 0 — Preflight and inventory | FAIL | Read-only inventory completed and production gate is closed: exact deployed SHA, least-privilege DB/object-storage identities, PITR, encrypted offsite restore, internal transport, capacity, and monitoring evidence fail. |
-| 1 — Consolidated implementation | FAIL | Accepted history is consolidated losslessly and draft PR #371 exists. The local additive head is `1685e35`; the remote PR is intentionally stale. The authentication/authorization component review accepted exact `137b020`, while schema, rollback, native DOCX, control-plane, final-head CI, census, and full integration review remain open. |
-| 2 — Production template intake | FAIL | The separate completed-document candidate workflow received independent ACCEPT and is integrated. Native bounded DOCX review at exact `635d966` returned REJECT: malformed control elements missing their required Word container can evade the placement gate and produce zero certification blockers. Unsupported repeats, rich text, ambiguous merges, unsafe parts, and unprofiled structures remain fail-closed and visible rather than claimed as supported. |
-| 3 — Extraction quality | FAIL | Exact evidence is revalidated at review, correction, signing, and download. The deterministic contract cohort passes 176/176, but the release-head live-provider cohort is `n=0` and Clinical Safety approval is pending. |
-| 4 — Microsoft Office compatibility | FAIL | The accepted author corpus passes its existing Open XML/LibreOffice checks, but detached review constructed synthetic misplaced dropdown/checkbox controls that intake accepted and Microsoft365 Open XML validation rejected. Additive placement remediation, fresh exact-head review, final-SHA package generation, and returned desktop Word evidence remain mandatory. |
-| 5 — Infrastructure and operations | FAIL | Fill-lineage immutability v5 and its rollback harness pass locally and are under detached review. Contracted Prisma schema drift is closed locally at `1685e35`. Control-plane v3 is still being remediated and is not integrated. Complete restore, PITR, object-store recovery, monitoring, capacity, and operational ownership remain unpassed. |
-| 6 — Privacy/Legal, Clinical, Operations approvals | HUMAN PENDING | No approval may be fabricated by Codex. |
-| 7 — Final release candidate | FAIL | No frozen exact head or independent final review exists. |
-| 8 — Production deployment and 100% rollout | FAIL | Not authorized until Phases 0–7 pass. Current rollout is 0%. |
+| Phase                                             | Status        | Evidence / blocking condition                                                                                                                                                                                                                |
+| ------------------------------------------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0 — Preflight and inventory                       | FAIL          | The equivalent preflight and read-only inventory exist, but deployed provenance, least-privilege production identities, PITR, complete restore, internal transport, capacity, monitoring, and credential-rotation gates remain open.         |
+| 1 — Consolidated implementation                   | FAIL          | Accepted history is preserved. The additive remediation passes a read-only working-tree audit with no P0/P1/P2, but it is uncommitted and therefore cannot yet receive the mandatory fresh detached exact-head review.                      |
+| 2 — Production template intake                    | FAIL          | Misplaced Word-control remediation and completed-document conversion are integrated; production scanner readiness, final compatibility evidence, and combined exact-head review remain open. Unsupported structures continue to fail closed. |
+| 3 — Extraction quality                            | FAIL          | Provider ownership now covers the released path technically, but the release-head live-provider clinical cohort remains `n=0` and Clinical Safety approval is HUMAN PENDING.                                                                 |
+| 4 — Microsoft Office compatibility                | FAIL          | Office evidence binding and misplaced-control remediation are integrated. Final-SHA corpus generation and returned desktop Word evidence remain mandatory; Word approval is HUMAN PENDING.                                                   |
+| 5 — Infrastructure and operations                 | FAIL          | Candidate disposable exact-principal, backup-role dump/restore/re-provision, and fresh 97-migration proofs pass. Production identities, immutable image digests, real six-container rollback, PITR/object/queue recovery, and named ownership remain unproven. |
+| 6 — Privacy/Legal, Clinical, Operations approvals | HUMAN PENDING | No implementation agent may supply these decisions.                                                                                                                                                                                          |
+| 7 — Final release candidate                       | FAIL          | The remediation is not yet an exact commit and has no detached exact-head verdict. No frozen or accepted RC exists.                                                                                                                         |
+| 8 — Production deployment and 100% rollout        | FAIL          | No production authority has been exercised; rollout is 0%.                                                                                                                                                                                   |
 
-## Phase 0 evidence already obtained
+## Historical scoped verification at rejected `e7b3864`
 
-- Mandatory equivalent preflight: `docs/preflight-reports/preflight-20260719T055320Z.md` (repository skill unavailable; recorded honestly).
-- Public health: app 307-to-login; `pro.quillmd.com` and `quillmd.com` 200; established unauthenticated admin root 404; Postgres/Redis/MinIO checks healthy.
-- DNS/TLS: app/admin resolve to `147.189.172.8`; certificate covers both and expires 2026-09-01.
-- Live schema-only backup/restore: restored all 30 public tables, 295 constraints, and 124 indexes to a network-isolated tmpfs PostgreSQL instance using immutable image `sha256:8ed3192326bb9d114cd5ef9acace453d5dae17425bd089d089330584c84c5a34`.
-- Latest local production dump: gzip integrity PASS; 375,260 bytes; SHA-256 `4312095f509e284ac5d7fe016898764f71d571ff36474a38cc54d1bb8df51823`; mtime 2026-07-19T00:00:00Z. Its PHI-bearing contents were not opened or restored into QA.
-- Accepted remediation CI: test, unit, Playwright E2E, npm high/critical audit, and verified-only TruffleHog checks succeeded at `79c04e8`; the branch-specific human-package job was skipped on PR #370.
-- Production DB: 67/67 migrations complete and no invalid indexes, but one documented historical migration checksum differs from the repository; PostgreSQL has no PITR and application traffic uses the sole superuser/owner role, including unrestricted mutation of `audit_logs`.
-- Production storage: MinIO is private and default-SSE encrypted, but web and worker use root credentials; versioning/object lock/lifecycle are absent, orphan reconciliation is disabled, and 76 storage-full events occurred July 16–17.
-- Internal service transport: PostgreSQL, Redis, and MinIO use plaintext on the private Docker network. Loopback-only host publishing reduces exposure but does not satisfy the explicit encryption-in-transit gate.
+- Auth/authz release manifest: **116/116 files and 1,362/1,362 tests PASS**.
+- Full TranscribeMD TypeScript: **PASS**.
+- Targeted ESLint: **163 application files and 17 package/script files PASS**.
+- Prisma 7.8.0 format, validate, and generate: **PASS**.
+- Diff whitespace check: **PASS**.
+- Fresh auth-email PostgreSQL proof: 96 migrations, **PASS**, including
+  transactional unique-conflict rollback and zero provider calls.
+- MFA v8 backfill and restore rehearsal: 96/96 migrations in both disposable
+  databases; encryption, strict plaintext denial, wrong-owner denial, session
+  revocation, email-authority cancellation, audit receipt, and restore proof
+  **PASS** on synthetic infrastructure.
+- Six-runtime rollback guard: static Compose census and focused fake-runtime
+  success/failure coverage **PASS** for all three app-image and three
+  worker-image long-lived services; the one-shot migrator is excluded.
 
-## Initial consolidated test census
+These scoped passes did not close the review finding. See
+`evidence-manifest-auth-authz-mfa-runtime-v1.md`.
 
-The census used clean detached worktrees, Node 22.22.0, npm 11.10.0, `npm ci`, and generated Prisma clients. It compared exact base `1be101912f01293de3b8fddae722c823ecc86f29` with release documentation head `4d011f6bcb8b8e9bac17a3f17d1874faec4f8ff3` before corrective commit `c4f6afa`; the final exact head must be rerun.
+## Current pre-commit remediation evidence
 
-- Repository test-file census: base 196, head 325, 129 added, 34 modified, none removed.
-- Offline unit census: base 143 files / 1,895 tests PASS; head 270 files / 3,264 tests PASS.
-- Identical 143-file manifest: base 1,895 tests PASS; head 1,925 tests PASS.
-- Head-only unit inventory: 127 files / 1,339 tests PASS.
-- The root `npm run test:all` command is a zero-test placeholder and is not counted as evidence.
-- The top-level CRM integration suite requires a seeded PostgreSQL instance and failed identically on base and head with the same unavailable test-database authentication; it is not marked PASS.
-- Browser, database-backed, Office, provider, load, and migration rehearsals remain separate open gates.
+- Full TranscribeMD unit suite: **416/416 files and 5,600/5,600 tests PASS**.
+- Full MedDoc unit suite against a disposable synthetic PostgreSQL database:
+  **11/11 files and 103/103 tests PASS** after a fresh **97/97 migration**
+  installation.
+- Full TranscribeMD TypeScript, Prisma 7.8.0 format/validate/generate, both
+  production application builds, both standalone application type checks,
+  changed-file lint, and diff whitespace: **PASS**. The final TranscribeMD
+  build used Next.js 16.2.6 and its server-action gate classified 30 source and
+  28 compiled exports.
+- Repository lint is unchanged from exact `e7b3864`: TranscribeMD reports the
+  same **25 errors / 37 warnings** on base and candidate; MedDoc reports the
+  same **0 errors / 3 warnings**. Changed-file lint passes. No baseline debt is
+  represented as newly green.
+- Exact database-principal source contracts: **4 files / 229 tests PASS**.
+- Role-graph and associated authorization contracts: **5 files / 71 tests
+  PASS**.
+- Disposable PostgreSQL 16 proofs for exact principals, all five runtime
+  profiles, credential-bootstrap log redaction, connection options, v6 role
+  graph, auth-token concurrency, auth-email outbox concurrency, and backup
+  dump/restore: **PASS**. Provider calls remained zero.
+- Dependency audit: **0 critical, 0 high, 12 moderate, 1 low**. The 13 lower
+  severity findings remain debt pending final RC disposition.
+- TruffleHog whole-workspace verified-only scan: **0 verified secrets** across
+  1.386 GB / 160,881 chunks. The source-only offline scan reported 59
+  unverified detector matches; the changed-file scan reported 35, all confined
+  to named synthetic test/QA fixtures and connection-string contracts. No
+  verified secret was found or retained.
+- Semgrep TypeScript scan: **0 findings, 0 errors**. Bash was validated with
+  shell syntax checks only; no Bash Semgrep result is claimed.
+- A fresh independent read-only working-tree audit returned **ACCEPT** with no
+  P0/P1/P2 findings after independently running the fatal-startup matrix,
+  focused 520-test integration census, MedDoc auth tests, database operator
+  contracts, TypeScript, lint, diff, and runtime-wrapper checks. This is not an
+  exact-head verdict.
 
-Draft PR #371 remains published at stale head `9088f74f17e11ff3f7e5869e5a56b6c5d36796fd`. Its current unit, TranscribeMD E2E, and accessibility checks are red; test, human-package, high/critical audit, and verified-only secret checks are green. This mixed stale-head result is **FAIL**, not final-head evidence. At combined local head `c9291c6`, the active TranscribeMD unit census passed 304 files / 3,522 tests and strict TypeScript passed; additive startup commit `2014ec2` then passed its focused test, lint, strict TypeScript, production Next.js build, and live standalone fail-fast probes. The full census will run again after control-plane integration and at frozen RC.
+This is working-tree evidence, not exact-head acceptance. It does not replace
+the additive commit, detached review, identical-manifest RC census, PR CI,
+Office return, provider-quality evaluation, or production infrastructure and
+human gates.
 
-## Corrective technical evidence at local head
+## Production and rollback provenance
 
-- Office evidence hardening commit: `70d3717594fd4fe512d5403918729dde23543f53`; focused author tests passed, but independent review rejected the package-origin, validator-report binding, and static-structure enforcement contracts. Desktop Word remains a human gate.
-- Intake/evidence/rollback commit: `581b5b5cfe17655f0994a382ccde5ca98088f4a9`; Template Twin path census 93 files / 1,012 tests PASS, application TypeScript PASS, changed-file ESLint PASS, Prisma format/validate/generate PASS.
-- A fresh disposable PostgreSQL database applied all 78 migrations. The synthetic-only `template-twin-quarantine-certification-contract-v1` passed its valid path and proved direct-SQL certification of a pre-GA source is rejected.
-- Independent detached review of `581b5b5` also returned REJECT: the generated Prisma enum omitted two admitted audit actions, legacy certified rows could bypass quarantine at runtime, the SQL receipt fixture was not canonical, no production ClamAV service was deployable, rollback lacked a callable audited maintenance command, and completed-document conversion was absent. Commit `9088f74` closes the legacy runtime bypass across activation, selection, pinning, fill, signing, and re-delivery; 138 focused tests, application TypeScript, and targeted lint pass. The other findings remain under additive remediation and require new independent exact-head review.
-- Completed-document candidate conversion passed detached review at exact `a0c142bc` with no P0/P1/P2 findings and is integrated through `1edc68c`. It never overwrites or activates the completed source and requires explicit physician decisions on every synthetic candidate region.
-- Fill-lineage immutability v5 is integrated through `635d966`; fresh, data-bearing, inconsistent-data, contention, race-ordering, stale-snapshot, rollback, and audit-time disposable PostgreSQL proofs passed. Detached exact-head review is in progress.
-- Native bounded DOCX hardening is integrated through `5cafc12`, but detached exact `635d966` review returned REJECT on missing-required-container handling for synthetic Word control elements. The existing focused corpus passed 84/84 and the complete app census passed 3,522/3,522 at `c9291c6`, demonstrating the missing negative coverage rather than closing the defect. Desktop Word remains HUMAN PENDING.
-- Administrative authentication and authorization hardening is independently accepted at exact `137b020904bfbee31dc5bea2a232bf706fadd300`: fresh per-page/API authority, host-only sessions, mandatory platform-admin MFA, required awaited audit persistence, fixed-detail error logs, and true process termination on unsafe production configuration. The detached reviewer passed 14/14 files and 62/62 tests, strict TypeScript, changed-file lint, production Next.js build, live host/cookie startup probes, Caddy/Compose validation, and returned zero P0/P1/P2 findings. Final combined-head review still applies.
-- Contracted schema reconciliation is integrated at `1685e35`: pre-operator drift contains only the documented lineage contract delta; the fully contracted disposable database produces an empty Prisma diff. The new harness rejects both uncontracted state and injected synthetic drift. See `evidence-manifest-schema-contract-v1.md`.
-- Current dependency audit has zero high/critical findings; one low and thirteen moderate findings are lower-severity debt for final triage. Verified-only TruffleHog found zero credentials; four offline heuristic hits are confined to named synthetic/placeholder test and example files.
-
-## Rollback compatibility finding
-
-An independent disposable-schema rehearsal rejected the preserved pre-release images as post-migration rollback targets. After the accepted lineage contract, the old application cannot create generic templates, cannot read newly appended audit enum values, can fail ordinary automation/signing transitions, can expose or select Template Twin rows without the new rollout contract, and its worker can replay ambiguous provider work. The archived images remain valid only for a rollback before any Template Twin migration. Commit `581b5b5` implements a final-schema `rollback-compat-v2` bridge and image guard, but production migration remains blocked until independent ACCEPT, immutable bridge digests, a data-bearing swap/roll-forward rehearsal, and an audited maintenance fence prove the required valid-token deactivation-before-revocation sequence.
+The last authorized inventory found healthy production containers whose images
+had no source-revision labels or registry digests. Their exact image IDs and a
+mode-0600 pre-migration archive remain recorded in the Phase 0 manifest and
+rollback plan. Those images are forbidden after any Template Twin migration.
+Post-migration rollback requires one accepted final-schema-compatible image pair
+recreating all six long-lived services with the reviewed bridge protocol.
 
 ## Protected-worktree statement
 
-`/opt/meddoc-pro` remains untouched. Its pre-existing modified and untracked files were not reset, cleaned, stashed, overwritten, switched, committed, or copied into the release workspace.
+Release agents issued no writes to `/opt/meddoc-pro`; its branch and SHA remain
+`feat/template-twin-docx-v1` and
+`bb1c828189ee95f85136c7ebd79d07e52467782a`. Its NUL-delimited status
+fingerprint changed from
+`f442687419e7b111b02f5ee90394330c9df5a4ca4aedd54f908573ba64851946`
+to `f2426a8fb327fcc6c5ae5721eb6a5f3823ef723eacc72856636eac81054da461`.
+No task-current mtimes were observed, but the change is unattributed and may be
+concurrent user activity. Exact fingerprint continuity is therefore not proven;
+the protected worktree must remain untouched and receive a final read-only
+reconciliation before reporting.

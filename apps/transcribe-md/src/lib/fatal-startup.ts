@@ -10,8 +10,9 @@ export function terminateForFatalStartupConfiguration(
   error: unknown,
   exitProcess: ExitProcess = process.exit,
 ): never {
+  void error;
   console.error("[startup] fatal runtime configuration rejected; terminating", {
-    errorType: error instanceof Error ? error.name : "UnknownError",
+    code: "QUILLMD_FATAL_STARTUP_CONFIGURATION_REJECTED",
   });
   return exitProcess(1);
 }

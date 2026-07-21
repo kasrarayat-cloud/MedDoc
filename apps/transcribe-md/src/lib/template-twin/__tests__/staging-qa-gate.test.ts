@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { evaluateTemplateTwinStagingQaGate } from "../staging-qa-gate";
+import {
+  evaluateTemplateTwinStagingQaGate,
+  evaluateTemplateTwinStagingQaResourceBoundary,
+} from "../staging-qa-gate";
 
 const SAFE_ENV = Object.freeze({
   TEMPLATE_TWIN_STAGING_QA_ENABLED: "true",
@@ -19,6 +22,23 @@ const SAFE_ENV = Object.freeze({
 });
 
 describe("Template Twin synthetic staging process gate", () => {
+  it("reuses the exact isolated resource boundary without enabling staging", () => {
+    expect(
+      evaluateTemplateTwinStagingQaResourceBoundary({
+        ...SAFE_ENV,
+        TEMPLATE_TWIN_STAGING_QA_ENABLED: undefined,
+        MOCK_AI_CALLS: "false",
+        MOCK_TEMPLATE_TWIN_E2E: "false",
+      }),
+    ).toEqual({ allowed: true, environment: "qa" });
+    expect(
+      evaluateTemplateTwinStagingQaGate({
+        ...SAFE_ENV,
+        TEMPLATE_TWIN_STAGING_QA_ENABLED: undefined,
+      }),
+    ).toEqual({ allowed: false, code: "STAGING_QA_DISABLED" });
+  });
+
   it("admits only the exact isolated synthetic configuration", () => {
     expect(evaluateTemplateTwinStagingQaGate(SAFE_ENV)).toEqual({
       allowed: true,

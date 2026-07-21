@@ -59,6 +59,7 @@ WORKDIR /app
 ARG QUILLMD_RELEASE_SHA=development
 LABEL org.opencontainers.image.revision="${QUILLMD_RELEASE_SHA}" \
       com.quillmd.runtime-protocol-epoch="template-twin-final-schema-v2" \
+      com.quillmd.rollback-runtime-capability="six-runtime-v1" \
       com.quillmd.runtime-component="transcribe-md-worker"
 
 ENV NODE_ENV=production

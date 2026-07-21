@@ -25,6 +25,33 @@ vi.mock("@meddoc/db", () => ({
 
 import { authConfig, createSessionValidationJwtCallback } from "./index";
 
+const SYNTHETIC_QA_DATABASE_CREDENTIAL = "s".repeat(43);
+
+function useExactSyntheticQaProfile(): void {
+  for (const [key, value] of Object.entries({
+    NODE_ENV: "production",
+    QUILLMD_SERVICE_ROLE: "physician-app",
+    QUILLMD_DATABASE_PRINCIPAL_PROFILE: "synthetic-disposable-qa-v1",
+    TEMPLATE_TWIN_STAGING_QA_ENVIRONMENT: "qa",
+    TEMPLATE_TWIN_STAGING_QA_RESOURCE_ATTESTATION: "isolated-disposable-qa-v1",
+    TEMPLATE_TWIN_STORAGE_PROFILE: "qa",
+    DATABASE_URL: `postgresql://meddoc_runtime:${SYNTHETIC_QA_DATABASE_CREDENTIAL}@postgres:5432/meddoc_qa_test?schema=public&options=-c%20search_path%3Dpg_catalog%2Cpublic`,
+    REDIS_URL: "redis://redis:6379/15",
+    MINIO_ENDPOINT: "minio:9000",
+    MINIO_USE_SSL: "false",
+    TRANSCRIBE_MD_MINIO_BUCKET: "transcribe-md-audio-qa",
+    TRANSCRIBE_MD_TEMPLATE_BUCKET: "transcribe-md-template-artifacts-qa",
+    ADMIN_SYNTHETIC_QA_SHARED_HOST_ATTESTATION:
+      "accepted-isolated-synthetic-qa-shared-host",
+    ADMIN_PUBLIC_HOST: "localhost",
+    PHYSICIAN_PUBLIC_HOST: "localhost",
+    AUTH_URL: "http://localhost:9020",
+    NEXTAUTH_URL: "http://localhost:9020",
+  })) {
+    vi.stubEnv(key, value);
+  }
+}
+
 function currentValidation() {
   return {
     id: "session-row-current",
@@ -233,6 +260,56 @@ describe("shared JWT current-session enforcement", () => {
     ).resolves.toMatchObject({ sessionId: "session-current" });
     expect(mocks.recordSessionLogin).toHaveBeenCalledTimes(1);
   });
+
+  it("passes the MedDoc Pro current-entitlement alternatives to the validator", async () => {
+    const meddocJwt = createSessionValidationJwtCallback({
+      anyOf: [
+        { requiredProducts: ["MEDDOC_PRO"] },
+        { requiredProducts: ["SUPER_ADMIN"] },
+      ],
+    });
+
+    await expect(
+      meddocJwt({ token: currentToken() } as never),
+    ).resolves.toMatchObject({ id: "doctor-current" });
+    expect(mocks.validateSession).toHaveBeenCalledWith({
+      sessionToken: "session-current",
+      expectedUserId: "doctor-current",
+      expectedPracticeId: "practice-current",
+      allowedRoles: undefined,
+      requiredProducts: undefined,
+      anyOf: [
+        { requiredProducts: ["MEDDOC_PRO"] },
+        { requiredProducts: ["SUPER_ADMIN"] },
+      ],
+    });
+  });
+
+  it("does not activate the control-session exception from role and principal alone", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("QUILLMD_SERVICE_ROLE", "template-twin-admin-control");
+    vi.stubEnv("QUILLMD_DATABASE_PRINCIPAL_PROFILE", "exact-production-v1");
+
+    await expect(runJwt({ token: currentToken() })).resolves.toMatchObject({
+      id: "doctor-current",
+    });
+    expect(mocks.validateSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("activates the narrow control-session exception only with its explicit verifier profile", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("QUILLMD_SERVICE_ROLE", "template-twin-admin-control");
+    vi.stubEnv("QUILLMD_DATABASE_PRINCIPAL_PROFILE", "exact-production-v1");
+    vi.stubEnv(
+      "QUILLMD_AUTH_SESSION_VERIFIER_PROFILE",
+      "template-twin-admin-control-v1",
+    );
+
+    await expect(runJwt({ token: currentToken() })).resolves.toEqual(
+      currentToken(),
+    );
+    expect(mocks.validateSession).not.toHaveBeenCalled();
+  });
 });
 
 describe("production mock-auth isolation", () => {
@@ -251,18 +328,8 @@ describe("production mock-auth isolation", () => {
   });
 
   it("honors AUTH_USE_MOCK only under the exact attested localhost QA profile", () => {
-    vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("AUTH_USE_MOCK", "true");
-    vi.stubEnv("QUILLMD_SERVICE_ROLE", "physician-app");
-    vi.stubEnv("TEMPLATE_TWIN_STORAGE_PROFILE", "qa");
-    vi.stubEnv(
-      "ADMIN_SYNTHETIC_QA_SHARED_HOST_ATTESTATION",
-      "accepted-isolated-synthetic-qa-shared-host",
-    );
-    vi.stubEnv("ADMIN_PUBLIC_HOST", "localhost");
-    vi.stubEnv("PHYSICIAN_PUBLIC_HOST", "localhost");
-    vi.stubEnv("AUTH_URL", "http://localhost:9020");
-    vi.stubEnv("NEXTAUTH_URL", "http://localhost:9020");
+    useExactSyntheticQaProfile();
     const authorized = authConfig.callbacks?.authorized;
 
     expect(

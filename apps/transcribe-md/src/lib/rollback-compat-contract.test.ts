@@ -60,6 +60,9 @@ describe("rollback compatibility deployment contract", () => {
         'org.opencontainers.image.revision="${QUILLMD_RELEASE_SHA}"',
       );
       expect(dockerfile).toContain(
+        'com.quillmd.rollback-runtime-capability="six-runtime-v1"',
+      );
+      expect(dockerfile).toContain(
         "ENV QUILLMD_RUNTIME_PROTOCOL_EPOCH=template-twin-final-schema-v2",
       );
     }
@@ -95,6 +98,49 @@ describe("rollback compatibility deployment contract", () => {
         /QUILLMD_REQUIRED_RUNTIME_PROTOCOL_EPOCH: template-twin-final-schema-v2/g,
       ),
     ).toHaveLength(2);
+    for (const flag of [
+      "MOCK_AI_CALLS",
+      "MOCK_TEMPLATE_TWIN_E2E",
+      "MOCK_TEMPLATE_PHI_FLAG",
+      "MOCK_RX_WARNINGS",
+    ]) {
+      expect(
+        compose.match(new RegExp(`^      ${flag}: "false"$`, "gmu")),
+      ).toHaveLength(6);
+      expect(runtimeCensus).toContain(flag);
+      expect(swapGuard).toContain(`${flag}: "false"`);
+    }
+    for (const [key, safeValue] of [
+      ["AUTH_USE_MOCK", "false"],
+      ["EMAIL_AUTO_CONFIRM_DOMAINS", ""],
+      ["EMAIL_AUTO_CONFIRM_ALLOW_IN_PROD", "false"],
+      ["RATE_LIMIT_DISABLED", "false"],
+      ["RATE_LIMIT_DISABLE_ALLOW_IN_PROD", "false"],
+    ] as const) {
+      expect(
+        compose.match(new RegExp(`^      ${key}: "${safeValue}"$`, "gmu")),
+      ).toHaveLength(key === "AUTH_USE_MOCK" ? 7 : 6);
+      expect(runtimeCensus).toContain(key);
+    }
+    expect(
+      compose.match(
+        /^      QUILLMD_AUTH_SESSION_VERIFIER_PROFILE: template-twin-admin-control-v1$/gmu,
+      ),
+    ).toHaveLength(1);
+    expect(
+      compose.match(/^      QUILLMD_AUTH_SESSION_VERIFIER_PROFILE: ""$/gmu),
+    ).toHaveLength(6);
+    expect(
+      qaCompose.match(/^      TEMPLATE_TWIN_STAGING_QA_ENABLED: /gmu),
+    ).toHaveLength(2);
+    expect(
+      qaCompose.match(/^      TEMPLATE_TWIN_STAGING_QA_ENVIRONMENT: qa$/gmu),
+    ).toHaveLength(2);
+    expect(
+      qaCompose.match(
+        /^      TEMPLATE_TWIN_STAGING_QA_RESOURCE_ATTESTATION: isolated-disposable-qa-v1$/gmu,
+      ),
+    ).toHaveLength(2);
   });
 
   it("starts both dispatcher runtimes behind the protocol guard and honest progress health", () => {
@@ -110,9 +156,7 @@ describe("rollback compatibility deployment contract", () => {
     expect(authEmailDispatcher).toMatch(
       /const result = await drainAuthEmailOutbox\([\s\S]*?\}\);[\s\S]*?await writeHeartbeat\(\);/u,
     );
-    expect(compose).toContain(
-      "/tmp/template-twin-audit-dispatcher-heartbeat",
-    );
+    expect(compose).toContain("/tmp/template-twin-audit-dispatcher-heartbeat");
   });
 
   it("enforces the protocol at the real Next startup hook without dropping Sentry", () => {
@@ -137,6 +181,7 @@ describe("rollback compatibility deployment contract", () => {
       "sha256:412dd3157475fd60a77d417a6db6880343d58755aaf76f044be035fba4acf44e",
     );
     expect(swapGuard).toContain("com.quillmd.runtime-protocol-epoch");
+    expect(swapGuard).toContain("com.quillmd.rollback-runtime-capability");
     expect(swapGuard).toContain("org.opencontainers.image.revision");
     expect(swapGuard).toContain('lineage_phase" != "CONTRACTED"');
     expect(swapGuard).toContain('enabled_practices" != "0"');
@@ -165,9 +210,7 @@ describe("rollback compatibility deployment contract", () => {
     expect(swapGuard).toContain("state_sha256");
     expect(swapGuard).toContain("migrator=excluded");
     expect(swapGuard).toContain('TEMPLATE_TWIN_RUNTIME_MODE: "%s"');
-    expect(swapGuard).toContain(
-      'TEMPLATE_TWIN_KILL_SWITCH: "true"',
-    );
+    expect(swapGuard).toContain('TEMPLATE_TWIN_KILL_SWITCH: "true"');
     expect(swapGuard).not.toMatch(/state_compose=.*db-migrate/u);
     expect(swapGuard).toContain("--no-build --no-deps --force-recreate");
   });

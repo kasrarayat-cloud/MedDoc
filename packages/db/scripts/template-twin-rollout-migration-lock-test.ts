@@ -37,7 +37,7 @@ const TARGET_SOURCE = path.join(MIGRATIONS, TARGET);
 const PRISMA = path.join(ROOT, "node_modules/.bin/prisma");
 const IMAGE =
   process.env.TEMPLATE_TWIN_ROLLOUT_LOCK_POSTGRES_IMAGE ??
-  "pgvector/pgvector:pg16";
+  "pgvector/pgvector:pg16@sha256:7d400e340efb42f4d8c9c12c6427adb253f726881a9985d2a471bf0eed824dff";
 const CONTAINER = `meddoc-rollout-migration-lock-${process.pid}`;
 const SYNTHETIC_PASSWORD = "synthetic-rollout-migration-lock-only";
 const EVIDENCE_PATH =

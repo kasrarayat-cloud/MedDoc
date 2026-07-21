@@ -23,6 +23,7 @@ import "./worker-sentry";
 import { captureWorkerException } from "./worker-sentry";
 import { Worker, type Job } from "bullmq";
 import prisma from "@meddoc/db";
+import { assertProductionRuntimeDatabasePrincipal } from "@meddoc/db/production-runtime-principal";
 import { evidenceAnchorsEnabled } from "./worker/evidence-anchors-flag";
 import { ANCHOR_GENERATION_ADDENDUM } from "./worker/layers/04b-anchor-verify";
 import {
@@ -134,7 +135,10 @@ import {
   runWithWorkerSyntheticQaProviderSelection,
   templateTwinSyntheticQaWorkerFailureCode,
 } from "@/worker/synthetic-qa-provider";
-import { evaluateTemplateTwinStagingQaGate } from "@/lib/template-twin/staging-qa-gate";
+import {
+  evaluateTemplateTwinStagingQaGate,
+  evaluateTemplateTwinStagingQaResourceBoundary,
+} from "@/lib/template-twin/staging-qa-gate";
 import { startTemplateTwinSyntheticQaExpiredLeaseReconciler } from "@/worker/cleanup/staging-qa-expired-leases";
 import {
   runTemplateTwinSyntheticQaClaimBoundMutation,
@@ -2156,6 +2160,12 @@ async function startHeartbeat(
 
 async function main() {
   const runtimeProtocol = assertQuillmdRuntimeProtocol(process.env);
+  await assertProductionRuntimeDatabasePrincipal({
+    prisma,
+    environment: process.env,
+    syntheticQaResourceBoundaryAllowed:
+      evaluateTemplateTwinStagingQaResourceBoundary(process.env).allowed,
+  });
   log.info("transcribe-md-worker", "booting", {
     runtimeProtocolEpoch: runtimeProtocol.epoch,
     runtimeMode: runtimeProtocol.mode,

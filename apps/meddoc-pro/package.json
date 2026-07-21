@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "node ../../scripts/quillmd-next-runtime-entrypoint.mjs next start",
     "lint": "eslint",
     "seed:e2e-admin": "tsx scripts/seed-e2e-admin.ts",
     "seed:e2e": "tsx scripts/seed-tenancy-fixtures.ts",

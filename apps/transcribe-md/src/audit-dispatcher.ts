@@ -1,7 +1,9 @@
 import { writeFile } from "node:fs/promises";
 
 import prisma from "@meddoc/db";
+import { QUILLMD_EXACT_PRODUCTION_DATABASE_PRINCIPAL_PROFILE } from "@meddoc/db/production-runtime-principal";
 
+import { assertExactDatabasePrincipal } from "@/lib/exact-database-principal";
 import { assertQuillmdRuntimeProtocol } from "@/lib/runtime-protocol";
 import { drainTemplateTwinAuditOutbox } from "@/lib/template-twin/audit-outbox";
 
@@ -31,6 +33,17 @@ async function main(): Promise<void> {
     throw new Error("Template Twin audit dispatcher service role is required.");
   }
   assertQuillmdRuntimeProtocol(process.env);
+  if (
+    process.env.QUILLMD_DATABASE_PRINCIPAL_PROFILE !==
+    QUILLMD_EXACT_PRODUCTION_DATABASE_PRINCIPAL_PROFILE
+  ) {
+    throw new Error("Exact production database-principal profile is required.");
+  }
+  await assertExactDatabasePrincipal({
+    prisma,
+    loginRole: "meddoc_audit_dispatcher",
+    boundaryRole: "quillmd_audit_dispatcher",
+  });
   const delay = intervalMs();
   let stopping = false;
   const stop = () => {

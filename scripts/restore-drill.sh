@@ -224,7 +224,7 @@ docker run --rm -d \
   -e POSTGRES_PASSWORD="$TEMP_PG_PASSWORD" \
   -e POSTGRES_DB="$TEMP_PG_DB" \
   -p "${TEMP_PG_PORT}:5432" \
-  pgvector/pgvector:pg16 >/dev/null
+  pgvector/pgvector:pg16@sha256:7d400e340efb42f4d8c9c12c6427adb253f726881a9985d2a471bf0eed824dff >/dev/null
 
 log "INFO: waiting for temp postgres to accept connections"
 for i in {1..60}; do

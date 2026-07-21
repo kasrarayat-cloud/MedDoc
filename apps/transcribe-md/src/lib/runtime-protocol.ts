@@ -1,3 +1,9 @@
+import {
+  evaluateSyntheticQaResourceBoundary,
+  isExactSyntheticQaRuntimeProfile,
+} from "@meddoc/auth/synthetic-qa-runtime-profile";
+import { hasConfiguredQuillmdRuntimeIdentity } from "@meddoc/auth/runtime-identity";
+
 /**
  * Runtime protocol identity shared by the TranscribeMD web and worker images.
  *
@@ -12,12 +18,41 @@ export const QUILLMD_RUNTIME_PROTOCOL_EPOCH_ENV =
   "QUILLMD_RUNTIME_PROTOCOL_EPOCH" as const;
 export const QUILLMD_REQUIRED_RUNTIME_PROTOCOL_EPOCH_ENV =
   "QUILLMD_REQUIRED_RUNTIME_PROTOCOL_EPOCH" as const;
+export const QUILLMD_DATABASE_PRINCIPAL_PROFILE_ENV =
+  "QUILLMD_DATABASE_PRINCIPAL_PROFILE" as const;
+export const QUILLMD_EXACT_PRODUCTION_DATABASE_PRINCIPAL_PROFILE =
+  "exact-production-v1" as const;
+export const QUILLMD_SYNTHETIC_QA_DATABASE_PRINCIPAL_PROFILE =
+  "synthetic-disposable-qa-v1" as const;
 
 export const TEMPLATE_TWIN_RUNTIME_MODE_ENV =
   "TEMPLATE_TWIN_RUNTIME_MODE" as const;
 export const TEMPLATE_TWIN_STANDARD_RUNTIME_MODE = "standard" as const;
 export const TEMPLATE_TWIN_ROLLBACK_COMPAT_RUNTIME_MODE =
   "rollback-compat-v2" as const;
+
+export const QUILLMD_DETERMINISTIC_PROVIDER_ENVIRONMENTS = Object.freeze([
+  "MOCK_AI_CALLS",
+  "MOCK_TEMPLATE_TWIN_E2E",
+  "MOCK_TEMPLATE_PHI_FLAG",
+  "MOCK_RX_WARNINGS",
+] as const);
+
+export const QUILLMD_SYNTHETIC_AUTH_BYPASS_BOOLEAN_ENVIRONMENTS = Object.freeze(
+  [
+    "AUTH_USE_MOCK",
+    "EMAIL_AUTO_CONFIRM_ALLOW_IN_PROD",
+    "RATE_LIMIT_DISABLED",
+    "RATE_LIMIT_DISABLE_ALLOW_IN_PROD",
+  ] as const,
+);
+export const QUILLMD_SYNTHETIC_AUTH_BYPASS_VALUE_ENVIRONMENTS = Object.freeze([
+  "EMAIL_AUTO_CONFIRM_DOMAINS",
+] as const);
+export const QUILLMD_AUTH_SESSION_VERIFIER_PROFILE_ENV =
+  "QUILLMD_AUTH_SESSION_VERIFIER_PROFILE" as const;
+export const QUILLMD_TEMPLATE_TWIN_ADMIN_CONTROL_SESSION_VERIFIER_PROFILE =
+  "template-twin-admin-control-v1" as const;
 
 export type TemplateTwinRuntimeMode =
   | typeof TEMPLATE_TWIN_STANDARD_RUNTIME_MODE
@@ -99,11 +134,32 @@ export function assertQuillmdRuntimeProtocol(
   const advertisedEpoch = env[QUILLMD_RUNTIME_PROTOCOL_EPOCH_ENV]?.trim();
   const requiredEpoch =
     env[QUILLMD_REQUIRED_RUNTIME_PROTOCOL_EPOCH_ENV]?.trim();
+  const principalProfile = env[QUILLMD_DATABASE_PRINCIPAL_PROFILE_ENV];
+  const configuredRuntimeIdentity = hasConfiguredQuillmdRuntimeIdentity(env);
+  const productionSafetyPosture =
+    normalized(env.NODE_ENV) === "production" || configuredRuntimeIdentity;
+  const syntheticQaBoundaryAllowed =
+    evaluateSyntheticQaResourceBoundary(env).allowed;
 
+  if (configuredRuntimeIdentity && env.NODE_ENV !== "production") {
+    throw new RuntimeProtocolConfigurationError(
+      "A configured runtime identity requires the exact production Node environment.",
+    );
+  }
+  const sessionVerifierProfile =
+    env[QUILLMD_AUTH_SESSION_VERIFIER_PROFILE_ENV]?.trim() ?? "";
   if (
-    advertisedEpoch &&
-    advertisedEpoch !== QUILLMD_RUNTIME_PROTOCOL_EPOCH
+    configuredRuntimeIdentity &&
+    (env.QUILLMD_SERVICE_ROLE === "template-twin-admin-control") !==
+      (sessionVerifierProfile ===
+        QUILLMD_TEMPLATE_TWIN_ADMIN_CONTROL_SESSION_VERIFIER_PROFILE)
   ) {
+    throw new RuntimeProtocolConfigurationError(
+      "The authentication session-verifier profile does not match the runtime role.",
+    );
+  }
+
+  if (advertisedEpoch && advertisedEpoch !== QUILLMD_RUNTIME_PROTOCOL_EPOCH) {
     throw new RuntimeProtocolConfigurationError(
       "This image advertises an incompatible runtime protocol epoch.",
     );
@@ -114,19 +170,66 @@ export function assertQuillmdRuntimeProtocol(
     );
   }
   if (
-    normalized(env.NODE_ENV) === "production" &&
+    productionSafetyPosture &&
     advertisedEpoch !== QUILLMD_RUNTIME_PROTOCOL_EPOCH
   ) {
     throw new RuntimeProtocolConfigurationError(
       "A production image must advertise its compiled runtime protocol epoch.",
     );
   }
+  const authBypassConfigured =
+    QUILLMD_SYNTHETIC_AUTH_BYPASS_BOOLEAN_ENVIRONMENTS.some(
+      (key) => normalized(env[key]) === "true",
+    ) ||
+    QUILLMD_SYNTHETIC_AUTH_BYPASS_VALUE_ENVIRONMENTS.some((key) =>
+      Boolean(env[key]?.trim()),
+    );
   if (
-    normalized(env.NODE_ENV) === "production" &&
+    productionSafetyPosture &&
+    authBypassConfigured &&
+    !isExactSyntheticQaRuntimeProfile(env)
+  ) {
+    throw new RuntimeProtocolConfigurationError(
+      "Synthetic authentication controls are forbidden outside the exact isolated synthetic QA runtime profile.",
+    );
+  }
+  if (
+    productionSafetyPosture &&
+    (Boolean(env.EMAIL_AUTO_CONFIRM_DOMAINS?.trim()) !==
+      (normalized(env.EMAIL_AUTO_CONFIRM_ALLOW_IN_PROD) === "true") ||
+      (normalized(env.RATE_LIMIT_DISABLED) === "true") !==
+        (normalized(env.RATE_LIMIT_DISABLE_ALLOW_IN_PROD) === "true"))
+  ) {
+    throw new RuntimeProtocolConfigurationError(
+      "Synthetic authentication controls require exact paired configuration.",
+    );
+  }
+  if (
+    productionSafetyPosture &&
     requiredEpoch !== QUILLMD_RUNTIME_PROTOCOL_EPOCH
   ) {
     throw new RuntimeProtocolConfigurationError(
       "A production deployment must require this image's runtime protocol epoch.",
+    );
+  }
+  if (
+    principalProfile === QUILLMD_SYNTHETIC_QA_DATABASE_PRINCIPAL_PROFILE &&
+    !syntheticQaBoundaryAllowed
+  ) {
+    throw new RuntimeProtocolConfigurationError(
+      "The synthetic database-principal profile is forbidden outside the exact isolated synthetic QA resource boundary.",
+    );
+  }
+  if (
+    productionSafetyPosture &&
+    QUILLMD_DETERMINISTIC_PROVIDER_ENVIRONMENTS.some(
+      (key) => normalized(env[key]) === "true",
+    ) &&
+    (principalProfile !== QUILLMD_SYNTHETIC_QA_DATABASE_PRINCIPAL_PROFILE ||
+      !syntheticQaBoundaryAllowed)
+  ) {
+    throw new RuntimeProtocolConfigurationError(
+      "Deterministic provider fixtures are forbidden outside the exact isolated synthetic QA resource boundary.",
     );
   }
 

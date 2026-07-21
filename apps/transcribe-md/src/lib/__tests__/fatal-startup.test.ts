@@ -17,7 +17,13 @@ describe("fatal production startup boundary", () => {
       ),
     ).toThrow("synthetic-process-exit");
     expect(exitProcess).toHaveBeenCalledWith(1);
+    expect(consoleSpy).toHaveBeenCalledWith(
+      "[startup] fatal runtime configuration rejected; terminating",
+      { code: "QUILLMD_FATAL_STARTUP_CONFIGURATION_REJECTED" },
+    );
     const rendered = JSON.stringify(consoleSpy.mock.calls);
+    expect(rendered).not.toContain("errorType");
+    expect(rendered).not.toContain("Error");
     expect(rendered).not.toContain("postgresql://");
     expect(rendered).not.toContain("clinical-value");
     consoleSpy.mockRestore();

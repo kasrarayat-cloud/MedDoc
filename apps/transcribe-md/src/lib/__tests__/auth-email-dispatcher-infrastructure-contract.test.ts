@@ -40,7 +40,7 @@ describe("authentication email dispatcher deployability contract", () => {
     expect(dispatcherBlock).toContain("cap_drop:\n      - ALL");
     expect(dispatcherBlock).not.toMatch(/^\s+ports:/mu);
     expect(dispatcherBlock).toContain(
-      "DATABASE_URL: postgresql://meddoc_auth_email_dispatcher:",
+      'DATABASE_URL: "postgresql://meddoc_auth_email_dispatcher:',
     );
     expect(dispatcherBlock).toContain(
       "QUILLMD_SERVICE_ROLE: auth-email-dispatcher",
@@ -110,12 +110,21 @@ describe("authentication email dispatcher deployability contract", () => {
       "CREATE ROLE quillmd_auth_email_dispatcher NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS",
     );
     expect(roleBootstrap).toContain(
-      "CREATE ROLE meddoc_auth_email_dispatcher LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS",
+      "CREATE ROLE meddoc_auth_email_dispatcher LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS CONNECTION LIMIT -1",
+    );
+    expect(roleBootstrap).toContain("\\password meddoc_auth_email_dispatcher");
+    expect(roleBootstrap).toContain(
+      "('meddoc_auth_email_dispatcher', 'quillmd_auth_email_dispatcher')",
     );
     expect(roleBootstrap).toContain(
-      "GRANT quillmd_auth_email_dispatcher TO meddoc_auth_email_dispatcher",
+      "GRANT %I TO %I WITH ADMIN FALSE, INHERIT TRUE, SET FALSE",
+    );
+    expect(roleBootstrap).toContain(
+      "WITH ADMIN FALSE, INHERIT TRUE, SET FALSE",
     );
     expect(roleBootstrap).toContain("membership.admin_option");
+    expect(roleBootstrap).toContain("membership.inherit_option");
+    expect(roleBootstrap).toContain("membership.set_option");
     expect(
       compose.match(/^\s+DB_AUTH_EMAIL_DISPATCHER_PASSWORD: ""$/gmu),
     ).toHaveLength(7);

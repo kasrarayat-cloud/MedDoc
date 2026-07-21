@@ -18,6 +18,7 @@
     "test:e2e:transcribe-md": "npm run test:e2e -w transcribe-md",
     "test:e2e:transcribe-md:install": "npm run test:e2e:install -w transcribe-md",
     "auth-email-dispatcher": "npm run auth-email-dispatcher -w transcribe-md",
+    "auth-token-linearization": "npm run auth-token-linearization:online -w @meddoc/db --",
     "test:all": "npm run test:all -w meddoc-pro",
     "seed:e2e": "npm run seed:e2e -w meddoc-pro",
     "seed:e2e-admin": "npm run seed:e2e-admin -w meddoc-pro",

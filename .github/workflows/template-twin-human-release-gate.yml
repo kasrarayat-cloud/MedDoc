@@ -55,6 +55,15 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Enforce production database-principal runtime census
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose --profile "*" -f docker-compose.yml \
+            config --no-interpolate --no-env-resolution --format json |
+            node scripts/database-principal-runtime-census.mjs \
+              --static-unresolved
+
       - name: Install locked dependencies without lifecycle credentials
         run: npm ci --no-audit --no-fund
 
