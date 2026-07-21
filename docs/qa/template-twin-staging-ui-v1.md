@@ -34,6 +34,13 @@ available:
 - the practice flag is enabled; and
 - the authenticated user is a current, active physician in that practice.
 
+The committed QA Compose baseline keeps
+`TEMPLATE_TWIN_KILL_SWITCH=true` for both APP and WORKER and exposes no
+environment override. A future E2E enablement path must first admit distinct
+short-lived APP and WORKER attestations in a guarded disposable release
+manifest through the production release-control contract. A staging flag or
+direct rollout-row update is not sufficient.
+
 Missing or unknown configuration denies access. QA images use an optimized
 `NODE_ENV=production` build, so `NODE_ENV` is not treated as an environment
 attestation.

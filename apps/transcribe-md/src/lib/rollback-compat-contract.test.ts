@@ -49,6 +49,10 @@ const a11yWorkflow = readFileSync(
   path.join(ROOT, ".github/workflows/a11y.yml"),
   "utf8",
 );
+const e2eWorkflow = readFileSync(
+  path.join(ROOT, ".github/workflows/e2e.yml"),
+  "utf8",
+);
 
 describe("rollback compatibility deployment contract", () => {
   it("stamps both runtime components with one final-schema protocol epoch", () => {
@@ -98,6 +102,18 @@ describe("rollback compatibility deployment contract", () => {
         /QUILLMD_REQUIRED_RUNTIME_PROTOCOL_EPOCH: template-twin-final-schema-v2/g,
       ),
     ).toHaveLength(2);
+    expect(
+      qaCompose.match(/^      TEMPLATE_TWIN_KILL_SWITCH: "true"$/gmu),
+    ).toHaveLength(2);
+    expect(qaCompose).not.toMatch(
+      /^      TEMPLATE_TWIN_KILL_SWITCH: "false"$/gmu,
+    );
+    expect(e2eWorkflow).not.toMatch(
+      /^\s*TEMPLATE_TWIN_KILL_SWITCH:\s*["']?false["']?\s*$/gmu,
+    );
+    expect(qaCompose).toContain(
+      "test -f /tmp/worker-heartbeat && [ $(( $(date +%s) - $(stat -c %Y /tmp/worker-heartbeat) )) -lt 60 ]",
+    );
     for (const flag of [
       "MOCK_AI_CALLS",
       "MOCK_TEMPLATE_TWIN_E2E",

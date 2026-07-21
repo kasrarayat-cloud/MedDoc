@@ -1166,7 +1166,7 @@ function qaRuntimeSurfaceIssue(name, service) {
   }
   if (
     !(worker
-      ? service?.healthcheck === undefined
+      ? hasExactRuntimeHealthcheck(name, service?.healthcheck)
       : hasExactKeys(service?.healthcheck, [
           "interval",
           "retries",

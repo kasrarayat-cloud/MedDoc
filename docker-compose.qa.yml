@@ -241,7 +241,10 @@ services:
       TEMPLATE_TWIN_APPROVED_STATIC_ASSETS_BY_PRACTICE_JSON: "{}"
       QUILLMD_REQUIRED_RUNTIME_PROTOCOL_EPOCH: template-twin-final-schema-v2
       TEMPLATE_TWIN_RUNTIME_MODE: standard
-      TEMPLATE_TWIN_KILL_SWITCH: "false"
+      # Baseline QA is fail-closed. Template Twin E2E may open this only after
+      # an exact disposable release manifest has admitted distinct APP and
+      # WORKER runtime attestations through the production control contract.
+      TEMPLATE_TWIN_KILL_SWITCH: "true"
       TEMPLATE_TWIN_MALWARE_SCANNER_SOCKET: /var/run/quillmd-clamav/clamd.sock
       TEMPLATE_TWIN_MALWARE_SCANNER_READINESS_FILE: /var/run/quillmd-clamav/readiness.json
       # Authenticated synthetic staging UI. Resource identity is fixed to this
@@ -358,7 +361,7 @@ services:
       TEMPLATE_TWIN_MAINTENANCE_ENABLED: "true"
       QUILLMD_REQUIRED_RUNTIME_PROTOCOL_EPOCH: template-twin-final-schema-v2
       TEMPLATE_TWIN_RUNTIME_MODE: standard
-      TEMPLATE_TWIN_KILL_SWITCH: "false"
+      TEMPLATE_TWIN_KILL_SWITCH: "true"
       TEMPLATE_TWIN_STAGING_QA_ENABLED: "${TEMPLATE_TWIN_STAGING_QA_ENABLED:-}"
       TEMPLATE_TWIN_STAGING_QA_ENVIRONMENT: qa
       TEMPLATE_TWIN_STAGING_QA_RESOURCE_ATTESTATION: isolated-disposable-qa-v1
@@ -377,6 +380,16 @@ services:
       # Clinical-model override for evals (feat/fable5-eval). Empty default →
       # the app/worker keep their hardcoded per-layer models (prod behaviour).
       TRANSCRIBE_MD_CLINICAL_MODEL: "${TRANSCRIBE_MD_CLINICAL_MODEL:-}"
+    # Match production readiness: the worker writes this heartbeat only after
+    # Redis readiness and its fail-closed runtime-attestation refresh.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "test -f /tmp/worker-heartbeat && [ $(( $(date +%s) - $(stat -c %Y /tmp/worker-heartbeat) )) -lt 60 ]"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
 
   # Marketing site (apps/marketing) — static Next, no backend. Opt-in via the
   # `marketing` profile so the default qa flow (transcribe-md E2E) never starts

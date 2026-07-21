@@ -958,6 +958,7 @@ function exactQaModel() {
         cpus: "1.0",
         mem_limit: "1g",
         networks: { default: null },
+        healthcheck: exactRuntimeHealthcheck("transcribe-md-worker"),
         environment: {
           DATABASE_URL: `postgresql://meddoc_runtime:${staticQaCredential("meddoc_runtime")}@postgres:5432/meddoc_qa_test?${CANONICAL_QUERY}`,
           NODE_ENV: "production",
@@ -1065,7 +1066,10 @@ function resolvedQaModel(keyringPath = APPROVED_KEYRING_PATH) {
   const worker = model.services["transcribe-md-worker"] as Record<
     string,
     unknown
-  > & { environment: Record<string, string> };
+  > & {
+    environment: Record<string, string>;
+    healthcheck: { start_period: string; test: string[] };
+  };
   worker.image = APPROVED_WORKER_IMAGE;
   worker.cpus = 1;
   worker.mem_limit = "1073741824";
@@ -1076,6 +1080,9 @@ function resolvedQaModel(keyringPath = APPROVED_KEYRING_PATH) {
     RESOLVED_CREDENTIAL_BY_LOGIN.meddoc_runtime,
   );
   worker.environment.PRISMA_STATEMENT_TIMEOUT_MS = "30000";
+  worker.healthcheck.start_period = "1m0s";
+  worker.healthcheck.test[1] =
+    "test -f /tmp/worker-heartbeat && [ $$(( $$(date +%s) - $$(stat -c %Y /tmp/worker-heartbeat) )) -lt 60 ]";
   const migrator = model.services["db-migrate"] as Record<string, unknown> & {
     environment: {
       DATABASE_RELEASE_MIGRATION_LOCK_TIMEOUT_MS: string;
@@ -2872,6 +2879,50 @@ describe("database-principal runtime census", () => {
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain(
       "transcribe-md has an unexpected runtime authority contract",
+    );
+  });
+
+  it.each([
+    ["missing", undefined],
+    [
+      "existence only",
+      {
+        interval: "30s",
+        retries: 3,
+        start_period: "60s",
+        test: ["CMD-SHELL", "test -f /tmp/worker-heartbeat"],
+        timeout: "5s",
+      },
+    ],
+    [
+      "stale threshold",
+      {
+        ...exactRuntimeHealthcheck("transcribe-md-worker"),
+        test: [
+          "CMD-SHELL",
+          "test -f /tmp/worker-heartbeat && [ $(( $(date +%s) - $(stat -c %Y /tmp/worker-heartbeat) )) -lt 600 ]",
+        ],
+      },
+    ],
+    [
+      "timing drift",
+      {
+        ...exactRuntimeHealthcheck("transcribe-md-worker"),
+        start_period: "30s",
+      },
+    ],
+  ] as const)("rejects QA worker healthcheck drift: %s", (_label, value) => {
+    const model = exactQaModel();
+    const worker = model.services["transcribe-md-worker"] as Record<
+      string,
+      unknown
+    >;
+    if (value === undefined) delete worker.healthcheck;
+    else worker.healthcheck = value;
+    const result = run(model, "--qa");
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain(
+      "transcribe-md-worker has an unexpected runtime authority contract",
     );
   });
 

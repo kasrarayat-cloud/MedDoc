@@ -80,6 +80,7 @@ COPY package.json package-lock.json tsconfig.base.json ./
 # assets — those belong to the web container.
 COPY apps/transcribe-md/package.json ./apps/transcribe-md/package.json
 COPY apps/transcribe-md/tsconfig.json ./apps/transcribe-md/tsconfig.json
+COPY apps/transcribe-md/tsconfig.worker.json ./apps/transcribe-md/tsconfig.worker.json
 COPY apps/transcribe-md/src ./apps/transcribe-md/src
 # T-M12: ship the scripts/ dir so ops can run `npm run minio:cleanup`
 # inside the container (or npx tsx scripts/minio-cleanup.ts). No
@@ -110,4 +111,4 @@ RUN addgroup --system --gid 1001 nodejs && \
 USER worker
 
 WORKDIR /app/apps/transcribe-md
-CMD ["npx", "tsx", "src/worker.ts"]
+CMD ["npx", "tsx", "--tsconfig", "tsconfig.worker.json", "src/worker.ts"]
