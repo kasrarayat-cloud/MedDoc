@@ -18,6 +18,23 @@ const deploymentRunbook = source("docs/DEPLOYMENT_RUNBOOK.md");
 const launchChecklist = source("docs/LAUNCH_CHECKLIST.md");
 const qaRunbook = source("docs/qa/README.md");
 const postMergeTodo = source("docs/POST_MERGE_TODO.md");
+const releaseStatus = source(
+  "docs/releases/template-twin-ga-20260719/status.md",
+);
+const humanApprovalPackets = [
+  source(
+    "docs/releases/template-twin-ga-20260719/clinical-safety-approval-packet.md",
+  ),
+  source(
+    "docs/releases/template-twin-ga-20260719/operations-approval-packet.md",
+  ),
+  source(
+    "docs/releases/template-twin-ga-20260719/physician-review-packet.md",
+  ),
+  source(
+    "docs/releases/template-twin-ga-20260719/privacy-legal-approval-packet.md",
+  ),
+];
 const lineageRunbook = source(
   "docs/runbooks/template-twin-lineage-online-migration.md",
 );
@@ -469,5 +486,30 @@ describe("closed database-release operator documentation contract", () => {
     expect(normalizedDeploymentRunbook).toContain(
       "Encryption and peer-certificate verification for any network transport are separate infrastructure gates",
     );
+  });
+
+  it("keeps exact-head scan claims bound and human approvals visibly unfilled", () => {
+    expect(releaseStatus).not.toContain(
+      "Current whole-workspace verified-only secret scan",
+    );
+    expect(releaseStatus).toMatch(
+      /Exact `[0-9a-f]{7,40}` whole-workspace verified-only secret scan:/u,
+    );
+
+    for (const packet of humanApprovalPackets) {
+      const humanDecision = packet.split("## Human decision\n\n")[1] ?? "";
+      const fields = humanDecision
+        .split("\n")
+        .filter((line) => line.startsWith("- "));
+
+      expect(fields[0]).toBe(
+        "- Decision: `APPROVE` / `REJECT` / `REVISE`",
+      );
+      expect(fields.length).toBeGreaterThan(1);
+      for (const field of fields.slice(1)) {
+        expect(field).toMatch(/: \*\*UNFILLED — HUMAN REQUIRED\*\*$/u);
+      }
+      expect(humanDecision).not.toMatch(/\\[\*_]/u);
+    }
   });
 });

@@ -34,9 +34,9 @@ Operations approval must be tied to the final exact SHA, immutable image digests
 ## Human decision
 
 - Decision: `APPROVE` / `REJECT` / `REVISE`
-- Final exact SHA: **\*\*\*\***\*\***\*\*\*\***\_\_\_\_**\*\*\*\***\*\***\*\*\*\***
-- App/worker/migrator image digests: \***\*\*\*\*\***\_\_\***\*\*\*\*\***
-- Backup and restore identifiers: \***\*\*\*\*\*\*\***\_\***\*\*\*\*\*\*\***
-- Name and role: **\*\*\*\***\*\*\*\***\*\*\*\***\_**\*\*\*\***\*\*\*\***\*\*\*\***
-- Date/time and timezone: **\*\***\*\***\*\***\_\_\_\_**\*\***\*\***\*\***
-- Approval record: **\*\*\*\***\*\***\*\*\*\***\_\_\_**\*\*\*\***\*\***\*\*\*\***
+- Final exact SHA: **UNFILLED — HUMAN REQUIRED**
+- App/worker/migrator image digests: **UNFILLED — HUMAN REQUIRED**
+- Backup and restore identifiers: **UNFILLED — HUMAN REQUIRED**
+- Name and role: **UNFILLED — HUMAN REQUIRED**
+- Date/time and timezone: **UNFILLED — HUMAN REQUIRED**
+- Approval record: **UNFILLED — HUMAN REQUIRED**

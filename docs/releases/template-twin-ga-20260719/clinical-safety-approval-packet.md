@@ -32,11 +32,11 @@ Clinical Safety must approve the supported concepts, critical-field taxonomy, ev
 ## Human decision
 
 - Decision: `APPROVE` / `REJECT` / `REVISE`
-- Final exact SHA: **\*\*\*\***\*\***\*\*\*\***\_\_\_\_**\*\*\*\***\*\***\*\*\*\***
-- Clinical report SHA-256: **\*\***\*\***\*\***\_\_\_**\*\***\*\***\*\***
-- Evidence-manifest SHA-256: **\*\***\*\***\*\***\_**\*\***\*\***\*\***
-- Name and role: **\*\*\*\***\*\*\*\***\*\*\*\***\_**\*\*\*\***\*\*\*\***\*\*\*\***
-- Date/time and timezone: **\*\***\*\***\*\***\_\_\_\_**\*\***\*\***\*\***
-- Approval record: **\*\*\*\***\*\***\*\*\*\***\_\_\_**\*\*\*\***\*\***\*\*\*\***
+- Final exact SHA: **UNFILLED — HUMAN REQUIRED**
+- Clinical report SHA-256: **UNFILLED — HUMAN REQUIRED**
+- Evidence-manifest SHA-256: **UNFILLED — HUMAN REQUIRED**
+- Name and role: **UNFILLED — HUMAN REQUIRED**
+- Date/time and timezone: **UNFILLED — HUMAN REQUIRED**
+- Approval record: **UNFILLED — HUMAN REQUIRED**
 
 No Codex or implementation-agent signature is valid for this gate.

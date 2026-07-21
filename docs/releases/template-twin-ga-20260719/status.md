@@ -1,6 +1,6 @@
 # QuillMD Template Twin GA release-program status
 
-Last updated: 2026-07-21T06:58:17Z
+Last updated: 2026-07-21T07:28:09Z
 
 ## Production verdict
 
@@ -17,10 +17,11 @@ PHI-bearing test. Template Twin remains unauthorized for production use.
 | Lossless stack integration                  | Merge `719eea4b27c68cc76e6bf485612c833705cef913`; accepted tree preserved                                                                                                                                                                                                            | PASS   |
 | Provider-ownership head                     | `db1cab904ac5c8d6c7f25878f59d71e1b094a223`                                                                                                                                                                                                                                           | PASS   |
 | Authentication/authorization implementation | `9a1ded49055d1aef153864b28267c81ab1b0506d`                                                                                                                                                                                                                                           | PASS   |
-| Current committed implementation            | `fix/template-twin-provider-ownership-b017-v1` at `25047df1fe095e47610b9e9eda4e25bb2b821d46`; tree `58c7d400886ad4e745e47c6883ad4ddbba9924b3`; parent `50286004f9bc7f940602206e50b24679ab1c2b38`                                                                                     | PASS   |
+| Current committed auth/runtime implementation | `fix/template-twin-provider-ownership-b017-v1` at `25047df1fe095e47610b9e9eda4e25bb2b821d46`; tree `58c7d400886ad4e745e47c6883ad4ddbba9924b3`; parent `50286004f9bc7f940602206e50b24679ab1c2b38`                                                                                | PASS   |
 | Independent review of `50286004`            | **REJECT**. Core auth/operator fixes reproduced successfully; one P1 obsolete raw-migration instruction and P2 release-record, actual-PostgreSQL regression, cleanup, strict-parser, diff-whitespace, and dependency-debt items remained                                             | FAIL   |
-| Exact-head review payload                   | Runtime/test implementation `25047df1` plus only the release-record correction containing this status. A commit cannot contain its own hash; the descendant's exact SHA, tree, bundle, and SHA-256 are recorded in the mode-0600 external receipt generated immediately after commit | PASS   |
-| Current exact-head review verdict           | Fresh detached auth/operator and security reviews are required against the release-record descendant; no ACCEPT exists yet                                                                                                                                                           | FAIL   |
+| Independent security review of `3a915158`   | **REJECT**. Every executable security gate passed; two P2 evidence-document defects remained: an unbound current-scan claim and malformed escaped approval blanks                                                                                                                       | FAIL   |
+| Exact-head review payload                   | Auth/runtime implementation `25047df1`, records descendant `3a915158`, and this additive evidence-document correction plus its regression test. A commit cannot contain its own hash; the final exact SHA, tree, bundle, and SHA-256 are recorded externally after commit                | PASS   |
+| Current exact-head review verdict           | The two `3a915158` P2 documentation findings are corrected here, but a fresh detached review of the resulting exact commit is mandatory; no ACCEPT exists yet                                                                                                                          | FAIL   |
 | Consolidated draft PR                       | PR #371 targets `main`, but its last recorded published head `9088f74f17e11ff3f7e5869e5a56b6c5d36796fd` does not contain this series                                                                                                                                                 | FAIL   |
 | Frozen release candidate                    | Not created                                                                                                                                                                                                                                                                          | FAIL   |
 | Current production Git SHA                  | Not reproducible from a clean commit at the last authorized inventory                                                                                                                                                                                                                | FAIL   |
@@ -41,13 +42,13 @@ is not authorization or proof of current production state.
 | Phase                                             | Status        | Evidence / blocking condition                                                                                                                                                                                                                                                                          |
 | ------------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | 0 — Preflight and inventory                       | FAIL          | The equivalent preflight and read-only inventory exist, but deployed provenance, least-privilege production identities, PITR, complete restore, internal transport, capacity, monitoring, and credential-rotation gates remain open.                                                                   |
-| 1 — Consolidated implementation                   | FAIL          | Accepted history is preserved. Exact `50286004` was rejected; every listed auth/authz, operator-document, regression, cleanup, parser-coverage, and diff-hygiene finding is committed at `25047df1`. Only this accurate records-only descendant and a fresh detached exact-head verdict remain.        |
+| 1 — Consolidated implementation                   | FAIL          | Accepted history is preserved. Auth/runtime closure is at `25047df1`; `3a915158` passed executable security gates but was rejected for two P2 evidence-document defects. This additive correction and its regression test still require a fresh detached exact-head verdict.                       |
 | 2 — Production template intake                    | FAIL          | Misplaced Word-control remediation and completed-document conversion are integrated; production scanner readiness, final compatibility evidence, and combined exact-head review remain open. Unsupported structures continue to fail closed.                                                           |
 | 3 — Extraction quality                            | FAIL          | Provider ownership now covers the released path technically, but the release-head live-provider clinical cohort remains `n=0` and Clinical Safety approval is HUMAN PENDING.                                                                                                                           |
 | 4 — Microsoft Office compatibility                | FAIL          | Office evidence binding and misplaced-control remediation are integrated. Final-SHA corpus generation and returned desktop Word evidence remain mandatory; Word approval is HUMAN PENDING.                                                                                                             |
 | 5 — Infrastructure and operations                 | FAIL          | Two fresh zero-state 97-migration release replays, candidate exact-principal/RI-tamper proof, and historical backup-role dump/restore/re-provision pass. Production identities, immutable image digests, real six-container rollback, PITR/object/queue recovery, and named ownership remain unproven. |
 | 6 — Privacy/Legal, Clinical, Operations approvals | HUMAN PENDING | No implementation agent may supply these decisions.                                                                                                                                                                                                                                                    |
-| 7 — Final release candidate                       | FAIL          | The additive closure is committed at `25047df1`, but the records-only exact-head descendant has not yet received independent ACCEPT. No frozen or accepted RC exists.                                                                                                                                  |
+| 7 — Final release candidate                       | FAIL          | The auth/runtime closure is committed at `25047df1`; exact `3a915158` was rejected for two P2 evidence-document defects now corrected additively. The replacement exact head has not received independent ACCEPT. No frozen or accepted RC exists.                                      |
 | 8 — Production deployment and 100% rollout        | FAIL          | No production authority has been exercised; rollout is 0%.                                                                                                                                                                                                                                             |
 
 ## Historical scoped verification at rejected `e7b3864`
@@ -92,10 +93,14 @@ These scoped passes did not close the review finding. See
   main-targeting and local diff whitespace checks. Both production builds, one
   fresh closed **97/97** migration replay, MedDoc **11/11 files and 103/103
   tests**, hardened labeled cleanup, and zero residual labeled resources also
-  pass. The two newly committed actual-PostgreSQL adversarial regressions still
-  require execution at the replacement exact head.
-- Current whole-workspace verified-only secret scan: **0 verified findings**;
-  scanner errors are configured to fail the gate.
+  pass. At exact `3a915158`, independent PostgreSQL 16 execution of the queued
+  index-drop/finalizer regression and strict HBA harness also passes; the
+  companion exact-principal review was still running when this correction was
+  authored.
+- Exact `3a915158` whole-workspace verified-only secret scan: **0 verified
+  findings**; scanner errors are configured to fail the gate. The final
+  descendant exact-head scan is recorded in external immutable evidence after
+  that commit identity exists.
 - Exact-base/head census at `50286004`: parent TranscribeMD **417 files / 5,614
   tests**; candidate **426 files / 5,754 tests** (`+9` files, `+140` tests).
   MedDoc remains **11 files / 103 tests**.
@@ -122,15 +127,19 @@ These scoped passes did not close the review finding. See
   all **791/791** with **0 skipped, 0 errors, and 0 findings** under Semgrep
   1.161.0 `p/typescript --strict`. Bash has shell-syntax evidence only; no Bash
   Semgrep result is claimed.
-- The latest completed detached review of exact `50286004` returned **REJECT**.
-  All listed P1/P2 implementation findings are committed at `25047df1`; only a
-  fresh detached review of the records-only descendant may decide whether they
-  are closed.
+- The detached security review of exact `3a915158` returned **REJECT** solely
+  for the two P2 evidence-document defects corrected by this additive change.
+  Its executable gates passed: strict Semgrep scanned **791/791** files with
+  zero skipped/errors/findings, the dependency gate found zero critical/high,
+  the verified-only secret scan found zero verified findings, changed shell
+  syntax passed **13/13**, and focused runtime/document tests passed **150/150**.
+  Only a fresh detached review of the replacement exact head may decide whether
+  the findings are closed.
 
-This is implementation-side evidence for exact `25047df1` plus a records-only
-descendant, not exact-head acceptance. It does not replace detached review,
-identical-manifest RC census, PR CI, Office return, provider-quality
-evaluation, or production infrastructure and human gates.
+This is implementation-side evidence for exact `25047df1` plus subsequent
+records and evidence-document descendants, not exact-head acceptance. It does
+not replace detached review, identical-manifest RC census, PR CI, Office return,
+provider-quality evaluation, or production infrastructure and human gates.
 
 ## Production and rollback provenance
 

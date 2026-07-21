@@ -68,10 +68,10 @@ Any critical medication, allergy, negation, laterality, measurement, evidence, s
 ## Human decision
 
 - Decision: `APPROVE` / `REJECT` / `REVISE`
-- Final exact SHA reviewed: **\*\***\*\***\*\***\_\_**\*\***\*\***\*\***
-- Evidence-manifest SHA-256: **\*\***\*\***\*\***\_**\*\***\*\***\*\***
-- Name and role: **\*\*\*\***\*\*\*\***\*\*\*\***\_**\*\*\*\***\*\*\*\***\*\*\*\***
-- Date/time and timezone: **\*\***\*\***\*\***\_\_\_\_**\*\***\*\***\*\***
-- Signature or approved organizational record: \***\*\_\_\_\*\***
+- Final exact SHA reviewed: **UNFILLED — HUMAN REQUIRED**
+- Evidence-manifest SHA-256: **UNFILLED — HUMAN REQUIRED**
+- Name and role: **UNFILLED — HUMAN REQUIRED**
+- Date/time and timezone: **UNFILLED — HUMAN REQUIRED**
+- Signature or approved organizational record: **UNFILLED — HUMAN REQUIRED**
 
 Codex and implementation agents may prepare this packet but may not sign it.
