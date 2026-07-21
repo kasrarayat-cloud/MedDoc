@@ -402,7 +402,8 @@ async function startWorkload(
            FROM pg_stat_activity
            WHERE wait_event_type = 'Lock'
              AND application_name IN (
-               'lineage_scale_workload', 'template_twin_lineage_online_v1'
+               'lineage_scale_workload',
+               'quillmd_template_twin_lineage_online_v1'
              )`,
         );
         metrics.maxObservedDatabaseLockWaitMs = Math.max(
@@ -448,6 +449,7 @@ async function runOperator(
   extraArgs: string[] = [],
   extraEnv: NodeJS.ProcessEnv = {},
 ): Promise<CommandResult> {
+  const approvedFingerprint = await operatorFingerprint(databaseUrl, phase);
   return checked(
     "npx",
     [
@@ -460,12 +462,57 @@ async function runOperator(
     ],
     {
       cwd: path.join(ROOT, "packages/db"),
-      env: { ...operatorEnv(databaseUrl), ...extraEnv },
+      env: {
+        ...operatorEnv(databaseUrl),
+        ...extraEnv,
+        TEMPLATE_TWIN_LINEAGE_APPROVED_TARGET_FINGERPRINT: approvedFingerprint,
+      },
     },
   );
 }
 
+async function operatorFingerprint(
+  databaseUrl: string,
+  phase: string,
+): Promise<string> {
+  const status = await checked(
+    "npx",
+    [
+      "--no-install",
+      "tsx",
+      "scripts/template-twin-lineage-online.ts",
+      "--phase",
+      "status",
+    ],
+    {
+      cwd: path.join(ROOT, "packages/db"),
+      env: operatorEnv(databaseUrl),
+    },
+  );
+  const line = status.stdout
+    .split("\n")
+    .map((value) => value.trim())
+    .find(Boolean);
+  let fingerprint: unknown;
+  try {
+    const parsed = JSON.parse(line ?? "") as {
+      targetFingerprints?: Record<string, unknown>;
+    };
+    fingerprint = parsed.targetFingerprints?.[phase];
+  } catch {
+    throw new Error("Lineage status did not return a fingerprint challenge");
+  }
+  if (typeof fingerprint !== "string" || !/^[a-f0-9]{64}$/u.test(fingerprint)) {
+    throw new Error("Lineage status returned an invalid fingerprint challenge");
+  }
+  return fingerprint;
+}
+
 async function interruptBackfill(databaseUrl: string) {
+  const approvedFingerprint = await operatorFingerprint(
+    databaseUrl,
+    "backfill",
+  );
   const barrierClient = makeClient(
     databaseUrl,
     "lineage_scale_interrupt_barrier",
@@ -483,7 +530,10 @@ async function interruptBackfill(databaseUrl: string) {
     ],
     {
       cwd: path.join(ROOT, "packages/db"),
-      env: operatorEnv(databaseUrl),
+      env: {
+        ...operatorEnv(databaseUrl),
+        TEMPLATE_TWIN_LINEAGE_APPROVED_TARGET_FINGERPRINT: approvedFingerprint,
+      },
       stdio: ["ignore", "ignore", "pipe"],
       // tsx may use a child process. A dedicated process group lets the
       // harness simulate a real operator crash instead of killing only its
@@ -764,6 +814,10 @@ async function main(): Promise<void> {
     evidence.finalIndexDurationMs = indexes.durationMs;
     const validate = await runOperator(databaseUrl, "validate");
     evidence.validationDurationMs = validate.durationMs;
+    const blockedContractFingerprint = await operatorFingerprint(
+      databaseUrl,
+      "contract",
+    );
 
     // Deterministic lock-contention proof: an open read transaction holds
     // ACCESS SHARE while the contract needs ACCESS EXCLUSIVE. The contract's
@@ -802,6 +856,8 @@ async function main(): Promise<void> {
         cwd: path.join(ROOT, "packages/db"),
         env: {
           ...operatorEnv(databaseUrl),
+          TEMPLATE_TWIN_LINEAGE_APPROVED_TARGET_FINGERPRINT:
+            blockedContractFingerprint,
           TEMPLATE_TWIN_LINEAGE_CONTRACT_ACK: `note_templates_lineage_v1:${DATABASE}`,
         },
       },

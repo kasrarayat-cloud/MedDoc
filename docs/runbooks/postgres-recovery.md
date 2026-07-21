@@ -12,14 +12,14 @@ When in doubt: `docker exec -it meddoc-pro-postgres-1 psql -U meddoc -d meddoc` 
 
 ## When to use this runbook
 
-| Scenario | Method | Downtime? |
-|---|---|---|
-| Run a one-off SQL as superuser (CREATE EXTENSION, ALTER ROLE another role, etc.) | §1 docker exec + psql | none |
-| Apply a Prisma migration manually | §1 (then `prisma migrate deploy`) | none (or restart app tier if migration needs it) |
-| Reset `meddoc` password (lost from .env / Bitwarden) | §2 docker exec + ALTER ROLE | brief (rotate DB_PASSWORD in .env + restart app tier) |
-| `meddoc` somehow loses LOGIN attribute (someone ran `ALTER ROLE meddoc NOLOGIN`) | §3 single-user mode | yes — postgres restart |
-| Cluster won't start (corruption, fsync, etc.) | §3 single-user mode + escalate | yes |
-| Audit-log immutability fix (Round 3 PR-C.1 deferred to Phase 7) | see §4 background | — |
+| Scenario                                                                         | Method                                                                                                                | Downtime?                                             |
+| -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| Run a one-off SQL as superuser (CREATE EXTENSION, ALTER ROLE another role, etc.) | §1 docker exec + psql                                                                                                 | none                                                  |
+| Inspect or resume a reviewed database release                                    | Read-only `docker compose run --rm db-migrate --phase status`, then `docs/DEPLOYMENT_RUNBOOK.md` §1.4.1 if authorized | keep app tier stopped until every gate passes         |
+| Reset `meddoc` password (lost from .env / Bitwarden)                             | §2 docker exec + ALTER ROLE                                                                                           | brief (rotate DB_PASSWORD in .env + restart app tier) |
+| `meddoc` somehow loses LOGIN attribute (someone ran `ALTER ROLE meddoc NOLOGIN`) | §3 single-user mode                                                                                                   | yes — postgres restart                                |
+| Cluster won't start (corruption, fsync, etc.)                                    | §3 single-user mode + escalate                                                                                        | yes                                                   |
+| Audit-log immutability fix (Round 3 PR-C.1 deferred to Phase 7)                  | see §4 background                                                                                                     | —                                                     |
 
 ---
 
@@ -49,6 +49,7 @@ GRANT ALL ON TABLE transcribe_visits TO meddoc;
 ```
 
 **Verification this works right now:**
+
 ```
 $ docker exec meddoc-pro-postgres-1 psql -U meddoc -d meddoc -At -c \
     "SELECT current_user, current_setting('is_superuser');"
@@ -62,6 +63,34 @@ meddoc|on
 2. **Do not run `\password` to set a password** while connected via trust auth — it works, but it puts the new password in the psql history. Use `ALTER ROLE meddoc PASSWORD '...'` directly.
 
 3. **`docker exec` runs as the container's unix user** (uid 999, named `postgres`). That user owns the postgres data dir. It does NOT need to match any DB role name.
+
+4. **HBA authentication is not transport encryption.** The immutable HBA file
+   controls which database identities may authenticate and which method they
+   use. It does not provide or prove TLS; TLS configuration and peer evidence
+   remain a separate infrastructure gate.
+
+### Schema-release boundary
+
+Do not paste migration DDL into this superuser shell and do not run raw Prisma
+deploy or resolve commands during recovery. The only routine migration command
+is the read-only closed-runner status:
+
+```bash
+cd /opt/meddoc-pro
+docker compose run --rm db-migrate --phase status
+```
+
+If the restored database is an exact accepted ledger prefix, use only the
+status-and-approved cumulative phase flow in `docs/DEPLOYMENT_RUNBOOK.md`
+§1.4.1, including the intervening lineage and authentication online contracts.
+Every cumulative-segment invocation requires a newly verified
+`targetFingerprints.<segment>` status entry. The map is phase-, ledger-,
+accepted-source-, and target-bound and is empty while PostgreSQL is in
+recovery; never derive or reuse an entry.
+Unknown checksums, unresolved attempts, catalog/ledger disagreement, or an
+ambiguous target are not permission to repair Prisma's ledger. Preserve a new
+snapshot and escalate for a reviewed DBA forward-reconciliation decision while
+the application tier remains stopped.
 
 ---
 
@@ -155,6 +184,7 @@ The bootstrap user is whichever role was created by `initdb` — in our cluster,
 The eventual fix is **Option B** — create a separate `meddoc_app` NOSUPERUSER LOGIN role for runtime app connections, with `INSERT, SELECT` only on `audit_logs`, while `meddoc` remains the bootstrap superuser used by migrations + emergency recovery (this runbook). That work is post-pilot scope.
 
 What's still in place from PR-C without PR-C.1:
+
 - `REVOKE UPDATE, DELETE, TRUNCATE ON audit_logs FROM meddoc` is committed (defends against any non-bootstrap role)
 - App-layer `logAudit()` calls in 9 PHI-read paths
 - `audit_logs` has no UPDATE/DELETE/TRUNCATE endpoints in the application API surface
@@ -223,6 +253,7 @@ Escalate to:
 ## Verification this runbook is up to date
 
 Last verified: 2026-05-05. Re-verify when:
+
 - Postgres major version upgrade
 - `pg_hba.conf` changes (e.g., dropping local trust)
 - A new bootstrap user model adopted (e.g., Option B from PR-C.1 deferral)

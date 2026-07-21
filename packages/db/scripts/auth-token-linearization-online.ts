@@ -10,11 +10,13 @@ import { Pool, type PoolClient } from "pg";
 
 import { assertNonProdDatabase, describeDbTarget } from "../src/db-guard";
 import {
+  AUTH_TOKEN_LINEARIZATION_PROOF_CONTRACT_VERSION,
   buildAuthTokenUniqueIndex,
-  readAuthTokenLinearizationStatus,
+  readAuthTokenLinearizationStatusSnapshot,
   reconcileAuthTokenDuplicateBatch,
+  type AuthTokenLinearizationStatus,
 } from "../src/auth-token-linearization-online";
-import { acquireAuthTokenOperatorSessionLock } from "../src/auth-token-linearization-session-lock";
+import { acquireAuthTokenOperatorSessionLockOnClient } from "../src/auth-token-linearization-session-lock";
 import {
   buildDatabaseConnectionString,
   DATABASE_SEARCH_PATH,
@@ -36,7 +38,8 @@ const AUTH_TOKEN_OPERATOR_LOCK_TIMEOUT_MS = 2_000;
 const AUTH_TOKEN_OPERATOR_SHORT_STATEMENT_TIMEOUT_MS = 30_000;
 const AUTH_TOKEN_OPERATOR_INDEX_STATEMENT_TIMEOUT_MS = 15 * 60_000;
 const AUTH_TOKEN_OPERATOR_TARGET_FINGERPRINT_VERSION =
-  "quillmd-auth-token-operator-target-v1";
+  "quillmd-auth-token-operator-target-v2";
+const AUTH_TOKEN_OPERATOR_PRINCIPAL = "meddoc";
 
 interface ConfiguredTarget {
   host: string;
@@ -49,7 +52,15 @@ export interface AuthTokenOperatorTarget extends ConfiguredTarget {
   serverAddress: string;
   serverPort: number;
   postgresMajor: number;
+  systemIdentifier: string;
   tlsIdentity: string;
+  databaseOid: string;
+  databaseOwner: string;
+  databaseOwnerOid: string;
+  principalOid: string;
+  principalCanLogin: boolean;
+  principalSuperuser: boolean;
+  inRecovery: boolean;
 }
 
 interface SessionTargetRow {
@@ -59,12 +70,20 @@ interface SessionTargetRow {
   serverAddress: string | null;
   serverPort: number | null;
   serverVersionNumber: number;
+  systemIdentifier: string;
   searchPath: string;
   statementTimeoutMs: number;
   lockTimeoutMs: number;
   applicationName: string;
   transactionReadOnly: string;
   ssl: boolean;
+  databaseOid: string;
+  databaseOwner: string;
+  databaseOwnerOid: string;
+  principalOid: string;
+  principalCanLogin: boolean;
+  principalSuperuser: boolean;
+  inRecovery: boolean;
 }
 
 function integer(value: string, flag: string, minimum: number): number {
@@ -137,11 +156,22 @@ export function buildAuthTokenOperatorConnectionString(
   databaseUrl: string,
   phase: AuthTokenOperatorPhase,
 ): string {
-  return buildDatabaseConnectionString(databaseUrl, statementTimeoutMs(phase), {
-    lockTimeoutMs: AUTH_TOKEN_OPERATOR_LOCK_TIMEOUT_MS,
-    applicationName: AUTH_TOKEN_OPERATOR_APPLICATION_NAME,
-    ...(phase === "status" ? { defaultTransactionReadOnly: true } : {}),
-  });
+  const connectionString = buildDatabaseConnectionString(
+    databaseUrl,
+    statementTimeoutMs(phase),
+    {
+      lockTimeoutMs: AUTH_TOKEN_OPERATOR_LOCK_TIMEOUT_MS,
+      applicationName: AUTH_TOKEN_OPERATOR_APPLICATION_NAME,
+      ...(phase === "status" ? { defaultTransactionReadOnly: true } : {}),
+    },
+  );
+  if (
+    decodeURIComponent(new URL(connectionString).username) !==
+    AUTH_TOKEN_OPERATOR_PRINCIPAL
+  ) {
+    throw new Error("AUTH_TOKEN_LINEARIZATION_TARGET_PRINCIPAL_MISMATCH");
+  }
+  return connectionString;
 }
 
 function configuredTarget(connectionString: string): ConfiguredTarget {
@@ -152,10 +182,12 @@ function configuredTarget(connectionString: string): ConfiguredTarget {
     database: decodeURIComponent(url.pathname.slice(1)),
     login: decodeURIComponent(url.username),
   };
+  if (target.login !== AUTH_TOKEN_OPERATOR_PRINCIPAL) {
+    throw new Error("AUTH_TOKEN_LINEARIZATION_TARGET_PRINCIPAL_MISMATCH");
+  }
   if (
     !target.host ||
     !target.database ||
-    !target.login ||
     !Number.isSafeInteger(target.port) ||
     target.port < 1 ||
     target.port > 65_535
@@ -208,6 +240,7 @@ function actualTlsIdentity(client: PoolClient, ssl: boolean): string {
 export function authTokenOperatorTargetFingerprint(
   target: AuthTokenOperatorTarget,
   phase: MutatingPhase,
+  protocolEpoch: string,
 ): string {
   const canonical = JSON.stringify([
     AUTH_TOKEN_OPERATOR_TARGET_FINGERPRINT_VERSION,
@@ -220,20 +253,80 @@ export function authTokenOperatorTargetFingerprint(
     ["serverAddress", target.serverAddress],
     ["serverPort", target.serverPort],
     ["postgresMajor", target.postgresMajor],
+    ["systemIdentifier", target.systemIdentifier],
+    ["databaseOid", target.databaseOid],
+    ["databaseOwner", target.databaseOwner],
+    ["databaseOwnerOid", target.databaseOwnerOid],
+    ["principalOid", target.principalOid],
+    ["principalCanLogin", target.principalCanLogin],
+    ["principalSuperuser", target.principalSuperuser],
+    ["inRecovery", target.inRecovery],
+    ["proofContractVersion", AUTH_TOKEN_LINEARIZATION_PROOF_CONTRACT_VERSION],
+    ["protocolEpoch", protocolEpoch],
   ]);
   return createHash("sha256").update(canonical, "utf8").digest("hex");
 }
 
+export function authTokenOperatorProtocolEpoch(
+  status: AuthTokenLinearizationStatus,
+): string {
+  return createHash("sha256")
+    .update(
+      JSON.stringify([
+        "quillmd-auth-token-linearization-protocol-epoch-v1",
+        AUTH_TOKEN_LINEARIZATION_PROOF_CONTRACT_VERSION,
+        status.duplicateGroups,
+        status.indexExists,
+        status.indexValid,
+        status.indexReady,
+        status.indexExact,
+        status.transitionTriggerEnabled,
+        status.transitionTriggerState,
+        status.complete,
+      ]),
+      "utf8",
+    )
+    .digest("hex");
+}
+
+export function authTokenOperatorApprovalFingerprint(
+  target: AuthTokenOperatorTarget,
+  status: AuthTokenLinearizationStatus,
+  phase: MutatingPhase,
+): string {
+  return authTokenOperatorTargetFingerprint(
+    target,
+    phase,
+    authTokenOperatorProtocolEpoch(status),
+  );
+}
+
 export function assertApprovedAuthTokenOperatorTarget(
   target: AuthTokenOperatorTarget,
+  status: AuthTokenLinearizationStatus,
   phase: MutatingPhase,
   approvedFingerprint: string | undefined,
 ): void {
+  if (
+    target.login !== AUTH_TOKEN_OPERATOR_PRINCIPAL ||
+    target.databaseOwner !== AUTH_TOKEN_OPERATOR_PRINCIPAL ||
+    target.databaseOwnerOid !== target.principalOid ||
+    !/^[0-9]+$/u.test(target.databaseOid) ||
+    !/^[0-9]+$/u.test(target.principalOid) ||
+    target.principalCanLogin !== true ||
+    target.principalSuperuser !== true
+  ) {
+    throw new Error("AUTH_TOKEN_LINEARIZATION_TARGET_PRINCIPAL_MISMATCH");
+  }
+  if (target.inRecovery) {
+    throw new Error("AUTH_TOKEN_LINEARIZATION_TARGET_IN_RECOVERY");
+  }
   if (!approvedFingerprint || !/^[a-f0-9]{64}$/u.test(approvedFingerprint)) {
     throw new Error("AUTH_TOKEN_LINEARIZATION_TARGET_APPROVAL_REQUIRED");
   }
   if (
-    approvedFingerprint !== authTokenOperatorTargetFingerprint(target, phase)
+    approvedFingerprint !==
+    authTokenOperatorApprovalFingerprint(target, status, phase)
   ) {
     throw new Error("AUTH_TOKEN_LINEARIZATION_TARGET_APPROVAL_MISMATCH");
   }
@@ -252,6 +345,8 @@ export async function preflightAuthTokenOperatorTarget(
       pg_catalog.inet_server_addr()::TEXT AS "serverAddress",
       pg_catalog.inet_server_port() AS "serverPort",
       current_setting('server_version_num')::INTEGER AS "serverVersionNumber",
+      (SELECT control.system_identifier::TEXT
+         FROM pg_catalog.pg_control_system() control) AS "systemIdentifier",
       current_setting('search_path') AS "searchPath",
       (SELECT setting::INTEGER FROM pg_catalog.pg_settings
         WHERE name = 'statement_timeout') AS "statementTimeoutMs",
@@ -260,7 +355,20 @@ export async function preflightAuthTokenOperatorTarget(
       current_setting('application_name') AS "applicationName",
       current_setting('transaction_read_only') AS "transactionReadOnly",
       COALESCE((SELECT ssl FROM pg_catalog.pg_stat_ssl
-        WHERE pid = pg_catalog.pg_backend_pid()), FALSE) AS "ssl"
+        WHERE pid = pg_catalog.pg_backend_pid()), FALSE) AS "ssl",
+      database_state.oid::TEXT AS "databaseOid",
+      database_owner.rolname::TEXT AS "databaseOwner",
+      database_owner.oid::TEXT AS "databaseOwnerOid",
+      principal.oid::TEXT AS "principalOid",
+      principal.rolcanlogin AS "principalCanLogin",
+      principal.rolsuper AS "principalSuperuser",
+      pg_catalog.pg_is_in_recovery() AS "inRecovery"
+    FROM pg_catalog.pg_database database_state
+    JOIN pg_catalog.pg_roles database_owner
+      ON database_owner.oid = database_state.datdba
+    JOIN pg_catalog.pg_roles principal
+      ON principal.rolname = session_user
+    WHERE database_state.datname = current_database()
   `);
   const row = result.rows[0];
   const observable = client as unknown as {
@@ -276,19 +384,29 @@ export async function preflightAuthTokenOperatorTarget(
     observable.port !== expected.port ||
     observable.database !== expected.database ||
     observable.user !== expected.login ||
-    row.sessionRole !== expected.login ||
-    row.currentRole !== expected.login ||
+    expected.login !== AUTH_TOKEN_OPERATOR_PRINCIPAL ||
+    row.sessionRole !== AUTH_TOKEN_OPERATOR_PRINCIPAL ||
+    row.currentRole !== AUTH_TOKEN_OPERATOR_PRINCIPAL ||
     row.database !== expected.database ||
+    !/^[0-9]+$/u.test(row.databaseOid) ||
+    row.databaseOwner !== AUTH_TOKEN_OPERATOR_PRINCIPAL ||
+    !/^[0-9]+$/u.test(row.databaseOwnerOid) ||
+    !/^[0-9]+$/u.test(row.principalOid) ||
+    row.databaseOwnerOid !== row.principalOid ||
+    row.principalCanLogin !== true ||
+    row.principalSuperuser !== true ||
     !row.serverAddress ||
     !Number.isSafeInteger(row.serverPort) ||
     row.serverPort! < 1 ||
     row.serverPort! > 65_535 ||
     Math.trunc(row.serverVersionNumber / 10_000) !== 16 ||
+    !/^[0-9]+$/u.test(row.systemIdentifier) ||
     row.searchPath !== DATABASE_SEARCH_PATH ||
     row.statementTimeoutMs !== statementTimeoutMs(phase) ||
     row.lockTimeoutMs !== AUTH_TOKEN_OPERATOR_LOCK_TIMEOUT_MS ||
     row.applicationName !== AUTH_TOKEN_OPERATOR_APPLICATION_NAME ||
-    row.transactionReadOnly !== (phase === "status" ? "on" : "off")
+    row.transactionReadOnly !== (phase === "status" ? "on" : "off") ||
+    typeof row.inRecovery !== "boolean"
   ) {
     throw new Error("AUTH_TOKEN_LINEARIZATION_SESSION_TARGET_MISMATCH");
   }
@@ -297,19 +415,30 @@ export async function preflightAuthTokenOperatorTarget(
     serverAddress: row.serverAddress.toLowerCase(),
     serverPort: row.serverPort,
     postgresMajor: Math.trunc(row.serverVersionNumber / 10_000),
+    systemIdentifier: row.systemIdentifier,
     tlsIdentity: actualTlsIdentity(client, row.ssl),
+    databaseOid: row.databaseOid,
+    databaseOwner: row.databaseOwner,
+    databaseOwnerOid: row.databaseOwnerOid,
+    principalOid: row.principalOid,
+    principalCanLogin: row.principalCanLogin,
+    principalSuperuser: row.principalSuperuser,
+    inRecovery: row.inRecovery,
   };
 }
 
-function targetFingerprints(
+export function authTokenOperatorTargetFingerprints(
   target: AuthTokenOperatorTarget,
-): Record<MutatingPhase, string> {
+  status: AuthTokenLinearizationStatus,
+): Partial<Record<MutatingPhase, string>> {
+  if (target.inRecovery) return {};
+  const epoch = authTokenOperatorProtocolEpoch(status);
   return Object.fromEntries(
     (["reconcile", "index", "all"] as const).map((phase) => [
       phase,
-      authTokenOperatorTargetFingerprint(target, phase),
+      authTokenOperatorTargetFingerprint(target, phase, epoch),
     ]),
-  ) as Record<MutatingPhase, string>;
+  ) as Partial<Record<MutatingPhase, string>>;
 }
 
 function sleep(milliseconds: number): Promise<void> {
@@ -334,6 +463,8 @@ const SAFE_INTERNAL_ERROR_CODES = new Set([
   "AUTH_TOKEN_LINEARIZATION_SESSION_TARGET_MISMATCH",
   "AUTH_TOKEN_LINEARIZATION_TARGET_APPROVAL_MISMATCH",
   "AUTH_TOKEN_LINEARIZATION_TARGET_APPROVAL_REQUIRED",
+  "AUTH_TOKEN_LINEARIZATION_TARGET_IN_RECOVERY",
+  "AUTH_TOKEN_LINEARIZATION_TARGET_PRINCIPAL_MISMATCH",
   "AUTH_TOKEN_RECONCILED_KEY_COUNT_INVALID",
   "AUTH_TOKEN_RETIRED_ROW_COUNT_INVALID",
   "AUTH_TOKEN_TRANSITION_GUARD_MISMATCH",
@@ -350,7 +481,7 @@ async function run(): Promise<void> {
   let pool: Pool | null = null;
   let client: PoolClient | null = null;
   let operatorLock: Awaited<
-    ReturnType<typeof acquireAuthTokenOperatorSessionLock>
+    ReturnType<typeof acquireAuthTokenOperatorSessionLockOnClient>
   > | null = null;
   let stopping = false;
   const stop = () => {
@@ -372,7 +503,7 @@ async function run(): Promise<void> {
     authorized(operatorConnectionString, options.phase);
     pool = new Pool({
       connectionString: operatorConnectionString,
-      max: 3,
+      max: 1,
       connectionTimeoutMillis: 10_000,
     });
     client = await pool.connect();
@@ -381,22 +512,33 @@ async function run(): Promise<void> {
       expectedTarget,
       options.phase,
     );
-    if (options.phase !== "status") {
-      assertApprovedAuthTokenOperatorTarget(
-        liveTarget,
-        options.phase,
-        process.env.AUTH_TOKEN_LINEARIZATION_APPROVED_TARGET_FINGERPRINT,
-      );
-      operatorLock = await acquireAuthTokenOperatorSessionLock(pool);
-    }
+    const observedStatus =
+      await readAuthTokenLinearizationStatusSnapshot(client);
     if (options.phase === "status") {
       printSafe({
         event: "status",
         readOnly: true,
-        targetFingerprints: targetFingerprints(liveTarget),
-        ...(await readAuthTokenLinearizationStatus(client)),
+        targetFingerprints: authTokenOperatorTargetFingerprints(
+          liveTarget,
+          observedStatus,
+        ),
+        ...observedStatus,
       });
       return;
+    }
+    assertApprovedAuthTokenOperatorTarget(
+      liveTarget,
+      observedStatus,
+      options.phase,
+      process.env.AUTH_TOKEN_LINEARIZATION_APPROVED_TARGET_FINGERPRINT,
+    );
+    operatorLock = await acquireAuthTokenOperatorSessionLockOnClient(client);
+    const lockedStatus = await readAuthTokenLinearizationStatusSnapshot(client);
+    if (
+      authTokenOperatorProtocolEpoch(lockedStatus) !==
+      authTokenOperatorProtocolEpoch(observedStatus)
+    ) {
+      throw new Error("AUTH_TOKEN_LINEARIZATION_TARGET_APPROVAL_MISMATCH");
     }
     if (options.phase === "reconcile" || options.phase === "all") {
       let batches = 0;
@@ -419,7 +561,7 @@ async function run(): Promise<void> {
         }
         if (options.batchDelayMs > 0) await sleep(options.batchDelayMs);
       }
-      const status = await readAuthTokenLinearizationStatus(client);
+      const status = await readAuthTokenLinearizationStatusSnapshot(client);
       if (
         options.phase === "reconcile" ||
         stopping ||
@@ -432,7 +574,7 @@ async function run(): Promise<void> {
     await buildAuthTokenUniqueIndex(client);
     printSafe({
       event: "status",
-      ...(await readAuthTokenLinearizationStatus(client)),
+      ...(await readAuthTokenLinearizationStatusSnapshot(client)),
     });
   } catch (error) {
     process.stderr.write(`${safeAuthTokenOperatorErrorCode(error)}\n`);

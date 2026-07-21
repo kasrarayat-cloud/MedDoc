@@ -15,8 +15,8 @@ never enter operator output or release evidence.
 
 ## Safety and lock boundary
 
-- `prisma migrate deploy` takes only the short metadata lock needed to install
-  the transition trigger, with `lock_timeout=2s` and
+- The closed `auth-expand` cumulative segment takes only the short metadata
+  lock needed to install the transition trigger, with `lock_timeout=2s` and
   `statement_timeout=30s`. A timeout is a failed migration attempt.
 - The trigger serializes exact `(userId,purpose)` writers and rejects a second
   unused row while no final index exists. During this transition only,
@@ -27,9 +27,11 @@ never enter operator output or release evidence.
 - Reconciliation locks only the token rows belonging to at most the requested
   number of duplicate keys. A batch is one transaction and one bounded
   statement; the default is 100 keys and the hard maximum is 1,000.
-- One session advisory lock spans reconciliation and standalone concurrent
-  index work. An opposing operator fails with
-  `AUTH_TOKEN_LINEARIZATION_OPERATOR_BUSY`.
+- Each mutating command retains one target-proved PostgreSQL connection for the
+  live principal/cluster preflight, coherent initial status, state-bound
+  fingerprint check, session advisory lock, locked status recheck, mutation,
+  and final status. No second session carries approval or the lock. An opposing
+  operator fails with `AUTH_TOKEN_LINEARIZATION_OPERATOR_BUSY`.
 - `CREATE UNIQUE INDEX CONCURRENTLY` permits ordinary reads and writes. Its
   brief catalog locks and total build retain explicit 2-second lock and
   15-minute statement bounds.
@@ -43,48 +45,71 @@ current row and duplicate-group census, free disk/WAL/replication capacity,
 monitoring ownership, approved maintenance window, and the accepted immutable
 migrator SHA. Record `SHOW default_transaction_isolation` and verify every
 current token writer/app transaction remains READ COMMITTED for the transition;
-a higher configured default is a migration blocker. Do not start or promote application or dispatcher processes
-between the expand migration and a complete operator status.
+a higher configured default is a migration blocker. Do not start or promote
+application or dispatcher processes between the expand migration and a
+complete operator status.
 
 The examples intentionally omit the database URL. Supply
 `AUTH_TOKEN_LINEARIZATION_DATABASE_URL` through the approved secret mechanism.
+The immutable HBA contract controls authentication only; it does not provide or
+prove TLS. Independently verify the required transport and peer-certificate
+evidence for a network target.
 
-1. Apply the reviewed migrations. A failed v5 attempt must be inspected and
-   retried through the standard Prisma failed-migration procedure; never edit
-   `_prisma_migrations` or copy a checksum.
-2. Record aggregate status:
+1. Run read-only `docker compose run --rm db-migrate --phase status`, verify the
+   exact ledger/target, and apply only the approved closed `auth-expand`
+   cumulative segment under `docs/DEPLOYMENT_RUNBOOK.md` §1.4.1. The lineage
+   contract must already be exactly `CONTRACTED`. A failed v5 attempt requires
+   preserved diagnostics, a fresh protected snapshot, and a separately reviewed
+   DBA forward-reconciliation decision before an unchanged retry. This runbook
+   does not authorize raw Prisma deploy/resolve or ledger repair.
+2. Record aggregate status and obtain a fresh phase challenge:
 
    ```bash
    npm run auth-token-linearization -- --phase status
    ```
 
-   This phase is server-enforced read-only. It also emits phase-specific opaque
+   This phase is server-enforced read-only. It emits phase-specific opaque
    `targetFingerprints` derived from the configured host, port, database and
-   login plus the live server address/port, PostgreSQL major version, TLS peer
-   certificate identity (or explicit plaintext transport), and phase. Verify
-   those target facts against approved infrastructure evidence before selecting
-   the fingerprint for a mutating phase. Before the operator, expect
-   `transitionTriggerEnabled=true`. The duplicate count may be nonzero. Neither
-   state authorizes process promotion.
+   exact `meddoc` login/database-owner contract; the live server address/port,
+   PostgreSQL 16 cluster system identifier, recovery state, transport identity,
+   proof-contract version, requested phase, and the complete current protocol
+   status. The operator refuses mutation unless session/current role and
+   database owner are exactly `meddoc`, that principal is LOGIN+SUPERUSER, and
+   the target is not in recovery. Verify those facts against approved
+   infrastructure evidence before selecting a fingerprint. Before the operator,
+   expect `transitionTriggerEnabled=true`. The duplicate count may be nonzero.
+   Neither state authorizes process promotion. Status emits no approval
+   fingerprints while the target is in recovery; an empty map is a stop
+   condition, not permission to construct a value.
 
-3. Reconcile in measured batches:
+3. Select the fresh `targetFingerprints.reconcile` challenge, then reconcile in
+   measured batches:
 
    ```bash
+   export AUTH_TOKEN_LINEARIZATION_APPROVED_TARGET_FINGERPRINT='<verified targetFingerprints.reconcile value>'
    npm run auth-token-linearization -- \
      --phase reconcile --batch-size 100 --batch-delay-ms 100
+   unset AUTH_TOKEN_LINEARIZATION_APPROVED_TARGET_FINGERPRINT
    ```
 
    Start smaller if measured production lock/WAL evidence requires it. Rerun
-   until `duplicateGroups=0`; then rerun once and require zero retired rows.
+   status and obtain a fresh `reconcile` challenge before every resumed or
+   idempotency invocation. Continue until `duplicateGroups=0`; then rerun once
+   with another fresh challenge and require zero retired rows.
 
-4. Build and catalog-verify the index:
+4. Run status again, verify the fresh `targetFingerprints.index` challenge,
+   then build and catalog-verify the index:
 
    ```bash
+   export AUTH_TOKEN_LINEARIZATION_APPROVED_TARGET_FINGERPRINT='<verified targetFingerprints.index value>'
    npm run auth-token-linearization -- --phase index
+   unset AUTH_TOKEN_LINEARIZATION_APPROVED_TARGET_FINGERPRINT
    ```
 
    Alternatively `--phase all` performs reconciliation then the index phase
-   under the same session lock.
+   under the same retained session lock, but requires a fresh verified
+   `targetFingerprints.all` value. An idempotency rerun requires a new status
+   challenge after the first invocation changes protocol state.
 
 5. Require status to report all of:
 
@@ -95,6 +120,7 @@ The examples intentionally omit the database URL. Supply
    indexReady=true
    indexExact=true
    transitionTriggerEnabled=false
+   transitionTriggerState=absent
    complete=true
    ```
 
@@ -110,14 +136,24 @@ AUTH_TOKEN_LINEARIZATION_PRODUCTION_ACK=<database-name>:<phase>
 AUTH_TOKEN_LINEARIZATION_APPROVED_TARGET_FINGERPRINT=<exact lowercase phase fingerprint from verified status>
 ```
 
-The fingerprint is phase-specific. A separate `reconcile` then `index` sequence
-requires the matching fingerprint for each invocation; `all` uses its own
-fingerprint. Rerun status and reverify the target whenever DNS resolution, the
-server address or port, PostgreSQL major, transport mode, or TLS certificate
-changes. Never approve a fingerprint solely because the operator printed it.
-Independently verify the configured and live target through the approved
-infrastructure, DNS, transport, and certificate evidence, then bind the opaque
-fingerprint returned for that phase to the change record.
+The fingerprint is phase- and protocol-state-specific. It binds the complete
+duplicate/index/transition-trigger status epoch as well as target, principal,
+cluster, recovery, transport, proof-contract, and phase evidence. A separate
+`reconcile` then `index` sequence requires a fresh matching fingerprint for
+each invocation; `all` uses its own fresh fingerprint. Every mutation,
+including a retry, resumed batch, and zero-change idempotency run, requires a
+new status observation and independently verified challenge. Rerun status and
+reverify the target whenever protocol state, DNS resolution, the server address
+or port, PostgreSQL major, cluster identifier, database/principal OID or
+attributes, recovery state, transport mode, or TLS certificate changes. Never
+approve a fingerprint solely because the operator printed it, reuse a stale
+value, or derive a missing one. Independently verify the configured and live
+target through the approved infrastructure, DNS, transport, principal, and
+certificate evidence, then bind the opaque fingerprint returned for that phase
+and state to the change record. After approval, the operator acquires the
+session advisory lock on the same retained target-proved connection and
+rechecks the full protocol epoch under that lock before any mutation; drift
+fails closed.
 These variables are an execution guard, not production authorization.
 
 ## Interruption, resume, and rollback
@@ -138,8 +174,12 @@ These variables are an execution guard, not production authorization.
   history. Do not reactivate retired bearers, drop the index, delete token rows,
   or down-migrate. Disable auth-email delivery if the authority state is
   ambiguous and follow the authentication incident procedure.
-- Database restore requires the same operator status proof before restored
-  application processes can start.
+- Database restore requires the same exact `meddoc` configured-login,
+  session/current-role, database-owner, LOGIN+SUPERUSER, PostgreSQL 16, cluster
+  identifier, transport, non-recovery, and state-bound operator proof. Status
+  emits no approval fingerprints while the restored target is in recovery.
+  Complete every exact database-principal preflight and this operator's final
+  exact status before any restored application, worker, or dispatcher starts.
 
 Evidence is aggregate only: batch count/duration, retired-row count,
 duplicate-group count, index catalog booleans, lock timeouts, interruption and

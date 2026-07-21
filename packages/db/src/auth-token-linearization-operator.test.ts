@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -7,13 +8,16 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   assertApprovedAuthTokenOperatorTarget,
+  authTokenOperatorApprovalFingerprint,
+  authTokenOperatorProtocolEpoch,
   authTokenOperatorTargetFingerprint,
+  authTokenOperatorTargetFingerprints,
   buildAuthTokenOperatorConnectionString,
   parseAuthTokenOperatorArgs,
   preflightAuthTokenOperatorTarget,
   safeAuthTokenOperatorErrorCode,
   type AuthTokenOperatorTarget,
-} from "./auth-token-linearization-online";
+} from "../scripts/auth-token-linearization-online";
 
 const repositoryRoot = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -24,31 +28,59 @@ const entrypoint = resolve(
   repositoryRoot,
   "packages/db/scripts/auth-token-linearization-online.ts",
 );
+const operatorSource = readFileSync(entrypoint, "utf8");
 
 const TARGET: AuthTokenOperatorTarget = {
   host: "postgres.internal",
   port: 5432,
   database: "meddoc_auth_test",
-  login: "meddoc_release_security",
+  login: "meddoc",
   serverAddress: "192.0.2.10",
   serverPort: 5432,
   postgresMajor: 16,
+  systemIdentifier: "7623456789012345678",
   tlsIdentity: `x509-authorized-sha256:${"a".repeat(64)}`,
+  databaseOid: "16384",
+  databaseOwner: "meddoc",
+  databaseOwnerOid: "10",
+  principalOid: "10",
+  principalCanLogin: true,
+  principalSuperuser: true,
+  inRecovery: false,
+};
+
+const STATUS = {
+  duplicateGroups: 2,
+  indexExists: false,
+  indexValid: false,
+  indexReady: false,
+  indexExact: false,
+  transitionTriggerEnabled: true,
+  transitionTriggerState: "exact" as const,
+  complete: false,
 };
 
 const SESSION_ROW = {
-  sessionRole: "meddoc_release_security",
-  currentRole: "meddoc_release_security",
+  sessionRole: "meddoc",
+  currentRole: "meddoc",
   database: "meddoc_auth_test",
   serverAddress: "192.0.2.10",
   serverPort: 5432,
   serverVersionNumber: 160_010,
+  systemIdentifier: "7623456789012345678",
   searchPath: "pg_catalog,public",
   statementTimeoutMs: 30_000,
   lockTimeoutMs: 2_000,
   applicationName: "quillmd_auth_token_linearization_online_v1",
   transactionReadOnly: "off",
   ssl: false,
+  databaseOid: "16384",
+  databaseOwner: "meddoc",
+  databaseOwnerOid: "10",
+  principalOid: "10",
+  principalCanLogin: true,
+  principalSuperuser: true,
+  inRecovery: false,
 };
 
 function sessionClient(
@@ -59,7 +91,7 @@ function sessionClient(
     host: "postgres.internal",
     port: 5432,
     database: "meddoc_auth_test",
-    user: "meddoc_release_security",
+    user: "meddoc",
     connection: { stream: { encrypted: false } },
     query: vi.fn().mockResolvedValue({
       rows: [{ ...SESSION_ROW, ...rowOverrides }],
@@ -96,6 +128,16 @@ async function runOperator(
 }
 
 describe("auth-token online operator fixed-output entrypoint", () => {
+  it("binds the operator lock and every mutation to one retained client", () => {
+    expect(operatorSource).toContain("max: 1");
+    expect(operatorSource).toContain(
+      "acquireAuthTokenOperatorSessionLockOnClient(client)",
+    );
+    expect(operatorSource).not.toContain(
+      "acquireAuthTokenOperatorSessionLock(pool)",
+    );
+  });
+
   it("requires each CLI control at most once", () => {
     expect(() =>
       parseAuthTokenOperatorArgs(["--phase", "status", "--phase", "reconcile"]),
@@ -104,7 +146,7 @@ describe("auth-token online operator fixed-output entrypoint", () => {
 
   it("uses the shared canonical options contract and makes status read-only", () => {
     const base =
-      "postgresql://meddoc_release_security:synthetic@postgres.internal:5432/meddoc_auth_test?schema=public";
+      "postgresql://meddoc:synthetic@postgres.internal:5432/meddoc_auth_test?schema=public";
     const status = new URL(
       buildAuthTokenOperatorConnectionString(base, "status"),
     );
@@ -128,43 +170,130 @@ describe("auth-token online operator fixed-output entrypoint", () => {
     ["surrounding whitespace", " "],
   ])("rejects a noncanonical operator URL: %s", (_label, suffix) => {
     const base =
-      "postgresql://meddoc_release_security:synthetic@postgres.internal:5432/meddoc_auth_test?schema=public";
+      "postgresql://meddoc:synthetic@postgres.internal:5432/meddoc_auth_test?schema=public";
     const raw = suffix === " " ? `${base}${suffix}` : `${base}${suffix}`;
     expect(() =>
       buildAuthTokenOperatorConnectionString(raw, "reconcile"),
     ).toThrow("DATABASE_CONNECTION_OPTIONS_INVALID");
   });
 
-  it("binds approval to every reviewed target dimension and phase", () => {
-    const approved = authTokenOperatorTargetFingerprint(TARGET, "reconcile");
+  it.each(["meddoc_runtime", "meddoc_release_security", "alternate_login"])(
+    "rejects the unapproved %s login before connecting",
+    (login) => {
+      expect(() =>
+        buildAuthTokenOperatorConnectionString(
+          `postgresql://${login}:synthetic@postgres.internal:5432/meddoc_auth_test?schema=public`,
+          "status",
+        ),
+      ).toThrow("AUTH_TOKEN_LINEARIZATION_TARGET_PRINCIPAL_MISMATCH");
+    },
+  );
+
+  it("binds approval to every reviewed target, state, protocol, and phase dimension", () => {
+    const epoch = authTokenOperatorProtocolEpoch(STATUS);
+    const approved = authTokenOperatorApprovalFingerprint(
+      TARGET,
+      STATUS,
+      "reconcile",
+    );
+    expect(authTokenOperatorTargetFingerprint(TARGET, "reconcile", epoch)).toBe(
+      approved,
+    );
     expect(() =>
-      assertApprovedAuthTokenOperatorTarget(TARGET, "reconcile", approved),
+      assertApprovedAuthTokenOperatorTarget(
+        TARGET,
+        STATUS,
+        "reconcile",
+        approved,
+      ),
     ).not.toThrow();
 
     const alternatives: AuthTokenOperatorTarget[] = [
       { ...TARGET, host: "alternate.internal" },
       { ...TARGET, port: 5433 },
       { ...TARGET, database: "alternate_auth_test" },
-      { ...TARGET, login: "alternate_login" },
       { ...TARGET, tlsIdentity: `x509-authorized-sha256:${"b".repeat(64)}` },
       { ...TARGET, serverAddress: "192.0.2.11" },
       { ...TARGET, serverPort: 5433 },
       { ...TARGET, postgresMajor: 17 },
+      { ...TARGET, systemIdentifier: "7623456789012345679" },
+      { ...TARGET, databaseOid: "16385" },
     ];
     for (const target of alternatives) {
-      expect(authTokenOperatorTargetFingerprint(target, "reconcile")).not.toBe(
-        approved,
-      );
+      expect(
+        authTokenOperatorTargetFingerprint(target, "reconcile", epoch),
+      ).not.toBe(approved);
       expect(() =>
-        assertApprovedAuthTokenOperatorTarget(target, "reconcile", approved),
+        assertApprovedAuthTokenOperatorTarget(
+          target,
+          STATUS,
+          "reconcile",
+          approved,
+        ),
       ).toThrow("AUTH_TOKEN_LINEARIZATION_TARGET_APPROVAL_MISMATCH");
     }
-    expect(authTokenOperatorTargetFingerprint(TARGET, "index")).not.toBe(
+    expect(authTokenOperatorTargetFingerprint(TARGET, "index", epoch)).not.toBe(
       approved,
     );
     expect(() =>
-      assertApprovedAuthTokenOperatorTarget(TARGET, "index", approved),
+      assertApprovedAuthTokenOperatorTarget(TARGET, STATUS, "index", approved),
     ).toThrow("AUTH_TOKEN_LINEARIZATION_TARGET_APPROVAL_MISMATCH");
+
+    const advancedStatus = { ...STATUS, duplicateGroups: 1 };
+    expect(authTokenOperatorProtocolEpoch(advancedStatus)).not.toBe(epoch);
+    expect(() =>
+      assertApprovedAuthTokenOperatorTarget(
+        TARGET,
+        advancedStatus,
+        "reconcile",
+        approved,
+      ),
+    ).toThrow("AUTH_TOKEN_LINEARIZATION_TARGET_APPROVAL_MISMATCH");
+
+    for (const target of [
+      { ...TARGET, login: "meddoc_runtime" },
+      { ...TARGET, databaseOwner: "alternate_owner" },
+      { ...TARGET, databaseOwnerOid: "11" },
+      { ...TARGET, principalOid: "11" },
+      { ...TARGET, principalCanLogin: false },
+      { ...TARGET, principalSuperuser: false },
+    ]) {
+      expect(() =>
+        assertApprovedAuthTokenOperatorTarget(
+          target,
+          STATUS,
+          "reconcile",
+          authTokenOperatorApprovalFingerprint(target, STATUS, "reconcile"),
+        ),
+      ).toThrow("AUTH_TOKEN_LINEARIZATION_TARGET_PRINCIPAL_MISMATCH");
+    }
+  });
+
+  it("refuses approval minting and mutation admission on recovery", () => {
+    const recoveryTarget = { ...TARGET, inRecovery: true };
+    expect(authTokenOperatorTargetFingerprints(recoveryTarget, STATUS)).toEqual(
+      {},
+    );
+    expect(() =>
+      assertApprovedAuthTokenOperatorTarget(
+        recoveryTarget,
+        STATUS,
+        "reconcile",
+        authTokenOperatorApprovalFingerprint(
+          recoveryTarget,
+          STATUS,
+          "reconcile",
+        ),
+      ),
+    ).toThrow("AUTH_TOKEN_LINEARIZATION_TARGET_IN_RECOVERY");
+  });
+
+  it("requires a canonical approval value", () => {
+    const approved = authTokenOperatorApprovalFingerprint(
+      TARGET,
+      STATUS,
+      "reconcile",
+    );
     for (const absentOrNoncanonical of [
       undefined,
       "",
@@ -174,6 +303,7 @@ describe("auth-token online operator fixed-output entrypoint", () => {
       expect(() =>
         assertApprovedAuthTokenOperatorTarget(
           TARGET,
+          STATUS,
           "reconcile",
           absentOrNoncanonical,
         ),
@@ -191,6 +321,14 @@ describe("auth-token online operator fixed-output entrypoint", () => {
     ["server address", {}, { serverAddress: null }],
     ["invalid server port", {}, { serverPort: 0 }],
     ["server major", {}, { serverVersionNumber: 170_000 }],
+    ["system identifier", {}, { systemIdentifier: "not-a-system-id" }],
+    ["database oid", {}, { databaseOid: "not-an-oid" }],
+    ["database owner", {}, { databaseOwner: "alternate_owner" }],
+    ["database owner oid", {}, { databaseOwnerOid: "11" }],
+    ["principal oid", {}, { principalOid: "11" }],
+    ["principal login attribute", {}, { principalCanLogin: false }],
+    ["principal superuser attribute", {}, { principalSuperuser: false }],
+    ["recovery shape", {}, { inRecovery: undefined }],
     ["search path", {}, { searchPath: "public" }],
     ["phase timeout", {}, { statementTimeoutMs: 900_000 }],
     ["TLS transport", {}, { ssl: true }],
@@ -204,7 +342,7 @@ describe("auth-token online operator fixed-output entrypoint", () => {
             host: "postgres.internal",
             port: 5432,
             database: "meddoc_auth_test",
-            login: "meddoc_release_security",
+            login: "meddoc",
           },
           "reconcile",
         ),
@@ -220,7 +358,7 @@ describe("auth-token online operator fixed-output entrypoint", () => {
           host: "postgres.internal",
           port: 5432,
           database: "meddoc_auth_test",
-          login: "meddoc_release_security",
+          login: "meddoc",
         },
         "reconcile",
       ),
@@ -228,11 +366,19 @@ describe("auth-token online operator fixed-output entrypoint", () => {
       host: "postgres.internal",
       port: 5432,
       database: "meddoc_auth_test",
-      login: "meddoc_release_security",
+      login: "meddoc",
       serverAddress: "192.0.2.10",
       serverPort: 5432,
       postgresMajor: 16,
+      systemIdentifier: "7623456789012345678",
       tlsIdentity: "plaintext",
+      databaseOid: "16384",
+      databaseOwner: "meddoc",
+      databaseOwnerOid: "10",
+      principalOid: "10",
+      principalCanLogin: true,
+      principalSuperuser: true,
+      inRecovery: false,
     });
 
     await expect(
@@ -242,7 +388,7 @@ describe("auth-token online operator fixed-output entrypoint", () => {
           host: "postgres.internal",
           port: 5432,
           database: "meddoc_auth_test",
-          login: "meddoc_release_security",
+          login: "meddoc",
         },
         "status",
       ),
@@ -272,7 +418,7 @@ describe("auth-token online operator fixed-output entrypoint", () => {
     {
       label: "connection failure",
       args: ["--phase", "status"],
-      url: "postgresql://synthetic:synthetic-connect-secret@127.0.0.1:1/meddoc_operator_test",
+      url: "postgresql://meddoc:synthetic-connect-secret@127.0.0.1:1/meddoc_operator_test",
       sentinel: "synthetic-connect-secret",
     },
     {

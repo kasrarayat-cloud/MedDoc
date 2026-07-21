@@ -1,0 +1,5 @@
+*
+!Dockerfile
+!quillmd-pg_hba.conf
+!quillmd-postgres-entrypoint.sh
+!verify-quillmd-host-auth.sh

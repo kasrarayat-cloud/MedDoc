@@ -2,10 +2,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   assertExactDatabasePrincipal: vi.fn(),
+  assertPostgresHostAuthenticationContract: vi.fn(),
 }));
 
 vi.mock("./exact-database-principal", () => ({
   assertExactDatabasePrincipal: mocks.assertExactDatabasePrincipal,
+}));
+vi.mock("./postgres-host-auth", () => ({
+  assertPostgresHostAuthenticationContract:
+    mocks.assertPostgresHostAuthenticationContract,
 }));
 
 import {
@@ -30,6 +35,7 @@ function environment(
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.assertExactDatabasePrincipal.mockResolvedValue(undefined);
+  mocks.assertPostgresHostAuthenticationContract.mockResolvedValue(undefined);
 });
 
 describe("production runtime database-principal profile", () => {
@@ -80,6 +86,9 @@ describe("production runtime database-principal profile", () => {
         prisma,
         ...principal,
       });
+      expect(
+        mocks.assertPostgresHostAuthenticationContract,
+      ).toHaveBeenCalledWith({ prisma });
     },
   );
 
@@ -96,6 +105,22 @@ describe("production runtime database-principal profile", () => {
       ProductionRuntimeDatabasePrincipalError,
     );
     await expect(rejection).rejects.not.toThrow(/secret|clinical|postgresql/u);
+  });
+
+  it("normalizes host-authentication proof failures without retaining details", async () => {
+    mocks.assertPostgresHostAuthenticationContract.mockRejectedValueOnce(
+      new Error("unreviewed HBA path and private connection detail"),
+    );
+    const rejection = assertProductionRuntimeDatabasePrincipal({
+      prisma,
+      environment: environment(),
+      syntheticQaResourceBoundaryAllowed: false,
+    });
+    await expect(rejection).rejects.toBeInstanceOf(
+      ProductionRuntimeDatabasePrincipalError,
+    );
+    await expect(rejection).rejects.not.toThrow(/HBA|private|path/u);
+    expect(mocks.assertExactDatabasePrincipal).not.toHaveBeenCalled();
   });
 
   it.each([

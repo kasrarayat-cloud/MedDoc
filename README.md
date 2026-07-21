@@ -79,13 +79,32 @@ $EDITOR .env     # at minimum: DB_PASSWORD, AUTH_SECRET, ANTHROPIC_API_KEY,
 # 3. Install dependencies (workspace-aware)
 npm install
 
-# 4. Start the stack
-docker compose up -d
+# 4. Start infrastructure only
+docker compose up -d postgres redis minio caddy
 
-# 5. Run migrations once
-docker compose run --rm db-migrate
+# 5. Inspect migration ledger and target only (applies nothing)
+docker compose run --rm db-migrate --phase status
+```
 
-# 6. Smoke-check
+A bare `docker compose run --rm db-migrate` is also read-only status. It no
+longer applies migrations. For disposable local development, complete the
+isolated closed database-release flow in `docs/qa/README.md`; do not grant
+production mutation controls to the production-named database merely to make a
+local setup work. A separately authorized production-style target must follow
+`docs/DEPLOYMENT_RUNBOOK.md` §1.4.1 and both online-transition runbooks. Raw
+Prisma deploy/resolve commands are not setup shortcuts. Every cumulative
+segment invocation requires a newly verified phase-specific
+`targetFingerprints.<segment>` status entry; the entry is ledger-,
+accepted-source-, phase-, and target-bound and must never be reused or derived.
+
+Only after the closed release graph and exact database-principal preflights
+pass may the app tier start:
+
+```bash
+# 6. Start apps
+docker compose up -d marketing meddoc-pro transcribe-md transcribe-md-worker
+
+# 7. Smoke-check
 curl -sS -o /dev/null -w "marketing: %{http_code}\n" http://localhost:9010/
 curl -sS -o /dev/null -w "transcribe-md: %{http_code}\n" http://localhost:9020/
 # Both should return 200 or 307.
@@ -93,16 +112,16 @@ curl -sS -o /dev/null -w "transcribe-md: %{http_code}\n" http://localhost:9020/
 
 Local ports (all bound to `127.0.0.1` only):
 
-| Service | Container port → Host port | Purpose |
-|---------|----------------------------|---------|
-| caddy | 80 → 80 | meddoc-pro via Caddy |
-| marketing | 9010 → 9010 | Public landing site |
-| transcribe-md | 9020 → 9020 | Solo-doctor app |
-| meddoc-pro (behind caddy) | 3000 (internal only) | Clinical CRM |
-| postgres | 5432 → 127.0.0.1:5432 | Direct SQL via `psql -h localhost` |
-| redis | 6379 → 127.0.0.1:6379 | BullMQ broker |
-| minio API | 9000 → 127.0.0.1:9000 | Object storage |
-| minio console | 9001 → 127.0.0.1:9001 | Web UI for bucket inspection |
+| Service                   | Container port → Host port | Purpose                            |
+| ------------------------- | -------------------------- | ---------------------------------- |
+| caddy                     | 80 → 80                    | meddoc-pro via Caddy               |
+| marketing                 | 9010 → 9010                | Public landing site                |
+| transcribe-md             | 9020 → 9020                | Solo-doctor app                    |
+| meddoc-pro (behind caddy) | 3000 (internal only)       | Clinical CRM                       |
+| postgres                  | 5432 → 127.0.0.1:5432      | Direct SQL via `psql -h localhost` |
+| redis                     | 6379 → 127.0.0.1:6379      | BullMQ broker                      |
+| minio API                 | 9000 → 127.0.0.1:9000      | Object storage                     |
+| minio console             | 9001 → 127.0.0.1:9001      | Web UI for bucket inspection       |
 
 ---
 

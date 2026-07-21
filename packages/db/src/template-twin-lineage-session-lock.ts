@@ -1,4 +1,4 @@
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 
 export const LINEAGE_OPERATOR_SESSION_LOCK_KEY =
   "template_twin_note_templates_lineage_operator_session_v1";
@@ -7,16 +7,10 @@ export interface LineageOperatorSessionLock {
   release(): Promise<void>;
 }
 
-/**
- * Hold a PostgreSQL session advisory lock across standalone
- * CREATE/DROP INDEX CONCURRENTLY and VALIDATE statements. A transaction lock
- * cannot span those autocommit statements. We fail immediately instead of
- * allowing two GUARDING/INDEXING/VALIDATING operators to overlap.
- */
-export async function acquireLineageOperatorSessionLock(
-  pool: Pool,
+async function acquireOnConnection(
+  connection: PoolClient,
+  releaseConnection: boolean,
 ): Promise<LineageOperatorSessionLock> {
-  const connection = await pool.connect();
   let held = false;
   try {
     const result = await connection.query<{ acquired: boolean }>(
@@ -26,7 +20,7 @@ export async function acquireLineageOperatorSessionLock(
     held = result.rows[0]?.acquired === true;
     if (!held) throw new Error("LINEAGE_MIGRATION_OPERATOR_BUSY");
   } catch (error) {
-    connection.release();
+    if (releaseConnection) connection.release();
     throw error;
   }
 
@@ -43,8 +37,28 @@ export async function acquireLineageOperatorSessionLock(
           throw new Error("LINEAGE_MIGRATION_OPERATOR_LOCK_RELEASE_FAILED");
         }
       } finally {
-        connection.release();
+        if (releaseConnection) connection.release();
       }
     },
   };
+}
+
+/** Bind the session lock to the already target-proved mutation connection. */
+export async function acquireLineageOperatorSessionLockOnClient(
+  connection: PoolClient,
+): Promise<LineageOperatorSessionLock> {
+  return acquireOnConnection(connection, false);
+}
+
+/**
+ * Hold a PostgreSQL session advisory lock across standalone
+ * CREATE/DROP INDEX CONCURRENTLY and VALIDATE statements. A transaction lock
+ * cannot span those autocommit statements. We fail immediately instead of
+ * allowing two GUARDING/INDEXING/VALIDATING operators to overlap.
+ */
+export async function acquireLineageOperatorSessionLock(
+  pool: Pool,
+): Promise<LineageOperatorSessionLock> {
+  const connection = await pool.connect();
+  return acquireOnConnection(connection, true);
 }

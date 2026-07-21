@@ -6,6 +6,7 @@ flowing. Audit-clean code (T-M18.1–18.3: 27/27 findings resolved) is
 the _starting_ condition for this list, not the end of it.
 
 This doc complements — does not replace:
+
 - `docs/DEPLOYMENT_RUNBOOK.md` — how to deploy
 - `docs/BAA_CHECKLIST.md` — third-party BAA processor matrix
 - `docs/ROTATION_RUNBOOK.md` — credential rotation procedure
@@ -45,6 +46,7 @@ sender-verified email, a trustworthy URL on Stripe receipts, and
 canonical references in Terms/Privacy.
 
 ### Decisions needed
+
 - [ ] Pick the apex domain (suggested: `transcribemd.com` / `.ai` / `.health`)
 - [ ] Decide on subdomain layout. Current code expects three URLs:
   - `app.<domain>` (TranscribeMD, was `:9020`)
@@ -53,6 +55,7 @@ canonical references in Terms/Privacy.
   - Three hostnames ⇒ three `A` records ⇒ three Caddy blocks
 
 ### Action
+
 - [ ] Purchase domain through any registrar (Cloudflare Registrar, Namecheap, Porkbun — registrar choice doesn't matter)
 - [ ] Do NOT enable Cloudflare proxy (orange cloud) — Caddy needs to terminate TLS with a real cert, not a Cloudflare-origin cert
 - [ ] Record the domain in `docs/DEPLOYMENT_RUNBOOK.md` §1 as the canonical deploy host
@@ -68,11 +71,13 @@ HTTPS with HSTS + CSP Report-Only). Let's Encrypt certs issued on first
 hit for all four hostnames, persisted in the `caddy_data` volume.
 
 ### Pre-flight
+
 - [x] Ports `80` + `443` open on the VPS firewall
 - [x] Four `A` records pointing at the VPS IP: `@`, `www`, `app`, `pro` (all four — `pro` added for the MedDoc Pro CRM subdomain that the original plan missed)
 - [x] DNS propagated — all four `dig +short A` lookups returned the VPS IP before cutover
 
 ### Cutover (done)
+
 - [x] Uncommented MODE B blocks in `Caddyfile`, commented out MODE A (`:80` / `:9010` / `:9020`) as rollback reference with HSTS-safe-rollback note
 - [x] Updated `.env` (kept out of git) with production URL envs:
   - `PUBLIC_URL=https://pro.quillmd.com`
@@ -84,16 +89,20 @@ hit for all four hostnames, persisted in the `caddy_data` volume.
 - [x] Smoke test: `curl -I https://app.quillmd.com/api/health` → `HTTP/2 200` with HSTS header present
 
 ### T-M19.2 follow-up fix
+
 - [x] Marketing "Sign In" link was baked in at build-time with the old `http://5.231.107.93:9020` fallback — `NEXT_PUBLIC_*` vars weren't landing in the Next builder stage (monorepo `next build` doesn't read root `.env`). Fixed by wiring `NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL` + `NEXT_PUBLIC_MARKETING_URL` as `build: args:` in `docker-compose.yml` + `ARG`/`ENV` in both Dockerfiles. Marketing rebuilt with correct URLs post-fix.
 - [x] `/api/health` version string fix (`??` → `||`) so compose's `${APP_VERSION:-}` empty-string default falls back correctly to the hardcoded milestone.
 
 ### T-M20 product polish (2026-04-22)
+
 Non-gate-but-launch-blocking issues caught during the browser-test pass on the new HTTPS deployment:
+
 - [x] **T-M20.1** — PDF label overlap when SOAP fields were `[not documented]` (PR #40). Root cause in `renderInlineWithBold`'s split on bold-markdown producing empty slots that pdfkit failed to finalize. One-line fix + a committed regression script (`apps/transcribe-md/scripts/gen-test-pdf.ts`) that reproduces the scenario end-to-end.
 - [x] **T-M20.2** — Rebrand TranscribeMD → QuillMD across all 26 user-facing string surfaces: email templates (subjects + bodies), PDF header/watermark/metadata, DOCX export, EHR-paste footer, app nav + auth pages, marketing site (PR #41). Internal identifiers (Docker services, package names, DB schemas, enum values, code comments) explicitly left alone to keep the change surface to 80 inserts / 80 deletes.
 - [x] **T-M20.3** — Pipeline tab (raw entities JSON, wall-time, cost, critique) gated behind `NEXT_PUBLIC_SHOW_PIPELINE_TAB`, defaulting hidden in production (PR #42). Gate lives in the server page so a dev can flip via runtime env override + force-recreate — no rebuild required.
 
 ### Post-cutover regressions to re-run
+
 - [ ] `bash scripts/verify-t-m18-2.sh` — adjust the hardcoded `http://localhost:9020` URLs to the new HTTPS hostname before running, or keep localhost-probes in parallel
 - [ ] `bash scripts/verify-t-m18-3.sh` — same
 - [ ] Browser-test the full signup → email-verify → login → dashboard flow from `https://quillmd.com` through `https://app.quillmd.com/dashboard` — in progress as of this PR
@@ -112,17 +121,20 @@ is counter-signed + archived.** The code path is already live; the gate
 is paper.
 
 ### Per-processor
+
 - [ ] **Anthropic** — request BAA via https://support.anthropic.com (fill the HIPAA-BAA contact form). Requires an Anthropic org on a paid plan. Confirm the signed PDF covers Claude Sonnet 4.6 + embedding + all future Claude model IDs.
 - [ ] **OpenAI** — request via the Enterprise/Business tier (Startup credits tier does NOT include a BAA). Scope must cover `text-embedding-3-small` + any `gpt-*` models currently referenced in `packages/ai/src/openai.ts`.
 - [ ] **Deepgram** — standard BAA template at https://deepgram.com/legal. Scope must cover `nova-3-medical`.
 - [ ] **VPS hosting provider** — whoever the current VPS is rented from needs a signed BAA too. Postgres + MinIO store PHI on their infrastructure. Check current provider's HIPAA program or migrate to one that has one (AWS, GCP, Azure, Linode-Akamai all have compliant programs).
 
 ### File + surface
+
 - [ ] Store signed PDFs in a secure, access-logged location (NOT in the git repo)
 - [ ] Update `docs/BAA_CHECKLIST.md` table: flip each `☐ NOT YET` to `✅ YYYY-MM-DD` with the date on the signed document
 - [ ] When all four are signed, check the master gate item in §0 of this doc
 
 ### Sentry note
+
 `docs/BAA_CHECKLIST.md` flags Sentry as needing a BAA before `SENTRY_DSN_*`
 env vars are set. Currently these env vars are blank — that's the
 safe default. Do NOT populate them on production until either:
@@ -139,16 +151,19 @@ one (even if the first 1–3 are comped) so the infrastructure is in
 place when we onboard paying users.
 
 ### Stripe account setup
+
 - [ ] Create a live-mode Stripe account (if not already done) and complete onboarding
 - [ ] Enable Tax (Stripe auto-collects sales tax where applicable)
 - [ ] Confirm Stripe's HIPAA posture: standard Stripe does NOT need a BAA because billing metadata is not PHI — but confirm no PHI is ever sent in `description`, `metadata`, or receipt line-items
 
 ### Product + price
+
 - [ ] Create one Product: "TranscribeMD Doctor Subscription"
 - [ ] Create one Price: `$49.00 USD / month`, recurring, active
 - [ ] Note the `price_id` — it'll go into `STRIPE_DEFAULT_PRICE_ID` env
 
 ### Integration work (code change — scope outside this doc)
+
 - [ ] Stripe Checkout Session creation endpoint
 - [ ] Webhook endpoint `/api/webhooks/stripe` (verify with `STRIPE_WEBHOOK_SECRET`)
 - [ ] Handle: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`
@@ -157,6 +172,7 @@ place when we onboard paying users.
 - [ ] Ship behind a feature flag so pilot doctors can bypass until we're ready to collect payment
 
 ### Env vars to add
+
 - [ ] `STRIPE_SECRET_KEY=sk_live_...`
 - [ ] `STRIPE_WEBHOOK_SECRET=whsec_...`
 - [ ] `STRIPE_DEFAULT_PRICE_ID=price_...`
@@ -172,12 +188,14 @@ email-verification both confirmed delivering to a real mailbox
 with a valid DKIM signature.
 
 ### Sender setup (post-domain)
+
 - [x] Added `quillmd.com` as a sender domain in the Resend dashboard
 - [x] All four DNS records landed at Namecheap: SPF TXT, DKIM TXT, DMARC TXT, MX
 - [x] Resend verified all four records (green)
 - [x] Production sender chosen: `noreply@quillmd.com` (branded as `QuillMD <noreply@quillmd.com>`)
 
 ### Env flip
+
 - [x] `RESEND_API_KEY=re_...` live key, loaded from `/opt/meddoc-pro/.env`
 - [x] `RESEND_FROM=QuillMD <noreply@quillmd.com>`
 - [x] `RESEND_FROM_VERIFIED=true` — gate now `isEmailDeliveryEnabled() === true`
@@ -185,6 +203,7 @@ with a valid DKIM signature.
 - [x] Source `DEFAULT_FROM` in `apps/transcribe-md/src/lib/email.ts` bumped to `QuillMD <noreply@quillmd.com>` (PR #38) so a deploy that forgets the env override still ships from a verified sender
 
 ### Smoke test
+
 - [x] Password-reset email delivered end-to-end to a real mailbox
 - [x] Inbox (not spam); DKIM signature validates against `quillmd.com`; sender displayed as `QuillMD` not `resend.dev`
 - [x] Resend dashboard recorded the `delivered` event
@@ -324,7 +343,16 @@ Closes Round 3 audit findings A05-P0-001..004 (encryption-at-rest gaps; PHI-read
 
 ### Migrations (apply via deploy pipeline)
 
-- [ ] `npm run db:migrate:deploy` runs to completion — applies `20260505010200_round_3_pr_c_phi_read_audit_actions` (enum +3 values) and `20260505010210_round_3_pr_c_revoke_audit_mutation` (REVOKE on audit_logs).
+- [ ] Read-only `docker compose run --rm db-migrate --phase status` proves the
+      exact ledger/target, then its freshly verified
+      `targetFingerprints.lineage-expand` entry authorizes one approved
+      `lineage-expand` cumulative-segment invocation from an eligible exact
+      prefix, under `docs/DEPLOYMENT_RUNBOOK.md` §1.4.1. Never reuse or derive
+      the phase-, ledger-, accepted-source-, and target-bound entry. The segment
+      applies
+      `20260505010200_round_3_pr_c_phi_read_audit_actions` (enum +3 values) and
+      `20260505010210_round_3_pr_c_revoke_audit_mutation` (REVOKE on
+      audit_logs). Do not use the removed raw deploy alias.
 - [ ] `bash tests/integrity/audit-logs-immutable.test.sh` returns PASS (was SKIP before deploy).
 
 ### MinIO SSE-S3 bootstrap
@@ -364,7 +392,15 @@ Closes Round 3 audit findings A06-P0-001 (empty-transcript guard, FULLY), A06-P0
 
 ### Migration (apply via deploy pipeline)
 
-- [ ] `npm run db:migrate:deploy` runs to completion — applies `20260505012317_round_3_pr_d_ai_safety` (8 enum values + weightKg + allergies columns)
+- [ ] Read-only `docker compose run --rm db-migrate --phase status` proves the
+      exact ledger/target, then its freshly verified
+      `targetFingerprints.lineage-expand` entry authorizes one approved
+      `lineage-expand` cumulative-segment invocation from an eligible exact
+      prefix. Never reuse or derive the phase-, ledger-, accepted-source-, and
+      target-bound entry. The segment applies
+      `20260505012317_round_3_pr_d_ai_safety` (8 enum values + weightKg +
+      allergies columns) under `docs/DEPLOYMENT_RUNBOOK.md` §1.4.1. Do not use
+      the removed raw deploy alias.
 
 ### Worker redeploy
 
@@ -411,22 +447,26 @@ Closes Round 3 audit findings A06-P0-001 (empty-transcript guard, FULLY), A06-P0
 2–4 weeks lead time and real budget.
 
 ### Terms of Service
+
 - [ ] Draft with counsel familiar with digital health / SaaS
 - [ ] Required clauses: acceptable use, IP ownership (doctor owns their SOAP notes; we own the service), limitation of liability, arbitration/venue, termination, survival
 - [ ] Publish at `https://<domain>/terms` — a page already exists in marketing; swap in the real content
 - [ ] Signup flow's ToS checkbox already references `/terms` (existing code)
 
 ### Privacy Policy
+
 - [ ] Draft with counsel — must cover both HIPAA (PHI specifically) AND general data privacy (CCPA at minimum, given likely California doctor customers)
 - [ ] Enumerate: what data we collect, what's PHI vs PII, sub-processors (the four from §3), retention periods (180 days audio per T-M16.2; 7 years notes per HIPAA), export + deletion rights
 - [ ] Publish at `https://<domain>/privacy`
 
 ### BAA template (for clinic customers)
+
 - [ ] Counsel drafts the template we'll offer to any practice that signs up
 - [ ] Should be offered as an attachment to the ToS for Practice-tier customers (when that tier exists)
 - [ ] Store template as a PDF on the marketing site: `https://<domain>/baa-template.pdf`
 
 ### HIPAA attestation
+
 - [ ] Brief public-facing statement at `https://<domain>/hipaa` describing our safeguards: encryption at rest (Postgres + MinIO on encrypted disk), in transit (TLS 1.2+ post §2), access controls (single-session enforcement, bcrypt-12, lockouts), audit logging (audit_logs table), BAA posture (§3), breach notification commitment
 - [ ] Link this page from: footer of every marketing page, settings → "your data" section, every outgoing email footer
 
@@ -441,6 +481,7 @@ Code ships with Sentry integration + `/api/health` with `cleanup_crons[]`
 the alerting on top.
 
 ### 8a. Sentry alert rules
+
 - [ ] Populate `SENTRY_DSN_MEDDOC_PRO`, `SENTRY_DSN_TRANSCRIBE_MD`, etc. on prod — **but only after Sentry BAA signed** (see §3 Sentry note)
 - [ ] In Sentry dashboard, create alert rules:
   - [ ] **Error rate**: >5 uncaught exceptions per 5-minute window across any app → page oncall
@@ -450,12 +491,14 @@ the alerting on top.
 - [ ] `SENTRY_RELEASE` should auto-populate per build; confirm by checking an event's Release tag
 
 ### 8b. External uptime probe
+
 - [ ] Sign up for UptimeRobot (free tier fine for 50 monitors at 5-min cadence)
 - [ ] Three monitors: each hostname's `/api/health` → expect 200
 - [ ] On failure: email + SMS to oncall
 - [ ] Failure threshold: 2 consecutive checks (10 min) before paging — avoids flapping on a single network blip
 
 ### 8c. Cron heartbeat alerts
+
 `/api/health` returns `cleanup_crons[]` with `ageSeconds` per job
 (T-M18.2 A13). Three crons tracked: `stale-visit-cleanup` (daily 03:00 UTC),
 `retention-sweep` (daily 04:00 UTC), `minio-orphan-cleanup` (disabled until
@@ -465,6 +508,7 @@ the alerting on top.
 - [ ] Page on failure — a cron that stops ticking silently is the class of problem that costs a week of audit evidence
 
 ### 8d. Postgres backup verification (T-M16.4 sidecar)
+
 - [ ] Confirm `meddoc-pro-postgres-backup-1` sidecar is producing daily dumps (check `/opt/meddoc-pro/backups/`)
 - [ ] Test a restore once into a scratch container before launch — an untested backup is not a backup
 
@@ -479,24 +523,28 @@ real doctors providing real feedback, before opening signup to the
 public.
 
 ### Candidate selection
+
 - [ ] Identify 1–3 doctors willing to pilot. Prefer:
   - Specialties we've already validated (T-M17.x live data: Cardiology, Internal Medicine, Orthopedics)
   - Low visit volume — 5-10 visits/week so we can investigate every anomaly
   - Tech-comfortable enough to tolerate rough UX edges
 
 ### Onboarding flow
+
 - [ ] Write a one-page onboarding doc ("getting started" — signup, first visit, how to sign a SOAP note, how to report issues)
 - [ ] Comp their subscription ($49/mo waived via Stripe coupon 100% off, or practice-tier account created manually)
 - [ ] Pre-load their account with their common specialty + set realistic expectations about: audio quality (push-to-talk vs background capture), confidence scores, when the AI gets medication names wrong
 - [ ] Schedule a 30-min kickoff call each — screen-share the first visit so we catch any setup foot-guns live
 
 ### Feedback collection
+
 - [ ] Dedicated email inbox or shared Slack channel for pilot feedback
 - [ ] Weekly 15-min check-in call per doctor for the first month
 - [ ] Explicit ask after each visit: "anything the AI got wrong?" — this becomes our real audit data
 - [ ] Log every piece of feedback in a single tracker (GitHub issues tagged `pilot-feedback` works) so nothing gets dropped
 
 ### Success metrics (exit criteria for "pilot → GA")
+
 - [ ] **Quality:** ≥90% of signed SOAPs required no AI correction beyond doctor's normal edit behavior (measurable via T-M14.1 edit-distance telemetry)
 - [ ] **Reliability:** ≥99% visit completion rate (QUEUED → SIGNED without a manual retry intervention)
 - [ ] **Latency:** median time-to-draft (audio upload → SOAP visible) ≤90 seconds for visits under 10 min of audio
@@ -524,6 +572,7 @@ issue tracker.
 ## Out of scope for this checklist
 
 Explicitly deferred to post-launch:
+
 - GA marketing (paid ads, SEO, content) — pilot first, scale later
 - Multi-doctor practices / org billing tier
 - Mobile app (web-only launch is fine for pilot)

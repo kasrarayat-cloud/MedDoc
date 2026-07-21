@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import {
   mkdtempSync,
+  mkdirSync,
   readFileSync,
   rmSync,
   symlinkSync,
@@ -15,10 +16,32 @@ const ROOT = path.resolve(__dirname, "../../../..");
 const CENSUS = path.join(ROOT, "scripts/database-principal-runtime-census.mjs");
 const CANONICAL_OPTIONS = "options=-c%20search_path%3Dpg_catalog%2Cpublic";
 const CANONICAL_QUERY = `schema=public&${CANONICAL_OPTIONS}`;
+const STATIC_STATEMENT_TIMEOUT = "${PRISMA_STATEMENT_TIMEOUT_MS:-30000}";
+const STATIC_MIGRATION_LOCK_TIMEOUT =
+  "${DATABASE_RELEASE_MIGRATION_LOCK_TIMEOUT_MS:-5000}";
+const MIGRATION_NETWORK_BOUNDARY = "postgres-loopback-v1";
 const BACKUP_IMAGE =
   "prodrigestivill/postgres-backup-local@sha256:a0103fbce0c48ccc7693ddbb2a2bfa733048db845354f635efef9e4566de185d";
-const POSTGRES_IMAGE =
-  "pgvector/pgvector:pg16@sha256:7d400e340efb42f4d8c9c12c6427adb253f726881a9985d2a471bf0eed824dff";
+const STATIC_POSTGRES_IMAGE =
+  "${QUILLMD_POSTGRES_IMAGE:?QUILLMD_POSTGRES_IMAGE must be an immutable sha256 digest}";
+const APPROVED_POSTGRES_IMAGE = `registry.invalid/quillmd/postgres@sha256:${"f".repeat(64)}`;
+const POSTGRES_HBA_PATH = "/etc/postgresql/quillmd-pg_hba.conf";
+const POSTGRES_HBA_VERIFIER_PATH = "/opt/quillmd/verify-quillmd-host-auth.sh";
+const POSTGRES_ENTRYPOINT_PATH =
+  "/usr/local/bin/quillmd-postgres-entrypoint.sh";
+const POSTGRES_HBA_SHA256 =
+  "8b76fed3fc6791617a828fcf5f1cbff35d681d3e753cda9594c89df52ea929b0";
+const POSTGRES_HBA_COMMAND = [
+  "postgres",
+  "-c",
+  `hba_file=${POSTGRES_HBA_PATH}`,
+  "-c",
+  "password_encryption=scram-sha-256",
+  "-c",
+  `quillmd.hba_contract_path=${POSTGRES_HBA_PATH}`,
+  "-c",
+  `quillmd.hba_contract_sha256=${POSTGRES_HBA_SHA256}`,
+];
 const PASSWORD_ENVIRONMENT_BY_LOGIN: Record<string, string> = {
   meddoc: "DB_PASSWORD",
   meddoc_audit_dispatcher: "DB_AUDIT_DISPATCHER_PASSWORD",
@@ -74,6 +97,24 @@ afterAll(() => {
   rmSync(APPROVED_KEYRING_DIRECTORY, { force: true, recursive: true });
 });
 
+function copyPostgresHostAuthenticationSources(destinationRoot: string) {
+  const destination = path.join(destinationRoot, "infra/postgres");
+  mkdirSync(destination, { recursive: true });
+  for (const [name, mode] of [
+    [".dockerignore", 0o644],
+    ["Dockerfile", 0o644],
+    ["quillmd-pg_hba.conf", 0o644],
+    ["quillmd-postgres-entrypoint.sh", 0o644],
+    ["verify-quillmd-host-auth.sh", 0o755],
+  ] as const) {
+    writeFileSync(
+      path.join(destination, name),
+      readFileSync(path.join(ROOT, "infra/postgres", name)),
+      { mode },
+    );
+  }
+}
+
 function staticCredential(login: string) {
   const name = PASSWORD_ENVIRONMENT_BY_LOGIN[login];
   if (!name) throw new Error(`unreviewed fixture login: ${login}`);
@@ -107,10 +148,17 @@ const productionServices = {
 
 function exactPostgresService() {
   return {
-    image: POSTGRES_IMAGE,
+    image: STATIC_POSTGRES_IMAGE,
+    entrypoint: [POSTGRES_ENTRYPOINT_PATH],
+    command: POSTGRES_HBA_COMMAND,
     restart: "unless-stopped",
     user: "999:999",
     cap_drop: ["ALL"],
+    read_only: true,
+    tmpfs: [
+      "/tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777",
+      "/var/run/postgresql:rw,noexec,nosuid,nodev,size=16m,uid=999,gid=999,mode=3777",
+    ],
     cpus: "1.0",
     mem_limit: "512m",
     environment: {
@@ -125,6 +173,7 @@ function exactPostgresService() {
         "${DB_RUNTIME_PASSWORD:?DB_RUNTIME_PASSWORD is required}",
       PGDATA: "/var/lib/postgresql/data/pgdata",
       POSTGRES_DB: "meddoc",
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=trust",
       POSTGRES_PASSWORD: "${DB_PASSWORD:?DB_PASSWORD is required}",
       POSTGRES_USER: "meddoc",
     },
@@ -173,7 +222,7 @@ function exactPostgresService() {
     healthcheck: {
       interval: "5s",
       retries: 5,
-      test: ["CMD-SHELL", "pg_isready -U meddoc"],
+      test: ["CMD", "/bin/sh", POSTGRES_HBA_VERIFIER_PATH],
       timeout: "5s",
     },
   };
@@ -181,8 +230,20 @@ function exactPostgresService() {
 
 function exactQaPostgresService() {
   return {
-    image: POSTGRES_IMAGE,
+    build: {
+      context: path.join(ROOT, "infra/postgres"),
+      dockerfile: "Dockerfile",
+    },
+    entrypoint: [POSTGRES_ENTRYPOINT_PATH],
+    command: POSTGRES_HBA_COMMAND,
     restart: "no",
+    user: "999:999",
+    cap_drop: ["ALL"],
+    read_only: true,
+    tmpfs: [
+      "/tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777",
+      "/var/run/postgresql:rw,noexec,nosuid,nodev,size=16m,uid=999,gid=999,mode=3777",
+    ],
     cpus: "1.0",
     mem_limit: "512m",
     environment: {
@@ -197,6 +258,7 @@ function exactQaPostgresService() {
       DB_RUNTIME_PASSWORD: staticQaCredential("meddoc_runtime"),
       PGDATA: "/var/lib/postgresql/data/pgdata",
       POSTGRES_DB: "meddoc_qa_test",
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=trust",
       POSTGRES_PASSWORD: "qa_test_pw",
       POSTGRES_USER: "meddoc",
     },
@@ -225,7 +287,7 @@ function exactQaPostgresService() {
     healthcheck: {
       interval: "5s",
       retries: 10,
-      test: ["CMD-SHELL", "pg_isready -U meddoc"],
+      test: ["CMD", "/bin/sh", POSTGRES_HBA_VERIFIER_PATH],
       timeout: "5s",
     },
   };
@@ -304,11 +366,14 @@ function exactProductionMigratorService() {
     },
     profiles: ["migrations"],
     working_dir: "/app/packages/db",
-    entrypoint: ["npx", "--no-install", "prisma"],
-    command: ["migrate", "deploy"],
-    networks: { default: null },
+    entrypoint: ["npm", "run", "--silent", "database-release:migrate", "--"],
+    command: ["--phase", "status"],
+    network_mode: "service:postgres",
     environment: {
-      DATABASE_URL: `postgresql://meddoc:${staticCredential("meddoc")}@postgres:5432/meddoc?${CANONICAL_QUERY}`,
+      DATABASE_RELEASE_MIGRATION_LOCK_TIMEOUT_MS: STATIC_MIGRATION_LOCK_TIMEOUT,
+      DATABASE_RELEASE_MIGRATION_NETWORK_BOUNDARY: MIGRATION_NETWORK_BOUNDARY,
+      DATABASE_URL: `postgresql://meddoc:${staticCredential("meddoc")}@127.0.0.1:5432/meddoc?${CANONICAL_QUERY}`,
+      PRISMA_STATEMENT_TIMEOUT_MS: STATIC_STATEMENT_TIMEOUT,
     },
   };
 }
@@ -542,6 +607,7 @@ function productionModel(
         NODE_ENV: "production",
         QUILLMD_SERVICE_ROLE: role,
         QUILLMD_DATABASE_PRINCIPAL_PROFILE: "exact-production-v1",
+        PRISMA_STATEMENT_TIMEOUT_MS: STATIC_STATEMENT_TIMEOUT,
       },
     };
   }
@@ -662,6 +728,7 @@ function runResolved(
       ...process.env,
       QUILLMD_APPROVED_DB_BACKUP_PASSWORD_FILE: approvedSecretPath,
       QUILLMD_APPROVED_MFA_SECRET_KEYRING_FILE: approvedKeyringPath,
+      QUILLMD_APPROVED_POSTGRES_IMAGE: APPROVED_POSTGRES_IMAGE,
       QUILLMD_APPROVED_RELEASE_SHA: APPROVED_RELEASE_SHA,
       QUILLMD_APPROVED_TRANSCRIBE_MD_IMAGE: APPROVED_FRONTEND_IMAGE,
       QUILLMD_APPROVED_TRANSCRIBE_MD_WORKER_IMAGE: APPROVED_WORKER_IMAGE,
@@ -680,12 +747,13 @@ function resolvedProductionModel(keyringPath = APPROVED_KEYRING_PATH) {
   }
   model.secrets.postgres_backup_password.file = "/approved/backup";
   const postgres = model.services.postgres as {
-    command?: null;
-    entrypoint?: null;
+    command?: null | string[];
+    entrypoint?: null | string[];
     environment: Record<string, string>;
   };
-  postgres.command = null;
-  postgres.entrypoint = null;
+  postgres.command = [...POSTGRES_HBA_COMMAND];
+  postgres.entrypoint = [POSTGRES_ENTRYPOINT_PATH];
+  (postgres as Record<string, unknown>).image = APPROVED_POSTGRES_IMAGE;
   (postgres as Record<string, unknown>).cpus = 1;
   (postgres as Record<string, unknown>).mem_limit = "536870912";
   const backup = model.services["postgres-backup"] as {
@@ -792,14 +860,21 @@ function resolvedProductionModel(keyringPath = APPROVED_KEYRING_PATH) {
         );
       }
     }
+    service.environment.PRISMA_STATEMENT_TIMEOUT_MS = "30000";
   }
   const migrator = model.services["db-migrate"] as {
-    environment: { DATABASE_URL: string };
+    environment: {
+      DATABASE_URL: string;
+      DATABASE_RELEASE_MIGRATION_LOCK_TIMEOUT_MS: string;
+      PRISMA_STATEMENT_TIMEOUT_MS: string;
+    };
   };
   migrator.environment.DATABASE_URL = migrator.environment.DATABASE_URL.replace(
     staticCredential("meddoc"),
     RESOLVED_CREDENTIAL_BY_LOGIN.meddoc,
   );
+  migrator.environment.PRISMA_STATEMENT_TIMEOUT_MS = "30000";
+  migrator.environment.DATABASE_RELEASE_MIGRATION_LOCK_TIMEOUT_MS = "5000";
   return model;
 }
 
@@ -871,6 +946,7 @@ function exactQaModel() {
           NODE_ENV: "production",
           QUILLMD_SERVICE_ROLE: "physician-app",
           QUILLMD_DATABASE_PRINCIPAL_PROFILE: "synthetic-disposable-qa-v1",
+          PRISMA_STATEMENT_TIMEOUT_MS: STATIC_STATEMENT_TIMEOUT,
         },
       },
       "transcribe-md-worker": {
@@ -886,21 +962,33 @@ function exactQaModel() {
           NODE_ENV: "production",
           QUILLMD_SERVICE_ROLE: "transcribe-md-worker",
           QUILLMD_DATABASE_PRINCIPAL_PROFILE: "synthetic-disposable-qa-v1",
+          PRISMA_STATEMENT_TIMEOUT_MS: STATIC_STATEMENT_TIMEOUT,
         },
       },
       "db-migrate": {
         profiles: ["migrations"],
         restart: "no",
         working_dir: "/app/packages/db",
-        entrypoint: ["npx", "--no-install", "prisma"],
-        command: ["migrate", "deploy"],
+        entrypoint: [
+          "npm",
+          "run",
+          "--silent",
+          "database-release:migrate",
+          "--",
+        ],
+        command: ["--phase", "status"],
         depends_on: {
           postgres: { condition: "service_healthy", required: true },
         },
         image: "${QA_DB_MIGRATE_IMAGE:-meddoc-pro-db-migrate:latest}",
-        networks: { default: null },
+        network_mode: "service:postgres",
         environment: {
-          DATABASE_URL: `postgresql://meddoc:qa_test_pw@postgres:5432/meddoc_qa_test?${CANONICAL_QUERY}`,
+          DATABASE_RELEASE_MIGRATION_LOCK_TIMEOUT_MS:
+            STATIC_MIGRATION_LOCK_TIMEOUT,
+          DATABASE_RELEASE_MIGRATION_NETWORK_BOUNDARY:
+            MIGRATION_NETWORK_BOUNDARY,
+          DATABASE_URL: `postgresql://meddoc:qa_test_pw@127.0.0.1:5432/meddoc_qa_test?${CANONICAL_QUERY}`,
+          PRISMA_STATEMENT_TIMEOUT_MS: STATIC_STATEMENT_TIMEOUT,
         },
       },
       marketing: { networks: { default: null } },
@@ -946,8 +1034,8 @@ function resolvedQaModel(keyringPath = APPROVED_KEYRING_PATH) {
   };
   postgres.cpus = 1;
   postgres.mem_limit = "536870912";
-  postgres.command = null;
-  postgres.entrypoint = null;
+  postgres.command = [...POSTGRES_HBA_COMMAND];
+  postgres.entrypoint = [POSTGRES_ENTRYPOINT_PATH];
   for (const [login, key] of Object.entries(PASSWORD_ENVIRONMENT_BY_LOGIN)) {
     if (login === "meddoc") continue;
     postgres.environment[key] = RESOLVED_CREDENTIAL_BY_LOGIN[login];
@@ -972,6 +1060,7 @@ function resolvedQaModel(keyringPath = APPROVED_KEYRING_PATH) {
     staticQaCredential("meddoc_runtime"),
     RESOLVED_CREDENTIAL_BY_LOGIN.meddoc_runtime,
   );
+  app.environment.PRISMA_STATEMENT_TIMEOUT_MS = "30000";
   const worker = model.services["transcribe-md-worker"] as Record<
     string,
     unknown
@@ -985,8 +1074,16 @@ function resolvedQaModel(keyringPath = APPROVED_KEYRING_PATH) {
     staticQaCredential("meddoc_runtime"),
     RESOLVED_CREDENTIAL_BY_LOGIN.meddoc_runtime,
   );
-  (model.services["db-migrate"] as Record<string, unknown>).image =
-    APPROVED_QA_MIGRATOR_IMAGE;
+  worker.environment.PRISMA_STATEMENT_TIMEOUT_MS = "30000";
+  const migrator = model.services["db-migrate"] as Record<string, unknown> & {
+    environment: {
+      DATABASE_RELEASE_MIGRATION_LOCK_TIMEOUT_MS: string;
+      PRISMA_STATEMENT_TIMEOUT_MS: string;
+    };
+  };
+  migrator.image = APPROVED_QA_MIGRATOR_IMAGE;
+  migrator.environment.DATABASE_RELEASE_MIGRATION_LOCK_TIMEOUT_MS = "5000";
+  migrator.environment.PRISMA_STATEMENT_TIMEOUT_MS = "30000";
   return model;
 }
 
@@ -1013,6 +1110,45 @@ describe("database-principal runtime census", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain(
       "profile=production mode=static-unresolved services=7",
+    );
+  });
+
+  it.each([
+    ["base image bypass", "image", "pgvector/pgvector:pg16"],
+    ["command bypass", "command", ["postgres"]],
+    ["entrypoint bypass", "entrypoint", ["/bin/sh"]],
+    ["owner uid bypass", "user", "0:0"],
+    ["writable root filesystem", "read_only", false],
+    ["missing runtime tmpfs", "tmpfs", []],
+  ] as const)(
+    "rejects production immutable PostgreSQL drift: %s",
+    (_label, key, value) => {
+      const model = productionModel();
+      (model.services.postgres as Record<string, unknown>)[key] = value;
+      const result = run(model);
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain(
+        "exact PostgreSQL database server is missing",
+      );
+    },
+  );
+
+  it("rejects a host replacement for the image-embedded HBA", () => {
+    const model = productionModel();
+    const postgres = model.services.postgres as {
+      volumes: Array<Record<string, unknown>>;
+    };
+    postgres.volumes.push({
+      bind: { create_host_path: true },
+      read_only: true,
+      source: `${ROOT}/infra/postgres/quillmd-pg_hba.conf`,
+      target: POSTGRES_HBA_PATH,
+      type: "bind",
+    });
+    const result = run(model);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain(
+      "exact PostgreSQL database server is missing",
     );
   });
 
@@ -1084,6 +1220,7 @@ describe("database-principal runtime census", () => {
         path.join(directory, "docker-compose.yml"),
         readFileSync(path.join(ROOT, "docker-compose.yml")),
       );
+      copyPostgresHostAuthenticationSources(directory);
       writeFileSync(
         path.join(directory, ".env"),
         [
@@ -1098,6 +1235,7 @@ describe("database-principal runtime census", () => {
           "MINIO_KMS_SECRET_KEY=synthetic-census-kms-key",
           "MINIO_ROOT_PASSWORD=synthetic-census-minio-password",
           `QUILLMD_RELEASE_SHA=${APPROVED_RELEASE_SHA}`,
+          `QUILLMD_POSTGRES_IMAGE=${APPROVED_POSTGRES_IMAGE}`,
           `TRANSCRIBE_MD_IMAGE=${APPROVED_FRONTEND_IMAGE}`,
           `TRANSCRIBE_MD_WORKER_IMAGE=${APPROVED_WORKER_IMAGE}`,
           "",
@@ -1148,6 +1286,7 @@ describe("database-principal runtime census", () => {
           ...process.env,
           QUILLMD_APPROVED_DB_BACKUP_PASSWORD_FILE: "/approved/backup",
           QUILLMD_APPROVED_MFA_SECRET_KEYRING_FILE: APPROVED_KEYRING_PATH,
+          QUILLMD_APPROVED_POSTGRES_IMAGE: APPROVED_POSTGRES_IMAGE,
           QUILLMD_APPROVED_RELEASE_SHA: APPROVED_RELEASE_SHA,
           QUILLMD_APPROVED_TRANSCRIBE_MD_IMAGE: APPROVED_FRONTEND_IMAGE,
           QUILLMD_APPROVED_TRANSCRIBE_MD_WORKER_IMAGE: APPROVED_WORKER_IMAGE,
@@ -1268,7 +1407,7 @@ describe("database-principal runtime census", () => {
     expect(result.stderr).toContain("exact postgres-backup runtime is missing");
   });
 
-  it("requires the exact one-shot migrator to be present", () => {
+  it("requires the exact closed segmented migrator to be present", () => {
     const model = productionModel();
     delete model.services["db-migrate"];
     const result = run(model);
@@ -1944,7 +2083,7 @@ describe("database-principal runtime census", () => {
     expect(result.stderr).toContain("network backup resource census drifted");
   });
 
-  it("allows the owner only for the exact one-shot db-migrate contract", () => {
+  it("allows the owner only for the exact closed segmented db-migrate contract", () => {
     const exactMigrator = exactProductionMigratorService();
     expect(run(productionModel({ "db-migrate": exactMigrator })).status).toBe(
       0,
@@ -1954,13 +2093,13 @@ describe("database-principal runtime census", () => {
       productionModel({
         "db-migrate": {
           ...exactMigrator,
-          command: ["migrate", "status"],
+          command: ["--phase", "all"],
         },
       }),
     );
     expect(drifted.status).not.toBe(0);
     expect(drifted.stderr).toContain(
-      "exact one-shot db-migrate runtime is missing",
+      "exact closed segmented db-migrate runtime is missing",
     );
 
     const unsafeSearchPath = run(
@@ -1975,7 +2114,7 @@ describe("database-principal runtime census", () => {
     );
     expect(unsafeSearchPath.status).not.toBe(0);
     expect(unsafeSearchPath.stderr).toContain(
-      "exact one-shot db-migrate runtime is missing",
+      "exact closed segmented db-migrate runtime is missing",
     );
 
     const privilegedOverride = run(
@@ -1985,7 +2124,7 @@ describe("database-principal runtime census", () => {
     );
     expect(privilegedOverride.status).not.toBe(0);
     expect(privilegedOverride.stderr).toContain(
-      "exact one-shot db-migrate runtime is missing",
+      "exact closed segmented db-migrate runtime is missing",
     );
 
     const injectedEnvironment = run(
@@ -2001,7 +2140,47 @@ describe("database-principal runtime census", () => {
     );
     expect(injectedEnvironment.status).not.toBe(0);
     expect(injectedEnvironment.stderr).toContain(
-      "exact one-shot db-migrate runtime is missing",
+      "exact closed segmented db-migrate runtime is missing",
+    );
+  });
+
+  it("requires one exact statement-timeout contract for preflight and every runtime", () => {
+    const staticDrift = productionModel();
+    (
+      staticDrift.services["transcribe-md"] as {
+        environment: Record<string, string>;
+      }
+    ).environment.PRISMA_STATEMENT_TIMEOUT_MS = "250";
+    const staticResult = run(staticDrift);
+    expect(staticResult.status).not.toBe(0);
+    expect(staticResult.stderr).toContain(
+      "does not share the exact preflight statement timeout",
+    );
+
+    const resolved = resolvedProductionModel();
+    for (const name of Object.keys(productionServices)) {
+      (
+        resolved.services[name] as {
+          environment: Record<string, string>;
+        }
+      ).environment.PRISMA_STATEMENT_TIMEOUT_MS = "250";
+    }
+    (
+      resolved.services["db-migrate"] as {
+        environment: Record<string, string>;
+      }
+    ).environment.PRISMA_STATEMENT_TIMEOUT_MS = "250";
+    expect(runResolved(resolved).status).toBe(0);
+
+    (
+      resolved.services["auth-email-dispatcher"] as {
+        environment: Record<string, string>;
+      }
+    ).environment.PRISMA_STATEMENT_TIMEOUT_MS = "0";
+    const invalid = runResolved(resolved);
+    expect(invalid.status).not.toBe(0);
+    expect(invalid.stderr).toContain(
+      "does not share the exact preflight statement timeout",
     );
   });
 
@@ -2410,7 +2589,7 @@ describe("database-principal runtime census", () => {
     const migrator = exactQaModel();
     migrator.services["db-migrate"] = { image: "busybox:latest" } as never;
     expect(run(migrator, "--qa").stderr).toContain(
-      "exact one-shot db-migrate runtime is missing",
+      "exact closed segmented db-migrate runtime is missing",
     );
   });
 
@@ -2423,7 +2602,7 @@ describe("database-principal runtime census", () => {
     ).environment.DATABASE_URL =
       `postgresql://meddoc:qa_test_pw@postgres:5432/meddoc_qa_test?${CANONICAL_QUERY}`;
     expect(run(owner, "--qa").stderr).toContain(
-      "uses the meddoc owner database identity outside the exact one-shot db-migrate boundary",
+      "uses the meddoc owner database identity outside the exact closed segmented db-migrate boundary",
     );
 
     const options = exactQaModel();
@@ -2513,11 +2692,29 @@ describe("database-principal runtime census", () => {
     );
   });
 
-  it("admits the exact disposable QA runtimes and exact one-shot migrator", () => {
+  it("admits the exact disposable QA runtimes and closed segmented migrator", () => {
     const result = run(exactQaModel(), "--qa");
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain(
       "profile=synthetic-qa mode=static-unresolved services=2",
+    );
+  });
+
+  it("rejects QA PostgreSQL Dockerfile or rootfs drift", () => {
+    const buildDrift = exactQaModel();
+    (
+      buildDrift.services.postgres as {
+        build: { dockerfile: string };
+      }
+    ).build.dockerfile = "unreviewed.Dockerfile";
+    expect(run(buildDrift, "--qa").stderr).toContain(
+      "exact PostgreSQL database server is missing",
+    );
+
+    const rootfsDrift = exactQaModel();
+    (rootfsDrift.services.postgres as { read_only: boolean }).read_only = false;
+    expect(run(rootfsDrift, "--qa").stderr).toContain(
+      "exact PostgreSQL database server is missing",
     );
   });
 
@@ -2543,6 +2740,7 @@ describe("database-principal runtime census", () => {
         path.join(directory, "docker-compose.qa.yml"),
         readFileSync(path.join(ROOT, "docker-compose.qa.yml")),
       );
+      copyPostgresHostAuthenticationSources(directory);
       const composeEnvironment = {
         ...Object.fromEntries(
           ["PATH", "DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_CONFIG"]

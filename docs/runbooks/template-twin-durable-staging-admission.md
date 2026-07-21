@@ -78,17 +78,29 @@ The migration runs in one transaction with `lock_timeout = 2s` and
 If a conflicting transaction holds the staging-run table longer than two
 seconds, the complete migration transaction rolls back. Verify that the new
 table and run column are absent, record the non-PHI blocker, let the owning
-transaction finish, mark the failed Prisma attempt rolled back using the
-standard `prisma migrate resolve --rolled-back` procedure, and retry the exact
-unchanged migration. Do not increase timeouts or edit a migration checksum.
+transaction finish, preserve the failed-attempt row and diagnostic, and take a
+fresh protected snapshot. The closed runner rejects an unresolved attempt. A
+separately reviewed DBA forward-reconciliation decision must address that exact
+failure; this runbook does not authorize a ledger-repair command. Do not
+increase timeouts, edit a migration checksum or ledger, or run raw Prisma
+deploy/resolve.
+
+Only after the reviewed reconciliation may the exact unchanged migration be
+retried through the closed `auth-expand` cumulative segment. Run
+`docker compose run --rm db-migrate --phase status`, independently verify the
+exact ledger prefix/target and fresh `targetFingerprints.auth-expand` entry,
+and follow the phase-specific approval flow in `docs/DEPLOYMENT_RUNBOOK.md`
+§1.4.1. The entry is ledger-, accepted-source-, phase-, and target-bound; never
+reuse it for a retry or derive it when status emits no entry. The lineage
+contract must already be exactly `CONTRACTED`.
 
 ## Deployment, rollback, and retained evidence
 
-Apply only through the normal migrator after taking the existing backup and
-change-control gates. Fresh-database and data-bearing 73-to-74 upgrade tests
-must both pass. Confirm that the admission table is empty after upgrade and
-that existing structured templates retain their lineage, version, status, and
-kind.
+Apply only through the closed status-and-approved `auth-expand` segment after
+taking the existing backup and change-control gates. Fresh-database and
+data-bearing 73-to-74 upgrade tests must both pass. Confirm that the admission
+table is empty after upgrade and that existing structured templates retain
+their lineage, version, status, and kind.
 
 Application rollback is to disable the synthetic staging process gate and the
 global/practice rollout gates. Keep the additive schema and immutable evidence;

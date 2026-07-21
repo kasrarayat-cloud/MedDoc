@@ -9,19 +9,20 @@ interface PrincipalQueryClient {
   $queryRaw<T>(query: Prisma.Sql): Promise<T>;
 }
 
-/** PostgreSQL 16 catalog contract derived from two isolated, pinned-image
- * clusters and frozen by additive migration v9. */
+/** PostgreSQL 16 catalog contract reproduced across isolated pinned-image
+ * clusters. Internal RI trigger OID names are normalized out while their
+ * complete stable enforcement state remains bound to each constraint. */
 export const EXACT_DATABASE_PRINCIPAL_CONTRACT = {
   postgresMajor: 16,
-  applicationAclCount: 4_141,
+  applicationAclCount: 4_160,
   applicationAclSha256:
-    "17af3f8af88bf594576f30c2cfa9bd6b1ee78b7e1447a9064ca657b71c1cfdd6",
-  applicationPublicAclCount: 504,
+    "cb437ac387bcdc582114b688e183e34bcc3e24fa9b02d35ee6997719f145f008",
+  applicationPublicAclCount: 503,
   applicationPublicAclSha256:
-    "d5e24c7cd5c7b20491973623e3f2387eb72dd2461f78a931897345b5cfd8ad16",
+    "f4b0042b47bb887343fcd7868203def89baf31294d1d8419f4ef5f6068385707",
   systemPublicAclCount: 4_046,
   systemPublicAclSha256:
-    "b2bf14053b1e8d8a0f135bd315f1c2c79a97f6957ab6a718fbed67c4aaf69746",
+    "e299da714d13776e242ee163fbb7aa7942696458aad4f7c23553064812204913",
   futureDefaultAclCount: 0,
   futureDefaultAclSha256:
     "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -32,7 +33,7 @@ export const EXACT_DATABASE_PRINCIPAL_CONTRACT = {
       boundaryMemberships: [] as string[],
       count: 260,
       sha256:
-        "9a57516235a2bf6e05d78ece57b36a8181b0940517dbac327b2ec38fecb08491",
+        "7c257cc86bc9b83528f62fd76765734b4f85713a297c1d87ed4e141944447e42",
     },
     quillmd_release_control: {
       loginBypassRls: false,
@@ -40,7 +41,7 @@ export const EXACT_DATABASE_PRINCIPAL_CONTRACT = {
       boundaryMemberships: [] as string[],
       count: 53,
       sha256:
-        "1b19ff4639456ed2198b33093733743bf844ff1b0ea535cd96fae987401eb9d2",
+        "7dd6b610f5171284e8576eb6ea03927618d7d1aeed15c7fd864a24740de404e8",
     },
     quillmd_release_security: {
       loginBypassRls: false,
@@ -56,7 +57,7 @@ export const EXACT_DATABASE_PRINCIPAL_CONTRACT = {
       boundaryMemberships: [] as string[],
       count: 7,
       sha256:
-        "3bcd5b8e7e9a2a11004d05e262a44dcbfccc4cd835e9ac8db844cb76425205ca",
+        "a30159d922564b79229daedd9052c08bcf1adda95bd9e1c91903b6eedccbed9b",
     },
     quillmd_auth_email_dispatcher: {
       loginBypassRls: false,

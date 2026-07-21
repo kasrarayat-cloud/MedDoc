@@ -1,6 +1,7 @@
 import { writeFile } from "node:fs/promises";
 
 import prisma from "@meddoc/db";
+import { assertPostgresHostAuthenticationContract } from "@meddoc/db/postgres-host-auth";
 import { QUILLMD_EXACT_PRODUCTION_DATABASE_PRINCIPAL_PROFILE } from "@meddoc/db/production-runtime-principal";
 
 import { assertExactDatabasePrincipal } from "@/lib/exact-database-principal";
@@ -39,6 +40,7 @@ async function main(): Promise<void> {
   ) {
     throw new Error("Exact production database-principal profile is required.");
   }
+  await assertPostgresHostAuthenticationContract({ prisma });
   await assertExactDatabasePrincipal({
     prisma,
     loginRole: "meddoc_audit_dispatcher",

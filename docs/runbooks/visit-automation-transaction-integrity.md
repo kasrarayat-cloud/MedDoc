@@ -157,12 +157,24 @@ Expected locks are catalog locks for enum/table/index/function/trigger
 creation; there is no data backfill or unbounded table update. The migration
 sets transaction-local `lock_timeout = 5s` and `statement_timeout = 60s`, so a
 busy deployment fails and can be retried rather than waiting indefinitely.
-Prisma records that bounded failure as a failed migration. After the blocking
-transaction is investigated and released, an operator must mark only this
-known failed attempt rolled back with `prisma migrate resolve --rolled-back
-20260717230000_visit_automation_manifest_v1`, verify the proof tables/types are
-absent (the explicit transaction rolls them all back), and rerun `migrate
-deploy`. The disposable contention test proves that sequence.
+Prisma records that bounded failure as a failed migration. Verify that the proof
+tables/types are absent (the explicit transaction rolls them all back), preserve
+the failed-attempt row and server diagnostic, and take a fresh protected
+snapshot. The closed runner rejects the unresolved attempt. A separately
+reviewed DBA forward-reconciliation decision must address that exact failed
+attempt; this runbook does not authorize a ledger-repair command.
+
+Only after that reconciliation may the unchanged migration be retried through
+the closed `auth-expand` cumulative segment. Run
+`docker compose run --rm db-migrate --phase status`, independently verify the
+exact prefix/target and fresh `targetFingerprints.auth-expand` entry, and use
+the phase-specific approval flow in `docs/DEPLOYMENT_RUNBOOK.md` §1.4.1. The
+entry is ledger-, accepted-source-, phase-, and target-bound; never reuse it
+for a retry or derive it when status emits no entry. The lineage contract must
+already be exactly `CONTRACTED`. Never run raw Prisma deploy/resolve, edit the
+migration checksum or ledger, or retry while the blocker remains. The
+disposable contention test proves the low-level rollback behavior only; it is
+not a production recovery instruction.
 
 Rollback/disable does not delete proof. Disable staging through the existing
 global/practice controls, stop new workers, and retain the additive rows and

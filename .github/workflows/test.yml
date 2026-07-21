@@ -25,25 +25,11 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The witnessed four-segment protocol replaces the former one-shot deploy;
+    # keep a bounded cushion for its online no-op/resume and six preflight proofs.
+    timeout-minutes: 30
 
     services:
-      postgres:
-        # T-M14.1 migration runs CREATE EXTENSION "vector" — the stock
-        # postgres:16 image doesn't ship pgvector, so use the same
-        # pgvector/pgvector:pg16 image as the production compose file.
-        image: pgvector/pgvector:pg16
-        env:
-          POSTGRES_USER: meddoc
-          POSTGRES_PASSWORD: meddoc
-          POSTGRES_DB: meddoc
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U meddoc -d meddoc"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
       # Phase 13 (h9-meddoc-e2e-residual): the dev server tries to
       # connect to redis at startup (audit-log SSE pubsub singleton).
       # Without this service the EAI_AGAIN noise pollutes the WebServer
@@ -60,7 +46,6 @@ jobs:
           --health-retries 5
 
     env:
-      DATABASE_URL: postgresql://meddoc:meddoc@localhost:5432/meddoc?schema=public
       REDIS_URL: redis://localhost:6379
       AUTH_SECRET: ci-dummy-auth-secret-not-for-production
       AUTH_USE_MOCK: "true"
@@ -88,8 +73,15 @@ jobs:
       - name: Generate Prisma client
         run: npm run db:generate
 
-      - name: Apply database migrations
-        run: npm run db:migrate:deploy
+      # Creates its own immutable, marker-named database on the local Docker
+      # daemon; accepts no target URL or production acknowledgement. It runs
+      # all four closed segments, both online protocols, release-security
+      # provisioning, and all six exact-principal preflights before exporting
+      # the job-scoped runtime URL through GITHUB_ENV.
+      - name: Apply witnessed migrations to isolated synthetic database
+        run: npm run db:migrate:synthetic-ci -- --phase provision
+        env:
+          QUILLMD_SYNTHETIC_CI_DATABASE_RELEASE: isolated-disposable-v1
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
@@ -113,6 +105,12 @@ jobs:
           name: playwright-test-results
           path: apps/meddoc-pro/test-results/
           retention-days: 7
+
+      - name: Destroy isolated synthetic database
+        if: always()
+        run: npm run db:migrate:synthetic-ci -- --phase cleanup
+        env:
+          QUILLMD_SYNTHETIC_CI_DATABASE_RELEASE: isolated-disposable-v1
 
   # ──────────────────────────────────────────────────────────────────
   # PR-K supply-chain hardening: dependency-vulnerability gate.

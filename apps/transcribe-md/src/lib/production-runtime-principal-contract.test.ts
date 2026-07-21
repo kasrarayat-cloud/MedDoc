@@ -147,6 +147,9 @@ describe("production runtime principal startup contract", () => {
         'import { assertExactDatabasePrincipal } from "@/lib/exact-database-principal"',
       );
       expect(dispatcher).toContain(
+        'import { assertPostgresHostAuthenticationContract } from "@meddoc/db/postgres-host-auth"',
+      );
+      expect(dispatcher).toContain(
         "QUILLMD_EXACT_PRODUCTION_DATABASE_PRINCIPAL_PROFILE",
       );
       expect(dispatcher).toContain(
@@ -154,6 +157,16 @@ describe("production runtime principal startup contract", () => {
       );
       expect(dispatcher).not.toContain('process.env.NODE_ENV === "production"');
       expect(dispatcher).toContain("await assertExactDatabasePrincipal({");
+      expect(dispatcher).toContain(
+        "await assertPostgresHostAuthenticationContract({ prisma });",
+      );
+      expect(
+        dispatcher.indexOf(
+          "await assertPostgresHostAuthenticationContract({ prisma });",
+        ),
+      ).toBeLessThan(
+        dispatcher.indexOf("await assertExactDatabasePrincipal({"),
+      );
     }
   });
 
@@ -228,6 +241,7 @@ describe("production runtime principal startup contract", () => {
       Object.keys(QUILLMD_PRODUCTION_RUNTIME_DATABASE_PRINCIPALS),
     ).toHaveLength(7);
     expect(dbPackage).toContain('"./exact-database-principal"');
+    expect(dbPackage).toContain('"./postgres-host-auth"');
     expect(dbPackage).toContain('"./production-runtime-principal"');
   });
 });

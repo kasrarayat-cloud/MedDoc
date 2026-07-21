@@ -8,14 +8,15 @@
 #
 # What this workflow does NOT depend on:
 #   - The live VPS (this runs on a fresh ubuntu-latest runner)
-#   - Docker compose (postgres + redis come from GitHub services)
+#   - Docker compose (Redis is a GitHub service; PostgreSQL is an immutable,
+#     script-owned disposable container with the full witnessed release graph)
 #   - Anthropic / Deepgram / Resend / MinIO (production build boots
 #     without them; visit-state seeding writes rows directly via psql)
 #
-# Why pgvector/pgvector:pg16 (not postgres:16):
-#   The 20260417030632_add_scribe_foundations migration runs
-#   CREATE EXTENSION "vector"; the stock postgres image doesn't ship
-#   pgvector. Same image as .github/workflows/test.yml.
+# Why the repository PostgreSQL image:
+#   The migration graph needs pgvector plus the exact immutable host-auth and
+#   principal bootstrap contracts. The CI provisioner builds those reviewed
+#   bytes directly and accepts no external database target.
 # ============================================================================
 
 name: a11y-ci
@@ -33,22 +34,11 @@ jobs:
   axe:
     name: axe-core sweep (chromium x desktop+mobile)
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # Includes the complete witnessed database protocol before the production
+    # build and browser sweep; still bounded so a stalled operator fails closed.
+    timeout-minutes: 35
 
     services:
-      postgres:
-        image: pgvector/pgvector:pg16
-        env:
-          POSTGRES_USER: meddoc
-          POSTGRES_PASSWORD: meddoc
-          POSTGRES_DB: meddoc_qa_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U meddoc -d meddoc_qa_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
       redis:
         image: redis:7-alpine
         ports:
@@ -61,7 +51,6 @@ jobs:
 
     env:
       # ---- DB / Redis ------------------------------------------------------
-      DATABASE_URL: postgresql://meddoc:meddoc@localhost:5432/meddoc_qa_test?schema=public
       REDIS_URL: redis://localhost:6379
       # ---- NextAuth + dummy keys ------------------------------------------
       AUTH_SECRET: ci-dummy-auth-secret-not-for-production
@@ -78,26 +67,24 @@ jobs:
       # request time; pointing at localhost keeps the lazy connection
       # from blowing up on a DNS lookup). -----------------------------------
       MINIO_ENDPOINT: localhost
-      MINIO_PORT: '9000'
+      MINIO_PORT: "9000"
       MINIO_ACCESS_KEY: meddoc
       MINIO_SECRET_KEY: meddoc
-      MINIO_USE_SSL: 'false'
+      MINIO_USE_SSL: "false"
       TRANSCRIBE_MD_MINIO_BUCKET: transcribe-md-audio
       # ---- App boot config -------------------------------------------------
       NODE_ENV: production
-      NEXT_TELEMETRY_DISABLED: '1'
-      PORT: '9020'
+      NEXT_TELEMETRY_DISABLED: "1"
+      PORT: "9020"
       QUILLMD_RUNTIME_PROTOCOL_EPOCH: template-twin-final-schema-v2
       QUILLMD_REQUIRED_RUNTIME_PROTOCOL_EPOCH: template-twin-final-schema-v2
       TEMPLATE_TWIN_RUNTIME_MODE: standard
-      TEMPLATE_TWIN_KILL_SWITCH: 'true'
+      TEMPLATE_TWIN_KILL_SWITCH: "true"
       # ---- Spec config -----------------------------------------------------
       PW_BASE_URL: http://localhost:9020
-      # PSQL_BIN switches helpers/seedVisitStates.ts off the docker-
-      # compose channel onto a direct psql so visit-state seeding works
-      # without docker on the runner.
-      PSQL_BIN: psql "postgresql://meddoc:meddoc@localhost:5432/meddoc_qa_test"
-      CI: 'true'
+      # DATABASE_URL, PSQL_BIN, and the exact synthetic principal profile are
+      # exported only after the disposable migration protocol succeeds.
+      CI: "true"
 
     steps:
       - name: Checkout
@@ -106,8 +93,8 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: 'npm'
+          node-version: "22"
+          cache: "npm"
 
       - name: Install workspace deps
         # --include=dev forces devDeps in even though job-level
@@ -120,8 +107,10 @@ jobs:
       - name: Generate Prisma client
         run: npm run db:generate
 
-      - name: Apply database migrations
-        run: npm run db:migrate:deploy
+      - name: Apply witnessed migrations to isolated synthetic database
+        run: npm run db:migrate:synthetic-ci -- --phase provision
+        env:
+          QUILLMD_SYNTHETIC_CI_DATABASE_RELEASE: isolated-disposable-v1
 
       # Cache Playwright browsers across runs. The cache key includes the
       # @playwright/test version so a Playwright bump invalidates the
@@ -157,7 +146,7 @@ jobs:
           # client bundles don't try to talk to a remote VPS.
           NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL: http://localhost:9020
           NEXT_PUBLIC_MARKETING_URL: http://localhost:9010
-          NEXT_PUBLIC_SHOW_PIPELINE_TAB: 'false'
+          NEXT_PUBLIC_SHOW_PIPELINE_TAB: "false"
 
       - name: Start transcribe-md in background
         # Production `next start` listens on $PORT (9020 from env above).
@@ -215,3 +204,9 @@ jobs:
           if [ -f /tmp/transcribe-md.pid ]; then
             kill "$(cat /tmp/transcribe-md.pid)" 2>/dev/null || true
           fi
+
+      - name: Destroy isolated synthetic database
+        if: always()
+        run: npm run db:migrate:synthetic-ci -- --phase cleanup
+        env:
+          QUILLMD_SYNTHETIC_CI_DATABASE_RELEASE: isolated-disposable-v1

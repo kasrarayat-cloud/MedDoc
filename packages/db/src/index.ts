@@ -14,10 +14,7 @@ const { PrismaClient } = require("@prisma/client") as { PrismaClient: any };
 // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any
 const { PrismaPg } = require("@prisma/adapter-pg") as { PrismaPg: any };
 
-import {
-  buildDatabaseConnectionString,
-  parseStatementTimeoutMs,
-} from "./database-connection-string";
+import { buildRuntimeDatabaseConnectionString } from "./database-connection-string";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const globalForPrisma = globalThis as unknown as { prisma?: any };
@@ -34,10 +31,6 @@ const globalForPrisma = globalThis as unknown as { prisma?: any };
 //     rogue query can't hold a connection indefinitely.
 const POOL_MAX = Number(process.env.PRISMA_POOL_MAX ?? 10);
 const POOL_TIMEOUT_MS = Number(process.env.PRISMA_POOL_TIMEOUT_MS ?? 20_000);
-const STATEMENT_TIMEOUT_MS = parseStatementTimeoutMs(
-  process.env.PRISMA_STATEMENT_TIMEOUT_MS,
-);
-
 function buildConnectionString(): string {
   const raw =
     process.env.DATABASE_URL ??
@@ -45,7 +38,7 @@ function buildConnectionString(): string {
   // The reviewed search_path and timeout must be sent through one effective
   // startup-options value. The builder rejects duplicate or unreviewed
   // options rather than relying on the driver's last-value-wins parser.
-  return buildDatabaseConnectionString(raw, STATEMENT_TIMEOUT_MS);
+  return buildRuntimeDatabaseConnectionString(raw, process.env);
 }
 
 function buildPrisma() {

@@ -17,11 +17,10 @@ name: meddoc-pro
 services:
   # ── PostgreSQL Database ──
   postgres:
-    # T-M14.1: reviewed PostgreSQL 16.13 + pgvector image. Keep this digest
-    # aligned with the exact database-principal catalog manifest.
-    # with the `vector` extension compiled in. Same PG 16 major → same
-    # on-disk format → the existing `pgdata` volume mounts unchanged.
-    image: pgvector/pgvector:pg16@sha256:7d400e340efb42f4d8c9c12c6427adb253f726881a9985d2a471bf0eed824dff
+    # Release automation builds infra/postgres/Dockerfile from the accepted
+    # exact SHA, publishes it, and supplies its immutable registry digest.
+    # That image embeds the reviewed HBA, verifier, and pre-entrypoint guard.
+    image: ${QUILLMD_POSTGRES_IMAGE:?QUILLMD_POSTGRES_IMAGE must be an immutable sha256 digest}
     restart: unless-stopped
     # Phase 13 — H4: non-root containers. The pgvector image's
     # `postgres` user is uid 999 and the data dir was already owned
@@ -36,6 +35,10 @@ services:
     # radius — drop ALL.
     cap_drop:
       - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777
+      - /var/run/postgresql:rw,noexec,nosuid,nodev,size=16m,uid=999,gid=999,mode=3777
     # T-M16.4: protective ceilings, not reservations. Sum across all
     # services > host RAM is intentional — compose mem_limits only
     # fire when a container actually hits the limit, preventing one
@@ -43,10 +46,22 @@ services:
     # §8 for the host-memory breakdown.
     mem_limit: 512m
     cpus: "1.0"
+    entrypoint: ["/usr/local/bin/quillmd-postgres-entrypoint.sh"]
+    command:
+      - postgres
+      - -c
+      - hba_file=/etc/postgresql/quillmd-pg_hba.conf
+      - -c
+      - password_encryption=scram-sha-256
+      - -c
+      - quillmd.hba_contract_path=/etc/postgresql/quillmd-pg_hba.conf
+      - -c
+      - quillmd.hba_contract_sha256=8b76fed3fc6791617a828fcf5f1cbff35d681d3e753cda9594c89df52ea929b0
     environment:
       POSTGRES_DB: meddoc
       POSTGRES_USER: meddoc
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=trust"
       DB_RUNTIME_PASSWORD: ${DB_RUNTIME_PASSWORD:?DB_RUNTIME_PASSWORD is required}
       DB_RELEASE_CONTROL_PASSWORD: ${DB_RELEASE_CONTROL_PASSWORD:?DB_RELEASE_CONTROL_PASSWORD is required}
       DB_AUDIT_DISPATCHER_PASSWORD: ${DB_AUDIT_DISPATCHER_PASSWORD:?DB_AUDIT_DISPATCHER_PASSWORD is required}
@@ -75,7 +90,7 @@ services:
     ports:
       - "127.0.0.1:5432:5432" # only accessible from localhost
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U meddoc"]
+      test: ["CMD", "/bin/sh", "/opt/quillmd/verify-quillmd-host-auth.sh"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -131,6 +146,7 @@ services:
       NODE_ENV: production
       QUILLMD_SERVICE_ROLE: meddoc-pro-app
       QUILLMD_DATABASE_PRINCIPAL_PROFILE: exact-production-v1
+      PRISMA_STATEMENT_TIMEOUT_MS: ${PRISMA_STATEMENT_TIMEOUT_MS:-30000}
       QUILLMD_AUTH_SESSION_VERIFIER_PROFILE: ""
       AUTH_USE_MOCK: "false"
       DB_PASSWORD: ""
@@ -489,6 +505,7 @@ services:
       NODE_ENV: production
       QUILLMD_SERVICE_ROLE: transcribe-md-worker
       QUILLMD_DATABASE_PRINCIPAL_PROFILE: exact-production-v1
+      PRISMA_STATEMENT_TIMEOUT_MS: ${PRISMA_STATEMENT_TIMEOUT_MS:-30000}
       QUILLMD_AUTH_SESSION_VERIFIER_PROFILE: ""
       DB_PASSWORD: ""
       DB_RUNTIME_PASSWORD: ""
@@ -615,6 +632,7 @@ services:
       DB_BACKUP_PASSWORD_FILE: ""
       QUILLMD_SERVICE_ROLE: template-twin-audit-dispatcher
       QUILLMD_DATABASE_PRINCIPAL_PROFILE: exact-production-v1
+      PRISMA_STATEMENT_TIMEOUT_MS: ${PRISMA_STATEMENT_TIMEOUT_MS:-30000}
       QUILLMD_AUTH_SESSION_VERIFIER_PROFILE: ""
       MFA_SECRET_ACTIVE_KEY_ID: ""
       MFA_SECRET_KEYRING_FILE: ""
@@ -688,6 +706,7 @@ services:
       DATABASE_URL: "postgresql://meddoc_auth_email_dispatcher:${DB_AUTH_EMAIL_DISPATCHER_PASSWORD:?DB_AUTH_EMAIL_DISPATCHER_PASSWORD is required}@postgres:5432/meddoc?schema=public&options=-c%20search_path%3Dpg_catalog%2Cpublic"
       QUILLMD_SERVICE_ROLE: auth-email-dispatcher
       QUILLMD_DATABASE_PRINCIPAL_PROFILE: exact-production-v1
+      PRISMA_STATEMENT_TIMEOUT_MS: ${PRISMA_STATEMENT_TIMEOUT_MS:-30000}
       QUILLMD_AUTH_SESSION_VERIFIER_PROFILE: ""
       DB_PASSWORD: ""
       DB_RUNTIME_PASSWORD: ""
@@ -839,6 +858,7 @@ services:
       DATABASE_URL: "postgresql://meddoc_runtime:${DB_RUNTIME_PASSWORD:?DB_RUNTIME_PASSWORD is required}@postgres:5432/meddoc?schema=public&options=-c%20search_path%3Dpg_catalog%2Cpublic"
       QUILLMD_SERVICE_ROLE: physician-app
       QUILLMD_DATABASE_PRINCIPAL_PROFILE: exact-production-v1
+      PRISMA_STATEMENT_TIMEOUT_MS: ${PRISMA_STATEMENT_TIMEOUT_MS:-30000}
       QUILLMD_AUTH_SESSION_VERIFIER_PROFILE: ""
       MFA_SECRET_ACTIVE_KEY_ID: ${MFA_SECRET_ACTIVE_KEY_ID:?MFA_SECRET_ACTIVE_KEY_ID is required}
       MFA_SECRET_KEYRING_FILE: ${MFA_SECRET_KEYRING_FILE:?MFA_SECRET_KEYRING_FILE is required}
@@ -934,6 +954,7 @@ services:
       DATABASE_URL: "postgresql://meddoc_runtime:${DB_RUNTIME_PASSWORD:?DB_RUNTIME_PASSWORD is required}@postgres:5432/meddoc?schema=public&options=-c%20search_path%3Dpg_catalog%2Cpublic"
       QUILLMD_SERVICE_ROLE: template-twin-admin-app
       QUILLMD_DATABASE_PRINCIPAL_PROFILE: exact-production-v1
+      PRISMA_STATEMENT_TIMEOUT_MS: ${PRISMA_STATEMENT_TIMEOUT_MS:-30000}
       QUILLMD_AUTH_SESSION_VERIFIER_PROFILE: ""
       MFA_SECRET_ACTIVE_KEY_ID: ${MFA_SECRET_ACTIVE_KEY_ID:?MFA_SECRET_ACTIVE_KEY_ID is required}
       MFA_SECRET_KEYRING_FILE: ${MFA_SECRET_KEYRING_FILE:?MFA_SECRET_KEYRING_FILE is required}
@@ -1023,6 +1044,7 @@ services:
       DATABASE_URL: "postgresql://meddoc_release_control:${DB_RELEASE_CONTROL_PASSWORD:?DB_RELEASE_CONTROL_PASSWORD is required}@postgres:5432/meddoc?schema=public&options=-c%20search_path%3Dpg_catalog%2Cpublic"
       QUILLMD_SERVICE_ROLE: template-twin-admin-control
       QUILLMD_DATABASE_PRINCIPAL_PROFILE: exact-production-v1
+      PRISMA_STATEMENT_TIMEOUT_MS: ${PRISMA_STATEMENT_TIMEOUT_MS:-30000}
       QUILLMD_AUTH_SESSION_VERIFIER_PROFILE: template-twin-admin-control-v1
       MFA_SECRET_ACTIVE_KEY_ID: ""
       MFA_SECRET_KEYRING_FILE: ""
@@ -1087,7 +1109,7 @@ services:
     ports:
       - "127.0.0.1:${TEMPLATE_TWIN_ADMIN_CONTROL_PORT:-3012}:3011"
 
-  # ── DB Migrator (one-shot) ──
+  # ── DB Migrator (closed segmented operator) ──
   # Targets the transcribe-md builder stage because it already runs
   # `npm ci` + `npm run db:generate` and has the full Prisma CLI
   # toolchain (prisma, @prisma/config, effect, c12, jiti …). Shipping
@@ -1095,9 +1117,10 @@ services:
   # reuse what's already built.
   #
   # Profile-gated so `docker compose up` ignores it. Invoke with:
-  #   docker compose run --rm db-migrate
-  # which defaults to `migrate deploy`. Override to peek:
-  #   docker compose run --rm db-migrate npx prisma migrate status
+  #   docker compose run --rm db-migrate --phase status
+  # Mutation phases are closed, cumulative release cut points and additionally
+  # require an exact target-fingerprint acknowledgement. There is deliberately
+  # no raw or one-shot `prisma migrate deploy` default.
   db-migrate:
     build:
       context: .
@@ -1107,11 +1130,18 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # The mutating Prisma child opens a second connection. Sharing the
+    # database container's network namespace makes 127.0.0.1:5432 an
+    # immutable execution boundary rather than a re-resolved service route.
+    network_mode: "service:postgres"
     environment:
-      DATABASE_URL: postgresql://meddoc:${DB_PASSWORD:?DB_PASSWORD is required}@postgres:5432/meddoc?schema=public&options=-c%20search_path%3Dpg_catalog%2Cpublic
+      DATABASE_URL: postgresql://meddoc:${DB_PASSWORD:?DB_PASSWORD is required}@127.0.0.1:5432/meddoc?schema=public&options=-c%20search_path%3Dpg_catalog%2Cpublic
+      PRISMA_STATEMENT_TIMEOUT_MS: ${PRISMA_STATEMENT_TIMEOUT_MS:-30000}
+      DATABASE_RELEASE_MIGRATION_LOCK_TIMEOUT_MS: ${DATABASE_RELEASE_MIGRATION_LOCK_TIMEOUT_MS:-5000}
+      DATABASE_RELEASE_MIGRATION_NETWORK_BOUNDARY: postgres-loopback-v1
     working_dir: /app/packages/db
-    entrypoint: ["npx", "--no-install", "prisma"]
-    command: ["migrate", "deploy"]
+    entrypoint: ["npm", "run", "--silent", "database-release:migrate", "--"]
+    command: ["--phase", "status"]
 
   # ── Postgres backup (dedicated read-only principal) ──
   # The pinned image runs pg_dump through the exact pre-backup hook. It has

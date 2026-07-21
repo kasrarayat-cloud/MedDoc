@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildDatabaseConnectionString,
+  buildRuntimeDatabaseConnectionString,
   DATABASE_SEARCH_PATH,
   parseStatementTimeoutMs,
 } from "./database-connection-string";
@@ -18,6 +19,27 @@ function optionsFromActualDriverParser(connectionString: string): string {
 }
 
 describe("database connection startup options", () => {
+  it.each([undefined, "250", "900000"])(
+    "builds the environment-selected runtime timeout identically (%s)",
+    (timeout) => {
+      const environment = { PRISMA_STATEMENT_TIMEOUT_MS: timeout };
+      expect(buildRuntimeDatabaseConnectionString(BASE, environment)).toBe(
+        buildDatabaseConnectionString(BASE, timeout),
+      );
+    },
+  );
+
+  it.each(["", " ", "0", "1.5", "2147483648"])(
+    "rejects an unsafe runtime environment timeout (%s)",
+    (timeout) => {
+      expect(() =>
+        buildRuntimeDatabaseConnectionString(BASE, {
+          PRISMA_STATEMENT_TIMEOUT_MS: timeout,
+        }),
+      ).toThrow("DATABASE_CONNECTION_OPTIONS_INVALID:STATEMENT_TIMEOUT");
+    },
+  );
+
   it("builds one effective options value containing both required settings", () => {
     const result = buildDatabaseConnectionString(BASE, 30_000);
 
@@ -153,6 +175,7 @@ describe("database connection startup options", () => {
       `${BASE}&lock_timeout=1`,
       "SETTING_OUTSIDE_CANONICAL_OPTIONS",
     ],
+    ["direct role", `${BASE}&role=meddoc`, "SETTING_OUTSIDE_CANONICAL_OPTIONS"],
     [
       "noncanonical surrounding whitespace",
       ` ${BASE}`,

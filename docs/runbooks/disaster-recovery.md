@@ -4,17 +4,17 @@
 
 **Owner:** Kasra. **Last reviewed:** 2026-05-05.
 
-This is the page operator opens when something is *gone*, not just *broken*. For "broken" → see `incident-response.md`. For "Postgres role won't connect" → `postgres-recovery.md`.
+This is the page operator opens when something is _gone_, not just _broken_. For "broken" → see `incident-response.md`. For "Postgres role won't connect" → `postgres-recovery.md`.
 
 ---
 
 ## §1 — Recovery objectives
 
-| Metric | Pre-pilot target | Post-launch target |
-|---|---|---|
-| **RTO** (recovery time) | < 4 hours | < 1 hour |
+| Metric                   | Pre-pilot target          | Post-launch target                     |
+| ------------------------ | ------------------------- | -------------------------------------- |
+| **RTO** (recovery time)  | < 4 hours                 | < 1 hour                               |
 | **RPO** (recovery point) | < 24 hours (daily backup) | < 1 hour (continuous backup, Phase 7+) |
-| **Drill cadence** | Once before pilot launch | Quarterly |
+| **Drill cadence**        | Once before pilot launch  | Quarterly                              |
 
 The pre-pilot targets are what's achievable today with Phase 6.1 daily local backups + Phase 6.2 (in-flight) encrypted offsite. Post-launch targets require continuous backup (e.g., WAL archiving) which is Phase 7 scope.
 
@@ -24,14 +24,14 @@ The pre-pilot targets are what's achievable today with Phase 6.1 daily local bac
 
 What we currently have, where it lives, and what it covers:
 
-| Backup | Source | Destination | Frequency | Retention | Encryption | Phase | Status |
-|---|---|---|---|---|---|---|---|
-| Postgres logical dump | `meddoc` DB | `/opt/meddoc-pro/backups/last/` (host volume) | Daily (postgres-backup sidecar) | 30 days | gzip; LUKS-at-rest via Phase 6.1 | 6.1 | ✅ Active |
-| Postgres encrypted offsite | `/opt/meddoc-pro/backups/last/` | Backblaze B2 via age-encryption | Daily (host cron) | 30 days B2 lifecycle | age (asymmetric, private key offline) | 6.2 | 🟡 Scripts shipped (PR #110); activation pending Backblaze BAA + bucket creation |
-| MinIO encrypted offsite | `transcribe-md-audio` bucket | Backblaze B2 via age-encryption + tar | Daily (host cron) | 30 days B2 lifecycle | age | 6.2 | 🟡 Same as Postgres path; same activation gate |
-| Source code | `main` branch | GitHub | On every push | Forever | TLS in transit; GitHub at-rest | N/A | ✅ Active |
-| Secrets | `/opt/meddoc-pro/.env` | Operator's Bitwarden | Per rotation | Bitwarden retention | Bitwarden vault encryption | N/A | ✅ Active per Round 3 PR-A |
-| Public/private offsite-backup keypair | `age-keygen` on offline laptop | Bitwarden + fireproof safe (paper backup) | One-time at Phase 6.2 setup | Forever | At-rest in Bitwarden | 6.2 | 🟡 Pending Phase 6.2 activation |
+| Backup                                | Source                          | Destination                                   | Frequency                       | Retention            | Encryption                            | Phase | Status                                                                           |
+| ------------------------------------- | ------------------------------- | --------------------------------------------- | ------------------------------- | -------------------- | ------------------------------------- | ----- | -------------------------------------------------------------------------------- |
+| Postgres logical dump                 | `meddoc` DB                     | `/opt/meddoc-pro/backups/last/` (host volume) | Daily (postgres-backup sidecar) | 30 days              | gzip; LUKS-at-rest via Phase 6.1      | 6.1   | ✅ Active                                                                        |
+| Postgres encrypted offsite            | `/opt/meddoc-pro/backups/last/` | Backblaze B2 via age-encryption               | Daily (host cron)               | 30 days B2 lifecycle | age (asymmetric, private key offline) | 6.2   | 🟡 Scripts shipped (PR #110); activation pending Backblaze BAA + bucket creation |
+| MinIO encrypted offsite               | `transcribe-md-audio` bucket    | Backblaze B2 via age-encryption + tar         | Daily (host cron)               | 30 days B2 lifecycle | age                                   | 6.2   | 🟡 Same as Postgres path; same activation gate                                   |
+| Source code                           | `main` branch                   | GitHub                                        | On every push                   | Forever              | TLS in transit; GitHub at-rest        | N/A   | ✅ Active                                                                        |
+| Secrets                               | `/opt/meddoc-pro/.env`          | Operator's Bitwarden                          | Per rotation                    | Bitwarden retention  | Bitwarden vault encryption            | N/A   | ✅ Active per Round 3 PR-A                                                       |
+| Public/private offsite-backup keypair | `age-keygen` on offline laptop  | Bitwarden + fireproof safe (paper backup)     | One-time at Phase 6.2 setup     | Forever              | At-rest in Bitwarden                  | 6.2   | 🟡 Pending Phase 6.2 activation                                                  |
 
 ### What's NOT backed up (and why)
 
@@ -82,16 +82,35 @@ LATEST=$(ls -t /opt/meddoc-pro/backups/last/meddoc-*.sql.gz | head -1)
 gunzip -c "$LATEST" \
   | docker exec -i meddoc-pro-postgres-1 psql -U meddoc -d meddoc
 
-# 6. Re-apply pending migrations (in case backup pre-dates them)
+# 6. Inspect the restored ledger and target only (applies nothing)
 cd /opt/meddoc-pro
-docker run --rm \
-  --network meddoc-pro_default \
-  -v /opt/meddoc-pro/packages/db/prisma/migrations:/app/packages/db/prisma/migrations:ro \
-  -v /opt/meddoc-pro/packages/db/prisma/schema.prisma:/app/packages/db/prisma/schema.prisma:ro \
-  -e "DATABASE_URL=postgresql://meddoc:$(grep '^DB_PASSWORD=' .env | cut -d= -f2-)@postgres:5432/meddoc?schema=public" \
-  -w /app/packages/db meddoc-pro-db-migrate \
-  /app/node_modules/.bin/prisma migrate deploy
+docker compose run --rm db-migrate --phase status
+```
 
+Keep every application, worker, and dispatcher stopped while reconciling the
+restore. Compare the exact ledger prefix, restored PostgreSQL cluster identity,
+backup manifest, and online-contract states with the approved recovery point.
+If the backup predates the accepted release, advance it only through the closed
+status-and-approved-phase graph in `docs/DEPLOYMENT_RUNBOOK.md` §1.4.1:
+`lineage-expand`, the complete fresh-challenge lineage protocol,
+`auth-expand`, the complete authentication-token protocol, `pre-v9`, reviewed
+release-security provisioning, and `v9`. Obtain a new verified target
+`targetFingerprints.<segment>` entry and production acknowledgement immediately
+before every cumulative-segment invocation, including retry, resume, or no-op,
+and a fresh phase fingerprint for every lineage mutation. The migration status
+map is phase-, ledger-, accepted-source-, and target-bound and is empty while
+the restored server is in recovery. Missing entries or recovery state are stop
+conditions; never derive or reuse a value.
+
+Do not place a database URL or password in argv, run raw `prisma migrate
+deploy`, or use a ledger-resolution command as a generic recovery shortcut. An
+unknown checksum, non-prefix ledger, unresolved attempt, mismatched cluster, or
+ambiguous online-contract state requires a new protected snapshot and an
+approved DBA forward-reconciliation decision. After the closed graph, require
+all exact database-principal preflights and final online-contract proofs before
+restart.
+
+```bash
 # 7. Restart app tier
 docker compose up -d transcribe-md transcribe-md-worker meddoc-pro marketing
 
@@ -109,11 +128,13 @@ Symptoms: audio playback returns 5xx; `docker exec minio mc ls local/transcribe-
 **RTO target:** depends on Phase 6.2 status.
 
 **Phase 6.2 NOT yet active** (current state):
+
 - Local restore is not possible (no MinIO local backup; volume IS the only copy)
 - Pre-pilot acceptable because no live PHI yet
 - Post-pilot blocker — Phase 6.2 must activate before pilot
 
 **Phase 6.2 active** (target state):
+
 ```bash
 # 1. Stop services that read MinIO
 docker compose stop transcribe-md transcribe-md-worker
@@ -153,6 +174,7 @@ Symptoms: ssh to host returns nothing; Zap Hosting dashboard shows server unreac
 **Phase 6.2 NOT yet active:** **DATA LOSS UP TO LAST DAILY BACKUP** (the local pg_dump is on the same host; if the host is gone, so is the backup). Pre-pilot acceptable; post-pilot blocker.
 
 **Phase 6.2 active** (target state):
+
 ```bash
 # 1. Provision new VPS (Zap Hosting, same Ubuntu version)
 #    Note the new public IP
@@ -181,11 +203,17 @@ sleep 15
 docker exec -i meddoc-pro-postgres-1 psql -U meddoc -d meddoc < /tmp/pg.sql
 
 # 8. Restore MinIO (per scenario C, steps 2-5)
+```
 
-# 9. Bring up the rest
+Before app startup, complete scenario B step 6: verify the restored ledger, run
+only approved closed phases, and prove both online contracts plus all exact
+database principals. Keep the app tier stopped until those gates pass.
+
+```bash
+# 10. Bring up the rest
 docker compose up -d
 
-# 10. Smoke + reset operator-facing creds (some may have been in
+# 11. Smoke + reset operator-facing creds (some may have been in
 #     post-rotation state per ROTATION_RUNBOOK.md)
 curl -sI https://app.quillmd.com
 ```

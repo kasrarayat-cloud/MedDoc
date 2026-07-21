@@ -1,6 +1,7 @@
 import { writeFile } from "node:fs/promises";
 
 import prisma from "@meddoc/db";
+import { assertPostgresHostAuthenticationContract } from "@meddoc/db/postgres-host-auth";
 import { QUILLMD_EXACT_PRODUCTION_DATABASE_PRINCIPAL_PROFILE } from "@meddoc/db/production-runtime-principal";
 
 import { drainAuthEmailOutbox } from "@/lib/auth-email-delivery";
@@ -48,6 +49,7 @@ async function main(): Promise<void> {
   if (!isEmailDeliveryEnabled()) {
     throw new Error("Verified auth email delivery is required.");
   }
+  await assertPostgresHostAuthenticationContract({ prisma });
   await assertExactDatabasePrincipal({
     prisma,
     loginRole: "meddoc_auth_email_dispatcher",

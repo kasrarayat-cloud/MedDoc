@@ -172,11 +172,17 @@ For a brand-new database, supply four distinct generated credentials to
 `infra/postgres/init-template-twin-roles.sh` through the container secret
 environment before first initialization. An existing production data volume
 does not rerun entrypoint initialization: a database administrator must apply
-the same reviewed role-provisioning block before `prisma migrate deploy`,
-including re-granting the four required edges with explicit `ADMIN FALSE,
-INHERIT TRUE, SET FALSE`. Verify the complete incoming and outgoing graph
-without recording credential values. A legacy default `SET TRUE` grant is a
-migration blocker even when its role names look correct.
+the same reviewed role-provisioning block before the closed `auth-expand`
+cumulative segment, including re-granting the four required edges with explicit
+`ADMIN FALSE, INHERIT TRUE, SET FALSE`. Then run the read-only
+`docker compose run --rm db-migrate --phase status`, independently verify the
+exact ledger/target and fresh `targetFingerprints.auth-expand` entry, and
+follow `docs/DEPLOYMENT_RUNBOOK.md` §1.4.1. The entry is ledger-,
+accepted-source-, phase-, and target-bound; never reuse it for a retry or
+derive it when status emits no entry. Do not use a raw Prisma deploy/resolve
+command. Verify the complete incoming and outgoing graph without recording
+credential values. A legacy default `SET TRUE` grant is a migration blocker
+even when its role names look correct.
 
 After all production-control migrations have committed, provision the fifth,
 procedure-only security login with

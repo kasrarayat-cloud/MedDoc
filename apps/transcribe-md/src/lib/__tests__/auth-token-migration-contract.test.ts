@@ -81,12 +81,24 @@ describe("auth-token linearization migration contract", () => {
     );
     expect(operator).toContain("AUTH_TOKEN_INDEX_DEFINITION_MISMATCH");
     expect(operator.indexOf("AUTH_TOKEN_INDEX_NOT_VALID")).toBeLessThan(
-      operator.indexOf("DROP TRIGGER IF EXISTS"),
+      operator.indexOf('LOCK TABLE public."auth_tokens"'),
+    );
+    expect(operator).toContain(
+      'LOCK TABLE public."auth_tokens" IN ACCESS EXCLUSIVE MODE',
+    );
+    expect(operator).toContain(
+      'DROP TRIGGER "${AUTH_TOKEN_TRANSITION_TRIGGER}"',
+    );
+    expect(operator).not.toContain(
+      'DROP TRIGGER IF EXISTS "${AUTH_TOKEN_TRANSITION_TRIGGER}"',
     );
   });
 
   it("requires one session lock and explicit production change control", () => {
-    expect(cli).toContain("acquireAuthTokenOperatorSessionLock");
+    expect(cli).toContain(
+      "acquireAuthTokenOperatorSessionLockOnClient(client)",
+    );
+    expect(cli).toContain("max: 1");
     expect(cli).toContain("AUTH_TOKEN_LINEARIZATION_ALLOW_PRODUCTION");
     expect(cli).toContain("AUTH_TOKEN_LINEARIZATION_PRODUCTION_CHANGE_ID");
     expect(cli).toContain("AUTH_TOKEN_LINEARIZATION_PRODUCTION_ACK");
@@ -104,6 +116,10 @@ describe("auth-token linearization migration contract", () => {
     );
     expect(cli).toContain('["tlsIdentity", target.tlsIdentity]');
     expect(cli).toContain('["phase", phase]');
+    expect(cli).toContain('["inRecovery", target.inRecovery]');
+    expect(cli).toContain("authTokenOperatorProtocolEpoch");
+    expect(cli).toContain('const AUTH_TOKEN_OPERATOR_PRINCIPAL = "meddoc"');
+    expect(cli).toContain("pg_catalog.pg_is_in_recovery()");
     expect(cli).toContain("SAFE_INTERNAL_ERROR_CODES");
     expect(cli).not.toContain("/^[A-Z0-9_]+$/");
   });

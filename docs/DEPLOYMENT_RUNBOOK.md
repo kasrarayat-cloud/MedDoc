@@ -79,9 +79,100 @@ docker compose up -d postgres redis minio caddy
 # Wait for postgres healthy
 until docker compose exec postgres pg_isready -U meddoc; do sleep 1; done
 
-# Run migrations
-docker compose run --rm db-migrate
+# Inspect the exact migration ledger and target (read-only; applies nothing)
+docker compose run --rm db-migrate --phase status
+```
 
+Do not continue to the image-build or application-start commands until the
+closed migration gate below has completed. A bare
+`docker compose run --rm db-migrate` uses the Compose default
+`--phase status`; it is exactly the same read-only status operation and never
+applies a migration. Raw or one-shot `prisma migrate deploy` is not a supported
+production entrypoint.
+
+#### 1.4.1 Closed migration gate
+
+The reviewed runner exposes only the cumulative `lineage-expand`,
+`auth-expand`, `pre-v9`, and `v9` cut points. Before **each** segment, run
+`--phase status`, verify the reported ledger position and live target against
+the approved change evidence, and select the exact lowercase
+`targetFingerprints.<segment>` entry for that one segment invocation. The map is
+phase-, ledger-, accepted-source-, and target-bound. Status emits no approval
+entries while PostgreSQL is in recovery; an empty map is a stop condition, not
+permission to construct a value. Production mutation requires all four
+controls:
+
+```bash
+release_segment='lineage-expand' # set to the one approved cut point
+export DATABASE_RELEASE_MIGRATION_APPROVED_TARGET_FINGERPRINT='<independently verified status targetFingerprints.<segment> value>'
+export DATABASE_RELEASE_MIGRATION_ALLOW_PRODUCTION='true'
+export DATABASE_RELEASE_MIGRATION_PRODUCTION_CHANGE_ID='<approved change identifier>'
+export DATABASE_RELEASE_MIGRATION_PRODUCTION_ACK="meddoc:${release_segment}"
+
+docker compose run --rm \
+  -e DATABASE_RELEASE_MIGRATION_APPROVED_TARGET_FINGERPRINT \
+  -e DATABASE_RELEASE_MIGRATION_ALLOW_PRODUCTION \
+  -e DATABASE_RELEASE_MIGRATION_PRODUCTION_CHANGE_ID \
+  -e DATABASE_RELEASE_MIGRATION_PRODUCTION_ACK \
+  db-migrate --phase "$release_segment"
+
+unset DATABASE_RELEASE_MIGRATION_APPROVED_TARGET_FINGERPRINT
+unset DATABASE_RELEASE_MIGRATION_ALLOW_PRODUCTION
+unset DATABASE_RELEASE_MIGRATION_PRODUCTION_CHANGE_ID
+unset DATABASE_RELEASE_MIGRATION_PRODUCTION_ACK
+unset release_segment
+```
+
+The variables are execution guards, not approval. Never select a fingerprint
+solely because the runner printed it, derive a missing entry, or reuse one for
+another segment, retry, resumed invocation, or zero-change invocation. Run
+status again and independently verify the new phase-specific entry immediately
+before every mutation; any ledger, accepted migration source, phase, target, or
+recovery-state change invalidates the previous value. Never put the database
+URL or a credential in argv, a ticket, or an evidence artifact. The runner
+retains its target-proved connection while the Prisma child executes, then
+re-proves the PostgreSQL 16 cluster system identifier, exact `meddoc`
+session/current role and database-owner/SUPERUSER contract, non-recovery state,
+target fingerprint, and exact ledger before it can report success. Mutation is
+also bound to the Compose-shared PostgreSQL loopback namespace and finite
+lock/statement timeouts.
+
+Execute the release graph in this exact order:
+
+1. From an empty or exact-prefix ledger, authorize `lineage-expand` only.
+2. Complete the fresh-challenge lineage protocol in
+   `docs/runbooks/template-twin-lineage-online-migration.md`; require its exact
+   `CONTRACTED` catalog status.
+3. Obtain and independently verify a fresh
+   `targetFingerprints.auth-expand` status entry, then authorize `auth-expand`
+   only.
+4. Complete `docs/runbooks/auth-token-linearization-online.md`; require its
+   exact complete catalog status.
+5. Obtain and independently verify a fresh `targetFingerprints.pre-v9` status
+   entry, then authorize `pre-v9` only.
+6. Provision and verify the release-security principal with the reviewed,
+   target-bound operations procedure. Do not improvise role DDL.
+7. Obtain and independently verify a fresh `targetFingerprints.v9` status
+   entry, then authorize `v9` only.
+8. Require final status to report all 97 exact migrations ending at
+   `20260720213000_exact_database_principal_closure_v9`, then run every exact
+   database-principal preflight before starting an application, worker, or
+   dispatcher.
+
+Any ledger mismatch, target mismatch, stale online-protocol proof, failed
+principal contract, timeout, or ambiguous result is a stop condition. Preserve
+the failed-attempt evidence and use the reviewed recovery procedure; never edit
+`_prisma_migrations` or copy a checksum.
+
+The image-embedded HBA contract controls PostgreSQL client authentication. HBA
+does not provide or prove TLS. Encryption and peer-certificate verification for
+any network transport are separate infrastructure gates; do not cite the HBA
+contract as TLS evidence.
+
+Only after every closed migration, online protocol, and exact-principal check
+above passes may the release continue:
+
+```bash
 # Build app images (ONE service at a time — the 2 GB VPS OOM-kills
 # parallel builds).
 docker compose build marketing
@@ -151,9 +242,11 @@ git fetch origin main
 git log HEAD..origin/main --oneline      # review what's landing
 git merge --ff-only origin/main
 
-# 3. If migrations are present
+# 3. Inspect migration state (read-only; a bare db-migrate is also status-only)
 ls packages/db/prisma/migrations/        # check for new dirs
-docker compose run --rm db-migrate        # Prisma will apply + log diff
+docker compose run --rm db-migrate --phase status
+# If a reviewed segment is required, follow §1.4.1 and both online-transition
+# runbooks. Never substitute a raw or one-shot Prisma deploy.
 
 # 4. Rebuild changed services (sequential — VPS can't parallel-build)
 #    Identify which services are affected by the diff, then:
@@ -323,7 +416,7 @@ NEXT_PUBLIC_SENTRY_RELEASE=<short-sha>
 ```
 
 Changing Sentry env vars requires a full rebuild for the client
-bundle to pick them up (NEXT_PUBLIC_* is a build-time embed). The
+bundle to pick them up (NEXT*PUBLIC*\* is a build-time embed). The
 server side picks them up on container recreate.
 
 ```bash
@@ -349,6 +442,7 @@ a multi-container failure (e.g. postgres down → both apps unhealthy)
 sends a pager.
 
 Recommended providers (pick one, free tier is enough):
+
 - **UptimeRobot** — 50 monitors free, 5-minute intervals.
 - **Better Stack** — richer incident timeline, also free tier.
 - **Hetzner Cloud Monitor** (if you're already on Hetzner) — no
@@ -356,9 +450,9 @@ Recommended providers (pick one, free tier is enough):
 
 Configure two monitors per deployment:
 
-| Name | URL | Expected |
-|------|-----|----------|
-| meddoc-pro health | `http://<host>:80/api/health` | 200 + JSON with `"status": "healthy"` |
+| Name                 | URL                             | Expected                              |
+| -------------------- | ------------------------------- | ------------------------------------- |
+| meddoc-pro health    | `http://<host>:80/api/health`   | 200 + JSON with `"status": "healthy"` |
 | transcribe-md health | `http://<host>:9020/api/health` | 200 + JSON with `"status": "healthy"` |
 
 Both endpoints return `503 { "status": "unhealthy", ... }` when any
@@ -379,6 +473,7 @@ this for free).
 The transcribe-md worker is a BullMQ consumer with no HTTP endpoint,
 so it has no docker healthcheck and doesn't appear in `/api/health`.
 Today's signals:
+
 - Sentry captures any pipeline throw via `captureWorkerException` in
   `apps/transcribe-md/src/worker-sentry.ts`.
 - `docker compose ps` shows `Up <duration>` based on process lifecycle.
@@ -397,13 +492,13 @@ after an hour of dev work. Digging into `ps aux --sort=-rss` showed
 **our app containers are not the culprit** — they total ~285 MB
 across all eight Docker services. The top userspace consumers:
 
-| Process | RSS | Nature |
-|---------|-----|--------|
-| `dockerd` | 504 MB | Docker daemon — aggregates all container-process memory |
-| Dev-session tooling (Claude agent, etc.) | ~390 MB | Ephemeral; vanishes when the dev session ends |
-| `next-server` × 4 | ~150 MB | Next.js runtime processes across the 3 apps |
-| Unrelated co-located projects (openclaw, meilisearch, ai-deal-hunter) | ~70 MB | Shared VPS tenants outside this repo |
-| Linux + systemd + containerd + multipathd + journald | ~150 MB | OS baseline |
+| Process                                                               | RSS     | Nature                                                  |
+| --------------------------------------------------------------------- | ------- | ------------------------------------------------------- |
+| `dockerd`                                                             | 504 MB  | Docker daemon — aggregates all container-process memory |
+| Dev-session tooling (Claude agent, etc.)                              | ~390 MB | Ephemeral; vanishes when the dev session ends           |
+| `next-server` × 4                                                     | ~150 MB | Next.js runtime processes across the 3 apps             |
+| Unrelated co-located projects (openclaw, meilisearch, ai-deal-hunter) | ~70 MB  | Shared VPS tenants outside this repo                    |
+| Linux + systemd + containerd + multipathd + journald                  | ~150 MB | OS baseline                                             |
 
 **No Postgres tuning is warranted** — postgres is at 6 MiB resident.
 **No app-side memory refactor is warranted** — the apps are light.
@@ -416,16 +511,16 @@ other projects, and the dev session itself.
 runaway container OOM-killing postgres, not against current-state
 swap pressure. Current values:
 
-| Service | mem_limit | cpus |
-|---------|-----------|------|
-| postgres | 512 MB | 1.0 |
-| redis | 128 MB | 0.5 |
-| minio | 256 MB | 0.5 |
-| caddy | 128 MB | 0.5 |
-| marketing | 256 MB | 0.5 |
-| meddoc-pro | 512 MB | 1.0 |
-| transcribe-md | 512 MB | 1.0 |
-| transcribe-md-worker | 1024 MB | 1.5 |
+| Service              | mem_limit | cpus |
+| -------------------- | --------- | ---- |
+| postgres             | 512 MB    | 1.0  |
+| redis                | 128 MB    | 0.5  |
+| minio                | 256 MB    | 0.5  |
+| caddy                | 128 MB    | 0.5  |
+| marketing            | 256 MB    | 0.5  |
+| meddoc-pro           | 512 MB    | 1.0  |
+| transcribe-md        | 512 MB    | 1.0  |
+| transcribe-md-worker | 1024 MB   | 1.5  |
 
 Sum of `mem_limit` across services (≈ 3.3 GB) exceeds physical RAM
 (1.8 GB) on purpose — limits are ceilings, not reservations. They
@@ -548,11 +643,12 @@ target you wanted to keep around. The monthly cadence is a calendar
 reminder for ops, not an automated job.
 
 Guidance:
+
 - Only run after a successful deploy has been stable for ≥1 week.
 - Don't run during / right before a build — prune races with the
   build's temporary image tags.
 - After `make prune-docker`, re-check `df -h /` and `docker system
-  df`. Expected: root fs drops 20-30%, `Reclaimable` columns near 0.
+df`. Expected: root fs drops 20-30%, `Reclaimable` columns near 0.
 
 ### 9.4 When to NOT prune (even on schedule)
 

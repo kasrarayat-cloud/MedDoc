@@ -4,10 +4,16 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  assertExactLineageConstraintCatalog,
+  assertExactLineageIndexCatalog,
   assertLineageBatchSize,
   backfillLineageBatch,
   buildLineageGuardIndex,
+  LINEAGE_FINAL_INDEX,
+  LINEAGE_PARTIAL_INDEX,
+  LINEAGE_VALIDATION_CONSTRAINT,
   sanitizeLineageMigrationError,
+  TEMPLATE_KIND_INDEX,
   type RawSqlClient,
   type TransactionalRawSqlClient,
 } from "../template-twin-lineage-online";
@@ -47,6 +53,92 @@ function progress(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function exactIndexRow(
+  indexName: string,
+  overrides: Record<string, unknown> = {},
+) {
+  const templateKind = indexName === TEMPLATE_KIND_INDEX;
+  const partial = indexName === LINEAGE_PARTIAL_INDEX;
+  const columns = templateKind
+    ? ['"doctorId"', '"templateKind"', "status", ""]
+    : ['"lineageId"', "version", "", ""];
+  return {
+    indexName,
+    tableName: "note_templates",
+    indexRelkind: "i",
+    indexPersistence: "p",
+    tableRelkind: "r",
+    accessMethod: "btree",
+    valid: true,
+    ready: true,
+    live: true,
+    unique: !templateKind,
+    immediate: true,
+    exclusion: false,
+    primary: false,
+    clustered: false,
+    replicaIdentity: false,
+    nullsNotDistinct: false,
+    keyAttributeCount: templateKind ? 3 : 2,
+    attributeCount: templateKind ? 3 : 2,
+    hasExpressions: false,
+    hasPredicate: partial,
+    hasOptions: false,
+    keyColumnsExact: true,
+    noConstraintDependency: true,
+    predicate: partial ? '("lineageId" IS NOT NULL)' : null,
+    columnOne: columns[0],
+    columnTwo: columns[1],
+    columnThree: columns[2],
+    columnFour: columns[3],
+    ...overrides,
+  };
+}
+
+function exactConstraintRow(overrides: Record<string, unknown> = {}) {
+  return {
+    type: "c",
+    validated: true,
+    local: true,
+    inheritCount: 0,
+    parentId: "0",
+    noInherit: false,
+    deferrable: false,
+    deferred: false,
+    columnKeyExact: true,
+    expression: '("lineageId" IS NOT NULL)',
+    ...overrides,
+  };
+}
+
+function exactTransitionTriggerRow(overrides: Record<string, unknown> = {}) {
+  return {
+    enabled: "O",
+    triggerType: 7,
+    attributeCount: 0,
+    argumentCount: 0,
+    arguments: "",
+    functionName: "note_templates_assign_lineage_during_transition",
+    functionSchema: "public",
+    language: "plpgsql",
+    securityDefiner: false,
+    leakproof: false,
+    volatility: "v",
+    parallel: "u",
+    functionKind: "f",
+    functionArgumentCount: 0,
+    returnsTrigger: true,
+    functionConfig: null,
+    functionSource: `BEGIN
+  IF NEW."lineageId" IS NULL THEN
+    NEW."lineageId" := NEW."id";
+  END IF;
+  RETURN NEW;
+END;`,
+    ...overrides,
+  };
+}
+
 describe("Template Twin NoteTemplate lineage online transition", () => {
   it("keeps prisma migrate deploy expand-only for the populated table", () => {
     expect(EXPAND_MIGRATION).toContain('ADD COLUMN "lineageId" TEXT');
@@ -60,7 +152,7 @@ describe("Template Twin NoteTemplate lineage online transition", () => {
       "template_twin_lineage_progress_guard_update_delete",
     );
     expect(EXPAND_MIGRATION).toContain(
-      'OLD."phase" = \'CONTRACTED\' AND NEW IS DISTINCT FROM OLD',
+      "OLD.\"phase\" = 'CONTRACTED' AND NEW IS DISTINCT FROM OLD",
     );
     expect(EXPAND_MIGRATION).not.toMatch(
       /UPDATE\s+"note_templates"\s+SET\s+"lineageId"/i,
@@ -94,7 +186,12 @@ describe("Template Twin NoteTemplate lineage online transition", () => {
       'CREATE INDEX CONCURRENTLY "${TEMPLATE_KIND_INDEX}"',
     );
     expect(OPERATOR).toContain("DROP INDEX CONCURRENTLY");
-    expect(OPERATOR).toContain("LINEAGE_MIGRATION_BACKFILL_REQUIRES_GUARD_INDEX");
+    expect(OPERATOR).toContain(
+      "LINEAGE_MIGRATION_BACKFILL_REQUIRES_GUARD_INDEX",
+    );
+    expect(OPERATOR).toContain("ns.nspname = 'public'");
+    expect(OPERATOR).toContain("'public.\"note_templates\"'::regclass");
+    expect(OPERATOR).not.toContain("current_schema()");
   });
 
   it("bounds batch sizes and stores only stable failure codes", () => {
@@ -106,23 +203,27 @@ describe("Template Twin NoteTemplate lineage online transition", () => {
       "UNCLASSIFIED_OPERATOR_FAILURE",
     );
     expect(
-      sanitizeLineageMigrationError(new Error("canceling statement due to lock timeout")),
+      sanitizeLineageMigrationError(
+        new Error("canceling statement due to lock timeout"),
+      ),
     ).toBe("LOCK_TIMEOUT");
   });
 
   it("refuses a batch until the independently verified guard index is valid", async () => {
-    const client = {
-      $queryRawUnsafe: vi.fn().mockResolvedValue([
-        { exists: false, isValid: false, isReady: false },
-      ]),
-      $executeRawUnsafe: vi.fn(),
-      $transaction: vi.fn(),
-    } as unknown as TransactionalRawSqlClient;
+    const client = {} as TransactionalRawSqlClient;
+    client.$queryRawUnsafe = vi.fn(async (sql: string) => {
+      if (sql.includes("migration_progress")) return [progress()];
+      if (sql.includes("pg_get_indexdef")) return [];
+      if (sql.includes("SELECT object.relkind::TEXT")) return [];
+      throw new Error(`Unexpected SQL: ${sql}`);
+    }) as RawSqlClient["$queryRawUnsafe"];
+    client.$executeRawUnsafe = vi.fn().mockResolvedValue(0);
+    client.$transaction = vi.fn(async (callback) => callback(client));
 
     await expect(backfillLineageBatch(client, 100)).rejects.toThrow(
       "LINEAGE_MIGRATION_BACKFILL_REQUIRES_GUARD_INDEX",
     );
-    expect(client.$transaction).not.toHaveBeenCalled();
+    expect(client.$transaction).toHaveBeenCalledOnce();
   });
 
   it("commits a primary-key batch and durable cursor in one transaction", async () => {
@@ -133,32 +234,40 @@ describe("Template Twin NoteTemplate lineage online transition", () => {
       executes.push(sql);
       return 0;
     });
-    client.$queryRawUnsafe = vi.fn(async (sql: string, ...values: unknown[]) => {
-      queries.push({ sql, values });
-      if (sql.includes("FROM pg_class c")) {
-        return [{ exists: true, isValid: true, isReady: true }];
-      }
-      if (sql.includes("pg_advisory_xact_lock")) return [{}];
-      if (sql.includes("FOR UPDATE") && sql.includes("migration_progress")) {
-        return [progress()];
-      }
-      if (sql.includes("WITH batch AS")) {
-        return [{ count: 2n, lastId: "template-0002" }];
-      }
-      if (sql.includes('UPDATE "template_twin_lineage_migration_progress"')) {
-        return [
-          progress({
-            phase: "BACKFILLING",
-            lastProcessedId: "template-0002",
-            rowsProcessed: 2n,
-            batchCount: 1n,
-            lastBatchRows: 2,
-            startedAt: new Date("2026-07-16T00:00:00.000Z"),
-          }),
-        ];
-      }
-      throw new Error(`Unexpected SQL: ${sql}`);
-    }) as RawSqlClient["$queryRawUnsafe"];
+    client.$queryRawUnsafe = vi.fn(
+      async (sql: string, ...values: unknown[]) => {
+        queries.push({ sql, values });
+        if (sql.includes("pg_get_indexdef")) {
+          return [exactIndexRow(String(values[0]))];
+        }
+        if (sql.includes("FROM pg_catalog.pg_trigger trigger_catalog")) {
+          return [exactTransitionTriggerRow()];
+        }
+        if (sql.includes("FROM pg_class c")) {
+          return [{ exists: true, isValid: true, isReady: true }];
+        }
+        if (sql.includes("pg_advisory_xact_lock")) return [{}];
+        if (sql.includes("FOR UPDATE") && sql.includes("migration_progress")) {
+          return [progress()];
+        }
+        if (sql.includes("WITH batch AS")) {
+          return [{ count: 2n, lastId: "template-0002" }];
+        }
+        if (sql.includes('UPDATE "template_twin_lineage_migration_progress"')) {
+          return [
+            progress({
+              phase: "BACKFILLING",
+              lastProcessedId: "template-0002",
+              rowsProcessed: 2n,
+              batchCount: 1n,
+              lastBatchRows: 2,
+              startedAt: new Date("2026-07-16T00:00:00.000Z"),
+            }),
+          ];
+        }
+        throw new Error(`Unexpected SQL: ${sql}`);
+      },
+    ) as RawSqlClient["$queryRawUnsafe"];
     client.$transaction = vi.fn(async (callback) => callback(client));
 
     const result = await backfillLineageBatch(client, 2);
@@ -180,30 +289,52 @@ describe("Template Twin NoteTemplate lineage online transition", () => {
 
   it("creates and catalog-verifies the partial guard outside a transaction", async () => {
     let indexExists = false;
+    let currentPhase = "EXPANDED";
     const standaloneSql: string[] = [];
     const client = {} as TransactionalRawSqlClient;
-    client.$executeRawUnsafe = vi.fn(async (sql: string) => {
-      if (sql.includes("CREATE UNIQUE INDEX CONCURRENTLY")) indexExists = true;
-      if (/^CREATE UNIQUE INDEX CONCURRENTLY/m.test(sql)) {
-        standaloneSql.push(sql);
-      }
-      return 0;
-    });
-    client.$queryRawUnsafe = vi.fn(async (sql: string) => {
-      if (sql.includes("FROM pg_class c")) {
-        return [
-          {
-            exists: indexExists,
-            isValid: indexExists,
-            isReady: indexExists,
-          },
-        ];
-      }
-      if (sql.includes("pg_advisory_xact_lock")) return [{}];
-      if (sql.includes("FOR UPDATE")) return [progress({ phase: "EXPANDED" })];
-      if (sql.includes("migration_progress")) return [progress({ phase: "EXPANDED" })];
-      throw new Error(`Unexpected SQL: ${sql}`);
-    }) as RawSqlClient["$queryRawUnsafe"];
+    client.$executeRawUnsafe = vi.fn(
+      async (sql: string, ...values: unknown[]) => {
+        if (sql.includes("CREATE UNIQUE INDEX CONCURRENTLY"))
+          indexExists = true;
+        if (
+          sql.includes('UPDATE "template_twin_lineage_migration_progress"') &&
+          typeof values[1] === "string"
+        ) {
+          currentPhase = values[1];
+        }
+        if (/^CREATE UNIQUE INDEX CONCURRENTLY/m.test(sql)) {
+          standaloneSql.push(sql);
+        }
+        return 0;
+      },
+    );
+    client.$queryRawUnsafe = vi.fn(
+      async (sql: string, ...values: unknown[]) => {
+        if (sql.includes("pg_get_indexdef")) {
+          return indexExists ? [exactIndexRow(String(values[0]))] : [];
+        }
+        if (sql.includes("SELECT object.relkind::TEXT")) return [];
+        if (sql.includes("FROM pg_catalog.pg_trigger trigger_catalog")) {
+          return [exactTransitionTriggerRow()];
+        }
+        if (sql.includes("FROM pg_class c")) {
+          return [
+            {
+              exists: indexExists,
+              isValid: indexExists,
+              isReady: indexExists,
+            },
+          ];
+        }
+        if (sql.includes("pg_advisory_xact_lock")) return [{}];
+        if (sql.includes("FOR UPDATE"))
+          return [progress({ phase: currentPhase })];
+        if (sql.includes("migration_progress")) {
+          return [progress({ phase: currentPhase })];
+        }
+        throw new Error(`Unexpected SQL: ${sql}`);
+      },
+    ) as RawSqlClient["$queryRawUnsafe"];
     client.$transaction = vi.fn(async (callback) => callback(client));
 
     await buildLineageGuardIndex(client);
@@ -212,6 +343,78 @@ describe("Template Twin NoteTemplate lineage online transition", () => {
     expect(client.$transaction).not.toHaveBeenCalledWith(
       expect.any(Function),
       expect.objectContaining({ isolationLevel: expect.anything() }),
+    );
+  });
+
+  it("requires the complete fixed index topology, including predicate and bounds", async () => {
+    const rows = new Map([
+      [LINEAGE_PARTIAL_INDEX, exactIndexRow(LINEAGE_PARTIAL_INDEX)],
+      [LINEAGE_FINAL_INDEX, exactIndexRow(LINEAGE_FINAL_INDEX)],
+      [TEMPLATE_KIND_INDEX, exactIndexRow(TEMPLATE_KIND_INDEX)],
+    ]);
+    const client = {
+      $executeRawUnsafe: vi.fn(),
+      $queryRawUnsafe: vi.fn(async (_sql: string, indexName: unknown) => {
+        const row = rows.get(String(indexName));
+        return row ? [row] : [];
+      }),
+    } as unknown as RawSqlClient;
+
+    await expect(
+      assertExactLineageIndexCatalog(client, LINEAGE_PARTIAL_INDEX),
+    ).resolves.toBeUndefined();
+    await expect(
+      assertExactLineageIndexCatalog(client, LINEAGE_FINAL_INDEX),
+    ).resolves.toBeUndefined();
+    await expect(
+      assertExactLineageIndexCatalog(client, TEMPLATE_KIND_INDEX),
+    ).resolves.toBeUndefined();
+    const indexContractSql = String(
+      vi.mocked(client.$queryRawUnsafe).mock.calls[0]?.[0],
+    );
+    expect(indexContractSql).toContain("ELSE ARRAY[]::SMALLINT[]");
+    expect(indexContractSql).not.toContain("ELSE FALSE");
+
+    rows.set(
+      LINEAGE_FINAL_INDEX,
+      exactIndexRow(LINEAGE_FINAL_INDEX, { columnThree: "unexpected" }),
+    );
+    await expect(
+      assertExactLineageIndexCatalog(client, LINEAGE_FINAL_INDEX),
+    ).rejects.toThrow("LINEAGE_MIGRATION_INDEX_DEFINITION_MISMATCH");
+
+    rows.set(
+      LINEAGE_PARTIAL_INDEX,
+      exactIndexRow(LINEAGE_PARTIAL_INDEX, { predicate: null }),
+    );
+    await expect(
+      assertExactLineageIndexCatalog(client, LINEAGE_PARTIAL_INDEX),
+    ).rejects.toThrow("LINEAGE_MIGRATION_INDEX_DEFINITION_MISMATCH");
+  });
+
+  it("requires the complete local nondeferrable lineage check contract", async () => {
+    let row = exactConstraintRow();
+    const client = {
+      $executeRawUnsafe: vi.fn(),
+      $queryRawUnsafe: vi.fn(async () => [row]),
+    } as unknown as RawSqlClient;
+
+    await expect(
+      assertExactLineageConstraintCatalog(client, true),
+    ).resolves.toBeUndefined();
+    row = exactConstraintRow({ expression: "version IS NOT NULL" });
+    await expect(
+      assertExactLineageConstraintCatalog(client, true),
+    ).rejects.toThrow("LINEAGE_MIGRATION_CONSTRAINT_DEFINITION_MISMATCH");
+    row = exactConstraintRow({ validated: false });
+    await expect(
+      assertExactLineageConstraintCatalog(client, false),
+    ).resolves.toBeUndefined();
+    await expect(
+      assertExactLineageConstraintCatalog(client, true),
+    ).rejects.toThrow("LINEAGE_MIGRATION_CONSTRAINT_DEFINITION_MISMATCH");
+    expect(LINEAGE_VALIDATION_CONSTRAINT).toBe(
+      "note_templates_lineageId_not_null_check",
     );
   });
 
@@ -227,7 +430,9 @@ describe("Template Twin NoteTemplate lineage online transition", () => {
   });
 
   it("keeps validation and the short NOT NULL contract as separate phases", () => {
-    const addCheck = OPERATOR.indexOf("CHECK (\"lineageId\" IS NOT NULL) NOT VALID");
+    const addCheck = OPERATOR.indexOf(
+      'CHECK ("lineageId" IS NOT NULL) NOT VALID',
+    );
     const validate = OPERATOR.indexOf("VALIDATE CONSTRAINT");
     const setNotNull = OPERATOR.indexOf(
       'ALTER COLUMN "lineageId" SET NOT NULL',

@@ -197,6 +197,13 @@ export function exactDatabasePrincipalCatalogQuery(input: {
               LEFT JOIN pg_catalog.pg_roles trigger_owner
                 ON trigger_owner.oid = trigger_function.proowner
               WHERE trigger.tgrelid = object.oid
+                -- PostgreSQL names internal RI triggers with catalog OIDs.
+                -- Their authoritative semantics are already frozen below by
+                -- the complete pg_constraint definition; including those
+                -- implementation names makes identical restored schemas hash
+                -- differently across clusters. User and user-created
+                -- constraint triggers remain part of this manifest.
+                AND trigger.tgisinternal = FALSE
             ), '[]'::pg_catalog.jsonb),
             COALESCE((
               SELECT pg_catalog.jsonb_agg(
@@ -231,7 +238,97 @@ export function exactDatabasePrincipalCatalogQuery(input: {
                   constraint_index.relname,
                   pg_catalog.pg_get_constraintdef(
                     constraint_object.oid, FALSE
-                  )
+                  ),
+                  COALESCE((
+                    SELECT pg_catalog.jsonb_agg(
+                      pg_catalog.jsonb_build_array(
+                        enforcement_namespace.nspname,
+                        enforcement_relation.relname,
+                        trigger_constraint_namespace.nspname,
+                        trigger_constraint_relation.relname,
+                        enforcement_trigger.tgenabled,
+                        enforcement_trigger.tgtype,
+                        enforcement_trigger.tgisinternal,
+                        enforcement_trigger.tgdeferrable,
+                        enforcement_trigger.tginitdeferred,
+                        enforcement_trigger.tgparentid <> 0,
+                        pg_catalog.cardinality(
+                          enforcement_trigger.tgattr::SMALLINT[]
+                        ),
+                        enforcement_trigger.tgnargs,
+                        pg_catalog.encode(
+                          enforcement_trigger.tgargs, 'hex'
+                        ),
+                        enforcement_function_namespace.nspname,
+                        enforcement_function.proname,
+                        CASE
+                          WHEN enforcement_function.proowner =
+                              selected.database_owner_oid
+                            THEN '<current-db-owner>'
+                          ELSE COALESCE(
+                            enforcement_function_owner.rolname,
+                            '<unknown-owner>'
+                          )
+                        END,
+                        enforcement_language.lanname,
+                        enforcement_function.prosecdef,
+                        enforcement_function.proleakproof,
+                        enforcement_function.provolatile,
+                        enforcement_function.proparallel,
+                        enforcement_function.prokind,
+                        enforcement_function.pronargs,
+                        pg_catalog.format_type(
+                          enforcement_function.prorettype, NULL
+                        ),
+                        pg_catalog.encode(pg_catalog.sha256(
+                          pg_catalog.convert_to(
+                            pg_catalog.pg_get_functiondef(
+                              enforcement_function.oid
+                            ),
+                            'UTF8'
+                          )
+                        ), 'hex')
+                      ) ORDER BY
+                        enforcement_namespace.nspname COLLATE "C",
+                        enforcement_relation.relname COLLATE "C",
+                        trigger_constraint_namespace.nspname COLLATE "C",
+                        trigger_constraint_relation.relname COLLATE "C",
+                        enforcement_trigger.tgtype,
+                        enforcement_function_namespace.nspname COLLATE "C",
+                        enforcement_function.proname COLLATE "C",
+                        enforcement_trigger.tgenabled
+                    )
+                    FROM pg_catalog.pg_trigger enforcement_trigger
+                    JOIN pg_catalog.pg_class enforcement_relation
+                      ON enforcement_relation.oid =
+                         enforcement_trigger.tgrelid
+                    JOIN pg_catalog.pg_namespace enforcement_namespace
+                      ON enforcement_namespace.oid =
+                         enforcement_relation.relnamespace
+                    LEFT JOIN pg_catalog.pg_class trigger_constraint_relation
+                      ON trigger_constraint_relation.oid =
+                         enforcement_trigger.tgconstrrelid
+                    LEFT JOIN pg_catalog.pg_namespace
+                      trigger_constraint_namespace
+                      ON trigger_constraint_namespace.oid =
+                         trigger_constraint_relation.relnamespace
+                    JOIN pg_catalog.pg_proc enforcement_function
+                      ON enforcement_function.oid =
+                         enforcement_trigger.tgfoid
+                    JOIN pg_catalog.pg_namespace
+                      enforcement_function_namespace
+                      ON enforcement_function_namespace.oid =
+                         enforcement_function.pronamespace
+                    JOIN pg_catalog.pg_language enforcement_language
+                      ON enforcement_language.oid =
+                         enforcement_function.prolang
+                    LEFT JOIN pg_catalog.pg_roles enforcement_function_owner
+                      ON enforcement_function_owner.oid =
+                         enforcement_function.proowner
+                    WHERE enforcement_trigger.tgconstraint =
+                          constraint_object.oid
+                      AND enforcement_trigger.tgisinternal = TRUE
+                  ), '[]'::pg_catalog.jsonb)
                 ) ORDER BY constraint_object.conname COLLATE "C",
                   constraint_object.contype
               )

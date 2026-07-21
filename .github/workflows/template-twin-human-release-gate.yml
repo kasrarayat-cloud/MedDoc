@@ -67,6 +67,9 @@ jobs:
       - name: Install locked dependencies without lifecycle credentials
         run: npm ci --no-audit --no-fund
 
+      - name: Prove the PostgreSQL host-authentication contract
+        run: npm run postgres-host-auth:pg-test -w @meddoc/db
+
       - name: Generate the Prisma client used by the production-path resolver
         run: npm run db:generate
 

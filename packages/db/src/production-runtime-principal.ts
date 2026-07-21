@@ -1,4 +1,5 @@
 import { assertExactDatabasePrincipal } from "./exact-database-principal";
+import { assertPostgresHostAuthenticationContract } from "./postgres-host-auth";
 
 export const QUILLMD_DATABASE_PRINCIPAL_PROFILE_ENV =
   "QUILLMD_DATABASE_PRINCIPAL_PROFILE" as const;
@@ -103,6 +104,7 @@ export async function assertProductionRuntimeDatabasePrincipal(input: {
   const role = productionRuntimeServiceRole(input.environment);
   if (profile === QUILLMD_EXACT_PRODUCTION_DATABASE_PRINCIPAL_PROFILE) {
     try {
+      await assertPostgresHostAuthenticationContract({ prisma: input.prisma });
       await assertExactDatabasePrincipal({
         prisma: input.prisma,
         ...QUILLMD_PRODUCTION_RUNTIME_DATABASE_PRINCIPALS[role],
@@ -118,6 +120,7 @@ export async function assertProductionRuntimeDatabasePrincipal(input: {
     input.syntheticQaResourceBoundaryAllowed
   ) {
     try {
+      await assertPostgresHostAuthenticationContract({ prisma: input.prisma });
       await assertExactDatabasePrincipal({
         prisma: input.prisma,
         ...QUILLMD_PRODUCTION_RUNTIME_DATABASE_PRINCIPALS[role],

@@ -6,6 +6,8 @@ export const AUTH_TOKEN_TRANSITION_TRIGGER =
   "aaa_auth_tokens_one_unused_transition" as const;
 export const AUTH_TOKEN_TRANSITION_FUNCTION =
   "auth_tokens_guard_one_unused_transition" as const;
+export const AUTH_TOKEN_LINEARIZATION_PROOF_CONTRACT_VERSION =
+  "quillmd-auth-token-linearization-proof-v2" as const;
 
 export interface AuthTokenLinearizationStatus {
   duplicateGroups: number;
@@ -331,6 +333,21 @@ export async function readAuthTokenLinearizationStatus(
   };
 }
 
+/** Read one deterministic approval state from a single MVCC snapshot. */
+export async function readAuthTokenLinearizationStatusSnapshot(
+  client: PoolClient,
+): Promise<AuthTokenLinearizationStatus> {
+  await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+  try {
+    const status = await readAuthTokenLinearizationStatus(client);
+    await client.query("COMMIT");
+    return status;
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  }
+}
+
 /** Retire older unused rows for at most batchSize authority keys. */
 export async function reconcileAuthTokenDuplicateBatch(
   client: PoolClient,
@@ -417,7 +434,8 @@ export async function reconcileAuthTokenDuplicateBatch(
 /**
  * Build the final invariant outside a transaction, recover an interrupted
  * invalid shell, catalog-verify it, then remove the transition trigger under
- * a separately bounded metadata transaction.
+ * a separately bounded table lock. The final invariant and exact transition
+ * state are re-proved while writes are excluded from the linearization point.
  */
 export async function buildAuthTokenUniqueIndex(
   client: PoolClient,
@@ -470,24 +488,59 @@ export async function buildAuthTokenUniqueIndex(
     throw new Error("AUTH_TOKEN_INDEX_NOT_VALID");
   }
 
-  const finalTriggerState = await readTransitionTriggerState(client);
-  if (finalTriggerState === "mismatch") {
-    throw new Error("AUTH_TOKEN_TRANSITION_GUARD_MISMATCH");
-  }
-  if (finalTriggerState === "exact") {
-    await client.query("BEGIN");
-    try {
-      await client.query("SET LOCAL lock_timeout = '2s'");
-      await client.query("SET LOCAL statement_timeout = '30s'");
+  await client.query("BEGIN");
+  try {
+    await client.query("SET LOCAL lock_timeout = '2s'");
+    await client.query("SET LOCAL statement_timeout = '30s'");
+    await client.query(
+      `LOCK TABLE public."auth_tokens" IN ACCESS EXCLUSIVE MODE`,
+    );
+
+    const lockedIndex = await readIndex(client);
+    if (
+      !(
+        lockedIndex.exists &&
+        lockedIndex.valid &&
+        lockedIndex.ready &&
+        lockedIndex.live &&
+        lockedIndex.exact
+      )
+    ) {
+      throw new Error("AUTH_TOKEN_INDEX_NOT_VALID");
+    }
+    if ((await countDuplicateGroups(client)) !== 0) {
+      throw new Error("AUTH_TOKEN_DUPLICATES_REMAIN");
+    }
+    const lockedTriggerState = await readTransitionTriggerState(client);
+    if (lockedTriggerState === "mismatch") {
+      throw new Error("AUTH_TOKEN_TRANSITION_GUARD_MISMATCH");
+    }
+    if (lockedTriggerState === "exact") {
       await client.query(
-        `DROP TRIGGER IF EXISTS "${AUTH_TOKEN_TRANSITION_TRIGGER}"
+        `DROP TRIGGER "${AUTH_TOKEN_TRANSITION_TRIGGER}"
            ON public."auth_tokens"`,
       );
-      await client.query("COMMIT");
-    } catch (error) {
-      await client.query("ROLLBACK").catch(() => undefined);
-      throw error;
     }
+
+    const finalIndex = await readIndex(client);
+    const finalTriggerState = await readTransitionTriggerState(client);
+    if (
+      !(
+        finalIndex.exists &&
+        finalIndex.valid &&
+        finalIndex.ready &&
+        finalIndex.live &&
+        finalIndex.exact
+      ) ||
+      finalTriggerState !== "absent" ||
+      (await countDuplicateGroups(client)) !== 0
+    ) {
+      throw new Error("AUTH_TOKEN_LINEARIZATION_INCOMPLETE");
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
   }
 
   const status = await readAuthTokenLinearizationStatus(client);

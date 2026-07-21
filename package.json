@@ -25,8 +25,8 @@
     "eval:doc-editor": "npm run eval:doc-editor -w meddoc-pro",
     "eval:clinical-notes": "npm run eval:clinical-notes -w meddoc-pro",
     "db:generate": "npm run generate -w @meddoc/db",
-    "db:migrate:deploy": "npm run migrate:deploy -w @meddoc/db",
-    "db:migrate:status": "npm run migrate:status -w @meddoc/db",
+    "db:migrate:status": "npm run database-release:migrate -w @meddoc/db -- --phase status",
+    "db:migrate:synthetic-ci": "npm run database-release:synthetic-ci -w @meddoc/db --",
     "db:migrate:dev": "npm run migrate:dev -w @meddoc/db"
   },
   "devDependencies": {

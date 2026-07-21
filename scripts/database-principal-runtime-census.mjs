@@ -1,13 +1,22 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
-import { realpathSync, statSync } from "node:fs";
+import { readFileSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
 const EXACT_PROFILE = "exact-production-v1";
 const SYNTHETIC_QA_PROFILE = "synthetic-disposable-qa-v1";
 const PROFILE_ENVIRONMENT = "QUILLMD_DATABASE_PRINCIPAL_PROFILE";
+const STATEMENT_TIMEOUT_ENVIRONMENT = "PRISMA_STATEMENT_TIMEOUT_MS";
+const STATIC_STATEMENT_TIMEOUT = "${PRISMA_STATEMENT_TIMEOUT_MS:-30000}";
+const MIGRATION_LOCK_TIMEOUT_ENVIRONMENT =
+  "DATABASE_RELEASE_MIGRATION_LOCK_TIMEOUT_MS";
+const STATIC_MIGRATION_LOCK_TIMEOUT =
+  "${DATABASE_RELEASE_MIGRATION_LOCK_TIMEOUT_MS:-5000}";
+const MIGRATION_NETWORK_BOUNDARY_ENVIRONMENT =
+  "DATABASE_RELEASE_MIGRATION_NETWORK_BOUNDARY";
+const MIGRATION_NETWORK_BOUNDARY = "postgres-loopback-v1";
 const DATABASE_OWNER_LOGIN = "meddoc";
 const BACKUP_LOGIN = "meddoc_backup";
 const RELEASE_SECURITY_LOGIN = "meddoc_release_security";
@@ -28,8 +37,40 @@ const QA_PASSWORD_ENVIRONMENT_BY_LOGIN = new Map([
 ]);
 const BACKUP_IMAGE =
   "prodrigestivill/postgres-backup-local@sha256:a0103fbce0c48ccc7693ddbb2a2bfa733048db845354f635efef9e4566de185d";
-const POSTGRES_IMAGE =
+const POSTGRES_BASE_IMAGE =
   "pgvector/pgvector:pg16@sha256:7d400e340efb42f4d8c9c12c6427adb253f726881a9985d2a471bf0eed824dff";
+const STATIC_POSTGRES_IMAGE =
+  "${QUILLMD_POSTGRES_IMAGE:?QUILLMD_POSTGRES_IMAGE must be an immutable sha256 digest}";
+const APPROVED_POSTGRES_IMAGE_ENVIRONMENT = "QUILLMD_APPROVED_POSTGRES_IMAGE";
+const POSTGRES_DOCKERFILE = "infra/postgres/Dockerfile";
+const POSTGRES_DOCKERIGNORE = "infra/postgres/.dockerignore";
+const POSTGRES_DOCKERIGNORE_SHA256 =
+  "d7084621521d6316ab21063e757e96ac57e8910c3b5571c0557ae28f544c01f0";
+const POSTGRES_DOCKERFILE_SHA256 =
+  "ea50af8ce2e7561d30931b71490a7c5cfb20799bd9f69ef63c4a1e5f0001035e";
+const POSTGRES_HBA_PATH = "/etc/postgresql/quillmd-pg_hba.conf";
+const POSTGRES_HBA_SHA256 =
+  "8b76fed3fc6791617a828fcf5f1cbff35d681d3e753cda9594c89df52ea929b0";
+const POSTGRES_HBA_VERIFIER_PATH = "/opt/quillmd/verify-quillmd-host-auth.sh";
+const POSTGRES_HBA_VERIFIER_SHA256 =
+  "c243bb5e2d1313025c392bb5a510e0e9d289b0f316e0eb236881484bb0d79e18";
+const POSTGRES_ENTRYPOINT_SOURCE =
+  "infra/postgres/quillmd-postgres-entrypoint.sh";
+const POSTGRES_ENTRYPOINT_PATH =
+  "/usr/local/bin/quillmd-postgres-entrypoint.sh";
+const POSTGRES_ENTRYPOINT_SHA256 =
+  "1121ef841eea8e0b2c7ba3e23c261f19c2806e17217eedd564eccf8c2d705d0a";
+const POSTGRES_HBA_COMMAND = [
+  "postgres",
+  "-c",
+  `hba_file=${POSTGRES_HBA_PATH}`,
+  "-c",
+  "password_encryption=scram-sha-256",
+  "-c",
+  `quillmd.hba_contract_path=${POSTGRES_HBA_PATH}`,
+  "-c",
+  `quillmd.hba_contract_sha256=${POSTGRES_HBA_SHA256}`,
+];
 let staticUnresolved = false;
 let resolvedCredentialFingerprintByLogin = new Map();
 const DATABASE_CREDENTIAL_ENVIRONMENT_KEYS = [
@@ -222,7 +263,6 @@ const PRODUCTION_NETWORK_CONSUMERS = new Map([
   [
     "default",
     [
-      "db-migrate",
       "marketing",
       "meddoc-pro",
       "minio",
@@ -252,7 +292,6 @@ const QA_NETWORK_CONSUMERS = new Map([
   [
     "default",
     [
-      "db-migrate",
       "marketing",
       "minio",
       "minio-template-init",
@@ -1309,6 +1348,69 @@ function normalizedResourceConsumers(values) {
   return [...values].map((value) => JSON.stringify(value)).sort();
 }
 
+function hasExactPostgresHostAuthenticationSources() {
+  const contracts = [
+    [
+      path.join(process.cwd(), POSTGRES_DOCKERIGNORE),
+      POSTGRES_DOCKERIGNORE_SHA256,
+      false,
+    ],
+    [
+      path.join(process.cwd(), POSTGRES_DOCKERFILE),
+      POSTGRES_DOCKERFILE_SHA256,
+      false,
+    ],
+    [
+      path.join(process.cwd(), "infra/postgres/quillmd-pg_hba.conf"),
+      POSTGRES_HBA_SHA256,
+      false,
+    ],
+    [
+      path.join(process.cwd(), "infra/postgres/verify-quillmd-host-auth.sh"),
+      POSTGRES_HBA_VERIFIER_SHA256,
+      true,
+    ],
+    [
+      path.join(process.cwd(), POSTGRES_ENTRYPOINT_SOURCE),
+      POSTGRES_ENTRYPOINT_SHA256,
+      false,
+    ],
+  ];
+  try {
+    return contracts.every(([source, expectedSha256, executable]) => {
+      const metadata = statSync(source);
+      return (
+        metadata.isFile() &&
+        realpathSync(source) === source &&
+        (!executable || (metadata.mode & 0o111) !== 0) &&
+        createHash("sha256").update(readFileSync(source)).digest("hex") ===
+          expectedSha256
+      );
+    });
+  } catch {
+    return false;
+  }
+}
+
+function hasExactQaPostgresBuild(build) {
+  return (
+    hasExactKeys(build, ["context", "dockerfile"]) &&
+    build.context === path.join(process.cwd(), "infra/postgres") &&
+    build.dockerfile === "Dockerfile"
+  );
+}
+
+function hasExactProductionPostgresImage(image) {
+  if (staticUnresolved) return image === STATIC_POSTGRES_IMAGE;
+  const approved = process.env[APPROVED_POSTGRES_IMAGE_ENVIRONMENT];
+  return (
+    typeof approved === "string" &&
+    approved !== POSTGRES_BASE_IMAGE &&
+    /@sha256:[a-f0-9]{64}$/u.test(approved) &&
+    image === approved
+  );
+}
+
 function hasExactNetworkResource(resource, key, qa, projectName) {
   if (!resource || typeof resource !== "object" || Array.isArray(resource)) {
     return false;
@@ -1916,8 +2018,13 @@ function assertExclusiveBackupResources(model, services, qa) {
     ) {
       consumers.network.push(name);
     }
+    const exactMigrationNetworkNamespace =
+      name === "db-migrate" &&
+      service?.network_mode === "service:postgres" &&
+      isExactSegmentedMigrator(name, service, qa);
     if (
-      service?.network_mode !== undefined ||
+      (service?.network_mode !== undefined &&
+        !exactMigrationNetworkNamespace) ||
       service?.volumes_from !== undefined ||
       service?.extra_hosts !== undefined ||
       service?.links !== undefined ||
@@ -2107,7 +2214,11 @@ function isExactDatabaseServer(name, service, inspection, qa) {
     .sort();
   const shared =
     name === "postgres" &&
-    service?.image === POSTGRES_IMAGE &&
+    (qa
+      ? service?.image === undefined && hasExactQaPostgresBuild(service?.build)
+      : service?.build === undefined &&
+        hasExactProductionPostgresImage(service?.image)) &&
+    hasExactPostgresHostAuthenticationSources() &&
     environment.POSTGRES_USER === DATABASE_OWNER_LOGIN &&
     typeof environment.POSTGRES_PASSWORD === "string" &&
     environment.PGDATA === "/var/lib/postgresql/data/pgdata" &&
@@ -2117,6 +2228,7 @@ function isExactDatabaseServer(name, service, inspection, qa) {
       JSON.stringify([
         "PGDATA",
         "POSTGRES_DB",
+        "POSTGRES_INITDB_ARGS",
         "POSTGRES_PASSWORD",
         "POSTGRES_USER",
       ]) &&
@@ -2126,20 +2238,32 @@ function isExactDatabaseServer(name, service, inspection, qa) {
   if (qa) {
     return (
       hasExactKeys(service, [
-        ...(!staticUnresolved ? ["command", "entrypoint"] : []),
+        "build",
+        "cap_drop",
+        "command",
+        "entrypoint",
         "cpus",
         "environment",
         "healthcheck",
-        "image",
         "mem_limit",
         "networks",
+        "read_only",
         "restart",
         "secrets",
+        "tmpfs",
+        "user",
         "volumes",
       ]) &&
-      (staticUnresolved ||
-        (service.command === null && service.entrypoint === null)) &&
+      exactArray(service.command, POSTGRES_HBA_COMMAND) &&
+      exactArray(service.entrypoint, [POSTGRES_ENTRYPOINT_PATH]) &&
       service.restart === "no" &&
+      service.user === "999:999" &&
+      exactArray(service.cap_drop, ["ALL"]) &&
+      service.read_only === true &&
+      exactArray(service.tmpfs, [
+        "/tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777",
+        "/var/run/postgresql:rw,noexec,nosuid,nodev,size=16m,uid=999,gid=999,mode=3777",
+      ]) &&
       service.cpus === (staticUnresolved ? "1.0" : 1) &&
       service.mem_limit === (staticUnresolved ? "512m" : "536870912") &&
       hasExactKeys(environment, [
@@ -2150,11 +2274,14 @@ function isExactDatabaseServer(name, service, inspection, qa) {
         "DB_RUNTIME_PASSWORD",
         "PGDATA",
         "POSTGRES_DB",
+        "POSTGRES_INITDB_ARGS",
         "POSTGRES_PASSWORD",
         "POSTGRES_USER",
       ]) &&
       environment.POSTGRES_DB === "meddoc_qa_test" &&
       environment.POSTGRES_PASSWORD === "qa_test_pw" &&
+      environment.POSTGRES_INITDB_ARGS ===
+        "--auth-host=scram-sha-256 --auth-local=trust" &&
       isRequiredResolvedSecret(
         environment.DB_RUNTIME_PASSWORD,
         "QA_DB_RUNTIME_PASSWORD",
@@ -2201,8 +2328,9 @@ function isExactDatabaseServer(name, service, inspection, qa) {
         "timeout",
       ]) &&
       exactArray(service.healthcheck.test, [
-        "CMD-SHELL",
-        "pg_isready -U meddoc",
+        "CMD",
+        "/bin/sh",
+        POSTGRES_HBA_VERIFIER_PATH,
       ]) &&
       service.healthcheck.interval === "5s" &&
       service.healthcheck.retries === 10 &&
@@ -2214,7 +2342,8 @@ function isExactDatabaseServer(name, service, inspection, qa) {
   return (
     hasExactKeys(service, [
       "cap_drop",
-      ...(!staticUnresolved ? ["command", "entrypoint"] : []),
+      "command",
+      "entrypoint",
       "cpus",
       "environment",
       "healthcheck",
@@ -2222,16 +2351,23 @@ function isExactDatabaseServer(name, service, inspection, qa) {
       "mem_limit",
       "networks",
       "ports",
+      "read_only",
       "restart",
       "secrets",
+      "tmpfs",
       "user",
       "volumes",
     ]) &&
-    (staticUnresolved ||
-      (service.command === null && service.entrypoint === null)) &&
+    exactArray(service.command, POSTGRES_HBA_COMMAND) &&
+    exactArray(service.entrypoint, [POSTGRES_ENTRYPOINT_PATH]) &&
     service.restart === "unless-stopped" &&
     service.user === "999:999" &&
     exactArray(service.cap_drop, ["ALL"]) &&
+    service.read_only === true &&
+    exactArray(service.tmpfs, [
+      "/tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777",
+      "/var/run/postgresql:rw,noexec,nosuid,nodev,size=16m,uid=999,gid=999,mode=3777",
+    ]) &&
     service.cpus === (staticUnresolved ? "1.0" : 1) &&
     service.mem_limit === (staticUnresolved ? "512m" : "536870912") &&
     hasExactKeys(environment, [
@@ -2242,10 +2378,13 @@ function isExactDatabaseServer(name, service, inspection, qa) {
       "DB_RUNTIME_PASSWORD",
       "PGDATA",
       "POSTGRES_DB",
+      "POSTGRES_INITDB_ARGS",
       "POSTGRES_PASSWORD",
       "POSTGRES_USER",
     ]) &&
     environment.POSTGRES_DB === "meddoc" &&
+    environment.POSTGRES_INITDB_ARGS ===
+      "--auth-host=scram-sha-256 --auth-local=trust" &&
     isRequiredResolvedSecret(environment.POSTGRES_PASSWORD, "DB_PASSWORD") &&
     isRequiredResolvedSecret(
       environment.DB_RUNTIME_PASSWORD,
@@ -2315,8 +2454,9 @@ function isExactDatabaseServer(name, service, inspection, qa) {
       "timeout",
     ]) &&
     exactArray(service.healthcheck.test, [
-      "CMD-SHELL",
-      "pg_isready -U meddoc",
+      "CMD",
+      "/bin/sh",
+      POSTGRES_HBA_VERIFIER_PATH,
     ]) &&
     service.healthcheck.interval === "5s" &&
     service.healthcheck.retries === 5 &&
@@ -2324,23 +2464,83 @@ function isExactDatabaseServer(name, service, inspection, qa) {
   );
 }
 
-function isExactOneShotMigrator(name, service, qa) {
+function hasExactMigrationLoopbackUrl(environment, qa) {
+  const inspection = inspectDatabaseEnvironment(environment);
+  const contract = inspection.postgresUrlContracts[0];
+  const expectedCredentialEnvironment = qa
+    ? null
+    : PASSWORD_ENVIRONMENT_BY_LOGIN.get(DATABASE_OWNER_LOGIN);
+  const expectedCredentialContract = qa
+    ? "synthetic-qa"
+    : staticUnresolved
+      ? `env:${expectedCredentialEnvironment ?? ""}`
+      : "resolved-base64url";
+  const expectedCredentialFingerprint =
+    !qa && !staticUnresolved
+      ? resolvedCredentialFingerprintByLogin.get(DATABASE_OWNER_LOGIN)
+      : null;
+  const normalizedActualQuery = JSON.stringify(
+    [...(contract?.queryEntries ?? [])].sort(
+      ([leftKey, leftValue], [rightKey, rightValue]) =>
+        leftKey === rightKey
+          ? leftValue.localeCompare(rightValue)
+          : leftKey.localeCompare(rightKey),
+    ),
+  );
+  const normalizedExpectedQuery = JSON.stringify([
+    ["options", CANONICAL_SEARCH_PATH_OPTION],
+    ["schema", "public"],
+  ]);
+  return (
+    hasOnlyIdentity(inspection, DATABASE_OWNER_LOGIN) &&
+    hasExactMechanisms(inspection, ["url:DATABASE_URL"]) &&
+    hasExactCanonicalSearchPath(inspection, 1) &&
+    inspection.postgresUrlContracts.length === 1 &&
+    contract?.key === "DATABASE_URL" &&
+    contract.authority === "127.0.0.1:5432" &&
+    contract.credentialContract === expectedCredentialContract &&
+    (qa ||
+      staticUnresolved ||
+      contract.credentialFingerprint === expectedCredentialFingerprint) &&
+    contract.database === (qa ? "meddoc_qa_test" : "meddoc") &&
+    contract.fragmentPresent === false &&
+    normalizedActualQuery === normalizedExpectedQuery
+  );
+}
+
+function isExactSegmentedMigrator(name, service, qa) {
   const environment = service?.environment ?? {};
+  const migrationLockTimeout = reviewedMigrationLockTimeout(environment);
   const sharedContract =
     name === "db-migrate" &&
     exactArray(service?.profiles, ["migrations"]) &&
-    exactArray(service?.entrypoint, ["npx", "--no-install", "prisma"]) &&
-    exactArray(service?.command, ["migrate", "deploy"]) &&
+    exactArray(service?.entrypoint, [
+      "npm",
+      "run",
+      "--silent",
+      "database-release:migrate",
+      "--",
+    ]) &&
+    exactArray(service?.command, ["--phase", "status"]) &&
     service?.working_dir === "/app/packages/db" &&
-    hasExactKeys(environment, ["DATABASE_URL"]) &&
+    hasExactKeys(environment, [
+      "DATABASE_URL",
+      MIGRATION_LOCK_TIMEOUT_ENVIRONMENT,
+      MIGRATION_NETWORK_BOUNDARY_ENVIRONMENT,
+      STATEMENT_TIMEOUT_ENVIRONMENT,
+    ]) &&
+    migrationLockTimeout !== null &&
+    environment[MIGRATION_NETWORK_BOUNDARY_ENVIRONMENT] ===
+      MIGRATION_NETWORK_BOUNDARY &&
+    hasExactMigrationLoopbackUrl(environment, qa) &&
     environment.QUILLMD_SERVICE_ROLE === undefined &&
     environment[PROFILE_ENVIRONMENT] === undefined &&
     hasExactKeys(service?.depends_on, ["postgres"]) &&
     hasExactKeys(service?.depends_on?.postgres, ["condition", "required"]) &&
     service.depends_on.postgres.condition === "service_healthy" &&
     service.depends_on.postgres.required === true &&
-    hasExactKeys(service?.networks, ["default"]) &&
-    service.networks.default === null;
+    service?.network_mode === "service:postgres" &&
+    service?.networks === undefined;
   if (!sharedContract) return false;
   if (qa) {
     const approvedMigratorImage =
@@ -2352,7 +2552,7 @@ function isExactOneShotMigrator(name, service, qa) {
         "entrypoint",
         "environment",
         "image",
-        "networks",
+        "network_mode",
         "profiles",
         "restart",
         "working_dir",
@@ -2374,7 +2574,7 @@ function isExactOneShotMigrator(name, service, qa) {
       "depends_on",
       "entrypoint",
       "environment",
-      "networks",
+      "network_mode",
       "profiles",
       "working_dir",
     ]) &&
@@ -2383,6 +2583,34 @@ function isExactOneShotMigrator(name, service, qa) {
     service.build.dockerfile === "apps/transcribe-md/Dockerfile" &&
     service.build.target === "builder"
   );
+}
+
+function reviewedMigrationLockTimeout(environment) {
+  const value = environment?.[MIGRATION_LOCK_TIMEOUT_ENVIRONMENT];
+  if (staticUnresolved) {
+    return value === STATIC_MIGRATION_LOCK_TIMEOUT ? value : null;
+  }
+  if (typeof value !== "string" || !/^[1-9][0-9]*$/u.test(value)) {
+    return null;
+  }
+  const milliseconds = Number(value);
+  return Number.isSafeInteger(milliseconds) && milliseconds <= 60_000
+    ? value
+    : null;
+}
+
+function reviewedStatementTimeout(environment) {
+  const value = environment?.[STATEMENT_TIMEOUT_ENVIRONMENT];
+  if (staticUnresolved) {
+    return value === STATIC_STATEMENT_TIMEOUT ? value : null;
+  }
+  if (typeof value !== "string" || !/^[1-9][0-9]*$/u.test(value)) {
+    return null;
+  }
+  const milliseconds = Number(value);
+  return Number.isSafeInteger(milliseconds) && milliseconds <= 2_147_483_647
+    ? value
+    : null;
 }
 
 let qa = false;
@@ -2435,20 +2663,22 @@ if (
 const migratorInspection = inspectDatabaseEnvironment(
   services["db-migrate"]?.environment ?? {},
 );
+const migratorStatementTimeout = reviewedStatementTimeout(
+  services["db-migrate"]?.environment ?? {},
+);
 if (
-  !isExactOneShotMigrator("db-migrate", services["db-migrate"], qa) ||
+  !isExactSegmentedMigrator("db-migrate", services["db-migrate"], qa) ||
   !hasOnlyIdentity(migratorInspection, DATABASE_OWNER_LOGIN) ||
   !hasExactMechanisms(migratorInspection, ["url:DATABASE_URL"]) ||
-  !hasExactReviewedPostgresUrls(
-    migratorInspection,
-    ["url:DATABASE_URL"],
-    DATABASE_OWNER_LOGIN,
+  !hasExactMigrationLoopbackUrl(
+    services["db-migrate"]?.environment ?? {},
     qa,
   ) ||
-  !hasExactCanonicalSearchPath(migratorInspection, 1)
+  !hasExactCanonicalSearchPath(migratorInspection, 1) ||
+  migratorStatementTimeout === null
 ) {
   fail(
-    "P1 pre-production blocker: exact one-shot db-migrate runtime is missing",
+    "P1 pre-production blocker: exact closed segmented db-migrate runtime is missing",
   );
 }
 assertExclusiveBackupResources(model, services, qa);
@@ -2496,15 +2726,10 @@ for (const [name, service] of Object.entries(services)) {
   }
 
   const exactOneShotMigrator =
-    isExactOneShotMigrator(name, service, qa) &&
+    isExactSegmentedMigrator(name, service, qa) &&
     hasOnlyIdentity(inspection, DATABASE_OWNER_LOGIN) &&
     hasExactMechanisms(inspection, ["url:DATABASE_URL"]) &&
-    hasExactReviewedPostgresUrls(
-      inspection,
-      ["url:DATABASE_URL"],
-      DATABASE_OWNER_LOGIN,
-      qa,
-    ) &&
+    hasExactMigrationLoopbackUrl(service?.environment ?? {}, qa) &&
     hasExactCanonicalSearchPath(inspection, 1);
   if (exactOneShotMigrator) {
     excludedInfrastructureServices.add(name);
@@ -2513,7 +2738,7 @@ for (const [name, service] of Object.entries(services)) {
   if (identities.has(DATABASE_OWNER_LOGIN)) {
     const restartable = ![undefined, null, "no"].includes(service?.restart);
     fail(
-      `P1 pre-production blocker: ${name}${restartable ? " is restartable and" : ""} uses the ${DATABASE_OWNER_LOGIN} owner database identity outside the exact one-shot db-migrate boundary`,
+      `P1 pre-production blocker: ${name}${restartable ? " is restartable and" : ""} uses the ${DATABASE_OWNER_LOGIN} owner database identity outside the exact closed segmented db-migrate boundary`,
     );
   }
   if (inspection.candidate && !expectedServices.has(name)) {
@@ -2549,6 +2774,13 @@ for (const [name, expected] of expectedServices) {
   }
   if (environment[PROFILE_ENVIRONMENT] !== expectedProfile) {
     fail(`${name} has an unexpected database-principal profile`);
+  }
+  const statementTimeout = reviewedStatementTimeout(environment);
+  if (
+    statementTimeout === null ||
+    statementTimeout !== migratorStatementTimeout
+  ) {
+    fail(`${name} does not share the exact preflight statement timeout`);
   }
   const primaryDatabaseUrl = environment.DATABASE_URL;
   const primaryInspection =

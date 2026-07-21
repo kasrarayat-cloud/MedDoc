@@ -1,118 +1,150 @@
-# Exact database-principal and auth-token evidence
+# Exact database-principal and release-operator evidence
 
-Generated: 2026-07-21T00:45:23Z
+Generated: 2026-07-21T05:19:19Z
 
 ## Verdict
 
-**TECHNICAL PASS IN DISPOSABLE SYNTHETIC POSTGRESQL 16; INDEPENDENT EXACT-HEAD
-REVIEW FAIL (NO COMMITTED CANDIDATE); PRODUCTION RELEASE FAIL.** Required human
-approvals remain **HUMAN PENDING**. This evidence does not authorize a
-production migration, credential rotation, PHI, deployment, canary, or
+**WORKING-TREE TECHNICAL PASS IN DISPOSABLE SYNTHETIC POSTGRESQL; FRESH
+DETACHED EXACT-HEAD REVIEW PENDING; PRODUCTION RELEASE FAIL.** Required human
+approvals remain **HUMAN PENDING**. This receipt authorizes no production
+migration, credential rotation, provider call, PHI, deployment, canary, or
 physician rollout.
 
-The verified working tree is based on branch
-`fix/template-twin-provider-ownership-b017-v1` at
-`e7b3864dc6d61d7d36755f59f87909bb7394740d`. The changes recorded here were
-not committed when this receipt was generated. The final committed exact head
-must receive a fresh detached review and rerun the release gates.
+The candidate is on branch `fix/template-twin-provider-ownership-b017-v1`,
+based on committed SHA `2d9c8f8e41fc0e20279ae3d6a253ec10405bc367` and tree
+`669b4483c9f4f66f0fa610c5e9bbb103d7c3df42`. The changes described below were
+uncommitted when this receipt was generated. They must be committed additively,
+rerun from that exact SHA, and receive a fresh independent detached review.
 
-## Frozen structural migration
+## Frozen structural migration and current operator artifacts
 
 | Artifact                              | SHA-256                                                            |
 | ------------------------------------- | ------------------------------------------------------------------ |
 | Exact database-principal v9 migration | `8d2c4fe1075490085b34397cdecde3d8c6e50b3e21c778ac9d491da071faf404` |
 | v9 generator                          | `1332214a34fc8f242ccd2b8d3919519cf0ead89904c48f061cb4d8d0a69677ad` |
-| Frozen helper `prosrc`                | `4e96e14b9bd337559df5a178a83d76490fa6cba73aed3ced3b2c4a4da644ee01` |
-| Pre-backup hook                       | `4344c1277dd436edd6622e388be3c5921f10bd6fd039a09f8284c1a50abf725d` |
-| Normalized hook helper semantics      | `61db58de71d232b29e38044cd4c4c7b310209e90be50377039b80ec19900c30e` |
-| Backup-principal provisioner          | `f456bd7efb1f79879a165cd5f4a97ff24d3ee57df8e6207fee23ca4702f5810c` |
-| Backup-principal PostgreSQL harness   | `b2abdaa10a813392ea294bddedb8fa1d65ac87664f1e65b8650b2eb6c70bb91e` |
+| Exact catalog query                   | `b74c507807d56c1dde54f7c6ad3698f7bd3c58da05e8aae0c1b59d943c61d32e` |
+| Exact-principal contract              | `33e373acf1ec45ade312a6a49519357a529967d645a98a5aba99d4d12e95bca1` |
+| Exact-principal preflight             | `f08698caeac2d556d3219ca1a6f315c0f355fe469d481133fd72e3b9f9f3a641` |
+| Auth-token operator CLI               | `b590320de7b455761b0ade96da7b4646bc10dd1ed6ffe9bcc6c937cc53596133` |
+| Auth-token online core                | `4fdd01e8c7ba74867414767777aae982609d19dac2cf410ae39331eed0b87ea5` |
+| Auth-token session lock               | `d08d50d20549dbf9e5cf102ce30f6c024b016771834318a7846d9978497ec314` |
+| Lineage operator CLI                  | `93bf09fb86748a1eb2c5ad7f3f7111ec06c81a3100f926d03c3d6cea9f03b0f8` |
+| Lineage online core                   | `f2d3dbfba324d5326300e1d230f496e6825db728122e7d65d2750d6b08317b21` |
+| Closed segmented migrator             | `46afa3f998057d8834d11142dcd4b8fc5b15c5ad137873517a2294df38dbfe1c` |
+| Synthetic release executor            | `128f528a9192c56abb0470c93cfce34bf7ee0291b0644bee40814e40eb06b007` |
+| Live host-auth assertion              | `65a15f02d7e29c46d8d95e5d804a19448f72e0c20eb2df6b783a69714b1707d4` |
+| PostgreSQL image Dockerfile           | `ea50af8ce2e7561d30931b71490a7c5cfb20799bd9f69ef63c4a1e5f0001035e` |
+| PostgreSQL HBA policy                 | `8b76fed3fc6791617a828fcf5f1cbff35d681d3e753cda9594c89df52ea929b0` |
+| PostgreSQL entrypoint                 | `1121ef841eea8e0b2c7ba3e23c261f19c2806e17217eedd564eccf8c2d705d0a` |
+| PostgreSQL HBA verifier               | `c243bb5e2d1313025c392bb5a510e0e9d289b0f316e0eb236881484bb0d79e18` |
+| Production Compose                    | `6455732a235dc623d8c441b08b54a75f41cbc1fc7a891158cd07cf383d28bbe2` |
+| QA Compose                            | `2cf1610ca744ce013bd63e6d3ea5657a1374a92645c29c6906481483462f8592` |
 
-The migration creates the fixed
-`public.quillmd_boundary_password_is_null(text)` helper. It exposes only a
-boolean for the reviewed fixed roles, never a verifier. Runtime, provisioning,
-and pre-backup proofs bind its source, owner, ACL, configuration, and shared
-dependency tuple. They also require every login verifier to retain the exact
-SCRAM shape without returning credential material.
+The unchanged v9 migration proves the fixed role, verifier, membership, helper,
+ACL, and shared-dependency boundary. The mandatory external runtime contract
+now additionally normalizes PostgreSQL's unstable internal referential-
+integrity trigger names while hashing their stable enforcement state into each
+constraint: relation identities, enablement, trigger type and arguments,
+deferral state, function identity and owner, language, security attributes, and
+function definition hash.
 
-V9 contains only plan-independent target, role/password/membership, helper,
-ACL, and shared-dependency assertions. PostgreSQL deparse output changes when
-the full runtime catalog query is nested inside a migration assertion, so v9
-does not freeze a second context-specific digest. The unchanged runtime-
-protocol query is the mandatory immediate post-migration gate; a source
-contract test enforces this ordering.
+## Current runtime manifests
 
-## Frozen runtime manifests
-
-PostgreSQL image:
-`pgvector/pgvector@sha256:7d400e340efb42f4d8c9c12c6427adb253f726881a9985d2a471bf0eed824dff`
-(PostgreSQL 16.13).
+The disposable evidence used PostgreSQL 16.13 from
+`pgvector/pgvector@sha256:7d400e340efb42f4d8c9c12c6427adb253f726881a9985d2a471bf0eed824dff`.
 
 | Manifest                              |  Rows | SHA-256                                                            |
 | ------------------------------------- | ----: | ------------------------------------------------------------------ |
-| Full application ACL/semantic closure | 4,141 | `17af3f8af88bf594576f30c2cfa9bd6b1ee78b7e1447a9064ca657b71c1cfdd6` |
-| Application `PUBLIC` closure          |   504 | `d5e24c7cd5c7b20491973623e3f2387eb72dd2461f78a931897345b5cfd8ad16` |
-| System `PUBLIC` closure               | 4,046 | `b2bf14053b1e8d8a0f135bd315f1c2c79a97f6957ab6a718fbed67c4aaf69746` |
+| Full application ACL/semantic closure | 4,160 | `cb437ac387bcdc582114b688e183e34bcc3e24fa9b02d35ee6997719f145f008` |
+| Application `PUBLIC` closure          |   503 | `f4b0042b47bb887343fcd7868203def89baf31294d1d8419f4ef5f6068385707` |
+| System `PUBLIC` closure               | 4,046 | `e299da714d13776e242ee163fbb7aa7942696458aad4f7c23553064812204913` |
 | Future default ACL closure            |     0 | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
-| `quillmd_runtime`                     |   260 | `9a57516235a2bf6e05d78ece57b36a8181b0940517dbac327b2ec38fecb08491` |
-| `quillmd_release_control`             |    53 | `1b19ff4639456ed2198b33093733743bf844ff1b0ea535cd96fae987401eb9d2` |
+| `quillmd_runtime`                     |   260 | `7c257cc86bc9b83528f62fd76765734b4f85713a297c1d87ed4e141944447e42` |
+| `quillmd_release_control`             |    53 | `7dd6b610f5171284e8576eb6ea03927618d7d1aeed15c7fd864a24740de404e8` |
 | `quillmd_release_security`            |     3 | `08d8966d88162b49e4a19e8e0054a8d507a1d6830bedefc7a6267d852a83974d` |
-| `quillmd_audit_dispatcher`            |     7 | `3bcd5b8e7e9a2a11004d05e262a44dcbfccc4cd835e9ac8db844cb76425205ca` |
+| `quillmd_audit_dispatcher`            |     7 | `a30159d922564b79229daedd9052c08bcf1adda95bd9e1c91903b6eedccbed9b` |
 | `quillmd_auth_email_dispatcher`       |    10 | `dc350422fa6da53ea697ba61956de992022ed3daad93f80227698d361be6e9a3` |
 | `quillmd_backup`                      |     2 | `e059a6bf37ca30b019ce585d518ae8d8441ec09aa864a3a1e323065b31a58fe5` |
 
-Two independently created full-role clusters produced byte-identical JSONL
-files for every table row above. A third cluster proved v9 and all required
-profiles with the optional release-security login absent. Restricted JSONL
-exports were removed after byte comparison; no catalog entries, credentials,
-URLs, or environment files were retained in the repository.
+These values were derived from the retained, data-bearing but synthetic
+contracted cluster. Each of two newly created zero-state release replays then
+accepted the same contract for every configured principal after the complete
+97-migration chain. No catalog JSONL, identifier, database URL, credential, or
+environment file was added to the repository.
+
+## Authentication and authorization defect closure
+
+- Auth-token reconciliation and finalization now use the same retained,
+  target-proved PostgreSQL session that owns the advisory lock.
+- The approval fingerprint binds the exact `meddoc` principal and database
+  owner OIDs, login and superuser state, system identifier, database OID,
+  recovery state, phase, proof version, and a fresh protocol-state epoch.
+- Recovery targets fail closed. A changed state epoch invalidates a previously
+  issued approval.
+- Final trigger removal occurs only under a bounded `ACCESS EXCLUSIVE` table
+  lock after exact index, duplicate, and trigger reproof. Trigger removal is
+  exact, and every invariant is re-proved before commit.
+- The segmented migrator's approvals are phase-, ledger-, accepted-source-,
+  target-, and recovery-bound. Status exposes fingerprints only for currently
+  eligible phases.
+- The lineage operator retains one target-proved locked session, refuses
+  recovery, and emits only cursor presence rather than the identifier value.
+- Active operator documentation permits only the closed segmented runner and
+  records the distinct HBA and TLS gates. CI cleanup is unconditional.
 
 ## Verification
 
-| Gate                                                                                                                               | Result                               |
-| ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| Fresh exact-v9 structural migration                                                                                                | PASS on two full-role clusters       |
-| Optional release-security-login-absent migration                                                                                   | PASS                                 |
-| Immediate external runtime manifest after migration                                                                                | PASS for every present profile       |
-| Adversarial exact-principal PostgreSQL harness                                                                                     | PASS                                 |
-| Unsafe search path, role attribute/login-verifier/graph drift                                                                      | rejected                             |
-| Outgoing membership from predefined `pg_read_all_data`                                                                             | rejected before and after v9         |
-| System/application ACL, enum, rule, unapproved-login, template database, role-setting, large-object, grantor, and membership drift | rejected and exact baseline restored |
-| Credential bootstrap plaintext/verifier log scan on pinned PostgreSQL                                                              | PASS                                 |
-| Shared database startup search path and statement-timeout PostgreSQL proof                                                         | PASS                                 |
-| Exact-principal preflight for runtime, release-control, release-security, audit-dispatcher, and auth-email-dispatcher profiles     | PASS                                 |
-| Authentic pre-v6 role graph, membership options, optional role, nested role, and assumed-session proof                             | PASS                                 |
-| Auth-email outbox concurrency: 24 unique claims, no persisted raw bearer, zero provider calls                                      | PASS                                 |
-| Auth-token concurrency: 16 concurrent mints, one current token, one successful consume                                             | PASS                                 |
-| Backup principal drift, lock contention, rollback, dump, restore, restored-cluster re-provision, and post-restore preflight        | PASS                                 |
-| Targeted database-principal unit/source contracts                                                                                  | 4 files, 229 tests PASS              |
-| Associated role-graph/authorization unit contracts                                                                                 | 5 files, 71 tests PASS               |
-| Full TranscribeMD TypeScript                                                                                                       | PASS                                 |
-| V9 generator byte-sync check                                                                                                       | PASS                                 |
-| Shell syntax for the two credential provisioners                                                                                   | PASS                                 |
+| Gate                                                                                 | Result                   |
+| ------------------------------------------------------------------------------------ | ------------------------ |
+| Fresh zero-state closed release replay, 97 migrations, all principal proofs, cleanup | PASS, run 1              |
+| Independent second zero-state replay with a new project namespace and credentials    | PASS, run 2              |
+| Focused operator/source/auth/lineage/HBA census                                      | 14 files, 284 tests PASS |
+| App migration/role-graph contracts                                                   | 2 files, 10 tests PASS   |
+| Independent HBA/runtime-principal census                                             | 5 files, 169 tests PASS  |
+| Pinned-image live PostgreSQL HBA harness                                             | PASS                     |
+| HBA entrypoint and verifier shell syntax                                             | PASS                     |
+| Full TranscribeMD TypeScript                                                         | PASS                     |
+| Changed JavaScript/TypeScript lint                                                   | PASS                     |
+| Whole-workspace verified-only secret scan                                            | 0 verified findings      |
+| Diff whitespace                                                                      | PASS                     |
+| Production provider calls or PHI                                                     | NONE                     |
 
-The synthetic auth-token online proof also passed from an authentic pre-v5
-database: deterministic reconciliation retired two older rows from one legacy
-duplicate group; same-statement, READ COMMITTED race, REPEATABLE READ, and
-SERIALIZABLE cases failed closed as expected; interrupted concurrent-index
-recovery, exact-index and trigger checks, operator contention, 16 concurrent
-mints, 16 concurrent consumes, and 12 atomic mutation attempts all preserved
-one-current-token and one-winner invariants. The test used synthetic-only
-identifiers and retained no tokens or hashes.
+The exact-principal tamper proof began from a passing data-bearing synthetic
+cluster, disabled one internal referential-integrity trigger, and observed the
+mandatory preflight fail closed. The trigger was re-enabled and the exact
+baseline passed again. The proof retained no unstable trigger name or catalog
+dump.
 
-An independent reviewer returned **ACCEPT** for the frozen v9 and
-backup-principal working-tree scope after independently checking the generator,
-shell syntax, formatting, exact PostgreSQL role/ACL behavior, checksum drift,
-lock contention, rollback, dump, and restore. That scoped working-tree verdict
-is not an exact committed integration-head ACCEPT and cannot authorize release.
+Both fresh replays used an immutable, digest-pinned nonprivileged executor with
+a read-only repository mount and root filesystem, a namespace-scoped database
+network, explicit minimal environment, synthetic credentials, production-route
+refusal, and labeled cleanup. Both ended with
+`SYNTHETIC_CI_DATABASE_RELEASE_PROVISION_PASS` and
+`SYNTHETIC_CI_DATABASE_RELEASE_CLEANUP_PASS`.
 
-## Open gates
+The separate HBA verifier exercised exact IPv4 and IPv6 SCRAM admission,
+wrong-password and unknown-login denial, replication denial, weak-startup and
+weak-policy rejection, read-only-rootfs operation, reload invalidation, and
+exact restart recovery. No labeled test resources remained. This proves the
+host-authentication boundary only; encrypted PostgreSQL transport remains a
+distinct unmet production gate.
 
-This receipt is not final release evidence. A committed exact head, independent
-detached ACCEPT, repository CI/census, production backup and restore authority,
-credential rotation, deployment/rollback evidence, desktop Word evidence, and
-signed Clinical Safety, Privacy/Legal, and Operations approvals remain
-mandatory. `/opt/meddoc-pro` was not switched, reset, cleaned, stashed, or
-modified by release agents. Its branch/SHA remain unchanged, but its
-NUL-delimited status fingerprint changed from `f442687…` to `f2426a8…` for an
-unattributed/concurrent reason; exact fingerprint continuity is not claimed.
+## Review history and open gates
+
+The independent review of exact committed SHA `2d9c8f8` remained **REJECT** for
+the earlier frozen-manifest P1. A later read-only snapshot audit of the
+uncommitted candidate returned **BLOCK** for the auth-session lock,
+principal/recovery/state binding, final trigger-drop race, internal RI
+enforcement omission, and raw operator-documentation paths. The current
+working tree implements each requested additive closure plus the reviewer's P2
+operator hardening. No implementation agent approves those changes.
+
+A new exact commit and fresh detached reviewer **ACCEPT** remain mandatory.
+Repository-wide RC/CI, production identity and backup/restore authority,
+credential rotation, immutable images and rollback rehearsal, desktop Word
+evidence, and signed Clinical Safety, Privacy/Legal, and Operations approvals
+also remain open. Production availability is 0%.
+
+`/opt/meddoc-pro` was not switched, reset, cleaned, stashed, or modified by this
+work. Its branch/SHA and NUL-status fingerprint require final read-only
+reconciliation before handoff.

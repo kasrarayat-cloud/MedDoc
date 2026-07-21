@@ -20,20 +20,41 @@
 # ============================================================================
 name: meddoc-qa
 
-x-qa-owner-db-url: &qa-owner-db-url postgresql://meddoc:qa_test_pw@postgres:5432/meddoc_qa_test?schema=public&options=-c%20search_path%3Dpg_catalog%2Cpublic
+x-qa-owner-db-url: &qa-owner-db-url postgresql://meddoc:qa_test_pw@127.0.0.1:5432/meddoc_qa_test?schema=public&options=-c%20search_path%3Dpg_catalog%2Cpublic
 x-qa-runtime-db-url: &qa-runtime-db-url "postgresql://meddoc_runtime:${QA_DB_RUNTIME_PASSWORD:?QA_DB_RUNTIME_PASSWORD is required}@postgres:5432/meddoc_qa_test?schema=public&options=-c%20search_path%3Dpg_catalog%2Cpublic"
 x-qa-secret: &qa-secret "qa-throwaway-secret-not-used-in-prod-000000000000000="
 
 services:
   postgres:
-    image: pgvector/pgvector:pg16@sha256:7d400e340efb42f4d8c9c12c6427adb253f726881a9985d2a471bf0eed824dff
+    build:
+      context: ./infra/postgres
+      dockerfile: Dockerfile
     restart: "no"
+    user: "999:999"
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777
+      - /var/run/postgresql:rw,noexec,nosuid,nodev,size=16m,uid=999,gid=999,mode=3777
     mem_limit: 512m
     cpus: "1.0"
+    entrypoint: ["/usr/local/bin/quillmd-postgres-entrypoint.sh"]
+    command:
+      - postgres
+      - -c
+      - hba_file=/etc/postgresql/quillmd-pg_hba.conf
+      - -c
+      - password_encryption=scram-sha-256
+      - -c
+      - quillmd.hba_contract_path=/etc/postgresql/quillmd-pg_hba.conf
+      - -c
+      - quillmd.hba_contract_sha256=8b76fed3fc6791617a828fcf5f1cbff35d681d3e753cda9594c89df52ea929b0
     environment:
       POSTGRES_DB: meddoc_qa_test # qa/test marker → db-guard allows mutation
       POSTGRES_USER: meddoc
       POSTGRES_PASSWORD: qa_test_pw
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=trust"
       PGDATA: /var/lib/postgresql/data/pgdata
       DB_RUNTIME_PASSWORD: ${QA_DB_RUNTIME_PASSWORD:?QA_DB_RUNTIME_PASSWORD is required}
       DB_RELEASE_CONTROL_PASSWORD: ${QA_DB_RELEASE_CONTROL_PASSWORD:?QA_DB_RELEASE_CONTROL_PASSWORD is required}
@@ -46,7 +67,7 @@ services:
     secrets:
       - qa_postgres_backup_password
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U meddoc"]
+      test: ["CMD", "/bin/sh", "/opt/quillmd/verify-quillmd-host-auth.sh"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -139,8 +160,8 @@ services:
         mc anonymous set none qa/transcribe-md-template-artifacts-qa
         mc version enable qa/transcribe-md-template-artifacts-qa
 
-  # One-shot schema apply (cached builder image — has the prisma CLI; no build).
-  # Invoke: docker compose -f docker-compose.qa.yml run --rm db-migrate
+  # Closed segmented schema operator (cached builder image; no build).
+  # Read-only default: docker compose -f docker-compose.qa.yml run --rm db-migrate
   db-migrate:
     image: ${QA_DB_MIGRATE_IMAGE:-meddoc-pro-db-migrate:latest}
     profiles: ["migrations"]
@@ -148,11 +169,15 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    network_mode: "service:postgres"
     environment:
       DATABASE_URL: *qa-owner-db-url
+      PRISMA_STATEMENT_TIMEOUT_MS: ${PRISMA_STATEMENT_TIMEOUT_MS:-30000}
+      DATABASE_RELEASE_MIGRATION_LOCK_TIMEOUT_MS: ${DATABASE_RELEASE_MIGRATION_LOCK_TIMEOUT_MS:-5000}
+      DATABASE_RELEASE_MIGRATION_NETWORK_BOUNDARY: postgres-loopback-v1
     working_dir: /app/packages/db
-    entrypoint: ["npx", "--no-install", "prisma"]
-    command: ["migrate", "deploy"]
+    entrypoint: ["npm", "run", "--silent", "database-release:migrate", "--"]
+    command: ["--phase", "status"]
 
   transcribe-md:
     image: ${QA_TRANSCRIBE_MD_IMAGE:-meddoc-pro-transcribe-md:latest}
@@ -175,6 +200,7 @@ services:
       REDIS_URL: redis://redis:6379/15
       QUILLMD_SERVICE_ROLE: physician-app
       QUILLMD_DATABASE_PRINCIPAL_PROFILE: synthetic-disposable-qa-v1
+      PRISMA_STATEMENT_TIMEOUT_MS: ${PRISMA_STATEMENT_TIMEOUT_MS:-30000}
       QUILLMD_AUTH_SESSION_VERIFIER_PROFILE: ""
       MFA_SECRET_ACTIVE_KEY_ID: ${QA_MFA_SECRET_ACTIVE_KEY_ID:?QA_MFA_SECRET_ACTIVE_KEY_ID is required}
       MFA_SECRET_KEYRING_FILE: ${QA_MFA_SECRET_KEYRING_FILE:?QA_MFA_SECRET_KEYRING_FILE is required}
@@ -294,6 +320,7 @@ services:
       NODE_ENV: production
       QUILLMD_SERVICE_ROLE: transcribe-md-worker
       QUILLMD_DATABASE_PRINCIPAL_PROFILE: synthetic-disposable-qa-v1
+      PRISMA_STATEMENT_TIMEOUT_MS: ${PRISMA_STATEMENT_TIMEOUT_MS:-30000}
       QUILLMD_AUTH_SESSION_VERIFIER_PROFILE: ""
       MFA_SECRET_ACTIVE_KEY_ID: ""
       MFA_SECRET_KEYRING_FILE: ""

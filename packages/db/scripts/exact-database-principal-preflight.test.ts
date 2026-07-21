@@ -5,7 +5,10 @@ import {
   EXACT_DATABASE_PRINCIPAL_PROFILES,
   exactDatabasePrincipalProfile,
 } from "./exact-database-principal-preflight";
-import { buildDatabaseConnectionString } from "../src/database-connection-string";
+import {
+  buildDatabaseConnectionString,
+  buildRuntimeDatabaseConnectionString,
+} from "../src/database-connection-string";
 
 describe("exact database-principal preflight profiles", () => {
   const base =
@@ -21,6 +24,29 @@ describe("exact database-principal preflight profiles", () => {
       ).searchParams.getAll("options"),
     ).toEqual(["-c search_path=pg_catalog,public -c statement_timeout=30000"]);
   });
+
+  it.each([undefined, "250", "900000"])(
+    "uses the runtime-selected statement timeout (%s)",
+    (timeout) => {
+      const environment = { PRISMA_STATEMENT_TIMEOUT_MS: timeout };
+      expect(
+        buildExactDatabasePrincipalPreflightConnectionString(base, environment),
+      ).toBe(buildRuntimeDatabaseConnectionString(base, environment));
+    },
+  );
+
+  it.each(["", " ", "0", "1.5", "2147483648"])(
+    "rejects the same unsafe runtime timeout (%s)",
+    (timeout) => {
+      const environment = { PRISMA_STATEMENT_TIMEOUT_MS: timeout };
+      expect(() =>
+        buildExactDatabasePrincipalPreflightConnectionString(base, environment),
+      ).toThrow("DATABASE_CONNECTION_OPTIONS_INVALID:STATEMENT_TIMEOUT");
+      expect(() =>
+        buildRuntimeDatabaseConnectionString(base, environment),
+      ).toThrow("DATABASE_CONNECTION_OPTIONS_INVALID:STATEMENT_TIMEOUT");
+    },
+  );
 
   it.each([
     ["surrounding whitespace", `${base} `],

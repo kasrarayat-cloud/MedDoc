@@ -83,7 +83,7 @@ The implementation is divided into these boundaries:
 | ------------------------------ | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | Untrusted DOCX                 | `apps/transcribe-md/src/lib/note-template-docx/`                                                   | ZIP/OPC/XML validation, deterministic compilation, exact rendering, independent output readback, and static-region proof                        |
 | Shared contracts               | `apps/transcribe-md/src/lib/template-twin/ir.ts`                                                   | Provider-neutral IR, facts, mappings, resolutions, validation, and manifest schemas                                                             |
-| Safe-alpha extraction boundary | `supported-concepts.ts`, `custom-concepts/`, `encounter-facts/`                                   | Versioned exact core allowlist plus physician-certified, template-scoped scalar extraction                                                      |
+| Safe-alpha extraction boundary | `supported-concepts.ts`, `custom-concepts/`, `encounter-facts/`                                    | Versioned exact core allowlist plus physician-certified, template-scoped scalar extraction                                                      |
 | Artifact custody               | `apps/transcribe-md/src/lib/template-twin/storage/`                                                | Tenant-scoped keys, immutable-style writes, readiness evidence, bounded stream reads, byte/hash verification, and durable object-write ledger   |
 | Draft and certification        | `create-draft.ts`, `certification-lifecycle.ts`, `synthetic-test.ts`                               | Persist draft, propose/approve mappings, synthetic proof, certify, and activate                                                                 |
 | Encounter filling              | `encounter-facts/`, `resolver/`, `validation/`, `fill-engine.ts`                                   | One voice/text fact path, exact field resolution, validation, rendering, and manifest persistence                                               |
@@ -266,20 +266,20 @@ The compiler reads OOXML structure directly; it does not ask a language model to
 
 The compatibility boundary is an allowlist, not an “every DOCX” claim:
 
-| Document structure | Admission and fail-closed boundary |
-| --- | --- |
-| Native scalar text | One control type, one simple paragraph, at least one Word text target, and uniform effective run formatting. Newlines require `w:text w:multiLine="true"`; otherwise a multiline resolution is rejected. Rich text, lists, drawings, mixed formatting, and multi-paragraph content block certification. |
-| Dropdown / combo box | One exact finite ordered list with Word-namespaced, noncolliding `displayText`/`value` attributes. Duplicate or incomplete options block. Combo boxes operate only in exact-option mode; arbitrary free text is unsupported. |
-| Checkbox | Modern `w14:checkbox` and a single deterministic legacy checkbox definition. Unknown remains a third state, affirmative and explicit denial remain distinct, and missing evidence blocks signing. |
-| Date | Native `w:date` only, with a strict ISO canonical value and one bounded display pattern containing exactly one year, month, and day. Numeric formats may omit locale; English month/weekday names require `en-US`. Only Gregorian/date-time storage semantics are admitted. Legacy dates, other calendars/locales/storage modes, duplicate children, and unprofiled Word formatting tokens block. |
-| Legacy form field | Exactly one immediate text, dropdown, or checkbox child; nested competing controls and `entryMacro`/`exitMacro` hooks reject the package. Legacy regular/number text rejects Word display transforms and enforces a strict 1–32,767 maximum length at render. Legacy dates and mixed definitions are unsupported. |
-| Ordinary placeholder | Exact `ORDINARY_PLACEHOLDER_TOKEN_V1`: one bounded `<<...>>`, `[[...]]`, `{{...}}`, or recognized underscore token within one paragraph/story/path, with immutable span and context hashes. Other placeholders block. |
-| Plain blank table cell | One unmerged, non-nested cell with one blank paragraph and at most one empty run. If the run owns formatting, output text is inserted into that same run; newlines become explicit `w:br` elements and tabs become `w:tab` elements rather than literal controls in `w:t`. Multiple runs or other mutable content block. |
-| Tab-only blank cell | Exact `TAB_ONLY_BLANK_TABLE_CELL_V1`, one unmerged cell and its bounded tab-stop/property allowlist. Newlines and content tabs are rejected. |
-| Tables and merges | At most 63 explicit grid columns, bounded widths, strict positive `gridSpan`, and no span outside the declared grid. A `vMerge` continuation must match the preceding restart at the same columns and span. Transitional `hMerge`, invalid/orphan `vMerge`, implicit grid-before/after, over-wide rows, and unbounded spans block. Merged blank cells are not inferred as fillable. |
-| Repeating rows/sections/items | Inventoried but certification-blocked in safe alpha. No row cloning is claimed until unique Word identities and clinical row alignment are independently proven. |
-| Headers and footers | Only parts reached by a schema-positioned `w:sectPr` reference with one reference per story role, exact standard relationship/content type, and the matching `w:hdr` or `w:ftr` root are compiled. Suffix lookalikes, duplicate roles, dangling references, unused story relationships, and orphan or header-shaped auxiliary parts reject the package. Supported scalar controls and exact placeholders then use the same rules as the main story. |
-| Original layout | Untouched package parts and static regions are verified; supported values patch only certified targets. This technical proof does not replace the mandatory desktop Word open/save/reopen/PDF and visual approval gate. |
+| Document structure            | Admission and fail-closed boundary                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Native scalar text            | One control type, one simple paragraph, at least one Word text target, and uniform effective run formatting. Newlines require `w:text w:multiLine="true"`; otherwise a multiline resolution is rejected. Rich text, lists, drawings, mixed formatting, and multi-paragraph content block certification.                                                                                                                                             |
+| Dropdown / combo box          | One exact finite ordered list with Word-namespaced, noncolliding `displayText`/`value` attributes. Duplicate or incomplete options block. Combo boxes operate only in exact-option mode; arbitrary free text is unsupported.                                                                                                                                                                                                                        |
+| Checkbox                      | Modern `w14:checkbox` and a single deterministic legacy checkbox definition. Unknown remains a third state, affirmative and explicit denial remain distinct, and missing evidence blocks signing.                                                                                                                                                                                                                                                   |
+| Date                          | Native `w:date` only, with a strict ISO canonical value and one bounded display pattern containing exactly one year, month, and day. Numeric formats may omit locale; English month/weekday names require `en-US`. Only Gregorian/date-time storage semantics are admitted. Legacy dates, other calendars/locales/storage modes, duplicate children, and unprofiled Word formatting tokens block.                                                   |
+| Legacy form field             | Exactly one immediate text, dropdown, or checkbox child; nested competing controls and `entryMacro`/`exitMacro` hooks reject the package. Legacy regular/number text rejects Word display transforms and enforces a strict 1–32,767 maximum length at render. Legacy dates and mixed definitions are unsupported.                                                                                                                                   |
+| Ordinary placeholder          | Exact `ORDINARY_PLACEHOLDER_TOKEN_V1`: one bounded `<<...>>`, `[[...]]`, `{{...}}`, or recognized underscore token within one paragraph/story/path, with immutable span and context hashes. Other placeholders block.                                                                                                                                                                                                                               |
+| Plain blank table cell        | One unmerged, non-nested cell with one blank paragraph and at most one empty run. If the run owns formatting, output text is inserted into that same run; newlines become explicit `w:br` elements and tabs become `w:tab` elements rather than literal controls in `w:t`. Multiple runs or other mutable content block.                                                                                                                            |
+| Tab-only blank cell           | Exact `TAB_ONLY_BLANK_TABLE_CELL_V1`, one unmerged cell and its bounded tab-stop/property allowlist. Newlines and content tabs are rejected.                                                                                                                                                                                                                                                                                                        |
+| Tables and merges             | At most 63 explicit grid columns, bounded widths, strict positive `gridSpan`, and no span outside the declared grid. A `vMerge` continuation must match the preceding restart at the same columns and span. Transitional `hMerge`, invalid/orphan `vMerge`, implicit grid-before/after, over-wide rows, and unbounded spans block. Merged blank cells are not inferred as fillable.                                                                 |
+| Repeating rows/sections/items | Inventoried but certification-blocked in safe alpha. No row cloning is claimed until unique Word identities and clinical row alignment are independently proven.                                                                                                                                                                                                                                                                                    |
+| Headers and footers           | Only parts reached by a schema-positioned `w:sectPr` reference with one reference per story role, exact standard relationship/content type, and the matching `w:hdr` or `w:ftr` root are compiled. Suffix lookalikes, duplicate roles, dangling references, unused story relationships, and orphan or header-shaped auxiliary parts reject the package. Supported scalar controls and exact placeholders then use the same rules as the main story. |
+| Original layout               | Untouched package parts and static regions are verified; supported values patch only certified targets. This technical proof does not replace the mandatory desktop Word open/save/reopen/PDF and visual approval gate.                                                                                                                                                                                                                             |
 
 Detection is broader than certification support. The IR records repeating
 sections/rows, rich-text controls, multi-paragraph or list-bearing text
@@ -333,13 +333,13 @@ The already-tracked repository fixture `WM IOV Template.docx` is read in place
 by `wm-iov-existing-fixture.test.ts`; this branch does not add or copy another
 real document. The current deterministic inventory reports:
 
-| Structure                       | Aggregate finding                                                        |
-| ------------------------------- | ------------------------------------------------------------------------ |
+| Structure                       | Aggregate finding                                                                                           |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | Fillable controls               | 28 native dropdowns, 52 `TAB_ONLY_BLANK_TABLE_CELL_V1` fields, and 7 `ORDINARY_PLACEHOLDER_TOKEN_V1` fields |
-| Other supported control kinds   | 0 combo boxes, 0 checkboxes, 0 date controls                             |
-| Tables                          | 1 fixed table; 0 repeating tables                                        |
-| Headers/footers                 | 2 header parts; 0 footer parts                                           |
-| Compiler certification blockers | 0 for the 87 intended structural fields; all 7 ordinary placeholders remain `needs_confirmation` |
+| Other supported control kinds   | 0 combo boxes, 0 checkboxes, 0 date controls                                                                |
+| Tables                          | 1 fixed table; 0 repeating tables                                                                           |
+| Headers/footers                 | 2 header parts; 0 footer parts                                                                              |
+| Compiler certification blockers | 0 for the 87 intended structural fields; all 7 ordinary placeholders remain `needs_confirmation`            |
 | Pre-storage privacy blockers    | The six exact standard glossary parts pass the narrow auxiliary profile; the embedded JPEG remains rejected |
 
 The compiler census now recognizes all 87 intended structural fields. The seven
@@ -444,10 +444,10 @@ The certification flow is:
 8. Download and inspect the synthetic clone.
 9. Explicitly acknowledge both certification statements.
 10. Certify and activate only if every field mapping and placeholder intent is supported/certified, the
-   field set and mapping hash are current, required/material field coverage is
-   complete, every optional untested field has a current physician waiver,
-   there are no blocking unsupported items, and the synthetic output has
-   verified package/static/field readback.
+    field set and mapping hash are current, required/material field coverage is
+    complete, every optional untested field has a current physician waiver,
+    there are no blocking unsupported items, and the synthetic output has
+    verified package/static/field readback.
 
 An optional-field waiver is field-specific and records physician identity,
 reason, mapping hash, and timestamp with a durable audit event. Required or
@@ -669,13 +669,16 @@ asset decisions, and the decision-to-audit-outbox foreign-key contract. It
 also adds database guards for intent immutability, receipt expiry/replay and
 rollout generation, asset lifecycle, and exact audit-event consistency.
 
-`prisma migrate deploy` intentionally stops at the lineage expand shape. The
-versioned operator in `packages/db/scripts/template-twin-lineage-online.ts`
-must then build a transition guard index concurrently, backfill bounded
-primary-key batches, build final indexes concurrently, validate a non-null
-proof, and take the short final contract lock. Template Twin enablement fails
-closed until the durable phase is `CONTRACTED`. Full deployment, pause/resume,
-lock, failure, checksum, and future Prisma-drift handling are in
+The closed `db-migrate --phase lineage-expand` cumulative segment intentionally
+stops at the lineage expand shape. A raw one-shot Prisma deploy is not a release
+entrypoint. The versioned operator in
+`packages/db/scripts/template-twin-lineage-online.ts` must then build a
+transition guard index concurrently, backfill bounded primary-key batches,
+build final indexes concurrently, validate a non-null proof, and take the short
+final contract lock. Every mutation requires a fresh phase-bound status
+fingerprint. Template Twin enablement fails closed until the durable phase is
+`CONTRACTED`. Full deployment, pause/resume, lock, failure, checksum, and future
+Prisma-drift handling are in
 `docs/runbooks/template-twin-lineage-online-migration.md`.
 
 The third migration intentionally takes `SHARE ROW EXCLUSIVE` locks on the
@@ -774,7 +777,15 @@ Required order:
 1. Record app/worker image digests, database migration status, and backup/restore evidence.
 2. Provision and verify the private bucket and least-privilege runtime policy.
 3. Confirm Anthropic/vendor agreement and privacy controls for source PHI scanning and mapping proposals.
-4. Apply all Template Twin Prisma migrations through the existing migration deployment path.
+4. Apply only the closed cumulative database-release graph: status and approved
+   `lineage-expand`, complete the fresh-challenge lineage contract, status and
+   approved `auth-expand`, complete the authentication-token contract, then
+   status and approved `pre-v9` and `v9` around reviewed release-security
+   provisioning. Every segment invocation requires its newly verified
+   `targetFingerprints.<segment>` status entry; the entry is phase-, ledger-,
+   accepted-source-, and target-bound and must never be reused or derived.
+   Follow `docs/DEPLOYMENT_RUNBOOK.md` §1.4.1; never substitute a raw one-shot
+   deploy.
 5. Deploy compatible TranscribeMD app and worker images together; the app owns upload/review/sign/export, while the worker owns encounter filling.
 6. Verify application and worker health without real PHI.
 7. Run one synthetic upload → mapping review → synthetic output → certification → typed visit → review → sign → original DOCX flow.
@@ -842,7 +853,11 @@ CI evidence lives in:
 - `.github/workflows/e2e.yml` — isolated TranscribeMD app/worker/QA stack and Playwright;
 - `.github/workflows/a11y.yml` — TranscribeMD production build and accessibility run.
 
-Migration deployment is `npm run db:migrate:deploy`, but it is an operational write and must run only in an explicitly approved deployment window. It is not a developer verification command.
+There is no root migration-deploy alias. The root
+`npm run db:migrate:status` command is read-only. Operational mutation uses only
+the status-and-approved closed phases documented in
+`docs/DEPLOYMENT_RUNBOOK.md` §1.4.1 and is never a developer verification
+command.
 
 ### Synthetic test plan and result record
 
@@ -879,23 +894,23 @@ Required fixture coverage:
 
 Complete this table at merge handoff; do not replace missing evidence with assumptions:
 
-| Gate                                        | Command/evidence                                                             | Result                                                                                                             | UTC        | Commit/run link                    |
-| ------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ---------- | ---------------------------------- |
-| Prisma format/validate/generate             | Commands above                                                               | `PASS`                                                                                                                  | 2026-07-16 | Local compatibility change set        |
-| Full Template Twin suite                    | Consolidated feature-path invocation, including the tracked WM fixture       | `PASS — 77 files / 920 tests`                                                                                           | 2026-07-16 | Synthetic/local only                  |
-| Full TranscribeMD unit suite                | `npm run test:unit -w transcribe-md`                                         | `PASS — 219 files / 2,766 tests`                                                                                        | 2026-07-16 | Synthetic/local only                  |
-| Type generation/typecheck                   | `next typegen` then active `tsc --noEmit` command                            | `TYPECHECK PASS; type generation pending final-SHA rerun`                                                              | 2026-07-16 | Local compatibility change set        |
-| Focused/full lint                           | Changed-path files / full active command                                     | `FOCUSED PASS; full repository lint pending final-SHA result and baseline comparison`                                  | 2026-07-16 | Do not infer a full-lint pass          |
-| Production build                            | Clean Docker app/worker/migrator image builds                                | `PENDING FINAL-SHA RERUN`                                                                                               | —          | Disposable local images only          |
-| Migration tests                             | Fresh QA PostgreSQL plus interrupted/resumed one-million-row upgrade harness | `PASS — all 72 migrations; 1,000,000 requested / 1,000,226 processed; retry/idempotency/lock-contention proof passed` | 2026-07-16 | Disposable QA only                    |
-| Isolated infrastructure-backed QA E2E       | `playwright test --project=template-twin`                                    | `PENDING FINAL-SHA RERUN`                                                                                               | —          | QA stack must be disposable            |
-| Browser safety/accessibility                | Chromium, PHI reject, Rx safety, and axe projects                            | `PENDING FINAL-SHA RERUN`                                                                                               | —          | Synthetic/local only                  |
-| Open XML and LibreOffice gate               | SDK 3.5.1 plus pinned LibreOffice 25.8.7.3                                   | `PENDING ORDINARY-PLACEHOLDER CORPUS RERUN`                                                                             | —          | Pre-delivery and QA-only proofs differ |
-| Desktop Microsoft Word                      | Returned no-network Windows QA bundle                                        | `PENDING`                                                                                                               | —          | Mandatory release gate                |
-| Dependency/secret gates                     | npm high/critical audit and TruffleHog filesystem scan                       | `PENDING FINAL-DIFF RERUN`                                                                                              | —          | Never infer from an earlier SHA        |
-| Live provider quality                       | Approved synthetic specialty evaluation with provider provenance             | `PENDING`                                                                                                               | —          | Mocked tests are not provider evidence |
-| Backup/restore and production bucket policy | Operations evidence                                                          | `PENDING`                                                                                                               | —          | Production-readiness prerequisite     |
-| Clinical/privacy approval                   | Named Clinical Safety and Privacy/Legal approval records                     | `PENDING`                                                                                                               | —          | Real-PHI prerequisite                 |
+| Gate                                        | Command/evidence                                                             | Result                                                                                                                | UTC        | Commit/run link                        |
+| ------------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ---------- | -------------------------------------- |
+| Prisma format/validate/generate             | Commands above                                                               | `PASS`                                                                                                                | 2026-07-16 | Local compatibility change set         |
+| Full Template Twin suite                    | Consolidated feature-path invocation, including the tracked WM fixture       | `PASS — 77 files / 920 tests`                                                                                         | 2026-07-16 | Synthetic/local only                   |
+| Full TranscribeMD unit suite                | `npm run test:unit -w transcribe-md`                                         | `PASS — 219 files / 2,766 tests`                                                                                      | 2026-07-16 | Synthetic/local only                   |
+| Type generation/typecheck                   | `next typegen` then active `tsc --noEmit` command                            | `TYPECHECK PASS; type generation pending final-SHA rerun`                                                             | 2026-07-16 | Local compatibility change set         |
+| Focused/full lint                           | Changed-path files / full active command                                     | `FOCUSED PASS; full repository lint pending final-SHA result and baseline comparison`                                 | 2026-07-16 | Do not infer a full-lint pass          |
+| Production build                            | Clean Docker app/worker/migrator image builds                                | `PENDING FINAL-SHA RERUN`                                                                                             | —          | Disposable local images only           |
+| Migration tests                             | Fresh QA PostgreSQL plus interrupted/resumed one-million-row upgrade harness | `PASS — all 72 migrations; 1,000,000 requested / 1,000,226 processed; retry/idempotency/lock-contention proof passed` | 2026-07-16 | Disposable QA only                     |
+| Isolated infrastructure-backed QA E2E       | `playwright test --project=template-twin`                                    | `PENDING FINAL-SHA RERUN`                                                                                             | —          | QA stack must be disposable            |
+| Browser safety/accessibility                | Chromium, PHI reject, Rx safety, and axe projects                            | `PENDING FINAL-SHA RERUN`                                                                                             | —          | Synthetic/local only                   |
+| Open XML and LibreOffice gate               | SDK 3.5.1 plus pinned LibreOffice 25.8.7.3                                   | `PENDING ORDINARY-PLACEHOLDER CORPUS RERUN`                                                                           | —          | Pre-delivery and QA-only proofs differ |
+| Desktop Microsoft Word                      | Returned no-network Windows QA bundle                                        | `PENDING`                                                                                                             | —          | Mandatory release gate                 |
+| Dependency/secret gates                     | npm high/critical audit and TruffleHog filesystem scan                       | `PENDING FINAL-DIFF RERUN`                                                                                            | —          | Never infer from an earlier SHA        |
+| Live provider quality                       | Approved synthetic specialty evaluation with provider provenance             | `PENDING`                                                                                                             | —          | Mocked tests are not provider evidence |
+| Backup/restore and production bucket policy | Operations evidence                                                          | `PENDING`                                                                                                             | —          | Production-readiness prerequisite      |
+| Clinical/privacy approval                   | Named Clinical Safety and Privacy/Legal approval records                     | `PENDING`                                                                                                             | —          | Real-PHI prerequisite                  |
 
 ## Current limitations and v1 non-goals
 

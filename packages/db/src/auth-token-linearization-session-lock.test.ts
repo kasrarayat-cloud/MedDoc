@@ -1,9 +1,29 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { acquireAuthTokenOperatorSessionLock } from "./auth-token-linearization-session-lock";
-import type { Pool } from "pg";
+import {
+  acquireAuthTokenOperatorSessionLock,
+  acquireAuthTokenOperatorSessionLockOnClient,
+} from "./auth-token-linearization-session-lock";
+import type { Pool, PoolClient } from "pg";
 
 describe("auth-token online operator session lock", () => {
+  it("holds and releases on the already target-proved retained client", async () => {
+    const release = vi.fn();
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [{ acquired: true }] })
+      .mockResolvedValueOnce({ rows: [{ released: true }] });
+    const client = { query, release } as unknown as PoolClient;
+
+    const lock = await acquireAuthTokenOperatorSessionLockOnClient(client);
+    await lock.release();
+
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(query.mock.calls[0]?.[0]).toContain("pg_try_advisory_lock");
+    expect(query.mock.calls[1]?.[0]).toContain("pg_advisory_unlock");
+    expect(release).not.toHaveBeenCalled();
+  });
+
   it("destroys a connection after an uncertain acquire result", async () => {
     const release = vi.fn();
     const pool = {

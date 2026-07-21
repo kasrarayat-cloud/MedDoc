@@ -7,8 +7,12 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 
-import { buildDatabaseConnectionString } from "../src/database-connection-string";
+import {
+  buildRuntimeDatabaseConnectionString,
+  type DatabaseRuntimeConnectionEnvironment,
+} from "../src/database-connection-string";
 import { assertExactDatabasePrincipal } from "../src/exact-database-principal";
+import { assertPostgresHostAuthenticationContract } from "../src/postgres-host-auth";
 
 export const EXACT_DATABASE_PRINCIPAL_PROFILES = {
   runtime: {
@@ -31,6 +35,10 @@ export const EXACT_DATABASE_PRINCIPAL_PROFILES = {
     loginRole: "meddoc_auth_email_dispatcher",
     boundaryRole: "quillmd_auth_email_dispatcher",
   },
+  backup: {
+    loginRole: "meddoc_backup",
+    boundaryRole: "quillmd_backup",
+  },
 } as const;
 
 export function exactDatabasePrincipalProfile(profile: string | undefined): {
@@ -49,12 +57,13 @@ export function exactDatabasePrincipalProfile(profile: string | undefined): {
 
 export function buildExactDatabasePrincipalPreflightConnectionString(
   databaseUrl: string,
+  environment: Readonly<DatabaseRuntimeConnectionEnvironment> = process.env,
 ): string {
   // This intentionally is the same builder and default timeout used by the
   // production runtime. It rejects whitespace, duplicate query keys, target
   // overrides, and unreviewed startup GUCs before the driver can normalize
   // them. The catalog proof then verifies the resulting live session.
-  return buildDatabaseConnectionString(databaseUrl);
+  return buildRuntimeDatabaseConnectionString(databaseUrl, environment);
 }
 
 async function run(): Promise<void> {
@@ -69,11 +78,14 @@ async function run(): Promise<void> {
     );
     prisma = new PrismaClient({
       adapter: new PrismaPg({
-        connectionString:
-          buildExactDatabasePrincipalPreflightConnectionString(databaseUrl),
+        connectionString: buildExactDatabasePrincipalPreflightConnectionString(
+          databaseUrl,
+          process.env,
+        ),
         connectionTimeoutMillis: 10_000,
       }),
     });
+    await assertPostgresHostAuthenticationContract({ prisma });
     await assertExactDatabasePrincipal({ prisma, ...profile });
     process.stdout.write("EXACT_DATABASE_PRINCIPAL_PREFLIGHT_PASS\n");
   } catch {

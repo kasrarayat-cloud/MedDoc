@@ -102,6 +102,66 @@ jobs:
           printf 'MFA_SECRET_ACTIVE_KEY_ID=ci-synthetic-v1\n' >> "$GITHUB_ENV"
           printf 'MFA_SECRET_KEYRING_FILE=%s\n' "$keyring_path" >> "$GITHUB_ENV"
 
+      # The exact principal bootstrap refuses defaults and short/fixed
+      # passwords. Generate isolated job-only credentials before either
+      # Compose file is parsed. Values are written directly to GITHUB_ENV and
+      # a read-only bootstrap file inside a 0700 job-only directory; they are
+      # never printed or uploaded. The file itself is world-readable only
+      # after exact-path bind mounting because the unprivileged PostgreSQL UID
+      # cannot read a runner-owned 0600 bind source; the parent prevents host
+      # traversal by every other non-root user.
+      - name: Provision ephemeral synthetic database credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          credential_dir="$RUNNER_TEMP/quillmd-ci-database"
+          backup_path="$credential_dir/backup-password"
+          install -d -m 0700 "$credential_dir"
+          GITHUB_ENV_PATH="$GITHUB_ENV" BACKUP_PATH="$backup_path" node <<'NODE'
+          const { randomBytes } = require("node:crypto");
+          const { appendFileSync, writeFileSync } = require("node:fs");
+          const environmentPath = process.env.GITHUB_ENV_PATH;
+          const backupPath = process.env.BACKUP_PATH;
+          if (!environmentPath || !backupPath) process.exit(1);
+
+          const secret = () => randomBytes(32).toString("base64url");
+          const qa = {
+            runtime: secret(),
+            releaseControl: secret(),
+            releaseSecurity: secret(),
+            auditDispatcher: secret(),
+            authEmailDispatcher: secret(),
+            backup: secret(),
+          };
+          writeFileSync(backupPath, qa.backup, { mode: 0o444 });
+
+          const values = {
+            QA_DB_RUNTIME_PASSWORD: qa.runtime,
+            QA_DB_RELEASE_CONTROL_PASSWORD: qa.releaseControl,
+            QA_DB_RELEASE_SECURITY_PASSWORD: qa.releaseSecurity,
+            QA_DB_AUDIT_DISPATCHER_PASSWORD: qa.auditDispatcher,
+            QA_DB_AUTH_EMAIL_DISPATCHER_PASSWORD: qa.authEmailDispatcher,
+            QA_DB_BACKUP_PASSWORD_FILE: backupPath,
+            DB_PASSWORD: secret(),
+            DB_RUNTIME_PASSWORD: qa.runtime,
+            DB_RELEASE_CONTROL_PASSWORD: qa.releaseControl,
+            DB_AUDIT_DISPATCHER_PASSWORD: qa.auditDispatcher,
+            DB_AUTH_EMAIL_DISPATCHER_PASSWORD: qa.authEmailDispatcher,
+            DB_BACKUP_PASSWORD_FILE: backupPath,
+            MINIO_ROOT_PASSWORD: secret(),
+            MINIO_KMS_SECRET_KEY: `ci-synthetic-key:${randomBytes(32).toString("hex")}`,
+          };
+          appendFileSync(
+            environmentPath,
+            Object.entries(values)
+              .map(([name, value]) => `${name}=${value}\n`)
+              .join(""),
+            { mode: 0o600 },
+          );
+          NODE
+          chmod 0444 "$backup_path"
+
       # ── Build the real images from the PR (app build = the OOM-sensitive
       #    step; the Dockerfile bakes --max-old-space-size=6144 + the
       #    unpdf/mammoth bundle-assert, both of which run here). The 16 GB
@@ -123,24 +183,305 @@ jobs:
       - name: Start qa infra (postgres + redis + minio)
         run: docker compose -f docker-compose.qa.yml up -d --wait postgres redis minio
 
-      - name: Migrate schema → meddoc_qa_test
-        run: docker compose -f docker-compose.qa.yml run --rm db-migrate
+      # Prisma migrations are cumulative but this release contains two online
+      # transition boundaries. The closed runner exposes only the four audited
+      # cut points, verifies the official ledger prefix and binds each mutation
+      # to this disposable target. A raw one-shot deploy is intentionally not
+      # available through the Compose contract.
+      - name: Apply lineage-expand migration segment
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(docker compose -f docker-compose.qa.yml run --rm -T \
+            db-migrate --phase status)"
+          fingerprint="$(jq -er '
+            select(.event == "status") |
+            select(.appliedMigrations == 0) |
+            .targetFingerprints["lineage-expand"]
+          ' <<<"$status")"
+          [[ "$fingerprint" =~ ^[a-f0-9]{64}$ ]]
+          DATABASE_RELEASE_MIGRATION_APPROVED_TARGET_FINGERPRINT="$fingerprint" \
+            docker compose -f docker-compose.qa.yml run --rm -T \
+              -e DATABASE_RELEASE_MIGRATION_APPROVED_TARGET_FINGERPRINT \
+              db-migrate --phase lineage-expand
 
-      # Prisma deploy performs only the online lineage EXPAND. Template Twin
-      # admission fails closed until the versioned operator has built its
-      # concurrent guard/final indexes, completed bounded batches, validated
-      # the proof constraint, and committed the short contract. This database
-      # is isolated/synthetic and is destroyed with `down -v` below.
+      # Complete and prove the lineage transition before migration 69 can be
+      # admitted. The second bounded backfill must be a zero-change no-op so
+      # idempotent resume is evidenced, not merely assumed.
       - name: Contract NoteTemplate lineage in disposable QA
-        run: >
-          docker compose -f docker-compose.qa.yml run --rm
-          --entrypoint sh db-migrate
-          -c 'npm run lineage:online -w @meddoc/db -- --phase guard-index &&
-          npm run lineage:online -w @meddoc/db -- --phase backfill --batch-size 1000 --batch-delay-ms 0 &&
-          npm run lineage:online -w @meddoc/db -- --phase indexes &&
-          npm run lineage:online -w @meddoc/db -- --phase validate &&
-          TEMPLATE_TWIN_LINEAGE_CONTRACT_ACK=note_templates_lineage_v1:meddoc_qa_test
-          npm run lineage:online -w @meddoc/db -- --phase contract'
+        shell: bash
+        run: |
+          set -euo pipefail
+          lineage_status() {
+            docker compose -f docker-compose.qa.yml run --rm -T \
+              --entrypoint sh db-migrate -c \
+              'npm run --silent lineage:online -w @meddoc/db -- --phase status'
+          }
+          lineage_fingerprint() {
+            local status="$1"
+            local phase="$2"
+            local fingerprint
+            fingerprint="$(jq -er --arg phase "$phase" \
+              '.targetFingerprints[$phase]' <<<"$status")"
+            [[ "$fingerprint" =~ ^[a-f0-9]{64}$ ]]
+            printf '%s' "$fingerprint"
+          }
+
+          initial_status="$(lineage_status)"
+          jq -e '
+            .readOnly == true and
+            .operationKey == "note_templates_lineage_v1" and
+            .phase == "EXPANDED" and
+            .presentIndexesExact == true and
+            .validationConstraintExact == true and
+            .transitionContractExact == true
+          ' <<<"$initial_status" >/dev/null
+
+          fingerprint="$(lineage_fingerprint "$initial_status" guard-index)"
+          TEMPLATE_TWIN_LINEAGE_APPROVED_TARGET_FINGERPRINT="$fingerprint" \
+            docker compose -f docker-compose.qa.yml run --rm -T \
+              -e TEMPLATE_TWIN_LINEAGE_APPROVED_TARGET_FINGERPRINT \
+              --entrypoint sh db-migrate -c \
+              'npm run --silent lineage:online -w @meddoc/db -- --phase guard-index'
+
+          status="$(lineage_status)"
+          fingerprint="$(lineage_fingerprint "$status" backfill)"
+          TEMPLATE_TWIN_LINEAGE_APPROVED_TARGET_FINGERPRINT="$fingerprint" \
+            docker compose -f docker-compose.qa.yml run --rm -T \
+              -e TEMPLATE_TWIN_LINEAGE_APPROVED_TARGET_FINGERPRINT \
+              --entrypoint sh db-migrate -c \
+              'npm run --silent lineage:online -w @meddoc/db -- --phase backfill --batch-size 1000 --batch-delay-ms 0'
+
+          status="$(lineage_status)"
+          fingerprint="$(lineage_fingerprint "$status" backfill)"
+          no_op_backfill="$(
+            TEMPLATE_TWIN_LINEAGE_APPROVED_TARGET_FINGERPRINT="$fingerprint" \
+              docker compose -f docker-compose.qa.yml run --rm -T \
+                -e TEMPLATE_TWIN_LINEAGE_APPROVED_TARGET_FINGERPRINT \
+                --entrypoint sh db-migrate -c \
+                'npm run --silent lineage:online -w @meddoc/db -- --phase backfill --batch-size 1000 --batch-delay-ms 0'
+          )"
+          jq -se '
+            [ .[] | select(.event == "batch") ] as $batches |
+            $batches | length == 1 and
+            .[0].phase == "BACKFILLED" and
+            .[0].batchRows == 0 and
+            .[0].complete == true and
+            .[0].cursorRestarted == false
+          ' <<<"$no_op_backfill" >/dev/null
+
+          status="$(lineage_status)"
+          fingerprint="$(lineage_fingerprint "$status" indexes)"
+          TEMPLATE_TWIN_LINEAGE_APPROVED_TARGET_FINGERPRINT="$fingerprint" \
+            docker compose -f docker-compose.qa.yml run --rm -T \
+              -e TEMPLATE_TWIN_LINEAGE_APPROVED_TARGET_FINGERPRINT \
+              --entrypoint sh db-migrate -c \
+              'npm run --silent lineage:online -w @meddoc/db -- --phase indexes'
+
+          status="$(lineage_status)"
+          fingerprint="$(lineage_fingerprint "$status" validate)"
+          TEMPLATE_TWIN_LINEAGE_APPROVED_TARGET_FINGERPRINT="$fingerprint" \
+            docker compose -f docker-compose.qa.yml run --rm -T \
+              -e TEMPLATE_TWIN_LINEAGE_APPROVED_TARGET_FINGERPRINT \
+              --entrypoint sh db-migrate -c \
+              'npm run --silent lineage:online -w @meddoc/db -- --phase validate'
+
+          status="$(lineage_status)"
+          fingerprint="$(lineage_fingerprint "$status" contract)"
+          TEMPLATE_TWIN_LINEAGE_APPROVED_TARGET_FINGERPRINT="$fingerprint" \
+          TEMPLATE_TWIN_LINEAGE_CONTRACT_ACK=note_templates_lineage_v1:meddoc_qa_test \
+            docker compose -f docker-compose.qa.yml run --rm -T \
+              -e TEMPLATE_TWIN_LINEAGE_APPROVED_TARGET_FINGERPRINT \
+              -e TEMPLATE_TWIN_LINEAGE_CONTRACT_ACK \
+              --entrypoint sh db-migrate -c \
+              'npm run --silent lineage:online -w @meddoc/db -- --phase contract'
+
+          final_status="$(lineage_status)"
+          jq -e '
+            .readOnly == true and
+            .operationKey == "note_templates_lineage_v1" and
+            .phase == "CONTRACTED" and
+            .nullRows == 0 and
+            .duplicateLineageVersions == 0 and
+            .partialIndex.exists == false and
+            .finalIndex == {"exists":true,"valid":true,"ready":true} and
+            .templateKindIndex == {"exists":true,"valid":true,"ready":true} and
+            .validationConstraint == {"exists":true,"validated":true} and
+            .presentIndexesExact == true and
+            .validationConstraintExact == true and
+            .columnNotNull == true and
+            .transitionTriggerPresent == false and
+            .transitionContractExact == true
+          ' <<<"$final_status" >/dev/null
+
+      - name: Apply auth-expand migration segment
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(docker compose -f docker-compose.qa.yml run --rm -T \
+            db-migrate --phase status)"
+          fingerprint="$(jq -er '
+            select(.event == "status") |
+            select(.appliedMigrations == 68) |
+            select(.lastMigration == "20260715162000_template_twin_docx_v1") |
+            .targetFingerprints["auth-expand"]
+          ' <<<"$status")"
+          [[ "$fingerprint" =~ ^[a-f0-9]{64}$ ]]
+          DATABASE_RELEASE_MIGRATION_APPROVED_TARGET_FINGERPRINT="$fingerprint" \
+            docker compose -f docker-compose.qa.yml run --rm -T \
+              -e DATABASE_RELEASE_MIGRATION_APPROVED_TARGET_FINGERPRINT \
+              db-migrate --phase auth-expand
+
+      # V5 is deliberately expand-only. Complete it on the already reviewed
+      # synthetic target, rerun the idempotent reconciliation, and prove the
+      # transition trigger is absent before migration 94 is admitted.
+      - name: Complete auth-token linearization in disposable QA
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth_status() {
+            docker compose -f docker-compose.qa.yml run --rm -T \
+              --entrypoint sh db-migrate -c \
+              'export AUTH_TOKEN_LINEARIZATION_DATABASE_URL="$DATABASE_URL";
+               npm run --silent auth-token-linearization:online -w @meddoc/db -- --phase status'
+          }
+          for attempt in 1 2; do
+            status="$(auth_status)"
+            fingerprint="$(jq -er '.targetFingerprints.all' <<<"$status")"
+            [[ "$fingerprint" =~ ^[a-f0-9]{64}$ ]]
+            AUTH_TOKEN_LINEARIZATION_APPROVED_TARGET_FINGERPRINT="$fingerprint" \
+              docker compose -f docker-compose.qa.yml run --rm -T \
+                -e AUTH_TOKEN_LINEARIZATION_APPROVED_TARGET_FINGERPRINT \
+                --entrypoint sh db-migrate -c \
+                'export AUTH_TOKEN_LINEARIZATION_DATABASE_URL="$DATABASE_URL";
+                 npm run --silent auth-token-linearization:online -w @meddoc/db -- --phase all --batch-size 100 --batch-delay-ms 0'
+          done
+          final_status="$(auth_status)"
+          jq -e '
+            .duplicateGroups == 0 and
+            .indexExists == true and
+            .indexValid == true and
+            .indexReady == true and
+            .indexExact == true and
+            .transitionTriggerEnabled == false and
+            .transitionTriggerState == "absent" and
+            .complete == true
+          ' <<<"$final_status" >/dev/null
+
+      - name: Apply pre-v9 migration segment
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(docker compose -f docker-compose.qa.yml run --rm -T \
+            db-migrate --phase status)"
+          fingerprint="$(jq -er '
+            select(.event == "status") |
+            select(.appliedMigrations == 93) |
+            select(.lastMigration == "20260720150000_auth_token_linearization_v5") |
+            .targetFingerprints["pre-v9"]
+          ' <<<"$status")"
+          [[ "$fingerprint" =~ ^[a-f0-9]{64}$ ]]
+          DATABASE_RELEASE_MIGRATION_APPROVED_TARGET_FINGERPRINT="$fingerprint" \
+            docker compose -f docker-compose.qa.yml run --rm -T \
+              -e DATABASE_RELEASE_MIGRATION_APPROVED_TARGET_FINGERPRINT \
+              db-migrate --phase pre-v9
+
+      # The release-security login is deliberately absent during fresh-cluster
+      # bootstrap and is added only after v8 by its target-bound transactional
+      # provisioner. No credential enters argv or output.
+      - name: Provision release-security principal in disposable QA
+        shell: bash
+        run: |
+          set -euo pipefail
+          system_identifier="$({
+            docker compose -f docker-compose.qa.yml exec -T postgres \
+              psql -X --no-psqlrc --quiet --tuples-only --no-align \
+              --username meddoc --dbname meddoc_qa_test \
+              --command 'SELECT system_identifier FROM pg_control_system()'
+          })"
+          [[ "$system_identifier" =~ ^[0-9]+$ ]]
+          DB_RELEASE_SECURITY_PASSWORD="$QA_DB_RELEASE_SECURITY_PASSWORD" \
+          POSTGRES_USER=meddoc \
+          POSTGRES_DB=meddoc_qa_test \
+          DB_EXPECTED_SYSTEM_IDENTIFIER="$system_identifier" \
+            docker compose -f docker-compose.qa.yml exec -T \
+              -e DB_RELEASE_SECURITY_PASSWORD \
+              -e POSTGRES_USER \
+              -e POSTGRES_DB \
+              -e DB_EXPECTED_SYSTEM_IDENTIFIER \
+              postgres sh -s < \
+                infra/postgres/provision-template-twin-release-security.sh
+
+      - name: Apply exact-principal v9 migration segment
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(docker compose -f docker-compose.qa.yml run --rm -T \
+            db-migrate --phase status)"
+          fingerprint="$(jq -er '
+            select(.event == "status") |
+            select(.appliedMigrations == 96) |
+            select(.lastMigration == "20260720200000_mfa_credential_lifecycle_audit_v8") |
+            .targetFingerprints.v9
+          ' <<<"$status")"
+          [[ "$fingerprint" =~ ^[a-f0-9]{64}$ ]]
+          DATABASE_RELEASE_MIGRATION_APPROVED_TARGET_FINGERPRINT="$fingerprint" \
+            docker compose -f docker-compose.qa.yml run --rm -T \
+              -e DATABASE_RELEASE_MIGRATION_APPROVED_TARGET_FINGERPRINT \
+              db-migrate --phase v9
+          final_status="$(docker compose -f docker-compose.qa.yml run --rm -T \
+            db-migrate --phase status)"
+          jq -e '
+            .event == "status" and
+            .appliedMigrations == 97 and
+            .lastMigration == "20260720213000_exact_database_principal_closure_v9"
+          ' <<<"$final_status" >/dev/null
+
+      # Run the exact catalog contract only after the ordered migrations and
+      # both online protocols have reached their promotable final states.
+      # Every application/operations login is proved independently before
+      # runtime startup. Credentials remain process environment only; the
+      # preflight emits fixed PASS/FAIL output and never catalog details.
+      - name: Prove every exact database principal after fresh migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          backup_password="$(<"$QA_DB_BACKUP_PASSWORD_FILE")"
+          [[ "$backup_password" =~ ^[A-Za-z0-9_-]{43,128}$ ]]
+          profiles=(
+            runtime
+            release-control
+            release-security
+            audit-dispatcher
+            auth-email-dispatcher
+            backup
+          )
+          logins=(
+            meddoc_runtime
+            meddoc_release_control
+            meddoc_release_security
+            meddoc_audit_dispatcher
+            meddoc_auth_email_dispatcher
+            meddoc_backup
+          )
+          passwords=(
+            "$QA_DB_RUNTIME_PASSWORD"
+            "$QA_DB_RELEASE_CONTROL_PASSWORD"
+            "$QA_DB_RELEASE_SECURITY_PASSWORD"
+            "$QA_DB_AUDIT_DISPATCHER_PASSWORD"
+            "$QA_DB_AUTH_EMAIL_DISPATCHER_PASSWORD"
+            "$backup_password"
+          )
+          for index in "${!profiles[@]}"; do
+            connection="postgresql://${logins[$index]}:${passwords[$index]}@postgres:5432/meddoc_qa_test?schema=public&options=-c%20search_path%3Dpg_catalog%2Cpublic"
+            EXACT_DATABASE_PRINCIPAL_DATABASE_URL="$connection" \
+            EXACT_DATABASE_PRINCIPAL_PROFILE="${profiles[$index]}" \
+              docker compose -f docker-compose.qa.yml run --rm -T --no-deps \
+                -e EXACT_DATABASE_PRINCIPAL_DATABASE_URL \
+                -e EXACT_DATABASE_PRINCIPAL_PROFILE \
+                --entrypoint sh db-migrate -c \
+                'cd /app; npm run database-principal:preflight -w @meddoc/db'
+          done
 
       # The #278 fail-closed db-guard (assertNonProdDatabase) refuses to seed
       # unless DATABASE_URL is a positively non-prod DB. meddoc_qa_test carries

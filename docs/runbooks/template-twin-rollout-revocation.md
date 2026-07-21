@@ -70,18 +70,26 @@ the bound was absent. Require all of the following before retry:
   absent; and
 - pre-existing practice/template data is unchanged.
 
-After the conflicting transaction is identified and safely cleared, mark only
-that verified failed attempt rolled back and rerun the unchanged migration:
+After the conflicting transaction is identified and safely cleared, stop and
+preserve the failed-attempt row, server diagnostic, catalog-absence proof, and a
+fresh protected snapshot. The closed runner intentionally rejects an unresolved
+attempt. Resolving that exact failed attempt requires a separately reviewed DBA
+forward-reconciliation decision under the approved change; this runbook does
+not authorize or provide a ledger-repair command.
 
-```bash
-prisma migrate resolve --rolled-back \
-  20260716113000_template_twin_rollout_generations
-prisma migrate deploy
-```
-
-Do not delete or update `_prisma_migrations` manually, use `--applied`, or retry
-while the blocker remains. A second `migrate deploy` after success must report
-no pending migration. Rollout stays disabled throughout installation and retry.
+Only after that human-reviewed reconciliation may the unchanged migration be
+retried through the closed cumulative segment that contains it (`auth-expand`).
+First run `docker compose run --rm db-migrate --phase status`, verify the exact
+ledger prefix and target, obtain a fresh `targetFingerprints.auth-expand`
+entry, and follow the phase-specific approval procedure in
+`docs/DEPLOYMENT_RUNBOOK.md` §1.4.1. The entry is ledger-, accepted-source-,
+phase-, and target-bound; never reuse it for a retry or derive it when status
+emits no entry. The lineage protocol must already be exactly `CONTRACTED`. Do
+not delete or update
+`_prisma_migrations` manually, mark an attempt applied, run a raw deploy/resolve
+command, or retry while the blocker remains. After success, require a new
+read-only status result at the exact `auth-expand` cut point. Rollout stays
+disabled throughout installation and retry.
 
 The focused disposable proof is:
 
@@ -91,9 +99,10 @@ node_modules/.bin/tsx \
 ```
 
 It creates isolated synthetic PostgreSQL databases from the actual preceding
-70 migrations, invokes the real `prisma migrate deploy/resolve` runner, and
-uses a granted `ACCESS SHARE` lock as a deterministic barrier. One scenario
-blocks the first `practices` DDL; a second blocks the later fill-manifest DDL
+70 migrations, exercises the real low-level Prisma failure/reconciliation
+behavior strictly inside its disposable harness, and uses a granted
+`ACCESS SHARE` lock as a deterministic barrier. One scenario blocks the first
+`practices` DDL; a second blocks the later fill-manifest DDL
 after the migration has performed earlier work. Each scenario proves atomic
 rollback, unchanged synthetic data, reviewed rollback resolution, complete
 retry, and an idempotent no-pending run. The harness accepts only PostgreSQL
@@ -109,7 +118,9 @@ accepts a production database URL.
 This migration changed before any production application. A disposable
 development/QA database that successfully applied its earlier checksum must be
 destroyed and recreated from the committed migrations. Do not copy the new
-checksum into `_prisma_migrations` or use `migrate resolve` to disguise drift.
+checksum into `_prisma_migrations` or use any ledger-resolution command to
+disguise drift.
+
 A non-disposable environment that recorded the earlier successful checksum is
 blocked pending a reviewed DBA forward-reconciliation plan and snapshot; the
 automatic retry procedure above does not apply to checksum drift. It applies

@@ -20,6 +20,11 @@ export interface DatabaseConnectionStartupContract {
   defaultTransactionReadOnly?: boolean;
 }
 
+export interface DatabaseRuntimeConnectionEnvironment {
+  readonly [name: string]: string | undefined;
+  PRISMA_STATEMENT_TIMEOUT_MS?: string;
+}
+
 const MAX_POSTGRES_INTEGER_GUC_MS = 2_147_483_647;
 const SEARCH_PATH_OPTION = `-c search_path=${DATABASE_SEARCH_PATH}`;
 const DIRECT_CONNECTION_IDENTITY_KEYS = new Set([
@@ -41,6 +46,7 @@ const DIRECT_STARTUP_GUC_KEYS = new Set([
   "lock_timeout",
   "query_timeout",
   "replication",
+  "role",
   "search_path",
   "statement_timeout",
 ]);
@@ -192,4 +198,20 @@ export function buildDatabaseConnectionString(
   // failed closed, so this never normalizes an ambiguous input into a pass.
   url.searchParams.set("options", canonicalOptions);
   return url.toString();
+}
+
+/**
+ * One pure connection-string entrypoint shared by long-lived runtimes and
+ * their release preflight. Keeping the environment explicit prevents a
+ * verifier from silently proving a different timeout contract than the
+ * process it is about to admit.
+ */
+export function buildRuntimeDatabaseConnectionString(
+  raw: string,
+  environment: Readonly<DatabaseRuntimeConnectionEnvironment>,
+): string {
+  return buildDatabaseConnectionString(
+    raw,
+    environment.PRISMA_STATEMENT_TIMEOUT_MS,
+  );
 }
