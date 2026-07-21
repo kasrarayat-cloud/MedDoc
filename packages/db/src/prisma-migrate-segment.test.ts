@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -193,7 +194,7 @@ describe("closed segmented Prisma migration runner", () => {
       `${invocation.executable}\n${invocation.args.join("\n")}`,
     ).not.toMatch(/(?:^|\/)npx(?:$|\s)/u);
     const source = readFileSync(
-      new URL("../scripts/prisma-migrate-segment.ts", import.meta.url),
+      resolve(__dirname, "../scripts/prisma-migrate-segment.ts"),
       "utf8",
     );
     expect(source).toContain(
