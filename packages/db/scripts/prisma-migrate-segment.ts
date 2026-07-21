@@ -784,7 +784,55 @@ export function classifyPrismaMigrationFailure(
   if (/\bP\d{4}\b/u.test(diagnostic)) {
     return "DATABASE_RELEASE_MIGRATION_PRISMA_KNOWN_ERROR";
   }
-  return "DATABASE_RELEASE_MIGRATION_PRISMA_FAILED";
+  if (/\b(?:Killed|Terminated)\b/u.test(diagnostic)) {
+    return "DATABASE_RELEASE_MIGRATION_PRISMA_PROCESS_TERMINATED";
+  }
+  if (
+    /(?:\b(?:ENOMEM|ENOSPC|EDQUOT)\b|no space left on device|out of memory|cannot allocate memory|disk quota exceeded)/iu.test(
+      diagnostic,
+    )
+  ) {
+    return "DATABASE_RELEASE_MIGRATION_PRISMA_RESOURCE_EXHAUSTED";
+  }
+  if (
+    /(?:\b(?:EACCES|EPERM|EROFS)\b|permission denied|read-only file system)/iu.test(
+      diagnostic,
+    )
+  ) {
+    return "DATABASE_RELEASE_MIGRATION_PRISMA_FILESYSTEM_DENIED";
+  }
+  if (
+    /(?:\b(?:ENOENT|MODULE_NOT_FOUND|ERR_MODULE_NOT_FOUND)\b|cannot find module|no such file or directory)/iu.test(
+      diagnostic,
+    )
+  ) {
+    return "DATABASE_RELEASE_MIGRATION_PRISMA_RUNTIME_MISSING";
+  }
+  if (
+    /(?:\b(?:ECONNREFUSED|ECONNRESET|EHOSTUNREACH|ENETUNREACH)\b|connection refused|can't reach database server|server closed the connection unexpectedly|connection terminated unexpectedly)/iu.test(
+      diagnostic,
+    )
+  ) {
+    return "DATABASE_RELEASE_MIGRATION_PRISMA_CONNECTION_FAILED";
+  }
+  if (
+    /(?:schema engine|migration engine|query engine|libssl|glibc|binary target|failed to load native binding)/iu.test(
+      diagnostic,
+    )
+  ) {
+    return "DATABASE_RELEASE_MIGRATION_PRISMA_ENGINE_FAILED";
+  }
+  if (
+    /(?:failed to load config|unable to load config|prisma config|config file|unknown option|unexpected argument)/iu.test(
+      diagnostic,
+    )
+  ) {
+    return "DATABASE_RELEASE_MIGRATION_PRISMA_CLI_CONFIGURATION_FAILED";
+  }
+  if (diagnostic.trim().length === 0) {
+    return "DATABASE_RELEASE_MIGRATION_PRISMA_SILENT_EXIT";
+  }
+  return "DATABASE_RELEASE_MIGRATION_PRISMA_UNCLASSIFIED_DIAGNOSTIC";
 }
 
 export function buildPrismaMigrationInvocation(configPath: string): {

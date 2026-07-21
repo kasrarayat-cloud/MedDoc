@@ -281,8 +281,40 @@ describe("closed segmented Prisma migration runner", () => {
         "DATABASE_RELEASE_MIGRATION_PRISMA_KNOWN_ERROR",
       ],
       [
+        classify({ stderr: `Killed ${sensitive}` }),
+        "DATABASE_RELEASE_MIGRATION_PRISMA_PROCESS_TERMINATED",
+      ],
+      [
+        classify({ stderr: `ENOSPC ${sensitive}` }),
+        "DATABASE_RELEASE_MIGRATION_PRISMA_RESOURCE_EXHAUSTED",
+      ],
+      [
+        classify({ stderr: `EROFS ${sensitive}` }),
+        "DATABASE_RELEASE_MIGRATION_PRISMA_FILESYSTEM_DENIED",
+      ],
+      [
+        classify({ stderr: `MODULE_NOT_FOUND ${sensitive}` }),
+        "DATABASE_RELEASE_MIGRATION_PRISMA_RUNTIME_MISSING",
+      ],
+      [
+        classify({ stderr: `ECONNREFUSED ${sensitive}` }),
+        "DATABASE_RELEASE_MIGRATION_PRISMA_CONNECTION_FAILED",
+      ],
+      [
+        classify({ stderr: `schema engine ${sensitive}` }),
+        "DATABASE_RELEASE_MIGRATION_PRISMA_ENGINE_FAILED",
+      ],
+      [
+        classify({ stderr: `failed to load config ${sensitive}` }),
+        "DATABASE_RELEASE_MIGRATION_PRISMA_CLI_CONFIGURATION_FAILED",
+      ],
+      [
+        classify({ stdout: "", stderr: "" }),
+        "DATABASE_RELEASE_MIGRATION_PRISMA_SILENT_EXIT",
+      ],
+      [
         classify({ stderr: sensitive }),
-        "DATABASE_RELEASE_MIGRATION_PRISMA_FAILED",
+        "DATABASE_RELEASE_MIGRATION_PRISMA_UNCLASSIFIED_DIAGNOSTIC",
       ],
     ] as const;
 
