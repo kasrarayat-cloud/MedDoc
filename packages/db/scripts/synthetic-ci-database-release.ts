@@ -23,7 +23,7 @@ import { fileURLToPath } from "node:url";
 
 type Phase = "provision" | "cleanup";
 
-interface SyntheticState {
+export interface SyntheticState {
   version: "quillmd-synthetic-ci-database-state-v1";
   token: string;
   containerName: string;
@@ -279,92 +279,164 @@ function validateState(value: unknown, runnerTemp: string): SyntheticState {
   return state;
 }
 
-function resourceInspection(
-  type: "container" | "volume" | "image",
-  target: string,
-): string {
-  return command(
-    "docker",
-    [
-      type,
-      "inspect",
-      "--format",
-      `{{index .Config.Labels \"${resourceLabel}\"}}`,
-      target,
-    ],
-    "SYNTHETIC_CI_DATABASE_RELEASE_RESOURCE_ABSENT",
-    {
-      environment: dockerEnvironment(),
-      tolerateFailure: true,
-    },
-  );
+interface CleanupResource {
+  target: string;
+  listArgs: readonly string[];
+  inspectArgs: readonly string[];
+  removeArgs: readonly string[];
+  removeFailureCode: string;
 }
 
-function cleanupState(
+function cleanupResources(state: SyntheticState): CleanupResource[] {
+  const executorName = state.containerName + "-executor";
+  const containerLabelFormat =
+    '{{index .Config.Labels "' + resourceLabel + '"}}';
+  return [
+    {
+      target: executorName,
+      listArgs: [
+        "container",
+        "ls",
+        "--all",
+        "--filter",
+        "name=^/" + executorName + "$",
+        "--format",
+        "{{.Names}}",
+      ],
+      inspectArgs: [
+        "container",
+        "inspect",
+        "--format",
+        containerLabelFormat,
+        executorName,
+      ],
+      removeArgs: ["container", "rm", "--force", executorName],
+      removeFailureCode:
+        "SYNTHETIC_CI_DATABASE_RELEASE_CONTAINER_CLEANUP_FAILED",
+    },
+    {
+      target: state.containerName,
+      listArgs: [
+        "container",
+        "ls",
+        "--all",
+        "--filter",
+        "name=^/" + state.containerName + "$",
+        "--format",
+        "{{.Names}}",
+      ],
+      inspectArgs: [
+        "container",
+        "inspect",
+        "--format",
+        containerLabelFormat,
+        state.containerName,
+      ],
+      removeArgs: ["container", "rm", "--force", state.containerName],
+      removeFailureCode:
+        "SYNTHETIC_CI_DATABASE_RELEASE_CONTAINER_CLEANUP_FAILED",
+    },
+    {
+      target: state.volumeName,
+      listArgs: [
+        "volume",
+        "ls",
+        "--filter",
+        "name=^" + state.volumeName + "$",
+        "--format",
+        "{{.Name}}",
+      ],
+      inspectArgs: [
+        "volume",
+        "inspect",
+        "--format",
+        '{{index .Labels "' + resourceLabel + '"}}',
+        state.volumeName,
+      ],
+      removeArgs: ["volume", "rm", state.volumeName],
+      removeFailureCode: "SYNTHETIC_CI_DATABASE_RELEASE_VOLUME_CLEANUP_FAILED",
+    },
+    {
+      target: state.imageTag,
+      listArgs: [
+        "image",
+        "ls",
+        "--all",
+        "--filter",
+        "reference=" + state.imageTag,
+        "--format",
+        "{{.Repository}}:{{.Tag}}",
+      ],
+      inspectArgs: [
+        "image",
+        "inspect",
+        "--format",
+        containerLabelFormat,
+        state.imageTag,
+      ],
+      removeArgs: ["image", "rm", state.imageTag],
+      removeFailureCode: "SYNTHETIC_CI_DATABASE_RELEASE_IMAGE_CLEANUP_FAILED",
+    },
+  ];
+}
+
+function resourceExists(resource: CleanupResource): boolean {
+  const census = command(
+    "docker",
+    resource.listArgs,
+    "SYNTHETIC_CI_DATABASE_RELEASE_RESOURCE_LIST_FAILED",
+    { environment: dockerEnvironment() },
+  );
+  if (!census) return false;
+  const names = census.split(/\r?\n/u);
+  if (names.length !== 1 || names[0] !== resource.target) {
+    fail("SYNTHETIC_CI_DATABASE_RELEASE_RESOURCE_CENSUS_MISMATCH");
+  }
+  return true;
+}
+
+function attestOwnedResource(
+  resource: CleanupResource,
+  expectedLabel: string,
+): boolean {
+  if (!resourceExists(resource)) return false;
+  const label = command(
+    "docker",
+    resource.inspectArgs,
+    "SYNTHETIC_CI_DATABASE_RELEASE_RESOURCE_INSPECTION_FAILED",
+    { environment: dockerEnvironment() },
+  );
+  if (label !== expectedLabel) {
+    fail("SYNTHETIC_CI_DATABASE_RELEASE_RESOURCE_IDENTITY_MISMATCH");
+  }
+  return true;
+}
+
+export function cleanupState(
   state: SyntheticState,
   runnerTemp: string,
   statePath: string,
 ): void {
   const expectedLabel = `${resourceLabelVersion}:${state.token}`;
-  const executorName = `${state.containerName}-executor`;
-  const executorLabel = resourceInspection("container", executorName);
-  if (executorLabel) {
-    if (executorLabel !== expectedLabel) {
-      fail("SYNTHETIC_CI_DATABASE_RELEASE_RESOURCE_IDENTITY_MISMATCH");
-    }
-    command(
-      "docker",
-      ["container", "rm", "--force", executorName],
-      "SYNTHETIC_CI_DATABASE_RELEASE_CONTAINER_CLEANUP_FAILED",
-      { environment: dockerEnvironment() },
-    );
-  }
-  const containerLabel = resourceInspection("container", state.containerName);
-  if (containerLabel) {
-    if (containerLabel !== expectedLabel) {
-      fail("SYNTHETIC_CI_DATABASE_RELEASE_RESOURCE_IDENTITY_MISMATCH");
-    }
-    command(
-      "docker",
-      ["container", "rm", "--force", state.containerName],
-      "SYNTHETIC_CI_DATABASE_RELEASE_CONTAINER_CLEANUP_FAILED",
-      { environment: dockerEnvironment() },
-    );
-  }
-  const volumeLabel = command(
-    "docker",
-    [
-      "volume",
-      "inspect",
-      "--format",
-      `{{index .Labels \"${resourceLabel}\"}}`,
-      state.volumeName,
-    ],
-    "SYNTHETIC_CI_DATABASE_RELEASE_RESOURCE_ABSENT",
-    { environment: dockerEnvironment(), tolerateFailure: true },
+  const resources = cleanupResources(state);
+  // Attest every exact-name object before deleting any of them. A Docker list
+  // or inspect failure, an ambiguous census, or a missing/wrong label leaves
+  // the state and temporary evidence intact for operator investigation.
+  const present = resources.map((resource) =>
+    attestOwnedResource(resource, expectedLabel),
   );
-  if (volumeLabel) {
-    if (volumeLabel !== expectedLabel) {
-      fail("SYNTHETIC_CI_DATABASE_RELEASE_RESOURCE_IDENTITY_MISMATCH");
-    }
-    command(
-      "docker",
-      ["volume", "rm", state.volumeName],
-      "SYNTHETIC_CI_DATABASE_RELEASE_VOLUME_CLEANUP_FAILED",
-      { environment: dockerEnvironment() },
-    );
+  for (const [index, resource] of resources.entries()) {
+    if (!present[index]) continue;
+    command("docker", resource.removeArgs, resource.removeFailureCode, {
+      environment: dockerEnvironment(),
+    });
   }
-  const imageLabel = resourceInspection("image", state.imageTag);
-  if (imageLabel) {
-    if (imageLabel !== expectedLabel) {
-      fail("SYNTHETIC_CI_DATABASE_RELEASE_RESOURCE_IDENTITY_MISMATCH");
+  // Removal command success is not absence evidence. Prove the complete
+  // exact-name resource set absent before destroying recovery state.
+  for (const resource of resources) {
+    if (resourceExists(resource)) {
+      fail("SYNTHETIC_CI_DATABASE_RELEASE_RESOURCE_CLEANUP_INCOMPLETE");
     }
-    command(
-      "docker",
-      ["image", "rm", state.imageTag],
-      "SYNTHETIC_CI_DATABASE_RELEASE_IMAGE_CLEANUP_FAILED",
-      { environment: dockerEnvironment() },
-    );
   }
   const temporaryDirectory = resolve(state.temporaryDirectory);
   const expectedPrefix = `${resolve(runnerTemp)}/quillmd-synthetic-ci-`;
@@ -1137,7 +1209,9 @@ function provision(
   }
 }
 
-function cleanup(boundary: ReturnType<typeof assertSyntheticCiBoundary>): void {
+export function cleanup(
+  boundary: ReturnType<typeof assertSyntheticCiBoundary>,
+): void {
   if (!existsSync(boundary.statePath)) {
     process.stdout.write("SYNTHETIC_CI_DATABASE_RELEASE_CLEANUP_NOOP\n");
     return;

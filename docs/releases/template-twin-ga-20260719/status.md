@@ -1,6 +1,6 @@
 # QuillMD Template Twin GA release-program status
 
-Last updated: 2026-07-21T05:19:19Z
+Last updated: 2026-07-21T06:39:08Z
 
 ## Production verdict
 
@@ -10,27 +10,27 @@ PHI-bearing test. Template Twin remains unauthorized for production use.
 
 ## Exact source records
 
-| Record                                      | Exact value                                                                                                                                                                                                                                                                            | Status |
-| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| Local `origin/main` reference               | `1be101912f01293de3b8fddae722c823ecc86f29`; last remotely verified 2026-07-19                                                                                                                                                                                                          | PASS   |
-| Accepted remediation                        | `79c04e88785a16e8e3b37b58544e107e3a16996e`; parent `b46c62f97544a0193c60929d5ac8e8870b20dc4b`                                                                                                                                                                                          | PASS   |
-| Lossless stack integration                  | Merge `719eea4b27c68cc76e6bf485612c833705cef913`; accepted tree preserved                                                                                                                                                                                                              | PASS   |
-| Provider-ownership head                     | `db1cab904ac5c8d6c7f25878f59d71e1b094a223`                                                                                                                                                                                                                                             | PASS   |
-| Authentication/authorization implementation | `9a1ded49055d1aef153864b28267c81ab1b0506d`                                                                                                                                                                                                                                             | PASS   |
-| Current committed baseline                  | `fix/template-twin-provider-ownership-b017-v1` at `2d9c8f8e41fc0e20279ae3d6a253ec10405bc367`; tree `669b4483c9f4f66f0fa610c5e9bbb103d7c3df42`                                                                                                                                          | PASS   |
-| Independent review of committed baseline    | **REJECT**; authentication/runtime scope passed, but the reviewer found one P1 stale post-v9 exact-principal manifest                                                                                                                                                                  | FAIL   |
-| Current remediation candidate               | Uncommitted additive working tree based on `2d9c8f8`; a snapshot audit returned **BLOCK**, and its auth-session, recovery/principal/state, finalization-race, RI-enforcement, documentation, and P2 findings are implemented and focused-tested; no detached exact-head verdict exists | FAIL   |
-| Consolidated draft PR                       | PR #371 targets `main`, but its last recorded published head `9088f74f17e11ff3f7e5869e5a56b6c5d36796fd` does not contain this series                                                                                                                                                   | FAIL   |
-| Frozen release candidate                    | Not created                                                                                                                                                                                                                                                                            | FAIL   |
-| Current production Git SHA                  | Not reproducible from a clean commit at the last authorized inventory                                                                                                                                                                                                                  | FAIL   |
+| Record                                      | Exact value                                                                                                                                                                                                                                                                                                                 | Status |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| Local `origin/main` reference               | `1be101912f01293de3b8fddae722c823ecc86f29`; last remotely verified 2026-07-19                                                                                                                                                                                                                                               | PASS   |
+| Accepted remediation                        | `79c04e88785a16e8e3b37b58544e107e3a16996e`; parent `b46c62f97544a0193c60929d5ac8e8870b20dc4b`                                                                                                                                                                                                                               | PASS   |
+| Lossless stack integration                  | Merge `719eea4b27c68cc76e6bf485612c833705cef913`; accepted tree preserved                                                                                                                                                                                                                                                   | PASS   |
+| Provider-ownership head                     | `db1cab904ac5c8d6c7f25878f59d71e1b094a223`                                                                                                                                                                                                                                                                                  | PASS   |
+| Authentication/authorization implementation | `9a1ded49055d1aef153864b28267c81ab1b0506d`                                                                                                                                                                                                                                                                                  | PASS   |
+| Current committed implementation            | `fix/template-twin-provider-ownership-b017-v1` at `50286004f9bc7f940602206e50b24679ab1c2b38`; tree `465d0b6908f8dfcfe49bc3f1993119fbdbff5e91`; parent `2d9c8f8e41fc0e20279ae3d6a253ec10405bc367`                                                                                                                            | PASS   |
+| Independent review of `50286004`            | **REJECT**. Core auth/operator fixes reproduced successfully; one P1 obsolete raw-migration instruction and P2 release-record, actual-PostgreSQL regression, cleanup, strict-parser, diff-whitespace, and dependency-debt items remained                                                                                    | FAIL   |
+| Current remediation candidate               | Uncommitted additive working tree based on `50286004`; the obsolete instructions, docs census, actual-PostgreSQL regressions, cleanup failure semantics, strict Semgrep parser coverage, and diff whitespace are corrected and focused-tested. A new immutable SHA and fresh detached exact-head verdict are still required | FAIL   |
+| Consolidated draft PR                       | PR #371 targets `main`, but its last recorded published head `9088f74f17e11ff3f7e5869e5a56b6c5d36796fd` does not contain this series                                                                                                                                                                                        | FAIL   |
+| Frozen release candidate                    | Not created                                                                                                                                                                                                                                                                                                                 | FAIL   |
+| Current production Git SHA                  | Not reproducible from a clean commit at the last authorized inventory                                                                                                                                                                                                                                                       | FAIL   |
 
 The candidate contains **97 ordered Prisma migrations**; the ordered-name
 manifest SHA-256 is
 `62efcdab3aea04ad635a1c01d0dab21f360e27a78cb87aab32cbeb3b8ca6040f`.
 Two independently created disposable synthetic PostgreSQL release environments
 each applied all 97 migrations, completed the closed auth/lineage/release
-transitions and six exact-principal proofs, and cleaned up successfully. This is
-working-tree evidence, not a committed final-head receipt. The 96/96
+transitions and six exact-principal proofs, and cleaned up successfully at exact
+`50286004`. That rejected head is not a final-head receipt. The 96/96
 authentication-email and MFA receipts below remain historical evidence from
 `e7b3864`. Production was last observed at 67 migrations; that dated inventory
 is not authorization or proof of current production state.
@@ -40,13 +40,13 @@ is not authorization or proof of current production state.
 | Phase                                             | Status        | Evidence / blocking condition                                                                                                                                                                                                                                                                          |
 | ------------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | 0 — Preflight and inventory                       | FAIL          | The equivalent preflight and read-only inventory exist, but deployed provenance, least-privilege production identities, PITR, complete restore, internal transport, capacity, monitoring, and credential-rotation gates remain open.                                                                   |
-| 1 — Consolidated implementation                   | FAIL          | Accepted history is preserved. The latest independent snapshot audit returned BLOCK; every listed auth/authz and operator finding is additively remediated and focused-tested, but the result is uncommitted and has no fresh detached exact-head verdict.                                             |
+| 1 — Consolidated implementation                   | FAIL          | Accepted history is preserved. Exact `50286004` was rejected; every listed auth/authz, operator-document, regression, cleanup, parser-coverage, and diff-hygiene finding is now additively remediated, but the follow-up is uncommitted and has no fresh detached exact-head verdict.                  |
 | 2 — Production template intake                    | FAIL          | Misplaced Word-control remediation and completed-document conversion are integrated; production scanner readiness, final compatibility evidence, and combined exact-head review remain open. Unsupported structures continue to fail closed.                                                           |
 | 3 — Extraction quality                            | FAIL          | Provider ownership now covers the released path technically, but the release-head live-provider clinical cohort remains `n=0` and Clinical Safety approval is HUMAN PENDING.                                                                                                                           |
 | 4 — Microsoft Office compatibility                | FAIL          | Office evidence binding and misplaced-control remediation are integrated. Final-SHA corpus generation and returned desktop Word evidence remain mandatory; Word approval is HUMAN PENDING.                                                                                                             |
 | 5 — Infrastructure and operations                 | FAIL          | Two fresh zero-state 97-migration release replays, candidate exact-principal/RI-tamper proof, and historical backup-role dump/restore/re-provision pass. Production identities, immutable image digests, real six-container rollback, PITR/object/queue recovery, and named ownership remain unproven. |
 | 6 — Privacy/Legal, Clinical, Operations approvals | HUMAN PENDING | No implementation agent may supply these decisions.                                                                                                                                                                                                                                                    |
-| 7 — Final release candidate                       | FAIL          | The remediation is not yet an exact commit and has no detached exact-head verdict. No frozen or accepted RC exists.                                                                                                                                                                                    |
+| 7 — Final release candidate                       | FAIL          | Exact `50286004` is rejected and the additive closure is not yet committed or independently accepted. No frozen or accepted RC exists.                                                                                                                                                                 |
 | 8 — Production deployment and 100% rollout        | FAIL          | No production authority has been exercised; rollout is 0%.                                                                                                                                                                                                                                             |
 
 ## Historical scoped verification at rejected `e7b3864`
@@ -69,7 +69,7 @@ is not authorization or proof of current production state.
 These scoped passes did not close the review finding. See
 `evidence-manifest-auth-authz-mfa-runtime-v1.md`.
 
-## Current pre-commit remediation evidence
+## Current committed and follow-up evidence
 
 - Two independent disposable zero-state executions completed the closed release
   path, all **97/97 migrations**, auth and lineage transitions, six exact-
@@ -81,15 +81,23 @@ These scoped passes did not close the review finding. See
   and runtime-principal tests**, the pinned-image live PostgreSQL HBA harness,
   and shell syntax. PostgreSQL transport encryption remains independently
   unproven for production.
-- Full TranscribeMD TypeScript and diff whitespace: **PASS** on the current
-  working tree. Current changed JavaScript/TypeScript lint also passes.
+- Exact `50286004` passed the full TranscribeMD suite (**426/426 files and
+  5,754/5,754 tests**), full MedDoc suite (**11/11 files and 103/103 tests**),
+  both standalone TypeScript checks, Prisma 7.8.0 format/validate/generate,
+  both production builds, changed-file lint, and diff whitespace.
+- The current additive follow-up passes full TranscribeMD TypeScript,
+  **427/427 files and 5,758/5,758 tests**, the operator-doc contract
+  (**11/11**), cleanup negative paths (**10/10**), changed-file lint, and both
+  main-targeting and local diff whitespace checks. Both production builds, one
+  fresh closed **97/97** migration replay, MedDoc **11/11 files and 103/103
+  tests**, hardened labeled cleanup, and zero residual labeled resources also
+  pass. The two newly committed actual-PostgreSQL adversarial regressions still
+  require execution at the replacement exact head.
 - Current whole-workspace verified-only secret scan: **0 verified findings**;
   scanner errors are configured to fail the gate.
-- An earlier pre-operator-fix working tree passed the full TranscribeMD suite
-  (**416 files / 5,600 tests**), the full MedDoc suite (**11 files / 103 tests**),
-  Prisma 7.8.0 format/validate/generate, both production builds, standalone type
-  checks, and changed-file lint. Those broader receipts do not bind the latest
-  operator diff and must be rerun after the exact candidate is committed.
+- Exact-base/head census at `50286004`: parent TranscribeMD **417 files / 5,614
+  tests**; candidate **426 files / 5,754 tests** (`+9` files, `+140` tests).
+  MedDoc remains **11 files / 103 tests**.
 - Earlier repository lint was unchanged from exact `e7b3864`: TranscribeMD reports the
   same **25 errors / 37 warnings** on base and candidate; MedDoc reports the
   same **0 errors / 3 warnings**. Changed-file lint passes. No baseline debt is
@@ -108,12 +116,14 @@ These scoped passes did not close the review finding. See
   unverified detector matches; the changed-file scan reported 35, all confined
   to named synthetic test/QA fixtures and connection-string contracts. No
   verified secret was found or retained.
-- Earlier Semgrep TypeScript scan: **0 findings, 0 errors**. Bash was validated with
-  shell syntax checks only; no Bash Semgrep result is claimed.
-- The latest independent read-only working-tree audit returned **BLOCK** for
-  five P1 categories and four P2 hardening items. All listed findings have been
-  implemented additively; only a fresh detached exact-head reviewer may decide
-  whether they are closed.
+- Exact `50286004` had **29 strict Semgrep partial-parse errors** across 790
+  main-targeting TypeScript files. The current source-compatible follow-up scans
+  all **791/791** with **0 skipped, 0 errors, and 0 findings** under Semgrep
+  1.161.0 `p/typescript --strict`. Bash has shell-syntax evidence only; no Bash
+  Semgrep result is claimed.
+- The latest detached review of exact `50286004` returned **REJECT**. All listed
+  P1/P2 implementation findings are now addressed in the additive working tree;
+  only a fresh detached exact-head reviewer may decide whether they are closed.
 
 This is working-tree evidence, not exact-head acceptance. It does not replace
 the additive commit, detached review, identical-manifest RC census, PR CI,

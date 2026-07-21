@@ -136,7 +136,7 @@ vi.mock("@/lib/minio", () => ({
 // aggregates get the empty-array override.
 vi.mock("@/lib/deepgram-vocabulary", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("@/lib/deepgram-vocabulary")>();
+    (await importOriginal()) as typeof import("@/lib/deepgram-vocabulary");
   return {
     ...actual,
     CLINICAL_KEYTERMS: [],

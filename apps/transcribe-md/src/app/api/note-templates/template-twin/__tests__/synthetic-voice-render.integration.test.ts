@@ -52,7 +52,7 @@ vi.mock("next/server", () => {
 });
 
 vi.mock("@meddoc/ai", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@meddoc/ai")>();
+  const actual = (await importOriginal()) as typeof import("@meddoc/ai");
   return {
     ...actual,
     transcribe: mocks.transcribe,
@@ -80,7 +80,7 @@ vi.mock("@/lib/auth", () => ({
 }));
 
 vi.mock("@/lib/rate-limit", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/rate-limit")>();
+  const actual = (await importOriginal()) as typeof import("@/lib/rate-limit");
   return { ...actual, rateLimitOr429: mocks.rateLimitOr429 };
 });
 
@@ -88,7 +88,7 @@ vi.mock("@/lib/audit", () => ({ logAudit: mocks.legacyAudit }));
 
 vi.mock("@/lib/template-twin/storage", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("@/lib/template-twin/storage")>();
+    (await importOriginal()) as typeof import("@/lib/template-twin/storage");
   return {
     ...actual,
     createTemplateTwinArtifactStore: mocks.createStore,
@@ -97,7 +97,7 @@ vi.mock("@/lib/template-twin/storage", async (importOriginal) => {
 
 vi.mock("@/lib/template-twin/rollout", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("@/lib/template-twin/rollout")>();
+    (await importOriginal()) as typeof import("@/lib/template-twin/rollout");
   return {
     ...actual,
     lockTemplateTwinRolloutForFinalClaim: mocks.finalRollout,
@@ -119,9 +119,7 @@ vi.mock(
   "@/lib/template-twin/synthetic-evidence-gate",
   async (importOriginal) => {
     const actual =
-      await importOriginal<
-        typeof import("@/lib/template-twin/synthetic-evidence-gate")
-      >();
+      (await importOriginal()) as typeof import("@/lib/template-twin/synthetic-evidence-gate");
     return {
       ...actual,
       assertTemplateTwinStagingQaEvidencePhiFree: mocks.syntheticEvidenceGate,

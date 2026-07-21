@@ -21,7 +21,10 @@ import { isMockEnabled, mockComplete, mockCompleteText } from "./mock";
 import { syntheticQaFixtureForProviderCall } from "./synthetic-qa-context";
 import type { AiLogContext, ModelProvider } from "./types";
 
-export type * from "./types";
+// `src/index.ts` is the package's only exported entrypoint and already
+// re-exports every shared type. Avoid the redundant `export type *` form here:
+// Semgrep's OSS TypeScript parser cannot parse it and would skip the remainder
+// of this provider-authorization boundary.
 export type { AnthropicCompleteTextResult };
 
 /** T-M17.1: SCHEMA_FAIL and JSON_PARSE_FAIL from Claude have a ~5% per-call

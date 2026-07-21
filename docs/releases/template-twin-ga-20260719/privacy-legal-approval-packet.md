@@ -12,18 +12,18 @@ Status: **HUMAN PENDING — PHI AND PRODUCTION ROLLOUT BLOCKED**
 
 ## Decisions required
 
-| Topic | Evidence required | Current status |
-|---|---|---|
-| HIPAA and BAA status | Executed agreements and effective dates for every PHI processor and host | HUMAN PENDING |
-| Provider data handling | Current models, regions, training/retention settings, fallback routes, subprocessor list | HUMAN PENDING |
-| Retention and deletion | Approved schedules for raw uploads, quarantine, templates, outputs, audit, backups, and provider logs | HUMAN PENDING |
-| De-identification | Approved standard, responsibilities, validation, and re-identification controls | HUMAN PENDING |
-| Legal hold | Hold initiation, scope, precedence over deletion, release, and audit trail | HUMAN PENDING |
-| Account deletion | Physician/practice/patient effects across primary, object, queue, audit, and backup stores | HUMAN PENDING |
-| Audit access | Authorized roles, immutable access history, retention, and disclosure workflow | HUMAN PENDING |
-| Breach response | Named incident owner, counsel/privacy contacts, containment and notification decisions | HUMAN PENDING |
-| Patient/document export | Authorized requester, identity verification, format, completeness, and audit trail | HUMAN PENDING |
-| Data-subject requests | Intake, identity, search scope, exceptions, response deadlines, and ownership | HUMAN PENDING |
+| Topic                   | Evidence required                                                                                     | Current status |
+| ----------------------- | ----------------------------------------------------------------------------------------------------- | -------------- |
+| HIPAA and BAA status    | Executed agreements and effective dates for every PHI processor and host                              | HUMAN PENDING  |
+| Provider data handling  | Current models, regions, training/retention settings, fallback routes, subprocessor list              | HUMAN PENDING  |
+| Retention and deletion  | Approved schedules for raw uploads, quarantine, templates, outputs, audit, backups, and provider logs | HUMAN PENDING  |
+| De-identification       | Approved standard, responsibilities, validation, and re-identification controls                       | HUMAN PENDING  |
+| Legal hold              | Hold initiation, scope, precedence over deletion, release, and audit trail                            | HUMAN PENDING  |
+| Account deletion        | Physician/practice/patient effects across primary, object, queue, audit, and backup stores            | HUMAN PENDING  |
+| Audit access            | Authorized roles, immutable access history, retention, and disclosure workflow                        | HUMAN PENDING  |
+| Breach response         | Named incident owner, counsel/privacy contacts, containment and notification decisions                | HUMAN PENDING  |
+| Patient/document export | Authorized requester, identity verification, format, completeness, and audit trail                    | HUMAN PENDING  |
+| Data-subject requests   | Intake, identity, search scope, exceptions, response deadlines, and ownership                         | HUMAN PENDING  |
 
 ## Mandatory constraints unless explicitly approved otherwise
 
@@ -35,9 +35,9 @@ Status: **HUMAN PENDING — PHI AND PRODUCTION ROLLOUT BLOCKED**
 
 ## Human decision
 
-Decision: `APPROVE` / `REJECT` / `REVISE`  
-Final exact SHA: ________________________________________  
-Evidence-manifest SHA-256: _____________________________  
-Name and role: _________________________________________  
-Date/time and timezone: ________________________________  
-Approval record: _______________________________________
+- Decision: `APPROVE` / `REJECT` / `REVISE`
+- Final exact SHA: **\*\*\*\***\*\***\*\*\*\***\_\_\_\_**\*\*\*\***\*\***\*\*\*\***
+- Evidence-manifest SHA-256: **\*\***\*\***\*\***\_**\*\***\*\***\*\***
+- Name and role: **\*\*\*\***\*\*\*\***\*\*\*\***\_**\*\*\*\***\*\*\*\***\*\*\*\***
+- Date/time and timezone: **\*\***\*\***\*\***\_\_\_\_**\*\***\*\***\*\***
+- Approval record: **\*\*\*\***\*\***\*\*\*\***\_\_\_**\*\*\*\***\*\***\*\*\*\***

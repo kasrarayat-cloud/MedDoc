@@ -50,7 +50,7 @@ vi.mock("@/lib/template-twin/workspace-read", () => ({
 }));
 
 vi.mock("../rollout", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../rollout")>();
+  const actual = (await importOriginal()) as typeof import("../rollout");
   return {
     ...actual,
     lockTemplateTwinRolloutForFinalClaim: mocks.finalRollout,
@@ -65,7 +65,8 @@ vi.mock("../final-claim-authority", () => ({
 // tests keep their historical in-memory provider seam so privacy failures are
 // asserted without requiring a second database emulator.
 vi.mock("../provider-ownership", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../provider-ownership")>();
+  const actual =
+    (await importOriginal()) as typeof import("../provider-ownership");
   return {
     ...actual,
     resolveTemplateTwinProviderLogicalAttempt: async () => 1,

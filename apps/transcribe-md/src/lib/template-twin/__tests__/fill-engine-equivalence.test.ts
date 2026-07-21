@@ -7,9 +7,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@meddoc/db', () => ({ default: {} }));
 vi.mock('@/lib/audit', () => ({ logAudit: vi.fn() }));
 vi.mock('@/lib/note-template-docx', async (importOriginal) => {
-  const actual = await importOriginal<
-    typeof import('../../note-template-docx')
-  >();
+  const actual =
+    (await importOriginal()) as typeof import('../../note-template-docx');
   return { ...actual, renderTemplateDocx: mocks.renderTemplateDocx };
 });
 
@@ -69,7 +68,8 @@ describe('Template Twin pure fill-engine input equivalence', () => {
     const fixture = await buildTemplateTwinIntegrationFixture();
     const common = {
       soapVersion: 1,
-      soapFinal: 'Synthetic SOAP reviewed for equivalent voice and typed evidence.',
+      soapFinal:
+        'Synthetic SOAP reviewed for equivalent voice and typed evidence.',
       compiledVersionId: 'compiled-synthetic-1',
       noteTemplateId: 'template-synthetic-1',
       noteTemplateVersion: 1,
@@ -109,9 +109,14 @@ describe('Template Twin pure fill-engine input equivalence', () => {
       );
       expect(
         call[0].resolutions.every(
-          (field: { value: unknown; sourceFactIds: string[]; evidenceAnchorIds: string[] }) =>
+          (field: {
+            value: unknown;
+            sourceFactIds: string[];
+            evidenceAnchorIds: string[];
+          }) =>
             field.value === null ||
-            (field.sourceFactIds.length > 0 && field.evidenceAnchorIds.length > 0),
+            (field.sourceFactIds.length > 0 &&
+              field.evidenceAnchorIds.length > 0),
         ),
       ).toBe(true);
     }

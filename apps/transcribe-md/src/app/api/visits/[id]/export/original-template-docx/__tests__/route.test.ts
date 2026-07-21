@@ -106,26 +106,20 @@ vi.mock("@/lib/template-twin/rollout", () => ({
   }),
 }));
 vi.mock("@/lib/template-twin/read-authority", async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import("@/lib/template-twin/read-authority")
-  >()),
+  ...((await importOriginal()) as typeof import("@/lib/template-twin/read-authority")),
   requireTemplateTwinVisitReadAuthority: mocks.requireRead,
 }));
 vi.mock(
   "@/lib/template-twin/synthetic-read-admission",
   async (importOriginal) => ({
-    ...(await importOriginal<
-      typeof import("@/lib/template-twin/synthetic-read-admission")
-    >()),
+    ...((await importOriginal()) as typeof import("@/lib/template-twin/synthetic-read-admission")),
     requireTemplateTwinSyntheticReadAdmission: mocks.requireSyntheticRead,
   }),
 );
 vi.mock(
   "@/lib/template-twin/staging-qa-visit-guard",
   async (importOriginal) => ({
-    ...(await importOriginal<
-      typeof import("@/lib/template-twin/staging-qa-visit-guard")
-    >()),
+    ...((await importOriginal()) as typeof import("@/lib/template-twin/staging-qa-visit-guard")),
     assertTemplateTwinStagingQaVisitGuard: mocks.assertStagingRun,
     lockAndAssertTemplateTwinStagingQaOperation: mocks.lockStagingRun,
   }),

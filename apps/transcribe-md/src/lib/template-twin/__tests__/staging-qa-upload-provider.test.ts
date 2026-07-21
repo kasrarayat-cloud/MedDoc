@@ -26,7 +26,7 @@ vi.mock("@meddoc/db", () => ({
   },
 }));
 vi.mock("../rollout", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../rollout")>()),
+  ...((await importOriginal()) as typeof import("../rollout")),
   pinTemplateTwinRollout: mocks.pinRollout,
 }));
 

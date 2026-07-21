@@ -26,7 +26,7 @@ vi.mock("@meddoc/db", () => ({
 vi.mock("bcryptjs", () => ({ default: { compare: mocks.comparePassword } }));
 vi.mock("@/lib/account-mutation-authority", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("@/lib/account-mutation-authority")>();
+    (await importOriginal()) as typeof import("@/lib/account-mutation-authority");
   return {
     ...actual,
     lockCurrentAccountMutationAuthority: mocks.lockAuthority,

@@ -27,8 +27,11 @@ vi.mock("@meddoc/db", () => ({
 }));
 vi.mock("@/lib/account-mutation-authority", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("@/lib/account-mutation-authority")>();
-  return { ...actual, lockCurrentAccountMutationAuthority: mocks.lockAuthority };
+    (await importOriginal()) as typeof import("@/lib/account-mutation-authority");
+  return {
+    ...actual,
+    lockCurrentAccountMutationAuthority: mocks.lockAuthority,
+  };
 });
 vi.mock("bcryptjs", () => ({ default: { compare: mocks.comparePassword } }));
 vi.mock("@/lib/mfa-request-actor", () => ({
@@ -234,7 +237,9 @@ describe("MFA disable boundary", () => {
       mfaVerifiedAt: new Date("2026-07-20T08:00:00.000Z"),
       mfaBackupCodes: [],
     });
-    mocks.appendAudit.mockRejectedValueOnce(new Error("synthetic audit outage"));
+    mocks.appendAudit.mockRejectedValueOnce(
+      new Error("synthetic audit outage"),
+    );
 
     const response = await POST(request(), { params: Promise.resolve({}) });
 

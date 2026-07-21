@@ -12,7 +12,7 @@ vi.mock("@meddoc/db", () => ({
   default: { user: { findUnique: vi.fn() } },
 }));
 vi.mock("@meddoc/auth", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@meddoc/auth")>();
+  const actual = (await importOriginal()) as typeof import("@meddoc/auth");
   return { ...actual, validateSession: mocks.validateSession };
 });
 

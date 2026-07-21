@@ -32,9 +32,7 @@ vi.mock("@/worker/automation-locks", () => ({
   runVisitAutomationTransaction: mocks.automationTransaction,
 }));
 vi.mock("@/lib/template-twin/staging-qa-visit-guard", async (original) => ({
-  ...(await original<
-    typeof import("../../lib/template-twin/staging-qa-visit-guard")
-  >()),
+  ...((await original()) as typeof import("../../lib/template-twin/staging-qa-visit-guard")),
   lockAndAssertTemplateTwinStagingQaAttempt: mocks.lockAttempt,
 }));
 

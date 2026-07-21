@@ -59,9 +59,7 @@ vi.mock("@/lib/template-twin/staging-qa-mutation", () => ({
 vi.mock(
   "@/lib/template-twin/visit-mutation-authority",
   async (importOriginal) => ({
-    ...(await importOriginal<
-      typeof import("@/lib/template-twin/visit-mutation-authority")
-    >()),
+    ...((await importOriginal()) as typeof import("@/lib/template-twin/visit-mutation-authority")),
     lockAndAssertOrdinaryClinicalMutation: mocks.lockOrdinary,
   }),
 );

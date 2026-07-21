@@ -1,7 +1,8 @@
 # Template Twin clinical-quality technical report
 
-Evaluation timestamp: 2026-07-19T07:42:03Z  
-Evaluated branch: `release/template-twin-ga-20260719`  
+Evaluation timestamp: 2026-07-19T07:42:03Z
+
+Evaluated branch: `release/template-twin-ga-20260719`
 Evaluated technical head: `a351fa7309a59d114a9bdee736c8d9b3b32b5d01`
 
 ## Verdict
@@ -16,15 +17,15 @@ No real PHI was used. No production provider call, database write, feature chang
 
 ## Decision summary
 
-| Question | Evidence | Status |
-|---|---|---|
-| Do deterministic field and evidence contracts behave as specified? | Ten-file synthetic cohort, 176/176 tests | PASS |
-| Does typed input resolve identically to equivalent voice evidence? | Synthetic modality-equivalence and voice-to-DOCX tests | PASS |
-| Are exact options, units, dates, laterality, polarity, and anchors independently revalidated? | Resolver, validation, certification-coverage, and evidence-verification tests | PASS |
-| Is release-head live-provider clinical accuracy measured? | No release-head scored provider cohort | FAIL |
-| Are multiple specialties, accents, tables, missing data, and ambiguity scored end to end on the released provider configuration? | Required scored corpus not yet executed | FAIL |
-| Are provider agreements sufficient for PHI? | Existing audit records no countersigned BAAs on file; current human verification is required | FAIL |
-| Has Clinical Safety approved thresholds and the observed results? | No signed decision | HUMAN PENDING |
+| Question                                                                                                                         | Evidence                                                                                     | Status        |
+| -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ------------- |
+| Do deterministic field and evidence contracts behave as specified?                                                               | Ten-file synthetic cohort, 176/176 tests                                                     | PASS          |
+| Does typed input resolve identically to equivalent voice evidence?                                                               | Synthetic modality-equivalence and voice-to-DOCX tests                                       | PASS          |
+| Are exact options, units, dates, laterality, polarity, and anchors independently revalidated?                                    | Resolver, validation, certification-coverage, and evidence-verification tests                | PASS          |
+| Is release-head live-provider clinical accuracy measured?                                                                        | No release-head scored provider cohort                                                       | FAIL          |
+| Are multiple specialties, accents, tables, missing data, and ambiguity scored end to end on the released provider configuration? | Required scored corpus not yet executed                                                      | FAIL          |
+| Are provider agreements sufficient for PHI?                                                                                      | Existing audit records no countersigned BAAs on file; current human verification is required | FAIL          |
+| Has Clinical Safety approved thresholds and the observed results?                                                                | No signed decision                                                                           | HUMAN PENDING |
 
 ## Evidence cohorts
 
@@ -74,18 +75,18 @@ The repository contains a zero-PHI real-model lane and configured provider crede
 
 These thresholds are proposed for review; they are **not approved policy**. Clinical Safety may tighten them, change denominators, require larger cohorts, or reject the release despite a numeric pass.
 
-| Metric | Proposed release threshold | Required denominator and rule |
-|---|---|---|
-| Critical-field accuracy | At least 99.5%, with zero catastrophic errors | All expected critical fields in a pre-registered release-head cohort; report point estimate and 95% Wilson interval. Any wrong medication, allergy, negation, laterality, or critical measurement is a release blocker. |
-| Unsupported-field recall | At least 99.0%, with zero missed critical unsupported fields | Every deliberately unsupported or ambiguous source region. A field is recalled only if it is visibly marked unsupported/uncertain and blocks activation or signing as required. |
-| Field-level clinical fabrication | Zero critical fabrications and no more than 0.1% noncritical unsupported assertions | Every populated field plus generated narrative assertion; report both encounter-level and assertion-level rates with a 95% upper confidence bound. |
-| Evidence-anchor validity | 100% | Every populated field must point to the exact canonical source span with matching mode, SHA-256, offsets, quote, polarity, and unique occurrence. |
-| Exact dropdown accuracy | 100% | Every populated native dropdown must equal one certified option exactly. Nearest-option substitution is a failure. |
-| Critical negation and laterality accuracy | 100% | All critical polarity and laterality facts. Unknown or ambiguous evidence must remain unresolved. |
-| All-field negation and laterality accuracy | At least 99.5% | All scored polarity and laterality fields, with subgroup counts by specialty, modality, and accent. |
-| Table-placement accuracy | 100% for the declared supported matrix | Every populated cell, row, header/footer occurrence, and repeated-row binding must land at its certified structural identity with static regions unchanged. |
-| Typed/voice canonical equivalence | 100% on matched-pair facts | Equivalent typed and voice inputs must produce the same canonical facts and the same unresolved/unsupported dispositions; anchors remain mode-specific. |
-| Ambiguity containment | 100% | Every pre-registered critical ambiguity, missing evidence, provider ambiguity, or incomplete automation case must block review/signing/download according to policy. |
+| Metric                                     | Proposed release threshold                                                          | Required denominator and rule                                                                                                                                                                                           |
+| ------------------------------------------ | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Critical-field accuracy                    | At least 99.5%, with zero catastrophic errors                                       | All expected critical fields in a pre-registered release-head cohort; report point estimate and 95% Wilson interval. Any wrong medication, allergy, negation, laterality, or critical measurement is a release blocker. |
+| Unsupported-field recall                   | At least 99.0%, with zero missed critical unsupported fields                        | Every deliberately unsupported or ambiguous source region. A field is recalled only if it is visibly marked unsupported/uncertain and blocks activation or signing as required.                                         |
+| Field-level clinical fabrication           | Zero critical fabrications and no more than 0.1% noncritical unsupported assertions | Every populated field plus generated narrative assertion; report both encounter-level and assertion-level rates with a 95% upper confidence bound.                                                                      |
+| Evidence-anchor validity                   | 100%                                                                                | Every populated field must point to the exact canonical source span with matching mode, SHA-256, offsets, quote, polarity, and unique occurrence.                                                                       |
+| Exact dropdown accuracy                    | 100%                                                                                | Every populated native dropdown must equal one certified option exactly. Nearest-option substitution is a failure.                                                                                                      |
+| Critical negation and laterality accuracy  | 100%                                                                                | All critical polarity and laterality facts. Unknown or ambiguous evidence must remain unresolved.                                                                                                                       |
+| All-field negation and laterality accuracy | At least 99.5%                                                                      | All scored polarity and laterality fields, with subgroup counts by specialty, modality, and accent.                                                                                                                     |
+| Table-placement accuracy                   | 100% for the declared supported matrix                                              | Every populated cell, row, header/footer occurrence, and repeated-row binding must land at its certified structural identity with static regions unchanged.                                                             |
+| Typed/voice canonical equivalence          | 100% on matched-pair facts                                                          | Equivalent typed and voice inputs must produce the same canonical facts and the same unresolved/unsupported dispositions; anchors remain mode-specific.                                                                 |
+| Ambiguity containment                      | 100%                                                                                | Every pre-registered critical ambiguity, missing evidence, provider ambiguity, or incomplete automation case must block review/signing/download according to policy.                                                    |
 
 ### Proposed minimum evaluation design
 
@@ -155,12 +156,12 @@ The committed BAA audit `docs/qa-reports/pre-pilot-baa-status-20260610T152350Z.m
 
 ## Evidence hashes
 
-| Evidence | SHA-256 |
-|---|---|
-| `docs/qa-reports/pre-pilot-baa-status-20260610T152350Z.md` | `e71ee5da398491a964cf2ce962b46a72530cb20c6738f43999d956814fa41f82` |
-| `docs/qa-reports/hallucination-reconciliation-20260611T072219Z.md` | `db0df3693725dd2b828ff3850200a90258cd1b2f0ae502b32bb74bed4b2b2101` |
+| Evidence                                                             | SHA-256                                                            |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `docs/qa-reports/pre-pilot-baa-status-20260610T152350Z.md`           | `e71ee5da398491a964cf2ce962b46a72530cb20c6738f43999d956814fa41f82` |
+| `docs/qa-reports/hallucination-reconciliation-20260611T072219Z.md`   | `db0df3693725dd2b828ff3850200a90258cd1b2f0ae502b32bb74bed4b2b2101` |
 | `docs/eval-runs/primock57-fullchain-fabrication-20260706T205036Z.md` | `eef536cc55965ab780551331d0dc000ada37e130b532144dd4a7a0622f3d7646` |
-| Ten-file deterministic cohort file hashes | Recorded in `clinical-quality-evidence-manifest.md` |
+| Ten-file deterministic cohort file hashes                            | Recorded in `clinical-quality-evidence-manifest.md`                |
 
 ## Human decision required
 

@@ -53,7 +53,7 @@ vi.mock("@meddoc/db", () => ({
 
 vi.mock("../quarantine-admission", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("../quarantine-admission")>();
+    (await importOriginal()) as typeof import("../quarantine-admission");
   return {
     ...actual,
     beginTemplateTwinQuarantine: mocks.begin,
@@ -64,24 +64,25 @@ vi.mock("../quarantine-admission", async (importOriginal) => {
 });
 
 vi.mock("../source-metadata", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../source-metadata")>();
+  const actual =
+    (await importOriginal()) as typeof import("../source-metadata");
   return { ...actual, minimizeTemplateTwinSourceMetadata: mocks.minimize };
 });
 
 vi.mock("../completed-candidate-converter", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("../completed-candidate-converter")>();
+    (await importOriginal()) as typeof import("../completed-candidate-converter");
   return { ...actual, convertCompletedDocumentsToCandidate: mocks.convert };
 });
 
 vi.mock("@/lib/note-template-docx", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("@/lib/note-template-docx")>();
+    (await importOriginal()) as typeof import("@/lib/note-template-docx");
   return { ...actual, compileTemplateDocx: mocks.compile };
 });
 
 vi.mock("../rollout", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../rollout")>();
+  const actual = (await importOriginal()) as typeof import("../rollout");
   return {
     ...actual,
     lockTemplateTwinRolloutForFinalClaim: mocks.finalRollout,
@@ -90,7 +91,7 @@ vi.mock("../rollout", async (importOriginal) => {
 
 vi.mock("../final-claim-authority", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("../final-claim-authority")>();
+    (await importOriginal()) as typeof import("../final-claim-authority");
   return {
     ...actual,
     lockAndAssertCurrentTemplateTwinPhysician: mocks.currentPhysician,
@@ -102,7 +103,7 @@ vi.mock("../audit-outbox", () => ({
 }));
 
 vi.mock("../storage", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../storage")>();
+  const actual = (await importOriginal()) as typeof import("../storage");
   return {
     ...actual,
     assertTemplateTwinRecordOwner: mocks.assertOwner,

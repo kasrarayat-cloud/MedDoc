@@ -1,7 +1,8 @@
 # Template Twin physician-review packet
 
-Status: **HUMAN PENDING**  
-Release: `release/template-twin-ga-20260719`  
+Status: **HUMAN PENDING**
+
+Release: `release/template-twin-ga-20260719`
 Exact candidate SHA: **TO BE FROZEN AFTER TECHNICAL GATES**
 
 ## What the reviewer is deciding
@@ -44,33 +45,33 @@ The final supported-file matrix must narrow this statement to structures that pa
 
 Use only the supplied synthetic reviewer corpus and returned Word evidence package.
 
-| Exercise | Reviewer result |
-|---|---|
-| Confirm every candidate field is visible and understandable | PASS / FAIL |
-| Confirm uncertain and unsupported regions are concise and complete | PASS / FAIL |
-| Confirm exact dropdown choices and explicit denial behavior | PASS / FAIL |
-| Confirm medication, allergy, dose, unit, negation, and laterality traps | PASS / FAIL |
-| Confirm table, header/footer, page, and repeated occurrence placement | PASS / FAIL |
-| Confirm missing information remains blank/unresolved and blocks where required | PASS / FAIL |
-| Confirm side-by-side completed-document candidate review does not overwrite the source | PASS / FAIL |
-| Confirm review language is clinically adequate and not misleading | PASS / FAIL |
-| Confirm known specialty and document limitations are acceptable | PASS / FAIL |
+| Exercise                                                                               | Reviewer result |
+| -------------------------------------------------------------------------------------- | --------------- |
+| Confirm every candidate field is visible and understandable                            | PASS / FAIL     |
+| Confirm uncertain and unsupported regions are concise and complete                     | PASS / FAIL     |
+| Confirm exact dropdown choices and explicit denial behavior                            | PASS / FAIL     |
+| Confirm medication, allergy, dose, unit, negation, and laterality traps                | PASS / FAIL     |
+| Confirm table, header/footer, page, and repeated occurrence placement                  | PASS / FAIL     |
+| Confirm missing information remains blank/unresolved and blocks where required         | PASS / FAIL     |
+| Confirm side-by-side completed-document candidate review does not overwrite the source | PASS / FAIL     |
+| Confirm review language is clinically adequate and not misleading                      | PASS / FAIL     |
+| Confirm known specialty and document limitations are acceptable                        | PASS / FAIL     |
 
 ## Findings register
 
 | Severity | Case/template | Finding | Required correction | Retest evidence |
-|---|---|---|---|---|
-|  |  |  |  |  |
+| -------- | ------------- | ------- | ------------------- | --------------- |
+|          |               |         |                     |                 |
 
 Any critical medication, allergy, negation, laterality, measurement, evidence, structural placement, signing, or data-isolation error is a release blocker.
 
 ## Human decision
 
-Decision: `APPROVE` / `REJECT` / `REVISE`  
-Final exact SHA reviewed: ______________________________  
-Evidence-manifest SHA-256: _____________________________  
-Name and role: _________________________________________  
-Date/time and timezone: ________________________________  
-Signature or approved organizational record: ___________
+- Decision: `APPROVE` / `REJECT` / `REVISE`
+- Final exact SHA reviewed: **\*\***\*\***\*\***\_\_**\*\***\*\***\*\***
+- Evidence-manifest SHA-256: **\*\***\*\***\*\***\_**\*\***\*\***\*\***
+- Name and role: **\*\*\*\***\*\*\*\***\*\*\*\***\_**\*\*\*\***\*\*\*\***\*\*\*\***
+- Date/time and timezone: **\*\***\*\***\*\***\_\_\_\_**\*\***\*\***\*\***
+- Signature or approved organizational record: \***\*\_\_\_\*\***
 
 Codex and implementation agents may prepare this packet but may not sign it.

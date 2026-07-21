@@ -14,18 +14,18 @@ Status: **HUMAN PENDING — PRODUCTION DEPLOYMENT BLOCKED**
 
 ## Decisions and named owners required
 
-| Topic | Required evidence | Status |
-|---|---|---|
-| Deployment owner | Named person/team with production authority and change window | HUMAN PENDING |
-| Migration owner/window | Approved window, lock/statement timeouts, abort criteria | HUMAN PENDING |
-| Backup/restore | Fresh identifiers plus complete disposable restore and PITR evidence | FAIL |
-| Storage recovery | Version/object recovery, retention/deletion/legal-hold behavior | FAIL |
-| Queue/worker recovery | Retry, ambiguous outcome, interruption/resume, and idempotency rehearsal | FAIL |
-| Monitoring/alerts | Dashboards, thresholds, delivery tests, and named responders | FAIL |
-| Kill switch | Named owner, audited invocation, propagation target, and SLA | HUMAN PENDING |
-| Rollback | Exact bridge images/digests, ordered procedure, maintenance fence, rehearsal | FAIL |
-| Capacity/rate limits | Production-scale upload/render/sign/provider/queue tests | FAIL |
-| Support/incident response | Named support and clinical/privacy/security escalation paths | HUMAN PENDING |
+| Topic                     | Required evidence                                                            | Status        |
+| ------------------------- | ---------------------------------------------------------------------------- | ------------- |
+| Deployment owner          | Named person/team with production authority and change window                | HUMAN PENDING |
+| Migration owner/window    | Approved window, lock/statement timeouts, abort criteria                     | HUMAN PENDING |
+| Backup/restore            | Fresh identifiers plus complete disposable restore and PITR evidence         | FAIL          |
+| Storage recovery          | Version/object recovery, retention/deletion/legal-hold behavior              | FAIL          |
+| Queue/worker recovery     | Retry, ambiguous outcome, interruption/resume, and idempotency rehearsal     | FAIL          |
+| Monitoring/alerts         | Dashboards, thresholds, delivery tests, and named responders                 | FAIL          |
+| Kill switch               | Named owner, audited invocation, propagation target, and SLA                 | HUMAN PENDING |
+| Rollback                  | Exact bridge images/digests, ordered procedure, maintenance fence, rehearsal | FAIL          |
+| Capacity/rate limits      | Production-scale upload/render/sign/provider/queue tests                     | FAIL          |
+| Support/incident response | Named support and clinical/privacy/security escalation paths                 | HUMAN PENDING |
 
 ## Required rollout authorization
 
@@ -33,10 +33,10 @@ Operations approval must be tied to the final exact SHA, immutable image digests
 
 ## Human decision
 
-Decision: `APPROVE` / `REJECT` / `REVISE`  
-Final exact SHA: ________________________________________  
-App/worker/migrator image digests: ______________________  
-Backup and restore identifiers: _________________________  
-Name and role: _________________________________________  
-Date/time and timezone: ________________________________  
-Approval record: _______________________________________
+- Decision: `APPROVE` / `REJECT` / `REVISE`
+- Final exact SHA: **\*\*\*\***\*\***\*\*\*\***\_\_\_\_**\*\*\*\***\*\***\*\*\*\***
+- App/worker/migrator image digests: \***\*\*\*\*\***\_\_\***\*\*\*\*\***
+- Backup and restore identifiers: \***\*\*\*\*\*\*\***\_\***\*\*\*\*\*\*\***
+- Name and role: **\*\*\*\***\*\*\*\***\*\*\*\***\_**\*\*\*\***\*\*\*\***\*\*\*\***
+- Date/time and timezone: **\*\***\*\***\*\***\_\_\_\_**\*\***\*\***\*\***
+- Approval record: **\*\*\*\***\*\***\*\*\*\***\_\_\_**\*\*\*\***\*\***\*\*\*\***

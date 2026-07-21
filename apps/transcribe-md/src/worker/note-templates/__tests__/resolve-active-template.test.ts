@@ -18,9 +18,8 @@ vi.mock('@meddoc/db', () => ({
   },
 }));
 vi.mock('@/lib/template-twin/rollout', async (importOriginal) => {
-  const actual = await importOriginal<
-    typeof import('@/lib/template-twin/rollout')
-  >();
+  const actual =
+    (await importOriginal()) as typeof import('@/lib/template-twin/rollout');
   return { ...actual, pinTemplateTwinRollout: rolloutMocks.pin };
 });
 
@@ -116,50 +115,79 @@ describe('selectTemplate — fallback chain', () => {
 
   it('Phase-0 reality: returns the system default when the doctor has no custom template', () => {
     expect(
-      selectTemplate([systemDefault], { doctorId: 'doc1', encounterType: 'cardiology' })
+      selectTemplate([systemDefault], {
+        doctorId: 'doc1',
+        encounterType: 'cardiology',
+      }),
     ).toBe(systemDefault);
   });
 
   it('returns the system default when no encounter type is requested and there is no doctor template', () => {
-    expect(selectTemplate([systemDefault], { doctorId: 'doc1' })).toBe(systemDefault);
+    expect(selectTemplate([systemDefault], { doctorId: 'doc1' })).toBe(
+      systemDefault,
+    );
   });
 
   it("returns the doctor's catch-all (encounterType null) over the system default", () => {
-    const doctorDefault = tmpl({ id: 'dd', doctorId: 'doc1', encounterType: null });
+    const doctorDefault = tmpl({
+      id: 'dd',
+      doctorId: 'doc1',
+      encounterType: null,
+    });
     expect(
-      selectTemplate([systemDefault, doctorDefault], { doctorId: 'doc1' })
+      selectTemplate([systemDefault, doctorDefault], { doctorId: 'doc1' }),
     ).toBe(doctorDefault);
   });
 
   it("prefers the doctor's exact encounter-type match over the catch-all", () => {
-    const doctorDefault = tmpl({ id: 'dd', doctorId: 'doc1', encounterType: null });
-    const exact = tmpl({ id: 'ex', doctorId: 'doc1', encounterType: 'cardiology' });
+    const doctorDefault = tmpl({
+      id: 'dd',
+      doctorId: 'doc1',
+      encounterType: null,
+    });
+    const exact = tmpl({
+      id: 'ex',
+      doctorId: 'doc1',
+      encounterType: 'cardiology',
+    });
     expect(
       selectTemplate([systemDefault, doctorDefault, exact], {
         doctorId: 'doc1',
         encounterType: 'cardiology',
-      })
+      }),
     ).toBe(exact);
   });
 
   it('falls back to the catch-all when no template matches the requested encounter type', () => {
-    const doctorDefault = tmpl({ id: 'dd', doctorId: 'doc1', encounterType: null });
-    const exact = tmpl({ id: 'ex', doctorId: 'doc1', encounterType: 'cardiology' });
+    const doctorDefault = tmpl({
+      id: 'dd',
+      doctorId: 'doc1',
+      encounterType: null,
+    });
+    const exact = tmpl({
+      id: 'ex',
+      doctorId: 'doc1',
+      encounterType: 'cardiology',
+    });
     expect(
       selectTemplate([systemDefault, doctorDefault, exact], {
         doctorId: 'doc1',
         encounterType: 'dermatology',
-      })
+      }),
     ).toBe(doctorDefault);
   });
 
   it("ignores another doctor's templates", () => {
-    const otherDoc = tmpl({ id: 'od', doctorId: 'doc2', encounterType: 'cardiology' });
+    const otherDoc = tmpl({
+      id: 'od',
+      doctorId: 'doc2',
+      encounterType: 'cardiology',
+    });
     expect(
       selectTemplate([systemDefault, otherDoc], {
         doctorId: 'doc1',
         encounterType: 'cardiology',
-      })
+      }),
     ).toBe(systemDefault);
   });
 
@@ -170,9 +198,9 @@ describe('selectTemplate — fallback chain', () => {
       encounterType: null,
       status: 'draft',
     });
-    expect(selectTemplate([systemDefault, draftCatchAll], { doctorId: 'doc1' })).toBe(
-      systemDefault
-    );
+    expect(
+      selectTemplate([systemDefault, draftCatchAll], { doctorId: 'doc1' }),
+    ).toBe(systemDefault);
   });
 
   it('ignores a draft exact match and continues down the chain', () => {
@@ -182,23 +210,27 @@ describe('selectTemplate — fallback chain', () => {
       encounterType: 'cardiology',
       status: 'draft',
     });
-    const doctorDefault = tmpl({ id: 'dd', doctorId: 'doc1', encounterType: null });
+    const doctorDefault = tmpl({
+      id: 'dd',
+      doctorId: 'doc1',
+      encounterType: null,
+    });
     expect(
       selectTemplate([systemDefault, draftExact, doctorDefault], {
         doctorId: 'doc1',
         encounterType: 'cardiology',
-      })
+      }),
     ).toBe(doctorDefault);
   });
 
   it('throws MissingSystemDefaultTemplateError when no system default is present', () => {
     expect(() => selectTemplate([], { doctorId: 'doc1' })).toThrow(
-      MissingSystemDefaultTemplateError
+      MissingSystemDefaultTemplateError,
     );
     // A doctor draft with no active fallback + no system default also throws.
     const draft = tmpl({ id: 'dr', doctorId: 'doc1', status: 'draft' });
     expect(() => selectTemplate([draft], { doctorId: 'doc1' })).toThrow(
-      MissingSystemDefaultTemplateError
+      MissingSystemDefaultTemplateError,
     );
   });
 
@@ -234,7 +266,7 @@ describe('resolveVisitTemplate — immutable retry provenance', () => {
         encounterType: 'cardiology',
         pinnedTemplateId: 'twin-v1',
         pinnedTemplateVersion: 1,
-      })
+      }),
     ).resolves.toBe(pinned);
     expect(prisma.noteTemplate.findFirst).toHaveBeenCalledWith({
       where: {
@@ -294,10 +326,12 @@ describe('resolveVisitTemplate — immutable retry provenance', () => {
         sizeBytes: TEMPLATE_TWIN_STAGING_QA_FIXTURE_SIZE_BYTES,
       },
     );
-    vi.mocked(prisma.noteTemplate.findFirst).mockResolvedValue(pinnedStaging as never);
-    vi.mocked(prisma.templateTwinSyntheticQaRun.findFirst).mockResolvedValueOnce(
-      null,
+    vi.mocked(prisma.noteTemplate.findFirst).mockResolvedValue(
+      pinnedStaging as never,
     );
+    vi.mocked(
+      prisma.templateTwinSyntheticQaRun.findFirst,
+    ).mockResolvedValueOnce(null);
 
     await expect(
       resolveVisitTemplate({
@@ -308,7 +342,9 @@ describe('resolveVisitTemplate — immutable retry provenance', () => {
       }),
     ).rejects.toBeInstanceOf(PinnedTemplateUnavailableError);
 
-    vi.mocked(prisma.templateTwinSyntheticQaRun.findFirst).mockResolvedValueOnce({
+    vi.mocked(
+      prisma.templateTwinSyntheticQaRun.findFirst,
+    ).mockResolvedValueOnce({
       id: 'run-1',
     } as never);
     vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({
@@ -476,7 +512,7 @@ describe('resolveVisitTemplate — immutable retry provenance', () => {
     ] as never);
 
     await expect(
-      resolveActiveTemplate({ doctorId: 'doc1', encounterType: 'cardiology' })
+      resolveActiveTemplate({ doctorId: 'doc1', encounterType: 'cardiology' }),
     ).resolves.toBe(systemDefault);
     expect(prisma.user.findUnique).not.toHaveBeenCalled();
     expect(rolloutMocks.pin).not.toHaveBeenCalled();
@@ -498,7 +534,9 @@ describe('resolveVisitTemplate — immutable retry provenance', () => {
         },
       },
     };
-    vi.mocked(prisma.noteTemplate.findFirst).mockResolvedValueOnce(legacy as never);
+    vi.mocked(prisma.noteTemplate.findFirst).mockResolvedValueOnce(
+      legacy as never,
+    );
 
     await expect(
       resolveVisitTemplate({
@@ -518,7 +556,7 @@ describe('resolveVisitTemplate — immutable retry provenance', () => {
     });
     const kindDrifted = { ...compiled, templateKind: 'structured' };
     vi.mocked(prisma.noteTemplate.findFirst).mockResolvedValueOnce(
-      kindDrifted as never
+      kindDrifted as never,
     );
 
     await expect(
@@ -526,7 +564,7 @@ describe('resolveVisitTemplate — immutable retry provenance', () => {
         doctorId: 'doc1',
         pinnedTemplateId: kindDrifted.id,
         pinnedTemplateVersion: kindDrifted.version,
-      })
+      }),
     ).rejects.toBeInstanceOf(PinnedTemplateUnavailableError);
     expect(prisma.user.findUnique).not.toHaveBeenCalled();
     expect(rolloutMocks.pin).not.toHaveBeenCalled();
@@ -669,7 +707,7 @@ describe('resolveVisitTemplate — immutable retry provenance', () => {
         doctorId: 'doc1',
         pinnedTemplateId: 'twin-v1',
         pinnedTemplateVersion: null,
-      })
+      }),
     ).rejects.toBeInstanceOf(PinnedTemplateUnavailableError);
 
     vi.mocked(prisma.noteTemplate.findFirst).mockResolvedValueOnce(null);
@@ -678,7 +716,7 @@ describe('resolveVisitTemplate — immutable retry provenance', () => {
         doctorId: 'doc1',
         pinnedTemplateId: 'twin-v1',
         pinnedTemplateVersion: 1,
-      })
+      }),
     ).rejects.toBeInstanceOf(PinnedTemplateUnavailableError);
   });
 });

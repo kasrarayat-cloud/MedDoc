@@ -39,19 +39,17 @@ vi.mock("@meddoc/db", () => {
 });
 
 vi.mock("../rollout", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../rollout")>()),
+  ...((await importOriginal()) as typeof import("../rollout")),
   lockTemplateTwinRolloutForFinalClaim: mocks.rollout,
 }));
 
 vi.mock("../final-claim-authority", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../final-claim-authority")>()),
+  ...((await importOriginal()) as typeof import("../final-claim-authority")),
   lockAndAssertCurrentTemplateTwinPhysician: mocks.currentPhysician,
 }));
 
 vi.mock("../custom-concepts/example-coverage", async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import("../custom-concepts/example-coverage")
-  >()),
+  ...((await importOriginal()) as typeof import("../custom-concepts/example-coverage")),
   executeTemplateTwinCustomExamples: mocks.execute,
   evaluateTemplateTwinCustomExampleCoverage: mocks.evaluate,
 }));

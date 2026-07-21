@@ -156,6 +156,33 @@ async function waitForConcurrentIndex(
   throw new Error("AUTH_TOKEN_CONCURRENT_INDEX_NOT_OBSERVED");
 }
 
+async function waitForTableLock(input: {
+  observer: Client;
+  pid: number;
+  granted: boolean;
+  mode?: string;
+  attempts?: number;
+}): Promise<void> {
+  for (let attempt = 0; attempt < (input.attempts ?? 100); attempt += 1) {
+    const result = await input.observer.query<{ present: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1
+         FROM pg_catalog.pg_locks held_lock
+         WHERE held_lock.pid = $1
+           AND held_lock.locktype = 'relation'
+           AND held_lock.relation =
+             'public.auth_tokens'::pg_catalog.regclass
+           AND held_lock.granted = $2
+           AND ($3::text IS NULL OR held_lock.mode = $3)
+       ) AS "present"`,
+      [input.pid, input.granted, input.mode ?? null],
+    );
+    if (result.rows[0]?.present) return;
+    await sleep(25);
+  }
+  throw new Error("AUTH_TOKEN_EXPECTED_TABLE_LOCK_NOT_OBSERVED");
+}
+
 function isAuthorityError(error: unknown): boolean {
   return error instanceof Error && error.name === "AuthTokenAuthorityError";
 }
@@ -518,6 +545,86 @@ async function main(): Promise<void> {
       true,
     );
 
+    // Recreate the exact transition guard while leaving the final index in
+    // place. Queue a concurrent index drop ahead of finalization's table lock:
+    // the locked catalog reproof must reject and roll back without removing
+    // the transition guard, leaving a recoverable no-gap state.
+    await observer.query(migrationSql);
+    const guardedBeforeDropRace = await readAuthTokenLinearizationStatus(
+      observer as never,
+    );
+    assert.equal(guardedBeforeDropRace.indexExact, true);
+    assert.equal(guardedBeforeDropRace.indexValid, true);
+    assert.equal(guardedBeforeDropRace.indexReady, true);
+    assert.equal(guardedBeforeDropRace.transitionTriggerState, "exact");
+    assert.equal(guardedBeforeDropRace.complete, false);
+
+    const lockBlocker = client("auth-token-final-drop-race-blocker");
+    const queuedDropper = client("auth-token-final-drop-race-dropper");
+    const finalizer = client("auth-token-final-drop-race-finalizer");
+    await Promise.all([
+      lockBlocker.connect(),
+      queuedDropper.connect(),
+      finalizer.connect(),
+    ]);
+    try {
+      const dropperPid = await queuedDropper.query<{ pid: number }>(
+        `SELECT pg_catalog.pg_backend_pid() AS pid`,
+      );
+      const finalizerPid = await finalizer.query<{ pid: number }>(
+        `SELECT pg_catalog.pg_backend_pid() AS pid`,
+      );
+      assert(dropperPid.rows[0]?.pid);
+      assert(finalizerPid.rows[0]?.pid);
+
+      await lockBlocker.query("BEGIN");
+      await lockBlocker.query(`LOCK TABLE public."auth_tokens" IN SHARE MODE`);
+      const queuedDrop = queuedDropper.query(
+        `DROP INDEX CONCURRENTLY public."${AUTH_TOKEN_INDEX}"`,
+      );
+      await waitForTableLock({
+        observer,
+        pid: dropperPid.rows[0].pid,
+        granted: false,
+      });
+
+      const rejectedFinalization = expectRejected(
+        () => buildAuthTokenUniqueIndex(finalizer as never),
+        "AUTH_TOKEN_INDEX_NOT_VALID",
+        "queued final-index drop before locked reproof",
+      );
+      await waitForTableLock({
+        observer,
+        pid: finalizerPid.rows[0].pid,
+        granted: false,
+        mode: "AccessExclusiveLock",
+        attempts: 60,
+      });
+      await lockBlocker.query("ROLLBACK");
+      await Promise.all([queuedDrop, rejectedFinalization]);
+    } finally {
+      await lockBlocker.query("ROLLBACK").catch(() => undefined);
+      await Promise.allSettled([
+        lockBlocker.end(),
+        queuedDropper.end(),
+        finalizer.end(),
+      ]);
+    }
+
+    const afterDropRace = await readAuthTokenLinearizationStatus(
+      observer as never,
+    );
+    assert.equal(afterDropRace.indexExists, false);
+    assert.equal(afterDropRace.transitionTriggerState, "exact");
+    assert.equal(afterDropRace.complete, false);
+    await buildAuthTokenUniqueIndex(observer as never);
+    const recoveredAfterDropRace = await readAuthTokenLinearizationStatus(
+      observer as never,
+    );
+    assert.equal(recoveredAfterDropRace.complete, true);
+    assert.equal(recoveredAfterDropRace.indexExact, true);
+    assert.equal(recoveredAfterDropRace.transitionTriggerState, "absent");
+
     const lockPool = new Pool({ connectionString: databaseUrl, max: 3 });
     try {
       const firstLock = await acquireAuthTokenOperatorSessionLock(lockPool);
@@ -639,7 +746,9 @@ async function main(): Promise<void> {
         operatorContentionRejected: true,
         idempotentFinalization: true,
         malformedTriggerWithFinalIndexRejected: true,
-        finalCatalogComplete: complete.complete,
+        queuedFinalIndexDropRejectedWithGuardPreserved: true,
+        queuedFinalIndexDropRecovered: true,
+        finalCatalogComplete: recoveredAfterDropRace.complete,
         concurrentMints: mintAttempts,
         remainingCurrentTokens: currentAfterMint.length,
         successfulConcurrentConsumes: consumers.filter(Boolean).length,

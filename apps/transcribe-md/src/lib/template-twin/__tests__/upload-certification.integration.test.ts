@@ -110,7 +110,7 @@ vi.mock("@/worker/layers/03-extract-entities", () => ({
 }));
 
 vi.mock("../rollout", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../rollout")>();
+  const actual = (await importOriginal()) as typeof import("../rollout");
   return {
     ...actual,
     lockTemplateTwinRolloutForFinalClaim: mocks.finalRollout,
@@ -594,15 +594,17 @@ function configureInMemoryPrisma(): void {
   mocks.transaction.mockImplementation(
     async (callback: (client: unknown) => Promise<unknown>) =>
       callback({
-        $queryRaw: vi.fn().mockImplementation(
-          async (query: { strings?: readonly string[] }) => {
-            const sql = query.strings?.join(" ") ?? "";
-            if (sql.includes('FROM "practices" practice')) {
-              return [{ id: ACTOR.practiceId, isActive: true }];
-            }
-            return [{ id: ACTOR.userId, email: ACTOR.userEmail }];
-          },
-        ),
+        $queryRaw: vi
+          .fn()
+          .mockImplementation(
+            async (query: { strings?: readonly string[] }) => {
+              const sql = query.strings?.join(" ") ?? "";
+              if (sql.includes('FROM "practices" practice')) {
+                return [{ id: ACTOR.practiceId, isActive: true }];
+              }
+              return [{ id: ACTOR.userId, email: ACTOR.userEmail }];
+            },
+          ),
         noteTemplate: {
           create: mocks.noteCreate,
           findFirst: mocks.noteFindFirst,

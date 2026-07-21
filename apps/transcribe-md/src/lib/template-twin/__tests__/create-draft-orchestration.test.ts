@@ -77,7 +77,7 @@ vi.mock('@meddoc/db', () => {
 });
 
 vi.mock('../rollout', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../rollout')>();
+  const actual = (await importOriginal()) as typeof import('../rollout');
   return {
     ...actual,
     lockTemplateTwinRolloutForFinalClaim: mocks.finalRollout,
@@ -148,22 +148,20 @@ function syntheticStorage(source: Uint8Array) {
     sizeBytes: source.byteLength,
     created: true,
   });
-  const storeSourceArtifact = vi.fn(
-    async (input: { bytes: Uint8Array }) => {
-      const admittedDigest = sha256(input.bytes);
-      return {
-        bucket: 'synthetic-template-artifacts',
-        objectKey: `practices/${ACTOR.practiceId}/template-twin/sources/lineage/v1/source/${admittedDigest}.docx`,
-        objectVersionId: 'provider-source-version-synthetic',
-        objectEtag: 'provider-source-etag-synthetic',
-        sha256: admittedDigest,
-        mimeType:
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        sizeBytes: input.bytes.byteLength,
-        created: true,
-      };
-    },
-  );
+  const storeSourceArtifact = vi.fn(async (input: { bytes: Uint8Array }) => {
+    const admittedDigest = sha256(input.bytes);
+    return {
+      bucket: 'synthetic-template-artifacts',
+      objectKey: `practices/${ACTOR.practiceId}/template-twin/sources/lineage/v1/source/${admittedDigest}.docx`,
+      objectVersionId: 'provider-source-version-synthetic',
+      objectEtag: 'provider-source-etag-synthetic',
+      sha256: admittedDigest,
+      mimeType:
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      sizeBytes: input.bytes.byteLength,
+      created: true,
+    };
+  });
   return {
     value: {
       storeQuarantineArtifact,
@@ -268,11 +266,12 @@ describe('Template Twin upload/compile proposal orchestration', () => {
     });
     expect(result.sourceSha256).not.toBe(rawDigest);
     expect(mocks.modelComplete).toHaveBeenCalledTimes(2);
-    expect(mocks.modelComplete.mock.calls.map((call) => call[0].purpose)).toEqual([
-      'tm_template_phi_scan',
-      'tm_template_parse',
-    ]);
-    expect(mocks.modelComplete.mock.calls.map((call) => call[0].visitId)).toEqual([
+    expect(
+      mocks.modelComplete.mock.calls.map((call) => call[0].purpose),
+    ).toEqual(['tm_template_phi_scan', 'tm_template_parse']);
+    expect(
+      mocks.modelComplete.mock.calls.map((call) => call[0].visitId),
+    ).toEqual([
       'template-twin-staging-upload-visit:synthetic',
       'template-twin-staging-upload-visit:synthetic',
     ]);
@@ -605,7 +604,9 @@ describe('Template Twin upload/compile proposal orchestration', () => {
     mocks.outboxCreate
       .mockResolvedValueOnce({ id: 'outbox-quarantine-synthetic' })
       .mockResolvedValueOnce({ id: 'outbox-scan-synthetic' })
-      .mockRejectedValueOnce(new Error('synthetic quarantine audit unavailable'));
+      .mockRejectedValueOnce(
+        new Error('synthetic quarantine audit unavailable'),
+      );
 
     await expect(
       createTemplateTwinDraft({

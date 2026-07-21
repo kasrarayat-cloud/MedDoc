@@ -38,8 +38,15 @@ export interface ExpandedXmlVisit {
   readonly parent: ExpandedXmlVisit | null;
 }
 
-const XML_DECLARATION_ATTACK_RE = /<!\s*(?:DOCTYPE|ENTITY)\b/i;
-const XML_HIDDEN_CONTENT_RE = /<!--|<!\[CDATA\[|<\?/i;
+// Semgrep's OSS TypeScript parser treats regex literals beginning with an XML
+// opener as JSX and only partially parses the security boundary. Constant
+// constructors preserve the exact regular-expression semantics while keeping
+// this runtime file fully available to strict static analysis.
+const XML_DECLARATION_ATTACK_RE = new RegExp(
+  "<!\\s*(?:DOCTYPE|ENTITY)\\b",
+  "i",
+);
+const XML_HIDDEN_CONTENT_RE = new RegExp("<!--|<!\\[CDATA\\[|<\\?", "i");
 
 export function parseOrderedXml(
   bytes: Uint8Array,

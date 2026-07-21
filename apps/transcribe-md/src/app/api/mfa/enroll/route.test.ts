@@ -30,8 +30,11 @@ vi.mock("bcryptjs", () => ({
 }));
 vi.mock("@/lib/account-mutation-authority", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("@/lib/account-mutation-authority")>();
-  return { ...actual, lockCurrentAccountMutationAuthority: mocks.lockAuthority };
+    (await importOriginal()) as typeof import("@/lib/account-mutation-authority");
+  return {
+    ...actual,
+    lockCurrentAccountMutationAuthority: mocks.lockAuthority,
+  };
 });
 vi.mock("@/lib/mfa-request-actor", () => ({
   resolveMfaRequestActor: mocks.resolveActor,
@@ -229,7 +232,9 @@ describe("MFA enrollment authorization boundary", () => {
       mfaVerifiedAt: null,
       mfaBackupCodes: [],
     });
-    mocks.appendAudit.mockRejectedValueOnce(new Error("synthetic audit outage"));
+    mocks.appendAudit.mockRejectedValueOnce(
+      new Error("synthetic audit outage"),
+    );
 
     const response = await POST(request(), { params: Promise.resolve({}) });
 

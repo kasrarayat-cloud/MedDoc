@@ -23,7 +23,7 @@ vi.mock("@meddoc/db", () => ({
   },
 }));
 vi.mock("../rollout", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../rollout")>();
+  const actual = (await importOriginal()) as typeof import("../rollout");
   return {
     ...actual,
     pinTemplateTwinRollout: mocks.pinRollout,
@@ -37,17 +37,15 @@ vi.mock("../rollout", async (importOriginal) => {
   };
 });
 vi.mock("../fill-engine", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../fill-engine")>()),
+  ...((await importOriginal()) as typeof import("../fill-engine")),
   lockCurrentTemplateTwinVisit: mocks.lockVisit,
 }));
 vi.mock("../staging-qa-visit-guard", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../staging-qa-visit-guard")>()),
+  ...((await importOriginal()) as typeof import("../staging-qa-visit-guard")),
   lockAndAssertTemplateTwinStagingQaActor: mocks.lockActor,
 }));
 vi.mock("@/worker/automation-finalization", async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import("@/worker/automation-finalization")
-  >()),
+  ...((await importOriginal()) as typeof import("@/worker/automation-finalization")),
   assessVisitAutomationProof: mocks.assessAutomation,
   lockAndAssertVisitAutomationProof: mocks.lockAutomation,
 }));

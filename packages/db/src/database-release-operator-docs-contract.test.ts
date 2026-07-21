@@ -17,6 +17,7 @@ const rootReadme = source("README.md");
 const deploymentRunbook = source("docs/DEPLOYMENT_RUNBOOK.md");
 const launchChecklist = source("docs/LAUNCH_CHECKLIST.md");
 const qaRunbook = source("docs/qa/README.md");
+const postMergeTodo = source("docs/POST_MERGE_TODO.md");
 const lineageRunbook = source(
   "docs/runbooks/template-twin-lineage-online-migration.md",
 );
@@ -246,6 +247,7 @@ describe("closed database-release operator documentation contract", () => {
       qaRunbook,
       lineageRunbook,
       authTokenRunbook,
+      postMergeTodo,
     ];
     const forbiddenInstructions = [
       /^\s*docker\s+compose\s+exec[^\n]*prisma\s+migrate\s+deploy\b/mu,
@@ -264,6 +266,13 @@ describe("closed database-release operator documentation contract", () => {
       scripts?: Record<string, string>;
     };
     expect(rootPackage.scripts?.["db:migrate:deploy"]).toBeUndefined();
+    expect(postMergeTodo).toContain(
+      "Historical record — not an operator runbook",
+    );
+    expect(postMergeTodo).toContain(
+      "docker compose run --rm db-migrate --phase status",
+    );
+    expect(postMergeTodo).toContain("docs/DEPLOYMENT_RUNBOOK.md");
   });
 
   it("requires one retained target-proved lineage session and a fresh challenge per mutation", () => {

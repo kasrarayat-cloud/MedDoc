@@ -29,11 +29,11 @@ vi.mock("@meddoc/db", () => ({
   },
 }));
 vi.mock("../rollout", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../rollout")>()),
+  ...((await importOriginal()) as typeof import("../rollout")),
   pinTemplateTwinRollout: mocks.pinRollout,
 }));
 vi.mock("../staging-qa-admission", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../staging-qa-admission")>()),
+  ...((await importOriginal()) as typeof import("../staging-qa-admission")),
   certifyTemplateTwinStagingQaAdmission: mocks.certifyAdmission,
   markTemplateTwinStagingQaAdmissionFailed: mocks.markAdmissionFailed,
 }));

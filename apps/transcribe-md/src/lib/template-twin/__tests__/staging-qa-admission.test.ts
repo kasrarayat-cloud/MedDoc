@@ -26,7 +26,7 @@ vi.mock("@meddoc/db", () => ({
   },
 }));
 vi.mock("../rollout", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../rollout")>()),
+  ...((await importOriginal()) as typeof import("../rollout")),
   pinTemplateTwinRollout: mocks.pinRollout,
   lockTemplateTwinRolloutForFinalClaim: mocks.lockRollout,
 }));
@@ -46,8 +46,7 @@ import {
 const SAFE_ENV: SyntheticQaProviderEnvironment = {
   TEMPLATE_TWIN_STAGING_QA_ENABLED: "true",
   TEMPLATE_TWIN_STAGING_QA_ENVIRONMENT: "test",
-  TEMPLATE_TWIN_STAGING_QA_RESOURCE_ATTESTATION:
-    "isolated-disposable-qa-v1",
+  TEMPLATE_TWIN_STAGING_QA_RESOURCE_ATTESTATION: "isolated-disposable-qa-v1",
   TEMPLATE_TWIN_STORAGE_PROFILE: "qa",
   DATABASE_URL: "postgresql:///meddoc_durable_admission_synthetic_test",
   REDIS_URL: "redis://redis:6379/15",

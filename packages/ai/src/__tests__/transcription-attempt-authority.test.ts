@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../log", () => ({ logAiCall: vi.fn() }));
 vi.mock("../api-usage", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../api-usage")>();
+  const actual = (await importOriginal()) as typeof import("../api-usage");
   return { ...actual, logApiUsage: vi.fn() };
 });
 

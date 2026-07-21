@@ -93,9 +93,7 @@ vi.mock("@/lib/template-twin/fill-engine", () => ({
 vi.mock(
   "@/lib/template-twin/staging-qa-visit-guard",
   async (importOriginal) => ({
-    ...(await importOriginal<
-      typeof import("../../lib/template-twin/staging-qa-visit-guard")
-    >()),
+    ...((await importOriginal()) as typeof import("../../lib/template-twin/staging-qa-visit-guard")),
     lockAndAssertTemplateTwinStagingQaAttempt: dependencyMocks.lockAttempt,
     lockAndAssertTemplateTwinStagingQaOperation: dependencyMocks.lockOperation,
     lockTemplateTwinStagingQaAdmissionThenRun:

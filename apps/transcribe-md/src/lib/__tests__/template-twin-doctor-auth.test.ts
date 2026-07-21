@@ -14,7 +14,7 @@ vi.mock("@meddoc/db", () => ({
 }));
 vi.mock("@/lib/template-twin/rollout", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("@/lib/template-twin/rollout")>();
+    (await importOriginal()) as typeof import("@/lib/template-twin/rollout");
   return {
     ...actual,
     pinTemplateTwinRollout: mocks.pinRollout,

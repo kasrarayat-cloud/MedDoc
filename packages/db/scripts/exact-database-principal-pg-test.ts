@@ -203,7 +203,10 @@ async function main(): Promise<void> {
       GRANT exact_principal_pre_v9_read_closure_extra TO pg_read_all_data
         WITH ADMIN FALSE, INHERIT TRUE, SET FALSE;`);
     try {
-      await expectMigrationRejected(admin, "predefined read-role closure drift");
+      await expectMigrationRejected(
+        admin,
+        "predefined read-role closure drift",
+      );
     } finally {
       await admin.query(`
         REVOKE exact_principal_pre_v9_read_closure_extra
@@ -353,6 +356,38 @@ async function main(): Promise<void> {
         DROP ROLE exact_principal_graph_member;
         DROP ROLE exact_principal_graph_granted;`,
     });
+
+    const readAuthTokenRiState = async (): Promise<{
+      count: number;
+      enabled: number;
+    }> => {
+      const result = await admin.query<{ count: number; enabled: number }>(
+        `SELECT COUNT(*)::integer AS count,
+                COUNT(*) FILTER (
+                  WHERE trigger_state.tgenabled = 'O'
+                )::integer AS enabled
+           FROM pg_catalog.pg_trigger trigger_state
+          WHERE trigger_state.tgrelid =
+                'public.auth_tokens'::pg_catalog.regclass
+            AND trigger_state.tgisinternal
+            AND trigger_state.tgconstraint <> 0`,
+      );
+      assert(result.rows[0]);
+      return result.rows[0];
+    };
+    assert.deepEqual(await readAuthTokenRiState(), { count: 4, enabled: 4 });
+    diagnosticContext = "disabled internal RI enforcement";
+    diagnosticStage = "install-drift:disabled internal RI enforcement";
+    await admin.query(`ALTER TABLE public."auth_tokens" DISABLE TRIGGER ALL`);
+    try {
+      assert.deepEqual(await readAuthTokenRiState(), { count: 4, enabled: 0 });
+      await expectRuntimeRejected("disabled internal RI enforcement");
+    } finally {
+      diagnosticStage = "remove-drift:disabled internal RI enforcement";
+      await admin.query(`ALTER TABLE public."auth_tokens" ENABLE TRIGGER ALL`);
+    }
+    assert.deepEqual(await readAuthTokenRiState(), { count: 4, enabled: 4 });
+    await expectProfileAccepted("meddoc_runtime", "quillmd_runtime");
 
     diagnosticContext = "final-baseline";
     await expectRuntimeAccepted();

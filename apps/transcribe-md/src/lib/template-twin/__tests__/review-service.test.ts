@@ -46,13 +46,11 @@ vi.mock("../runtime-attestation", () => ({
   TemplateTwinRuntimeAttestationError: class extends Error {},
 }));
 vi.mock("../staging-qa-visit-guard", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../staging-qa-visit-guard")>()),
+  ...((await importOriginal()) as typeof import("../staging-qa-visit-guard")),
   lockAndAssertTemplateTwinStagingQaActor: database.lockActor,
 }));
 vi.mock("@/worker/automation-finalization", async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import("@/worker/automation-finalization")
-  >()),
+  ...((await importOriginal()) as typeof import("@/worker/automation-finalization")),
   assessVisitAutomationProof: database.assessAutomation,
   lockAndAssertVisitAutomationProof: database.lockAutomation,
 }));

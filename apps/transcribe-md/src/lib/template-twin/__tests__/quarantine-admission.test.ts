@@ -33,12 +33,12 @@ vi.mock("@meddoc/db", () => {
 });
 
 vi.mock("../rollout", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../rollout")>()),
+  ...((await importOriginal()) as typeof import("../rollout")),
   lockTemplateTwinRolloutForFinalClaim: mocks.finalRollout,
 }));
 
 vi.mock("../final-claim-authority", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../final-claim-authority")>()),
+  ...((await importOriginal()) as typeof import("../final-claim-authority")),
   lockAndAssertCurrentTemplateTwinPhysician: mocks.currentPhysician,
 }));
 

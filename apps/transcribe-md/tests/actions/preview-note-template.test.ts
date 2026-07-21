@@ -29,7 +29,7 @@ const store = h.store;
 
 // Keep wrapAsData / delimiterSystemSuffix REAL (pure) — override only the model.
 vi.mock("@meddoc/ai", async (orig) => {
-  const actual = await orig<typeof import("@meddoc/ai")>();
+  const actual = (await orig()) as typeof import("@meddoc/ai");
   return {
     ...actual,
     modelClient: { completeText: h.completeText, complete: vi.fn() },
