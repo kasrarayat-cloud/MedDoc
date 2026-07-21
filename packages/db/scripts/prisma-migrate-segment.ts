@@ -122,6 +122,10 @@ const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryRoot = resolve(packageRoot, "../..");
 const prismaRoot = join(packageRoot, "prisma");
 const migrationsRoot = join(prismaRoot, "migrations");
+const prismaCliEntrypoint = join(
+  repositoryRoot,
+  "node_modules/prisma/build/index.js",
+);
 const expectedMigrationCount = 97;
 const databaseOwner = "meddoc";
 const defaultMigrationLockTimeoutMs = 5_000;
@@ -747,6 +751,12 @@ export function classifyPrismaMigrationFailure(
   if (result.signal !== null) {
     return "DATABASE_RELEASE_MIGRATION_PRISMA_PROCESS_TERMINATED";
   }
+  // Shell/npm wrappers conventionally translate SIGKILL/SIGTERM into these
+  // statuses. The direct Node invocation below preserves signals, but retain
+  // this bounded classification for older executors and platform wrappers.
+  if (result.status === 137 || result.status === 143) {
+    return "DATABASE_RELEASE_MIGRATION_PRISMA_PROCESS_TERMINATED";
+  }
 
   const diagnostic = [result.stdout, result.stderr]
     .filter((value): value is string => typeof value === "string")
@@ -777,18 +787,27 @@ export function classifyPrismaMigrationFailure(
   return "DATABASE_RELEASE_MIGRATION_PRISMA_FAILED";
 }
 
+export function buildPrismaMigrationInvocation(configPath: string): {
+  readonly executable: string;
+  readonly args: readonly string[];
+} {
+  const metadata = lstatSync(prismaCliEntrypoint);
+  assert(metadata.isFile() && !metadata.isSymbolicLink());
+  return {
+    executable: process.execPath,
+    args: [prismaCliEntrypoint, "migrate", "deploy", "--config", configPath],
+  };
+}
+
 function runPrismaMigration(configPath: string, databaseUrl: string): void {
-  const result = spawnSync(
-    "npx",
-    ["--no-install", "prisma", "migrate", "deploy", "--config", configPath],
-    {
-      cwd: repositoryRoot,
-      encoding: "utf8",
-      maxBuffer: 16 * 1024 * 1024,
-      timeout: 15 * 60_000,
-      env: buildPrismaMigrationChildEnvironment(databaseUrl, process.env),
-    },
-  );
+  const invocation = buildPrismaMigrationInvocation(configPath);
+  const result = spawnSync(invocation.executable, [...invocation.args], {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+    maxBuffer: 16 * 1024 * 1024,
+    timeout: 15 * 60_000,
+    env: buildPrismaMigrationChildEnvironment(databaseUrl, process.env),
+  });
   if (result.error || result.status !== 0 || result.signal !== null) {
     throw new Error(classifyPrismaMigrationFailure(result));
   }

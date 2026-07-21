@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -7,6 +9,7 @@ import {
   databaseReleaseMigrationApprovalFingerprint,
   buildMigrationDeployConnectionString,
   buildMigrationProbeConnectionString,
+  buildPrismaMigrationInvocation,
   buildPrismaMigrationChildEnvironment,
   classifyPrismaMigrationFailure,
   normalizePrismaLedgerAttempts,
@@ -174,6 +177,31 @@ describe("closed segmented Prisma migration runner", () => {
     });
   });
 
+  it("invokes the exact installed Prisma entry point without an npm wrapper", () => {
+    const invocation = buildPrismaMigrationInvocation(
+      "/tmp/quillmd-reviewed-prisma.config.ts",
+    );
+    expect(invocation.executable).toBe(process.execPath);
+    expect(invocation.args).toEqual([
+      expect.stringMatching(/\/node_modules\/prisma\/build\/index\.js$/u),
+      "migrate",
+      "deploy",
+      "--config",
+      "/tmp/quillmd-reviewed-prisma.config.ts",
+    ]);
+    expect(
+      `${invocation.executable}\n${invocation.args.join("\n")}`,
+    ).not.toMatch(/(?:^|\/)npx(?:$|\s)/u);
+    const source = readFileSync(
+      new URL("../scripts/prisma-migrate-segment.ts", import.meta.url),
+      "utf8",
+    );
+    expect(source).toContain(
+      "const invocation = buildPrismaMigrationInvocation(configPath);",
+    );
+    expect(source).not.toMatch(/spawnSync\(\s*["']npx["']/u);
+  });
+
   it("classifies Prisma child failures without reflecting diagnostic values", () => {
     const sensitive =
       "postgresql://meddoc:synthetic-sensitive-value@127.0.0.1:5432/meddoc_ci_test";
@@ -219,6 +247,14 @@ describe("closed segmented Prisma migration runner", () => {
       ],
       [
         classify({ signal: "SIGKILL" }),
+        "DATABASE_RELEASE_MIGRATION_PRISMA_PROCESS_TERMINATED",
+      ],
+      [
+        classify({ status: 137, stderr: `Killed ${sensitive}` }),
+        "DATABASE_RELEASE_MIGRATION_PRISMA_PROCESS_TERMINATED",
+      ],
+      [
+        classify({ status: 143, stderr: sensitive }),
         "DATABASE_RELEASE_MIGRATION_PRISMA_PROCESS_TERMINATED",
       ],
       [
