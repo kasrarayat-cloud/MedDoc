@@ -104,10 +104,40 @@ describe("rollback compatibility deployment contract", () => {
     ).toHaveLength(2);
     expect(
       qaCompose.match(/^      TEMPLATE_TWIN_KILL_SWITCH: "true"$/gmu),
+    ).toBeNull();
+    expect(
+      qaCompose.match(
+        /^      TEMPLATE_TWIN_KILL_SWITCH: "\$\{QA_TEMPLATE_TWIN_KILL_SWITCH:-true\}"$/gmu,
+      ),
     ).toHaveLength(2);
     expect(qaCompose).not.toMatch(
       /^      TEMPLATE_TWIN_KILL_SWITCH: "false"$/gmu,
     );
+    expect(qaCompose).not.toContain(
+      'TEMPLATE_TWIN_KILL_SWITCH: "${TEMPLATE_TWIN_KILL_SWITCH:-true}"',
+    );
+    for (const key of [
+      "TEMPLATE_TWIN_RELEASE_COMMIT_SHA",
+      "TEMPLATE_TWIN_APP_IMAGE_DIGEST",
+      "TEMPLATE_TWIN_WORKER_IMAGE_DIGEST",
+      "TEMPLATE_TWIN_MIGRATOR_IMAGE_DIGEST",
+    ]) {
+      expect(
+        qaCompose.match(
+          new RegExp(`^      ${key}: "\\$\\{QA_${key}:-\\}"$`, "gmu"),
+        ),
+      ).toHaveLength(2);
+    }
+    expect(
+      qaCompose.match(
+        /^      TEMPLATE_TWIN_RUNTIME_ATTESTATION: "\$\{QA_TEMPLATE_TWIN_APP_RUNTIME_ATTESTATION:-\}"$/gmu,
+      ),
+    ).toHaveLength(1);
+    expect(
+      qaCompose.match(
+        /^      TEMPLATE_TWIN_RUNTIME_ATTESTATION: "\$\{QA_TEMPLATE_TWIN_WORKER_RUNTIME_ATTESTATION:-\}"$/gmu,
+      ),
+    ).toHaveLength(1);
     expect(e2eWorkflow).not.toMatch(
       /^\s*TEMPLATE_TWIN_KILL_SWITCH:\s*["']?false["']?\s*$/gmu,
     );

@@ -1,8 +1,19 @@
 import {
+  execFileSync,
   execSync,
   spawn,
   type ChildProcessWithoutNullStreams,
 } from "node:child_process";
+import {
+  closeSync,
+  constants,
+  fstatSync,
+  lstatSync,
+  openSync,
+  readFileSync,
+  realpathSync,
+} from "node:fs";
+import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
 
 import { assertNonProdDbName } from "@meddoc/db/guard";
 
@@ -15,6 +26,312 @@ import { QA_COMPOSE, QA_DB } from "./qa-compose";
 
 const TEMPLATE_BUCKET =
   process.env.E2E_TEMPLATE_TWIN_BUCKET ?? "transcribe-md-template-artifacts-qa";
+const REPOSITORY_ROOT = realpathSync(resolve(__dirname, "../../../../.."));
+const SYNTHETIC_CI_FIXTURE_VERSION =
+  "template-twin-synthetic-ci-release-fixture-v1";
+const SYNTHETIC_CI_RELEASE_PROFILE = "synthetic-ci-fixture/not-production";
+const FIXTURE_IDENTITY_FILE = "fixture-identities.json";
+const MAX_FIXTURE_IDENTITY_FILE_BYTES = 16 * 1024;
+const RANDOM_FIXTURE_PASSWORD = /^[A-Za-z0-9_-]{32}Aa1!$/u;
+
+const EXPECTED_SYNTHETIC_CI_IDENTITIES = Object.freeze({
+  infrastructure: Object.freeze({
+    practiceId: "synthetic_ci_template_twin_infrastructure",
+    doctorId: "synthetic_ci_template_twin_infrastructure_doctor",
+    doctorEmail: "template-twin-infrastructure@synthetic.test",
+  }),
+  stagingPrimary: Object.freeze({
+    practiceId: "synthetic_ci_template_twin_staging_primary",
+    doctorId: "synthetic_ci_template_twin_staging_primary_doctor",
+    doctorEmail: "template-twin-staging-primary@synthetic.test",
+  }),
+  stagingForeign: Object.freeze({
+    practiceId: "synthetic_ci_template_twin_staging_foreign",
+    doctorId: "synthetic_ci_template_twin_staging_foreign_doctor",
+    doctorEmail: "template-twin-staging-foreign@synthetic.test",
+  }),
+});
+
+export type TemplateTwinSyntheticCiRuntimeProfile =
+  | "infrastructure"
+  | "staging";
+
+export type TemplateTwinSyntheticCiOrchestratorCommand =
+  | "activate-cycle"
+  | "replace-cycle";
+
+export interface TemplateTwinSyntheticCiDoctorIdentity {
+  readonly practiceId: string;
+  readonly doctorId: string;
+  readonly doctorEmail: string;
+  readonly password: string;
+}
+
+export interface TemplateTwinSyntheticCiFixtureIdentities {
+  readonly infrastructure: TemplateTwinSyntheticCiDoctorIdentity;
+  readonly stagingPrimary: TemplateTwinSyntheticCiDoctorIdentity;
+  readonly stagingForeign: TemplateTwinSyntheticCiDoctorIdentity;
+}
+
+function syntheticCiBoundaryRejected(): never {
+  throw new Error("Template Twin synthetic CI setup boundary rejected.");
+}
+
+function exactRecord(
+  value: unknown,
+  expectedKeys: readonly string[],
+): Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    syntheticCiBoundaryRejected();
+  }
+  const record = value as Record<string, unknown>;
+  const actualKeys = Object.keys(record).sort();
+  const exactKeys = [...expectedKeys].sort();
+  if (JSON.stringify(actualKeys) !== JSON.stringify(exactKeys)) {
+    syntheticCiBoundaryRejected();
+  }
+  return record;
+}
+
+function assertSyntheticCiGithubBoundary(
+  profile: TemplateTwinSyntheticCiRuntimeProfile,
+): void {
+  const githubWorkspace = process.env.GITHUB_WORKSPACE;
+  let workspace = "";
+  try {
+    workspace = githubWorkspace ? realpathSync(githubWorkspace) : "";
+  } catch {
+    syntheticCiBoundaryRejected();
+  }
+  if (
+    process.env.CI !== "true" ||
+    process.env.GITHUB_ACTIONS !== "true" ||
+    process.env.GITHUB_REPOSITORY !== "kasrarayat-cloud/MedDoc" ||
+    !["pull_request", "push"].includes(process.env.GITHUB_EVENT_NAME ?? "") ||
+    !/^[1-9][0-9]{0,19}$/u.test(process.env.GITHUB_RUN_ID ?? "") ||
+    !/^[1-9][0-9]{0,19}$/u.test(process.env.GITHUB_RUN_ATTEMPT ?? "") ||
+    !/^[a-f0-9]{40}$/u.test(process.env.GITHUB_SHA ?? "") ||
+    !/^[a-f0-9]{40}$/u.test(process.env.QUILLMD_RELEASE_SHA ?? "") ||
+    process.env.PW_BASE_URL !== "http://localhost:9020" ||
+    process.env.TEMPLATE_TWIN_SYNTHETIC_CI_RUNTIME_PROFILE !== profile ||
+    process.env.QA_TEMPLATE_TWIN_RELEASE_PROFILE !==
+      SYNTHETIC_CI_RELEASE_PROFILE ||
+    process.env.NODE_ENV === "production" ||
+    workspace !== REPOSITORY_ROOT
+  ) {
+    syntheticCiBoundaryRejected();
+  }
+}
+
+function readProtectedSyntheticCiIdentityFile(): string {
+  const configuredPath =
+    process.env.QA_TEMPLATE_TWIN_FIXTURE_IDENTITIES_FILE ?? "";
+  const runnerTemp = process.env.RUNNER_TEMP ?? "";
+  if (
+    !isAbsolute(configuredPath) ||
+    !isAbsolute(runnerTemp) ||
+    /[\0\r\n]/u.test(configuredPath) ||
+    basename(configuredPath) !== FIXTURE_IDENTITY_FILE
+  ) {
+    syntheticCiBoundaryRejected();
+  }
+
+  let runnerRoot = "";
+  let fixturePath = "";
+  try {
+    runnerRoot = realpathSync(runnerTemp);
+    fixturePath = realpathSync(configuredPath);
+  } catch {
+    syntheticCiBoundaryRejected();
+  }
+  const relativePath = relative(runnerRoot, fixturePath);
+  if (
+    fixturePath !== configuredPath ||
+    relativePath === "" ||
+    relativePath === ".." ||
+    relativePath.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) ||
+    isAbsolute(relativePath)
+  ) {
+    syntheticCiBoundaryRejected();
+  }
+
+  const expectedUid =
+    typeof process.getuid === "function" ? process.getuid() : undefined;
+  const parent = lstatSync(dirname(fixturePath));
+  if (
+    expectedUid === undefined ||
+    !parent.isDirectory() ||
+    parent.isSymbolicLink() ||
+    (parent.mode & 0o777) !== 0o700 ||
+    parent.uid !== expectedUid
+  ) {
+    syntheticCiBoundaryRejected();
+  }
+
+  let descriptor: number | undefined;
+  try {
+    descriptor = openSync(
+      fixturePath,
+      constants.O_RDONLY | constants.O_NOFOLLOW,
+    );
+    const before = fstatSync(descriptor);
+    if (
+      !before.isFile() ||
+      before.isSymbolicLink() ||
+      (before.mode & 0o777) !== 0o600 ||
+      before.uid !== expectedUid ||
+      before.nlink !== 1 ||
+      before.size < 1 ||
+      before.size > MAX_FIXTURE_IDENTITY_FILE_BYTES
+    ) {
+      syntheticCiBoundaryRejected();
+    }
+    const contents = readFileSync(descriptor, "utf8");
+    const after = fstatSync(descriptor);
+    if (
+      before.dev !== after.dev ||
+      before.ino !== after.ino ||
+      before.size !== after.size ||
+      before.mtimeMs !== after.mtimeMs
+    ) {
+      syntheticCiBoundaryRejected();
+    }
+    return contents;
+  } catch {
+    syntheticCiBoundaryRejected();
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
+  }
+  return syntheticCiBoundaryRejected();
+}
+
+export function readTemplateTwinSyntheticCiFixtureIdentities(
+  profile: TemplateTwinSyntheticCiRuntimeProfile,
+): TemplateTwinSyntheticCiFixtureIdentities {
+  assertSyntheticCiGithubBoundary(profile);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readProtectedSyntheticCiIdentityFile()) as unknown;
+  } catch {
+    syntheticCiBoundaryRejected();
+  }
+  const document = exactRecord(parsed, [
+    "version",
+    "profile",
+    "synthetic",
+    "phi",
+    "productionUse",
+    "identities",
+  ]);
+  if (
+    document.version !== SYNTHETIC_CI_FIXTURE_VERSION ||
+    document.profile !== SYNTHETIC_CI_RELEASE_PROFILE ||
+    document.synthetic !== true ||
+    document.phi !== "FORBIDDEN" ||
+    document.productionUse !== "FORBIDDEN"
+  ) {
+    syntheticCiBoundaryRejected();
+  }
+
+  const identities = exactRecord(document.identities, [
+    "infrastructure",
+    "stagingPrimary",
+    "stagingForeign",
+  ]);
+  const result = {} as Record<
+    keyof typeof EXPECTED_SYNTHETIC_CI_IDENTITIES,
+    TemplateTwinSyntheticCiDoctorIdentity
+  >;
+  for (const name of Object.keys(EXPECTED_SYNTHETIC_CI_IDENTITIES) as Array<
+    keyof typeof EXPECTED_SYNTHETIC_CI_IDENTITIES
+  >) {
+    const identity = exactRecord(identities[name], [
+      "practiceId",
+      "doctorId",
+      "doctorEmail",
+      "password",
+    ]);
+    const expected = EXPECTED_SYNTHETIC_CI_IDENTITIES[name];
+    if (
+      identity.practiceId !== expected.practiceId ||
+      identity.doctorId !== expected.doctorId ||
+      identity.doctorEmail !== expected.doctorEmail ||
+      typeof identity.password !== "string" ||
+      !RANDOM_FIXTURE_PASSWORD.test(identity.password)
+    ) {
+      syntheticCiBoundaryRejected();
+    }
+    result[name] = Object.freeze({
+      ...expected,
+      password: identity.password,
+    });
+  }
+  if (
+    new Set(Object.values(result).map(({ password }) => password)).size !== 3
+  ) {
+    syntheticCiBoundaryRejected();
+  }
+  return Object.freeze(result) as TemplateTwinSyntheticCiFixtureIdentities;
+}
+
+export function runTemplateTwinSyntheticCiOrchestrator(input: {
+  readonly command: TemplateTwinSyntheticCiOrchestratorCommand;
+  readonly profile: TemplateTwinSyntheticCiRuntimeProfile;
+}): void {
+  assertSyntheticCiGithubBoundary(input.profile);
+  const allowedCombination =
+    input.command === "activate-cycle" ||
+    (input.command === "replace-cycle" && input.profile === "staging");
+  const actionVariable =
+    input.command === "activate-cycle"
+      ? "TEMPLATE_TWIN_SYNTHETIC_CI_ACTIVATE_ACTION"
+      : "TEMPLATE_TWIN_SYNTHETIC_CI_REPLACE_ACTION";
+  const expectedOrchestrator = resolve(
+    REPOSITORY_ROOT,
+    "scripts/template-twin-synthetic-ci-orchestrator.sh",
+  );
+  const configuredOrchestrator =
+    process.env.TEMPLATE_TWIN_SYNTHETIC_CI_ORCHESTRATOR ?? "";
+  let metadata;
+  try {
+    metadata = lstatSync(configuredOrchestrator);
+  } catch {
+    syntheticCiBoundaryRejected();
+  }
+  if (
+    !allowedCombination ||
+    process.env[actionVariable] !== input.command ||
+    configuredOrchestrator !== expectedOrchestrator ||
+    realpathSync(configuredOrchestrator) !== expectedOrchestrator ||
+    !metadata.isFile() ||
+    metadata.isSymbolicLink() ||
+    (metadata.mode & 0o111) === 0
+  ) {
+    syntheticCiBoundaryRejected();
+  }
+
+  // Re-validate the protected identity capability immediately before the
+  // privileged release transition. The child inherits only the exact GitHub
+  // job environment and receives one non-shell argument. Its output is always
+  // discarded, and failures are reduced to a fixed message so credentials or
+  // signed runtime envelopes can never reach Playwright diagnostics.
+  readTemplateTwinSyntheticCiFixtureIdentities(input.profile);
+  try {
+    execFileSync(configuredOrchestrator, [input.command], {
+      env: {
+        ...process.env,
+        TEMPLATE_TWIN_SYNTHETIC_CI_RUNTIME_PROFILE: input.profile,
+      },
+      shell: false,
+      stdio: ["ignore", "ignore", "ignore"],
+      timeout: input.command === "replace-cycle" ? 600_000 : 300_000,
+      killSignal: "SIGKILL",
+      windowsHide: true,
+    });
+  } catch {
+    throw new Error("Template Twin synthetic CI orchestration failed closed.");
+  }
+}
 
 export interface TemplateTwinQaField {
   fieldId: string;
@@ -103,16 +420,6 @@ function shellQuote(value: string): string {
 
 function sqlLiteral(value: string): string {
   return `'${value.replaceAll("'", "''")}'`;
-}
-
-function assertSyntheticEmail(email: string): void {
-  if (
-    !/^qa-template-twin-e2e-[a-z0-9-]+@(example|synthetic)\.test$/i.test(email)
-  ) {
-    throw new Error(
-      "Template Twin QA helpers accept only qa-template-twin-e2e-* @example.test/@synthetic.test identities.",
-    );
-  }
 }
 
 function psql(sql: string): string {
@@ -298,86 +605,6 @@ function expectPsqlRejected(sql: string, expectedError: string): void {
   throw new Error(
     `QA database accepted an adversarial Template Twin write that should have failed: ${expectedError}`,
   );
-}
-
-export function setTemplateTwinQaPractice(input: {
-  email: string;
-  enabled: boolean;
-}): { userId: string; practiceId: string } {
-  assertSyntheticEmail(input.email);
-  const enabledSql = input.enabled ? "true" : "false";
-  return psqlJson(`
-    DO $template_twin_qa_rollout$
-    DECLARE
-      owning_user TEXT;
-      owning_practice TEXT;
-      lineage_contracted BOOLEAN;
-    BEGIN
-      SELECT id, "practiceId"
-      INTO owning_user, owning_practice
-      FROM users
-      WHERE email = ${sqlLiteral(input.email.toLowerCase())};
-      IF owning_user IS NULL OR owning_practice IS NULL THEN
-        RAISE EXCEPTION 'Synthetic Template Twin QA actor was not found';
-      END IF;
-
-      SELECT EXISTS (
-        SELECT 1
-        FROM template_twin_lineage_migration_progress
-        WHERE "operationKey" = 'note_templates_lineage_v1'
-          AND phase = 'CONTRACTED'
-      ) INTO lineage_contracted;
-      IF ${enabledSql} AND NOT lineage_contracted THEN
-        RAISE EXCEPTION 'Template Twin lineage migration is not contracted';
-      END IF;
-
-      -- Test setup follows the production lock order exactly. The DO block is
-      -- one transaction, so neither generation becomes externally visible
-      -- until both mutations commit.
-      PERFORM 1
-      FROM template_twin_rollout_controls
-      WHERE id = 'global'
-      FOR UPDATE;
-      IF NOT FOUND THEN
-        RAISE EXCEPTION 'Global Template Twin rollout control is unavailable';
-      END IF;
-      PERFORM 1
-      FROM practices
-      WHERE id = owning_practice
-      FOR UPDATE;
-      IF NOT FOUND THEN
-        RAISE EXCEPTION 'Synthetic Template Twin QA practice is unavailable';
-      END IF;
-
-      -- The actor row is deliberately taken only after global and practice.
-      -- Moving this write above either rollout lock can deadlock a worker that
-      -- follows global -> practice -> operation -> actor.
-      UPDATE users
-      SET "emailVerified" = COALESCE("emailVerified", CURRENT_TIMESTAMP)
-      WHERE id = owning_user;
-
-      UPDATE template_twin_rollout_controls
-      SET enabled = ${enabledSql},
-          generation = generation + 1,
-          "updatedAt" = CURRENT_TIMESTAMP
-      WHERE id = 'global'
-        AND enabled IS DISTINCT FROM ${enabledSql};
-      UPDATE practices
-      SET "templateTwinEnabled" = ${enabledSql},
-          "templateTwinRolloutGeneration" =
-            "templateTwinRolloutGeneration" + 1
-      WHERE id = owning_practice
-        AND "templateTwinEnabled" IS DISTINCT FROM ${enabledSql};
-    END
-    $template_twin_qa_rollout$;
-
-    SELECT json_build_object(
-      'userId', id,
-      'practiceId', "practiceId"
-    )
-    FROM users
-    WHERE email = ${sqlLiteral(input.email.toLowerCase())};
-  `);
 }
 
 export function readTemplateTwinQaFields(noteTemplateId: string): {

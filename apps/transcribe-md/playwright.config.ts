@@ -109,7 +109,9 @@ export default defineConfig({
       // they remain disabled even on failure for this clinical workflow.
       name: "template-twin-staging-ui",
       testMatch: "**/30-template-twin-staging-ui.spec.ts",
-      timeout: 420_000,
+      // Two independently bounded attested lifecycle transitions can consume
+      // up to fifteen minutes before the browser/provider journey budget.
+      timeout: 1_500_000,
       use: {
         ...devices["Desktop Chrome"],
         screenshot: "off",

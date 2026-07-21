@@ -37,10 +37,10 @@ jobs:
   e2e:
     name: Playwright E2E (transcribe-md)
     runs-on: ubuntu-latest
-    # The dedicated staging journey adds a second real worker render plus
-    # pinned Open XML validation. Keep a bounded cushion without weakening any
-    # individual test timeout or turning a stalled job into a pass.
-    timeout-minutes: 55
+    # Five health-gated immutable runtime transitions now accompany the real
+    # worker renders and pinned Open XML validation. This bounded watchdog
+    # cushion does not weaken any per-step gate or turn a failure into a pass.
+    timeout-minutes: 75
 
     env:
       # Build args: point the client bundle + auth URL at the CI app (:9020)
@@ -699,34 +699,50 @@ jobs:
           CI: "true"
         run: npx playwright test --project=chromium
 
-      # Template Twin has a richer Layer-3 fixture than the generic MOCK path.
-      # It is triply gated in packages/ai: MOCK_AI_CALLS, this dedicated flag,
-      # and a database name containing qa/test/synthetic. Recreate only the app
-      # and worker; the isolated Postgres/Redis/versioned MinIO volumes remain.
-      - name: Recreate app + worker with the Template Twin synthetic fixture
-        run: >
-          MOCK_TEMPLATE_TWIN_E2E=true
-          docker compose -f docker-compose.qa.yml up -d --wait transcribe-md transcribe-md-worker
+      - name: Verify app + worker after ordinary Chromium
+        if: ${{ !cancelled() }}
+        run: scripts/template-twin-synthetic-ci-orchestrator.sh assert-runtime
+
+      # This fixture exercises the production release-control contract only in
+      # the disposable meddoc_qa_test database. Its four mechanical decisions
+      # are labelled synthetic-ci-fixture/not-production-approval and do not
+      # represent Desktop Word, Clinical Safety, Privacy/Legal, or Operations
+      # approval. Only protected file paths are exported through GITHUB_ENV.
+      - name: Prepare the disabled synthetic Template Twin release
+        run: scripts/template-twin-synthetic-ci-orchestrator.sh prepare
+
+      # PREPARE leaves both persisted rollout controls and this process boundary
+      # disabled. The actual app health route and worker startup—not the fixture
+      # process—must register the two distinct deployment envelopes before an
+      # activation attempt can succeed.
+      - name: Start attested Template Twin runtimes with kill switch active
+        env:
+          TEMPLATE_TWIN_SYNTHETIC_CI_RUNTIME_PROFILE: infrastructure
+        run: scripts/template-twin-synthetic-ci-orchestrator.sh recreate-disabled
 
       - name: Run E2E (Template Twin infrastructure path)
         working-directory: apps/transcribe-md
         env:
           PW_BASE_URL: http://localhost:9020
           CI: "true"
+          TEMPLATE_TWIN_SYNTHETIC_CI_RUNTIME_PROFILE: infrastructure
+          TEMPLATE_TWIN_SYNTHETIC_CI_ORCHESTRATOR: ${{ github.workspace }}/scripts/template-twin-synthetic-ci-orchestrator.sh
+          TEMPLATE_TWIN_SYNTHETIC_CI_ACTIVATE_ACTION: activate-cycle
         run: npx playwright test --project=template-twin
 
-      # The authenticated staging workflow is an additional fail-closed
-      # profile. Both the app and worker must see the explicit synthetic-QA
-      # admission variables; leaving either empty keeps every route hidden or
-      # denied. The same real Postgres, Redis/BullMQ and versioned MinIO stack
-      # remains in use, with deterministic local provider fixtures only.
-      - name: Recreate app + worker with Template Twin staging QA enabled
-        run: >
-          MOCK_TEMPLATE_TWIN_E2E=true
-          TEMPLATE_TWIN_STAGING_QA_ENABLED=true
-          TEMPLATE_TWIN_STAGING_QA_ENVIRONMENT=qa
-          TEMPLATE_TWIN_STAGING_QA_RESOURCE_ATTESTATION=isolated-disposable-qa-v1
-          docker compose -f docker-compose.qa.yml up -d --wait transcribe-md transcribe-md-worker
+      - name: Verify app + worker after Template Twin infrastructure
+        if: ${{ !cancelled() }}
+        run: scripts/template-twin-synthetic-ci-orchestrator.sh assert-runtime
+
+      # Replace the infrastructure release while fail closed. This revokes the
+      # old epochs, creates the staging candidate, writes new APP/WORKER
+      # envelopes with kill switch=true, and then recreates the real replicas so
+      # they can register. The staging Playwright journey performs the later
+      # activate-cycle only after its authenticated disabled checks pass.
+      - name: Prepare disabled replacement for Template Twin staging QA
+        env:
+          TEMPLATE_TWIN_SYNTHETIC_CI_RUNTIME_PROFILE: staging
+        run: scripts/template-twin-synthetic-ci-orchestrator.sh replace-disabled
 
       - name: Run E2E (authenticated Template Twin staging UI)
         working-directory: apps/transcribe-md
@@ -734,7 +750,15 @@ jobs:
           PW_BASE_URL: http://localhost:9020
           CI: "true"
           TEMPLATE_TWIN_STAGING_ARTIFACT_DIR: template-twin-staging-artifacts
+          TEMPLATE_TWIN_SYNTHETIC_CI_RUNTIME_PROFILE: staging
+          TEMPLATE_TWIN_SYNTHETIC_CI_ORCHESTRATOR: ${{ github.workspace }}/scripts/template-twin-synthetic-ci-orchestrator.sh
+          TEMPLATE_TWIN_SYNTHETIC_CI_ACTIVATE_ACTION: activate-cycle
+          TEMPLATE_TWIN_SYNTHETIC_CI_REPLACE_ACTION: replace-cycle
         run: npx playwright test --project=template-twin-staging-ui
+
+      - name: Verify app + worker after Template Twin staging UI
+        if: ${{ !cancelled() }}
+        run: scripts/template-twin-synthetic-ci-orchestrator.sh assert-runtime
 
       - name: Validate staging source and output with Open XML SDK
         env:
@@ -775,6 +799,15 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+      # Close the synthetic release before unrelated PHI/Rx fixtures run. The
+      # following baseline Compose recreation intentionally omits runtime.env,
+      # restoring the committed kill-switch-on defaults.
+      - name: Revoke the synthetic Template Twin release after staging
+        run: scripts/template-twin-synthetic-ci-orchestrator.sh revoke
+
+      - name: Clean the synthetic Template Twin release fixture after staging
+        run: scripts/template-twin-synthetic-ci-orchestrator.sh cleanup
+
       # ── Flag-gated MOCK fixtures that can't share the main suite's app env:
       #    • MOCK_TEMPLATE_PHI_FLAG=true → every note-format parse rejects
       #      (scenario 23, phi-reject project) — flips the mocked PHI scan flagged.
@@ -790,15 +823,32 @@ jobs:
       - name: Recreate app + worker with the flag-gated MOCK fixtures
         run: >
           MOCK_TEMPLATE_PHI_FLAG=true MOCK_RX_WARNINGS=true
-          docker compose -f docker-compose.qa.yml up -d --wait transcribe-md transcribe-md-worker
+          docker compose -f docker-compose.qa.yml up -d --wait --force-recreate
+          transcribe-md transcribe-md-worker
 
-      - name: Run E2E (flag-on projects — phi-reject + rx-safety)
+      - name: Run E2E (flag-on project — phi-reject)
         working-directory: apps/transcribe-md
         env:
           PW_BASE_URL: http://localhost:9020
           NOTE_FORMAT_E2E: "1"
           CI: "true"
-        run: npx playwright test --project=phi-reject --project=rx-safety
+        run: npx playwright test --project=phi-reject
+
+      - name: Verify app + worker after PHI rejection
+        if: ${{ !cancelled() }}
+        run: scripts/template-twin-synthetic-ci-orchestrator.sh assert-runtime
+
+      - name: Run E2E (flag-on project — rx-safety)
+        working-directory: apps/transcribe-md
+        env:
+          PW_BASE_URL: http://localhost:9020
+          NOTE_FORMAT_E2E: "1"
+          CI: "true"
+        run: npx playwright test --project=rx-safety
+
+      - name: Verify app + worker after Rx safety
+        if: ${{ !cancelled() }}
+        run: scripts/template-twin-synthetic-ci-orchestrator.sh assert-runtime
 
       # ── Debuggability for a red run. ──
       - name: App + worker logs (on failure)
@@ -821,9 +871,25 @@ jobs:
           path: apps/transcribe-md/test-results/
           retention-days: 14
 
+      # Safety cleanup stays ahead of volume destruction so revocation and its
+      # audit evidence are proven while PostgreSQL is still available. Both
+      # phases are recovery-safe when preparation never started or already
+      # completed earlier in the job.
+      - name: Revoke any remaining synthetic Template Twin release
+        if: always()
+        run: scripts/template-twin-synthetic-ci-orchestrator.sh revoke
+
+      - name: Clean any remaining synthetic Template Twin release state
+        if: always()
+        run: scripts/template-twin-synthetic-ci-orchestrator.sh cleanup
+
       - name: Tear down the qa stack (volumes too)
         if: always()
         run: docker compose -f docker-compose.qa.yml down -v
+
+      - name: Remove the protected Template Twin fixture root
+        if: always()
+        run: scripts/template-twin-synthetic-ci-orchestrator.sh destroy
 
       - name: Remove ephemeral synthetic MFA keyring
         if: always()

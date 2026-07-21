@@ -87,6 +87,13 @@ const DATABASE_CREDENTIAL_ENVIRONMENT_KEYS = [
   "DB_BACKUP_PASSWORD_FILE",
   "TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL",
 ];
+const TEMPLATE_TWIN_NEXT_RUNTIME_SERVICES = new Set([
+  "transcribe-md",
+  "template-twin-admin-app",
+  "template-twin-admin-control",
+]);
+const STATIC_TEMPLATE_TWIN_NEXT_MEMORY_LIMIT = "768m";
+const RESOLVED_TEMPLATE_TWIN_NEXT_MEMORY_LIMIT = "805306368";
 const TRUSTED_PRODUCTION_LOGINS = new Set([
   "meddoc_runtime",
   "meddoc_release_control",
@@ -1145,10 +1152,10 @@ function qaRuntimeSurfaceIssue(name, service) {
       (staticUnresolved
         ? worker
           ? "1g"
-          : "512m"
+          : STATIC_TEMPLATE_TWIN_NEXT_MEMORY_LIMIT
         : worker
           ? "1073741824"
-          : "536870912")
+          : RESOLVED_TEMPLATE_TWIN_NEXT_MEMORY_LIMIT)
   ) {
     return "resource limits";
   }
@@ -1217,6 +1224,15 @@ function runtimeSurfaceIssue(name, service, qa) {
     return "container identity";
   }
   if (!hasExactRuntimeBuildAndImage(name, service)) return "build or image";
+  if (
+    TEMPLATE_TWIN_NEXT_RUNTIME_SERVICES.has(name) &&
+    service?.mem_limit !==
+      (staticUnresolved
+        ? STATIC_TEMPLATE_TWIN_NEXT_MEMORY_LIMIT
+        : RESOLVED_TEMPLATE_TWIN_NEXT_MEMORY_LIMIT)
+  ) {
+    return "memory limit";
+  }
   if (!hasExactRuntimePorts(name, service?.ports)) return "ports";
   if (!hasExactRuntimeNetworks(name, service?.networks)) return "networks";
   if (!hasExactRuntimeHealthcheck(name, service?.healthcheck)) {

@@ -827,7 +827,14 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-    mem_limit: 512m
+    # Template Twin expands the production server module working set. The
+    # exact-head ordinary-journey E2E exhausted V8's cgroup-sized ~259 MiB heap
+    # under the former 512 MiB ceiling before any Template Twin route ran.
+    # 768 MiB is a bounded ceiling (805306368 bytes), not a reservation; it
+    # preserves room for Node's native allocations while retaining runaway
+    # isolation. The two admin runtimes inherit this same image/cap via the
+    # anchor so all three production app roles use one capacity contract.
+    mem_limit: 768m
     cpus: "1.0"
     # T-M16.4: 500 MB upload streams + MinIO SDK + NextAuth + BullMQ
     # keep a lot of sockets open; 1024 default FDs is tight.

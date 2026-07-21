@@ -185,7 +185,7 @@ services:
     restart: "no"
     cap_drop:
       - ALL
-    mem_limit: 512m
+    mem_limit: 768m
     cpus: "1.0"
     group_add:
       - "101"
@@ -244,7 +244,19 @@ services:
       # Baseline QA is fail-closed. Template Twin E2E may open this only after
       # an exact disposable release manifest has admitted distinct APP and
       # WORKER runtime attestations through the production control contract.
-      TEMPLATE_TWIN_KILL_SWITCH: "true"
+      TEMPLATE_TWIN_KILL_SWITCH: "${QA_TEMPLATE_TWIN_KILL_SWITCH:-true}"
+      TEMPLATE_TWIN_RELEASE_COMMIT_SHA: "${QA_TEMPLATE_TWIN_RELEASE_COMMIT_SHA:-}"
+      TEMPLATE_TWIN_APP_IMAGE_DIGEST: "${QA_TEMPLATE_TWIN_APP_IMAGE_DIGEST:-}"
+      TEMPLATE_TWIN_WORKER_IMAGE_DIGEST: "${QA_TEMPLATE_TWIN_WORKER_IMAGE_DIGEST:-}"
+      TEMPLATE_TWIN_MIGRATOR_IMAGE_DIGEST: "${QA_TEMPLATE_TWIN_MIGRATOR_IMAGE_DIGEST:-}"
+      # Component-scoped source variables are consumed only by Compose. The
+      # container receives one generic envelope and cannot read its peer's
+      # envelope or any release-control credential.
+      TEMPLATE_TWIN_APP_RUNTIME_ATTESTATION: ""
+      TEMPLATE_TWIN_ADMIN_CONTROL_RUNTIME_ATTESTATION: ""
+      TEMPLATE_TWIN_ADMIN_APP_RUNTIME_ATTESTATION: ""
+      TEMPLATE_TWIN_WORKER_RUNTIME_ATTESTATION: ""
+      TEMPLATE_TWIN_RUNTIME_ATTESTATION: "${QA_TEMPLATE_TWIN_APP_RUNTIME_ATTESTATION:-}"
       TEMPLATE_TWIN_MALWARE_SCANNER_SOCKET: /var/run/quillmd-clamav/clamd.sock
       TEMPLATE_TWIN_MALWARE_SCANNER_READINESS_FILE: /var/run/quillmd-clamav/readiness.json
       # Authenticated synthetic staging UI. Resource identity is fixed to this
@@ -361,7 +373,16 @@ services:
       TEMPLATE_TWIN_MAINTENANCE_ENABLED: "true"
       QUILLMD_REQUIRED_RUNTIME_PROTOCOL_EPOCH: template-twin-final-schema-v2
       TEMPLATE_TWIN_RUNTIME_MODE: standard
-      TEMPLATE_TWIN_KILL_SWITCH: "true"
+      TEMPLATE_TWIN_KILL_SWITCH: "${QA_TEMPLATE_TWIN_KILL_SWITCH:-true}"
+      TEMPLATE_TWIN_RELEASE_COMMIT_SHA: "${QA_TEMPLATE_TWIN_RELEASE_COMMIT_SHA:-}"
+      TEMPLATE_TWIN_APP_IMAGE_DIGEST: "${QA_TEMPLATE_TWIN_APP_IMAGE_DIGEST:-}"
+      TEMPLATE_TWIN_WORKER_IMAGE_DIGEST: "${QA_TEMPLATE_TWIN_WORKER_IMAGE_DIGEST:-}"
+      TEMPLATE_TWIN_MIGRATOR_IMAGE_DIGEST: "${QA_TEMPLATE_TWIN_MIGRATOR_IMAGE_DIGEST:-}"
+      TEMPLATE_TWIN_APP_RUNTIME_ATTESTATION: ""
+      TEMPLATE_TWIN_ADMIN_CONTROL_RUNTIME_ATTESTATION: ""
+      TEMPLATE_TWIN_ADMIN_APP_RUNTIME_ATTESTATION: ""
+      TEMPLATE_TWIN_WORKER_RUNTIME_ATTESTATION: ""
+      TEMPLATE_TWIN_RUNTIME_ATTESTATION: "${QA_TEMPLATE_TWIN_WORKER_RUNTIME_ATTESTATION:-}"
       TEMPLATE_TWIN_STAGING_QA_ENABLED: "${TEMPLATE_TWIN_STAGING_QA_ENABLED:-}"
       TEMPLATE_TWIN_STAGING_QA_ENVIRONMENT: qa
       TEMPLATE_TWIN_STAGING_QA_RESOURCE_ATTESTATION: isolated-disposable-qa-v1

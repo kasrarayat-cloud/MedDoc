@@ -22,6 +22,7 @@
     "lineage:scale-test": "tsx scripts/template-twin-lineage-scale-test.ts",
     "rollout:pg-test": "tsx scripts/template-twin-rollout-pg-test.ts",
     "release-control:pg-test": "NODE_OPTIONS=--conditions=react-server tsx --tsconfig ../../apps/transcribe-md/tsconfig.json scripts/template-twin-release-control-pg-test.ts",
+    "release-control:synthetic-ci-fixture": "NODE_OPTIONS=--conditions=react-server tsx --tsconfig ../../apps/transcribe-md/tsconfig.json scripts/template-twin-synthetic-release-fixture.ts",
     "rollback-fence:pg-test": "tsx --tsconfig ../../apps/transcribe-md/tsconfig.json scripts/template-twin-rollback-fence-pg-test.ts",
     "visit-automation:pg-test": "tsx --tsconfig ../../apps/transcribe-md/tsconfig.json scripts/visit-automation-transaction-integrity-pg-test.ts",
     "static-asset:pg-test": "NODE_OPTIONS=--conditions=react-server tsx --tsconfig ../../apps/transcribe-md/tsconfig.json scripts/template-twin-static-asset-revocation-pg-test.ts",
@@ -52,6 +53,7 @@
   "dependencies": {
     "@prisma/adapter-pg": "^7.7.0",
     "@prisma/client": "^7.7.0",
+    "bcryptjs": "^3.0.2",
     "pg": "^8.20.0"
   },
   "devDependencies": {

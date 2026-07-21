@@ -511,20 +511,34 @@ other projects, and the dev session itself.
 runaway container OOM-killing postgres, not against current-state
 swap pressure. Current values:
 
-| Service              | mem_limit | cpus |
-| -------------------- | --------- | ---- |
-| postgres             | 512 MB    | 1.0  |
-| redis                | 128 MB    | 0.5  |
-| minio                | 256 MB    | 0.5  |
-| caddy                | 128 MB    | 0.5  |
-| marketing            | 256 MB    | 0.5  |
-| meddoc-pro           | 512 MB    | 1.0  |
-| transcribe-md        | 512 MB    | 1.0  |
-| transcribe-md-worker | 1024 MB   | 1.5  |
+| Service                        | mem_limit | cpus |
+| ------------------------------ | --------- | ---- |
+| postgres                       | 512 MB    | 1.0  |
+| redis                          | 128 MB    | 0.5  |
+| minio                          | 256 MB    | 0.5  |
+| caddy                          | 128 MB    | 0.5  |
+| marketing                      | 256 MB    | 0.5  |
+| meddoc-pro                     | 512 MB    | 1.0  |
+| transcribe-md                  | 768 MB    | 1.0  |
+| template-twin-admin-app        | 768 MB    | 1.0  |
+| template-twin-admin-control    | 768 MB    | 1.0  |
+| transcribe-md-worker           | 1024 MB   | 1.5  |
+| template-twin-audit-dispatcher | 192 MB    | 0.25 |
+| auth-email-dispatcher          | 192 MB    | 0.25 |
+| template-twin-clamav           | 1536 MB   | 1.0  |
+| postgres-backup                | 128 MB    | 0.5  |
 
-Sum of `mem_limit` across services (≈ 3.3 GB) exceeds physical RAM
-(1.8 GB) on purpose — limits are ceilings, not reservations. They
-only fire when a container actually hits them.
+The three Next runtimes built from the TranscribeMD image use the same bounded
+768 MiB ceiling (exactly 805306368 bytes). The prior 512 MiB ceiling gave V8 an
+approximately 259 MiB heap and the release-candidate ordinary-journey E2E
+exhausted it before any Template Twin route ran. Raising the cgroup ceiling,
+rather than forcing a larger V8 heap inside 512 MiB, preserves headroom for
+native allocations, request buffers, Prisma, and the immutable entrypoint.
+
+The resulting sum of declared `mem_limit` ceilings is 7 GiB (7516192768 bytes).
+That sum is intentionally not a reservation, but deployment preflight must
+still prove host headroom for the three 768 MiB app ceilings before they are
+started together. If that capacity cannot be proven, deployment is blocked.
 
 **Future note**: if memory pressure starts causing observable
 problems (slow API latency, worker OOM-kills, PDF renders failing)

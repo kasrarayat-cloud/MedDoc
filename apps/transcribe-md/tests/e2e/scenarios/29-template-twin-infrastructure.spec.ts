@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -19,10 +19,10 @@ import {
   readTemplateTwinQaFields,
   readTemplateTwinQaFill,
   readTemplateTwinQaInventory,
+  readTemplateTwinSyntheticCiFixtureIdentities,
   removeTemplateTwinQaObjectVersion,
-  setTemplateTwinQaPractice,
+  runTemplateTwinSyntheticCiOrchestrator,
 } from "../helpers/templateTwin";
-import { TEST_PASSWORD } from "../helpers/test-utils";
 import { waitForVisitStatus } from "../helpers/waitForReady";
 
 const DOCX_MIME =
@@ -32,7 +32,13 @@ const DICTATION_AUDIO = resolve(
   "../fixtures/audio/silence-3sec.mp3",
 );
 
-test.setTimeout(300_000);
+// The attested activation transition has its own five-minute fail-closed
+// watchdog. Keep an independent journey budget after that child process exits
+// so a slow but healthy runtime registration cannot consume the test timeout.
+test.setTimeout(900_000);
+// The fixture password is random job authority. Never retain a Playwright
+// trace or video that could capture the real form-login request or DOM state.
+test.use({ trace: "off", video: "off" });
 
 function sameOriginHeaders(page: Page): Record<string, string> {
   return {
@@ -72,24 +78,6 @@ async function confirmTemplateTwinReview(
     response.status(),
     `Template Twin review acknowledgement failed: ${await response.text()}`,
   ).toBe(200);
-}
-
-async function signupSyntheticDoctor(page: Page, email: string): Promise<void> {
-  await page.goto("/signup");
-  await page.getByLabel("Full name").fill("Synthetic Template Twin Doctor");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password", { exact: true }).fill(TEST_PASSWORD);
-  await page.getByLabel("Confirm password").fill(TEST_PASSWORD);
-  await page.getByRole("checkbox").check();
-  await page.getByRole("button", { name: /create account/i }).click();
-
-  await page.waitForURL(/\/(?:dashboard|check-email)(?:\?|$)/, {
-    timeout: 20_000,
-  });
-  setTemplateTwinQaPractice({ email, enabled: false });
-  if (!/\/dashboard$/.test(new URL(page.url()).pathname)) {
-    await loginUser(page, email, TEST_PASSWORD);
-  }
 }
 
 async function uploadTemplate(
@@ -206,9 +194,10 @@ async function expectVerifiedEvidenceFill(visitId: string) {
 test("Template Twin: isolated QA routes, Postgres, worker, and MinIO preserve the original DOCX fail closed", async ({
   page,
 }) => {
-  const email = `qa-template-twin-e2e-${Date.now().toString(36)}-${randomBytes(4).toString("hex")}@synthetic.test`;
+  const { infrastructure } =
+    readTemplateTwinSyntheticCiFixtureIdentities("infrastructure");
   const source = await buildTemplateTwinSafeAlphaDocx();
-  await signupSyntheticDoctor(page, email);
+  await loginUser(page, infrastructure.doctorEmail, infrastructure.password);
 
   // Server-side rollout enforcement: a hidden UI is not enough. The exact
   // same authenticated upload is rejected until the QA practice is enabled.
@@ -218,7 +207,13 @@ test("Template Twin: isolated QA routes, Postgres, worker, and MinIO preserve th
     error: expect.stringMatching(/not enabled|unavailable/i),
   });
 
-  const actor = setTemplateTwinQaPractice({ email, enabled: true });
+  runTemplateTwinSyntheticCiOrchestrator({
+    command: "activate-cycle",
+    profile: "infrastructure",
+  });
+  await page.reload();
+  await expect(page).not.toHaveURL(/\/login(?:\?|$)/u);
+
   const upload = await uploadTemplate(page, source);
   const uploadPayload = await responseJson<{
     ok: boolean;
@@ -414,7 +409,9 @@ test("Template Twin: isolated QA routes, Postgres, worker, and MinIO preserve th
     certificationStatus: "certified",
   });
 
-  const certifiedInventory = readTemplateTwinQaInventory(actor.practiceId);
+  const certifiedInventory = readTemplateTwinQaInventory(
+    infrastructure.practiceId,
+  );
   expect(certifiedInventory).toMatchObject({
     sourceArtifacts: 1,
     compiledVersions: 1,
@@ -472,7 +469,9 @@ test("Template Twin: isolated QA routes, Postgres, worker, and MinIO preserve th
       (field) => field.fieldId === chiefField!.fieldId,
     )?.value,
   ).toBe("synthetic wrist discomfort reviewed");
-  expect(readTemplateTwinQaInventory(actor.practiceId).reviewDecisions).toBe(1);
+  expect(
+    readTemplateTwinQaInventory(infrastructure.practiceId).reviewDecisions,
+  ).toBe(1);
 
   // Compile a second, inactive lineage solely to prove the migrated database
   // rejects a review decision linked to a field from another compiled version.

@@ -28,10 +28,11 @@ import {
   readTemplateTwinProviderAtomicityInventory,
   readTemplateTwinProviderProjectionRetryInventory,
   readTemplateTwinStagingQaRunByVisit,
+  readTemplateTwinSyntheticCiFixtureIdentities,
   removeTemplateTwinProviderProjectionRetryFault,
-  setTemplateTwinQaPractice,
+  runTemplateTwinSyntheticCiOrchestrator,
+  type TemplateTwinSyntheticCiDoctorIdentity,
 } from "../helpers/templateTwin";
-import { TEST_PASSWORD } from "../helpers/test-utils";
 import { waitForVisitStatus } from "../helpers/waitForReady";
 
 const FIXTURE_VERSION = "template-twin-staging-safe-docx/1.0.0";
@@ -61,7 +62,13 @@ if (
   );
 }
 
-test.setTimeout(Math.max(420_000, PROVIDER_ATOMICITY_JOURNEY_COUNT * 60_000));
+test.setTimeout(
+  // Activation and immutable replacement have independent five- and ten-
+  // minute fail-closed watchdogs. Preserve a further ten-minute browser and
+  // provider-journey budget instead of letting those child ceilings consume
+  // the entire parent timeout.
+  Math.max(1_500_000, PROVIDER_ATOMICITY_JOURNEY_COUNT * 60_000 + 600_000),
+);
 
 function sha256(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
@@ -129,22 +136,6 @@ async function revealNoteFormatSettings(page: Page): Promise<void> {
   ).toBeVisible();
   const tab = page.getByRole("button", { name: "Note format", exact: true });
   if ((await tab.count()) > 0) await tab.click();
-}
-
-async function signupSyntheticDoctor(page: Page, email: string): Promise<void> {
-  await page.goto("/signup");
-  await page.getByLabel("Full name").fill("Synthetic Template Twin Doctor");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password", { exact: true }).fill(TEST_PASSWORD);
-  await page.getByLabel("Confirm password").fill(TEST_PASSWORD);
-  await page.getByRole("checkbox").check();
-  await page.getByRole("button", { name: /create account/i }).click();
-  await page.waitForURL(/\/(?:dashboard|check-email)(?:\?|$)/, {
-    timeout: 20_000,
-  });
-  if (!/\/dashboard$/.test(new URL(page.url()).pathname)) {
-    await loginUser(page, email, TEST_PASSWORD);
-  }
 }
 
 async function saveSyntheticScreenshot(
@@ -414,17 +405,15 @@ async function runPostProviderProjectionRetryJourney(input: {
   }
 }
 
-async function signupCrossTenantDoctor(
+async function loginCrossTenantDoctor(
   browser: Browser,
-  email: string,
+  identity: TemplateTwinSyntheticCiDoctorIdentity,
 ): Promise<{ page: Page; close: () => Promise<void> }> {
   const context = await browser.newContext({
     baseURL: process.env.PW_BASE_URL ?? "http://localhost:9020",
   });
   const page = await context.newPage();
-  await signupSyntheticDoctor(page, email);
-  setTemplateTwinQaPractice({ email, enabled: true });
-  await page.reload();
+  await loginUser(page, identity.doctorEmail, identity.password);
   return { page, close: () => context.close() };
 }
 
@@ -433,9 +422,9 @@ test("Template Twin staging UI drives the real synthetic pipeline fail closed", 
   browser,
 }) => {
   mkdirSync(ARTIFACT_ROOT, { recursive: true });
-  const suffix = `${Date.now().toString(36)}-${randomBytes(4).toString("hex")}`;
-  const email = `qa-template-twin-e2e-staging-${suffix}@synthetic.test`;
-  const foreignEmail = `qa-template-twin-e2e-staging-foreign-${suffix}@synthetic.test`;
+  const { stagingPrimary, stagingForeign } =
+    readTemplateTwinSyntheticCiFixtureIdentities("staging");
+  const idempotencySuffix = `${Date.now().toString(36)}-${randomBytes(4).toString("hex")}`;
   const sourcePath = resolve(
     ARTIFACT_ROOT,
     "template-twin-staging-source.docx",
@@ -445,8 +434,7 @@ test("Template Twin staging UI drives the real synthetic pipeline fail closed", 
     "template-twin-staging-output.docx",
   );
 
-  await signupSyntheticDoctor(page, email);
-  setTemplateTwinQaPractice({ email, enabled: false });
+  await loginUser(page, stagingPrimary.doctorEmail, stagingPrimary.password);
   await page.goto("/settings");
   await revealNoteFormatSettings(page);
   await expect(
@@ -457,8 +445,12 @@ test("Template Twin staging UI drives the real synthetic pipeline fail closed", 
   );
   expect(deniedFixture.status()).toBe(404);
 
-  setTemplateTwinQaPractice({ email, enabled: true });
+  runTemplateTwinSyntheticCiOrchestrator({
+    command: "activate-cycle",
+    profile: "staging",
+  });
   await page.reload();
+  await expect(page).not.toHaveURL(/\/login(?:\?|$)/u);
   await revealNoteFormatSettings(page);
   await expect(
     page.getByText("SYNTHETIC TEST ONLY — NOT FOR PATIENT CARE").first(),
@@ -495,7 +487,7 @@ test("Template Twin staging UI drives the real synthetic pipeline fail closed", 
         encounterScope: ENCOUNTER_SCOPE,
         versionDescription: VERSION_DESCRIPTION,
         fixtureVersion: FIXTURE_VERSION,
-        idempotencyKey: `${suffix}-changed-fixture-upload`,
+        idempotencyKey: `${idempotencySuffix}-changed-fixture-upload`,
       },
     },
   );
@@ -1315,7 +1307,7 @@ test("Template Twin staging UI drives the real synthetic pipeline fail closed", 
     );
   }
 
-  const foreign = await signupCrossTenantDoctor(browser, foreignEmail);
+  const foreign = await loginCrossTenantDoctor(browser, stagingForeign);
   try {
     expect(
       (
@@ -1500,24 +1492,14 @@ test("Template Twin staging UI drives the real synthetic pipeline fail closed", 
     page.getByRole("button", { name: "Certify & activate" }),
   ).toBeDisabled();
 
-  // A disable commit advances both rollout epochs. Re-enabling admits only a
-  // new run under the new epochs; it can never revive the isolated old run.
-  const staleAdmission = await page.request.post(
-    "/api/note-templates/template-twin/staging-qa/runs",
-    {
-      headers: {
-        ...sameOriginHeaders(page),
-        "Content-Type": "application/json",
-      },
-      data: {
-        ...typedAdmissionPayload,
-        idempotencyKey: crypto.randomUUID(),
-        encounterText: SYNTHETIC_ENCOUNTER,
-      },
-    },
-  );
-  expect(staleAdmission.status()).toBe(202);
-  const staleAdmissionBody = (await staleAdmission.json()) as {
+  // Hold the old worker before admission so the run cannot complete before
+  // immutable replacement revokes its release and epochs. The orchestrator
+  // performs that atomic revoke first, then unpauses only to force-recreate the
+  // runtime under the replacement release. A failure before replacement is
+  // invoked releases the fault locally; after invocation, the worker remains
+  // paused for the always-run revoke/cleanup path unless replacement succeeds.
+  let staleWorkerPaused = false;
+  let staleAdmissionBody: {
     ok: true;
     runId: string;
     visitId: string;
@@ -1527,8 +1509,47 @@ test("Template Twin staging UI drives the real synthetic pipeline fail closed", 
       practiceRolloutGeneration: string;
     };
   };
-  setTemplateTwinQaPractice({ email, enabled: false });
-  setTemplateTwinQaPractice({ email, enabled: true });
+  let replacementAttempted = false;
+  try {
+    execSync(`${QA_COMPOSE} pause transcribe-md-worker`, { stdio: "pipe" });
+    staleWorkerPaused = true;
+    const staleAdmission = await page.request.post(
+      "/api/note-templates/template-twin/staging-qa/runs",
+      {
+        headers: {
+          ...sameOriginHeaders(page),
+          "Content-Type": "application/json",
+        },
+        data: {
+          ...typedAdmissionPayload,
+          idempotencyKey: crypto.randomUUID(),
+          encounterText: SYNTHETIC_ENCOUNTER,
+        },
+      },
+    );
+    expect(staleAdmission.status()).toBe(202);
+    staleAdmissionBody =
+      (await staleAdmission.json()) as typeof staleAdmissionBody;
+    replacementAttempted = true;
+    runTemplateTwinSyntheticCiOrchestrator({
+      command: "replace-cycle",
+      profile: "staging",
+    });
+    staleWorkerPaused = false;
+  } finally {
+    if (staleWorkerPaused && !replacementAttempted) {
+      try {
+        execSync(`${QA_COMPOSE} unpause transcribe-md-worker`, {
+          stdio: "ignore",
+        });
+      } catch {
+        // A local pre-transition assertion may race a container teardown. Its
+        // fixed test failure remains authoritative; never surface Docker output.
+      }
+    }
+  }
+  await page.reload();
+  await expect(page).not.toHaveURL(/\/login(?:\?|$)/u);
 
   const staleRunRead = await page.request.get(
     `/api/note-templates/template-twin/staging-qa/runs/${encodeURIComponent(staleAdmissionBody.runId)}`,

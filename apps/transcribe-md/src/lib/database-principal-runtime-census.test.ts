@@ -75,6 +75,13 @@ const DATABASE_CREDENTIAL_ENVIRONMENT_KEYS = [
   "DB_BACKUP_PASSWORD_FILE",
   "TEMPLATE_TWIN_RELEASE_CONTROL_DATABASE_URL",
 ] as const;
+const TEMPLATE_TWIN_NEXT_RUNTIME_SERVICES = [
+  "transcribe-md",
+  "template-twin-admin-app",
+  "template-twin-admin-control",
+] as const;
+const STATIC_TEMPLATE_TWIN_NEXT_MEMORY_LIMIT = "768m";
+const RESOLVED_TEMPLATE_TWIN_NEXT_MEMORY_LIMIT = "805306368";
 const APPROVED_FRONTEND_IMAGE = `registry.invalid/quillmd/transcribe@sha256:${"a".repeat(64)}`;
 const APPROVED_WORKER_IMAGE = `registry.invalid/quillmd/worker@sha256:${"b".repeat(64)}`;
 const APPROVED_QA_MIGRATOR_IMAGE = `registry.invalid/quillmd/migrator@sha256:${"d".repeat(64)}`;
@@ -483,6 +490,9 @@ function exactProductionRuntimeSurface(name: string) {
     "template-twin-audit-dispatcher",
     "auth-email-dispatcher",
   ].includes(name);
+  const templateTwinNextRuntime = TEMPLATE_TWIN_NEXT_RUNTIME_SERVICES.includes(
+    name as (typeof TEMPLATE_TWIN_NEXT_RUNTIME_SERVICES)[number],
+  );
   return {
     build,
     ...(meddoc
@@ -493,6 +503,9 @@ function exactProductionRuntimeSurface(name: string) {
             : "${TRANSCRIBE_MD_IMAGE:-meddoc-pro-transcribe-md:latest}",
         }),
     restart: "unless-stopped",
+    ...(templateTwinNextRuntime
+      ? { mem_limit: STATIC_TEMPLATE_TWIN_NEXT_MEMORY_LIMIT }
+      : {}),
     networks,
     ...(ports === undefined ? {} : { ports }),
     healthcheck: exactRuntimeHealthcheck(name),
@@ -785,6 +798,7 @@ function resolvedProductionModel(keyringPath = APPROVED_KEYRING_PATH) {
       group_add?: unknown;
       healthcheck: { start_period: string; test: string[] };
       image?: string | null;
+      mem_limit?: string;
       ports?: unknown;
       volumes?: Array<Record<string, unknown>>;
     };
@@ -813,6 +827,13 @@ function resolvedProductionModel(keyringPath = APPROVED_KEYRING_PATH) {
       ].includes(name)
         ? APPROVED_WORKER_IMAGE
         : APPROVED_FRONTEND_IMAGE;
+    }
+    if (
+      TEMPLATE_TWIN_NEXT_RUNTIME_SERVICES.includes(
+        name as (typeof TEMPLATE_TWIN_NEXT_RUNTIME_SERVICES)[number],
+      )
+    ) {
+      service.mem_limit = RESOLVED_TEMPLATE_TWIN_NEXT_MEMORY_LIMIT;
     }
     if (service.build.args) {
       for (const key of Object.keys(service.build.args)) {
@@ -909,7 +930,7 @@ function exactQaModel() {
         restart: "no",
         cap_drop: ["ALL"],
         cpus: "1.0",
-        mem_limit: "512m",
+        mem_limit: STATIC_TEMPLATE_TWIN_NEXT_MEMORY_LIMIT,
         group_add: ["101", "1001"],
         networks: { default: null },
         ports: [exactPort("9020", 3011)],
@@ -1049,7 +1070,7 @@ function resolvedQaModel(keyringPath = APPROVED_KEYRING_PATH) {
   };
   app.image = APPROVED_FRONTEND_IMAGE;
   app.cpus = 1;
-  app.mem_limit = "536870912";
+  app.mem_limit = RESOLVED_TEMPLATE_TWIN_NEXT_MEMORY_LIMIT;
   app.command = null;
   app.entrypoint = null;
   Object.assign(app.volumes[1], {
@@ -1155,6 +1176,7 @@ describe("database-principal runtime census", () => {
         {
           environment?: Record<string, string | null>;
           group_add?: string[] | null;
+          mem_limit?: string;
           volumes?: Array<Record<string, unknown>>;
         }
       >;
@@ -1167,6 +1189,11 @@ describe("database-principal runtime census", () => {
       "1001",
     ]);
     expect(model.services["template-twin-admin-control"]?.group_add).toBeNull();
+    for (const serviceName of TEMPLATE_TWIN_NEXT_RUNTIME_SERVICES) {
+      expect(model.services[serviceName]?.mem_limit).toBe(
+        STATIC_TEMPLATE_TWIN_NEXT_MEMORY_LIMIT,
+      );
+    }
 
     const census = run(model);
     expect(census.status, census.stderr).toBe(0);
@@ -1226,6 +1253,20 @@ describe("database-principal runtime census", () => {
       expect(result.status).not.toBe(0);
       expect(result.stderr).toContain(
         "exact PostgreSQL database server is missing",
+      );
+    },
+  );
+
+  it.each(TEMPLATE_TWIN_NEXT_RUNTIME_SERVICES)(
+    "rejects production Next runtime memory-limit drift on %s",
+    (serviceName) => {
+      const model = productionModel();
+      const service = model.services[serviceName] as Record<string, unknown>;
+      service.mem_limit = "512m";
+      const result = run(model);
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain(
+        `${serviceName} has an unexpected runtime authority contract: runtime surface memory limit`,
       );
     },
   );
