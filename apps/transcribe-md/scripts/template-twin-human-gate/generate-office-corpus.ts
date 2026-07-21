@@ -22,7 +22,7 @@ import {
   type TemplateField,
 } from "../../src/lib/template-twin/ir";
 import { resolveTemplateFields } from "../../src/lib/template-twin/resolver";
-import { expectedDataTypeForFieldKind } from "../../src/lib/template-twin/semantic-mapping";
+import { expectedDataTypeForFieldKind } from "../../src/lib/template-twin/semantic-mapping/compatibility";
 import { validateTemplateTwin } from "../../src/lib/template-twin/validation";
 
 const FIXED_ZIP_DATE = new Date("2000-01-01T00:00:00.000Z");

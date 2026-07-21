@@ -610,26 +610,40 @@ function migrationCommand(
   phase: "status" | "lineage-expand" | "auth-expand" | "pre-v9" | "v9",
   approvedFingerprint?: string,
 ): string {
-  return runInDatabaseNetwork(
-    state,
-    "packages/db/scripts/prisma-migrate-segment.ts",
-    ["--phase", phase],
-    {
-      DATABASE_URL: ownerUrl,
-      PRISMA_STATEMENT_TIMEOUT_MS: "30000",
-      DATABASE_RELEASE_MIGRATION_LOCK_TIMEOUT_MS: "5000",
-      DATABASE_RELEASE_MIGRATION_NETWORK_BOUNDARY: "postgres-loopback-v1",
-      ...(approvedFingerprint
-        ? {
-            DATABASE_RELEASE_MIGRATION_APPROVED_TARGET_FINGERPRINT:
-              approvedFingerprint,
-          }
-        : {}),
-    },
-    `SYNTHETIC_CI_DATABASE_RELEASE_SEGMENT_${phase
-      .replaceAll("-", "_")
-      .toUpperCase()}_FAILED`,
-  );
+  const segment = phase.replaceAll("-", "_").toUpperCase();
+  try {
+    return runInDatabaseNetwork(
+      state,
+      "packages/db/scripts/prisma-migrate-segment.ts",
+      ["--phase", phase],
+      {
+        DATABASE_URL: ownerUrl,
+        PRISMA_STATEMENT_TIMEOUT_MS: "30000",
+        DATABASE_RELEASE_MIGRATION_LOCK_TIMEOUT_MS: "5000",
+        DATABASE_RELEASE_MIGRATION_NETWORK_BOUNDARY: "postgres-loopback-v1",
+        ...(approvedFingerprint
+          ? {
+              DATABASE_RELEASE_MIGRATION_APPROVED_TARGET_FINGERPRINT:
+                approvedFingerprint,
+            }
+          : {}),
+      },
+      `SYNTHETIC_CI_DATABASE_RELEASE_SEGMENT_${segment}_FAILED`,
+    );
+  } catch (error) {
+    const child =
+      error instanceof Error
+        ? error.message.match(
+            /^SYNTHETIC_CI_DATABASE_RELEASE_CHILD_(DATABASE_RELEASE_MIGRATION_[A-Z0-9_]{2,100})$/u,
+          )
+        : null;
+    if (child?.[1]) {
+      fail(
+        `SYNTHETIC_CI_DATABASE_RELEASE_SEGMENT_${segment}_CHILD_${child[1]}`,
+      );
+    }
+    throw error;
+  }
 }
 
 function migrationStatus(

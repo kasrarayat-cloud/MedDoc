@@ -7,7 +7,9 @@
     "types": ["node", "vitest/globals"]
   },
   "include": [
+    "scripts/prisma-migrate-segment.ts",
     "scripts/synthetic-ci-database-release.ts",
+    "src/prisma-migrate-segment.test.ts",
     "src/synthetic-ci-database-release-contract.test.ts",
     "src/synthetic-ci-database-release-secret-masking.test.ts"
   ],

@@ -153,6 +153,9 @@ describe("closed synthetic CI database release path", () => {
     expect(provisioner).toContain(
       "SYNTHETIC_CI_DATABASE_RELEASE_CHILD_${safeChildCode}",
     );
+    expect(provisioner).toContain(
+      "SYNTHETIC_CI_DATABASE_RELEASE_SEGMENT_${segment}_CHILD_${child[1]}",
+    );
   });
 
   it("runs the complete witnessed segmented sequence and exact prerequisites", () => {

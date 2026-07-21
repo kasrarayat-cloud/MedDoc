@@ -8,6 +8,7 @@ import {
   buildMigrationDeployConnectionString,
   buildMigrationProbeConnectionString,
   buildPrismaMigrationChildEnvironment,
+  classifyPrismaMigrationFailure,
   normalizePrismaLedgerAttempts,
   parsePrismaMigrationSegmentArgs,
   readExactMigrationSources,
@@ -171,6 +172,87 @@ describe("closed segmented Prisma migration runner", () => {
       NO_COLOR: "1",
       PRISMA_HIDE_UPDATE_MESSAGE: "1",
     });
+  });
+
+  it("classifies Prisma child failures without reflecting diagnostic values", () => {
+    const sensitive =
+      "postgresql://meddoc:synthetic-sensitive-value@127.0.0.1:5432/meddoc_ci_test";
+    const classify = (input: {
+      error?: NodeJS.ErrnoException;
+      status?: number | null;
+      signal?: NodeJS.Signals | null;
+      stdout?: string;
+      stderr?: string;
+    }) =>
+      classifyPrismaMigrationFailure({
+        status: 1,
+        signal: null,
+        stdout: "",
+        stderr: sensitive,
+        ...input,
+      });
+
+    const cases = [
+      [
+        classify({
+          error: Object.assign(new Error(sensitive), { code: "ETIMEDOUT" }),
+        }),
+        "DATABASE_RELEASE_MIGRATION_PRISMA_PROCESS_TIMEOUT",
+      ],
+      [
+        classify({
+          error: Object.assign(new Error(sensitive), { code: "ENOBUFS" }),
+        }),
+        "DATABASE_RELEASE_MIGRATION_PRISMA_OUTPUT_LIMIT",
+      ],
+      [
+        classify({
+          error: Object.assign(new Error(sensitive), { code: "ENOMEM" }),
+        }),
+        "DATABASE_RELEASE_MIGRATION_PRISMA_RESOURCE_EXHAUSTED",
+      ],
+      [
+        classify({
+          error: Object.assign(new Error(sensitive), { code: "ENOENT" }),
+        }),
+        "DATABASE_RELEASE_MIGRATION_PRISMA_PROCESS_START_FAILED",
+      ],
+      [
+        classify({ signal: "SIGKILL" }),
+        "DATABASE_RELEASE_MIGRATION_PRISMA_PROCESS_TERMINATED",
+      ],
+      [
+        classify({ stderr: `55P03 lock timeout ${sensitive}` }),
+        "DATABASE_RELEASE_MIGRATION_PRISMA_LOCK_TIMEOUT",
+      ],
+      [
+        classify({ stderr: `57014 statement timeout ${sensitive}` }),
+        "DATABASE_RELEASE_MIGRATION_PRISMA_STATEMENT_TIMEOUT",
+      ],
+      [
+        classify({
+          stdout: `P3009 previous P3018 statement timeout ${sensitive}`,
+        }),
+        "DATABASE_RELEASE_MIGRATION_PRISMA_LEDGER_BLOCKED",
+      ],
+      [
+        classify({ stderr: `P3018 ${sensitive}` }),
+        "DATABASE_RELEASE_MIGRATION_PRISMA_APPLY_FAILED",
+      ],
+      [
+        classify({ stderr: `P2024 ${sensitive}` }),
+        "DATABASE_RELEASE_MIGRATION_PRISMA_KNOWN_ERROR",
+      ],
+      [
+        classify({ stderr: sensitive }),
+        "DATABASE_RELEASE_MIGRATION_PRISMA_FAILED",
+      ],
+    ] as const;
+
+    for (const [actual, expected] of cases) {
+      expect(actual).toBe(expected);
+      expect(actual).not.toContain(sensitive);
+    }
   });
 
   it.each([

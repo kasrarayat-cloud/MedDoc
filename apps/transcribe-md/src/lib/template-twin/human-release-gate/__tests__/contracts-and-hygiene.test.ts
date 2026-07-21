@@ -207,6 +207,25 @@ describe("human release-gate contracts", () => {
     expect(workflow).not.toMatch(/if:\s*(?:true|\$\{\{\s*always\(\))/u);
   });
 
+  it("keeps the standalone Office corpus on a provider-free mapping boundary", async () => {
+    const appRoot = path.resolve(import.meta.dirname, "../../../../..");
+    const readAppFile = (relativePath: string) =>
+      readFile(path.join(appRoot, relativePath), "utf8");
+    const [generator, resolver, validation, compatibility] = await Promise.all([
+      readAppFile("scripts/template-twin-human-gate/generate-office-corpus.ts"),
+      readAppFile("src/lib/template-twin/resolver/index.ts"),
+      readAppFile("src/lib/template-twin/validation/index.ts"),
+      readAppFile("src/lib/template-twin/semantic-mapping/compatibility.ts"),
+    ]);
+
+    for (const consumer of [generator, resolver, validation]) {
+      expect(consumer).toContain("semantic-mapping/compatibility");
+    }
+    expect(compatibility).not.toMatch(
+      /(?:import\s+["']server-only|from\s+["'](?:@meddoc\/|@\/|[^"']*provider-ownership))/u,
+    );
+  });
+
   it("makes exact post-LibreOffice classification a mandatory package input", async () => {
     const packager = await readFile(
       path.join(

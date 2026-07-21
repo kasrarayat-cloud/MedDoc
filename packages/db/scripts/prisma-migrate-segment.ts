@@ -715,6 +715,68 @@ function buildCumulativeBundle(
   return { root, configPath: join(bundlePackage, "prisma.config.ts") };
 }
 
+interface PrismaMigrationChildResult {
+  readonly error?: Error;
+  readonly status: number | null;
+  readonly signal: NodeJS.Signals | null;
+  readonly stdout: unknown;
+  readonly stderr: unknown;
+}
+
+/**
+ * Reduce a Prisma subprocess failure to a value-free operational code. Raw
+ * child output can contain connection material and must never cross the
+ * release-helper logging boundary.
+ */
+export function classifyPrismaMigrationFailure(
+  result: PrismaMigrationChildResult,
+): string {
+  const spawnCode = (result.error as NodeJS.ErrnoException | undefined)?.code;
+  if (spawnCode === "ETIMEDOUT") {
+    return "DATABASE_RELEASE_MIGRATION_PRISMA_PROCESS_TIMEOUT";
+  }
+  if (spawnCode === "ENOBUFS") {
+    return "DATABASE_RELEASE_MIGRATION_PRISMA_OUTPUT_LIMIT";
+  }
+  if (spawnCode === "ENOMEM") {
+    return "DATABASE_RELEASE_MIGRATION_PRISMA_RESOURCE_EXHAUSTED";
+  }
+  if (spawnCode === "ENOENT" || spawnCode === "EACCES") {
+    return "DATABASE_RELEASE_MIGRATION_PRISMA_PROCESS_START_FAILED";
+  }
+  if (result.signal !== null) {
+    return "DATABASE_RELEASE_MIGRATION_PRISMA_PROCESS_TERMINATED";
+  }
+
+  const diagnostic = [result.stdout, result.stderr]
+    .filter((value): value is string => typeof value === "string")
+    .join("\n");
+  if (/\bP3009\b/u.test(diagnostic)) {
+    return "DATABASE_RELEASE_MIGRATION_PRISMA_LEDGER_BLOCKED";
+  }
+  if (
+    /(?:\b55P03\b|canceling statement due to lock timeout|lock timeout)/iu.test(
+      diagnostic,
+    )
+  ) {
+    return "DATABASE_RELEASE_MIGRATION_PRISMA_LOCK_TIMEOUT";
+  }
+  if (
+    /(?:canceling statement due to statement timeout|statement timeout)/iu.test(
+      diagnostic,
+    )
+  ) {
+    return "DATABASE_RELEASE_MIGRATION_PRISMA_STATEMENT_TIMEOUT";
+  }
+  if (/\bP3018\b|\b25P02\b/u.test(diagnostic)) {
+    return "DATABASE_RELEASE_MIGRATION_PRISMA_APPLY_FAILED";
+  }
+  if (/\bP\d{4}\b/u.test(diagnostic)) {
+    return "DATABASE_RELEASE_MIGRATION_PRISMA_KNOWN_ERROR";
+  }
+  return "DATABASE_RELEASE_MIGRATION_PRISMA_FAILED";
+}
+
 function runPrismaMigration(configPath: string, databaseUrl: string): void {
   const result = spawnSync(
     "npx",
@@ -727,8 +789,8 @@ function runPrismaMigration(configPath: string, databaseUrl: string): void {
       env: buildPrismaMigrationChildEnvironment(databaseUrl, process.env),
     },
   );
-  if (result.status !== 0 || result.signal !== null) {
-    throw new Error("DATABASE_RELEASE_MIGRATION_PRISMA_FAILED");
+  if (result.error || result.status !== 0 || result.signal !== null) {
+    throw new Error(classifyPrismaMigrationFailure(result));
   }
 }
 

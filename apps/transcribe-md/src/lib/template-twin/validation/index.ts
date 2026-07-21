@@ -28,7 +28,7 @@ import {
   hasExactEncounterEvidenceSpan,
   parseExplicitNumberAndUnit,
 } from "../encounter-facts";
-import { isMappingTypeCompatible } from "../semantic-mapping";
+import { isMappingTypeCompatible } from "../semantic-mapping/compatibility";
 import {
   approvedPracticeDefaultAnchorId,
   approvedPracticeDefaultFactId,
