@@ -484,6 +484,13 @@ services:
         # .env for both this interpolation AND the worker's runtime env_file).
         # ROLLBACK: unset/false in .env, rebuild + up -d --no-deps transcribe-md.
         NEXT_PUBLIC_ULTRASOUND_SPECIALTY: "${NEXT_PUBLIC_ULTRASOUND_SPECIALTY:-false}"
+        # Template Twin native-DOCX gate. Same build-time-inline pattern as
+        # ULTRASOUND: default OFF so a build with no override is byte-identical to
+        # the styled-export pipeline; prod enables it by setting
+        # NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX=true in .env (compose reads .env for this
+        # interpolation AND the worker's runtime env_file).
+        # ROLLBACK: unset/false in .env, rebuild + up -d --no-deps transcribe-md.
+        NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX: "${NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX:-false}"
     restart: unless-stopped
     logging:
       driver: json-file
