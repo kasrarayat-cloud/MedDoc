@@ -102,8 +102,16 @@ function parseMeasurement(clause: string): { diameter: string; reflux: string | 
 export function extractLegMeasurements(prose: string): Map<string, Cell> {
   const out = new Map<string, Cell>();
   // Split into clauses on sentence/segment boundaries so each measurement is
-  // scoped to one vein+segment mention.
-  const clauses = prose.split(/(?<=[.;])\s+|(?:,\s*and\b)|(?:\band\b(?=\s+at\s+the))/i);
+  // scoped to one vein+segment mention. A conjunction ("… and …" / "…, and …")
+  // starts a new clause when it introduces the next measurement — whether that
+  // measurement is written segment-first ("and at the proximal calf 2.8 mm") OR
+  // value-first ("and 2.8 mm at the proximal calf"). The value-first branch is
+  // the real-model phrasing the prod bug exposed: without it the whole compound
+  // sentence stayed one clause and only the FIRST measurement was captured, so a
+  // dictated value (right SSV proximal-calf 2.8) was silently dropped.
+  const clauses = prose.split(
+    /(?<=[.;])\s+|[,;]?\s*\band\b(?=\s+(?:at\s+the|\d+(?:\.\d+)?\s*(?:mm|millimet(?:er|re)s?)\b))/i,
+  );
   let currentVein: string | null = null;
   for (const clause of clauses) {
     for (const v of VEIN_PATTERNS) {
