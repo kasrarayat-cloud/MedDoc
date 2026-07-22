@@ -152,7 +152,7 @@ describe('proposeSemanticMappings', () => {
     expect(args.schema.parse({ mappings: [mapping(id)] })).toBeTruthy();
   });
 
-  it('rejects missing, extra, duplicate, and type-incompatible mappings', async () => {
+  it('rejects missing, extra, and duplicate mappings; coerces type-incompatible ones', async () => {
     const id = `ttf_${'2'.repeat(24)}`;
     const extraId = `ttf_${'3'.repeat(24)}`;
 
@@ -178,16 +178,20 @@ describe('proposeSemanticMappings', () => {
       ),
     ).rejects.toMatchObject({ code: 'DUPLICATE_FIELD' });
 
-    await expect(
-      proposeSemanticMappings(
-        { fields: [field(id)] },
-        {
-          practiceId: 'p',
-          userId: 'u',
-          client: clientReturning({ mappings: [mapping(id, 'text')] }).client,
-        },
-      ),
-    ).rejects.toMatchObject({ code: 'TYPE_MISMATCH' });
+    // A type-incompatible model proposal ('text' for a single_select field) is
+    // COERCED to the compiler-derived data type (the compiler kind is
+    // authoritative), not rejected — this is what unblocks large templates whose
+    // model proposals occasionally guess the wrong dataType.
+    const coerced = await proposeSemanticMappings(
+      { fields: [field(id)] },
+      {
+        practiceId: 'p',
+        userId: 'u',
+        client: clientReturning({ mappings: [mapping(id, 'text')] }).client,
+      },
+    );
+    expect(coerced).toHaveLength(1);
+    expect(coerced[0].expectedDataType).toBe('single_select');
   });
 
   it('forces compiler uncertainty back to needs confirmation', async () => {
