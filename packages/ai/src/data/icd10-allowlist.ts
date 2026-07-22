@@ -483,10 +483,17 @@ const STARTER_ICD10_CODES: ReadonlyArray<string> = [
   'I83.20',    // Varicose veins of unspecified LE with both ulcer and inflammation
   'I83.21',    // … right LE with both ulcer and inflammation
   'I83.22',    // … left LE with both ulcer and inflammation
-  'I83.81',    // Varicose veins of LE with pain — right
+  // NOTE: the bare 5-char subcategory I83.81 is intentionally NOT allowlisted —
+  // it is a non-billable category header whose billable children (…810/811/812/
+  // 813) are below; a model that emits the bare code is correctly dropped.
+  'I83.810',   // Varicose veins of unspecified LE with pain
   'I83.811',   // Varicose veins of right LE with pain
   'I83.812',   // … left LE
   'I83.813',   // … bilateral LE
+  'I83.891',   // Varicose veins of right LE with other complications (swelling/heaviness/edema)
+  'I83.892',   // … left LE
+  'I83.893',   // … bilateral LE
+  'I83.899',   // … unspecified LE
   'I83.90',    // Asymptomatic varicose veins of unspecified LE
   'I83.91',    // … right LE
   'I83.92',    // … left LE
