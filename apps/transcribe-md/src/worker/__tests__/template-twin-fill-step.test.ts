@@ -23,6 +23,7 @@ const INPUT = {
   inputMode: 'text_notes',
   contextText: 'raw bullets',
   entities: { chief_complaint: null },
+  generatedNote: 'FINDINGS\nThe generated note body.',
 };
 
 describe('runTemplateTwinFillStep — flag-gated + fail-safe', () => {
@@ -57,8 +58,12 @@ describe('runTemplateTwinFillStep — flag-gated + fail-safe', () => {
     const r = await runTemplateTwinFillStep(INPUT);
     expect(r).toEqual({ status: 'filled', roundTripVerified: true });
     expect(processTemplateTwinVisit).toHaveBeenCalledOnce();
-    // input mode mapped text_notes -> text
-    expect(processTemplateTwinVisit.mock.calls[0][0]).toMatchObject({ inputMode: 'text', visitId: 'visit-1' });
+    // input mode mapped text_notes -> text; generated note threaded to the fill
+    expect(processTemplateTwinVisit.mock.calls[0][0]).toMatchObject({
+      inputMode: 'text',
+      visitId: 'visit-1',
+      generatedNote: 'FINDINGS\nThe generated note body.',
+    });
   });
 
   it('FAIL-SAFE: a fill failure NEVER throws — returns failed, visit can proceed', async () => {

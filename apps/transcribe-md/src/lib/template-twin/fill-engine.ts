@@ -15,6 +15,8 @@ import {
   type RenderTemplateDocxResult,
 } from '@/lib/note-template-docx';
 
+import { docxToTextWithControls } from '@/lib/note-template-parse/docx-content-controls';
+
 import { canonicalSha256 } from './canonical';
 import {
   projectEncounterFacts,
@@ -34,6 +36,7 @@ import {
   type TemplateTwinFillManifest,
 } from './ir';
 import { templateTwinMappingsSha256 } from './mapping-hash';
+import { bridgeTemplateFill } from './bridge-fill';
 import {
   resolveTemplateFields,
   withApprovedPracticeDefaultFacts,
@@ -77,6 +80,12 @@ export interface PrepareTemplateTwinFillInput {
   resolverModelVersion: string | null;
   validationNow: Date | string;
   allowUncertifiedForSyntheticTest?: boolean;
+  /** The compiled {{one of}} marker text — drives the CHOICE_SLOT picks overlay. */
+  markerText?: string;
+  /** The LIVE brain's generated note — its picks + table measurements are bridged
+   *  onto the resolver baseline. When absent, only the evidence resolver runs
+   *  (behaviour-identical to the pre-bridge fill path). */
+  generatedNote?: string;
 }
 
 export interface PreparedTemplateTwinFill {
@@ -156,13 +165,26 @@ export async function prepareTemplateTwinFill(
     mappings,
     facts: input.facts,
   });
-  const fields = resolveTemplateFields({
+  const baseline = resolveTemplateFields({
     fields: ir.fields,
     mappings,
     facts,
     certifiedFieldIds: input.certifiedFieldIds,
     allowUncertifiedForSyntheticTest: input.allowUncertifiedForSyntheticTest,
   });
+  // Overlay the LIVE brain's CHOICE_SLOT picks + dictated table measurements onto
+  // the evidence baseline. Real evidence always wins (bridge fills only where the
+  // resolver left a field unfilled). Absent a generated note, the baseline stands
+  // — byte-identical to the pre-bridge behaviour.
+  const fields =
+    input.markerText != null && input.generatedNote != null
+      ? bridgeTemplateFill({
+          ir,
+          markerText: input.markerText,
+          filledNote: input.generatedNote,
+          baseline,
+        })
+      : baseline;
   return finalizeTemplateTwinFill({
     ...input,
     ir,
@@ -221,6 +243,10 @@ export interface ProcessTemplateTwinVisitInput {
    * widens some inferred leaf types to unknown, so this boundary narrows only
    * after Layer 3 has parsed the object. */
   entities: unknown;
+  /** The LIVE brain's generated note (soapFinal). Its CHOICE_SLOT picks + table
+   *  measurements are bridged onto the resolver baseline. Optional: absent it,
+   *  only the evidence resolver runs. */
+  generatedNote?: string;
   asrQuality?: 'high' | 'review' | 'unknown';
   validationNow: Date | string;
   resolverModelVersion: string | null;
@@ -377,6 +403,13 @@ export async function processTemplateTwinVisit(
     expectedSha256: compiled.sourceArtifact.sha256,
     expectedSizeBytes: compiled.sourceArtifact.sizeBytes,
   });
+  // Recover the compiled {{one of}} marker form from the SAME verified source
+  // the IR was compiled from — the picks bridge aligns the generated note's picks
+  // to it. Cheap, deterministic, no re-parse of the IR.
+  const markerText =
+    input.generatedNote != null
+      ? (await docxToTextWithControls(source)).text
+      : undefined;
   const prepared = await prepareTemplateTwinFill({
     compiledVersionId: compiled.id,
     noteTemplateId: row.id,
@@ -388,6 +421,8 @@ export async function processTemplateTwinVisit(
     source,
     resolverModelVersion: input.resolverModelVersion,
     validationNow: input.validationNow,
+    markerText,
+    generatedNote: input.generatedNote,
   });
 
   const existing = await prisma.templateTwinFillManifest.findUnique({

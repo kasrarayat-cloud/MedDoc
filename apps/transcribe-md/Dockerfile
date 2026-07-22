@@ -85,6 +85,17 @@ ENV NEXT_PUBLIC_SKIN_BETA=${NEXT_PUBLIC_SKIN_BETA}
 ARG NEXT_PUBLIC_ULTRASOUND_SPECIALTY=false
 ENV NEXT_PUBLIC_ULTRASOUND_SPECIALTY=${NEXT_PUBLIC_ULTRASOUND_SPECIALTY}
 
+# Template Twin native-DOCX gate. Like SKIN_BETA / ULTRASOUND, NEXT_PUBLIC_* must
+# be set in the BUILDER env so `next build` inlines it into the client bundle
+# (the Settings certify workspace + export path read it at build time; the worker
+# reads the same var at runtime). Default "false" so an image built with no
+# override is byte-identical to the styled-export pipeline. Promote by building
+# with `--build-arg NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX=true`.
+# ROLLBACK: NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX=false docker compose build transcribe-md
+#           && docker compose up -d --no-deps transcribe-md  (→ native fill off).
+ARG NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX=false
+ENV NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX=${NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX}
+
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # ── Build heap (incident 2026-06-04) ──

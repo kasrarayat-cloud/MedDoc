@@ -11,6 +11,7 @@ import {
   visibleText,
 } from '@/lib/note-template-docx/xml';
 import { detectStructuredPhi } from '@/lib/note-template-parse/phi-gate';
+import { docxToTextWithControls } from '@/lib/note-template-parse/docx-content-controls';
 import { PhiScanSchema } from '@/lib/note-template-parse/note-template-schema';
 
 const MAX_PHI_SCAN_CHARS = 50_000;
@@ -80,12 +81,37 @@ export async function assertTemplateTwinSourcePhiFree(input: {
   client?: Pick<ModelClient, 'complete'>;
 }): Promise<void> {
   const parts = scanPartNames(input.source);
-  const mainText = parts.find((part) => part.partName === 'word/document.xml')?.text ?? '';
-  if (detectStructuredPhi(mainText).length > 0) {
+  // Deterministic structured-PHI pre-check on the FIXED document text only.
+  // A dropdown's {{one of: …}} OPTION list is the doctor's enumerated FORMAT
+  // (reused across every patient — e.g. a clinic-address option "…, CA 92604"),
+  // never patient PHI, so the option lists are neutralised before the scan — the
+  // SAME "options are format, not content" principle the note-format PHI gate
+  // applies (phi-gate.ts stripChoiceOptions). The FIXED text around the markers,
+  // where a pasted patient example would actually leak, is still fully scanned;
+  // the LLM part-scan below independently covers the remaining OOXML parts.
+  const { text: markerText } = await docxToTextWithControls(input.source);
+  const scannableText = markerText.replace(/\{\{one of:[^}]*\}\}/g, '{{options}}');
+  if (detectStructuredPhi(scannableText).length > 0) {
     throw new TemplateTwinPhiRejectedError();
   }
 
-  const fields = Object.fromEntries(parts.map((part) => [part.partName, part.text]));
+  // Scan the DOCUMENT BODY only, with dropdown {{one of}} option lists collapsed
+  // ("options are format, not content") — the same scope the shipped note-format
+  // PHI gate uses. Header/footer parts are practice/provider LETTERHEAD (name,
+  // clinic address, phone), explicitly NOT patient PHI (PHI_SCAN_SYSTEM), and a
+  // conservative model otherwise sets `anyUncertain` on a legitimate letterhead
+  // and false-rejects the whole template. The body fixed text — where a pasted
+  // patient example would actually leak — is still fully scanned by both the
+  // deterministic detector above and this model scan.
+  const isLetterhead = (partName: string) => /word\/(header|footer)\d*\.xml$/i.test(partName);
+  const fields = Object.fromEntries(
+    parts
+      .filter((part) => !isLetterhead(part.partName))
+      .map((part) => [
+        part.partName,
+        part.partName === 'word/document.xml' ? scannableText : part.text,
+      ]),
+  );
   const serialized = JSON.stringify(fields);
   if (serialized.length > MAX_PHI_SCAN_CHARS) {
     throw new TemplateTwinPhiRejectedError();

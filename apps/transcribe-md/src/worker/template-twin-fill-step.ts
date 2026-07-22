@@ -66,6 +66,9 @@ export async function runTemplateTwinFillStep(input: {
   inputMode: string;
   contextText: string;
   entities: unknown;
+  /** The generated note (soapFinal) — its CHOICE_SLOT picks + table measurements
+   *  are bridged into the native fill. */
+  generatedNote: string;
 }): Promise<TwinFillStepResult> {
   // Flag OFF: no-op, no DB, behavior-identical to the live pipeline.
   if (!templateNativeDocxEnabled()) return { status: 'skipped', reason: 'flag_off' };
@@ -84,6 +87,7 @@ export async function runTemplateTwinFillStep(input: {
         inputMode: mapInputMode(input.inputMode),
         contextText: input.contextText,
         entities: input.entities,
+        generatedNote: input.generatedNote,
         validationNow: new Date(),
         resolverModelVersion: null,
       }),
