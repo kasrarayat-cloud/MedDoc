@@ -88,6 +88,7 @@ import { runLayer5SelfCritique } from '@/worker/layers/05-self-critique';
 import type { AudioConfidenceStats } from '@/worker/layers/audio-confidence';
 import { runLayer6Polish } from '@/worker/layers/06-polish';
 import { resolveActiveTemplate } from '@/worker/note-templates/resolve-active-template';
+import { runTemplateTwinFillStep } from '@/worker/template-twin-fill-step';
 import {
   normalizeTemplate,
   type ResolvedNoteTemplate,
@@ -996,6 +997,26 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
     // serialize-fail; null is the same shape the column carries on
     // first-attempt initial state (worker.ts:297), so downstream
     // readers handle it.
+    // Template Twin native-DOCX fill step (flag-gated + FAIL-SAFE). Produces the
+    // provenance-pinned native fill manifest BEFORE the visit goes READY, so
+    // export serves a cached native document. A failure here NEVER blocks the
+    // visit or signing — the result is advisory; native export falls back to styled.
+    const twinFill = await runTemplateTwinFillStep({
+      visitId,
+      practiceId,
+      doctorId: visit.userId,
+      noteTemplateId: noteTemplate.id,
+      noteTemplateVersion: noteTemplate.version,
+      inputMode: visit.inputMode,
+      contextText,
+      entities,
+    });
+    if (twinFill.status === 'failed') {
+      console.warn(
+        `[transcribe-md-worker] template-twin fill non-blocking failure visit=${visitId}: ${twinFill.reason}`
+      );
+    }
+
     const safeConfidenceScores = sanitizeConfidenceScores(confidenceScores);
     if (safeConfidenceScores === null) {
       console.warn(

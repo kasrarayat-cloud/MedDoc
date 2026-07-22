@@ -135,6 +135,7 @@ const MOCK_COMPLETE_FIXTURES: Partial<Record<ModelCallPurpose, unknown>> = {
   // (MOCK_TEMPLATE_PHI_SCAN_FLAGGED) is returned instead when
   // MOCK_TEMPLATE_PHI_FLAG=true, so the PHI-gate REJECT path is testable too.
   tm_template_phi_scan: { phiFields: [], anyUncertain: false },
+  tm_template_synthetic_phi_scan: { phiFields: [], anyUncertain: false },
 };
 
 // Note-format PHI gate — the FLAGGED counterpart to the clean
