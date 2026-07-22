@@ -44,8 +44,17 @@ export const GET = withApiHandler<{ id: string }>(
       // template, serve the doctor's OWN roundtrip-verified document; else fall
       // back to the QuillMD-styled export. Flag OFF: styled path only, byte-
       // identical to the live route. The sign route is NOT involved either way.
+      // A native-load failure (MinIO read / sha256 or size integrity mismatch)
+      // DEGRADES to the styled export rather than failing the download — the
+      // doctor always gets a valid document, never a 500 or a corrupt native one.
       const native = templateNativeDocxEnabled()
-        ? await loadNativeTemplateDocxForVisit(visitId, userId)
+        ? await loadNativeTemplateDocxForVisit(visitId, userId).catch((err) => {
+            console.warn(
+              '[api:visits:export:docx] native load failed; falling back to styled:',
+              redactPhi(err instanceof Error ? err.message : err)
+            );
+            return null;
+          })
         : null;
       if (native) {
         docx = native.bytes;

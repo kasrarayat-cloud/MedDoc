@@ -31,6 +31,22 @@ function mapInputMode(inputMode: string): EncounterInputMode {
   return 'conversation'; // audio_upload
 }
 
+/** Hard ceiling so a stalled fill/storage call can never delay the visit reaching
+ *  READY. On timeout the step is treated as a (non-blocking) failure. */
+const FILL_TIMEOUT_MS = 45_000;
+
+async function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('TWIN_FILL_TIMEOUT')), ms);
+  });
+  try {
+    return await Promise.race([work, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 /** Cheap gate: only a CERTIFIED twin compiled version triggers the fill. Avoids
  *  running the provenance claim for the common non-twin (SOAP) visit. */
 async function isCertifiedTwinTemplate(noteTemplateId: string): Promise<boolean> {
@@ -58,18 +74,21 @@ export async function runTemplateTwinFillStep(input: {
     if (!(await isCertifiedTwinTemplate(input.noteTemplateId))) {
       return { status: 'skipped', reason: 'not_certified_twin' };
     }
-    const prepared = await processTemplateTwinVisit({
-      visitId: input.visitId,
-      practiceId: input.practiceId,
-      doctorId: input.doctorId,
-      noteTemplateId: input.noteTemplateId,
-      noteTemplateVersion: input.noteTemplateVersion,
-      inputMode: mapInputMode(input.inputMode),
-      contextText: input.contextText,
-      entities: input.entities,
-      validationNow: new Date(),
-      resolverModelVersion: null,
-    });
+    const prepared = await withTimeout(
+      processTemplateTwinVisit({
+        visitId: input.visitId,
+        practiceId: input.practiceId,
+        doctorId: input.doctorId,
+        noteTemplateId: input.noteTemplateId,
+        noteTemplateVersion: input.noteTemplateVersion,
+        inputMode: mapInputMode(input.inputMode),
+        contextText: input.contextText,
+        entities: input.entities,
+        validationNow: new Date(),
+        resolverModelVersion: null,
+      }),
+      FILL_TIMEOUT_MS,
+    );
     return {
       status: 'filled',
       roundTripVerified: prepared.render?.verification.verified === true,
