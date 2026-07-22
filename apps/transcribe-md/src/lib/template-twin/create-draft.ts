@@ -1,3 +1,10 @@
+// ============================================================================
+// Template Twin — upload -> compile -> propose -> persist DRAFT (Phase 2b).
+// Compiles the uploaded .docx to the IR (fail-closed; quarantines a rejected
+// source), proposes semantic mappings (bounded LLM), then persists a NoteTemplate
+// (EXISTING columns only — no lineage) plus the twin source-artifact / compiled-
+// version / field-definitions / proposed-mappings. prisma singleton + logTwinAudit.
+// ============================================================================
 import { createHash, randomUUID } from 'node:crypto';
 
 import type { Prisma } from '@prisma/client';

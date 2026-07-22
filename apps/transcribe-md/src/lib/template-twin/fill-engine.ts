@@ -1,3 +1,11 @@
+// ============================================================================
+// Template Twin — deterministic FILL engine (Phase 2b). prepare/finalize/
+// processTemplateTwinVisit: resolve fields from anchored encounter facts ->
+// independently validate -> conditionally native-render (renderTemplateDocx) +
+// round-trip verify -> persist the fill manifest. Invariants: only template
+// options, blank when unsaid, never invented; every populated value carries
+// evidence. prisma singleton + injectable storage + logTwinAudit only.
+// ============================================================================
 import { Prisma } from '@prisma/client';
 import prisma from '@meddoc/db';
 

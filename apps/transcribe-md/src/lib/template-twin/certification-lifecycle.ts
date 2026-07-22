@@ -1,3 +1,10 @@
+// ============================================================================
+// Template Twin — physician CERTIFICATION lifecycle (Phase 2b). Mapping update +
+// the ONE-TIME certify/activate. Binds the synthetic-test proof to the immutable
+// compiled version and requires the saved mapping hash to still match (no
+// test-then-edit activation). Authorization is supplied by the caller
+// (TemplateTwinActor value-object); uses the prisma singleton + logTwinAudit only.
+// ============================================================================
 import { Prisma } from '@prisma/client';
 import prisma from '@meddoc/db';
 

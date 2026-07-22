@@ -1,3 +1,11 @@
+// ============================================================================
+// Template Twin — PURE sign-time gate (Phase 2b). assessTemplateTwinSigning
+// decides, over a passed-in context (no prisma/AI/auth import), whether the twin
+// sign-gate APPLIES and is READY: tenant / template-version / certification /
+// round-trip provenance. Discriminates twin templates by the presence of a
+// compiled version (templateTwinCompiledVersion), never a note_templates column.
+// Currently DORMANT — not wired into the frozen sign route.
+// ============================================================================
 import { canonicalSha256 } from './canonical';
 import {
   SemanticMappingSchema,

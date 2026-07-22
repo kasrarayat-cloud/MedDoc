@@ -1,3 +1,10 @@
+// ============================================================================
+// Template Twin — certify-time SYNTHETIC TEST (Phase 2b). Runs an INJECTED
+// TwinEntityExtractor (this module never imports the worker pipeline) over
+// physician-supplied synthetic evidence -> fill -> native render -> persist the
+// proof that certification binds. PHI-gated (synthetic-evidence-gate); prisma
+// singleton + injectable storage + logTwinAudit only.
+// ============================================================================
 import { Prisma } from '@prisma/client';
 import prisma from '@meddoc/db';
 
