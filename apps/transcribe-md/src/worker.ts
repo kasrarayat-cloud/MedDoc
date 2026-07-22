@@ -88,6 +88,7 @@ import { runLayer5SelfCritique } from '@/worker/layers/05-self-critique';
 import type { AudioConfidenceStats } from '@/worker/layers/audio-confidence';
 import { runLayer6Polish } from '@/worker/layers/06-polish';
 import { resolveActiveTemplate } from '@/worker/note-templates/resolve-active-template';
+import { reconcileMeasurementTables } from '@/worker/note-templates/reconcile-measurement-tables';
 import { runTemplateTwinFillStep } from '@/worker/template-twin-fill-step';
 import {
   normalizeTemplate,
@@ -673,6 +674,16 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         noteTemplate,
       });
     }
+
+    // BUG-FIX (styled-export measurement tables): rebuild any venous-duplex
+    // measurement table to ONE canonical symmetric row set for both legs and
+    // recover a dropped, prose-documented measurement into its cell. Pure +
+    // deterministic; a no-op for a note with no measurement tables (every SOAP
+    // note), so it never touches non-imaging output.
+    polished = {
+      ...polished,
+      soapFinal: reconcileMeasurementTables(polished.soapFinal),
+    };
 
     // -------------------------------------------------------------------
     // T-M6 — parallel automation fan-out. Each L7x layer runs

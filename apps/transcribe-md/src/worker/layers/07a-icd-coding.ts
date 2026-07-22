@@ -36,6 +36,25 @@ export const IcdResult = z.object({
 });
 export type IcdResult = z.infer<typeof IcdResult>;
 
+/**
+ * Clinical-coherence floor for varicose-vein codes. An ASYMPTOMATIC / unspecified
+ * varicose code (I83.9x — I83.90 unspecified, I83.91/92/93) cannot coexist with a
+ * SYMPTOMATIC varicose code (I83.8x, "…with other complications/pain/…") in the
+ * same study: a patient coded symptomatic is not simultaneously "asymptomatic
+ * varicose", and a normal-findings limb warrants no varicose code at all.
+ *
+ * ONLY-REMOVE semantics: when a symptomatic I83.8x is present, drop any
+ * asymptomatic/unspecified I83.9x that rode along. A supported symptomatic code is
+ * never touched, no code is ever added, and — with no symptomatic code present —
+ * a genuine asymptomatic code (a truly asymptomatic-but-present varicosity) is
+ * left untouched. Pure + deterministic. Preserves input order.
+ */
+export function dropIncoherentVaricoseCodes(codes: readonly IcdCode[]): IcdCode[] {
+  const hasSymptomaticVaricose = codes.some((c) => /^I83\.8/i.test(c.code));
+  if (!hasSymptomaticVaricose) return [...codes];
+  return codes.filter((c) => !/^I83\.9/i.test(c.code));
+}
+
 export interface Layer7aInput {
   visitId: string;
   practiceId: string;
@@ -283,7 +302,24 @@ export async function runLayer7aIcdCoding(
       },
     });
   }
-  const filtered: typeof result = { codes: accepted };
+  // Clinical-coherence floor (varicose veins) — see dropIncoherentVaricoseCodes.
+  const coherent = dropIncoherentVaricoseCodes(accepted);
+  const droppedIncoherent = accepted.filter((c) => !coherent.includes(c));
+  if (droppedIncoherent.length > 0) {
+    void logAudit({
+      action: 'CODING_COACH_REJECTED_INVALID_ICD',
+      targetId: input.visitId,
+      targetType: 'TranscribeVisit',
+      userId: input.userId,
+      practiceId: input.practiceId,
+      success: false,
+      metadata: {
+        reason: 'asymptomatic_varicose_with_symptomatic',
+        rejectedCodes: droppedIncoherent.map((c) => c.code),
+      },
+    });
+  }
+  const filtered: typeof result = { codes: coherent };
 
   // Q2 fix-pack §06.6 — surface low-confidence codes via needsReview
   // when one or more accepted codes land at confidenceLevel='low'.
