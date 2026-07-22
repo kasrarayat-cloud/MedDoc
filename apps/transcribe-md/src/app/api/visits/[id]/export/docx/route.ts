@@ -11,6 +11,8 @@ import { filenameSlug, formatVisitDate } from '@/lib/visit-export';
 import { loadVisitExportData } from '@/lib/visit-export-server';
 import { generateVisitDocx } from '@/lib/docx-generator';
 import { logDelivery } from '@/lib/deliveries';
+import { templateNativeDocxEnabled } from '@/config/template-native-docx';
+import { loadNativeTemplateDocxForVisit } from '@/lib/template-twin/native-export';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { redactPhi } from '@meddoc/ai';
@@ -36,8 +38,21 @@ export const GET = withApiHandler<{ id: string }>(
     if (!data) return apiError('not found', 404);
 
     let docx: Buffer;
+    let nativeTemplate = false;
     try {
-      docx = await generateVisitDocx(data);
+      // Flag ON: if this visit was filled against a Template Twin native
+      // template, serve the doctor's OWN roundtrip-verified document; else fall
+      // back to the QuillMD-styled export. Flag OFF: styled path only, byte-
+      // identical to the live route. The sign route is NOT involved either way.
+      const native = templateNativeDocxEnabled()
+        ? await loadNativeTemplateDocxForVisit(visitId, userId)
+        : null;
+      if (native) {
+        docx = native.bytes;
+        nativeTemplate = true;
+      } else {
+        docx = await generateVisitDocx(data);
+      }
     } catch (err) {
       console.error(
         '[api:visits:export:docx] generation failed:',
@@ -58,6 +73,9 @@ export const GET = withApiHandler<{ id: string }>(
       metadata: {
         sizeBytes: docx.byteLength,
         isSigned: data.signedAt !== null,
+        // Additive only when a native template was actually served, so the
+        // flag-OFF audit metadata stays byte-identical to the live route.
+        ...(nativeTemplate ? { nativeTemplate: true } : {}),
       },
     });
 
