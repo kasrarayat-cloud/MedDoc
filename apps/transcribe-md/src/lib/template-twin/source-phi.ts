@@ -95,16 +95,22 @@ export async function assertTemplateTwinSourcePhiFree(input: {
     throw new TemplateTwinPhiRejectedError();
   }
 
-  // Same "options are format, not content" neutralisation for the LLM scan: the
-  // document part is scanned with its dropdown option lists collapsed (the fixed
-  // text — where a pasted patient example would leak — is unchanged), so a
-  // clinic-address option can't drive a false patient-PHI rejection. Header/
-  // footer/other parts are scanned verbatim.
+  // Scan the DOCUMENT BODY only, with dropdown {{one of}} option lists collapsed
+  // ("options are format, not content") — the same scope the shipped note-format
+  // PHI gate uses. Header/footer parts are practice/provider LETTERHEAD (name,
+  // clinic address, phone), explicitly NOT patient PHI (PHI_SCAN_SYSTEM), and a
+  // conservative model otherwise sets `anyUncertain` on a legitimate letterhead
+  // and false-rejects the whole template. The body fixed text — where a pasted
+  // patient example would actually leak — is still fully scanned by both the
+  // deterministic detector above and this model scan.
+  const isLetterhead = (partName: string) => /word\/(header|footer)\d*\.xml$/i.test(partName);
   const fields = Object.fromEntries(
-    parts.map((part) => [
-      part.partName,
-      part.partName === 'word/document.xml' ? scannableText : part.text,
-    ]),
+    parts
+      .filter((part) => !isLetterhead(part.partName))
+      .map((part) => [
+        part.partName,
+        part.partName === 'word/document.xml' ? scannableText : part.text,
+      ]),
   );
   const serialized = JSON.stringify(fields);
   if (serialized.length > MAX_PHI_SCAN_CHARS) {
