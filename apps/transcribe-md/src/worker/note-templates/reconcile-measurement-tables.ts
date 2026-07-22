@@ -293,13 +293,15 @@ function selectProse(
   existing: Map<string, string[]>,
 ): Map<string, Cell> {
   if (paragraphs.length === 0) return new Map();
+  // Candidate pool for the content match: a paragraph explicitly marked as the
+  // OTHER leg is NEVER eligible (would contaminate this leg with the other's
+  // values). Same-leg-marked or unmarked paragraphs remain.
+  const candidates = tableLeg
+    ? paragraphs.filter((p) => !p.leg || p.leg === tableLeg)
+    : paragraphs;
   if (tableLeg) {
-    const marked = paragraphs.find((p) => p.leg === tableLeg);
+    const marked = candidates.find((p) => p.leg === tableLeg);
     if (marked) return marked.measurements;
-    // A different paragraph is explicitly the OTHER leg — never borrow from it.
-    if (paragraphs.some((p) => p.leg && p.leg !== tableLeg) && paragraphs.every((p) => p.leg)) {
-      return new Map();
-    }
   }
   const tableValues = new Set<string>();
   for (const cells of existing.values()) {
@@ -309,10 +311,10 @@ function selectProse(
     }
   }
   if (tableValues.size === 0) return new Map();
-  const scored = paragraphs
+  const scored = candidates
     .map((p) => ({ p, score: [...p.values].filter((v) => tableValues.has(v)).length }))
     .sort((a, b) => b.score - a.score);
-  if (scored[0].score > 0 && (scored.length === 1 || scored[0].score > scored[1].score)) {
+  if (scored.length > 0 && scored[0].score > 0 && (scored.length === 1 || scored[0].score > scored[1].score)) {
     return scored[0].p.measurements;
   }
   return new Map();

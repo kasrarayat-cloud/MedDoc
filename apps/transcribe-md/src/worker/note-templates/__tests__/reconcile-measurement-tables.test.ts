@@ -112,6 +112,30 @@ describe('reconcileMeasurementTables', () => {
     expect(left).not.toMatch(/GSV at the Knee \| 4\.1/);
   });
 
+  it('MIXED marking: never borrows from an explicitly-other-leg paragraph even on a coincident value — W1', () => {
+    // The LEFT-marked paragraph shares the coincident value 4.1 with the right
+    // table's GSV knee, but is explicitly the other leg — it must NOT be a
+    // content-match candidate for the right table's empty SSV cell.
+    const note = [
+      '## FINDINGS',
+      'On the left: the great saphenous vein at the knee measures 4.1 mm; the small saphenous vein at the proximal calf measures 9.9 mm.',
+      '',
+      'The great saphenous vein at the saphenofemoral junction measures 6.2 mm.',
+      '',
+      '## DIAMETER AND REFLUX TIME — Right Leg',
+      '| DIAMETER (mm) | REFLUX TIME (seconds) |', '| --- | --- |',
+      '| GSV at the SFJ | 6.2 | [not documented] |',
+      '| GSV at the Knee | 4.1 | [not documented] |',
+      '| SSV at the Proximal Calf | [not documented] | [not documented] |',
+      '',
+    ].join('\n');
+    const out = reconcileMeasurementTables(note);
+    const right = out.split('## PROCEDURES')[0].split('— Right Leg')[1] ?? out;
+    // The left-leg SSV proximal-calf 9.9 must NOT be recovered into the right cell.
+    expect(right).toMatch(/SSV at the Proximal Calf \| \[not documented\] \| \[not documented\] \|/);
+    expect(out).not.toMatch(/SSV at the Proximal Calf \| 9\.9/);
+  });
+
   it('preserves a stated-normal "—" the model wrote', () => {
     const note = [
       '## FINDINGS', 'right leg only', '',
