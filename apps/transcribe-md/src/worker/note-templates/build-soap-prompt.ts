@@ -65,6 +65,34 @@ export const CHOICE_SLOT_DIRECTIVE = [
   'them as ONE coherent set: the segments must belong to the vein you chose',
   'and read proximal-to-distal. Never place an option from one menu into a',
   'different menu.',
+  'SIDE / SUBJECT GROUNDING (laterality is sacred). A carrier names a specific',
+  'side and structure (e.g. "Left great saphenous vein is {{...}}"). Choose an',
+  'option ONLY when the transcript states it FOR THAT SAME side and structure.',
+  'A finding about the RIGHT leg must NEVER fill a LEFT carrier\'s menu (and',
+  'vice-versa); the mere appearance of an option\'s words elsewhere in the',
+  'transcript (e.g. "reflux positive" said of the OTHER leg) is NOT support',
+  'for THIS carrier. Never default to the first-listed option.',
+  'NORMAL FINDING → OMIT, and never contradict a sibling line. When the',
+  'transcript describes this carrier\'s side/structure as NORMAL / competent /',
+  'no reflux and NO listed option encodes that (a menu of only abnormal',
+  'options, e.g. "{{one of: reflux positive | is absent}}"), do NOT pick an',
+  'abnormal option to fill the sentence — OMIT the entire carrier line. In',
+  'particular, never emit a per-side abnormal carrier that contradicts an',
+  'adjacent fixed line stating the opposite (e.g. keep "No saphenous reflux',
+  'in <side> lower extremity." and drop that side\'s carrier).',
+  'MUTUALLY-EXCLUSIVE SIBLING LINES (both directions). When a per-side carrier',
+  'and a nearby FIXED scaffold line make OPPOSITE assertions about the SAME',
+  'side and structure (e.g. the carrier "<Side> <vein> is {{one of: reflux',
+  'positive. | is absent.}}" vs the fixed line "No saphenous reflux in <side>',
+  'lower extremity."), they are ALTERNATIVES — emit EXACTLY ONE per side, the',
+  'one the transcript supports, and DROP the other so the section never states',
+  'a finding AND its negation for the same side. If the transcript dictates',
+  'saphenous reflux on this side, keep the "... is reflux positive." carrier',
+  '(with the correct vein and side) AND DROP the fixed "No saphenous reflux in',
+  '<side> lower extremity." line. If the side is normal / competent (no',
+  'saphenous reflux), DROP the reflux carrier and KEEP that fixed line. Resolve',
+  'each side independently by ITS OWN dictated status (the two legs commonly',
+  'differ — one refluxing, one normal).',
   'Preserve the scaffold\'s LINE STRUCTURE: reproduce each labeled field and',
   'each sentence on its OWN line, exactly as laid out — never merge separate',
   'fields or sentences onto one line.',
@@ -94,6 +122,33 @@ export function normalizeTemplate(row: {
     sections: (row.sections as NoteTemplateSection[]) ?? [],
     styleProfile: (row.styleProfile as NoteTemplateStyleProfile) ?? SAFETY,
   };
+}
+
+/**
+ * Reconcile venous-reflux TIME units to SECONDS (the code-wide convention —
+ * see ultrasound-report-template.ts's measurement discipline — and how reflux
+ * is dictated: "3.4 seconds"). A doctor's Word template may label the reflux
+ * column and its threshold in milliseconds ("REFLUX TIME (ms)", "reflux
+ * lasting more than 500 milliseconds"); a bare seconds value ("3.4") under an
+ * "(ms)" header is a unit mismatch. We render the header/threshold in seconds
+ * (never CONVERT the dictated value to ms — 3400 is a token the transcript
+ * never states and would trip 04b's measurement guard). NARROW: touches only a
+ * reflux / reverse-flow context, never other columns/units (e.g. "(mm)").
+ * No reflux/ms token → returns the string unchanged.
+ */
+export function normalizeRefluxTimeUnit(text: string): string {
+  if (!text) return text;
+  // (1) Column header: "REFLUX TIME (ms)" / "reverse flow (msec)" -> "(seconds)".
+  let out = text.replace(
+    /\b(reflux|reverse[-\s]?flow)((?:\s+time)?[^()\n]*?)\(\s*(?:ms|msec|millisec(?:ond)?s?)\s*\)/gi,
+    (_m, label, mid) => `${label}${mid}(seconds)`
+  );
+  // (2) Threshold prose: "reflux ... more than 500 milliseconds" -> "... 0.5 seconds".
+  out = out.replace(
+    /(\breflux\b[^.\n]*?\bmore than\s+)(\d+(?:\.\d+)?)\s*(?:ms|msec|milliseconds?)\b/gi,
+    (_m, pre, num) => `${pre}${Number(num) / 1000} seconds`
+  );
+  return out;
 }
 
 function formatHintDirective(hint: SectionFormatHint): string {
@@ -148,8 +203,25 @@ export function renderStructureDirective(
       'spelling.',
     ].join('\n');
   }
-  const header = `| ${structure.columns.join(' | ')} |`;
-  const separator = `| ${structure.columns.map(() => '---').join(' | ')} |`;
+  // Reconcile reflux-time column headers to SECONDS so a bare seconds value
+  // (e.g. "3.4") is not rendered under a milliseconds header (unit mismatch).
+  // No-op for every non-reflux header (e.g. "DIAMETER (mm)" is untouched).
+  const cols = structure.columns.map(normalizeRefluxTimeUnit);
+  const header = `| ${cols.join(' | ')} |`;
+  const separator = `| ${cols.map(() => '---').join(' | ')} |`;
+  // Cell-value discipline shared by both table shapes: a numeric column cell
+  // holds the BARE value in the header's unit (no repeated/added unit word),
+  // and a STATED-normal segment gets a clean "—" marker — never a prose phrase.
+  const CELL_DISCIPLINE = [
+    'A cell holds ONLY the BARE value: when a column header ends in a unit',
+    '(e.g. "DIAMETER (mm)", "REFLUX TIME (seconds)"), write just the number',
+    'the transcript dictated (e.g. "6.2") — never repeat the unit word and',
+    'never write a unit the header does not name. Never put a phrase or a',
+    'sentence in a cell.',
+    'When the transcript EXPLICITLY reports a segment as normal/absent (e.g.',
+    '"no reflux", "competent"), put "—" in that numeric cell — reserve',
+    '"[not documented]" for a segment that was NOT assessed.',
+  ];
   if (structure.rowLabels && structure.rowLabels.length > 0) {
     const rows = structure.rowLabels.map(
       (r) =>
@@ -166,8 +238,8 @@ export function renderStructureDirective(
       separator,
       ...rows,
       'Replace a "[not documented]" cell ONLY with a value the transcript',
-      'states, copied as dictated — do not append units or qualifiers the',
-      'transcript does not state. Leave it "[not documented]" otherwise.',
+      'states, copied as dictated.',
+      ...CELL_DISCIPLINE,
       'Never invent, estimate, or carry forward a value. Do not add,',
       'remove, rename, or reorder rows or columns. Append the evidence',
       'anchor(s) for a filled row after its final "|".',
@@ -180,12 +252,10 @@ export function renderStructureDirective(
     header,
     separator,
     'Add ONE row per item the transcript supports, and append the evidence',
-    'anchor(s) for each row after its final "|". Copy cell values as',
-    'dictated — do not append units or qualifiers the transcript does not',
-    'state. In a supported row, put "[not documented]" in any cell whose',
-    'value the transcript does not state — never invent a value to',
-    'complete a row. Do NOT add a row for an item the transcript never',
-    'mentions.',
+    'anchor(s) for each row after its final "|".',
+    ...CELL_DISCIPLINE,
+    'Never invent a value to complete a row. Do NOT add a row for an item',
+    'the transcript never mentions.',
   ].join('\n');
 }
 
