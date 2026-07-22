@@ -16,6 +16,7 @@ import { delimiterSystemSuffix } from '@meddoc/ai';
 import type { ResolvedNoteTemplate, BuildSystemPromptOpts } from './build-soap-prompt';
 import {
   renderStructureDirective,
+  normalizeRefluxTimeUnit,
   SCAFFOLD_CONFIRM_MARKER,
   CHOICE_SLOT_DIRECTIVE,
   templateHasChoiceSlots,
@@ -44,9 +45,14 @@ function renderSectionBody(s: NoteTemplateSection): string[] {
   out.push(s.styleInstructions || formatHintDirective(s.formatHint));
   if (s.structure) out.push(renderStructureDirective(s.structure));
   if (s.defaultText) {
-    if (s.defaultTextMode === 'always_include') out.push(s.defaultText);
+    // Reconcile a milliseconds reflux threshold in scaffold prose (e.g. the
+    // Technique line "reflux lasting more than 500 milliseconds") to seconds,
+    // to match the seconds-based reflux column + how reflux is dictated.
+    // No-op for any prose without a reflux/ms threshold.
+    const defaultText = normalizeRefluxTimeUnit(s.defaultText);
+    if (s.defaultTextMode === 'always_include') out.push(defaultText);
     else if (s.defaultTextMode === 'scaffold_confirm')
-      out.push(`${s.defaultText}\n${SCAFFOLD_CONFIRM_MARKER}`);
+      out.push(`${defaultText}\n${SCAFFOLD_CONFIRM_MARKER}`);
   }
   return out;
 }
