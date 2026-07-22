@@ -57,10 +57,20 @@ export async function loadVisitExportData(
   });
   if (!visit || visit.userId !== userId) return null;
 
-  const soapText =
+  const rawSoap =
     visit.status === 'SIGNED'
       ? visit.signedSoap ?? visit.soapFinal ?? ''
       : visit.soapFinal ?? '';
+  // DEDUPE (prod bug): the note body may carry a "## PATIENT SUMMARY" section
+  // (from the template — often partial), and the visit ALSO has a dedicated,
+  // complete `patientSummary` field the exporters render as their own "Patient
+  // Summary" block. Rendering both yields a partial-above-complete duplicate.
+  // When the complete field is present, strip the note's section so exactly one
+  // (complete) summary is rendered; when it is absent, the note's section stays.
+  const soapText =
+    visit.patientSummary && visit.patientSummary.trim()
+      ? stripNotePatientSummarySection(rawSoap)
+      : rawSoap;
 
   // All four of these are Json? columns — treat each as its own shape
   // with a tolerant cast + safe-default. Downstream code can rely on
@@ -111,4 +121,19 @@ export async function loadVisitExportData(
     referrals: refBlob?.referrals ?? [],
     patientSummary: visit.patientSummary,
   };
+}
+
+/**
+ * Remove a note body's "## PATIENT SUMMARY" section (heading + body up to the
+ * next "## " heading or end of note) so it is not rendered alongside the visit's
+ * dedicated complete `patientSummary` field. Pure; case-insensitive on the
+ * heading text only. When the note carries no such section the SECTION is left
+ * intact; trailing whitespace is still normalised (trimEnd + collapse blank-line
+ * runs), which is inert for the export renderer.
+ */
+export function stripNotePatientSummarySection(soap: string): string {
+  return soap
+    .replace(/(^|\n)[ \t]*##[ \t]+patient summary\b[\s\S]*?(?=\n[ \t]*##[ \t]|$)/i, '$1')
+    .replace(/\n{3,}/g, '\n\n')
+    .trimEnd();
 }
