@@ -12,7 +12,7 @@ import { loadVisitExportData } from '@/lib/visit-export-server';
 import { generateVisitDocx } from '@/lib/docx-generator';
 import { logDelivery } from '@/lib/deliveries';
 import { templateNativeDocxEnabled } from '@/config/template-native-docx';
-import { loadNativeTemplateDocxForVisit } from '@/lib/template-twin/native-export';
+import { loadOrComputeNativeTemplateDocxForVisit } from '@/lib/template-twin/native-export';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { redactPhi } from '@meddoc/ai';
@@ -48,7 +48,7 @@ export const GET = withApiHandler<{ id: string }>(
       // DEGRADES to the styled export rather than failing the download — the
       // doctor always gets a valid document, never a 500 or a corrupt native one.
       const native = templateNativeDocxEnabled()
-        ? await loadNativeTemplateDocxForVisit(visitId, userId).catch((err) => {
+        ? await loadOrComputeNativeTemplateDocxForVisit(visitId, userId).catch((err) => {
             console.warn(
               '[api:visits:export:docx] native load failed; falling back to styled:',
               redactPhi(err instanceof Error ? err.message : err)

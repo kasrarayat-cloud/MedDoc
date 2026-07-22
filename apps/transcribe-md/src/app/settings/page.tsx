@@ -40,6 +40,11 @@ import { ChangeEmailDialog } from './change-email-dialog';
 import { EmailChangeToast } from './email-change-toast';
 import { isDataExportEnabled } from '../api/settings/export-data/route';
 import { NoteFormatManager } from './note-format/note-format-manager';
+import {
+  NativeTemplateManager,
+  type NativeTemplateListItem,
+} from './note-format/native-template-manager';
+import { templateNativeDocxEnabled } from '@/config/template-native-docx';
 import { listDoctorTemplates } from '@/lib/note-template-persist/read';
 import { findSpecialty } from '@meddoc/shared/specialties';
 import type { ClientTemplateListItem } from '@/lib/note-template-persist/types';
@@ -72,6 +77,44 @@ async function getUploadCaps(): Promise<{ pdf: boolean; docx: boolean }> {
   ]);
   uploadCapsCache = { pdf, docx };
   return uploadCapsCache;
+}
+
+/** The doctor's native (Template Twin) .docx templates + certification status. */
+async function loadNativeTemplates(doctorId: string): Promise<NativeTemplateListItem[]> {
+  const rows = await prisma.noteTemplate.findMany({
+    where: { doctorId, templateTwinCompiledVersion: { isNot: null } },
+    select: {
+      id: true,
+      name: true,
+      version: true,
+      templateTwinCompiledVersion: {
+        select: {
+          certificationStatus: true,
+          fields: { select: { id: true } },
+        },
+      },
+    },
+    orderBy: { updatedAt: 'desc' },
+    take: 25,
+  });
+  type Row = {
+    id: string;
+    name: string;
+    version: number;
+    templateTwinCompiledVersion: {
+      certificationStatus: string;
+      fields: { id: string }[];
+    } | null;
+  };
+  return (rows as Row[]).map((t) => ({
+    noteTemplateId: t.id,
+    name: t.name,
+    version: t.version,
+    certificationStatus: (
+      t.templateTwinCompiledVersion?.certificationStatus ?? 'NEEDS_CONFIRMATION'
+    ).toLowerCase(),
+    fieldCount: t.templateTwinCompiledVersion?.fields.length ?? 0,
+  }));
 }
 
 export default async function SettingsPage() {
@@ -151,6 +194,12 @@ export default async function SettingsPage() {
   // Which upload formats can this image actually extract (see getUploadCaps).
   const uploadCaps = await getUploadCaps();
 
+  // Native-DOCX certify-once workspace (flag-gated). Flag OFF → nativeSlot is
+  // null and the note-format section renders byte-identical to today.
+  const nativeSlot = templateNativeDocxEnabled() ? (
+    <NativeTemplateManager existing={await loadNativeTemplates(session.user.id)} />
+  ) : null;
+
   // ── C3 calm-skin settings (Stage 3, flag-gated) ───────────────────────────
   // SKIN-ONLY: identical auth + Prisma reads + VIEWED_SETTINGS audit row + the
   // doctor-scoped template read above. This is a re-layout — the long 7-section
@@ -205,7 +254,10 @@ export default async function SettingsPage() {
         subtitle:
           'QuillMD writes in a standard SOAP format. Most doctors leave this as-is — teaching it your own template is an explicit, opt-in step below.',
         content: (
-          <NoteFormatManager templates={noteTemplates} uploadCaps={uploadCaps} />
+          <>
+            <NoteFormatManager templates={noteTemplates} uploadCaps={uploadCaps} />
+            {nativeSlot}
+          </>
         ),
       },
       {
@@ -612,6 +664,7 @@ export default async function SettingsPage() {
             title="My Note Format"
           >
             <NoteFormatManager templates={noteTemplates} uploadCaps={uploadCaps} />
+            {nativeSlot}
           </Section>
 
           <Section

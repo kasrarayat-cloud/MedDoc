@@ -1010,6 +1010,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       inputMode: visit.inputMode,
       contextText,
       entities,
+      generatedNote: soapFinalForFanout,
     });
     if (twinFill.status === 'failed') {
       console.warn(
