@@ -252,7 +252,9 @@ export async function proposeSemanticMappings(
     system: SYSTEM_PROMPT,
     user: ['Compiler-owned field metadata:', wrapped.wrapped].join('\n'),
     schema: ModelSemanticMappingProposalSchema,
-    maxTokens: 4096,
+    // A full proposal for a large template (e.g. WM_IOV's 28 dropdowns) exceeds
+    // 4096 output tokens; 8192 leaves headroom so the tool-use JSON is not truncated.
+    maxTokens: 8192,
     temperature: 0,
     retryOnSchemaFail: true,
     useToolUse: {
