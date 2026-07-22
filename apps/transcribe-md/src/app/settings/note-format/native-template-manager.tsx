@@ -29,22 +29,31 @@ export interface NativeTemplateListItem {
 const mono = 'var(--font-mono)';
 const sans = 'var(--font-sans)';
 
+type CertStatus =
+  | 'certified'
+  | 'recognized'
+  | 'needs_confirmation'
+  | 'unsupported'
+  | 'quarantined';
+
+const PILL_CLASS: Record<CertStatus, string> = {
+  certified: 'qm-lin-pill qm-lin-pill--ready',
+  recognized: 'qm-lin-pill',
+  needs_confirmation: 'qm-lin-pill',
+  unsupported: 'qm-lin-pill qm-lin-pill--review',
+  quarantined: 'qm-lin-pill qm-lin-pill--review',
+};
+const PILL_LABEL: Record<CertStatus, string> = {
+  certified: 'Certified',
+  recognized: 'Draft',
+  needs_confirmation: 'Needs review',
+  unsupported: 'Unsupported',
+  quarantined: 'Unsupported',
+};
+
 function StatusPill({ status }: { status: string }) {
-  const certified = status === 'certified';
-  const blocked = status === 'unsupported' || status === 'quarantined';
-  const cls = certified
-    ? 'qm-lin-pill qm-lin-pill--ready'
-    : blocked
-      ? 'qm-lin-pill qm-lin-pill--review'
-      : 'qm-lin-pill';
-  const label = certified
-    ? 'Certified'
-    : status === 'needs_confirmation'
-      ? 'Needs review'
-      : blocked
-        ? 'Unsupported'
-        : 'Draft';
-  return <span className={cls}>{label}</span>;
+  const s = (status in PILL_CLASS ? status : 'recognized') as CertStatus;
+  return <span className={PILL_CLASS[s]}>{PILL_LABEL[s]}</span>;
 }
 
 export function NativeTemplateManager({
@@ -422,7 +431,7 @@ function ReviewWorkspace({
             opacity: canCertify ? 1 : 0.5,
             background: 'var(--color-linear-sage)',
             borderColor: 'var(--color-linear-sage)',
-            color: '#08090a',
+            color: '#0d1611', // allowlisted text-on-sage (matches note-format-manager)
             fontWeight: 500,
           }}
         >

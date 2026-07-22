@@ -143,6 +143,45 @@ describe('bridgeNumericTableCells — exact measurement placement (WM_IOV)', () 
   });
 });
 
+describe('bridgeNumericTableCells — one-leg dictation never mis-places (laterality)', () => {
+  const ir = compileTemplateDocx(wmIovBytes);
+
+  it('a full skeleton with ONLY the left block filled leaves every right cell blank', () => {
+    // Build the FULL skeleton the note-generation always reproduces: every IR
+    // table row (both legs, document order) seeded "[not documented]", then fill
+    // ONLY the left GSV-at-SFJ (rowIndex 15) — the right block stays all blank.
+    const rows = ir.fields
+      .filter((f) => f.rendererBinding.bindingType === 'table_cell')
+      .reduce<Map<number, { vein: string }>>((m, f) => {
+        const r = f.rendererBinding.rowIndex ?? -1;
+        if (f.labelSource === 'left_cell') m.set(r, { vein: f.originalLabel });
+        else if (!m.has(r)) m.set(r, { vein: f.originalLabel });
+        return m;
+      }, new Map());
+    const ordered = [...rows.entries()].sort((a, b) => a[0] - b[0]);
+    const lines = ['| VEIN | DIAMETER (mm) | REFLUX TIME (seconds) |', '| --- | --- | --- |'];
+    let seenSfj = 0;
+    for (const [, { vein }] of ordered) {
+      // The SECOND exact "GSV at the SFJ" is the left one (rowIndex 15). Exact
+      // match — "AAGSV/PAGSV at the SFJ" must NOT count.
+      const leftGsvSfj = vein === 'GSV at the SFJ' && ++seenSfj === 2;
+      lines.push(leftGsvSfj ? `| Left ${vein} | 5.8 | 3.1 |` : `| ${vein} | [not documented] | [not documented] |`);
+    }
+    const note = 'FINDINGS\nLeft leg only.\n\n' + lines.join('\n');
+
+    const res = bridgeNumericTableCells({ ir, filledNote: note });
+    const byField = new Map(res.map((r) => [r.fieldId, r]));
+    // Left GSV-SFJ (row 15) is filled.
+    expect(byField.get(cell(ir, 15, 1).fieldId)?.value).toBe('5.8');
+    expect(byField.get(cell(ir, 15, 2).fieldId)?.value).toBe('3.1');
+    // The RIGHT GSV-SFJ (row 1) — same vein name, other leg — MUST stay blank.
+    expect(byField.has(cell(ir, 1, 1).fieldId)).toBe(false);
+    expect(byField.has(cell(ir, 1, 2).fieldId)).toBe(false);
+    // Nothing else filled.
+    expect(res.length).toBe(2);
+  });
+});
+
 describe('mergeFieldResolutions — overlay precedence', () => {
   const ir = compileTemplateDocx(wmIovBytes);
 

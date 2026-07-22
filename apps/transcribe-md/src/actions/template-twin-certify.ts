@@ -11,6 +11,16 @@
 // Flag-gated at the action boundary (defense-in-depth beyond the UI gate) and
 // doctor-scoped via requireSession. PHI-safe: never surfaces raw model output or
 // document content — only typed lifecycle/security error messages.
+//
+// DESIGN NOTE (BOUND-002): certifyNativeTemplateAction runs the synthetic-test
+// proof (a bounded Anthropic L3 extract) INLINE on the request thread rather than
+// enqueuing it. This is a deliberate call: certification is a ONE-TIME, explicit,
+// interactive step the doctor is actively waiting on ("Verifying & certifying…"),
+// not a per-visit hot path — inline keeps the UX a single confirmed action with
+// immediate success/failure, and a transient model outage surfaces as a retriable
+// error rather than a stuck background job. If certify latency/availability ever
+// becomes a problem, move the proof to the worker + poll (mirror actions/visits
+// retryVisit).
 // ============================================================================
 
 import { requireSession, type Session } from '@/lib/auth';

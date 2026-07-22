@@ -83,6 +83,14 @@ export async function loadNativeTemplateDocxForVisit(
  * it runs ONLY for an UNSIGNED certified-twin visit that has a generated note.
  * Any failure returns null so the caller degrades to the styled export — the
  * fill never blocks the download.
+ *
+ * DESIGN NOTE (BOUND-002 spirit): the on-demand compute is heavy work on the GET
+ * export request thread, which we normally keep off the web tier. It is bounded +
+ * safe here: DETERMINISTIC (resolver + bridge + render, NO AI), gated to an
+ * UNSIGNED certified-twin visit with a generated note, idempotent (compute-once —
+ * the worker fill step is the PRIMARY producer; this only fires when the manifest
+ * never materialised), and fail-safe (any error → null → styled export). It is a
+ * resilience fallback, not the hot path.
  */
 export async function loadOrComputeNativeTemplateDocxForVisit(
   visitId: string,

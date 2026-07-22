@@ -192,6 +192,21 @@ export interface BridgeNumericTableCellsInput {
  * aligned laterality-correct by forward-cursor vein match (Right block then Left,
  * in document order), and a cell is filled ONLY when its column holds a bare
  * number; "—"/"[not documented]"/prose/absent all stay blank (not_mentioned).
+ *
+ * LATERALITY / ORDER ASSUMPTION (patient-safety critical): the forward cursor is
+ * safe because the generated markdown table is a FULL SKELETON REPRODUCTION —
+ * renderStructureDirective seeds every rowLabel (both legs, in document order)
+ * with "[not documented]", and the note-generation prompt (CELL_DISCIPLINE)
+ * forbids the model from adding, removing, or reordering rows; it may only replace
+ * a "[not documented]" cell. So both leg blocks are ALWAYS present in the same
+ * order as the IR rows, even for a one-leg dictation (the undictated leg's rows
+ * are present but "[not documented]"). The Nth markdown data row is therefore the
+ * Nth IR data row, and an undictated leg's cells stay blank — a left value can
+ * never land in a right cell. `normVein` strips the leg word deliberately (the IR
+ * vein labels carry no leg), so laterality rides entirely on this full-skeleton
+ * ordering, NOT on the leg word. A one-leg-only regression in bridge-fill.test.ts
+ * locks this: a full skeleton with only the left block filled must leave every
+ * right cell blank.
  */
 export function bridgeNumericTableCells(input: BridgeNumericTableCellsInput): FieldResolution[] {
   const { ir, filledNote } = input;
