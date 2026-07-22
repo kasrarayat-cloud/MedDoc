@@ -440,6 +440,101 @@ function buildTextPrompt(): { system: string; userPrefix: string } {
 // The layer itself.
 // ---------------------------------------------------------------------------
 
+/**
+ * Visit-free extraction core (ADDITIVE, 2026-07-22). The injection-delimiter
+ * guard + the single tm_entities model call, parameterised by audit target so it
+ * serves BOTH a visit (transcribe_visit) and a Template Twin note template
+ * (NoteTemplate). Contains NO visit-specific persistence — the caller owns any
+ * transcribeVisit write — so the existing visit path stays behavior-identical
+ * (see runLayer3ExtractEntities) while the twin certify-time synthetic test can
+ * extract without a visit.
+ */
+export interface Layer3ExtractionCore {
+  mode: Layer3Input['mode'];
+  contextText: string;
+  prompts: { system: string; userPrefix: string };
+  practiceId: string;
+  userId: string | null;
+  /** Telemetry visit id, or null for a template (no visit). */
+  visitId: string | null;
+  auditTargetType: string;
+  auditTargetId: string;
+}
+
+async function completeLayer3Entities(
+  input: Layer3ExtractionCore
+): Promise<ExtractedEntities> {
+  // Round 3 PR-J — A07-P0 prompt-injection delimiter. L3 is the
+  // first layer that touches user-supplied content (transcript /
+  // dictation / typed text), so wrapping here makes the boundary
+  // visible to L4/L5 readers via contextText reuse.
+  const wrap = wrapAsData(input.contextText, 'transcript');
+  if (wrap.injectionAttemptDetected) {
+    void logAudit({
+      action: 'PIPELINE_REJECTED_INJECTION_DELIMITER',
+      targetType: input.auditTargetType,
+      targetId: input.auditTargetId,
+      userId: input.userId,
+      practiceId: input.practiceId,
+      success: false,
+      errorCode: 'INJECTION_DELIMITER_DETECTED',
+      metadata: { layer: 'L3', mode: input.mode, suffix: wrap.suffix },
+    });
+  }
+  const user = [
+    input.prompts.userPrefix,
+    '',
+    wrap.wrapped,
+    '',
+    delimiterSystemSuffix('transcript'),
+  ].join('\n');
+
+  return modelClient.complete({
+    practiceId: input.practiceId,
+    visitId: input.visitId,
+    userId: input.userId,
+    purpose: 'tm_entities',
+    provider: 'anthropic',
+    model: MODEL,
+    system: input.prompts.system,
+    user,
+    schema: ExtractedEntities,
+    maxTokens: 6144,
+    // Q2 fix-pack — entity extraction is structured-output; tightened
+    // from 0.2 to 0.1 for reproducible parses (audit §08).
+    temperature: 0.1,
+  });
+}
+
+/** Template Twin visit-free entity extraction (text / dictation). Wired into the
+ * twin TwinEntityExtractor seam for certify-time synthetic tests. No transcribe-
+ * Visit write; audited against the NoteTemplate. */
+export interface Layer3TemplateExtractionInput {
+  mode: 'text' | 'dictation';
+  text: string;
+  practiceId: string;
+  userId: string | null;
+  noteTemplateId: string;
+}
+
+export async function extractTemplateTwinEntities(
+  input: Layer3TemplateExtractionInput
+): Promise<Layer3Output> {
+  const contextText = input.text.trim();
+  const prompts = input.mode === 'dictation' ? buildDictationPrompt() : buildTextPrompt();
+  const entities = await completeLayer3Entities({
+    mode: input.mode,
+    contextText,
+    prompts,
+    practiceId: input.practiceId,
+    userId: input.userId,
+    visitId: null,
+    auditTargetType: 'NoteTemplate',
+    auditTargetId: input.noteTemplateId,
+  });
+  return { entities, contextText };
+}
+
 export async function runLayer3ExtractEntities(
   input: Layer3Input
 ): Promise<Layer3Output> {
@@ -459,45 +554,17 @@ export async function runLayer3ExtractEntities(
     prompts = buildTextPrompt();
   }
 
-  // Round 3 PR-J — A07-P0 prompt-injection delimiter. L3 is the
-  // first layer that touches user-supplied content (transcript /
-  // dictation / typed text), so wrapping here makes the boundary
-  // visible to L4/L5 readers via contextText reuse.
-  const wrap = wrapAsData(contextText, 'transcript');
-  if (wrap.injectionAttemptDetected) {
-    void logAudit({
-      action: 'PIPELINE_REJECTED_INJECTION_DELIMITER',
-      targetType: 'transcribe_visit',
-      targetId: input.visitId,
-      userId: input.userId,
-      practiceId: input.practiceId,
-      success: false,
-      errorCode: 'INJECTION_DELIMITER_DETECTED',
-      metadata: { layer: 'L3', mode: input.mode, suffix: wrap.suffix },
-    });
-  }
-  const user = [
-    prompts.userPrefix,
-    '',
-    wrap.wrapped,
-    '',
-    delimiterSystemSuffix('transcript'),
-  ].join('\n');
-
-  const entities = await modelClient.complete({
+  // Delegate the injection guard + model call to the shared visit-free core;
+  // the visit-specific persistence stays here so this path is behavior-identical.
+  const entities = await completeLayer3Entities({
+    mode: input.mode,
+    contextText,
+    prompts,
     practiceId: input.practiceId,
-    visitId: input.visitId,
     userId: input.userId,
-    purpose: 'tm_entities',
-    provider: 'anthropic',
-    model: MODEL,
-    system: prompts.system,
-    user,
-    schema: ExtractedEntities,
-    maxTokens: 6144,
-    // Q2 fix-pack — entity extraction is structured-output; tightened
-    // from 0.2 to 0.1 for reproducible parses (audit §08).
-    temperature: 0.1,
+    visitId: input.visitId,
+    auditTargetType: 'transcribe_visit',
+    auditTargetId: input.visitId,
   });
 
   await prisma.transcribeVisit.update({
