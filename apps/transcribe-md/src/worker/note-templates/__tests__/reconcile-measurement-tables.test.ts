@@ -166,4 +166,69 @@ describe('extractLegMeasurements', () => {
     expect(m.get('SSV at the Proximal Calf')?.diameter).toBe('2.8');
     expect(m.has('GSV at the SFJ')).toBe(false);
   });
+
+  it('captures BOTH measurements in a VALUE-FIRST compound clause — exact prod phrasing', () => {
+    // The real model wrote the right-leg SSV as one compound sentence, value
+    // before segment: "measuring 3.2 mm at the saphenopopliteal junction … and
+    // 2.8 mm at the proximal calf." The "and" precedes a value, not "at the", so
+    // the clause never split and the trailing 2.8 was dropped (the prod bug).
+    const m = extractLegMeasurements(
+      'The small saphenous vein is competent, measuring 3.2 mm at the saphenopopliteal junction with reflux of 0.3 seconds and 2.8 mm at the proximal calf.',
+    );
+    expect(m.get('SSV at the SPJ')).toEqual({ diameter: '3.2', reflux: '0.3' });
+    expect(m.get('SSV at the Proximal Calf')?.diameter).toBe('2.8');
+  });
+
+  it('does not over-split "and" that joins a qualifier rather than a measurement', () => {
+    // "4.2 mm and is competent" — the "and" precedes "is competent", not a value
+    // or "at the", so the SFJ measurement stays whole and the later ";"-clause
+    // still yields the knee value.
+    const m = extractLegMeasurements(
+      'The great saphenous vein at the saphenofemoral junction measures 4.2 mm and is competent with reflux of 0.3 seconds; at the knee it measures 3.4 mm.',
+    );
+    expect(m.get('GSV at the SFJ')).toEqual({ diameter: '4.2', reflux: '0.3' });
+    expect(m.get('GSV at the Knee')?.diameter).toBe('3.4');
+  });
+});
+
+describe('reconcileMeasurementTables — value-first prod regression', () => {
+  // The exact prod shape: model documented right SSV proximal-calf 2.8 only in a
+  // value-first compound prose clause and DROPPED the table row; left GSV knee
+  // 3.4 only in prose. The reconciler must recover BOTH into their cells and make
+  // the two leg tables symmetric.
+  const NOTE = [
+    '## FINDINGS',
+    'Reflux is present in the superficial system. The great saphenous vein at the saphenofemoral junction measures 6.2 mm with reflux of 3.4 seconds. The small saphenous vein is competent, measuring 3.2 mm at the saphenopopliteal junction with reflux of 0.3 seconds and 2.8 mm at the proximal calf.',
+    '',
+    'The great saphenous vein at the saphenofemoral junction measures 4.2 mm with reflux of 0.3 seconds; at the knee it measures 3.4 mm. The small saphenous vein is competent.',
+    '',
+    '## DIAMETER AND REFLUX TIME — Right Leg',
+    '| DIAMETER (mm) | REFLUX TIME (seconds) |',
+    '| --- | --- |',
+    '| GSV at the SFJ | 6.2 | 3.4 |',
+    '| SSV at the SPJ | 3.2 | 0.3 |',
+    '| SSV at the Proximal Calf | [not documented] | [not documented] |',
+    '',
+    '## DIAMETER AND REFLUX TIME — Left Leg',
+    '| DIAMETER (mm) | REFLUX TIME (seconds) |',
+    '| --- | --- |',
+    '| GSV at the SFJ | 4.2 | 0.3 |',
+    '| GSV at the Knee | [not documented] | [not documented] |',
+    '',
+    '## IMPRESSION',
+  ].join('\n');
+  const out = reconcileMeasurementTables(NOTE);
+
+  it('recovers the value-first right SSV proximal-calf 2.8 into its cell', () => {
+    expect(out).toMatch(/SSV at the Proximal Calf \| 2\.8 \|/);
+  });
+
+  it('still recovers the left GSV knee 3.4', () => {
+    expect(out).toMatch(/GSV at the Knee \| 3\.4 \|/);
+  });
+
+  it('does not cross-attribute: left SSV proximal calf stays undocumented', () => {
+    const left = out.split('— Left Leg')[1];
+    expect(left).toMatch(/SSV at the Proximal Calf \| \[not documented\] \| \[not documented\] \|/);
+  });
 });
