@@ -219,18 +219,19 @@ const SYSTEM_PROMPT = [
  * Ask the shared ModelClient for a constrained proposal, then independently
  * reconcile it against the compiler-owned field set.
  */
-export async function proposeSemanticMappings(
-  ir: Pick<TemplateDocIR, 'fields'>,
+/** Fields per model call. A single proposal for ALL fields of a large template
+ *  (e.g. WM_IOV's 80 fields) blows past the 8192 output-token ceiling, truncating
+ *  the tool-use JSON into a schema-fail + retry loop that never converges (a
+ *  certify request just hangs). Chunking keeps every call's output small; chunks
+ *  are disjoint + independent, so their proposals merge with no cross-talk. */
+const MAPPING_CHUNK_SIZE = 20;
+
+/** One model proposal over a subset of fields → its fieldId→mapping map. */
+async function proposeMappingChunk(
+  fields: readonly TemplateField[],
   context: ProposeSemanticMappingsContext,
-): Promise<SemanticMapping[]> {
-  const orderedFields = [...ir.fields].sort(
-    (a, b) => a.displayOrder - b.displayOrder || a.fieldId.localeCompare(b.fieldId),
-  );
-  const payload = JSON.stringify(
-    { fields: orderedFields.map(fieldForModel) },
-    null,
-    2,
-  );
+): Promise<Map<string, SemanticMapping>> {
+  const payload = JSON.stringify({ fields: fields.map(fieldForModel) }, null, 2);
   const wrapped = wrapAsData(payload, 'transcript');
   if (wrapped.injectionAttemptDetected) {
     throw new SemanticMappingInvariantError(
@@ -238,22 +239,17 @@ export async function proposeSemanticMappings(
       'Template field metadata contains a reserved data-boundary delimiter.',
     );
   }
-
   const client = context.client ?? modelClient;
   const proposed = await client.complete({
     practiceId: context.practiceId,
     visitId: null,
     userId: context.userId,
-    // Reuse the existing template-analysis accounting lane. A dedicated
-    // purpose can be introduced later without bypassing ModelClient.
     purpose: 'tm_template_parse',
     provider: 'anthropic',
     model: context.model ?? DEFAULT_MODEL,
     system: SYSTEM_PROMPT,
     user: ['Compiler-owned field metadata:', wrapped.wrapped].join('\n'),
     schema: ModelSemanticMappingProposalSchema,
-    // A full proposal for a large template (e.g. WM_IOV's 28 dropdowns) exceeds
-    // 4096 output tokens; 8192 leaves headroom so the tool-use JSON is not truncated.
     maxTokens: 8192,
     temperature: 0,
     retryOnSchemaFail: true,
@@ -263,7 +259,6 @@ export async function proposeSemanticMappings(
         'Submit exactly one non-certified semantic mapping proposal for every supplied field ID.',
     },
   });
-
   const byId = new Map<string, SemanticMapping>();
   for (const raw of proposed.mappings) {
     if (byId.has(raw.fieldId)) {
@@ -273,6 +268,40 @@ export async function proposeSemanticMappings(
       );
     }
     byId.set(raw.fieldId, SemanticMappingSchema.parse(raw));
+  }
+  return byId;
+}
+
+export async function proposeSemanticMappings(
+  ir: Pick<TemplateDocIR, 'fields'>,
+  context: ProposeSemanticMappingsContext,
+): Promise<SemanticMapping[]> {
+  const orderedFields = [...ir.fields].sort(
+    (a, b) => a.displayOrder - b.displayOrder || a.fieldId.localeCompare(b.fieldId),
+  );
+
+  // Chunk the fields so each proposal stays well under the output-token ceiling;
+  // run the (independent) chunks concurrently and merge. The full-set validation
+  // below is unchanged — it still guarantees exactly one mapping per field.
+  const chunks: TemplateField[][] = [];
+  for (let i = 0; i < orderedFields.length; i += MAPPING_CHUNK_SIZE) {
+    chunks.push(orderedFields.slice(i, i + MAPPING_CHUNK_SIZE));
+  }
+  const chunkMaps = await Promise.all(
+    chunks.map((chunk) => proposeMappingChunk(chunk, context)),
+  );
+
+  const byId = new Map<string, SemanticMapping>();
+  for (const chunkMap of chunkMaps) {
+    for (const [fieldId, mapping] of chunkMap) {
+      if (byId.has(fieldId)) {
+        throw new SemanticMappingInvariantError(
+          'DUPLICATE_FIELD',
+          `The model returned duplicate mapping fieldId ${fieldId}.`,
+        );
+      }
+      byId.set(fieldId, mapping);
+    }
   }
 
   const expectedIds = new Set(orderedFields.map((field) => field.fieldId));
@@ -295,10 +324,18 @@ export async function proposeSemanticMappings(
         `Missing semantic mapping for ${field.fieldId}.`,
       );
     }
-    if (!isMappingTypeCompatible(field, mapping)) {
+    // The renderable data type is DETERMINED by the compiler field kind, not the
+    // model's guess — the model's job is the clinical concept/polarity/synonyms.
+    // A large template makes the model occasionally propose e.g. `measurement`
+    // for a narrative_text reflux cell; rather than hard-fail the whole draft on
+    // that, the compiler kind is authoritative and we coerce expectedDataType to
+    // it (fail-closed only if the kind has no fillable type, which the compiler
+    // never emits for an ir.field).
+    const compilerDataType = expectedDataTypeForFieldKind(field.kind);
+    if (compilerDataType === null) {
       throw new SemanticMappingInvariantError(
         'TYPE_MISMATCH',
-        `Mapping data type does not match compiler field kind for ${field.fieldId}.`,
+        `Compiler field kind has no fillable data type for ${field.fieldId}.`,
       );
     }
 
@@ -306,6 +343,7 @@ export async function proposeSemanticMappings(
     // Nothing from this helper can become certified or carry a default.
     return SemanticMappingSchema.parse({
       ...mapping,
+      expectedDataType: compilerDataType,
       practiceDefault: null,
       status:
         mapping.clinicalConcept === null ||
