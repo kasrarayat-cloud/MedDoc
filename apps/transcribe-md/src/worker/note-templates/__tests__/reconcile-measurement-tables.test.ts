@@ -71,6 +71,47 @@ describe('reconcileMeasurementTables', () => {
     expect(reconcileMeasurementTables(soap)).toBe(soap);
   });
 
+  it('NEVER overwrites a documented cell (units / qualitative) with [not documented] — B2', () => {
+    const note = [
+      '## FINDINGS', 'right leg only', '',
+      '## DIAMETER AND REFLUX TIME — Right Leg',
+      '| DIAMETER (mm) | REFLUX TIME (seconds) |',
+      '| --- | --- |',
+      '| GSV at the SFJ | 6.2 mm | competent |', // unit-bearing + qualitative
+      '',
+    ].join('\n');
+    const out = reconcileMeasurementTables(note);
+    expect(out).toMatch(/GSV at the SFJ \| 6\.2 mm \| competent \|/);
+    expect(out).not.toMatch(/GSV at the SFJ \| \[not documented\]/);
+  });
+
+  it('does NOT cross-attribute a value to the wrong leg when prose is unmarked/ambiguous — W1', () => {
+    // Left table missing GSV Knee; only the RIGHT leg documented a knee (4.1),
+    // the left knee was never dictated. The right value must NOT land in the
+    // left cell — content-attribution picks the right paragraph for the right
+    // table only; the left knee stays [not documented].
+    const note = [
+      '## FINDINGS',
+      'The great saphenous vein at the saphenofemoral junction measures 6.2 mm with reflux of 3.4 seconds. At the knee it measures 4.1 mm.',
+      '',
+      'The great saphenous vein at the saphenofemoral junction measures 4.2 mm with reflux of 0.3 seconds. The rest of the left leg is normal.',
+      '',
+      '## DIAMETER AND REFLUX TIME — Right Leg',
+      '| DIAMETER (mm) | REFLUX TIME (seconds) |', '| --- | --- |',
+      '| GSV at the SFJ | 6.2 | 3.4 |', '| GSV at the Knee | 4.1 | [not documented] |',
+      '',
+      '## DIAMETER AND REFLUX TIME — Left Leg',
+      '| DIAMETER (mm) | REFLUX TIME (seconds) |', '| --- | --- |',
+      '| GSV at the SFJ | 4.2 | 0.3 |',
+      '',
+    ].join('\n');
+    const out = reconcileMeasurementTables(note);
+    const left = out.split('— Left Leg')[1];
+    // Left GSV Knee was never dictated → stays blank, does NOT borrow right's 4.1.
+    expect(left).toMatch(/GSV at the Knee \| \[not documented\] \| \[not documented\] \|/);
+    expect(left).not.toMatch(/GSV at the Knee \| 4\.1/);
+  });
+
   it('preserves a stated-normal "—" the model wrote', () => {
     const note = [
       '## FINDINGS', 'right leg only', '',

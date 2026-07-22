@@ -77,16 +77,14 @@ interface Cell {
   reflux: string | null;
 }
 
-function isBareNumber(s: string): boolean {
-  return /^-?\d+(?:\.\d+)?$/.test(s.trim());
-}
-
-/** A cell token is a real value only if bare-numeric; "—"/"[not documented]"/
- *  blank/prose are treated as "no value" for recovery purposes. */
-function valueOrNull(token: string | undefined): string | null {
-  if (token == null) return null;
-  const t = token.trim();
-  return isBareNumber(t) ? t : null;
+/** True only for the "no value here" tokens — empty or the not-assessed
+ *  placeholder. ANY other existing cell content (a bare number, a number with a
+ *  unit, "—", "competent", "<0.5") is a real documented value and is preserved
+ *  verbatim — the reconciler recovers from prose ONLY into genuinely empty cells,
+ *  so it can never overwrite a documented value with a false "[not documented]". */
+function isEmptyCell(token: string | undefined): boolean {
+  const t = (token ?? '').trim();
+  return t === '' || t === NOT_DOCUMENTED;
 }
 
 /** Parse one clinical sentence-ish clause for a measurement. Reads the diameter
@@ -208,9 +206,8 @@ export function reconcileMeasurementTables(note: string): string {
   };
   const canonical = [...union].sort((a, b) => rank(a) - rank(b));
 
-  // Per-leg prose measurements, from the FINDINGS section (first non-empty
-  // paragraph = right leg, second = left — matching the per-limb organisation).
-  const legMeasurements = extractFindingsByLeg(note);
+  // Parse the FINDINGS prose into paragraphs, each with its own measurements.
+  const paragraphs = parseFindingsParagraphs(note);
 
   // Rebuild each table in place (from the LAST table to the first, so earlier
   // line indices stay valid while we splice).
@@ -219,20 +216,21 @@ export function reconcileMeasurementTables(note: string): string {
     const t = tables[ti];
     const existing = new Map<string, string[]>();
     for (const r of t.rows) existing.set(r.label, r.cells);
-    const prose = (t.leg && legMeasurements.get(t.leg)) || new Map<string, Cell>();
+    // Attribute a findings paragraph to THIS leg table safely — see selectProse.
+    const prose = selectProse(paragraphs, t.leg, existing);
 
     const newRows = canonical.map((label) => {
       const cells = existing.get(label);
-      const diaExisting = valueOrNull(cells?.[1]);
-      const refExisting = t.dataCols >= 2 ? valueOrNull(cells?.[2]) : null;
       const recovered = prose.get(label);
-      const diameter = diaExisting ?? recovered?.diameter ?? null;
-      const reflux = refExisting ?? recovered?.reflux ?? null;
-      // Preserve a stated-normal "—" the model wrote (don't overwrite with prose).
-      const diaCell = cells && cells[1]?.trim() === '—' && diaExisting == null ? '—' : (diameter ?? NOT_DOCUMENTED);
-      const refCell = t.dataCols >= 2
-        ? (cells && cells[2]?.trim() === '—' && refExisting == null ? '—' : (reflux ?? NOT_DOCUMENTED))
-        : null;
+      // Preserve ANY existing documented cell verbatim; recover from prose ONLY
+      // into a genuinely empty / not-documented / missing cell (never overwrite).
+      const diaCell = !isEmptyCell(cells?.[1])
+        ? cells![1].trim()
+        : (recovered?.diameter ?? NOT_DOCUMENTED);
+      const refCell =
+        t.dataCols >= 2
+          ? (!isEmptyCell(cells?.[2]) ? cells![2].trim() : (recovered?.reflux ?? NOT_DOCUMENTED))
+          : null;
       return t.dataCols >= 2 ? `| ${label} | ${diaCell} | ${refCell} |` : `| ${label} | ${diaCell} |`;
     });
 
@@ -241,33 +239,81 @@ export function reconcileMeasurementTables(note: string): string {
   return rebuilt.join('\n');
 }
 
-/** Split the FINDINGS section into right/left prose + extract each leg's
- *  measurements. Uses explicit "Right Leg"/"Left Leg" markers when present,
- *  else paragraph order (1st = right, 2nd = left). */
-function extractFindingsByLeg(note: string): Map<string, Map<string, Cell>> {
-  const result = new Map<string, Map<string, Cell>>();
+interface FindingsParagraph {
+  leg: string | null; // explicit right/left marker on this paragraph, else null
+  measurements: Map<string, Cell>;
+  values: Set<string>; // every numeric value this paragraph reports
+}
+
+/** True right/left leg attribution for a paragraph, from an explicit heading /
+ *  label / laterality phrase. Ambiguous (both or neither) → null. */
+function detectLeg(chunk: string): string | null {
+  const t = chunk.toLowerCase();
+  const r = /(^|\n)\s*#{0,4}\s*right(\s+leg| lower extremity)?\b|\bon the right\b/.test(t);
+  const l = /(^|\n)\s*#{0,4}\s*left(\s+leg| lower extremity)?\b|\bon the left\b/.test(t);
+  if (r && !l) return 'right';
+  if (l && !r) return 'left';
+  return null;
+}
+
+/** The FINDINGS body split into paragraphs (on blank lines OR "###" headings). */
+function parseFindingsParagraphs(note: string): FindingsParagraph[] {
   const lines = note.split('\n');
-  // Grab the FINDINGS section body (## FINDINGS … next ##).
   let start = -1;
   let end = lines.length;
   for (let i = 0; i < lines.length; i++) {
     if (/^##\s+findings\b/i.test(lines[i])) { start = i + 1; continue; }
     if (start >= 0 && /^##\s/.test(lines[i])) { end = i; break; }
   }
-  if (start < 0) return result;
+  if (start < 0) return [];
   const body = lines.slice(start, end).join('\n');
+  const chunks = body.split(/\n(?=\s*###\s)|\n\s*\n/).map((c) => c.trim()).filter(Boolean);
+  return chunks.map((chunk) => {
+    const measurements = extractLegMeasurements(chunk);
+    const values = new Set<string>();
+    for (const c of measurements.values()) {
+      if (c.diameter) values.add(c.diameter);
+      if (c.reflux) values.add(c.reflux);
+    }
+    return { leg: detectLeg(chunk), measurements, values };
+  });
+}
 
-  // Prefer explicit leg markers.
-  const rightMark = body.match(/right leg\s*:?\s*([\s\S]*?)(?=left leg\s*:|$)/i);
-  const leftMark = body.match(/left leg\s*:?\s*([\s\S]*)$/i);
-  if (rightMark || leftMark) {
-    if (rightMark) result.set('right', extractLegMeasurements(rightMark[1]));
-    if (leftMark) result.set('left', extractLegMeasurements(leftMark[1]));
-    return result;
+/**
+ * Choose the findings prose that belongs to a given leg table WITHOUT ever
+ * guessing by position. Prefer a paragraph with an explicit matching leg marker;
+ * otherwise pick the paragraph whose reported values overlap this table's already-
+ * filled cells the most — but ONLY when that winner is unambiguous (strictly beats
+ * every other paragraph). A tie / no overlap yields no prose, so a value stays
+ * unrecovered ("[not documented]") rather than risk landing in the wrong leg.
+ */
+function selectProse(
+  paragraphs: FindingsParagraph[],
+  tableLeg: string | null,
+  existing: Map<string, string[]>,
+): Map<string, Cell> {
+  if (paragraphs.length === 0) return new Map();
+  if (tableLeg) {
+    const marked = paragraphs.find((p) => p.leg === tableLeg);
+    if (marked) return marked.measurements;
+    // A different paragraph is explicitly the OTHER leg — never borrow from it.
+    if (paragraphs.some((p) => p.leg && p.leg !== tableLeg) && paragraphs.every((p) => p.leg)) {
+      return new Map();
+    }
   }
-  // Fall back to paragraph order.
-  const paras = body.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
-  if (paras[0]) result.set('right', extractLegMeasurements(paras[0]));
-  if (paras[1]) result.set('left', extractLegMeasurements(paras[1]));
-  return result;
+  const tableValues = new Set<string>();
+  for (const cells of existing.values()) {
+    for (const c of cells.slice(1)) {
+      const v = c.trim();
+      if (/^-?\d+(?:\.\d+)?$/.test(v)) tableValues.add(v);
+    }
+  }
+  if (tableValues.size === 0) return new Map();
+  const scored = paragraphs
+    .map((p) => ({ p, score: [...p.values].filter((v) => tableValues.has(v)).length }))
+    .sort((a, b) => b.score - a.score);
+  if (scored[0].score > 0 && (scored.length === 1 || scored[0].score > scored[1].score)) {
+    return scored[0].p.measurements;
+  }
+  return new Map();
 }

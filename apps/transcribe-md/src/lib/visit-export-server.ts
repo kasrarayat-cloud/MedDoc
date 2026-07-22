@@ -127,7 +127,9 @@ export async function loadVisitExportData(
  * Remove a note body's "## PATIENT SUMMARY" section (heading + body up to the
  * next "## " heading or end of note) so it is not rendered alongside the visit's
  * dedicated complete `patientSummary` field. Pure; case-insensitive on the
- * heading text only; a no-op when the note carries no such section.
+ * heading text only. When the note carries no such section the SECTION is left
+ * intact; trailing whitespace is still normalised (trimEnd + collapse blank-line
+ * runs), which is inert for the export renderer.
  */
 export function stripNotePatientSummarySection(soap: string): string {
   return soap

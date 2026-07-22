@@ -56,6 +56,12 @@ describe('dropIncoherentVaricoseCodes', () => {
     expect(dropIncoherentVaricoseCodes([])).toEqual([]);
   });
 
+  it('treats I83.0x (ulcer) and I83.1x (inflammation) as symptomatic too — drops the asymptomatic ride-along', () => {
+    expect(dropIncoherentVaricoseCodes([code('I83.012'), code('I83.90')]).map((c) => c.code)).toEqual(['I83.012']);
+    expect(dropIncoherentVaricoseCodes([code('I83.115'), code('I83.92')]).map((c) => c.code)).toEqual(['I83.115']);
+    expect(dropIncoherentVaricoseCodes([code('I83.201'), code('I83.90')]).map((c) => c.code)).toEqual(['I83.201']);
+  });
+
   it('leaves a genuine asymptomatic code untouched when NO symptomatic varicose code is present', () => {
     // A truly asymptomatic-but-present varicosity study — nothing to conflict with.
     const out = dropIncoherentVaricoseCodes([code('I83.92', 'Asymptomatic varicose veins, left'), code('I10')]);

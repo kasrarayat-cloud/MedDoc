@@ -43,14 +43,18 @@ export type IcdResult = z.infer<typeof IcdResult>;
  * same study: a patient coded symptomatic is not simultaneously "asymptomatic
  * varicose", and a normal-findings limb warrants no varicose code at all.
  *
- * ONLY-REMOVE semantics: when a symptomatic I83.8x is present, drop any
+ * The symptomatic/complicated varicose families are I83.0x (with ulcer), I83.1x
+ * (with inflammation), I83.2x (with both), and I83.8x (with other complications) —
+ * the same taxonomy the L7A prompt teaches; I83.9x is the asymptomatic family.
+ *
+ * ONLY-REMOVE semantics: when any symptomatic varicose code is present, drop any
  * asymptomatic/unspecified I83.9x that rode along. A supported symptomatic code is
  * never touched, no code is ever added, and — with no symptomatic code present —
  * a genuine asymptomatic code (a truly asymptomatic-but-present varicosity) is
  * left untouched. Pure + deterministic. Preserves input order.
  */
 export function dropIncoherentVaricoseCodes(codes: readonly IcdCode[]): IcdCode[] {
-  const hasSymptomaticVaricose = codes.some((c) => /^I83\.8/i.test(c.code));
+  const hasSymptomaticVaricose = codes.some((c) => /^I83\.[0128]/i.test(c.code));
   if (!hasSymptomaticVaricose) return [...codes];
   return codes.filter((c) => !/^I83\.9/i.test(c.code));
 }
@@ -303,29 +307,24 @@ export async function runLayer7aIcdCoding(
     });
   }
   // Clinical-coherence floor (varicose veins) — see dropIncoherentVaricoseCodes.
+  // Dropped codes are VALID (allowlist-passed) but clinically incoherent, so they
+  // are NOT audited via CODING_COACH_REJECTED_INVALID_ICD (that action feeds the
+  // "invalid-code rate" metric and must stay pure). A non-PHI console line keeps
+  // the drop observable without polluting that metric.
   const coherent = dropIncoherentVaricoseCodes(accepted);
   const droppedIncoherent = accepted.filter((c) => !coherent.includes(c));
   if (droppedIncoherent.length > 0) {
-    void logAudit({
-      action: 'CODING_COACH_REJECTED_INVALID_ICD',
-      targetId: input.visitId,
-      targetType: 'TranscribeVisit',
-      userId: input.userId,
-      practiceId: input.practiceId,
-      success: false,
-      metadata: {
-        reason: 'asymptomatic_varicose_with_symptomatic',
-        rejectedCodes: droppedIncoherent.map((c) => c.code),
-      },
-    });
+    console.info(
+      `[l7a-icd] dropped ${droppedIncoherent.length} incoherent asymptomatic varicose code(s) alongside a symptomatic one: ${droppedIncoherent.map((c) => c.code).join(', ')}`
+    );
   }
   const filtered: typeof result = { codes: coherent };
 
-  // Q2 fix-pack §06.6 — surface low-confidence codes via needsReview
-  // when one or more accepted codes land at confidenceLevel='low'.
-  // Doctor sees the warning before signing rather than auto-attaching
-  // a speculative code to billing.
-  const lowConfCodes = accepted.filter((c) => c.confidenceLevel === 'low');
+  // Q2 fix-pack §06.6 — surface low-confidence codes via needsReview when one or
+  // more of the FINAL (coherence-filtered) codes land at confidenceLevel='low'.
+  // Doctor sees the warning before signing rather than auto-attaching a
+  // speculative code to billing.
+  const lowConfCodes = coherent.filter((c) => c.confidenceLevel === 'low');
   if (lowConfCodes.length > 0) {
     await prisma.transcribeVisit.update({
       where: { id: input.visitId },
@@ -344,9 +343,9 @@ export async function runLayer7aIcdCoding(
   // needsReview + reviewReason so the billing-compliance gap surfaces
   // before sign-off.
   const isPlaceholderOnly =
-    accepted.length === 1 && accepted[0].code.toUpperCase() === 'Z76.89';
-  if (accepted.length === 0 || isPlaceholderOnly) {
-    const reason = accepted.length === 0
+    coherent.length === 1 && coherent[0].code.toUpperCase() === 'Z76.89';
+  if (coherent.length === 0 || isPlaceholderOnly) {
+    const reason = coherent.length === 0
       ? `Auto-coding returned no diagnoses for this ${input.specialty.replace(/-/g, ' ')} encounter — verify before signing. Every billable visit should carry at least one diagnosis or encounter Z-code.`
       : 'Auto-coding could not identify a specific diagnosis (placeholder Z76.89 used) — verify before signing.';
     await prisma.transcribeVisit.update({
@@ -365,7 +364,7 @@ export async function runLayer7aIcdCoding(
       success: false,
       metadata: {
         layer: 'l7a-icd',
-        emptyArray: accepted.length === 0,
+        emptyArray: coherent.length === 0,
         placeholderOnly: isPlaceholderOnly,
         specialty: input.specialty,
       },
