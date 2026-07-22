@@ -80,7 +80,6 @@ beforeAll(async () => {
     noteTemplate: {
       id: 'template-1',
       version: 1,
-      templateKind: 'template_twin_docx',
       templateTwinCompiledVersion: {
         id: 'compiled-1',
         noteTemplateId: 'template-1',
@@ -185,7 +184,6 @@ describe('Template Twin server-side signing gate', () => {
       noteTemplate: {
         id: 'template-1',
         version: 3,
-        templateKind: 'structured',
       },
       templateTwinFill: null,
     });

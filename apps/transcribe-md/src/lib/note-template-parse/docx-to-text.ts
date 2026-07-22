@@ -13,7 +13,7 @@
 import mammoth from 'mammoth';
 
 import { templateNativeDocxEnabled } from '@/config/template-native-docx';
-import { TemplateDocxError } from '@/lib/note-template-docx';
+import { TemplateDocxError } from '@/lib/note-template-docx/errors';
 
 import { docxToTextWithControls } from './docx-content-controls';
 

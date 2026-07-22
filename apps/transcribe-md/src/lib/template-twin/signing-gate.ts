@@ -23,7 +23,6 @@ export const TEMPLATE_TWIN_SIGNING_VISIT_SELECT = {
     select: {
       id: true,
       version: true,
-      templateKind: true,
       templateTwinCompiledVersion: {
         select: {
           id: true,
@@ -142,7 +141,6 @@ export interface TemplateTwinSigningContext {
   noteTemplate?: {
     id: string;
     version: number;
-    templateKind: string;
     templateTwinCompiledVersion?: {
       id: string;
       noteTemplateId: string;
@@ -463,7 +461,12 @@ export function assessTemplateTwinSigning(
   }
 
   const template = context.noteTemplate;
-  if (template?.templateKind === 'structured') {
+  const compiled = template?.templateTwinCompiledVersion ?? null;
+  if (!template || !compiled) {
+    // Not an exact-source DOCX twin (a regular custom template or the system
+    // default): the twin sign-gate does not apply. Discriminated by the presence
+    // of a compiled twin version, NOT a note_templates column. A twin fill
+    // manifest for a non-twin template is a provenance mismatch -> block.
     if (context.templateTwinFill) {
       return {
         applies: true,
@@ -483,22 +486,11 @@ export function assessTemplateTwinSigning(
       claim: null,
     };
   }
-  if (template?.templateKind !== 'template_twin_docx') {
-    return {
-      applies: true,
-      ready: false,
-      blockerCodes: ['TEMPLATE_PROVENANCE_UNAVAILABLE'],
-      compiledVersionId: null,
-      fillManifestId: context.templateTwinFill?.id ?? null,
-      claim: null,
-    };
-  }
 
   const blockerCodes: TemplateTwinSignBlockerCode[] = [];
   const add = (code: TemplateTwinSignBlockerCode) => {
     if (!blockerCodes.includes(code)) blockerCodes.push(code);
   };
-  const compiled = template.templateTwinCompiledVersion;
   const fill = context.templateTwinFill;
   let certifiedState: CertifiedTemplateState | null = null;
 
