@@ -38,6 +38,12 @@ export const GET = withApiHandler<{ id: string }>(
     if (!data) return apiError('not found', 404);
 
     let pdf: Buffer;
+    // Visibility (feat/pdf-native-durable-cert): every export records whether the
+    // native path applied and, if not, WHY — so a styled fallback is never silent
+    // (e.g. an orphaned cert after template-id rotation surfaces as stale_cert /
+    // no_canvas instead of vanishing). Logged + returned on the response.
+    let nativeApplied = false;
+    let nativeReason = 'flag_off';
     try {
       // feat/pdf-native-fill: when the flag is ON and the visit's template is a
       // CERTIFIED flat PDF, return the doctor's OWN page with answers drawn into
@@ -45,8 +51,14 @@ export const GET = withApiHandler<{ id: string }>(
       // any native-fill error falls back to the styled export, never a 500.
       let nativePdf: Buffer | null = null;
       try {
-        nativePdf = await nativePdfExport(visitId, userId);
+        const native = await nativePdfExport(visitId, userId);
+        nativePdf = native.pdf;
+        nativeApplied = native.applied;
+        nativeReason = native.reason;
       } catch (nativeErr) {
+        // Coded reason only — the raw message can echo patient-derived characters
+        // and, unnormalized, could even break the response header. Detail → log.
+        nativeReason = 'fill_error';
         console.error(
           '[api:visits:export:pdf] native fill failed, falling back to styled:',
           redactPhi(nativeErr instanceof Error ? nativeErr.message : nativeErr)
@@ -60,6 +72,7 @@ export const GET = withApiHandler<{ id: string }>(
       );
       return apiError('pdf generation failed', 500);
     }
+    console.info(`[api:visits:export:pdf] nativePdfApplied=${nativeApplied} reason=${nativeReason}`);
 
     logDelivery({
       visitId,
@@ -73,6 +86,9 @@ export const GET = withApiHandler<{ id: string }>(
       metadata: {
         sizeBytes: pdf.byteLength,
         isSigned: data.signedAt !== null,
+        // Native-PDF visibility — structured, non-PHI (a boolean + a coded reason).
+        nativePdfApplied: nativeApplied,
+        nativePdfReason: nativeReason,
       },
     });
 
@@ -87,6 +103,9 @@ export const GET = withApiHandler<{ id: string }>(
         'Content-Length': String(pdf.byteLength),
         'Content-Disposition': `attachment; filename="${filename}"`,
         'Cache-Control': 'no-store, private',
+        // Surfaced like a provenance signal — inspectable without opening the PDF.
+        'X-Native-Pdf-Applied': String(nativeApplied),
+        'X-Native-Pdf-Reason': nativeReason,
       },
     });
   }

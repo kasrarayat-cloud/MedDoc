@@ -33,6 +33,9 @@ interface Props {
   onChangePatient?: () => void;
   specialties: readonly Specialty[];
   defaultSpecialty: string;
+  /** The doctor's own note formats (active + drafts), for the per-visit picker.
+   *  Empty/omitted → the picker is not shown (standard SOAP users see no change). */
+  templates?: ReadonlyArray<{ id: string; name: string; isActive: boolean }>;
   /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: VisitFormStep2Theme;
 }
@@ -52,7 +55,9 @@ export function VisitFormStep2({
   onChangePatient,
   specialties,
   defaultSpecialty,
+  templates,
 }: Props) {
+  const hasTemplates = (templates?.length ?? 0) > 0;
   return (
     <>
       <PatientPill patient={patient} onChangePatient={onChangePatient} />
@@ -123,6 +128,36 @@ export function VisitFormStep2({
             </span>
           </label>
         </div>
+
+        {/*
+          Per-visit note-format picker (req: end template×dictation collisions).
+          Only shown to doctors who have custom formats. Default = the active
+          format (auto). "Standard SOAP" forces the system default regardless of
+          which custom form is active — so a bariatric follow-up dictated while an
+          op-note form is active still yields a normal SOAP note.
+        */}
+        {hasTemplates ? (
+          <div className="sm:col-span-2">
+            <label className={FIELD_LABEL} htmlFor="note-format-select">
+              Note format
+            </label>
+            <select
+              id="note-format-select"
+              name="noteTemplateId"
+              defaultValue=""
+              className={INPUT_CLS}
+            >
+              <option value="">My active note format (default)</option>
+              {templates!.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                  {t.isActive ? ' — active' : ''}
+                </option>
+              ))}
+              <option value="__default__">Standard SOAP — no custom format</option>
+            </select>
+          </div>
+        ) : null}
       </form>
 
       <div className="mt-10">

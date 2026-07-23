@@ -109,6 +109,24 @@ export default async function NewVisitPage({
     ? findSpecialty(mostRecentVisit.specialty).id
     : pickerSpecialties[0].id;
 
+  // The doctor's OWN custom note formats, for the per-visit picker (active first,
+  // then drafts). Empty for the vast majority (no custom template) → the picker
+  // is not rendered and the flow is unchanged.
+  const noteFormats = (await prisma.noteTemplate.findMany({
+    where: {
+      doctorId: session.user.id,
+      isSystemDefault: false,
+      status: { in: ['active', 'draft'] },
+    },
+    select: { id: true, name: true, status: true },
+    orderBy: [{ status: 'asc' }, { updatedAt: 'desc' }],
+  })) as Array<{ id: string; name: string; status: string }>;
+  const templates = noteFormats.map((t) => ({
+    id: t.id,
+    name: t.name,
+    isActive: t.status === 'active',
+  }));
+
   // \u2500\u2500 C3 calm "just start" create flow (flag-gated) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
   // SKIN-ONLY: identical auth + patient-scope reads + defaultSpecialty above.
   // The 3-step stepper + side rail collapse to one calm card; the SAME
@@ -128,6 +146,7 @@ export default async function NewVisitPage({
           initialPatient={initialPatient}
           specialties={pickerSpecialties}
           defaultSpecialty={defaultSpecialty}
+          templates={templates}
         />
       </AppFrame>
     );
@@ -160,6 +179,7 @@ export default async function NewVisitPage({
           initialPatient={initialPatient}
           specialties={pickerSpecialties}
           defaultSpecialty={defaultSpecialty}
+          templates={templates}
         />
       </div>
     </AppFrame>

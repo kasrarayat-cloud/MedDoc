@@ -23,6 +23,7 @@ interface Props {
   initialPatient: SelectedPatient | null;
   specialties: readonly Specialty[];
   defaultSpecialty: string;
+  templates?: ReadonlyArray<{ id: string; name: string; isActive: boolean }>;
   /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: NewVisitClientTheme;
 }
@@ -42,6 +43,7 @@ export function NewVisitClient({
   initialPatient,
   specialties,
   defaultSpecialty,
+  templates,
 }: Props) {
   const [selectedPatient, setSelectedPatient] = useState<SelectedPatient | null>(
     initialPatient
@@ -80,6 +82,7 @@ export function NewVisitClient({
               onChangePatient={() => setSelectedPatient(null)}
               specialties={specialties}
               defaultSpecialty={defaultSpecialty}
+              templates={templates}
             />
           )}
         </div>

@@ -25,12 +25,14 @@ interface Props {
   initialPatient: SelectedPatient | null;
   specialties: readonly Specialty[];
   defaultSpecialty: string;
+  templates?: ReadonlyArray<{ id: string; name: string; isActive: boolean }>;
 }
 
 export function NewVisitClientC3({
   initialPatient,
   specialties,
   defaultSpecialty,
+  templates,
 }: Props) {
   const [patient, setPatient] = useState<SelectedPatient | null>(initialPatient);
 
@@ -55,6 +57,7 @@ export function NewVisitClientC3({
             onChangePatient={() => setPatient(null)}
             specialties={specialties}
             defaultSpecialty={defaultSpecialty}
+            templates={templates}
           />
         )}
       </div>

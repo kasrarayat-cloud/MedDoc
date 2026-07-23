@@ -50,6 +50,10 @@ export interface PdfFillInput {
   anchors: readonly PdfFillAnchor[];
   /** key → the text to draw. A key absent / mapped to '' is left blank. */
   texts: Readonly<Record<string, string>>;
+  /** Note sections with content but NO region on the form — rendered on a labeled
+   *  "Additional documentation" continuation page (never dropped, never over his
+   *  ink). Distinct from `(continued)` overflow of an anchored region. */
+  addenda?: ReadonlyArray<{ label: string; text: string }>;
   /** Small signed-status line for the bottom margin (optional). */
   signedStatusLine?: string | null;
 }
@@ -140,13 +144,18 @@ function drawRegion(page: PDFPage, font: PDFFont, a: PdfFillAnchor, text: string
   return overflow;
 }
 
-function drawContinuationPages(
+/** Append one or more letter-size pages titled `title`, listing `{label,text}`
+ *  blocks. Used for both region overflow ("CONTINUATION") and off-form note
+ *  sections ("ADDITIONAL DOCUMENTATION"). */
+function drawAppendedSection(
   doc: PDFDocument,
   font: PDFFont,
   fontBold: PDFFont,
-  overflows: Overflow[]
+  title: string,
+  subtitle: string | null,
+  items: ReadonlyArray<{ label: string; text: string }>
 ): void {
-  if (overflows.length === 0) return;
+  if (items.length === 0) return;
   const W = 612;
   const H = 792;
   const M = 54;
@@ -159,13 +168,17 @@ function drawContinuationPages(
       y = H - M;
     }
   };
-  page.drawText('CONTINUATION', { x: M, y, size: 9, font: fontBold, color: rgb(0.4, 0.4, 0.4) });
-  y -= 22;
-  for (const ov of overflows) {
-    room(40);
-    page.drawText(ov.label, { x: M, y, size: 11, font: fontBold, color: INK });
+  page.drawText(title, { x: M, y, size: 9, font: fontBold, color: rgb(0.4, 0.4, 0.4) });
+  y -= subtitle ? 13 : 22;
+  if (subtitle) {
+    page.drawText(subtitle, { x: M, y, size: 8, font, color: rgb(0.5, 0.5, 0.5) });
     y -= 16;
-    for (const line of wrapHanging(ov.text, font, 10, maxWidth, maxWidth)) {
+  }
+  for (const it of items) {
+    room(40);
+    page.drawText(it.label, { x: M, y, size: 11, font: fontBold, color: INK });
+    y -= 16;
+    for (const line of wrapHanging(it.text, font, 10, maxWidth, maxWidth)) {
       room(14);
       if (line) page.drawText(line, { x: M, y, size: 10, font, color: INK });
       y -= 12;
@@ -192,7 +205,15 @@ export async function fillPdfTemplate(input: PdfFillInput): Promise<Uint8Array> 
     if (ov) overflows.push(ov);
   }
 
-  drawContinuationPages(doc, font, fontBold, overflows);
+  drawAppendedSection(doc, font, fontBold, 'CONTINUATION', null, overflows);
+  drawAppendedSection(
+    doc,
+    font,
+    fontBold,
+    'ADDITIONAL DOCUMENTATION',
+    'Sections from this note that are not fields on the original form.',
+    input.addenda ?? []
+  );
 
   if (input.signedStatusLine && pages[0]) {
     pages[0].drawText(input.signedStatusLine, { x: 54, y: 22, size: 7, font, color: rgb(0.5, 0.5, 0.5) });

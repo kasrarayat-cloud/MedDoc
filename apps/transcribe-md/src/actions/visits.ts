@@ -69,7 +69,42 @@ const CreateVisitSchema = z.object({
       z.boolean(),
     )
     .default(false),
+  /** Per-visit note-format pick from the new-visit picker. Ends template×dictation
+   *  collisions (e.g. dictating a follow-up while an op-note form is active).
+   *   - '' / 'auto' / omitted → resolve the doctor's ACTIVE format at generation
+   *     (unchanged default behavior — noteTemplateId stays NULL on the visit).
+   *   - '__default__'         → the system default (standard SOAP; no custom form).
+   *   - '<templateId>'        → that specific owned template.
+   *  Resolved to a concrete id (or null) server-side; a bad/foreign id → null. */
+  noteTemplateId: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => (v === '' || v === undefined || v === 'auto' ? null : v))
+    .nullable(),
 });
+
+/** Resolve the new-visit template pick into a concrete NoteTemplate id to pin on
+ *  the visit, or null to leave active-template resolution to the worker. */
+async function resolveRequestedTemplate(
+  doctorId: string,
+  pick: string | null
+): Promise<string | null> {
+  if (!pick) return null; // 'auto' → worker resolves the active format at generation
+  if (pick === '__default__') {
+    const sys = await prisma.noteTemplate.findFirst({
+      where: { isSystemDefault: true },
+      select: { id: true },
+    });
+    return sys?.id ?? null;
+  }
+  // A specific format — must be the caller's own row (never another doctor's).
+  const owned = await prisma.noteTemplate.findFirst({
+    where: { id: pick, doctorId },
+    select: { id: true },
+  });
+  return owned?.id ?? null;
+}
 
 /** Resolve the (patientId, patientName) pair into a real TranscribeMdPatient.
  *  Three paths:
@@ -141,6 +176,7 @@ export async function createVisitAction(formData: FormData): Promise<void> {
     patientId: raw.patientId ?? null,
     patientName: raw.patientName ?? null,
     chiefComplaint: raw.chiefComplaint ?? null,
+    noteTemplateId: raw.noteTemplateId ?? null,
   });
   if (!parsed.success) {
     // The form's client component re-renders and shows the error. With
@@ -153,6 +189,11 @@ export async function createVisitAction(formData: FormData): Promise<void> {
     session.user.practiceId,
     parsed.data.patientId ?? null,
     parsed.data.patientName ?? null
+  );
+
+  const requestedTemplateId = await resolveRequestedTemplate(
+    session.user.id,
+    parsed.data.noteTemplateId ?? null
   );
 
   const visit = await prisma.transcribeVisit.create({
@@ -168,6 +209,8 @@ export async function createVisitAction(formData: FormData): Promise<void> {
       chiefComplaint: parsed.data.chiefComplaint ?? null,
       inputMode: parsed.data.inputMode,
       interpreterMode: parsed.data.interpreterMode,
+      // Per-visit template pick (null = worker resolves the active format).
+      noteTemplateId: requestedTemplateId,
     },
     select: { id: true },
   });
