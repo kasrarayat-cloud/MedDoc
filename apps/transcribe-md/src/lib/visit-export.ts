@@ -157,13 +157,51 @@ export function filenameSlug(name: string | null | undefined): string {
     'visit';
 }
 
+/** Known administration ROUTES (not form descriptors like "extended release").
+ *  A form whose leading word is one of these AND which the drug name already
+ *  carries is de-duplicated; restricting to routes keeps multi-word form
+ *  descriptors intact. */
+const ROUTE_WORDS = new Set([
+  'sublingual', 'oral', 'buccal', 'rectal', 'topical', 'transdermal',
+  'ophthalmic', 'otic', 'nasal', 'intranasal', 'inhaled', 'inhalation',
+  'vaginal', 'subcutaneous', 'intramuscular', 'intravenous', 'oromucosal',
+]);
+
+/** If `form` begins with a route word that already appears (as a whole word) in
+ *  `drug`, strip that leading word (and its separator). Returns the trimmed
+ *  form otherwise. Pure; presentation-only. */
+export function dedupeLeadingRoute(drug: string, form: string): string {
+  const trimmed = form.trim();
+  const m = trimmed.match(/^(\S+?)([\s,;:]+)(.*)$/);
+  const firstRaw = m ? m[1] : trimmed;
+  const first = firstRaw.replace(/[.,;:]+$/, '').toLowerCase();
+  if (
+    ROUTE_WORDS.has(first) &&
+    new RegExp(`\\b${first.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(drug)
+  ) {
+    return m ? m[3].trim() : '';
+  }
+  return trimmed;
+}
+
 /** Format a prescription into a single Epic-compatible line. Shared
  *  between clipboard formatters + the PDF/DOCX generators so their Rx
  *  sections stay aligned if one of us changes format conventions later. */
 export function prescriptionOneLine(rx: Prescription): string {
   const parts: string[] = [rx.drug];
   if (rx.strength) parts.push(rx.strength);
-  if (rx.form) parts.push(rx.form);
+  if (rx.form) {
+    // Route-word de-dup (2026-07-23): the drafter sometimes appends a route to
+    // the drug name AND repeats it as the form's leading word — e.g. drug
+    // "Cyanocobalamin (Vitamin B12) sublingual" + form "sublingual tablet"
+    // renders "…sublingual sublingual tablet". Drop the form's leading word only
+    // when it is a known ROUTE word (not a form descriptor like "extended
+    // release") that already appears in the drug name — provably redundant, and
+    // the whitelist avoids garbling multi-word form descriptors. Trims leading
+    // whitespace and ignores trailing punctuation on the leading word.
+    const form = dedupeLeadingRoute(rx.drug, rx.form);
+    if (form) parts.push(form);
+  }
   if (rx.sig) parts.push(`– ${rx.sig}`);
   const tail: string[] = [];
   if (rx.quantity) tail.push(`#${rx.quantity}`);
