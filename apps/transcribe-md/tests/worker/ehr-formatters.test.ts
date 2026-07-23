@@ -132,7 +132,7 @@ describe('formatGeneric', () => {
 });
 
 describe('Rx warnings', () => {
-  it('surfaces warnings under the Medications section', () => {
+  it('does NOT surface Rx warnings in the export — review chrome stays on-screen + in the audit', () => {
     const visit = mkVisit({
       rxWarnings: [
         {
@@ -143,8 +143,12 @@ describe('Rx warnings', () => {
       ],
     });
     const out = formatForEpic(visit);
-    expect(out).toContain('--- Rx warnings');
-    expect(out).toContain('[CRITICAL] Lisinopril');
+    // The "Rx safety warnings — review before sending" banner + [SEVERITY]
+    // blocks are internal review machinery — never in an exported document.
+    expect(out).not.toContain('--- Rx warnings');
+    expect(out).not.toContain('review before sending');
+    expect(out).not.toContain('[CRITICAL]');
+    expect(out).not.toContain('Prior ACE-inhibitor cough');
   });
 });
 
