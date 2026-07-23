@@ -59,6 +59,87 @@ export function dropIncoherentVaricoseCodes(codes: readonly IcdCode[]): IcdCode[
   return codes.filter((c) => !/^I83\.9/i.test(c.code));
 }
 
+/**
+ * Clinical-coherence floor (generalized) — drop a code that the note EXPLICITLY
+ * CONTRADICTS by documenting a denial of the very condition the code encodes.
+ * The classic case is a MED-INFERRED code: the L7A prompt hoists K21.9 (GERD)
+ * from chronic PPI use, but the note documents "no reflux symptoms / denies
+ * heartburn" — the code is then incoherent with the record.
+ *
+ * ONLY-REMOVE, support-preserving: never adds a code; only fires when the
+ * condition appears in the text AND *every* mention sits inside a negation
+ * clause. A single affirmative (non-negated) mention — an explicit diagnosis,
+ * problem-list entry, or assessment line — marks the code as SUPPORTED and it is
+ * never dropped, so a truly-diagnosed-but-asymptomatic-today condition survives.
+ * Pure + deterministic; preserves input order. `clinicalText` is the final note
+ * (optionally plus structured negation context).
+ */
+const DENIAL_NEGATION_CUE =
+  /\b(no|not|non|denies|denied|deny|without|w\/o|negative for|absence of|absent|ruled out|r\/o|free of|none|resolved)\b/i;
+
+const DENIAL_CONTRADICTION_RULES: ReadonlyArray<{
+  readonly prefix: RegExp;
+  readonly condition: RegExp;
+  readonly label: string;
+}> = [
+  {
+    // GERD (K21.x). The L7A prompt intentionally hoists this from chronic PPI
+    // use, so an explicit reflux denial is what makes an unsupported K21.x
+    // incoherent — the guard removes only the med-inferred, contradicted code.
+    prefix: /^K21(\b|\.)/i,
+    // "regurgitation" alone collides with cardiac (mitral/aortic) regurgitation,
+    // so it is qualified to "acid regurgitation" — the GERD-specific sense.
+    condition: /\b(reflux|gerd|heartburn|acid regurgitation|pyrosis)\b/i,
+    label: 'GERD',
+  },
+];
+
+// An adversative conjunction RESETS the negation scope inside a clause, so a
+// negation cue before it does not reach a mention after it: "no history of GERD
+// but now has reflux" — the affirmative "reflux" is NOT under the "no".
+const ADVERSATIVE_RESET = /\b(but|however|although|though|yet|whereas|aside from|other than|except)\b/gi;
+
+/** True iff `condition` occurs in `text` AND every occurrence is negated within
+ *  its own clause (a negation cue earlier in the same clause, not cut off by an
+ *  adversative conjunction). A boundary of `.;:,\n` starts a new clause. Commas
+ *  ARE boundaries: a serial "no A, no B, and no C" still drops because each item
+ *  carries its own cue, but a leading cue is NOT allowed to leak across a comma
+ *  onto a later AFFIRMATIVE mention ("denies heartburn, GERD stable on PPI" must
+ *  KEEP the supported code). Any affirmative occurrence returns false. */
+function conditionExplicitlyDenied(text: string, condition: RegExp): boolean {
+  const scan = new RegExp(condition.source, 'gi');
+  let match: RegExpExecArray | null;
+  let sawMention = false;
+  while ((match = scan.exec(text)) !== null) {
+    sawMention = true;
+    const before = text.slice(0, match.index);
+    // The current clause = the trailing run of non-boundary chars before the
+    // mention (last `.;:,\n` resets it)…
+    let clause = before.slice(before.search(/[^.;:,\n]*$/));
+    // …then trim to after the last adversative conjunction in that clause, so a
+    // "no X but has X" affirmation is not read as negated.
+    ADVERSATIVE_RESET.lastIndex = 0;
+    let am: RegExpExecArray | null;
+    let cut = -1;
+    while ((am = ADVERSATIVE_RESET.exec(clause)) !== null) cut = am.index + am[0].length;
+    if (cut >= 0) clause = clause.slice(cut);
+    if (!DENIAL_NEGATION_CUE.test(clause)) return false; // affirmative → supported
+  }
+  return sawMention;
+}
+
+export function dropDenialContradictedCodes(
+  codes: readonly IcdCode[],
+  clinicalText: string
+): IcdCode[] {
+  if (!clinicalText) return [...codes];
+  return codes.filter((c) => {
+    const rule = DENIAL_CONTRADICTION_RULES.find((r) => r.prefix.test(c.code));
+    if (!rule) return true;
+    return !conditionExplicitlyDenied(clinicalText, rule.condition);
+  });
+}
+
 export interface Layer7aInput {
   visitId: string;
   practiceId: string;
@@ -318,13 +399,28 @@ export async function runLayer7aIcdCoding(
       `[l7a-icd] dropped ${droppedIncoherent.length} incoherent asymptomatic varicose code(s) alongside a symptomatic one: ${droppedIncoherent.map((c) => c.code).join(', ')}`
     );
   }
-  const filtered: typeof result = { codes: coherent };
+  // Generalized coherence floor — drop a code the note explicitly denies (e.g.
+  // med-inferred K21.9 GERD vs a documented reflux denial). Scans the final note
+  // (the entities JSON is appended as a coarse, conservative fallback — its `:`
+  // punctuation clause-breaks most structured negation, so it rarely fires);
+  // ONLY-REMOVE and support-preserving (a code whose condition is affirmatively
+  // documented is never touched). Same non-PHI-console + metric-purity treatment
+  // as the varicose floor above.
+  const denialText = `${input.soapFinal ?? ''}\n${input.entitiesJson ?? ''}`;
+  const coherentFinal = dropDenialContradictedCodes(coherent, denialText);
+  const droppedDenied = coherent.filter((c) => !coherentFinal.includes(c));
+  if (droppedDenied.length > 0) {
+    console.info(
+      `[l7a-icd] dropped ${droppedDenied.length} code(s) contradicted by an explicit denial in the note: ${droppedDenied.map((c) => c.code).join(', ')}`
+    );
+  }
+  const filtered: typeof result = { codes: coherentFinal };
 
   // Q2 fix-pack §06.6 — surface low-confidence codes via needsReview when one or
   // more of the FINAL (coherence-filtered) codes land at confidenceLevel='low'.
   // Doctor sees the warning before signing rather than auto-attaching a
   // speculative code to billing.
-  const lowConfCodes = coherent.filter((c) => c.confidenceLevel === 'low');
+  const lowConfCodes = coherentFinal.filter((c) => c.confidenceLevel === 'low');
   if (lowConfCodes.length > 0) {
     await prisma.transcribeVisit.update({
       where: { id: input.visitId },
@@ -343,9 +439,9 @@ export async function runLayer7aIcdCoding(
   // needsReview + reviewReason so the billing-compliance gap surfaces
   // before sign-off.
   const isPlaceholderOnly =
-    coherent.length === 1 && coherent[0].code.toUpperCase() === 'Z76.89';
-  if (coherent.length === 0 || isPlaceholderOnly) {
-    const reason = coherent.length === 0
+    coherentFinal.length === 1 && coherentFinal[0].code.toUpperCase() === 'Z76.89';
+  if (coherentFinal.length === 0 || isPlaceholderOnly) {
+    const reason = coherentFinal.length === 0
       ? `Auto-coding returned no diagnoses for this ${input.specialty.replace(/-/g, ' ')} encounter — verify before signing. Every billable visit should carry at least one diagnosis or encounter Z-code.`
       : 'Auto-coding could not identify a specific diagnosis (placeholder Z76.89 used) — verify before signing.';
     await prisma.transcribeVisit.update({
@@ -364,7 +460,7 @@ export async function runLayer7aIcdCoding(
       success: false,
       metadata: {
         layer: 'l7a-icd',
-        emptyArray: coherent.length === 0,
+        emptyArray: coherentFinal.length === 0,
         placeholderOnly: isPlaceholderOnly,
         specialty: input.specialty,
       },

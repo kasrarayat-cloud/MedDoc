@@ -12,7 +12,10 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('@meddoc/db', () => ({ default: { transcribeVisit: { update: vi.fn() } } }));
 vi.mock('@/lib/audit', () => ({ logAudit: vi.fn() }));
 
-import { dropIncoherentVaricoseCodes } from '../07a-icd-coding';
+import {
+  dropIncoherentVaricoseCodes,
+  dropDenialContradictedCodes,
+} from '../07a-icd-coding';
 import type { IcdCode } from '../07a-icd-coding';
 
 function code(c: string, description = ''): IcdCode {
@@ -76,5 +79,129 @@ describe('dropIncoherentVaricoseCodes', () => {
       code('E11.9'),
     ]);
     expect(out.map((c) => c.code)).toEqual(['I10', 'I83.891', 'E11.9']);
+  });
+});
+
+describe('dropDenialContradictedCodes (denial-vs-code coherence)', () => {
+  // Regression for the KUK bariatric visit (2026-07-23): K21.9 GERD was
+  // med-inferred from chronic omeprazole while the note documented "no reflux
+  // symptoms". A code contradicted by an explicit denial must be dropped.
+  it('drops med-inferred K21.9 when the note explicitly denies reflux (the KUK bug)', () => {
+    const note =
+      '## Objective\nNo dysphagia, no persistent nausea, no vomiting, and no reflux symptoms.';
+    const out = dropDenialContradictedCodes(
+      [code('E66.01'), code('K21.9', 'GERD without esophagitis'), code('E11.9')],
+      note
+    );
+    expect(out.map((c) => c.code)).toEqual(['E66.01', 'E11.9']);
+  });
+
+  it('drops K21.9 for "denies heartburn" / "negative for GERD" phrasings too', () => {
+    expect(
+      dropDenialContradictedCodes([code('K21.9')], 'Patient denies heartburn today.').length
+    ).toBe(0);
+    expect(
+      dropDenialContradictedCodes([code('K21.9')], 'GI review negative for GERD.').length
+    ).toBe(0);
+    expect(
+      dropDenialContradictedCodes([code('K21.0'), code('K21.9')], 'No acid regurgitation reported.')
+        .length
+    ).toBe(0);
+  });
+
+  it('KEEPS K21.9 when GERD is AFFIRMATIVELY documented — support is never suppressed', () => {
+    // An explicit diagnosis line + a "no acute symptoms today" note: controlled
+    // GERD still merits the code. Any non-negated mention protects it.
+    const note =
+      '## Assessment\nGERD, chronic — continue omeprazole.\n## Plan\nNo acute reflux today.';
+    const out = dropDenialContradictedCodes([code('K21.9', 'GERD')], note);
+    expect(out.map((c) => c.code)).toEqual(['K21.9']);
+  });
+
+  it('KEEPS K21.9 when the note is silent on reflux (only-remove on explicit denial)', () => {
+    const out = dropDenialContradictedCodes(
+      [code('K21.9'), code('E66.01')],
+      '## Plan\nAdvance diet; multivitamin adherence.'
+    );
+    expect(out.map((c) => c.code)).toEqual(['K21.9', 'E66.01']);
+    expect(dropDenialContradictedCodes([code('K21.9')], '').map((c) => c.code)).toEqual(['K21.9']);
+  });
+
+  it('does not affect unrelated codes governed by no rule (I83.9x path untouched)', () => {
+    const note = 'No reflux symptoms. Bilateral varicose study.';
+    const out = dropDenialContradictedCodes(
+      [code('I83.891'), code('I83.90'), code('I10')],
+      note
+    );
+    // No rule governs I83.x here — this guard leaves them all in; the varicose
+    // floor (separate function) owns that coherence. Only K21.x is denial-gated.
+    expect(out.map((c) => c.code)).toEqual(['I83.891', 'I83.90', 'I10']);
+  });
+
+  it('a negation for a DIFFERENT condition in the same clause does not deny reflux', () => {
+    // "denies chest pain, reports reflux" — reflux itself is affirmative.
+    const out = dropDenialContradictedCodes(
+      [code('K21.9')],
+      'Denies chest pain. Reports ongoing reflux on PPI.'
+    );
+    expect(out.map((c) => c.code)).toEqual(['K21.9']);
+  });
+
+  // Auditor edge case 1 — CARDIAC "regurgitation" must not read as GERD denial.
+  it('does NOT drop K21.9 for a negated CARDIAC regurgitation (no reflux mention)', () => {
+    expect(
+      dropDenialContradictedCodes([code('K21.9')], 'Cardiac: no mitral regurgitation on echo.')
+        .map((c) => c.code)
+    ).toEqual(['K21.9']);
+    // But an explicit "no acid regurgitation" IS a reflux denial → drop.
+    expect(
+      dropDenialContradictedCodes([code('K21.9')], 'GI: no acid regurgitation.').length
+    ).toBe(0);
+  });
+
+  // Auditor edge case 2 — an adversative conjunction resets the negation scope,
+  // so "no history of GERD but now has reflux" keeps the (supported) code.
+  it('KEEPS K21.9 when a "no X but has X" conjunction re-affirms reflux (support-preserving)', () => {
+    expect(
+      dropDenialContradictedCodes(
+        [code('K21.9')],
+        'No history of GERD but now has reflux on omeprazole.'
+      ).map((c) => c.code)
+    ).toEqual(['K21.9']);
+    // The serial-denial path (no adversative) still drops.
+    expect(
+      dropDenialContradictedCodes([code('K21.9')], 'No dysphagia, no heartburn, no reflux.').length
+    ).toBe(0);
+  });
+
+  // Adversarial edge case — a leading denial must NOT leak across a comma onto a
+  // later AFFIRMATIVE GERD mention (the confirmed support-suppression breach).
+  it('KEEPS K21.9 when a denial precedes an affirmative GERD across a comma (the comma-leak breach)', () => {
+    expect(
+      dropDenialContradictedCodes(
+        [code('K21.9')],
+        'Denies heartburn currently, GERD stable on omeprazole.'
+      ).map((c) => c.code)
+    ).toEqual(['K21.9']);
+    expect(
+      dropDenialContradictedCodes([code('K21.9')], 'No chest pain, GERD confirmed on EGD.').map(
+        (c) => c.code
+      )
+    ).toEqual(['K21.9']);
+    expect(
+      dropDenialContradictedCodes([code('K21.9')], 'Problems: no tobacco use, GERD, HTN.').map(
+        (c) => c.code
+      )
+    ).toEqual(['K21.9']);
+  });
+
+  it('still drops when the SAME comma-run repeats the cue per item (order-insensitive)', () => {
+    // Affirmative-first was already safe; assert denial-first serial still drops.
+    expect(
+      dropDenialContradictedCodes(
+        [code('K21.9')],
+        'No abdominal pain, no reflux, no early satiety.'
+      ).length
+    ).toBe(0);
   });
 });
