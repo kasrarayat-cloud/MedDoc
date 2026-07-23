@@ -36,6 +36,14 @@ describe('extractSurgeonFromNote', () => {
     );
   });
 
+  it('stops the name at the sentence period — does not swallow the next word (prod-smoke bug)', () => {
+    expect(
+      extractSurgeonFromNote(
+        'The colonoscopy was performed by Dr. Shabatian. The scope was advanced to the cecum.'
+      )
+    ).toBe('Dr. Shabatian');
+  });
+
   it('returns null when no surgeon is clearly stated (→ blank field, never guessed)', () => {
     expect(extractSurgeonFromNote('Patient tolerated the procedure well.')).toBeNull();
     // A consulting/referring physician is NOT the surgeon → not extracted.
