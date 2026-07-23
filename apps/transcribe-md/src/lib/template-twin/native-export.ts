@@ -111,6 +111,8 @@ export async function loadOrComputeNativeTemplateDocxForVisit(
         soapFinal: true,
         noteTemplateId: true,
         noteTemplateVersion: true,
+        createdAt: true,
+        signedAt: true,
         user: { select: { practiceId: true } },
       },
     });
@@ -141,6 +143,9 @@ export async function loadOrComputeNativeTemplateDocxForVisit(
       entities: visit.entities,
       generatedNote: visit.soapFinal,
       validationNow: new Date(),
+      // Encounter date for the DATE OF PROCEDURE metadata fill: the signed date
+      // once frozen, else the visit's creation (encounter) date.
+      visitDate: visit.signedAt ?? visit.createdAt,
       resolverModelVersion: null,
       storage: deps?.storage,
     });

@@ -37,6 +37,7 @@ import {
 } from './ir';
 import { templateTwinMappingsSha256 } from './mapping-hash';
 import { bridgeTemplateFill } from './bridge-fill';
+import { withProcedureDateFact } from './procedure-date';
 import {
   resolveTemplateFields,
   withApprovedPracticeDefaultFacts,
@@ -82,6 +83,9 @@ export interface PrepareTemplateTwinFillInput {
   allowUncertifiedForSyntheticTest?: boolean;
   /** The compiled {{one of}} marker text — drives the CHOICE_SLOT picks overlay. */
   markerText?: string;
+  /** The visit (encounter) date — deterministically fills a DATE OF PROCEDURE
+   *  content control as metadata (never AI). Absent → the control is left blank. */
+  visitDate?: Date | string | null;
   /** The LIVE brain's generated note — its picks + table measurements are bridged
    *  onto the resolver baseline. When absent, only the evidence resolver runs
    *  (behaviour-identical to the pre-bridge fill path). */
@@ -160,10 +164,19 @@ export async function prepareTemplateTwinFill(
 ): Promise<PreparedTemplateTwinFill> {
   const ir = TemplateDocIRSchema.parse(input.ir);
   const mappings = input.mappings.map((mapping) => SemanticMappingSchema.parse(mapping));
-  const facts = withApprovedPracticeDefaultFacts({
+  // Inject the visit date as a traceable fact for a DATE OF PROCEDURE control
+  // (deterministic metadata, never AI), then let the evidence resolver fill it —
+  // so the resolution is independently validated like any other, never a bare
+  // overlay. No-op when there is no such control / no visit date.
+  const facts = withProcedureDateFact({
     fields: ir.fields,
     mappings,
-    facts: input.facts,
+    visitDate: input.visitDate,
+    facts: withApprovedPracticeDefaultFacts({
+      fields: ir.fields,
+      mappings,
+      facts: input.facts,
+    }),
   });
   const baseline = resolveTemplateFields({
     fields: ir.fields,
@@ -249,6 +262,9 @@ export interface ProcessTemplateTwinVisitInput {
   generatedNote?: string;
   asrQuality?: 'high' | 'review' | 'unknown';
   validationNow: Date | string;
+  /** The visit (encounter) date — deterministically fills a DATE OF PROCEDURE
+   *  content control as metadata (never AI). Absent → the control is left blank. */
+  visitDate?: Date | string | null;
   resolverModelVersion: string | null;
   storage?: TemplateTwinArtifactStore;
 }
@@ -421,6 +437,7 @@ export async function processTemplateTwinVisit(
     source,
     resolverModelVersion: input.resolverModelVersion,
     validationNow: input.validationNow,
+    visitDate: input.visitDate,
     markerText,
     generatedNote: input.generatedNote,
   });

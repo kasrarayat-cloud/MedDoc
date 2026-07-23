@@ -1027,6 +1027,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       contextText,
       entities,
       generatedNote: soapFinalForFanout,
+      visitDate: visit.createdAt,
     });
     if (twinFill.status === 'failed') {
       console.warn(
