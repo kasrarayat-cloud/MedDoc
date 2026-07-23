@@ -52,6 +52,8 @@ function mkVisit(overrides: Partial<VisitExportData> = {}): VisitExportData {
     rxWarnings: [],
     referrals: [],
     patientSummary: 'Today we talked about your blood pressure…',
+    headerFields: [],
+    formOnly: false,
     ...overrides,
   };
 }
@@ -292,5 +294,62 @@ describe('generateVisitDocx — metadata PHI guard', () => {
     );
     const xml = await readDocxCoreXml(buf);
     expect(xml).not.toContain(PHI_CLINICIAN);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Header fields + form-only export (feat/template-header-fields). A parsed
+// operative-note form's labeled header renders at the top of the styled export
+// in place of the generic patient bar; a form-only template suppresses the
+// appended coding/summary blocks.
+// ---------------------------------------------------------------------------
+describe('generateVisitDocx — header fields (form templates)', () => {
+  const HEADER_FIELDS = [
+    { label: 'PATIENT NAME', value: 'KUK' },
+    { label: 'PATIENT DOB', value: '' },
+    { label: 'DATE OF SURGERY', value: '2026-07-23' },
+    { label: 'SURGEON', value: 'Dr. Shabatian' },
+  ];
+
+  async function docXml(buf: Buffer): Promise<string> {
+    const zip = await JSZip.loadAsync(buf);
+    return zip.file('word/document.xml')!.async('text');
+  }
+
+  it('renders labeled header fields (values + honest blank) in place of the patient bar', async () => {
+    const xml = await docXml(await generateVisitDocx(mkVisit({ headerFields: HEADER_FIELDS })));
+    expect(xml).toContain('PATIENT NAME');
+    expect(xml).toContain('KUK');
+    expect(xml).toContain('DATE OF SURGERY');
+    expect(xml).toContain('2026-07-23');
+    expect(xml).toContain('SURGEON');
+    expect(xml).toContain('Dr. Shabatian');
+    expect(xml).toContain('—'); // blank PATIENT DOB → honest em-dash
+    // The generic patient bar's "Jane Doe" is replaced by the doctor's form.
+    expect(xml).not.toContain('Jane Doe');
+  });
+
+  it('form-only export suppresses appended Diagnoses/Summary but keeps the form + body', async () => {
+    const withXml = await docXml(
+      await generateVisitDocx(mkVisit({ headerFields: HEADER_FIELDS, formOnly: false }))
+    );
+    const formXml = await docXml(
+      await generateVisitDocx(mkVisit({ headerFields: HEADER_FIELDS, formOnly: true }))
+    );
+    expect(withXml).toContain('DIAGNOSES'); // section headings are uppercased
+    expect(formXml).not.toContain('DIAGNOSES');
+    expect(formXml).not.toContain('PATIENT SUMMARY');
+    expect(formXml).toContain('PATIENT NAME'); // form header survives
+    expect(formXml).toContain('lisinopril'); // note body survives
+  });
+});
+
+describe('generateVisitPdf — header fields', () => {
+  it('renders header fields + form-only without crashing', async () => {
+    const buf = await generateVisitPdf(
+      mkVisit({ headerFields: [{ label: 'SURGEON', value: 'Dr. Shabatian' }], formOnly: true })
+    );
+    expect(buf.subarray(0, 4).toString('ascii')).toBe('%PDF');
+    expect(buf.length).toBeGreaterThan(1000);
   });
 });

@@ -928,6 +928,11 @@ function buildSectionData(props: VisitReadyViewProps): VisitExportData {
     rxWarnings: rxBlob?.warnings ?? [],
     referrals: refBlob?.referrals ?? [],
     patientSummary: props.patientSummary,
+    // Header fields + form-only are a STYLED-export (DOCX/PDF) concern, loaded
+    // server-side in loadVisitExportData; the client clipboard/EHR path omits
+    // them (the EHR already carries patient demographics).
+    headerFields: [],
+    formOnly: false,
   };
 }
 

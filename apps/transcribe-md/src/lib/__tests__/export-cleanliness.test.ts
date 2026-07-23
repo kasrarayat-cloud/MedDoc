@@ -111,6 +111,8 @@ function fixture(): VisitExportData {
     ],
     referrals: [],
     patientSummary: null,
+    headerFields: [],
+    formOnly: false,
   };
 }
 

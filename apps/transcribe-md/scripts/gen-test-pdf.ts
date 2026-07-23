@@ -146,6 +146,8 @@ function buildMock(
     rxWarnings: [],
     referrals: [],
     patientSummary: null,
+    headerFields: [],
+    formOnly: false,
   };
 }
 
