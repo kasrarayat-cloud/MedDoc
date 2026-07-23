@@ -47,6 +47,7 @@ import {
   dropHeaderMarkerSections,
   firstClinicalHeadingIndex,
 } from './reconcile-markers';
+import { extractHeaderFields } from './header-fields';
 
 // TRANSCRIBE_MD_CLINICAL_MODEL — eval override (feat/fable5-eval); unset → default unchanged.
 const MODEL = process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-opus-4-8';
@@ -286,6 +287,14 @@ export async function parseNoteToTemplate(
   // header and restored post-gate (which would bypass the LLM PHI scan).
   const headerBoundaryIdx = firstClinicalHeadingIndex(noteText, clinicalSections);
 
+  // feat/template-header-fields (2026-07-23): capture the doctor's labeled
+  // header/short fields (PATIENT NAME / DOB / ID / DATE OF SURGERY / SURGEON)
+  // from the header region — LABELS ONLY, deterministically PHI-scanned — so the
+  // styled export can reproduce their form. dropAdministrativeChrome removed
+  // these from the note BODY (they are not clinical prose); here we preserve
+  // them as export-only header fields. Never carries a patient value.
+  const headerFields = extractHeaderFields(noteText, clinicalSections);
+
   // Reconcile dropped BODY-region markers BEFORE the PHI scan (fix/template-
   // parse-determinism). A body carrier sentence the LLM dropped can, in a pasted
   // FILLED example, carry a patient name / free-text specific that only the LLM
@@ -367,5 +376,18 @@ export async function parseNoteToTemplate(
   //    No-op when the LLM preserved the header markers, or the note has none
   //    (SOAP / scaffold-free templates) → byte-identical. ──
   const reconciled = reconcileHeaderMarkers(noteText, gated.template.sections, headerBoundaryIdx);
-  return { ...gated, template: { ...gated.template, sections: reconciled } };
+  return {
+    ...gated,
+    template: {
+      ...gated.template,
+      sections: reconciled,
+      // Header fields ride in styleProfile alongside contextDefaults (export-only
+      // config; note-gen ignores them). Labels were PHI-scanned deterministically
+      // in extractHeaderFields; they carry no patient values.
+      styleProfile: {
+        ...gated.template.styleProfile,
+        headerFields: headerFields.length > 0 ? headerFields : null,
+      },
+    },
+  };
 }

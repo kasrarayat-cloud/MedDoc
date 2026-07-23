@@ -13,7 +13,12 @@
 import prisma from '@meddoc/db';
 import type { TranscribeVisitStatus } from '@prisma/client';
 import { findSpecialty } from '@meddoc/shared/specialties';
-import { projectEmForDisplay, sanitizeExportedSoap } from './visit-export';
+import {
+  projectEmForDisplay,
+  sanitizeExportedSoap,
+  resolveHeaderFields,
+  coerceHeaderFields,
+} from './visit-export';
 import type {
   CptEm,
   CptModifier,
@@ -52,10 +57,23 @@ export async function loadVisitExportData(
       rxDrafts: true,
       referrals: true,
       patientSummary: true,
+      // feat/template-header-fields: the bound template's export-only config
+      // (header fields + form-only pref) rides in its styleProfile JSONB. One
+      // round-trip via the relation; only these two export fields are read,
+      // note-gen never sees them.
+      noteTemplate: { select: { styleProfile: true } },
       user: { select: { name: true, email: true } },
     },
   });
   if (!visit || visit.userId !== userId) return null;
+
+  const styleProfile =
+    (visit.noteTemplate?.styleProfile as {
+      headerFields?: unknown;
+      formOnlyExport?: unknown;
+    } | null) ?? null;
+  const parsedHeaderFields = coerceHeaderFields(styleProfile?.headerFields);
+  const formOnly = styleProfile?.formOnlyExport === true;
 
   const rawSoap =
     visit.status === 'SIGNED'
@@ -102,6 +120,14 @@ export async function loadVisitExportData(
   // the client Codes tab + "Copy codes" use, so all surfaces agree.
   const emForExport = projectEmForDisplay(cptBlob?.em ?? null, visit.status === 'SIGNED');
 
+  // Deterministically fill the header fields for THIS visit (never AI): NAME +
+  // DATE from the visit record, SURGEON from the dictated note, DOB/ID blank.
+  const headerFields = resolveHeaderFields(parsedHeaderFields, {
+    patientName: visit.patientName,
+    visitDate: visit.signedAt ?? visit.createdAt,
+    soapText,
+  });
+
   return {
     visitId: visit.id,
     patientName: visit.patientName,
@@ -126,6 +152,8 @@ export async function loadVisitExportData(
     rxWarnings: rxBlob?.warnings ?? [],
     referrals: refBlob?.referrals ?? [],
     patientSummary: visit.patientSummary,
+    headerFields,
+    formOnly,
   };
 }
 

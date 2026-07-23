@@ -17,6 +17,7 @@
 import { z } from 'zod';
 import type {
   NoteTemplateSection,
+  NoteTemplateHeaderField,
   SectionFormatHint,
   SectionStructure,
 } from '@/worker/note-templates/system-default-template';
@@ -145,6 +146,12 @@ export interface ParsedStyleProfile {
    *  (feat/template-context-defaults). Only set by the review/persist path;
    *  never emitted by the parse LLM. */
   contextDefaults?: Record<string, string> | null;
+  /** Labeled header/short fields captured DETERMINISTICALLY from the note header
+   *  (feat/template-header-fields) — labels only, never a patient value. Set by
+   *  parse + carried through review/persist; the parse LLM never emits it. */
+  headerFields?: NoteTemplateHeaderField[] | null;
+  /** Per-template "form-only export" preference (default OFF). */
+  formOnlyExport?: boolean | null;
 }
 
 /** The DRAFT template the parse returns (2b reviews + persists it; nothing is
