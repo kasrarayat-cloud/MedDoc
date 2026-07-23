@@ -43,6 +43,8 @@ function row(over: Record<string, unknown> = {}) {
     rxDrafts: null,
     referrals: null,
     patientSummary: null,
+    headerFields: [],
+    formOnly: false,
     user: { name: 'Dr', email: 'd@t.dev' },
     ...over,
   };

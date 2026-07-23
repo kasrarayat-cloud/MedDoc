@@ -237,6 +237,11 @@ export function TemplateReviewEditor({
           for (const [k, v] of Object.entries(contextDefaults)) if (keys.has(k) && v) out[k] = v;
           return Object.keys(out).length > 0 ? out : null;
         })(),
+        // feat/template-header-fields: parsed header fields + form-only pref
+        // round-trip READ-ONLY (v1 — no editor UI). The server re-derives keys +
+        // re-PHI-scans on save, so this is a pure passthrough.
+        headerFields: styleProfile.headerFields ?? null,
+        formOnlyExport: styleProfile.formOnlyExport ?? false,
       },
     };
   }
