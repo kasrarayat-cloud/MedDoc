@@ -13,6 +13,7 @@ import { auth } from '@/lib/nextauth';
 import { filenameSlug, formatVisitDate } from '@/lib/visit-export';
 import { loadVisitExportData } from '@/lib/visit-export-server';
 import { generateVisitPdf } from '@/lib/pdf-generator';
+import { nativePdfExport } from '@/lib/pdf-native/export';
 import { logDelivery } from '@/lib/deliveries';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
@@ -38,7 +39,20 @@ export const GET = withApiHandler<{ id: string }>(
 
     let pdf: Buffer;
     try {
-      pdf = await generateVisitPdf(data);
+      // feat/pdf-native-fill: when the flag is ON and the visit's template is a
+      // CERTIFIED flat PDF, return the doctor's OWN page with answers drawn into
+      // its blanks; otherwise fall through to the styled generator. Fail-open —
+      // any native-fill error falls back to the styled export, never a 500.
+      let nativePdf: Buffer | null = null;
+      try {
+        nativePdf = await nativePdfExport(visitId, userId);
+      } catch (nativeErr) {
+        console.error(
+          '[api:visits:export:pdf] native fill failed, falling back to styled:',
+          redactPhi(nativeErr instanceof Error ? nativeErr.message : nativeErr)
+        );
+      }
+      pdf = nativePdf ?? (await generateVisitPdf(data));
     } catch (err) {
       console.error(
         '[api:visits:export:pdf] generation failed:',
