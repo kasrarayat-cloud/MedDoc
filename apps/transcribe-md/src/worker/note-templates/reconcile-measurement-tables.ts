@@ -54,11 +54,10 @@ const ROW_LABEL: Record<string, Record<string, string>> = {
   },
 };
 
-// Conventional vein-segment ordering for a lower-extremity venous reflux study.
-// The canonical row union is sorted by this so a recovered row lands in its
-// proper place (e.g. SSV proximal calf directly after SSV SPJ), not appended.
-// Rows not in this list keep their first-seen relative order, after the known
-// ones — the reconciler never drops a row a template defines.
+// The FIXED canonical row set for a lower-extremity venous reflux study — both
+// legs always get exactly these 10 segments, in this order. Any extra row a
+// venous table also defines is appended after these (first-seen order); the
+// reconciler never drops a template-defined row.
 const CANONICAL_ORDER = [
   'GSV at the SFJ',
   'GSV at the Proximal Thigh',
@@ -87,48 +86,118 @@ function isEmptyCell(token: string | undefined): boolean {
   return t === '' || t === NOT_DOCUMENTED;
 }
 
-/** Parse one clinical sentence-ish clause for a measurement. Reads the diameter
- *  ("6.2 mm" / "measures 6.2 millimeters") and reflux ("reflux of 3.4 seconds")
- *  nearest the clause. Returns null when no diameter number is present. */
-function parseMeasurement(clause: string): { diameter: string; reflux: string | null } | null {
-  const dia = clause.match(/(\d+(?:\.\d+)?)\s*(?:mm|millimet(?:er|re)s?)\b/i);
-  if (!dia) return null;
-  const ref = clause.match(/reflux[^.]*?(\d+(?:\.\d+)?)\s*(?:s\b|sec\b|seconds?)/i);
-  return { diameter: dia[1], reflux: ref ? ref[1] : null };
+/** Every non-overlapping match of a labelled pattern set, most-specific first.
+ *  Patterns are given in specificity order (e.g. AAGSV before GSV, "below the
+ *  knee" before "knee"); at any overlap the earlier-listed (more specific) match
+ *  wins, so "great saphenous" inside "anterior accessory great saphenous" and
+ *  "knee" inside "below the knee" never double-count. Returned in text order. */
+function findSpans(
+  text: string,
+  patterns: ReadonlyArray<{ re: RegExp; key: string }>,
+): Array<{ index: number; key: string }> {
+  const raw: Array<{ start: number; end: number; key: string; order: number }> = [];
+  patterns.forEach((p, order) => {
+    for (const m of text.matchAll(new RegExp(p.re.source, 'gi'))) {
+      const start = m.index ?? 0;
+      raw.push({ start, end: start + m[0].length, key: p.key, order });
+    }
+  });
+  raw.sort((a, b) => a.order - b.order || b.end - b.start - (a.end - a.start) || a.start - b.start);
+  const kept: Array<{ start: number; end: number; key: string }> = [];
+  for (const c of raw) {
+    if (kept.some((k) => c.start < k.end && k.start < c.end)) continue; // overlaps a kept span
+    kept.push(c);
+  }
+  return kept
+    .sort((a, b) => a.start - b.start)
+    .map((k) => ({ index: k.start, key: k.key }));
 }
 
-/** Extract vein/segment measurements from one leg's findings prose. Tracks the
- *  current vein across anaphora ("it measures …" keeps the last-named vein). */
+/** Nearest labelled span (by character distance) that each numeric value belongs
+ *  to; the FIRST value assigned to a span wins. Position-based, so it is immune
+ *  to clause structure: serial lists, value-first ("3.9 mm at the SFJ") vs
+ *  segment-first ("at the SFJ 3.9 mm"), multiple segments in one sentence, and
+ *  verbose connective prose ("…, tapering to 2.8 mm below the knee") all resolve
+ *  correctly — a value lands on whichever segment it sits closest to. */
+function assignNearest(
+  spans: ReadonlyArray<{ index: number }>,
+  values: ReadonlyArray<{ index: number; value: string }>,
+): Map<number, string> {
+  const out = new Map<number, string>();
+  for (const v of values) {
+    let best = -1;
+    let bestDist = Infinity;
+    spans.forEach((s, si) => {
+      const dist = Math.abs(v.index - s.index);
+      if (dist < bestDist) { bestDist = dist; best = si; }
+    });
+    if (best >= 0 && !out.has(best)) out.set(best, v.value);
+  }
+  return out;
+}
+
+const DIAMETER_RE = /(\d+(?:\.\d+)?)\s*(?:mm|millimet(?:er|re)s?)\b/gi;
+const REFLUX_RE =
+  /reflux[^.;]*?(\d+(?:\.\d+)?)\s*(?:s\b|sec\b|seconds?)|(\d+(?:\.\d+)?)\s*seconds?\s+of\s+reflux/gi;
+
+function numbers(text: string, re: RegExp): Array<{ index: number; value: string }> {
+  return [...text.matchAll(new RegExp(re.source, 'gi'))].map((m) => ({
+    index: m.index ?? 0,
+    value: (m[1] ?? m[2]) as string,
+  }));
+}
+
+/**
+ * Extract vein/segment measurements from one leg's findings prose. Two-stage,
+ * so it is robust to BOTH well-separated measurements and dense multi-segment
+ * sentences:
+ *   1. split the prose into measurement clauses (sentence/`;` boundaries, plus a
+ *      conjunction or bare comma that introduces the next measurement) — this
+ *      bounds each measurement to a short span and threads the vein via anaphora;
+ *   2. WITHIN each clause, SEGMENT-ANCHOR: bind every diameter/reflux to the
+ *      segment it sits closest to. Over a short clause "nearest" is unambiguous,
+ *      so a clause carrying two segments ("…at the knee 3.2 mm, tapering to 2.8 mm
+ *      below the knee") places both values correctly, and knee vs below-knee is
+ *      resolved by position, not pattern order.
+ */
 export function extractLegMeasurements(prose: string): Map<string, Cell> {
   const out = new Map<string, Cell>();
-  // Split into clauses on sentence/segment boundaries so each measurement is
-  // scoped to one vein+segment mention. A conjunction ("… and …" / "…, and …")
-  // starts a new clause when it introduces the next measurement — whether that
-  // measurement is written segment-first ("and at the proximal calf 2.8 mm") OR
-  // value-first ("and 2.8 mm at the proximal calf"). The value-first branch is
-  // the real-model phrasing the prod bug exposed: without it the whole compound
-  // sentence stayed one clause and only the FIRST measurement was captured, so a
-  // dictated value (right SSV proximal-calf 2.8) was silently dropped.
+  const NEXT_MEASUREMENT = String.raw`(?:at\s+the|\d+(?:\.\d+)?\s*(?:mm|millimet(?:er|re)s?)\b)`;
   const clauses = prose.split(
-    /(?<=[.;])\s+|[,;]?\s*\band\b(?=\s+(?:at\s+the|\d+(?:\.\d+)?\s*(?:mm|millimet(?:er|re)s?)\b))/i,
+    new RegExp(
+      String.raw`(?<=[.;])\s+|[,;]?\s*\band\b(?=\s+${NEXT_MEASUREMENT})|,\s*(?=${NEXT_MEASUREMENT})`,
+      'i',
+    ),
   );
   let currentVein: string | null = null;
   for (const clause of clauses) {
-    for (const v of VEIN_PATTERNS) {
-      if (v.re.test(clause)) { currentVein = v.key; break; }
-    }
-    if (!currentVein) continue;
-    let segment: string | null = null;
-    for (const s of SEGMENT_PATTERNS) {
-      if (s.re.test(clause)) { segment = s.key; break; }
-    }
-    if (!segment) continue;
-    const label = ROW_LABEL[currentVein]?.[segment];
-    if (!label) continue;
-    const m = parseMeasurement(clause);
-    if (!m) continue;
-    // First mention wins (never overwrite an earlier explicit value).
-    if (!out.has(label)) out.set(label, { diameter: m.diameter, reflux: m.reflux });
+    const veinsHere = findSpans(clause, VEIN_PATTERNS);
+    const segs = findSpans(clause, SEGMENT_PATTERNS);
+    // Vein for a segment: the most recent vein named before it IN THIS CLAUSE,
+    // else the running vein carried across clauses by anaphora.
+    const veinFor = (pos: number): string | null => {
+      let before: string | null = null;
+      for (const v of veinsHere) if (v.index <= pos) before = v.key;
+      return before ?? currentVein;
+    };
+    // Carry the last-named vein forward BEFORE skipping a segment-less clause, so
+    // a vein-only lead-in ("The great saphenous vein is incompetent.") still
+    // anchors the anaphora for the measurement clauses that follow it.
+    if (veinsHere.length > 0) currentVein = veinsHere[veinsHere.length - 1].key;
+    if (segs.length === 0) continue;
+
+    const segDiameter = assignNearest(segs, numbers(clause, DIAMETER_RE));
+    const segReflux = assignNearest(segs, numbers(clause, REFLUX_RE));
+    segs.forEach((s, si) => {
+      const diameter = segDiameter.get(si);
+      if (diameter === undefined) return; // a segment named with no diameter → skip
+      const vein = veinFor(s.index);
+      if (!vein) return;
+      const label = ROW_LABEL[vein]?.[s.key];
+      if (!label) return;
+      // First mention wins (never overwrite an earlier explicit value).
+      if (!out.has(label)) out.set(label, { diameter, reflux: segReflux.get(si) ?? null });
+    });
   }
   return out;
 }
@@ -181,38 +250,62 @@ function findTables(lines: string[]): Array<ParsedTable & { leg: string | null }
   return tables;
 }
 
-/** Is this a venous measurement table (has a DIAMETER or REFLUX column)? */
+/** Is this a measurement table (has a DIAMETER or REFLUX column)? */
 function isMeasurementTable(header: string[]): boolean {
   return header.some((h) => /diameter|reflux/i.test(h));
+}
+
+/** Is this specifically a VENOUS-DUPLEX leg table — the only kind the fixed
+ *  saphenous-segment canon applies to? True when it has a REFLUX column or at
+ *  least one canonical vein-segment row. A non-venous imaging table under the
+ *  ultrasound specialty (e.g. an abdominal-aorta "Segment | Diameter (cm)"
+ *  table) matches neither, so it is left completely untouched — the fixed venous
+ *  canon is never imposed on non-venous anatomy. */
+function isVenousTable(t: ParsedTable): boolean {
+  return (
+    t.header.some((h) => /reflux/i.test(h)) ||
+    t.rows.some((r) => CANONICAL_ORDER.includes(r.label))
+  );
 }
 
 /**
  * Rebuild every venous measurement table in the note to one canonical symmetric
  * row set, recovering any dropped, prose-documented measurement into its cell.
  * Pure. A no-op when the note has no measurement tables.
+ *
+ * SINGLE SOURCE (enforced): the ONLY input is `note` — the final adopted SOAP
+ * body (worker: polished.soapFinal → the signed note). The reconciler NEVER
+ * reads the set-aside/suggestions lane (suggestedClaims). A measurement demoted
+ * out of the adopted note therefore does NOT reappear in a table — tables and
+ * prose can only ever reflect the same adopted note, never disagree by pulling
+ * unadopted content into a cell.
  */
 export function reconcileMeasurementTables(note: string): string {
   const lines = note.split('\n');
-  const tables = findTables(lines).filter((t) => isMeasurementTable(t.header));
+  // Only VENOUS-duplex leg tables get the fixed saphenous canon + prose recovery.
+  // A non-venous imaging table (aorta/thyroid/renal) under the ultrasound
+  // specialty is left untouched — never rebuilt against vein anatomy.
+  const tables = findTables(lines)
+    .filter((t) => isMeasurementTable(t.header))
+    .filter(isVenousTable);
   if (tables.length === 0) return note;
 
-  // Canonical row set = union of every measurement table's rows, in first-seen
-  // order (so a row one leg dropped is still contributed by the other leg). The
-  // template emits both legs identically, so this recovers the full set.
-  const union: string[] = [];
-  const seen = new Set<string>();
+  // Canonical row set = the FIXED conventional segment sequence (CANONICAL_ORDER),
+  // ALWAYS, for BOTH legs, in fixed order — NOT derived from whatever rows the
+  // model happened to emit. Deriving it from the emitted tables (the old
+  // behaviour) let a segment the model dropped from BOTH legs vanish entirely
+  // (the KUK regression: neither leg emitted "GSV at the Knee", so no knee row
+  // existed and the dictated knee diameters had nowhere to land). Any EXTRA row a
+  // venous table defines that the convention doesn't name is preserved, appended
+  // in first-seen order — the reconciler never drops a template-defined row.
+  const extras: string[] = [];
+  const seen = new Set<string>(CANONICAL_ORDER);
   for (const t of tables) {
     for (const r of t.rows) {
-      if (!seen.has(r.label)) { seen.add(r.label); union.push(r.label); }
+      if (!seen.has(r.label)) { seen.add(r.label); extras.push(r.label); }
     }
   }
-  // Order by the conventional segment sequence; keep first-seen order for any
-  // label the convention list doesn't name (stable sort).
-  const rank = (label: string) => {
-    const i = CANONICAL_ORDER.indexOf(label);
-    return i < 0 ? CANONICAL_ORDER.length + union.indexOf(label) : i;
-  };
-  const canonical = [...union].sort((a, b) => rank(a) - rank(b));
+  const canonical = [...CANONICAL_ORDER, ...extras];
 
   // Parse the FINDINGS prose into paragraphs, each with its own measurements.
   const paragraphs = parseFindingsParagraphs(note);
@@ -254,11 +347,13 @@ interface FindingsParagraph {
 }
 
 /** True right/left leg attribution for a paragraph, from an explicit heading /
- *  label / laterality phrase. Ambiguous (both or neither) → null. */
+ *  label / laterality phrase. Ambiguous (both or neither) → null. Leading
+ *  markdown emphasis/heading/quote markers are stripped first so a bold
+ *  "**Left Leg:**" or "### Right leg" label is detected the same as a bare one. */
 function detectLeg(chunk: string): string | null {
-  const t = chunk.toLowerCase();
-  const r = /(^|\n)\s*#{0,4}\s*right(\s+leg| lower extremity)?\b|\bon the right\b/.test(t);
-  const l = /(^|\n)\s*#{0,4}\s*left(\s+leg| lower extremity)?\b|\bon the left\b/.test(t);
+  const t = chunk.toLowerCase().replace(/(^|\n)[ \t]*[*_#>]+[ \t]*/g, '$1');
+  const r = /(^|\n)\s*right(\s+leg| lower extremity)?\b|\bon the right\b/.test(t);
+  const l = /(^|\n)\s*left(\s+leg| lower extremity)?\b|\bon the left\b/.test(t);
   if (r && !l) return 'right';
   if (l && !r) return 'left';
   return null;
