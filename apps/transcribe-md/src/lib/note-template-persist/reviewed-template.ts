@@ -28,6 +28,9 @@ import type {
   ParsedTemplateDraft,
   NoteTemplateSection,
 } from '@/lib/note-template-parse/note-template-schema';
+import type { NoteTemplateHeaderField } from '@/worker/note-templates/system-default-template';
+import { canonicalHeaderKey } from '@/lib/note-template-parse/header-fields';
+import { detectStructuredPhi } from '@/lib/note-template-parse/phi-gate';
 
 export const FormatHintSchema = z.enum(['prose', 'bullets', 'numbered']);
 
@@ -64,6 +67,19 @@ export const ContextDefaultsSchema = z
   })
   .strict();
 
+/** Parsed header/short fields — labels only, round-tripped read-only through
+ *  review (feat/template-header-fields). Values are filled at export, never
+ *  stored here. */
+export const HeaderFieldsSchema = z.array(
+  z
+    .object({
+      key: z.string().trim().min(1).max(60),
+      label: z.string().trim().min(1).max(80),
+      order: z.number().int().min(1).max(50),
+    })
+    .strict()
+);
+
 /** Doctor-level prose style. `.strict()` — no preamble/globalRules accepted. */
 export const ReviewedStyleProfileSchema = z
   .object({
@@ -71,6 +87,8 @@ export const ReviewedStyleProfileSchema = z
     tone: z.string().trim().max(LIM.tone).default(''),
     abbreviations: z.string().trim().max(LIM.abbreviations).nullable().default(null),
     contextDefaults: ContextDefaultsSchema.nullable().default(null),
+    headerFields: HeaderFieldsSchema.max(20).nullable().default(null),
+    formOnlyExport: z.boolean().default(false),
   })
   .strict();
 
@@ -109,6 +127,29 @@ export type ReviewedTemplateInput = z.infer<typeof ReviewedTemplateSchema>;
  *   - the section/styleProfile JSON to persist (after the gate scrubs it).
  *  Re-numbers `order` to 1..n by the submitted order and COERCES
  *  defaultTextMode (rule 2 above). */
+/** Re-derive canonical keys + PHI-guard the round-tripped header fields. The
+ *  client-supplied `key` is IGNORED (re-derived from the label server-side), any
+ *  label the deterministic PHI detector flags is dropped, unrecognized labels
+ *  are dropped, and order is re-numbered 1..n — so a tampered submission can
+ *  neither inject an arbitrary fill key nor persist a patient value. */
+function normalizeHeaderFields(
+  fields: ReviewedTemplateInput['styleProfile']['headerFields']
+): NoteTemplateHeaderField[] | null {
+  if (!fields || fields.length === 0) return null;
+  const seen = new Set<string>();
+  const out: NoteTemplateHeaderField[] = [];
+  for (const f of [...fields].sort((a, b) => a.order - b.order)) {
+    const label = f.label.replace(/\s*:\s*$/, '').trim();
+    if (!label) continue;
+    const key = canonicalHeaderKey(label);
+    if (!key || seen.has(key)) continue;
+    if (detectStructuredPhi(label).length > 0) continue;
+    seen.add(key);
+    out.push({ key, label, order: out.length + 1 });
+  }
+  return out.length > 0 ? out : null;
+}
+
 export function normalizeReviewedTemplate(input: ReviewedTemplateInput): {
   draft: ParsedTemplateDraft;
 } {
@@ -139,6 +180,12 @@ export function normalizeReviewedTemplate(input: ReviewedTemplateInput): {
       tone: input.styleProfile.tone,
       abbreviations: input.styleProfile.abbreviations,
       contextDefaults: input.styleProfile.contextDefaults ?? null,
+      // Header fields round-trip read-only. Re-derive each canonical key from the
+      // label server-side (never trust a client-supplied key), re-number order,
+      // and drop any label the deterministic PHI detector flags — the persisted
+      // template can then carry only clean, label-only header fields.
+      headerFields: normalizeHeaderFields(input.styleProfile.headerFields),
+      formOnlyExport: input.styleProfile.formOnlyExport ?? false,
     },
   };
   return { draft };

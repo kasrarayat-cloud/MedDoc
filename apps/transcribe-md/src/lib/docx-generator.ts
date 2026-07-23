@@ -25,6 +25,7 @@ import {
 
 import {
   type VisitExportData,
+  type RenderedHeaderField,
   prescriptionOneLine,
   formatVisitDate,
 } from './visit-export';
@@ -93,14 +94,24 @@ export async function generateVisitDocx(
   // (N = 2 when minimal visit data, up to 4 with chief complaint
   // + signed). Each cell holds two paragraphs: label on top
   // (bold uppercase muted), value below (regular, larger).
-  children.push(renderPatientInfoBar(data));
+  // feat/template-header-fields: when the doctor's form defines its own labeled
+  // header (PATIENT NAME / DATE OF SURGERY / SURGEON / …), render THAT block in
+  // place of the app's generic patient info bar — same slot, no duplicate
+  // "Patient" line. Deterministically filled; blanks render as "—".
+  if (data.headerFields.length > 0) {
+    children.push(...renderHeaderFieldsBlock(data.headerFields));
+  } else {
+    children.push(renderPatientInfoBar(data));
+  }
   children.push(spacer());
 
   // ── SOAP note ─────────────────────────────────────────────────────
   children.push(...renderSoapParagraphs(data.soapText));
 
   // ── Diagnoses ─────────────────────────────────────────────────────
-  if (data.icdCodes.length > 0) {
+  // feat/template-header-fields: a "form-only" template suppresses these
+  // appended coding/summary blocks so the export is strictly the doctor's form.
+  if (!data.formOnly && data.icdCodes.length > 0) {
     children.push(sectionHeading('Diagnoses'));
     for (const c of data.icdCodes) {
       children.push(
@@ -118,9 +129,8 @@ export async function generateVisitDocx(
 
   // ── Procedures / E&M ─────────────────────────────────────────────
   if (
-    data.em ||
-    data.procedures.length > 0 ||
-    data.modifiers.length > 0
+    !data.formOnly &&
+    (data.em || data.procedures.length > 0 || data.modifiers.length > 0)
   ) {
     children.push(sectionHeading('Procedures / E&M'));
     if (data.em) {
@@ -167,7 +177,7 @@ export async function generateVisitDocx(
   // Prescriptions only. The Rx safety-warning banner + [SEVERITY] blocks are
   // internal review chrome: they stay on the review screen and in the audit
   // trail (rx-warning-audit) but never render in an exported clinical document.
-  if (data.prescriptions.length > 0) {
+  if (!data.formOnly && data.prescriptions.length > 0) {
     children.push(sectionHeading('Medications'));
     for (const rx of data.prescriptions) {
       children.push(
@@ -181,7 +191,7 @@ export async function generateVisitDocx(
   }
 
   // ── Referrals ────────────────────────────────────────────────────
-  if (data.referrals.length > 0) {
+  if (!data.formOnly && data.referrals.length > 0) {
     children.push(sectionHeading('Referrals'));
     for (const r of data.referrals) {
       children.push(
@@ -223,7 +233,7 @@ export async function generateVisitDocx(
   }
 
   // ── Patient summary ──────────────────────────────────────────────
-  if (data.patientSummary) {
+  if (!data.formOnly && data.patientSummary) {
     children.push(sectionHeading('Patient Summary'));
     for (const block of data.patientSummary.trim().split(/\n\n+/)) {
       children.push(
@@ -302,6 +312,22 @@ export async function generateVisitDocx(
  *  fields (2 minimum — Patient + Visit Date; up to 4 with Chief
  *  Complaint + Status). Cell layout mirrors PDF T-M21.2: label
  *  on top (bold, uppercase, muted), value below (regular, larger). */
+/** Render the doctor's parsed form header (feat/template-header-fields) as a
+ *  compact labeled block — one line per field, "LABEL: value", with a blank
+ *  value shown as "—". Presentation-only; values were filled deterministically. */
+function renderHeaderFieldsBlock(fields: RenderedHeaderField[]): Paragraph[] {
+  return fields.map(
+    (f) =>
+      new Paragraph({
+        spacing: { after: 40 },
+        children: [
+          new TextRun({ text: `${f.label}: `, bold: true }),
+          new TextRun({ text: f.value.trim() ? f.value.trim() : '—' }),
+        ],
+      })
+  );
+}
+
 function renderPatientInfoBar(data: VisitExportData): Table {
   const cells: Array<{ label: string; value: string }> = [
     { label: 'Patient', value: data.patientName?.trim() || 'Anonymous' },

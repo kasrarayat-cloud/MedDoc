@@ -9,6 +9,7 @@
 
 import type { TranscribeVisitStatus } from '@prisma/client';
 import { EMPTY_SECTION_PLACEHOLDER } from './soap-format';
+import type { NoteTemplateHeaderField } from '@/worker/note-templates/system-default-template';
 
 // ----------------------------------------------------------------------------
 // Wire types — duplicated from worker/layers/* so this module can be
@@ -141,6 +142,115 @@ export interface VisitExportData {
   rxWarnings: RxWarning[];
   referrals: Referral[];
   patientSummary: string | null;
+
+  /** The doctor's parsed form header fields (feat/template-header-fields),
+   *  deterministically filled for THIS visit (label + value; value '' = blank).
+   *  Empty for templates without a header block. Rendered at the top of the
+   *  styled export, in order. */
+  headerFields: RenderedHeaderField[];
+  /** "Form-only export": when true, suppress the appended Diagnoses /
+   *  Procedures / Medications / Referrals / Patient Summary blocks. */
+  formOnly: boolean;
+}
+
+/** A header field resolved for one visit: the doctor's label + the filled value
+ *  ('' when blank / not dictated). Presentation-only. */
+export interface RenderedHeaderField {
+  label: string;
+  value: string;
+}
+
+// A surgeon must be EXPLICITLY attributed with an OPERATING role — an operating
+// surgeon / performed by / proceduralist attribution, or a labeled "SURGEON:"
+// field. A BARE mid-sentence "surgeon" is intentionally NOT matched: it grabs a
+// referring/consulting surgeon or even the PATIENT's own occupation ("the
+// patient is a surgeon, Dr. Jane Patient") — wrong-physician / patient-name
+// contamination of a signed export. The negative lookbehind additionally rejects
+// "referring/consulting/… surgeon:". Case-INSENSITIVE for the attribution…
+const SURGEON_CONTEXT_RE =
+  /(?<!\b(?:referring|consulting|usual|prior|previous)\s{1,3})(?:\b(?:operating\s+surgeon|proceduralist|performing\s+(?:surgeon|physician|provider))\b(?:\s+(?:was|is))?\s*[:,]?|\bperformed(?:\s+\w+){0,2}\s+by\b|\bsurgeon\s*:)\s*/i;
+// …but the NAME is matched CASE-SENSITIVELY (real uppercase first letters) so a
+// following lowercase word ("performed") is never swallowed into the name.
+const SURGEON_NAME_RE = /^(Dr\.?\s+[A-Z][A-Za-z.'’-]+(?:\s+[A-Z][A-Za-z.'’-]+){0,2})/;
+
+/** Extract an explicitly-attributed surgeon name ("Dr. X") from the dictated
+ *  note. Returns null when not clearly stated (→ blank field). Conservative +
+ *  deterministic; NEVER AI, never the account holder. */
+export function extractSurgeonFromNote(soapText: string): string | null {
+  const ctx = soapText.match(SURGEON_CONTEXT_RE);
+  if (!ctx || ctx.index === undefined) return null;
+  const name = soapText.slice(ctx.index + ctx[0].length).match(SURGEON_NAME_RE);
+  if (!name) return null;
+  // Strip a trailing sentence period/comma; internal "Dr." period is preserved.
+  return name[1].replace(/[.,;]+$/, '').replace(/\s+/g, ' ').trim();
+}
+
+/** A header field LABEL is a short generic form label ("PATIENT NAME", "DATE OF
+ *  SURGERY"). It must NOT look like it carries data. This is the render-seam
+ *  DEFENSE-IN-DEPTH backstop: the primary guard is the ^…$-anchored canonical-key
+ *  match at every WRITE seam, but the structured-PHI detector is blind to a bare
+ *  name (no digits), so if a write-seam guard were ever loosened a name could sit
+ *  in a stored label. Re-validating here means a malformed/tampered stored row
+ *  can never render a patient value. Rejects digits, over-long, or many-word
+ *  labels. Pure. */
+export function isSafeHeaderLabel(label: string): boolean {
+  const t = label.trim();
+  return t.length > 0 && t.length <= 40 && !/\d/.test(t) && t.split(/\s+/).length <= 5;
+}
+
+/** Shape-guard header fields read from a template's styleProfile JSONB into the
+ *  typed array (drops malformed entries + labels that fail the safety backstop).
+ *  Pure. */
+export function coerceHeaderFields(raw: unknown): NoteTemplateHeaderField[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((f) => {
+    if (!f || typeof f !== 'object') return [];
+    const o = f as Record<string, unknown>;
+    if (typeof o.key !== 'string' || typeof o.label !== 'string' || typeof o.order !== 'number') {
+      return [];
+    }
+    if (!isSafeHeaderLabel(o.label)) return [];
+    return [{ key: o.key, label: o.label, order: o.order }];
+  });
+}
+
+/**
+ * Deterministically fill a template's header fields for the styled export.
+ * Same rule class as context defaults + the native DATE OF PROCEDURE fill:
+ *   - patient_name    → the visit's patient name (visit record)
+ *   - date_of_surgery → the visit date (signed/created — visit record)
+ *   - surgeon         → an explicit surgeon attribution in the note, else blank
+ *   - patient_dob / patient_id / anything else → blank unless dictated (never
+ *     inferred — DOB/ID are never guessed)
+ * NEVER AI. Preserves template order. A blank value ('') is rendered as an
+ * honest blank by the generators.
+ */
+export function resolveHeaderFields(
+  headerFields: NoteTemplateHeaderField[] | null | undefined,
+  ctx: { patientName: string | null; visitDate: Date; soapText: string }
+): RenderedHeaderField[] {
+  if (!headerFields || headerFields.length === 0) return [];
+  const surgeon = extractSurgeonFromNote(ctx.soapText);
+  return [...headerFields]
+    .sort((a, b) => a.order - b.order)
+    .map((f) => {
+      let value = '';
+      switch (f.key) {
+        case 'patient_name':
+          value = (ctx.patientName ?? '').trim();
+          break;
+        case 'date_of_surgery':
+          value = formatVisitDate(ctx.visitDate);
+          break;
+        case 'surgeon':
+          value = surgeon ?? '';
+          break;
+        // patient_dob, patient_id, and any unmapped field: blank unless dictated.
+        default:
+          value = '';
+      }
+      return { label: f.label, value };
+    });
 }
 
 /** Human-readable short date used in filenames + PDF headers. */

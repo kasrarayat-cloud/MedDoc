@@ -85,6 +85,11 @@ export async function saveNoteTemplateAction(
     // safety field; validated at generation against the template's own
     // options). Null when unset.
     contextDefaults: gate.template.styleProfile.contextDefaults ?? null,
+    // feat/template-header-fields: labeled header/short fields (labels only) for
+    // the styled export, and the form-only export preference. Export-only —
+    // note-gen ignores them.
+    headerFields: gate.template.styleProfile.headerFields ?? null,
+    formOnlyExport: gate.template.styleProfile.formOnlyExport ?? false,
   } as unknown as Prisma.InputJsonValue;
   const flags = gate.flags;
 

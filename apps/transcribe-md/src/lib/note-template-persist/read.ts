@@ -8,6 +8,7 @@
 // ============================================================================
 
 import prisma from '@meddoc/db';
+import { coerceHeaderFields } from '@/lib/visit-export';
 import type {
   NoteTemplateSection,
   ParsedStyleProfile,
@@ -30,6 +31,14 @@ function asStyleProfile(json: unknown): ParsedStyleProfile {
     tense: typeof o.tense === 'string' ? o.tense : null,
     tone: typeof o.tone === 'string' ? o.tone : '',
     abbreviations: typeof o.abbreviations === 'string' ? o.abbreviations : null,
+    // feat/template-header-fields: carry parsed header fields + form-only pref
+    // into the edit-existing review model (labels only). Loosely shaped here;
+    // the save path re-validates + re-derives keys + re-PHI-scans.
+    headerFields: (() => {
+      const a = coerceHeaderFields(o.headerFields);
+      return a.length > 0 ? a : null;
+    })(),
+    formOnlyExport: typeof o.formOnlyExport === 'boolean' ? o.formOnlyExport : false,
   };
 }
 
