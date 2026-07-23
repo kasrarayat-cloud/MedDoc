@@ -550,6 +550,12 @@ services:
       # container — no rebuild needed because /visits/[id]/page.tsx
       # is a server component reading process.env at request time.
       NEXT_PUBLIC_SHOW_PIPELINE_TAB: ${NEXT_PUBLIC_SHOW_PIPELINE_TAB:-}
+      # feat/pdf-native-fill: runtime gate for PDF native fill. Read SERVER-SIDE
+      # in nativePdfExport (the /export/pdf route handler), so flipping it "true"
+      # on the host + force-recreating the container takes effect with NO rebuild.
+      # Default OFF (styled export byte-identical); only CERTIFIED PDF templates
+      # are affected even when ON. ROLLBACK: unset it + force-recreate.
+      NEXT_PUBLIC_TEMPLATE_NATIVE_PDF: ${NEXT_PUBLIC_TEMPLATE_NATIVE_PDF:-}
       # Phase 7-QA: comma-separated allowlist of email domains whose
       # signups skip the verification-email dispatch and stamp
       # emailVerified immediately. Production should hold ONLY the
