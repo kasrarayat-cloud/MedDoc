@@ -15,6 +15,7 @@ vi.mock('@/lib/audit', () => ({ logAudit: vi.fn() }));
 import {
   dropIncoherentVaricoseCodes,
   dropDenialContradictedCodes,
+  dropUnsupportedDeficiencyCodes,
 } from '../07a-icd-coding';
 import type { IcdCode } from '../07a-icd-coding';
 
@@ -26,6 +27,11 @@ function code(c: string, description = ''): IcdCode {
     confidence: 0.9,
     confidenceLevel: 'high',
   };
+}
+
+/** Same, but with an explicit evidence_quote — the deficiency guard reads it. */
+function codeEv(c: string, evidence_quote: string, description = ''): IcdCode {
+  return { code: c, description: description || c, evidence_quote, confidence: 0.9, confidenceLevel: 'high' };
 }
 
 describe('dropIncoherentVaricoseCodes', () => {
@@ -203,5 +209,143 @@ describe('dropDenialContradictedCodes (denial-vs-code coherence)', () => {
         'No abdominal pain, no reflux, no early satiety.'
       ).length
     ).toBe(0);
+  });
+});
+
+describe('dropUnsupportedDeficiencyCodes (E50–E64 deficiency-family coherence)', () => {
+  // Principle: no unspecified deficiency-family code from prophylactic
+  // supplementation / missed doses / ordered-but-unresulted labs ALONE.
+  // Only-remove, support-preserving.
+
+  // Regression: KUK #4 (post-bariatric plan) — prophylactic multivitamin/D3/B12
+  // to PREVENT deficiency hoisted E63.9 with no deficiency ever diagnosed.
+  it('drops E63.9 when its only support is prophylactic supplementation to PREVENT deficiency (KUK #4)', () => {
+    const note =
+      '## Plan\nStarted on chewable multivitamin, vitamin D3 2000 units daily, and B12 to prevent nutritional deficiency after sleeve.';
+    const out = dropUnsupportedDeficiencyCodes(
+      [
+        code('E66.01'),
+        codeEv('E63.9', 'Started on chewable multivitamin ... to prevent nutritional deficiency'),
+        code('Z98.84'),
+      ],
+      note
+    );
+    expect(out.map((c) => c.code)).toEqual(['E66.01', 'Z98.84']);
+  });
+
+  // The E53.8 case — prophylactic B-complex supplementation, no B-vitamin
+  // deficiency documented.
+  it('drops E53.8 when B-complex is prophylactic (no deficiency documented)', () => {
+    const note = '## Plan\nContinue daily B-complex supplement per bariatric protocol.';
+    expect(
+      dropUnsupportedDeficiencyCodes([codeEv('E53.8', 'Continue daily B-complex supplement')], note).length
+    ).toBe(0);
+  });
+
+  // Missed doses / ordered-but-unresulted labs — neither establishes a diagnosis.
+  it('drops on missed doses alone and on ordered-but-unresulted labs alone', () => {
+    expect(
+      dropUnsupportedDeficiencyCodes(
+        [codeEv('E55.9', 'Patient missed several doses of vitamin D')],
+        'Patient missed several doses of vitamin D.'
+      ).length
+    ).toBe(0);
+    expect(
+      dropUnsupportedDeficiencyCodes(
+        [codeEv('E61.1', 'Ordered iron studies, results pending')],
+        'Ordered iron studies; will recheck B12 and folate levels next visit.'
+      ).length
+    ).toBe(0);
+  });
+
+  // Support-preserving — an AFFIRMATIVE deficiency diagnosis is NEVER dropped.
+  it('KEEPS E53.8 when a B12 deficiency is affirmatively documented (with a low level)', () => {
+    const note = '## Assessment\nVitamin B12 deficiency, level 180. Start B12 injections.';
+    const out = dropUnsupportedDeficiencyCodes(
+      [codeEv('E53.8', 'Start B12 injections'), code('D51.9')],
+      note
+    );
+    expect(out.map((c) => c.code)).toEqual(['E53.8', 'D51.9']);
+  });
+
+  it('KEEPS E55.9 when its OWN evidence asserts the deficiency (insufficiency counts)', () => {
+    expect(
+      dropUnsupportedDeficiencyCodes(
+        [codeEv('E55.9', 'Vitamin D insufficiency documented; start supplementation')],
+        '## Assessment\nVitamin D insufficiency; start supplementation.'
+      ).map((c) => c.code)
+    ).toEqual(['E55.9']);
+  });
+
+  it('a documented deficiency VETOES the drop for the whole family (support-preserving)', () => {
+    // Iron deficiency is documented; a companion prophylactic B12 code rides along
+    // — conservative keep (never suppress a documented deficiency).
+    const note = '## Assessment\nIron deficiency anemia. ## Plan\nB12 supplement prophylactically.';
+    const out = dropUnsupportedDeficiencyCodes(
+      [codeEv('E61.1', 'iron deficiency anemia'), codeEv('E53.8', 'B12 supplement prophylactically')],
+      note
+    );
+    expect(out.map((c) => c.code)).toEqual(['E61.1', 'E53.8']);
+  });
+
+  it('never touches non-deficiency-family codes and preserves order', () => {
+    const out = dropUnsupportedDeficiencyCodes(
+      [code('E66.01'), code('I10'), codeEv('E63.9', 'multivitamin to prevent deficiency'), code('K76.0')],
+      'Started multivitamin to prevent deficiency.'
+    );
+    expect(out.map((c) => c.code)).toEqual(['E66.01', 'I10', 'K76.0']);
+  });
+
+  it('empty note / empty codes are safe no-ops', () => {
+    expect(dropUnsupportedDeficiencyCodes([], 'anything')).toEqual([]);
+    // No evidence framing at all → ambiguous → conservative keep.
+    expect(
+      dropUnsupportedDeficiencyCodes([codeEv('E63.9', 'nutritional status reviewed')], '').map((c) => c.code)
+    ).toEqual(['E63.9']);
+  });
+
+  it('veto still fires when an incidental exam word co-occurs in the deficiency clause (GUARD-1)', () => {
+    // "Vitamin D deficiency and lower extremity weakness" — "lower" must NOT read
+    // as preventive framing; the documented deficiency vetoes the family drop.
+    const note = '## Assessment\nVitamin D deficiency and lower extremity weakness.\n## Plan\nB12 supplement prophylactically; monitor and reduce fall risk.';
+    const out = dropUnsupportedDeficiencyCodes(
+      [codeEv('E55.9', 'Vitamin D deficiency'), codeEv('E53.8', 'B12 supplement prophylactically')],
+      note
+    );
+    expect(out.map((c) => c.code)).toEqual(['E55.9', 'E53.8']);
+  });
+
+  it('KEEPS a documented deficiency when a later negation modifies a DIFFERENT verb (negation-scope hole)', () => {
+    // "B12 deficiency NOT fully corrected" — the "not" negates "corrected", not
+    // the deficiency; the deficiency is real + active → E53.8 must be kept.
+    const note = 'B12 deficiency not fully corrected despite repletion.';
+    expect(
+      dropUnsupportedDeficiencyCodes(
+        [codeEv('E53.8', 'B12 deficiency not fully corrected despite repletion')],
+        note
+      ).map((c) => c.code)
+    ).toEqual(['E53.8']);
+    // Symmetric: "iron deficiency, could not tolerate oral iron" keeps E61.1.
+    expect(
+      dropUnsupportedDeficiencyCodes(
+        [codeEv('E61.1', 'iron deficiency, could not tolerate oral iron')],
+        'Iron deficiency; could not tolerate oral iron, switched to IV.'
+      ).length
+    ).toBe(1);
+    // But a genuine resolution qualifier right after DOES defeat it (drop path):
+    expect(
+      dropUnsupportedDeficiencyCodes(
+        [codeEv('E55.9', 'started on vitamin D supplementation')],
+        'Prior vitamin D deficiency resolved; continue vitamin D supplementation.'
+      ).length
+    ).toBe(0);
+  });
+
+  it('does not disturb the K21.9-denial and I83.9x guards on a shared code list', () => {
+    // A code list carrying all four regression families: the deficiency guard
+    // only governs E50–E64 and must leave the rest for their own guards.
+    const codes = [code('K21.9'), code('I83.90'), codeEv('E63.9', 'multivitamin supplement'), code('E66.01')];
+    const out = dropUnsupportedDeficiencyCodes(codes, 'Started multivitamin supplement daily.');
+    expect(out.map((c) => c.code)).toEqual(['K21.9', 'I83.90', 'E66.01']);
   });
 });

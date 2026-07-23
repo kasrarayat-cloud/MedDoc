@@ -73,6 +73,27 @@ describe('fillPdfTemplate', () => {
     expect(text).toContain('Finding 39'); // the tail flowed to the continuation
   });
 
+  it('renders off-form note sections on a labeled "Additional documentation" page (addendum rule)', async () => {
+    const out = await fillPdfTemplate({
+      canvasPdf: await makeCanvas(),
+      anchors: ANCHORS,
+      texts: { procedure: 'Colonoscopy.' },
+      addenda: [
+        { label: 'FINDINGS', text: 'Two 4 mm polyps in the sigmoid colon, removed.' },
+        { label: 'IMPRESSION', text: 'Tubular adenomas; surveillance in 5 years.' },
+      ],
+    });
+    const doc = await PDFDocument.load(out);
+    expect(doc.getPageCount()).toBe(2); // original form + 1 addendum page
+    const text = await pdfText(out);
+    expect(text).toContain('ADDITIONAL DOCUMENTATION');
+    expect(text).toContain('FINDINGS');
+    expect(text).toContain('sigmoid colon'); // the off-form content is never dropped
+    expect(text).toContain('IMPRESSION');
+    // The doctor's form page 1 still carries only its own ink + the anchored fill.
+    expect(text).toContain('PROCEDURE:');
+  });
+
   it('draws the signed-status line in the bottom margin', async () => {
     const out = await fillPdfTemplate({
       canvasPdf: await makeCanvas(),
