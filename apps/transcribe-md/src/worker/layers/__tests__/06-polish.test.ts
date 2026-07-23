@@ -49,7 +49,7 @@ vi.mock('@/worker/finalize-review-state', () => ({
   applyAdditiveReviewState: mocks.applyAdditiveReviewState,
 }));
 
-import { runLayer6Polish, type Layer6Input } from '../06-polish';
+import { runLayer6Polish, stripModelPreamble, type Layer6Input } from '../06-polish';
 import type { ResolvedNoteTemplate } from '../../note-templates/build-soap-prompt';
 import type {
   CritiqueReport,
@@ -143,6 +143,29 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+});
+
+describe('stripModelPreamble', () => {
+  it('strips a leading refusal preamble before the first heading (the KUK op-note prod leak)', () => {
+    const note =
+      'I cannot apply Issue #1 as described, because it conflicts with the required headings.\n\n---\n\n## PROCEDURE:\n_[set aside]_\n\n## RECOMMENDATIONS:\nFollow up.';
+    expect(stripModelPreamble(note)).toBe(
+      '## PROCEDURE:\n_[set aside]_\n\n## RECOMMENDATIONS:\nFollow up.'
+    );
+  });
+
+  it('is a no-op when the note already starts with a heading', () => {
+    const note = '## Subjective\nPatient well.';
+    expect(stripModelPreamble(note)).toBe(note);
+  });
+
+  it('ignores a mid-line "#" ("Issue #1") — only line-start headings anchor the note', () => {
+    expect(stripModelPreamble('Refusing Issue #1 here.\n## PLAN\nx')).toBe('## PLAN\nx');
+  });
+
+  it('does not strip when there is no heading at all (validator owns that class)', () => {
+    expect(stripModelPreamble('no headings here')).toBe('no headings here');
+  });
 });
 
 describe('runLayer6Polish — passthrough branch (no fixable issues)', () => {
