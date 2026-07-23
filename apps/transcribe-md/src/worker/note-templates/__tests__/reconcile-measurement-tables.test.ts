@@ -81,8 +81,9 @@ describe('reconcileMeasurementTables', () => {
       '',
     ].join('\n');
     const out = reconcileMeasurementTables(note);
-    expect(out).toMatch(/GSV at the SFJ \| 6\.2 mm \| competent \|/);
-    expect(out).not.toMatch(/GSV at the SFJ \| \[not documented\]/);
+    expect(out).toMatch(/\| GSV at the SFJ \| 6\.2 mm \| competent \|/);
+    // Anchor the leading pipe so "GSV at the SFJ" can't match inside "AAGSV at the SFJ".
+    expect(out).not.toMatch(/\| GSV at the SFJ \| \[not documented\]/);
   });
 
   it('does NOT cross-attribute a value to the wrong leg when prose is unmarked/ambiguous — W1', () => {
@@ -230,5 +231,175 @@ describe('reconcileMeasurementTables — value-first prod regression', () => {
   it('does not cross-attribute: left SSV proximal calf stays undocumented', () => {
     const left = out.split('— Left Leg')[1];
     expect(left).toMatch(/SSV at the Proximal Calf \| \[not documented\] \| \[not documented\] \|/);
+  });
+});
+
+// ============================================================================
+// KUK regression (2026-07-23): left-detailed / right-screening ultrasound.
+// Three defects in one visit:
+//  1. Both tables emitted only 9 rows (no "GSV at the Knee") — the canon was
+//     DERIVED from the union of emitted rows, so a segment the model dropped
+//     from BOTH legs vanished and its dictated diameters had nowhere to land.
+//  2. Serial diameter-only phrasing "…at the proximal thigh 3.6 mm, and at the
+//     knee 3.1 mm" — the comma-separated middle value (3.6) never extracted.
+//  3. The right-leg paragraph was SET-ASIDE (in the suggestions lane, not the
+//     adopted note); its right GSV-knee 3.0 must NOT be recovered — the
+//     reconciler reads the adopted note ONLY.
+// ============================================================================
+describe('KUK regression — fixed 10-row canon + comma-serial extraction + single source', () => {
+  const KUK = [
+    '## FINDINGS',
+    '',
+    '**Left Leg:** There is reflux in the superficial system.  The small saphenous vein is incompetent from the saphenopopliteal junction to the mid calf.  At the saphenopopliteal junction the small saphenous vein measures 5.4 mm with reflux of 2.9 seconds, and at the proximal calf it measures 4.7 mm with reflux of 2.2 seconds.  The great saphenous vein is competent — at the saphenofemoral junction it measures 3.9 mm with reflux of 0.3 seconds, at the proximal thigh 3.6 mm, and at the knee 3.1 mm.  The anterior accessory great saphenous vein at the saphenofemoral junction measures 2.9 mm with no reflux.',
+    '',
+    '## DIAMETER AND REFLUX TIME — Right Leg',
+    '| Segment | DIAMETER (mm) | REFLUX TIME (seconds) |',
+    '| --- | --- | --- |',
+    '| GSV at the SFJ | 3.8 | 0.2 |',
+    '| GSV at the Proximal Thigh | [not documented] | [not documented] |',
+    '| GSV Below Knee | [not documented] | [not documented] |',
+    '| SSV at the SPJ | 2.6 | — |',
+    '| SSV at the Proximal Calf | [not documented] | [not documented] |',
+    '| AAGSV at the SFJ | [not documented] | [not documented] |',
+    '| AAGSV at the Proximal Thigh | [not documented] | [not documented] |',
+    '| PAGSV at the SFJ | [not documented] | [not documented] |',
+    '| PAGSV at the Proximal Thigh | [not documented] | [not documented] |',
+    '',
+    '## DIAMETER AND REFLUX TIME — Left Leg',
+    '| Segment | DIAMETER (mm) | REFLUX TIME (seconds) |',
+    '| --- | --- | --- |',
+    '| GSV at the SFJ | 3.9 | 0.3 |',
+    '| GSV at the Proximal Thigh | [not documented] | [not documented] |',
+    '| GSV Below Knee | [not documented] | [not documented] |',
+    '| SSV at the SPJ | 5.4 | 2.9 |',
+    '| SSV at the Proximal Calf | 4.7 | 2.2 |',
+    '| AAGSV at the SFJ | 2.9 | [not documented] |',
+    '| AAGSV at the Proximal Thigh | [not documented] | [not documented] |',
+    '| PAGSV at the SFJ | [not documented] | [not documented] |',
+    '| PAGSV at the Proximal Thigh | [not documented] | [not documented] |',
+    '',
+    '## IMPRESSION',
+  ].join('\n');
+  const out = reconcileMeasurementTables(KUK);
+
+  const CANON = [
+    'GSV at the SFJ', 'GSV at the Proximal Thigh', 'GSV at the Knee', 'GSV Below Knee',
+    'SSV at the SPJ', 'SSV at the Proximal Calf', 'AAGSV at the SFJ',
+    'AAGSV at the Proximal Thigh', 'PAGSV at the SFJ', 'PAGSV at the Proximal Thigh',
+  ];
+  const rowLabels = (block: string) =>
+    (block.match(/^\| ([A-Z][^|]*?) \|/gm) || [])
+      .map((m) => m.replace(/^\| | \|$/g, '').trim())
+      .filter((label) => !/^segment$|diameter|reflux/i.test(label)); // drop the header cell
+
+  it('rebuilds BOTH legs to the fixed canonical 10-row set, in fixed order', () => {
+    const right = rowLabels(out.split('— Left Leg')[0].split('— Right Leg')[1]);
+    const left = rowLabels(out.split('— Left Leg')[1]);
+    expect(right).toEqual(CANON);
+    expect(left).toEqual(CANON); // 10 = 10, symmetric
+  });
+
+  it('recovers the comma-serial left GSV proximal-thigh 3.6 (was prose-only)', () => {
+    expect(out.split('— Left Leg')[1]).toMatch(/GSV at the Proximal Thigh \| 3\.6 \|/);
+  });
+
+  it('recovers the left GSV knee 3.1 into the now-present knee row', () => {
+    expect(out.split('— Left Leg')[1]).toMatch(/GSV at the Knee \| 3\.1 \|/);
+  });
+
+  it('SINGLE SOURCE: the set-aside right GSV-knee 3.0 is NOT recovered (not in the adopted note)', () => {
+    const right = out.split('— Left Leg')[0];
+    expect(right).toMatch(/GSV at the Knee \| \[not documented\] \| \[not documented\] \|/);
+    expect(out).not.toMatch(/\| 3\.0 \|/);
+  });
+
+  it('preserves the model right-leg table values (3.8/0.2, 2.6) verbatim', () => {
+    const right = out.split('— Left Leg')[0];
+    expect(right).toMatch(/GSV at the SFJ \| 3\.8 \| 0\.2 \|/);
+    expect(right).toMatch(/SSV at the SPJ \| 2\.6 \| — \|/);
+  });
+
+  it('never invents — undictated left segments stay [not documented]', () => {
+    expect(out.split('— Left Leg')[1]).toMatch(/GSV Below Knee \| \[not documented\] \| \[not documented\] \|/);
+  });
+});
+
+describe('extractLegMeasurements — comma-serial diameter-only + bold leg label', () => {
+  it('captures each measurement in a comma-separated serial list (KUK phrasing)', () => {
+    const m = extractLegMeasurements(
+      'The great saphenous vein is competent — at the saphenofemoral junction it measures 3.9 mm with reflux of 0.3 seconds, at the proximal thigh 3.6 mm, and at the knee 3.1 mm.',
+    );
+    expect(m.get('GSV at the SFJ')).toEqual({ diameter: '3.9', reflux: '0.3' });
+    expect(m.get('GSV at the Proximal Thigh')?.diameter).toBe('3.6');
+    expect(m.get('GSV at the Knee')?.diameter).toBe('3.1');
+  });
+});
+
+describe('non-venous imaging tables are left untouched (BLOCK fix)', () => {
+  it('does NOT inject saphenous rows into an abdominal-aorta table', () => {
+    const note = [
+      '## FINDINGS', 'The abdominal aorta is normal in caliber.', '',
+      '## AORTIC DIAMETERS',
+      '| Segment | Diameter (cm) |',
+      '| --- | --- |',
+      '| Proximal aorta | 2.1 |',
+      '| Mid aorta | 1.9 |',
+      '| Distal aorta | 1.8 |',
+      '',
+    ].join('\n');
+    const out = reconcileMeasurementTables(note);
+    expect(out).toBe(note); // no reflux column, no canonical vein rows → untouched
+    expect(out).not.toMatch(/GSV|SSV|AAGSV|PAGSV/);
+  });
+
+  it('still reconciles a venous table that sits alongside a non-venous one', () => {
+    const note = [
+      '## FINDINGS', 'On the left the great saphenous vein at the knee measures 3.4 mm.', '',
+      '## AORTIC DIAMETERS',
+      '| Segment | Diameter (cm) |', '| --- | --- |', '| Proximal aorta | 2.1 |', '',
+      '## DIAMETER AND REFLUX TIME — Left Leg',
+      '| DIAMETER (mm) | REFLUX TIME (seconds) |', '| --- | --- |',
+      '| GSV at the SFJ | 4.2 | 0.3 |', '',
+    ].join('\n');
+    const out = reconcileMeasurementTables(note);
+    // The aortic block (between its heading and the next ## heading) is untouched.
+    const aorticBlock = out.split('## AORTIC DIAMETERS')[1].split('## DIAMETER')[0];
+    expect(aorticBlock).toMatch(/Proximal aorta \| 2\.1 \|/);
+    expect(aorticBlock).not.toMatch(/GSV|SSV|AAGSV|PAGSV/); // no vein rows injected into the aorta table
+    const venous = out.split('— Left Leg')[1];
+    expect(venous).toMatch(/GSV at the Knee \| 3\.4 \|/); // venous table reconciled + recovered
+  });
+});
+
+describe('extractLegMeasurements — segment-anchored, multi-segment & connective prose', () => {
+  it('captures a trailing measurement after a non-splitting connective ("tapering to")', () => {
+    const m = extractLegMeasurements(
+      'The great saphenous vein is competent throughout — at the saphenofemoral junction it measures 3.9 mm with reflux of 0.3 seconds, at the proximal thigh 3.6 mm, and the vein stays patent at the knee where it measures 3.2 mm, tapering to 2.8 mm below the knee.',
+    );
+    expect(m.get('GSV at the SFJ')).toEqual({ diameter: '3.9', reflux: '0.3' });
+    expect(m.get('GSV at the Proximal Thigh')?.diameter).toBe('3.6');
+    expect(m.get('GSV at the Knee')?.diameter).toBe('3.2');
+    expect(m.get('GSV Below Knee')?.diameter).toBe('2.8');
+  });
+
+  it('does NOT mis-assign knee vs below-knee in a "…at the knee, while below the knee…" list', () => {
+    const m = extractLegMeasurements(
+      'The great saphenous vein is diffusely incompetent. It measures 4.4 mm at the saphenofemoral junction with 3.8 seconds of reflux, at the proximal thigh 3.9 mm, and 3.2 mm at the knee, while below the knee the vein tapers to 2.6 mm.',
+    );
+    expect(m.get('GSV at the SFJ')).toEqual({ diameter: '4.4', reflux: '3.8' });
+    expect(m.get('GSV at the Proximal Thigh')?.diameter).toBe('3.9');
+    expect(m.get('GSV at the Knee')?.diameter).toBe('3.2');
+    expect(m.get('GSV Below Knee')?.diameter).toBe('2.6');
+  });
+
+  it('handles a semicolon serial that switches veins mid-paragraph', () => {
+    const m = extractLegMeasurements(
+      'The great saphenous vein was insonated in the standing position. At the saphenofemoral junction it measures 6.2 mm with 2.8 seconds of reflux; in the proximal thigh the vein is 5.4 mm and competent; at the knee it measures 4.1 mm with 1.9 seconds of reflux; turning to the small saphenous vein, at the saphenopopliteal junction it is 3.6 mm and at the proximal calf 3.2 mm.',
+    );
+    expect(m.get('GSV at the SFJ')?.diameter).toBe('6.2');
+    expect(m.get('GSV at the Proximal Thigh')?.diameter).toBe('5.4');
+    expect(m.get('GSV at the Knee')).toEqual({ diameter: '4.1', reflux: '1.9' });
+    expect(m.get('SSV at the SPJ')?.diameter).toBe('3.6');
+    expect(m.get('SSV at the Proximal Calf')?.diameter).toBe('3.2');
   });
 });
