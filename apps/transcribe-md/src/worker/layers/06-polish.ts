@@ -108,6 +108,17 @@ export function isAdditiveFix(draft: string, issue: CritiqueIssue): boolean {
   return novel.length >= 3;
 }
 
+/** Remove any leading model prose before the first markdown heading. The polish
+ *  prompt forbids preamble, but a suggested fix that conflicts with the custom
+ *  structure lock can make the model explain its refusal in prose ("I cannot
+ *  apply Issue #1…"). A clinical note always begins with a heading, so anything
+ *  before the first `#`-heading is not note content. No-op when the note already
+ *  starts with a heading or has none. */
+export function stripModelPreamble(text: string): string {
+  const idx = text.search(/^#{1,6}\s/m);
+  return idx > 0 ? text.slice(idx) : text;
+}
+
 export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output> {
   const { fixable: fixableAll, unfixable } = classifyCritique(input.critique);
   const deferredAdditive = fixableAll.filter((i) => isAdditiveFix(input.soapDraft, i));
@@ -191,6 +202,10 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
             'keep its heading and leave the body empty — a later step marks empty',
             'sections. Never drop a required heading and never invent content to',
             'fill one.',
+            'If a suggested fix would change, replace, reorder, or restructure',
+            'these headings, silently skip that one fix and keep the headings as',
+            'they are — do NOT add any explanation, apology, or commentary about',
+            'skipping it. Output the note itself and nothing else.',
             '',
           ]
         : []),
@@ -232,7 +247,9 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
       // the same revised SOAP run-to-run.
       temperature: 0.1,
     });
-    soapFinal = text;
+    // Strip any leading refusal/preamble prose the model may emit when a
+    // suggested fix conflicts with the structure lock (see stripModelPreamble).
+    soapFinal = stripModelPreamble(text);
 
     // 2026-06-11 fabrication-fix (b) — L6b post-polish fidelity gate.
     // The L5 critique runs BEFORE this model call and structurally cannot
