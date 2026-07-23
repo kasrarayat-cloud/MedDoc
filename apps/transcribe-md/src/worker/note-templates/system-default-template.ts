@@ -108,6 +108,33 @@ export interface NoteTemplateStyleProfile {
    *  otherwise the field stays "[not documented]". Absent on the system default
    *  and on every SOAP template → no effect. */
   contextDefaults?: Record<string, string> | null;
+  /** Labeled header/short fields parsed from the doctor's form — e.g. an
+   *  operative note's PATIENT NAME / PATIENT DOB / PATIENT ID # / DATE OF
+   *  SURGERY / SURGEON block (feat/template-header-fields, 2026-07-23). Rendered
+   *  at the TOP of the STYLED export in `order`, each filled DETERMINISTICALLY
+   *  (never AI) from the visit record / dictation or left an honest blank.
+   *  LABELS ONLY — never a patient value (values are export-time). Absent on the
+   *  system default + every prose template → no header block. */
+  headerFields?: NoteTemplateHeaderField[] | null;
+  /** "Form-only export" preference: when true the STYLED export renders ONLY the
+   *  doctor's form (header fields + note body) and SUPPRESSES the appended
+   *  Diagnoses / Procedures / Medications / Referrals / Patient Summary blocks.
+   *  Default OFF; no UI yet (feat/template-header-fields groundwork). */
+  formOnlyExport?: boolean | null;
+}
+
+/** One labeled header/short field of a parsed form template. LABEL ONLY — it
+ *  never carries a patient value; the value is filled at export time. */
+export interface NoteTemplateHeaderField {
+  /** Canonical fill key: 'patient_name' | 'patient_dob' | 'patient_id' |
+   *  'date_of_surgery' | 'surgeon' | a slug for an unmapped field. Drives the
+   *  deterministic export-time fill. */
+  key: string;
+  /** The field's label verbatim from the doctor's form (e.g. "PATIENT NAME:").
+   *  Rendered as the field label; NEVER a patient value. */
+  label: string;
+  /** 1-based render order within the header block. */
+  order: number;
 }
 
 /** Content shape of the seeded system-default template (the DB row adds

@@ -139,13 +139,23 @@ export async function generateVisitPdf(
   doc.lineGap(4);
 
   renderHeader(doc, data);
-  renderPatientBlock(doc, data);
+  // feat/template-header-fields: the doctor's form header (when present) renders
+  // in place of the generic patient info bar — no duplicate "Patient" line.
+  if (data.headerFields.length > 0) {
+    renderHeaderFieldsBlock(doc, data);
+  } else {
+    renderPatientBlock(doc, data);
+  }
   renderSoap(doc, data);
-  renderIcd(doc, data);
-  renderCpt(doc, data);
-  renderRx(doc, data);
-  renderReferrals(doc, data);
-  renderPatientSummary(doc, data);
+  // A "form-only" template suppresses the appended coding/summary blocks so the
+  // export is strictly the doctor's form + note body.
+  if (!data.formOnly) {
+    renderIcd(doc, data);
+    renderCpt(doc, data);
+    renderRx(doc, data);
+    renderReferrals(doc, data);
+    renderPatientSummary(doc, data);
+  }
 
   // Watermark + footer on every page — hook the doc's pageAdded event
   // for pages after the first; apply to the current page manually here
@@ -190,6 +200,33 @@ function renderHeader(
  *  stacked everything in one column because `\n` between rows plus
  *  the lineGap(4) advance produced a vertical list — fine for
  *  transcript blocks but wrong for a chart-header info bar. */
+/** Render the doctor's parsed form header (feat/template-header-fields) as a
+ *  vertical labeled list — one "LABEL: value" line per field, blanks as "—".
+ *  Presentation-only; values were filled deterministically. */
+function renderHeaderFieldsBlock(
+  doc: PDFKit.PDFDocument,
+  data: VisitExportData
+): void {
+  const LABEL_SIZE = 9;
+  for (const f of data.headerFields) {
+    doc
+      .font(FONTS.labelBold)
+      .fontSize(LABEL_SIZE)
+      .fillColor(COLORS.textMuted)
+      .text(`${f.label}:  `, PAGE.margin, doc.y, {
+        continued: true,
+        lineBreak: false,
+      });
+    doc
+      .font(FONTS.bodyRegular)
+      .fontSize(LABEL_SIZE + 1)
+      .fillColor(COLORS.textPrimary)
+      .text(f.value.trim() ? f.value.trim() : '—');
+  }
+  doc.x = PAGE.margin;
+  doc.moveDown(0.6);
+}
+
 function renderPatientBlock(
   doc: PDFKit.PDFDocument,
   data: VisitExportData

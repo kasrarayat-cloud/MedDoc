@@ -62,6 +62,8 @@ function mkVisit(overrides: Partial<VisitExportData> = {}): VisitExportData {
     rxWarnings: [],
     referrals: [],
     patientSummary: 'Today we talked about your blood pressure…',
+    headerFields: [],
+    formOnly: false,
     ...overrides,
   };
 }

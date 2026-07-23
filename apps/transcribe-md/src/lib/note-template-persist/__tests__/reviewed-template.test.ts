@@ -104,14 +104,42 @@ describe('normalizeReviewedTemplate', () => {
     expect(draft.sections[0].defaultTextMode).toBe('omit_unless_supported');
   });
 
-  it('styleProfile carries prose fields + contextDefaults, NEVER the immutable safety fields', () => {
+  it('styleProfile carries prose fields + contextDefaults + header/form config, NEVER the immutable safety fields', () => {
     const { draft } = normalizeReviewedTemplate(ReviewedTemplateSchema.parse(base()));
     expect(Object.keys(draft.styleProfile).sort()).toEqual([
-      'abbreviations', 'contextDefaults', 'tense', 'tone',
+      'abbreviations', 'contextDefaults', 'formOnlyExport', 'headerFields', 'tense', 'tone',
     ]);
     // the safety layer is immutable + sourced canonically — it can never ride here
     expect(draft.styleProfile).not.toHaveProperty('preamble');
     expect(draft.styleProfile).not.toHaveProperty('globalRules');
+  });
+
+  it('re-derives header-field keys from labels + drops unrecognized/off-form fields (never trusts client keys)', () => {
+    const { draft } = normalizeReviewedTemplate(
+      ReviewedTemplateSchema.parse({
+        ...base(),
+        styleProfile: {
+          tense: null,
+          tone: '',
+          abbreviations: null,
+          headerFields: [
+            // client claims a bogus key — server MUST re-derive 'surgeon' from label
+            { key: 'evil_injected_key', label: 'SURGEON:', order: 5 },
+            { key: 'patient_name', label: 'Patient Name', order: 1 },
+            // unrecognized label → dropped
+            { key: 'x', label: 'Referring Clinic Phone', order: 2 },
+          ],
+          formOnlyExport: true,
+        },
+      })
+    );
+    // Sorted by the input `order` (1 = Patient Name, 5 = SURGEON; the phone line
+    // is unrecognized → dropped), keys re-derived from labels, re-numbered 1..n.
+    expect(draft.styleProfile.headerFields).toEqual([
+      { key: 'patient_name', label: 'Patient Name', order: 1 },
+      { key: 'surgeon', label: 'SURGEON', order: 2 },
+    ]);
+    expect(draft.styleProfile.formOnlyExport).toBe(true);
   });
 });
 
