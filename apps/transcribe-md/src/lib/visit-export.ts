@@ -170,8 +170,11 @@ export interface RenderedHeaderField {
 const SURGEON_CONTEXT_RE =
   /(?<!\b(?:referring|consulting|usual|prior|previous)\s{1,3})(?:\b(?:operating\s+surgeon|proceduralist|performing\s+(?:surgeon|physician|provider))\b(?:\s+(?:was|is))?\s*[:,]?|\bperformed(?:\s+\w+){0,2}\s+by\b|\bsurgeon\s*:)\s*/i;
 // …but the NAME is matched CASE-SENSITIVELY (real uppercase first letters) so a
-// following lowercase word ("performed") is never swallowed into the name.
-const SURGEON_NAME_RE = /^(Dr\.?\s+[A-Z][A-Za-z.'’-]+(?:\s+[A-Z][A-Za-z.'’-]+){0,2})/;
+// following lowercase word ("performed") is never swallowed. The surname char
+// class excludes '.' (kept only in the "Dr." title) so a sentence period is a
+// hard stop — "Dr. Shabatian. The scope…" yields "Dr. Shabatian", not
+// "Dr. Shabatian. The". Hyphenated/compound surnames (Reyes-Lopez) still match.
+const SURGEON_NAME_RE = /^(Dr\.?\s+[A-Z][A-Za-z'’-]+(?:\s+[A-Z][A-Za-z'’-]+){0,2})/;
 
 /** Extract an explicitly-attributed surgeon name ("Dr. X") from the dictated
  *  note. Returns null when not clearly stated (→ blank field). Conservative +
