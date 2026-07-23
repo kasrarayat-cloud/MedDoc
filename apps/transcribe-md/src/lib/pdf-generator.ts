@@ -51,8 +51,6 @@ const COLORS = {
   textMuted: '#666666',
   rule: '#dddddd',
   accent: '#7C3AED',
-  warningRed: '#B91C1C',
-  warningAmber: '#B45309',
 };
 
 const FONTS = {
@@ -422,7 +420,10 @@ function renderCpt(doc: PDFKit.PDFDocument, data: VisitExportData): void {
 }
 
 function renderRx(doc: PDFKit.PDFDocument, data: VisitExportData): void {
-  if (data.prescriptions.length === 0 && data.rxWarnings.length === 0) return;
+  // Prescriptions only. The Rx safety-warning banner + [SEVERITY] blocks are
+  // internal review chrome — they stay on the review screen and in the audit
+  // trail, never in an exported clinical document.
+  if (data.prescriptions.length === 0) return;
   sectionHeading(doc, 'Medications');
   for (const rx of data.prescriptions) {
     doc
@@ -430,33 +431,6 @@ function renderRx(doc: PDFKit.PDFDocument, data: VisitExportData): void {
       .fontSize(SIZE.body)
       .fillColor(COLORS.textPrimary)
       .text(prescriptionOneLine(rx));
-  }
-  if (data.rxWarnings.length > 0) {
-    doc.moveDown(0.3);
-    doc
-      .font(FONTS.labelBold)
-      .fontSize(SIZE.small)
-      .fillColor(COLORS.warningRed)
-      .text('Rx safety warnings — review before sending.');
-    for (const w of data.rxWarnings) {
-      const tone =
-        w.severity === 'critical' ? COLORS.warningRed : COLORS.warningAmber;
-      // T-M21.1: dropped the two-space leading indent that preceded
-      // `[CRITICAL]`. In InterTight-SemiBold at 9pt those spaces
-      // rendered with enough visual weight to read as a glyph
-      // placeholder in some PDF viewers. Flush-left tags line up
-      // cleanly with the "Rx safety warnings — review before sending"
-      // header above them and read as an obvious list.
-      doc
-        .font(FONTS.labelBold)
-        .fontSize(SIZE.small)
-        .fillColor(tone)
-        .text(`[${w.severity.toUpperCase()}]`, { continued: true });
-      doc
-        .font(FONTS.bodyRegular)
-        .fillColor(COLORS.textSecondary)
-        .text(`  ${w.rx_drug} — ${w.message}`);
-    }
   }
   doc.moveDown(0.6);
 }

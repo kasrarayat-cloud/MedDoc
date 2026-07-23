@@ -69,6 +69,8 @@ export async function runTemplateTwinFillStep(input: {
   /** The generated note (soapFinal) — its CHOICE_SLOT picks + table measurements
    *  are bridged into the native fill. */
   generatedNote: string;
+  /** The visit (encounter) date — fills a DATE OF PROCEDURE control as metadata. */
+  visitDate?: Date | string | null;
 }): Promise<TwinFillStepResult> {
   // Flag OFF: no-op, no DB, behavior-identical to the live pipeline.
   if (!templateNativeDocxEnabled()) return { status: 'skipped', reason: 'flag_off' };
@@ -89,6 +91,7 @@ export async function runTemplateTwinFillStep(input: {
         entities: input.entities,
         generatedNote: input.generatedNote,
         validationNow: new Date(),
+        visitDate: input.visitDate,
         resolverModelVersion: null,
       }),
       FILL_TIMEOUT_MS,

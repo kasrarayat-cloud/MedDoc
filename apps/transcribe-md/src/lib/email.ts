@@ -10,6 +10,7 @@
 // ============================================================================
 
 import { Resend } from 'resend';
+import { escapeHtml } from './html-escape';
 
 // Phase 6Z (PHASE-6Z-07): Resend wraps were never wired to logApiUsage,
 // so api_usage_events had no `provider='resend'` rows and the /admin/usage
@@ -318,6 +319,49 @@ async function sendOne(args: {
 function greetingFor(name: string | null | undefined): string {
   const trimmed = name?.trim();
   return trimmed ? `Hi ${trimmed},` : 'Hi,';
+}
+
+// ---------------------------------------------------------------------------
+// Note format certified — one-time nudge when a doctor's uploaded note format
+// finishes verification and becomes the active format for its visit type.
+// Plain, human copy; no internal jargon (no "twin"/"IR"/"mapping"/"compiled");
+// links to the note-format settings page. Fired only on the CERTIFIED
+// transition by the certify action, and only when email delivery is enabled.
+// ---------------------------------------------------------------------------
+
+export interface SendTemplateCertifiedArgs {
+  toEmail: string;
+  userName: string | null;
+  templateName: string;
+}
+
+export async function sendTemplateCertifiedEmail(
+  args: SendTemplateCertifiedArgs
+): Promise<SenderResult> {
+  const greeting = greetingFor(args.userName);
+  const manageUrl = `${appUrl()}/settings/note-format`;
+  const rawName = args.templateName.trim() || 'Your note format';
+  const subject = 'Your note format is ready to use';
+  const html = [
+    `<p>${greeting}</p>`,
+    `<p>Good news — <strong>${escapeHtml(rawName)}</strong> is set up and ready. From now on, QuillMD will format your notes for that visit type to match it.</p>`,
+    `<p>There's nothing else you need to do. You can review it, or switch formats, any time from your settings:</p>`,
+    `<p><a href="${manageUrl}" style="display:inline-block;padding:10px 18px;background:#7C3AED;color:#fff;border-radius:6px;text-decoration:none;">Open note format settings</a></p>`,
+    `<hr style="border:none;border-top:1px solid #eee;margin:24px 0;" />`,
+    `<p style="color:#999;font-size:12px;">QuillMD · note formats</p>`,
+  ].join('\n');
+  const text = [
+    greeting,
+    '',
+    `Good news — "${rawName}" is set up and ready. From now on, QuillMD will format your notes for that visit type to match it.`,
+    '',
+    "There's nothing else you need to do. Review it, or switch formats, any time from your settings:",
+    '',
+    manageUrl,
+    '',
+    '— QuillMD',
+  ].join('\n');
+  return sendOne({ to: args.toEmail, subject, html, text, category: 'template_certified' });
 }
 
 // ---------------------------------------------------------------------------
