@@ -11,6 +11,7 @@ import { getDocumentProxy } from 'unpdf';
 import { extractPdfAnchors, missingAnchors, type AnchorLabelSpec } from './anchors';
 import { fillPdfTemplate, type PdfFillAnchor } from './fill-engine';
 import { putTemplateCanvas } from './store';
+import { canvasHash, templateStructureHash } from './hash';
 import type {
   NoteTemplateSection,
   NoteTemplateHeaderField,
@@ -71,6 +72,12 @@ export async function certifyPdfTemplate(input: {
         ...styleProfile,
         pdfNativeAnchors: anchors as unknown,
         pdfNativeCertified: true,
+        // Durable-cert signatures — let a future re-upload (new template id) carry
+        // this cert forward instead of silently falling back to styled.
+        pdfNativeCanvasHash: canvasHash(input.pdfBytes),
+        pdfNativeStructureHash: templateStructureHash(sections, headerFields),
+        // A fresh cert clears any prior "needs preview" marker.
+        pdfNativePendingPreview: false,
       } as never,
     },
   });
