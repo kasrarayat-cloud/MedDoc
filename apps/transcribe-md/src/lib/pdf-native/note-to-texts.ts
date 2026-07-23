@@ -14,21 +14,34 @@ import { EMPTY_SECTION_PLACEHOLDER } from '@/lib/soap-format';
 
 const norm = (s: string): string => s.toLowerCase().replace(/\s+/g, ' ').replace(/[:*_]+$/g, '').trim();
 
-/** Split note markdown into { normalizedHeading → body }. */
-function splitByHeadings(noteText: string): Map<string, string> {
-  const out = new Map<string, string>();
+interface Heading {
+  /** Normalized heading key (for matching to section/header labels). */
+  key: string;
+  /** The heading text as written in the note (for an addendum-page title). */
+  label: string;
+  body: string;
+}
+
+/** Split note markdown into an ORDERED LIST of headings. A LIST, not a Map, so two
+ *  headings that normalize to the same key (e.g. a signed note with two
+ *  `## Impression` sections, or `## IMPRESSION` + `## Impression`) BOTH survive —
+ *  a Map would drop the first body (last-write-wins) and silently lose real,
+ *  physician-authored content. Same-key bodies are later concatenated into their
+ *  section (or each becomes its own addendum), never dropped. */
+function splitByHeadings(noteText: string): Heading[] {
+  const out: Heading[] = [];
   const lines = noteText.split('\n');
-  let current: string | null = null;
+  let current: { key: string; label: string } | null = null;
   let buf: string[] = [];
   const flush = () => {
-    if (current) out.set(current, buf.join('\n').trim());
+    if (current) out.push({ key: current.key, label: current.label, body: buf.join('\n').trim() });
     buf = [];
   };
   for (const line of lines) {
     const m = line.match(/^#{1,6}\s+(.+?)\s*$/);
     if (m) {
       flush();
-      current = norm(m[1]);
+      current = { key: norm(m[1]), label: m[1].replace(/[:*_]+$/g, '').trim() };
     } else if (current) {
       buf.push(line);
     }
@@ -61,25 +74,58 @@ export interface BuildFillTextsInput {
   headerCtx: { patientName: string | null; visitDate: Date; soapText: string };
 }
 
-/** Build the anchorKey → text map. */
-export function buildPdfFillTexts(input: BuildFillTextsInput): Record<string, string> {
+export interface BuildFillTextsOutput {
+  /** anchorKey → text to draw into the form's blank region. */
+  texts: Record<string, string>;
+  /** Note sections with real content that match NO form label — carried to a
+   *  labeled "Additional documentation" continuation page (never dropped, never
+   *  drawn over the doctor's ink). */
+  addenda: Array<{ label: string; text: string }>;
+}
+
+/** Build the anchorKey → text map + the unmatched-section addenda. */
+export function buildPdfFillTexts(input: BuildFillTextsInput): BuildFillTextsOutput {
   const texts: Record<string, string> = {};
 
   const headings = splitByHeadings(input.noteText);
+  const sectionKeys = new Set(input.sections.map((s) => norm(s.label)));
+
+  // Section fill: CONCATENATE every note heading that matches this section's
+  // label (duplicates/case-variants included) so no body is ever dropped; the
+  // engine wraps + overflows the combined text.
   for (const s of input.sections) {
-    const body = headings.get(norm(s.label));
-    const text = body ? meaningful(body) : '';
-    if (text) texts[s.key] = text;
+    const nl = norm(s.label);
+    const bodies = headings
+      .filter((h) => h.key === nl)
+      .map((h) => meaningful(h.body))
+      .filter(Boolean);
+    if (bodies.length) texts[s.key] = bodies.join('\n\n');
   }
 
   // Header values keyed by the field key (resolveHeaderFields preserves the
-  // sorted-by-order sequence, so index-align it back to the keys).
+  // sorted-by-order sequence, so index-align it back to the keys). Track which
+  // header LABELS actually produced a value — only those suppress an addendum
+  // (a header field that yields no value must not silently swallow a note section
+  // that happens to share its label).
   const sorted = [...input.headerFields].sort((a, b) => a.order - b.order);
   const rendered = resolveHeaderFields(sorted, input.headerCtx);
+  const filledHeaderKeys = new Set<string>();
   sorted.forEach((f, i) => {
     const v = rendered[i]?.value?.trim();
-    if (v) texts[f.key] = v;
+    if (v) {
+      texts[f.key] = v;
+      filledHeaderKeys.add(norm(f.label));
+    }
   });
 
-  return texts;
+  // Addenda: every note heading NOT consumed by a section and NOT naming a filled
+  // header field, with real content — each occurrence preserved (never dropped).
+  const addenda: Array<{ label: string; text: string }> = [];
+  for (const h of headings) {
+    if (sectionKeys.has(h.key) || filledHeaderKeys.has(h.key)) continue;
+    const text = meaningful(h.body);
+    if (text) addenda.push({ label: h.label, text });
+  }
+
+  return { texts, addenda };
 }
