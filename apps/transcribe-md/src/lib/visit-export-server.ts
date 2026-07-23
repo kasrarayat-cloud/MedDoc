@@ -13,7 +13,7 @@
 import prisma from '@meddoc/db';
 import type { TranscribeVisitStatus } from '@prisma/client';
 import { findSpecialty } from '@meddoc/shared/specialties';
-import { projectEmForDisplay } from './visit-export';
+import { projectEmForDisplay, sanitizeExportedSoap } from './visit-export';
 import type {
   CptEm,
   CptModifier,
@@ -67,10 +67,16 @@ export async function loadVisitExportData(
   // Summary" block. Rendering both yields a partial-above-complete duplicate.
   // When the complete field is present, strip the note's section so exactly one
   // (complete) summary is rendered; when it is absent, the note's section stays.
-  const soapText =
+  // Presentation-only export cleanup (Stage 1): set-aside/empty prose sections
+  // → "Not documented.", "[not documented]" table cells → "—", review-lane
+  // placeholder dropped. Applied ONLY to the exported copy — stored columns and
+  // the on-screen review lane are untouched. Runs after the patient-summary
+  // strip so the dedupe still sees the note's own heading.
+  const soapText = sanitizeExportedSoap(
     visit.patientSummary && visit.patientSummary.trim()
       ? stripNotePatientSummarySection(rawSoap)
-      : rawSoap;
+      : rawSoap
+  );
 
   // All four of these are Json? columns — treat each as its own shape
   // with a tolerant cast + safe-default. Downstream code can rely on

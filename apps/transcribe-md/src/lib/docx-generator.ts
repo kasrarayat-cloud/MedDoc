@@ -164,7 +164,10 @@ export async function generateVisitDocx(
   }
 
   // ── Medications ──────────────────────────────────────────────────
-  if (data.prescriptions.length > 0 || data.rxWarnings.length > 0) {
+  // Prescriptions only. The Rx safety-warning banner + [SEVERITY] blocks are
+  // internal review chrome: they stay on the review screen and in the audit
+  // trail (rx-warning-audit) but never render in an exported clinical document.
+  if (data.prescriptions.length > 0) {
     children.push(sectionHeading('Medications'));
     for (const rx of data.prescriptions) {
       children.push(
@@ -173,44 +176,6 @@ export async function generateVisitDocx(
           children: [new TextRun({ text: prescriptionOneLine(rx) })],
         })
       );
-    }
-    if (data.rxWarnings.length > 0) {
-      children.push(
-        new Paragraph({
-          spacing: { before: 80, after: 60 },
-          children: [
-            new TextRun({
-              text: 'Rx safety warnings — review before sending.',
-              bold: true,
-              color: 'B91C1C',
-              size: 20,
-              font: FONTS.label,
-            }),
-          ],
-        })
-      );
-      for (const w of data.rxWarnings) {
-        const color = w.severity === 'critical' ? 'B91C1C' : 'B45309';
-        children.push(
-          new Paragraph({
-            spacing: { after: 40 },
-            children: [
-              new TextRun({
-                text: `[${w.severity.toUpperCase()}] `,
-                bold: true,
-                color,
-                size: 20,
-                font: FONTS.label,
-              }),
-              new TextRun({
-                text: `${w.rx_drug} — ${w.message}`,
-                color: '555555',
-                size: 20,
-              }),
-            ],
-          })
-        );
-      }
     }
     children.push(spacer());
   }

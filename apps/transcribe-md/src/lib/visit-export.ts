@@ -8,6 +8,7 @@
 // ============================================================================
 
 import type { TranscribeVisitStatus } from '@prisma/client';
+import { EMPTY_SECTION_PLACEHOLDER } from './soap-format';
 
 // ----------------------------------------------------------------------------
 // Wire types — duplicated from worker/layers/* so this module can be
@@ -174,4 +175,56 @@ export function prescriptionOneLine(rx: Prescription): string {
     parts.push(`[${rx.action.toUpperCase()}]`);
   }
   return parts.join(' ');
+}
+
+// ----------------------------------------------------------------------------
+// Export cleanliness (Stage 1) — one presentation-only convention for "nothing
+// documented", applied to the note markdown BEFORE any renderer (docx / PDF /
+// clipboard / email) walks it, so a signed export reads as a physician-authored
+// clinical document: no review-screen machinery, no bracketed markers, no
+// stray markdown. It is PURELY presentational — it never changes stored data
+// and NEVER generates clinical content the doctor didn't dictate or adopt.
+// ----------------------------------------------------------------------------
+
+/** The word used in a prose section that has no documented content. */
+export const EXPORT_EMPTY_SECTION_TEXT = 'Not documented.';
+/** The cell token used in an export table for an undocumented measurement. */
+export const EXPORT_EMPTY_CELL = '—';
+
+/**
+ * Clean a note's markdown for export. Two transforms, both presentation-only:
+ *   1. every set-aside/empty PROSE section renders as its header + "Not
+ *      documented." — the "_[All AI-drafted…adopt before signing.]_" review
+ *      placeholder is dropped, and any section left with no content gets the
+ *      one consistent "Not documented." line (never a bare header);
+ *   2. every "[not documented]" table cell becomes an em dash "—".
+ *
+ * It NEVER touches a section the doctor adopted (its text renders exactly as
+ * today), NEVER invents content, and NEVER edits stored columns — the loader
+ * runs it only on the copy handed to the exporters. A section that carries a
+ * table (its body has pipe rows) keeps its structure; only its empty cells
+ * become "—". Idempotent.
+ */
+export function sanitizeExportedSoap(soap: string): string {
+  if (!soap || !soap.trim()) return soap;
+  const SECTION_RE = /^\s*#{1,6}\s/;
+  // Pass 1: drop the set-aside placeholder line; normalise empty table cells.
+  const lines = soap
+    .split('\n')
+    .filter((l) => l.trim() !== EMPTY_SECTION_PLACEHOLDER)
+    .map((l) => l.replace(/\[not documented\]/gi, EXPORT_EMPTY_CELL));
+  // Pass 2: any section whose body has no remaining content → "Not documented."
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    out.push(lines[i]);
+    if (!SECTION_RE.test(lines[i])) continue;
+    let j = i + 1;
+    let hasContent = false;
+    while (j < lines.length && !SECTION_RE.test(lines[j])) {
+      if (lines[j].trim()) hasContent = true;
+      j++;
+    }
+    if (!hasContent) out.push(EXPORT_EMPTY_SECTION_TEXT);
+  }
+  return out.join('\n');
 }
