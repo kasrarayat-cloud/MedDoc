@@ -30,6 +30,7 @@
 // ============================================================================
 
 import { Resend } from 'resend';
+import { escapeHtml } from './html-escape';
 
 import { getSharedRedisConnection } from './queue';
 import { log } from './log';
@@ -135,14 +136,6 @@ function buildBody(input: AdminAlertInput): { subject: string; html: string; tex
   return { subject, html, text };
 }
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
 
 let clientSingleton: Resend | null = null;
 function getResend(): Resend | null {

@@ -39,6 +39,8 @@ import { extractTemplateTwinEntities } from '@/worker/layers/03-extract-entities
 import { TemplateDocxError } from '@/lib/note-template-docx';
 import { TemplateTwinPhiRejectedError } from '@/lib/template-twin/source-phi';
 import type { TemplateTwinWorkspace } from '@/lib/template-twin/client-types';
+import { sendTemplateCertifiedEmail } from '@/lib/email';
+import { isEmailDeliveryEnabled } from '@/lib/email-enabled';
 
 // A synthetic, PHI-free clinical encounter used to prove the template renders +
 // roundtrips before certification (the certify step binds this verified proof).
@@ -176,6 +178,26 @@ export async function certifyNativeTemplateAction(
       actor,
       expectedMappingsSha256,
     });
+    // Notify the doctor their note format is ready — ONLY on the genuine
+    // recognized→certified transition (never on an idempotent re-certify), and
+    // only when email delivery is configured. Fire-and-forget + fully fail-safe:
+    // an email hiccup must never fail or roll back certification.
+    const becameCertified =
+      current?.template.certificationStatus !== 'certified' &&
+      workspace.template.certificationStatus === 'certified';
+    if (becameCertified && isEmailDeliveryEnabled()) {
+      void sendTemplateCertifiedEmail({
+        toEmail: session.user.email,
+        userName: session.user.fullName ?? null,
+        templateName: workspace.template.name,
+      }).catch((err) => {
+        console.warn(
+          `[template-twin] certified-email non-blocking failure template=${noteTemplateId}: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      });
+    }
     return { ok: true, data: workspace };
   } catch (err) {
     if (err instanceof TemplateTwinLifecycleError) {

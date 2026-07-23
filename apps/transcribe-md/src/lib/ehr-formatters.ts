@@ -198,12 +198,9 @@ function rxSection(data: VisitExportData, label = 'MEDICATIONS'): string[] {
   for (const rx of data.prescriptions) {
     lines.push(`  ${prescriptionOneLine(rx)}`);
   }
-  if (data.rxWarnings.length > 0) {
-    lines.push('  --- Rx warnings (review before sending):');
-    for (const w of data.rxWarnings) {
-      lines.push(`    [${w.severity.toUpperCase()}] ${w.rx_drug}: ${w.message}`);
-    }
-  }
+  // The Rx safety-warning banner + [SEVERITY] blocks are internal review
+  // chrome — they stay on the review screen and in the audit trail, never in
+  // an exported clinical document (clipboard / email).
   return lines;
 }
 
