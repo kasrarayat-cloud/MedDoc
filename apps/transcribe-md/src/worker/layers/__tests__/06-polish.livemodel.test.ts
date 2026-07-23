@@ -161,6 +161,39 @@ describe.skipIf(!LIVE || !KEY)('L6 real-model structure preservation', () => {
     }
   }, 120_000);
 
+  it('does NOT leak a refusal preamble when a critique fix conflicts with the lock (the prod leak)', async () => {
+    const result = await runLayer6Polish({
+      visitId: 'probe-conflict',
+      practiceId: 'probe-practice',
+      userId: 'probe-user',
+      soapDraft: SPARSE_OP_DRAFT,
+      critique: {
+        issues: [
+          {
+            severity: 'major',
+            location: 'PROCEDURE:',
+            // Directly conflicts with the structure lock — the model must
+            // silently skip it, NOT explain its refusal into the note body.
+            description: 'the note should use SOAP sections for a clinic visit',
+            suggested_fix:
+              'remove the operative headings and reorganize the note into Subjective, Objective, Assessment, and Plan',
+          },
+        ],
+        overall_quality: 'medium',
+        safe_to_sign_without_review: false,
+      },
+      noteTemplate: OP_NOTE_TEMPLATE,
+    } as Layer6Input);
+
+    const note = result.soapFinal;
+    // The note must START with a heading — no leading prose/refusal preamble.
+    expect(note.trimStart()).toMatch(/^##\s/);
+    expect(note).not.toMatch(/I cannot apply|cannot be applied|my (immutable|formatting) rules/i);
+    // …and the operative structure held (no SOAP reversion).
+    expect(note).toMatch(/##\s+PROCEDURE:/i);
+    expect(note).not.toMatch(/##\s+Subjective/i);
+  }, 120_000);
+
   // Ultrasound control (the "ultrasound unchanged" rail): a non-customizing
   // imaging doctor reaches L6 with the SOAP default template while the draft
   // carries the ultrasound REPORT headings. The lock is gated OFF for the
