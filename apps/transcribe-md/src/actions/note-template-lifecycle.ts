@@ -150,6 +150,31 @@ export async function saveNoteTemplateAction(
       return { id: created.id, status };
     });
 
+    // Durable PDF-native cert — a re-upload/re-activation of the SAME flat-PDF
+    // form mints a new id; carry a prior cert forward so native export never
+    // silently drops to styled. Fail-safe: wrapped so it can never FAIL the save
+    // (the tx is already committed); on a hit it adds a MinIO GET + parse.
+    if (activate && result.status === 'active') {
+      try {
+        const { carryForwardPdfCertification } = await import('@/lib/pdf-native/carry-forward');
+        const cf = await carryForwardPdfCertification({
+          doctorId,
+          encounterType: encounterType ?? null,
+          newTemplateId: result.id,
+        });
+        console.info(
+          cf.carried
+            ? `[note-template] carried PDF-native cert ${cf.fromTemplateId} → ${result.id} (${cf.anchors} anchors)`
+            : `[note-template] no PDF-native cert carry-forward for ${result.id}: ${cf.reason}`
+        );
+      } catch (e) {
+        console.error(
+          '[note-template] cert carry-forward failed (non-fatal):',
+          e instanceof Error ? e.message : e
+        );
+      }
+    }
+
     revalidatePath('/settings');
     return { ok: true, id: result.id, status: result.status, flags };
   } catch {
@@ -183,6 +208,27 @@ export async function activateNoteTemplateAction(id: string): Promise<SimpleResu
       });
       await tx.noteTemplate.update({ where: { id }, data: { status: 'active' } });
     });
+
+    // Durable PDF-native cert carry-forward (see saveNoteTemplateAction). Safe.
+    try {
+      const { carryForwardPdfCertification } = await import('@/lib/pdf-native/carry-forward');
+      const cf = await carryForwardPdfCertification({
+        doctorId,
+        encounterType: row.encounterType ?? null,
+        newTemplateId: id,
+      });
+      console.info(
+        cf.carried
+          ? `[note-template] carried PDF-native cert ${cf.fromTemplateId} → ${id} (${cf.anchors} anchors)`
+          : `[note-template] no PDF-native cert carry-forward for ${id}: ${cf.reason}`
+      );
+    } catch (e) {
+      console.error(
+        '[note-template] cert carry-forward failed (non-fatal):',
+        e instanceof Error ? e.message : e
+      );
+    }
+
     revalidatePath('/settings');
     return { ok: true, id };
   } catch {

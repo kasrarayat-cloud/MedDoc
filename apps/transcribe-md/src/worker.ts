@@ -256,6 +256,11 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       specialty: true,
       inputMode: true,
       interpreterMode: true,
+      // Per-visit template pick (req: end template×dictation collisions). When a
+      // doctor chose a specific format on the new-visit form, it is written here
+      // at create time and HONORED below over active-template resolution. NULL for
+      // the default ("auto") path → resolveActiveTemplate as before.
+      noteTemplateId: true,
       user: { select: { practiceId: true } },
       // Fix-Pack 1 Q0-2 / audit Finding 01.1 — pull patient demographic
       // + safety context for L7c pediatric framing. Round 3 PR-D added
@@ -590,11 +595,24 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
     // DB hiccup never breaks generation.
     let noteTemplate: ResolvedNoteTemplate;
     try {
+      // Honor an explicit per-visit pick (chosen on the new-visit form) over
+      // active-template resolution. Scoped: the row must be the doctor's own or
+      // the shared system default. A stale/invalid pick falls through to the
+      // normal active resolution so generation never breaks on a bad id.
+      const picked = visit.noteTemplateId
+        ? await prisma.noteTemplate.findFirst({
+            where: {
+              id: visit.noteTemplateId,
+              OR: [{ doctorId: visit.userId ?? '' }, { isSystemDefault: true }],
+            },
+          })
+        : null;
       noteTemplate = normalizeTemplate(
-        await resolveActiveTemplate({
-          doctorId: visit.userId ?? '',
-          encounterType: visit.specialty,
-        })
+        picked ??
+          (await resolveActiveTemplate({
+            doctorId: visit.userId ?? '',
+            encounterType: visit.specialty,
+          }))
       );
     } catch (err) {
       log.warn(

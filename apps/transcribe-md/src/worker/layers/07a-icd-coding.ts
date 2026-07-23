@@ -140,6 +140,94 @@ export function dropDenialContradictedCodes(
   });
 }
 
+/**
+ * Clinical-coherence floor (deficiency family, principle-level) — drop an
+ * ICD-10 deficiency-family code (E50–E64: vitamin, mineral, and other
+ * nutritional-deficiency codes) whose ONLY support in the note is one of the
+ * contexts that does NOT establish a deficiency DIAGNOSIS:
+ *   - PROPHYLACTIC supplementation — a bariatric multivitamin / B12 / vitamin-D /
+ *     iron regimen is given to PREVENT deficiency, not because one is documented;
+ *   - a MISSED / skipped dose — non-adherence, not a measured deficiency;
+ *   - an ORDERED-BUT-UNRESULTED lab — a pending workup, not a result.
+ * The classic false-positive is a post-bariatric plan: "started on chewable
+ * multivitamin and vitamin D3 to prevent nutritional deficiency" hoists E63.9 /
+ * E55.9 / E53.8 with no deficiency ever diagnosed.
+ *
+ * ONLY-REMOVE, support-preserving. A code is dropped only when ALL hold: it is in
+ * the E50–E64 family, its cited evidence_quote is a prophylactic/ordered/missed
+ * context, AND the note does not AFFIRMATIVELY document a deficiency anywhere. Any
+ * affirmative, non-preventive deficiency statement in the note (an assessment
+ * line, "B12 deficiency", a documented low level) VETOES the drop for the whole
+ * family — a real, documented deficiency is never suppressed. Evidence that is
+ * itself a deficiency claim is kept; ambiguous evidence (neither clearly
+ * prophylactic nor a deficiency claim) is kept. Pure + deterministic; preserves
+ * input order.
+ */
+const DEFICIENCY_FAMILY = /^E(5[0-9]|6[0-4])(\b|\.)/i;
+
+// Deficiency-DIAGNOSIS language — the words that mark a family code as SUPPORTED
+// when they sit in a clause that is not framed as prevention/risk/negation.
+const DEFICIENCY_DX_WORD =
+  /\b(deficien\w*|deplet\w*|insufficien\w*|hypovitaminosis|malnutrition|malnourish\w*)\b/i;
+
+// Framing that turns a "deficiency" word into a NON-diagnosis (prevention, risk,
+// screening, or negation) — a mention under this framing is not an active
+// diagnosis, so it must not protect a family code. Deliberately NARROW: only
+// genuinely preventive/negating cues, NOT incidental exam words like "lower
+// (extremity)" / "reduce" / "monitor" that can co-occur with a real deficiency
+// clause and wrongly defeat the support-preserving veto.
+const NON_DIAGNOSTIC_FRAMING =
+  /\b(prevent\w*|prophyla\w*|avoid\w*|guard against|reduce the risk|at risk|risk of|risk for|screen\w* for|rule out|r\/o|no|not|non|denies|deny|without|w\/o|negative for|absence of|absent)\b/i;
+
+// Support that does NOT, on its own, establish a deficiency diagnosis:
+// prophylactic supplementation, ordered-but-unresulted labs, or missed doses.
+const NON_DIAGNOSTIC_SUPPORT =
+  /\b(prophyla\w*|supplement\w*|multi-?vitamin|MVI|repletion|maintenance doses?|started on|continu\w*|prescrib\w*|recommend\w*|advis\w*|encourag\w*|daily (?:oral )?(?:vitamin|calcium|iron|b-?12|folate|folic|zinc|thiamine)|missed (?:a |several )?doses?|skipped (?:a )?doses?|non-?adheren\w*|noncompli\w*|not taking|order\w*|obtain\w*|check\w*|draw\w*|pending|await\w*|to be drawn|will (?:monitor|recheck|check|follow|repeat|obtain)|recheck\w*)/i;
+
+// A deficiency word is only DEFEATED as a diagnosis when the preventive/negation
+// framing SCOPES it: preventive cues sit BEFORE the word ("prevent/risk of/screen
+// for/no/denies … deficiency"), or an immediate resolution qualifier follows it
+// ("deficiency ruled out/resolved/excluded"). A later clause-local token that
+// modifies a DIFFERENT verb — "B12 deficiency NOT fully CORRECTED" ("not" negates
+// "corrected", not the deficiency) — must NOT defeat the affirmation. Checking the
+// pre-word text (plus a tight post-word resolution qualifier) instead of the whole
+// clause errs toward KEEPING a documented deficiency (support-preserving).
+const RESOLUTION_AFTER = /^\s+(ruled out|resolved|excluded|no longer\b|not present)/i;
+
+/** True iff `text` AFFIRMATIVELY documents a deficiency — a deficiency-diagnosis
+ *  word that is NOT framed (preventive cue before it, or a resolution qualifier
+ *  right after it). Used for both the note-level veto and per-code evidence. */
+function deficiencyAffirmedIn(text: string): boolean {
+  if (!text) return false;
+  const scan = new RegExp(DEFICIENCY_DX_WORD.source, 'gi');
+  let m: RegExpExecArray | null;
+  while ((m = scan.exec(text)) !== null) {
+    // Clause bounds around the match (last `.;:,\n` before → next after).
+    const start = text.slice(0, m.index).search(/[^.;:,\n]*$/);
+    const before = text.slice(start, m.index);
+    const rest = text.slice(m.index + m[0].length);
+    const relEnd = rest.search(/[.;:,\n]/);
+    const after = relEnd === -1 ? rest : rest.slice(0, relEnd);
+    const framedBefore = NON_DIAGNOSTIC_FRAMING.test(before);
+    const resolvedAfter = RESOLUTION_AFTER.test(after);
+    if (!framedBefore && !resolvedAfter) return true; // an unframed deficiency mention = a diagnosis
+  }
+  return false;
+}
+
+export function dropUnsupportedDeficiencyCodes(
+  codes: readonly IcdCode[],
+  clinicalText: string
+): IcdCode[] {
+  if (deficiencyAffirmedIn(clinicalText)) return [...codes]; // a real deficiency is documented → keep the family
+  return codes.filter((c) => {
+    if (!DEFICIENCY_FAMILY.test(c.code)) return true;
+    if (deficiencyAffirmedIn(c.evidence_quote)) return true; // its own evidence asserts one
+    if (NON_DIAGNOSTIC_SUPPORT.test(c.evidence_quote)) return false; // prophylactic / ordered / missed → drop
+    return true; // ambiguous evidence → conservative keep
+  });
+}
+
 export interface Layer7aInput {
   visitId: string;
   practiceId: string;
@@ -407,11 +495,23 @@ export async function runLayer7aIcdCoding(
   // documented is never touched). Same non-PHI-console + metric-purity treatment
   // as the varicose floor above.
   const denialText = `${input.soapFinal ?? ''}\n${input.entitiesJson ?? ''}`;
-  const coherentFinal = dropDenialContradictedCodes(coherent, denialText);
-  const droppedDenied = coherent.filter((c) => !coherentFinal.includes(c));
+  const coherentDenial = dropDenialContradictedCodes(coherent, denialText);
+  const droppedDenied = coherent.filter((c) => !coherentDenial.includes(c));
   if (droppedDenied.length > 0) {
     console.info(
       `[l7a-icd] dropped ${droppedDenied.length} code(s) contradicted by an explicit denial in the note: ${droppedDenied.map((c) => c.code).join(', ')}`
+    );
+  }
+  // Deficiency-family floor (E50–E64) — drop a deficiency code supported ONLY by
+  // prophylactic supplementation / missed doses / ordered-but-unresulted labs;
+  // a documented deficiency is never suppressed. Scans the final note (the
+  // diagnosis lives there); ONLY-REMOVE. Same non-PHI-console + metric-purity
+  // treatment as the guards above.
+  const coherentFinal = dropUnsupportedDeficiencyCodes(coherentDenial, input.soapFinal ?? '');
+  const droppedDeficiency = coherentDenial.filter((c) => !coherentFinal.includes(c));
+  if (droppedDeficiency.length > 0) {
+    console.info(
+      `[l7a-icd] dropped ${droppedDeficiency.length} deficiency-family code(s) supported only by prophylactic supplementation / ordered labs / missed doses: ${droppedDeficiency.map((c) => c.code).join(', ')}`
     );
   }
   const filtered: typeof result = { codes: coherentFinal };
