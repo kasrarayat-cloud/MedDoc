@@ -117,6 +117,17 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
   const template: ResolvedNoteTemplate =
     input.noteTemplate ?? SYSTEM_DEFAULT_NOTE_TEMPLATE;
   const requiredSections = requiredSectionLabels(template);
+  // Phase-1 custom-template fix (2026-07-23): emit an explicit heading-lock ONLY
+  // for a non-default custom template with a known section set. The system
+  // default keeps its original structure-agnostic prompt (byte-identical) — this
+  // matters because an IMAGING visit by a non-customizing doctor reaches L6 with
+  // the SOAP default here while the draft carries the ultrasound report headings
+  // (L4 swaps ULTRASOUND_REPORT_TEMPLATE in internally, never reflected back).
+  // Locking to this template's labels there would wrongly force the imaging
+  // report into SOAP. Gating on isSystemDefault leaves SOAP + ultrasound paths
+  // untouched and pins only genuine custom templates (the KUK operative note),
+  // whose draft DOES match these labels.
+  const emitStructureLock = !template.isSystemDefault && requiredSections.length > 0;
   let soapFinal: string;
   // FIND-P1-016 (2026-05-14) — when the model edits the draft, the
   // output goes through the same SOAP-structure validator L4 uses.
@@ -161,6 +172,28 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
       'complete revised SOAP note in the same markdown structure as the',
       'draft.',
       '',
+      // Phase-1 custom-template fix (2026-07-23): for a doctor-uploaded custom
+      // template (e.g. an operative note) the draft does NOT use the default
+      // SOAP layout. Without an explicit lock the model "helpfully" reverts a
+      // sparse custom note back to Subjective/Objective/Assessment/Plan — which
+      // then fails the structure validator and drops the doctor's chosen format.
+      // Pin polish to this template's own headings. Gated to non-default
+      // templates so the SOAP + ultrasound-imaging paths stay structure-agnostic
+      // (see emitStructureLock above).
+      ...(emitStructureLock
+        ? [
+            'The revised note MUST use these markdown section headings, exactly',
+            'as written below, in this order, and NO OTHERS. Do not rename, add,',
+            'remove, reorder, merge, or split them, and do not restructure the',
+            'note under a different set of headings:',
+            ...requiredSections.map((label) => `## ${label}`),
+            'If one of these sections has no supporting content in the draft,',
+            'keep its heading and leave the body empty — a later step marks empty',
+            'sections. Never drop a required heading and never invent content to',
+            'fill one.',
+            '',
+          ]
+        : []),
       'Rules:',
       '- Preserve all clinical content that the auditor did not flag.',
       '- Apply each "suggested_fix" as closely as possible, using only',

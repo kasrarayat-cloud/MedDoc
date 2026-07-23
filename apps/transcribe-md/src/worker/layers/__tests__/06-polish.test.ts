@@ -527,6 +527,41 @@ Appearance appropriate; mood depressed; no SI/HI.`;
     ]);
     expect(result.needsReview).toBe(true);
   });
+
+  // The KUK operative-note bug (2026-07-23): L4 applied the custom template but
+  // L6 silently reverted the sparse note to Subjective/Objective/Assessment/Plan.
+  // The polish system prompt must now PIN the resolved template's own headings.
+  it('pins the system prompt to the custom template headings (prevents SOAP reversion)', async () => {
+    mocks.modelCompleteText.mockResolvedValueOnce({ text: CUSTOM_POLISHED });
+
+    await runLayer6Polish(
+      makeInput({ critique: reportWithFixable(), noteTemplate: CUSTOM_TEMPLATE })
+    );
+
+    const { system } = mocks.modelCompleteText.mock.calls[0][0];
+    expect(system).toContain('## Presenting Concern');
+    expect(system).toContain('## Mental Status Exam');
+    expect(system).toMatch(/NO OTHERS/);
+    expect(system).toMatch(/different set of headings/i);
+    // It must NOT force the default SOAP scaffold onto a custom template.
+    expect(system).not.toContain('## Subjective');
+  });
+
+  it('default template does NOT emit the heading-lock (structure-agnostic; SOAP + ultrasound paths unchanged)', async () => {
+    // The lock is gated to non-default custom templates. The system default —
+    // which an imaging visit ALSO reaches L6 with while carrying an ultrasound
+    // draft — keeps its original structure-agnostic prompt, so polish never
+    // forces SOAP headings onto a non-SOAP draft.
+    mocks.modelCompleteText.mockResolvedValueOnce({ text: POLISHED_SOAP });
+
+    await runLayer6Polish(makeInput({ critique: reportWithFixable() }));
+
+    const { system } = mocks.modelCompleteText.mock.calls[0][0];
+    expect(system).not.toMatch(/NO OTHERS/);
+    expect(system).not.toMatch(/different set of headings/i);
+    // Original structure-agnostic instruction still present.
+    expect(system).toMatch(/same markdown structure as the/i);
+  });
 });
 
 describe('review-reason composition (#315 obs#1) — L6 never overwrites an earlier reason', () => {
