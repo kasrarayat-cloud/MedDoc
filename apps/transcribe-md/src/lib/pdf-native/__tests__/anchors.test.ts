@@ -39,12 +39,15 @@ describe('extractPdfAnchors', () => {
     expect(anchors.map((a) => a.key).sort()).toEqual(
       ['patient_name', 'procedure', 'recommendations', 'surgeon'].sort()
     );
-    // Inline (PATIENT NAME:) fills to the RIGHT of the label.
-    expect(byKey.patient_name.x).toBeGreaterThan(54 + 60);
-    // Block (PROCEDURE:) fills BELOW its label and above RECOMMENDATIONS:.
-    expect(byKey.procedure.yTop).toBeLessThan(660);
-    expect(byKey.procedure.yBottom).toBeGreaterThan(300); // bounded by next label region
-    expect(byKey.procedure.x).toBeCloseTo(54, 0);
+    // Inline (PATIENT NAME:) first line starts to the RIGHT of the label; it's a
+    // single-line region.
+    expect(byKey.patient_name.firstLineX).toBeGreaterThan(54 + 60);
+    expect(byKey.patient_name.yTop - byKey.patient_name.yBottom).toBeLessThan(20);
+    // Block (PROCEDURE:) first line right of the label, wraps below at x=54, down
+    // to the next label region.
+    expect(byKey.procedure.firstLineX).toBeGreaterThan(54 + 60);
+    expect(byKey.procedure.wrapX).toBeCloseTo(54, 0);
+    expect(byKey.procedure.yBottom).toBeGreaterThan(300); // bounded by RECOMMENDATIONS:
   });
 
   it('reports labels that do not anchor (never silently dropped)', async () => {

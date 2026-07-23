@@ -103,40 +103,50 @@ export async function extractPdfAnchors(
     .map((s) => ({ spec: s, item: findLabel(items, s.label) }))
     .filter((l): l is { spec: AnchorLabelSpec; item: PlacedItem } => l.item !== null);
 
+  // The nearest FORM INK below a y on a page — a block region must stop above it
+  // (the next section label OR the form's own footer, e.g. "Electronically
+  // Signed -" / "DD:" / "DT:"), so fill text never overlaps his printed ink.
+  const nearestInkYBelow = (page: number, y: number): number | undefined =>
+    items
+      .filter((it) => it.page === page && it.y < y - 2)
+      .map((it) => it.y)
+      .sort((a, b) => b - a)[0];
+  const INK_CLEAR = 14; // vertical clearance above the next ink (≈1.2 line @12pt)
+
   const anchors: PdfFillAnchor[] = [];
   for (const { spec, item } of located) {
     const pageWidth = pageW[item.page] ?? 612;
-    const size = Math.max(8, Math.min(item.height || 11, 14));
+    const size = Math.max(8, Math.min(item.height || 11, 12));
+    const firstLineX = item.x + item.width + 6; // just past the printed label
+    const rightEdge = pageWidth - rightMargin;
 
     if (spec.kind === 'inline') {
-      // Fill to the right of the label, same baseline row.
-      const x = item.x + item.width + 6;
+      // One-line region to the RIGHT of the label (header fields).
       anchors.push({
         key: spec.key,
         label: spec.label,
         page: item.page,
-        x,
-        yTop: item.y + size, // one line tall, centered on the label row
-        yBottom: item.y - 2,
-        width: Math.max(40, pageWidth - x - rightMargin),
+        yTop: item.y,
+        yBottom: item.y - size * 1.2,
+        firstLineX,
+        wrapX: firstLineX,
+        rightEdge,
         fontSize: size,
       });
     } else {
-      // Block: fill below, down to the next located label on the same page, or
-      // the page bottom margin.
-      const below = located
-        .filter((o) => o.item.page === item.page && o.item.y < item.y - 1)
-        .map((o) => o.item.y)
-        .sort((a, b) => b - a)[0];
-      const yBottom = (below ?? bottomMargin) + 4;
+      // Block: first line right of the label, wrapping BELOW at the label's left
+      // edge, down to a clear gap above the next FORM INK (next label or footer).
+      const inkY = nearestInkYBelow(item.page, item.y);
+      const yBottom = inkY !== undefined ? inkY + INK_CLEAR : bottomMargin;
       anchors.push({
         key: spec.key,
         label: spec.label,
         page: item.page,
-        x: item.x,
-        yTop: item.y - size * 1.2, // start just below the label
+        yTop: item.y,
         yBottom,
-        width: Math.max(40, pageWidth - item.x - rightMargin),
+        firstLineX,
+        wrapX: item.x,
+        rightEdge,
         fontSize: size,
       });
     }

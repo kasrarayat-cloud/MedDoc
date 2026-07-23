@@ -3,42 +3,43 @@
 // ----------------------------------------------------------------------------
 // Draws generated answers into the BLANK REGIONS of the doctor's OWN flat PDF
 // template — the original page bytes are the export background, never altered.
-// PHI-safe + deterministic: no AI here; it consumes already-resolved text +
-// pre-extracted anchors (label position + the blank region below/beside it).
+// PHI-safe + deterministic: no AI; consumes already-resolved text + pre-extracted
+// anchors (label position + the blank region to its right/below).
 //
-// Rules (per spec):
-//  - font matched to the form (Arial family → Helvetica, metric-compatible),
-//    left-aligned, drawn under/into the region.
-//  - overflow: shrink-to-fit down to a readable floor (MIN_PT). Past that, the
-//    region shows the lead text + " (continued)" and the remainder flows to an
-//    APPENDED continuation page carrying the section label — never a silent
-//    truncation, never drawn over the form's own ink (clipped to the region).
-//  - unfilled sections: nothing drawn (the form's blank space IS the honest
-//    blank; no "Not documented." stamped on his page).
-//  - signed-status line: small, in the bottom page margin, not over his layout.
+// HANGING-INDENT model (matches real operative-note forms): the answer's first
+// line starts to the RIGHT of the printed label (on the label's baseline);
+// continuation lines wrap BELOW at the region's left edge, down to the next
+// label. A short header field is just a one-line region to the right of its
+// label. Rules: font matched to the form (Helvetica ≈ Arial), left-aligned;
+// shrink-to-fit to an 8pt floor; overflow → lead text + " (continued)" and the
+// remainder flows to an APPENDED continuation page carrying the section label
+// (never silent truncation, never below the region floor / over the form ink);
+// unfilled regions left blank; signed-status line small in the bottom margin.
 // ============================================================================
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 
-/** A fillable region on a template page: the label's position + the blank area
- *  to draw into (PDF user space, origin bottom-left). Produced by the anchor
- *  extractor at certify time, stored, and re-derivable — never client-trusted. */
+/** A fillable region: where the answer's first line starts (right of the label)
+ *  and how it wraps below. PDF user space, origin bottom-left. Produced by the
+ *  anchor extractor at certify time; stored; re-derivable; never client-trusted. */
 export interface PdfFillAnchor {
   /** Section/header-field key (matches the text map + continuation heading). */
   key: string;
   /** The doctor's own label text — used ONLY for the continuation-page heading;
-   *  it is already printed on his form, so the engine never redraws it. */
+   *  already printed on his form, so the engine never redraws it. */
   label: string;
-  /** 0-based page index the region lives on. */
+  /** 0-based page index. */
   page: number;
-  /** Left edge of the fill region. */
-  x: number;
-  /** Top of the region (just below the label) — text starts here, going down. */
+  /** Baseline y of the first line (= the label's baseline). */
   yTop: number;
-  /** Bottom of the region — text must not cross below this (next label / margin). */
+  /** Text must never cross below this (next label / margin). */
   yBottom: number;
-  /** Region width; text wraps within it. */
-  width: number;
-  /** The form's label font size (pt) — the fill matches it as a starting size. */
+  /** X where the FIRST line starts — just past the printed label. */
+  firstLineX: number;
+  /** X where wrapped continuation lines start (left edge of the region). */
+  wrapX: number;
+  /** Right boundary for wrapping (page width − right margin). */
+  rightEdge: number;
+  /** The form's label font size (pt) — the fill matches it as the starting size. */
   fontSize: number;
 }
 
@@ -53,15 +54,23 @@ export interface PdfFillInput {
   signedStatusLine?: string | null;
 }
 
-const MIN_PT = 8; // readable floor for shrink-to-fit
-const DEFAULT_PT = 10;
-const LINE_GAP = 1.18; // line-height multiplier
-const REGION_PAD = 2; // pt inset so fill never kisses the form ink
+const MIN_PT = 8;
+const DEFAULT_PT = 11;
+const LINE_GAP = 1.2;
 const CONTINUED = ' (continued)';
+const INK = rgb(0.1, 0.12, 0.14);
 
-/** Greedy word-wrap: returns the lines that fit within `maxWidth` at `size`. */
-function wrapLines(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
+/** Greedy wrap where the FIRST line has `firstWidth` and the rest `restWidth`
+ *  (hanging indent). Honors explicit newlines. */
+function wrapHanging(
+  text: string,
+  font: PDFFont,
+  size: number,
+  firstWidth: number,
+  restWidth: number
+): string[] {
   const out: string[] = [];
+  const widthFor = (i: number) => (out.length === 0 && i === 0 ? firstWidth : restWidth);
   for (const rawLine of text.split('\n')) {
     if (rawLine.trim() === '') {
       out.push('');
@@ -70,7 +79,8 @@ function wrapLines(text: string, font: PDFFont, size: number, maxWidth: number):
     let line = '';
     for (const word of rawLine.split(/\s+/)) {
       const trial = line ? `${line} ${word}` : word;
-      if (font.widthOfTextAtSize(trial, size) <= maxWidth || !line) {
+      const w = out.length === 0 ? firstWidth : restWidth;
+      if (font.widthOfTextAtSize(trial, size) <= w || !line) {
         line = trial;
       } else {
         out.push(line);
@@ -79,13 +89,12 @@ function wrapLines(text: string, font: PDFFont, size: number, maxWidth: number):
     }
     if (line) out.push(line);
   }
+  void widthFor;
   return out;
 }
 
-/** How many lines fit vertically in a region of the given height at `size`. */
-function linesThatFit(regionHeight: number, size: number): number {
-  const lineH = size * LINE_GAP;
-  return Math.max(0, Math.floor(regionHeight / lineH));
+function capacity(yTop: number, yBottom: number, size: number): number {
+  return Math.max(1, Math.floor((yTop - yBottom) / (size * LINE_GAP)) + 1);
 }
 
 interface Overflow {
@@ -94,56 +103,43 @@ interface Overflow {
   text: string;
 }
 
-/** Draw one region's text; return an Overflow if the remainder must continue. */
-function drawRegion(
-  page: PDFPage,
-  font: PDFFont,
-  anchor: PdfFillAnchor,
-  text: string
-): Overflow | null {
-  const x = anchor.x + REGION_PAD;
-  const maxWidth = Math.max(1, anchor.width - REGION_PAD * 2);
-  const regionHeight = Math.max(0, anchor.yTop - anchor.yBottom - REGION_PAD);
+function drawRegion(page: PDFPage, font: PDFFont, a: PdfFillAnchor, text: string): Overflow | null {
+  const firstWidth = Math.max(1, a.rightEdge - a.firstLineX);
+  const restWidth = Math.max(1, a.rightEdge - a.wrapX);
 
-  // Shrink-to-fit: from the form's size down to MIN_PT, pick the largest size at
-  // which ALL lines fit; if none fits (even at MIN_PT), we overflow at MIN_PT.
-  let size = Math.max(MIN_PT, Math.min(anchor.fontSize || DEFAULT_PT, 14));
-  let lines = wrapLines(text, font, size, maxWidth);
-  while (size > MIN_PT && lines.length > linesThatFit(regionHeight, size)) {
+  // Shrink-to-fit: from the form's size down to MIN_PT, largest size where all
+  // lines fit vertically; if none fits even at MIN_PT, overflow at MIN_PT.
+  let size = Math.max(MIN_PT, Math.min(a.fontSize || DEFAULT_PT, 12));
+  let lines = wrapHanging(text, font, size, firstWidth, restWidth);
+  while (size > MIN_PT && lines.length > capacity(a.yTop, a.yBottom, size)) {
     size -= 0.5;
-    lines = wrapLines(text, font, size, maxWidth);
+    lines = wrapHanging(text, font, size, firstWidth, restWidth);
   }
 
-  const capacity = linesThatFit(regionHeight, size);
-  let overflow: Overflow | null = null;
+  const cap = capacity(a.yTop, a.yBottom, size);
   let drawn = lines;
-
-  if (lines.length > capacity) {
-    // Reserve the last visible line for the lead text + "(continued)".
-    const keep = Math.max(1, capacity);
+  let overflow: Overflow | null = null;
+  if (lines.length > cap) {
+    const keep = Math.max(1, cap);
     drawn = lines.slice(0, keep);
-    // Append the continued marker to the last kept line if it fits; else replace.
     const last = drawn[keep - 1] ?? '';
     const withMark = `${last}${CONTINUED}`;
-    drawn[keep - 1] =
-      font.widthOfTextAtSize(withMark, size) <= maxWidth ? withMark : CONTINUED.trim();
-    // The remainder (from the first not-drawn line) flows to a continuation page.
+    const wLast = keep === 1 ? firstWidth : restWidth;
+    drawn[keep - 1] = font.widthOfTextAtSize(withMark, size) <= wLast ? withMark : CONTINUED.trim();
     const remainder = lines.slice(keep).join(' ').trim();
-    if (remainder) overflow = { key: anchor.key, label: anchor.label, text: remainder };
+    if (remainder) overflow = { key: a.key, label: a.label, text: remainder };
   }
 
   const lineH = size * LINE_GAP;
-  let y = anchor.yTop - size; // baseline of the first line
-  for (const line of drawn) {
-    if (y < anchor.yBottom) break; // hard clip — never cross the region floor
-    if (line) page.drawText(line, { x, y, size, font, color: rgb(0.1, 0.12, 0.14) });
-    y -= lineH;
-  }
+  drawn.forEach((line, i) => {
+    const y = a.yTop - i * lineH;
+    if (y < a.yBottom - 0.01) return; // hard clip at the region floor
+    const x = i === 0 ? a.firstLineX : a.wrapX;
+    if (line) page.drawText(line, { x, y, size, font, color: INK });
+  });
   return overflow;
 }
 
-/** Append continuation page(s) for regions that overflowed, each headed by the
- *  section label, in a single readable column. */
 function drawContinuationPages(
   doc: PDFDocument,
   font: PDFFont,
@@ -151,39 +147,35 @@ function drawContinuationPages(
   overflows: Overflow[]
 ): void {
   if (overflows.length === 0) return;
-  const PAGE_W = 612;
-  const PAGE_H = 792; // Letter
+  const W = 612;
+  const H = 792;
   const M = 54;
-  const maxWidth = PAGE_W - M * 2;
-  let page = doc.addPage([PAGE_W, PAGE_H]);
-  let y = PAGE_H - M;
-
-  const ensureRoom = (needed: number) => {
-    if (y - needed < M) {
-      page = doc.addPage([PAGE_W, PAGE_H]);
-      y = PAGE_H - M;
+  const maxWidth = W - M * 2;
+  let page = doc.addPage([W, H]);
+  let y = H - M;
+  const room = (n: number) => {
+    if (y - n < M) {
+      page = doc.addPage([W, H]);
+      y = H - M;
     }
   };
-
   page.drawText('CONTINUATION', { x: M, y, size: 9, font: fontBold, color: rgb(0.4, 0.4, 0.4) });
-  y -= 20;
-
+  y -= 22;
   for (const ov of overflows) {
-    ensureRoom(40);
-    page.drawText(ov.label, { x: M, y, size: 11, font: fontBold, color: rgb(0.1, 0.12, 0.14) });
+    room(40);
+    page.drawText(ov.label, { x: M, y, size: 11, font: fontBold, color: INK });
     y -= 16;
-    for (const line of wrapLines(ov.text, font, 10, maxWidth)) {
-      ensureRoom(14);
-      if (line) page.drawText(line, { x: M, y, size: 10, font, color: rgb(0.1, 0.12, 0.14) });
+    for (const line of wrapHanging(ov.text, font, 10, maxWidth, maxWidth)) {
+      room(14);
+      if (line) page.drawText(line, { x: M, y, size: 10, font, color: INK });
       y -= 12;
     }
     y -= 10;
   }
 }
 
-/** Fill the doctor's template PDF with the resolved texts. Returns new PDF bytes;
- *  the original page content is preserved verbatim (only overlays + appended
- *  continuation pages are added). */
+/** Fill the doctor's template PDF. Returns new PDF bytes; the original page
+ *  content is preserved verbatim (only overlays + appended continuation pages). */
 export async function fillPdfTemplate(input: PdfFillInput): Promise<Uint8Array> {
   const doc = await PDFDocument.load(input.canvasPdf);
   const font = await doc.embedFont(StandardFonts.Helvetica);
@@ -191,27 +183,19 @@ export async function fillPdfTemplate(input: PdfFillInput): Promise<Uint8Array> 
   const pages = doc.getPages();
   const overflows: Overflow[] = [];
 
-  for (const anchor of input.anchors) {
-    const text = (input.texts[anchor.key] ?? '').trim();
+  for (const a of input.anchors) {
+    const text = (input.texts[a.key] ?? '').trim();
     if (!text) continue; // unfilled → leave his blank space blank
-    const page = pages[anchor.page];
+    const page = pages[a.page];
     if (!page) continue;
-    const ov = drawRegion(page, font, anchor, text);
+    const ov = drawRegion(page, font, a, text);
     if (ov) overflows.push(ov);
   }
 
   drawContinuationPages(doc, font, fontBold, overflows);
 
-  // Signed-status line in the bottom margin of page 1 — small, out of the layout.
   if (input.signedStatusLine && pages[0]) {
-    const p0 = pages[0];
-    p0.drawText(input.signedStatusLine, {
-      x: 54,
-      y: 24,
-      size: 7,
-      font,
-      color: rgb(0.5, 0.5, 0.5),
-    });
+    pages[0].drawText(input.signedStatusLine, { x: 54, y: 22, size: 7, font, color: rgb(0.5, 0.5, 0.5) });
   }
 
   return doc.save();

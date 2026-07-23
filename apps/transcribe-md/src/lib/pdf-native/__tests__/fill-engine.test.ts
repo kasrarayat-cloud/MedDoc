@@ -26,10 +26,10 @@ async function pdfText(bytes: Uint8Array): Promise<string> {
 }
 
 const ANCHORS: PdfFillAnchor[] = [
-  // Region under PROCEDURE: (tall enough for a line or two)
-  { key: 'procedure', label: 'PROCEDURE:', page: 0, x: 54, yTop: 705, yBottom: 640, width: 500, fontSize: 11 },
-  // Small region under RECOMMENDATIONS: (forces overflow for long text)
-  { key: 'recommendations', label: 'RECOMMENDATIONS:', page: 0, x: 54, yTop: 285, yBottom: 250, width: 500, fontSize: 11 },
+  // Region right-of + below PROCEDURE: (tall enough for a line or two)
+  { key: 'procedure', label: 'PROCEDURE:', page: 0, yTop: 720, yBottom: 640, firstLineX: 130, wrapX: 54, rightEdge: 558, fontSize: 11 },
+  // Small region at RECOMMENDATIONS: (forces overflow for long text)
+  { key: 'recommendations', label: 'RECOMMENDATIONS:', page: 0, yTop: 300, yBottom: 280, firstLineX: 170, wrapX: 54, rightEdge: 558, fontSize: 11 },
 ];
 
 describe('fillPdfTemplate', () => {
