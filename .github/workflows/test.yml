@@ -136,6 +136,42 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
+      - name: Assert sharp survived install (lockfile is hand-maintained)
+        # `overrides.sharp: ^0.35.0` (which clears GHSA-f88m-g3jw-g9cj, the
+        # sharp <0.35.0 libvips HIGH) is DISJOINT from what next declares:
+        # next@16.2.11 has `optionalDependencies.sharp: ^0.34.5`, and there is
+        # no newer stable next. Because sharp is OPTIONAL, npm resolves the
+        # conflict by silently DROPPING it rather than erroring — so a full
+        # re-resolve (`npm update`, `npm install`) can quietly remove sharp and
+        # Next loses its native image optimiser with no warning anywhere.
+        #
+        # `npm ci` installs strictly from the lockfile and keeps it, which is
+        # why CI and the Docker build are fine. This assert exists so that if
+        # someone regenerates the lockfile with `npm install`, CI says so
+        # instead of shipping an image without sharp.
+        # NOTE: read package.json off the filesystem, NOT via
+        # require('sharp/package.json') — sharp's "exports" map does not expose
+        # the ./package.json subpath, so the require form throws
+        # ERR_PACKAGE_PATH_NOT_EXPORTED even when sharp is correctly installed
+        # (i.e. it would be a permanent false alarm).
+        run: |
+          node -e "
+            const fs = require('fs'), path = require('path');
+            const p = path.join(process.cwd(), 'node_modules', 'sharp', 'package.json');
+            if (!fs.existsSync(p)) {
+              console.error('::error::sharp is MISSING from node_modules after npm ci.');
+              console.error('::error::The lockfile was probably regenerated with \`npm install\`, which drops sharp');
+              console.error('::error::because overrides.sharp ^0.35.0 cannot satisfy next optionalDependencies ^0.34.5.');
+              console.error('::error::Fix: restore the sharp + @img entries in package-lock.json, verify with \`npm ci\`.');
+              process.exit(1);
+            }
+            const v = JSON.parse(fs.readFileSync(p, 'utf8')).version;
+            if (!v.startsWith('0.35.')) {
+              console.error('::error::sharp resolved to ' + v + ' — expected 0.35.x (GHSA-f88m-g3jw-g9cj).');
+              process.exit(1);
+            }
+            console.log('sharp ' + v + ' present');
+          "
       - name: Audit (fail on high/critical only; decommissioned meddoc-pro excluded)
         # `--audit-level=high` gates the exit code on high/critical only
         # (moderate + low are printed but don't fail). `|| true` is
