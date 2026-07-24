@@ -12,6 +12,9 @@ import { extractPdfAnchors, missingAnchors, type AnchorLabelSpec } from './ancho
 import { fillPdfTemplate, type PdfFillAnchor } from './fill-engine';
 import { putTemplateCanvas } from './store';
 import { canvasHash, templateStructureHash } from './hash';
+import { extractHeaderFields, deriveHeaderFieldsFromRun } from '@/lib/note-template-parse/header-fields';
+import { pdfToText } from '@/lib/note-template-parse/pdf-to-text';
+import { normalizeExtractedText } from '@/lib/note-template-parse/extract-note-text';
 import type {
   NoteTemplateSection,
   NoteTemplateHeaderField,
@@ -50,8 +53,32 @@ async function loadTemplateShape(templateId: string): Promise<{
 export async function certifyPdfTemplate(input: {
   templateId: string;
   pdfBytes: Buffer;
-}): Promise<{ anchors: PdfFillAnchor[]; missing: string[] }> {
-  const { sections, headerFields, styleProfile } = await loadTemplateShape(input.templateId);
+}): Promise<{ anchors: PdfFillAnchor[]; missing: string[]; headerFields: NoteTemplateHeaderField[] }> {
+  const { sections, headerFields: existingHeader, styleProfile } = await loadTemplateShape(
+    input.templateId
+  );
+
+  // Re-derive header fields from the PDF's OWN text using the template's canonical
+  // section labels as the boundary. Deterministic (the PDF + stored labels, no
+  // fresh LLM output) and FAR more robust than the parse-time capture whose
+  // boundary collapses on label drift — so every (re-)cert REFRESHES the header
+  // fields. Keep the parsed set only when the PDF yields none.
+  let headerFields = existingHeader;
+  try {
+    // Use the SAME text pipeline as the upload parser (pdfToText → normalize) so
+    // the line structure extractHeaderFields depends on matches — raw extractText
+    // merges runs differently and defeats the boundary.
+    const pdfText = normalizeExtractedText(await pdfToText(new Uint8Array(input.pdfBytes).slice()));
+    const specSections = sections.map((s) => ({ label: s.label }));
+    // Line-based first (multi-line forms); fall back to the run-aware derivation
+    // for flat forms whose text layer flattens to a single line.
+    let derived = extractHeaderFields(pdfText, specSections);
+    if (derived.length === 0) derived = deriveHeaderFieldsFromRun(pdfText, specSections);
+    if (derived.length > 0) headerFields = derived as NoteTemplateHeaderField[];
+  } catch {
+    // Text-layer extraction failed → keep whatever headerFields were parsed.
+  }
+
   const specs = anchorSpecsFor(sections, headerFields);
 
   // getDocumentProxy detaches its input buffer → give each pass its own copy.
@@ -70,6 +97,9 @@ export async function certifyPdfTemplate(input: {
     data: {
       styleProfile: {
         ...styleProfile,
+        // Persist the (refreshed) header fields so the styled export + the native
+        // header block both fill even when the parse-time capture missed them.
+        headerFields: headerFields as unknown,
         pdfNativeAnchors: anchors as unknown,
         pdfNativeCertified: true,
         // Durable-cert signatures — let a future re-upload (new template id) carry
@@ -81,7 +111,7 @@ export async function certifyPdfTemplate(input: {
       } as never,
     },
   });
-  return { anchors, missing };
+  return { anchors, missing, headerFields };
 }
 
 /** Preview-once: fill the anchors with SYNTHETIC text so the doctor confirms the

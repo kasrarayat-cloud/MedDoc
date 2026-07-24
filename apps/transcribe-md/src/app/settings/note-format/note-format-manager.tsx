@@ -27,6 +27,7 @@ import {
   deleteNoteTemplateAction,
   getNoteTemplateForEditAction,
 } from '@/actions/note-template-lifecycle';
+import { certifyPdfTemplateAction } from '@/actions/certify-pdf-template';
 import type { TemplateReviewModel, ClientTemplateListItem } from '@/lib/note-template-persist/types';
 import { TemplateReviewEditor } from './template-review-editor';
 
@@ -56,6 +57,21 @@ const subLabel: React.CSSProperties = {
   color: 'var(--color-linear-text-3)',
 };
 
+/** Open a base64-encoded PDF (the one-time synthetic preview) in a new tab. */
+function openPdfPreview(base64: string): void {
+  try {
+    const bin = atob(base64);
+    const buf = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([buf], { type: 'application/pdf' }));
+    window.open(url, '_blank', 'noopener');
+    // Revoke after a beat so the new tab has loaded it.
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch {
+    /* preview is a nicety; ignore */
+  }
+}
+
 type View = 'home' | 'entry' | 'parsing' | 'review' | 'rejected';
 
 /** Which uploadable formats this image can actually extract. Computed server-
@@ -69,9 +85,11 @@ export interface UploadCaps {
 export function NoteFormatManager({
   templates,
   uploadCaps,
+  nativePdfEnabled = false,
 }: {
   templates: ClientTemplateListItem[];
   uploadCaps: UploadCaps;
+  nativePdfEnabled?: boolean;
 }) {
   const router = useRouter();
   const hasTemplates = templates.length > 0;
@@ -242,6 +260,29 @@ export function NoteFormatManager({
       }
     });
   }
+  // Finish native-export setup: the doctor re-uploads his blank form once; we
+  // certify it (canvas + anchors + derived header fields) and open a one-time
+  // synthetic preview so he confirms placement.
+  function onFinishNativeSetup(id: string, file: File) {
+    startTransition(async () => {
+      try {
+        const fd = new FormData();
+        fd.set('templateId', id);
+        fd.set('file', file);
+        const res = await certifyPdfTemplateAction(fd);
+        if (!res.ok) { toast.error(res.error); return; }
+        toast.success(
+          `Native export ready — ${res.anchors} field${res.anchors === 1 ? '' : 's'} mapped` +
+            (res.headerFields ? `, ${res.headerFields} header field${res.headerFields === 1 ? '' : 's'}` : '') +
+            (res.missing.length ? ` (${res.missing.length} label not found — check the preview)` : '')
+        );
+        if (res.previewBase64) openPdfPreview(res.previewBase64);
+        router.refresh();
+      } catch (err) {
+        handleActionError(err, 'home');
+      }
+    });
+  }
 
   // ── Render ────────────────────────────────────────────────────────────────
   if (view === 'review' && review) {
@@ -305,10 +346,12 @@ export function NoteFormatManager({
             key={t.id}
             t={t}
             pending={pending}
+            nativePdfEnabled={nativePdfEnabled}
             onEdit={() => onEdit(t.id)}
             onDuplicate={() => onDuplicate(t.id)}
             onActivate={() => onActivate(t.id)}
             onDelete={() => onDelete(t.id)}
+            onFinishNativeSetup={onFinishNativeSetup}
           />
         ))}
         {/* Built-in fallback row (the standard format — not editable) */}
@@ -351,18 +394,25 @@ function pill(kind: 'active' | 'draft' | 'inactive' | 'fallback'): React.CSSProp
 }
 
 function TemplateRow({
-  t, pending, onEdit, onDuplicate, onActivate, onDelete,
+  t, pending, nativePdfEnabled, onEdit, onDuplicate, onActivate, onDelete, onFinishNativeSetup,
 }: {
   t: ClientTemplateListItem;
   pending: boolean;
+  nativePdfEnabled: boolean;
   onEdit: () => void;
   onDuplicate: () => void;
   onActivate: () => void;
   onDelete: () => void;
+  onFinishNativeSetup: (id: string, file: File) => void;
 }) {
+  const setupRef = useRef<HTMLInputElement | null>(null);
   const statusLabel = t.status === 'active'
     ? `Active · ${t.encounterLabel}`
     : t.status === 'draft' ? 'Draft' : 'Superseded';
+  // Native-export setup surfaces ONLY on the active format when the flag is on.
+  // Certified → a calm "Native ✓" chip; otherwise a "Set up native export" CTA
+  // the doctor can actually see + act on (re-upload his blank form once).
+  const showNative = nativePdfEnabled && t.status === 'active';
   return (
     <div style={rowStyle}>
       <div style={{ minWidth: 0 }}>
@@ -372,9 +422,45 @@ function TemplateRow({
           {' · '}{t.defaultCount} default{t.defaultCount === 1 ? '' : 's'}
           {t.version > 1 ? ` · v${t.version}` : ''}
         </div>
+        {showNative && t.pdfNativeCertified && (
+          <div style={{ fontSize: 11, color: 'var(--color-linear-sage-bright)', marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <span aria-hidden>✓</span> Native export ready — your form is filled in for exports
+          </div>
+        )}
+        {showNative && !t.pdfNativeCertified && (
+          <div style={{ fontSize: 11, color: 'var(--color-linear-amber, #d9a44a)', marginTop: 4 }}>
+            {t.pdfNativePendingPreview
+              ? "Native export needs the original flat PDF form — re-upload to finish."
+              : 'Exports use a styled re-creation. Finish setup to fill your own form instead.'}
+          </div>
+        )}
       </div>
       <span style={pill(t.status === 'active' ? 'active' : 'draft')}>{statusLabel}</span>
       <div style={{ display: 'flex', gap: 6 }}>
+        {showNative && !t.pdfNativeCertified && (
+          <>
+            <input
+              ref={setupRef}
+              type="file"
+              accept=".pdf,application/pdf"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) onFinishNativeSetup(t.id, f);
+                e.target.value = '';
+              }}
+            />
+            <button
+              type="button"
+              style={btnPrimary}
+              onClick={() => setupRef.current?.click()}
+              disabled={pending}
+              title="Upload your blank form to fill your own page on export"
+            >
+              Set up native export
+            </button>
+          </>
+        )}
         <button type="button" style={btn} onClick={onEdit} disabled={pending}>Edit</button>
         {t.status !== 'active' && (
           <button type="button" style={btnPrimary} onClick={onActivate} disabled={pending}>Activate</button>

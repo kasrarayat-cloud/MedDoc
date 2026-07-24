@@ -70,8 +70,13 @@ export interface BuildFillTextsInput {
   sections: ReadonlyArray<{ key: string; label: string }>;
   /** Template header fields (labels only). */
   headerFields: ReadonlyArray<NoteTemplateHeaderField>;
-  /** Header-fill context (GOAL-8). */
-  headerCtx: { patientName: string | null; visitDate: Date; soapText: string };
+  /** Header-fill context (GOAL-8) + a dictation fallback for the surgeon field. */
+  headerCtx: {
+    patientName: string | null;
+    visitDate: Date;
+    soapText: string;
+    dictationText?: string | null;
+  };
 }
 
 export interface BuildFillTextsOutput {

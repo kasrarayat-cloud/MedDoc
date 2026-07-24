@@ -94,3 +94,46 @@ export function extractHeaderFields(
   }
   return out;
 }
+
+/**
+ * Run-aware header capture for FLAT-FORM PDFs whose text layer flattens to a
+ * SINGLE line — e.g. "OPERATIVE NOTE PATIENT NAME: PATIENT DOB: ... SURGEON:
+ * PROCEDURE: ...". The line-based `extractHeaderFields` cannot find a per-line
+ * boundary there; this derives header fields from the colon-delimited run BEFORE
+ * the first section label. For each colon segment the label is the LONGEST
+ * trailing 1–4 words that canonicalizes to a header field (so "PATIENT NAME" is
+ * kept, not the bare "NAME"). Deterministic; LABELS ONLY; PHI-scanned; deduped.
+ */
+export function deriveHeaderFieldsFromRun(
+  text: string,
+  sectionLabels: { label: string }[]
+): NoteTemplateHeaderField[] {
+  const hay = text.toLowerCase();
+  // Header region = everything before the earliest section label in the text.
+  let boundary = text.length;
+  for (const s of sectionLabels) {
+    const lbl = s.label.replace(/:\s*$/, '').trim().toLowerCase();
+    if (!lbl) continue;
+    const idx = hay.indexOf(lbl);
+    if (idx >= 0) boundary = Math.min(boundary, idx);
+  }
+  const header = text.slice(0, boundary);
+  const segs = header.split(':');
+  const out: NoteTemplateHeaderField[] = [];
+  const seen = new Set<string>();
+  // Each colon terminates a label; the label is the trailing words of the segment
+  // BEFORE that colon (segs[i] precedes the (i+1)-th colon).
+  for (let i = 0; i < segs.length - 1; i++) {
+    const words = segs[i].trim().split(/\s+/).filter(Boolean);
+    for (let n = Math.min(4, words.length); n >= 1; n--) {
+      const cand = words.slice(words.length - n).join(' ');
+      const key = canonicalHeaderKey(cand);
+      if (!key || seen.has(key)) continue;
+      if (detectStructuredPhi(cand).length > 0) continue;
+      seen.add(key);
+      out.push({ key, label: cand.replace(/\s*:\s*$/, ''), order: out.length + 1 });
+      break;
+    }
+  }
+  return out;
+}

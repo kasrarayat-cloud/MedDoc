@@ -510,6 +510,15 @@ export function SoapEditor({
               setSignAdvisoryOpen(false);
               setSignModalOpen(true);
             }}
+            onReviewNow={() => {
+              // Legacy renders the suggestions lane inline — close + scroll to it.
+              setSignAdvisoryOpen(false);
+              setTimeout(() => {
+                document
+                  .querySelector('[data-testid="suggestions-lane"]')
+                  ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }, 80);
+            }}
           />
         )}
 

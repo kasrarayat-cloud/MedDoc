@@ -554,6 +554,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
           rxResolved={rxResolved}
           pendingEmChange={pendingEmChange}
           rxTabKey="rx"
+          reviewTabKey="review"
           visitId={props.visitId}
           doctorEmail={props.doctorEmail}
           emailEnabled={props.emailEnabled}
