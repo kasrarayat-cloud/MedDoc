@@ -142,6 +142,11 @@ export interface ConfirmCardProps {
   /** Non-null after a confirm attempt where activation succeeded but native
    *  certification did not. Never silent — shown with a retry. */
   certError: string | null;
+  /** Non-null when the confirm itself was REJECTED (nothing was activated).
+   *  Rendered in the card, not just toasted: a toast auto-dismisses after 4s,
+   *  and a failure that leaves no trace is indistinguishable from a dead
+   *  button — the exact misreading this pack exists to stop repeating. */
+  saveError: string | null;
   onConfirm: () => void;
   onRetryCert: () => void;
   onAdvanced: () => void;
@@ -200,6 +205,19 @@ export function ConfirmCard(props: ConfirmCardProps) {
           )}
         </div>
       </div>
+
+      {props.saveError && (
+        <div className="qm-ux-cert-warn" role="alert" data-testid="confirm-save-error">
+          <ShieldAlert className="h-4 w-4 flex-none" aria-hidden />
+          <div>
+            <strong>We couldn&rsquo;t use this format</strong> — {props.saveError}
+            <br />
+            <span className="qm-ux-cert-note">
+              Nothing was changed. Open the advanced editor to adjust it, or cancel.
+            </span>
+          </div>
+        </div>
+      )}
 
       {props.certError && (
         <div className="qm-ux-cert-warn" role="alert">
