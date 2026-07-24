@@ -41,7 +41,11 @@ import type { EmOverride } from '../../lib/em-coding-ui/types';
  *  imported it from here dragged dns/net/tls into the browser bundle and broke
  *  the build. The leaf module lets the signed-visit view read ICD rows without
  *  the scoring engine, with still exactly ONE implementation. */
-export { extractIcdRows } from './icd-rows';
+import { extractIcdRows } from './icd-rows';
+// Re-exported so existing server callers keep importing it from here. NOTE the
+// import-then-export form: a bare `export { x } from './y'` does NOT bind the
+// name in this module's scope, and computeDisplayedEmCode below calls it.
+export { extractIcdRows };
 
 /** rxDrafts jsonb → engine rows. Reads BOTH the worker's current
  *  `{ prescriptions: [...] }` (Layer 7c) AND the legacy `{ drafts: [...] }`
