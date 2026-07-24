@@ -147,6 +147,8 @@ export async function carryForwardPdfCertification(input: {
         pdfNativeStructureHash: newStructure,
         pdfNativePendingPreview: false,
         pdfNativeCarriedFrom: prior.id,
+        // Carry the form's signature style forward too (form-only exports).
+        ...(priorSp.formSignature ? { formSignature: priorSp.formSignature } : {}),
       } as never,
     },
   });

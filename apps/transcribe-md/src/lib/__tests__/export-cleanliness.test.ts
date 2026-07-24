@@ -113,6 +113,8 @@ function fixture(): VisitExportData {
     patientSummary: null,
     headerFields: [],
     formOnly: false,
+    formTitle: null,
+    formSignature: null,
   };
 }
 
