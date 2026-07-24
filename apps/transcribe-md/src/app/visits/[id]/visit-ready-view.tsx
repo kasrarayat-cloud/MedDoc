@@ -561,7 +561,16 @@ export function VisitReadyView(props: VisitReadyViewProps) {
             lockBanner={null}
             noteNode={noteNode}
             dictationNode={dictationNode}
-            dictationLabel={secondTabLabel.toLowerCase()}
+            // Name the source the doctor actually produced, rather than
+            // reusing a tab noun: "View original dictation" / "…transcript" /
+            // "…typed notes" all read as the thing they are.
+            dictationLabel={
+              props.inputMode === 'voice_dictation'
+                ? 'original dictation'
+                : props.inputMode === 'text_notes'
+                  ? 'the original typed notes'
+                  : 'the original transcript'
+            }
             summary={{
               icd: extractIcdRows(props.icdCodes),
               emCode: displayedEm,
