@@ -45,6 +45,8 @@ function row(over: Record<string, unknown> = {}) {
     patientSummary: null,
     headerFields: [],
     formOnly: false,
+    formTitle: null,
+    formSignature: null,
     user: { name: 'Dr', email: 'd@t.dev' },
     ...over,
   };

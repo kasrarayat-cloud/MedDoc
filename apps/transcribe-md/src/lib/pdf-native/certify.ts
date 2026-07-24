@@ -86,6 +86,7 @@ export async function certifyPdfTemplate(input: {
   // boundary collapses on label drift — so every (re-)cert REFRESHES the header
   // fields. Keep the parsed set only when the PDF yields none.
   let headerFields = existingHeader;
+  let formSignature: { dd: boolean; dt: boolean } | undefined;
   try {
     // Use the SAME text pipeline as the upload parser (pdfToText → normalize) so
     // the line structure extractHeaderFields depends on matches — raw extractText
@@ -97,6 +98,11 @@ export async function certifyPdfTemplate(input: {
     let derived = extractHeaderFields(pdfText, specSections);
     if (derived.length === 0) derived = deriveHeaderFieldsFromRun(pdfText, specSections);
     if (derived.length > 0) headerFields = derived as NoteTemplateHeaderField[];
+    // Capture the form's own DD:/DT: (dictation/transcription date) lines for
+    // form-only exports. The "Electronically Signed –" attestation is always
+    // rendered; these add the form's own date lines when it has them.
+    const sig = { dd: /\bDD\s*:/i.test(pdfText), dt: /\bDT\s*:/i.test(pdfText) };
+    if (sig.dd || sig.dt) formSignature = sig;
   } catch {
     // Text-layer extraction failed → keep whatever headerFields were parsed.
   }
@@ -130,6 +136,9 @@ export async function certifyPdfTemplate(input: {
     // Persist the (refreshed) header fields so the styled export + the native
     // header block both fill even when the parse-time capture missed them.
     headerFields: headerFields as unknown,
+    // The form's signature style (footer) for form-only exports (preserve any
+    // existing capture if this pass found none).
+    ...(formSignature ? { formSignature } : {}),
     pdfNativeAnchors: anchors as unknown,
     pdfNativeCertified: true,
     // Durable-cert signatures — let a future re-upload (new template id) carry

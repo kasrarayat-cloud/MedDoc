@@ -16,6 +16,7 @@ import {
   prescriptionOneLine,
   formatVisitDate,
 } from './visit-export';
+import { formSignatureLines } from './form-only';
 
 // ---------------------------------------------------------------------------
 // Font assets — bundled in apps/transcribe-md/fonts/ (committed to repo,
@@ -157,15 +158,21 @@ export async function generateVisitPdf(
     renderPatientSummary(doc, data);
   }
 
-  // Watermark + footer on every page — hook the doc's pageAdded event
-  // for pages after the first; apply to the current page manually here
-  // because the event only fires for subsequent adds.
-  drawWatermark(doc);
-  drawFooter(doc, data);
-  doc.on('pageAdded', () => {
+  // Form-only: NO QuillMD watermark + NO QuillMD "Signed electronically" footer.
+  // The form's OWN signature block renders inline at the end of the content.
+  if (data.formOnly) {
+    renderFormSignature(doc, data);
+  } else {
+    // Watermark + footer on every page — hook the doc's pageAdded event
+    // for pages after the first; apply to the current page manually here
+    // because the event only fires for subsequent adds.
     drawWatermark(doc);
     drawFooter(doc, data);
-  });
+    doc.on('pageAdded', () => {
+      drawWatermark(doc);
+      drawFooter(doc, data);
+    });
+  }
 
   doc.end();
   return done;
@@ -179,6 +186,14 @@ function renderHeader(
   doc: PDFKit.PDFDocument,
   data: VisitExportData
 ): void {
+  // Form-only: EXACTLY the doctor's form — its own title, centered as on the
+  // form, no QuillMD wordmark, no account/specialty line, no rule.
+  if (data.formOnly) {
+    doc.font(FONTS.bodyBold).fontSize(SIZE.title).fillColor(COLORS.textPrimary);
+    doc.text((data.formTitle ?? '').trim().toUpperCase() || 'NOTE', { align: 'center' });
+    doc.moveDown(0.8);
+    return;
+  }
   doc.font(FONTS.brand).fontSize(SIZE.small).fillColor(COLORS.accent);
   doc.text('QUILLMD', { align: 'left' });
   doc.moveDown(0.25);
@@ -327,8 +342,20 @@ function parseTableRow(line: string): string[] {
     .map((c) => c.trim());
 }
 
+/** The form's OWN signature block (form-only) — "Electronically Signed – <name>
+ *  <date>" (+ DD:/DT: when the form has them). No QuillMD chrome. */
+function renderFormSignature(doc: PDFKit.PDFDocument, data: VisitExportData): void {
+  doc.moveDown(1.2);
+  doc.font(FONTS.bodyRegular).fontSize(SIZE.small).fillColor(COLORS.textPrimary);
+  for (const line of formSignatureLines(data.clinicianName, data.signedAt, data.formSignature)) {
+    doc.text(line);
+    doc.moveDown(0.15);
+  }
+}
+
 function renderSoap(doc: PDFKit.PDFDocument, data: VisitExportData): void {
-  sectionHeading(doc, 'Clinical Note');
+  // Form-only omits the injected "CLINICAL NOTE" heading (not on the form).
+  if (!data.formOnly) sectionHeading(doc, 'Clinical Note');
   const soap = data.soapText.trim();
   if (!soap) {
     muted(doc, 'No SOAP note available.');
