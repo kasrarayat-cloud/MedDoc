@@ -3,7 +3,52 @@
 // ============================================================================
 import { describe, expect, it } from 'vitest';
 
-import { canonicalHeaderKey, extractHeaderFields } from '../header-fields';
+import { canonicalHeaderKey, extractHeaderFields, deriveHeaderFieldsFromRun } from '../header-fields';
+
+const OP_SECTIONS = [
+  { label: 'PROCEDURE:' },
+  { label: 'PREOPERATIVE DIAGNOSIS:' },
+  { label: 'DESCRIPTION OF PROCEDURE:' },
+  { label: 'RECOMMENDATIONS:' },
+];
+
+describe('deriveHeaderFieldsFromRun (flat-form PDF flattened to one line)', () => {
+  it('captures the 5 op-note header fields from a single-line form (the tom fix)', () => {
+    // pdfToText flattens the colon form to one run; the line-based path can't find
+    // a boundary, so this run-aware derivation must recover the header block.
+    const oneLine =
+      'OPERATIVE NOTE PATIENT NAME: PATIENT DOB: PATIENT ID #: DATE OF SURGERY: SURGEON: PROCEDURE: PREOPERATIVE DIAGNOSIS: DESCRIPTION OF PROCEDURE: RECOMMENDATIONS: Electronically Signed - DD: DT:';
+    const fields = deriveHeaderFieldsFromRun(oneLine, OP_SECTIONS);
+    expect(fields.map((f) => f.key)).toEqual([
+      'patient_name',
+      'patient_dob',
+      'patient_id',
+      'date_of_surgery',
+      'surgeon',
+    ]);
+    // Full labels retained (not the bare trailing word).
+    expect(fields.find((f) => f.key === 'patient_name')?.label).toBe('PATIENT NAME');
+    expect(fields.find((f) => f.key === 'date_of_surgery')?.label).toBe('DATE OF SURGERY');
+  });
+
+  it('stops at the first section label — form footer labels (DD:/DT:) are not captured', () => {
+    const oneLine = 'PATIENT NAME: SURGEON: PROCEDURE: RECOMMENDATIONS: DD: DT:';
+    const fields = deriveHeaderFieldsFromRun(oneLine, OP_SECTIONS);
+    expect(fields.map((f) => f.key)).toEqual(['patient_name', 'surgeon']);
+  });
+
+  it('no header labels before the first section → empty (never invents)', () => {
+    expect(deriveHeaderFieldsFromRun('PROCEDURE: RECOMMENDATIONS:', OP_SECTIONS)).toEqual([]);
+  });
+
+  it('captures "DATE OF PROCEDURE" header without truncating at the PROCEDURE section (WARN-2)', () => {
+    // "DATE OF PROCEDURE" (header) contains the word "PROCEDURE" (a section) — the
+    // header must be matched longest-first, NOT truncated by the section label.
+    const oneLine = 'PATIENT NAME: DATE OF PROCEDURE: SURGEON: PROCEDURE: RECOMMENDATIONS:';
+    const fields = deriveHeaderFieldsFromRun(oneLine, OP_SECTIONS);
+    expect(fields.map((f) => f.key)).toEqual(['patient_name', 'date_of_surgery', 'surgeon']);
+  });
+});
 
 describe('canonicalHeaderKey', () => {
   it('maps the operative-note header labels to canonical keys (colon-tolerant)', () => {

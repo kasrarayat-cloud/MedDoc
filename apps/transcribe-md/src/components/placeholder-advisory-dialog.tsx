@@ -24,6 +24,9 @@ export interface PlaceholderAdvisoryDialogProps {
   suggestionCount: number;
   /** Continue to the real Sign & Send modal. */
   onContinue: () => void;
+  /** One-tap jump to the review/suggestions lane (closes the advisory + navigates
+   *  there). When omitted, the review button simply closes the dialog. */
+  onReviewNow?: () => void;
 }
 
 export function PlaceholderAdvisoryDialog({
@@ -32,6 +35,7 @@ export function PlaceholderAdvisoryDialog({
   sections,
   suggestionCount,
   onContinue,
+  onReviewNow,
 }: PlaceholderAdvisoryDialogProps) {
   const n = sections.length;
   return (
@@ -144,22 +148,24 @@ export function PlaceholderAdvisoryDialog({
               padding: '16px 24px 20px',
             }}
           >
-            <Dialog.Close asChild>
-              <button
-                type="button"
-                className="qm-lin-btn"
-                style={{ padding: '8px 14px', height: 32 }}
-              >
-                Go back to review
-              </button>
-            </Dialog.Close>
             <button
               type="button"
-              className="qm-lin-btn-primary"
+              className="qm-lin-btn"
               style={{ padding: '8px 14px', height: 32 }}
               onClick={onContinue}
             >
               Sign anyway
+            </button>
+            <button
+              type="button"
+              className="qm-lin-btn-primary"
+              style={{ padding: '8px 14px', height: 32 }}
+              // One-tap jump to the suggestions lane (Review tab in the V2 skin) so
+              // the doctor can adopt the set-aside content instead of signing over it.
+              onClick={() => (onReviewNow ? onReviewNow() : onOpenChange(false))}
+              autoFocus
+            >
+              Review now
             </button>
           </div>
         </Dialog.Content>
