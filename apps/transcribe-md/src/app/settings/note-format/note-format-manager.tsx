@@ -29,6 +29,7 @@ import {
   saveNoteTemplateAction,
 } from '@/actions/note-template-lifecycle';
 import { previewNoteTemplateAction } from '@/actions/preview-note-template';
+import { SPECIALTY_IDS } from '@meddoc/shared/specialties';
 import { certifyPdfTemplateAction } from '@/actions/certify-pdf-template';
 import type { TemplateReviewModel, ClientTemplateListItem } from '@/lib/note-template-persist/types';
 import { TemplateReviewEditor } from './template-review-editor';
@@ -119,6 +120,9 @@ export function NoteFormatManager({
   const [sample, setSample] = useState<string | null>(null);
   const [sampleFailed, setSampleFailed] = useState(false);
   const [certError, setCertError] = useState<string | null>(null);
+  /** Confirm failure shown IN the card. A toast alone auto-dismisses after 4s,
+   *  which is exactly how a real failure gets misread as a dead button. */
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
   /** Set once confirm has activated the template, so a cert retry doesn't
    *  re-activate (and re-version) it. */
@@ -227,9 +231,19 @@ export function NoteFormatManager({
    *  own document precisely because they want THAT document back. The toggle
    *  remains in Settings › My Note Format for opt-out. */
   function buildConfirmPayload(model: TemplateReviewModel) {
+    // The parse LLM emits FREE-TEXT encounter types ("Operative Note",
+    // "Follow-up progress note") that can never equal a visit.specialty, and
+    // ReviewedTemplateSchema rejects anything outside the static catalog
+    // (custom-template QA 2026-07-02, finding F-2). The review editor already
+    // coerces an off-catalog value to the catch-all; the confirm card has to do
+    // the SAME or a one-tap confirm fails on most real uploads.
+    const encounterType =
+      model.encounterType && (SPECIALTY_IDS as readonly string[]).includes(model.encounterType)
+        ? model.encounterType
+        : null;
     return {
       name: model.name.trim() || 'My note format',
-      encounterType: model.encounterType,
+      encounterType,
       sections: model.sections.map((s, i) => ({
         key: s.key,
         label: s.label.trim() || 'Section',
@@ -277,6 +291,7 @@ export function NoteFormatManager({
     if (!review) return;
     setConfirmBusy(true);
     setCertError(null);
+    setSaveError(null);
     startTransition(async () => {
       try {
         let templateId = activatedId;
@@ -285,6 +300,7 @@ export function NoteFormatManager({
         if (!templateId) {
           const saved = await saveNoteTemplateAction(buildConfirmPayload(review.model), true);
           if (!saved.ok) {
+            setSaveError(saved.error);
             toast.error('Could not use this format', { description: saved.error });
             setConfirmBusy(false);
             return;
@@ -534,6 +550,7 @@ export function NoteFormatManager({
         nativeCandidate={isNativeCandidate}
         busy={confirmBusy || pending}
         certError={certError}
+        saveError={saveError}
         onConfirm={onConfirmFormat}
         onRetryCert={onRetryCert}
         onAdvanced={onAdvanced}
