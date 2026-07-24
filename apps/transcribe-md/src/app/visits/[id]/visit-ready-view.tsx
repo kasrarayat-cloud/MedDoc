@@ -33,7 +33,7 @@ import { ReviewTabsV2, type V2Tab } from './review-tabs-v2';
 // UX simplification pack (B) — flag-gated signed-visit document view.
 import { isUxSimplify } from '@/config/ux-simplify';
 import { SignedDocumentView } from './signed-document-view';
-import { extractIcdRows } from '@/lib/em-coding/displayed-level';
+import { extractIcdRows } from '@/lib/em-coding/icd-rows';
 import { BillingCardC3 } from './billing-card-c3';
 import { SoapEditor } from './soap-editor';
 import { SuggestionsLane, type SuggestedClaimView } from './suggestions-lane';

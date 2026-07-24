@@ -33,24 +33,15 @@ import type { EmOverride } from '../../lib/em-coding-ui/types';
 /** icdCodes jsonb → engine rows. Handles BOTH shapes seen across migrations:
  *  Layer 7a's `{ codes: [{ code, description }] }` AND legacy bare arrays.
  *  (The route handled both; the gate's old copy handled only `{codes}` —
- *  a divergence source.) */
-export function extractIcdRows(raw: unknown): IcdCodeRow[] {
-  if (!raw) return [];
-  if (Array.isArray(raw)) {
-    return raw
-      .filter((r): r is Record<string, unknown> => !!r && typeof r === 'object')
-      .map((r) => ({
-        code: typeof r.code === 'string' ? r.code : '',
-        description: typeof r.description === 'string' ? r.description : undefined,
-      }))
-      .filter((r) => r.code.length > 0);
-  }
-  if (typeof raw === 'object') {
-    const blob = raw as { codes?: unknown };
-    if (Array.isArray(blob.codes)) return extractIcdRows(blob.codes);
-  }
-  return [];
-}
+ *  a divergence source.)
+ *
+ *  MOVED to ./icd-rows (2026-07-24) and re-exported here so existing server
+ *  callers are unchanged. The extractor is dependency-free, but THIS module
+ *  imports ./score → llm-mdm → lib/redis → ioredis, so a client component that
+ *  imported it from here dragged dns/net/tls into the browser bundle and broke
+ *  the build. The leaf module lets the signed-visit view read ICD rows without
+ *  the scoring engine, with still exactly ONE implementation. */
+export { extractIcdRows } from './icd-rows';
 
 /** rxDrafts jsonb → engine rows. Reads BOTH the worker's current
  *  `{ prescriptions: [...] }` (Layer 7c) AND the legacy `{ drafts: [...] }`
