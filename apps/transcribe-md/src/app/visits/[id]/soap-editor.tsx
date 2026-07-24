@@ -515,7 +515,7 @@ export function SoapEditor({
               setSignAdvisoryOpen(false);
               setTimeout(() => {
                 document
-                  .querySelector('[data-testid="suggestions-lane"]')
+                  .querySelector('#suggestions-lane, [data-testid="suggestions-lane"]')
                   ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
               }, 80);
             }}

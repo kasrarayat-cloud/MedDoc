@@ -286,7 +286,7 @@ export function ReviewTabsV2(props: ReviewTabsV2Props) {
                     setActive(key);
                     setTimeout(() => {
                       document
-                        .querySelector('[data-testid="suggestions-lane"]')
+                        .querySelector('#suggestions-lane, [data-testid="suggestions-lane"]')
                         ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }, 80);
                   }}

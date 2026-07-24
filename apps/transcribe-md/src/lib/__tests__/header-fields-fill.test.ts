@@ -143,6 +143,15 @@ describe('extractSurgeonFromDictation (dictation fallback for the surgeon field)
     expect(extractSurgeonFromDictation('The surgeon was Dr. Kim, assisted by a resident.')).toBe('Dr. Kim');
   });
 
+  it('prefers the OPERATING surgeon over a referring one (WARN-4)', () => {
+    expect(
+      extractSurgeonFromDictation('Referring surgeon was Dr. Smith; operating surgeon was Dr. Lee.')
+    ).toBe('Dr. Lee');
+    // A lone referring/consulting attribution → no operating surgeon → null.
+    expect(extractSurgeonFromDictation('Referring surgeon: Dr. Smith.')).toBeNull();
+    expect(extractSurgeonFromDictation('The consulting surgeon is Dr. Jones.')).toBeNull();
+  });
+
   it('never yields a name from "surgeon is the resident" / no attribution / empty', () => {
     expect(extractSurgeonFromDictation('Surgeon is the resident on call.')).toBeNull();
     expect(extractSurgeonFromDictation('Patient is a 61-year-old female for colonoscopy.')).toBeNull();

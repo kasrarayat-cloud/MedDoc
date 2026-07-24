@@ -57,18 +57,21 @@ const subLabel: React.CSSProperties = {
   color: 'var(--color-linear-text-3)',
 };
 
-/** Open a base64-encoded PDF (the one-time synthetic preview) in a new tab. */
-function openPdfPreview(base64: string): void {
+/** Open a base64-encoded PDF (the one-time synthetic preview) in a new tab.
+ *  Returns false when the browser blocked the popup (or on any error) so the
+ *  caller can offer a fallback. */
+function openPdfPreview(base64: string): boolean {
   try {
     const bin = atob(base64);
     const buf = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
     const url = URL.createObjectURL(new Blob([buf], { type: 'application/pdf' }));
-    window.open(url, '_blank', 'noopener');
+    const win = window.open(url, '_blank', 'noopener');
     // Revoke after a beat so the new tab has loaded it.
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    return win !== null;
   } catch {
-    /* preview is a nicety; ignore */
+    return false;
   }
 }
 
@@ -264,6 +267,13 @@ export function NoteFormatManager({
   // certify it (canvas + anchors + derived header fields) and open a one-time
   // synthetic preview so he confirms placement.
   function onFinishNativeSetup(id: string, file: File) {
+    // Same client-side pre-check as the bring-a-note upload (F-4): the server
+    // action rejects bodies over 1 MB before our size check runs, so say so
+    // honestly instead of surfacing a generic "Setup failed".
+    if (file.size > UPLOAD_ACTION_BODY_LIMIT_BYTES) {
+      toast.error('That PDF is larger than 1 MB — a blank form is usually well under. Try re-saving it.');
+      return;
+    }
     startTransition(async () => {
       try {
         const fd = new FormData();
@@ -276,7 +286,9 @@ export function NoteFormatManager({
             (res.headerFields ? `, ${res.headerFields} header field${res.headerFields === 1 ? '' : 's'}` : '') +
             (res.missing.length ? ` (${res.missing.length} label not found — check the preview)` : '')
         );
-        if (res.previewBase64) openPdfPreview(res.previewBase64);
+        if (res.previewBase64 && !openPdfPreview(res.previewBase64)) {
+          toast.message('Preview blocked by your browser — export any visit to see your filled form.');
+        }
         router.refresh();
       } catch (err) {
         handleActionError(err, 'home');
@@ -428,7 +440,7 @@ function TemplateRow({
           </div>
         )}
         {showNative && !t.pdfNativeCertified && (
-          <div style={{ fontSize: 11, color: 'var(--color-linear-amber, #d9a44a)', marginTop: 4 }}>
+          <div style={{ fontSize: 11, color: 'var(--color-linear-amber)', marginTop: 4 }}>
             {t.pdfNativePendingPreview
               ? "Native export needs the original flat PDF form — re-upload to finish."
               : 'Exports use a styled re-creation. Finish setup to fill your own form instead.'}

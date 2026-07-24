@@ -40,6 +40,14 @@ describe('deriveHeaderFieldsFromRun (flat-form PDF flattened to one line)', () =
   it('no header labels before the first section → empty (never invents)', () => {
     expect(deriveHeaderFieldsFromRun('PROCEDURE: RECOMMENDATIONS:', OP_SECTIONS)).toEqual([]);
   });
+
+  it('captures "DATE OF PROCEDURE" header without truncating at the PROCEDURE section (WARN-2)', () => {
+    // "DATE OF PROCEDURE" (header) contains the word "PROCEDURE" (a section) — the
+    // header must be matched longest-first, NOT truncated by the section label.
+    const oneLine = 'PATIENT NAME: DATE OF PROCEDURE: SURGEON: PROCEDURE: RECOMMENDATIONS:';
+    const fields = deriveHeaderFieldsFromRun(oneLine, OP_SECTIONS);
+    expect(fields.map((f) => f.key)).toEqual(['patient_name', 'date_of_surgery', 'surgeon']);
+  });
 });
 
 describe('canonicalHeaderKey', () => {

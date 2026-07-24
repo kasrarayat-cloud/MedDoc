@@ -31,13 +31,18 @@ export function anchorSpecsFor(
   ];
 }
 
-async function loadTemplateShape(templateId: string): Promise<{
+async function loadTemplateShape(
+  templateId: string,
+  doctorId?: string
+): Promise<{
   sections: NoteTemplateSection[];
   headerFields: NoteTemplateHeaderField[];
   styleProfile: Record<string, unknown>;
 }> {
-  const row = await prisma.noteTemplate.findUniqueOrThrow({
-    where: { id: templateId },
+  // Scope by doctorId when provided (defense-in-depth — the action already checks
+  // ownership, but the library must not be a way to touch another doctor's row).
+  const row = await prisma.noteTemplate.findFirstOrThrow({
+    where: doctorId ? { id: templateId, doctorId } : { id: templateId },
     select: { sections: true, styleProfile: true },
   });
   const styleProfile = ((row.styleProfile ?? {}) as Record<string, unknown>) || {};
@@ -48,14 +53,31 @@ async function loadTemplateShape(templateId: string): Promise<{
   };
 }
 
+/** Scoped styleProfile write (updateMany so a doctorId filter applies). */
+async function writeStyleProfile(
+  templateId: string,
+  doctorId: string | undefined,
+  styleProfile: Record<string, unknown>
+): Promise<void> {
+  await prisma.noteTemplate.updateMany({
+    where: doctorId ? { id: templateId, doctorId } : { id: templateId },
+    data: { styleProfile: styleProfile as never },
+  });
+}
+
 /** Certify: store the canvas + re-extracted anchors on the template. Returns the
- *  anchors + any labels that did NOT anchor (surfaced, never silently dropped). */
+ *  anchors + any labels that did NOT anchor (surfaced, never silently dropped).
+ *  When NO anchor resolves (not a fillable flat form), it neither stores a canvas
+ *  nor marks certified — so a bad re-upload can never clobber a prior good cert. */
 export async function certifyPdfTemplate(input: {
   templateId: string;
   pdfBytes: Buffer;
+  /** When set, all reads/writes are scoped to this doctor's own row. */
+  doctorId?: string;
 }): Promise<{ anchors: PdfFillAnchor[]; missing: string[]; headerFields: NoteTemplateHeaderField[] }> {
   const { sections, headerFields: existingHeader, styleProfile } = await loadTemplateShape(
-    input.templateId
+    input.templateId,
+    input.doctorId
   );
 
   // Re-derive header fields from the PDF's OWN text using the template's canonical
@@ -91,25 +113,31 @@ export async function certifyPdfTemplate(input: {
     specs
   );
 
+  // Not a fillable flat form → do NOT store a canvas or mark certified (never
+  // overwrite a prior good cert with a bad upload). Flag pending so the CTA
+  // persists; leave any existing canvas + cert intact.
+  if (anchors.length === 0) {
+    await writeStyleProfile(input.templateId, input.doctorId, {
+      ...styleProfile,
+      pdfNativePendingPreview: true,
+    });
+    return { anchors, missing, headerFields };
+  }
+
   await putTemplateCanvas(input.templateId, input.pdfBytes);
-  await prisma.noteTemplate.update({
-    where: { id: input.templateId },
-    data: {
-      styleProfile: {
-        ...styleProfile,
-        // Persist the (refreshed) header fields so the styled export + the native
-        // header block both fill even when the parse-time capture missed them.
-        headerFields: headerFields as unknown,
-        pdfNativeAnchors: anchors as unknown,
-        pdfNativeCertified: true,
-        // Durable-cert signatures — let a future re-upload (new template id) carry
-        // this cert forward instead of silently falling back to styled.
-        pdfNativeCanvasHash: canvasHash(input.pdfBytes),
-        pdfNativeStructureHash: templateStructureHash(sections, headerFields),
-        // A fresh cert clears any prior "needs preview" marker.
-        pdfNativePendingPreview: false,
-      } as never,
-    },
+  await writeStyleProfile(input.templateId, input.doctorId, {
+    ...styleProfile,
+    // Persist the (refreshed) header fields so the styled export + the native
+    // header block both fill even when the parse-time capture missed them.
+    headerFields: headerFields as unknown,
+    pdfNativeAnchors: anchors as unknown,
+    pdfNativeCertified: true,
+    // Durable-cert signatures — let a future re-upload (new template id) carry
+    // this cert forward instead of silently falling back to styled.
+    pdfNativeCanvasHash: canvasHash(input.pdfBytes),
+    pdfNativeStructureHash: templateStructureHash(sections, headerFields),
+    // A fresh cert clears any prior "needs preview" marker.
+    pdfNativePendingPreview: false,
   });
   return { anchors, missing, headerFields };
 }

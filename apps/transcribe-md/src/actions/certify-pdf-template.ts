@@ -48,19 +48,11 @@ export async function certifyPdfTemplateAction(formData: FormData): Promise<Cert
 
   const bytes = Buffer.from(await file.arrayBuffer());
   try {
-    const res = await certifyPdfTemplate({ templateId, pdfBytes: bytes });
+    // Scoped to the caller; when no anchor resolves, certify leaves any prior
+    // canvas + cert INTACT and only flags pending (never clobbers a good cert).
+    const res = await certifyPdfTemplate({ templateId, pdfBytes: bytes, doctorId });
 
-    // No anchors resolved → this isn't a fillable flat form (scanned image / wrong
-    // file). Undo the certified flag so the export gate falls back to styled, and
-    // flag it pending so the CTA persists with guidance.
     if (res.anchors.length === 0) {
-      const sp = ((owned.styleProfile ?? {}) as Record<string, unknown>) || {};
-      await prisma.noteTemplate.update({
-        where: { id: templateId },
-        data: {
-          styleProfile: { ...sp, pdfNativeCertified: false, pdfNativePendingPreview: true } as never,
-        },
-      });
       return {
         ok: false,
         error:

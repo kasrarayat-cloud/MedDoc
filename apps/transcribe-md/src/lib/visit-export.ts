@@ -195,7 +195,10 @@ export function extractSurgeonFromNote(soapText: string): string | null {
 // note). Accepts the spelled-out "Doctor" as well as "Dr.". The CONTEXT match is
 // case-insensitive; the NAME match stays case-SENSITIVE (real title + capitalized
 // name) so "surgeon is the resident" can never yield a name. Conservative; no AI.
-const SURGEON_DICTATION_CTX = /\bsurgeon\s*(?:is|was|:)\s*(?:the\s+)?/i;
+// A negative lookbehind disqualifies a NON-operating attribution ("referring
+// surgeon was Dr. Smith") so the operating surgeon later in the dictation wins.
+const SURGEON_DICTATION_CTX =
+  /(?<!\b(?:referring|consulting|assistant|assisting|prior|previous|usual|patient(?:['’]s)?)\s{1,4})\bsurgeon\s*(?:is|was|:)\s*(?:the\s+)?/i;
 const SURGEON_DICTATION_NAME =
   /^((?:Dr\.?|Doctor)\s+[A-Z][A-Za-z'’-]+(?:\s+[A-Z][A-Za-z'’-]+){0,2})/;
 
