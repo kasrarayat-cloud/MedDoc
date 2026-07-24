@@ -67,9 +67,11 @@ export function rowToListItem(row: {
   status: string;
   version: number;
   sections: unknown;
+  styleProfile?: unknown;
   updatedAt: Date;
 }): TemplateListItem {
   const sections = asSections(row.sections);
+  const sp = ((row.styleProfile ?? {}) as Record<string, unknown>) || {};
   return {
     id: row.id,
     name: row.name,
@@ -78,6 +80,9 @@ export function rowToListItem(row: {
     version: row.version,
     sectionCount: sections.length,
     defaultCount: sections.filter((s) => !!s.defaultText).length,
+    // PDF-native export setup state (surfaced so the doctor can finish setup).
+    pdfNativeCertified: sp.pdfNativeCertified === true,
+    pdfNativePendingPreview: sp.pdfNativePendingPreview === true,
     updatedAt: row.updatedAt,
   };
 }
@@ -94,6 +99,7 @@ export async function listDoctorTemplates(doctorId: string): Promise<TemplateLis
       status: true,
       version: true,
       sections: true,
+      styleProfile: true,
       updatedAt: true,
     },
     orderBy: [{ updatedAt: 'desc' }],
@@ -106,6 +112,7 @@ export async function listDoctorTemplates(doctorId: string): Promise<TemplateLis
       status: string;
       version: number;
       sections: unknown;
+      styleProfile: unknown;
       updatedAt: Date;
     }) => rowToListItem(r),
   );

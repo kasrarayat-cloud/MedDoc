@@ -45,6 +45,7 @@ import {
   type NativeTemplateListItem,
 } from './note-format/native-template-manager';
 import { templateNativeDocxEnabled } from '@/config/template-native-docx';
+import { templateNativePdfEnabled } from '@/config/template-native-pdf';
 import { listDoctorTemplates } from '@/lib/note-template-persist/read';
 import { findSpecialty } from '@meddoc/shared/specialties';
 import type { ClientTemplateListItem } from '@/lib/note-template-persist/types';
@@ -188,8 +189,14 @@ export default async function SettingsPage() {
     version: t.version,
     sectionCount: t.sectionCount,
     defaultCount: t.defaultCount,
+    pdfNativeCertified: t.pdfNativeCertified,
+    pdfNativePendingPreview: t.pdfNativePendingPreview,
     updatedAtIso: t.updatedAt.toISOString(),
   }));
+
+  // Native-PDF "finish setup" CTA visibility follows the export flag — showing it
+  // only when native export is actually reachable (flag ON in prod).
+  const nativePdfEnabled = templateNativePdfEnabled();
 
   // Which upload formats can this image actually extract (see getUploadCaps).
   const uploadCaps = await getUploadCaps();
@@ -255,7 +262,7 @@ export default async function SettingsPage() {
           'QuillMD writes in a standard SOAP format. Most doctors leave this as-is — teaching it your own template is an explicit, opt-in step below.',
         content: (
           <>
-            <NoteFormatManager templates={noteTemplates} uploadCaps={uploadCaps} />
+            <NoteFormatManager templates={noteTemplates} uploadCaps={uploadCaps} nativePdfEnabled={nativePdfEnabled} />
             {nativeSlot}
           </>
         ),
@@ -663,7 +670,7 @@ export default async function SettingsPage() {
             eyebrow="02 / Note format"
             title="My Note Format"
           >
-            <NoteFormatManager templates={noteTemplates} uploadCaps={uploadCaps} />
+            <NoteFormatManager templates={noteTemplates} uploadCaps={uploadCaps} nativePdfEnabled={nativePdfEnabled} />
             {nativeSlot}
           </Section>
 

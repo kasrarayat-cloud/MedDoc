@@ -56,6 +56,9 @@ export interface ReviewTabsV2Props {
   pendingEmChange: { from: string; to: string } | null;
   /** Tab key to jump to when the Rx blocker is tapped from the bottom bar. */
   rxTabKey: string;
+  /** Tab key of the review/suggestions lane — the "Review now" jump target from
+   *  the set-aside advisory. Undefined when the lane isn't shown. */
+  reviewTabKey?: string;
   // ── Sign bar (the ONE Sign action) ──
   visitId: string;
   doctorEmail: string;
@@ -270,6 +273,22 @@ export function ReviewTabsV2(props: ReviewTabsV2Props) {
                   onContinue={() => {
                     setAdvisoryOpen(false);
                     setSignOpen(true);
+                  }}
+                  onReviewNow={() => {
+                    setAdvisoryOpen(false);
+                    // Jump to the Review/suggestions tab (or the note tab if the
+                    // lane isn't present — e.g. every suggestion was dismissed but
+                    // the placeholder remains), then scroll the lane into view.
+                    const key =
+                      props.reviewTabKey && props.tabs.some((t) => t.key === props.reviewTabKey)
+                        ? props.reviewTabKey
+                        : props.tabs[0]?.key ?? 'note';
+                    setActive(key);
+                    setTimeout(() => {
+                      document
+                        .querySelector('#suggestions-lane, [data-testid="suggestions-lane"]')
+                        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 80);
                   }}
                 />
               </>

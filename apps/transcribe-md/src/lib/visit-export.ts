@@ -188,6 +188,35 @@ export function extractSurgeonFromNote(soapText: string): string | null {
   return name[1].replace(/[.,;]+$/, '').replace(/\s+/g, ' ').trim();
 }
 
+// The DICTATION reliably states the operating surgeon in plain form — "Surgeon is
+// Doctor Enayati" / "Surgeon: Dr. X" / "surgeon was Dr. X". It is the doctor's own
+// structured input for THIS operative note, so a labeled "surgeon is/was/:"
+// attribution is unambiguous (unlike a bare mid-sentence "surgeon" in a clinic
+// note). Accepts the spelled-out "Doctor" as well as "Dr.". The CONTEXT match is
+// case-insensitive; the NAME match stays case-SENSITIVE (real title + capitalized
+// name) so "surgeon is the resident" can never yield a name. Conservative; no AI.
+// A negative lookbehind disqualifies a NON-operating attribution ("referring
+// surgeon was Dr. Smith") so the operating surgeon later in the dictation wins.
+const SURGEON_DICTATION_CTX =
+  /(?<!\b(?:referring|consulting|assistant|assisting|prior|previous|usual|patient(?:['’]s)?)\s{1,4})\bsurgeon\s*(?:is|was|:)\s*(?:the\s+)?/i;
+const SURGEON_DICTATION_NAME =
+  /^((?:Dr\.?|Doctor)\s+[A-Z][A-Za-z'’-]+(?:\s+[A-Z][A-Za-z'’-]+){0,2})/;
+
+/** Fallback surgeon source: the visit's raw dictation, when the generated note
+ *  didn't carry an operating-surgeon line. Returns "Dr. X" or null. */
+export function extractSurgeonFromDictation(text: string | null | undefined): string | null {
+  if (!text) return null;
+  const ctx = text.match(SURGEON_DICTATION_CTX);
+  if (!ctx || ctx.index === undefined) return null;
+  const name = text.slice(ctx.index + ctx[0].length).match(SURGEON_DICTATION_NAME);
+  if (!name) return null;
+  return name[1]
+    .replace(/^Doctor\b/i, 'Dr.')
+    .replace(/[.,;]+$/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /** A header field LABEL is a short generic form label ("PATIENT NAME", "DATE OF
  *  SURGERY"). It must NOT look like it carries data. This is the render-seam
  *  DEFENSE-IN-DEPTH backstop: the primary guard is the ^…$-anchored canonical-key
@@ -230,10 +259,19 @@ export function coerceHeaderFields(raw: unknown): NoteTemplateHeaderField[] {
  */
 export function resolveHeaderFields(
   headerFields: NoteTemplateHeaderField[] | null | undefined,
-  ctx: { patientName: string | null; visitDate: Date; soapText: string }
+  ctx: {
+    patientName: string | null;
+    visitDate: Date;
+    soapText: string;
+    /** Raw dictation — a fallback surgeon source when the note omitted the line. */
+    dictationText?: string | null;
+  }
 ): RenderedHeaderField[] {
   if (!headerFields || headerFields.length === 0) return [];
-  const surgeon = extractSurgeonFromNote(ctx.soapText);
+  // Prefer an operating-surgeon line in the note; fall back to the dictation
+  // (which reliably states it) so a dictated surgeon is never dropped.
+  const surgeon =
+    extractSurgeonFromNote(ctx.soapText) ?? extractSurgeonFromDictation(ctx.dictationText);
   return [...headerFields]
     .sort((a, b) => a.order - b.order)
     .map((f) => {
