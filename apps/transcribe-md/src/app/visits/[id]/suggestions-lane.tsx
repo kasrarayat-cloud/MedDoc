@@ -144,6 +144,7 @@ export function SuggestionsLane({
 
   return (
     <section
+      id="suggestions-lane"
       role="region"
       aria-label="AI suggestions not stated in this visit"
       data-testid="suggestions-lane"

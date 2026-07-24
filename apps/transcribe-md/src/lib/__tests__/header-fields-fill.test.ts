@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import {
   resolveHeaderFields,
   extractSurgeonFromNote,
+  extractSurgeonFromDictation,
   coerceHeaderFields,
 } from '../visit-export';
 import type { NoteTemplateHeaderField } from '@/worker/note-templates/system-default-template';
@@ -128,5 +129,53 @@ describe('coerceHeaderFields', () => {
         { key: 'patient_name', label: 'PATIENT NAME', order: 4 }, // clean → kept
       ])
     ).toEqual([{ key: 'patient_name', label: 'PATIENT NAME', order: 4 }]);
+  });
+});
+
+describe('extractSurgeonFromDictation (dictation fallback for the surgeon field)', () => {
+  it('captures "Surgeon is Doctor Enayati" (spelled-out title, no colon) → Dr. Enayati', () => {
+    expect(extractSurgeonFromDictation('Operative note. Surgeon is Doctor Enayati. Procedure: colonoscopy.'))
+      .toBe('Dr. Enayati');
+  });
+
+  it('captures "Surgeon: Dr. Shabatian" and "surgeon was Dr. Kim"', () => {
+    expect(extractSurgeonFromDictation('Surgeon: Dr. Shabatian.')).toBe('Dr. Shabatian');
+    expect(extractSurgeonFromDictation('The surgeon was Dr. Kim, assisted by a resident.')).toBe('Dr. Kim');
+  });
+
+  it('prefers the OPERATING surgeon over a referring one (WARN-4)', () => {
+    expect(
+      extractSurgeonFromDictation('Referring surgeon was Dr. Smith; operating surgeon was Dr. Lee.')
+    ).toBe('Dr. Lee');
+    // A lone referring/consulting attribution → no operating surgeon → null.
+    expect(extractSurgeonFromDictation('Referring surgeon: Dr. Smith.')).toBeNull();
+    expect(extractSurgeonFromDictation('The consulting surgeon is Dr. Jones.')).toBeNull();
+  });
+
+  it('never yields a name from "surgeon is the resident" / no attribution / empty', () => {
+    expect(extractSurgeonFromDictation('Surgeon is the resident on call.')).toBeNull();
+    expect(extractSurgeonFromDictation('Patient is a 61-year-old female for colonoscopy.')).toBeNull();
+    expect(extractSurgeonFromDictation('')).toBeNull();
+    expect(extractSurgeonFromDictation(null)).toBeNull();
+  });
+
+  it('resolveHeaderFields fills SURGEON from the dictation when the note omits it (the TOM fix)', () => {
+    const out = resolveHeaderFields(OP_FIELDS, {
+      patientName: 'TOM',
+      visitDate: new Date('2026-07-23'),
+      soapText: '## PROCEDURE:\nColonoscopy.', // note DROPPED the surgeon line
+      dictationText: 'Surgeon is Doctor Enayati. Procedure performed: colonoscopy.',
+    });
+    expect(out.find((f) => f.label === 'SURGEON')?.value).toBe('Dr. Enayati');
+  });
+
+  it('prefers an operating-surgeon line in the NOTE over the dictation', () => {
+    const out = resolveHeaderFields(OP_FIELDS, {
+      patientName: 'X',
+      visitDate: new Date('2026-07-23'),
+      soapText: '## PROCEDURE:\nSleeve. Surgeon: Dr. Shabatian.',
+      dictationText: 'Surgeon is Doctor Someone.',
+    });
+    expect(out.find((f) => f.label === 'SURGEON')?.value).toBe('Dr. Shabatian');
   });
 });

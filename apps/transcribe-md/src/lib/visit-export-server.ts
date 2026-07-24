@@ -52,6 +52,7 @@ export async function loadVisitExportData(
       signedAt: true,
       soapFinal: true,
       signedSoap: true,
+      rawTextInput: true,
       icdCodes: true,
       cptCodes: true,
       rxDrafts: true,
@@ -126,6 +127,7 @@ export async function loadVisitExportData(
     patientName: visit.patientName,
     visitDate: visit.signedAt ?? visit.createdAt,
     soapText,
+    dictationText: visit.rawTextInput,
   });
 
   return {

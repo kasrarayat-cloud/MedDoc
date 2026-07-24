@@ -31,6 +31,11 @@ export interface TemplateListItem {
   version: number;
   sectionCount: number;
   defaultCount: number;
+  /** PDF-native export is set up (canvas + anchors stored). */
+  pdfNativeCertified: boolean;
+  /** A prior form changed / a cert attempt didn't fully anchor — needs the doctor
+   *  to finish (re-upload the blank form) to enable native export. */
+  pdfNativePendingPreview: boolean;
   updatedAt: Date;
 }
 
@@ -44,5 +49,7 @@ export interface ClientTemplateListItem {
   version: number;
   sectionCount: number;
   defaultCount: number;
+  pdfNativeCertified: boolean;
+  pdfNativePendingPreview: boolean;
   updatedAtIso: string;
 }
