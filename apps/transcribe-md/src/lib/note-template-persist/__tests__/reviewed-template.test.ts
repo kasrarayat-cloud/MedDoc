@@ -5,6 +5,7 @@
 // ============================================================================
 
 import { describe, expect, it } from 'vitest';
+import { SPECIALTY_IDS } from '@meddoc/shared/specialties';
 import {
   ReviewedTemplateSchema,
   normalizeReviewedTemplate,
@@ -140,6 +141,40 @@ describe('normalizeReviewedTemplate', () => {
       { key: 'surgeon', label: 'SURGEON', order: 2 },
     ]);
     expect(draft.styleProfile.formOnlyExport).toBe(true);
+  });
+});
+
+describe('encounterType coercion contract (F-2)', () => {
+  // The parse LLM emits free-text encounter types. Both the review editor AND
+  // the one-tap confirm card must coerce anything outside the static catalog to
+  // the catch-all (null) BEFORE calling save — otherwise the save is rejected.
+  // The confirm card originally skipped this and failed on a real operative-form
+  // upload with "Unknown encounter type"; these tests pin both directions.
+  it('REJECTS the raw free-text encounterType the parser produces', () => {
+    const r = ReviewedTemplateSchema.safeParse({ ...base(), encounterType: 'Operative Note' });
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      expect(friendlyValidationError(r.error)).toMatch(/Unknown encounter type/i);
+    }
+  });
+
+  it('ACCEPTS it once coerced to the catch-all, which is what callers must send', () => {
+    const coerce = (v: string | null) =>
+      v && (SPECIALTY_IDS as readonly string[]).includes(v) ? v : null;
+    const r = ReviewedTemplateSchema.safeParse({
+      ...base(),
+      encounterType: coerce('Operative Note'),
+    });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.encounterType).toBeNull();
+  });
+
+  it('preserves a genuine catalog slug through the same coercion', () => {
+    const coerce = (v: string | null) =>
+      v && (SPECIALTY_IDS as readonly string[]).includes(v) ? v : null;
+    expect(coerce('orthopedics')).toBe('orthopedics');
+    const r = ReviewedTemplateSchema.safeParse({ ...base(), encounterType: coerce('orthopedics') });
+    expect(r.success).toBe(true);
   });
 });
 
