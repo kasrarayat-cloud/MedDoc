@@ -1,0 +1,85 @@
+- generic [active] [ref=f1e1]:
+  - link "Skip to main content" [ref=f1e2] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=f1e21]:
+    - generic [ref=f1e22]:
+      - banner [ref=f1e23]:
+        - link "QuillMD" [ref=f1e24] [cursor=pointer]:
+          - /url: /dashboard
+          - generic [ref=f1e25]: Q
+          - text: QuillMD
+        - generic [ref=f1e26]: Settings
+      - main [ref=f1e27]:
+        - generic [ref=f1e28]:
+          - generic [ref=f1e29]: Account
+          - heading "Settings" [level=1] [ref=f1e30]
+        - generic [ref=f1e32]:
+          - navigation "Settings sections" [ref=f1e33]:
+            - button "Profile" [pressed] [ref=f1e34] [cursor=pointer]
+            - button "Note format" [ref=f1e35] [cursor=pointer]
+            - button "Security" [ref=f1e36] [cursor=pointer]
+            - button "Active session" [ref=f1e37] [cursor=pointer]
+            - button "Your data" [ref=f1e38] [cursor=pointer]
+            - button "Billing" [ref=f1e39] [cursor=pointer]
+            - button "Danger zone" [ref=f1e40] [cursor=pointer]
+          - region "Profile" [ref=f1e42]:
+            - heading "Profile" [level=2] [ref=f1e43]
+            - generic [ref=f1e44]:
+              - generic [ref=f1e45]:
+                - generic [ref=f1e46]:
+                  - generic [ref=f1e47]:
+                    - generic [ref=f1e48]: Display name
+                    - textbox "Display name" [ref=f1e49]: QA Interaction Auditor
+                  - generic [ref=f1e50]:
+                    - generic [ref=f1e51]: Specialty
+                    - combobox "Specialty" [ref=f1e52]:
+                      - option "Unspecified" [selected]
+                      - option "Primary Care"
+                      - option "Cardiology"
+                      - option "Psychiatry"
+                      - option "Pediatrics"
+                      - option "OB-GYN"
+                      - option "Dermatology"
+                      - option "Orthopedics"
+                      - option "Urgent Care"
+                      - option "Pain Management"
+                      - option "Weight Management"
+                      - option "Bariatric Surgery"
+                      - option "Vascular Surgery"
+                      - option "Ultrasound"
+                - generic [ref=f1e53]:
+                  - generic [ref=f1e54]:
+                    - generic [ref=f1e55]: NPI
+                    - textbox "NPI" [ref=f1e56]:
+                      - /placeholder: 10-digit NPI
+                  - generic [ref=f1e57]:
+                    - generic [ref=f1e58]: Clinic name
+                    - textbox "Clinic name" [ref=f1e59]:
+                      - /placeholder: Optional — overrides practice name on exports
+                - generic [ref=f1e60]:
+                  - generic [ref=f1e61]: Time zone
+                  - textbox "Time zone" [ref=f1e62]:
+                    - /placeholder: e.g. America/Los_Angeles
+                    - text: America/Los_Angeles
+                - button "Save profile" [ref=f1e64] [cursor=pointer]
+              - generic [ref=f1e65]:
+                - generic [ref=f1e66]:
+                  - generic [ref=f1e67]:
+                    - generic [ref=f1e68]: Email
+                    - button "Change" [ref=f1e69] [cursor=pointer]
+                  - generic [ref=f1e73]: qa-auditor@quillmd.test
+                - generic [ref=f1e74]:
+                  - generic [ref=f1e75]: Member since
+                  - time [ref=f1e77]: Jul 22, 2026
+    - navigation "Primary mobile navigation" [ref=f1e78]:
+      - link "Home" [ref=f1e79] [cursor=pointer]:
+        - /url: /dashboard
+      - link "Patients" [ref=f1e84] [cursor=pointer]:
+        - /url: /patients
+      - link "New visit" [ref=f1e91] [cursor=pointer]:
+        - /url: /visits/new
+      - button "Search" [ref=f1e94] [cursor=pointer]
+      - link "Settings" [ref=f1e99] [cursor=pointer]:
+        - /url: /settings
+  - region "Notifications alt+T"
+  - alert [ref=f1e20]
