@@ -226,9 +226,20 @@ function fieldLabel(path: ReadonlyArray<PropertyKey>): string {
  *  raw Zod technical text. Branches on `issue.code` (stable API), not the
  *  message string (cosmetic + version-volatile), so a Zod wording change can't
  *  silently start leaking raw text. Use in place of `error.issues[0].message`. */
+/** Fields the doctor never types and cannot correct from the review editor.
+ *  They are carried by the client payload, so a mismatch is our bug, not
+ *  theirs — telling a clinician that "id isn't valid — please review it"
+ *  sends them looking for a field that isn't on screen and offers no path to
+ *  recovery. Found during the full-app audit (2026-07-24): editing a template
+ *  whose id is not a cuid produced exactly that message. */
+const INTERNAL_FIELDS = new Set(['id']);
+
 export function friendlyValidationError(error: z.ZodError): string {
   const issue = error.issues[0];
   if (!issue) return 'This format has fields we couldn’t accept — please review and try again.';
+  if (INTERNAL_FIELDS.has(String(issue.path[0] ?? ''))) {
+    return 'We couldn’t save this format — something went wrong on our end. Please reload the page and try again.';
+  }
   const field = fieldLabel(issue.path);
   switch (issue.code) {
     case 'too_big':
