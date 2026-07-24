@@ -75,6 +75,7 @@ export async function nativePdfExport(visitId: string, userId: string): Promise<
       signedAt: true,
       soapFinal: true,
       signedSoap: true,
+      rawTextInput: true,
       noteTemplate: { select: { id: true, sections: true, styleProfile: true } },
     },
   });
@@ -108,7 +109,12 @@ export async function nativePdfExport(visitId: string, userId: string): Promise<
       noteText,
       sections: (visit.noteTemplate.sections as unknown as NoteTemplateSection[]) ?? [],
       headerFields: coerceHeaderFields(sp.headerFields),
-      headerCtx: { patientName: visit.patientName, visitDate, soapText: noteText },
+      headerCtx: {
+        patientName: visit.patientName,
+        visitDate,
+        soapText: noteText,
+        dictationText: visit.rawTextInput,
+      },
     });
 
     // Addendum rule — a note section with content but NO anchor on the form is
