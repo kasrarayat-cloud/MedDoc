@@ -64,6 +64,8 @@ function mkVisit(overrides: Partial<VisitExportData> = {}): VisitExportData {
     patientSummary: 'Today we talked about your blood pressure…',
     headerFields: [],
     formOnly: false,
+    formTitle: null,
+    formSignature: null,
     ...overrides,
   };
 }

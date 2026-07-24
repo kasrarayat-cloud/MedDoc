@@ -90,6 +90,12 @@ export async function saveNoteTemplateAction(
     // note-gen ignores them.
     headerFields: gate.template.styleProfile.headerFields ?? null,
     formOnlyExport: gate.template.styleProfile.formOnlyExport ?? false,
+    // NOTE: this rebuild intentionally omits the certify-derived durable fields
+    // (pdfNative* + formSignature). Editing an ACTIVE row creates a new version
+    // whose cert is then re-keyed by carryForwardPdfCertification (which copies
+    // formSignature forward) — so an active form-only template keeps its DD:/DT:
+    // lines. A draft edit drops them until the next certify. Consistent with the
+    // pre-existing pdfNative* drop-and-carry-forward behavior.
   } as unknown as Prisma.InputJsonValue;
   const flags = gate.flags;
 
