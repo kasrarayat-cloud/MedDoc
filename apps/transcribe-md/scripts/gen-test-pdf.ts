@@ -148,6 +148,8 @@ function buildMock(
     patientSummary: null,
     headerFields: [],
     formOnly: false,
+    formTitle: null,
+    formSignature: null,
   };
 }
 

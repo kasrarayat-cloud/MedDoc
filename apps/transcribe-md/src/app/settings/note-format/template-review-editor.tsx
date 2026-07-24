@@ -165,6 +165,12 @@ export function TemplateReviewEditor({
     () => detectContextFields(sections),
     [sections],
   );
+  // feat/form-only-export: per-template preference — when ON, the exported DOCX/
+  // styled-PDF renders ONLY the doctor's form (no QuillMD chrome, no appended
+  // coding/summary blocks). In-app review + the standard export are unchanged.
+  const [formOnlyExport, setFormOnlyExport] = useState<boolean>(
+    styleProfile.formOnlyExport ?? false
+  );
   const [contextDefaults, setContextDefaults] = useState<Record<string, string>>(
     () => ({ ...(styleProfile.contextDefaults ?? {}) }),
   );
@@ -241,7 +247,7 @@ export function TemplateReviewEditor({
         // round-trip READ-ONLY (v1 — no editor UI). The server re-derives keys +
         // re-PHI-scans on save, so this is a pure passthrough.
         headerFields: styleProfile.headerFields ?? null,
-        formOnlyExport: styleProfile.formOnlyExport ?? false,
+        formOnlyExport,
       },
     };
   }
@@ -424,6 +430,36 @@ export function TemplateReviewEditor({
         {/* RIGHT — live sample note generated in the doctor's format (synthetic) */}
         <SamplePreview sections={sections} getPayload={buildPayload} />
       </div>
+
+      {/* Form-only export toggle (feat/form-only-export) */}
+      <label
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 10,
+          marginTop: 16,
+          padding: '12px 14px',
+          borderRadius: 8,
+          border: '1px solid var(--color-linear-border)',
+          background: 'var(--color-linear-surface-2)',
+          cursor: 'pointer',
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={formOnlyExport}
+          onChange={(e) => setFormOnlyExport(e.target.checked)}
+          style={{ marginTop: 2, accentColor: 'var(--color-linear-sage)' }}
+        />
+        <span style={{ fontSize: 13, color: 'var(--color-linear-text)', lineHeight: 1.5 }}>
+          Form-only export
+          <span style={{ display: 'block', fontSize: 12, color: 'var(--color-linear-text-3)', marginTop: 2 }}>
+            Exported Word/PDF documents contain only your form — its title, header, sections, and
+            signature line. No QuillMD banner, and no appended diagnoses, billing, or patient
+            summary. Your review screen and the standard export are unchanged.
+          </span>
+        </span>
+      </label>
 
       {/* Sticky action bar */}
       <div

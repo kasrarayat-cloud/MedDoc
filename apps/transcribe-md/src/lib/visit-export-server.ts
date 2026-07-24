@@ -19,6 +19,7 @@ import {
   resolveHeaderFields,
   coerceHeaderFields,
 } from './visit-export';
+import { renumberFormSections, coerceFormSignature } from './form-only';
 import type {
   CptEm,
   CptModifier,
@@ -62,7 +63,7 @@ export async function loadVisitExportData(
       // (header fields + form-only pref) rides in its styleProfile JSONB. One
       // round-trip via the relation; only these two export fields are read,
       // note-gen never sees them.
-      noteTemplate: { select: { styleProfile: true } },
+      noteTemplate: { select: { styleProfile: true, name: true } },
       user: { select: { name: true, email: true } },
     },
   });
@@ -72,9 +73,12 @@ export async function loadVisitExportData(
     (visit.noteTemplate?.styleProfile as {
       headerFields?: unknown;
       formOnlyExport?: unknown;
+      formSignature?: unknown;
     } | null) ?? null;
   const parsedHeaderFields = coerceHeaderFields(styleProfile?.headerFields);
   const formOnly = styleProfile?.formOnlyExport === true;
+  const formTitle = visit.noteTemplate?.name ?? null;
+  const formSignature = coerceFormSignature(styleProfile?.formSignature);
 
   const rawSoap =
     visit.status === 'SIGNED'
@@ -91,11 +95,14 @@ export async function loadVisitExportData(
   // placeholder dropped. Applied ONLY to the exported copy — stored columns and
   // the on-screen review lane are untouched. Runs after the patient-summary
   // strip so the dedupe still sees the note's own heading.
-  const soapText = sanitizeExportedSoap(
+  const sanitizedSoap = sanitizeExportedSoap(
     visit.patientSummary && visit.patientSummary.trim()
       ? stripNotePatientSummarySection(rawSoap)
       : rawSoap
   );
+  // Form-only: renumber enumerable findings/recommendations PROSE into numbered
+  // lists (matching the practice's form style). Toggle-OFF path is untouched.
+  const soapText = formOnly ? renumberFormSections(sanitizedSoap) : sanitizedSoap;
 
   // All four of these are Json? columns — treat each as its own shape
   // with a tolerant cast + safe-default. Downstream code can rely on
@@ -156,6 +163,8 @@ export async function loadVisitExportData(
     patientSummary: visit.patientSummary,
     headerFields,
     formOnly,
+    formTitle,
+    formSignature,
   };
 }
 
