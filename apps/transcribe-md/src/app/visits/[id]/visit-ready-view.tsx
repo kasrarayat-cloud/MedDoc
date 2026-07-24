@@ -30,6 +30,10 @@ import { isSkinBeta } from '@/config/skin-beta';
 import { criticalWarningRefs } from '@/lib/rx-warnings';
 import { placeholderSections } from '@/lib/parse-note-sections';
 import { ReviewTabsV2, type V2Tab } from './review-tabs-v2';
+// UX simplification pack (B) — flag-gated signed-visit document view.
+import { isUxSimplify } from '@/config/ux-simplify';
+import { SignedDocumentView } from './signed-document-view';
+import { extractIcdRows } from '@/lib/em-coding/displayed-level';
 import { BillingCardC3 } from './billing-card-c3';
 import { SoapEditor } from './soap-editor';
 import { SuggestionsLane, type SuggestedClaimView } from './suggestions-lane';
@@ -38,8 +42,8 @@ import { RxTab, rxTabWarningLevel } from './rx-tab';
 import { ExtrasTab, extrasTabHasFlag } from './extras-tab';
 import { CopySectionButton } from './copy-section-button';
 import { TranscriptTab, utterancesToSources } from './transcript-tab';
-import { projectEmForDisplay } from '@/lib/visit-export';
-import type { VisitExportData } from '@/lib/visit-export';
+import { projectEmForDisplay, projectDisplayedEmCode } from '@/lib/visit-export';
+import type { VisitExportData, CptEm } from '@/lib/visit-export';
 import {
   sectionSoap,
   sectionCodes,
@@ -525,6 +529,53 @@ export function VisitReadyView(props: VisitReadyViewProps) {
           />
         ),
       });
+    }
+
+    // ── UX simplification pack (B): a SIGNED note is a finished record, so it
+    //    renders as ONE scrolling document instead of six tabs. Flag-gated and
+    //    scoped to signed/readonly ONLY — the unsigned path below keeps
+    //    ReviewTabsV2 verbatim, because that is where the critical-Rx and E/M
+    //    gates live and those are frozen.
+    //
+    //    The nodes are pulled straight out of the tab list that was just built,
+    //    so the note and the transcript render byte-for-byte what the tabs
+    //    render. Only the container changes.
+    if (isUxSimplify() && isSigned) {
+      const noteNode = tabs.find((t) => t.key === 'note')?.node ?? null;
+      const dictationNode = tabs.find((t) => t.key === 'transcript')?.node ?? null;
+      // Authoritative displayed level — the SAME projection every exported
+      // artifact uses (signed ⇒ the frozen signedCode, else override ?? raw),
+      // so the summary row can never disagree with the exported document.
+      const emBlob = (props.cptCodes as { em?: CptEm } | null | undefined)?.em ?? null;
+      const displayedEm = projectDisplayedEmCode(emBlob, true);
+      const overrodeCount = props.rxOverriddenWarningIds?.length ?? 0;
+
+      return (
+        <div className="w-full qm-c3-rev2-root">
+          <SignedDocumentView
+            visitId={props.visitId}
+            doctorEmail={props.doctorEmail}
+            emailEnabled={props.emailEnabled}
+            // The signed-lock banner already rides inside the note node
+            // (SignedStateCard), so it is not duplicated here.
+            lockBanner={null}
+            noteNode={noteNode}
+            dictationNode={dictationNode}
+            dictationLabel={secondTabLabel.toLowerCase()}
+            summary={{
+              icd: extractIcdRows(props.icdCodes),
+              emCode: displayedEm,
+              emNotApplicable: !!props.emNotApplicable,
+              // Shown ONLY when an override was actually recorded — otherwise
+              // the row would assert "no overrides" on every ordinary note.
+              rxOverrideNote:
+                overrodeCount > 0
+                  ? `${overrodeCount} critical interaction${overrodeCount === 1 ? '' : 's'} overridden before signing`
+                  : null,
+            }}
+          />
+        </div>
+      );
     }
 
     return (
