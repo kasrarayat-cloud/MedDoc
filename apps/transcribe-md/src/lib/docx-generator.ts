@@ -29,6 +29,7 @@ import {
   prescriptionOneLine,
   formatVisitDate,
 } from './visit-export';
+import { formSignatureLines } from './form-only';
 
 // T-M22.4: typography tokens. Font NAMES are set on every TextRun
 // so Word renders Charter (body) and Inter Tight (labels + brand)
@@ -54,39 +55,57 @@ export async function generateVisitDocx(
   const children: (Paragraph | Table)[] = [];
 
   // ── Header ────────────────────────────────────────────────────────
-  children.push(
-    new Paragraph({
-      spacing: { after: 120 },
-      children: [
-        new TextRun({
-          text: 'QUILLMD',
-          bold: true,
-          color: '7C3AED',
-          size: 18, // half-points (9pt)
-          font: FONTS.label,
-          // T-M22.5: match PDF's 1.2pt letterspacing on the brand
-          // wordmark. docx character-spacing unit is 1/20 pt, so 24
-          // ≈ 1.2pt — same visual rhythm as the pdf-generator's
-          // `characterSpacing: 1.2` in the section-heading primitive.
-          characterSpacing: 24,
-        }),
-      ],
-    })
-  );
-  children.push(
-    new Paragraph({
-      spacing: { after: 240 },
-      children: [
-        new TextRun({
-          text: data.clinicianName
-            ? `${data.clinicianName} · ${data.specialty}`
-            : data.specialty,
-          bold: true,
-          size: 32,
-        }),
-      ],
-    })
-  );
+  // Form-only: render EXACTLY the doctor's form — the form's own title (centered,
+  // as on the form), NO QuillMD wordmark, NO account/specialty line.
+  if (data.formOnly) {
+    children.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 240 },
+        children: [
+          new TextRun({
+            text: (data.formTitle ?? '').trim().toUpperCase() || 'NOTE',
+            bold: true,
+            size: 32, // 16pt
+          }),
+        ],
+      })
+    );
+  } else {
+    children.push(
+      new Paragraph({
+        spacing: { after: 120 },
+        children: [
+          new TextRun({
+            text: 'QUILLMD',
+            bold: true,
+            color: '7C3AED',
+            size: 18, // half-points (9pt)
+            font: FONTS.label,
+            // T-M22.5: match PDF's 1.2pt letterspacing on the brand
+            // wordmark. docx character-spacing unit is 1/20 pt, so 24
+            // ≈ 1.2pt — same visual rhythm as the pdf-generator's
+            // `characterSpacing: 1.2` in the section-heading primitive.
+            characterSpacing: 24,
+          }),
+        ],
+      })
+    );
+    children.push(
+      new Paragraph({
+        spacing: { after: 240 },
+        children: [
+          new TextRun({
+            text: data.clinicianName
+              ? `${data.clinicianName} · ${data.specialty}`
+              : data.specialty,
+            bold: true,
+            size: 32,
+          }),
+        ],
+      })
+    );
+  }
 
   // ── Patient block ─────────────────────────────────────────────────
   // T-M22.2: horizontal info bar matching the PDF T-M21.2 design.
@@ -106,7 +125,9 @@ export async function generateVisitDocx(
   children.push(spacer());
 
   // ── SOAP note ─────────────────────────────────────────────────────
-  children.push(...renderSoapParagraphs(data.soapText));
+  // Form-only omits the injected "CLINICAL NOTE" heading — the form has no such
+  // title; its own sections speak for themselves.
+  children.push(...renderSoapParagraphs(data.soapText, data.formOnly));
 
   // ── Diagnoses ─────────────────────────────────────────────────────
   // feat/template-header-fields: a "form-only" template suppresses these
@@ -245,25 +266,38 @@ export async function generateVisitDocx(
     }
   }
 
-  // ── Footer ──────────────────────────────────────────────────────
+  // ── Footer / signature ──────────────────────────────────────────
   children.push(spacer());
-  children.push(
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      children: [
-        new TextRun({
-          text: data.signedAt
-            ? `Signed electronically by ${data.clinicianName ?? 'Clinician'} on ${formatVisitDate(
-                data.signedAt
-              )}.`
-            : 'Not yet signed.',
-          color: '666666',
-          size: 18,
-          italics: true,
-        }),
-      ],
-    })
-  );
+  if (data.formOnly) {
+    // The form's OWN signature block — "Electronically Signed – <name> <date>"
+    // (+ DD:/DT: when the form has them). No QuillMD signed line.
+    for (const line of formSignatureLines(data.clinicianName, data.signedAt, data.formSignature)) {
+      children.push(
+        new Paragraph({
+          spacing: { after: 20 },
+          children: [new TextRun({ text: line, size: 20 })],
+        })
+      );
+    }
+  } else {
+    children.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        children: [
+          new TextRun({
+            text: data.signedAt
+              ? `Signed electronically by ${data.clinicianName ?? 'Clinician'} on ${formatVisitDate(
+                  data.signedAt
+                )}.`
+              : 'Not yet signed.',
+            color: '666666',
+            size: 18,
+            italics: true,
+          }),
+        ],
+      })
+    );
+  }
 
   const doc = new Document({
     // docProps/core.xml survives every Word/Pages/LibreOffice
@@ -440,7 +474,7 @@ const TASK_LINE_RE = /^\s*[-*]\s+\[( |x|X)\]\s+(.*)$/;
  *  `**Label:** content` / `*Label:* content`, `**bold**` + `*italic*`
  *  inline, `-` bullets, `- [x]` task lines, and `| a | b |` tables —
  *  everything else renders as a plain paragraph. */
-function renderSoapParagraphs(soap: string): (Paragraph | Table)[] {
+function renderSoapParagraphs(soap: string, formOnly = false): (Paragraph | Table)[] {
   const out: (Paragraph | Table)[] = [];
   if (!soap.trim()) {
     out.push(
@@ -456,7 +490,8 @@ function renderSoapParagraphs(soap: string): (Paragraph | Table)[] {
     );
     return out;
   }
-  out.push(sectionHeading('Clinical Note'));
+  // Form-only omits the injected "CLINICAL NOTE" heading (not on the form).
+  if (!formOnly) out.push(sectionHeading('Clinical Note'));
   // Consecutive pipe rows collect here and flush as one Table on the
   // first non-pipe line (and at end-of-note). Prose-only notes never
   // populate the buffer, so their output is unchanged.

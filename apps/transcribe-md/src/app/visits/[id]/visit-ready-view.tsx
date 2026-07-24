@@ -934,6 +934,8 @@ function buildSectionData(props: VisitReadyViewProps): VisitExportData {
     // them (the EHR already carries patient demographics).
     headerFields: [],
     formOnly: false,
+    formTitle: null,
+    formSignature: null,
   };
 }
 

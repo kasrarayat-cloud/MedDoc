@@ -10,6 +10,7 @@
 import type { TranscribeVisitStatus } from '@prisma/client';
 import { EMPTY_SECTION_PLACEHOLDER } from './soap-format';
 import type { NoteTemplateHeaderField } from '@/worker/note-templates/system-default-template';
+import type { FormSignatureStyle } from './form-only';
 
 // ----------------------------------------------------------------------------
 // Wire types — duplicated from worker/layers/* so this module can be
@@ -148,9 +149,17 @@ export interface VisitExportData {
    *  Empty for templates without a header block. Rendered at the top of the
    *  styled export, in order. */
   headerFields: RenderedHeaderField[];
-  /** "Form-only export": when true, suppress the appended Diagnoses /
-   *  Procedures / Medications / Referrals / Patient Summary blocks. */
+  /** "Form-only export": when true, the styled export renders EXACTLY the
+   *  doctor's form — suppress ALL QuillMD chrome (banner, "CLINICAL NOTE" title,
+   *  the appended Diagnoses / Procedures / Medications / Referrals / Patient
+   *  Summary blocks, watermark, QuillMD signed line) and render the form's own
+   *  title + header + sections + signature style instead. */
   formOnly: boolean;
+  /** The form's title for form-only mode (the template name, e.g. "Operative
+   *  Note"). Null when unknown. Rendered centered/uppercased as on the form. */
+  formTitle: string | null;
+  /** The form's captured signature style (DD:/DT: presence) for form-only mode. */
+  formSignature: FormSignatureStyle | null;
 }
 
 /** A header field resolved for one visit: the doctor's label + the filled value
