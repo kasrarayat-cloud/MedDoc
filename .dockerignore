@@ -51,3 +51,34 @@ coverage
 .cache
 tmp
 out
+
+# ── Build-context weight (full-app audit 2026-07-24) ────────────────────────
+# `COPY . .` in apps/*/Dockerfile ships the ENTIRE repo root into the builder
+# layer. Only `apps/*` and `packages/*` are npm workspaces, so everything below
+# is dead weight that made a cold build spend minutes on a single COPY.
+#
+# NOTE on secrets/: it holds a 1 GB LUKS container (pgdata.luks). It never
+# reached the FINAL image — the runner stage copies only the standalone build,
+# so multi-stage kept it out (verified against the running prod container) —
+# but it was being shipped into the build CONTEXT and the builder layer, which
+# is both slow and the wrong place for a volume image to live.
+.local
+secrets
+landing-monolith
+venv
+_design-references
+audit-evidence
+audit-final-evidence
+
+# Loose capture artefacts that accumulate at the repo ROOT (157 of them at the
+# time of writing). Anchored with a leading slash ON PURPOSE: a bare `*.png`
+# would also exclude apps/*/public/**, so the day someone adds a real image
+# asset the build would silently ship without it. There are no image assets in
+# any app's public/ today — this rule keeps it that way by construction rather
+# than by luck.
+/*.jpeg
+/*.jpg
+/*.png
+/*.zip
+/*.pdf
+/*.docx
