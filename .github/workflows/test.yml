@@ -136,19 +136,20 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
-      - name: Assert sharp survived install (lockfile is hand-maintained)
-        # `overrides.sharp: ^0.35.0` (which clears GHSA-f88m-g3jw-g9cj, the
-        # sharp <0.35.0 libvips HIGH) is DISJOINT from what next declares:
-        # next@16.2.11 has `optionalDependencies.sharp: ^0.34.5`, and there is
-        # no newer stable next. Because sharp is OPTIONAL, npm resolves the
-        # conflict by silently DROPPING it rather than erroring — so a full
-        # re-resolve (`npm update`, `npm install`) can quietly remove sharp and
-        # Next loses its native image optimiser with no warning anywhere.
+      - name: Assert sharp survived install
+        # HISTORY: `overrides.sharp: ^0.35.0` used to sit at ROOT level, which is
+        # a GLOBAL demand npm could not reconcile with next's own
+        # `optionalDependencies.sharp: ^0.34.5`. Because sharp is OPTIONAL, npm
+        # resolved that conflict by silently DROPPING the package rather than
+        # erroring, so any full re-resolve removed Next's native image optimiser
+        # with no warning — and the lockfile had to be hand-maintained.
         #
-        # `npm ci` installs strictly from the lockfile and keeps it, which is
-        # why CI and the Docker build are fine. This assert exists so that if
-        # someone regenerates the lockfile with `npm install`, CI says so
-        # instead of shipping an image without sharp.
+        # FIXED by scoping the override under `next`, the form npm actually
+        # supports ("when THIS parent asks for sharp, use ^0.35.0"). The lockfile
+        # is regenerable normally again. This assert is KEPT as a regression
+        # guard: if anyone reintroduces a root-level sharp override, or the
+        # ranges drift apart again, CI says so instead of shipping an image
+        # without sharp.
         # NOTE: read package.json off the filesystem, NOT via
         # require('sharp/package.json') — sharp's "exports" map does not expose
         # the ./package.json subpath, so the require form throws
@@ -161,8 +162,8 @@ jobs:
             if (!fs.existsSync(p)) {
               console.error('::error::sharp is MISSING from node_modules after npm ci.');
               console.error('::error::The lockfile was probably regenerated with \`npm install\`, which drops sharp');
-              console.error('::error::because overrides.sharp ^0.35.0 cannot satisfy next optionalDependencies ^0.34.5.');
-              console.error('::error::Fix: restore the sharp + @img entries in package-lock.json, verify with \`npm ci\`.');
+              console.error('::error::Check that overrides.sharp is still SCOPED under next, not root-level.');
+              console.error('::error::Fix: overrides = { next: { sharp: ^0.35.0 } }, then npm install && npm ci.');
               process.exit(1);
             }
             const v = JSON.parse(fs.readFileSync(p, 'utf8')).version;
@@ -178,6 +179,26 @@ jobs:
         # intentionally NOT added — we want the gate to fail on a
         # vulnerability above threshold.
         #
+        # POLICY (2026-07-25): this BLOCKING gate runs `--omit=dev`, i.e. the
+        # full high+critical threshold against PRODUCTION dependencies — the
+        # code that actually ships in the image and can be reached by a request.
+        # The threshold is NOT lowered and the meddoc-pro exclusion is unchanged;
+        # only the dependency SCOPE narrows, from "everything in the repo" to
+        # "everything we ship".
+        #
+        # WHY: dev-only tooling was blocking merges on advisories that cannot
+        # reach production. Concretely, the eslint chain
+        # (eslint -> @eslint/* -> minimatch -> brace-expansion) is fixable only
+        # by eslint 10.8.0, which is ECOSYSTEM-BLOCKED: eslint-config-next@16.2.2
+        # still peer-caps its plugin set at eslint 9 (eslint-plugin-import <=^9,
+        # jsx-a11y <=^9, react <=^9.7). Holding production changes hostage to a
+        # linter's transitive dependency is the wrong trade.
+        #
+        # Dev advisories do NOT become invisible — the `audit-dev` job below runs
+        # the identical scan WITHOUT --omit=dev and reports, non-blocking.
+        # Tracking issue: adopt eslint 10 the moment eslint-config-next's plugins
+        # accept it (the same issue carries the "did next widen its sharp range?"
+        # watcher, which would let the sharp override be dropped entirely).
         # Scope: `--workspaces` would also scan apps/meddoc-pro, which is
         # decommissioned and slated for deletion — its dead dep tree must
         # not gate live PRs. npm has no `--workspace-exclude`, so we
@@ -199,8 +220,47 @@ jobs:
             exit 1
           fi
           args=(); for w in "${WS[@]}"; do args+=(--workspace "$w"); done
-          echo "Auditing ${#WS[@]} in-scope workspaces (meddoc-pro excluded): ${WS[*]}"
-          npm audit --audit-level=high "${args[@]}" --include-workspace-root
+          echo "Auditing ${#WS[@]} in-scope workspaces, PRODUCTION deps only (meddoc-pro excluded): ${WS[*]}"
+          npm audit --audit-level=high --omit=dev "${args[@]}" --include-workspace-root
+
+  # ──────────────────────────────────────────────────────────────────
+  # Dev-dependency advisory visibility (2026-07-25). NON-BLOCKING.
+  # ----------------------------------------------------------------------------
+  # The gate above deliberately scopes to production deps. This job runs the
+  # IDENTICAL scan without --omit=dev so a dev-tooling advisory is still
+  # surfaced on every PR — it just doesn't hold the merge. `continue-on-error`
+  # is what makes it advisory; it is NOT in the required-checks list.
+  #
+  # If this job is red and the blocking gate is green, the finding is in dev
+  # tooling. That is a real debt item to schedule, not a reason to stop a
+  # production fix. Read it, don't ignore it.
+  # ──────────────────────────────────────────────────────────────────
+  audit-dev:
+    name: dev-dependency advisories (report-only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Audit FULL tree incl. dev (advisory only — never blocks)
+        shell: bash
+        run: |
+          mapfile -t WS < <(npm query .workspace --json \
+            | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{for(const w of JSON.parse(s)){if(w.name!=='meddoc-pro')console.log(w.name)}})")
+          if [ "${#WS[@]}" -eq 0 ]; then
+            echo "::warning::no in-scope workspaces resolved — dev audit skipped"
+            exit 0
+          fi
+          args=(); for w in "${WS[@]}"; do args+=(--workspace "$w"); done
+          echo "Dev-inclusive audit over ${#WS[@]} workspaces (meddoc-pro excluded): ${WS[*]}"
+          npm audit --audit-level=high "${args[@]}" --include-workspace-root \
+            || echo "::warning::dev-tree high/critical advisories present — see log. Blocking gate covers production deps only."
 
   # ──────────────────────────────────────────────────────────────────
   # In-scope unit gate (chore/ci-unit-gate-and-marketing-copy).

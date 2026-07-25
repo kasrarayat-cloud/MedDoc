@@ -39,6 +39,9 @@
     "next": {
       "postcss": "^8.5.23",
       "sharp": "^0.35.0"
+    },
+    "@prisma/dev": {
+      "find-my-way": "^9.7.0"
     }
   }
 }
