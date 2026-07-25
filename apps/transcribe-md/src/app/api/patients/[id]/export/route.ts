@@ -34,6 +34,7 @@ import { ZipArchive } from 'archiver';
 
 import prisma from '@meddoc/db';
 import { apiError, withApiHandler } from '@/lib/api-error';
+import { logAudit } from '@/lib/audit';
 import { auth } from '@/lib/nextauth';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { downloadAudio } from '@/lib/minio';
@@ -215,6 +216,18 @@ export const GET = withApiHandler<{ id: string }>(
         );
       }
     })();
+
+    // S4b — record the disclosure BEFORE handing back the stream. Every visit
+    // this doctor holds for ONE patient, leaving as a single file. Ran
+    // unaudited until 2026-07-25. See the sibling settings/export-data route
+    // for why this is logged at response time rather than on completion.
+    await logAudit({
+      action: 'EXPORT_PATIENT_ARCHIVE_DOWNLOADED',
+      userId,
+      targetType: 'TranscribeMdPatient',
+      targetId: patientId,
+      metadata: { visitCount: visits.length, scope: 'single_patient' },
+    });
 
     const webStream = Readable.toWeb(passThrough) as ReadableStream<Uint8Array>;
 
