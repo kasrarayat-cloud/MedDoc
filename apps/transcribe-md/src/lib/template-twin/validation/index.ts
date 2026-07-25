@@ -503,7 +503,22 @@ export function validateTemplateTwin(
     } else if (resolution.status === 'ambiguous') {
       add('FIELD_AMBIGUOUS', critical || field.required || mapping.required ? 'blocking' : 'warning', 'The field evidence is ambiguous.', field.fieldId);
     } else if (resolution.status === 'needs_clinician_input') {
-      add('FIELD_NEEDS_CLINICIAN_INPUT', critical || field.required || mapping.required ? 'blocking' : 'warning', 'The field needs clinician input.', field.fieldId);
+      // AT CERTIFICATION ONLY, this is a warning rather than a blocker.
+      //
+      // Certification asks "does this template fill correctly from evidence?",
+      // not "did a clinician sit down and answer every prompt?". A field the
+      // resolver deliberately refuses to infer — an enumerated DIAGNOSIS, say —
+      // is CORRECT behaviour, and the field stays BLANK either way. It is
+      // attested as a blank-proof carrying this reason, so the certificate says
+      // exactly what happened rather than hiding it.
+      //
+      // AT VISIT TIME the severity is unchanged: a clinically material field
+      // needing input still blocks, because there the question really is
+      // whether the clinician answered. Both directions are test-pinned.
+      const needsInputBlocks =
+        !input.allowUncertifiedForSyntheticTest &&
+        (critical || field.required || mapping.required);
+      add('FIELD_NEEDS_CLINICIAN_INPUT', needsInputBlocks ? 'blocking' : 'warning', 'The field needs clinician input.', field.fieldId);
     } else if (
       resolution.status === 'not_mentioned' &&
       (field.required || mapping.required || mapping.unknownPolicy === 'requires_input')

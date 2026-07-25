@@ -5,6 +5,8 @@
 // proof that certification binds. PHI-gated (synthetic-evidence-gate); prisma
 // singleton + injectable storage + logTwinAudit only.
 // ============================================================================
+import { createHash } from 'node:crypto';
+
 import { Prisma } from '@prisma/client';
 import prisma from '@meddoc/db';
 
@@ -152,6 +154,12 @@ export async function runTemplateTwinSyntheticTest(input: {
           id: true,
           compiledDocumentIr: true,
           certificationStatus: true,
+          structureSha256: true,
+          pinnedSyntheticNote: true,
+          pinnedNoteEncounterSha256: true,
+          pinnedNoteTemplateSha256: true,
+          pinnedNoteModelVersion: true,
+          pinnedNoteGeneratedAt: true,
           sourceArtifact: {
             select: {
               practiceId: true,
@@ -267,9 +275,31 @@ export async function runTemplateTwinSyntheticTest(input: {
   // Run the LIVE brain over the synthetic encounter, then recover the compiled
   // {{one of}} marker form from the SAME verified source the IR came from —
   // byte-for-byte what processTemplateTwinVisit does.
+  // ── PINNED SYNTHETIC NOTE ────────────────────────────────────────────────
+  // Generate ONCE, then reuse. Which sections L4 emits varies between runs, so
+  // an unpinned proof made certification a coin flip: one run filled the
+  // DIAGNOSIS control, the next left it NEEDS_CLINICIAN_INPUT and blocked.
+  // The pin fixes the stochastic INPUT only — the pinned note still goes
+  // through bridge -> matcher -> validator -> renderer -> roundtrip exactly as
+  // an unpinned one would. Nothing is bypassed and no requirement is relaxed.
+  const encounterSha256 = createHash('sha256').update(input.encounterText).digest('hex');
+  const templateSha256 = compiled.structureSha256;
+  const pinValid =
+    !!compiled.pinnedSyntheticNote &&
+    compiled.pinnedNoteEncounterSha256 === encounterSha256 &&
+    compiled.pinnedNoteTemplateSha256 === templateSha256;
+
   let generatedNote: string | undefined;
   let markerText: string | undefined;
-  if (input.generateNote) {
+  if (pinValid) {
+    generatedNote = compiled.pinnedSyntheticNote!;
+    markerText = (await docxToTextWithControls(source)).text;
+    console.info(
+      `[template-twin:pin] REUSED compiled=${compiled.id} encounterSha=${encounterSha256.slice(0, 12)} ` +
+        `templateSha=${String(templateSha256).slice(0, 12)} model=${compiled.pinnedNoteModelVersion} ` +
+        `generatedAt=${compiled.pinnedNoteGeneratedAt?.toISOString()}`,
+    );
+  } else if (input.generateNote) {
     generatedNote = await input.generateNote({
       encounterText: input.encounterText,
       noteTemplateId: row.id,
@@ -279,6 +309,22 @@ export async function runTemplateTwinSyntheticTest(input: {
       roleLabeledTranscript: extracted.contextText,
     });
     markerText = (await docxToTextWithControls(source)).text;
+    // Pin it, with the provenance that decides when it must be regenerated.
+    await prisma.templateTwinCompiledVersion.update({
+      where: { id: compiled.id },
+      data: {
+        pinnedSyntheticNote: generatedNote,
+        pinnedNoteEncounterSha256: encounterSha256,
+        pinnedNoteTemplateSha256: templateSha256,
+        pinnedNoteModelVersion:
+          process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-opus-4-8',
+        pinnedNoteGeneratedAt: new Date(),
+      },
+    });
+    console.info(
+      `[template-twin:pin] CREATED compiled=${compiled.id} encounterSha=${encounterSha256.slice(0, 12)} ` +
+        `templateSha=${String(templateSha256).slice(0, 12)}`,
+    );
   }
   const prepared = await prepareTemplateTwinFill({
     compiledVersionId: compiled.id,
