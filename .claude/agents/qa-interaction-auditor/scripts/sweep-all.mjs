@@ -115,7 +115,46 @@ function deepWalkerFixtureId() {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const seeded = JSON.parse(execSync(`cat ${seededPath}`, { encoding: 'utf-8' }));
     const scenario = process.env.QA_SCENARIO ?? 'bumpEligible';
-    return seeded.visitIds?.[scenario] ?? null;
+    const id = seeded.visitIds?.[scenario] ?? null;
+    if (!id) return null;
+
+    // FAIL CLOSED (full-app audit 2026-07-24). The seeders run inside the
+    // db-migrate container, so they write seeded-ids.json to the CONTAINER
+    // filesystem — the host copy is not a bind mount and goes stale silently.
+    // On 2026-07-24 the host file still named a userId/patientId from
+    // 2026-06-15 and five qa_fix_visit_* ids that no longer existed in the DB
+    // (0 rows). Because an id was still *resolvable* from the JSON, the
+    // orchestrator did not take its `skipped` branch: the flagship walker
+    // launched, walked a not-found page, and reported on it. Verify the id
+    // actually exists in the target DB before handing it to the walker.
+    const container = process.env.QA_AUDITOR_DB_CONTAINER ?? 'meddoc-qa-postgres-1';
+    const dbName = process.env.QA_AUDITOR_DB_NAME ?? 'meddoc_qa_test';
+    const dbUser = process.env.QA_AUDITOR_DB_USER ?? 'meddoc';
+    try {
+      const sql = `SELECT COUNT(*) FROM transcribe_visits WHERE id='${id.replace(/'/g, "''")}';`;
+      const n = parseInt(
+        execSync(
+          `docker exec ${container} psql -U ${dbUser} -d ${dbName} -tA -c ${JSON.stringify(sql)}`,
+          { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] }
+        ).trim(),
+        10
+      );
+      if (!Number.isFinite(n) || n < 1) {
+        console.error(
+          `[sweep-all] STALE FIXTURES: '${id}' (scenario=${scenario}) is named in ` +
+            `${seededPath} but does not exist in ${dbName}. Re-run seed-qa-fixtures.ts. ` +
+            `Refusing to walk a non-existent visit.`
+        );
+        return null;
+      }
+    } catch (err) {
+      console.error(
+        `[sweep-all] Could not verify fixture '${id}' against ${dbName}: ` +
+          `${err instanceof Error ? err.message : err}. Refusing to walk unverified fixtures.`
+      );
+      return null;
+    }
+    return id;
   } catch {
     return null;
   }
@@ -188,14 +227,26 @@ function buildReport({ runs, preflightInfo, startedAt, finishedAt }) {
   ).length;
   const skipped = orchSkipped + selfSkipped;
   const failed = runs.filter((r) => !r.skipped && r.exitCode !== 0).length;
-  const ok = totalWalkers - skipped - failed;
+  // Walkers whose DB probes errored: they exited 0 and looked green, but their
+  // assertions never ran. Counted separately so the headline can never again
+  // read "30/30 ok" over a sweep that verified nothing on the data side.
+  const dbBroken = runs.filter(
+    (r) =>
+      !r.skipped &&
+      r.exitCode === 0 &&
+      r.events?.some((e) => e.event === 'db-probe-error')
+  ).length;
+  const ok = totalWalkers - skipped - failed - dbBroken;
 
   const lines = [];
   lines.push(`# QA Interaction Audit — full-site sweep — ${startedAt}`);
   lines.push('');
   lines.push(`- Agent: qa-interaction-auditor v3.1 (storageState + rich fixtures + deepWalk)`);
   lines.push(`- Run mode: sweep-all.mjs orchestrator`);
-  lines.push(`- Walkers: ${totalWalkers} total — ${ok} ok, ${failed} failed, ${skipped} skipped`);
+  lines.push(
+    `- Walkers: ${totalWalkers} total — ${ok} ok, ${failed} failed, ${skipped} skipped` +
+      (dbBroken ? `, **${dbBroken} DB-probe-broken (assertions did not run)**` : '')
+  );
   lines.push(`- Pre-flight: ${preflightInfo.availableMb} Mi available / ${preflightInfo.totalMb} Mi total`);
   lines.push(`- Started: ${startedAt}`);
   lines.push(`- Finished: ${finishedAt}`);
@@ -220,9 +271,16 @@ function buildReport({ runs, preflightInfo, startedAt, finishedAt }) {
       continue;
     }
     const result = r.events.find((e) => e.event === 'walker-result');
-    const ok = result?.ok ?? false;
+    // A DB probe that errored proves nothing, so a walker that emitted one
+    // cannot be reported as ✅ — its zero-write / side-effect assertions did
+    // not actually run. Before 2026-07-24 these were swallowed and the sweep
+    // reported 30/30 ok while emitting 14 Postgres errors.
+    const dbProbeErrors = r.events.filter((e) => e.event === 'db-probe-error');
+    const ok = (result?.ok ?? false) && dbProbeErrors.length === 0;
     const icon = r.exitCode === 0 ? (ok ? '✅' : '⚠️') : '❌';
-    const note = result?.note ?? result?.loadErr ?? r.stderrTail?.split('\n')[0]?.slice(0, 80) ?? '';
+    const note = dbProbeErrors.length
+      ? `DB PROBE FAILED (${dbProbeErrors.length}) — assertions did not run: ${(dbProbeErrors[0].error ?? '').split('\n')[0].slice(0, 90)}`
+      : (result?.note ?? result?.loadErr ?? r.stderrTail?.split('\n')[0]?.slice(0, 80) ?? '');
     const dur = result?.durationMs ? `${result.durationMs}ms` : '—';
     lines.push(`| ${r.name} | ${icon} | ${dur} | ${(note ?? '').replace(/\|/g, '\\|').slice(0, 120)} |`);
   }
