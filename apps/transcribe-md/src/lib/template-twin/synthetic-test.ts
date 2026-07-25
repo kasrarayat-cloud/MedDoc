@@ -56,6 +56,10 @@ export interface TwinNoteGenerator {
     noteTemplateId: string;
     practiceId: string;
     userId: string;
+    /** L3 output for this encounter, already computed here — passed through so
+     *  the generator does not pay for extraction a second time. */
+    entities: unknown;
+    roleLabeledTranscript: string;
   }): Promise<string>;
 }
 
@@ -271,6 +275,8 @@ export async function runTemplateTwinSyntheticTest(input: {
       noteTemplateId: row.id,
       practiceId: input.actor.practiceId,
       userId: input.actor.userId,
+      entities: extracted.entities,
+      roleLabeledTranscript: extracted.contextText,
     });
     markerText = (await docxToTextWithControls(source)).text;
   }
