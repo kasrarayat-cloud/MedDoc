@@ -105,3 +105,43 @@ Pinned by test: the three invented concepts that caused the outage
 (`test.venous_duplex.gsv_sfj_diameter` etc.) are **rejected**, and no registry
 concept may contain anatomy — one concept serves 26 template rows precisely
 because it does not name a vein.
+
+## Stage 5 — leg-table addressing: STOPPED, new design question
+
+Not completed, and deliberately not decided unilaterally.
+
+**The situation.** The docx has ONE table (`distinct tableIds among cells = 1`),
+26 rows, vein labels that REPEAT — rows 1-13 and 14-26 carry the same labels:
+
+```
+  row 1: GSV at the SFJ          row 2: GSV at the Proximal Thigh
+  row 3: GSV at the Knee         row 4: GSV Below Knee
+  row 5: SSV at the SPJ          ...
+```
+
+L4 renders this as TWO markdown tables (Right Leg, Left Leg). `pickTable`
+returns one, so only half the cells are ever offered.
+
+**Why "offer both tables" is not safe as-is.** Nothing in the IR row data says
+which leg a row belongs to — not the label, not the binding, not a heading.
+`matchMeasurementFact` takes laterality FROM the matched fact and the ROW has
+no laterality to check against, so offering both tables to all rows would let a
+right-leg value satisfy a left-leg row. That is precisely the clinical error the
+ambiguity rule exists to prevent, and it would pass silently.
+
+**The open question:** how is an IR row's laterality determined? Options seen
+from here, none of them free:
+  (a) parse the docx's in-table leg heading rows and stamp laterality onto each
+      IR row at COMPILE time (most correct; changes the IR);
+  (b) infer from row-block ordering (first N rows = first leg) — cheap, and
+      wrong the moment a template orders legs differently;
+  (c) require the template to declare it (a compile-time contract).
+
+(a) looks right to me, but it changes the IR and belongs to whoever owns the
+compiler contract. Left for a ruling.
+
+## Stages 6-9 — not attempted
+
+Stage 6 (pin reuse) is independent of Stage 5 but has no value without
+certification. Stages 7 (certify twice), 8 (real-visit export) and 9 (GA) all
+depend on cells filling, which depends on Stage 5.
