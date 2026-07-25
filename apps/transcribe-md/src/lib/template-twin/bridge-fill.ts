@@ -45,8 +45,17 @@ interface ParsedMarkdownTable {
 // ZERO rows — so all 52 measurement cells never reached the matcher and every
 // dictated measurement was silently dropped. Measured on a real visit:
 // parseMarkdownTables -> 2 tables, rows=0, filledCount=0.
-const TABLE_ROW_RE =
-  /^\s*\|(.+)\|\s*(?:(?:\[[^\]]*\]|"[^"]*").*)?$/;
+// Anything after the closing pipe is an annotation, in ANY form. Three have
+// been observed from L4 and enumerating them was a losing game:
+//   | GSV at the SFJ | 6.2 | 3.4 | [S1: "..."]          bracketed anchor
+//   | GSV at the SFJ | 6.2 | 3.4 | "Right great ..."    quoted evidence
+//   | GSV at the SFJ | 7 | 2.4 | Great saphenous vein ...  bare prose
+// Each unrecognised form silently killed the whole table: the row failed to
+// match, and being the FIRST data row, accumulation ended with zero rows and
+// every measurement was dropped. The cells are fixed by the pipes BEFORE the
+// annotation, so the trailing text simply does not matter — capture to the last
+// pipe and ignore the rest, rather than keep guessing at forms.
+const TABLE_ROW_RE = /^\s*\|(.+)\|\s*.*$/;
 const SEP_ROW_RE = /^[\s:|-]+$/; // the | --- | --- | separator
 
 /** Split one "| a | b | c |" line into its cell strings (trimmed). Any trailing
@@ -273,6 +282,25 @@ export function bridgeNumericTableCells(input: BridgeNumericTableCellsInput): Fi
     const diameterCol = roleByCol.findIndex((r) => r === 'diameter');
     const refluxCol = roleByCol.findIndex((r) => r === 'reflux');
 
+    // HEADER/CELL ALIGNMENT. A data row is always [label, ...values], but the
+    // header does NOT always carry a column for the label:
+    //
+    //   | Segment | DIAMETER (mm) | REFLUX TIME (s) |   header 3, cells 3  -> offset 0
+    //   | DIAMETER (mm) | REFLUX TIME (s) |             header 2, cells 3  -> offset 1
+    //
+    // Both shapes come out of L4. Indexing cells by header position assumed the
+    // first form, so under the second the DIAMETER column read the row LABEL
+    // (dropped as non-numeric) and the REFLUX column read the DIAMETER value.
+    // Measured on the pinned note: filledCount=0, and a 7 mm diameter was
+    // offered to a reflux cell — refused only because the evidence matcher
+    // checks the fact's concept against the field's mapping. Alignment is a
+    // shape problem and belongs here, not behind the matcher.
+    //
+    // Detect it from the header's own first column: if that column already
+    // classifies as DATA, the header has no label column and every data cell
+    // sits one to the right.
+    const labelColumnOffset = roleByCol[0] === 'other' || roleByCol.length === 0 ? 0 : 1;
+
     let cursor = 0;
     for (const irRow of irRows) {
       const core = normVein(irRow.vein);
@@ -285,8 +313,10 @@ export function bridgeNumericTableCells(input: BridgeNumericTableCellsInput): Fi
       const mdRow = md.rows[matchedAt];
 
       const place = (field: TemplateField | null, col: number) => {
-        if (!field || col < 0 || col >= mdRow.cells.length) return;
-        const num = numericCell(mdRow.cells[col]);
+        if (!field || col < 0) return;
+        const cellIndex = col + labelColumnOffset;
+        if (cellIndex >= mdRow.cells.length) return;
+        const num = numericCell(mdRow.cells[cellIndex]);
         if (num == null) return; // —/[not documented]/prose → blank
         // Laterality comes from the MATCHED FACT, never from row position.
         const resolved = supportedNumeric(field, num, irRow.vein, facts, mappingById.get(field.fieldId));

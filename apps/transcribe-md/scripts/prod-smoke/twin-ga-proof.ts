@@ -76,20 +76,28 @@ async function main() {
   // fictional | mock | test | example) so a mislabeled real encounter can
   // never be persisted as a certification proof. Satisfy it honestly rather
   // than routing around it.
+  // Dense bilateral reflux narrative. Three things it must do at once:
+  //   * state >= 10 enumerated picks IN THE OPTIONS' OWN WORDING, so the live
+  //     brain's CHOICE_SLOT picks have facts to cite;
+  //   * state multiple measurements per leg, so the measurement cells fill and
+  //     the >= 1-cell floor is met by real evidence;
+  //   * DELIBERATELY leave segments unmentioned (SSV, AAGSV, PAGSV, below-knee)
+  //     so the >= 1-blank invariant keeps exercising blank behaviour.
+  // The evidence gate still requires the explicit synthetic marker.
   const ENCOUNTER = [
     'SYNTHETIC TEST ENCOUNTER — fictional data, not a real patient.',
-    'Bilateral lower extremity venous duplex reflux study.',
-    'Right great saphenous vein reflux 2.4 seconds, diameter 7 mm.',
-    'Left great saphenous vein reflux 3.1 seconds, diameter 8 mm.',
-    'No deep venous thrombosis identified bilaterally.',
+    'Bilateral lower extremity venous duplex reflux study, bilateral detailed.',
+    'Clinical indication: chronic venous insufficiency with aching, heaviness and swelling.',
+    'Technique: patient examined standing, with augmentation and Valsalva maneuvers.',
+    'Right leg. Great saphenous vein at the saphenofemoral junction: diameter 7 millimeters, reflux 2.4 seconds.',
+    'Right great saphenous vein at the proximal thigh: diameter 6.4 millimeters, reflux 2.1 seconds.',
+    'Right great saphenous vein at the knee: diameter 5.1 millimeters, reflux 1.6 seconds.',
+    'Left leg. Great saphenous vein at the saphenofemoral junction: diameter 8 millimeters, reflux 3.1 seconds.',
+    'Left great saphenous vein at the proximal thigh: diameter 6.9 millimeters, reflux 2.8 seconds.',
+    'Left great saphenous vein at the knee: diameter 5.6 millimeters, reflux 1.2 seconds.',
+    'The small saphenous veins and the accessory saphenous veins were not evaluated on this study.',
+    'No deep venous thrombosis identified bilaterally. The deep system is competent.',
     'Impression: bilateral great saphenous vein incompetence, left greater than right.',
-    // The DIAGNOSIS control is an enumerated single_select mapped to the
-    // `assessment` concept. The resolver will not infer an enumerated
-    // diagnosis from prose — it raises FIELD_NEEDS_CLINICIAN_INPUT rather than
-    // guess, which is correct for a clinically material assessment field. So
-    // the synthetic encounter states the diagnosis in the template's own
-    // words, which is exactly the "add direct synthetic evidence" the error
-    // asks for — not a relaxation of the check.
     'Diagnosis: Chronic venous hypertension with other complications of bilateral lower extremities.',
   ].join(' ');
   try {
