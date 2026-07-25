@@ -36,6 +36,7 @@ import {
 } from '@/lib/template-twin/certification-lifecycle';
 import { runTemplateTwinSyntheticTest } from '@/lib/template-twin/synthetic-test';
 import { extractTemplateTwinEntities } from '@/worker/layers/03-extract-entities';
+import { createEphemeralVisitNoteGenerator } from '@/worker/template-twin-note-generator';
 import { TemplateDocxError } from '@/lib/note-template-docx';
 import { TemplateTwinPhiRejectedError } from '@/lib/template-twin/source-phi';
 import type { TemplateTwinWorkspace } from '@/lib/template-twin/client-types';
@@ -171,6 +172,13 @@ export async function certifyNativeTemplateAction(
         encounterText: VERIFICATION_ENCOUNTER,
         encounterMode: 'dictation',
         extractEntities: extractTemplateTwinEntities,
+        // Run the proof through the LIVE fill path: a real (ephemeral) visit,
+        // the real L4, then bridgeTemplateFill over the resulting picks —
+        // exactly what a patient visit does. Costs one generation per
+        // certification, which is the price of attesting the real path.
+        generateNote: createEphemeralVisitNoteGenerator({
+          specialty: current?.template.encounterType ?? 'General',
+        }),
       });
     }
     const workspace = await certifyAndActivateTemplateTwin({
