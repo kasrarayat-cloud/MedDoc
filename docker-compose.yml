@@ -490,6 +490,13 @@ services:
         # interpolation AND the worker's runtime env_file).
         # ROLLBACK: unset/false in .env, rebuild + up -d --no-deps transcribe-md.
         NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX: "${NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX:-false}"
+        # UX simplification pack (upload → one confirm card; signed visit → one
+        # document). isUxSimplify() is read from CLIENT components, so this MUST
+        # be a build arg — a runtime env would silently leave both branches OFF.
+        # Stage on QA via the separately-tagged :ux-simplify image; promote by
+        # setting NEXT_PUBLIC_UX_SIMPLIFY=true in .env (compose reads .env here).
+        # ROLLBACK: NEXT_PUBLIC_UX_SIMPLIFY=false docker compose build transcribe-md
+        NEXT_PUBLIC_UX_SIMPLIFY: "${NEXT_PUBLIC_UX_SIMPLIFY:-false}"
     restart: unless-stopped
     logging:
       driver: json-file

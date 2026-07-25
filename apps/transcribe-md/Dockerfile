@@ -96,6 +96,16 @@ ENV NEXT_PUBLIC_ULTRASOUND_SPECIALTY=${NEXT_PUBLIC_ULTRASOUND_SPECIALTY}
 ARG NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX=false
 ENV NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX=${NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX}
 
+# UX simplification pack gate (upload → one confirm card; signed visit → one
+# document). Same rules as SKIN_BETA / ULTRASOUND: isUxSimplify() is read from
+# CLIENT components, so the value must be present at BUILD time to be inlined —
+# setting it only as a runtime container env would leave both branches on the
+# OFF path with no error. Default OFF.
+# Stage:   --build-arg NEXT_PUBLIC_UX_SIMPLIFY=true  (separately-tagged image)
+# ROLLBACK: NEXT_PUBLIC_UX_SIMPLIFY=false docker compose build transcribe-md
+ARG NEXT_PUBLIC_UX_SIMPLIFY=false
+ENV NEXT_PUBLIC_UX_SIMPLIFY=${NEXT_PUBLIC_UX_SIMPLIFY}
+
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # ── Build heap (incident 2026-06-04) ──
