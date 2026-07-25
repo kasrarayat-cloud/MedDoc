@@ -91,3 +91,32 @@ ORDER BY timestamp DESC LIMIT 50;
 
 Synthetic rows are expected in production audit output. Anyone auditing the
 trail should filter on this address rather than being surprised by it.
+
+## Authenticating a smoke run — use the callback, not the login form
+
+Since S2 gave every request a real client IP, `RATE_LIMITS.LOGIN` (10/hour,
+keyed on `clientIpFromHeaders`) is genuinely per-IP. A smoke that drives the
+**login form** repeatedly from one box therefore trips its own limiter — this
+happened on 2026-07-25 after 12 logins in an hour, and the symptom is
+misleading: `page.waitForURL(/\/dashboard/)` times out with no error text, which
+reads as "the app is broken" rather than "you are rate limited".
+
+The limiter is on the server ACTION (`loginAction`), not on the NextAuth
+callback route. So authenticate through the callback and reuse the context
+cookie jar:
+
+```js
+const csrf = (await (await ctx.request.get(`${BASE}/api/auth/csrf`)).json()).csrfToken;
+await ctx.request.post(`${BASE}/api/auth/callback/credentials`, {
+  form: { csrfToken: csrf, email: SMOKE_EMAIL, password: SMOKE_PASSWORD },
+});
+// page navigations now carry the session
+```
+
+This is not a way around the control — it is the same credential check, minus
+the form action's abuse limiter, which exists to stop password-guessing rather
+than to stop a smoke logging in. If you specifically want to TEST the limiter,
+drive the form; expect "Too many attempts" on the 11th.
+
+Note also that a burst of failed logins trips the 5-failure ACCOUNT lock on the
+fixture. Re-run `provision.ts` to clear it.

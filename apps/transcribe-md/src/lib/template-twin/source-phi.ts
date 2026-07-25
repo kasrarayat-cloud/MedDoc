@@ -121,8 +121,33 @@ export async function assertTemplateTwinSourcePhiFree(input: {
     throw new TemplateTwinPhiRejectedError();
   }
 
+  // Bound the scan. Measured 2026-07-25: a 52 KB WM_IOV docx sat in this call
+  // for over ten minutes with no ceiling — the upload UI just span, and the
+  // operator could not tell a slow model from a wedged one. The scan is a
+  // safety gate, so the answer to "we don't know" must be a clear refusal, not
+  // an unbounded wait: on timeout we raise the same
+  // TemplateTwinPhiScanUnavailableError the catch below raises, which the
+  // caller already treats as fail-closed (the file is NOT saved).
+  const timeoutMs = Number(process.env.TEMPLATE_TWIN_PHI_SCAN_TIMEOUT_MS ?? 90_000);
+  let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () =>
+        reject(
+          new Error(
+            `template-twin PHI scan exceeded ${timeoutMs}ms — refusing the upload rather than saving an unscanned template`,
+          ),
+        ),
+      timeoutMs,
+    );
+    // Do not hold the process open on this timer alone.
+    timer.unref?.();
+  });
+
   try {
-    const scan = await (input.client ?? modelClient).complete({
+    const scan = await Promise.race([
+      deadline,
+      (input.client ?? modelClient).complete({
       practiceId: input.practiceId,
       visitId: null,
       userId: input.userId,
@@ -140,7 +165,8 @@ export async function assertTemplateTwinSourcePhiFree(input: {
         description:
           'Report any OOXML part containing patient-specific content and whether the scan is uncertain.',
       },
-    });
+      }),
+    ]);
     const knownParts = new Set(Object.keys(fields));
     if (
       scan.anyUncertain ||
@@ -152,5 +178,7 @@ export async function assertTemplateTwinSourcePhiFree(input: {
   } catch (error) {
     if (error instanceof TemplateTwinPhiRejectedError) throw error;
     throw new TemplateTwinPhiScanUnavailableError(error);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
