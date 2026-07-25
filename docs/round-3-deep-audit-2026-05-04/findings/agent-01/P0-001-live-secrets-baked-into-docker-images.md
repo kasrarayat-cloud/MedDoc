@@ -19,6 +19,27 @@ Every shipped image built from this tree carries the **complete production `.env
 
 Root cause: the per-app Dockerfiles call `COPY . .` (e.g. `apps/transcribe-md/Dockerfile:39`) for the build stage, and `.dockerignore` excludes `.env.local` and `.env.production` but **not `.env`** itself. Next.js standalone tracing then keeps the `apps/meddoc-pro/.env` file in the runtime layer of `meddoc-pro-meddoc-pro`. The `db-migrate` service targets the `builder` stage directly (where the full source tree, including all dotfiles not gitignored, is preserved), so every secret env file present at build time is layered into the image.
 
+## Redaction note (2026-07-25)
+
+The `DB_PASSWORD` value originally quoted verbatim in the Evidence block below
+was still the LIVE production database password as of 2026-07-25 — confirmed by
+byte-comparison against `/opt/meddoc-pro/.env` (identical sha256). Every other
+credential in this document was already truncated or `<REDACTED>`; this one was
+not.
+
+Remediation performed 2026-07-25:
+- `ALTER ROLE meddoc WITH PASSWORD <new 32-char value>` on the production
+  Postgres, `.env` updated, and the four consumers recreated
+  (postgres-backup, transcribe-md-worker, transcribe-md, meddoc-pro).
+- Verified over the network path where authentication is actually enforced
+  (`pg_hba`: `host all all all scram-sha-256`): the new password authenticates,
+  the old one returns `FATAL: password authentication failed`.
+  NOTE: a `docker exec psql` test is NOT a valid check here — `pg_hba` grants
+  `trust` for local/127.0.0.1 connections inside the container, so it succeeds
+  with any password.
+- The value remains in git history. That is acceptable only because it is now
+  dead; it is no longer a credential.
+
 ## Evidence
 
 `apps/transcribe-md/Dockerfile:39`:
@@ -49,7 +70,7 @@ OPENAI_API_KEY=sk-proj-<REDACTED>...0A
 ANTHROPIC_API_KEY=sk-ant-api03-<REDACTED>...AAA
 DEEPGRAM_API_KEY=a905214...e6915a1
 RESEND_API_KEY=<REDACTED-LIVE-RESEND>
-DB_PASSWORD=X9kLm2pQz7
+DB_PASSWORD=<REDACTED-ROTATED-20260725>
 MINIO_ROOT_PASSWORD=WHu8b2IFVoc...9B5a
 SCRIBE_SERVICE_TOKEN=0edd0e511...debfed
 
