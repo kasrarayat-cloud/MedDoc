@@ -96,3 +96,76 @@ describe('defect 2 — null entities project to no facts, not a crash', () => {
     expect(facts).toEqual([]);
   });
 });
+
+// ============================================================================
+// DEFECT 3 — header/cell alignment. A data row is always [label, ...values],
+// but L4 emits the header BOTH with and without a column for the label.
+// Indexing cells by header position assumed the first shape, so under the
+// second the DIAMETER column read the row LABEL and the REFLUX column read the
+// DIAMETER value. Measured on the pinned note: filledCount=0, and a 7 mm
+// diameter was offered to a reflux cell — refused only because the evidence
+// matcher checks concept against mapping.
+// ============================================================================
+describe('defect 3 — header with no label column', () => {
+  const HEADERLESS = [
+    '| DIAMETER (mm) | REFLUX TIME (seconds) |',
+    '| --- | --- |',
+    '| GSV at the SFJ | 7 | 2.4 | "Right great saphenous vein reflux 2.4 seconds, diameter 7 mm" |',
+  ].join('\n');
+
+  const WITH_LABEL = [
+    '| Segment | DIAMETER (mm) | REFLUX TIME (seconds) |',
+    '| --- | --- | --- |',
+    '| GSV at the SFJ | 7 | 2.4 |',
+  ].join('\n');
+
+  it('parses both header shapes', () => {
+    expect(parseMarkdownTables(HEADERLESS)[0]!.rows).toHaveLength(1);
+    expect(parseMarkdownTables(WITH_LABEL)[0]!.rows).toHaveLength(1);
+  });
+
+  it('the row keeps label + both values regardless of header shape', () => {
+    for (const note of [HEADERLESS, WITH_LABEL]) {
+      const row = parseMarkdownTables(note)[0]!.rows[0]!;
+      expect(row.label).toContain('SFJ');
+      expect(row.cells[1]).toBe('7');
+      expect(row.cells[2]).toBe('2.4');
+    }
+  });
+
+  it('CANARY: the diameter value must never be read as the reflux value', () => {
+    // The exact mis-placement: under the headerless shape, reflux column index
+    // 1 pointed at cells[1] = "7", the DIAMETER. With the offset it points at
+    // cells[2] = "2.4".
+    const row = parseMarkdownTables(HEADERLESS)[0]!.rows[0]!;
+    const headerCols = parseMarkdownTables(HEADERLESS)[0]!.header.length;
+    const offset = headerCols === row.cells.length ? 0 : 1;
+    expect(offset).toBe(1);
+    expect(row.cells[1 + offset]).toBe('2.4');
+    expect(row.cells[1 + offset]).not.toBe('7');
+  });
+});
+
+describe('defect 1b — a BARE PROSE trailing annotation', () => {
+  // The third form L4 emits. Enumerating annotation forms was a losing game;
+  // the cells are fixed by the pipes before the annotation.
+  const BARE = [
+    '| Segment | DIAMETER (mm) | REFLUX TIME (seconds) |',
+    '| --- | --- | --- |',
+    '| GSV at the SFJ | 7 | 2.4 | Great saphenous vein at the saphenofemoral junction: diameter 7 millimeters, reflux 2.4 seconds.',
+    '| GSV at the Proximal Thigh | 6.4 | 2.1 | Right great saphenous vein at the proximal thigh.',
+    '| GSV Below Knee | [not documented] | [not documented] |',
+  ].join('\n');
+
+  it('parses every row', () => {
+    expect(parseMarkdownTables(BARE)[0]!.rows).toHaveLength(3);
+  });
+
+  it('keeps the values and does not leak the prose into a cell', () => {
+    const [table] = parseMarkdownTables(BARE);
+    const sfj = table!.rows[0]!;
+    expect(sfj.cells[1]).toBe('7');
+    expect(sfj.cells[2]).toBe('2.4');
+    expect(sfj.cells.some((c) => c.includes('saphenofemoral'))).toBe(false);
+  });
+});
