@@ -148,10 +148,10 @@ async function main() {
   const manifest = await prisma.templateTwinFillManifest.findFirst({
     where: { compiledVersionId: compiled!.id },
     orderBy: { createdAt: 'desc' },
-    select: { outputObjectKey: true, outputSha256: true, outputSizeBytes: true, fillStatus: true },
+    select: { outputObjectKey: true, outputSha256: true, outputSizeBytes: true, status: true },
   });
   say(
-    `MANIFEST ${manifest ? `status=${manifest.fillStatus} bytes=${manifest.outputSizeBytes} sha=${String(manifest.outputSha256).slice(0, 12)}` : 'NONE'}`
+    `MANIFEST ${manifest ? `status=${manifest.status} bytes=${manifest.outputSizeBytes} sha=${String(manifest.outputSha256).slice(0, 12)}` : 'NONE'}`
   );
   if (manifest?.outputObjectKey) {
     const { createTemplateTwinArtifactStore } = await import('@/lib/template-twin/storage');
