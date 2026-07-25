@@ -321,6 +321,36 @@ function ReviewWorkspace({
         <StatusPill status={workspace.template.certificationStatus} />
       </div>
 
+      {/* WHY it is not certified — and therefore why exports still come back in
+          the QuillMD layout rather than the doctor's own document.
+          The pill alone said "Needs review" without saying review of WHAT, and
+          the export silently degraded to styled, so the two facts never met.
+          Anything short of certified states the blocker in the doctor's terms
+          and offers the action that clears it. */}
+      {workspace.template.certificationStatus !== 'certified' && (
+        <div
+          style={{
+            padding: '11px 16px',
+            borderBottom: '1px solid var(--color-linear-hairline)',
+            background: 'color-mix(in srgb, var(--color-linear-amber, #d0a215) 8%, transparent)',
+            fontFamily: sans,
+            fontSize: 12.5,
+            lineHeight: 1.5,
+            color: 'var(--color-linear-text-2)',
+          }}
+          data-testid="twin-not-certified-reason"
+        >
+          <strong style={{ color: 'var(--color-linear-text)' }}>
+            Exports use the QuillMD layout until this form is confirmed.
+          </strong>{' '}
+          {blockingUnsupported.length > 0
+            ? `${blockingUnsupported.length} element${blockingUnsupported.length === 1 ? '' : 's'} in this document can't be filled safely, so it can't be certified as-is.`
+            : (byStatus.needs_confirmation ?? 0) > 0
+              ? `${byStatus.needs_confirmation} of ${fields.length} fields still need a quick confirmation of what they mean.`
+              : 'Run the sample check below to confirm the filled document matches your form.'}
+        </div>
+      )}
+
       {/* Detection summary */}
       <div
         style={{
