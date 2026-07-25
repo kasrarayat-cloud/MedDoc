@@ -70,7 +70,12 @@ async function main() {
   say(`CONFIRM ${confirmed.length} mappings -> sha ${ws.mappingsSha256.slice(0, 12)}`);
 
   // ── synthetic roundtrip (required by the certification gate) ─────────────
+  // The evidence gate REQUIRES an explicit synthetic marker (synthetic |
+  // fictional | mock | test | example) so a mislabeled real encounter can
+  // never be persisted as a certification proof. Satisfy it honestly rather
+  // than routing around it.
   const ENCOUNTER = [
+    'SYNTHETIC TEST ENCOUNTER — fictional data, not a real patient.',
     'Bilateral lower extremity venous duplex reflux study.',
     'Right great saphenous vein reflux 2.4 seconds, diameter 7 mm.',
     'Left great saphenous vein reflux 3.1 seconds, diameter 8 mm.',
