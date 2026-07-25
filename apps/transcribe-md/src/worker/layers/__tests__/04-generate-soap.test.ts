@@ -89,6 +89,8 @@ function makeInput(overrides: Partial<Layer4Input> = {}): Layer4Input {
       tests_mentioned: [],
       assessment_discussed: [],
       plan_discussed: [],
+      // Additive L3 slot; a SOAP fixture has none.
+      measurements: [],
     },
     audioConfidenceStats: null,
     interpreterMode: false,
