@@ -6038,3 +6038,72 @@ body {
     transition: none;
   }
 }
+
+/* ============================================================================
+   Toast hit-target fix — full-app audit 2026-07-24
+   ----------------------------------------------------------------------------
+   Sonner renders its toast list as `position: fixed` at `z-index: 999999999`
+   with NO `pointer-events: none` on the container (only invisible toasts get
+   it). The toaster is bottom-right, which is exactly where the sticky action
+   bars in this app put their primary CTA — e.g. "Save & activate" in
+   Settings > My Note Format (template-review-editor.tsx sticky bar).
+
+   Measured on the QA stack in real Chromium:
+     - 390x844 (mobile): sonner's mobile rule is `width: 100%`, so a visible
+       toast covers the ENTIRE bottom band. document.elementFromPoint() at the
+       centre of "Save & activate" returned the toast <li>, not the button —
+       the primary CTA is untappable for the toast's full 4s duration. A doctor
+       who taps Save, sees a toast, and taps again is tapping the toast.
+     - 1440x900 (desktop): the 356px toaster clips only the top ~7px of the
+       button; the centre still hit-tests to the button. Not blocked, but the
+       top edge is.
+
+   Fix: let clicks pass THROUGH the toast surface, while keeping any control
+   inside a toast clickable. Nothing is lost — this app mounts sonner with
+   `closeButton={false}` and no toast in the codebase supplies an action
+   button, and sonner does not dismiss on body-click by default (swipe +
+   timeout only).
+
+   Deliberately scoped to pointer behaviour rather than moving the toaster:
+   position/duration are design decisions, and this keeps the visual result
+   byte-identical while removing the interception.
+   ========================================================================= */
+[data-sonner-toast] {
+  pointer-events: none;
+}
+[data-sonner-toast] button,
+[data-sonner-toast] a,
+[data-sonner-toast] [data-button],
+[data-sonner-toast] [data-close-button] {
+  pointer-events: auto;
+}
+
+/* ============================================================================
+   Note-format editor sticky action bar vs the mobile bottom nav
+   — full-app audit 2026-07-24
+   ----------------------------------------------------------------------------
+   `.qm-c3-mobilenav` is `position: fixed; z-index: 40` and occupies the bottom
+   60px below 980px. The template-review editor's action bar is
+   `position: sticky; bottom: 0` with no z-index, so the nav painted straight
+   over it.
+
+   Measured on the QA stack at 390x844, with NO toast on screen:
+     "Save & activate" rect  = y 776 -> 842
+     .qm-c3-mobilenav rect   = y 784 -> 844  (fixed, z-index 40)
+     document.elementFromPoint(button centre) -> BUTTON.qm-c3-mtab (the nav)
+     => saveHittable: false
+   Only the top 8px of a 66px-tall primary CTA was exposed: on a phone the
+   doctor could not save their note format at all. This is the concrete
+   mechanism behind the long-standing "the save button doesn't fire" report,
+   which had been attributed to a React 19 event-delegation quirk — the button
+   was fine; it was covered.
+
+   Mirrors the existing `.qm-c3-rev2-signbar` treatment (same breakpoint, same
+   60px + safe-area offset) so the two sticky bars behave identically.
+   ========================================================================= */
+@media (max-width: 980px) {
+  .qm-tpl-actionbar {
+    bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+    z-index: 41;
+  }
+}

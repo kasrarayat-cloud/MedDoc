@@ -175,4 +175,25 @@ describe('friendlyValidationError', () => {
       expect(msg).not.toMatch(/unrecognized|preamble/i);
     }
   });
+
+  // Full-app audit 2026-07-24: editing a template whose id is not a cuid made
+  // the save fail with "id isn't valid — please review it." `id` is not a
+  // field the doctor can see or correct, so that message sends a clinician
+  // hunting for something that isn't on screen and offers no way out.
+  it('does not tell the doctor to review `id` — an internal, non-editable field', () => {
+    const r = ReviewedTemplateSchema.safeParse({ ...base(), id: 'qa_tpl_followup' });
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      const msg = friendlyValidationError(r.error);
+      expect(msg).not.toMatch(/\bid\b/i);
+      expect(msg).not.toMatch(/please review it/i);
+      expect(msg).toMatch(/on our end/i);
+    }
+  });
+
+  it('still names a genuinely doctor-editable field when that is what failed', () => {
+    const r = ReviewedTemplateSchema.safeParse({ ...base(), name: 'q'.repeat(500) });
+    expect(r.success).toBe(false);
+    if (!r.success) expect(friendlyValidationError(r.error)).toMatch(/too long/i);
+  });
 });
