@@ -79,11 +79,60 @@ const NOTE = [
   '| Left GSV at the Proximal Thigh | 4.1 | 1.8 |',
 ].join('\n');
 
+
+/** Facts that genuinely support the fixture values — the bridge is a MATCHER
+ *  now, so a test that supplies no facts is asserting the blank path, not the
+ *  fill path. Ids are real (ttfact_ + 24 hex) because that is exactly what the
+ *  validator checks for. */
+function fact(
+  n: number,
+  concept: string,
+  laterality: 'left' | 'right' | 'bilateral' | 'not_applicable' = 'right',
+  value: string | number = n,
+) {
+  const id = `ttfact_${Math.abs(hash(`${concept}${n}${laterality}`)).toString(16).padStart(24, '0').slice(0, 24)}`;
+  return {
+    factId: id,
+    sourceType: 'encounter_evidence' as const,
+    concept,
+    value,
+    polarity: 'affirmed' as const,
+    temporality: 'current' as const,
+    experiencer: 'patient' as const,
+    laterality,
+    number: typeof value === 'number' ? value : n,
+    unit: null,
+    speaker: 'Doctor',
+    sourceTranscriptOffsets: null,
+    audioTimestampSeconds: null,
+    evidenceAnchorIds: [`anchor-${id.slice(-8)}`],
+    evidenceQuote: 'synthetic fixture evidence',
+    quality: { asr: 'unknown' as const, evidence: 'direct' as const },
+  };
+}
+function hash(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return h;
+}
+
+/** Facts supporting every value the NOTE fixture states, with the correct side.
+ *  Concepts carry the vein/segment tokens the matcher aligns on. */
+const FIXTURE_FACTS = [
+  fact(6.2, 'gsv sfj diameter', 'right'),
+  fact(3.4, 'gsv sfj reflux', 'right'),
+  fact(5.1, 'gsv knee diameter', 'right'),
+  fact(5.8, 'gsv sfj diameter', 'left'),
+  fact(3.1, 'gsv sfj reflux', 'left'),
+  fact(4.1, 'gsv proximal thigh diameter', 'left'),
+  fact(1.8, 'gsv proximal thigh reflux', 'left'),
+];
+
 describe('bridgeNumericTableCells — exact measurement placement (WM_IOV)', () => {
   const ir = compileTemplateDocx(wmIovBytes);
 
   it('resolves exactly the dictated numeric cells, laterality-correct, nothing else', () => {
-    const res = bridgeNumericTableCells({ ir, filledNote: NOTE });
+    const res = bridgeNumericTableCells({ facts: FIXTURE_FACTS, ir, filledNote: NOTE });
     const byField = new Map(res.map((r) => [r.fieldId, r]));
 
     // Every produced resolution is a supported, evidence-carrying measurement.
@@ -119,7 +168,7 @@ describe('bridgeNumericTableCells — exact measurement placement (WM_IOV)', () 
   });
 
   it('native-renders the doctor’s own docx with the values in the correct cells, roundtrip-verified', async () => {
-    const numerics = bridgeNumericTableCells({ ir, filledNote: NOTE });
+    const numerics = bridgeNumericTableCells({ facts: FIXTURE_FACTS, ir, filledNote: NOTE });
     const merged = mergeFieldResolutions(ir, blankBaseline(ir), numerics);
     expect(merged.length).toBe(ir.fields.length); // renderer requires 1:1
 
@@ -169,7 +218,7 @@ describe('bridgeNumericTableCells — one-leg dictation never mis-places (latera
     }
     const note = 'FINDINGS\nLeft leg only.\n\n' + lines.join('\n');
 
-    const res = bridgeNumericTableCells({ ir, filledNote: note });
+    const res = bridgeNumericTableCells({ facts: FIXTURE_FACTS, ir, filledNote: note });
     const byField = new Map(res.map((r) => [r.fieldId, r]));
     // Left GSV-SFJ (row 15) is filled.
     expect(byField.get(cell(ir, 15, 1).fieldId)?.value).toBe('5.8');
@@ -202,7 +251,7 @@ describe('mergeFieldResolutions — overlay precedence', () => {
           })
         : r,
     );
-    const overlay = bridgeNumericTableCells({ ir, filledNote: NOTE }); // would set 6.2
+    const overlay = bridgeNumericTableCells({ facts: FIXTURE_FACTS, ir, filledNote: NOTE }); // would set 6.2
     const merged = mergeFieldResolutions(ir, baseline, overlay);
     const m = new Map(merged.map((r) => [r.fieldId, r]));
     // Evidence-backed baseline (7.0) is NOT overwritten by the note overlay (6.2).
@@ -227,8 +276,7 @@ describe('bridgeTemplateFill — unified picks + numeric overlay', () => {
         String(opts).split('|').map((o) => o.trim()).filter(Boolean)[0] ?? '',
       ) + '\n' + NOTE;
 
-    const merged = bridgeTemplateFill({
-      ir,
+    const merged = bridgeTemplateFill({ facts: FIXTURE_FACTS, ir,
       markerText,
       filledNote: pickedNote,
       baseline: blankBaseline(ir),
