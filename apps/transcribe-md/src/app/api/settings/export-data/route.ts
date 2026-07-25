@@ -37,6 +37,7 @@ import { ZipArchive } from 'archiver';
 
 import prisma from '@meddoc/db';
 import { apiError, withApiHandler } from '@/lib/api-error';
+import { logAudit } from '@/lib/audit';
 import { auth } from '@/lib/nextauth';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { downloadAudio } from '@/lib/minio';
@@ -232,6 +233,30 @@ export const GET = withApiHandler('api:settings:export-data', async () => {
       );
     }
   })();
+
+  // S4b — record the disclosure BEFORE handing back the stream.
+  //
+  // This is the single largest PHI egress the product has: every visit the
+  // user owns, with SOAP text, the original audio, and generated PDFs. It ran
+  // unaudited from T-M16.2 until 2026-07-25.
+  //
+  // Logged at RESPONSE time, not on completion. A streamed download has no
+  // reliable completion signal server-side — the client can disconnect
+  // mid-transfer and we would never hear about it. Recording at the point the
+  // bytes start flowing can therefore over-report a fully-completed download,
+  // but it can never MISS one, and for an audit trail a false positive is the
+  // safe direction. `visitCount` is what the archive was built to contain.
+  await logAudit({
+    action: 'EXPORT_ACCOUNT_ARCHIVE_DOWNLOADED',
+    userId,
+    targetType: 'User',
+    targetId: userId,
+    metadata: {
+      visitCount: visits.length,
+      editPatternCount: editPatterns.length,
+      scope: 'full_account',
+    },
+  });
 
   // Readable.toWeb() adapts the Node stream to a Web ReadableStream
   // that NextResponse accepts as body. Streaming = no memory spike.

@@ -21,6 +21,40 @@
 #   3. Then flip back to MODE A
 # ============================================================================
 
+# ─── Global options — trusted proxy chain (S2) ────────────────────────────
+# Ingress is: internet → HOST nginx (owns :80/:443) → Caddy at 127.0.0.1:8443
+# → app containers. From inside the container the nginx hop appears as the
+# docker bridge gateway 172.19.0.1, so EVERY request looked like it came from
+# 172.19.0.1 — all 2300 prod audit rows recorded that one address and per-IP
+# login rate limiting was effectively global.
+#
+# Declaring the hop trusted is what makes {client_ip} resolve from the
+# X-Forwarded-For header at all; without it, {client_ip} is just the immediate
+# peer (the bridge gateway) and nothing changes.
+#
+# READ THIS BEFORE CHANGING EITHER LAYER — the two halves are load-bearing
+# TOGETHER, and this config is NOT self-sufficient:
+#
+#   Caddy's {client_ip} takes the LEFTMOST value of X-Forwarded-For when the
+#   immediate peer is trusted. It does NOT walk the chain right-to-left looking
+#   for the first untrusted hop. So on its own, trusting the hop would turn a
+#   collapsed client IP into an ATTACKER-CHOSEN one: nginx used to append with
+#   $proxy_add_x_forwarded_for, so a request carrying "X-Forwarded-For: 1.2.3.4"
+#   arrived as "1.2.3.4, <realIP>" and the leftmost value won. This was measured,
+#   not assumed — a probe with a forged header landed 1.2.3.4 in audit_logs.
+#
+#   The spoof resistance therefore lives in HOST nginx, which now REPLACES the
+#   header with $remote_addr (see /etc/nginx/sites-enabled/quillmd). By the time
+#   the chain reaches Caddy it holds exactly one trustworthy value.
+#
+# If nginx is ever reverted to $proxy_add_x_forwarded_for, this block silently
+# becomes a client-IP spoofing vector.
+{
+    servers {
+        trusted_proxies static 127.0.0.1/32 ::1 172.19.0.0/16
+    }
+}
+
 # ─── Shared header snippet — MODE A (plaintext-safe) ──────────────────────
 # Kept so the rollback commented block below still parses. No active block
 # currently imports it.
@@ -72,8 +106,8 @@ quillmd.com, www.quillmd.com {
 
     reverse_proxy marketing:3010 {
         header_up Host {host}
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
+        header_up X-Real-IP {client_ip}
+        header_up X-Forwarded-For {client_ip}
         header_up X-Forwarded-Proto {scheme}
     }
 }
@@ -89,8 +123,8 @@ app.quillmd.com {
 
     reverse_proxy transcribe-md:3011 {
         header_up Host {host}
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
+        header_up X-Real-IP {client_ip}
+        header_up X-Forwarded-For {client_ip}
         header_up X-Forwarded-Proto {scheme}
     }
 }
@@ -137,8 +171,8 @@ admin.quillmd.com {
     handle @auth {
         reverse_proxy transcribe-md:3011 {
             header_up Host {host}
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {client_ip}
+            header_up X-Forwarded-For {client_ip}
             header_up X-Forwarded-Proto {scheme}
         }
     }
@@ -148,8 +182,8 @@ admin.quillmd.com {
     handle @adminApi {
         reverse_proxy transcribe-md:3011 {
             header_up Host {host}
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {client_ip}
+            header_up X-Forwarded-For {client_ip}
             header_up X-Forwarded-Proto {scheme}
         }
     }
@@ -160,8 +194,8 @@ admin.quillmd.com {
     handle @nextStatic {
         reverse_proxy transcribe-md:3011 {
             header_up Host {host}
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {client_ip}
+            header_up X-Forwarded-For {client_ip}
             header_up X-Forwarded-Proto {scheme}
         }
     }
@@ -173,8 +207,8 @@ admin.quillmd.com {
     handle @authPages {
         reverse_proxy transcribe-md:3011 {
             header_up Host {host}
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {client_ip}
+            header_up X-Forwarded-For {client_ip}
             header_up X-Forwarded-Proto {scheme}
         }
     }
@@ -184,8 +218,8 @@ admin.quillmd.com {
     handle @adminPath {
         reverse_proxy transcribe-md:3011 {
             header_up Host {host}
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {client_ip}
+            header_up X-Forwarded-For {client_ip}
             header_up X-Forwarded-Proto {scheme}
         }
     }
@@ -196,8 +230,8 @@ admin.quillmd.com {
         rewrite * /admin
         reverse_proxy transcribe-md:3011 {
             header_up Host {host}
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {client_ip}
+            header_up X-Forwarded-For {client_ip}
             header_up X-Forwarded-Proto {scheme}
         }
     }
@@ -231,8 +265,8 @@ pro.quillmd.com {
 
     reverse_proxy meddoc-pro:3000 {
         header_up Host {host}
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
+        header_up X-Real-IP {client_ip}
+        header_up X-Forwarded-For {client_ip}
         header_up X-Forwarded-Proto {scheme}
     }
 }
