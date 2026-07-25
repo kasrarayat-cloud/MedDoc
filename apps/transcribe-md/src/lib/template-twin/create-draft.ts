@@ -9,6 +9,8 @@ import { createHash, randomUUID } from 'node:crypto';
 
 import type { Prisma } from '@prisma/client';
 import prisma from '@meddoc/db';
+import { extractNoteTextFromUpload } from '@/lib/note-template-parse/extract-note-text';
+import { parseNoteToTemplate } from '@/lib/note-template-parse/parse-note-to-template';
 
 import {
   TemplateDocxError,
@@ -246,6 +248,71 @@ export async function createTemplateTwinDraft(
     );
   }
 
+  // ── The BRIDGE ────────────────────────────────────────────────────────────
+  // This used to hand the twin NoteTemplate `systemDefault.sections` verbatim,
+  // i.e. Subjective / Objective / Assessment / Plan. That is the defect the
+  // 2026-07-25 probe found: the twin extracted 80 field definitions from the
+  // real WM_IOV docx and then generated against SOAP headings the document does
+  // not contain, so L4 wrote a SOAP note and the fill bound almost nothing.
+  //
+  // The document's own structure is not something this file has to invent — the
+  // ordinary one-tap upload path already derives it, and derives it well (the
+  // same WM_IOV docx parses to "Venous Duplex Lower Extremities US Report,
+  // 5 sections, 4 header fields"). So the bridge reuses that parser rather than
+  // growing a second, divergent one.
+  //
+  // The IR is deliberately NOT the source of sections: it models fillable
+  // controls and tables (flat `fields` + `tableId`), which is the right model
+  // for BINDING but carries no section concept. Sections come from the prose
+  // structure; bindings come from the IR. Two different questions.
+  //
+  // Fails SOFT, and visibly: if extraction or parsing fails we keep the
+  // system-default sections so the draft still exists and the source artifact
+  // is still preserved — but we record why, so the Settings card can say the
+  // twin is running on fallback structure instead of pretending it is fine.
+  let bridgedSections: Prisma.InputJsonValue = systemDefault.sections as Prisma.InputJsonValue;
+  let bridgedStyle: Prisma.InputJsonValue = systemDefault.styleProfile as Prisma.InputJsonValue;
+  let bridgedName = 'Original Word template';
+  let bridgeFallbackReason: string | null = null;
+
+  try {
+    const extracted = await extractNoteTextFromUpload(
+      input.source,
+      'template.docx',
+      DOCX_MIME_TYPE,
+    );
+    const noteText = extracted.ok ? extracted.text : '';
+    if (!noteText.trim()) {
+      bridgeFallbackReason = 'NO_TEXT_EXTRACTED';
+    } else {
+      const parsed = await parseNoteToTemplate(noteText, {
+        practiceId: input.actor.practiceId,
+        userId: input.actor.userId,
+      });
+      if (parsed.rejected || !parsed.template) {
+        bridgeFallbackReason = 'PARSE_REJECTED';
+      } else if (!Array.isArray(parsed.template.sections) || parsed.template.sections.length === 0) {
+        bridgeFallbackReason = 'PARSE_EMPTY_SECTIONS';
+      } else {
+        bridgedSections = parsed.template.sections as unknown as Prisma.InputJsonValue;
+        bridgedStyle = (parsed.template.styleProfile ??
+          systemDefault.styleProfile) as unknown as Prisma.InputJsonValue;
+        bridgedName = parsed.template.name?.trim() || bridgedName;
+      }
+    }
+  } catch {
+    // Never fail the draft on a bridge miss — the twin's structural work (the
+    // IR, the artifact, the field definitions) is still valuable and is what
+    // the physician reviews. Reason is surfaced, not swallowed.
+    bridgeFallbackReason = 'BRIDGE_THREW';
+  }
+  if (bridgeFallbackReason) {
+    console.warn(
+      `[template-twin:bridge] fell back to system-default sections (${bridgeFallbackReason}) — ` +
+        'the twin will generate against SOAP headings this document does not contain',
+    );
+  }
+
   const lineageId = randomUUID();
   const noteTemplateId = randomUUID();
   const sourceArtifactId = randomUUID();
@@ -264,10 +331,10 @@ export async function createTemplateTwinDraft(
         data: {
           id: noteTemplateId,
           doctorId: input.actor.userId,
-          name: 'Original Word template',
+          name: bridgedName,
           encounterType: null,
-          sections: systemDefault.sections as Prisma.InputJsonValue,
-          styleProfile: systemDefault.styleProfile as Prisma.InputJsonValue,
+          sections: bridgedSections,
+          styleProfile: bridgedStyle,
           specialtyBaseline: systemDefault.specialtyBaseline,
           version: 1,
           status: 'draft',
