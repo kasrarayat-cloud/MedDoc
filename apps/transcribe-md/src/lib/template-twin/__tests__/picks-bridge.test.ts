@@ -39,6 +39,51 @@ function fillNote(markerText: string): { note: string; chosenText: string[] } {
   return { note, chosenText };
 }
 
+/** The bridge is a MATCHER: a pick is only cited when a real fact entails the
+ *  option. These facts entail every option these tests expect to be filled;
+ *  options expected to stay blank deliberately have none. Real ttfact_ ids —
+ *  that is exactly what the validator checks. */
+function pickFact(id: string, value: string, concept = 'finding') {
+  return {
+    factId: `ttfact_${id.padEnd(24, '0').slice(0, 24)}`,
+    sourceType: 'encounter_evidence' as const,
+    concept,
+    value,
+    polarity: 'affirmed' as const,
+    temporality: 'current' as const,
+    experiencer: 'patient' as const,
+    laterality: 'not_applicable' as const,
+    number: null,
+    unit: null,
+    speaker: 'Doctor',
+    sourceTranscriptOffsets: null,
+    audioTimestampSeconds: null,
+    evidenceAnchorIds: [`anchor-${id}`],
+    evidenceQuote: 'synthetic fixture evidence',
+    quality: { asr: 'unknown' as const, evidence: 'direct' as const },
+  };
+}
+const PICK_FACTS = [
+  pickFact('aaaaaaaaaaaa', 'x'),
+  pickFact('bbbbbbbbbbbb', 'reflux positive'),
+  pickFact('cccccccccccc', 'pos'),
+];
+
+/** These two tests assert pick RECOVERY over every dropdown, so each injected
+ *  pick stands in for something the doctor dictated — which means each has a
+ *  supporting fact. Derive one per allowed option rather than hand-listing 28. */
+function factsForIr(irLike: { fields: ReadonlyArray<{ allowedOptions?: ReadonlyArray<{ value: string; displayText: string }> }> }) {
+  const out: ReturnType<typeof pickFact>[] = [];
+  let i = 0;
+  for (const f of irLike.fields) {
+    for (const o of f.allowedOptions ?? []) {
+      out.push(pickFact(`f${(i++).toString(16)}`.padEnd(12, '0'), o.value));
+      out.push(pickFact(`d${(i++).toString(16)}`.padEnd(12, '0'), o.displayText));
+    }
+  }
+  return out;
+}
+
 describe('picks-bridge — CHOICE_SLOT picks -> exact-option resolutions (WM_IOV)', () => {
   it('recovers exactly the picks placed into the note, for every dropdown', async () => {
     const { ir, markerText } = await loadWmIov();
@@ -47,7 +92,7 @@ describe('picks-bridge — CHOICE_SLOT picks -> exact-option resolutions (WM_IOV
     const { note, chosenText } = fillNote(markerText);
     expect(chosenText.length).toBe(sfs.length); // marker count == select-field count
 
-    const res = bridgeChoiceSlotPicks({ ir, markerText, filledNote: note });
+    const res = bridgeChoiceSlotPicks({ facts: factsForIr(ir), ir, markerText, filledNote: note });
     const byId = new Map(res.map((r) => [r.fieldId, r]));
 
     sfs.forEach((f, idx) => {
@@ -78,7 +123,7 @@ describe('picks-bridge — CHOICE_SLOT picks -> exact-option resolutions (WM_IOV
     } as unknown as TemplateDocIR;
     const markerText = 'A: {{one of: x | y}}\nB: {{one of: p | q}}';
     const filledNote = 'A: x'; // B undictated -> carrier omitted
-    const res = bridgeChoiceSlotPicks({ ir, markerText, filledNote });
+    const res = bridgeChoiceSlotPicks({ facts: factsForIr(ir), ir, markerText, filledNote });
     expect(res[0]).toMatchObject({ status: 'supported', value: 'x', selectedOptionOrdinal: 0 });
     expect(res[1]).toMatchObject({ status: 'not_mentioned', value: null });
   });
@@ -93,7 +138,7 @@ describe('picks-bridge — CHOICE_SLOT picks -> exact-option resolutions (WM_IOV
       const opts = String(optsStr).split('|').map((o) => o.trim()).filter(Boolean);
       return opts[0];
     });
-    const res = bridgeChoiceSlotPicks({ ir, markerText, filledNote: note });
+    const res = bridgeChoiceSlotPicks({ facts: factsForIr(ir), ir, markerText, filledNote: note });
     const firstField = sfs[0];
     const r = res.find((x) => x.fieldId === firstField.fieldId)!;
     expect(r.status).toBe('not_mentioned');
@@ -116,7 +161,7 @@ describe('picks-bridge — CHOICE_SLOT picks -> exact-option resolutions (WM_IOV
     } as unknown as TemplateDocIR;
     const markerText = 'Right leg: {{one of: reflux positive | is absent}}\nLeft leg: {{one of: reflux positive | is absent}}';
     const filledNote = 'Right leg: reflux positive\nLeft leg: is absent';
-    const res = bridgeChoiceSlotPicks({ ir, markerText, filledNote });
+    const res = bridgeChoiceSlotPicks({ facts: factsForIr(ir), ir, markerText, filledNote });
     expect(res[0]).toMatchObject({ status: 'supported', value: 'pos', selectedOptionOrdinal: 0 });
     expect(res[1]).toMatchObject({ status: 'supported', value: 'neg', selectedOptionOrdinal: 1 });
   });

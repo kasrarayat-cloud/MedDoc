@@ -24,6 +24,8 @@ import {
   type TemplateField,
 } from './ir';
 import { bridgeChoiceSlotPicks } from './picks-bridge';
+import { citationOf, matchMeasurementFact } from './bridge-evidence';
+import type { EncounterFact, SemanticMapping } from './ir';
 
 // ── numeric table-cell fill ─────────────────────────────────────────────────
 
@@ -166,13 +168,28 @@ function pickTable(tables: ParsedMarkdownTable[], irRows: IrTableRow[]): ParsedM
   return bestScore > 0 ? best : null;
 }
 
-function supportedNumeric(field: TemplateField, value: string): FieldResolution {
+/** A measurement is written ONLY when a real fact supports it, and it cites
+ *  THAT fact. No match -> null, and the caller leaves the cell to the resolver
+ *  baseline (blank) with the failure named in the log. */
+function supportedNumeric(
+  field: TemplateField,
+  value: string,
+  segmentLabel: string,
+  facts: readonly EncounterFact[],
+  mapping?: SemanticMapping,
+): FieldResolution | null {
+  const matched = matchMeasurementFact({ value, segmentLabel, facts, mapping });
+  if (!matched.ok) {
+    console.info(
+      `[template-twin:bridge] cell left blank field=${field.fieldId} reason=${matched.reason}`,
+    );
+    return null;
+  }
   return FieldResolutionSchema.parse({
     fieldId: field.fieldId,
     status: 'supported',
     value, // narrative_text cells render the bare string; no unit, no reformat
-    sourceFactIds: [`ttfact_${'0'.repeat(24)}`],
-    evidenceAnchorIds: ['table-cell-measurement'],
+    ...citationOf(matched.match),
     selectedOptionOrdinal: null,
     reasonCode: 'table_cell_measurement',
     clinicianReviewed: false,
@@ -180,6 +197,12 @@ function supportedNumeric(field: TemplateField, value: string): FieldResolution 
 }
 
 export interface BridgeNumericTableCellsInput {
+  /** The L3 EncounterFacts for this encounter. Every bridged value must cite
+   *  one of these — see bridge-evidence.ts. */
+  facts: readonly EncounterFact[];
+  /** Approved mappings, so a citation also satisfies the validator's
+   *  concept/temporality rule rather than merely existing. */
+  mappings?: readonly SemanticMapping[];
   ir: TemplateDocIR;
   /** The LIVE brain's generated note (its markdown table holds the measurements). */
   filledNote: string;
@@ -209,7 +232,8 @@ export interface BridgeNumericTableCellsInput {
  * right cell blank.
  */
 export function bridgeNumericTableCells(input: BridgeNumericTableCellsInput): FieldResolution[] {
-  const { ir, filledNote } = input;
+  const { ir, filledNote, facts } = input;
+  const mappingById = new Map((input.mappings ?? []).map((m) => [m.fieldId, m]));
   const cellFields = ir.fields.filter((f) => f.rendererBinding.bindingType === 'table_cell');
   if (cellFields.length === 0) return [];
 
@@ -248,7 +272,9 @@ export function bridgeNumericTableCells(input: BridgeNumericTableCellsInput): Fi
         if (!field || col < 0 || col >= mdRow.cells.length) return;
         const num = numericCell(mdRow.cells[col]);
         if (num == null) return; // —/[not documented]/prose → blank
-        out.push(supportedNumeric(field, num));
+        // Laterality comes from the MATCHED FACT, never from row position.
+        const resolved = supportedNumeric(field, num, irRow.vein, facts, mappingById.get(field.fieldId));
+        if (resolved) out.push(resolved);
       };
       place(irRow.diameterField, diameterCol);
       place(irRow.refluxField, refluxCol);
@@ -310,6 +336,10 @@ export function mergeFieldResolutions(
 // ── unified entry ─────────────────────────────────────────────────────────────
 
 export interface BridgeTemplateFillInput {
+  /** L3 EncounterFacts — the evidence every bridged value must match. */
+  facts: readonly EncounterFact[];
+  /** Approved mappings — a citation must satisfy the validator's rule. */
+  mappings?: readonly SemanticMapping[];
   ir: TemplateDocIR;
   /** The compiled {{one of}} marker text (drives the single-select picks). */
   markerText: string;
@@ -329,7 +359,14 @@ export function bridgeTemplateFill(input: BridgeTemplateFillInput): FieldResolut
     ir: input.ir,
     markerText: input.markerText,
     filledNote: input.filledNote,
+    facts: input.facts,
+    mappings: input.mappings,
   }).filter((r) => r.status === 'supported');
-  const numerics = bridgeNumericTableCells({ ir: input.ir, filledNote: input.filledNote });
+  const numerics = bridgeNumericTableCells({
+    ir: input.ir,
+    filledNote: input.filledNote,
+    facts: input.facts,
+    mappings: input.mappings,
+  });
   return mergeFieldResolutions(input.ir, input.baseline, picks, numerics);
 }

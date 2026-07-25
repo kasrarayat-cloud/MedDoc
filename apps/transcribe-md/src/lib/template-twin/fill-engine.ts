@@ -196,6 +196,10 @@ export async function prepareTemplateTwinFill(
           markerText: input.markerText,
           filledNote: input.generatedNote,
           baseline,
+          // The SAME facts the resolver used. Every bridged value must cite one
+          // of these — the bridge no longer mints provenance.
+          facts,
+          mappings,
         })
       : baseline;
   return finalizeTemplateTwinFill({

@@ -18,6 +18,8 @@
 // Pure + deterministic. No I/O, no AI.
 // ============================================================================
 
+import { citationOf, matchPickFact } from './bridge-evidence';
+import type { EncounterFact, SemanticMapping } from './ir';
 import {
   FieldResolutionSchema,
   type FieldResolution,
@@ -89,13 +91,29 @@ function alignLineFrom(
   return { picks: optionLists.map(() => null), matchedAt: -1 }; // line omitted -> blank
 }
 
-function supported(field: TemplateField, value: string, ordinal: number): FieldResolution {
+/** A pick is written ONLY when a real fact entails the selected option, and it
+ *  cites THAT fact. No match -> notMentioned (blank), reason named. The note
+ *  and the facts come from one transcript, so a genuinely dictated pick has a
+ *  fact to cite; one the model chose without dictated support does not. */
+function supported(
+  field: TemplateField,
+  value: string,
+  ordinal: number,
+  facts: readonly EncounterFact[],
+  mapping?: SemanticMapping,
+): FieldResolution {
+  const matched = matchPickFact({ optionText: value, facts, mapping });
+  if (!matched.ok) {
+    console.info(
+      `[template-twin:bridge] pick left blank field=${field.fieldId} reason=${matched.reason}`,
+    );
+    return notMentioned(field);
+  }
   return FieldResolutionSchema.parse({
     fieldId: field.fieldId,
     status: 'supported',
     value,
-    sourceFactIds: [`ttfact_${'0'.repeat(24)}`],
-    evidenceAnchorIds: ['choice-slot-pick'],
+    ...citationOf(matched.match),
     selectedOptionOrdinal: ordinal,
     reasonCode: 'choice_slot_pick',
     clinicianReviewed: false,
@@ -116,6 +134,10 @@ function notMentioned(field: TemplateField): FieldResolution {
 
 export interface BridgeChoiceSlotPicksInput {
   ir: TemplateDocIR;
+  /** L3 EncounterFacts — every pick must cite one. */
+  facts: readonly EncounterFact[];
+  /** Approved mappings — a citation must satisfy the validator's rule. */
+  mappings?: readonly SemanticMapping[];
   /** The {{one of}} marker text the template was compiled/parsed from. */
   markerText: string;
   /** The LIVE brain's generated note (markers filled with picks). */
@@ -155,6 +177,6 @@ export function bridgeChoiceSlotPicks(input: BridgeChoiceSlotPicksInput): FieldR
     const pick = pickByFieldId.get(field.fieldId);
     if (pick == null || pick === '') return notMentioned(field);
     const opt = field.allowedOptions.find((o) => norm(o.displayText) === norm(pick) || norm(o.value) === norm(pick));
-    return opt ? supported(field, opt.value, opt.ordinal) : notMentioned(field); // never off-list
+    return opt ? supported(field, opt.value, opt.ordinal, input.facts, (input.mappings ?? []).find((m) => m.fieldId === field.fieldId)) : notMentioned(field); // never off-list
   });
 }
