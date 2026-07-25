@@ -47,10 +47,19 @@ export class TemplateTwinSyntheticTestError extends Error {
     | 'VALIDATION_FAILED'
     | 'SYNTHETIC_EVIDENCE_REJECTED';
 
-  constructor(code: TemplateTwinSyntheticTestError['code'], message: string) {
+  /** For VALIDATION_FAILED: "<fieldId>:<issueCode>" per blocking check.
+   *  Ids and codes only — never encounter text or filled values. */
+  readonly blocking: readonly string[];
+
+  constructor(
+    code: TemplateTwinSyntheticTestError['code'],
+    message: string,
+    detail?: { blocking?: readonly string[] },
+  ) {
     super(message);
     this.name = 'TemplateTwinSyntheticTestError';
     this.code = code;
+    this.blocking = detail?.blocking ?? [];
   }
 }
 
@@ -240,12 +249,24 @@ export async function runTemplateTwinSyntheticTest(input: {
     allowUncertifiedForSyntheticTest: true,
   });
   if (!prepared.render) {
-    const blockers = prepared.manifest.validation.issues.filter(
+    const blocking = prepared.manifest.validation.issues.filter(
       (issue) => issue.severity === 'blocking',
-    ).length;
+    );
+    // Name them. Counting blockers without saying WHICH is the same opacity the
+    // certification gate had: it tells the physician a test failed but not what
+    // to add to their synthetic encounter, so the only way forward is guessing.
+    // Field ids and issue codes only — never the encounter text or a filled
+    // value, so this stays safe to log.
+    console.warn(
+      `[template-twin:synthetic] BLOCKED compiled=${compiled.id}: ` +
+        blocking
+          .map((issue) => `${issue.fieldId ?? 'field?'}:${issue.code ?? 'issue?'}`)
+          .join(', '),
+    );
     throw new TemplateTwinSyntheticTestError(
       'VALIDATION_FAILED',
-      `The synthetic encounter left ${blockers} blocking field check${blockers === 1 ? '' : 's'}. Add direct synthetic evidence or correct the mapping, then test again.`,
+      `The synthetic encounter left ${blocking.length} blocking field check${blocking.length === 1 ? '' : 's'}. Add direct synthetic evidence or correct the mapping, then test again.`,
+      { blocking: blocking.map((issue) => `${issue.fieldId ?? 'field?'}:${issue.code ?? 'issue?'}`) },
     );
   }
   const render = prepared.render;

@@ -41,6 +41,7 @@ async function main() {
     '@/lib/template-twin/certification-lifecycle'
   );
   const { runTemplateTwinSyntheticTest } = await import('@/lib/template-twin/synthetic-test');
+  const { extractTemplateTwinEntities } = await import('@/worker/layers/03-extract-entities');
 
   const created = await createTemplateTwinDraft({ source: bytes, actor });
   const noteTemplateId = created.noteTemplateId;
@@ -81,6 +82,14 @@ async function main() {
     'Left great saphenous vein reflux 3.1 seconds, diameter 8 mm.',
     'No deep venous thrombosis identified bilaterally.',
     'Impression: bilateral great saphenous vein incompetence, left greater than right.',
+    // The DIAGNOSIS control is an enumerated single_select mapped to the
+    // `assessment` concept. The resolver will not infer an enumerated
+    // diagnosis from prose — it raises FIELD_NEEDS_CLINICIAN_INPUT rather than
+    // guess, which is correct for a clinically material assessment field. So
+    // the synthetic encounter states the diagnosis in the template's own
+    // words, which is exactly the "add direct synthetic evidence" the error
+    // asks for — not a relaxation of the check.
+    'Diagnosis: Chronic venous hypertension with other complications of bilateral lower extremities.',
   ].join(' ');
   try {
     await runTemplateTwinSyntheticTest({
@@ -89,9 +98,12 @@ async function main() {
       expectedMappingsSha256: ws.mappingsSha256,
       encounterText: ENCOUNTER,
       encounterMode: 'text',
-      // The synthetic test is about the RENDERER roundtrip, not L3 quality —
-      // an empty entity set keeps it deterministic and offline.
-      extractEntities: async () => ({ entities: [] }) as never,
+      // Use the REAL L3 extractor. An earlier run stubbed this to an empty
+      // entity set, which made every field resolve "notMentioned" (filled=0)
+      // and left only the 28 content controls in the roundtrip proof — a
+      // measurement of the STUB, not of the renderer. Re-prove with the real
+      // thing before concluding anything about table-cell fill.
+      extractEntities: extractTemplateTwinEntities,
     });
     say('SYNTHETIC test: OK');
   } catch (err) {
@@ -117,8 +129,17 @@ async function main() {
 
   const compiled = await prisma.templateTwinCompiledVersion.findFirst({
     where: { noteTemplateId },
-    select: { id: true, certificationStatus: true },
+    select: {
+      id: true,
+      certificationStatus: true,
+      latestSyntheticTestManifest: true,
+      latestTestRoundTrip: true,
+    },
   });
+  const mf = compiled?.latestSyntheticTestManifest as { counts?: unknown; fields?: unknown[] } | null;
+  const rt = compiled?.latestTestRoundTrip as { fields?: unknown[] } | null;
+  say(`FILL counts=${JSON.stringify(mf?.counts)} manifestFields=${mf?.fields?.length ?? 0}`);
+  say(`PROOF roundTrip.fields=${rt?.fields?.length ?? 0} (IR declares 80)`);
   say(`CERTIFY status=${compiled?.certificationStatus}`);
 
   // ── the payoff: the doctor's own document back, filled ──────────────────
