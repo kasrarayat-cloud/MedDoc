@@ -50,6 +50,28 @@ interface AiRow {
   total: bigint;
 }
 
+
+/** Detector queries must not take the whole security dashboard down — but a
+ *  detector that silently returns [] is INDISTINGUISHABLE from "no threats
+ *  found". That is exactly how the PHI-export volume-spike detector stayed
+ *  dead in production for 90 days: `action LIKE 'EXPORT_%'` against a Postgres
+ *  enum throws 42883, and a bare `.catch(() => [])` rendered that as a clean
+ *  "no threats". Prod Postgres logs carried 965 occurrences of the error while
+ *  /admin/security reported all-clear.
+ *
+ *  Failing soft stays correct — one broken detector must not blank the page —
+ *  but it has to be LOUD, so a dead detector appears in the log stream instead
+ *  of masquerading as a clean bill of health. */
+function detectorFail<T>(detector: string): (err: unknown) => T[] {
+  return (err: unknown) => {
+    console.error(
+      `[admin:threat-detector] ${detector} FAILED — this detector is BLIND, not clean:`,
+      err instanceof Error ? err.message : String(err)
+    );
+    return [] as T[];
+  };
+}
+
 export async function getSystemHealth(): Promise<SystemHealth> {
   const [database, redis, minio, external] = await Promise.all([
     inspectDatabase(),
@@ -162,7 +184,7 @@ async function inspectExternalApis() {
       FROM audit_logs
       WHERE "timestamp" >= ${since}
         AND action IN ('EXPORT_EMAIL_SENT', 'EXPORT_EMAIL_BLOCKED_DESTINATION')
-    `.catch(() => []);
+    `.catch(detectorFail<{ failed: bigint; total: bigint }>('resend-health-lane'));
     const resend = resendRows[0];
     if (!resend || Number(resend.total) === 0 || Number(resend.failed) === 0) {
       upCount += 1;
@@ -498,7 +520,7 @@ export async function getThreats(): Promise<Threat[]> {
       HAVING COUNT(*) >= ${FAILED_LOGIN_BURST_THRESHOLD}
       ORDER BY "lastSeen" DESC
       LIMIT 20
-    `.catch(() => [] as RawFailedLoginBurst[]),
+    `.catch(detectorFail<RawFailedLoginBurst>('RawFailedLoginBurst')),
 
     prisma.$queryRaw<RawCrossTenant[]>`
       SELECT
@@ -517,7 +539,7 @@ export async function getThreats(): Promise<Threat[]> {
       HAVING COUNT(*) >= 3
       ORDER BY "lastSeen" DESC
       LIMIT 20
-    `.catch(() => [] as RawCrossTenant[]),
+    `.catch(detectorFail<RawCrossTenant>('RawCrossTenant')),
 
     prisma.$queryRaw<RawBulkPhi[]>`
       WITH bucketed AS (
@@ -553,7 +575,7 @@ export async function getThreats(): Promise<Threat[]> {
          OR export_count >= ${BULK_PHI_THRESHOLD}
       ORDER BY "windowStart" DESC
       LIMIT 20
-    `.catch(() => [] as RawBulkPhi[]),
+    `.catch(detectorFail<RawBulkPhi>('RawBulkPhi')),
 
     prisma.$queryRaw<RawExportExternal[]>`
       SELECT
@@ -570,7 +592,7 @@ export async function getThreats(): Promise<Threat[]> {
       HAVING COUNT(*) >= 1
       ORDER BY "lastSeen" DESC
       LIMIT 20
-    `.catch(() => [] as RawExportExternal[]),
+    `.catch(detectorFail<RawExportExternal>('RawExportExternal')),
 
     // Phase 6G — Detector 3: privilege escalation. Each
     // USER_GRANTED_SUPER_ADMIN row in the last 7 days is its own threat
@@ -588,7 +610,7 @@ export async function getThreats(): Promise<Threat[]> {
         AND action = 'USER_GRANTED_SUPER_ADMIN'
       ORDER BY "timestamp" DESC
       LIMIT 20
-    `.catch(() => [] as RawPrivilegeEsc[]),
+    `.catch(detectorFail<RawPrivilegeEsc>('RawPrivilegeEsc')),
 
     // Phase 8 — Detector 4: PHI export volume spike. CTE pattern:
     //   per_day  : count of EXPORT_* per (userId, day) over last 14d
@@ -605,7 +627,7 @@ export async function getThreats(): Promise<Threat[]> {
           COUNT(*)::int AS exports
         FROM audit_logs
         WHERE "timestamp" >= NOW() - (${VOLUME_SPIKE_HISTORY_DAYS} || ' days')::interval
-          AND action LIKE 'EXPORT_%'
+          AND action::text LIKE 'EXPORT_%'
           AND "userId" IS NOT NULL
         GROUP BY "userId", day
       ),
@@ -637,7 +659,7 @@ export async function getThreats(): Promise<Threat[]> {
         AND t.today_count >= ${VOLUME_SPIKE_MIN_TODAY}
       ORDER BY multiple DESC
       LIMIT 20
-    `.catch(() => [] as RawVolumeSpike[]),
+    `.catch(detectorFail<RawVolumeSpike>('RawVolumeSpike')),
 
     loadActiveResolutions(),
   ]);
@@ -810,7 +832,7 @@ export async function getResolvedThreats(
       FROM windowed
       GROUP BY ip, bucket_start
       HAVING COUNT(*) >= ${FAILED_LOGIN_BURST_THRESHOLD}
-    `.catch(() => [] as RawFailedLoginBurst[]),
+    `.catch(detectorFail<RawFailedLoginBurst>('RawFailedLoginBurst')),
 
     prisma.$queryRaw<RawCrossTenant[]>`
       SELECT
@@ -827,7 +849,7 @@ export async function getResolvedThreats(
         AND "userId" IS NOT NULL
       GROUP BY "userId"
       HAVING COUNT(*) >= 3
-    `.catch(() => [] as RawCrossTenant[]),
+    `.catch(detectorFail<RawCrossTenant>('RawCrossTenant')),
 
     prisma.$queryRaw<RawBulkPhi[]>`
       WITH bucketed AS (
@@ -861,7 +883,7 @@ export async function getResolvedThreats(
       FROM bucketed
       WHERE patient_count >= ${BULK_PHI_THRESHOLD}
          OR export_count >= ${BULK_PHI_THRESHOLD}
-    `.catch(() => [] as RawBulkPhi[]),
+    `.catch(detectorFail<RawBulkPhi>('RawBulkPhi')),
 
     prisma.$queryRaw<RawExportExternal[]>`
       SELECT
@@ -876,7 +898,7 @@ export async function getResolvedThreats(
         AND metadata->>'requestedDomain' IS NOT NULL
       GROUP BY "userId", "externalDomain"
       HAVING COUNT(*) >= 1
-    `.catch(() => [] as RawExportExternal[]),
+    `.catch(detectorFail<RawExportExternal>('RawExportExternal')),
 
     prisma.$queryRaw<RawPrivilegeEsc[]>`
       SELECT
@@ -888,7 +910,7 @@ export async function getResolvedThreats(
       FROM audit_logs
       WHERE "timestamp" >= ${sinceDetect}
         AND action = 'USER_GRANTED_SUPER_ADMIN'
-    `.catch(() => [] as RawPrivilegeEsc[]),
+    `.catch(detectorFail<RawPrivilegeEsc>('RawPrivilegeEsc')),
 
     // Phase 8 — Detector 4 mirror in the historical view. Same CTE
     // shape as the live getThreats() detector; widening to the history
@@ -902,7 +924,7 @@ export async function getResolvedThreats(
           COUNT(*)::int AS exports
         FROM audit_logs
         WHERE "timestamp" >= ${sinceDetect}
-          AND action LIKE 'EXPORT_%'
+          AND action::text LIKE 'EXPORT_%'
           AND "userId" IS NOT NULL
         GROUP BY "userId", day
       ),
@@ -926,7 +948,7 @@ export async function getResolvedThreats(
       LEFT JOIN users u ON u.id = p."userId"
       WHERE p.exports >= b.avg_per_day * ${VOLUME_SPIKE_MULTIPLE_THRESHOLD}
         AND p.exports >= ${VOLUME_SPIKE_MIN_TODAY}
-    `.catch(() => [] as RawVolumeSpike[]),
+    `.catch(detectorFail<RawVolumeSpike>('RawVolumeSpike')),
   ]);
 
   // Index every potential threat by its deterministic id so we can
