@@ -208,6 +208,45 @@ export const ExtractedEntities = z.object({
     .array(factWithEvidence('finding'))
     .default([]),
   plan_discussed: z.array(factWithEvidence('item')).default([]),
+
+  /**
+   * STRUCTURED MEASUREMENTS (additive).
+   *
+   * Imaging studies state numbers per anatomical segment and side — "right GSV
+   * at the SFJ, diameter 7 millimetres, reflux 2.4 seconds". Until now those
+   * landed only as prose inside hpi/tests_mentioned, so nothing downstream
+   * could treat them as VALUES: projectEncounterFacts had no numeric fact to
+   * emit, and every consumer that needs a number with a side (the Template
+   * Twin's measurement cells) was structurally unable to fill.
+   *
+   * The slot is deliberately narrow: what was measured, where, which side,
+   * how much, in what unit, and the span it came from. Anatomy stays a
+   * STRUCTURED attribute — never baked into a concept string.
+   *
+   * `.default([])` keeps every existing consumer byte-identical: a SOAP
+   * encounter simply yields an empty array, and the SOAP fields above are
+   * untouched.
+   */
+  measurements: z
+    .array(
+      z.object({
+        /** Anatomical segment as spoken, e.g. "GSV at the SFJ". */
+        segment: z.string().min(1).max(120),
+        laterality: z.enum(['left', 'right', 'bilateral', 'not_applicable', 'unknown']),
+        /** What was measured. Extend deliberately; never free-text. */
+        metric: z.enum(['diameter', 'reflux_time', 'velocity', 'length', 'depth']),
+        /** The number exactly as stated — normalization happens downstream so
+         *  the extractor is never asked to do arithmetic. */
+        value: z.number(),
+        /** Unit exactly as stated ("mm", "cm", "seconds", "ms"). */
+        unit: z.string().min(1).max(24),
+        /** Verbatim span the value came from — the evidence anchor. */
+        sourceSpan: z.string().min(1),
+        speaker: z.string().optional(),
+        timestamp: z.number().nonnegative().optional(),
+      })
+    )
+    .default([]),
 });
 export type ExtractedEntities = z.infer<typeof ExtractedEntities>;
 
@@ -346,6 +385,25 @@ const COMMON_CATEGORIES = [
   '- exam_findings: list of {system, finding, evidence_quote, ...} — only',
   '  what the doctor stated/observed',
   '- tests_mentioned: list of {test, result_if_given?, evidence_quote, ...}',
+  '- measurements: list of {segment, laterality, metric, value, unit,',
+  '  sourceSpan}. Populate ONLY for numeric measurements tied to an',
+  '  anatomical segment — imaging/duplex studies. One entry PER NUMBER: a',
+  '  segment stated with both a diameter and a reflux time yields TWO entries.',
+  '    * segment: the anatomical location as spoken ("GSV at the SFJ",',
+  '      "small saphenous vein at the saphenopopliteal junction").',
+  '    * laterality: left | right | bilateral — carry forward the side from',
+  '      the governing sentence or heading ("Right leg." applies to the',
+  '      segments that follow). Use "unknown" ONLY when no side is inferable;',
+  '      never guess a side.',
+  '    * metric: diameter | reflux_time | velocity | length | depth.',
+  '    * value: the number EXACTLY as stated. Never convert, round, or',
+  '      normalize — 0.62 stays 0.62, 1800 stays 1800.',
+  '    * unit: the unit EXACTLY as stated ("mm", "cm", "seconds",',
+  '      "milliseconds"). Unit conversion happens downstream.',
+  '    * sourceSpan: the verbatim clause the number came from.',
+  '  A visit with no measured numbers yields an EMPTY list. Never invent a',
+  '  measurement, and never carry a number into a segment it was not stated',
+  '  for — an unstated segment is simply absent.',
   '- assessment_discussed: list of {finding, evidence_quote, ...}',
   '- plan_discussed: list of {item, evidence_quote, ...}',
 ].join('\n');
