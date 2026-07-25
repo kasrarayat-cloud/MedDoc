@@ -302,7 +302,6 @@ services:
       # Read-only mount; remove with the matching Caddyfile block when the
       # review window closes. Same posture as fixtures/seeded-ids.json —
       # host-side artifact, not in the production app surface.
-      - ./_design-references:/srv/_design-references:ro
 
   # ── TranscribeMD Marketing (T-M1) ──
   # Static Next.js landing site for the new standalone product. No DB,

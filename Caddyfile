@@ -87,16 +87,6 @@ app.quillmd.com {
 
     import security_headers_mode_b
 
-    # Temporary design-review preview. Serves /opt/meddoc-pro/_design-
-    # references/ at /_preview/*. `handle` is exclusive — these requests
-    # never hit the reverse_proxy below. Remove with the matching volume
-    # mount in docker-compose.yml when the review window closes.
-    handle /_preview/* {
-        root * /srv/_design-references
-        uri strip_prefix /_preview
-        file_server browse
-    }
-
     reverse_proxy transcribe-md:3011 {
         header_up Host {host}
         header_up X-Real-IP {remote_host}
