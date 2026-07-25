@@ -705,6 +705,25 @@ export async function certifyAndActivateTemplateTwin(input: {
         );
       }
 
+      // ── BLANK-VERIFICATION INVARIANT ─────────────────────────────────────
+      // At least one field must be proven BLANK. The synthetic encounter
+      // deliberately leaves fields unmentioned, so a run with zero blank
+      // entries means blank behaviour was never exercised — and a certificate
+      // that only ever attests fills would let the honest-blank path rot
+      // unnoticed. This ADDS a requirement; nothing is relaxed.
+      const roundTripFields = isRecord(compiled.latestTestRoundTrip)
+        ? (compiled.latestTestRoundTrip.fields as unknown[]) ?? []
+        : [];
+      const blankProofCount = roundTripFields.filter(
+        (entry) => isRecord(entry) && entry.kind === 'blank',
+      ).length;
+      if (testReady && blankProofCount === 0) {
+        blockers.push(
+          'blankVerification=false (no field was proven blank — the synthetic ' +
+            'encounter must leave something unmentioned so blank behaviour is verified)',
+        );
+      }
+
       if (blockers.length > 0) {
         console.warn(
           `[template-twin:certify] BLOCKED compiled=${compiled.id} template=${template.id}: ${blockers.join(' | ')}`,
