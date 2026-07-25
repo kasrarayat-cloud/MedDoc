@@ -6,6 +6,7 @@
 // certify a field, add/remove a field, alter options, or invent a default.
 // ============================================================================
 
+import { isRegisteredConcept, synonymsFor } from '../concept-registry';
 import { z } from 'zod';
 
 import {
@@ -344,15 +345,47 @@ export async function proposeSemanticMappings(
     return SemanticMappingSchema.parse({
       ...mapping,
       expectedDataType: compilerDataType,
+      // REGISTRY CONSTRAINT. A concept the extractor never emits can never be
+      // matched by any fact, so the field would be permanently unfillable —
+      // this is exactly how `filledCount=0` survived four sessions of fixes
+      // downstream. Off-registry proposals are dropped to null here, which
+      // leaves the mapping visibly `needs_confirmation` (see status below)
+      // rather than certifying a dead field. Approved synonyms come from the
+      // registry, not the model.
+      clinicalConcept:
+        mapping.clinicalConcept && isRegisteredConcept(mapping.clinicalConcept)
+          ? mapping.clinicalConcept
+          : null,
+      approvedSynonyms:
+        mapping.clinicalConcept && isRegisteredConcept(mapping.clinicalConcept)
+          ? [...new Set([...(mapping.approvedSynonyms ?? []), ...synonymsFor(mapping.clinicalConcept)])]
+          : [],
       practiceDefault: null,
       status:
         mapping.clinicalConcept === null ||
+        !isRegisteredConcept(mapping.clinicalConcept) ||
         field.detectionStatus !== 'recognized' ||
         mapping.status === 'needs_confirmation'
           ? 'needs_confirmation'
           : 'recognized',
     });
   });
+
+  // Visible at PROPOSAL time, not discovered at certification time.
+  const offRegistry = [
+    ...new Set(
+      mappings
+        .filter((m) => m.clinicalConcept === null)
+        .map((m) => m.fieldId),
+    ),
+  ];
+  if (offRegistry.length > 0) {
+    console.warn(
+      `[template-twin:mappings] ${offRegistry.length}/${mappings.length} proposals were ` +
+        'off-registry or unconcepted and are left unconfirmed: ' +
+        `${offRegistry.slice(0, 10).join(',')}${offRegistry.length > 10 ? ',…' : ''}`,
+    );
+  }
 
   return SemanticMappingProposalSchema.parse({ mappings }).mappings;
 }
