@@ -42,6 +42,7 @@ async function main() {
   );
   const { runTemplateTwinSyntheticTest } = await import('@/lib/template-twin/synthetic-test');
   const { extractTemplateTwinEntities } = await import('@/worker/layers/03-extract-entities');
+  const { createEphemeralVisitNoteGenerator } = await import('@/worker/template-twin-note-generator');
 
   const created = await createTemplateTwinDraft({ source: bytes, actor });
   const noteTemplateId = created.noteTemplateId;
@@ -104,6 +105,7 @@ async function main() {
       // measurement of the STUB, not of the renderer. Re-prove with the real
       // thing before concluding anything about table-cell fill.
       extractEntities: extractTemplateTwinEntities,
+      generateNote: createEphemeralVisitNoteGenerator({ specialty: 'Vascular Surgery' }),
     });
     say('SYNTHETIC test: OK');
   } catch (err) {
