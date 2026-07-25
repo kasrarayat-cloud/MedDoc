@@ -26,10 +26,17 @@ import {
   duplicateNoteTemplateAction,
   deleteNoteTemplateAction,
   getNoteTemplateForEditAction,
+  saveNoteTemplateAction,
 } from '@/actions/note-template-lifecycle';
+import { previewNoteTemplateAction } from '@/actions/preview-note-template';
+import { SPECIALTY_IDS } from '@meddoc/shared/specialties';
 import { certifyPdfTemplateAction } from '@/actions/certify-pdf-template';
 import type { TemplateReviewModel, ClientTemplateListItem } from '@/lib/note-template-persist/types';
 import { TemplateReviewEditor } from './template-review-editor';
+// UX simplification pack (A) — flag-gated. OFF ⇒ every path below behaves
+// exactly as before; the review editor stays the destination after a parse.
+import { isUxSimplify } from '@/config/ux-simplify';
+import { ConfirmCard, ProcessingStages, useStages } from './upload-flow';
 
 const mono = 'var(--font-mono)';
 const sans = 'var(--font-sans)';
@@ -75,7 +82,7 @@ function openPdfPreview(base64: string): boolean {
   }
 }
 
-type View = 'home' | 'entry' | 'parsing' | 'review' | 'rejected';
+type View = 'home' | 'entry' | 'parsing' | 'review' | 'rejected' | 'confirm';
 
 /** Which uploadable formats this image can actually extract. Computed server-
  *  side (see SettingsPage.getUploadCaps) so the UI never advertises a format
@@ -101,6 +108,30 @@ export function NoteFormatManager({
   const [review, setReview] = useState<{ model: TemplateReviewModel; flags: string[] } | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [pending, startTransition] = useTransition();
+
+  // ── UX simplification pack (A) state. Inert when the flag is OFF. ──
+  const uxSimplify = isUxSimplify();
+  /** The uploaded file is RETAINED through the flow so confirm can hand the
+   *  same bytes to certifyPdfTemplateAction. The old flow extracted text and
+   *  dropped the bytes, which is exactly why a second "Set up native export"
+   *  upload existed at all. Kept in memory only — never persisted here. */
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const { stages, step, reset: resetStages } = useStages(true);
+  const [sample, setSample] = useState<string | null>(null);
+  const [sampleFailed, setSampleFailed] = useState(false);
+  const [certError, setCertError] = useState<string | null>(null);
+  /** Confirm failure shown IN the card. A toast alone auto-dismisses after 4s,
+   *  which is exactly how a real failure gets misread as a dead button. */
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
+  /** Set once confirm has activated the template, so a cert retry doesn't
+   *  re-activate (and re-version) it. */
+  const [activatedId, setActivatedId] = useState<string | null>(null);
+
+  const isNativeCandidate =
+    !!pendingFile &&
+    (pendingFile.type === 'application/pdf' ||
+      pendingFile.name.toLowerCase().endsWith('.pdf'));
   const fileRef = useRef<HTMLInputElement>(null);
 
   function refreshHome() {
@@ -137,24 +168,201 @@ export function NoteFormatManager({
       try {
         const res = await parseNoteTemplateAction(text);
         if (res.rejected) {
+          // PHI rejection stays exactly as prominent as before — the simplified
+          // flow never softens or swallows it. Same view, same plain language.
           setRejectReason(res.reason);
           setView('rejected');
-        } else {
-          setReview({
-            model: {
-              name: res.template.name,
-              encounterType: res.template.encounterType,
-              sections: res.template.sections,
-              styleProfile: res.template.styleProfile,
-            },
-            flags: res.flags,
-          });
-          setView('review');
+          return;
         }
+        const model: TemplateReviewModel = {
+          name: res.template.name,
+          encounterType: res.template.encounterType,
+          sections: res.template.sections,
+          styleProfile: res.template.styleProfile,
+        };
+        setReview({ model, flags: res.flags });
+
+        if (!uxSimplify) {
+          setView('review');
+          return;
+        }
+
+        // Stage 2 done — the count is READ OFF the result, not estimated.
+        const sectionCount = model.sections.length;
+        const headerCount = model.styleProfile.headerFields?.length ?? 0;
+        step('sections', 'done', `${sectionCount}`);
+        // Stage 3 needs no extra round trip: the header fields came back on the
+        // same parse result. Mark it done immediately rather than fake latency.
+        step('fields', 'done', headerCount > 0 ? `${headerCount}` : 'none');
+
+        // Stage 4 — the filled sample. The staged view stays up until this
+        // really resolves, so the last stage is genuinely observable rather
+        // than a row that flashes complete. Failure NEVER blocks the confirm
+        // card; it degrades to an honest "couldn't render a sample" note.
+        setSample(null);
+        setSampleFailed(false);
+        try {
+          const prev = await previewNoteTemplateAction(buildConfirmPayload(model));
+          if (prev.ok) {
+            setSample(prev.markdown);
+            step('sample', 'done');
+          } else {
+            setSample('');
+            setSampleFailed(true);
+            step('sample', 'done', 'unavailable');
+          }
+        } catch {
+          setSample('');
+          setSampleFailed(true);
+          step('sample', 'done', 'unavailable');
+        }
+        setView('confirm');
       } catch (err) {
         handleActionError(err, 'entry');
       }
     });
+  }
+
+  /** The exact payload shape saveNoteTemplateAction + previewNoteTemplateAction
+   *  validate (ReviewedTemplateSchema). Built from the parse result with no
+   *  doctor edits — the confirm card is the "I didn't need to edit it" path.
+   *
+   *  formOnlyExport defaults ON for an uploaded form: the doctor brought their
+   *  own document precisely because they want THAT document back. The toggle
+   *  remains in Settings › My Note Format for opt-out. */
+  function buildConfirmPayload(model: TemplateReviewModel) {
+    // The parse LLM emits FREE-TEXT encounter types ("Operative Note",
+    // "Follow-up progress note") that can never equal a visit.specialty, and
+    // ReviewedTemplateSchema rejects anything outside the static catalog
+    // (custom-template QA 2026-07-02, finding F-2). The review editor already
+    // coerces an off-catalog value to the catch-all; the confirm card has to do
+    // the SAME or a one-tap confirm fails on most real uploads.
+    const encounterType =
+      model.encounterType && (SPECIALTY_IDS as readonly string[]).includes(model.encounterType)
+        ? model.encounterType
+        : null;
+    return {
+      name: model.name.trim() || 'My note format',
+      encounterType,
+      sections: model.sections.map((s, i) => ({
+        key: s.key,
+        label: s.label.trim() || 'Section',
+        order: i + 1,
+        formatHint: s.formatHint,
+        styleInstructions: s.styleInstructions,
+        defaultText: s.defaultText,
+        structure: s.structure ?? null,
+      })),
+      styleProfile: {
+        tense: model.styleProfile.tense,
+        tone: model.styleProfile.tone,
+        abbreviations: model.styleProfile.abbreviations,
+        contextDefaults: model.styleProfile.contextDefaults ?? null,
+        headerFields: model.styleProfile.headerFields ?? null,
+        formOnlyExport: true,
+      },
+    };
+  }
+
+  /** Run native-PDF certification for an already-activated template. Split out
+   *  so the retry affordance re-runs ONLY this half — never re-activating (and
+   *  re-versioning) a template that is already live. */
+  async function runCertify(templateId: string, file: File): Promise<string | null> {
+    const fd = new FormData();
+    fd.append('templateId', templateId);
+    fd.append('file', file);
+    try {
+      const res = await certifyPdfTemplateAction(fd);
+      return res.ok ? null : res.error;
+    } catch {
+      return 'Setup failed — please try again.';
+    }
+  }
+
+  /** THE one action. Activate + certify for native export + form-only, in a
+   *  single confirm. This is what retires the CTA-once ritual: the upload IS
+   *  the setup, so there is no separate "Set up native export" step and no
+   *  dependence on the active template id staying put.
+   *
+   *  Failure policy — never silent: if certification fails the template is
+   *  STILL activated (styled export works), and the card shows the real reason
+   *  plus a retry. The doctor is never left with a dead button and no cause. */
+  function onConfirmFormat() {
+    if (!review) return;
+    setConfirmBusy(true);
+    setCertError(null);
+    setSaveError(null);
+    startTransition(async () => {
+      try {
+        let templateId = activatedId;
+
+        // 1. Save + activate (skipped when a previous attempt already did it).
+        if (!templateId) {
+          const saved = await saveNoteTemplateAction(buildConfirmPayload(review.model), true);
+          if (!saved.ok) {
+            setSaveError(saved.error);
+            toast.error('Could not use this format', { description: saved.error });
+            setConfirmBusy(false);
+            return;
+          }
+          templateId = saved.id;
+          setActivatedId(saved.id);
+        }
+
+        // 2. Native-export certification — only for a flat PDF we still hold.
+        let certFailure: string | null = null;
+        if (pendingFile && isNativeCandidate) {
+          certFailure = await runCertify(templateId, pendingFile);
+        }
+
+        if (certFailure) {
+          setCertError(certFailure);
+          setConfirmBusy(false);
+          toast.warning('Format activated — native export needs another try', {
+            description: certFailure,
+            duration: 9000,
+          });
+          router.refresh();
+          return;
+        }
+
+        toast.success('Format activated', {
+          description: isNativeCandidate
+            ? 'New matching visits will be written in this format and exported on your own page.'
+            : 'New matching visits will be written in this format.',
+        });
+        setPendingFile(null);
+        setActivatedId(null);
+        refreshHome();
+      } catch (err) {
+        setConfirmBusy(false);
+        handleActionError(err, 'confirm');
+      }
+    });
+  }
+
+  function onRetryCert() {
+    if (!activatedId || !pendingFile) return;
+    setConfirmBusy(true);
+    startTransition(async () => {
+      const failure = await runCertify(activatedId, pendingFile);
+      setCertError(failure);
+      setConfirmBusy(false);
+      if (!failure) {
+        toast.success('Native export is set up', {
+          description: 'Exports will use your own page.',
+        });
+        setPendingFile(null);
+        setActivatedId(null);
+        refreshHome();
+      }
+    });
+  }
+
+  /** "Something's off" — the Advanced escape hatch. The full review editor is
+   *  NOT deleted; it is simply no longer the default destination. */
+  function onAdvanced() {
+    setView('review');
   }
 
   function onParseClick() {
@@ -173,6 +381,15 @@ export function NoteFormatManager({
       });
       return;
     }
+    // Paste path: there is genuinely no file, so the "Reading your form" stage
+    // is skipped rather than shown-and-instantly-completed, and there are no
+    // PDF bytes to certify against.
+    setPendingFile(null);
+    setActivatedId(null);
+    setCertError(null);
+    setSample(null);
+    setSampleFailed(false);
+    resetStages(false);
     runParse(text);
   }
 
@@ -189,20 +406,32 @@ export function NoteFormatManager({
     }
     const fd = new FormData();
     fd.append('file', file);
+    // Retain the bytes so confirm can certify native export from the SAME
+    // upload. Also reset any prior attempt's state so a second try starts clean.
+    setPendingFile(file);
+    setActivatedId(null);
+    setCertError(null);
+    setSample(null);
+    setSampleFailed(false);
+    resetStages(true);
     setView('parsing');
     startTransition(async () => {
       try {
         const ex = await extractNoteFileAction(fd);
         if (!ex.ok) {
           toast.error('Could not read that file', { description: ex.error });
+          setPendingFile(null);
           setView('entry');
           return;
         }
+        // Stage 1 done — the file really has been read at this point.
+        step('read', 'done');
         setPasteText(ex.text);
         // runParse opens its own transition + owns its own error recovery (also
         // to 'entry'); this catch only covers the extract action itself.
         runParse(ex.text);
       } catch (err) {
+        setPendingFile(null);
         handleActionError(err, 'entry');
       }
     });
@@ -308,8 +537,36 @@ export function NoteFormatManager({
     );
   }
 
+  // UX pack (A): the ONE confirm card. Flag-gated; `review` is always present
+  // here because runParse only routes to 'confirm' after setting it.
+  if (uxSimplify && view === 'confirm' && review) {
+    return (
+      <ConfirmCard
+        name={review.model.name}
+        sectionCount={review.model.sections.length}
+        headerFieldCount={review.model.styleProfile.headerFields?.length ?? 0}
+        sampleMarkdown={sample}
+        sampleFailed={sampleFailed}
+        nativeCandidate={isNativeCandidate}
+        busy={confirmBusy || pending}
+        certError={certError}
+        saveError={saveError}
+        onConfirm={onConfirmFormat}
+        onRetryCert={onRetryCert}
+        onAdvanced={onAdvanced}
+        onCancel={() => {
+          setPendingFile(null);
+          setActivatedId(null);
+          setCertError(null);
+          setView(hasTemplates ? 'home' : 'entry');
+        }}
+      />
+    );
+  }
+
   if (view === 'parsing') {
-    return <ParsingState />;
+    // Flag ON → the honest staged view; OFF → the original spinner, untouched.
+    return uxSimplify ? <ProcessingStages stages={stages} /> : <ParsingState />;
   }
 
   if (view === 'rejected') {
