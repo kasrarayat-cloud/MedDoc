@@ -39,6 +39,9 @@ export const GET = withApiHandler<{ id: string }>(
 
     let docx: Buffer;
     let nativeTemplate = false;
+    // Why the doctor's own document was NOT returned. Mirrors the PDF route's
+    // nativePdfReason so a styled fallback is never silent on either path.
+    let nativeReason: string | null = null;
     try {
       // Flag ON: if this visit was filled against a Template Twin native
       // template, serve the doctor's OWN roundtrip-verified document; else fall
@@ -47,21 +50,25 @@ export const GET = withApiHandler<{ id: string }>(
       // A native-load failure (MinIO read / sha256 or size integrity mismatch)
       // DEGRADES to the styled export rather than failing the download — the
       // doctor always gets a valid document, never a 500 or a corrupt native one.
-      const native = templateNativeDocxEnabled()
+      const outcome = templateNativeDocxEnabled()
         ? await loadOrComputeNativeTemplateDocxForVisit(visitId, userId).catch((err) => {
             console.warn(
               '[api:visits:export:docx] native load failed; falling back to styled:',
               redactPhi(err instanceof Error ? err.message : err)
             );
-            return null;
+            return { native: null, reason: 'fill_failed' as const };
           })
-        : null;
-      if (native) {
-        docx = native.bytes;
+        : { native: null, reason: null };
+      if (outcome.native) {
+        docx = outcome.native.bytes;
         nativeTemplate = true;
       } else {
+        nativeReason = outcome.reason;
         docx = await generateVisitDocx(data);
       }
+      console.info(
+        `[api:visits:export:docx] nativeTemplateApplied=${nativeTemplate} reason=${nativeReason ?? 'n/a'}`
+      );
     } catch (err) {
       console.error(
         '[api:visits:export:docx] generation failed:',
@@ -85,6 +92,9 @@ export const GET = withApiHandler<{ id: string }>(
         // Additive only when a native template was actually served, so the
         // flag-OFF audit metadata stays byte-identical to the live route.
         ...(nativeTemplate ? { nativeTemplate: true } : {}),
+        // Only when the flag is ON and we fell back — keeps flag-OFF audit
+        // metadata byte-identical to the live route.
+        ...(!nativeTemplate && nativeReason ? { nativeTemplateReason: nativeReason } : {}),
       },
     });
 

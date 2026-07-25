@@ -23,6 +23,8 @@ async function main() {
   const file = process.argv[2];
   const bytes = new Uint8Array(readFileSync(file));
   console.log(`[twin] source: ${file} (${bytes.length} bytes)`);
+  const t0 = Date.now();
+  const lap = (s: string) => console.log(`[twin]   (+${Math.round((Date.now() - t0) / 1000)}s ${s})`);
 
   const user = await prisma.user.findFirst({
     where: { email: { contains: 'qa-' } },
@@ -43,6 +45,7 @@ async function main() {
       actor,
     });
     noteTemplateId = created.noteTemplateId;
+    lap('stage 1 done');
     console.log(`[twin] STAGE 1 createTemplateTwinDraft: OK noteTemplateId=${noteTemplateId}`);
   } catch (err) {
     console.log('[twin] STAGE 1 createTemplateTwinDraft: FAILED');
@@ -57,9 +60,14 @@ async function main() {
     where: { id: noteTemplateId },
     select: { name: true, sections: true, status: true },
   });
-  const secs = (tmpl?.sections as unknown as { heading?: string }[]) ?? [];
-  console.log(`[twin] STAGE 2 bridged NoteTemplate: status=${tmpl?.status} sections=${secs.length}`);
-  console.log(`[twin]   headings: ${secs.map((s) => s.heading).join(' | ')}`);
+  // NB: the section key is `label` — an earlier probe read `heading` and
+  // reported every heading as empty, which was a probe bug, not a data bug.
+  const secs = (tmpl?.sections as unknown as { label?: string; key?: string }[]) ?? [];
+  console.log(`[twin] STAGE 2 bridged NoteTemplate: name="${tmpl?.name}" status=${tmpl?.status} sections=${secs.length}`);
+  console.log(`[twin]   labels: ${secs.map((x) => x.label ?? x.key ?? '(none)').join(' | ')}`);
+  const soapish = ['Subjective', 'Objective', 'Assessment', 'Plan'];
+  const isSystemDefault = secs.length === 4 && secs.every((x, i) => x.label === soapish[i]);
+  console.log(`[twin]   VERDICT: ${isSystemDefault ? 'STILL the system-default SOAP sections (bridge BROKEN)' : "the document's OWN structure (bridge OK)"}`);
 
   const compiled = await prisma.templateTwinCompiledVersion.findFirst({
     where: { noteTemplateId },
