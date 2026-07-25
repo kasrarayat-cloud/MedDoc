@@ -38,10 +38,19 @@ export class TemplateTwinLifecycleError extends Error {
     | 'MAPPING_INVALID'
     | 'CERTIFICATION_BLOCKED';
 
-  constructor(code: TemplateTwinLifecycleError['code'], message: string) {
+  /** Per-condition detail for CERTIFICATION_BLOCKED. Field IDs and sha
+   *  prefixes only — never option values or filled content. */
+  readonly blockers: readonly string[];
+
+  constructor(
+    code: TemplateTwinLifecycleError['code'],
+    message: string,
+    detail?: { blockers?: readonly string[] },
+  ) {
     super(message);
     this.name = 'TemplateTwinLifecycleError';
     this.code = code;
+    this.blockers = detail?.blockers ?? [];
   }
 }
 
@@ -601,16 +610,81 @@ export async function certifyAndActivateTemplateTwin(input: {
           }) &&
           proofReady,
       );
-      if (
-        !fieldsReady ||
-        compiled.fields.length !== ir.fields.length ||
-        compiled.blockingUnsupportedCount > 0 ||
-        ir.unsupported.some((item) => item.blocksCertification) ||
-        !testReady
-      ) {
+      // ── Gate transparency ────────────────────────────────────────────────
+      // This gate refused certification without saying which of its five
+      // conditions failed, and `testReady` alone is a nine-clause conjunction.
+      // Debugging it meant re-deriving the whole thing by hand against the
+      // database. A safety gate is allowed to say no; it is not allowed to say
+      // no anonymously — that is the last silent thing in this system.
+      //
+      // Reasons name field IDs and sha prefixes only. No option values, no
+      // filled content, no encounter text: a certification blocker must be
+      // diagnosable from logs without those logs becoming a PHI surface.
+      const unreadyFieldIds = ir.fields
+        .filter((field) => {
+          const mapping = mappingById.get(field.fieldId);
+          return !(
+            mapping &&
+            mapping.status === 'certified' &&
+            mapping.clinicalConcept &&
+            isMappingTypeCompatible(field, mapping) &&
+            validPracticeDefault(field, mapping)
+          );
+        })
+        .map((field) => field.fieldId);
+
+      const blockers: string[] = [];
+      if (!fieldsReady) {
+        blockers.push(
+          `fieldsReady=false (${unreadyFieldIds.length}/${ir.fields.length} unready: ` +
+            `${unreadyFieldIds.slice(0, 10).join(',')}${unreadyFieldIds.length > 10 ? ',…' : ''})`,
+        );
+      }
+      if (compiled.fields.length !== ir.fields.length) {
+        blockers.push(`fieldCount storedjson=${compiled.fields.length} ir=${ir.fields.length}`);
+      }
+      if (compiled.blockingUnsupportedCount > 0) {
+        blockers.push(`blockingUnsupportedCount=${compiled.blockingUnsupportedCount}`);
+      }
+      const blockingIr = ir.unsupported.filter((item) => item.blocksCertification);
+      if (blockingIr.length > 0) {
+        blockers.push(`irBlockingUnsupported=${blockingIr.length}`);
+      }
+      if (!testReady) {
+        // Each clause of testReady, individually, so the nine-way conjunction
+        // never has to be re-derived by hand again.
+        const t: Record<string, boolean> = {
+          manifest: Boolean(compiled.latestSyntheticTestManifest),
+          outputKey: Boolean(compiled.latestTestOutputObjectKey),
+          outputSha: Boolean(compiled.latestTestOutputSha256),
+          staticSha: Boolean(compiled.latestTestStaticContentSha256),
+          verifiedAt: Boolean(compiled.latestTestVerifiedAt),
+          mappingsShaMatch: compiled.latestTestMappingsSha256 === mappingHash,
+          artifactPractice: outputArtifact?.practiceId === input.actor.practiceId,
+          artifactKind: outputArtifact?.kind === 'output',
+          artifactShaMatch: outputArtifact?.sha256 === compiled.latestTestOutputSha256,
+          proofReady,
+        };
+        const failed = Object.entries(t)
+          .filter(([, ok]) => !ok)
+          .map(([name]) => name);
+        blockers.push(
+          `testReady=false (failed: ${failed.join(',') || 'verifiedManifest'}; ` +
+            `testMappingsSha=${String(compiled.latestTestMappingsSha256).slice(0, 12)} ` +
+            `currentMappingsSha=${mappingHash.slice(0, 12)})`,
+        );
+      }
+
+      if (blockers.length > 0) {
+        console.warn(
+          `[template-twin:certify] BLOCKED compiled=${compiled.id} template=${template.id}: ${blockers.join(' | ')}`,
+        );
         throw new TemplateTwinLifecycleError(
           'CERTIFICATION_BLOCKED',
           'Confirm every field, clear blocking structure, and verify a synthetic DOCX using the current mappings.',
+          // Machine-readable detail for the workspace UI and for callers; the
+          // human-facing message above is unchanged.
+          { blockers },
         );
       }
 
