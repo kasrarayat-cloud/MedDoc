@@ -76,6 +76,8 @@ export type AuditAction =
   | 'EXPORT_PDF_DOWNLOADED'
   | 'EXPORT_DOCX_DOWNLOADED'
   | 'EXPORT_CLIPBOARD_COPIED'
+  | 'EXPORT_ACCOUNT_ARCHIVE_DOWNLOADED'
+  | 'EXPORT_PATIENT_ARCHIVE_DOWNLOADED'
   // Patient CRUD (TranscribeMdPatient)
   | 'TM_PATIENT_CREATED'
   | 'TM_PATIENT_UPDATED'
@@ -269,6 +271,12 @@ export async function logAudit(input: AuditLogInput): Promise<void> {
       errorCode: input.errorCode ?? null,
       timestamp: new Date(),
       practiceId,
+      // S4c tombstone. practiceId is now a nullable FK that goes NULL when the
+      // practice is deleted (so an account deletion can never delete its own
+      // audit trail). This copy carries no FK and therefore survives, keeping
+      // "which tenant did this happen in" answerable afterwards — the same job
+      // userEmailSnapshot does for the user.
+      practiceIdSnapshot: practiceId,
     };
 
     // Prisma's shared barrel exports `any` (see memory note on typing).

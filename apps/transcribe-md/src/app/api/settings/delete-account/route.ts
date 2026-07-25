@@ -120,6 +120,44 @@ export const POST = withApiHandler('api:settings:delete-account', async (req) =>
 
   const purgeAt = new Date(Date.now() + PURGE_DELAY_MS);
 
+  // ── Audit FIRST, and fail closed ────────────────────────────────
+  //
+  // S4c. This used to be a `void logAudit(...)` AFTER the transaction, which
+  // was wrong twice over: the transaction always threw (see below) so it was
+  // never reached, and it passes practiceId — which by then would have been
+  // deleted, so the insert would have FK-violated and `void` would have
+  // swallowed it. Either way ACCOUNT_DELETED was never written.
+  //
+  // Writing it BEFORE the destructive work means the practice and user rows
+  // still exist, so the row lands with valid references. The migration then
+  // detaches those references (SET NULL) as the entities are removed, and
+  // practiceIdSnapshot preserves the tenant.
+  //
+  // Awaited and fail-closed on purpose: if we cannot record the deletion we do
+  // not perform it. An unauditable destruction of clinical records is the one
+  // outcome this system must never produce — better a user retries than that
+  // PHI disappears with no trace of who removed it or when.
+  try {
+    await logAudit({
+      action: 'ACCOUNT_DELETED',
+      targetType: 'User',
+      targetId: user.id,
+      userId: user.id,
+      userEmail: user.email,
+      practiceId: user.practiceId,
+      metadata: { visitCount, specialty },
+    });
+  } catch (err) {
+    console.error(
+      `[api:settings:delete-account] AUDIT WRITE FAILED — refusing to delete user=${user.id}:`,
+      redactPhi(err instanceof Error ? err.message : err)
+    );
+    return apiError(
+      'Could not complete deletion. Please try again or contact support.',
+      500
+    );
+  }
+
   // ── Atomic destructive path ─────────────────────────────────────
   try {
     await prisma.$transaction(async (tx: typeof prisma) => {
@@ -132,14 +170,32 @@ export const POST = withApiHandler('api:settings:delete-account', async (req) =>
           purgeAt,
         },
       });
-      await tx.aiCall.deleteMany({
-        where: { practiceId: user.practiceId },
-      });
-      // User and Practice are symmetric for solo TranscribeMD users
-      // (1:1 synthetic Practice). Non-solo users would keep the
-      // Practice — but TranscribeMD signup only creates solo ones,
-      // so dropping it is always correct here.
+
+      // User first. Cascades TranscribeVisit (and, since the S4c migration,
+      // the RxWarningOverride rows hanging off each visit — that FK was
+      // RESTRICT and silently blocked the whole cascade for any doctor who
+      // had ever overridden an Rx warning), plus UserSession, Session,
+      // Account, AuthToken, ApiUsage, SessionLog, DoctorEditPattern.
+      // Deleting sessions here is what revokes access immediately.
       await tx.user.delete({ where: { id: user.id } });
+
+      // Practice-scoped clinical rows whose FK is RESTRICT. These are the
+      // user's own records and the request is an explicit full purge, so they
+      // are deleted rather than detached. audit_logs and billing_events are
+      // deliberately absent from this list: they DETACH (SET NULL) when the
+      // practice goes, because an audit trail and a financial record must
+      // outlive the account they describe.
+      await tx.aiCall.deleteMany({ where: { practiceId: user.practiceId } });
+      await tx.allergy.deleteMany({ where: { practiceId: user.practiceId } });
+      await tx.medication.deleteMany({ where: { practiceId: user.practiceId } });
+      await tx.task.deleteMany({ where: { practiceId: user.practiceId } });
+      await tx.patient.deleteMany({ where: { practiceId: user.practiceId } });
+
+      // Practice last. Cascades TranscribeMdPatient and the template_twin_*
+      // artifacts; nulls the practice ref on the surviving audit/billing rows.
+      // User and Practice are symmetric for solo TranscribeMD users (1:1
+      // synthetic Practice) — TranscribeMD signup only creates solo ones, so
+      // dropping it is always correct here.
       await tx.practice.delete({ where: { id: user.practiceId } });
     });
   } catch (err) {
@@ -156,19 +212,6 @@ export const POST = withApiHandler('api:settings:delete-account', async (req) =>
   log.info('api:settings:delete-account', 'user purged', {
     userId: user.id,
     visitCount,
-  });
-  // Pass explicit userId + userEmail + practiceId — the session has
-  // just been invalidated via the transaction's cascade, so a fresh
-  // auth() inside logAudit would see no session. The audit row still
-  // needs the actor for the compliance export.
-  void logAudit({
-    action: 'ACCOUNT_DELETED',
-    targetType: 'User',
-    targetId: user.id,
-    userId: user.id,
-    userEmail: user.email,
-    practiceId: user.practiceId,
-    metadata: { visitCount },
   });
 
   // ── Best-effort post-transaction cleanup ────────────────────────
