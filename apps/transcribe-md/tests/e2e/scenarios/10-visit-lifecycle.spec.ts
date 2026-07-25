@@ -38,8 +38,33 @@ test('lifecycle: delete a READY visit → trash → restore', async ({ page }) =
   await expect(page.locator(`#main a[href="/visits/${visitId}"]`)).toBeVisible();
 
   // Restore from the visit page's trash banner → back in the active list.
+  //
+  // The wait below is load-bearing, not defensive. Restore is a CLIENT fetch:
+  // the handler does `await fetch(POST /restore)` and only then router.refresh().
+  // Playwright's click() resolves as soon as the click is DISPATCHED, so a bare
+  // `click(); goto('/visits')` navigates while that POST is still in flight —
+  // and navigating tears the page down, which aborts it. The visit then never
+  // leaves the trash and the list assertion fails 10s later, pointing at the
+  // list rather than at the restore that never happened.
+  //
+  // This was intermittent in CI and green locally: the race only loses when the
+  // box is loaded enough for the POST to still be in flight one tick after the
+  // click, which is exactly what parallel workers on a CI runner produce. That
+  // made "re-run the job" look like a fix, so it stayed a flake instead of a bug.
+  //
+  // Waiting on the RESPONSE is the deterministic signal — it proves the server
+  // committed before we navigate. Deliberately not the success toast: toasts
+  // auto-dismiss (4s) and would reintroduce a timing dependency.
   await page.goto(`/visits/${visitId}`);
+  const restored = page.waitForResponse(
+    (r) =>
+      r.url().includes(`/api/visits/${visitId}/restore`) &&
+      r.request().method() === 'POST',
+    { timeout: 15_000 },
+  );
   await page.getByRole('button', { name: /restore/i }).click();
+  expect((await restored).status()).toBe(200);
+
   await page.goto('/visits');
   await expect(page.locator(`a[href="/visits/${visitId}"]`)).toBeVisible({
     timeout: 10_000,
