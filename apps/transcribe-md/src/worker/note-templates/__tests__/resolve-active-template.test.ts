@@ -133,3 +133,63 @@ describe('selectTemplate — fallback chain', () => {
     );
   });
 });
+
+// ============================================================================
+// S6 — selection must be DETERMINISTIC regardless of candidate-set order.
+// ----------------------------------------------------------------------------
+// resolveActiveTemplate() used to load candidates with an unordered findMany,
+// and selectTemplate() takes the first match. Postgres returns rows in physical
+// heap order, which shifts when a row is updated — so a tie in the candidate
+// set meant the chosen template could change between two otherwise identical
+// visits, with nothing in the data to explain it.
+//
+// Worth recording precisely, because it changes what this test is FOR: the
+// database already prevents the tie for real doctors. A partial unique index,
+// note_templates_one_active_per_doctor_encounter ON ("doctorId",
+// "encounterType") NULLS NOT DISTINCT WHERE status='active', predates this
+// work and was verified to reject a second active catch-all. So this is not
+// guarding a live production bug.
+//
+// It guards the PURE function, which is exported and takes an arbitrary
+// candidate set: callers other than resolveActiveTemplate (tests, future
+// resolvers, a cross-practice admin view) are not covered by that index, and a
+// pure selector that depends on input order is a latent trap regardless.
+// ============================================================================
+describe('selectTemplate — deterministic under candidate reordering', () => {
+  const older = tmpl({
+    id: 'aaa',
+    doctorId: 'doc1',
+    name: 'older catch-all',
+    encounterType: null,
+    updatedAt: new Date('2026-07-01T00:00:00Z'),
+  });
+  const newer = tmpl({
+    id: 'zzz',
+    doctorId: 'doc1',
+    name: 'newer catch-all',
+    encounterType: null,
+    updatedAt: new Date('2026-07-20T00:00:00Z'),
+  });
+
+  it('picks the SAME catch-all whichever order the rows arrive in', () => {
+    const a = selectTemplate([older, newer, systemDefault], { doctorId: 'doc1' });
+    const b = selectTemplate([newer, older, systemDefault], { doctorId: 'doc1' });
+    const c = selectTemplate([systemDefault, newer, older], { doctorId: 'doc1' });
+    expect(a.id).toBe(b.id);
+    expect(b.id).toBe(c.id);
+  });
+
+  it('resolves the tie toward the most recently updated template', () => {
+    const picked = selectTemplate([older, newer, systemDefault], { doctorId: 'doc1' });
+    expect(picked.id).toBe('zzz');
+  });
+
+  it('falls back to id when updatedAt is identical', () => {
+    const sameTime = new Date('2026-07-20T00:00:00Z');
+    const t1 = tmpl({ id: 'aaa', doctorId: 'doc1', encounterType: null, updatedAt: sameTime });
+    const t2 = tmpl({ id: 'zzz', doctorId: 'doc1', encounterType: null, updatedAt: sameTime });
+    expect(selectTemplate([t1, t2, systemDefault], { doctorId: 'doc1' }).id).toBe(
+      selectTemplate([t2, t1, systemDefault], { doctorId: 'doc1' }).id
+    );
+  });
+});

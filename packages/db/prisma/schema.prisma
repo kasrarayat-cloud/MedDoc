@@ -132,6 +132,13 @@ enum AuditAction {
   EXPORT_PDF_DOWNLOADED
   EXPORT_DOCX_DOWNLOADED
   EXPORT_CLIPBOARD_COPIED
+  /// S4b — bulk PHI egress. Deliberately distinct from the per-visit
+  /// EXPORT_* actions above: one row here can mean every visit the user
+  /// owns (full account archive) or every visit for one patient. Both
+  /// keep the EXPORT_ prefix so the admin export-volume detector, which
+  /// filters `action::text LIKE 'EXPORT_%'`, picks them up unchanged.
+  EXPORT_ACCOUNT_ARCHIVE_DOWNLOADED
+  EXPORT_PATIENT_ARCHIVE_DOWNLOADED
 
   // transcribe-md — patient CRUD (TranscribeMdPatient; CRM patient
   // events use CREATED_PATIENT / UPDATED_PATIENT / ARCHIVED_PATIENT
@@ -1075,8 +1082,16 @@ model AuditLog {
   // will route those to a designated "platform" practice. For now,
   // practiceId is mandatory and Phase-1 backfill assigns everything to
   // clinic_main.
-  practiceId String
-  practice   Practice @relation(fields: [practiceId], references: [id])
+  /// S4c — NULLABLE + SetNull. An audit row must outlive the practice it
+  /// describes: deleting an account must never delete its audit trail, and a
+  /// RESTRICT here made account deletion impossible instead. The tenant is
+  /// preserved in practiceIdSnapshot below, which carries no FK.
+  practiceId String?
+  practice   Practice? @relation(fields: [practiceId], references: [id], onDelete: SetNull)
+  /// Tombstone: the practice id as it was at write time. Survives the practice
+  /// row itself, so "which tenant did this happen in" stays answerable after a
+  /// deletion. Same role userEmailSnapshot plays for the user.
+  practiceIdSnapshot String?
 
   @@index([practiceId])
   @@index([userId])
@@ -1326,15 +1341,15 @@ enum BillingEventStatus {
 model BillingEvent {
   id String @id @default(cuid())
 
-  practiceId String
-  practice   Practice @relation(fields: [practiceId], references: [id])
+  practiceId String?
+  practice   Practice? @relation(fields: [practiceId], references: [id], onDelete: SetNull)
 
   patientId String
   patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
   /// Clinician this encounter is billed under (source of truth for the claim).
-  clinicianUserId String
-  clinicianUser   User   @relation("BillingClinician", fields: [clinicianUserId], references: [id])
+  clinicianUserId String?
+  clinicianUser   User?   @relation("BillingClinician", fields: [clinicianUserId], references: [id], onDelete: SetNull)
 
   /// JSON array of { code, description, evidence_quote, confidence }. Mirrors
   /// CodingOutput.icd10 from @meddoc/types.
@@ -2188,7 +2203,7 @@ model RxWarningOverride {
   id String @id @default(cuid())
 
   visitId String
-  visit   TranscribeVisit @relation(fields: [visitId], references: [id])
+  visit   TranscribeVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
 
   /// Which Rx line in the SOAP note this warning attached to. Useful
   /// for joining back to the line in replay without parsing JSON.
@@ -2218,8 +2233,8 @@ model RxWarningOverride {
   /// but the server also validates before insert.
   reason String @db.Text
 
-  overriddenBy String
-  user         User   @relation(fields: [overriddenBy], references: [id])
+  overriddenBy String?
+  user         User?   @relation(fields: [overriddenBy], references: [id], onDelete: SetNull)
 
   overriddenAt DateTime @default(now()) @db.Timestamptz(6)
 
@@ -2483,7 +2498,7 @@ model TemplateTwinSourceArtifact {
   id String @id @default(cuid())
 
   practiceId String
-  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict)
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
 
   createdById String?
   createdBy   User?   @relation("TemplateTwinSourceCreator", fields: [createdById], references: [id], onDelete: SetNull)
@@ -2511,10 +2526,10 @@ model TemplateTwinCompiledVersion {
   id String @id @default(cuid())
 
   sourceArtifactId String
-  sourceArtifact   TemplateTwinSourceArtifact @relation(fields: [sourceArtifactId], references: [id], onDelete: Restrict)
+  sourceArtifact   TemplateTwinSourceArtifact @relation(fields: [sourceArtifactId], references: [id], onDelete: Cascade)
 
   noteTemplateId String       @unique
-  noteTemplate   NoteTemplate @relation(fields: [noteTemplateId], references: [id], onDelete: Restrict)
+  noteTemplate   NoteTemplate @relation(fields: [noteTemplateId], references: [id], onDelete: Cascade)
 
   compilerVersion          String
   irSchemaVersion          Int
@@ -2611,10 +2626,10 @@ model TemplateTwinCertification {
   id String @id @default(cuid())
 
   compiledVersionId String                      @unique
-  compiledVersion   TemplateTwinCompiledVersion @relation(fields: [compiledVersionId], references: [id], onDelete: Restrict)
+  compiledVersion   TemplateTwinCompiledVersion @relation(fields: [compiledVersionId], references: [id], onDelete: Cascade)
 
-  certifiedById String
-  certifiedBy   User   @relation("TemplateTwinCertifier", fields: [certifiedById], references: [id], onDelete: Restrict)
+  certifiedById String?
+  certifiedBy   User?   @relation("TemplateTwinCertifier", fields: [certifiedById], references: [id], onDelete: SetNull)
 
   compiledStructureSha256 String   @db.Char(64)
   approvedMappingsSha256  String   @db.Char(64)
@@ -2631,13 +2646,13 @@ model TemplateTwinFillManifest {
   id String @id @default(cuid())
 
   practiceId String
-  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Restrict)
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
 
   visitId String          @unique
   visit   TranscribeVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
 
   compiledVersionId String
-  compiledVersion   TemplateTwinCompiledVersion @relation(fields: [compiledVersionId], references: [id], onDelete: Restrict)
+  compiledVersion   TemplateTwinCompiledVersion @relation(fields: [compiledVersionId], references: [id], onDelete: Cascade)
 
   noteTemplateId       String
   noteTemplateVersion  Int
@@ -2687,7 +2702,7 @@ model TemplateTwinReviewDecision {
 
   fieldId                 String
   fieldDefinitionId       String
-  fieldDefinition         TemplateTwinFieldDefinition  @relation(fields: [fieldDefinitionId], references: [id], onDelete: Restrict)
+  fieldDefinition         TemplateTwinFieldDefinition  @relation(fields: [fieldDefinitionId], references: [id], onDelete: Cascade)
   resolutionStatus        TemplateTwinResolutionStatus
   decisionKind            String
   previousValue           Json?

@@ -5,8 +5,13 @@
 // ----------------------------------------------------------------------------
 // Phase 5 — Linear V1 Faithful. A `.qm-lin-btn`-shaped chip with a
 // copy icon; flips to a check + "Copied" for 1.5s after a successful
-// clipboard write. No VisitDelivery row — too granular for the audit
-// trail. The `theme` prop is preserved as a no-op for back-compat.
+// clipboard write. No VisitDelivery row — too granular for a DELIVERY
+// row. The `theme` prop is preserved as a no-op for back-compat.
+//
+// S4b (2026-07-25): it does now emit an AUDIT row. The two are different
+// things — a VisitDelivery models "the note was sent somewhere we track", an
+// audit row models "PHI left the application". Copying a whole SOAP section to
+// the OS clipboard is the second, and it used to leave no trace at all.
 // ============================================================================
 
 import { useCallback, useState } from 'react';
@@ -14,10 +19,13 @@ import { Copy, Check } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { cn } from '@/lib/cn';
+import { reportClipboardCopy } from '@/lib/clipboard-audit';
 
 type CopySectionButtonTheme = 'legacy' | 'clinician';
 
 interface CopySectionButtonProps {
+  /** Visit this text belongs to — required so the copy can be audited. */
+  visitId: string;
   /** The plaintext payload to write to the clipboard. */
   text: string;
   /** Short label shown when the button is idle, e.g. "Copy SOAP". */
@@ -30,6 +38,7 @@ interface CopySectionButtonProps {
 }
 
 export function CopySectionButton({
+  visitId,
   text,
   label = 'Copy section',
   section,
@@ -44,6 +53,9 @@ export function CopySectionButton({
     }
     try {
       await navigator.clipboard.writeText(text);
+      // Only after the write RESOLVES — a blocked clipboard throws, and
+      // auditing a disclosure that never happened would be a false record.
+      reportClipboardCopy(visitId, 'section', section, text);
       setCopied(true);
       toast.success(`${section} copied`);
       // Plain timeout — not a setState inside an effect, so the
@@ -54,7 +66,7 @@ export function CopySectionButton({
         description: 'Grant clipboard access in your browser settings.',
       });
     }
-  }, [text, section]);
+  }, [visitId, text, section]);
 
   return (
     <button
