@@ -36,7 +36,17 @@ interface ParsedMarkdownTable {
   rows: { label: string; cells: string[] }[];
 }
 
-const TABLE_ROW_RE = /^\s*\|(.+)\|\s*(?:\[[^\]]*\].*)?$/; // trailing evidence anchor tolerated
+// A row may carry a trailing annotation AFTER its closing pipe. Two forms are
+// produced in practice and both must be tolerated:
+//   | GSV at the SFJ | 6.2 | 3.4 | [S1: "..."]      <- bracketed anchor
+//   | GSV at the SFJ | 6.2 | 3.4 | "Right great ..." <- inline evidence quote
+// Only the bracketed form was tolerated. A quoted row failed to match, and
+// because it is typically the FIRST data row, table accumulation ended with
+// ZERO rows — so all 52 measurement cells never reached the matcher and every
+// dictated measurement was silently dropped. Measured on a real visit:
+// parseMarkdownTables -> 2 tables, rows=0, filledCount=0.
+const TABLE_ROW_RE =
+  /^\s*\|(.+)\|\s*(?:(?:\[[^\]]*\]|"[^"]*").*)?$/;
 const SEP_ROW_RE = /^[\s:|-]+$/; // the | --- | --- | separator
 
 /** Split one "| a | b | c |" line into its cell strings (trimmed). Any trailing
@@ -49,6 +59,12 @@ function splitRow(line: string): string[] | null {
 
 /** Extract every contiguous markdown pipe-table from the note. A table is a
  *  header row, a `---` separator row, then data rows. */
+/** Diagnostic alias — same function, exported so a QA harness can show what the
+ *  bridge actually parses out of a generated note. */
+export function parseMarkdownTablesForDiagnosis(note: string): ParsedMarkdownTable[] {
+  return parseMarkdownTables(note);
+}
+
 function parseMarkdownTables(note: string): ParsedMarkdownTable[] {
   const lines = note.split('\n');
   const tables: ParsedMarkdownTable[] = [];

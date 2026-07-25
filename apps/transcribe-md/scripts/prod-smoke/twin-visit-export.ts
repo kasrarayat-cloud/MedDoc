@@ -105,6 +105,25 @@ async function main() {
       data: { soapFinal: note, status: 'READY' },
     });
     say(`L4 note generated (${note.length} chars)`);
+    // ── DIAGNOSTIC DUMP ──────────────────────────────────────────────────
+    writeFileSync('/app/diag-l4-note.txt', note);
+    const tableLines = note.split('\n').filter((l) => l.trim().startsWith('|'));
+    say(`DIAG note pipe-lines=${tableLines.length}`);
+    for (const l of tableLines.slice(0, 12)) say(`DIAG  ${l.trim().slice(0, 120)}`);
+    const { parseMarkdownTables } = await import('@/lib/template-twin/bridge-fill-diag');
+    const parsed = parseMarkdownTables(note);
+    say(`DIAG parseMarkdownTables -> ${parsed.length} table(s)`);
+    for (const t of parsed) say(`DIAG  header=[${t.header.join(' | ')}] rows=${t.rows.length} labels=[${t.rows.slice(0,4).map((r) => r.label).join(' / ')}]`);
+    // IR rows the bridge wants to match
+    const irCells = (await prisma.templateTwinCompiledVersion.findUnique({
+      where: { id: compiled.id }, select: { compiledDocumentIr: true },
+    }))!.compiledDocumentIr as { fields: { originalLabel: string; tableId: string | null; rendererBinding: { rowIndex: number | null } }[] };
+    const rows = irCells.fields.filter((f) => f.tableId);
+    say(`DIAG IR table cells=${rows.length}; first labels=[${rows.slice(0, 6).map((f) => f.originalLabel).join(' / ')}]`);
+    // facts the picks/measurements must cite
+    const facts = (extracted.entities as { facts?: unknown[] } | null);
+    writeFileSync('/app/diag-facts.json', JSON.stringify(extracted.entities, null, 2).slice(0, 200000));
+    say(`DIAG entities dumped`);
 
     // The twin fill step the worker runs.
     const { processTemplateTwinVisit } = await import('@/lib/template-twin/fill-engine');
