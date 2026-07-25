@@ -120,7 +120,23 @@ export async function renderTemplateDocx(
     const prepared = prepareScalarResolution(field, resolution);
     const part = getPartPlan(field.rendererBinding.partName);
     const patches = createFieldPatches(part.scan, field, prepared);
-    if (patches.length === 0) continue;
+    if (patches.length === 0) {
+      // BLANK PROOF. No patch means the field keeps the template's own unfilled
+      // state — a dropdown placeholder, an empty cell. That is a real outcome
+      // and the certificate must attest it, so an entry is emitted rather than
+      // the field being skipped.
+      //
+      // Skipping was why certification could not close: the gate requires one
+      // proof entry per expected field, and every honestly-blank field silently
+      // had none. The verifier checks this entry by comparing the rendered
+      // bytes at this binding against the SOURCE's bytes — the blank is proven
+      // against the doctor's own canvas, not asserted.
+      //
+      // occurrences = 1: one binding site, verified. The gate's
+      // `expected.occurrences > 0` is satisfied without touching the gate.
+      fieldProofs.push(fieldProof(field, resolution.value, 1, 'blank'));
+      continue;
+    }
     part.patches.push(...patches);
     fieldProofs.push(fieldProof(field, resolution.value, 1));
   }
@@ -1197,8 +1213,10 @@ function fieldProof(
   field: TemplateField,
   value: FieldResolution['value'],
   occurrences: number,
+  kind: RenderedFieldProof['kind'] = 'filled',
 ): RenderedFieldProof {
   return {
+    kind,
     fieldId: field.fieldId,
     partName: field.rendererBinding.partName,
     bindingPath: field.rendererBinding.path,
