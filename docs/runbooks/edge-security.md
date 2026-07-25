@@ -526,3 +526,75 @@ Tag the merge: `git tag round-3-pr-b-complete && git push origin round-3-pr-b-co
 | `/etc/issue.net` | (optional) | delete |
 | `/root/ai-deal-hunter/` | moved | mv back from archive |
 | `/root/archive-2026-05-04/` | created | rmdir if empty |
+
+---
+
+## S2 (2026-07-25) — real client IPs through the nginx → Caddy chain
+
+### The defect
+
+Ingress is `internet → host nginx (:80/:443) → QuillMD Caddy (127.0.0.1:8443) → containers`.
+Caddy set `header_up X-Forwarded-For {remote_host}`, i.e. it **overwrote** the
+chain with its own immediate peer. From inside the container that peer is the
+docker bridge gateway, so every request downstream looked like `172.19.0.1`.
+
+Measured impact, from prod `audit_logs`:
+
+| month | rows recorded as `172.19.x` | rows with a real client IP |
+|---|---|---|
+| 2026-04 | 2565 | 1204 |
+| 2026-05 | 0 | 1286 |
+| 2026-06 | 1272 | **0** |
+| 2026-07 | 1379 | **0** |
+
+The collapse begins in **June 2026** — when host nginx was put in front of Caddy
+during the 2026-06-03 site-down recovery. Before that Caddy was the edge and
+`{remote_host}` genuinely was the client. Consequences: the audit trail could not
+attribute an action to an origin, and `RATE_LIMITS.LOGIN` (10/hour, keyed on
+`clientIpFromHeaders`) was one global bucket — any single attacker could lock
+login for every doctor on the platform.
+
+### The fix — two halves, both required
+
+1. **Caddy** (`Caddyfile`, in git): global `servers { trusted_proxies static … }`
+   plus `header_up X-Forwarded-For {client_ip}` / `X-Real-IP {client_ip}` on the
+   nine QuillMD reverse-proxy blocks. The LeatherERP co-tenant block is
+   deliberately untouched.
+2. **Host nginx** (`/etc/nginx/sites-enabled/quillmd`, NOT in git —
+   backup at `quillmd.bak-20260725`): line 42 changed from
+   `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`
+   to `proxy_set_header X-Forwarded-For $remote_addr;`
+
+**Why half a fix is worse than none.** Caddy's `{client_ip}` takes the
+*leftmost* XFF value when the peer is trusted — it does not walk right-to-left
+for the first untrusted hop. nginx's `$proxy_add_x_forwarded_for` *appends*, so
+a client sending `X-Forwarded-For: 1.2.3.4` arrived as `1.2.3.4, <realIP>` and
+the forged leftmost value won. This was **measured, not assumed**: with only the
+Caddy half applied, a probe carrying a forged header wrote `1.2.3.4` into
+`audit_logs`. nginx replacing the header is what supplies the spoof resistance;
+`trusted_proxies` is what lets Caddy read the sanitised value at all.
+
+> If CloudFlare is ever switched from grey-cloud to orange-cloud (proxied),
+> `$remote_addr` becomes a CloudFlare address and this must become
+> `CF-Connecting-IP`.
+
+### Verification performed on production
+
+| test | result |
+|---|---|
+| forged `X-Forwarded-For: 1.2.3.4`, Caddy half only | recorded `1.2.3.4` — vulnerable |
+| forged `X-Forwarded-For: 1.2.3.4`, both halves | recorded `147.189.172.8` — forgery discarded |
+| two genuine sources, no header injection | distinct rows: `147.189.172.8` and `127.0.0.1` |
+| login burst from source A (public) | rate-limited at attempt **11** (limit 10/hr) |
+| single login from source B (loopback), A already limited | **not** limited — normal credential failure |
+
+Reload discipline: nginx was `nginx -t`-tested then `-s reload`ed; Caddy was
+**recreated, not reloaded** — the Caddyfile is a single-file bind mount and
+Docker binds by inode, so an in-place host rewrite leaves the container serving
+the old inode. Verified by comparing `stat -c%i` inside and outside.
+
+### Historical note
+
+Rows written before 2026-07-25 are not retro-fixable. Any audit review of
+April–July 2026 must treat `172.19.0.1` as "origin not recorded", **not** as a
+real address.

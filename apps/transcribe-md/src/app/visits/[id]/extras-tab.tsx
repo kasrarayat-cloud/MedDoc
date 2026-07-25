@@ -38,6 +38,7 @@ import { Copy, Check } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { cn } from '@/lib/cn';
+import { reportClipboardCopy } from '@/lib/clipboard-audit';
 
 import { DemographicsCard, type DemographicsCardData } from './extras/DemographicsCard';
 import { VitalsCard, type VitalsCardData } from './extras/VitalsCard';
@@ -66,6 +67,9 @@ export interface ReferralsBlob {
 type ExtrasTabTheme = 'legacy' | 'clinician';
 
 interface ExtrasTabProps {
+  /** Visit this content belongs to — required so the patient-summary copy
+   *  can be audited as a PHI disclosure (S4b). */
+  visitId: string;
   /** AI-generated referrals blob (preserved from the previous
    *  ExtrasTab; rendered in the supplementary "AI extras" card). */
   referrals: unknown;
@@ -98,6 +102,7 @@ interface ExtrasTabProps {
 }
 
 export function ExtrasTab({
+  visitId,
   referrals,
   patientSummary,
   fleschKincaid,
@@ -138,6 +143,7 @@ export function ExtrasTab({
       )}
       {hasAiExtras && (
         <AiExtrasCard
+          visitId={visitId}
           referrals={refs}
           patientSummary={patientSummary}
           fleschKincaid={fleschKincaid}
@@ -171,11 +177,13 @@ export function ExtrasTab({
 // ---------------------------------------------------------------------------
 
 function AiExtrasCard({
+  visitId,
   referrals,
   patientSummary,
   fleschKincaid,
   flagged,
 }: {
+  visitId: string;
   referrals: Referral[];
   patientSummary: string | null;
   fleschKincaid: number | null;
@@ -200,6 +208,7 @@ function AiExtrasCard({
         <div className="space-y-6">
           <ReferralsSection referrals={referrals} />
           <SummarySection
+            visitId={visitId}
             summary={patientSummary}
             fleschKincaid={fleschKincaid}
             flagged={flagged}
@@ -280,10 +289,12 @@ function ReferralCard({ referral }: { referral: Referral }) {
 }
 
 function SummarySection({
+  visitId,
   summary,
   fleschKincaid,
   flagged,
 }: {
+  visitId: string;
   summary: string | null;
   fleschKincaid: number | null;
   flagged: boolean;
@@ -294,13 +305,16 @@ function SummarySection({
     if (!summary) return;
     try {
       await navigator.clipboard.writeText(summary);
+      // Post-resolve only: a blocked clipboard throws, and auditing a
+      // disclosure that never happened would be a false record.
+      reportClipboardCopy(visitId, 'summary', 'Patient summary', summary);
       setCopied(true);
       toast.success('Copied to clipboard');
       setTimeout(() => setCopied(false), 1500);
     } catch {
       toast.error('Could not copy — your browser blocked clipboard access.');
     }
-  }, [summary]);
+  }, [visitId, summary]);
 
   if (!summary) {
     return (

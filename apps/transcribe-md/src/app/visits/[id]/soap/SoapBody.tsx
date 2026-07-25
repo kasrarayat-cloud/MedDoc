@@ -15,6 +15,7 @@
 import { useMemo } from 'react';
 import { Copy } from 'lucide-react';
 import { toast } from 'sonner';
+import { reportClipboardCopy } from '@/lib/clipboard-audit';
 
 import { parseNoteSections } from '@/lib/parse-note-sections';
 import type { SoapSectionKey } from '@/lib/parse-soap-sections';
@@ -39,12 +40,16 @@ export interface SoapBodyProps {
    *  call so error toasts stay centralised. */
   onEdit: (next: string) => Promise<{ ok: boolean; error?: string }>;
   readonly: boolean;
+  /** Visit this note belongs to — required so the full-note copy can be
+   *  audited as a PHI disclosure (S4b). */
+  visitId: string;
   /** Pretty-printed last edit time — e.g. "4m ago". Optional; the foot
    *  shows just the section count when absent. */
   lastEditLabel?: string | null;
 }
 
 export function SoapBody({
+  visitId,
   text,
   statusFor,
   pulseHints,
@@ -65,6 +70,8 @@ export function SoapBody({
   const onCopy = async () => {
     try {
       await navigator.clipboard.writeText(text);
+      // Post-resolve only — see clipboard-audit.ts.
+      reportClipboardCopy(visitId, 'full_note', 'Full note', text);
       toast.success('SOAP copied');
     } catch {
       toast.error('Copy failed — try again');

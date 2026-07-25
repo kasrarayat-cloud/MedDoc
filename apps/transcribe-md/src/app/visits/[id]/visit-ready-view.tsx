@@ -464,6 +464,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
       badge: extrasWarn ? { tone: 'warn', text: '!' } : null,
       node: (
         <ExtrasTab
+              visitId={props.visitId}
           referrals={props.referrals}
           patientSummary={props.patientSummary}
           fleschKincaid={fleschKincaid}
@@ -663,6 +664,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
           <div className="space-y-3">
             <div className="flex justify-end">
               <CopySectionButton
+                visitId={props.visitId}
                 text={sectionSoap(sectionData)}
                 label="Copy SOAP"
                 section="SOAP note"
@@ -731,6 +733,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
           <div className="space-y-3">
             <div className="flex justify-end">
               <CopySectionButton
+                visitId={props.visitId}
                 text={sectionCodes(sectionData)}
                 label="Copy codes"
                 section="Codes"
@@ -747,6 +750,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
           <div className="space-y-3">
             <div className="flex justify-end">
               <CopySectionButton
+                visitId={props.visitId}
                 text={sectionRx(sectionData)}
                 label="Copy Rx"
                 section="Prescriptions"
@@ -764,12 +768,14 @@ export function VisitReadyView(props: VisitReadyViewProps) {
           <div className="space-y-3">
             <div className="flex justify-end">
               <CopySectionButton
+                visitId={props.visitId}
                 text={sectionExtras(sectionData)}
                 label="Copy extras"
                 section="Referrals + patient summary"
               />
             </div>
             <ExtrasTab
+              visitId={props.visitId}
               referrals={props.referrals}
               patientSummary={props.patientSummary}
               fleschKincaid={fleschKincaid}

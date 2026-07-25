@@ -59,11 +59,35 @@ export class MissingSystemDefaultTemplateError extends Error {
  *
  * @throws {MissingSystemDefaultTemplateError} if no system default is present.
  */
+/**
+ * Deterministic ordering for candidate templates: newest first, id as the
+ * final tie-break.
+ *
+ * S6 — this used to be absent, and it mattered. `resolveActiveTemplate` loads
+ * candidates with an unordered `findMany`, so Postgres returns them in
+ * whatever physical order the heap happens to have. The `.find()` calls below
+ * take the FIRST match. With two active catch-alls for one doctor, which
+ * template generated a note therefore depended on row layout — and could
+ * change after any UPDATE moved a row. Two visits, same doctor, same input,
+ * different note format, no way to explain why from the data.
+ *
+ * A unique index now prevents that state from being created at all (see
+ * migration 20260725050000). This ordering is the belt to that suspenders: the
+ * pure core must be deterministic on ANY candidate set, including one loaded
+ * by a future caller that forgets to order, or one built by a test.
+ */
+function deterministic(rows: readonly NoteTemplate[]): NoteTemplate[] {
+  return [...rows].sort((a, b) => {
+    const t = b.updatedAt.getTime() - a.updatedAt.getTime();
+    return t !== 0 ? t : (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
+  });
+}
+
 export function selectTemplate(
   candidates: readonly NoteTemplate[],
   { doctorId, encounterType = null }: ResolveTemplateInput
 ): NoteTemplate {
-  const active = candidates.filter((t) => t.status === 'active');
+  const active = deterministic(candidates.filter((t) => t.status === 'active'));
 
   // 1. doctor's template for this exact encounter type (only when a type
   //    was requested — a null request skips straight to the catch-all).
@@ -103,6 +127,11 @@ export async function resolveActiveTemplate(
     where: {
       OR: [{ doctorId: input.doctorId }, { isSystemDefault: true }],
     },
+    // S6 — an unordered findMany returns rows in physical heap order, which is
+    // not stable across updates. selectTemplate() re-sorts anyway, but ordering
+    // here too means the rows arrive in the same order they will be evaluated
+    // in, so anything reading the query log sees what the resolver saw.
+    orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
   });
   return selectTemplate(candidates, input);
 }
