@@ -427,6 +427,36 @@ export async function updateTemplateTwinMappings(input: {
         }
       }
 
+      // ── PRACTICE-DEFAULT LAW ─────────────────────────────────────────────
+      // A practice default is a standing clinical assertion: at visit time
+      // withApprovedPracticeDefaultFacts injects it as an EncounterFact with
+      // quality.evidence 'direct', and a VALID one then renders as an ordinary
+      // populated value. Validation is rigorous about its PROVENANCE
+      // (PRACTICE_DEFAULT_INVALID checks fact id, anchor, exact value, null
+      // offsets) but nothing routes it to a flagged / set-aside lane — so it
+      // can put content the clinician never said into a signed note,
+      // distinguishable only by sourceType inside the manifest.
+      //
+      // Until that flagged-review lane exists, nothing may set one. This is a
+      // hard refusal rather than a silent coercion to null: quietly dropping
+      // the value would leave the caller believing a default was stored, which
+      // is the same class of silence the rest of this system just retired.
+      //
+      // Lifting this: build the lane (default-sourced resolutions ride the
+      // existing set-aside / adopt-before-sign surface), THEN delete this
+      // block. Do not delete it to make a fixture certify.
+      const withDefaults = parsed.filter((mapping) => mapping.practiceDefault !== null);
+      if (withDefaults.length > 0) {
+        const ids = withDefaults.map((mapping) => mapping.fieldId);
+        console.warn(
+          `[template-twin:mappings] REFUSED practice default on ${ids.length} field(s): ${ids.slice(0, 10).join(',')}`,
+        );
+        throw new TemplateTwinLifecycleError(
+          'MAPPING_INVALID',
+          'Practice defaults are not available yet: a standing default would put content the clinician never said into a signed note, and the flagged-review lane for that is not built. Leave the field blank or confirm it per visit.',
+        );
+      }
+
       const afterHash = templateTwinMappingsSha256(parsed);
       if (afterHash === beforeHash) return;
 
