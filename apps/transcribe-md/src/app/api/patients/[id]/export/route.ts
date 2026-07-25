@@ -23,7 +23,14 @@
 
 import { NextResponse } from 'next/server';
 import { PassThrough, Readable } from 'node:stream';
-import archiver from 'archiver';
+// archiver v8 is pure ESM and no longer exports a callable factory: v7's
+// `module.exports = archiver` became named class exports
+// ({ Archiver, JsonArchive, TarArchive, ZipArchive }), so `import archiver from
+// 'archiver'` has no default export and `archiver('zip', opts)` is not callable.
+// The rest of our surface is unchanged — Archiver still extends stream.Transform,
+// so pipe/append/finalize behave identically, and on('error'|'warning') is now
+// properly typed as ArchiverError instead of implicit any.
+import { ZipArchive } from 'archiver';
 
 import prisma from '@meddoc/db';
 import { apiError, withApiHandler } from '@/lib/api-error';
@@ -97,7 +104,7 @@ export const GET = withApiHandler<{ id: string }>(
     const safeName = patient.name.replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 40);
     const filename = `patient-${safeName}-${patient.id}-${stamp}.zip`;
 
-    const archive = archiver('zip', { zlib: { level: 6 } });
+    const archive = new ZipArchive({ zlib: { level: 6 } });
     const passThrough = new PassThrough();
     archive.pipe(passThrough);
 
