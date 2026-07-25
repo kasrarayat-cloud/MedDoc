@@ -6106,6 +6106,9 @@ body {
     bottom: calc(60px + env(safe-area-inset-bottom, 0px));
     z-index: 41;
   }
+}
+
+/* ============================================================================
    UX simplification pack (A) — staged processing + the ONE confirm card
    ----------------------------------------------------------------------------
    Flag: NEXT_PUBLIC_UX_SIMPLIFY. Linear V1 tokens only — no new palette, no new
