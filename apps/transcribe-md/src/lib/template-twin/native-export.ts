@@ -92,13 +92,35 @@ export async function loadNativeTemplateDocxForVisit(
  * never materialised), and fail-safe (any error → null → styled export). It is a
  * resilience fallback, not the hot path.
  */
+/**
+ * Why a native export did NOT happen. Every fallback path names itself.
+ *
+ * Silence was the defect: this function returned bare `null` from four
+ * different places and the caller degraded to the styled export without a
+ * word, so "my own form did not come back" was indistinguishable from "the
+ * feature is off" — for the doctor AND for anyone reading the logs. The PDF
+ * path already records nativePdfApplied/nativePdfReason on its audit row; this
+ * mirrors that so the DOCX path is equally accountable.
+ */
+export type NativeDocxSkipReason =
+  | 'not_certified'
+  | 'visit_not_eligible'
+  | 'fill_failed'
+  | 'manifest_incomplete';
+
+export interface NativeDocxOutcome {
+  native: NativeTemplateExport | null;
+  /** null when a native export WAS produced. */
+  reason: NativeDocxSkipReason | null;
+}
+
 export async function loadOrComputeNativeTemplateDocxForVisit(
   visitId: string,
   userId: string,
   deps?: { storage?: TemplateTwinArtifactStore },
-): Promise<NativeTemplateExport | null> {
+): Promise<NativeDocxOutcome> {
   const cached = await loadNativeTemplateDocxForVisit(visitId, userId, deps);
-  if (cached) return cached;
+  if (cached) return { native: cached, reason: null };
 
   try {
     const visit = await prisma.transcribeVisit.findFirst({
@@ -124,13 +146,21 @@ export async function loadOrComputeNativeTemplateDocxForVisit(
       visit.noteTemplateVersion == null ||
       !visit.user?.practiceId
     ) {
-      return null;
+      return { native: null, reason: 'visit_not_eligible' };
     }
     const compiled = await prisma.templateTwinCompiledVersion.findUnique({
       where: { noteTemplateId: visit.noteTemplateId },
       select: { certificationStatus: true },
     });
-    if (compiled?.certificationStatus !== 'CERTIFIED') return null;
+    if (compiled?.certificationStatus !== 'CERTIFIED') {
+      // The single most common reason a doctor's own document does not come
+      // back: the template is uploaded and compiled but never certified.
+      console.info(
+        `[native-export] visit=${visitId} template not CERTIFIED ` +
+          `(status=${compiled?.certificationStatus ?? 'NO_COMPILED_VERSION'}); styled fallback`,
+      );
+      return { native: null, reason: 'not_certified' };
+    }
 
     await processTemplateTwinVisit({
       visitId,
@@ -149,12 +179,15 @@ export async function loadOrComputeNativeTemplateDocxForVisit(
       resolverModelVersion: null,
       storage: deps?.storage,
     });
-    return await loadNativeTemplateDocxForVisit(visitId, userId, deps);
+    const produced = await loadNativeTemplateDocxForVisit(visitId, userId, deps);
+    return produced
+      ? { native: produced, reason: null }
+      : { native: null, reason: 'manifest_incomplete' };
   } catch (err) {
     console.warn(
       `[native-export] on-demand fill failed for visit=${visitId}; styled fallback:`,
       err instanceof Error ? err.message : String(err),
     );
-    return null;
+    return { native: null, reason: 'fill_failed' };
   }
 }
