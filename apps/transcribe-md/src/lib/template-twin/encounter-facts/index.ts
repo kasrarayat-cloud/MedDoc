@@ -305,7 +305,14 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
     );
   };
 
-  const entities = input.entities;
+  // TranscribeVisit.entities is NULLABLE. The on-demand native-export path
+  // feeds it straight through, so a visit whose L3 output was never persisted
+  // (a legacy row, a failed pipeline, a re-export after cleanup) reached here
+  // as null and threw "Cannot read properties of null (reading
+  // 'chief_complaint')" — surfacing to the doctor as a silent styled fallback.
+  // No entities means no evidence, which means no facts: an empty projection,
+  // not an exception.
+  const entities = input.entities ?? ({} as typeof input.entities);
   if (entities.chief_complaint) {
     add({
       path: 'chief_complaint.statement',

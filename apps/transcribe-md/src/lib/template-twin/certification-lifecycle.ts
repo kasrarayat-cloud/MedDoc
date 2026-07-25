@@ -29,6 +29,11 @@ import { parseTemplateTwinArtifactKey } from './storage';
 import { canonicalSha256 } from './canonical';
 import { validateTemplateTwin } from './validation';
 
+/** Minimum filled fields a synthetic proof must produce before a template may
+ *  certify. Set from what the WM_IOV encounter legitimately supports; raise it
+ *  as encounters get richer, never lower it to make a fixture pass. */
+const MIN_CERTIFIED_FILLED_FIELDS = 10;
+
 export class TemplateTwinLifecycleError extends Error {
   readonly code:
     | 'NOT_FOUND'
@@ -717,6 +722,40 @@ export async function certifyAndActivateTemplateTwin(input: {
       const blankProofCount = roundTripFields.filter(
         (entry) => isRecord(entry) && entry.kind === 'blank',
       ).length;
+      // ── FILL-COVERAGE INVARIANT ──────────────────────────────────────────
+      // A template must not certify with a dead fill path. WM_IOV certified
+      // cleanly while the visit-time fill produced filledCount=0 — the
+      // certificate attested a template whose measurements never landed,
+      // because the synthetic proof exercised almost nothing.
+      //
+      // So: the synthetic encounter must produce a REALISTIC fill — enough
+      // filled fields, and at least one measurement CELL, which is the path
+      // that was silently broken. Both counts come from what the WM_IOV
+      // encounter legitimately supports; neither relaxes anything.
+      const filledResolutions = [...syntheticResolutions.values()].filter(
+        (r) => r != null && r.value !== null,
+      );
+      const cellFieldIds = new Set(
+        ir.fields.filter((f) => f.rendererBinding.bindingType === 'table_cell').map((f) => f.fieldId),
+      );
+      const filledCellCount = [...syntheticResolutions.entries()].filter(
+        ([fieldId, r]) => cellFieldIds.has(fieldId) && r != null && r.value !== null,
+      ).length;
+      if (testReady && filledResolutions.length < MIN_CERTIFIED_FILLED_FIELDS) {
+        blockers.push(
+          `fillCoverage=false (${filledResolutions.length} filled, need >= ${MIN_CERTIFIED_FILLED_FIELDS} — ` +
+            'the synthetic encounter must exercise a realistic fill, or the certificate ' +
+            'attests a template whose fill path is dead)',
+        );
+      }
+      if (testReady && cellFieldIds.size > 0 && filledCellCount === 0) {
+        blockers.push(
+          'fillCoverage=false (no measurement CELL was filled — that is the path ' +
+            'that silently produced empty documents; a template with table cells must ' +
+            'prove at least one)',
+        );
+      }
+
       if (testReady && blankProofCount === 0) {
         blockers.push(
           'blankVerification=false (no field was proven blank — the synthetic ' +
