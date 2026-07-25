@@ -342,13 +342,44 @@ export function applyApprovedXmlPatches(
   return output;
 }
 
-export interface RenderedFieldProof {
-  readonly fieldId: string;
-  readonly partName: string;
-  readonly bindingPath: string;
-  readonly valueSha256: string;
-  readonly occurrences: number;
-}
+/**
+ * Proof that one field's rendered state is the state we approved.
+ *
+ * Two kinds, because there are two honest outcomes and BOTH must be attested:
+ *
+ *  * 'filled' — the field was patched. Verified exactly as before: its id must
+ *    appear in the approved patch set. Byte-identical to the pre-blank
+ *    behaviour; nothing on this path changed.
+ *
+ *  * 'blank'  — nothing was written, so the field keeps the doctor's own
+ *    unfilled state ("Choose an item.", an empty cell). Verified by comparing
+ *    the rendered bytes AT THAT BINDING against the SOURCE template's bytes at
+ *    the same binding. Not "is it empty", not "does a null hash match" — is it
+ *    still, byte for byte, the canvas the doctor uploaded.
+ *
+ * A blank field emitting no proof at all was the gap: the certification gate
+ * requires one entry per expected field, so every honestly-blank field silently
+ * had none and certification could not close.
+ */
+export type RenderedFieldProof =
+  | {
+      readonly kind: 'filled';
+      readonly fieldId: string;
+      readonly partName: string;
+      readonly bindingPath: string;
+      readonly valueSha256: string;
+      readonly occurrences: number;
+    }
+  | {
+      readonly kind: 'blank';
+      readonly fieldId: string;
+      readonly partName: string;
+      readonly bindingPath: string;
+      /** Hash of the approved (null) value, same shape the gate computes. */
+      readonly valueSha256: string;
+      /** One verified binding site. The gate requires > 0 and is untouched. */
+      readonly occurrences: number;
+    };
 
 export interface RenderedPartProof {
   readonly partName: string;
@@ -361,6 +392,10 @@ export interface RenderVerificationPlan {
 }
 
 export interface VerifiedRenderedField {
+  /** Which contract this entry attests — a fill, or a proven-blank. Persisted
+   *  into the roundtrip proof so the certification gate can require at least
+   *  one blank-verified field. */
+  readonly kind: 'filled' | 'blank';
   readonly fieldId: string;
   readonly partName: string;
   readonly bindingPath: string;
@@ -463,22 +498,65 @@ export function verifyRenderedTemplateDocx(
     scanXmlPart(outputEntry.bytes);
   }
   const proofFieldIds = new Set<string>();
+  const filledFieldIds = new Set<string>();
+  const blankProofs: RenderedFieldProof[] = [];
   for (const field of input.plan.fields) {
     if (proofFieldIds.has(field.fieldId) || field.occurrences < 1) {
       failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
     }
     proofFieldIds.add(field.fieldId);
+    if (field.kind === 'blank') blankProofs.push(field);
+    else filledFieldIds.add(field.fieldId);
   }
   const patchedFieldIds = new Set(
     input.plan.parts.flatMap((part) =>
       part.patches.flatMap((patch) => patch.fieldIds),
     ),
   );
+  // FILLED: unchanged — the filled proof set must be exactly the patched set.
   if (
-    proofFieldIds.size !== patchedFieldIds.size ||
-    [...proofFieldIds].some((fieldId) => !patchedFieldIds.has(fieldId))
+    filledFieldIds.size !== patchedFieldIds.size ||
+    [...filledFieldIds].some((fieldId) => !patchedFieldIds.has(fieldId))
   ) {
     failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+  }
+  // BLANK: a blank field must not appear in the patch set at all — claiming a
+  // field is blank while having patched it is the contradiction worth catching.
+  for (const blank of blankProofs) {
+    if (patchedFieldIds.has(blank.fieldId)) {
+      failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+    }
+  }
+  // ...and the rendered bytes at its binding must still BE the source's bytes.
+  // Same failure class as a filled mismatch: a blank is a claim about the
+  // document, and an unverified claim is exactly what this module exists to
+  // prevent.
+  if (blankProofs.length > 0) {
+    const sourceScans = new Map<string, ScannedXmlPart>();
+    const outputScans = new Map<string, ScannedXmlPart>();
+    const scanOf = (
+      cache: Map<string, ScannedXmlPart>,
+      pkg: typeof sourcePackage,
+      partName: string,
+    ): ScannedXmlPart => {
+      const hit = cache.get(partName);
+      if (hit) return hit;
+      const entry = pkg.zip.entries.get(partName);
+      if (!entry) failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+      const scanned = scanXmlPart(entry.bytes);
+      cache.set(partName, scanned);
+      return scanned;
+    };
+    for (const blank of blankProofs) {
+      const src = scanOf(sourceScans, sourcePackage, blank.partName);
+      const out = scanOf(outputScans, outputPackage, blank.partName);
+      const srcSpan = src.byPath.get(blank.bindingPath);
+      const outSpan = out.byPath.get(blank.bindingPath);
+      if (!srcSpan || !outSpan) failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+      const srcBytes = src.text.slice(srcSpan.start, srcSpan.end);
+      const outBytes = out.text.slice(outSpan.start, outSpan.end);
+      if (srcBytes !== outBytes) failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+    }
   }
 
   const outputSha256 = createHash('sha256')
