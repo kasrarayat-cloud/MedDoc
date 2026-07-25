@@ -78,3 +78,30 @@ deliberately kept OUT of concept strings (standing ruling), so the segment's
 spoken form lives in the quote. Addressing only.
 
 **507 tests pass, typecheck clean.**
+
+## Stage 4 — registry + constrained proposer
+
+The vocabulary the extractor REALLY emits, from a live run (facts 6 -> 14):
+
+```
+[vocab] facts=14
+[vocab] assessment                                              n=2 numeric=0 lat={bilateral}
+[vocab] exam.vascular                                           n=2 numeric=0 lat={unknown}
+[vocab] measurement.diameter                                    n=4 numeric=4 lat={right,left}
+[vocab] measurement.reflux_time                                 n=4 numeric=4 lat={right,left}
+[vocab] test.bilateral_lower_extremity_venous_duplex_reflux_study.result  n=1 numeric=0 lat={bilateral}
+[vocab] test.name                                               n=1 numeric=0 lat={bilateral}
+```
+
+**8 numeric facts, correct laterality** — the thing that did not exist before.
+
+Registry in code (`concept-registry.ts`): fixed concepts + a closed set of
+patterns (`test.<slug>.result`, `exam.*`, `hpi.*`) + explicit synonyms. The
+proposer may now select ONLY from it; an off-registry concept is nulled and the
+mapping stays visibly `needs_confirmation`, reported at PROPOSAL time rather
+than discovered at certification as phantom missing evidence.
+
+Pinned by test: the three invented concepts that caused the outage
+(`test.venous_duplex.gsv_sfj_diameter` etc.) are **rejected**, and no registry
+concept may contain anatomy — one concept serves 26 template rows precisely
+because it does not name a vein.
