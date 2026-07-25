@@ -24,6 +24,7 @@ import {
 import type { TemplateTwinActor } from './certification-lifecycle';
 import { readTemplateTwinWorkspace } from './workspace-read';
 import { assertTemplateTwinSyntheticEvidencePhiFree } from './synthetic-evidence-gate';
+import { docxToTextWithControls } from '@/lib/note-template-parse/docx-content-controls';
 
 /** Injected entity-extraction seam — synthetic-test never imports the worker
  *  clinical pipeline. The caller (certify route / QA harness) supplies an
@@ -36,6 +37,26 @@ export interface TwinEntityExtractor {
     userId: string;
     noteTemplateId: string;
   }): Promise<{ entities: unknown; contextText: string }>;
+}
+
+/** Injected NOTE-GENERATION seam — same reason as TwinEntityExtractor: this
+ *  module never imports the worker clinical pipeline. The caller supplies an
+ *  adapter over the live constrained-fill generator (CHOICE_SLOT over the
+ *  template's enumerated options).
+ *
+ *  WHY certification needs it: the proof must exercise the SAME fill path a
+ *  real visit uses. processTemplateTwinVisit derives markerText from the
+ *  verified source and passes generatedNote, so prepareTemplateTwinFill runs
+ *  bridgeTemplateFill (the picks -> IR bridge). The synthetic test passed
+ *  neither, so it fell through to the resolver-only baseline — attesting a
+ *  path production does not take. */
+export interface TwinNoteGenerator {
+  (input: {
+    encounterText: string;
+    noteTemplateId: string;
+    practiceId: string;
+    userId: string;
+  }): Promise<string>;
 }
 
 export class TemplateTwinSyntheticTestError extends Error {
@@ -109,6 +130,10 @@ export async function runTemplateTwinSyntheticTest(input: {
   storage?: TemplateTwinArtifactStore;
   /** Injected live-L3 entity extractor (no worker import in this module). */
   extractEntities: TwinEntityExtractor;
+  /** Injected live note generator. When supplied, the proof exercises the
+   *  picks -> IR bridge exactly as a real visit does. Optional so existing
+   *  callers keep their current (resolver-only) behaviour unchanged. */
+  generateNote?: TwinNoteGenerator;
 }) {
   const row = await prisma.noteTemplate.findFirst({
     where: {
@@ -235,6 +260,20 @@ export async function runTemplateTwinSyntheticTest(input: {
     expectedSha256: compiled.sourceArtifact.sha256,
     expectedSizeBytes: compiled.sourceArtifact.sizeBytes,
   });
+  // Run the LIVE brain over the synthetic encounter, then recover the compiled
+  // {{one of}} marker form from the SAME verified source the IR came from —
+  // byte-for-byte what processTemplateTwinVisit does.
+  let generatedNote: string | undefined;
+  let markerText: string | undefined;
+  if (input.generateNote) {
+    generatedNote = await input.generateNote({
+      encounterText: input.encounterText,
+      noteTemplateId: row.id,
+      practiceId: input.actor.practiceId,
+      userId: input.actor.userId,
+    });
+    markerText = (await docxToTextWithControls(source)).text;
+  }
   const prepared = await prepareTemplateTwinFill({
     compiledVersionId: compiled.id,
     noteTemplateId: row.id,
@@ -243,6 +282,8 @@ export async function runTemplateTwinSyntheticTest(input: {
     mappings,
     facts,
     source,
+    markerText,
+    generatedNote,
     resolverModelVersion:
       process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-sonnet-4-6',
     validationNow: new Date(),
