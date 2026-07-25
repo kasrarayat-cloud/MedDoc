@@ -37,7 +37,16 @@ describe('Bump CTA threshold (regression — text_notes / dictation parity)', ()
       data: 'minimal',
       risk: 'moderate',
     },
-    perElementConfidence: { hpi: 0.9 },
+    // HpiConfidence is a per-ELEMENT object, not a scalar. Pre-existing red on
+    // main; `next build` type-checks with tsconfig include **/*.ts, so this sat
+    // one unrelated type error away from breaking the image build.
+    perElementConfidence: {
+      hpi: {
+        location: 0.9, quality: 0.9, severity: 0.9, duration: 0.9,
+        timing: 0.9, context: 0.9, modifyingFactors: 0.9,
+        associatedSignsSymptoms: 0.9,
+      },
+    },
     bumpableTo: null,
     timeFitScore: null,
     llmJudged: false,
