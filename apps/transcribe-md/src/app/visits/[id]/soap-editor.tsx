@@ -372,6 +372,7 @@ export function SoapEditor({
       <div className={c3 ? 'qm-lin-coach-grid qm-lin-coach-grid--solo' : 'qm-lin-coach-grid'}>
         {/* LEFT — v6 SOAP body (4 section blocks + bottom strip). */}
         <SoapBody
+          visitId={visitId}
           text={text}
           statusFor={statusFor}
           pulseHints={boostHints}
