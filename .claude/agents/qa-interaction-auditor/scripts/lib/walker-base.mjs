@@ -17,9 +17,64 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const TEST_EMAIL = process.env.QA_AUDITOR_EMAIL ?? 'qa-auditor@quillmd.test';
-const APP_BASE = process.env.QA_AUDITOR_APP_URL ?? 'https://app.quillmd.com';
+
+// ──────────────────────────────────────────────────────────────────────
+// Target resolution — SAFE BY DEFAULT (full-app audit 2026-07-24).
+// ----------------------------------------------------------------------
+// These defaults used to be `https://app.quillmd.com` / the prod postgres
+// container, so a single forgotten env var pointed the transactional-tier
+// walkers (which click affordances and assert DB deltas) at PRODUCTION and
+// real doctor data. That is the same failure mode `packages/db/src/db-guard.ts`
+// exists to prevent on the seeder side — "there is intentionally no force
+// flag" — and the walker fleet did not inherit the discipline.
+//
+// Now: the isolated QA stack is the default for BOTH the app and the DB, and
+// pointing at production requires an explicit, deliberate opt-in.
+// ──────────────────────────────────────────────────────────────────────
+const PROD_APP_HOSTS = new Set(['app.quillmd.com', 'pro.quillmd.com', 'admin.quillmd.com']);
+const ALLOW_PROD = process.env.QA_AUDITOR_ALLOW_PROD === 'i-know-this-hits-production';
+
+const APP_BASE = process.env.QA_AUDITOR_APP_URL ?? 'http://localhost:9020';
+// Marketing pages are public, server-rendered and write nothing, so reading
+// production there is equivalent to a normal visitor load and stays default.
 const MARKETING_BASE =
   process.env.QA_AUDITOR_MARKETING_URL ?? 'https://quillmd.com';
+
+/** Fail closed when the app target is production and the operator has not
+ *  explicitly opted in. Mirrors assertNonProdDatabase() for the HTTP side. */
+function assertNonProdAppTarget() {
+  let host;
+  try {
+    host = new URL(APP_BASE).hostname;
+  } catch {
+    throw new Error(`QA_AUDITOR_APP_URL is not a valid URL: ${APP_BASE}`);
+  }
+  if (PROD_APP_HOSTS.has(host) && !ALLOW_PROD) {
+    throw new Error(
+      `REFUSING TO RUN: QA_AUDITOR_APP_URL points at production (${host}). ` +
+        `The transactional walkers click affordances and assert DB deltas. ` +
+        `Point it at the QA stack (http://localhost:9020) or, if you really ` +
+        `mean it, set QA_AUDITOR_ALLOW_PROD=i-know-this-hits-production.`
+    );
+  }
+}
+assertNonProdAppTarget();
+
+// DB target for the snapshot/diff helpers. Previously hardcoded to the prod
+// container + prod database in three separate places, so the "zero DB writes"
+// assertions read PRODUCTION state even when driving the QA app — comparing
+// prod before/after a QA interaction, which can never be meaningful.
+const DB_CONTAINER = process.env.QA_AUDITOR_DB_CONTAINER ?? 'meddoc-qa-postgres-1';
+const DB_NAME = process.env.QA_AUDITOR_DB_NAME ?? 'meddoc_qa_test';
+const DB_USER = process.env.QA_AUDITOR_DB_USER ?? 'meddoc';
+
+if (DB_NAME === 'meddoc' && !ALLOW_PROD) {
+  throw new Error(
+    `REFUSING TO RUN: QA_AUDITOR_DB_NAME is the production database ("meddoc"). ` +
+      `Set it to a qa/test-marked database, or set ` +
+      `QA_AUDITOR_ALLOW_PROD=i-know-this-hits-production.`
+  );
+}
 
 /** Session file lives in /tmp keyed by sweepRunId so a single
  *  sweep-all.mjs run shares one session across 28 walkers. The
@@ -35,10 +90,27 @@ function sessionPath(sweepRunId = process.env.QA_SWEEP_RUN_ID ?? 'single') {
 }
 
 /** Emit one NDJSON line per event so sweep-all.mjs can fold them into
- *  the unified report without re-parsing prose output. */
+ *  the unified report without re-parsing prose output.
+ *
+ *  Fail-closed hook (full-app audit 2026-07-24): every walker builds its own
+ *  `walker-result` and none of them consulted the DB-probe outcome, so a
+ *  walker whose assertions never ran still reported `ok: true`. Rather than
+ *  patch eight walkers (and require every future one to remember), the single
+ *  choke point every walker already goes through downgrades `ok` and attaches
+ *  the probe-failure count. A probe that errored proves nothing. */
 export function emit(obj) {
+  let payload = obj;
+  if (obj && obj.event === 'walker-result' && dbErrors.length > 0) {
+    payload = {
+      ...obj,
+      ok: false,
+      dbProbeErrors: dbErrors.length,
+      dbProbeErrorNote:
+        'DB probe(s) failed — zero-write / side-effect assertions did not run',
+    };
+  }
   process.stdout.write(
-    JSON.stringify({ ts: new Date().toISOString(), ...obj }) + '\n'
+    JSON.stringify({ ts: new Date().toISOString(), ...payload }) + '\n'
   );
 }
 
@@ -60,18 +132,59 @@ export function readSeededIds() {
   }
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// DB probe plumbing — FAILS LOUDLY (full-app audit 2026-07-24).
+// ----------------------------------------------------------------------
+// Every DB helper below used to be `try { … } catch { return null }`. A
+// malformed query therefore produced the same result as "nothing changed",
+// so the zero-write / expected-side-effect assertions that define the
+// transactional walker tier silently stopped running. The 2026-07-24 sweep
+// reported 30/30 walkers OK while emitting 14 Postgres errors — unquoted
+// camelCase identifiers ("updatedat"/"userid" do not exist) and a doubled
+// LIMIT. Errors are now collected and surfaced so the walker can fail.
+// ──────────────────────────────────────────────────────────────────────
+const dbErrors = [];
+
+/** Errors recorded by the DB probes since the last reset. A non-empty list
+ *  MUST fail the walker — a probe that errored proves nothing. */
+export function getDbErrors() {
+  return [...dbErrors];
+}
+export function resetDbErrors() {
+  dbErrors.length = 0;
+}
+
+/** Run one SQL statement against the resolved (non-prod by default) DB.
+ *  Returns trimmed stdout, or null after recording the failure. */
+function psql(sql, context) {
+  try {
+    return execSync(
+      `docker exec ${DB_CONTAINER} psql -U ${DB_USER} -d ${DB_NAME} -tA -c ${JSON.stringify(sql)}`,
+      { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] }
+    ).trim();
+  } catch (err) {
+    const stderr = (err && err.stderr ? String(err.stderr) : String(err && err.message)).trim();
+    const record = { context, sql, error: stderr.slice(0, 400) };
+    dbErrors.push(record);
+    // Emit on the NDJSON stream so the failure reaches the report even when a
+    // walker forgets to check getDbErrors(). sweep-all.mjs fails any walker
+    // that emits one of these — a probe that errored proves nothing, and
+    // "silently proves nothing" is exactly the bug this replaces.
+    emit({ event: 'db-probe-error', ...record });
+    return null;
+  }
+}
+
 /** Pull the visit's current mutable state for diffing. */
 export function snapshotVisit(visitId, label) {
   if (!visitId) return null;
-  try {
-    return execSync(
-      `docker exec meddoc-pro-postgres-1 psql -U meddoc -d meddoc -tA -c \
-"SELECT row_to_json(t) FROM (SELECT id, status::text, \\\"signedAt\\\"::text, LENGTH(COALESCE(\\\"soapDraft\\\",'')) AS sd, LENGTH(COALESCE(\\\"soapFinal\\\",'')) AS sf, \\\"cptCodes\\\"::text AS cpt, \\\"updatedAt\\\"::text AS updated FROM transcribe_visits WHERE id='${visitId}') t;"`,
-      { encoding: 'utf-8' }
-    ).trim();
-  } catch {
-    return null;
-  }
+  return psql(
+    `SELECT row_to_json(t) FROM (SELECT id, status::text, "signedAt"::text, ` +
+      `LENGTH(COALESCE("soapDraft",'')) AS sd, LENGTH(COALESCE("soapFinal",'')) AS sf, ` +
+      `"cptCodes"::text AS cpt, "updatedAt"::text AS updated ` +
+      `FROM transcribe_visits WHERE id='${visitId}') t;`,
+    `snapshotVisit:${label ?? visitId}`
+  );
 }
 
 /** Count audit rows for a visit since the last 10 minutes — used to
@@ -80,16 +193,13 @@ export function snapshotVisit(visitId, label) {
  *  Prisma's camel-case `createdAt`. Don't quote it. */
 export function snapshotAuditCount(visitId) {
   if (!visitId) return 0;
-  try {
-    const out = execSync(
-      `docker exec meddoc-pro-postgres-1 psql -U meddoc -d meddoc -tA -c \
-"SELECT COUNT(*) FROM audit_logs WHERE \\\"targetId\\\"='${visitId}' AND timestamp > NOW() - INTERVAL '10 minutes';"`,
-      { encoding: 'utf-8' }
-    );
-    return parseInt(out.trim(), 10) || 0;
-  } catch {
-    return 0;
-  }
+  const out = psql(
+    `SELECT COUNT(*) FROM audit_logs WHERE "targetId"='${visitId}' ` +
+      `AND timestamp > NOW() - INTERVAL '10 minutes';`,
+    `snapshotAuditCount:${visitId}`
+  );
+  if (out === null) return 0; // failure already recorded in dbErrors
+  return parseInt(out, 10) || 0;
 }
 
 /** Settled-count variant of `snapshotAuditCount` — closes F-15 from the
@@ -491,16 +601,18 @@ export function snapshotTables(spec) {
   // spec: Array<{ table: string, where: string }>
   const out = {};
   for (const entry of spec) {
-    try {
-      const json = execSync(
-        `docker exec meddoc-pro-postgres-1 psql -U meddoc -d meddoc -tA -c \
-"SELECT row_to_json(t) FROM (SELECT * FROM ${entry.table} WHERE ${entry.where} LIMIT 1) t;"`,
-        { encoding: 'utf-8' }
-      ).trim();
-      out[entry.table] = json || null;
-    } catch {
-      out[entry.table] = null;
-    }
+    // Callers legitimately pass an ordered/limited predicate such as
+    // `TRUE ORDER BY "updatedAt" DESC LIMIT 5`. Blindly appending our own
+    // LIMIT produced `… LIMIT 5 LIMIT 1` → `syntax error at or near "LIMIT"`,
+    // which the old bare catch swallowed. Only add the guard LIMIT when the
+    // caller has not already bounded the query.
+    const hasLimit = /\blimit\b/i.test(entry.where);
+    const json = psql(
+      `SELECT row_to_json(t) FROM (SELECT * FROM ${entry.table} WHERE ${entry.where}` +
+        `${hasLimit ? '' : ' LIMIT 1'}) t;`,
+      `snapshotTables:${entry.table}`
+    );
+    out[entry.table] = json || null;
   }
   return out;
 }
