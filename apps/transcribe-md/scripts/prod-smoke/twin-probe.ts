@@ -30,6 +30,9 @@ async function main() {
   });
   if (!user) throw new Error('no QA user found on this database');
   console.log(`[twin] actor: ${user.email}`);
+  // The twin actor carries userEmail as well as the ids — it lands in the
+  // TEMPLATE_TWIN_* audit rows, which is why it is required rather than derived.
+  const actor = { userId: user.id, userEmail: user.email, practiceId: user.practiceId };
 
   const { createTemplateTwinDraft } = await import('@/lib/template-twin/create-draft');
 
@@ -37,7 +40,7 @@ async function main() {
   try {
     const created = await createTemplateTwinDraft({
       source: bytes,
-      actor: { userId: user.id, practiceId: user.practiceId },
+      actor,
     });
     noteTemplateId = created.noteTemplateId;
     console.log(`[twin] STAGE 1 createTemplateTwinDraft: OK noteTemplateId=${noteTemplateId}`);
