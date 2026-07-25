@@ -461,8 +461,14 @@ export function TemplateReviewEditor({
         </span>
       </label>
 
-      {/* Sticky action bar */}
+      {/* Sticky action bar.
+          `qm-tpl-actionbar` lifts it above the fixed mobile bottom nav
+          (`.qm-c3-mobilenav`, position:fixed, z-index:40) below 980px — without
+          it the nav paints over this bar and "Save & activate" is literally
+          unclickable on a phone. Same treatment `.qm-c3-rev2-signbar` already
+          gets on the review screen. See globals.css. */}
       <div
+        className="qm-tpl-actionbar"
         style={{
           position: 'sticky',
           bottom: 0,
