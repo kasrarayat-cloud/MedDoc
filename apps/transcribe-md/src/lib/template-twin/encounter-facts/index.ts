@@ -28,6 +28,18 @@ export interface FactSnapshot extends EvidenceSnapshot {
 
 export interface EncounterEntitySnapshot {
   chief_complaint?: (EvidenceSnapshot & { statement: string }) | null;
+  /** Structured measurements (L3, additive). Optional so a SOAP snapshot and
+   *  every existing caller stay valid. */
+  measurements?: Array<{
+    segment: string;
+    laterality: 'left' | 'right' | 'bilateral' | 'not_applicable' | 'unknown';
+    metric: 'diameter' | 'reflux_time' | 'velocity' | 'length' | 'depth';
+    value: number;
+    unit: string;
+    sourceSpan: string;
+    speaker?: string;
+    timestamp?: number;
+  }> | null;
   hpi?: (EvidenceSnapshot & {
     onset?: string;
     duration?: string;
@@ -101,6 +113,15 @@ interface AddFactOptions {
   defaultTemporality: EncounterFact['temporality'];
   experiencer?: EncounterFact['experiencer'];
   conflicting?: boolean;
+  /** Structured overrides for measurement facts. Prose paths leave these unset
+   *  and keep the inferred values, so every existing fact is byte-identical. */
+  laterality?: EncounterFact['laterality'];
+  number?: number;
+  unit?: string;
+  /** Anatomical segment, carried as DATA so downstream addressing never has to
+   *  parse it back out of a concept string. Folded into the concept for
+   *  matching; the raw text stays in the evidence quote. */
+  segment?: string;
 }
 
 const HPI_FIELDS = [
@@ -212,6 +233,51 @@ function nthExactOffset(
  * Project all supported Layer-3 entity categories. Facts remain ordered by the
  * source schema so manifests and tests are deterministic.
  */
+
+/**
+ * UNIT NORMALIZATION — lives here, not in the extractor.
+ *
+ * L3 records the value and unit EXACTLY as spoken ("0.62 centimeters",
+ * "1800 milliseconds") and does no arithmetic: asking a language model to
+ * convert is asking it to be a calculator, and a number that changes on the way
+ * into a chart is the one defect this pipeline may never ship.
+ *
+ * Conversion is therefore deterministic code, in one place, with the canonical
+ * unit chosen to match what the templates actually ask for:
+ *   * lengths  -> mm      (0.62 cm  -> 6.2 mm)
+ *   * durations-> seconds (1800 ms  -> 1.8 seconds)
+ * The ORIGINAL value and unit stay in the fact's evidence quote, so the
+ * conversion is always auditable against what was said.
+ */
+const LENGTH_TO_MM: Record<string, number> = {
+  mm: 1, millimeter: 1, millimeters: 1, millimetre: 1, millimetres: 1,
+  cm: 10, centimeter: 10, centimeters: 10, centimetre: 10, centimetres: 10,
+};
+const DURATION_TO_SECONDS: Record<string, number> = {
+  s: 1, sec: 1, secs: 1, second: 1, seconds: 1,
+  ms: 0.001, millisecond: 0.001, milliseconds: 0.001,
+};
+
+export function normalizeMeasurement(
+  value: number,
+  unit: string,
+): { value: number; unit: string } {
+  const u = unit.trim().toLowerCase().replace(/\./g, '');
+  const lengthFactor = LENGTH_TO_MM[u];
+  if (lengthFactor !== undefined) {
+    // Round to 6dp to kill float noise (0.62 * 10 = 6.199999999999999).
+    return { value: Number((value * lengthFactor).toFixed(6)), unit: 'mm' };
+  }
+  const durationFactor = DURATION_TO_SECONDS[u];
+  if (durationFactor !== undefined) {
+    return { value: Number((value * durationFactor).toFixed(6)), unit: 'seconds' };
+  }
+  // Unknown unit: pass through untouched rather than guess. The fact still
+  // carries the spoken unit and the matcher compares numbers, so an
+  // unrecognised unit degrades to "no match", never to a wrong number.
+  return { value, unit: unit.trim() };
+}
+
 export function projectEncounterFacts(input: ProjectEncounterFactsInput): EncounterFact[] {
   const facts: EncounterFact[] = [];
   const quoteOccurrences = new Map<string, number>();
@@ -263,6 +329,11 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
       path: options.path,
       concept: options.concept,
       value: options.value,
+      segment: options.segment ?? null,
+      // Laterality is IDENTITY-BEARING for a measurement: the same 7 mm on the
+      // right and the left are two different clinical facts, and collapsing
+      // them to one id would let a right-leg value satisfy a left-leg row.
+      laterality: options.laterality ?? null,
       quote,
       occurrence,
     });
@@ -287,9 +358,9 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
           options.defaultTemporality,
         ),
         experiencer: options.experiencer ?? 'patient',
-        laterality: inferLaterality(options.value, quote),
-        number: numberAndUnit.number,
-        unit: numberAndUnit.unit,
+        laterality: options.laterality ?? inferLaterality(options.value, quote),
+        number: options.number ?? numberAndUnit.number,
+        unit: options.unit ?? numberAndUnit.unit,
         speaker: options.evidence.speaker?.slice(0, 80) ?? null,
         sourceTranscriptOffsets: offsets,
         audioTimestampSeconds:
@@ -484,6 +555,35 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
       value: item.item,
       evidence: item,
       defaultTemporality: 'planned',
+    });
+  }
+
+  // ── STRUCTURED MEASUREMENTS -> numeric EncounterFacts ────────────────────
+  // These are what matchMeasurementFact needs and could never previously get:
+  // a real number, a real laterality, and a traceable anchor. The matcher and
+  // its requirements are untouched — they are simply satisfiable now.
+  for (const m of entities.measurements ?? []) {
+    if (!m || typeof m.value !== 'number' || !Number.isFinite(m.value)) continue;
+    const norm = normalizeMeasurement(m.value, m.unit);
+    add({
+      // Concept is the measurement KIND plus the segment as an attribute-style
+      // suffix — anatomy stays structured data in the fact (laterality, span),
+      // never invented into a per-field concept string.
+      path: `measurements.${m.metric}`,
+      concept: `measurement.${m.metric}`,
+      value: norm.value,
+      evidence: {
+        evidence_quote: m.sourceSpan,
+        speaker: m.speaker,
+        timestamp: m.timestamp,
+      },
+      defaultTemporality: 'current',
+      laterality: m.laterality,
+      number: norm.value,
+      unit: norm.unit,
+      // The segment travels with the fact so downstream addressing can align
+      // it to a template row without parsing it back out of prose.
+      segment: m.segment,
     });
   }
 
