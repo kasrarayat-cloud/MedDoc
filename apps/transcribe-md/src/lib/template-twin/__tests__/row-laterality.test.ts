@@ -129,15 +129,23 @@ describe('one rule, both callers', () => {
     expect(rowLateralityVerdict({ laterality: 'bilateral' }, 'unknown')).toBe('ok');
   });
 
-  it('the resolver actually calls it — on table cells, before any candidate is used', () => {
+  it('the resolver does not address fixed-grid rows at all — the bridge does', () => {
+    // The first attempt at this bug added the same laterality filter to the
+    // resolver. That was still wrong: the resolver has no row information
+    // beyond the leg, and in a 26-row grid every reflux cell shares ONE
+    // concept, so it could tell right from left and still not tell the SFJ row
+    // from the knee row. It guessed, and 33 cells came back
+    // needs_clinician_input about an encounter that had said nothing about
+    // them. Row addressing belongs to the bridge, which matches by vein label
+    // and then requires the fact to satisfy laterality AND segment.
     const { readFileSync } = require('node:fs') as typeof import('node:fs');
     const { join } = require('node:path') as typeof import('node:path');
     const src = readFileSync(join(__dirname, '..', 'resolver', 'index.ts'), 'utf-8');
-    expect(src, 'the resolver baseline does not enforce row laterality').toContain(
-      'rowLateralityVerdict(fact, rowLaterality)',
+    expect(src, 'the resolver still resolves fixed-grid cells from raw facts').toContain(
+      "if (field.rendererBinding.bindingType === 'table_cell' && !field.rowPrototype)",
     );
-    // And the filtered set is what everything downstream consumes — filtering
-    // into a variable nobody reads would pass a naive grep.
-    expect(src).toMatch(/\?\s*rowCongruent\s*\n?\s*:\s*rowCongruent\.filter/);
+    // A repeating-row prototype must NOT be caught by that rule — it expands one
+    // row per fact, so there is nothing to address.
+    expect(src).toContain('!field.rowPrototype');
   });
 });

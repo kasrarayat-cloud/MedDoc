@@ -357,6 +357,20 @@ export async function runTemplateTwinSyntheticTest(input: {
           noteTemplateId: row.id,
         });
   const extractionReused = pinnedEntities != null && pinnedContextText != null;
+  if (!extractionReused) {
+    // Pin it NOW, not only when a note is generated. A run that adopts an older
+    // note pin skips generation entirely, and pinning only there left the
+    // extraction unpinned forever — the run after it extracted fresh again and
+    // certification stayed non-reproducible.
+    await prisma.templateTwinCompiledVersion.update({
+      where: { id: compiled.id },
+      data: {
+        pinnedSyntheticEntities: asJson(extracted.entities),
+        pinnedSyntheticContextText: extracted.contextText,
+        pinnedNoteEncounterSha256: encounterSha256,
+      },
+    });
+  }
   console.info(
     `[template-twin:pin] EXTRACTION ${extractionReused ? 'REUSED' : 'FRESH'} ` +
       `compiled=${compiled.id} encounterSha=${encounterSha256.slice(0, 12)}`,
