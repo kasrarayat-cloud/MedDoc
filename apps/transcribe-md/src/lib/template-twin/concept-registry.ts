@@ -132,6 +132,35 @@ const MANUAL_LABEL_PATTERNS: ReadonlyArray<RegExp> = [
   /^address\b/i,                 // context_default in waiting
 ];
 
+/**
+ * Labels whose CONCEPT the compiler decides rather than the model — the same
+ * doctrine already applied to `expectedDataType` and `sourceType`: the
+ * document's own label is stronger evidence than a guess, and a mapping that
+ * does not depend on a sampling decision is what makes certification
+ * reproducible.
+ *
+ * The one entry so far is the study-identity class. "SIDE OF EXAM" reads like
+ * laterality but its options are PROTOCOL strings — "Bilateral Detailed",
+ * "Unilateral - Right Leg Limited; Left Leg Screening". The extractor names the
+ * study under `test.name` and nothing else can support those options, yet the
+ * model proposed a fresh concept for it on every run, which nulled the field and
+ * blocked certification. With the concept pinned, the field fills only when the
+ * doctor actually states the protocol; a dictation that says merely "bilateral
+ * lower extremity venous duplex" does not entail "Bilateral Detailed", so the
+ * field stays honestly blank.
+ */
+const CONCEPT_LABEL_OVERRIDES: ReadonlyArray<readonly [RegExp, string]> = [
+  [/^\s*(side of exam|exam type|type of (exam|study)|study type)\b/i, 'test.name'],
+];
+
+/** The compiler's concept for this label, or null to let the model propose. */
+export function conceptOverrideFor(originalLabel: string): string | null {
+  for (const [pattern, concept] of CONCEPT_LABEL_OVERRIDES) {
+    if (pattern.test(originalLabel)) return concept;
+  }
+  return null;
+}
+
 export type MappingSourceType =
   | 'extraction'
   | 'context_default'

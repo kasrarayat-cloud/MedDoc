@@ -151,6 +151,11 @@ function fieldCreateInput(
       required: field.required,
       mapping: {
         create: {
+          // The classification is decided at PROPOSAL time from the compiler's
+          // own label. If it is not written here the row defaults to
+          // 'extraction', and a field nobody dictates looks like a field the
+          // extractor simply failed on — which blocks certification forever.
+          sourceType: mapping.sourceType,
           clinicalConcept: mapping.clinicalConcept,
           expectedDataType: mapping.expectedDataType,
           polarityBehavior: mapping.polarityBehavior,
