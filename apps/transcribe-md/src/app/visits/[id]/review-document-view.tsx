@@ -36,7 +36,9 @@ import { toast } from 'sonner';
 import { adoptSuggestionAction, dismissSuggestionAction } from '@/actions/suggestion-actions';
 import { parseNoteSections, type NoteSection } from '@/lib/parse-note-sections';
 import {
+  emChangeEq,
   normalizeSectionLabel as norm,
+  sectionLabelForClaim,
   suggestionReasonLabel as reasonLabel,
 } from '@/lib/suggestion-labels';
 import { SignAndSendModal } from './sign-and-send-modal';
@@ -108,8 +110,14 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
   // on saying "Level confirmed" for a level the doctor never saw — the exact
   // silent-flip regression prod-smoke #311 closed. Same derived-state-during-
   // render pattern the claims list uses above.
+  //
+  // Compared by VALUE, not identity. The parent re-sets this state after EVERY
+  // adopt (the action returns the current pending record either way), so an
+  // identity check would silently un-confirm the level each time the doctor
+  // accepted an unrelated suggestion — confirm/re-confirm churn on a clinical
+  // gate. Only a real change to the codes should re-arm the card.
   const [prevEm, setPrevEm] = useState(props.emPendingChange);
-  if (prevEm !== props.emPendingChange) {
+  if (!emChangeEq(prevEm, props.emPendingChange)) {
     setPrevEm(props.emPendingChange);
     setEmConfirmed(false);
   }
@@ -132,8 +140,10 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
     const labels = new Set(sections.map((s) => norm(s.label)));
     const placed = new Set<number>();
     claims.forEach((c, i) => {
-      const key = norm(c.section);
-      if (!labels.has(key)) return;
+      // Resolves a `###` sub-heading to the top-level section that owns it —
+      // the section the adopt action will actually append into.
+      const key = sectionLabelForClaim(c.section, sections);
+      if (!key || !labels.has(key)) return;
       const list = byLabel.get(key) ?? [];
       list.push(i);
       byLabel.set(key, list);
@@ -154,21 +164,28 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
     setSeen((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
   }, []);
 
-  /** The observer is created LAZILY, here, rather than in an effect.
+  /** The observer is created LAZILY, here, rather than in an effect. Ref
+   *  callbacks fire during commit, before effects run — an observer built in
+   *  useEffect did not exist yet when the cards attached, so nothing was ever
+   *  observed and the bar could never unlock.
    *
-   *  Ref callbacks fire during commit, before effects run — so an observer
-   *  built in useEffect did not exist yet when the cards attached, nothing was
-   *  ever observed, and the bar could never unlock. It failed safe (bulk-accept
-   *  simply never appeared) which is exactly why it survived a read-through:
-   *  the broken state and the correct initial state look identical. */
+   *  WHAT IS OBSERVED IS A SENTINEL AT THE CARD'S BOTTOM EDGE, not the card.
+   *  Inferring "fully read" from intersectionRatio cannot work: the observer
+   *  only reports when the crossed-threshold BUCKET changes, so a card 5%
+   *  taller than the viewport tops out at a reported ratio of 0.75 and never
+   *  satisfies any "seen" test — the gate would stay locked forever, with no
+   *  error, for exactly the card size a long suggestion on a phone produces.
+   *  Scrolling the BOTTOM of the card into view is the semantics we actually
+   *  mean, and it is height-independent. */
   const attachSuggestion = useCallback(
     (el: HTMLElement | null) => {
       if (!el) return;
+      const key = el.dataset.suggestionKey;
+      if (!key) return;
       if (typeof IntersectionObserver === 'undefined') {
         // No observer (jsdom, very old browsers): do not hold the doctor
         // hostage to a capability the browser lacks.
-        const key = el.dataset.suggestionKey;
-        if (key) markSeen(key);
+        markSeen(key);
         return;
       }
       if (!observerRef.current) {
@@ -176,29 +193,13 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
           (entries) => {
             for (const e of entries) {
               if (!e.isIntersecting) continue;
-              const el = e.target as HTMLElement;
-              const fullyVisible = e.intersectionRatio >= 0.999;
-              // A card taller than the viewport counts as read once it fills
-              // the viewport — there is no ratio at which it can do better.
-              const tallerThanViewport =
-                e.boundingClientRect.height > e.rootBounds!.height * 0.9;
-              const fillsViewport =
-                tallerThanViewport &&
-                e.intersectionRect.height >= e.rootBounds!.height * 0.85;
-              if (!fullyVisible && !fillsViewport) continue;
-              const key = el.dataset.suggestionKey;
-              if (key) markSeen(key);
+              const k = (e.target as HTMLElement).dataset.suggestionKey;
+              if (k) markSeen(k);
             }
           },
-          // "Fully read" = the whole card has been on screen. threshold:1
-          // alone cannot express that: a card TALLER than the viewport never
-          // reaches ratio 1, so the gate would never unlock — the same
-          // fails-closed-and-looks-normal trap as the observer lifecycle bug.
-          // So: ratio 1 when it fits, or the card covering the viewport when it
-          // does not.
-          {
-            threshold: [0, 0.25, 0.5, 0.75, 1],
-          },
+          // The sentinel is a zero-height element; any intersection at all
+          // means its edge has entered the viewport.
+          { threshold: 0 },
         );
       }
       observerRef.current.observe(el);
@@ -243,6 +244,7 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
         if (res.emPendingChange) {
           toast.warning('Documentation level changed', {
             description: `Now supports ${res.emPendingChange.to} — confirm before signing.`,
+            duration: 8_000,
           });
         }
       }
@@ -290,6 +292,7 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
       if (last?.emPendingChange) {
         toast.warning('Documentation level changed', {
           description: `Now supports ${last.emPendingChange.to} — confirm before signing.`,
+          duration: 8_000,
         });
       }
       router.refresh();
@@ -308,13 +311,12 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
     const key = claimKey(c);
     return (
       <div
-        key={key}
-        ref={attachSuggestion}
-        data-suggestion-key={key}
+        key={`${i}::${key}`}
         data-testid="review-doc-suggestion"
         className="qm-rdoc-sugg"
       >
         <p className="qm-rdoc-sugg-text">{c.text}</p>
+        {/* The bottom-edge sentinel: reaching it IS having read the card. */}
         <div className="qm-rdoc-sugg-foot">
           <span className="qm-rdoc-sugg-tag">
             <Sparkles className="h-3 w-3" aria-hidden /> suggested — {reasonLabel(c.reason)}
@@ -339,6 +341,12 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
             </button>
           </span>
         </div>
+        <span
+          ref={attachSuggestion}
+          data-suggestion-key={key}
+          aria-hidden
+          className="qm-rdoc-sugg-end"
+        />
       </div>
     );
   };

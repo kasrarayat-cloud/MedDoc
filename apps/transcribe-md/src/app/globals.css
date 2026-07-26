@@ -6780,3 +6780,13 @@ body {
     flex: 0 0 auto;
   }
 }
+
+/* The read-sentinel: a zero-height marker at the bottom edge of a suggestion.
+   Reaching it IS having read the card, which is height-independent — unlike
+   inferring "read" from an intersection ratio, which cannot be satisfied at all
+   by a card taller than the viewport. */
+.qm-rdoc-sugg-end {
+  display: block;
+  height: 0;
+  width: 100%;
+}
