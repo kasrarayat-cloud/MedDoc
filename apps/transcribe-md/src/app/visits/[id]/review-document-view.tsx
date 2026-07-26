@@ -155,33 +155,48 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
   // threshold:1 means the whole card, not a sliver of it; once seen, a card
   // stays seen (scrolling back up must not re-lock the bar).
   const [seen, setSeen] = useState<Set<string>>(new Set());
-  const seenRef = useRef(seen);
-  seenRef.current = seen;
   const observerRef = useRef<IntersectionObserver | null>(null);
 
   const markSeen = useCallback((key: string) => {
     setSeen((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
   }, []);
 
-  useEffect(() => {
-    if (typeof IntersectionObserver === 'undefined') return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) {
-          if (!e.isIntersecting) continue;
-          const key = (e.target as HTMLElement).dataset.suggestionKey;
-          if (key) markSeen(key);
-        }
-      },
-      { threshold: 1 },
-    );
-    observerRef.current = io;
-    return () => io.disconnect();
-  }, [markSeen]);
+  /** The observer is created LAZILY, here, rather than in an effect.
+   *
+   *  Ref callbacks fire during commit, before effects run — so an observer
+   *  built in useEffect did not exist yet when the cards attached, nothing was
+   *  ever observed, and the bar could never unlock. It failed safe (bulk-accept
+   *  simply never appeared) which is exactly why it survived a read-through:
+   *  the broken state and the correct initial state look identical. */
+  const attachSuggestion = useCallback(
+    (el: HTMLElement | null) => {
+      if (!el) return;
+      if (typeof IntersectionObserver === 'undefined') {
+        // No observer (jsdom, very old browsers): do not hold the doctor
+        // hostage to a capability the browser lacks.
+        const key = el.dataset.suggestionKey;
+        if (key) markSeen(key);
+        return;
+      }
+      if (!observerRef.current) {
+        observerRef.current = new IntersectionObserver(
+          (entries) => {
+            for (const e of entries) {
+              if (!e.isIntersecting) continue;
+              const key = (e.target as HTMLElement).dataset.suggestionKey;
+              if (key) markSeen(key);
+            }
+          },
+          // threshold 1 = the WHOLE card, not a sliver of it.
+          { threshold: 1 },
+        );
+      }
+      observerRef.current.observe(el);
+    },
+    [markSeen],
+  );
 
-  const attachSuggestion = useCallback((el: HTMLElement | null) => {
-    if (el && observerRef.current) observerRef.current.observe(el);
-  }, []);
+  useEffect(() => () => observerRef.current?.disconnect(), []);
 
   const claimKey = (c: SuggestedClaimView, i: number) => `${i}:${c.text.slice(0, 40)}`;
   const allSeen = claims.every((c, i) => seen.has(claimKey(c, i)));
