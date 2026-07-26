@@ -6756,3 +6756,27 @@ body {
   .qm-rdoc-bulk { font-size: 12px; padding: 8px 10px; }
   .qm-rdoc-page { padding: 14px 12px 18px; }
 }
+
+/* ── RIDER: the section header stops colliding at phone width ─────────────
+   `.qm-lin-soap-section-head` is space-between with a `white-space: nowrap`
+   pulse on the right. At 390px the eyebrow + label + REVIEWED pill and the
+   "GAP TO NEXT TIER" hint do not both fit, and nowrap turns that into an
+   overlap — the pill renders on top of the hint. Pre-existing on the tabbed
+   surface too; fixed here for both, because a doctor reading a note on a phone
+   should not have to decode two overlapping labels.
+
+   CSS-only and layout-only: the hint drops to its own line instead of being
+   painted over. Nothing above 560px changes. */
+@media (max-width: 560px) {
+  .qm-lin-soap-section-v6 .qm-lin-soap-section-head {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+  .qm-lin-soap-section-v6 .qm-lin-soap-section-head-left {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .qm-lin-soap-section-v6 .qm-lin-soap-section-pulse {
+    flex: 0 0 auto;
+  }
+}
