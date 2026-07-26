@@ -35,6 +35,10 @@ import { toast } from 'sonner';
 
 import { adoptSuggestionAction, dismissSuggestionAction } from '@/actions/suggestion-actions';
 import { parseNoteSections, type NoteSection } from '@/lib/parse-note-sections';
+import {
+  normalizeSectionLabel as norm,
+  suggestionReasonLabel as reasonLabel,
+} from '@/lib/suggestion-labels';
 import { SignAndSendModal } from './sign-and-send-modal';
 import type { SuggestedClaimView } from './suggestions-lane';
 
@@ -78,33 +82,10 @@ export interface ReviewDocumentViewProps {
   }) => void;
 }
 
-/** DemotionReason → human chip. Same vocabulary the lane uses; an unknown
- *  reason falls back rather than printing a raw enum at a clinician. */
-const REASON_LABELS: Record<string, string> = {
-  model_suggested: 'not stated',
-  no_anchor: 'not stated',
-  anchor_not_in_transcript: 'quote not in transcript',
-  anchor_overlaps_unclear: 'unclear audio',
-  digits_unsupported: 'numbers not supported',
-  negation_mismatch: 'negation mismatch',
-  gloss_unsupported: 'explanation not in transcript',
-  process_assertion_unsupported: 'reasoning not stated',
-  form_route_unsupported: 'form/route not stated',
-  not_entailed: "couldn't verify",
-  verifier_failed: "couldn't verify",
-};
-const reasonLabel = (r: string) => REASON_LABELS[r] ?? "couldn't verify";
-
-/** Match a claim to the section it belongs under. The claim carries the
- *  heading text the adopt action will append it to, so equality on the
- *  normalised label is the same join the server makes. Claims whose section
- *  has no matching heading fall to the end of the document rather than
- *  vanishing — an unplaceable suggestion is still a suggestion. */
-const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
-
 export function ReviewDocumentView(props: ReviewDocumentViewProps) {
   const router = useRouter();
   const dictationPanelId = useId();
+  const summaryPanelId = useId();
 
   const [claims, setClaims] = useState<SuggestedClaimView[]>(props.claims);
   const [busy, setBusy] = useState<number | 'bulk' | null>(null);
@@ -119,6 +100,18 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
   if (prevClaims !== props.claims) {
     setPrevClaims(props.claims);
     setClaims(props.claims);
+  }
+
+  // BLOCK fix. `emConfirmed` is a local acknowledgement of a value the SERVER
+  // recomputes: adopting another suggestion can move the level again (see
+  // suggestion-actions' mergeEmPendingChange). Left latched, the card would go
+  // on saying "Level confirmed" for a level the doctor never saw — the exact
+  // silent-flip regression prod-smoke #311 closed. Same derived-state-during-
+  // render pattern the claims list uses above.
+  const [prevEm, setPrevEm] = useState(props.emPendingChange);
+  if (prevEm !== props.emPendingChange) {
+    setPrevEm(props.emPendingChange);
+    setEmConfirmed(false);
   }
 
   const sections = useMemo(() => parseNoteSections(props.soapFinal), [props.soapFinal]);
@@ -183,12 +176,29 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
           (entries) => {
             for (const e of entries) {
               if (!e.isIntersecting) continue;
-              const key = (e.target as HTMLElement).dataset.suggestionKey;
+              const el = e.target as HTMLElement;
+              const fullyVisible = e.intersectionRatio >= 0.999;
+              // A card taller than the viewport counts as read once it fills
+              // the viewport — there is no ratio at which it can do better.
+              const tallerThanViewport =
+                e.boundingClientRect.height > e.rootBounds!.height * 0.9;
+              const fillsViewport =
+                tallerThanViewport &&
+                e.intersectionRect.height >= e.rootBounds!.height * 0.85;
+              if (!fullyVisible && !fillsViewport) continue;
+              const key = el.dataset.suggestionKey;
               if (key) markSeen(key);
             }
           },
-          // threshold 1 = the WHOLE card, not a sliver of it.
-          { threshold: 1 },
+          // "Fully read" = the whole card has been on screen. threshold:1
+          // alone cannot express that: a card TALLER than the viewport never
+          // reaches ratio 1, so the gate would never unlock — the same
+          // fails-closed-and-looks-normal trap as the observer lifecycle bug.
+          // So: ratio 1 when it fits, or the card covering the viewport when it
+          // does not.
+          {
+            threshold: [0, 0.25, 0.5, 0.75, 1],
+          },
         );
       }
       observerRef.current.observe(el);
@@ -198,8 +208,13 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
 
   useEffect(() => () => observerRef.current?.disconnect(), []);
 
-  const claimKey = (c: SuggestedClaimView, i: number) => `${i}:${c.text.slice(0, 40)}`;
-  const allSeen = claims.every((c, i) => seen.has(claimKey(c, i)));
+  /** Content-derived, NOT index-derived. Accepting one claim renumbers the DB
+   *  array, so an index-keyed set invalidated every remaining card's "seen"
+   *  mark: the bar fell back to "scroll to review" and the bulk button vanished
+   *  even though the doctor had read everything — intermittently, because a card
+   *  still fully in view re-fired the observer and one scrolled off did not. */
+  const claimKey = (c: SuggestedClaimView) => `${c.section}::${c.text}`;
+  const allSeen = claims.every((c) => seen.has(claimKey(c)));
 
   // ── the one mechanism for adoption ───────────────────────────────────────
   async function act(index: number, kind: 'adopt' | 'dismiss') {
@@ -223,6 +238,13 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
           soapVersion: res.soapVersion,
           emPendingChange: res.emPendingChange,
         });
+        // Parity with the suggestions lane: an adoption that moves the billing
+        // level says so out loud.
+        if (res.emPendingChange) {
+          toast.warning('Documentation level changed', {
+            description: `Now supports ${res.emPendingChange.to} — confirm before signing.`,
+          });
+        }
       }
       router.refresh();
       return true;
@@ -241,6 +263,7 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
     setBusy('bulk');
     try {
       let queue = claims;
+      let last: Awaited<ReturnType<typeof adoptSuggestionAction>> | null = null;
       let guard = queue.length + 2;
       while (guard-- > 0) {
         if (queue.length === 0) break;
@@ -252,13 +275,22 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
         }
         queue = res.suggestedClaims ?? [];
         setClaims(queue);
-        if (typeof res.soapFinal === 'string' && typeof res.soapVersion === 'number') {
-          props.onAdopted({
-            soapFinal: res.soapFinal,
-            soapVersion: res.soapVersion,
-            emPendingChange: res.emPendingChange,
-          });
-        }
+        // Collected, not emitted: onAdopted bumps a key that remounts the whole
+        // SoapEditor subtree, so emitting per iteration re-parsed the note and
+        // tore down every card once per suggestion.
+        last = res;
+      }
+      if (last && typeof last.soapFinal === 'string' && typeof last.soapVersion === 'number') {
+        props.onAdopted({
+          soapFinal: last.soapFinal,
+          soapVersion: last.soapVersion,
+          emPendingChange: last.emPendingChange,
+        });
+      }
+      if (last?.emPendingChange) {
+        toast.warning('Documentation level changed', {
+          description: `Now supports ${last.emPendingChange.to} — confirm before signing.`,
+        });
       }
       router.refresh();
     } finally {
@@ -273,7 +305,7 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
   const renderSuggestion = (i: number) => {
     const c = claims[i];
     if (!c) return null;
-    const key = claimKey(c, i);
+    const key = claimKey(c);
     return (
       <div
         key={key}
@@ -390,6 +422,7 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
             type="button"
             className="qm-rdoc-meta-row qm-tap-44"
             aria-expanded={openSummary}
+            aria-controls={summaryPanelId}
             onClick={() => setOpenSummary((v) => !v)}
             data-testid="review-doc-codes-toggle"
           >
@@ -408,7 +441,7 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
             </span>
           </button>
           {openSummary && (
-            <div className="qm-rdoc-meta-body">
+            <div id={summaryPanelId} className="qm-rdoc-meta-body">
               {props.summary.icd.map((r) => (
                 <div key={r.code} className="qm-rdoc-meta-line">
                   <span className="qm-rdoc-meta-code">{r.code}</span>
