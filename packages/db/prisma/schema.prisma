@@ -342,6 +342,12 @@ enum AuditAction {
   // claims enter the note as DOCTOR-attested. Metadata: { section, reason,
   // remaining } — never claim text (PHI).
   SUGGESTION_ADOPTED
+  /// One row per chat-editor turn. Every EFFECT the chat has is already
+  /// audited by the action it dispatches into — but a SUGGESTION_ADOPTED row
+  /// written by the chat is byte-identical to one written by a button, and
+  /// "did the model do this, or did the doctor?" is the first question anyone
+  /// will ask of this feature. Metadata is counts and intent KINDS only.
+  CHAT_EDIT_TURN
   SUGGESTION_DISMISSED
 
   // E/M recompute on adoption — visible-confirm, never silent (2026-06-12,
