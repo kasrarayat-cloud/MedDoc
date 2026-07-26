@@ -32,6 +32,9 @@ import { placeholderSections } from '@/lib/parse-note-sections';
 import { ReviewTabsV2, type V2Tab } from './review-tabs-v2';
 // UX simplification pack (B) — flag-gated signed-visit document view.
 import { isUxSimplify } from '@/config/ux-simplify';
+// Pre-sign review as one document — flag-gated, UNSIGNED visits.
+import { isReviewDocView } from '@/config/review-doc-view';
+import { ReviewDocumentView } from './review-document-view';
 import { SignedDocumentView } from './signed-document-view';
 import { extractIcdRows } from '@/lib/em-coding/icd-rows';
 import { BillingCardC3 } from './billing-card-c3';
@@ -541,6 +544,92 @@ export function VisitReadyView(props: VisitReadyViewProps) {
     //    The nodes are pulled straight out of the tab list that was just built,
     //    so the note and the transcript render byte-for-byte what the tabs
     //    render. Only the container changes.
+    // 3b. PRE-SIGN REVIEW AS THE DOCUMENT — flag NEXT_PUBLIC_REVIEW_DOC_VIEW.
+    //     The other half of the linearisation, for UNSIGNED visits. The gates
+    //     are NOT moved: RxTab is handed to the document verbatim (same
+    //     override modal, same recordOverride, one button per warning), the E/M
+    //     confirmation inside SignAndSendModal stays exactly where it is and
+    //     stays the enforcement, and POST /sign is untouched. What changes is
+    //     that a blocker can no longer hide behind a tab nobody opened.
+    if (isReviewDocView() && !isSigned) {
+      const dictationNode = tabs.find((t) => t.key === 'transcript')?.node ?? null;
+      const emBlob = (props.cptCodes as { em?: CptEm } | null | undefined)?.em ?? null;
+      const displayedEm = projectDisplayedEmCode(emBlob, false);
+      const hasRxWarnings = rxWarn !== null;
+
+      return (
+        <div className="w-full qm-c3-rev2-root">
+          {/* The PIPELINE review-reason banner — not the set-aside advisory the
+              inline highlights replace. It names why the pipeline flagged the
+              visit, which nothing else on this surface says, so it stays. */}
+        {props.needsReview && props.reviewReason && !props.signedAt && (
+          <div
+            role="status"
+            data-testid="review-reason-banner"
+            className="mb-4 rounded-lg border px-4 py-3 text-[13px] leading-relaxed"
+            style={{
+              borderColor:
+                'color-mix(in srgb, var(--color-linear-amber) 35%, transparent)',
+              background:
+                'color-mix(in srgb, var(--color-linear-amber) 8%, transparent)',
+              color: 'var(--color-linear-amber)',
+            }}
+          >
+            <span className="font-medium">Review before signing — </span>
+            <span style={{ color: 'var(--color-linear-text-2)' }}>
+              {props.reviewReason}
+            </span>
+          </div>
+        )}
+          <ReviewDocumentView
+            visitId={props.visitId}
+            doctorEmail={props.doctorEmail}
+            emailEnabled={props.emailEnabled}
+            soapFinal={adoption?.text ?? props.soapText}
+            renderNote={(afterSection) => (
+              <SoapEditor
+                key={`soap-editor-${adoption?.seq ?? 0}`}
+                visitId={props.visitId}
+                doctorEmail={props.doctorEmail}
+                emailEnabled={props.emailEnabled}
+                initialText={adoption?.text ?? props.soapText}
+                initialSoapVersion={adoption?.version ?? props.soapVersion}
+                readonly={props.readonly}
+                signedAt={props.signedAt}
+                sources={soapSources}
+                initialScore={props.initialEmScore}
+                emPendingChange={pendingEmChange}
+                chromeless
+                afterSection={afterSection}
+              />
+            )}
+            claims={props.suggestedClaims ?? []}
+            rxGateNode={
+              hasRxWarnings ? (
+                <RxTab
+                  rx={props.rxDrafts}
+                  visitId={props.visitId}
+                  readonly={props.readonly}
+                  initialOverriddenIds={props.rxOverriddenWarningIds}
+                  onResolvedChange={setRxResolved}
+                />
+              ) : null
+            }
+            rxBlocking={!rxResolved}
+            emPendingChange={pendingEmChange}
+            summary={{
+              icd: extractIcdRows(props.icdCodes),
+              emCode: displayedEm,
+              emNotApplicable: !!props.emNotApplicable,
+            }}
+            dictationNode={dictationNode}
+            dictationLabel={secondTabLabel}
+            onAdopted={handleSuggestionAdopted}
+          />
+        </div>
+      );
+    }
+
     if (isUxSimplify() && isSigned) {
       const noteNode = tabs.find((t) => t.key === 'note')?.node ?? null;
       const dictationNode = tabs.find((t) => t.key === 'transcript')?.node ?? null;
