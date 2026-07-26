@@ -6834,3 +6834,60 @@ body {
   background: var(--color-linear-row-hover);
   color: var(--color-linear-text);
 }
+
+/* ── Native document preview ────────────────────────────────────────────────
+   The doctor's own page, rendered. The stage is deliberately paper-coloured
+   inside a dark app: this is the one surface that is NOT ours, and it should
+   read as a document sitting on the desk rather than another panel.
+
+   Because the stage is light, text sitting ON it cannot use the app's dark-theme
+   muted grey — that lands around 2.6:1. Notes that appear over paper get their
+   own ink colour; notes outside the stage keep the app's. */
+.qm-npv { margin: 0; }
+.qm-npv-stage {
+  background: #f4f2ee;
+  border: 1px solid var(--color-linear-border);
+  border-radius: 10px;
+  overflow: auto;
+  max-height: min(72vh, 780px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+/* A scrollable region must be reachable by keyboard (axe: scrollable-region-
+   focusable) — a multi-page form always overflows. */
+.qm-npv-stage:focus-visible {
+  outline: 2px solid var(--color-linear-sage);
+  outline-offset: 2px;
+}
+.qm-npv-pdf { display: block; padding: 8px 0; }
+/* Each page is a canvas laid out at column width — no plugin, so it draws the
+   same on a phone as on a desktop. */
+.qm-npv-page {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0 auto 10px;
+  background: #fff;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.28);
+}
+.qm-npv-docx { padding: 8px 0; }
+/* docx-preview emits its own page boxes; give them the shadow it omits. */
+.qm-npv-docx .qm-docxp-wrapper > section.qm-docxp {
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.28);
+  margin: 8px auto;
+  background: #fff;
+}
+.qm-npv-note {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--color-linear-text-3);
+}
+/* On paper, not in the app. 4.5:1+ against #f4f2ee. */
+.qm-npv-stage .qm-npv-note {
+  color: #4a4640;
+  margin: 0;
+  padding: 14px 16px;
+}
+@media (max-width: 480px) {
+  .qm-npv-stage { max-height: 58vh; }
+}

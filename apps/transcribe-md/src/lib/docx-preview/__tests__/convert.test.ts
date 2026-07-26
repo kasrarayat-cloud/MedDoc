@@ -57,17 +57,59 @@ describe('convertDocxToPdf', () => {
     expect(r.reason).toBe('empty_result');
   });
 
-  it('NOTHING clinical imports it — preview only', async () => {
-    const { readFileSync } = await import('node:fs');
+  it('NOTHING clinical reaches it — transitively, and it FAILS LOUD', async () => {
+    // The first version of this test was fail-open (`|| true`) and checked only
+    // DIRECT importers, so a clinical module importing the preview ACTION would
+    // have sailed through. Walk the closure instead, and let a broken grep fail
+    // the test rather than pass it.
     const { execSync } = await import('node:child_process');
-    const hits = execSync(
-      "grep -rl \"docx-preview/convert\" src --include=*.ts --include=*.tsx || true",
-      { encoding: 'utf8' },
-    ).trim().split('\n').filter(Boolean);
-    const forbidden = hits.filter((f) =>
-      /api\/visits\/.*\/sign|certification-lifecycle|fill-engine|validation\//.test(f),
+
+    const importersOf = (mod: string): string[] =>
+      execSync(`grep -rl "${mod}" src --include=*.ts --include=*.tsx || printf ''`, {
+        encoding: 'utf8',
+      })
+        .trim()
+        .split('\n')
+        .filter(Boolean);
+
+    // Transitive closure: the converter, then anything that reaches it.
+    const seen = new Set<string>();
+    const frontier = ['docx-preview/convert'];
+    while (frontier.length) {
+      const mod = frontier.pop() as string;
+      for (const f of importersOf(mod)) {
+        if (seen.has(f)) continue;
+        seen.add(f);
+        // Follow by module specifier (path without extension, from src/).
+        frontier.push(f.replace(/^src\//, '').replace(/\.tsx?$/, ''));
+      }
+    }
+    expect(seen.size, 'grep found nothing — the guard itself is broken').toBeGreaterThan(0);
+
+    // The paths that must never depend on a preview: certification, filling,
+    // verification, export, and signing.
+    const CLINICAL =
+      /(api\/visits\/.*\/sign|certification-lifecycle|synthetic-test|signing-gate|fill-engine|bridge-fill|native-export|artifact-compiler|validation\/|\/worker\/)/;
+    const violations = [...seen].filter((f) => CLINICAL.test(f));
+    expect(
+      violations,
+      `a clinical path now reaches the preview converter: ${violations.join(', ')}`,
+    ).toEqual([]);
+  });
+});
+
+describe('the preview action reads practiceId from the right row', () => {
+  it('selects sourceArtifact.practiceId, not a field the model lacks', async () => {
+    // TypeScript did NOT catch `practiceId` on the compiled version — the
+    // generated client has no such field, and the select still type-checked.
+    // It would have thrown at request time. Pin the shape so it cannot return.
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync('src/actions/preview-native-document.ts', 'utf8');
+    const twinSelect = src.slice(
+      src.indexOf('templateTwinCompiledVersion'),
+      src.indexOf('  if (!row)'),
     );
-    expect(forbidden, `a clinical path imports the preview converter: ${forbidden.join(', ')}`).toEqual([]);
-    void readFileSync;
+    expect(twinSelect).toContain('sourceArtifact: { select: { practiceId: true } }');
+    expect(twinSelect).not.toMatch(/^\s+practiceId: true,/m);
   });
 });
