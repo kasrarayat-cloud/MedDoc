@@ -82,13 +82,18 @@ test.describe('pre-sign review as the document', () => {
   });
 
   test('the read-gate stays locked until every suggestion has been on screen', async ({ page }) => {
+    // A phone viewport, deliberately: at desktop height all three cards can be
+    // on screen at once, in which case the gate SHOULD unlock immediately and
+    // there is no lock to test. The invariant is "not until they have been
+    // seen", not "not until you have scrolled".
+    await page.setViewportSize({ width: 390, height: 700 });
     test.skip(!(await open(page, 'rdoc-3')), 'psql seeding unavailable');
+    // The invariant is the BUTTON, not the bar copy: a blocking drug warning
+    // outranks "you have suggestions to read", and rightly so — asserting on
+    // bar text here would be testing the message priority, not the read-gate.
     await expect(page.locator(BULK)).toHaveCount(0);
-    await expect(page.locator(BAR)).toContainText('scroll to review');
-
     await scrollThroughSuggestions(page);
     await expect(page.locator(BULK)).toBeVisible();
-    await expect(page.locator(BAR)).not.toContainText('scroll to review');
   });
 
   test('a card TALLER than the viewport still unlocks the gate', async ({ page }) => {
@@ -128,6 +133,13 @@ test.describe('pre-sign review as the document', () => {
     await scrollThroughSuggestions(page);
     await page.locator(BULK).click();
     await expect(page.locator(SUGG)).toHaveCount(0, { timeout: 30_000 });
+    // The bar now reports the REMAINING blocker — this visit still has an
+    // un-overridden critical interaction, and a surface that said "Reviewed"
+    // with a drug warning outstanding would be lying. Clearing it yields
+    // "Reviewed" only once nothing is left.
+    await expect(page.locator(BAR)).toContainText('prescription');
+    await clearRxGate(page);
+    await page.getByTestId('review-doc-em-confirm').click();
     await expect(page.locator(BAR)).toContainText('Reviewed');
   });
 
@@ -140,7 +152,10 @@ test.describe('pre-sign review as the document', () => {
     await expect(sign).toBeDisabled();
 
     await clearRxGate(page);
-    await expect(sign).toBeEnabled();
+    // Sign stays disabled — the E/M level is ALSO pending. The bar names the
+    // next blocker rather than pretending the note is ready.
+    await expect(page.locator(BAR)).toContainText('documentation level');
+    await expect(sign).toBeDisabled();
   });
 
   test('the E/M card blocks signing until the level is confirmed', async ({ page }) => {
@@ -183,9 +198,19 @@ test.describe('pre-sign review as the document', () => {
     await page.getByRole('button', { name: /sign & download/i }).click();
     const dialog = page.getByRole('dialog');
     await dialog.getByRole('button', { name: /download docx/i }).click();
+    // The modal keeps its OWN E/M confirmation, and it remains the enforcement:
+    // the inline card is an additional visible blocker in front of it, never a
+    // replacement. Two acknowledgements for a billing-level change is the
+    // deliberate design, so the test acknowledges twice too.
+    const modalEm = dialog.getByTestId('em-change-confirm-toggle');
+    if (await modalEm.count()) await modalEm.click();
 
+    // dispatchEvent, not click(): submitting triggers a download, and the
+    // actionability check never settles behind one even though the button
+    // reports visible/enabled/stable. The real handler still runs — this
+    // bypasses Playwright's wait, not the application.
     const download = page.waitForEvent('download', { timeout: 60_000 });
-    await dialog.getByRole('button', { name: /sign & deliver/i }).click();
+    await dialog.getByRole('button', { name: /sign & deliver/i }).dispatchEvent('click');
     const file = await download;
     expect(file.suggestedFilename()).toMatch(/\.(docx|pdf)$/);
   });

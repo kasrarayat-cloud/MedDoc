@@ -145,6 +145,34 @@ jobs:
           MOCK_TEMPLATE_PHI_FLAG=true MOCK_RX_WARNINGS=true
           docker compose -f docker-compose.qa.yml up -d --wait transcribe-md transcribe-md-worker
 
+      # ── The pre-sign document surface. Needs the C3 skin AND the review-doc
+      #    flag baked in (both are read from CLIENT components, so a runtime env
+      #    would leave the OFF branch live with no error). Separately tagged so
+      #    the gate's own image is never overwritten. ──
+      - name: Build flag-ON image for the document surface
+        run: >
+          docker build -f apps/transcribe-md/Dockerfile
+          --build-arg NEXT_PUBLIC_REVIEW_DOC_VIEW=true
+          --build-arg NEXT_PUBLIC_SKIN_BETA=true
+          -t meddoc-pro-transcribe-md:review-doc .
+
+      - name: Recreate app on the flag-ON image
+        run: >
+          docker compose -f docker-compose.qa.yml -f docker-compose.qa.reviewdoc.yml
+          up -d --wait transcribe-md
+
+      - name: Run E2E (review-doc — the pre-sign document surface)
+        working-directory: apps/transcribe-md
+        env:
+          PW_BASE_URL: http://localhost:9020
+          CI: "true"
+        run: npx playwright test --project=review-doc
+
+      - name: Restore the fixture app image
+        run: >
+          MOCK_TEMPLATE_PHI_FLAG=true MOCK_RX_WARNINGS=true
+          docker compose -f docker-compose.qa.yml up -d --wait transcribe-md
+
       - name: Run E2E (flag-on projects — phi-reject + rx-safety)
         working-directory: apps/transcribe-md
         env:
