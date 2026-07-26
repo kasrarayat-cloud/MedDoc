@@ -123,21 +123,31 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
 
   const sections = useMemo(() => parseNoteSections(props.soapFinal), [props.soapFinal]);
 
-  // Which claims sit under which section heading. Index is preserved because
-  // the action addresses claims BY INDEX — never re-number them.
-  const claimsBySection = useMemo(() => {
-    const bySection = new Map<string, number[]>();
+  // Which claims sit under which section heading.
+  //
+  // Keyed by the NORMALISED LABEL, not by parseNoteSections' generated id. The
+  // slot's section comes from SoapBody's own parse of its own (editable) text,
+  // while this map is built from the soapFinal prop; the moment the doctor
+  // edits inline those two parses can produce different ids for the same
+  // heading, and a suggestion keyed by id would silently disappear off the
+  // page. The label is what the adopt action joins on anyway.
+  //
+  // Index is preserved because the action addresses claims BY INDEX — the
+  // entries here are positions in the DB array, never renumbered.
+  const claimsByLabel = useMemo(() => {
+    const byLabel = new Map<string, number[]>();
+    const labels = new Set(sections.map((s) => norm(s.label)));
     const placed = new Set<number>();
     claims.forEach((c, i) => {
-      const hit = sections.find((s) => norm(s.label) === norm(c.section));
-      if (!hit) return;
-      const list = bySection.get(hit.id) ?? [];
+      const key = norm(c.section);
+      if (!labels.has(key)) return;
+      const list = byLabel.get(key) ?? [];
       list.push(i);
-      bySection.set(hit.id, list);
+      byLabel.set(key, list);
       placed.add(i);
     });
     const orphans = claims.map((_, i) => i).filter((i) => !placed.has(i));
-    return { bySection, orphans };
+    return { byLabel, orphans };
   }, [claims, sections]);
 
   // ── READING IS THE REVIEW ────────────────────────────────────────────────
@@ -294,17 +304,17 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
           rendered directly beneath it, where they would land if accepted. */}
       <article className="qm-rdoc-page">
         {props.renderNote((section) => {
-          const idx = claimsBySection.bySection.get(section.id) ?? [];
+          const idx = claimsByLabel.byLabel.get(norm(section.label)) ?? [];
           if (idx.length === 0) return null;
           return <div className="qm-rdoc-sugg-group">{idx.map((i) => renderSuggestion(i))}</div>;
         })}
 
         {/* A suggestion whose section heading is not in this note still gets
             read — dropping it silently would be the one unacceptable outcome. */}
-        {claimsBySection.orphans.length > 0 && (
+        {claimsByLabel.orphans.length > 0 && (
           <div className="qm-rdoc-sugg-group qm-rdoc-orphans">
             <h3 className="qm-rdoc-orphan-h">Also suggested</h3>
-            {claimsBySection.orphans.map((i) => renderSuggestion(i))}
+            {claimsByLabel.orphans.map((i) => renderSuggestion(i))}
           </div>
         )}
 

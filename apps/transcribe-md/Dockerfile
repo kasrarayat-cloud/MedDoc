@@ -106,6 +106,15 @@ ENV NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX=${NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX}
 ARG NEXT_PUBLIC_UX_SIMPLIFY=false
 ENV NEXT_PUBLIC_UX_SIMPLIFY=${NEXT_PUBLIC_UX_SIMPLIFY}
 
+# Pre-sign review as ONE document — the other half of the linearisation, for
+# UNSIGNED visits (isReviewDocView(), read from CLIENT components, so it must be
+# present at BUILD time to be inlined; a runtime env would silently leave both
+# branches on the OFF path). Default OFF.
+# Stage:   --build-arg NEXT_PUBLIC_REVIEW_DOC_VIEW=true  (separately-tagged image)
+# ROLLBACK: rebuild without the arg.
+ARG NEXT_PUBLIC_REVIEW_DOC_VIEW=false
+ENV NEXT_PUBLIC_REVIEW_DOC_VIEW=${NEXT_PUBLIC_REVIEW_DOC_VIEW}
+
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # ── Build heap (incident 2026-06-04) ──
