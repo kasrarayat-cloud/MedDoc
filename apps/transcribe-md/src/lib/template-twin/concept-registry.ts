@@ -161,6 +161,39 @@ export function conceptOverrideFor(originalLabel: string): string | null {
   return null;
 }
 
+/**
+ * A VEIN MEASUREMENT GRID DEFINES ITS OWN COLUMNS.
+ *
+ * In WM_IOV each grid row is [vein name + diameter, reflux time]. The reflux
+ * cell says so in its own label; the diameter cell is labelled with the VEIN,
+ * so it is not self-describing and the model chose its concept per field — 80
+ * fields, one at a time. It chose `measurement.diameter` for the right leg and
+ * `test.vascular_ultrasound.result` for the left, which the registry accepts by
+ * pattern. The result: every right diameter filled and every left diameter came
+ * back "no supporting fact", from an encounter that dictated both legs equally,
+ * with nothing to show that the two halves of one grid had been read as
+ * different kinds of thing.
+ *
+ * The structure decides it instead. A row that contains a REFLUX TIME cell is a
+ * vein measurement row: that cell is reflux time, and the row's other data cell
+ * — the one carrying the vein name — is the diameter. This is the same reading
+ * of the grid the bridge already uses to pair note rows to IR rows, so the two
+ * cannot drift apart.
+ *
+ * Returns null for anything that is not such a row, leaving the model's proposal
+ * to stand.
+ */
+export function veinGridCellConcept(input: {
+  originalLabel: string;
+  isReflux: boolean;
+  rowHasRefluxCell: boolean;
+  isRowLabelCell: boolean;
+}): string | null {
+  if (!input.rowHasRefluxCell) return null;
+  if (input.isReflux) return 'measurement.reflux_time';
+  return input.isRowLabelCell ? 'measurement.diameter' : null;
+}
+
 export type MappingSourceType =
   | 'extraction'
   | 'context_default'

@@ -9,6 +9,7 @@
 import {
   classifyFieldSource,
   conceptOverrideFor,
+  veinGridCellConcept,
   isRegisteredConcept,
   synonymsFor,
   REGISTRY_CONCEPTS,
@@ -339,6 +340,15 @@ export async function proposeSemanticMappings(
     );
   }
 
+  // Cells grouped by their table row, so a cell can see its siblings — a vein
+  // grid row is identified by containing a REFLUX TIME cell.
+  const cellsByRow = new Map<string, TemplateField[]>();
+  for (const f of orderedFields) {
+    if (f.rendererBinding.bindingType !== 'table_cell') continue;
+    const key = `${f.tableId ?? ''}#${f.rendererBinding.rowIndex ?? -1}`;
+    (cellsByRow.get(key) ?? cellsByRow.set(key, []).get(key)!).push(f);
+  }
+
   const mappings = orderedFields.map((field) => {
     const mapping = byId.get(field.fieldId);
     if (!mapping) {
@@ -362,9 +372,19 @@ export async function proposeSemanticMappings(
       );
     }
 
-    // A label the compiler recognises decides its own concept; otherwise the
-    // model's proposal stands, and either way it must be in the registry.
-    const candidate = conceptOverrideFor(field.originalLabel) ?? mapping.clinicalConcept;
+    // A structure or a label the compiler recognises decides its own concept;
+    // otherwise the model's proposal stands, and either way it must be in the
+    // registry.
+    const rowKey = `${field.tableId ?? ''}#${field.rendererBinding.rowIndex ?? -1}`;
+    const rowCells = cellsByRow.get(rowKey) ?? [];
+    const gridConcept = veinGridCellConcept({
+      originalLabel: field.originalLabel,
+      isReflux: /reflux/i.test(field.originalLabel),
+      rowHasRefluxCell: rowCells.some((c) => /reflux/i.test(c.originalLabel)),
+      isRowLabelCell: field.labelSource === 'left_cell',
+    });
+    const candidate =
+      gridConcept ?? conceptOverrideFor(field.originalLabel) ?? mapping.clinicalConcept;
     const proposedConcept = candidate && isRegisteredConcept(candidate) ? candidate : null;
 
     // Compiler uncertainty always wins over a model's optimistic recognition.
