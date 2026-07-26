@@ -7057,3 +7057,16 @@ body {
   color: var(--color-linear-text-3);
 }
 .qm-chat-action-none { color: var(--color-linear-text-3); }
+/* The billing level has not been checked against the note as it now stands. */
+.qm-rdoc-stale {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-linear-amber);
+  background: color-mix(in srgb, var(--color-linear-amber) 12%, transparent);
+}

@@ -48,6 +48,19 @@ export const ScrollIntentSchema = z.object({
   target: z.enum(['rx_gate', 'em_gate', 'codes', 'document', 'suggestions']),
 });
 
+/**
+ * The model declares that its reply renders these suggestions IN FULL.
+ *
+ * A declaration, not a fact — the server VERIFIES it against the reply text it
+ * is about to send, and records the attestation only for claims whose full text
+ * actually appears there. The model cannot talk its way past this: the evidence
+ * is the words the doctor will read.
+ */
+export const ListedIntentSchema = z.object({
+  kind: z.literal('listed_suggestions'),
+  indexes: z.array(z.number().int().min(0).max(199)).min(1).max(50),
+});
+
 /** The model believes this is out of scope. Carried explicitly so a refusal is
  *  a first-class outcome rather than a reply that happens to contain "no". */
 export const RefuseIntentSchema = z.object({
@@ -60,6 +73,7 @@ export const ChatIntentSchema = z.discriminatedUnion('kind', [
   AdoptIntentSchema,
   AdoptManyIntentSchema,
   EditSectionIntentSchema,
+  ListedIntentSchema,
   ScrollIntentSchema,
   RefuseIntentSchema,
 ]);

@@ -58,6 +58,7 @@ import { isVisitDocPage } from '@/config/visit-doc-page';
 import { isChatEditor } from '@/config/chat-editor';
 import { ChatEditorPanel } from './chat-editor-panel';
 import { saveNoteSectionAction } from '@/actions/save-note-section';
+import { rescoreEmAction } from '@/actions/rescore-em';
 import { readNoteSection } from '@/lib/splice-note-section';
 import { SectionEditCard } from './section-edit-card';
 import { parseNoteSections } from '@/lib/parse-note-sections';
@@ -173,6 +174,9 @@ export interface VisitReadyViewProps {
    *  or null when there is nothing to confirm. Hydrates the Sign & Send
    *  modal's confirm control; the sign route enforces it server-side. */
   emPendingChange?: { from: string; to: string } | null;
+  /** The note changed since the E/M level was scored — signing is refused
+   *  until the codes row re-checks it. */
+  emStale?: boolean;
 
   // Phase 5.1.1 — V4 Extras card-stream wiring.
   // Patient identity (powers DemographicsCard) + problem list (powers
@@ -219,11 +223,16 @@ export function VisitReadyView(props: VisitReadyViewProps) {
 
   // ── PHASE 2 — the visit page IS the document ────────────────────────────
   const docPage = isVisitDocPage();
+
   const chatEditor = isChatEditor();
   /** Set once the document turns out to be unavailable (not certified, fill
    *  failed, could not be drawn). Latched so the page does not flicker between
    *  two surfaces while the doctor is reading — and so the styled note, once
    *  chosen, stays chosen for this visit. */
+  /** Mirrors the server's `emStale`. Every content mutation on this page sets
+   *  it server-side; the re-score clears it. Held locally so the badge and the
+   *  sign bar react without a round trip. */
+  const [emStale, setEmStale] = useState(props.emStale ?? false);
   const [docPageMiss, setDocPageMiss] = useState<string | null>(null);
   const docPageUnavailable = docPageMiss !== null;
   const handleDocPageUnavailable = useCallback((reason: string | null) => {
@@ -239,6 +248,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
     async (label: string, body: string, expectedVersion: number) => {
       const r = await saveNoteSectionAction(props.visitId, label, body, expectedVersion);
       if (!r.ok || !r.soapFinal) return { ok: false, error: r.error };
+      setEmStale(true);
       setAdoption((prev) => ({
         text: r.soapFinal as string,
         version: r.soapVersion ?? (prev?.version ?? props.soapVersion) + 1,
@@ -272,12 +282,25 @@ export function VisitReadyView(props: VisitReadyViewProps) {
     setSyncedPendingEm(propPendingEm);
     setPendingEmChange(propPendingEm);
   }
+
+  const rescoreEm = useCallback(async () => {
+    const r = await rescoreEmAction(props.visitId);
+    if (!r.ok) return;
+    setEmStale(r.stale);
+    // The level moved: hand it to the SAME confirm card an adopt would arm.
+    if (r.pending) setPendingEmChange(r.pending);
+  }, [props.visitId]);
+
+
   const handleSuggestionAdopted = useCallback(
     (r: {
       soapFinal: string;
       soapVersion: number;
       emPendingChange?: { from: string; to: string } | null;
     }) => {
+      // Adopting changes the note, so the server marked the level stale.
+      // Mirror it: the badge and the lazy re-score both key off this.
+      setEmStale(true);
       setAdoption((prev) => ({
         text: r.soapFinal,
         version: r.soapVersion,
@@ -650,13 +673,18 @@ export function VisitReadyView(props: VisitReadyViewProps) {
             <ChatEditorPanel
               visitId={props.visitId}
               disabled={props.readonly}
-              onNoteChanged={(r) =>
+              onNoteChanged={(r) => {
+                // The server marked the level stale for this change; mirror it
+                // locally or the badge never appears, the codes row never
+                // re-scores, and the doctor meets the sign gate with no visible
+                // way to resolve it.
+                setEmStale(true);
                 setAdoption((prev) => ({
                   text: r.soapFinal,
                   version: r.soapVersion ?? (prev?.version ?? props.soapVersion) + 1,
                   seq: (prev?.seq ?? 0) + 1,
-                }))
-              }
+                }));
+              }}
               onScrollTo={(target) => {
                 const el =
                   target === 'rx_gate'
@@ -749,6 +777,8 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               emCode: displayedEm,
               emNotApplicable: !!props.emNotApplicable,
             }}
+            emStale={emStale}
+            onRescoreEm={rescoreEm}
             billingNode={tabs.find((t) => t.key === 'billing')?.node ?? null}
             codesNode={tabs.find((t) => t.key === 'codes')?.node ?? null}
             dictationNode={dictationNode}
