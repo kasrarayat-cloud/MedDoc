@@ -177,6 +177,29 @@ function irTableRows(fields: TemplateField[]): IrTableRow[] {
 /** The markdown table most likely to be this vein grid: it must carry a diameter
  *  or reflux column, and we prefer the one whose row labels best match the IR
  *  vein names (guards against picking an unrelated table in the note). */
+/** ALL tables that plausibly belong to this IR grid, best first.
+ *
+ *  One grid in the document becomes TWO markdown tables in the note (Right Leg,
+ *  Left Leg), so returning a single winner left half the cells never offered.
+ *  Offering every candidate is safe now that addressing is fail-closed on row
+ *  laterality: a right-leg value simply cannot fill a left-leg row, so the
+ *  tables sort themselves out at the matcher instead of needing to be
+ *  pre-assigned to legs here. */
+function pickTables(tables: ParsedMarkdownTable[], irRows: IrTableRow[]): ParsedMarkdownTable[] {
+  const veinCores = irRows.map((r) => normVein(r.vein)).filter(Boolean);
+  const scored: Array<{ table: ParsedMarkdownTable; score: number }> = [];
+  for (const t of tables) {
+    if (!t.header.some((h) => classifyHeader(h) !== 'other')) continue;
+    let score = 0;
+    for (const row of t.rows) {
+      const core = normVein(row.label);
+      if (veinCores.some((v) => veinMatches(v, core))) score++;
+    }
+    if (score > 0) scored.push({ table: t, score });
+  }
+  return scored.sort((a, b) => b.score - a.score).map((x) => x.table);
+}
+
 function pickTable(tables: ParsedMarkdownTable[], irRows: IrTableRow[]): ParsedMarkdownTable | null {
   const veinCores = irRows.map((r) => normVein(r.vein)).filter(Boolean);
   let best: ParsedMarkdownTable | null = null;
@@ -275,8 +298,9 @@ export function bridgeNumericTableCells(input: BridgeNumericTableCellsInput): Fi
 
   for (const fields of byTableId.values()) {
     const irRows = irTableRows(fields);
-    const md = pickTable(tables, irRows);
-    if (!md) continue;
+    const candidates = pickTables(tables, irRows);
+    if (candidates.length === 0) continue;
+    for (const md of candidates) {
 
     // Which markdown data column is diameter, which is reflux (by header).
     const roleByCol = md.header.map(classifyHeader);
@@ -326,8 +350,13 @@ export function bridgeNumericTableCells(input: BridgeNumericTableCellsInput): Fi
       place(irRow.diameterField, diameterCol);
       place(irRow.refluxField, refluxCol);
     }
+    } // end candidate table
   }
-  return out;
+  // A field may be offered by BOTH note tables; fail-closed laterality means at
+  // most one can produce a resolution, but keep the first defensively so a
+  // future addressing change cannot introduce duplicates silently.
+  const seen = new Set<string>();
+  return out.filter((r) => (seen.has(r.fieldId) ? false : (seen.add(r.fieldId), true)));
 }
 
 // ── merge ───────────────────────────────────────────────────────────────────

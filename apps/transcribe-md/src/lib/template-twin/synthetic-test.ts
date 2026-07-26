@@ -284,20 +284,59 @@ export async function runTemplateTwinSyntheticTest(input: {
   // an unpinned one would. Nothing is bypassed and no requirement is relaxed.
   const encounterSha256 = createHash('sha256').update(input.encounterText).digest('hex');
   const templateSha256 = compiled.structureSha256;
-  const pinValid =
-    !!compiled.pinnedSyntheticNote &&
-    compiled.pinnedNoteEncounterSha256 === encounterSha256 &&
-    compiled.pinnedNoteTemplateSha256 === templateSha256;
+  // CONTENT-ADDRESSED. The pin belongs to the (encounter, template structure)
+  // pair, not to a compiled-version row: re-uploading the same docx makes a NEW
+  // compiled version, so a per-row pin would never be reused and determinism
+  // could never be demonstrated. Look the pin up by its content hashes.
+  let pinned = compiled.pinnedSyntheticNote;
+  let pinnedModel = compiled.pinnedNoteModelVersion;
+  let pinnedAt = compiled.pinnedNoteGeneratedAt;
+  if (
+    !pinned ||
+    compiled.pinnedNoteEncounterSha256 !== encounterSha256 ||
+    compiled.pinnedNoteTemplateSha256 !== templateSha256
+  ) {
+    const sibling = await prisma.templateTwinCompiledVersion.findFirst({
+      where: {
+        pinnedNoteEncounterSha256: encounterSha256,
+        pinnedNoteTemplateSha256: templateSha256,
+        pinnedSyntheticNote: { not: null },
+      },
+      select: {
+        pinnedSyntheticNote: true,
+        pinnedNoteModelVersion: true,
+        pinnedNoteGeneratedAt: true,
+      },
+    });
+    if (sibling?.pinnedSyntheticNote) {
+      pinned = sibling.pinnedSyntheticNote;
+      pinnedModel = sibling.pinnedNoteModelVersion;
+      pinnedAt = sibling.pinnedNoteGeneratedAt;
+      // Copy it onto this compiled version so the proof it certifies is stored
+      // with it, not borrowed at read time.
+      await prisma.templateTwinCompiledVersion.update({
+        where: { id: compiled.id },
+        data: {
+          pinnedSyntheticNote: pinned,
+          pinnedNoteEncounterSha256: encounterSha256,
+          pinnedNoteTemplateSha256: templateSha256,
+          pinnedNoteModelVersion: pinnedModel,
+          pinnedNoteGeneratedAt: pinnedAt,
+        },
+      });
+    }
+  }
+  const pinValid = !!pinned;
 
   let generatedNote: string | undefined;
   let markerText: string | undefined;
   if (pinValid) {
-    generatedNote = compiled.pinnedSyntheticNote!;
+    generatedNote = pinned!;
     markerText = (await docxToTextWithControls(source)).text;
     console.info(
       `[template-twin:pin] REUSED compiled=${compiled.id} encounterSha=${encounterSha256.slice(0, 12)} ` +
-        `templateSha=${String(templateSha256).slice(0, 12)} model=${compiled.pinnedNoteModelVersion} ` +
-        `generatedAt=${compiled.pinnedNoteGeneratedAt?.toISOString()}`,
+        `templateSha=${String(templateSha256).slice(0, 12)} model=${pinnedModel} ` +
+        `generatedAt=${pinnedAt?.toISOString()}`,
     );
   } else if (input.generateNote) {
     generatedNote = await input.generateNote({
