@@ -361,3 +361,183 @@ working tree: only the expected `M Caddyfile`
 
 One-shot rollback if anything had been deployed: `:pre-finish-20260725`. Nothing
 was.
+
+---
+
+# FINAL MILE — the picks ruling, S5 complete, GA
+
+## The provenance class: `verified_note_selection`
+
+A dropdown cannot cite an extracted fact. The template's options are protocol
+language — "Bilateral Detailed", "Swelling, Heaviness" — and no extractor emits
+facts that read like that, so requiring entailment left fourteen dropdowns blank
+on every real visit and the native export refused the document as incomplete,
+while the note had already selected every one of them correctly.
+
+Picks now cite the SELECTION, through the product's existing chain: transcript →
+constrained CHOICE_SLOT fill → anchored-verifier grounding → the doctor adopting
+the note. The citation is a first-class `EncounterFact` whose identity includes
+the note version, and it travels out of the bridge into the manifest's fact set —
+a citation to a fact that is not there is untraceable, and the validator says so.
+
+**Every check enforced; each REMOVES a way for a value to reach the document.**
+`__tests__/verified-note-selection.test.ts` — 15 tests:
+
+| Check | Test |
+|---|---|
+| (a) verbatim option only | fills on a verbatim option **and** CANARY: `Bilateral, detailed study` → blank |
+| (b) adopted note only | an omitted carrier line → blank, nothing invented |
+| (c) never a set-aside section | a pick under the verifier's placeholder → blank; and the lane ENDS at the next heading |
+| (d) provenance recorded | marker # + note sha in the citation, PHI-free; a different note or a different pick is a different fact |
+| side, fail-closed | side read from the field's own label; a label naming both names neither; a mapping REQUIRING a side on a field naming none → blank |
+| no concept | no approved concept → no citation → blank |
+| resolver defers | `sourceType === 'verified_note_selection'` → `awaiting_note_selection`, never resolved from raw facts |
+
+**Byte-identical, as required:** `factSatisfiesMapping`, `matchMeasurementFact`,
+the validator, the roundtrip, and the gate floors are untouched. The injected
+fact is checked exactly as any other citation is — the same shape approved
+practice defaults have used since they shipped. Mutation guard retargeted, not
+weakened: the measurement bridge must still route through `citationOf`, and the
+picks bridge must mint provenance only through the named constructor and must
+push the facts out.
+
+**Cert-time semantics** are the same rules on whichever note is presented — the
+pinned note at certification, the adopted note at visit time. There is no
+cert-time exemption to test in two directions, because there is no exemption.
+
+## The defect prod found that QA could not
+
+The first prod chain **BLOCKED**, and correctly:
+
+```
+[template-twin:certify] BLOCKED … fillCoverage=false (9 filled, need >= 10 …)
+                                | fillCoverage=false (no measurement CELL was filled …)
+```
+
+Nine picks filled, zero cells. The generated note said why itself:
+
+```
+| GSV at the SFJ | 2.4 | "Great saphenous vein at the saphenofemoral junction: diameter 7 millimeters, reflux 2.4 seconds."
+Note: Diameter values dictated for the right GSV (SFJ 7 mm, Proximal Thigh 6.4 mm,
+Knee 5.1 mm) could not be placed, as the table skeleton provides only a single
+value column per row.
+```
+
+The row builder used `columns.slice(1)`, assuming the header's first column is
+the row-label column. WM_IOV's is not: its header is
+`[DIAMETER (mm) | REFLUX TIME (seconds)]` and the vein name sits in an unheaded
+first cell. So each row offered ONE placeholder for TWO data columns and every
+diameter in the document was lost. QA had never shown it because QA's pinned note
+predated the corrupted skeleton — the pin was protecting the bug.
+
+Fixed, with 3 tests pinning the column count for all three header shapes. Pins
+then cleared on both databases as an **explicit operator re-pin** (the hashes
+alone would not have invalidated them — the encounter and the template structure
+were unchanged).
+
+## S4 — twice-identical, now with BOTH pins reused
+
+| | run 1 | run 2 |
+|---|---|---|
+| pin (note) | CREATED | **REUSED** `generatedAt` identical |
+| pin (extraction) | FRESH | **REUSED** |
+| counts | `filled:20 conflicts:0 needsReview:0 notMentioned:60 criticalUnresolved:0` | **identical** |
+| roundTrip | 80/80 | 80/80 |
+| status | CERTIFIED | CERTIFIED |
+
+## S5 — REAL-VISIT PROOF, COMPLETE ✅
+
+**QA** (`docs/qa-reports/twin-real-visit-20260726.docx`, 49 402 bytes):
+
+```
+MANIFEST status=VERIFIED filledCount=21 needsReview=0 conflicts=0
+BLOCKING 0
+EXPORT nativeTemplateApplied=true nativeTemplateReason=n/a
+ARTIFACT expected=13 missing=0 | blanks-held=true | PASS
+```
+
+Independent unzip + grep of `word/document.xml`:
+
+```
+dictated values present: 13 / 13   missing: none
+'Choose an item.' leaked: False
+SIDE OF EXAM: Bilateral Detailed
+Right great saphenous vein is reflux positive.
+Left great saphenous vein is reflux positive.
+6.2 3.4 5.5 2.2 5.1 1.5   ← right leg
+5.8 3.1 4.1 1.8 3.9 1.1   ← left leg
+```
+
+**PROD** (`twin-prod-visit.docx`, 49 402 bytes), same harness, prod database,
+synthetic smoke-doctor:
+
+```
+MANIFEST status=VERIFIED filledCount=21 needsReview=0 conflicts=0
+BLOCKING 0
+EXPORT nativeTemplateApplied=true
+ARTIFACT expected=13 missing=0 | blanks-held=true | PASS
+
+independent grep: 13/13 present, 'Choose an item.' leaked: False,
+                  picks present: Bilateral Detailed, reflux positive
+```
+
+The four manual context fields — technologist, referring physician, machine,
+location — are blank in both documents, which is the point: nobody dictates them.
+
+**The artifact check is now permanent.** The harness unzips its own output and
+greps it, and exits non-zero if a dictated value is missing or a placeholder
+leaked. It exists because a run once reported `nativeTemplateApplied=true` and
+wrote a 49 297-byte file containing none of the dictated values. A flag is not
+evidence.
+
+## S6 — GA ✅
+
+```
+migrations applied to prod (all additive, verified post-apply):
+  pinnedSyntheticNote / pinnedNoteEncounterSha256 / pinnedNoteTemplateSha256 /
+  pinnedNoteModelVersion / pinnedNoteGeneratedAt   → nullable, no default
+  pinnedSyntheticEntities / pinnedSyntheticContextText → nullable, no default
+  sourceType TEXT NOT NULL DEFAULT 'extraction'    → no row invalidated
+rollbacks: DROP COLUMN for each; an unpinned template simply generates again,
+           and nothing reads sourceType without the code shipped beside it.
+
+flag: NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX=true in .env (build-arg inlined)
+images: app b6be7e434ffc / worker 43bf217e8e7a
+rollback: images :pre-twinGA-20260726 (both), git tag pre-twinGA-20260726
+          flag OFF = unset in .env + rebuild + up -d --no-deps transcribe-md
+
+prod audit trail (synthetic smoke-doctor, one-tap chain):
+  03:18:51 TEMPLATE_TWIN_SOURCE_UPLOADED
+  03:18:51 TEMPLATE_TWIN_COMPILED
+  03:18:51 TEMPLATE_TWIN_MAPPING_UPDATED
+  03:19:50 TEMPLATE_TWIN_SYNTHETIC_TESTED
+  03:19:50 TEMPLATE_TWIN_ACTIVATED
+  03:19:50 TEMPLATE_TWIN_CERTIFIED
+  03:21:06 TEMPLATE_TWIN_RENDER_VERIFIED
+  (and at 03:14:52 a SYNTHETIC_TESTED with no CERTIFIED after it — the
+   fillCoverage refusal, in the trail where it belongs)
+
+native vs styled, both directions observed on prod:
+  nativeTemplateApplied=false reason=manifest_incomplete  → styled export stands
+  nativeTemplateApplied=true  reason=n/a                  → the doctor's own form
+
+cleaned to baseline: visits=17 patients=9 templates=4
+                    twin_compiled=0 twin_artifacts=0 synthetic_strays=0
+                    (audit rows retained — they are the evidence)
+9/9 containers healthy; co-tenants app 307 / pro 200 / quillmd.com 200 /
+admin 404 (incl. LeatherERP)
+```
+
+**What GA means here, precisely.** The path is live, flag ON, and proven end to
+end on production against a synthetic account. Prod currently has **zero**
+certified twins, because the smoke template was cleaned. No existing user's
+behaviour changes until a real doctor certifies their own template — and that
+confirmation of eighty mappings is *their* safety gate, not one a script may
+perform for them.
+
+## S3 — PARKED (deep)
+
+The unified defaults lane for `context_default` + `practice_default` is a
+review-before-sign surface, not a flag flip: it needs a place for the clinician
+to see and accept a deterministic fill before it enters a signed note. The guard
+stays; the four context fields stay honestly blank. Parked as specified.
