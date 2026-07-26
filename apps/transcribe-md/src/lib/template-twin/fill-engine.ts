@@ -276,6 +276,166 @@ export interface ProcessTemplateTwinVisitInput {
   storage?: TemplateTwinArtifactStore;
 }
 
+/** What the read+prepare phase produces. The persistence phase needs the rows
+ *  it read, so they come back rather than being read twice. */
+/**
+ * READ + PREPARE, with no writes of any kind.
+ * ---------------------------------------------------------------------------
+ * Extracted VERBATIM from processTemplateTwinVisit so the pre-sign preview and
+ * the real export cannot drift: the doctor must be looking at the same fill
+ * they are about to sign. Everything here is a read plus pure computation. The
+ * template-provenance claim ABOVE it and the manifest persistence BELOW it stay
+ * where they were, in the writing path only.
+ *
+ * A preview must never leave a fill manifest behind. The sign gate validates a
+ * STORED manifest against the certified IR, so a manifest written mid-review
+ * would let a doctor sign a fill that predates their own adoptions.
+ */
+export async function readAndPrepareTemplateTwinFill(
+  input: Omit<ProcessTemplateTwinVisitInput, 'visitId'>,
+) {
+    const row = await prisma.noteTemplate.findFirst({
+      where: {
+        id: input.noteTemplateId,
+        doctorId: input.doctorId,
+        version: input.noteTemplateVersion,
+      },
+      select: {
+        id: true,
+        version: true,
+        templateTwinCompiledVersion: {
+          select: {
+            id: true,
+            compilerVersion: true,
+            compiledDocumentIr: true,
+            certificationStatus: true,
+            certification: { select: { id: true, approvedMappingsSha256: true } },
+            sourceArtifact: {
+              select: {
+                practiceId: true,
+                objectKey: true,
+                sha256: true,
+                sizeBytes: true,
+                validationStatus: true,
+              },
+            },
+            fields: {
+              orderBy: { displayOrder: 'asc' },
+              select: {
+                fieldId: true,
+                detectionStatus: true,
+                mapping: {
+                  select: {
+                    sourceType: true,
+                    clinicalConcept: true,
+                    expectedDataType: true,
+                    polarityBehavior: true,
+                    temporality: true,
+                    laterality: true,
+                    unitPolicy: true,
+                    approvedSynonyms: true,
+                    required: true,
+                    blankPolicy: true,
+                    unknownPolicy: true,
+                    practiceDefault: true,
+                    mappingStatus: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    const compiled = row?.templateTwinCompiledVersion;
+    if (!row || !compiled || compiled.certificationStatus !== 'CERTIFIED' || !compiled.certification) {
+      throw new TemplateTwinFillError(
+        'CERTIFIED_TEMPLATE_NOT_FOUND',
+        'The selected Template Twin version is not certified and active.',
+      );
+    }
+    if (
+      row.version !== input.noteTemplateVersion ||
+      compiled.sourceArtifact.practiceId !== input.practiceId ||
+      compiled.sourceArtifact.validationStatus !== 'accepted' ||
+      !compiled.sourceArtifact.objectKey
+    ) {
+      throw new TemplateTwinFillError(
+        'TEMPLATE_PROVENANCE_MISMATCH',
+        'The selected Template Twin provenance does not match this visit.',
+      );
+    }
+    const certifiedFieldIds: string[] = [];
+    const mappings = compiled.fields.map((field: {
+      fieldId: string;
+      detectionStatus: string;
+      mapping: PersistedMappingRow | null;
+    }) => {
+      if (!field.mapping) {
+        throw new TemplateTwinFillError(
+          'TEMPLATE_PROVENANCE_MISMATCH',
+          'The certified Template Twin mapping set is incomplete.',
+        );
+      }
+      if (field.detectionStatus !== 'CERTIFIED') {
+        throw new TemplateTwinFillError(
+          'TEMPLATE_PROVENANCE_MISMATCH',
+          'The certified Template Twin field set is incomplete.',
+        );
+      }
+      certifiedFieldIds.push(field.fieldId);
+      return mappingFromRow(field.fieldId, field.mapping);
+    });
+    const ir = TemplateDocIRSchema.parse(compiled.compiledDocumentIr);
+    if (
+      mappings.length !== ir.fields.length ||
+      templateTwinMappingsSha256(mappings) !==
+        compiled.certification.approvedMappingsSha256
+    ) {
+      throw new TemplateTwinFillError(
+        'TEMPLATE_PROVENANCE_MISMATCH',
+        'The certified Template Twin mappings no longer match their certification.',
+      );
+    }
+    const facts = projectEncounterFacts({
+      mode: input.inputMode,
+      contextText: input.contextText,
+      entities: input.entities as EncounterEntitySnapshot,
+      asrQuality: input.asrQuality,
+    });
+    const storage = input.storage ?? createTemplateTwinArtifactStore();
+    const source = await storage.readSourceArtifact({
+      practiceId: input.practiceId,
+      objectKey: compiled.sourceArtifact.objectKey,
+      expectedSha256: compiled.sourceArtifact.sha256,
+      expectedSizeBytes: compiled.sourceArtifact.sizeBytes,
+    });
+    // Recover the compiled {{one of}} marker form from the SAME verified source
+    // the IR was compiled from — the picks bridge aligns the generated note's picks
+    // to it. Cheap, deterministic, no re-parse of the IR.
+    const markerText =
+      input.generatedNote != null
+        ? (await docxToTextWithControls(source)).text
+        : undefined;
+    const prepared = await prepareTemplateTwinFill({
+      compiledVersionId: compiled.id,
+      noteTemplateId: row.id,
+      noteTemplateVersion: row.version,
+      ir,
+      mappings,
+      facts,
+      certifiedFieldIds,
+      source,
+      resolverModelVersion: input.resolverModelVersion,
+      validationNow: input.validationNow,
+      visitDate: input.visitDate,
+      markerText,
+      generatedNote: input.generatedNote,
+    });
+
+  return { prepared, row, compiled, ir, storage };
+}
+
 /** Resolves, independently validates, conditionally renders, stores, and
  * records one visit against its already-selected immutable template version. */
 export async function processTemplateTwinVisit(
@@ -311,145 +471,13 @@ export async function processTemplateTwinVisit(
     );
   }
 
-  const row = await prisma.noteTemplate.findFirst({
-    where: {
-      id: input.noteTemplateId,
-      doctorId: input.doctorId,
-      version: input.noteTemplateVersion,
-    },
-    select: {
-      id: true,
-      version: true,
-      templateTwinCompiledVersion: {
-        select: {
-          id: true,
-          compilerVersion: true,
-          compiledDocumentIr: true,
-          certificationStatus: true,
-          certification: { select: { id: true, approvedMappingsSha256: true } },
-          sourceArtifact: {
-            select: {
-              practiceId: true,
-              objectKey: true,
-              sha256: true,
-              sizeBytes: true,
-              validationStatus: true,
-            },
-          },
-          fields: {
-            orderBy: { displayOrder: 'asc' },
-            select: {
-              fieldId: true,
-              detectionStatus: true,
-              mapping: {
-                select: {
-                  sourceType: true,
-                  clinicalConcept: true,
-                  expectedDataType: true,
-                  polarityBehavior: true,
-                  temporality: true,
-                  laterality: true,
-                  unitPolicy: true,
-                  approvedSynonyms: true,
-                  required: true,
-                  blankPolicy: true,
-                  unknownPolicy: true,
-                  practiceDefault: true,
-                  mappingStatus: true,
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-  });
-  const compiled = row?.templateTwinCompiledVersion;
-  if (!row || !compiled || compiled.certificationStatus !== 'CERTIFIED' || !compiled.certification) {
-    throw new TemplateTwinFillError(
-      'CERTIFIED_TEMPLATE_NOT_FOUND',
-      'The selected Template Twin version is not certified and active.',
-    );
-  }
-  if (
-    row.version !== input.noteTemplateVersion ||
-    compiled.sourceArtifact.practiceId !== input.practiceId ||
-    compiled.sourceArtifact.validationStatus !== 'accepted' ||
-    !compiled.sourceArtifact.objectKey
-  ) {
-    throw new TemplateTwinFillError(
-      'TEMPLATE_PROVENANCE_MISMATCH',
-      'The selected Template Twin provenance does not match this visit.',
-    );
-  }
-  const certifiedFieldIds: string[] = [];
-  const mappings = compiled.fields.map((field: {
-    fieldId: string;
-    detectionStatus: string;
-    mapping: PersistedMappingRow | null;
-  }) => {
-    if (!field.mapping) {
-      throw new TemplateTwinFillError(
-        'TEMPLATE_PROVENANCE_MISMATCH',
-        'The certified Template Twin mapping set is incomplete.',
-      );
-    }
-    if (field.detectionStatus !== 'CERTIFIED') {
-      throw new TemplateTwinFillError(
-        'TEMPLATE_PROVENANCE_MISMATCH',
-        'The certified Template Twin field set is incomplete.',
-      );
-    }
-    certifiedFieldIds.push(field.fieldId);
-    return mappingFromRow(field.fieldId, field.mapping);
-  });
-  const ir = TemplateDocIRSchema.parse(compiled.compiledDocumentIr);
-  if (
-    mappings.length !== ir.fields.length ||
-    templateTwinMappingsSha256(mappings) !==
-      compiled.certification.approvedMappingsSha256
-  ) {
-    throw new TemplateTwinFillError(
-      'TEMPLATE_PROVENANCE_MISMATCH',
-      'The certified Template Twin mappings no longer match their certification.',
-    );
-  }
-  const facts = projectEncounterFacts({
-    mode: input.inputMode,
-    contextText: input.contextText,
-    entities: input.entities as EncounterEntitySnapshot,
-    asrQuality: input.asrQuality,
-  });
-  const storage = input.storage ?? createTemplateTwinArtifactStore();
-  const source = await storage.readSourceArtifact({
-    practiceId: input.practiceId,
-    objectKey: compiled.sourceArtifact.objectKey,
-    expectedSha256: compiled.sourceArtifact.sha256,
-    expectedSizeBytes: compiled.sourceArtifact.sizeBytes,
-  });
-  // Recover the compiled {{one of}} marker form from the SAME verified source
-  // the IR was compiled from — the picks bridge aligns the generated note's picks
-  // to it. Cheap, deterministic, no re-parse of the IR.
-  const markerText =
-    input.generatedNote != null
-      ? (await docxToTextWithControls(source)).text
-      : undefined;
-  const prepared = await prepareTemplateTwinFill({
-    compiledVersionId: compiled.id,
-    noteTemplateId: row.id,
-    noteTemplateVersion: row.version,
+  const {
+    prepared,
+    row,
+    compiled,
     ir,
-    mappings,
-    facts,
-    certifiedFieldIds,
-    source,
-    resolverModelVersion: input.resolverModelVersion,
-    validationNow: input.validationNow,
-    visitDate: input.visitDate,
-    markerText,
-    generatedNote: input.generatedNote,
-  });
-
+    storage,
+  } = await readAndPrepareTemplateTwinFill(input);
   const existing = await prisma.templateTwinFillManifest.findUnique({
     where: { visitId: input.visitId },
     select: {

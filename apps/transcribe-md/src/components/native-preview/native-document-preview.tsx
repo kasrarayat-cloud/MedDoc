@@ -26,7 +26,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { NativePreviewError, NativePreviewKind } from '@/actions/preview-native-document';
 
 /** Doctor-facing, PHI-free. Every reason has a sentence — silence is illegal. */
-const REASON_TEXT: Record<NativePreviewError, string> = {
+const REASON_TEXT: Partial<Record<string, string>> = {
   no_native_template: 'This template fills our styled layout, not your own form.',
   sample_unavailable: "We couldn't load the sample this time. Your template is unaffected.",
   no_form_uploaded:
@@ -43,7 +43,10 @@ export interface NativeDocumentPreviewProps {
   kind: NativePreviewKind | null;
   /** base64: a PDF when kind==='pdf', the true DOCX when 'docx_fallback'. */
   data: string | null;
-  reason: NativePreviewError | null;
+  /** Any named reason from either preview surface. Widened deliberately: the
+   *  visit page carries its own misses, and casting them through `as never` at
+   *  the call site would keep compiling long after the unions diverged. */
+  reason: NativePreviewError | string | null;
   /** Accessible label; the caller knows whether this is a sample or a visit. */
   label: string;
   /** One line under the page, in the doctor's language, saying what they are
@@ -72,12 +75,15 @@ export function NativeDocumentPreview(props: NativeDocumentPreviewProps) {
   // Draw every page. Kept in one effect so a re-render cannot leave half a
   // document on screen: the host is cleared, then filled, or the whole thing
   // reports failure.
-  // Reset on new input FIRST: a failure from a previous document must not
-  // outlive it, or a good render shows as broken.
+  // Reset on new input: a failure from a previous document must not outlive it,
+  // or a good render shows as broken. Queued rather than synchronous — a
+  // synchronous setState in an effect cascades an extra render.
   useEffect(() => {
-    setPdfFailed(false);
-    setPdfDrawn(false);
-    setDocxFailed(false);
+    queueMicrotask(() => {
+      setPdfFailed(false);
+      setPdfDrawn(false);
+      setDocxFailed(false);
+    });
   }, [kind, data]);
 
   useEffect(() => {
@@ -88,9 +94,11 @@ export function NativeDocumentPreview(props: NativeDocumentPreviewProps) {
     const url = URL.createObjectURL(
       new Blob([bytes.slice() as unknown as BlobPart], { type: 'application/pdf' }),
     );
-    setPdfUrl(url);
 
     (async () => {
+      // Queued with the draw rather than set synchronously — a setState in the
+      // effect body cascades a render before this one has painted.
+      setPdfUrl(url);
       try {
         const pdfjs = await import('pdfjs-dist');
         // Same-origin worker; no CDN, which the app's CSP would refuse anyway.
@@ -164,7 +172,7 @@ export function NativeDocumentPreview(props: NativeDocumentPreviewProps) {
   if (!kind || !data) {
     return (
       <p className="qm-npv-note" role="status">
-        {reason ? REASON_TEXT[reason] : 'No preview available.'}
+        {(reason ? REASON_TEXT[reason] : null) ?? 'No preview available.'}
       </p>
     );
   }
@@ -207,7 +215,7 @@ export function NativeDocumentPreview(props: NativeDocumentPreviewProps) {
         <figcaption className="qm-npv-note" role="status">
           {props.caption}
           {props.caption && reason ? ' ' : null}
-          {reason ? REASON_TEXT[reason] : null}
+          {reason ? (REASON_TEXT[reason] ?? null) : null}
         </figcaption>
       )}
     </figure>
