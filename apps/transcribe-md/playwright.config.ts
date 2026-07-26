@@ -78,6 +78,8 @@ export default defineConfig({
       // 24-…rx-clinical-safety → the rx-safety project (needs MOCK_RX_WARNINGS=true,
       // whose critical warning would block every other spec's sign).
       testIgnore: [
+        // The pre-sign document surface — its own flag-ON project below.
+        '**/review-document.spec.ts',
         '**/a11y.spec.ts',
         '**/23-note-format-phi-parse-reject.spec.ts',
         '**/24-rx-clinical-safety.spec.ts',
@@ -124,6 +126,17 @@ export default defineConfig({
         '**/24-rx-clinical-safety.spec.ts',
         '**/25-rx-override-correlation.spec.ts',
       ],
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      // The pre-sign DOCUMENT surface (NEXT_PUBLIC_REVIEW_DOC_VIEW). Its own
+      // project because the default chromium run builds the pre-C3 skin with
+      // the flag OFF, where this surface does not exist — the pack would fail
+      // the required gate for an environment reason rather than a real one.
+      // Runs against an app built flag-ON, the same way phi-reject/rx-safety
+      // run against their own fixture builds.
+      name: 'review-doc',
+      testMatch: ['**/review-document.spec.ts'],
       use: { ...devices['Desktop Chrome'] },
     },
     {
