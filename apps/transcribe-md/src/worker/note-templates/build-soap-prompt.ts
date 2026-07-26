@@ -223,10 +223,30 @@ export function renderStructureDirective(
     '"[not documented]" for a segment that was NOT assessed.',
   ];
   if (structure.rowLabels && structure.rowLabels.length > 0) {
+    // HOW MANY VALUE CELLS DOES A ROW HAVE?
+    //
+    // `.slice(1)` assumed the header's first column is the row-label column.
+    // WM_IOV's is not: its header is [DIAMETER (mm) | REFLUX TIME (seconds)]
+    // and the vein name lives in an unheaded first cell. So a row got ONE
+    // placeholder for TWO data columns, and the generator did exactly what the
+    // skeleton showed — one value per row — then said so in the note itself:
+    //   "Diameter values ... could not be placed, as the table skeleton
+    //    provides only a single value column per row."
+    // Every diameter in the document was lost that way, and certification
+    // blocked on a fill path that had never been given room to work.
+    //
+    // A header column that names a unit or a metric is a DATA column; a plain
+    // word like "VEIN" is the label column. When the header is all data, the
+    // label cell is extra and the row carries one placeholder per column.
+    const isDataColumn = (h: string) =>
+      /\([^)]*\)\s*$/.test(h) || /diameter|reflux|velocity|length|depth|time|size/i.test(h);
+    const valueColumnCount =
+      structure.columns.length > 0 && isDataColumn(structure.columns[0]!)
+        ? structure.columns.length
+        : structure.columns.length - 1;
     const rows = structure.rowLabels.map(
       (r) =>
-        `| ${r} |${structure.columns
-          .slice(1)
+        `| ${r} |${Array.from({ length: Math.max(valueColumnCount, 1) })
           .map(() => ' [not documented] |')
           .join('')}`
     );
@@ -239,6 +259,9 @@ export function renderStructureDirective(
       ...rows,
       'Replace a "[not documented]" cell ONLY with a value the transcript',
       'states, copied as dictated.',
+      'Each row has one cell per column above, in that order — fill every',
+      'column the transcript supports. Never drop a column, and never write a',
+      'quotation or a sentence in place of a value.',
       ...CELL_DISCIPLINE,
       'Never invent, estimate, or carry forward a value. Do not add,',
       'remove, rename, or reorder rows or columns. Append the evidence',
