@@ -433,6 +433,28 @@ function resolveOne(
     return missingResolution(field, mapping, allFacts);
   }
 
+  // A SELECT CAN ONLY CONFLICT OVER ITS OWN OPTIONS.
+  // These dropdowns sit inside sentences ("Right deep venous system <choose>")
+  // and map to a coarse concept like `exam.vascular`, which every vascular
+  // statement in the encounter shares. Judging polarity and laterality across
+  // all of them made a "conflict" out of four unrelated sentences — one
+  // affirmed, one denied — and blocked certification on a field about which the
+  // encounter had said nothing selectable. Seven fields, every run.
+  //
+  // A fact whose value is not one of THIS field's enumerated options cannot
+  // fill it, so it is not evidence about it and cannot contradict anything
+  // here. When none qualify there is nothing to conflict about, and the field
+  // continues to the existing derivation path — which surfaces it as
+  // needs-input with select_value_not_exact_option, not as a silent blank and
+  // not as a conflict. Two facts that both name real options and disagree are
+  // still a genuine conflict, judged exactly as before.
+  const conflictCandidates =
+    field.kind === 'single_select' || field.kind === 'multi_select'
+      ? conceptCandidates.filter(
+          (fact) => typeof fact.value === 'string' && exactOption(field, fact.value) !== null,
+        )
+      : conceptCandidates;
+
   const expectedTemporality = mapping.temporality;
   const temporalCandidates =
     expectedTemporality === null || expectedTemporality === 'any'
@@ -447,6 +469,11 @@ function resolveOne(
       'temporality_not_approved',
     );
   }
+
+  // The facts eligible to fill THIS field (see conflictCandidates above), which
+  // are the only ones whose disagreement is a disagreement about it. For a
+  // non-select this is every temporal candidate, exactly as before.
+  const judged = temporalCandidates.filter((fact) => conflictCandidates.includes(fact));
 
   const permitsFamily = normalizeConcept(mapping.clinicalConcept).startsWith(
     'family_history.',
@@ -492,9 +519,7 @@ function resolveOne(
   }
 
   if (mapping.laterality === 'required') {
-    const lateralities = unique(
-      temporalCandidates.map((fact) => fact.laterality),
-    );
+    const lateralities = unique(judged.map((fact) => fact.laterality));
     if (lateralities.includes('unknown') || lateralities.includes('not_applicable')) {
       return makeResolution(
         field.fieldId,
@@ -515,13 +540,13 @@ function resolveOne(
     }
   }
 
-  const polarities = unique(temporalCandidates.map((fact) => fact.polarity));
+  const polarities = unique(judged.map((fact) => fact.polarity));
   if (polarities.includes('uncertain') || polarities.includes('conditional')) {
     return makeResolution(
       field.fieldId,
       'ambiguous',
       null,
-      temporalCandidates,
+      judged,
       'polarity_ambiguous',
     );
   }
@@ -530,7 +555,7 @@ function resolveOne(
       field.fieldId,
       'conflict',
       null,
-      temporalCandidates,
+      judged,
       'polarity_conflict',
     );
   }
