@@ -181,3 +181,49 @@ describe('the baseline is seeded, so the FIRST edit is gated too', () => {
     expect(src).toContain('initialEmScore?.override?.code ?? initialEmScore?.suggestedCode');
   });
 });
+
+describe('the baseline is also seeded at the FIRST MUTATION', () => {
+  // WHAT the seed writes is tested behaviourally in
+  // src/lib/em-coding/__tests__/seed-baseline.test.ts — against a stubbed
+  // prisma, asserting the written value. These only check that the callers
+  // exist, which is all a source-text test can honestly claim.
+  it('the three doctor-EDIT paths call it', () => {
+    for (const file of [
+      'src/actions/soap.ts',
+      'src/actions/suggestion-actions.ts',
+      'src/app/api/visits/[id]/em-score/apply-additions/route.ts',
+    ]) {
+      expect(readFileSync(file, 'utf8'), `${file} must seed`).toContain(
+        'seedEmBaselineIfUnset(',
+      );
+    }
+  });
+
+  it('RETRY does not — it is a regeneration, not an edit', () => {
+    // The canonical manual retry failed during L7: soapFinal is populated but
+    // every scoring signal is still null. Seeding there records a level
+    // derived from absent signals, and the resume then makes the next
+    // re-score report a movement the note never made.
+    expect(readFileSync('src/app/api/visits/[id]/retry/route.ts', 'utf8')).not.toContain(
+      'seedEmBaselineIfUnset(',
+    );
+  });
+
+  it('adopt hands over its own prior score, never the failure sentinel', () => {
+    const src = readFileSync('src/actions/suggestion-actions.ts', 'utf8');
+    expect(src).toContain('emDelta.from !== EM_DELTA_INDETERMINATE.from');
+  });
+
+  it('apply-additions selects the signals the level depends on', () => {
+    // prisma is untyped here (`as any`), so a missing select column is
+    // invisible to tsc — cptCodes absent meant the doctor's override was not
+    // projected and the baseline could never match a later score.
+    const src = readFileSync(
+      'src/app/api/visits/[id]/em-score/apply-additions/route.ts',
+      'utf8',
+    );
+    const select = src.slice(src.indexOf('select: {'), src.indexOf('emStale: true'));
+    expect(select).toContain('cptCodes: true');
+    expect(select).toContain('specialty: true');
+  });
+});

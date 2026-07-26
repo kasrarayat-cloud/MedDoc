@@ -16,10 +16,14 @@ import { claimId, recordRendered, wereRendered } from '../attestation';
 const CLAIM = { section: 'FINDINGS', text: 'Right GSV reflux 2.4 seconds.' };
 
 /** A tiny in-memory stand-in for the set operations we use. */
-function fakeRedis() {
+function fakeRedis(opts: { expireFails?: boolean } = {}) {
   const sets = new Map<string, Set<string>>();
+  const ttls = new Map<string, number>();
+  const calls: string[] = [];
   return {
     sets,
+    ttls,
+    calls,
     client: {
       /** `recordRendered` pipelines sadd+expire so a dropped connection cannot
        *  leave a key without a TTL — the stub mirrors that shape. */
@@ -34,12 +38,18 @@ function fakeRedis() {
             });
             return chain;
           },
-          expire() {
+          expire(k: string, ttl: number) {
+            ops.push(() => {
+              if (!opts.expireFails) ttls.set(k, ttl);
+            });
             return chain;
           },
           async exec() {
             ops.forEach((op) => op());
-            return [];
+            calls.push('exec');
+            return opts.expireFails
+              ? [[null, 1] as const, [new Error('expire failed'), null] as const]
+              : [[null, 1] as const, [null, 1] as const];
           },
         };
         return chain;
@@ -50,23 +60,38 @@ function fakeRedis() {
         sets.set(k, s);
         return v.length;
       },
-      async expire() {
+      async expire(k: string, ttl: number) {
+        calls.push('expire');
+        if (opts.expireFails) return 0;
+        ttls.set(k, ttl);
         return 1;
       },
       async smismember(k: string, ...v: string[]) {
         const s = sets.get(k) ?? new Set<string>();
         return v.map((x) => (s.has(x) ? 1 : 0));
       },
+      /** Narrowed delete: the key is only dropped when it genuinely has no
+       *  TTL, so an earlier turn's attested ids are not thrown away. */
+      async pttl(k: string) {
+        calls.push('pttl');
+        return ttls.has(k) ? ttls.get(k)! * 1000 : -1;
+      },
       async del(k: string) {
+        calls.push('del');
         sets.delete(k);
+        ttls.delete(k);
         return 1;
       },
     },
   };
 }
 
-async function withRedis(ready: boolean, fn: (r: ReturnType<typeof fakeRedis>) => Promise<void>) {
-  const r = fakeRedis();
+async function withRedis(
+  ready: boolean,
+  fn: (r: ReturnType<typeof fakeRedis>) => Promise<void>,
+  opts: { expireFails?: boolean } = {},
+) {
+  const r = fakeRedis(opts);
   vi.doMock('@/lib/redis', () => ({
     getRedis: () => r.client,
     isRedisReady: () => ready,
@@ -194,5 +219,58 @@ describe('the attestation cannot authorise the turn that created it', () => {
     expect(check).toBeGreaterThan(-1);
     expect(record).toBeGreaterThan(-1);
     expect(check, 'the check must precede the record').toBeLessThan(record);
+  });
+});
+
+describe('no TTL-less keys', () => {
+  it('sets a TTL on the happy path', async () => {
+    await withRedis(true, async (r) => {
+      const m = await import('../attestation');
+      await m.recordRendered('v1', 'u1', [m.claimId(CLAIM)]);
+      expect(r.ttls.size, 'the key must carry a TTL').toBe(1);
+    });
+  });
+
+  it('when the pipelined expire fails, it RETRIES and then DROPS the key', async () => {
+    // `exec()` reports per-command errors as [err, res] pairs and does not
+    // throw for them, so an expire that failed while the sadd succeeded left a
+    // key that never expires — holding state in the instance that also brokers
+    // the clinical pipeline.
+    await withRedis(
+      true,
+      async (r) => {
+        const m = await import('../attestation');
+        await m.recordRendered('v1', 'u1', [m.claimId(CLAIM)]);
+        expect(r.calls, 'it must retry the TTL').toContain('expire');
+        expect(r.calls, 'and drop the key when that fails too').toContain('del');
+        expect(r.ttls.size).toBe(0);
+        expect(r.sets.size, 'a key with no TTL must not survive').toBe(0);
+      },
+      { expireFails: true },
+    );
+  });
+});
+
+describe('a failed SADD is its own failure, not a TTL problem', () => {
+  it('reports it and does not pretend a record exists', async () => {
+    // `some(([err]) => ...)` over BOTH pairs swallowed a failed sadd — the
+    // attestation was never recorded at all — and misreported it as a missing
+    // TTL. The gate refuses either way, but the operator was told the wrong
+    // thing.
+    const src = readFileSync('src/lib/chat-edit/attestation.ts', 'utf8');
+    expect(src).toContain('const [saddErr] = results[0];');
+    expect(src).toContain('const [expireErr] = results[1];');
+    expect(src, 'the two failures must not be conflated').not.toContain(
+      'results.some(([err])',
+    );
+  });
+
+  it('only drops the key when it genuinely has no TTL', async () => {
+    // recordRendered accumulates ids across listing turns. Deleting on any
+    // expire hiccup would throw away earlier turns' correctly-attested ids
+    // under a live TTL, and make the doctor re-read a list they had read.
+    const src = readFileSync('src/lib/chat-edit/attestation.ts', 'utf8');
+    expect(src).toContain('redis.pttl(k)');
+    expect(src).toContain('if (ttl < 0)');
   });
 });

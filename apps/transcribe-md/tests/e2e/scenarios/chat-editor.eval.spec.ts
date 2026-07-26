@@ -147,6 +147,33 @@ test.describe('the chat editor', () => {
     expect(adoptedCount(seeded.visitId)).toBeGreaterThan(before);
   });
 
+
+  test('every attestation key carries a TTL', async ({ page }) => {
+    test.setTimeout(600_000);
+    const seeded = await open(page);
+    await say(page, 'List every suggestion in full.');
+
+    // Against REAL Redis, not the unit stub: `multi().exec()` reports
+    // per-command errors as [err, res] pairs and does NOT throw, so an expire
+    // that failed while the sadd succeeded would leave a key that never
+    // expires — in the instance that also brokers the clinical pipeline.
+    const keys = execSync(`${QA_COMPOSE} exec -T redis redis-cli --scan --pattern 'chatattest:*'`, {
+      encoding: 'utf8',
+    })
+      .trim()
+      .split('\n')
+      .map((k) => k.trim())
+      .filter(Boolean);
+    expect(keys.length, 'the listing must have recorded an attestation').toBeGreaterThan(0);
+    for (const k of keys) {
+      const ttl = Number(
+        execSync(`${QA_COMPOSE} exec -T redis redis-cli ttl ${k}`, { encoding: 'utf8' }).trim(),
+      );
+      expect(ttl, `${k} must expire`).toBeGreaterThan(0);
+    }
+    void seeded;
+  });
+
   test('an out-of-scope request is refused and changes nothing', async ({ page }) => {
     test.setTimeout(600_000);
     const seeded = await open(page);

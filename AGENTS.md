@@ -53,3 +53,19 @@ override at it.
 If a flow genuinely cannot be exercised on QA, say so in the report and leave it
 unverified. An unverified step named honestly is worth more than a green tick
 bought with a patient's record.
+
+## Tracked fixtures — a recorded decision
+
+`WM IOV Template.docx` at the repo root is a **known, accepted tracked
+fixture**. It is a customer's BLANK form — headings, dropdown content controls
+and letterhead, no patient data — and the repository is private. It is the only
+real-world template the Template Twin work can be exercised against, and a copy
+lives at `apps/transcribe-md/tests/e2e/fixtures/sample-form.docx` for the E2E
+packs.
+
+Decided 2026-07-26. **Do not re-flag it** in audits or reports, and do not
+rewrite history to remove it.
+
+What this does NOT cover, and what remains forbidden: any **filled** document or
+note. `twin-*.docx`, `diag-*`, and the other clinical artifacts at the repo root
+carry PHI and are gitignored. A filled document is never a fixture.
