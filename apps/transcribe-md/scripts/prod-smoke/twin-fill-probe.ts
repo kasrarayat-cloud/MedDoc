@@ -154,6 +154,41 @@ async function main() {
     }
   }
 
+  // ADDRESSING. The bridge matches a note table row to an IR row by vein label;
+  // when that match fails the cell is silently left to the resolver, which
+  // cannot address rows at all. Print both sides so the mismatch is visible.
+  const { parseMarkdownTables } = await import('@/lib/template-twin/bridge-fill-diag');
+  for (const t of parseMarkdownTables(compiled.pinnedSyntheticNote!)) {
+    say(`NOTE TABLE header=[${t.header.join(' | ')}] rows=${t.rows.length}`);
+    for (const r of t.rows) say(`  note row "${r.label}" -> [${r.cells.join(' | ')}]`);
+  }
+
+  // Full picture, compactly: what each field's binding is and how it resolved.
+  const irFields = (compiled.compiledDocumentIr as {
+    fields: {
+      fieldId: string;
+      rendererBinding: { bindingType: string; rowLaterality?: string };
+    }[];
+  }).fields;
+  const bindingById = new Map(irFields.map((f) => [f.fieldId, f.rendererBinding]));
+  const irCells = irFields.filter((f) => f.rendererBinding.bindingType === 'table_cell');
+  say(`IR table cells=${irCells.length}`);
+  for (const f of irCells.slice(0, 60)) {
+    const b = f.rendererBinding as { rowIndex?: number; rowLaterality?: string; columnIndex?: number };
+    const st = fields.find((x) => x.fieldId === f.fieldId);
+    say(
+      `  ir row=${String(b.rowIndex).padStart(2)} col=${b.columnIndex} lat=${b.rowLaterality} ` +
+        `"${String(labelById.get(f.fieldId)).slice(0, 28)}" -> ${st?.status}/${st?.reasonCode}`,
+    );
+  }
+  const byBucket = new Map<string, number>();
+  for (const f of fields) {
+    const b = bindingById.get(f.fieldId);
+    const key = `${b?.bindingType}/${b?.rowLaterality ?? '-'} ${f.status} ${f.reasonCode}`;
+    byBucket.set(key, (byBucket.get(key) ?? 0) + 1);
+  }
+  for (const [key, n] of [...byBucket.entries()].sort()) say(`BUCKET ${n.toString().padStart(3)}  ${key}`);
+
   const counts = prepared.manifest.counts;
   say(`counts=${JSON.stringify(counts)}`);
 }
