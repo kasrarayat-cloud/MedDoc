@@ -31,6 +31,7 @@
 // ============================================================================
 
 import { NextResponse } from 'next/server';
+import { invalidateVisitFills } from '@/lib/docx-preview/fill-cache';
 import { z } from 'zod';
 
 import prisma from '@meddoc/db';
@@ -363,6 +364,13 @@ export const POST = withApiHandler<{ id: string }>(
             : {}),
         },
       });
+      // The pre-sign preview cache is keyed on soapVersion, which SIGNING DOES
+      // NOT BUMP — so without this a signed visit could be served the pre-sign
+      // render for the rest of the TTL, defeating the rule that a signed
+      // document is never re-derived. Preview-side only; nothing here is read
+      // by this route's own gates.
+      void invalidateVisitFills(visitId);
+
       if (updated.count === 0) {
         // Another concurrent request got there first. Re-read.
         const refreshed = await prisma.transcribeVisit.findUnique({

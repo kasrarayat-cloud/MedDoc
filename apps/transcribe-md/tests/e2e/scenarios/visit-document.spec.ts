@@ -15,6 +15,7 @@
 // ============================================================================
 
 import { execSync } from 'node:child_process';
+import { readFileSync, writeFileSync } from 'node:fs';
 
 import { expect, test, type Page } from '@playwright/test';
 
@@ -28,6 +29,9 @@ import {
   VISIT_DOC_PASSWORD,
   type OwnerCredentials,
 } from '../helpers/seedVisitDocVisit';
+
+/** Written by the tap-to-edit walk and looked for in the signed file. */
+const EDIT_MARK = 'Bilateral study completed without complication.';
 
 function converter(action: 'stop' | 'start') {
   try {
@@ -108,6 +112,64 @@ test.describe('the visit page is the document', () => {
     await expect(page.getByTestId('review-doc-rx-gate')).toBeVisible();
     // And the pinned bar is untouched.
     await expect(page.getByRole('button', { name: /sign & download/i })).toBeVisible();
+  });
+
+
+  test('tap-to-edit: the edit reaches the document AND the delivered file', async ({ page }) => {
+    test.setTimeout(420_000);
+    await page.setViewportSize({ width: 1400, height: 1000 });
+    const seeded = await openVisit(page);
+    await page.getByTestId('visit-document').waitFor({ state: 'visible', timeout: 120_000 });
+
+    const counts = page.getByTestId('visit-document-counts');
+    const shaBefore = await counts.getAttribute('data-fill-sha');
+
+    const opener = page.locator('[data-testid^="section-edit-"]').first();
+    await expect(opener, 'every anchored section should offer an edit').toBeVisible();
+    const label = (await opener.getAttribute('data-testid'))!.replace('section-edit-', '');
+    await opener.click();
+    // By testid, not by `#edit-${label}`: the DOM id is slugified (an id may
+    // not contain whitespace), so a label like "Chief Complaint" would make
+    // that selector a descendant combinator matching nothing.
+    const ta = page.getByTestId(`section-textarea-${label}`);
+    await expect(ta).toBeVisible();
+    await ta.fill(`${await ta.inputValue()}\n${EDIT_MARK}`);
+    await page.getByTestId(`section-save-${label}`).click();
+
+    // The document re-fills through the SAME path an adopt uses.
+    await expect
+      .poll(async () => counts.getAttribute('data-fill-sha').catch(() => shaBefore), {
+        timeout: 120_000,
+        message: 'the document should re-fill after an edit',
+      })
+      .not.toBe(shaBefore);
+    // And editing still writes no fill manifest.
+    expect(visitDocManifestCount()).toBe(0);
+
+    // Sign, and read the file the doctor actually receives.
+    const dismiss = page.getByRole('button', { name: /^dismiss/i }).first();
+    if (await dismiss.count()) {
+      await dismiss.click();
+      await page.waitForTimeout(2500);
+    }
+    await page.getByRole('button', { name: /sign & download/i }).click();
+    const pending = page.waitForEvent('download', { timeout: 120_000 });
+    await page.getByRole('button', { name: /^sign & deliver$/i }).dispatchEvent('click');
+    const download = await pending;
+    const file = await download.path();
+    writeFileSync('/tmp/qa-signed-preview.pdf', readFileSync(file!));
+
+    // Read the PDF's TEXT. A byte search finds nothing — the streams are
+    // compressed — and would pass as a false negative forever.
+    const text = execSync(
+      `node -e "const {extractText,getDocumentProxy}=require('unpdf');const fs=require('fs');` +
+        `(async()=>{const d=await getDocumentProxy(new Uint8Array(` +
+        `fs.readFileSync('/tmp/qa-signed-preview.pdf')));` +
+        `const r=await extractText(d,{mergePages:true});process.stdout.write(r.text)})()"`,
+      { encoding: 'utf8', cwd: process.cwd() },
+    );
+    expect(text, 'the signed file must carry the doctor’s edit').toContain(EDIT_MARK);
+    void seeded;
   });
 
   test('390px: the document draws and nothing overflows sideways', async ({ page }) => {

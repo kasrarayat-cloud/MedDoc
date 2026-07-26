@@ -23,6 +23,11 @@ import prisma from '@meddoc/db';
 
 import { requireSession } from '@/lib/auth';
 import { convertDocxToPdf } from '@/lib/docx-preview/convert';
+import {
+  readCachedFill,
+  writeCachedFill,
+  type CachedFill,
+} from '@/lib/docx-preview/fill-cache';
 import { readAndPrepareTemplateTwinFill } from '@/lib/template-twin/fill-engine';
 import { loadNativeTemplateDocxForVisit } from '@/lib/template-twin/native-export';
 import type { NativePreviewResult } from './preview-native-document';
@@ -69,6 +74,7 @@ export async function previewVisitDocumentAction(
       transcriptText: true,
       entities: true,
       soapFinal: true,
+      soapVersion: true,
       noteTemplateId: true,
       noteTemplateVersion: true,
       createdAt: true,
@@ -123,6 +129,21 @@ export async function previewVisitDocumentAction(
         };
   }
 
+  // Cached on the NOTE'S VERSION — and only ever consulted BELOW the signed
+  // branch. Read above it, a pre-sign entry would be served for a signed visit
+  // and quietly defeat the one rule that branch exists to enforce.
+  const cached = await readCachedFill(visitId, visit.soapVersion);
+  if (cached) {
+    return {
+      ok: true,
+      kind: cached.kind,
+      data: cached.data,
+      reason: cached.reason as VisitPreviewResult['reason'],
+      counts: cached.counts,
+      fillSha: cached.fillSha,
+    };
+  }
+
   try {
     const { prepared } = await readAndPrepareTemplateTwinFill({
       practiceId: visit.user.practiceId,
@@ -159,23 +180,24 @@ export async function previewVisitDocumentAction(
   }
 
   const converted = await convertDocxToPdf(docx, 'visit.docx');
-  if (converted.pdf) {
-    return {
-      ok: true,
-      kind: 'pdf',
-      data: Buffer.from(converted.pdf).toString('base64'),
-      reason: null,
-      counts,
-      fillSha,
-    };
-  }
-  // Converter unavailable — hand the true bytes over and let the browser draw.
-  return {
-    ok: true,
-    kind: 'docx_fallback',
-    data: Buffer.from(docx).toString('base64'),
-    reason: converted.reason,
-    counts,
-    fillSha,
-  };
+  const result: CachedFill = converted.pdf
+    ? {
+        kind: 'pdf',
+        data: Buffer.from(converted.pdf).toString('base64'),
+        reason: null,
+        counts,
+        fillSha,
+      }
+    : {
+        // Converter unavailable — hand the true bytes over and let the browser
+        // draw them. Cached too: a sidecar that is down stays down, and
+        // re-running the whole fill to rediscover that helps nobody.
+        kind: 'docx_fallback',
+        data: Buffer.from(docx).toString('base64'),
+        reason: converted.reason,
+        counts,
+        fillSha,
+      };
+  await writeCachedFill(visitId, visit.soapVersion, result);
+  return { ok: true, ...result, reason: result.reason as VisitPreviewResult['reason'] };
 }

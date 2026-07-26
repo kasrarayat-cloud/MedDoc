@@ -147,3 +147,7 @@ Caddyfile.bak-T0.19-followup
 /dom-flag-off.txt
 /*.docx
 apps/transcribe-md/dp-*.png
+# Walk screenshots written into the app tree by ad-hoc specs.
+apps/transcribe-md/s1-*.png
+apps/transcribe-md/p2-*.png
+apps/transcribe-md/chat-*.png

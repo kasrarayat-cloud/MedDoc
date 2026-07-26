@@ -84,6 +84,7 @@ export default defineConfig({
         // converter mid-run, which no other spec should have to survive.
         '**/doc-preview.spec.ts',
         '**/visit-document.spec.ts',
+        '**/chat-editor.spec.ts',
         '**/a11y.spec.ts',
         '**/23-note-format-phi-parse-reject.spec.ts',
         '**/24-rx-clinical-safety.spec.ts',
@@ -159,6 +160,13 @@ export default defineConfig({
       // this flag, so running these there would wait 120s for a surface that
       // was never compiled in and red the gate for an environment reason.
       // Serialised — one spec stops the converter sidecar on purpose.
+      name: 'chat-editor',
+      testMatch: ['**/chat-editor.spec.ts', '**/zz-chat.spec.ts'],
+      fullyParallel: false,
+      workers: 1,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
       name: 'visit-doc',
       testMatch: ['**/visit-document.spec.ts'],
       fullyParallel: false,

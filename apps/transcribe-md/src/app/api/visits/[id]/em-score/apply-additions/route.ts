@@ -16,6 +16,7 @@
 // ============================================================================
 
 import { NextResponse } from 'next/server';
+import { invalidateVisitFills } from '@/lib/docx-preview/fill-cache';
 import { z } from 'zod';
 
 import prisma from '@meddoc/db';
@@ -173,8 +174,15 @@ export const POST = withApiHandler<{ id: string }>(
       data: {
         soapDraft: merge.newSoap,
         soapFinal: merge.newSoap,
+        // This route rewrites the note, so it must move the version with it.
+        // The document preview is cached on (visitId, soapVersion); leaving
+        // this untouched served the pre-addition render for the whole TTL and
+        // falsified the cache's central claim — that every path which can
+        // change what the document says bumps this.
+        soapVersion: { increment: 1 },
       },
     });
+    void invalidateVisitFills(visitId);
 
     // Audit row. Metadata carries the from→to code pair + per-criterion
     // counts; never the addition text itself (PHI).
