@@ -42,6 +42,19 @@ const DICTATION = [
   'Diagnosis: Chronic venous hypertension with other complications of bilateral lower extremities.',
 ].join(' ');
 
+/** Every value the dictation states that the document must contain. */
+const EXPECTED_IN_DOCUMENT = [
+  '6.2', '3.4', '5.5', '2.2', '5.1', '1.5',   // right leg
+  '5.8', '3.1', '4.1', '1.8', '3.9', '1.1',   // left leg
+  'Bilateral Detailed',                        // an adopted enumerated pick
+];
+
+/** Nothing dictates these, so they must come back blank — the honest-blank
+ *  half of the proof. Any of them appearing means something was invented. */
+const MUST_STAY_BLANK = [
+  'Choose an item.',   // an unfilled dropdown placeholder must not survive as text
+];
+
 async function main() {
   const out = process.argv[2] ?? '/app/twin-visit-export.docx';
 
@@ -209,6 +222,25 @@ async function main() {
     if (outcome.native) {
       writeFileSync(out, Buffer.from(outcome.native.bytes));
       say(`WROTE ${out} (${outcome.native.bytes.byteLength} bytes)`);
+
+      // ── THE ARTIFACT CHECK ────────────────────────────────────────────────
+      // A run once reported nativeTemplateApplied=true and wrote a 49 297-byte
+      // file that contained NONE of the dictated values: the fill had resolved
+      // nothing, validated trivially, and returned the doctor's blank form
+      // wearing a success flag. A flag is not evidence. Open the document and
+      // look for the numbers.
+      const JSZip = (await import('jszip')).default;
+      const zip = await JSZip.loadAsync(Buffer.from(outcome.native.bytes));
+      const xml = await zip.file('word/document.xml')!.async('string');
+      const text = xml.replace(/<[^>]+>/g, '');
+      const missing = EXPECTED_IN_DOCUMENT.filter((v) => !text.includes(v));
+      say(`ARTIFACT expected=${EXPECTED_IN_DOCUMENT.length} missing=${missing.length}`);
+      if (missing.length > 0) say(`ARTIFACT MISSING: ${missing.join(', ')}`);
+      // And the fields nobody dictates must NOT be there.
+      const leaked = MUST_STAY_BLANK.filter((v) => text.includes(v));
+      say(`ARTIFACT blanks-held=${leaked.length === 0} ${leaked.length ? `LEAKED: ${leaked.join(', ')}` : ''}`);
+      say(`ARTIFACT ${missing.length === 0 && leaked.length === 0 ? 'PASS' : 'FAIL'}`);
+      if (missing.length > 0 || leaked.length > 0) process.exitCode = 1;
     }
   } finally {
     if (visitId) {
