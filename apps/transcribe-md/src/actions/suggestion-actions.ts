@@ -43,6 +43,11 @@
 // ============================================================================
 
 import { revalidatePath } from 'next/cache';
+import {
+  isImagingReportSpecialty,
+  ultrasoundSpecialtyEnabled,
+} from '@meddoc/shared/specialties';
+import { seedEmBaselineIfUnset } from '@/lib/em-coding/seed-baseline';
 import { z } from 'zod';
 
 import prisma from '@meddoc/db';
@@ -192,6 +197,9 @@ type LoadedVisit = {
   rxDrafts: unknown;
   cptCodes: unknown;
   emPendingChange: unknown;
+  /** For the seed-on-first-mutation path. */
+  emScoredCode: string | null;
+  specialty: string;
 };
 
 /** Shared auth + ownership + lifecycle gate (mirrors actions/soap.ts). */
@@ -208,6 +216,8 @@ async function loadVisitForSuggestion(
       deletedAt: true,
       archivedAt: true,
       soapFinal: true,
+      emScoredCode: true,
+      specialty: true,
       soapVersion: true,
       suggestedClaims: true,
       // E/M visible-confirm — structured signals for the scoring engine
@@ -241,6 +251,10 @@ async function loadVisitForSuggestion(
  *  confirmation (the GOAL's invariant: never toward a silent sign). `from`
  *  and `to` differ so it survives the merge-cancel and forces the gate; the
  *  sign dialog renders an honest "couldn't recompute — review" prompt. */
+// NOT exported: this is a 'use server' file, and Next allows it to export
+// async functions ONLY — an exported object makes the whole module fail to
+// evaluate, which took the visit page down with it. The one comparison that
+// needs this constant lives in this file.
 const EM_DELTA_INDETERMINATE = { from: 'unknown', to: 'review' } as const;
 
 /** The level change an action produced, as the DOCTOR SEES IT. Computes the
@@ -441,6 +455,32 @@ export async function adoptSuggestionAction(
         },
       });
     }
+
+    // The baseline, for free — AFTER the atomic update, so the adopt's own
+    // write stays first on this path. The value is the PRE-adopt level either
+    // way: `emDelta.from` was computed against the note as it stood before.
+    // computeEmLevelDelta just scored the PRE-adopt
+    // note, and `from` is exactly the level we would otherwise pay to compute.
+    // (It returns null when the level did not move, in which case `to` — also
+    // the prior level — is the right seed.)
+    await seedEmBaselineIfUnset({
+      visitId: visit.id,
+      priorSoap: visit.soapFinal,
+      currentScoredCode: visit.emScoredCode,
+      signals: { icdCodes: visit.icdCodes, rxDrafts: visit.rxDrafts, cptCodes: visit.cptCodes },
+      ctx: { practiceId: session.user.practiceId, userId: session.user.id },
+      applies: !(ultrasoundSpecialtyEnabled() && isImagingReportSpecialty(visit.specialty)),
+      // ONLY a real CPT code. `computeEmLevelDelta` does not return null when
+      // scoring fails — it returns EM_DELTA_INDETERMINATE, whose `from` is the
+      // string 'unknown'. Passing that seeded the baseline with a non-code, and
+      // every later re-score then reported a movement FROM 'unknown' that never
+      // happened: a fabricated confirm dialog and a fabricated EM_RESCORED row.
+      //
+      // Without it the fallback scores the prior note, hits the same failure,
+      // throws, and the seed safely no-ops — which is what should happen.
+      knownPriorCode:
+        emDelta && emDelta.from !== EM_DELTA_INDETERMINATE.from ? emDelta.from : null,
+    });
 
     revalidatePath(`/visits/${visit.id}`);
     return {
