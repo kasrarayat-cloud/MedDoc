@@ -725,3 +725,165 @@ gone on reload. `CHAT_EDIT_TURN` metadata is intent kinds and counts.
 ⚠ A live Anthropic key was written to a compose override during this work. It
 was **never committed** (`git log -S` confirms); the file is deleted and
 `docker-compose.*key*.yml` is gitignored. Rotation is Kasra's call.
+
+---
+
+# S2 HARDENING — 2026-07-26
+
+## 1. Server-owned reading attestation
+
+The gate this replaces searched a **client-supplied** transcript for each
+claim's text. A server action is a public endpoint, so a crafted call could hand
+over a fabricated assistant turn and satisfy it without a word having reached a
+doctor. It read like evidence and was not.
+
+Now the server records it. The model returns a `listed_suggestions` intent
+declaring what its reply lists; the server checks its own outgoing reply for
+each claim's **full text** and records only what it can actually find, keyed to
+`(visit, doctor)` in Redis under a **content hash** of the claim — not its
+index, because indexes shift as the array shrinks and a record that survived a
+shift would authorise something never read.
+
+| property | evidence |
+|---|---|
+| forged transcript refused | E2E rewrites the history inside a *legitimate* request; **0 adopted** |
+| the client check is gone | `wereListed` deleted; unit test asserts its absence |
+| fails closed | no Redis → refuse; 6 store tests |
+| cannot self-authorise | `wereRendered` is evaluated **before** `recordRendered`, so a reply cannot both list and adopt |
+| content-hashed | `JSON.stringify([section, text])` — a space-joined key let `{'A B','C'}` collide with `{'A','B C'}` |
+
+## 2. E/M-stale unification
+
+`emStale` is set by **every** doctor-reachable content mutation. A fan-out sweep
+of the codebase enumerated them, and found one my own grep had missed: a
+**retry** on a READY visit re-runs the pipeline over the doctor's edited note
+and re-persists it.
+
+| path | covered |
+|---|---|
+| draft save — inline editor, tap-to-edit, chat `edit_section` all funnel here | `actions/soap.ts` |
+| adopting a suggestion | `actions/suggestion-actions.ts` |
+| applying E/M additions | `em-score/apply-additions` |
+| retry on a READY visit | `visits/[id]/retry` |
+
+The sign route resolves it **itself**. The first version returned 409 and told
+the doctor to open the codes row — which made a server-side gate depend on a
+control that only exists behind `NEXT_PUBLIC_REVIEW_DOC_VIEW`. With that flag
+off (its own documented rollback) every edited visit would have been
+**permanently unsignable**, and in a second tab the named remedy did nothing.
+It now re-scores inline and falls through to the **existing** acknowledgement
+gate, which is byte-for-byte untouched and still runs for every case it did
+before.
+
+**Imaging reports are exempt.** Ultrasound is live in prod and the pipeline
+skips E/M for it entirely; gating a level that does not exist would have made
+every ultrasound report unsignable after any edit, and "resolving" it would have
+meant inventing a clinic code.
+
+### The bounded gap, named
+
+`emScoredCode` is the level last validated. It exists because the first version
+had **no before**: it scored the current note, called that the baseline, and
+concluded nothing had moved — every time. The gate cleared itself and looked
+exactly like a gate that had checked.
+
+A visit with no recorded baseline (every visit predating this deploy) has its
+baseline **established** by the first re-score rather than a movement asserted
+that cannot be substantiated. So the first edit of an existing visit is not
+gated; every edit after it is. Prod has **2 READY visits**; the migration
+defaults `emStale=false`, so neither becomes unsignable.
+
+## 3. Per-turn cap
+
+20 actions. Enforced on one budget for the whole turn, so 34 requested as a
+single bulk intent and 34 requested as 34 singles both stop at 20 — the same
+lesson as the listing gate, which was once evaluated per-intent and walked past
+by exactly that shape. A capped turn **says so** in the reply and carries
+`capped` in its audit row.
+
+## 4. Found in the review OF the fixes — and why that mattered
+
+The re-audit found one defect that broke the very gate this change set exists to
+protect, and my own test had pinned it:
+
+> `cause: 'note_edited'` was not a member of `EM_CHANGE_CAUSES`, so **every**
+> record the re-score wrote was malformed by its own parser and coerced to the
+> `unknown → unknown` sentinel. A doctor who confirmed the correct code was
+> refused, and the confirm card read *"now supports unknown, up from unknown"*.
+>
+> My test asserted `toContain("existing?.cause ?? 'note_edited'")` — the
+> presence of a literal its own parser rejects. Two files that never met.
+
+There is a **round-trip** test now: build the record the way the writer builds
+it, feed it to the reader, assert the codes survive. It goes red without the
+enum entry (verified by removing it).
+
+Also fixed from that pass: the re-score reported success when its write missed;
+its imaging early-return did the same; a *cleared* record left the pre-re-score
+value in place, demanding acknowledgement of a change the DB no longer held; and
+a doctor's own edit was described to them as *"an AI-suggestion action"*.
+
+## The gate CATCHES a change — end to end
+
+| | |
+|---|---|
+| planted baseline | `emScoredCode = 99214`, note scores `99212` |
+| sign | **400** — *"Documentation level changed (99214 → 99212) by an edit to the note — confirm the new level before signing."* |
+| the record reaching the gate | `{from: 99214, to: 99212, cause: note_edited}` — **real codes, not the sentinel** |
+| visit | stayed `READY` |
+| audit | `EM_SIGN_BLOCKED_UNACKNOWLEDGED_CHANGE` written |
+
+## The scripted conversation, with audit rows
+
+```
+CHAT_EDIT_TURN     {"intents":["listed_suggestions"],"adopted":0,"capped":0}
+CHAT_EDIT_TURN     {"intents":["listed_suggestions"],"adopted":0,"capped":0}
+SUGGESTION_ADOPTED {"section":"IMPRESSION","remaining":2}
+SUGGESTION_ADOPTED {"section":"FINDINGS","remaining":1}
+SUGGESTION_ADOPTED {"section":"FINDINGS","remaining":0}
+CHAT_EDIT_TURN     {"intents":["adopt_suggestions"],"adopted":3,"capped":0}
+CHAT_EDIT_TURN     {"intents":["edit_section"],"edited":1}
+CHAT_EDIT_TURN     {"intents":["refuse"],"refused":1}
+CHAT_EDIT_TURN     {"intents":["scroll_to"]}
+```
+
+One `SUGGESTION_ADOPTED` per claim — the loop, not a bulk endpoint. Asked to
+override the prescription warning and sign: *"actions you must take personally,
+having seen them yourself. There's no way for me to do them on your behalf."*
+Visit stayed READY; zero gate rows.
+
+## Verification
+
+2441 unit · `visit-doc` 8/8 · `chat-editor` 6/6 (real model) · a11y 26/26 ·
+lint clean.
+
+## Prod
+
+`app 9e40ef1fcc54`, 10/10 healthy, co-tenants 307/200/200/404, 0 errors.
+`emStale` + `emScoredCode` applied; both READY visits `emStale=false` and
+unaffected. Three new audit actions present. `NEXT_PUBLIC_CHAT_EDITOR=true`.
+Rollback `pre-chat-20260726`.
+
+## Chat transcript storage — the decision
+
+**Client-side only.** Component state for the life of the page; not persisted,
+gone on reload. The sole server-side residue is the reading attestation:
+**content hashes, no text**, in Redis, keyed `(visit, doctor)`, 2-hour TTL. The
+note and its suggestions go to the model on the same server-side path as
+generation; `AiCall` stores a prompt HASH, never prompt text. `CHAT_EDIT_TURN`
+metadata is intent kinds and counts.
+
+## Held
+
+- **The attestation proves the SERVER emitted the text, not that a human read
+  it.** A scripted caller can make two sequential calls — "list them", then
+  "accept all" — and satisfy it. Inherent to server-side attestation; worth
+  naming rather than pretending otherwise.
+- **`multi().exec()` result is unchecked** — an `expire` that errors while
+  `sadd` succeeds would leave a key without a TTL, silently.
+- **The E/M override route** deliberately does NOT mark stale: an override is
+  the doctor choosing the level, it persists into `cptCodes`, and the re-score
+  projects it — so the baseline stays coherent and re-confirming their own
+  choice would be wrong. Considered, not overlooked.
+- **Rotate the Anthropic key.** Never committed; passed via shell env; echoed
+  into session output twice by a redaction that did not match.
