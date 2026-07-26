@@ -80,6 +80,9 @@ export default defineConfig({
       testIgnore: [
         // The pre-sign document surface — its own flag-ON project below.
         '**/review-document.spec.ts',
+        // The real-document preview — flag-ON project below; also STOPS the
+        // converter mid-run, which no other spec should have to survive.
+        '**/doc-preview.spec.ts',
         '**/a11y.spec.ts',
         '**/23-note-format-phi-parse-reject.spec.ts',
         '**/24-rx-clinical-safety.spec.ts',
@@ -137,6 +140,16 @@ export default defineConfig({
       // run against their own fixture builds.
       name: 'review-doc',
       testMatch: ['**/review-document.spec.ts'],
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      // Real-document preview (NEXT_PUBLIC_DOC_PREVIEW=true). Its own project
+      // because one spec deliberately STOPS the converter sidecar to prove the
+      // fallback — serialised so it cannot break a parallel spec.
+      name: 'doc-preview',
+      testMatch: ['**/doc-preview.spec.ts'],
+      fullyParallel: false,
+      workers: 1,
       use: { ...devices['Desktop Chrome'] },
     },
     {

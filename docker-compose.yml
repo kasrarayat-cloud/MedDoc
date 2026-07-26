@@ -550,6 +550,7 @@ services:
         NEXT_PUBLIC_REVIEW_DOC_VIEW: "${NEXT_PUBLIC_REVIEW_DOC_VIEW:-false}"
         # Settings row simplification. ROLLBACK: unset + rebuild.
         NEXT_PUBLIC_SETTINGS_SIMPLE_ROW: "${NEXT_PUBLIC_SETTINGS_SIMPLE_ROW:-false}"
+        NEXT_PUBLIC_DOC_PREVIEW: "${NEXT_PUBLIC_DOC_PREVIEW:-false}"
     restart: unless-stopped
     logging:
       driver: json-file

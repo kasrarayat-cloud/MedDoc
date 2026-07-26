@@ -192,6 +192,7 @@ export default async function SettingsPage() {
     defaultCount: t.defaultCount,
     pdfNativeCertified: t.pdfNativeCertified,
     pdfNativePendingPreview: t.pdfNativePendingPreview,
+    nativePreviewAvailable: t.nativePreviewAvailable,
     updatedAtIso: t.updatedAt.toISOString(),
   }));
 

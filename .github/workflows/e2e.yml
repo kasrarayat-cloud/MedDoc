@@ -168,6 +168,29 @@ jobs:
           CI: "true"
         run: npx playwright test --project=review-doc
 
+      # ── Real-document preview. Its own flag-ON image, and the converter
+      #    sidecar, because one spec STOPS the converter on purpose to prove the
+      #    fallback — the guarantee the whole feature rests on. ──
+      - name: Build flag-ON image for the document preview
+        run: >
+          docker build -f apps/transcribe-md/Dockerfile
+          --build-arg NEXT_PUBLIC_DOC_PREVIEW=true
+          --build-arg NEXT_PUBLIC_SETTINGS_SIMPLE_ROW=true
+          --build-arg NEXT_PUBLIC_SKIN_BETA=true
+          -t meddoc-pro-transcribe-md:doc-preview .
+
+      - name: Start the converter sidecar + app on the flag-ON image
+        run: >
+          docker compose -f docker-compose.qa.yml -f docker-compose.qa.docpreview.yml
+          up -d --wait gotenberg transcribe-md
+
+      - name: Run E2E (doc-preview — including the sidecar-down fallback)
+        working-directory: apps/transcribe-md
+        env:
+          PW_BASE_URL: http://localhost:9020
+          CI: "true"
+        run: npx playwright test --project=doc-preview
+
       - name: Restore the fixture app image
         run: >
           MOCK_TEMPLATE_PHI_FLAG=true MOCK_RX_WARNINGS=true

@@ -28,7 +28,13 @@ import {
   getNoteTemplateForEditAction,
   saveNoteTemplateAction,
 } from '@/actions/note-template-lifecycle';
+import {
+  previewNativeDocumentAction,
+  type NativePreviewResult,
+} from '@/actions/preview-native-document';
 import { previewNoteTemplateAction } from '@/actions/preview-note-template';
+import { previewUploadedFormAction } from '@/actions/preview-uploaded-form';
+import { NativeDocumentPreview } from '@/components/native-preview/native-document-preview';
 import { SPECIALTY_IDS } from '@meddoc/shared/specialties';
 import { certifyPdfTemplateAction } from '@/actions/certify-pdf-template';
 import type { TemplateReviewModel, ClientTemplateListItem } from '@/lib/note-template-persist/types';
@@ -36,6 +42,7 @@ import { TemplateReviewEditor } from './template-review-editor';
 // UX simplification pack (A) — flag-gated. OFF ⇒ every path below behaves
 // exactly as before; the review editor stays the destination after a parse.
 import { isUxSimplify } from '@/config/ux-simplify';
+import { isDocPreview } from '@/config/doc-preview';
 import { isSettingsSimpleRow } from '@/config/settings-simple-row';
 import { ConfirmCard, ProcessingStages, useStages } from './upload-flow';
 
@@ -112,13 +119,15 @@ export function NoteFormatManager({
 
   // ── UX simplification pack (A) state. Inert when the flag is OFF. ──
   const uxSimplify = isUxSimplify();
+  const docPreview = isDocPreview();
   /** The uploaded file is RETAINED through the flow so confirm can hand the
    *  same bytes to certifyPdfTemplateAction. The old flow extracted text and
    *  dropped the bytes, which is exactly why a second "Set up native export"
    *  upload existed at all. Kept in memory only — never persisted here. */
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const { stages, step, reset: resetStages } = useStages(true);
-  const [sample, setSample] = useState<string | null>(null);
+  const [sample, setSample] = useState<NativePreviewResult | null>(null);
+  const [sampleMarkdown, setSampleMarkdown] = useState<string | null>(null);
   const [sampleFailed, setSampleFailed] = useState(false);
   const [certError, setCertError] = useState<string | null>(null);
   /** Confirm failure shown IN the card. A toast alone auto-dismisses after 4s,
@@ -163,7 +172,7 @@ export function NoteFormatManager({
     setView(recoverView);
   }
 
-  function runParse(text: string) {
+  function runParse(text: string, sourceFile?: File) {
     setView('parsing');
     startTransition(async () => {
       try {
@@ -203,17 +212,57 @@ export function NoteFormatManager({
         setSample(null);
         setSampleFailed(false);
         try {
-          const prev = await previewNoteTemplateAction(buildConfirmPayload(model));
-          if (prev.ok) {
-            setSample(prev.markdown);
+          // The doctor's OWN page, rendered from the bytes they just uploaded.
+          // Filled for a flat PDF; the form itself for a .docx. Nothing is
+          // persisted by this call and a failure never blocks the confirm.
+          if (!docPreview) {
+            // Flag OFF — the previous markdown sample, unchanged.
+            const prev = await previewNoteTemplateAction(buildConfirmPayload(model));
+            if (prev.ok) {
+              setSampleMarkdown(prev.markdown);
+              step('sample', 'done');
+            } else {
+              setSampleMarkdown('');
+              setSampleFailed(true);
+              step('sample', 'done', 'unavailable');
+            }
+            setView('confirm');
+            return;
+          }
+          if (!sourceFile) {
+            // Pasted text: there is no form. Say so — do not draw a mock.
+            setSample({
+              ok: false,
+              kind: null,
+              data: null,
+              reason: 'no_form_uploaded',
+            });
             step('sample', 'done');
+            setView('confirm');
+            return;
+          }
+          const pfd = new FormData();
+          pfd.set('file', sourceFile);
+          pfd.set('sections', JSON.stringify(model.sections ?? []));
+          pfd.set(
+            'headerFields',
+            JSON.stringify(model.styleProfile?.headerFields ?? []),
+          );
+          const prev = await previewUploadedFormAction(pfd);
+          if (prev.ok) {
+            setSample(prev);
+            step('sample', 'done', prev.kind === 'docx_fallback' ? 'close preview' : undefined);
           } else {
-            setSample('');
+            setSample(prev);
             setSampleFailed(true);
             step('sample', 'done', 'unavailable');
           }
         } catch {
-          setSample('');
+          // NOT null — the flag-ON card tests `sample === null` FIRST and would
+          // sit on "Opening your form…" forever. A failure must look like a
+          // failure, which is the whole point of carrying a reason.
+          setSample({ ok: false, kind: null, data: null, reason: 'sample_unavailable' });
+          setSampleMarkdown('');
           setSampleFailed(true);
           step('sample', 'done', 'unavailable');
         }
@@ -389,6 +438,7 @@ export function NoteFormatManager({
     setActivatedId(null);
     setCertError(null);
     setSample(null);
+    setSampleMarkdown(null);
     setSampleFailed(false);
     resetStages(false);
     runParse(text);
@@ -413,6 +463,7 @@ export function NoteFormatManager({
     setActivatedId(null);
     setCertError(null);
     setSample(null);
+    setSampleMarkdown(null);
     setSampleFailed(false);
     resetStages(true);
     setView('parsing');
@@ -430,7 +481,7 @@ export function NoteFormatManager({
         setPasteText(ex.text);
         // runParse opens its own transition + owns its own error recovery (also
         // to 'entry'); this catch only covers the extract action itself.
-        runParse(ex.text);
+        runParse(ex.text, file);
       } catch (err) {
         setPendingFile(null);
         handleActionError(err, 'entry');
@@ -546,7 +597,9 @@ export function NoteFormatManager({
         name={review.model.name}
         sectionCount={review.model.sections.length}
         headerFieldCount={review.model.styleProfile.headerFields?.length ?? 0}
-        sampleMarkdown={sample}
+        sample={sample}
+        sampleMarkdown={sampleMarkdown}
+        docPreview={docPreview}
         sampleFailed={sampleFailed}
         nativeCandidate={isNativeCandidate}
         busy={confirmBusy || pending}
@@ -677,6 +730,26 @@ function TemplateRow({
 }) {
   const setupRef = useRef<HTMLInputElement | null>(null);
   const [overflowOpen, setOverflowOpen] = useState(false);
+  /** The inline "See your form" panel. `preview === null` means still loading;
+   *  a failed load still SETS a result carrying its named reason, so the panel
+   *  can never sit on a spinner forever. */
+  const docPreviewRow = isDocPreview();
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [preview, setPreview] = useState<NativePreviewResult | null>(null);
+
+  async function togglePreview() {
+    if (previewOpen) {
+      setPreviewOpen(false);
+      return;
+    }
+    setPreviewOpen(true);
+    if (preview) return; // already fetched for this row
+    try {
+      setPreview(await previewNativeDocumentAction(t.id));
+    } catch {
+      setPreview({ ok: false, kind: null, data: null, reason: 'sample_unavailable' });
+    }
+  }
   const simpleRow = isSettingsSimpleRow();
   const statusLabel = t.status === 'active'
     ? `Active · ${t.encounterLabel}`
@@ -715,6 +788,31 @@ function TemplateRow({
                 ? 'Exports use your own form'
                 : 'Exports use a styled copy — Replace with your blank form to use your own'}
             </div>
+          )}
+          {/* SEE IT. A doctor should not have to export a real visit to find
+              out what their exports look like. This opens the artifact
+              certification itself verified — their page, filled — inline. */}
+          {docPreviewRow && t.nativePreviewAvailable && (
+            <button
+              type="button"
+              onClick={() => void togglePreview()}
+              aria-expanded={previewOpen}
+              data-testid="template-row-see-form"
+              style={{
+                marginTop: 6,
+                padding: 0,
+                background: 'none',
+                border: 0,
+                font: 'inherit',
+                fontSize: 11,
+                color: 'var(--color-linear-text-3)',
+                textDecoration: 'underline',
+                textUnderlineOffset: 3,
+                cursor: 'pointer',
+              }}
+            >
+              {previewOpen ? 'Hide your form' : 'See your form'}
+            </button>
           )}
         </div>
         <span style={pill(t.status === 'active' ? 'active' : 'draft')}>{statusLabel}</span>
@@ -786,6 +884,23 @@ function TemplateRow({
             )}
           </div>
         </div>
+        {previewOpen && (
+          <div style={{ gridColumn: '1 / -1', marginTop: 12 }} data-testid="template-row-preview">
+            {preview === null ? (
+              <p style={{ fontSize: 12, color: 'var(--color-linear-text-3)', margin: 0 }}>
+                Opening your form…
+              </p>
+            ) : (
+              <NativeDocumentPreview
+                kind={preview.kind}
+                data={preview.data}
+                reason={preview.reason}
+                label={`${t.name} — your form, filled`}
+                caption="Filled with the synthetic visit your template was certified against — no patient data."
+              />
+            )}
+          </div>
+        )}
       </div>
     );
   }

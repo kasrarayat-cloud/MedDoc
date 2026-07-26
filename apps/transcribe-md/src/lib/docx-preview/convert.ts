@@ -25,11 +25,17 @@ const CONVERT_TIMEOUT_MS = 12_000;
 const GOTENBERG_URL =
   process.env.GOTENBERG_URL ?? 'http://gotenberg:3000/forms/libreoffice/convert';
 
+/** A rendered page is a few hundred KB; 40 MB is a generous ceiling and a hard
+ *  stop. Without one, a wedged sidecar can stream an arbitrary body straight
+ *  into the app container's heap. */
+const MAX_PDF_BYTES = 40 * 1024 * 1024;
+
 export type ConvertFailure =
-  | 'not_configured'
   | 'timeout'
   | 'converter_error'
-  | 'empty_result';
+  | 'empty_result'
+  /** The response exceeded MAX_PDF_BYTES and was abandoned. */
+  | 'too_large';
 
 export interface ConvertResult {
   /** The rendered PDF, or null when the caller must fall back. */
@@ -46,8 +52,6 @@ export async function convertDocxToPdf(
   docx: Uint8Array,
   filename = 'document.docx',
 ): Promise<ConvertResult> {
-  if (!GOTENBERG_URL) return { pdf: null, reason: 'not_configured' };
-
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), CONVERT_TIMEOUT_MS);
   try {
@@ -68,8 +72,17 @@ export async function convertDocxToPdf(
       console.warn(`[docx-preview] converter returned ${res.status}; falling back`);
       return { pdf: null, reason: 'converter_error' };
     }
+    const declared = Number(res.headers.get('content-length') ?? '0');
+    if (declared > MAX_PDF_BYTES) {
+      console.warn('[docx-preview] converter response over cap; falling back');
+      return { pdf: null, reason: 'too_large' };
+    }
     const buf = new Uint8Array(await res.arrayBuffer());
     if (buf.byteLength === 0) return { pdf: null, reason: 'empty_result' };
+    if (buf.byteLength > MAX_PDF_BYTES) {
+      console.warn('[docx-preview] converter response over cap; falling back');
+      return { pdf: null, reason: 'too_large' };
+    }
     return { pdf: buf, reason: null };
   } catch (err) {
     const timedOut = err instanceof Error && err.name === 'AbortError';
