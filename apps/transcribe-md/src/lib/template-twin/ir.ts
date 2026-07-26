@@ -264,6 +264,27 @@ export type TemplateDocIR = z.infer<typeof TemplateDocIRSchema>;
 export const SemanticMappingSchema = z
   .object({
     fieldId: z.string().regex(/^ttf_[a-f0-9]{24}$/),
+    /**
+     * WHERE this field's value legitimately comes from.
+     *
+     *  'extraction'      — dictated; fills from a cited EncounterFact. The only
+     *                      class that may ever produce a value today.
+     *  'manual'          — a per-visit human field (the technologist on shift).
+     *                      Nothing can know it, so it is attested BLANK with a
+     *                      named reason rather than blocking certification —
+     *                      the needs-input mechanism, applied by class.
+     *  'context_default' — RESERVED. Deterministic practice context (referring
+     *                      physician, machine, location). NOT implemented: a
+     *                      deterministic fill puts content into a signed note
+     *                      that the clinician did not dictate, and the flagged
+     *                      review-before-sign lane for that does not exist yet.
+     *                      Until it does, these classify as 'manual' and render
+     *                      honestly blank.
+     *  'visit_metadata'  — RESERVED. Deterministic from the visit record.
+     */
+    sourceType: z
+      .enum(['extraction', 'context_default', 'visit_metadata', 'manual'])
+      .default('extraction'),
     clinicalConcept: z.string().min(1).max(160).nullable(),
     expectedDataType: z.enum([
       'text',

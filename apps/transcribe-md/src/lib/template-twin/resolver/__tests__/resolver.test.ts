@@ -75,6 +75,7 @@ function mapping(
   };
   return {
     fieldId: definition.fieldId,
+    sourceType: 'extraction' as const,
     clinicalConcept: concept,
     expectedDataType: dataType[definition.kind],
     polarityBehavior:

@@ -5,6 +5,7 @@ import { templateTwinMappingsSha256 } from '../mapping-hash';
 
 const base: SemanticMapping = {
   fieldId: `ttf_${'a'.repeat(24)}`,
+  sourceType: 'extraction' as const,
   clinicalConcept: 'synthetic finding',
   expectedDataType: 'text',
   polarityBehavior: 'value_only',
