@@ -622,6 +622,8 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               emCode: displayedEm,
               emNotApplicable: !!props.emNotApplicable,
             }}
+            billingNode={tabs.find((t) => t.key === 'billing')?.node ?? null}
+            codesNode={tabs.find((t) => t.key === 'codes')?.node ?? null}
             dictationNode={dictationNode}
             dictationLabel={secondTabLabel}
             onAdopted={handleSuggestionAdopted}
