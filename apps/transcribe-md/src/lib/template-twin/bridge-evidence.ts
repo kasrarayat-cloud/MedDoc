@@ -186,22 +186,36 @@ export function matchMeasurementFact(input: {
   const fact = candidates[0]!;
   if (fact.laterality === 'unknown') return { ok: false, reason: 'ambiguous_laterality' };
 
-  // FAIL-CLOSED ROW CONGRUENCE. A right-leg measurement in a left-leg row is
-  // the error this whole chain exists to prevent, and it would pass silently:
-  // the value is real, the citation is real, only the ROW is wrong.
   if (input.rowLaterality !== undefined) {
-    const sidedFact = fact.laterality === 'left' || fact.laterality === 'right';
-    if (input.rowLaterality === 'unknown') {
-      // An unmarked row cannot accept a sided value. The document gave no leg
-      // signal, so filling here would be a guess wearing a citation.
-      if (sidedFact) return { ok: false, reason: 'row_laterality_unknown' };
-    } else if (!sidedFact || fact.laterality !== input.rowLaterality) {
-      // Includes a bilateral/not_applicable fact offered to a sided row.
-      return { ok: false, reason: 'laterality_mismatch' };
-    }
+    const verdict = rowLateralityVerdict(fact, input.rowLaterality);
+    if (verdict !== 'ok') return { ok: false, reason: verdict };
   }
 
   return { ok: true, match: { fact, laterality: fact.laterality } };
+}
+
+/**
+ * FAIL-CLOSED ROW CONGRUENCE. A right-leg measurement in a left-leg row is the
+ * error this whole chain exists to prevent, and it would pass silently: the
+ * value is real, the citation is real, only the ROW is wrong.
+ *
+ * Exported because the resolver needs the SAME rule. It did not have it, and
+ * that is how three right-leg reflux cells were filled from left-leg facts and
+ * only caught downstream as ASSERTION_NOT_SUPPORTED — the bridge refused them,
+ * the resolver baseline underneath did not. One rule, both callers.
+ */
+export function rowLateralityVerdict(
+  fact: Pick<EncounterFact, 'laterality'>,
+  rowLaterality: 'right' | 'left' | 'unknown',
+): 'ok' | 'laterality_mismatch' | 'row_laterality_unknown' {
+  const sidedFact = fact.laterality === 'left' || fact.laterality === 'right';
+  if (rowLaterality === 'unknown') {
+    // An unmarked row cannot accept a sided value. The document gave no leg
+    // signal, so filling here would be a guess wearing a citation.
+    return sidedFact ? 'row_laterality_unknown' : 'ok';
+  }
+  // Includes a bilateral/not_applicable fact offered to a sided row.
+  return sidedFact && fact.laterality === rowLaterality ? 'ok' : 'laterality_mismatch';
 }
 
 /**
