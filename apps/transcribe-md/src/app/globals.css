@@ -6801,3 +6801,36 @@ body {
   padding: 14px 12px 8px;
 }
 .qm-rdoc-panel { min-width: 0; }
+
+/* Settings › My Note Format — the ⋯ overflow. The advanced editor and
+   Duplicate live here so the row itself is name · Active · Replace · Delete. */
+.qm-tmpl-overflow {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  min-width: 168px;
+  padding: 4px;
+  border: 1px solid var(--color-linear-border);
+  border-radius: 9px;
+  background: var(--color-linear-surface-2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+}
+.qm-tmpl-overflow button {
+  text-align: left;
+  padding: 9px 10px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  color: var(--color-linear-text-2);
+  cursor: pointer;
+  min-height: 40px;
+}
+.qm-tmpl-overflow button:hover {
+  background: var(--color-linear-row-hover);
+  color: var(--color-linear-text);
+}

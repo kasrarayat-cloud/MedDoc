@@ -503,6 +503,8 @@ services:
         # the OFF path with no error. Default OFF.
         # ROLLBACK: NEXT_PUBLIC_REVIEW_DOC_VIEW=false docker compose build transcribe-md
         NEXT_PUBLIC_REVIEW_DOC_VIEW: "${NEXT_PUBLIC_REVIEW_DOC_VIEW:-false}"
+        # Settings row simplification. ROLLBACK: unset + rebuild.
+        NEXT_PUBLIC_SETTINGS_SIMPLE_ROW: "${NEXT_PUBLIC_SETTINGS_SIMPLE_ROW:-false}"
     restart: unless-stopped
     logging:
       driver: json-file
