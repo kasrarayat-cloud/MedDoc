@@ -278,6 +278,75 @@ test.describe('the visit page is the document', () => {
     ).toMatch(/99214/);
   });
 
+
+  test('an existing baseline is NEVER overwritten', async ({ page }) => {
+    test.setTimeout(300_000);
+    const seeded = await openVisit(page);
+    const sqlOne = (q: string) =>
+      execSync(`${QA_COMPOSE} exec -T postgres psql -U meddoc -d ${QA_DB} -A -t -f -`, {
+        input: q,
+        encoding: 'utf8',
+      }).trim();
+
+    // The baseline is the level the doctor last had VALIDATED. Re-seeding it
+    // from a later note would quietly move the goalposts: the next comparison
+    // would be against a level nobody confirmed.
+    sqlOne(
+      `update transcribe_visits set "emScoredCode"='99999', "emStale"=false ` +
+        `where id='${seeded.visitId}'`,
+    );
+    await page.goto(`/visits/${seeded.visitId}`);
+    await page.waitForTimeout(4000);
+    const r = await page.request.post(`/api/visits/${seeded.visitId}/retry`, { data: {} });
+    expect(r.status()).toBe(200);
+    await page.waitForTimeout(3000);
+
+    expect(
+      sqlOne(`select "emScoredCode" from transcribe_visits where id='${seeded.visitId}'`),
+      'a planted baseline must survive both the page view and the mutation',
+    ).toBe('99999');
+  });
+
+  test('an EDIT seeds the baseline when none exists', async ({ page }) => {
+    test.setTimeout(300_000);
+    const seeded = await openVisit(page);
+    await page.getByTestId('visit-document').waitFor({ state: 'visible', timeout: 120_000 });
+    const sqlOne = (q: string) =>
+      execSync(`${QA_COMPOSE} exec -T postgres psql -U meddoc -d ${QA_DB} -A -t -f -`, {
+        input: q,
+        encoding: 'utf8',
+      }).trim();
+
+    // Clear the baseline AFTER the page has loaded, so the page-view seed
+    // cannot be what re-establishes it. This is the doctor whose first action
+    // on a visit is an edit: without the save path seeding, their first
+    // re-score finds no baseline, concludes nothing moved, and clears the gate.
+    //
+    // (Retry deliberately does NOT seed — it is a regeneration, and the
+    // canonical failed-during-L7 retry has no scoring signals yet.)
+    sqlOne(
+      `update transcribe_visits set "emScoredCode"=null, "emStale"=false ` +
+        `where id='${seeded.visitId}'`,
+    );
+
+    const opener = page.locator('[data-testid^="section-edit-"]').first();
+    const label = (await opener.getAttribute('data-testid'))!.replace('section-edit-', '');
+    await opener.click();
+    const ta = page.getByTestId(`section-textarea-${label}`);
+    await ta.fill(`${await ta.inputValue()}\nBaseline seed probe.`);
+    await page.getByTestId(`section-save-${label}`).click();
+
+    await expect
+      .poll(
+        () =>
+          sqlOne(
+            `select coalesce("emScoredCode",'-') from transcribe_visits where id='${seeded.visitId}'`,
+          ),
+        { timeout: 120_000, message: 'the edit must seed the baseline' },
+      )
+      .toMatch(/^\d{5}$/);
+  });
+
   test('390px: the document draws and nothing overflows sideways', async ({ page }) => {
     test.setTimeout(300_000);
     await page.setViewportSize({ width: 390, height: 844 });

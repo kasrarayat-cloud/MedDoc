@@ -16,6 +16,11 @@
 // ============================================================================
 
 import { NextResponse } from 'next/server';
+import {
+  isImagingReportSpecialty,
+  ultrasoundSpecialtyEnabled,
+} from '@meddoc/shared/specialties';
+import { seedEmBaselineIfUnset } from '@/lib/em-coding/seed-baseline';
 import { invalidateVisitFills } from '@/lib/docx-preview/fill-cache';
 import { z } from 'zod';
 
@@ -83,6 +88,9 @@ export const POST = withApiHandler<{ id: string }>(
         signedAt: true,
         soapDraft: true,
         soapFinal: true,
+        emScoredCode: true,
+        cptCodes: true,
+        specialty: true,
         audioDurationSec: true,
         dictationDurationSec: true,
         inputMode: true,
@@ -169,6 +177,20 @@ export const POST = withApiHandler<{ id: string }>(
     // The pre-merge soapFinal is preserved as soapL6Original (set by
     // L6 polish; not touched here so the original-AI-output snapshot
     // remains immutable for the doctor-edit-pattern capture path).
+    // Seed the baseline from the PRE-merge note, before it is overwritten.
+    await seedEmBaselineIfUnset({
+      visitId,
+      priorSoap: visit.soapFinal,
+      currentScoredCode: visit.emScoredCode,
+      // cptCodes MUST be in the select: without it the override the doctor set
+      // is invisible here, so the baseline records the raw engine code while
+      // every re-score projects the override — baseline never equals scored,
+      // and the doctor gets a phantom confirm forever.
+      signals: { icdCodes: visit.icdCodes, rxDrafts: visit.rxDrafts, cptCodes: visit.cptCodes },
+      ctx: { practiceId, userId },
+      applies: !(ultrasoundSpecialtyEnabled() && isImagingReportSpecialty(visit.specialty)),
+    });
+
     await prisma.transcribeVisit.update({
       where: { id: visitId },
       data: {

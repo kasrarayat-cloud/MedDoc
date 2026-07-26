@@ -86,6 +86,13 @@ export const POST = withApiHandler<{ id: string }>(
     const visit = await prisma.transcribeVisit.findUnique({
       where: { id: visitId },
       select: {
+        soapFinal: true,
+        emScoredCode: true,
+        specialty: true,
+        icdCodes: true,
+        rxDrafts: true,
+        cptCodes: true,
+        user: { select: { practiceId: true } },
         id: true,
         userId: true,
         status: true,
@@ -157,6 +164,17 @@ export const POST = withApiHandler<{ id: string }>(
     // Reset + re-enqueue. Resume logic (T-M13) inside processVisit
     // checks column presence; layers that already wrote their output
     // stay skipped, so this isn't a full re-run.
+    // NO BASELINE SEED HERE, deliberately.
+    //
+    // Retry is a REGENERATION, not a doctor's edit — there is no "level before
+    // the edit" to record. Worse, the canonical manual retry is a visit that
+    // failed during L7, where soapFinal is populated but icdCodes / rxDrafts /
+    // cptCodes are all still null: scoring that note records a level derived
+    // from absent signals, and when the resume fills them in the very next
+    // re-score reports a movement the note never made.
+    //
+    // A READY retry is already covered by the page view and by the save path,
+    // both of which see a complete visit.
     try {
       await prisma.transcribeVisit.update({
         where: { id: visit.id },

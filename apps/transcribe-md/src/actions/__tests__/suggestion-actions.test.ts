@@ -335,8 +335,16 @@ describe('adopt — E/M level delta recording (visible-confirm, never silent)', 
 
     // ONE update carries note + lane + pending-change together — no
     // window where the note changed but the change isn't recorded.
-    expect(mocks.updateMany).toHaveBeenCalledTimes(1);
-    const args = mocks.updateMany.mock.calls[0][0];
+    // The invariant is that the ADOPT's write is atomic — note + lane +
+    // pending-change in ONE update, with no window where the note changed but
+    // the change isn't recorded. It is not that the action makes exactly one
+    // write: the E/M baseline seed seeds `emScoredCode` separately, and does
+    // not touch any of the three. Assert on the adopt's own call.
+    const adoptCall = mocks.updateMany.mock.calls.find(
+      (c) => (c[0] as { data?: Record<string, unknown> })?.data?.soapFinal !== undefined,
+    ) as [{ data: Record<string, unknown>; where: Record<string, unknown> }] | undefined;
+    expect(adoptCall, 'the adopt must write the note').toBeDefined();
+    const args = adoptCall![0];
     expect(args.data.emPendingChange).toEqual({
       from: '99213',
       to: '99214',
