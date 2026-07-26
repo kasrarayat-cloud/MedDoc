@@ -51,6 +51,18 @@ export function verifiedNoteSelectionFactId(input: {
   }).slice(0, 24)}`;
 }
 
+/** The side the field's own label names, or 'unknown' when it names none.
+ *  Read from the document, never inferred from position or from the model. */
+export function fieldLateralityFromLabel(originalLabel: string): 'right' | 'left' | 'unknown' {
+  const t = originalLabel.trim().toLowerCase();
+  const right = /\bright\b/.test(t);
+  const left = /\bleft\b/.test(t);
+  // A label naming BOTH sides names neither for this purpose — fail closed
+  // rather than pick one.
+  if (right === left) return 'unknown';
+  return right ? 'right' : 'left';
+}
+
 export function verifiedNoteSelectionAnchorId(fieldId: string, factId: string): string {
   return `ttvns_${canonicalSha256({ factId, fieldId }).slice(0, 24)}`;
 }
@@ -72,6 +84,10 @@ export function buildVerifiedNoteSelectionFact(input: {
   markerOrdinal: number;
   /** Identity of the note the pick was read from — the ADOPTED note. */
   noteSha256: string;
+  /** The side the FIELD ITSELF names, read from the document's own label
+   *  ("Right <choose> is <choose>"). Same doctrine as row laterality stamped
+   *  from the leg headings: the document says which side, never the model. */
+  fieldLaterality: 'right' | 'left' | 'unknown';
 }): EncounterFact {
   const factId = verifiedNoteSelectionFactId({
     fieldId: input.field.fieldId,
@@ -94,7 +110,12 @@ export function buildVerifiedNoteSelectionFact(input: {
         ? input.mapping.temporality
         : 'current',
     experiencer: 'patient',
-    laterality: input.mapping.laterality === 'not_applicable' ? 'not_applicable' : 'unknown',
+    laterality:
+      input.fieldLaterality !== 'unknown'
+        ? input.fieldLaterality
+        : input.mapping.laterality === 'not_applicable'
+          ? 'not_applicable'
+          : 'unknown',
     number: null,
     unit: null,
     speaker: 'Verified note selection',

@@ -23,6 +23,7 @@ import { EMPTY_SECTION_PLACEHOLDER } from '@/lib/soap-format';
 import { bridgeChoiceSlotPicks } from '../picks-bridge';
 import {
   buildVerifiedNoteSelectionFact,
+  fieldLateralityFromLabel,
   verifiedNoteSelectionFactId,
 } from '../verified-note-selection';
 import {
@@ -108,6 +109,7 @@ describe('the citation', () => {
       optionValue: 'Bilateral Detailed',
       markerOrdinal: 0,
       noteSha256: 'c'.repeat(64),
+      fieldLaterality: 'unknown',
     });
     expect(fact.sourceType).toBe('verified_note_selection');
     expect(fact.value).toBe('Bilateral Detailed');
@@ -145,6 +147,7 @@ describe('the citation', () => {
     const fact = buildVerifiedNoteSelectionFact({
       field: { fieldId: FIELD_ID }, mapping: MAPPING,
       optionValue: 'Bilateral Detailed', markerOrdinal: 3, noteSha256: 'c'.repeat(64),
+      fieldLaterality: 'unknown',
     });
     expect(fact.evidenceQuote).toContain('marker #3');
     expect(fact.evidenceQuote).toContain('cccccccccccc');
@@ -200,6 +203,35 @@ describe('the strict checks — none waived', () => {
   it('(d) no approved concept -> no citation -> blank', () => {
     const out = run('SIDE OF EXAM: Bilateral Detailed', [
       { ...MAPPING, clinicalConcept: null } as SemanticMapping,
+    ]);
+    expect(out.resolutions.find((x) => x.fieldId === FIELD_ID)!.status).toBe('not_mentioned');
+    expect(out.facts).toHaveLength(0);
+  });
+});
+
+describe('the side comes from the document', () => {
+  it('reads the field label, and names neither side when the label names both', () => {
+    expect(fieldLateralityFromLabel('Right Choose an item. is Choose an item.')).toBe('right');
+    expect(fieldLateralityFromLabel('Left deep venous system Choose an item.')).toBe('left');
+    expect(fieldLateralityFromLabel('SIDE OF EXAM')).toBe('unknown');
+    // Naming both is naming neither — fail closed rather than pick one.
+    expect(fieldLateralityFromLabel('Right and Left legs')).toBe('unknown');
+  });
+
+  it('stamps it onto the citation', () => {
+    const fact = buildVerifiedNoteSelectionFact({
+      field: { fieldId: FIELD_ID }, mapping: MAPPING,
+      optionValue: 'Bilateral Detailed', markerOrdinal: 0, noteSha256: 'c'.repeat(64),
+      fieldLaterality: 'left',
+    });
+    expect(fact.laterality).toBe('left');
+  });
+
+  it('CANARY: a mapping that REQUIRES a side, on a field naming none, stays blank', () => {
+    // A right-leg finding in a left-leg sentence is the error the measurement
+    // path fails closed on; the pick path must not be laxer.
+    const out = run('SIDE OF EXAM: Bilateral Detailed', [
+      { ...MAPPING, laterality: 'required' } as SemanticMapping,
     ]);
     expect(out.resolutions.find((x) => x.fieldId === FIELD_ID)!.status).toBe('not_mentioned');
     expect(out.facts).toHaveLength(0);
