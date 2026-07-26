@@ -497,6 +497,12 @@ services:
         # setting NEXT_PUBLIC_UX_SIMPLIFY=true in .env (compose reads .env here).
         # ROLLBACK: NEXT_PUBLIC_UX_SIMPLIFY=false docker compose build transcribe-md
         NEXT_PUBLIC_UX_SIMPLIFY: "${NEXT_PUBLIC_UX_SIMPLIFY:-false}"
+        # Pre-sign review as ONE document (the unsigned half of the
+        # linearisation). isReviewDocView() is read from CLIENT components, so
+        # this must be a build arg — a runtime env would leave both branches on
+        # the OFF path with no error. Default OFF.
+        # ROLLBACK: NEXT_PUBLIC_REVIEW_DOC_VIEW=false docker compose build transcribe-md
+        NEXT_PUBLIC_REVIEW_DOC_VIEW: "${NEXT_PUBLIC_REVIEW_DOC_VIEW:-false}"
     restart: unless-stopped
     logging:
       driver: json-file
