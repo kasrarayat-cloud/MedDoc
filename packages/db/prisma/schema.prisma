@@ -2564,6 +2564,11 @@ model TemplateTwinCompiledVersion {
   pinnedNoteTemplateSha256  String?   @db.Char(64)
   pinnedNoteModelVersion    String?
   pinnedNoteGeneratedAt     DateTime? @db.Timestamptz(6)
+  /// The Layer-3 extraction pinned alongside the note. L3 is a model too: an
+  /// unpinned certification re-extracted every run and blocked on a different
+  /// set of fields each time. Keyed by the same encounter hash as the note.
+  pinnedSyntheticEntities    Json?
+  pinnedSyntheticContextText String?
 
   fields        TemplateTwinFieldDefinition[]
   certification TemplateTwinCertification?
