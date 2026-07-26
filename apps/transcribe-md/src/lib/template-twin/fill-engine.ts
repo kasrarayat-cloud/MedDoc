@@ -212,6 +212,7 @@ export async function prepareTemplateTwinFill(
 }
 
 interface PersistedMappingRow {
+  sourceType: string;
   clinicalConcept: string | null;
   expectedDataType: string;
   polarityBehavior: string;
@@ -229,6 +230,7 @@ interface PersistedMappingRow {
 function mappingFromRow(fieldId: string, row: PersistedMappingRow): SemanticMapping {
   return SemanticMappingSchema.parse({
     fieldId,
+    sourceType: row.sourceType,
     clinicalConcept: row.clinicalConcept,
     expectedDataType: row.expectedDataType,
     polarityBehavior: row.polarityBehavior,
@@ -340,6 +342,7 @@ export async function processTemplateTwinVisit(
               detectionStatus: true,
               mapping: {
                 select: {
+                  sourceType: true,
                   clinicalConcept: true,
                   expectedDataType: true,
                   polarityBehavior: true,

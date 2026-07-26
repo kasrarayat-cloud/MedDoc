@@ -123,6 +123,28 @@ describe('the persistence chain — every link', () => {
     expect(src).toContain('sourceType: row.sourceType,');
   });
 
+  it('4b. EVERY mapping projection carries it', () => {
+    // Projections are the failure mode. Each module selects its own mapping
+    // columns, and one that omits sourceType silently reads every row back as
+    // 'extraction'. Two of them did, and the second surfaced as
+    // "Mappings changed after the page loaded" — the two projections hashed to
+    // different shas because one of them was reading a field that wasn't there.
+    for (const file of [
+      'certification-lifecycle.ts',
+      'workspace-read.ts',
+      'synthetic-test.ts',
+      'fill-engine.ts',
+      'signing-gate.ts',
+    ]) {
+      const src = read(file);
+      const selects = src.split('polarityBehavior: true').length - 1;
+      const carried = src.split('sourceType: true,').length - 1;
+      expect(carried, `${file} has ${selects} mapping select(s) but only ${carried} carry sourceType`).toBe(
+        selects,
+      );
+    }
+  });
+
   it('5. both gate checks honour the manual carve-out', () => {
     const src = read('certification-lifecycle.ts');
     // fieldsReady, and the mapping-update validation.
