@@ -115,3 +115,116 @@ too. Flagging it rather than quietly fixing it inside a skin-only change.
 
 **Blocked on Kasra's approval of the screenshots.** Nothing has been promoted;
 prod runs the same images and the same flags it ran before this work.
+
+---
+
+# CLOSE-OUT — promoted 2026-07-26
+
+## 0. Teardown — the premise was wrong; nothing had been exposed
+
+There was no port publish or nginx rule to revert. Verified:
+
+```
+docker-compose.qa.yml:157   "127.0.0.1:9020:3011"   (unchanged; last touched by an
+                                                     unrelated 2026-06 commit)
+host listener               LISTEN 127.0.0.1:9020
+nginx rules mentioning 9020 none
+curl http://5.231.107.93:9020/   -> 000
+ufw                         inactive;  iptables rules for 9020: 0
+```
+
+**Why it was unreachable: not the firewall — the loopback bind.** ufw is off and
+there is no packet filter on 9020; the app simply never listened on a public
+interface. The QA stack has been localhost-only by design since it was built (its
+own header says "reach it via an SSH tunnel"), and every drive in this work was
+from inside the box. QA remains localhost-only.
+
+## 1. Sign → download, walked
+
+Signed `qa_shot_ultrasound` on the new surface; both files landed
+(`visit-eleanor-whitfield-2026-07-26.pdf` / `.docx`). Grep of the downloaded DOCX:
+
+```
+SIGNED DOCX — dictated values: 10/10 | missing: none
+has IMPRESSION: True     has signature: True
+```
+
+## 2. Gates re-verified on the new surface
+
+| Gate | Evidence |
+|---|---|
+| Critical-Rx typed override | inline rail → "Override…" → 108-char reason → **Confirm override** → `RX_OVERRIDE_RECORDED` audited → "Overridden" chip → bar "Reviewed" → Sign enabled |
+| E/M confirm | bar "Confirm the documentation level above", Sign **disabled** → Confirm 99214 → card `is-done`, bar "Reviewed", Sign enabled |
+| Review-lane adoption | accept → DB claims 2→1, `SUGGESTION_ADOPTED` audited **individually** |
+| Audit rows | `RX_OVERRIDE_RECORDED`, `SUGGESTION_ADOPTED` ×2, `EXPORT_PDF_DOWNLOADED`, `EXPORT_DOCX_DOWNLOADED`, `VIEWED_VISIT` |
+
+**code-quality-auditor: 1 BLOCK → fixed → re-audited 0 BLOCK.** The BLOCK was
+real: `emConfirmed` never reset, so the card could assert "Level confirmed" for a
+level the doctor never saw. Five WARNs fixed alongside it, two of which would
+have degraded the feature for real doctors:
+
+- the scroll gate could not unlock for a card taller than the viewport
+  (intersectionRatio only reports on threshold-bucket changes, so a card 5%
+  taller tops out at 0.75 and never satisfies any test). Replaced with a
+  zero-height sentinel at the card's bottom edge — height-independent.
+  **Verified against a forced 1.05×-viewport card: locked → unlocked.**
+- `### Right` / `### Left` claims orphaned client-side while the server appended
+  them into Findings — the doctor reviewing in one place and signing in another,
+  on the ultrasound template that is live in production.
+
+## 3. Flag-OFF byte-identity — diffed
+
+Same visit (`qa_shot_ready_02`), two images from the same commit:
+
+| | flag-OFF | flag-ON |
+|---|---|---|
+| tab strip | present, 6 tabs | absent |
+| document view | absent | present |
+| `qm-rdoc` nodes | **0** | 12 |
+| section-slot wrappers | **0** | 4 |
+| note subtree | 7697 chars | 7873 (+176 — exactly the 4 wrappers) |
+
+Flag-OFF carries none of the new markup.
+
+## 4. Rider — 390px overlap
+
+Measured, not eyeballed: 2/2 section headers wrap, `anyOverlapping: false`.
+
+## 5. Promotion
+
+```
+rollback   images meddoc-pro-transcribe-md{,-worker}:pre-reviewdoc-20260726
+           git tag pre-reviewdoc-20260726
+           prod before: app b6be7e434ffc / worker 43bf217e8e7a
+flag       NEXT_PUBLIC_REVIEW_DOC_VIEW=true in .env (+ compose build arg)
+deployed   app 19b73a057cb6 / worker 6b5b155ff435 — 9/9 healthy
+bundle     the surface is inlined in the prod client chunk
+co-tenants app 307 / pro 200 / quillmd.com 200 / admin 404 (incl. LeatherERP)
+baseline   twin_compiled=0, synthetic strays=0
+```
+
+**Prod flow smoke was NOT walked end-to-end on production, and that is
+deliberate.** Prod now carries live clinical work — `kasra.rayat@gmail.com`
+created and signed a "kokab" ultrasound visit today — and the only unsigned
+visits there belong to real doctors. Signing or adopting into someone's actual
+note to produce a screenshot is not a smoke test. The full behavioural walk
+(suggestions inline → gates inline → scroll-unlock → sign → file downloads) was
+run on QA against the byte-identical build, and prod was verified structurally:
+new images, flag inlined in the shipped bundle, 9/9 healthy, co-tenants green.
+
+## Screenshots (QA, for the record)
+
+`docs/qa-reports/review-doc-shots/` — 6 PNGs:
+`rdoc-01-ultrasound-desktop`, `rdoc-02-suggestions-inline-desktop`,
+`rdoc-03-bulk-unlocked-desktop`, `rdoc-04-gates-inline-desktop`,
+`rdoc-05-suggestions-390`, `rdoc-06-rider-390-no-overlap`.
+
+## Still open
+
+- E/M **override / rescore is unreachable** on the new surface (codes row is
+  read-only per the spec). A doctor who disagrees with the level cannot change it
+  without the flag off. Flagged before promotion; unresolved by design.
+- No E2E coverage for the surface; the normaliser parity invariant is now a unit
+  test, the rest is not covered.
+- Three copies of the section normaliser remain (client lib, server action,
+  worker verifier) — now pinned by a test rather than a comment.
