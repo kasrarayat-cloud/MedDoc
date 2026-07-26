@@ -185,3 +185,53 @@ headings can never silently accept a sided value — filling there would be a
 guess wearing a citation.
 
 156 twin/docx tests pass.
+
+## Stage 5.4 — both tables offered ✅
+
+`pickTable` returned one winner, so half the cells were never offered. Now every
+candidate table is offered — safe BY CONSTRUCTION, because fail-closed row
+laterality means a right-leg value cannot fill a left-leg row. The tables sort
+themselves out at the matcher instead of being pre-assigned to legs. A defensive
+dedupe keeps a field from taking two resolutions if addressing ever changes.
+
+## Stage 6 — pin content-addressed ✅ (not yet demonstrated)
+
+The pin is now looked up by (encounterSha, templateStructureSha) across compiled
+versions and copied onto the current one, instead of being keyed to a row. That
+was why "pin REUSED" never appeared: re-uploading the same docx makes a NEW
+compiled version every run.
+
+Not demonstrated — Stage 7 did not get far enough to reuse it.
+
+## Stage 7 — CERTIFY: blocked, and correctly
+
+```
+[template-twin:mappings] 72/80 proposals were off-registry or unconcepted
+                         and are left unconfirmed: ttf_e3e4a4d7…, …
+[ga] UNCAUGHT: TemplateTwinLifecycleError: The approved mapping for field 1 is
+     incomplete or incompatible.
+```
+
+Both behaviours are correct. The registry constraint fired at PROPOSAL time as
+designed, and `updateTemplateTwinMappings` then refused to certify mappings that
+carry no concept.
+
+**The gap is the registry's CONTENTS, not its design.** It was built from a
+single encounter's emissions, so it covers `measurement.*`, `assessment`,
+`exam.vascular`, `test.*` — but not the template's metadata fields
+(`REFERRING PHYSICIAN`, `ULTRASOUND TECHNOLOGIST`, `MACHINE`, `LOCATION`,
+`SIDE OF EXAM`), which is 72 of 80 fields.
+
+### Open question for a ruling
+
+A field whose concept is legitimately outside the extractor's vocabulary can
+never fill. The gate requires EVERY field ready, so today that blocks
+certification outright. Either:
+  (a) grow the registry to cover metadata concepts (`encounter.referring_physician`,
+      `test.machine`, `exam.side`) — mostly mechanical, and the proposer would
+      then have real concepts to select; or
+  (b) certification tolerates permanently-unconcepted fields as attested-blank,
+      the way needs-input is already attested.
+
+(a) looks right and is the smaller change, but it widens the vocabulary contract
+and belongs with whoever owns it. Stages 8-9 remain blocked behind it.
