@@ -12,7 +12,7 @@
 // down to each <SoapSection>.
 // ============================================================================
 
-import { useMemo } from 'react';
+import { Fragment, useMemo } from 'react';
 import { Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import { reportClipboardCopy } from '@/lib/clipboard-audit';
@@ -87,26 +87,35 @@ export function SoapBody({
 
   return (
     <div className="qm-lin-soap-body-v6">
-      {sections.map((section) => (
-        <div key={section.id} className="qm-lin-soap-section-slot">
-        <SoapSection
-          letter={section.letter}
-          label={section.label}
-          body={section.body}
-          fullText={text}
-          status={
-            section.soapKey
-              ? statusFor(section.soapKey)
-              : statusFor(null, section.body)
-          }
-          pulseHint={section.soapKey ? pulseHints?.[section.soapKey] ?? null : null}
-          highlight={section.soapKey ? highlightSet.has(section.soapKey) : false}
-          onEdit={onEdit}
-          readonly={readonly}
-        />
-        {afterSection?.(section)}
-        </div>
-      ))}
+      {sections.map((section) => {
+        const node = (
+          <SoapSection
+            letter={section.letter}
+            label={section.label}
+            body={section.body}
+            fullText={text}
+            status={
+              section.soapKey
+                ? statusFor(section.soapKey)
+                : statusFor(null, section.body)
+            }
+            pulseHint={section.soapKey ? pulseHints?.[section.soapKey] ?? null : null}
+            highlight={section.soapKey ? highlightSet.has(section.soapKey) : false}
+            onEdit={onEdit}
+            readonly={readonly}
+          />
+        );
+        // No slot → render EXACTLY what this component has always rendered.
+        // Wrapping unconditionally would change the DOM of every surface that
+        // does not use the slot, which is the opposite of what "additive" means.
+        if (!afterSection) return <Fragment key={section.id}>{node}</Fragment>;
+        return (
+          <div key={section.id} className="qm-lin-soap-section-slot">
+            {node}
+            {afterSection(section)}
+          </div>
+        );
+      })}
 
       <div className="qm-lin-soap-notebody-foot">
         <div className="qm-lin-soap-notebody-foot-meta">
