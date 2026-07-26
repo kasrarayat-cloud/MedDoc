@@ -407,3 +407,68 @@ Tag `pre-docfirst-converter-20260726`.
 
 10/10 healthy (9 + gotenberg). Co-tenants 307 / 200 / 200 / 404. Structural
 verification only, per the runbook law.
+
+---
+
+# PHASE 1b — REAL-DOCUMENT PREVIEW — live on prod 2026-07-26
+
+## What changed
+
+The settings "sample" was markdown in a `<pre>`. It answered *did we read your
+sections* — our question. It has been replaced by the document.
+
+| surface | before | now |
+|---|---|---|
+| confirm card | markdown mock, our fonts | their uploaded form. Flat PDF drawn **filled** (sample answers in their own blanks); `.docx` drawn as the page it is, captioned as unfilled |
+| settings row | nothing | **"See your form"** — inline, the artifact certification itself verified |
+
+**Drawn, not embedded.** Pages render to `<canvas>` via pdf.js rather than an
+`<object>`. A browser with no PDF plugin — headless Chromium, Chrome on Android
+— renders `<object>` as a blank white rectangle, which a doctor reads as *my
+form came back empty*. It also made the surface unverifiable in QA. Confirmed in
+the browser: the worker loads (no 404, no fake-worker warning, no page error).
+
+## Verification
+
+| check | result |
+|---|---|
+| real 3-page WM form → confirm card | `data-drawn=true`, 3 canvases, letterhead + headings intact |
+| DOCX branch end to end | 49,297-byte certified artifact → **54,190-byte `%PDF-`**, reason `null` |
+| sidecar unreachable | reason `converter_error`, pdf `null`, doctor still confirms + activates |
+| 390px | draws; horizontal overflow **0 px**; CTA `HITTABLE` (not covered by the fixed mobile nav) |
+| flag OFF | **byte-identical to HEAD's own component** across loading / rendered / failed |
+| unit | 2373 passed |
+| E2E `doc-preview` | 4/4 — no skips |
+| a11y gate | 26/26 |
+| auditor | 5 BLOCK / 12 WARN / 10 NIT → all BLOCKs and every substantive WARN fixed |
+
+## Found in review, fixed before shipping
+
+- **`practiceId` read from the compiled version**, which has no such column.
+  `tsc` accepted it; it would have thrown on the first request. It lives on the
+  source artifact. *tsc does not police Prisma selects — the probe did.*
+- **A throw left the flag-ON card on "Opening your form…" forever** — the null
+  check ran before the failure check, so `sampleFailed` was unreachable.
+- **The flag had no compose build-arg**, so it could not be turned on at all and
+  the documented rollback was vacuous.
+- **The button promised a preview on a key alone** while the action also needs
+  the hash — the next click would have denied the page exists.
+- **Error text sat grey-on-paper (~2.6:1)** and the scrollable page stack was not
+  keyboard reachable — both against a required a11y gate.
+- **An integrity failure** (stored artifact no longer matches the certified hash)
+  was collapsed into "storage hiccup". It is security-relevant; it now has its
+  own reason and the error class is logged.
+- **The "nothing clinical imports it" guard was fail-open** (`|| true`) and only
+  checked direct importers. Now transitive, and proven to fail: a deliberately
+  introduced import in `signing-gate.ts` turned it red.
+- **PHI artifacts were staged for commit** (`twin-prod-visit.docx`,
+  `twin-real-visit.docx`, filled notes) by an earlier `git add -A`. Never
+  committed; unstaged and `.gitignore`d.
+
+## Prod
+
+`app 6ea1ae02e9a3`, 10/10 healthy. Co-tenants 307 / 200 / 200 / 404.
+`NEXT_PUBLIC_DOC_PREVIEW=true`; row half also requires
+`NEXT_PUBLIC_SETTINGS_SIMPLE_ROW`, already ON.
+Rollback: `pre-docfirst-p1b-20260726` (git tag + both image tags).
+Structural verification only — no real doctor's visit was used as a smoke target.
