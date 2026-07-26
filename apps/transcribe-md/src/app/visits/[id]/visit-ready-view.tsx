@@ -54,6 +54,12 @@ import {
   sectionExtras,
 } from '@/lib/ehr-formatters';
 import { formatLocalDateTime } from '@/lib/format-time';
+import { isVisitDocPage } from '@/config/visit-doc-page';
+import { parseNoteSections } from '@/lib/parse-note-sections';
+import {
+  VisitDocumentSurface,
+  VISIT_DOCUMENT_MISS_TEXT,
+} from './visit-document-surface';
 
 type VisitReadyViewTheme = 'legacy' | 'clinician';
 
@@ -205,6 +211,29 @@ export function VisitReadyView(props: VisitReadyViewProps) {
     version: number;
     seq: number;
   } | null>(null);
+
+  // ── PHASE 2 — the visit page IS the document ────────────────────────────
+  const docPage = isVisitDocPage();
+  /** Set once the document turns out to be unavailable (not certified, fill
+   *  failed, could not be drawn). Latched so the page does not flicker between
+   *  two surfaces while the doctor is reading — and so the styled note, once
+   *  chosen, stays chosen for this visit. */
+  const [docPageMiss, setDocPageMiss] = useState<string | null>(null);
+  const docPageUnavailable = docPageMiss !== null;
+  const handleDocPageUnavailable = useCallback((reason: string | null) => {
+    setDocPageMiss(reason ?? 'no_render');
+  }, []);
+  /** The anchors cards are placed against. The KEY IS THE SECTION LABEL, which
+   *  is exactly what the suggestion map is keyed by — so a card placed on a
+   *  page and a card placed under a heading resolve through the same lookup. */
+  const docAnchors = useMemo(
+    () =>
+      (docPage ? parseNoteSections(adoption?.text ?? props.soapText) : []).map((sec) => ({
+        key: sec.label,
+        text: sec.label,
+      })),
+    [docPage, adoption?.text, props.soapText],
+  );
   // E/M visible-confirm (prod smoke #311) — the unacknowledged change the
   // Sign & Send modal must surface. Server-rendered prop is the source of
   // truth (re-synced on every RSC refresh via the adjust-state-during-
@@ -581,11 +610,53 @@ export function VisitReadyView(props: VisitReadyViewProps) {
             </span>
           </div>
         )}
+          {/* WHY the document is not on screen. The reason was carried all the
+              way here and then read as a boolean — so a doctor whose template
+              is not certified watched "Opening your document…" turn into a
+              styled note with no explanation. Silence is illegal. */}
+          {docPage && docPageMiss && VISIT_DOCUMENT_MISS_TEXT[docPageMiss] && (
+            <p
+              className="qm-vdoc-counts"
+              role="status"
+              data-testid="visit-document-miss"
+            >
+              {VISIT_DOCUMENT_MISS_TEXT[docPageMiss]}
+            </p>
+          )}
           <ReviewDocumentView
             visitId={props.visitId}
             doctorEmail={props.doctorEmail}
             emailEnabled={props.emailEnabled}
             soapFinal={adoption?.text ?? props.soapText}
+            /* PHASE 2 — the page becomes the doctor's own form. Returns null
+               when there is nothing to draw, and ReviewDocumentView then falls
+               back to renderNote below, unchanged. */
+            renderDocument={
+              docPage && !props.signedAt && !docPageUnavailable
+                ? (afterLabel) => (
+                    <VisitDocumentSurface
+                      visitId={props.visitId}
+                      revision={adoption?.seq ?? 0}
+                      anchors={docAnchors}
+                      renderAfterSection={(keys) => (
+                        <>
+                          {keys.map((k) => (
+                            <div key={k}>{afterLabel(k)}</div>
+                          ))}
+                        </>
+                      )}
+                      renderUnplaced={(keys) => (
+                        <>
+                          {keys.map((k) => (
+                            <div key={k}>{afterLabel(k)}</div>
+                          ))}
+                        </>
+                      )}
+                      onUnavailable={handleDocPageUnavailable}
+                    />
+                  )
+                : undefined
+            }
             renderNote={(afterSection) => (
               <SoapEditor
                 key={`soap-editor-${adoption?.seq ?? 0}`}
@@ -645,6 +716,18 @@ export function VisitReadyView(props: VisitReadyViewProps) {
       return (
         <div className="w-full qm-c3-rev2-root">
           <SignedDocumentView
+              documentNode={
+                docPage && !docPageUnavailable ? (
+                  <VisitDocumentSurface
+                    visitId={props.visitId}
+                    revision={adoption?.seq ?? 0}
+                    anchors={[]}
+                    renderAfterSection={() => null}
+                    renderUnplaced={() => null}
+                    onUnavailable={handleDocPageUnavailable}
+                  />
+                ) : undefined
+              }
             visitId={props.visitId}
             doctorEmail={props.doctorEmail}
             emailEnabled={props.emailEnabled}

@@ -83,6 +83,7 @@ export default defineConfig({
         // The real-document preview — flag-ON project below; also STOPS the
         // converter mid-run, which no other spec should have to survive.
         '**/doc-preview.spec.ts',
+        '**/visit-document.spec.ts',
         '**/a11y.spec.ts',
         '**/23-note-format-phi-parse-reject.spec.ts',
         '**/24-rx-clinical-safety.spec.ts',
@@ -148,6 +149,18 @@ export default defineConfig({
       // fallback — serialised so it cannot break a parallel spec.
       name: 'doc-preview',
       testMatch: ['**/doc-preview.spec.ts'],
+      fullyParallel: false,
+      workers: 1,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      // Phase 2 — the visit page as the document (NEXT_PUBLIC_VISIT_DOC_PAGE).
+      // Its OWN project and its OWN image: the doc-preview build does not carry
+      // this flag, so running these there would wait 120s for a surface that
+      // was never compiled in and red the gate for an environment reason.
+      // Serialised — one spec stops the converter sidecar on purpose.
+      name: 'visit-doc',
+      testMatch: ['**/visit-document.spec.ts'],
       fullyParallel: false,
       workers: 1,
       use: { ...devices['Desktop Chrome'] },

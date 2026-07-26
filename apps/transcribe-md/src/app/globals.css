@@ -6891,3 +6891,38 @@ body {
 @media (max-width: 480px) {
   .qm-npv-stage { max-height: 58vh; }
 }
+
+/* ── The visit page as the document (phase 2) ───────────────────────────────
+   Pages stack; cards sit BETWEEN them, at the page they belong to. The gap is
+   deliberate: a card must read as commentary on the page above, not as part of
+   the document. */
+.qm-vdoc { display: block; }
+.qm-vdoc-page { margin: 0 0 18px; }
+.qm-vdoc-pageslot { display: block; }
+.qm-vdoc-afterpage { margin: 10px 0 0; }
+.qm-vdoc-unplaced { margin: 18px 0 0; }
+.qm-vdoc-counts {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--color-linear-text-3);
+}
+/* Pages get the paper treatment individually, not one long scroll box: the
+   document is the page here, so it should not sit inside a second frame. */
+.qm-vdoc .qm-npv-page {
+  border-radius: 6px;
+  margin-bottom: 0;
+}
+
+/* Visually hidden, still announced. The document renders as canvases, so the
+   note's text lives here for anyone reading with assistive technology. */
+.qm-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

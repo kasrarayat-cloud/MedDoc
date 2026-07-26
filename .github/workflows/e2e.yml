@@ -191,6 +191,32 @@ jobs:
           CI: "true"
         run: npx playwright test --project=doc-preview
 
+      # ── Phase 2 — the visit page as the document. Its own flag-ON image
+      #    (the doc-preview build does not carry NEXT_PUBLIC_VISIT_DOC_PAGE),
+      #    and the converter sidecar, because one spec stops it on purpose. ──
+      - name: Build flag-ON image for the document visit page
+        run: >
+          docker build -f apps/transcribe-md/Dockerfile
+          --build-arg NEXT_PUBLIC_VISIT_DOC_PAGE=true
+          --build-arg NEXT_PUBLIC_DOC_PREVIEW=true
+          --build-arg NEXT_PUBLIC_REVIEW_DOC_VIEW=true
+          --build-arg NEXT_PUBLIC_SETTINGS_SIMPLE_ROW=true
+          --build-arg NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX=true
+          --build-arg NEXT_PUBLIC_SKIN_BETA=true
+          -t meddoc-pro-transcribe-md:visit-doc .
+
+      - name: Start the converter sidecar + app on the visit-doc image
+        run: >
+          docker compose -f docker-compose.qa.yml -f docker-compose.qa.visitdoc.yml
+          up -d --wait gotenberg transcribe-md
+
+      - name: Run E2E (visit-doc — the document page, incl. sidecar-down)
+        working-directory: apps/transcribe-md
+        env:
+          PW_BASE_URL: http://localhost:9020
+          CI: "true"
+        run: npx playwright test --project=visit-doc
+
       - name: Restore the fixture app image
         run: >
           MOCK_TEMPLATE_PHI_FLAG=true MOCK_RX_WARNINGS=true

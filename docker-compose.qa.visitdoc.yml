@@ -1,0 +1,23 @@
+# ============================================================================
+# Phase 2 QA override — the visit page as the document. Build-time flags cannot
+# be flipped at runtime, so the flag-ON surface needs its own image.
+#
+# BUILD IT FIRST — nothing else creates this tag:
+#
+#   docker build -f apps/transcribe-md/Dockerfile \
+#     --build-arg NEXT_PUBLIC_VISIT_DOC_PAGE=true \
+#     --build-arg NEXT_PUBLIC_DOC_PREVIEW=true \
+#     --build-arg NEXT_PUBLIC_REVIEW_DOC_VIEW=true \
+#     --build-arg NEXT_PUBLIC_SETTINGS_SIMPLE_ROW=true \
+#     --build-arg NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX=true \
+#     --build-arg NEXT_PUBLIC_SKIN_BETA=true \
+#     -t meddoc-pro-transcribe-md:visit-doc .
+#
+#   docker compose -f docker-compose.qa.yml -f docker-compose.qa.visitdoc.yml \
+#     up -d --wait gotenberg transcribe-md
+#
+# Production is untouched: separate project / network / volumes.
+# ============================================================================
+services:
+  transcribe-md:
+    image: meddoc-pro-transcribe-md:visit-doc
