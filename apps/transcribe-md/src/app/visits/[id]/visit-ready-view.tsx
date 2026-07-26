@@ -55,6 +55,9 @@ import {
 } from '@/lib/ehr-formatters';
 import { formatLocalDateTime } from '@/lib/format-time';
 import { isVisitDocPage } from '@/config/visit-doc-page';
+import { saveNoteSectionAction } from '@/actions/save-note-section';
+import { readNoteSection } from '@/lib/splice-note-section';
+import { SectionEditCard } from './section-edit-card';
 import { parseNoteSections } from '@/lib/parse-note-sections';
 import {
   VisitDocumentSurface,
@@ -226,6 +229,23 @@ export function VisitReadyView(props: VisitReadyViewProps) {
   /** The anchors cards are placed against. The KEY IS THE SECTION LABEL, which
    *  is exactly what the suggestion map is keyed by — so a card placed on a
    *  page and a card placed under a heading resolve through the same lookup. */
+  /** Save one section. Goes through saveNoteSectionAction (which splices and
+   *  delegates to the existing draft save), then bumps the same `adoption`
+   *  state an adopt does — so the document re-fills through one path, not two. */
+  const saveSection = useCallback(
+    async (label: string, body: string, expectedVersion: number) => {
+      const r = await saveNoteSectionAction(props.visitId, label, body, expectedVersion);
+      if (!r.ok || !r.soapFinal) return { ok: false, error: r.error };
+      setAdoption((prev) => ({
+        text: r.soapFinal as string,
+        version: r.soapVersion ?? (prev?.version ?? props.soapVersion) + 1,
+        seq: (prev?.seq ?? 0) + 1,
+      }));
+      return { ok: true };
+    },
+    [props.visitId, props.soapVersion],
+  );
+
   const docAnchors = useMemo(
     () =>
       (docPage ? parseNoteSections(adoption?.text ?? props.soapText) : []).map((sec) => ({
@@ -641,7 +661,18 @@ export function VisitReadyView(props: VisitReadyViewProps) {
                       renderAfterSection={(keys) => (
                         <>
                           {keys.map((k) => (
-                            <div key={k}>{afterLabel(k)}</div>
+                            <div key={k}>
+                              {afterLabel(k)}
+                              {/* Under the page the section appears on — the
+                                  only place this view can honestly offer it. */}
+                              <SectionEditCard
+                                label={k}
+                                body={readNoteSection(adoption?.text ?? props.soapText, k)}
+                                disabled={props.readonly || props.signedAt !== null}
+                                soapVersion={adoption?.version ?? props.soapVersion}
+                                onSave={saveSection}
+                              />
+                            </div>
                           ))}
                         </>
                       )}
