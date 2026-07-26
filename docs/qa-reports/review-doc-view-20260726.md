@@ -228,3 +228,85 @@ new images, flag inlined in the shipped bundle, 9/9 healthy, co-tenants green.
   test, the rest is not covered.
 - Three copies of the section normaliser remain (client lib, server action,
   worker verifier) — now pinned by a test rather than a comment.
+
+---
+
+# E/M REACHABILITY + HARDENING — promoted 2026-07-26
+
+## 1. The codes row expands to the real billing panel
+
+`BillingCardC3` and `CodesTab` render inside the row, verbatim — the same
+components the tabs had, same enforcement, same audit. Collapsed by default; the
+inline confirm card is still the gate. Verified in the browser:
+
+```
+expanded: true   billingCard: true   "Why this level?": true
+override <select>: 1   codes tables: present
+BILLING SUPPORT · AMA 2021
+Supports a level 4 visit, 99214 — established patient, moderate complexity.
+The documented level changed to 99214 — you'll confirm it when you sign.
+Why this level? / Set a different code / 99211 …
+```
+
+Screenshot: `review-doc-shots/rdoc-07-codes-row-expanded.png`.
+
+Acknowledging a level and changing one are different acts, and they now have
+different controls: the inline card confirms, this row changes. No doctor needs
+the flag toggled to disagree.
+
+## 2. E2E pack — 10 tests, green
+
+```
+npx playwright test --project=review-doc
+  10 tests in 1 file → rc=0, no failure artifacts
+```
+
+Covers: document renders / tab strip gone · placement per section · read-gate
+locked → unlocked · **a card taller than the viewport still unlocks** · single
+adopt (and the gate NOT re-locking) · accept-remaining · critical-Rx typed
+override · E/M confirm · the expanded codes row · sign with an asserted download.
+
+**Its own Playwright project.** The default chromium gate builds the pre-C3 skin
+with the flag OFF, where this surface does not exist — left in the default sweep
+the pack would have failed the required gate for an environment reason rather
+than a real one. CI builds a separately-tagged flag-ON image, runs
+`--project=review-doc`, then restores the fixture image for phi-reject/rx-safety.
+
+**Four of the first failures were the TEST being wrong**, and each is recorded in
+the seed because a seed that does not match production is a test of the seed:
+
+| symptom | cause |
+|---|---|
+| override rendered `undefined`, server refused it | invented warning fields; L7c writes `{severity, rx_drug, message, evidence_quote}`, identity POSITIONAL |
+| E/M card said "unknown → unknown" | `parseEmPendingChange` is strict and fails closed; `{from,to}` without `cause`/`at` coerces to null |
+| codes toggle never appeared | nothing seeded any codes — the product correctly renders no row |
+| bar never said "scroll to review" | a pending drug warning outranks it; asserting on bar text tested message priority, not the gate |
+
+The sign test needed `dispatchEvent('click')`: the submit reports
+visible/enabled/stable but the actionability wait never settles behind a browser
+download. The real handler still runs — it bypasses Playwright's wait, not the
+application.
+
+## 3. Runbook — standing law
+
+`AGENTS.md` gains **"Production verification — standing law"**: a real doctor's
+visit is never a smoke target; production verification is structural (health,
+image digests, migrations, flag inlined in the shipped bundle, co-tenants, DOM
+presence without mutation, synthetic smoke-doctor flows only); the full clinical
+walk lives on QA against a byte-identical build; never rebuild prod's `:latest`
+to stage something. And: an unverified step named honestly beats a green tick
+bought with a patient's record.
+
+## 4. Promotion
+
+```
+rollback   images meddoc-pro-transcribe-md{,-worker}:pre-emrow-20260726
+           git tag pre-emrow-20260726
+           prod before: app 19b73a057cb6 / worker 6b5b155ff435
+deployed   app 42954b04d7e8 / worker 3399454681a2 — 9/9 healthy
+structural qm-rdoc-meta-panels + qm-rdoc-sugg-end present in the shipped bundle
+co-tenants app 307 / pro 200 / quillmd.com 200 / admin 404
+baseline   visits=18 patients=9 strays=0 — no prod data touched
+```
+
+Verification was structural only, per rule 3 — the same rule this run wrote down.
