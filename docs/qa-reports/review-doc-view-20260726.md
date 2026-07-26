@@ -310,3 +310,50 @@ baseline   visits=18 patients=9 strays=0 — no prod data touched
 ```
 
 Verification was structural only, per rule 3 — the same rule this run wrote down.
+
+---
+
+# DOCUMENT-FIRST 1a — the settings row. Promoted 2026-07-26.
+
+## What shipped
+
+Rows are now **name · status · Replace · Delete · ⋯** (advanced editor and
+Duplicate behind the overflow). The "Set up native export" CTA, its setup prose,
+and the separate "Native template (beta) — upload your .docx to certify" block
+are gone. When we cannot fill the doctor's own page it is one line of fact —
+*"Exports use a styled copy — Replace with your blank form to use your own"* —
+not a job handed back.
+
+Screenshot: `review-doc-shots/p1a-02-settings-row-after.png`.
+
+## The finding that changed 1a's shape
+
+The brief assumed absorption could migrate Kasra's live row automatically. **It
+cannot, and no amount of code makes it possible:**
+
+- the blank-form bytes are never retained — `certifyPdfTemplateAction` takes a
+  fresh upload
+- `carry-forward` can only inherit from a prior CERTIFIED template with a
+  matching structure hash
+- Kasra has **exactly one** template: `cms1fenrn…`, v1, active, uncertified, no
+  structure hash, no predecessor. There is nothing to carry from.
+
+So the honest fix is not a migration that pretends to absorb. It is deleting the
+ritual and letting the one real action do the job: **Replace already activates,
+certifies, sets form-only and previews once.** A separate step asking for the
+same file under a different name was ceremony. Recorded rather than papered over.
+
+## Promotion
+
+```
+rollback   images meddoc-pro-transcribe-md{,-worker}:pre-docfirst-p1a-20260726
+           git tag pre-docfirst-p1a-20260726
+           prod before: app 42954b04d7e8 / worker 3399454681a2
+deployed   app 788438a6b24a / worker 3d15de5ddbf7 — 9/9 healthy
+flag       NEXT_PUBLIC_SETTINGS_SIMPLE_ROW=true (+ Dockerfile ARG + compose arg)
+structural template-row-replace present in the shipped bundle;
+           "Set up native export" absent from every shipped chunk
+co-tenants app 307 / pro 200 / quillmd.com 200 / admin 404
+```
+
+Verification structural only, per the runbook law.
