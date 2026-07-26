@@ -357,3 +357,53 @@ co-tenants app 307 / pro 200 / quillmd.com 200 / admin 404
 ```
 
 Verification structural only, per the runbook law.
+
+---
+
+# CONVERTER SIDECAR — live on prod 2026-07-26
+
+## Resource + isolation, verified on the deployed container
+
+```
+image        gotenberg/gotenberg:8  (1.68 GB pulled; disk 46 G free)
+networks     meddoc-pro_converter ONLY  (internal: true — Docker installs no
+             gateway, so there is no route off this box)
+published    3000/tcp -> null   (no host port; unreachable from outside)
+memory       1024 MB cap, 1.5 cpus
+persistence  /tmp is tmpfs (rw,noexec,nosuid,256m); NO volume
+privileges   no-new-privileges:true;  --chromium-deny-list=.*  as a second belt
+health       curl /health, 30s interval — reports "up"
+egress test  curl https://example.com  ->  000 / BLOCKED;  no external DNS
+conversion   the real WM_IOV form -> 87,214-byte PDF, HTTP 200
+```
+
+## HIPAA note — exactly what happens
+
+**What crosses:** a *filled* DOCX. It carries PHI, because the point of the
+preview is that the doctor sees their real document.
+
+**Where it goes:** over the internal `converter` Docker network to a container
+with no gateway and no published port. It cannot reach the internet, and the
+internet cannot reach it. It is not on the default network with the rest of the
+stack; only the app is dual-homed.
+
+**Where it lives:** in RAM. `/tmp` is a tmpfs, so LibreOffice's scratch never
+touches disk and dies with the container.
+
+**What persists: nothing.** There is no volume, no cache, no log of content. The
+PDF is returned in the response body and the request ends.
+
+**What depends on it: nothing clinical.** Certify, export and sign do not call
+the converter, and `__tests__/convert.test.ts` asserts no clinical path imports
+it. On timeout (12 s hard ceiling, inside Gotenberg's own 25 s), error, or a
+sidecar that is not deployed at all, the client returns a named reason and null
+and the caller renders the true bytes in the browser. A preview that could block
+a signature would be worse than no preview.
+
+Rollback: `docker compose stop gotenberg` — nothing breaks, previews fall back.
+Tag `pre-docfirst-converter-20260726`.
+
+## Prod
+
+10/10 healthy (9 + gotenberg). Co-tenants 307 / 200 / 200 / 404. Structural
+verification only, per the runbook law.
