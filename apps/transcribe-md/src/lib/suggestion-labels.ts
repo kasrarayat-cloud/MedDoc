@@ -33,12 +33,11 @@ export function suggestionReasonLabel(reason: string): string {
 
 /** Normalise a section heading for comparison. MUST match the rule the adopt
  *  action applies when it decides which heading to append under — strip bold
- *  markers, strip a trailing colon, collapse whitespace, casefold. */
+ *  markers, strip a trailing colon, trim, casefold. */
 export function normalizeSectionLabel(s: string): string {
-  return s
-    .replace(/\*\*/g, '')
-    .replace(/:\s*$/, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase();
+  // BYTE-IDENTICAL to normalizeHeading in actions/suggestion-actions.ts. Not
+  // "equivalent" — identical. An extra step here (a whitespace collapse, say)
+  // would let the client place a claim inline that the server then appends
+  // somewhere else, which is worse than either behaviour on its own.
+  return s.replace(/\*\*/g, '').replace(/:\s*$/, '').trim().toLowerCase();
 }
