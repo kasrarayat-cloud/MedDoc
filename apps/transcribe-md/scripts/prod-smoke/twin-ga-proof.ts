@@ -153,11 +153,26 @@ async function main() {
   say(`CERTIFY status=${compiled?.certificationStatus}`);
 
   // ── the payoff: the doctor's own document back, filled ──────────────────
-  const manifest = await prisma.templateTwinFillManifest.findFirst({
-    where: { compiledVersionId: compiled!.id },
-    orderBy: { createdAt: 'desc' },
-    select: { outputObjectKey: true, outputSha256: true, outputSizeBytes: true, status: true },
+  // The synthetic proof's artifact lives ON the compiled version — the separate
+  // fill-manifest table belongs to VISITS. Reading the wrong one reported
+  // "MANIFEST NONE" for a run that had in fact produced and verified a document.
+  const artifact = await prisma.templateTwinCompiledVersion.findUnique({
+    where: { id: compiled!.id },
+    select: {
+      latestTestOutputObjectKey: true,
+      latestTestOutputSha256: true,
+      latestTestMappingsSha256: true,
+    },
   });
+  const manifest = artifact?.latestTestOutputObjectKey
+    ? {
+        status: 'verified',
+        outputObjectKey: artifact.latestTestOutputObjectKey,
+        outputSha256: artifact.latestTestOutputSha256,
+        outputSizeBytes: null as number | null,
+      }
+    : null;
+  say(`MAPPINGS sha=${String(artifact?.latestTestMappingsSha256).slice(0, 12)}`);
   say(
     `MANIFEST ${manifest ? `status=${manifest.status} bytes=${manifest.outputSizeBytes} sha=${String(manifest.outputSha256).slice(0, 12)}` : 'NONE'}`
   );
@@ -168,7 +183,6 @@ async function main() {
       practiceId: user.practiceId,
       objectKey: manifest.outputObjectKey,
       expectedSha256: manifest.outputSha256!,
-      expectedSizeBytes: manifest.outputSizeBytes ?? undefined,
     });
     writeFileSync('/app/twin-native-output.docx', Buffer.from(out));
     say(`NATIVE DOCX written: ${out.byteLength} bytes`);

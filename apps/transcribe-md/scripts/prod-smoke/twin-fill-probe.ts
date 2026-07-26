@@ -25,7 +25,9 @@ async function main() {
       pinnedSyntheticNote: true,
       pinnedSyntheticEntities: true,
       pinnedSyntheticContextText: true,
-      sourceArtifact: { select: { practiceId: true } },
+      sourceArtifact: {
+        select: { practiceId: true, objectKey: true, sha256: true, sizeBytes: true },
+      },
       fields: {
         select: {
           fieldId: true,
@@ -88,6 +90,11 @@ async function main() {
     asrQuality: 'unknown',
   });
   say(`facts=${facts.length}`);
+  const measurements = facts.filter((f) => f.concept.startsWith('measurement.'));
+  say(`measurement facts=${measurements.length}`);
+  for (const m of measurements) {
+    say(`  m ${m.concept} lat=${m.laterality} num=${m.number} unit=${m.unit} seg="${String((m as { segment?: string }).segment ?? '')}"`);
+  }
 
   const mappings = compiled.fields.map((f: (typeof compiled.fields)[number]) =>
     SemanticMappingSchema.parse({
@@ -108,7 +115,18 @@ async function main() {
     }),
   );
 
+  // The real source bytes, so the probe exercises render + roundtrip too rather
+  // than stopping one step short of the thing being certified.
+  const { createTemplateTwinArtifactStore } = await import('@/lib/template-twin/storage');
+  const source = await createTemplateTwinArtifactStore().readSourceArtifact({
+    practiceId: compiled.sourceArtifact.practiceId,
+    objectKey: compiled.sourceArtifact.objectKey,
+    expectedSha256: compiled.sourceArtifact.sha256,
+    expectedSizeBytes: compiled.sourceArtifact.sizeBytes,
+  });
+
   const prepared = await prepareTemplateTwinFill({
+    source,
     compiledVersionId: compiled.id,
     noteTemplateId: compiled.noteTemplateId,
     noteTemplateVersion: 1,
