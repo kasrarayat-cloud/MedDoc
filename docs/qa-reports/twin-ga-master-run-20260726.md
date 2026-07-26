@@ -235,3 +235,49 @@ certification outright. Either:
 
 (a) looks right and is the smaller change, but it widens the vocabulary contract
 and belongs with whoever owns it. Stages 8-9 remain blocked behind it.
+
+## Field-class ruling — WM_IOV's 80 fields classified
+
+Counts below are per-template (the raw dump was 3x inflated by three pinned
+compiled versions in QA). 52 cells + 28 controls = 80.
+
+### EXTRACTION (registry concept) — 71 fields
+
+| family | n | concept |
+|---|---|---|
+| measurement cells | **52** | `measurement.diameter` / `measurement.reflux_time` (emitted, verified) |
+| clinical indications | 6 | needs empirical dump |
+| finding chain "The …" | 8 | needs empirical dump |
+| finding chain Left/Right | 4 | needs empirical dump |
+| deep venous system L/R | 2 | needs empirical dump |
+| side of exam | 1 | needs empirical dump |
+| diagnosis | 1 | `assessment` (emitted, verified) |
+| technique statement | 1 | needs empirical dump |
+
+### CONTEXT_DEFAULT (deterministic, styleProfile) — 4 fields
+referring physician · machine · location · address
+
+### MANUAL (attested-blank, `reason=manual_field`) — 1 field
+ultrasound technologist
+
+### VISIT_METADATA — 0 in this template's controls
+Patient name / date-of-study are header fields outside the 80.
+
+**The fill floor is satisfiable by extraction alone**: 52 measurement cells
+against a ≥10-filled + ≥1-cell floor, with `measurement.*` already proven
+emitted and sided. Context defaults and manual are 5 fields total.
+
+## NOT IMPLEMENTED this run — stopped deliberately
+
+The ruling's mechanism (a `sourceType` per mapping; a CONTEXT_DEFAULT provenance
+class with its own strict validation mirroring the PRACTICE_DEFAULT checks;
+context defaults set through the real settings flow; re-propose; certify twice;
+export; GA) was not built.
+
+CONTEXT_DEFAULT is a NEW provenance type on the clinical evidence path — the
+same shape of thing as APPROVED_PRACTICE_DEFAULT, which is currently hard-blocked
+precisely because its visibility story is unfinished. Adding a second
+deterministic-fill provenance class, with its own validation, is safety-critical
+work and was not something to start at the end of a long session. The
+classification above is the input it needs; the empirical concept dumps for the
+six un-dumped pick families are the other.
