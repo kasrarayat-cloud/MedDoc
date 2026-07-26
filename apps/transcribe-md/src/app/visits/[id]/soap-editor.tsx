@@ -48,6 +48,7 @@ import type {
   SoapSectionKey as EmSoapSectionKey,
 } from '@/lib/em-coding-ui/types';
 import { SoapBody } from './soap/SoapBody';
+import type { NoteSection } from '@/lib/parse-note-sections';
 import type { SoapPulseHint, SoapSectionStatus } from './soap/SoapSection';
 import { SignAndSendModal } from './sign-and-send-modal';
 
@@ -130,6 +131,9 @@ interface SoapEditorProps {
    *  action in its persistent bottom bar instead (same SignAndSendModal, same
    *  gate, same props). Presentation-only: no save/sign/E-M logic changes. */
   chromeless?: boolean;
+  /** Optional per-section slot, forwarded to SoapBody. Only the pre-sign
+   *  document view passes it; everywhere else the note is untouched. */
+  afterSection?: (section: NoteSection) => React.ReactNode;
   /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: SoapEditorTheme;
 }
@@ -145,6 +149,7 @@ export function SoapEditor({
   initialScore = null,
   emPendingChange = null,
   chromeless = false,
+  afterSection,
 }: SoapEditorProps) {
   const [text, setText] = useState(initialText);
   const [soapVersion, setSoapVersion] = useState(initialSoapVersion);
@@ -379,6 +384,7 @@ export function SoapEditor({
           highlightedSections={highlightedSections}
           onEdit={onEdit}
           readonly={isReadonly}
+          afterSection={afterSection}
         />
 
         {/* RIGHT — Coding Rail slot. Phase 5.2 stub completion: now
