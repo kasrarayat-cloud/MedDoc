@@ -305,6 +305,11 @@ export async function runTemplateTwinSyntheticTest(input: {
         pinnedNoteTemplateSha256: templateSha256,
         pinnedSyntheticNote: { not: null },
       },
+      // Newest first, and prefer one that also carries the pinned EXTRACTION.
+      // An unordered findFirst kept selecting an older sibling that had only the
+      // note, so the extraction was re-run every time and the second half of the
+      // determinism guarantee never took effect.
+      orderBy: [{ pinnedSyntheticEntities: 'desc' }, { compiledAt: 'desc' }],
       select: {
         pinnedSyntheticNote: true,
         pinnedSyntheticEntities: true,
