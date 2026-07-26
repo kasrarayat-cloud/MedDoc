@@ -169,6 +169,10 @@ export type AuditAction =
   // verifier-demoted claim ("Suggested by AI" lane). Metadata: { section,
   // reason, remaining } — never claim text.
   | 'SUGGESTION_ADOPTED'
+  // One row per chat-editor turn. Its EFFECTS are audited by the actions it
+  // dispatches into, but those rows are byte-identical to a button click —
+  // this one records that the chat was what did it.
+  | 'CHAT_EDIT_TURN'
   | 'SUGGESTION_DISMISSED'
   // E/M recompute on adoption — visible-confirm, never silent (2026-06-12,
   // prod smoke #311). EM_LEVEL_CHANGED: an adopt/dismiss suggestion action

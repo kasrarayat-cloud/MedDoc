@@ -7056,3 +7056,4 @@ body {
   font-size: 11.5px;
   color: var(--color-linear-text-3);
 }
+.qm-chat-action-none { color: var(--color-linear-text-3); }

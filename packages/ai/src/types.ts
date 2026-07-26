@@ -54,7 +54,12 @@ export type ModelCallPurpose =
   // Template Twin native-DOCX — PHI gate over physician-supplied SYNTHETIC test
   // evidence at certify time (distinct from tm_template_phi_scan over parsed
   // output). Separate purpose keeps telemetry/cost attribution clean.
-  | 'tm_template_synthetic_phi_scan';
+  | 'tm_template_synthetic_phi_scan'
+  // The pre-sign chat editor. The model NEVER writes: it returns a structured
+  // intent, and the server dispatches into the same audited actions the buttons
+  // call. Its own purpose so its cost and volume are attributable separately
+  // from the generation pipeline.
+  | 'tm_chat_edit';
 
 export interface AiLogContext {
   practiceId: string;

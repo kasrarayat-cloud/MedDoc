@@ -55,6 +55,8 @@ import {
 } from '@/lib/ehr-formatters';
 import { formatLocalDateTime } from '@/lib/format-time';
 import { isVisitDocPage } from '@/config/visit-doc-page';
+import { isChatEditor } from '@/config/chat-editor';
+import { ChatEditorPanel } from './chat-editor-panel';
 import { saveNoteSectionAction } from '@/actions/save-note-section';
 import { readNoteSection } from '@/lib/splice-note-section';
 import { SectionEditCard } from './section-edit-card';
@@ -217,6 +219,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
 
   // ── PHASE 2 — the visit page IS the document ────────────────────────────
   const docPage = isVisitDocPage();
+  const chatEditor = isChatEditor();
   /** Set once the document turns out to be unavailable (not certified, fill
    *  failed, could not be drawn). Latched so the page does not flicker between
    *  two surfaces while the doctor is reading — and so the styled note, once
@@ -642,6 +645,28 @@ export function VisitReadyView(props: VisitReadyViewProps) {
             >
               {VISIT_DOCUMENT_MISS_TEXT[docPageMiss]}
             </p>
+          )}
+          {chatEditor && !props.signedAt && (
+            <ChatEditorPanel
+              visitId={props.visitId}
+              disabled={props.readonly}
+              onNoteChanged={(r) =>
+                setAdoption((prev) => ({
+                  text: r.soapFinal,
+                  version: r.soapVersion ?? (prev?.version ?? props.soapVersion) + 1,
+                  seq: (prev?.seq ?? 0) + 1,
+                }))
+              }
+              onScrollTo={(target) => {
+                const el =
+                  target === 'rx_gate'
+                    ? document.querySelector('[data-testid="review-doc-rx-gate"]')
+                    : target === 'document'
+                      ? document.querySelector('[data-testid="visit-document"]')
+                      : document.querySelector(`[data-chat-target="${target}"]`);
+                el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }}
+            />
           )}
           <ReviewDocumentView
             visitId={props.visitId}

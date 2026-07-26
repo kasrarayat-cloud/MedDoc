@@ -552,6 +552,7 @@ services:
         NEXT_PUBLIC_SETTINGS_SIMPLE_ROW: "${NEXT_PUBLIC_SETTINGS_SIMPLE_ROW:-false}"
         NEXT_PUBLIC_DOC_PREVIEW: "${NEXT_PUBLIC_DOC_PREVIEW:-false}"
         NEXT_PUBLIC_VISIT_DOC_PAGE: "${NEXT_PUBLIC_VISIT_DOC_PAGE:-false}"
+        NEXT_PUBLIC_CHAT_EDITOR: "${NEXT_PUBLIC_CHAT_EDITOR:-false}"
     restart: unless-stopped
     logging:
       driver: json-file
