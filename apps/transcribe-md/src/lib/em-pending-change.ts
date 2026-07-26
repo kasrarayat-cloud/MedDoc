@@ -36,6 +36,13 @@
 export const EM_CHANGE_CAUSES = [
   'suggestion_adopted',
   'suggestion_dismissed',
+  // A doctor (or the chat, on their instruction) changed the note and the
+  // re-score found the level had moved. Added with the E/M-stale unification:
+  // without it every record the re-score wrote was malformed by THIS parser,
+  // coerced to the unknown→unknown sentinel, and the doctor who confirmed the
+  // correct code was refused — the confirm card reading "unknown, up from
+  // unknown" on the one path the gate exists to protect.
+  'note_edited',
 ] as const;
 
 export type EmChangeCause = (typeof EM_CHANGE_CAUSES)[number];

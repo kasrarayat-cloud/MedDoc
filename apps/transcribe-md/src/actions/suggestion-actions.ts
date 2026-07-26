@@ -396,6 +396,11 @@ export async function adoptSuggestionAction(
       where: { id: visit.id, soapVersion: visit.soapVersion, status: TranscribeVisitStatus.READY },
       data: {
         soapFinal: newSoap,
+        // Adoption computes its own precise delta below and arms the confirm
+        // when the level moved. This flag is the OTHER half: the note changed,
+        // so the level must be revalidated before signing even when this leg
+        // saw no movement. One semantics for every content change.
+        emStale: true,
         soapVersion: { increment: 1 },
         suggestedClaims:
           remaining.length > 0

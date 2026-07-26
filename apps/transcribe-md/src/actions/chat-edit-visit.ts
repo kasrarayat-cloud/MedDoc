@@ -38,6 +38,12 @@ import { logAudit } from '@/lib/audit';
 import { requireSession } from '@/lib/auth';
 import { CHAT_EDIT_SYSTEM } from '@/lib/chat-edit/prompt';
 import { ChatReplySchema, type ChatIntent } from '@/lib/chat-edit/intent';
+import {
+  claimId,
+  clearAttestations,
+  recordRendered,
+  wereRendered,
+} from '@/lib/chat-edit/attestation';
 
 import { adoptSuggestionAction } from './suggestion-actions';
 import { saveNoteSectionAction } from './save-note-section';
@@ -75,15 +81,11 @@ function fail(error: string): ChatEditResult {
   return { ok: false, reply: '', actions: [], scrollTo: null, error };
 }
 
-/** Did a previous assistant turn actually read these suggestions out? */
-function wereListed(history: ChatTurn[], texts: string[]): boolean {
-  const said = history
-    .filter((t) => t.role === 'assistant')
-    .map((t) => t.text)
-    .join("\n");
-  // Every one of them, not 'some' and not 'a count'.
-  return texts.every((t) => said.includes(t.slice(0, 60)));
-}
+/** Hard cap on what one turn may do. Fifty adopts each run an uncached E/M
+ *  judgement; a doctor asking "accept all" should not be able to start that by
+ *  accident, and a confused model should not be able to at all. When the cap
+ *  bites, the reply says so and the doctor asks again. */
+const MAX_ACTIONS_PER_TURN = 20;
 
 export async function chatEditVisitAction(
   visitId: string,
@@ -196,23 +198,43 @@ export async function chatEditVisitAction(
     );
   }
 
-  // THE LISTING GATE, HOISTED. Checking it per-intent meant a model could emit
-  // fifty separate `adopt_suggestion` intents and adopt fifty suggestions with
-  // no listing requirement at all — the singular arm never reached the check.
-  // The bar is the TURN's total, however it is expressed.
+  // ── THE LISTING, RECORDED BY THE SERVER ─────────────────────────────────
+  // The model DECLARES what its reply lists; the server verifies that each
+  // claim's FULL text actually appears in the reply it is about to send, and
+  // records only those. The client's transcript is not consulted — it is not
+  // evidence, because the client writes it.
+  const declaredListed = parsed.intents.flatMap((i) =>
+    i.kind === 'listed_suggestions' ? i.indexes : [],
+  );
+  const actuallyRendered = declaredListed
+    .map((i) => claims[i])
+    .filter((c): c is (typeof claims)[number] => Boolean(c))
+    .filter((c) => parsed.reply.includes(c.text));
+
+  // Bulk adoption is eligible only for claims recorded BEFORE this turn.
+  //
+  // Recording first and checking after let one reply both list and adopt: the
+  // model could satisfy, in the same breath, the gate that exists to put the
+  // doctor's eyes between the two. The property that matters is a turn of
+  // theirs in between, so the check runs against the PRE-EXISTING record and
+  // this turn's listing is written afterwards, for the next one.
   const wanted = parsed.intents.flatMap((i) =>
-    i.kind === 'adopt_suggestion'
-      ? [i.index]
-      : i.kind === 'adopt_suggestions'
-        ? i.indexes
-        : [],
+    i.kind === 'adopt_suggestion' ? [i.index] : i.kind === 'adopt_suggestions' ? i.indexes : [],
   );
   const bulkNeedsListing =
     wanted.length > 1 &&
-    !wereListed(
-      history,
-      wanted.map((i) => claims[i]?.text).filter(Boolean) as string[],
-    );
+    !(await wereRendered(
+      visitId,
+      session.user.id,
+      wanted.map((i) => claims[i]).filter(Boolean).map(claimId),
+    ));
+
+  if (actuallyRendered.length > 0) {
+    await recordRendered(visitId, session.user.id, actuallyRendered.map(claimId));
+  }
+
+  let budget = MAX_ACTIONS_PER_TURN;
+  let capped = 0;
 
   const actions: ChatActionOutcome[] = [];
   let scrollTo: string | null = null;
@@ -235,6 +257,11 @@ export async function chatEditVisitAction(
           break;
 
         case 'edit_section': {
+        if (budget <= 0) {
+          capped += 1;
+          break;
+        }
+        budget -= 1;
           // The version the model's snapshot was taken at. Without it an adopt
           // landing during the Opus round-trip is silently overwritten inside
           // the edited section — the exact bug this parameter exists for.
@@ -279,6 +306,15 @@ export async function chatEditVisitAction(
           // ONE CALL PER CLAIM, highest index first so the earlier indexes stay
           // valid as the array shrinks under us.
           for (const index of [...indexes].sort((a, b) => b - a)) {
+            // THE CAP. Every adopt runs an uncached E/M judgement, so an
+            // "accept all" over a long lane is real work and real money. Stop
+            // at the cap and SAY so — a doctor who asked for 34 and got 20
+            // must not be left believing they got 34.
+            if (budget <= 0) {
+              capped += 1;
+              continue;
+            }
+            budget -= 1;
             const claim = claims[index];
             if (!claim) {
               actions.push({
@@ -318,6 +354,11 @@ export async function chatEditVisitAction(
     }
   }
 
+  // The note changed, so what was read out is no longer what would be adopted:
+  // the remaining claims may have shifted, and a stale attestation would
+  // authorise a suggestion nobody has seen in its current form.
+  if (soapFinal) await clearAttestations(visitId, session.user.id);
+
   // PROVENANCE. Every effect above is audited by the action it went through,
   // but those rows look identical to a button click. This one says the chat did
   // it. Counts and intent KINDS only — never note text, never the reply.
@@ -328,15 +369,24 @@ export async function chatEditVisitAction(
     metadata: {
       intents: parsed.intents.map((i) => i.kind),
       adopted: actions.filter((a) => a.kind.startsWith('adopt') && a.ok).length,
+      capped,
       edited: actions.filter((a) => a.kind === 'edit_section' && a.ok).length,
       refused: actions.filter((a) => a.kind === 'refuse').length,
       failed: actions.filter((a) => !a.ok).length,
     },
   });
 
+  // The model wrote its reply before the cap was applied, so it cannot know
+  // about it. Append the truth rather than let its account stand.
+  const reply =
+    capped > 0
+      ? `${parsed.reply}\n\nI stopped at ${MAX_ACTIONS_PER_TURN} actions this turn — ` +
+        `${capped} more ${capped === 1 ? 'is' : 'are'} still waiting. Say "continue" and I'll carry on.`
+      : parsed.reply;
+
   return {
     ok: true,
-    reply: parsed.reply,
+    reply,
     actions,
     scrollTo,
     soapFinal,

@@ -167,6 +167,13 @@ export const POST = withApiHandler<{ id: string }>(
           failureCategory: null,
           processingFinishedAt: null,
           manualRetryCount: { increment: 1 },
+          // A retry on a READY visit re-runs the pipeline over the note as it
+          // now stands — including a doctor's edits — and re-persists it. The
+          // billing level was scored against the note BEFORE that, so it needs
+          // revalidating like any other content change. (Found by mapping every
+          // soapFinal writer: READY is not an in-flight status, so this path is
+          // reachable from a review-time retry.)
+          emStale: true,
         },
       });
       await enqueueProcessVisit(visitId, userId, { retry: true });

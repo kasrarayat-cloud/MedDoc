@@ -131,15 +131,36 @@ export function seedVisitDocVisit(): SeededVisitDoc | null {
   // to resolve; and ONE demoted claim, because accepting it is what proves the
   // document fills.
   const note = `'${SEED_NOTE.replace(/'/g, "''")}'`;
+  // THREE claims, not one. The bulk-adoption gate only engages above a single
+  // suggestion (accepting one is a direct instruction, not a batch), so a
+  // one-claim fixture cannot exercise it — and a test that cannot reach the
+  // rule it is named after is worse than no test.
+  //
   // EVERY field, or nothing: extractSuggestedClaims voids the whole array on a
   // single malformed entry (so rendered indices can never drift from the DB
   // array the adopt action validates against). A claim missing `anchor` does
   // not render as a broken card — it renders as no lane at all.
-  const claims =
-    `'[{\"section\":\"FINDINGS\",` +
-    `\"text\":\"Right GSV Below Knee measured 4.2 mm with reflux of 0.9 seconds.\",` +
-    `\"reason\":\"not supported by the dictation\",` +
-    `\"anchor\":\"no anchor\"}]'::jsonb`;
+  const claimList = [
+    {
+      section: 'FINDINGS',
+      text: 'Right GSV Below Knee measured 4.2 mm with reflux of 0.9 seconds.',
+      reason: 'not supported by the dictation',
+      anchor: 'no anchor',
+    },
+    {
+      section: 'FINDINGS',
+      text: 'Left SSV at the proximal calf measured 3.1 mm without reflux.',
+      reason: 'not supported by the dictation',
+      anchor: 'no anchor',
+    },
+    {
+      section: 'IMPRESSION',
+      text: 'No evidence of deep venous thrombosis in either lower extremity.',
+      reason: 'not supported by the dictation',
+      anchor: 'no anchor',
+    },
+  ];
+  const claims = `'${JSON.stringify(claimList).replace(/'/g, "''")}'::jsonb`;
 
   psql(`
     create temp table _seed as select * from transcribe_visits where id = '${donor}';
@@ -160,6 +181,25 @@ export function seedVisitDocVisit(): SeededVisitDoc | null {
     insert into transcribe_visits select * from _seed;
     delete from template_twin_fill_manifests where "visitId" = '${VISIT_DOC_VISIT_ID}';
   `);
+
+  // The chat's reading attestations live in Redis, keyed by visit + doctor —
+  // both of which this fixture REUSES. Left in place, a later test inherits an
+  // earlier one's permission to bulk-adopt, and the gate looks satisfied when
+  // nothing was read in that session.
+  try {
+    execSync(
+      `${COMPOSE} exec -T redis redis-cli --scan --pattern 'chatattest:v1:${VISIT_DOC_VISIT_ID}:*'`,
+      { encoding: 'utf8' },
+    )
+      .split('\n')
+      .map((k) => k.trim())
+      .filter(Boolean)
+      .forEach((k) => {
+        execSync(`${COMPOSE} exec -T redis redis-cli del ${k}`, { stdio: 'ignore' });
+      });
+  } catch {
+    // No Redis, no attestation — the gate fails closed, which is correct.
+  }
 
   return { visitId: VISIT_DOC_VISIT_ID, doctorEmail: ownerEmail };
 }

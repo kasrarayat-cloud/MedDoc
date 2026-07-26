@@ -173,6 +173,10 @@ export type AuditAction =
   // dispatches into, but those rows are byte-identical to a button click —
   // this one records that the chat was what did it.
   | 'CHAT_EDIT_TURN'
+  // Sign refused because the note changed since the E/M level was scored.
+  | 'EM_SIGN_BLOCKED_STALE'
+  // The E/M level was re-scored against a changed note.
+  | 'EM_RESCORED'
   | 'SUGGESTION_DISMISSED'
   // E/M recompute on adoption — visible-confirm, never silent (2026-06-12,
   // prod smoke #311). EM_LEVEL_CHANGED: an adopt/dismiss suggestion action

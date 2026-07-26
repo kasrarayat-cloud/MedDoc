@@ -20,7 +20,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 
 import { loginUser } from '../helpers/auth';
-import { QA_COMPOSE } from '../helpers/qa-compose';
+import { QA_COMPOSE, QA_DB } from '../helpers/qa-compose';
 import {
   prepareVisitDocLogin,
   restoreOwnerCredentials,
@@ -146,6 +146,17 @@ test.describe('the visit page is the document', () => {
     // And editing still writes no fill manifest.
     expect(visitDocManifestCount()).toBe(0);
 
+    // The edit made the billing level stale — that is the new gate, and it
+    // refuses the signature. Re-check the level the way a doctor would: open
+    // the codes row, then acknowledge if it moved.
+    await page.getByTestId('review-doc-codes-toggle').click();
+    await expect(page.getByTestId('em-stale-badge')).toHaveCount(0, { timeout: 120_000 });
+    const emConfirm = page.getByRole('button', { name: /confirm|acknowledge/i }).first();
+    if (await emConfirm.count()) {
+      await emConfirm.click();
+      await page.waitForTimeout(2000);
+    }
+
     // Sign, and read the file the doctor actually receives.
     const dismiss = page.getByRole('button', { name: /^dismiss/i }).first();
     if (await dismiss.count()) {
@@ -170,6 +181,101 @@ test.describe('the visit page is the document', () => {
     );
     expect(text, 'the signed file must carry the doctor’s edit').toContain(EDIT_MARK);
     void seeded;
+  });
+
+
+  test('E/M STALE: an edit blocks signing until the level is re-checked', async ({ page }) => {
+    test.setTimeout(420_000);
+    await page.setViewportSize({ width: 1400, height: 1000 });
+    const seeded = await openVisit(page);
+    await page.getByTestId('visit-document').waitFor({ state: 'visible', timeout: 120_000 });
+
+    const isStale = () =>
+      execSync(
+        `${QA_COMPOSE} exec -T postgres psql -U meddoc -d ${QA_DB} -A -t -f -`,
+        {
+          input: `select "emStale" from transcribe_visits where id='${seeded.visitId}'`,
+          encoding: 'utf8',
+        },
+      ).trim();
+
+    // Edit through tap-to-edit — the surface every editor funnels into.
+    const opener = page.locator('[data-testid^="section-edit-"]').first();
+    const label = (await opener.getAttribute('data-testid'))!.replace('section-edit-', '');
+    await opener.click();
+    const ta = page.getByTestId(`section-textarea-${label}`);
+    await ta.fill(`${await ta.inputValue()}\nStale-gate probe.`);
+    await page.getByTestId(`section-save-${label}`).click();
+    await page.waitForTimeout(3000);
+
+    expect(isStale(), 'an edit must mark the level stale').toBe('t');
+
+    // The doctor is TOLD why, at the control that resolves it.
+    await expect(page.getByTestId('em-stale-badge')).toBeVisible();
+
+    const scoredCode = () =>
+      execSync(`${QA_COMPOSE} exec -T postgres psql -U meddoc -d ${QA_DB} -A -t -f -`, {
+        input: `select coalesce("emScoredCode",'-') from transcribe_visits where id='${seeded.visitId}'`,
+        encoding: 'utf8',
+      }).trim();
+
+    // Opening the codes row re-scores: the flag clears AND a baseline is
+    // recorded. Without a baseline the re-score compares the current level to
+    // itself, concludes nothing moved, and clears the flag every time — a gate
+    // that cannot catch anything looks exactly like one that checked.
+    await page.getByTestId('review-doc-codes-toggle').click();
+    await expect
+      .poll(() => isStale(), { timeout: 120_000, message: 'the re-score should clear the flag' })
+      .toBe('f');
+    expect(scoredCode(), 'the validated level must be recorded').toMatch(/^\d{5}$/);
+
+    // A SECOND edit is now gated against a real before.
+    await opener.click();
+    await ta.fill(`${await ta.inputValue()}\nSecond probe.`);
+    await page.getByTestId(`section-save-${label}`).click();
+    await expect.poll(() => isStale(), { timeout: 60_000 }).toBe('t');
+
+    // Signing re-scores server-side rather than refusing and pointing at a
+    // control that may not be rendered — the gate is enforced by the route
+    // that owns the transition, not by whichever surface happens to be up.
+    const attempt = await page.request.post(`/api/visits/${seeded.visitId}/sign`, {
+      data: { destinations: [] },
+    });
+    expect([200, 400, 409]).toContain(attempt.status());
+    expect(isStale(), 'the sign path must resolve staleness, not leave it').toBe('f');
+  });
+
+
+  test('E/M STALE: a MOVED level blocks the signature', async ({ page }) => {
+    test.setTimeout(300_000);
+    const seeded = await openVisit(page);
+    const sqlOne = (q: string) =>
+      execSync(`${QA_COMPOSE} exec -T postgres psql -U meddoc -d ${QA_DB} -A -t -f -`, {
+        input: q,
+        encoding: 'utf8',
+      }).trim();
+
+    // A validated level that differs from what this note scores at. Planting
+    // the baseline is the only way to exercise "moved" deterministically — the
+    // scorer is a real model and we do not get to choose its answer.
+    sqlOne(
+      `update transcribe_visits set "emScoredCode"='99214', "emStale"=true, ` +
+        `"emPendingChange"=null where id='${seeded.visitId}'`,
+    );
+
+    const r = await page.request.post(`/api/visits/${seeded.visitId}/sign`, {
+      data: { destinations: [] },
+    });
+    expect(r.status(), 'a moved level must block the signature').not.toBe(200);
+    expect(await r.text()).toMatch(/confirm the new level/i);
+    expect(sqlOne(`select status from transcribe_visits where id='${seeded.visitId}'`)).toBe(
+      'READY',
+    );
+    // The record reaching the gate carries REAL codes, not the fail-closed
+    // sentinel — a cause the parser rejects turns this into "unknown → unknown".
+    expect(
+      sqlOne(`select "emPendingChange"::text from transcribe_visits where id='${seeded.visitId}'`),
+    ).toMatch(/99214/);
   });
 
   test('390px: the document draws and nothing overflows sideways', async ({ page }) => {

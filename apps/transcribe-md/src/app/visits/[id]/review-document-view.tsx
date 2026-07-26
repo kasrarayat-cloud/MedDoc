@@ -89,6 +89,11 @@ export interface ReviewDocumentViewProps {
    *  a surface is not the same as removing it: the doctor must be able to
    *  override, rescore or dispute a level from here, with the same components,
    *  the same enforcement and the same audit the Billing/Codes tabs had. */
+  /** The note changed since the level was scored — the sign route refuses
+   *  while this holds. Opening the codes row re-scores it. */
+  emStale?: boolean;
+  /** Re-scores lazily. Returns whether the level moved. */
+  onRescoreEm?: () => Promise<void>;
   billingNode: React.ReactNode;
   codesNode: React.ReactNode;
   dictationNode: React.ReactNode;
@@ -369,7 +374,14 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
     );
   };
 
-  const hasSummary = props.summary.icd.length > 0 || props.summary.emCode !== null || props.summary.emNotApplicable;
+  // The codes row is also where a stale billing level gets re-checked, so a
+  // visit with nothing to summarise must still be able to open it — otherwise
+  // the sign gate refuses and there is no control on the page that clears it.
+  const hasSummary =
+    props.summary.icd.length > 0 ||
+    props.summary.emCode !== null ||
+    props.summary.emNotApplicable ||
+    Boolean(props.emStale);
 
   return (
     <div className="qm-rdoc" data-testid="review-document-view">
@@ -478,7 +490,15 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
             className="qm-rdoc-meta-row qm-tap-44"
             aria-expanded={openSummary}
             aria-controls={summaryPanelId}
-            onClick={() => setOpenSummary((v) => !v)}
+            onClick={() => {
+              const next = !openSummary;
+              setOpenSummary(next);
+              // LAZY RE-SCORE. Opening this row is the moment the doctor is
+              // actually looking at the level, so it is the moment to check it
+              // — not on every keystroke-sized save, which would be an LLM
+              // judgement per edit.
+              if (next && props.emStale) void props.onRescoreEm?.();
+            }}
             data-testid="review-doc-codes-toggle"
           >
             <ChevronRight
@@ -487,6 +507,13 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
             />
             <span className="qm-rdoc-meta-key">CODES · BILLING</span>
             <span className="qm-rdoc-meta-val">
+              {/* Say WHY signing is blocked, at the control that resolves it.
+                  A gate the doctor cannot see the reason for is a dead end. */}
+              {props.emStale && (
+                <span className="qm-rdoc-stale" data-testid="em-stale-badge">
+                  needs re-check
+                </span>
+              )}
               {props.summary.icd.map((r) => r.code).join(' · ') || '—'}
               {props.summary.emNotApplicable
                 ? ''
@@ -586,6 +613,14 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
                 {busy === 'bulk' ? 'Accepting…' : `Accept remaining (${remaining})`}
               </button>
             )}
+            {/* Re-check before the modal opens. The gate render IS a moment
+                the doctor is looking at the level, and it means they meet the
+                confirm card rather than a refusal they have to interpret. */}
+            <span
+              onClickCapture={() => {
+                if (props.emStale) void props.onRescoreEm?.();
+              }}
+            >
             <SignAndSendModal
               visitId={props.visitId}
               doctorEmail={props.doctorEmail}
@@ -596,6 +631,7 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
               triggerIcon={<FileSignature className="h-3.5 w-3.5" aria-hidden />}
               disabled={blocked || busy !== null}
             />
+            </span>
           </div>
         </div>
       </div>
