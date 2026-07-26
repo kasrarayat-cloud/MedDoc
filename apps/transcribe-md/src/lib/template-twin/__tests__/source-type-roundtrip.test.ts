@@ -92,7 +92,17 @@ describe('the persistence chain — every link', () => {
     );
   });
 
-  it('2. the UPDATE payload writes it', () => {
+  it('2a. the CREATE payload writes it', () => {
+    // The link this test originally missed. Classification happens at proposal
+    // time; if the first write drops it, every row is born 'extraction' and the
+    // carve-outs never fire no matter how correct the update path is.
+    const src = read('create-draft.ts');
+    expect(src, 'draft creation does not persist sourceType').toContain(
+      'sourceType: mapping.sourceType,',
+    );
+  });
+
+  it('2b. the UPDATE payload writes it', () => {
     const src = read('certification-lifecycle.ts');
     expect(src, 'updateTemplateTwinMappings does not persist sourceType').toContain(
       'sourceType: mapping.sourceType,',
