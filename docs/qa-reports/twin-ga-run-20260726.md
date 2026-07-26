@@ -143,3 +143,65 @@ unresolved. S4/S5/S6 remain blocked behind it; S3 was not reached.
 
 Disk **77% -> 72%** (81 G free), 26 rollback tags intact, 14 co-tenant images
 untouched. No open PRs; all work committed to `fix/twin-visit-export-harness`.
+
+## S2(b)-COMPLETE — the sourceType persistence round-trip ✅
+
+The miss: `sourceType` was added to the Zod schema and the proposer but there was
+no COLUMN, so every mapping round-tripped back as `extraction` and both manual
+carve-outs in the gate were inert code. Two certification runs were burned before
+the persistence path was checked. Fixed end-to-end, traced statically FIRST.
+
+**1. Migration — additive.** `20260726010000_twin_mapping_source_type`:
+
+```sql
+ALTER TABLE "template_twin_semantic_mappings"
+  ADD COLUMN "sourceType" TEXT NOT NULL DEFAULT 'extraction';
+```
+
+NOT NULL *with* a DEFAULT, so every existing row is valid without a backfill.
+Proof on QA after apply — 2000 pre-existing rows, none invalidated, none touched:
+
+```
+ column_name | data_type | is_nullable |   column_default
+ sourceType  | text      | NO          | 'extraction'::text
+
+ sourceType | count
+ extraction |  2000
+```
+
+Rollback: `ALTER TABLE "template_twin_semantic_mappings" DROP COLUMN "sourceType";`
+Nothing reads it when it is absent except the code shipped alongside it.
+
+**2/3. Write and read.** `updateTemplateTwinMappings` now sends
+`sourceType: mapping.sourceType`; `fromPersistedMapping` takes `sourceType:
+row.sourceType`; both the certification projection and the workspace projection
+select it. App typecheck clean.
+
+**4. Round-trip — both halves.**
+
+Static, every link (`__tests__/source-type-roundtrip.test.ts`, 16/16): the column
+exists in the model, the update payload writes it, the read projection selects and
+parses it, the workspace projection carries it to the review surface, and both
+gate checks honour the manual carve-out. A break anywhere makes the carve-outs
+silently dead again — which looks exactly like a certification bug and is not one.
+
+Live, against the QA database (`scripts/prod-smoke/source-type-roundtrip.ts`):
+
+```
+[rt] chose mapping cmrzutiha000e0wo3g4xh7ywc (sourceType=extraction)
+[rt] read back sourceType=manual
+[rt] parsed sourceType=manual
+[rt] ROUNDTRIP PASS — wrote manual, read manual: true
+[rt] restored sourceType=extraction
+```
+
+**Operational finding, recorded because it cost a cycle:** `db-migrate` in
+`docker-compose.qa.yml` is `image:`-only (no `build:`), so `--build` is a silent
+no-op and the image's baked migrations go stale (70 vs 72 on disk). It reports
+"No pending migrations to apply" while the column is genuinely absent. Correct
+invocation mounts the live directory:
+
+```
+docker compose -f docker-compose.qa.yml run --rm \
+  -v /opt/meddoc-pro/packages/db/prisma:/app/packages/db/prisma db-migrate
+```

@@ -66,6 +66,7 @@ export interface TemplateTwinActor {
 }
 
 interface PersistedMappingRow {
+  sourceType: string;
   clinicalConcept: string | null;
   expectedDataType: string;
   polarityBehavior: string;
@@ -86,6 +87,7 @@ function fromPersistedMapping(
 ): SemanticMapping {
   return SemanticMappingSchema.parse({
     fieldId,
+    sourceType: row.sourceType,
     clinicalConcept: row.clinicalConcept,
     expectedDataType: row.expectedDataType,
     polarityBehavior: row.polarityBehavior,
@@ -192,6 +194,7 @@ async function loadOwnedCompilation(
               mapping: {
                 select: {
                   id: true,
+                  sourceType: true,
                   clinicalConcept: true,
                   expectedDataType: true,
                   polarityBehavior: true,
@@ -487,6 +490,9 @@ export async function updateTemplateTwinMappings(input: {
         await tx.templateTwinSemanticMapping.update({
           where: { id: persisted.mapping.id },
           data: {
+            // Persist the classification. Without this the manual carve-outs in
+            // the gate are inert: every mapping reads back as 'extraction'.
+            sourceType: mapping.sourceType,
             clinicalConcept: mapping.clinicalConcept,
             expectedDataType: mapping.expectedDataType,
             polarityBehavior: mapping.polarityBehavior,
