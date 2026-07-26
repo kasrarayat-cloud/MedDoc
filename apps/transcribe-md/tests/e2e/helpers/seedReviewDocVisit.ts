@@ -71,16 +71,54 @@ const CLAIMS = [
  *  sign route validates against that same identity. */
 const RX = {
   prescriptions: [
-    { lineNumber: 1, drug: 'Ibuprofen', strength: '400 mg', form: 'tablet', sig: '400 mg PO TID PRN', quantity: '30', refills: '0', action: 'continue' },
+    {
+      lineNumber: 1,
+      drug: 'Ibuprofen',
+      strength: '400 mg',
+      form: 'tablet',
+      sig: '400 mg PO TID PRN',
+      quantity: '30',
+      refills: '0',
+      action: 'continue',
+    },
   ],
+  // THE SHAPE LAYER 7c ACTUALLY PERSISTS — `{severity, rx_drug, message,
+  // evidence_quote}`, with identity POSITIONAL (warningIdForIndex). Inventing
+  // fields here produced a warning that rendered "undefined" and an override
+  // the server would not record: a seed that does not match production is a
+  // test of the seed.
   warnings: [
     {
       severity: 'critical',
-      rxLineNumber: 1,
-      headline: 'NSAID with heart failure — may worsen fluid retention',
-      detail: 'Prefer acetaminophen in a patient with CHF.',
+      rx_drug: 'Ibuprofen',
+      message: 'NSAID with heart failure — may worsen fluid retention; prefer acetaminophen.',
+      evidence_quote: null,
     },
   ],
+};
+
+/** parseEmPendingChange is STRICT and fails closed: `{from,to}` alone is
+ *  malformed and coerces to null, which renders "unknown" and tests nothing.
+ *  `cause` and `at` are required. */
+const EM_PENDING = {
+  from: '99213',
+  to: '99214',
+  cause: 'suggestion_adopted',
+  at: new Date().toISOString(),
+};
+
+/** Codes, so the collapsed CODES · BILLING row exists at all — with none, the
+ *  product correctly renders no row and there is nothing to expand. */
+const ICD = [
+  { code: 'J45.909', description: 'Unspecified asthma, uncomplicated' },
+  { code: 'I10', description: 'Essential (primary) hypertension' },
+];
+const CPT = {
+  em: {
+    code: '99213',
+    description: 'Office visit, established patient, low complexity',
+    reasoning: { problems: [{ description: 'Asthma', status: 'stable' }] },
+  },
 };
 
 export interface SeededReviewDocVisit {
@@ -119,13 +157,15 @@ export function seedReviewDocVisit(email: string): SeededReviewDocVisit | null {
          (id, "userId", "patientId", specialty, "inputMode", status,
           "transcriptText", "soapFinal", "soapVersion",
           "suggestedClaims", "rxDrafts", "emPendingChange",
+          "icdCodes", "cptCodes",
           "createdAt", "updatedAt")
        values
          ('${visitId}', '${userId}', '${patientId}', 'primary-care', 'text_notes', 'READY',
           'Asthma review. Continue current medications.',
           '${NOTE.replace(/'/g, "''")}', 1,
           '${j(CLAIMS)}'::jsonb, '${j(RX)}'::jsonb,
-          '${j({ from: '99213', to: '99214' })}'::jsonb,
+          '${j(EM_PENDING)}'::jsonb,
+          '${j(ICD)}'::jsonb, '${j(CPT)}'::jsonb,
           now(), now())
        on conflict (id) do nothing`,
     );
