@@ -19,6 +19,7 @@ import {
   type TemplateField,
 } from '../ir';
 import { parseExplicitNumberAndUnit } from '../encounter-facts';
+import { rowLateralityVerdict } from '../bridge-evidence';
 import { isMappingTypeCompatible } from '../semantic-mapping';
 import {
   approvedPracticeDefaultAnchorId,
@@ -411,17 +412,42 @@ function resolveOne(
     return missingResolution(field, mapping, allFacts);
   }
 
+  // ROW CONGRUENCE — the document's own leg heading, applied to the BASELINE.
+  // The bridge has always refused a left-leg fact in a right-leg row; the
+  // resolver underneath it did not, so a cross-leg value reached the renderer
+  // with a real citation attached and was caught only downstream, as
+  // ASSERTION_NOT_SUPPORTED. Same rule, same function, both callers. This only
+  // ever REMOVES candidates.
+  const rowLaterality = field.rendererBinding.rowLaterality;
+  const rowCongruent =
+    field.rendererBinding.bindingType === 'table_cell' && rowLaterality !== undefined
+      ? conceptCandidates.filter(
+          (fact) => rowLateralityVerdict(fact, rowLaterality) === 'ok',
+        )
+      : conceptCandidates;
+  if (rowCongruent.length === 0) {
+    // Named, surfaced, PHI-safe: the row asked for one leg and the encounter
+    // only spoke about the other.
+    return makeResolution(
+      field.fieldId,
+      'not_mentioned',
+      null,
+      [],
+      rowLaterality === 'unknown' ? 'row_laterality_unknown' : 'row_laterality_mismatch',
+    );
+  }
+
   const expectedTemporality = mapping.temporality;
   const temporalCandidates =
     expectedTemporality === null || expectedTemporality === 'any'
-      ? conceptCandidates
-      : conceptCandidates.filter((fact) => fact.temporality === expectedTemporality);
+      ? rowCongruent
+      : rowCongruent.filter((fact) => fact.temporality === expectedTemporality);
   if (temporalCandidates.length === 0) {
     return makeResolution(
       field.fieldId,
       'ambiguous',
       null,
-      conceptCandidates,
+      rowCongruent,
       'temporality_not_approved',
     );
   }

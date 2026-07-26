@@ -12,7 +12,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { matchMeasurementFact } from '../bridge-evidence';
+import { matchMeasurementFact, rowLateralityVerdict } from '../bridge-evidence';
 import type { EncounterFact } from '../ir';
 
 const sidedFact = (laterality: EncounterFact['laterality']): EncounterFact =>
@@ -89,5 +89,55 @@ describe('unmarked rows are fail-closed', () => {
 describe('legacy callers are unaffected', () => {
   it('omitting rowLaterality applies no row-side constraint', () => {
     expect(match(undefined, 'right').ok).toBe(true);
+  });
+});
+
+// ============================================================================
+// THE BASELINE HAD NO SUCH RULE.
+// ----------------------------------------------------------------------------
+// The bridge refused cross-leg fills from the start. The resolver baseline
+// underneath it did not consult the row's laterality at all, so on a synthetic
+// encounter where L4 rendered the legs the other way round, three right-leg
+// REFLUX TIME cells were filled from left-leg facts. The value was real and the
+// citation was real; only the ROW was wrong — which is the precise failure this
+// stage exists to prevent, arriving through the door nobody had locked. It
+// surfaced downstream as ASSERTION_NOT_SUPPORTED, which reads like missing
+// evidence rather than a misaddressed row.
+//
+// Both callers now go through one function, so a rule that holds for one holds
+// for the other by construction.
+// ============================================================================
+
+describe('one rule, both callers', () => {
+  it('a sided row takes its own side only', () => {
+    expect(rowLateralityVerdict({ laterality: 'right' }, 'right')).toBe('ok');
+    expect(rowLateralityVerdict({ laterality: 'left' }, 'right')).toBe('laterality_mismatch');
+    expect(rowLateralityVerdict({ laterality: 'left' }, 'left')).toBe('ok');
+    expect(rowLateralityVerdict({ laterality: 'right' }, 'left')).toBe('laterality_mismatch');
+  });
+
+  it('a bilateral fact does not fill a sided row', () => {
+    // "No DVT bilaterally" is not a right-leg reflux measurement.
+    expect(rowLateralityVerdict({ laterality: 'bilateral' }, 'right')).toBe('laterality_mismatch');
+    expect(rowLateralityVerdict({ laterality: 'not_applicable' }, 'left')).toBe(
+      'laterality_mismatch',
+    );
+  });
+
+  it('an unmarked row refuses a sided value, and accepts an unsided one', () => {
+    expect(rowLateralityVerdict({ laterality: 'right' }, 'unknown')).toBe('row_laterality_unknown');
+    expect(rowLateralityVerdict({ laterality: 'bilateral' }, 'unknown')).toBe('ok');
+  });
+
+  it('the resolver actually calls it — on table cells, before any candidate is used', () => {
+    const { readFileSync } = require('node:fs') as typeof import('node:fs');
+    const { join } = require('node:path') as typeof import('node:path');
+    const src = readFileSync(join(__dirname, '..', 'resolver', 'index.ts'), 'utf-8');
+    expect(src, 'the resolver baseline does not enforce row laterality').toContain(
+      'rowLateralityVerdict(fact, rowLaterality)',
+    );
+    // And the filtered set is what everything downstream consumes — filtering
+    // into a variable nobody reads would pass a naive grep.
+    expect(src).toMatch(/\?\s*rowCongruent\s*\n?\s*:\s*rowCongruent\.filter/);
   });
 });
