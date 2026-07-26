@@ -118,7 +118,14 @@ async function main() {
     });
     await prisma.transcribeVisit.update({
       where: { id: visit.id },
-      data: { soapFinal: note, status: 'READY' },
+      data: {
+        soapFinal: note,
+        status: 'READY',
+        // The worker persists the extraction; the export path re-reads it from
+        // the visit row. Leaving it unset made the export re-fill with NO facts,
+        // which filled nothing, validated trivially and returned a blank form.
+        entities: extracted.entities as never,
+      },
     });
     say(`L4 note generated (${note.length} chars)`);
     // ── DIAGNOSTIC DUMP ──────────────────────────────────────────────────
