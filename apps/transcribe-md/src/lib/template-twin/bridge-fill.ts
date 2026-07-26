@@ -477,24 +477,42 @@ export interface BridgeTemplateFillInput {
   baseline: readonly FieldResolution[];
 }
 
+export interface BridgeTemplateFillResult {
+  resolutions: FieldResolution[];
+  /** Provenance facts minted by the picks overlay, to be merged into the fact
+   *  set the manifest records and the validator checks against. */
+  facts: EncounterFact[];
+}
+
 /**
  * Produce the final FieldResolution[] for the renderer: the resolver baseline,
  * overlaid with the CHOICE_SLOT single-select picks and the numeric table-cell
  * fills recovered from the generated note. Exactly one resolution per ir.field.
  */
-export function bridgeTemplateFill(input: BridgeTemplateFillInput): FieldResolution[] {
+export function bridgeTemplateFill(input: BridgeTemplateFillInput): BridgeTemplateFillResult {
   const picks = bridgeChoiceSlotPicks({
     ir: input.ir,
     markerText: input.markerText,
     filledNote: input.filledNote,
     facts: input.facts,
     mappings: input.mappings,
-  }).filter((r) => r.status === 'supported');
+  });
   const numerics = bridgeNumericTableCells({
     ir: input.ir,
     filledNote: input.filledNote,
     facts: input.facts,
     mappings: input.mappings,
   });
-  return mergeFieldResolutions(input.ir, input.baseline, picks, numerics);
+  return {
+    resolutions: mergeFieldResolutions(
+      input.ir,
+      input.baseline,
+      picks.resolutions.filter((r) => r.status === 'supported'),
+      numerics,
+    ),
+    // The picks' provenance facts must travel WITH the resolutions: a citation
+    // to a fact that is not in the manifest's fact set is untraceable, and the
+    // validator says so.
+    facts: picks.facts,
+  };
 }

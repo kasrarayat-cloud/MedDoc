@@ -189,25 +189,26 @@ export async function prepareTemplateTwinFill(
   // the evidence baseline. Real evidence always wins (bridge fills only where the
   // resolver left a field unfilled). Absent a generated note, the baseline stands
   // — byte-identical to the pre-bridge behaviour.
-  const fields =
+  const bridged =
     input.markerText != null && input.generatedNote != null
       ? bridgeTemplateFill({
           ir,
           markerText: input.markerText,
           filledNote: input.generatedNote,
           baseline,
-          // The SAME facts the resolver used. Every bridged value must cite one
-          // of these — the bridge no longer mints provenance.
+          // The SAME facts the resolver used. A bridged MEASUREMENT must cite one
+          // of these. A bridged PICK cites the selection itself — its own
+          // provenance class — and those facts come back out to be merged in.
           facts,
           mappings,
         })
-      : baseline;
+      : { resolutions: baseline, facts: [] };
   return finalizeTemplateTwinFill({
     ...input,
     ir,
     mappings,
-    facts,
-    resolutions: fields,
+    facts: [...facts, ...bridged.facts],
+    resolutions: bridged.resolutions,
   });
 }
 

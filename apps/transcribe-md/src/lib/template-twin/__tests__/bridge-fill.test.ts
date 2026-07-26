@@ -276,12 +276,38 @@ describe('bridgeTemplateFill — unified picks + numeric overlay', () => {
         String(opts).split('|').map((o) => o.trim()).filter(Boolean)[0] ?? '',
       ) + '\n' + NOTE;
 
-    const merged = bridgeTemplateFill({ facts: FIXTURE_FACTS, ir,
+    // Picks cite the SELECTION, which needs an approved mapping to satisfy.
+    const pickMappings = ir.fields
+      .filter((f) => f.kind === 'single_select')
+      .map((f) => ({
+        fieldId: f.fieldId,
+        sourceType: 'verified_note_selection' as const,
+        clinicalConcept: 'exam.vascular',
+        expectedDataType: 'single_select' as const,
+        polarityBehavior: 'value_only' as const,
+        temporality: 'current' as const,
+        laterality: 'optional' as const,
+        unitPolicy: 'not_applicable' as const,
+        approvedSynonyms: [],
+        required: false,
+        blankPolicy: 'blank' as const,
+        unknownPolicy: 'blank' as const,
+        practiceDefault: null,
+        status: 'certified' as const,
+      }));
+    const bridged = bridgeTemplateFill({ facts: FIXTURE_FACTS, ir,
       markerText,
       filledNote: pickedNote,
       baseline: blankBaseline(ir),
+      mappings: pickMappings,
     });
+    const merged = bridged.resolutions;
     expect(merged.length).toBe(ir.fields.length);
+    // Every filled pick brought its provenance fact out with it.
+    expect(bridged.facts.length).toBe(
+      merged.filter((r) => r.reasonCode === 'choice_slot_pick' && r.status === 'supported').length,
+    );
+    for (const f of bridged.facts) expect(f.sourceType).toBe('verified_note_selection');
 
     const filledSelects = merged.filter(
       (r) => r.status === 'supported' && r.reasonCode === 'choice_slot_pick',

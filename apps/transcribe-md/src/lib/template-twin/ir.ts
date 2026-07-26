@@ -283,7 +283,17 @@ export const SemanticMappingSchema = z
      *  'visit_metadata'  — RESERVED. Deterministic from the visit record.
      */
     sourceType: z
-      .enum(['extraction', 'context_default', 'visit_metadata', 'manual'])
+      .enum([
+        'extraction',
+        'context_default',
+        'visit_metadata',
+        'manual',
+        // An enumerated dropdown filled from the live brain's CHOICE_SLOT pick in
+        // the ADOPTED note. Its own provenance class with its own strict checks:
+        // verbatim option only, adopted note only, never from a set-aside
+        // section, and the marker + note version recorded on the cited fact.
+        'verified_note_selection',
+      ])
       .default('extraction'),
     clinicalConcept: z.string().min(1).max(160).nullable(),
     expectedDataType: z.enum([
@@ -328,6 +338,11 @@ export const EncounterFactSchema = z
       .enum([
         'encounter_evidence',
         'approved_practice_default',
+        // A pick the live brain made from the template's OWN enumerated options
+        // and the doctor adopted into the final note. Its provenance is the note
+        // selection itself — marker + note version — not a separately extracted
+        // fact, so it carries its own identity and anchor.
+        'verified_note_selection',
         'clinician_correction',
       ])
       .default('encounter_evidence'),

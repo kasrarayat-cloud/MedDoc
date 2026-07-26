@@ -394,7 +394,7 @@ export async function proposeSemanticMappings(
       expectedDataType: compilerDataType,
       // Classification is the COMPILER's label talking, not the model's guess —
       // the same doctrine as expectedDataType above.
-      sourceType: classifyFieldSource(field.originalLabel),
+      sourceType: classifyFieldSource(field.originalLabel, field),
       // REGISTRY CONSTRAINT. A concept the extractor never emits can never be
       // matched by any fact, so the field would be permanently unfillable —
       // this is exactly how `filledCount=0` survived four sessions of fixes
