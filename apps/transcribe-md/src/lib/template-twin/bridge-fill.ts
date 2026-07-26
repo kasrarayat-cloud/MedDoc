@@ -30,10 +30,15 @@ import type { EncounterFact, SemanticMapping } from './ir';
 // ── numeric table-cell fill ─────────────────────────────────────────────────
 
 /** A markdown pipe-table parsed out of the generated note. */
+interface ParsedMarkdownRow {
+  label: string;
+  cells: string[];
+}
+
 interface ParsedMarkdownTable {
   /** Header cells (column 0 is the row-label column). */
   header: string[];
-  rows: { label: string; cells: string[] }[];
+  rows: ParsedMarkdownRow[];
 }
 
 // A row may carry a trailing annotation AFTER its closing pipe. Two forms are
@@ -82,7 +87,7 @@ function parseMarkdownTables(note: string): ParsedMarkdownTable[] {
     if (!header) continue;
     const sepCells = i + 1 < lines.length ? splitRow(lines[i + 1]) : null;
     if (!sepCells || !sepCells.every((c) => SEP_ROW_RE.test(c) && c.includes('-'))) continue;
-    const rows: { label: string; cells: string[] }[] = [];
+    const rows: ParsedMarkdownRow[] = [];
     let j = i + 2;
     for (; j < lines.length; j++) {
       const cells = splitRow(lines[j]);
@@ -146,10 +151,22 @@ interface IrTableRow {
   vein: string;
   diameterField: TemplateField | null;
   refluxField: TemplateField | null;
+  rowLaterality: 'right' | 'left' | 'unknown';
 }
 
 /** Group a table's cell fields into ordered data rows, tagging each row's
  *  diameter cell (the vein-name left_cell) and reflux cell (the header cell). */
+/** IR rows split into leg groups, in document order, so each group can be
+ *  walked against a candidate table with its own cursor. */
+function groupByLeg(rows: readonly IrTableRow[]): IrTableRow[][] {
+  const groups = new Map<string, IrTableRow[]>();
+  for (const row of rows) {
+    const key = row.rowLaterality;
+    (groups.get(key) ?? groups.set(key, []).get(key)!).push(row);
+  }
+  return [...groups.values()];
+}
+
 function irTableRows(fields: TemplateField[]): IrTableRow[] {
   const byRow = new Map<number, TemplateField[]>();
   for (const f of fields) {
@@ -169,7 +186,11 @@ function irTableRows(fields: TemplateField[]): IrTableRow[] {
       cells.find((c) => c !== refluxField) ??
       null;
     const vein = diameterField ? diameterField.originalLabel : cells[0]?.originalLabel ?? '';
-    rows.push({ rowIndex, vein, diameterField, refluxField });
+    // The row's leg, stamped at compile time from the document's own headings.
+    // The walk below is per-leg, so it has to travel with the row.
+    const rowLaterality =
+      (diameterField ?? refluxField ?? cells[0])?.rendererBinding.rowLaterality ?? 'unknown';
+    rows.push({ rowIndex, vein, diameterField, refluxField, rowLaterality });
   }
   return rows;
 }
@@ -326,29 +347,60 @@ export function bridgeNumericTableCells(input: BridgeNumericTableCellsInput): Fi
     // sits one to the right.
     const labelColumnOffset = roleByCol[0] === 'other' || roleByCol.length === 0 ? 0 : 1;
 
-    let cursor = 0;
+    // ROW PAIRING. WM_IOV is a single 26-row grid; L4 renders it as two 13-row
+    // tables (Right Leg, Left Leg) — but it can also render one combined table,
+    // and the row labels are IDENTICAL between the legs. A single monotonic
+    // cursor over all 26 IR rows handled the combined shape and failed the split
+    // one: the right-leg rows consumed the LEFT table's rows before the
+    // left-leg rows were reached. The matcher correctly refused every one of
+    // those pairings on laterality — but the note row was already spent, so no
+    // left-leg cell could ever fill. Six right cells filled and thirteen left
+    // cells did not, from an encounter that dictated both legs equally.
+    //
+    // So pairing is decided by EVIDENCE, not by position: for each IR row, try
+    // every note row whose vein label matches, and keep the first one that
+    // actually produces a supported value. A note row is consumed only when it
+    // fills something, so a refused pairing costs nothing. Rows already
+    // consumed are not offered again, which preserves the one-note-row-per-IR-row
+    // property the cursor was there to guarantee.
+    //
+    // This is ADDRESSING only. Which fact may support a cell, and what it must
+    // cite, are unchanged.
+    const consumed = new Set<number>();
     for (const irRow of irRows) {
       const core = normVein(irRow.vein);
-      let matchedAt = -1;
-      for (let i = cursor; i < md.rows.length; i++) {
-        if (veinMatches(core, normVein(md.rows[i].label))) { matchedAt = i; break; }
-      }
-      if (matchedAt < 0) continue; // no row match → leave to the resolver baseline (blank)
-      cursor = matchedAt + 1;
-      const mdRow = md.rows[matchedAt];
 
-      const place = (field: TemplateField | null, col: number) => {
-        if (!field || col < 0) return;
+      const place = (field: TemplateField | null, col: number, mdRow: ParsedMarkdownRow) => {
+        if (!field || col < 0) return false;
         const cellIndex = col + labelColumnOffset;
-        if (cellIndex >= mdRow.cells.length) return;
+        if (cellIndex >= mdRow.cells.length) return false;
         const num = numericCell(mdRow.cells[cellIndex]);
-        if (num == null) return; // —/[not documented]/prose → blank
+        if (num == null) return false; // —/[not documented]/prose → blank
         // Laterality comes from the MATCHED FACT, never from row position.
-        const resolved = supportedNumeric(field, num, irRow.vein, facts, mappingById.get(field.fieldId), field.rendererBinding.rowLaterality);
-        if (resolved) out.push(resolved);
+        const resolved = supportedNumeric(
+          field,
+          num,
+          irRow.vein,
+          facts,
+          mappingById.get(field.fieldId),
+          field.rendererBinding.rowLaterality,
+        );
+        if (!resolved) return false;
+        out.push(resolved);
+        return true;
       };
-      place(irRow.diameterField, diameterCol);
-      place(irRow.refluxField, refluxCol);
+
+      for (let i = 0; i < md.rows.length; i++) {
+        if (consumed.has(i)) continue;
+        if (!veinMatches(core, normVein(md.rows[i].label))) continue;
+        const mdRow = md.rows[i];
+        const filledDiameter = place(irRow.diameterField, diameterCol, mdRow);
+        const filledReflux = place(irRow.refluxField, refluxCol, mdRow);
+        if (filledDiameter || filledReflux) {
+          consumed.add(i);
+          break;
+        }
+      }
     }
     } // end candidate table
   }

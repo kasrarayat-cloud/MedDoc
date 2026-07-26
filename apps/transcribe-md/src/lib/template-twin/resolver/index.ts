@@ -19,7 +19,6 @@ import {
   type TemplateField,
 } from '../ir';
 import { parseExplicitNumberAndUnit } from '../encounter-facts';
-import { rowLateralityVerdict } from '../bridge-evidence';
 import { isMappingTypeCompatible } from '../semantic-mapping';
 import {
   approvedPracticeDefaultAnchorId,
@@ -412,42 +411,39 @@ function resolveOne(
     return missingResolution(field, mapping, allFacts);
   }
 
-  // ROW CONGRUENCE — the document's own leg heading, applied to the BASELINE.
-  // The bridge has always refused a left-leg fact in a right-leg row; the
-  // resolver underneath it did not, so a cross-leg value reached the renderer
-  // with a real citation attached and was caught only downstream, as
-  // ASSERTION_NOT_SUPPORTED. Same rule, same function, both callers. This only
-  // ever REMOVES candidates.
-  const rowLaterality = field.rendererBinding.rowLaterality;
-  const rowCongruent =
-    field.rendererBinding.bindingType === 'table_cell' && rowLaterality !== undefined
-      ? conceptCandidates.filter(
-          (fact) => rowLateralityVerdict(fact, rowLaterality) === 'ok',
-        )
-      : conceptCandidates;
-  if (rowCongruent.length === 0) {
-    // Named, surfaced, PHI-safe: the row asked for one leg and the encounter
-    // only spoke about the other.
-    return makeResolution(
-      field.fieldId,
-      'not_mentioned',
-      null,
-      [],
-      rowLaterality === 'unknown' ? 'row_laterality_unknown' : 'row_laterality_mismatch',
-    );
+  // A FIXED-GRID TABLE CELL IS ADDRESSED BY ITS ROW, AND THE RESOLVER CANNOT
+  // SEE ROWS.
+  // Its only inputs are the field's concept and the fact set. In a 26-row vein
+  // grid every reflux cell shares one concept, so "the reflux facts" are
+  // candidates for all 26 of them and nothing here can say which row a given
+  // 2.4 seconds belongs to. It was guessing: sometimes filling the wrong leg,
+  // more often failing on type and returning needs_clinician_input for 33 cells
+  // that the encounter had said nothing about — noise that reads like missing
+  // evidence and blocks certification.
+  //
+  // Row addressing lives in the bridge, which matches a note row to an IR row by
+  // vein label and then requires the fact to satisfy laterality and segment. So
+  // the baseline for a table cell is the honest "not said here", and the bridge
+  // overlays the values it can actually address. Required cells still surface as
+  // needs-input through missingResolution, exactly as before.
+  // A repeating-row PROTOTYPE is the opposite case and keeps resolving here: it
+  // expands one row per fact, so there is no row to address and no ambiguity to
+  // resolve. Only the fixed grid — many rows, one shared concept — defers.
+  if (field.rendererBinding.bindingType === 'table_cell' && !field.rowPrototype) {
+    return missingResolution(field, mapping, allFacts);
   }
 
   const expectedTemporality = mapping.temporality;
   const temporalCandidates =
     expectedTemporality === null || expectedTemporality === 'any'
-      ? rowCongruent
-      : rowCongruent.filter((fact) => fact.temporality === expectedTemporality);
+      ? conceptCandidates
+      : conceptCandidates.filter((fact) => fact.temporality === expectedTemporality);
   if (temporalCandidates.length === 0) {
     return makeResolution(
       field.fieldId,
       'ambiguous',
       null,
-      rowCongruent,
+      conceptCandidates,
       'temporality_not_approved',
     );
   }
