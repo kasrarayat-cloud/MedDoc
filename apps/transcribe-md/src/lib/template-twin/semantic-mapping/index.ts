@@ -6,7 +6,7 @@
 // certify a field, add/remove a field, alter options, or invent a default.
 // ============================================================================
 
-import { isRegisteredConcept, synonymsFor } from '../concept-registry';
+import { isRegisteredConcept, synonymsFor, REGISTRY_CONCEPTS } from '../concept-registry';
 import { z } from 'zod';
 
 import {
@@ -212,7 +212,23 @@ const SYSTEM_PROMPT = [
   'a practice default, or mark any mapping certified. If uncertain, use a null concept and',
   'needs_confirmation. Keep native dropdown options exactly as supplied.',
   '',
-  `Canonical concept vocabulary/patterns: ${TEMPLATE_TWIN_CANONICAL_CONCEPT_GUIDANCE.join(', ')}`,
+  // The extractor's REAL vocabulary, not a style hint. A concept outside it can
+  // never be matched by any fact, so the field would be permanently unfillable —
+  // which is exactly how 72/80 proposals came back unusable while looking, at
+  // certification, like missing evidence. Constrain at GENERATION rather than
+  // rejecting afterwards.
+  'CLINICAL CONCEPT — CLOSED VOCABULARY. You MUST choose clinicalConcept from',
+  'this list, or from one of the patterns below, or return null. A concept',
+  'outside it is rejected and the field becomes permanently unfillable.',
+  `  exact: ${REGISTRY_CONCEPTS.join(', ')}`,
+  '  patterns: test.<snake_case_study>.result | exam.<snake_case_thing> | hpi.<snake_case_thing>',
+  'NEVER put anatomy, laterality, a segment name or a unit in the concept: a',
+  'measurement concept is its KIND (measurement.diameter, measurement.reflux_time)',
+  'and the vein, side and segment travel as structured data. One concept must be',
+  'able to serve every row of a 26-row grid.',
+  'If no listed concept fits the field, return null with needs_confirmation —',
+  'that is a correct answer, not a failure.',
+  `Additional guidance: ${TEMPLATE_TWIN_CANONICAL_CONCEPT_GUIDANCE.join(', ')}`,
   delimiterSystemSuffix('transcript'),
 ].join('\n');
 
