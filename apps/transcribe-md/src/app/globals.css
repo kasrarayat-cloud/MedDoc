@@ -6790,3 +6790,14 @@ body {
   height: 0;
   width: 100%;
 }
+
+/* The expanded codes/billing row. Collapsing a surface is not removing it: the
+   real BillingCardC3 and CodesTab render here, so override / rescore / dispute
+   stay reachable without changing surfaces. */
+.qm-rdoc-meta-panels {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 12px 8px;
+}
+.qm-rdoc-panel { min-width: 0; }
