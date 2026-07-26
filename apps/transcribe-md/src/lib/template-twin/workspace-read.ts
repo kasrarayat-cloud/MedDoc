@@ -23,6 +23,7 @@ interface WorkspaceMappingRow {
   blankPolicy: string;
   unknownPolicy: string;
   practiceDefault: string | null;
+  sourceType: string;
   mappingStatus: string;
 }
 
@@ -52,6 +53,7 @@ function parseMapping(row: WorkspaceMappingRow, fieldId: string): SemanticMappin
     blankPolicy: row.blankPolicy,
     unknownPolicy: row.unknownPolicy,
     practiceDefault: row.practiceDefault,
+    sourceType: row.sourceType,
     status: row.mappingStatus.toLowerCase(),
   });
 }
@@ -111,6 +113,7 @@ export async function readTemplateTwinWorkspace(input: {
                   blankPolicy: true,
                   unknownPolicy: true,
                   practiceDefault: true,
+                  sourceType: true,
                   mappingStatus: true,
                 },
               },

@@ -2611,6 +2611,11 @@ model TemplateTwinSemanticMapping {
   fieldDefinitionId String                      @unique
   fieldDefinition   TemplateTwinFieldDefinition @relation(fields: [fieldDefinitionId], references: [id], onDelete: Cascade)
 
+  /// Where this field's value legitimately comes from: extraction (cited
+  /// EncounterFact) | manual (per-visit human value, renders blank, attested) |
+  /// context_default / visit_metadata (RESERVED, unimplemented until the
+  /// flagged review-before-sign lane exists).
+  sourceType String @default("extraction")
   clinicalConcept  String?
   expectedDataType String
   polarityBehavior String
