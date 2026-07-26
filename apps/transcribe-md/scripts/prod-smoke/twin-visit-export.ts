@@ -20,14 +20,26 @@ import { prisma } from '@meddoc/db';
 
 const say = (s: string) => console.log(`[visit] ${s}`);
 
+// A REAL dictation for this form — what a vascular surgeon actually says when
+// reading a bilateral venous duplex, in the vocabulary the form's own dropdowns
+// use. It deliberately does NOT mention the technologist, referring physician,
+// machine or location: nobody dictates those, and the proof is that they come
+// back BLANK. It also leaves the SSV, accessory and below-knee segments
+// unstated, so most of the grid stays blank too.
 const DICTATION = [
-  'Bilateral lower extremity venous duplex reflux study.',
-  'Right great saphenous vein at the saphenofemoral junction: diameter 6.2 millimeters, reflux 3.4 seconds.',
-  'Right great saphenous vein at the knee: diameter 5.1 millimeters, no reflux.',
-  'Left great saphenous vein at the saphenofemoral junction: diameter 5.8 millimeters, reflux 3.1 seconds.',
+  'Bilateral lower extremity venous duplex reflux study, bilateral detailed.',
+  'Clinical indication: chronic venous insufficiency with aching, heaviness and swelling.',
+  'Technique: patient examined standing, with augmentation and Valsalva maneuvers.',
+  'Right leg. Great saphenous vein at the saphenofemoral junction: diameter 6.2 millimeters, reflux 3.4 seconds.',
+  'Right great saphenous vein at the proximal thigh: diameter 5.5 millimeters, reflux 2.2 seconds.',
+  'Right great saphenous vein at the knee: diameter 5.1 millimeters, reflux 1.5 seconds.',
+  'Left leg. Great saphenous vein at the saphenofemoral junction: diameter 5.8 millimeters, reflux 3.1 seconds.',
   'Left great saphenous vein at the proximal thigh: diameter 4.1 millimeters, reflux 1.8 seconds.',
-  'No deep venous thrombosis identified bilaterally. Deep system competent.',
+  'Left great saphenous vein at the knee: diameter 3.9 millimeters, reflux 1.1 seconds.',
+  'The small saphenous veins and the accessory saphenous veins were not evaluated on this study.',
+  'No deep venous thrombosis identified bilaterally. The deep system is competent.',
   'Impression: bilateral great saphenous vein incompetence, left greater than right.',
+  'Diagnosis: Chronic venous hypertension with other complications of bilateral lower extremities.',
 ].join(' ');
 
 async function main() {
@@ -152,9 +164,34 @@ async function main() {
         status: true, filledCount: true, notMentionedCount: true,
         needsReviewCount: true, conflictCount: true,
         outputObjectKey: true, outputSha256: true, outputSizeBytes: true,
+        fillManifest: true,
+        validationResult: true,
       },
     });
-    say(`MANIFEST ${JSON.stringify(manifest)}`);
+    const { fillManifest: body, validationResult, ...counts } = manifest ?? {
+      fillManifest: null,
+      validationResult: null,
+    };
+    say(`MANIFEST ${JSON.stringify(counts)}`);
+    // A NEEDS_REVIEW manifest means the fill did not validate; say WHICH fields
+    // and why, rather than reporting a count and leaving the reason unstated.
+    const validation = validationResult as {
+      issues?: { fieldId: string; code: string; severity: string }[];
+    } | null;
+    const blocking = (validation?.issues ?? []).filter((i) => i.severity === 'blocking');
+    say(`BLOCKING ${blocking.length}`);
+    const byCode = new Map<string, number>();
+    for (const i of blocking) byCode.set(i.code, (byCode.get(i.code) ?? 0) + 1);
+    for (const [code, n] of byCode) say(`  blocking ${n} ${code}`);
+    const irAll = (await prisma.templateTwinCompiledVersion.findUnique({
+      where: { id: compiled.id }, select: { compiledDocumentIr: true },
+    }))!.compiledDocumentIr as { fields: { fieldId: string; originalLabel: string }[] };
+    const label = new Map(irAll.fields.map((f) => [f.fieldId, f.originalLabel]));
+    const fieldsOut = (body as { fields?: { fieldId: string; status: string; value: unknown; reasonCode: string }[] } | null)?.fields ?? [];
+    for (const i of blocking.slice(0, 12)) {
+      const f = fieldsOut.find((x) => x.fieldId === i.fieldId);
+      say(`  ${i.code} "${String(label.get(i.fieldId)).slice(0, 30)}" status=${f?.status} value=${JSON.stringify(f?.value)} reason=${f?.reasonCode}`);
+    }
 
     // The exact function GET /api/visits/[id]/export/docx calls.
     const { loadOrComputeNativeTemplateDocxForVisit } = await import(

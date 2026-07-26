@@ -395,6 +395,17 @@ function resolveOne(
       'field_or_mapping_unsupported',
     );
   }
+  // A MANUAL field carries no concept BY CONSTRUCTION — nothing in any encounter
+  // can say who the technologist on shift was — and the certificate attests that
+  // it renders blank. Reporting it as an unmapped field turned a designed state
+  // into a configuration error, and at visit time that error is BLOCKING: four
+  // such fields refused the native document on every visit, forever, and the
+  // export fell back to the styled path. Nothing was made safer by that — the
+  // fields are blank in both documents — so the only effect was that the doctor
+  // never got their own form back.
+  if (mapping.sourceType === 'manual') {
+    return makeResolution(field.fieldId, 'not_mentioned', null, [], 'manual_source_not_filled');
+  }
   if (!mapping.clinicalConcept) {
     return makeResolution(
       field.fieldId,
