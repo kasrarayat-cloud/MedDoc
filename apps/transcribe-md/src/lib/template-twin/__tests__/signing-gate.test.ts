@@ -27,6 +27,7 @@ let baseContext: TemplateTwinSigningContext;
 
 function persistedMapping(mapping: SemanticMapping) {
   return {
+    sourceType: mapping.sourceType,
     clinicalConcept: mapping.clinicalConcept,
     expectedDataType: mapping.expectedDataType,
     polarityBehavior: mapping.polarityBehavior,

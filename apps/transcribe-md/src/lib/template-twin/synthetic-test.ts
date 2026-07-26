@@ -91,6 +91,7 @@ export class TemplateTwinSyntheticTestError extends Error {
 }
 
 interface MappingRow {
+  sourceType: string;
   clinicalConcept: string | null;
   expectedDataType: string;
   polarityBehavior: string;
@@ -108,6 +109,7 @@ interface MappingRow {
 function mapping(fieldId: string, row: MappingRow): SemanticMapping {
   return SemanticMappingSchema.parse({
     fieldId,
+    sourceType: row.sourceType,
     clinicalConcept: row.clinicalConcept,
     expectedDataType: row.expectedDataType,
     polarityBehavior: row.polarityBehavior,
@@ -175,6 +177,7 @@ export async function runTemplateTwinSyntheticTest(input: {
               fieldId: true,
               mapping: {
                 select: {
+                  sourceType: true,
                   clinicalConcept: true,
                   expectedDataType: true,
                   polarityBehavior: true,
@@ -227,7 +230,16 @@ export async function runTemplateTwinSyntheticTest(input: {
       'Mappings changed after the page loaded. Reload before testing.',
     );
   }
-  if (mappings.some((item: SemanticMapping) => item.status !== 'certified' || !item.clinicalConcept)) {
+  if (
+    mappings.some(
+      (item: SemanticMapping) =>
+        item.status !== 'certified' ||
+        // A manual field has no concept BY CONSTRUCTION — nothing dictates who
+        // the technologist on shift was, so there is no fact to cite. It is
+        // ready when it is confirmed; it renders blank and is attested blank.
+        (item.sourceType !== 'manual' && !item.clinicalConcept),
+    )
+  ) {
     throw new TemplateTwinSyntheticTestError(
       'MAPPINGS_NOT_READY',
       'Every field needs a physician-confirmed mapping before testing.',
@@ -421,6 +433,7 @@ export async function runTemplateTwinSyntheticTest(input: {
               fieldId: true,
               mapping: {
                 select: {
+                  sourceType: true,
                   clinicalConcept: true,
                   expectedDataType: true,
                   polarityBehavior: true,

@@ -35,6 +35,10 @@ async function main() {
 
   const compiled = await prisma.templateTwinCompiledVersion.findFirst({
     where: { certificationStatus: 'CERTIFIED' },
+    // Newest first. QA accumulates certified versions across runs, and an
+    // unordered findFirst would silently prove an older template than the one
+    // just certified.
+    orderBy: { compiledAt: 'desc' },
     select: { id: true, noteTemplateId: true, sourceArtifact: { select: { practiceId: true } } },
   });
   if (!compiled) throw new Error('no CERTIFIED compiled version on this database');
