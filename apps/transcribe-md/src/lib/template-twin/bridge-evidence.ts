@@ -59,6 +59,8 @@ function factSatisfiesMapping(fact: EncounterFact, mapping: SemanticMapping): bo
 export type BridgeMatchFailure =
   | 'no_supporting_fact'
   | 'ambiguous_laterality'
+  | 'laterality_mismatch'
+  | 'row_laterality_unknown'
   | 'ambiguous_candidates';
 
 export interface BridgeMatch {
@@ -159,6 +161,11 @@ export function matchMeasurementFact(input: {
   facts: readonly EncounterFact[];
   /** The field's approved mapping — the citation must satisfy it. */
   mapping?: SemanticMapping;
+  /** The ROW's laterality, stamped at compile time from the document's own leg
+   *  headings. Addressing is FAIL-CLOSED on it: a sided fact may only fill a
+   *  same-sided row, and an unmarked row may never silently accept a sided
+   *  value. Omitted (legacy callers) means no row-side constraint. */
+  rowLaterality?: 'right' | 'left' | 'unknown';
 }): BridgeMatchResult {
   const n = Number(input.value);
   if (!Number.isFinite(n)) return { ok: false, reason: 'no_supporting_fact' };
@@ -178,6 +185,22 @@ export function matchMeasurementFact(input: {
 
   const fact = candidates[0]!;
   if (fact.laterality === 'unknown') return { ok: false, reason: 'ambiguous_laterality' };
+
+  // FAIL-CLOSED ROW CONGRUENCE. A right-leg measurement in a left-leg row is
+  // the error this whole chain exists to prevent, and it would pass silently:
+  // the value is real, the citation is real, only the ROW is wrong.
+  if (input.rowLaterality !== undefined) {
+    const sidedFact = fact.laterality === 'left' || fact.laterality === 'right';
+    if (input.rowLaterality === 'unknown') {
+      // An unmarked row cannot accept a sided value. The document gave no leg
+      // signal, so filling here would be a guess wearing a citation.
+      if (sidedFact) return { ok: false, reason: 'row_laterality_unknown' };
+    } else if (!sidedFact || fact.laterality !== input.rowLaterality) {
+      // Includes a bilateral/not_applicable fact offered to a sided row.
+      return { ok: false, reason: 'laterality_mismatch' };
+    }
+  }
+
   return { ok: true, match: { fact, laterality: fact.laterality } };
 }
 

@@ -38,6 +38,7 @@ function field(
       tag: 'severity',
       alias: 'Synthetic severity',
       legacyName: null,
+      rowLaterality: 'unknown' as const,
       tableIndex: null,
       rowIndex: null,
       cellIndex: null,

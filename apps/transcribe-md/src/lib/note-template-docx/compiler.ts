@@ -46,6 +46,11 @@ interface MutableTableContext {
   tableId: string;
   tableIndex: number;
   rowIndex: number;
+  /** Laterality of the CURRENT row, stamped from the document's own leg
+   *  heading rows. 'unknown' when the document gives no signal — never
+   *  inferred from row ordering, because a template that orders legs
+   *  differently would then silently mis-place every measurement. */
+  rowLaterality: 'right' | 'left' | 'unknown';
   cellIndex: number;
   cellFieldIds: string[];
   repeatAncestorPath: string | null;
@@ -475,6 +480,7 @@ function processContentControl(
     legacyName: null,
     tableIndex: context.table?.tableIndex ?? null,
     rowIndex: context.table?.rowIndex ?? null,
+    rowLaterality: context.table?.rowLaterality ?? 'unknown',
     cellIndex: context.table?.cellIndex ?? null,
     repeatAncestorPath: context.repeatAncestorPath,
     sourceControlSha256: canonicalSha256(node),
@@ -612,6 +618,7 @@ function processLegacyField(
     legacyName: trimNullable(legacyName, 240),
     tableIndex: context.table?.tableIndex ?? null,
     rowIndex: context.table?.rowIndex ?? null,
+    rowLaterality: context.table?.rowLaterality ?? 'unknown',
     cellIndex: context.table?.cellIndex ?? null,
     repeatAncestorPath: context.repeatAncestorPath,
     sourceControlSha256: canonicalSha256(node),
@@ -721,7 +728,18 @@ function processTable(
   );
 
   const tableHeaderLabels = new Map<number, string>();
+  // Leg heading rows ("RIGHT LEG", "DIAMETER AND REFLUX TIME — Left Leg") split
+  // a single grid into per-leg blocks. Read them in document order and carry
+  // the current leg forward; a row before any heading stays 'unknown'.
+  const rowLegs = new Map<number, 'right' | 'left' | 'unknown'>();
+  let currentLeg: 'right' | 'left' | 'unknown' = 'unknown';
   rows.forEach((row, rowIndex) => {
+    const rowText = normalizeLabel(visibleText(row.node)).toLowerCase();
+    // Require the word "leg"/"extremity" or a standalone side token so an
+    // incidental "left" inside prose cannot flip the block.
+    if (/\b(right)\b/.test(rowText) && !/\bleft\b/.test(rowText)) currentLeg = 'right';
+    else if (/\bleft\b/.test(rowText) && !/\bright\b/.test(rowText)) currentLeg = 'left';
+    rowLegs.set(rowIndex, currentLeg);
     let logicalColumnStart = 0;
     const rowCells = directChildrenWithPaths(row.node, row.path, "tc", state);
     rowCells.forEach((cellLocation, cellIndex) => {
@@ -766,6 +784,7 @@ function processTable(
           tableId,
           tableIndex,
           rowIndex,
+          rowLaterality: rowLegs.get(rowIndex) ?? 'unknown',
           cellIndex,
           cellFieldIds: fieldIds,
           repeatAncestorPath,
@@ -852,6 +871,7 @@ function createAmbiguousTableCellField(
       legacyName: null,
       tableIndex: context.table?.tableIndex ?? null,
       rowIndex: context.table?.rowIndex ?? null,
+    rowLaterality: context.table?.rowLaterality ?? 'unknown',
       cellIndex: context.table?.cellIndex ?? null,
       repeatAncestorPath: context.repeatAncestorPath,
       sourceControlSha256: canonicalSha256(cell),
