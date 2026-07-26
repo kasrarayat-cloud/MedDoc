@@ -23,7 +23,10 @@ import { createHash } from 'node:crypto';
 import { EMPTY_SECTION_PLACEHOLDER } from '@/lib/soap-format';
 
 import type { EncounterFact, SemanticMapping } from './ir';
-import { buildVerifiedNoteSelectionFact } from './verified-note-selection';
+import {
+  buildVerifiedNoteSelectionFact,
+  fieldLateralityFromLabel,
+} from './verified-note-selection';
 import {
   FieldResolutionSchema,
   type FieldResolution,
@@ -119,12 +122,24 @@ function supported(
     );
     return null;
   }
+  // FAIL CLOSED ON SIDE. A mapping that REQUIRES laterality, on a field whose
+  // own label names no side, has nothing to say which leg the selection is
+  // about — and a right-leg finding in a left-leg sentence is exactly the error
+  // the measurement path fails closed on. Blank instead.
+  const fieldLaterality = fieldLateralityFromLabel(field.originalLabel);
+  if (mapping.laterality === 'required' && fieldLaterality === 'unknown') {
+    console.info(
+      `[template-twin:bridge] pick left blank field=${field.fieldId} reason=required_laterality_unknown`,
+    );
+    return null;
+  }
   const fact = buildVerifiedNoteSelectionFact({
     field,
     mapping,
     optionValue: value,
     markerOrdinal,
     noteSha256,
+    fieldLaterality,
   });
   return {
     fact,
