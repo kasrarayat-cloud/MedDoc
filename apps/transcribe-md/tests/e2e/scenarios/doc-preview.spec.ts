@@ -42,17 +42,20 @@ async function toNoteFormat(page: Page) {
   await page.waitForTimeout(1000);
 }
 
-/** The parse step upstream of this surface intermittently fails closed on its
- *  PHI scan (pre-existing, unrelated). Retry so the walk reaches the preview. */
+/** Upload the form and wait for the confirm card.
+ *
+ *  This used to retry four times: the PHI scan upstream refused a valid upload
+ *  about one time in eight. That was root-caused on 2026-07-26 — the scan was
+ *  stable (0/10 on identical input); the STRUCTURING step sometimes captured a
+ *  boilerplate finding ("No saphenous reflux in right lower extremity") into a
+ *  default, and the scan's rules had no answer for clinical prose that names an
+ *  anatomy and a side, so it set anyUncertain and the gate fail-closed on the
+ *  whole template. The rule is written down now, and the retry is gone: a
+ *  refusal here is a real regression, and it should fail this test.
+ */
 async function uploadUntilConfirm(page: Page) {
-  for (let attempt = 1; attempt <= 4; attempt += 1) {
-    await page.locator('input[type=file]').first().setInputFiles(FORM);
-    const card = page.getByTestId('confirm-filled-sample');
-    await card.waitFor({ state: 'visible', timeout: 180_000 }).catch(() => {});
-    if (await card.count()) return;
-    await toNoteFormat(page);
-  }
-  throw new Error('parse never succeeded in 4 attempts');
+  await page.locator('input[type=file]').first().setInputFiles(FORM);
+  await expect(page.getByTestId('confirm-filled-sample')).toBeVisible({ timeout: 180_000 });
 }
 
 test.describe('real-document preview', () => {
