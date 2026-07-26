@@ -145,3 +145,43 @@ compiler contract. Left for a ruling.
 Stage 6 (pin reuse) is independent of Stage 5 but has no value without
 certification. Stages 7 (certify twice), 8 (real-visit export) and 9 (GA) all
 depend on cells filling, which depends on Stage 5.
+
+## Stage 5 — laterality stamped from the document (ruling: option a) ✅
+
+WM_IOV compile, verbatim — the leg read from the document's own heading rows in
+document order, never inferred from ordering:
+
+```
+[stamp] row  1  right    GSV at the SFJ            [stamp] row 15  left  GSV at the SFJ
+[stamp] row  2  right    GSV at the Proximal Thigh [stamp] row 16  left  GSV at the Proximal Thigh
+[stamp] row  3  right    GSV at the Knee           [stamp] row 17  left  GSV at the Knee
+[stamp] row  4  right    GSV Below Knee            [stamp] row 18  left  GSV Below Knee
+[stamp] row  5  right    SSV at the SPJ            [stamp] row 19  left  SSV at the SPJ
+[stamp] row  6  right    SSV at the Proximal Calf  [stamp] row 20  left  SSV at the Proximal Calf
+[stamp] row  7  right    AAGSV at the SFJ          [stamp] row 21  left  AAGSV at the SFJ
+[stamp] row  8  right    AAGSV at the Prox Thigh   [stamp] row 22  left  AAGSV at the Prox Thigh
+[stamp] row  9  right    PAGSV at the SFJ          [stamp] row 23  left  PAGSV at the SFJ
+[stamp] row 10  right    PAGSV at the Prox Thigh   [stamp] row 24  left  PAGSV at the Prox Thigh
+[stamp] rows 11-13 right Saphenous Tributary Vein  [stamp] rows 25-27 left Saphenous Tributary Vein
+
+[stamp] TOTALS {"right":13,"left":13}
+[stamp] DETERMINISTIC recompile: true
+```
+
+**Fail-closed congruence** in addressing (evidence rails untouched):
+
+| row | fact | outcome |
+|---|---|---|
+| right | right | fills |
+| left | left | fills |
+| **left** | **right** | **REFUSED** `laterality_mismatch` |
+| **right** | **left** | **REFUSED** `laterality_mismatch` |
+| **unknown** | right | **REFUSED** `row_laterality_unknown` |
+| right | bilateral | REFUSED `laterality_mismatch` |
+| (omitted) | right | fills — legacy callers unconstrained |
+
+7 canaries. The unknown-row rule is the important one: a template with no leg
+headings can never silently accept a sided value — filling there would be a
+guess wearing a citation.
+
+156 twin/docx tests pass.

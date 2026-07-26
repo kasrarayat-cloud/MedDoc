@@ -202,8 +202,9 @@ function supportedNumeric(
   segmentLabel: string,
   facts: readonly EncounterFact[],
   mapping?: SemanticMapping,
+  rowLaterality?: 'right' | 'left' | 'unknown',
 ): FieldResolution | null {
-  const matched = matchMeasurementFact({ value, segmentLabel, facts, mapping });
+  const matched = matchMeasurementFact({ value, segmentLabel, facts, mapping, rowLaterality });
   if (!matched.ok) {
     console.info(
       `[template-twin:bridge] cell left blank field=${field.fieldId} reason=${matched.reason}`,
@@ -319,7 +320,7 @@ export function bridgeNumericTableCells(input: BridgeNumericTableCellsInput): Fi
         const num = numericCell(mdRow.cells[cellIndex]);
         if (num == null) return; // —/[not documented]/prose → blank
         // Laterality comes from the MATCHED FACT, never from row position.
-        const resolved = supportedNumeric(field, num, irRow.vein, facts, mappingById.get(field.fieldId));
+        const resolved = supportedNumeric(field, num, irRow.vein, facts, mappingById.get(field.fieldId), field.rendererBinding.rowLaterality);
         if (resolved) out.push(resolved);
       };
       place(irRow.diameterField, diameterCol);
