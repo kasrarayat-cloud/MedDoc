@@ -217,6 +217,13 @@ jobs:
           CI: "true"
         run: npx playwright test --project=visit-doc
 
+      # ── The chat editor is NOT run in CI: chat-editor.eval.spec.ts drives a
+      #    REAL model on real tokens, and *.eval.spec.ts is this repo's marker
+      #    for that class. It is run deliberately, against a stack with a live
+      #    key. What CI DOES cover is the unit layer that holds the safety
+      #    rules: the closed intent union, the attestation store, and the
+      #    E/M-stale invariants — all in the vitest gate.
+
       - name: Restore the fixture app image
         run: >
           MOCK_TEMPLATE_PHI_FLAG=true MOCK_RX_WARNINGS=true

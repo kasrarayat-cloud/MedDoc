@@ -180,6 +180,8 @@ export const POST = withApiHandler<{ id: string }>(
         // falsified the cache's central claim — that every path which can
         // change what the document says bumps this.
         soapVersion: { increment: 1 },
+        // The additions changed the note; the level must be revalidated.
+        emStale: true,
       },
     });
     void invalidateVisitFills(visitId);

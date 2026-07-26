@@ -120,6 +120,11 @@ export async function saveSoapDraftAction(
       where: { id: visitId, soapVersion: parsed.data.expectedVersion },
       data: {
         soapFinal: parsed.data.text,
+        // THE NOTE CHANGED. Every editing surface funnels here — the inline
+        // editor, tap-to-edit on the document, and the chat's section edit —
+        // so this one line closes the gap for all of them at once: an edit
+        // used to change the note without the E/M level ever being revisited.
+        emStale: true,
         soapVersion: { increment: 1 },
       },
     });
@@ -150,6 +155,7 @@ export async function saveSoapDraftAction(
     where: { id: visitId },
     data: {
       soapFinal: parsed.data.text,
+      emStale: true,
       soapVersion: { increment: 1 },
     },
     select: { soapVersion: true },
