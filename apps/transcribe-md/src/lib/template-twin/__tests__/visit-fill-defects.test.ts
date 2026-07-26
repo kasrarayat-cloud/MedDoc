@@ -169,3 +169,34 @@ describe('defect 1b — a BARE PROSE trailing annotation', () => {
     expect(sfj.cells.some((c) => c.includes('saphenofemoral'))).toBe(false);
   });
 });
+
+// ============================================================================
+// A DOCUMENT WITH NOTHING IN IT IS NOT A DOCUMENT.
+// ----------------------------------------------------------------------------
+// A fill that resolves no field validates trivially — there is no populated
+// value to object to — so it produced a VERIFIED manifest and the export handed
+// back the doctor's blank form as if it were their note. It was found by
+// unzipping the exported file and looking for the dictated numbers: every one
+// was absent, while the run had reported nativeTemplateApplied=true.
+//
+// The status now requires at least one filled field, so an empty fill withholds
+// the native document and the styled export stands.
+// ============================================================================
+
+describe('the zero-fill floor', () => {
+  const src = () => {
+    const { readFileSync } = require('node:fs') as typeof import('node:fs');
+    const { join } = require('node:path') as typeof import('node:path');
+    return readFileSync(join(__dirname, '..', 'fill-engine.ts'), 'utf-8');
+  };
+
+  it('VERIFIED requires a render AND at least one filled field', () => {
+    expect(src()).toContain(
+      "prepared.render && prepared.manifest.counts.filled > 0 ? 'VERIFIED' : 'NEEDS_REVIEW'",
+    );
+  });
+
+  it('and says so — an empty fill is never silent', () => {
+    expect(src()).toContain('NOTHING FILLED');
+  });
+});

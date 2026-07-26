@@ -491,7 +491,20 @@ export async function processTemplateTwinVisit(
         bytes: prepared.render.document,
       })
     : null;
-  const status = prepared.render ? 'VERIFIED' : 'NEEDS_REVIEW';
+  // A DOCUMENT WITH NOTHING IN IT IS NOT A DOCUMENT.
+  // A fill that resolves no field at all validates trivially — there is no
+  // populated value to object to — so it produced a VERIFIED manifest and the
+  // export returned the doctor's blank form as if it were their note. That is
+  // the silent-empty-document failure this whole chain exists to prevent, and it
+  // reached the export seam wearing a success flag. Certification has carried a
+  // fill-coverage floor since it hit the same thing; visit time needs one too.
+  const status = prepared.render && prepared.manifest.counts.filled > 0 ? 'VERIFIED' : 'NEEDS_REVIEW';
+  if (prepared.render && prepared.manifest.counts.filled === 0) {
+    console.warn(
+      `[template-twin:fill] NOTHING FILLED visit=${input.visitId} compiled=${compiled.id}; ` +
+        'native export withheld, styled export stands',
+    );
+  }
   const writeData = {
     compiledVersionId: compiled.id,
     noteTemplateId: row.id,
