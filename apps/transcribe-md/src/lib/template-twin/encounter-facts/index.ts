@@ -571,7 +571,15 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
       // never invented into a per-field concept string.
       path: `measurements.${m.metric}`,
       concept: `measurement.${m.metric}`,
-      value: norm.value,
+      // A fact's `value` is its STATED FORM; `number` and `unit` are the
+      // structured attributes beside it. Emitting a raw number here made the
+      // fact contradict its own schema, and the validator noticed: it
+      // re-derives a text cell's value as `typeof fact.value === 'string' ?
+      // fact.value : null`, so every measurement the bridge placed — correct
+      // number, correct leg, correct segment, real citation — came back
+      // ASSERTION_NOT_SUPPORTED. The document's cells are text; the stated form
+      // is what fills them.
+      value: String(norm.value),
       evidence: {
         evidence_quote: m.sourceSpan,
         speaker: m.speaker,
