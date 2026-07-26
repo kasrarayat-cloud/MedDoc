@@ -230,6 +230,10 @@ function missingResolution(
   field: TemplateField,
   mapping: SemanticMapping,
   facts: ReadonlyArray<EncounterFact>,
+  /** Overrides the reason when the field is unfilled for a NAMED reason more
+   *  specific than "nothing was said" — the reason must survive, the false
+   *  evidence trail must not. */
+  reason?: { unfilled: string; required: string },
 ): FieldResolution {
   const practiceDefault = practiceDefaultResolution(field, mapping, facts);
   if (practiceDefault) return practiceDefault;
@@ -244,7 +248,9 @@ function missingResolution(
     requiresInput ? 'needs_clinician_input' : 'not_mentioned',
     null,
     [],
-    requiresInput ? 'required_fact_not_mentioned' : 'fact_not_mentioned',
+    requiresInput
+      ? (reason?.required ?? 'required_fact_not_mentioned')
+      : (reason?.unfilled ?? 'fact_not_mentioned'),
   );
 }
 
@@ -461,13 +467,17 @@ function resolveOne(
       ? conceptCandidates
       : conceptCandidates.filter((fact) => fact.temporality === expectedTemporality);
   if (temporalCandidates.length === 0) {
-    return makeResolution(
-      field.fieldId,
-      'ambiguous',
-      null,
-      conceptCandidates,
-      'temporality_not_approved',
-    );
+    // NOT ambiguous, and NOT cited. The mapping approves one temporality and no
+    // fact carries it, so nothing was said about this field in the sense the
+    // mapping requires — that is absence, not conflicting evidence. Citing the
+    // rejected facts made the resolution contradict itself: it declared their
+    // temporality unapproved and then attached them as the field's evidence,
+    // and the validator (unchanged, and right) flagged both the mismatch and
+    // the ambiguity. The reason code still names exactly why.
+    return missingResolution(field, mapping, allFacts, {
+      unfilled: 'temporality_not_approved',
+      required: 'required_temporality_not_approved',
+    });
   }
 
   // The facts eligible to fill THIS field (see conflictCandidates above), which
