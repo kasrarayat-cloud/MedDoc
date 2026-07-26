@@ -13,7 +13,12 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { isRegisteredConcept, synonymsFor, REGISTRY_CONCEPTS } from '../concept-registry';
+import {
+  conceptOverrideFor,
+  isRegisteredConcept,
+  synonymsFor,
+  REGISTRY_CONCEPTS,
+} from '../concept-registry';
 
 describe('registry membership', () => {
   it('accepts every concept observed in a real extraction run', () => {
@@ -65,11 +70,25 @@ describe('proposer wiring', () => {
   };
 
   it('nulls an off-registry concept instead of persisting it', () => {
-    expect(src()).toMatch(/isRegisteredConcept\(mapping\.clinicalConcept\)\s*\n?\s*\?\s*mapping\.clinicalConcept\s*\n?\s*:\s*null/);
+    // Whatever the concept's origin — model proposal or compiler override — it
+    // reaches the mapping only through the registry check.
+    expect(src()).toMatch(
+      /const proposedConcept = candidate && isRegisteredConcept\(candidate\) \? candidate : null/,
+    );
+    expect(src()).toMatch(/clinicalConcept: proposedConcept,/);
   });
 
   it('an off-registry mapping cannot come back as recognised', () => {
-    expect(src()).toMatch(/!isRegisteredConcept\(mapping\.clinicalConcept\) \|\|/);
+    expect(src()).toMatch(/status:\s*\n?\s*proposedConcept === null \|\|/);
+  });
+
+  it('a compiler concept override still has to be in the registry', () => {
+    // The override is the compiler's label talking, not an exemption: an
+    // override naming an unregistered concept nulls exactly like a bad proposal.
+    expect(src()).toMatch(/conceptOverrideFor\(field\.originalLabel\) \?\? mapping\.clinicalConcept/);
+    expect(conceptOverrideFor('SIDE OF EXAM: Choose an item.')).toBe('test.name');
+    expect(isRegisteredConcept(conceptOverrideFor('SIDE OF EXAM: Choose an item.')!)).toBe(true);
+    expect(conceptOverrideFor('GSV at the SFJ')).toBeNull();
   });
 
   it('reports off-registry proposals visibly at PROPOSAL time', () => {

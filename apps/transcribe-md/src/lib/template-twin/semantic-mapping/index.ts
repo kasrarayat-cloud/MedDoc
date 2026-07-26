@@ -8,6 +8,7 @@
 
 import {
   classifyFieldSource,
+  conceptOverrideFor,
   isRegisteredConcept,
   synonymsFor,
   REGISTRY_CONCEPTS,
@@ -361,6 +362,11 @@ export async function proposeSemanticMappings(
       );
     }
 
+    // A label the compiler recognises decides its own concept; otherwise the
+    // model's proposal stands, and either way it must be in the registry.
+    const candidate = conceptOverrideFor(field.originalLabel) ?? mapping.clinicalConcept;
+    const proposedConcept = candidate && isRegisteredConcept(candidate) ? candidate : null;
+
     // Compiler uncertainty always wins over a model's optimistic recognition.
     // Nothing from this helper can become certified or carry a default.
     return SemanticMappingSchema.parse({
@@ -376,18 +382,13 @@ export async function proposeSemanticMappings(
       // leaves the mapping visibly `needs_confirmation` (see status below)
       // rather than certifying a dead field. Approved synonyms come from the
       // registry, not the model.
-      clinicalConcept:
-        mapping.clinicalConcept && isRegisteredConcept(mapping.clinicalConcept)
-          ? mapping.clinicalConcept
-          : null,
-      approvedSynonyms:
-        mapping.clinicalConcept && isRegisteredConcept(mapping.clinicalConcept)
-          ? [...new Set([...(mapping.approvedSynonyms ?? []), ...synonymsFor(mapping.clinicalConcept)])]
-          : [],
+      clinicalConcept: proposedConcept,
+      approvedSynonyms: proposedConcept
+        ? [...new Set([...(mapping.approvedSynonyms ?? []), ...synonymsFor(proposedConcept)])]
+        : [],
       practiceDefault: null,
       status:
-        mapping.clinicalConcept === null ||
-        !isRegisteredConcept(mapping.clinicalConcept) ||
+        proposedConcept === null ||
         field.detectionStatus !== 'recognized' ||
         mapping.status === 'needs_confirmation'
           ? 'needs_confirmation'
