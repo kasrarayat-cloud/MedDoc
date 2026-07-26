@@ -65,6 +65,11 @@ export const RendererBindingSchema = z
     alias: z.string().max(240).nullable(),
     legacyName: z.string().max(240).nullable(),
     tableIndex: z.number().int().nonnegative().nullable(),
+    /** Laterality of this binding's table ROW, stamped at compile time from the
+     *  document's own leg heading rows. 'unknown' when the document gives no
+     *  signal — never inferred from ordering. Addressing uses it fail-closed:
+     *  a sided fact may only fill a same-sided row. */
+    rowLaterality: z.enum(['right', 'left', 'unknown']).default('unknown'),
     rowIndex: z.number().int().nonnegative().nullable(),
     cellIndex: z.number().int().nonnegative().nullable(),
     repeatAncestorPath: z.string().max(512).nullable(),
