@@ -158,6 +158,8 @@ export async function runTemplateTwinSyntheticTest(input: {
           certificationStatus: true,
           structureSha256: true,
           pinnedSyntheticNote: true,
+          pinnedSyntheticEntities: true,
+          pinnedSyntheticContextText: true,
           pinnedNoteEncounterSha256: true,
           pinnedNoteTemplateSha256: true,
           pinnedNoteModelVersion: true,
@@ -264,26 +266,8 @@ export async function runTemplateTwinSyntheticTest(input: {
 
   const ir = TemplateDocIRSchema.parse(compiled.compiledDocumentIr);
   const encounterMode = input.encounterMode ?? 'text';
-  const extracted = await input.extractEntities({
-    mode: encounterMode,
-    text: input.encounterText,
-    practiceId: input.actor.practiceId,
-    userId: input.actor.userId,
-    noteTemplateId: row.id,
-  });
-  const facts = projectEncounterFacts({
-    mode: encounterMode,
-    contextText: extracted.contextText,
-    entities: extracted.entities as unknown as EncounterEntitySnapshot,
-    asrQuality: 'unknown',
-  });
-  const storage = input.storage ?? createTemplateTwinArtifactStore();
-  const source = await storage.readSourceArtifact({
-    practiceId: input.actor.practiceId,
-    objectKey: compiled.sourceArtifact.objectKey,
-    expectedSha256: compiled.sourceArtifact.sha256,
-    expectedSizeBytes: compiled.sourceArtifact.sizeBytes,
-  });
+  const encounterSha256 = createHash('sha256').update(input.encounterText).digest('hex');
+
   // Run the LIVE brain over the synthetic encounter, then recover the compiled
   // {{one of}} marker form from the SAME verified source the IR came from —
   // byte-for-byte what processTemplateTwinVisit does.
@@ -294,7 +278,6 @@ export async function runTemplateTwinSyntheticTest(input: {
   // The pin fixes the stochastic INPUT only — the pinned note still goes
   // through bridge -> matcher -> validator -> renderer -> roundtrip exactly as
   // an unpinned one would. Nothing is bypassed and no requirement is relaxed.
-  const encounterSha256 = createHash('sha256').update(input.encounterText).digest('hex');
   const templateSha256 = compiled.structureSha256;
   // CONTENT-ADDRESSED. The pin belongs to the (encounter, template structure)
   // pair, not to a compiled-version row: re-uploading the same docx makes a NEW
@@ -303,6 +286,14 @@ export async function runTemplateTwinSyntheticTest(input: {
   let pinned = compiled.pinnedSyntheticNote;
   let pinnedModel = compiled.pinnedNoteModelVersion;
   let pinnedAt = compiled.pinnedNoteGeneratedAt;
+  let pinnedEntities =
+    compiled.pinnedNoteEncounterSha256 === encounterSha256
+      ? compiled.pinnedSyntheticEntities
+      : null;
+  let pinnedContextText =
+    compiled.pinnedNoteEncounterSha256 === encounterSha256
+      ? compiled.pinnedSyntheticContextText
+      : null;
   if (
     !pinned ||
     compiled.pinnedNoteEncounterSha256 !== encounterSha256 ||
@@ -316,6 +307,8 @@ export async function runTemplateTwinSyntheticTest(input: {
       },
       select: {
         pinnedSyntheticNote: true,
+        pinnedSyntheticEntities: true,
+        pinnedSyntheticContextText: true,
         pinnedNoteModelVersion: true,
         pinnedNoteGeneratedAt: true,
       },
@@ -324,12 +317,16 @@ export async function runTemplateTwinSyntheticTest(input: {
       pinned = sibling.pinnedSyntheticNote;
       pinnedModel = sibling.pinnedNoteModelVersion;
       pinnedAt = sibling.pinnedNoteGeneratedAt;
+      pinnedEntities = sibling.pinnedSyntheticEntities;
+      pinnedContextText = sibling.pinnedSyntheticContextText;
       // Copy it onto this compiled version so the proof it certifies is stored
       // with it, not borrowed at read time.
       await prisma.templateTwinCompiledVersion.update({
         where: { id: compiled.id },
         data: {
           pinnedSyntheticNote: pinned,
+          pinnedSyntheticEntities: pinnedEntities ?? undefined,
+          pinnedSyntheticContextText: pinnedContextText,
           pinnedNoteEncounterSha256: encounterSha256,
           pinnedNoteTemplateSha256: templateSha256,
           pinnedNoteModelVersion: pinnedModel,
@@ -339,6 +336,44 @@ export async function runTemplateTwinSyntheticTest(input: {
     }
   }
   const pinValid = !!pinned;
+
+  // ── PINNED EXTRACTION ────────────────────────────────────────────────────
+  // Layer 3 is a model too. Re-extracting per attempt made the identical
+  // encounter yield a different fact set every run, so the same template
+  // blocked on a different set of fields each time and no two certifications
+  // could match. It is pinned beside the note, resolved through the SAME
+  // content-addressed lookup, and invalidated by the same encounter hash.
+  // The pinned entities still flow through projection -> resolver -> bridge ->
+  // matcher -> validator -> renderer -> roundtrip exactly as fresh ones would;
+  // only the stochastic INPUT is fixed.
+  const extracted =
+    pinnedEntities != null && pinnedContextText != null
+      ? { entities: pinnedEntities, contextText: pinnedContextText }
+      : await input.extractEntities({
+          mode: encounterMode,
+          text: input.encounterText,
+          practiceId: input.actor.practiceId,
+          userId: input.actor.userId,
+          noteTemplateId: row.id,
+        });
+  const extractionReused = pinnedEntities != null && pinnedContextText != null;
+  console.info(
+    `[template-twin:pin] EXTRACTION ${extractionReused ? 'REUSED' : 'FRESH'} ` +
+      `compiled=${compiled.id} encounterSha=${encounterSha256.slice(0, 12)}`,
+  );
+  const facts = projectEncounterFacts({
+    mode: encounterMode,
+    contextText: extracted.contextText,
+    entities: extracted.entities as unknown as EncounterEntitySnapshot,
+    asrQuality: 'unknown',
+  });
+  const storage = input.storage ?? createTemplateTwinArtifactStore();
+  const source = await storage.readSourceArtifact({
+    practiceId: input.actor.practiceId,
+    objectKey: compiled.sourceArtifact.objectKey,
+    expectedSha256: compiled.sourceArtifact.sha256,
+    expectedSizeBytes: compiled.sourceArtifact.sizeBytes,
+  });
 
   let generatedNote: string | undefined;
   let markerText: string | undefined;
@@ -365,6 +400,8 @@ export async function runTemplateTwinSyntheticTest(input: {
       where: { id: compiled.id },
       data: {
         pinnedSyntheticNote: generatedNote,
+        pinnedSyntheticEntities: asJson(extracted.entities),
+        pinnedSyntheticContextText: extracted.contextText,
         pinnedNoteEncounterSha256: encounterSha256,
         pinnedNoteTemplateSha256: templateSha256,
         pinnedNoteModelVersion:
