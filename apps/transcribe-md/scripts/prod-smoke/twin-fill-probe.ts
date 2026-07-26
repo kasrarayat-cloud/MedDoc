@@ -125,8 +125,19 @@ async function main() {
   const labelById = new Map(
     compiled.fields.map((f: (typeof compiled.fields)[number]) => [f.fieldId, f.originalLabel]),
   );
-  const issues = (prepared.manifest.validation as { issues?: { fieldId: string; code: string }[] })
-    .issues ?? [];
+  const issues =
+    (
+      prepared.manifest.validation as {
+        issues?: { fieldId: string; code: string; severity: string }[];
+      }
+    ).issues ?? [];
+  const blocking = issues.filter((i) => i.severity === 'blocking');
+  const byCode = new Map<string, number>();
+  for (const i of blocking) byCode.set(i.code, (byCode.get(i.code) ?? 0) + 1);
+  say(`BLOCKING ${blocking.length} of ${issues.length}`);
+  for (const [code, n] of [...byCode.entries()].sort((a, b) => b[1] - a[1])) {
+    say(`  blocking ${String(n).padStart(3)}  ${code}`);
+  }
   const failing = new Set(issues.map((i) => i.fieldId));
   say(`validation.valid=${(prepared.manifest.validation as { valid: boolean }).valid} issues=${issues.length}`);
 
@@ -140,8 +151,10 @@ async function main() {
   for (const f of fields) {
     if (!failing.has(f.fieldId)) continue;
     const codes = issues.filter((i) => i.fieldId === f.fieldId).map((i) => i.code).join('+');
+    const irf = (compiled.compiledDocumentIr as { fields: { fieldId: string; kind: string }[] })
+      .fields.find((x) => x.fieldId === f.fieldId);
     say(
-      `FAIL ${codes} "${String(labelById.get(f.fieldId)).slice(0, 34)}" ` +
+      `FAIL ${codes} kind=${irf?.kind} "${String(labelById.get(f.fieldId)).slice(0, 34)}" ` +
         `status=${f.status} value=${JSON.stringify(f.value)} reason=${f.reasonCode} ` +
         `cites=${f.sourceFactIds.length}`,
     );
@@ -149,7 +162,8 @@ async function main() {
       const fact = facts.find((x) => x.factId === id);
       say(
         `      cite ${id.slice(0, 16)} concept=${fact?.concept} lat=${fact?.laterality} ` +
-          `num=${fact?.number} unit=${fact?.unit}`,
+          `num=${fact?.number} unit=${fact?.unit} value=${JSON.stringify(fact?.value)} ` +
+          `(${typeof fact?.value})`,
       );
     }
   }
@@ -167,6 +181,8 @@ async function main() {
   const irFields = (compiled.compiledDocumentIr as {
     fields: {
       fieldId: string;
+      kind: string;
+      rowPrototype?: boolean;
       rendererBinding: { bindingType: string; rowLaterality?: string };
     }[];
   }).fields;
