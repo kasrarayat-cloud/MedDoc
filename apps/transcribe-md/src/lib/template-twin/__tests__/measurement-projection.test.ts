@@ -121,3 +121,44 @@ describe('projection', () => {
     expect(project([], 'Follow-up for hypertension.')).toEqual([]);
   });
 });
+
+// ============================================================================
+// THE STATED FORM IS A STRING — the seam that rejected every correct fill.
+// ----------------------------------------------------------------------------
+// A fact's `value` is what was said; `number` and `unit` are the structured
+// attributes beside it. Emitting a raw number made the fact contradict its own
+// schema, and the validator — correctly, and unchanged — re-derives a text
+// cell's value as `typeof fact.value === 'string' ? fact.value : null`. So
+// every measurement the bridge placed came back ASSERTION_NOT_SUPPORTED with a
+// correct number, a correct leg, a correct segment and a real citation. Nine
+// good fills, nine blocking issues, and nothing in the message hinting that the
+// disagreement was about a JavaScript type.
+// ============================================================================
+
+describe('a measurement fact states its value as text', () => {
+  it('value is the string form; number and unit stay structured', () => {
+    const [fact] = project([M()], 'right GSV at the SFJ measures 7 millimeters');
+    expect(typeof fact.value).toBe('string');
+    expect(fact.value).toBe('7');
+    expect(fact.number).toBe(7);
+    expect(fact.unit).toBe('mm');
+  });
+
+  it('holds after unit normalisation, where the stated number CHANGES', () => {
+    // 0.62 cm normalises to 6.2 mm: the string must be the normalised form the
+    // cell will actually contain, not the spoken one.
+    const [fact] = project(
+      [M({ value: 0.62, unit: 'cm' })],
+      'right GSV at the SFJ measures 0.62 centimeters',
+    );
+    expect(fact.value).toBe('6.2');
+    expect(fact.number).toBe(6.2);
+    expect(fact.unit).toBe('mm');
+  });
+
+  it('a text cell can therefore re-derive it — the check the validator makes', () => {
+    const [fact] = project([M()], 'right GSV at the SFJ measures 7 millimeters');
+    const derived = typeof fact.value === 'string' ? fact.value : null;
+    expect(derived).toBe('7');
+  });
+});
