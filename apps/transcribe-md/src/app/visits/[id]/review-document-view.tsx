@@ -73,6 +73,12 @@ export interface ReviewDocumentViewProps {
   /** Unacknowledged E/M level change ({from,to}) or null. */
   emPendingChange: { from: string; to: string } | null;
   summary: ReviewDocumentSummary;
+  /** The EXISTING billing panel and codes table, passed in verbatim. Collapsing
+   *  a surface is not the same as removing it: the doctor must be able to
+   *  override, rescore or dispute a level from here, with the same components,
+   *  the same enforcement and the same audit the Billing/Codes tabs had. */
+  billingNode: React.ReactNode;
+  codesNode: React.ReactNode;
   dictationNode: React.ReactNode;
   dictationLabel: string;
   /** Fired after each successful adopt so the parent stays in sync with the
@@ -449,21 +455,17 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
             </span>
           </button>
           {openSummary && (
-            <div id={summaryPanelId} className="qm-rdoc-meta-body">
-              {props.summary.icd.map((r) => (
-                <div key={r.code} className="qm-rdoc-meta-line">
-                  <span className="qm-rdoc-meta-code">{r.code}</span>
-                  <span>{r.description ?? ''}</span>
-                </div>
-              ))}
-              {props.summary.emNotApplicable && (
-                <div className="qm-rdoc-meta-line qm-rdoc-meta-muted">
-                  E/M not applicable to this encounter
-                </div>
-              )}
+            <div id={summaryPanelId} className="qm-rdoc-meta-body qm-rdoc-meta-panels">
+              {/* Verbatim: BillingCardC3 and CodesTab, the same components the
+                  tabs rendered. Override / rescore / dispute all live here, so
+                  a doctor who disagrees with a level never needs the surface
+                  changed under them. The inline confirm card above remains the
+                  gate; this is where the level is CHANGED, not acknowledged. */}
+              <div className="qm-rdoc-panel">{props.billingNode}</div>
+              <div className="qm-rdoc-panel">{props.codesNode}</div>
             </div>
           )}
-        </section>
+      </section>
       )}
 
       <section className="qm-rdoc-meta">
