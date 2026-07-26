@@ -1,0 +1,17 @@
+# ============================================================================
+# PRE-SIGN REVIEW DOCUMENT-VIEW staging override — runs the isolated QA stack
+# (docker-compose.qa.yml, project meddoc-qa, :9020, synthetic DB, MOCK_AI) with
+# the FLAG-ON image, so the redesigned pre-sign surface can be walked end to end
+# before anyone decides whether to promote it.
+#
+#   docker compose -f docker-compose.qa.yml -f docker-compose.qa.reviewdoc.yml \
+#     up -d --wait transcribe-md
+#
+# Production is untouched: separate project / network / volumes, and this only
+# swaps the app image to the separately-tagged :review-doc build. Prod's
+# :latest is never referenced here and never rebuilt by this file.
+# Bound to 127.0.0.1:9020 — reach it via an SSH tunnel.
+# ============================================================================
+services:
+  transcribe-md:
+    image: meddoc-pro-transcribe-md:review-doc
