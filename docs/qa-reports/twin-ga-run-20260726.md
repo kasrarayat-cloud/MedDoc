@@ -100,3 +100,46 @@ ships.
   untouched.** Target was <70% — 72% is short; the remainder is live volumes
   (33 G, prod data) and in-use images, which are not reclaimable without
   touching prod or co-tenants.
+
+## S2(b) — sourceType: built, NOT persisted (the blocker)
+
+Landed:
+* `sourceType` on `SemanticMappingSchema` — `extraction | context_default |
+  visit_metadata | manual`, defaulting to `extraction`.
+* `classifyFieldSource()` — label-driven, enumerated. The four non-extraction
+  families (referring physician, machine, location/address, technologist)
+  classify **manual**. `context_default` is declared but deliberately
+  UNIMPLEMENTED: a deterministic fill puts content into a signed note the
+  clinician never dictated, and the review lane does not exist. Honest blank
+  beats silent fill; the guard holds.
+* The proposer classifies from the COMPILER's label, not the model's guess —
+  same doctrine as `expectedDataType`.
+* Manual carve-outs in BOTH gate checks (`fieldsReady`) and the mapping-update
+  validation: a manual field is ready on classification + type compatibility,
+  with no clinical concept, because it can never produce a value. No evidence
+  rule is relaxed — nothing about a manual field can fill.
+
+**The blocker: `sourceType` is not persisted.** It exists in the Zod schema and
+the proposer, but `template_twin_semantic_mappings` has no such column, so every
+mapping reads back from the database as `extraction` and both carve-outs are
+dead code in practice:
+
+```
+[template-twin:mappings] 5/80 proposals were off-registry or unconcepted
+[ga] TemplateTwinLifecycleError: The approved mapping for field 1 is incomplete or incompatible.
+```
+
+Remaining work, fully specified and small:
+1. additive migration — `sourceType TEXT NOT NULL DEFAULT 'extraction'` on
+   `template_twin_semantic_mappings`;
+2. persist it in `updateTemplateTwinMappings`' update payload;
+3. read it in `fromPersistedMapping` and the workspace projection;
+4. re-run: 5/80 should go to 0 blocked and certification should proceed.
+
+That is a schema round-trip, not a design question — nothing in the rulebook is
+unresolved. S4/S5/S6 remain blocked behind it; S3 was not reached.
+
+## S7 (carried) — riders
+
+Disk **77% -> 72%** (81 G free), 26 rollback tags intact, 14 co-tenant images
+untouched. No open PRs; all work committed to `fix/twin-visit-export-harness`.

@@ -423,7 +423,14 @@ export async function updateTemplateTwinMappings(input: {
           mapping.status === 'unsupported' ||
           !isMappingTypeCompatible(field, mapping) ||
           !validPracticeDefault(field, mapping) ||
-          (mapping.status === 'certified' && !mapping.clinicalConcept)
+          // A MANUAL field carries no clinical concept because there is no
+          // evidence to cite — it is a per-visit human value that renders
+          // BLANK. Confirming its CLASSIFICATION is what the doctor is
+          // approving, not a concept. Same carve-out as fieldsReady, and it can
+          // never produce a value, so no evidence rule is relaxed.
+          (mapping.status === 'certified' &&
+            !mapping.clinicalConcept &&
+            mapping.sourceType !== 'manual')
         ) {
           throw new TemplateTwinLifecycleError(
             'MAPPING_INVALID',
@@ -585,9 +592,19 @@ export async function certifyAndActivateTemplateTwin(input: {
       const mappingById = new Map(mappings.map((mapping) => [mapping.fieldId, mapping]));
       const fieldsReady = ir.fields.every((field) => {
         const mapping = mappingById.get(field.fieldId);
+        if (!mapping) return false;
+        // A MANUAL field is a per-visit human value nobody can know — the
+        // technologist on shift. It carries no clinical concept because there
+        // is no evidence to cite, and it renders BLANK. Requiring a concept
+        // there would block certification on a field that is behaving
+        // correctly, so it is attested instead: the same mechanism
+        // needs-clinician-input already uses, applied narrowly by CLASS.
+        // Nothing about it can produce a value, so no evidence rule is relaxed.
+        if (mapping.sourceType === 'manual') {
+          return mapping.status === 'certified' && isMappingTypeCompatible(field, mapping);
+        }
         return Boolean(
-          mapping &&
-            mapping.status === 'certified' &&
+          mapping.status === 'certified' &&
             mapping.clinicalConcept &&
             isMappingTypeCompatible(field, mapping) &&
             validPracticeDefault(field, mapping),
@@ -658,8 +675,11 @@ export async function certifyAndActivateTemplateTwin(input: {
       const unreadyFieldIds = ir.fields
         .filter((field) => {
           const mapping = mappingById.get(field.fieldId);
+          if (!mapping) return true;
+          if (mapping.sourceType === 'manual') {
+            return !(mapping.status === 'certified' && isMappingTypeCompatible(field, mapping));
+          }
           return !(
-            mapping &&
             mapping.status === 'certified' &&
             mapping.clinicalConcept &&
             isMappingTypeCompatible(field, mapping) &&

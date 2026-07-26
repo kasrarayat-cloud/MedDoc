@@ -6,7 +6,12 @@
 // certify a field, add/remove a field, alter options, or invent a default.
 // ============================================================================
 
-import { isRegisteredConcept, synonymsFor, REGISTRY_CONCEPTS } from '../concept-registry';
+import {
+  classifyFieldSource,
+  isRegisteredConcept,
+  synonymsFor,
+  REGISTRY_CONCEPTS,
+} from '../concept-registry';
 import { z } from 'zod';
 
 import {
@@ -361,6 +366,9 @@ export async function proposeSemanticMappings(
     return SemanticMappingSchema.parse({
       ...mapping,
       expectedDataType: compilerDataType,
+      // Classification is the COMPILER's label talking, not the model's guess —
+      // the same doctrine as expectedDataType above.
+      sourceType: classifyFieldSource(field.originalLabel),
       // REGISTRY CONSTRAINT. A concept the extractor never emits can never be
       // matched by any fact, so the field would be permanently unfillable —
       // this is exactly how `filledCount=0` survived four sessions of fixes

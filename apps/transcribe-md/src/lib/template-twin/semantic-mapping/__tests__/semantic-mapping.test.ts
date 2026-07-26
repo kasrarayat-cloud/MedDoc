@@ -61,6 +61,7 @@ function mapping(
 ): SemanticMapping {
   return {
     fieldId,
+    sourceType: 'extraction' as const,
     clinicalConcept: 'hpi.severity',
     expectedDataType,
     polarityBehavior: 'value_only',

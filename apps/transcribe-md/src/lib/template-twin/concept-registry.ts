@@ -105,3 +105,42 @@ export class OffRegistryConceptError extends Error {
     this.concepts = concepts;
   }
 }
+
+
+// ============================================================================
+// FIELD CLASSIFICATION — where a field's value legitimately comes from.
+// ----------------------------------------------------------------------------
+// Derived from the recorded WM_IOV classification. Label-driven and enumerated:
+// a field nobody dictates cannot be filled from evidence, and pretending
+// otherwise is what left 4/80 mappings unconcepted and certification blocked.
+//
+// NOTE on context_default: referring physician / machine / location / address
+// ARE deterministic practice context, and the live product fills that class
+// today. They classify as 'manual' here — NOT because that is their nature, but
+// because a deterministic fill puts content into a signed note the clinician
+// never dictated, and the flagged review-before-sign lane for that does not
+// exist yet. Until it does, honest blank beats silent fill. When the lane
+// lands, these move to 'context_default' and start filling; that is a
+// one-line change here plus re-certification.
+// ============================================================================
+
+const MANUAL_LABEL_PATTERNS: ReadonlyArray<RegExp> = [
+  /ultrasound\s+technologist/i, // truly per-visit-human: who was on shift
+  /referring\s+physician/i,      // context_default in waiting
+  /^machine\b/i,                 // context_default in waiting
+  /^location\b/i,                // context_default in waiting
+  /^address\b/i,                 // context_default in waiting
+];
+
+export type MappingSourceType =
+  | 'extraction'
+  | 'context_default'
+  | 'visit_metadata'
+  | 'manual';
+
+/** Classify by the field's own label. Unmatched fields stay 'extraction'. */
+export function classifyFieldSource(originalLabel: string): MappingSourceType {
+  return MANUAL_LABEL_PATTERNS.some((p) => p.test(originalLabel))
+    ? 'manual'
+    : 'extraction';
+}
