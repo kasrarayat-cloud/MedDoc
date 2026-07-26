@@ -61,6 +61,18 @@ export interface ReviewDocumentViewProps {
    *  The note keeps its markdown fidelity, inline editing, status pills and
    *  copy affordances — this view supplies only what goes UNDER each section. */
   renderNote: (afterSection: (section: NoteSection) => React.ReactNode) => React.ReactNode;
+  /** PHASE 2 — the doctor's own form, filled so far, INSTEAD of the styled
+   *  note. Given a per-section slot renderer, exactly as `renderNote` is, so
+   *  the suggestion cards and gates below are byte-identical either way; only
+   *  what the page is made of changes. Absent (or returning null) → the styled
+   *  note renders, which is the correct page for a non-template visit and the
+   *  honest fallback when the document could not be produced. */
+  /*  Takes a slot renderer keyed by SECTION LABEL — the document surface has
+   *  headings, not parsed note sections, and synthesising a NoteSection to feed
+   *  it would break the moment that type gains a field. */
+  renderDocument?: (
+    afterLabel: (label: string) => React.ReactNode,
+  ) => React.ReactNode;
   /** Verifier-demoted claims, in DB-array order — the index IS the action's. */
   claims: SuggestedClaimView[];
   /** The critical-Rx gate, rendered inline and unchanged. Null when the visit
@@ -364,11 +376,40 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
       {/* THE DOCUMENT — the real note renderer, with each section's suggestions
           rendered directly beneath it, where they would land if accepted. */}
       <article className="qm-rdoc-page">
-        {props.renderNote((section) => {
-          const idx = claimsByLabel.byLabel.get(norm(section.label)) ?? [];
-          if (idx.length === 0) return null;
-          return <div className="qm-rdoc-sugg-group">{idx.map((i) => renderSuggestion(i))}</div>;
-        })}
+        {(() => {
+          // ONE slot renderer, used by whichever surface is drawing. The cards,
+          // their indices, and the adopt action they call do not know or care
+          // which one it is.
+          const afterLabel = (label: string) => {
+            const idx = claimsByLabel.byLabel.get(norm(label)) ?? [];
+            if (idx.length === 0) return null;
+            return (
+              <div className="qm-rdoc-sugg-group">{idx.map((i) => renderSuggestion(i))}</div>
+            );
+          };
+          const doc = props.renderDocument?.(afterLabel);
+          if (!doc) return props.renderNote((section) => afterLabel(section.label));
+          return (
+            <>
+              {doc}
+              {/* THE NOTE, STILL READABLE.
+                  The document renders as canvases — to a screen reader, one
+                  unlabelled raster per page. Without this the entire clinical
+                  note a doctor is about to sign would exist nowhere in the DOM,
+                  which is not a degraded experience but an absent one. The text
+                  is here, in reading order, for anyone whose reader needs it. */}
+              <div className="qm-sr-only" data-testid="visit-document-text">
+                <h2>The note this document was filled from</h2>
+                {sections.map((sec) => (
+                  <section key={sec.id}>
+                    <h3>{sec.label}</h3>
+                    <p>{sec.body}</p>
+                  </section>
+                ))}
+              </div>
+            </>
+          );
+        })()}
 
         {/* A suggestion whose section heading is not in this note still gets
             read — dropping it silently would be the one unacceptable outcome. */}
