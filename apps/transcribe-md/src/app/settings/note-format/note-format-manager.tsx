@@ -36,6 +36,7 @@ import { TemplateReviewEditor } from './template-review-editor';
 // UX simplification pack (A) — flag-gated. OFF ⇒ every path below behaves
 // exactly as before; the review editor stays the destination after a parse.
 import { isUxSimplify } from '@/config/ux-simplify';
+import { isSettingsSimpleRow } from '@/config/settings-simple-row';
 import { ConfirmCard, ProcessingStages, useStages } from './upload-flow';
 
 const mono = 'var(--font-mono)';
@@ -675,13 +676,121 @@ function TemplateRow({
   onFinishNativeSetup: (id: string, file: File) => void;
 }) {
   const setupRef = useRef<HTMLInputElement | null>(null);
+  const [overflowOpen, setOverflowOpen] = useState(false);
+  const simpleRow = isSettingsSimpleRow();
   const statusLabel = t.status === 'active'
     ? `Active · ${t.encounterLabel}`
     : t.status === 'draft' ? 'Draft' : 'Superseded';
   // Native-export setup surfaces ONLY on the active format when the flag is on.
-  // Certified → a calm "Native ✓" chip; otherwise a "Set up native export" CTA
-  // the doctor can actually see + act on (re-upload his blank form once).
   const showNative = nativePdfEnabled && t.status === 'active';
+
+  // ── THE SIMPLE ROW ──────────────────────────────────────────────────────
+  // name · Active · Replace · Delete, everything else behind ⋯.
+  //
+  // The "Set up native export" CTA is gone, and not conditionally: there is
+  // nothing for the doctor to decide. Replace already does the whole job —
+  // the upload activates, certifies, sets form-only and previews once — so a
+  // separate ritual that asks for the same file under a different name is
+  // pure ceremony. When we cannot fill their own page, that is a FACT we
+  // report on one line, not a task we hand back.
+  if (simpleRow) {
+    return (
+      <div style={rowStyle}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--color-linear-text)' }}>
+            {t.name}
+          </div>
+          {showNative && (
+            <div
+              style={{
+                fontSize: 11,
+                marginTop: 4,
+                color: t.pdfNativeCertified
+                  ? 'var(--color-linear-sage-bright)'
+                  : 'var(--color-linear-text-3)',
+              }}
+              data-testid="template-row-status"
+            >
+              {t.pdfNativeCertified
+                ? 'Exports use your own form'
+                : 'Exports use a styled copy — Replace with your blank form to use your own'}
+            </div>
+          )}
+        </div>
+        <span style={pill(t.status === 'active' ? 'active' : 'draft')}>{statusLabel}</span>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {t.status !== 'active' && (
+            <button type="button" style={btnPrimary} onClick={onActivate} disabled={pending}>
+              Activate
+            </button>
+          )}
+          <input
+            ref={setupRef}
+            type="file"
+            accept=".pdf,application/pdf,.docx"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) onFinishNativeSetup(t.id, f);
+              e.target.value = '';
+            }}
+          />
+          <button
+            type="button"
+            style={btn}
+            onClick={() => setupRef.current?.click()}
+            disabled={pending}
+            data-testid="template-row-replace"
+          >
+            Replace
+          </button>
+          <button
+            type="button"
+            style={{ ...btn, color: 'var(--color-linear-text-3)' }}
+            onClick={onDelete}
+            disabled={pending}
+            aria-label={`Delete ${t.name}`}
+          >
+            Delete
+          </button>
+          <div style={{ position: 'relative' }}>
+            <button
+              type="button"
+              style={{ ...btn, padding: '6px 9px', color: 'var(--color-linear-text-3)' }}
+              onClick={() => setOverflowOpen((v) => !v)}
+              aria-haspopup="menu"
+              aria-expanded={overflowOpen}
+              aria-label={`More actions for ${t.name}`}
+              data-testid="template-row-overflow"
+              disabled={pending}
+            >
+              ⋯
+            </button>
+            {overflowOpen && (
+              <div role="menu" className="qm-tmpl-overflow" data-testid="template-row-overflow-menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => { setOverflowOpen(false); onEdit(); }}
+                >
+                  Advanced editor
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => { setOverflowOpen(false); onDuplicate(); }}
+                >
+                  Duplicate
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // (statusLabel / showNative are declared above, shared by both branches.)
   return (
     <div style={rowStyle}>
       <div style={{ minWidth: 0 }}>
