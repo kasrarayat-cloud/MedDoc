@@ -41,3 +41,47 @@ export function normalizeSectionLabel(s: string): string {
   // somewhere else, which is worse than either behaviour on its own.
   return s.replace(/\*\*/g, '').replace(/:\s*$/, '').trim().toLowerCase();
 }
+
+/** Value equality for a pending E/M change. The RSC payload re-creates the
+ *  object on every refresh, so identity comparison reports a change where
+ *  there is none. */
+export function emChangeEq(
+  a: { from: string; to: string } | null | undefined,
+  b: { from: string; to: string } | null | undefined,
+): boolean {
+  if (a == null || b == null) return a == null && b == null;
+  return a.from === b.from && a.to === b.to;
+}
+
+/**
+ * Which top-level section a claim belongs under.
+ *
+ * The heading SETS diverge, and it bites a template that is live in production.
+ * The verifier tags a claim with whatever `#{1,6}` heading it sat under, and the
+ * adopt action appends under the same `#{1,6}` match — but the client's
+ * parseNoteSections splits on `#{1,2}` only and deliberately folds `###` into
+ * its parent's body. The ultrasound report's `### Right` / `### Left` blocks are
+ * exactly that shape, so the claim rendered in the "Also suggested" orphan block
+ * while the server appended it into the middle of Findings: the doctor reviewed
+ * it in one place and signed it in another.
+ *
+ * So when a claim's section is not a top-level heading, find the section whose
+ * BODY carries that sub-heading — which is where the append will actually land.
+ */
+export function sectionLabelForClaim(
+  claimSection: string,
+  sections: ReadonlyArray<{ label: string; body: string }>,
+): string | null {
+  const want = normalizeSectionLabel(claimSection);
+  const top = sections.find((s) => normalizeSectionLabel(s.label) === want);
+  if (top) return normalizeSectionLabel(top.label);
+  const owner = sections.find((s) =>
+    s.body
+      .split('\n')
+      .some((line) => {
+        const m = /^#{1,6}\s+(.*)$/.exec(line.trim());
+        return m ? normalizeSectionLabel(m[1]) === want : false;
+      }),
+  );
+  return owner ? normalizeSectionLabel(owner.label) : null;
+}
