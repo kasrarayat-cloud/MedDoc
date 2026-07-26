@@ -61,7 +61,8 @@ function mapping(
 ): SemanticMapping {
   return {
     fieldId,
-    sourceType: 'extraction' as const,
+    // An enumerated dropdown is answered by the adopted note's own pick.
+        sourceType: 'verified_note_selection' as const,
     clinicalConcept: 'hpi.severity',
     expectedDataType,
     polarityBehavior: 'value_only',

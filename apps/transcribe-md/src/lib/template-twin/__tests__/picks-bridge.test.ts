@@ -84,6 +84,30 @@ function factsForIr(irLike: { fields: ReadonlyArray<{ allowedOptions?: ReadonlyA
   return out;
 }
 
+/** A pick cites the SELECTION now, not an entailing fact — but it still needs an
+ *  approved mapping with a concept for that citation to satisfy, exactly as any
+ *  other citation must. One certified mapping per select field. */
+function mappingsForIr(irLike: { fields: ReadonlyArray<{ fieldId: string; kind: string }> }) {
+  return irLike.fields
+    .filter((f) => f.kind === 'single_select')
+    .map((f) => ({
+      fieldId: f.fieldId,
+      sourceType: 'verified_note_selection' as const,
+      clinicalConcept: 'exam.vascular',
+      expectedDataType: 'single_select' as const,
+      polarityBehavior: 'value_only' as const,
+      temporality: 'current' as const,
+      laterality: 'optional' as const,
+      unitPolicy: 'not_applicable' as const,
+      approvedSynonyms: [],
+      required: false,
+      blankPolicy: 'blank' as const,
+      unknownPolicy: 'blank' as const,
+      practiceDefault: null,
+      status: 'certified' as const,
+    }));
+}
+
 describe('picks-bridge — CHOICE_SLOT picks -> exact-option resolutions (WM_IOV)', () => {
   it('recovers exactly the picks placed into the note, for every dropdown', async () => {
     const { ir, markerText } = await loadWmIov();
@@ -92,7 +116,9 @@ describe('picks-bridge — CHOICE_SLOT picks -> exact-option resolutions (WM_IOV
     const { note, chosenText } = fillNote(markerText);
     expect(chosenText.length).toBe(sfs.length); // marker count == select-field count
 
-    const res = bridgeChoiceSlotPicks({ facts: factsForIr(ir), ir, markerText, filledNote: note });
+    const out = bridgeChoiceSlotPicks({ facts: factsForIr(ir), ir, markerText, filledNote: note , mappings: mappingsForIr(ir) });
+
+    const res = out.resolutions;
     const byId = new Map(res.map((r) => [r.fieldId, r]));
 
     sfs.forEach((f, idx) => {
@@ -123,7 +149,8 @@ describe('picks-bridge — CHOICE_SLOT picks -> exact-option resolutions (WM_IOV
     } as unknown as TemplateDocIR;
     const markerText = 'A: {{one of: x | y}}\nB: {{one of: p | q}}';
     const filledNote = 'A: x'; // B undictated -> carrier omitted
-    const res = bridgeChoiceSlotPicks({ facts: factsForIr(ir), ir, markerText, filledNote });
+    const out = bridgeChoiceSlotPicks({ facts: factsForIr(ir), ir, markerText, filledNote , mappings: mappingsForIr(ir) });
+    const res = out.resolutions;
     expect(res[0]).toMatchObject({ status: 'supported', value: 'x', selectedOptionOrdinal: 0 });
     expect(res[1]).toMatchObject({ status: 'not_mentioned', value: null });
   });
@@ -138,7 +165,8 @@ describe('picks-bridge — CHOICE_SLOT picks -> exact-option resolutions (WM_IOV
       const opts = String(optsStr).split('|').map((o) => o.trim()).filter(Boolean);
       return opts[0];
     });
-    const res = bridgeChoiceSlotPicks({ facts: factsForIr(ir), ir, markerText, filledNote: note });
+    const out = bridgeChoiceSlotPicks({ facts: factsForIr(ir), ir, markerText, filledNote: note , mappings: mappingsForIr(ir) });
+    const res = out.resolutions;
     const firstField = sfs[0];
     const r = res.find((x) => x.fieldId === firstField.fieldId)!;
     expect(r.status).toBe('not_mentioned');
@@ -161,7 +189,8 @@ describe('picks-bridge — CHOICE_SLOT picks -> exact-option resolutions (WM_IOV
     } as unknown as TemplateDocIR;
     const markerText = 'Right leg: {{one of: reflux positive | is absent}}\nLeft leg: {{one of: reflux positive | is absent}}';
     const filledNote = 'Right leg: reflux positive\nLeft leg: is absent';
-    const res = bridgeChoiceSlotPicks({ facts: factsForIr(ir), ir, markerText, filledNote });
+    const out = bridgeChoiceSlotPicks({ facts: factsForIr(ir), ir, markerText, filledNote , mappings: mappingsForIr(ir) });
+    const res = out.resolutions;
     expect(res[0]).toMatchObject({ status: 'supported', value: 'pos', selectedOptionOrdinal: 0 });
     expect(res[1]).toMatchObject({ status: 'supported', value: 'neg', selectedOptionOrdinal: 1 });
   });

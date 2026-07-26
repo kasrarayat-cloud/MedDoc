@@ -406,6 +406,15 @@ function resolveOne(
   if (mapping.sourceType === 'manual') {
     return makeResolution(field.fieldId, 'not_mentioned', null, [], 'manual_source_not_filled');
   }
+  // A VERIFIED NOTE SELECTION is answered by the adopted note's own pick, which
+  // only the picks bridge can read. Resolving it here from raw facts produced
+  // `select_value_not_exact_option` — needs-clinician-input, and BLOCKING at
+  // visit time — for fourteen dropdowns the note had already answered. Same
+  // shape as the fixed-grid rule: the component that can address it, addresses
+  // it; the baseline is honestly blank.
+  if (mapping.sourceType === 'verified_note_selection') {
+    return makeResolution(field.fieldId, 'not_mentioned', null, [], 'awaiting_note_selection');
+  }
   if (!mapping.clinicalConcept) {
     return makeResolution(
       field.fieldId,

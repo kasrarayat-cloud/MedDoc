@@ -198,11 +198,30 @@ export type MappingSourceType =
   | 'extraction'
   | 'context_default'
   | 'visit_metadata'
-  | 'manual';
+  | 'manual'
+  | 'verified_note_selection';
 
-/** Classify by the field's own label. Unmatched fields stay 'extraction'. */
-export function classifyFieldSource(originalLabel: string): MappingSourceType {
-  return MANUAL_LABEL_PATTERNS.some((p) => p.test(originalLabel))
-    ? 'manual'
-    : 'extraction';
+/**
+ * Classify where a field's value legitimately comes from.
+ *
+ * MANUAL wins first: a per-visit human value stays manual even though it is
+ * rendered as a dropdown, because nothing can select it from a dictation.
+ *
+ * Then VERIFIED_NOTE_SELECTION: a field with enumerated options is answered by
+ * the live brain's constrained pick in the adopted note, not by matching an
+ * extracted fact against option text. The options are protocol language
+ * ("Bilateral Detailed", "Swelling, Heaviness") that no extractor emits, so
+ * classifying these as `extraction` left fourteen of them permanently blank on
+ * every real visit and blocked the native export — while the note had already
+ * selected them correctly.
+ */
+export function classifyFieldSource(
+  originalLabel: string,
+  field?: { kind?: string; allowedOptions?: ReadonlyArray<unknown> },
+): MappingSourceType {
+  if (MANUAL_LABEL_PATTERNS.some((p) => p.test(originalLabel))) return 'manual';
+  const enumerated =
+    (field?.kind === 'single_select' || field?.kind === 'multi_select') &&
+    (field?.allowedOptions?.length ?? 0) > 0;
+  return enumerated ? 'verified_note_selection' : 'extraction';
 }
