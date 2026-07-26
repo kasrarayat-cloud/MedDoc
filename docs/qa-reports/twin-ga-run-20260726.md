@@ -205,3 +205,159 @@ invocation mounts the live directory:
 docker compose -f docker-compose.qa.yml run --rm \
   -v /opt/meddoc-pro/packages/db/prisma:/app/packages/db/prisma db-migrate
 ```
+
+## S4 — reaching CERTIFIED: seven defects, found by probe, not by guessing
+
+The first three certification attempts each blocked on a *different* set of
+fields. That is the tell: the run was not deterministic, so no fix could be
+judged. Everything below was found by replaying a compiled version's fill from
+its stored inputs (`scripts/prod-smoke/twin-fill-probe.ts`) — seconds, no
+writes — instead of an eight-minute run that mutates state.
+
+**Blocking issues, in order: 20 → 11 → 4 → 0.**
+
+1. **The classification was never written at draft creation.** `sourceType` went
+   into the schema, the proposer and the gate, but `create-draft.ts` did not
+   include it, so every row was born `extraction` and both manual carve-outs
+   were inert. The static round-trip test covered the update path and missed the
+   create path — the one that was broken.
+
+2. **Three of five mapping projections omitted `sourceType`.** Two of those are
+   hashed and compared, so the mismatch surfaced as *"Mappings changed after the
+   page loaded"* — which reads like a concurrency bug and is not one. A test now
+   asserts, per module, that the count of mapping selects equals the count that
+   carry `sourceType`.
+
+3. **Certification depended on TWO sampling decisions.** The note was pinned;
+   Layer 3 was not, and it re-extracted every attempt. Identical encounter text,
+   different facts, different blockers. The extraction is now pinned beside the
+   note under the same content hashes, so the synthetic proof is a pure function
+   of (document, encounter text).
+
+4. **The bridge walked 26 IR rows against a 13-row table with one cursor.** L4
+   renders the grid as two tables with identical row labels, so the right-leg
+   rows matched and consumed the LEFT table's rows first. Every such pairing was
+   correctly refused on laterality — but the row was already spent, so no
+   left-leg cell could fill. Pairing is now decided by evidence: a note row is
+   consumed only when it fills something, so a refusal costs nothing.
+
+5. **The resolver was guessing at rows it cannot see.** In a 26-row grid every
+   reflux cell shares one concept, so it could not say which row a given 2.4
+   seconds belonged to. It returned `needs_clinician_input` for 33 cells the
+   encounter had said nothing about. Fixed-grid cells now defer to the bridge; a
+   repeating-row prototype still resolves in the resolver, because it expands one
+   row per fact and has no row to address.
+
+6. **A measurement fact stated its value as a number.** The validator re-derives
+   a text cell as `typeof fact.value === 'string' ? fact.value : null`, so all
+   nine correctly-placed measurements — right number, right leg, right segment,
+   real citation — came back `ASSERTION_NOT_SUPPORTED`. A fact's `value` is its
+   stated form; `number` and `unit` are the structured attributes beside it.
+
+7. **A select was conflicting over sentences it could never contain.** Dropdowns
+   inside sentences map to a coarse concept like `exam.vascular`; judging
+   polarity across every vascular statement made a conflict out of four
+   unrelated ones. Conflicts are now judged over facts that could actually fill
+   the field. A near-match still reaches a clinician as
+   `select_value_not_exact_option` — that path is untouched.
+
+8. **An unapproved temporality cited the facts it had just rejected.** The
+   resolution declared their temporality unapproved and attached them as the
+   field's evidence; the validator flagged both. Absence is now absence, with the
+   reason code preserved.
+
+9. **The grid's two halves were mapped as different kinds of thing.** The reflux
+   cell names itself; the diameter cell is labelled with the vein, so the model
+   chose per field — `measurement.diameter` for the right leg,
+   `test.vascular_ultrasound.result` for the left. Both registry-valid, so
+   nothing rejected either, and every left diameter came back "no supporting
+   fact". The structure decides now, the same way the bridge already reads it.
+
+**Not one evidence rule was relaxed.** `factSatisfiesMapping`,
+`matchMeasurementFact`, the validator and the roundtrip are byte-identical; the
+gate's floors are unchanged. Every fix was upstream of them — a value written in
+the wrong shape, a row addressed by the wrong component, a conflict judged over
+the wrong facts.
+
+## S4 — CERTIFIED, twice, identical ✅
+
+Two consecutive runs of `twin-ga-proof.ts` against the doctor's own WM_IOV docx:
+
+```
+run A                                     run B
+4/80 off-registry (the 4 manual fields)   4/80 (same four)
+CONFIRM 80 mappings                       CONFIRM 80 mappings
+pin REUSED  templateSha=37813a6031d4      pin REUSED  templateSha=37813a6031d4
+            generatedAt=01:47:03.372Z                 generatedAt=01:47:03.372Z
+SYNTHETIC test: OK                        SYNTHETIC test: OK
+filled=13 conflicts=0 needsReview=19      filled=13 conflicts=0 needsReview=19
+notMentioned=48 criticalUnresolved=7      notMentioned=48 criticalUnresolved=7
+roundTrip.fields=80 (IR declares 80)      roundTrip.fields=80 (IR declares 80)
+CERTIFY status=CERTIFIED                  CERTIFY status=CERTIFIED
+                                          NATIVE DOCX written: 49368 bytes
+```
+
+Identical, from the same pinned note under the same content hashes. The four
+`manual` fields are attested blank; the fill floors are met by real evidence
+(13 ≥ 10 filled, measurement cells among them); 48 fields are proven blank.
+
+## S5 — real-visit proof: HONEST, NOT YET COMPLETE ⚠️
+
+The visit path now behaves correctly and does NOT yet produce the filled
+document. Both halves matter, so both are stated.
+
+**What it fixed, and how it was caught.** The first passing run reported
+`nativeTemplateApplied=true` and wrote a 49 297-byte file. Unzipping it and
+grepping for the dictated numbers found *none of them*: the export path re-fills
+from the visit row, the harness had never persisted the extraction there, so the
+fill resolved nothing, validated trivially — there is no populated value to
+object to — and returned the doctor's blank form wearing a success flag. That is
+precisely the silent-empty-document failure this whole chain exists to prevent,
+and it reached the export seam. `VERIFIED` now requires at least one filled
+field, and an empty fill says so in the log.
+
+Also fixed: the four `manual` context fields resolved as
+`clinical_concept_unmapped`, which is BLOCKING at visit time. They would have
+refused the native document on every visit forever while the certificate
+attested them blank — the two halves of one decision disagreeing. They are blank
+by design and now say so.
+
+**Where it stands.** With the extraction persisted and a full dictation:
+
+```
+MANIFEST status=NEEDS_REVIEW filledCount=13 notMentioned=53 needsReview=14
+BLOCKING 14 FIELD_NEEDS_CLINICIAN_INPUT
+EXPORT nativeTemplateApplied=false nativeTemplateReason=manifest_incomplete
+```
+
+Both legs' measurement cells fill with real citations (13). The remaining 14 are
+enumerated dropdowns — SIDE OF EXAM, CLINICAL INDICATIONS (×6), the deep-system
+sentences. The L4 note *does* choose them in the form's own wording
+(`SIDE OF EXAM: Bilateral Detailed`, `CLINICAL INDICATIONS: Swelling,
+Heaviness`), so the note is not the problem: the picks bridge reports
+`no_supporting_fact` for each, i.e. it cannot tie the chosen option back to a
+cited fact. At visit time a clinically material field left unanswered blocks the
+native render — deliberately, and test-pinned — so the export refuses and the
+styled export stands.
+
+**This is the one open item, and GA waits behind it.** The export refusing is
+correct behaviour, not a passing proof: the doctor does not yet get their own
+form back for a real visit.
+
+## S6 — GA: NOT STARTED
+
+Prod is untouched and verified so:
+
+```
+9/9 containers healthy
+NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX unset -> OFF
+pending migrations NOT applied: twin_pinned_synthetic_note,
+                                twin_mapping_source_type,
+                                twin_pinned_entities
+0 synthetic strays (prod and QA)
+app 307 / pro 200 / quillmd.com 200 / admin 404 (co-tenants incl. LeatherERP)
+working tree: only the expected `M Caddyfile`
+```
+
+One-shot rollback if anything had been deployed: `:pre-finish-20260725`. Nothing
+was.
