@@ -27,11 +27,16 @@ async function main() {
   const file = process.argv[2];
   const bytes = new Uint8Array(readFileSync(file));
 
+  // The actor is ALWAYS a synthetic fixture. Confirming eighty mappings is the
+  // clinical safety gate; a script asserting it on a real clinician's template
+  // would hollow it out. On QA that is the qa- user; on prod it is the
+  // smoke-doctor account, named explicitly rather than discovered.
+  const actorEmail = process.env.TWIN_SMOKE_ACTOR_EMAIL;
   const user = await prisma.user.findFirst({
-    where: { email: { contains: 'qa-' } },
+    where: actorEmail ? { email: actorEmail } : { email: { contains: 'qa-' } },
     select: { id: true, practiceId: true, email: true },
   });
-  if (!user) throw new Error('no QA user on this database');
+  if (!user) throw new Error(`no synthetic actor on this database (${actorEmail ?? 'qa-*'})`);
   const actor = { userId: user.id, userEmail: user.email, practiceId: user.practiceId };
   say(`actor ${user.email}`);
 
