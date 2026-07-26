@@ -472,3 +472,141 @@ the browser: the worker loads (no 404, no fake-worker warning, no page error).
 `NEXT_PUBLIC_SETTINGS_SIMPLE_ROW`, already ON.
 Rollback: `pre-docfirst-p1b-20260726` (git tag + both image tags).
 Structural verification only — no real doctor's visit was used as a smoke target.
+
+---
+
+# PHASE 2 — THE VISIT PAGE IS THE DOCUMENT — live on prod 2026-07-26
+
+## What changed
+
+A doctor reviewed a styled note and then downloaded a filled Word form. Those
+are two artifacts and only one was read. Flag ON, a visit whose template is
+CERTIFIED renders **the doctor's own form**, filled so far, with the suggestions
+and gates interleaved after the page they belong to.
+
+Anchoring is **by page, not by pixel** — pdf.js gives each page's text, so a card
+can honestly be placed on the page where IMPRESSION appears. Where *on* the page
+is not knowable without laying the document out ourselves, and a card beside the
+wrong sentence is worse than one under the right page. Unplaceable cards are
+grouped and named, never dropped.
+
+## Fill-updates-on-adopt evidence
+
+| | |
+|---|---|
+| before adopt | `6 fields filled · 74 still blank`, fill `d3ef2b8d2c6be9af…` |
+| after adopt | fill `1c5e0caff1c5befb…` — **the document re-filled** |
+| manifests written | **0**, before and after |
+
+The counts line did not move because the adopted sentence was prose in FINDINGS,
+not a new table measurement — the fill genuinely changed, and the *identity* is
+what proves it. Asserting on the counts alone would have been a weaker test that
+happened to look stronger.
+
+## It writes nothing — and why that is the point
+
+`readAndPrepareTemplateTwinFill` was extracted **verbatim** out of
+`processTemplateTwinVisit` (moved region diffed byte-identical modulo indent);
+the template-provenance claim stays above it, the manifest persistence below.
+Preview and export are now one code path and cannot drift.
+
+The sign gate validates a **stored** fill manifest against the certified IR. A
+manifest written mid-review could let a doctor sign a fill that predates their
+own adoptions. The E2E asserts zero manifests before and after adopting.
+
+Signed visits show the **delivered** file, from the stored roundtrip-verified
+bytes. A signed document is never re-derived.
+
+## Verification (QA, real UI, real WM form)
+
+| check | result |
+|---|---|
+| certified-template visit | 3 pages drawn, letterhead + filled diameter/reflux tables |
+| adopt → re-fill | fill identity changes; 0 manifests |
+| both gates | Rx card + codes row render, unchanged components |
+| sign → download | `visit-qa-test-patient-2026-07-26.pdf`; visit SIGNED; signed view shows the delivered file |
+| 390px | draws; horizontal overflow **0 px**; card anchors after page 1 |
+| sidecar stopped | page still works, still signs, reason surfaced |
+| flag OFF | review DOM **identical** to the pre-phase build — 14,825 bytes, diffed, modulo 3 React `useId` strings |
+| unit | 2373 passed |
+| E2E `visit-doc` | 5/5 · `doc-preview` 4/4 · a11y 26/26 |
+| auditor | 6 BLOCK / 8 WARN / 7 NIT → all BLOCKs and every substantive WARN fixed |
+
+## Found in review, fixed before shipping
+
+- **The failure reason was named, carried, latched — and then read as a
+  boolean.** A doctor whose template was not certified watched "Opening your
+  document…" become a styled note with no explanation. The `MISS_TEXT` table was
+  dead code.
+- **The note existed nowhere for a screen reader.** The document renders as
+  canvases and `SoapEditor` is no longer mounted, so the entire clinical note
+  was one unlabelled raster. The text is now in the DOM, in reading order.
+- **The specs were wired to a project whose image lacks this flag** — they would
+  have waited 120 s for a surface that was never compiled in, and redded the
+  gate for an environment reason. Own `visit-doc` project + CI step + build
+  recipe now.
+- **The seed re-credentialed a shared account** and left it that way with MFA
+  off. It now snapshots and restores. An earlier version re-owned the shared
+  template to a disposable user and **cleanup cascaded the fixture away** — the
+  fixture destroyed by its own test.
+- **The seed shell-interpolated SQL**, which ate a bcrypt hash down to 46
+  characters and surfaced as "invalid email or password" for a credential we had
+  just written. Now stdin, like the rest of the suite.
+- Server action now mirrors the fill path's own filters rather than trusting a
+  client-side guard; `as never` removed; 3 cascading-render lint errors fixed.
+
+## Prod
+
+`app 387b4402065b`, 10/10 healthy. Co-tenants 307 / 200 / 200 / 404. 0 errors.
+`NEXT_PUBLIC_VISIT_DOC_PAGE=true`. Rollback `pre-docfirst-p2-20260726`.
+Structural verification only — no real doctor's visit was used as a smoke target.
+
+---
+
+# RIDER — the intermittent PHI-scan fail-closed (root-caused + fixed)
+
+A valid form upload was refused about **one time in eight**, with "PHI scan could
+not confidently clear the parsed template". A doctor's first action in the
+product was a coin toss, and the E2E masked it with a 4× retry.
+
+## Measured, not guessed
+
+| hypothesis | verdict |
+|---|---|
+| transport / timeout | **No.** 74 scan calls: min 1256 ms, avg 1842 ms, max 5833 ms. Zero over 30 s, zero over 90 s. |
+| the 90 s bound | **No.** Nothing came near it. |
+| the scan is unstable | **No.** Draft held FIXED, same question asked 10×: **0/10 uncertain**, no field flagged. |
+| the scan is asked a different question each run | **Yes.** |
+
+*(`promptHash` looked like decisive evidence — 74 calls, 74 distinct hashes —
+until `wrapAsData` turned out to use `randomBytes` per call. Every prompt is
+unique by construction; the column proves nothing about determinism.)*
+
+## Root cause
+
+The structuring step sometimes captures a trailing line into a section default.
+On the refused run the flagged field was `sections[2].defaultText`, containing:
+
+> "No saphenous reflux in right lower extremity."
+
+The scan prompt counts "specific findings … sites" as PHI, while its only
+NOT-PHI examples were "all systems reviewed and negative" and "normal exam".
+Nothing covered a negative finding that names an anatomy and a side — which is
+exactly what a specialty template's default text **is**. Genuinely ambiguous, so
+the model went both ways, and `anyUncertain` refuses the whole template.
+
+## Fix
+
+The missing rule, written down: **anatomy and laterality are not identifiers.**
+What makes such a sentence PHI is a patient identifier or a specific measured
+value for this patient ("GSV 6.2 mm"). The **gate is unchanged** — still
+fail-closed, structural flags still reject, `anyUncertain` still rejects, the
+deterministic regex layer and the post-scrub re-scan untouched.
+
+| | refusal rate |
+|---|---|
+| before | **1 / 8** |
+| after | **0 / 16** |
+
+The E2E retry is removed. A refusal there is a real regression again.
+Shipped separately as `21e52ae`.
