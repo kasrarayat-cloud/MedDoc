@@ -86,7 +86,36 @@ const SEED_NOTE = [
   'Clinical correlation with the above findings is required.',
 ].join('\n');
 
+const STYLED_NOTE = [
+  '## TECHNIQUE',
+  '_[All AI-drafted content for this section was set aside for your review — see the suggestions below and adopt before signing.]_',
+  '',
+  '## FINDINGS',
+  'DIAMETER AND REFLUX TIME — Right Leg',
+  '| Segment | DIAMETER (mm) | REFLUX TIME (seconds) |',
+  '| --- | --- | --- |',
+  '| GSV at the SFJ | 6.2 | 3.4 |',
+  '| GSV at the Knee | 3.4 | 1.8 |',
+  '| SSV at the Proximal Calf | [not documented] | [not documented] |',
+  '',
+  '## IMPRESSION',
+  'Right great saphenous vein is reflux positive.',
+].join('\n');
+
+const STYLED_CLAIMS = [
+  {
+    section: 'FINDINGS',
+    text: '| GSV at the Knee | 3.4 | 1.8 |',
+    reason: 'not supported by the dictation',
+    anchor: 'no anchor',
+  },
+];
+
 export const VISIT_DOC_VISIT_ID = 'qa_visitdoc_twin';
+
+/** The same visit with NO template — a doctor who taught us a note FORMAT but
+ *  never uploaded a FORM, which is most of them. It must review identically. */
+export const STYLED_VISIT_ID = 'qa_styled_us';
 
 export interface SeededVisitDoc {
   visitId: string;
@@ -200,6 +229,30 @@ export function seedVisitDocVisit(): SeededVisitDoc | null {
   } catch {
     // No Redis, no attestation — the gate fails closed, which is correct.
   }
+
+  // A styled twin of the same visit: no template binding, an ultrasound
+  // measurements table with undocumented cells, the set-aside placeholder, and
+  // a suggestion quoted as a raw table row — every artifact the old card-wall
+  // surfaced, in one fixture.
+  psql(`
+    create temp table _styled as select * from transcribe_visits where id = '${VISIT_DOC_VISIT_ID}';
+    update _styled set
+      id = '${STYLED_VISIT_ID}',
+      "noteTemplateId" = null,
+      "noteTemplateVersion" = null,
+      status = 'READY',
+      "signedAt" = null,
+      specialty = 'ultrasound',
+      "emStale" = false,
+      "emScoredCode" = null,
+      -- Dollar-quoted, so the newlines survive: a standard SQL literal does
+      -- not interpret escape sequences, and the note arrived as one long line
+      -- with no table for the prose renderer to read a header from.
+      "soapFinal" = $note$${STYLED_NOTE}$note$,
+      "suggestedClaims" = $claims$${JSON.stringify(STYLED_CLAIMS)}$claims$::jsonb;
+    delete from transcribe_visits where id = '${STYLED_VISIT_ID}';
+    insert into transcribe_visits select * from _styled;
+  `);
 
   return { visitId: VISIT_DOC_VISIT_ID, doctorEmail: ownerEmail };
 }

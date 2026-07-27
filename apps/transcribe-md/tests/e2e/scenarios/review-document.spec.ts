@@ -42,6 +42,12 @@ test.describe('pre-sign review as the document', () => {
     if (!seeded) return null;
     await page.goto(`/visits/${seeded.visitId}`);
     await expect(page.getByTestId('review-document-view')).toBeVisible();
+    // The view mounting is NOT the review being ready. Suggestions are anchored
+    // into the document and rendered by its per-page callback, so they exist
+    // only once it has drawn — measured at ~900ms, and asserting before that
+    // reads as "no suggestions" rather than "not yet". Waiting on the drawn
+    // document is the real signal; a sleep here would only hide the race.
+    await expect(page.getByText('Opening your document…')).toHaveCount(0);
     return seeded;
   }
 
@@ -73,11 +79,12 @@ test.describe('pre-sign review as the document', () => {
   test('each suggestion sits under the section it would join', async ({ page }) => {
     test.skip(!(await open(page, 'rdoc-2')), 'psql seeding unavailable');
     // Placement, not presence: a claim rendered in the wrong section is a claim
-    // the doctor reviews in one place and signs in another.
-    const sections = page.locator('.qm-lin-soap-section-slot');
+    // the doctor reviews in one place and signs in another. The document view
+    // anchors each section's suggestions under that section's page slot, so the
+    // assertion is now against the slot's own label rather than the old
+    // card-wall's section container.
     for (const label of ['Subjective', 'Objective', 'Plan']) {
-      const sec = sections.filter({ hasText: label }).first();
-      await expect(sec.locator(SUGG)).toHaveCount(1);
+      await expect(page.locator(`[data-section="${label}"] ${SUGG}`)).toHaveCount(1);
     }
   });
 
@@ -120,8 +127,11 @@ test.describe('pre-sign review as the document', () => {
 
     await page.locator(ACCEPT).first().click();
     await expect(page.locator(SUGG)).toHaveCount(2);
-    // The accepted text is now note body, not a card.
-    await expect(page.getByText('nocturnal cough', { exact: false }).first()).toBeVisible();
+    // The accepted text is now note body, not a card. The document draws to a
+    // canvas, so the DOM copy of the note is the reading-order block the screen
+    // reader uses — which is the honest place to assert it landed, and doubles
+    // as a check that the block a blind doctor reads was refreshed too.
+    await expect(page.getByTestId('visit-document-text')).toContainText('nocturnal cough');
     await expect(page.locator(SUGG).filter({ hasText: 'nocturnal cough' })).toHaveCount(0);
     // And the bar does NOT fall back to "scroll to review" — the index-keyed
     // "seen" set used to un-read every surviving claim here.
