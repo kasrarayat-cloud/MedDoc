@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# ============================================================================
+# Block clinical documents from entering the repository.
+# ----------------------------------------------------------------------------
+# WHY THIS EXISTS
+#
+# `docs/qa-reports/twin-real-visit-20260726.docx` — a FILLED clinical export —
+# was committed, reached `main`, and sat in history until it had to be destroyed
+# with a full `git filter-repo` rewrite and a force-push over a protected
+# branch. `git rm` does not undo that: the blob stays reachable, on every clone
+# and on the remote. There were 22 clones of it on the VPS by the time it was
+# found.
+#
+# A tracked clinical file is not a mistake you fix later. This hook is the
+# cheapest place to stop it.
+#
+# WHAT IT BLOCKS: newly ADDED .docx / .pdf outside the fixture allowlist.
+# Modifications to already-tracked allowlisted fixtures are fine.
+#
+# The allowlist is BLANK FORMS and TEST FIXTURES only. The distinction that
+# matters is FILLED vs BLANK, not file type — a blank form is a fixture, a
+# filled one never is. See "Close-out hygiene" in AGENTS.md.
+#
+# Install (once per clone):
+#     git config core.hooksPath scripts/hooks
+#
+# Deliberate exception, when you are certain the file is blank:
+#     ALLOW_CLINICAL_DOC=1 git commit …
+# ============================================================================
+
+set -euo pipefail
+
+[ "${ALLOW_CLINICAL_DOC:-}" = "1" ] && exit 0
+
+# Only ADDED files — renames and edits of existing fixtures are not the risk.
+added=$(git diff --cached --name-only --diff-filter=A)
+[ -z "$added" ] && exit 0
+
+blocked=""
+while IFS= read -r f; do
+  case "$f" in
+    *.docx|*.pdf|*.DOCX|*.PDF) ;;
+    *) continue ;;
+  esac
+
+  case "$f" in
+    # The accepted tracked fixture — a customer's BLANK form. Recorded decision,
+    # see "Tracked fixtures" in AGENTS.md. Do not re-flag it.
+    "WM IOV Template.docx")                              continue ;;
+    "colon_blank_answers.pdf")                           continue ;;
+    # Committed test fixtures: blank forms and sample inputs.
+    apps/transcribe-md/tests/e2e/fixtures/*)             continue ;;
+    apps/transcribe-md/src/*/__tests__/__fixtures__/*)   continue ;;
+    apps/transcribe-md/src/*/__fixtures__/*)             continue ;;
+  esac
+
+  blocked="${blocked}  ${f}\n"
+done <<< "$added"
+
+[ -z "$blocked" ] && exit 0
+
+cat >&2 <<MSG
+
+  BLOCKED: a clinical document is being added to the repository.
+
+$(printf "%b" "$blocked")
+  A FILLED document is never a fixture. If one lands in a commit it cannot be
+  removed with 'git rm' — the blob stays reachable in history, on every clone
+  and on the remote, and clearing it costs a filter-repo rewrite and a
+  force-push over a protected branch. That has happened once already.
+
+  If this is genuinely a BLANK form or a test fixture, put it under one of:
+      apps/transcribe-md/tests/e2e/fixtures/
+      apps/transcribe-md/src/**/__fixtures__/
+  and add it to the allowlist in scripts/hooks/pre-commit.
+
+  If you are certain and this is a one-off:
+      ALLOW_CLINICAL_DOC=1 git commit …
+
+MSG
+exit 1

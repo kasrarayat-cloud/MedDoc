@@ -133,10 +133,27 @@ exactly where it was.
 The distinction is FILLED vs BLANK, not file type. A blank form is a fixture; a
 filled one never is.
 
-### Check `git ls-files` before deleting
+### A tracked clinical file means a HISTORY REWRITE, not `git rm`
 
-Deleting a *tracked* artifact from the working tree does not remove it from
+Deleting a tracked artifact from the working tree does not remove it from
 history. `docs/qa-reports/twin-real-visit-20260726.docx` — a filled document —
-was committed in `9d65cbfa` and reached `main`. The working-tree copy is gone;
-the blob is still reachable in history and clearing it needs a deliberate
-rewrite decision, which is not a close-out action.
+was committed in `9d65cbfa` and reached `main`. `git rm` left the blob
+reachable on every clone and on the remote.
+
+Clearing it cost a full `git filter-repo` rewrite across all refs, a force-push
+over a **protected branch** (protection read, relaxed on one field, restored),
+deletion of 22 scratch clones on the VPS, and deletion of two open dependabot
+branches that had forked off the old `main` and pulled the blob straight back
+after the first gc. Plus a permanently accepted residual: GitHub keeps
+unreachable objects until its own GC.
+
+**Filled exports never belong under `docs/`.** Nothing that renders a patient's
+note belongs in the repository at all — not as evidence, not as a QA artifact,
+not "just this once". Reference it by path in a report; do not commit it.
+
+A pre-commit guard now blocks added `.docx`/`.pdf` outside the fixture
+allowlist (`scripts/hooks/pre-commit`). Enable it per clone with:
+
+    git config core.hooksPath scripts/hooks
+
+It is a backstop, not the rule. The rule is the paragraph above.
