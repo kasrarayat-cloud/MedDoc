@@ -10,7 +10,8 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { editTableCell, findSection, TABLE_EDIT_REASON } from '../note-table-edit';
+import { editTableCell, TABLE_EDIT_REASON } from '../note-table-edit';
+import { readNoteSection } from '../splice-note-section';
 
 const NOTE = [
   '## TECHNIQUE',
@@ -53,7 +54,9 @@ describe('editTableCell', () => {
 
   it('leaves EVERY other line byte-identical', () => {
     const r = editTableCell({ ...base, rowLabel: 'GSV at the SFJ', columnLabel: 'diameter', value: '6.8' });
-    const before = findSection(NOTE, 'FINDINGS')!.lines;
+    // The SAME reader the splice uses — the section this module edits and the
+    // section saveNoteSectionAction writes back must be one section.
+    const before = readNoteSection(NOTE, 'FINDINGS')!.split('\n');
     const after = r.body!.split('\n');
     expect(after).toHaveLength(before.length);
     after.forEach((line, i) => {
@@ -124,24 +127,21 @@ describe('editTableCell', () => {
     expect(r.before).toBe('6.2');
   });
 
-  it('a value containing a pipe cannot break out of its cell', () => {
-    // Unescaped, "6.8 | 9.9" closes the cell early: the row gains a fourth
-    // column and every measurement to the right of it lands under the wrong
-    // heading. Caught by this test on the first run.
+  it('REFUSES a value containing a pipe rather than escaping it', () => {
+    // Escaping produced valid markdown that nothing else here understands:
+    // claim-prose, the screen-reader block, the DOCX table builder and the
+    // export reconciler all read the raw note, so `\\|` moved the corruption
+    // out of the note and into every renderer. A measurement never contains a
+    // pipe, so refusing is both safe and honest.
     const r = editTableCell({ ...base, rowLabel: 'GSV at the SFJ', columnLabel: 'diameter', value: '6.8 | 9.9' });
-    expect(r.ok).toBe(true);
-    const row = r.body!.split('\n').find((l) => l.includes('GSV at the SFJ'))!;
-    // Three cells, exactly as before: 4 structural pipes + 1 escaped.
-    expect((row.match(/(?<!\\)\|/g) || []).length).toBe(4);
-    expect(row).toContain('6.8 \\| 9.9');
-    // And the reflux value is still in the reflux column.
-    expect(row.trim().endsWith('| 3.4 |')).toBe(true);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('illegal_value');
   });
 
-  it('a newline in a value cannot end the row', () => {
+  it('REFUSES a newline in a value', () => {
     const r = editTableCell({ ...base, rowLabel: 'GSV at the SFJ', columnLabel: 'diameter', value: '6.8\n9.9' });
-    expect(r.ok).toBe(true);
-    expect(r.body!.split('\n').filter((l) => l.includes('GSV at the SFJ'))).toHaveLength(1);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('illegal_value');
   });
 
   it('leaves the sections around it alone', () => {
@@ -150,5 +150,101 @@ describe('editTableCell', () => {
     // other headings must not appear in it.
     expect(r.body).not.toContain('IMPRESSION');
     expect(r.body).not.toContain('TECHNIQUE');
+  });
+
+  // ── WHAT THE AUDIT CAUGHT ───────────────────────────────────────────────
+  it('resolves the section with the SAME matcher the save splices with', () => {
+    // THE BLOCKER. This module used to normalise a heading by dropping a
+    // trailing parenthetical ("FINDINGS (RIGHT)" -> "findings") while
+    // spliceNoteSection strips all punctuation ("findings right"). Given both
+    // headings, the RIGHT leg's table was read out and written back over the
+    // plain FINDINGS section, deleting its rows.
+    const twoHeadings = [
+      '## FINDINGS',
+      '| Segment | DIAMETER (mm) |',
+      '| --- | --- |',
+      '| GSV at the Knee | 3.4 |',
+      '',
+      '## FINDINGS (RIGHT)',
+      '| Segment | DIAMETER (mm) |',
+      '| --- | --- |',
+      '| GSV at the SFJ | 6.2 |',
+    ].join('\n');
+
+    const r = editTableCell({
+      note: twoHeadings,
+      sectionLabel: 'FINDINGS',
+      rowLabel: 'GSV at the SFJ',
+      columnLabel: 'diameter',
+      value: '9.9',
+    });
+    // "GSV at the SFJ" is NOT in the section called FINDINGS, and the row must
+    // not be found there. Silently editing the other section is the bug.
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('row_not_found');
+
+    // And the body this module returns is always the body of the section the
+    // splice will write to — assert on the shared reader, not on our own.
+    const ok = editTableCell({
+      note: twoHeadings,
+      sectionLabel: 'FINDINGS (RIGHT)',
+      rowLabel: 'GSV at the SFJ',
+      columnLabel: 'diameter',
+      value: '9.9',
+    });
+    expect(ok.ok).toBe(true);
+    expect(readNoteSection(twoHeadings, 'FINDINGS (RIGHT)')).toContain('GSV at the SFJ');
+    expect(ok.body).not.toContain('GSV at the Knee');
+  });
+
+  it('REFUSES a ragged table rather than writing one column left', () => {
+    // A header that omits the row-label column puts every index off by one, so
+    // the write lands in a different column from the one it reports back.
+    const ragged = [
+      '## FINDINGS',
+      '| DIAMETER (mm) | REFLUX TIME (seconds) |',
+      '| --- | --- |',
+      '| GSV at the SFJ | 6.2 | 3.4 |',
+    ].join('\n');
+    const r = editTableCell({
+      note: ragged,
+      sectionLabel: 'FINDINGS',
+      rowLabel: 'GSV at the SFJ',
+      columnLabel: 'DIAMETER (mm)',
+      value: '9.9',
+    });
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('ragged_table');
+  });
+
+  it('a bilateral study IS editable once the table is named', () => {
+    // The refusal used to ask which leg while offering no way to answer, so the
+    // commonest ultrasound on this surface could never have a cell changed.
+    const ambiguous = editTableCell({
+      note: BILATERAL,
+      sectionLabel: 'FINDINGS',
+      rowLabel: 'GSV at the SFJ',
+      columnLabel: 'diameter',
+      value: '7.0',
+    });
+    expect(ambiguous.ok).toBe(false);
+    expect(ambiguous.choices).toEqual([
+      'DIAMETER AND REFLUX TIME — Right Leg',
+      'DIAMETER AND REFLUX TIME — Left Leg',
+    ]);
+
+    const named = editTableCell({
+      note: BILATERAL,
+      sectionLabel: 'FINDINGS',
+      rowLabel: 'GSV at the SFJ',
+      columnLabel: 'diameter',
+      value: '7.0',
+      tableCaption: 'Left Leg',
+    });
+    expect(named.ok).toBe(true);
+    // The LEFT leg moved (5.1 -> 7.0) and the right one did not.
+    expect(named.before).toBe('5.1');
+    expect(named.body).toContain('| GSV at the SFJ | 6.2 |');
+    expect(named.body).toContain('| GSV at the SFJ | 7.0 |');
   });
 });

@@ -93,6 +93,17 @@ export const EditTableCellIntentSchema = z.object({
   columnLabel: z.string().min(1).max(160),
   /** The new cell contents. A VALUE, not a sentence. */
   value: z.string().max(200),
+  /**
+   * WHICH table, when the row label appears under more than one.
+   *
+   * A bilateral study is the ordinary ultrasound case and it renders one table
+   * per leg with identical segment labels. Without this the server could only
+   * refuse — and its refusal asked the doctor which leg while giving the model
+   * no field to answer in, so the commonest study on this surface was simply
+   * uneditable. Matched against the caption line above each table, which is
+   * what carries the laterality.
+   */
+  tableCaption: z.string().max(200).optional(),
 });
 
 /** Correct a header field — the patient's name and the visit's own metadata.

@@ -807,6 +807,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               ) : null
             }
             rxBlocking={!rxResolved}
+            rxHasWarnings={rxWarn !== null}
             emPendingChange={pendingEmChange}
             summary={{
               icd: extractIcdRows(props.icdCodes),
