@@ -43,6 +43,13 @@ export interface Layer6Input {
    *  preserves "the same markdown structure as the draft", so the model
    *  polishes in whatever structure the draft has. */
   noteTemplate?: ResolvedNoteTemplate;
+  /** Whether the anchored verifier left anything in the review lane.
+   *
+   *  A deferred additive fix is reported by pointing the doctor AT the
+   *  suggestions ("review the suggestions and draft before signing"). When the
+   *  lane is empty that sentence sends them hunting for cards that do not
+   *  exist. Absent ⇒ true, so every existing caller and test is unchanged. */
+  hasSuggestions?: boolean;
 }
 
 export interface Layer6Output {
@@ -333,7 +340,7 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
   // Survival tuning: deferred additive fixes still reach the doctor — their
   // content usually sits in the suggestions lane (adopt flow), so point there.
   const deferredReason =
-    deferredAdditive.length > 0
+    deferredAdditive.length > 0 && (input.hasSuggestions ?? true)
       ? `Auto-polish deferred ${deferredAdditive.length} auditor fix${
           deferredAdditive.length === 1 ? '' : 'es'
         } that would add content not in the draft — review the suggestions and draft before signing.`

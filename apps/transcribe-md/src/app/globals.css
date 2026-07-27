@@ -7100,3 +7100,18 @@ body {
 /* A prescription list with no warning is not an alarm. Same card, no amber. */
 .qm-rdoc-gate-quiet { border-color: var(--color-linear-border); }
 .qm-rdoc-gate-quiet .qm-rdoc-gate-head { color: var(--color-linear-text-3); }
+/* The Word view is scaled to the container by fitDocxToWidth (see
+   native-document-preview.tsx). The transform needs a stable box to scale
+   inside, and the stage must never grow a horizontal scrollbar the PDF tab
+   does not have — the two formats frame identically or the toggle lies. */
+.qm-npv-docx { overflow-x: hidden; }
+/* docx-preview wraps its pages in ~90px of grey gutter each side. Fitting the
+   WRAPPER to the container therefore fits the gutter too, and the page lands
+   ~20% narrower than the PDF canvas beside it — same document, two different
+   sizes, which is the thing the toggle must never do. The stage supplies its
+   own padding, so the gutter goes and the PAGE is what gets fitted. */
+.qm-npv-docx .qm-docxp-wrapper {
+  transform-origin: top left;
+  padding-left: 0;
+  padding-right: 0;
+}
