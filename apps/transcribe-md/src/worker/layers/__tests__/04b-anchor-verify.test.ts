@@ -40,6 +40,7 @@ vi.mock('@meddoc/db', () => ({
 }));
 vi.mock('@/lib/audit', () => ({ logAudit: mocks.logAudit }));
 
+import { Prisma } from '@prisma/client';
 import { runAnchorVerify } from '../04b-anchor-verify';
 import { runLayer4GenerateSoap } from '../04-generate-soap';
 import { buildSoapSystemPrompt } from '../../note-templates/build-soap-prompt';
@@ -303,7 +304,7 @@ describe('flag-off byte-identity (the rollout guarantee)', () => {
     expect(mocks.prismaUpdate.mock.calls[0][0].data.suggestedClaims).toBeUndefined();
   });
 
-  it('flag ON: addendum present; verified body persisted; suggestions stored', async () => {
+  it('flag ON: AUDIT-ONLY — the whole draft is served, nothing is staged', async () => {
     process.env.TRANSCRIBE_MD_EVIDENCE_ANCHORS = 'true';
     const anchoredOut = [
       '## Subjective',
@@ -325,12 +326,20 @@ describe('flag-off byte-identity (the rollout guarantee)', () => {
     const { system } = mocks.modelCompleteText.mock.calls[0][0];
     expect(system).toContain('EVIDENCE ANCHORS');
     expect(out).toContain('No prior diagnosis of migraines.');
-    expect(out).not.toContain('bursitis'); // demoted
-    expect(out).not.toContain('⟦'); // stripped
+    // AUDIT-ONLY (was: `expect(out).not.toContain('bursitis')`).
+    //
+    // The unanchored line is exactly what the old lane quarantined out of the
+    // note. It now stays in the draft the physician reviews and signs — that
+    // IS the behaviour change, so this assertion is inverted deliberately
+    // rather than deleted. If it ever reverts to "not.toContain", the lane has
+    // grown back.
+    expect(out).toContain('bursitis');
+    expect(out).not.toContain('⟦'); // anchors still stripped
     const data = mocks.prismaUpdate.mock.calls[0][0].data;
     expect(data.soapDraft).toBe(out);
-    expect(Array.isArray(data.suggestedClaims)).toBe(true);
-    expect(data.suggestedClaims[0].text).toContain('olecranon bursitis');
+    // No pending-suggestion state, ever. The column is actively CLEARED so a
+    // visit cannot keep a lane from an earlier run.
+    expect(data.suggestedClaims).toBe(Prisma.DbNull);
   });
 });
 

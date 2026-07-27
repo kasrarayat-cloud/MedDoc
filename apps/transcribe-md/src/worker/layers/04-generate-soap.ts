@@ -247,7 +247,6 @@ export async function runLayer4GenerateSoap(
   });
 
   let text = rawText;
-  let suggestedClaims: object | undefined;
   // Flag OFF → {} so the persisted shape is byte-identical to the pre-anchor
   // path (test-pinned). Flag ON → set unconditionally inside the branch.
   let suggestedClaimsWrite: { suggestedClaims?: Prisma.InputJsonValue | typeof Prisma.DbNull } = {};
@@ -276,18 +275,45 @@ export async function runLayer4GenerateSoap(
       // caption as transcript-derived sections and empties them.
       templateSections: template.sections,
     });
-    text = verified.body;
-    suggestedClaims = verified.suggestions.length > 0 ? verified.suggestions : undefined;
+    // AUDIT-ONLY: the draft is the COMPLETE generated note. `verified.body` has
+    // demoted lines removed and emptied sections back-filled with a placeholder
+    // — the shape that existed to feed the lane. There is no lane now, so
+    // serving it would silently drop content the physician never got to see.
+    text = verified.fullBody;
     filledEmptySections = verified.stats.filledEmptySections ?? [];
-    suggestedClaimsWrite = {
-      // Always write the column when anchoring ran — a re-run that demotes
-      // nothing must CLEAR the previous run's lane (stale suggestions would
-      // point at a superseded draft), not leave it behind.
-      suggestedClaims:
-        suggestedClaims !== undefined
-          ? (suggestedClaims as Prisma.InputJsonValue)
-          : Prisma.DbNull,
-    };
+    // ── AUDIT-ONLY ───────────────────────────────────────────────────────────
+    // The verifier still runs and still judges, but nothing it finds becomes
+    // PENDING STATE any more. Every generated line flows into the draft the
+    // physician reviews and signs; what the verifier thought is recorded in the
+    // audit log instead of staged as an Accept/Dismiss card.
+    //
+    // The column is ALWAYS cleared, not merely left unwritten — a visit that
+    // carried a lane from an earlier run must not keep pointing at a superseded
+    // draft, and there is no longer any surface that would render it.
+    suggestedClaimsWrite = { suggestedClaims: Prisma.DbNull };
+
+    // Category counts only — never a line of note text, so the audit stream is
+    // PHI-free and greppable. `{ no_anchor: 4, not_entailed: 1, … }`.
+    const flagCounts = verified.suggestions.reduce<Record<string, number>>((acc, s) => {
+      const reason = typeof s.reason === 'string' ? s.reason : 'unknown';
+      acc[reason] = (acc[reason] ?? 0) + 1;
+      return acc;
+    }, {});
+    void logAudit({
+      action: 'ANCHOR_FLAGS_RECORDED',
+      userId: input.userId,
+      practiceId: input.practiceId,
+      targetType: 'TranscribeVisit',
+      targetId: input.visitId,
+      success: true,
+      metadata: {
+        visitId: input.visitId,
+        flagCount: verified.suggestions.length,
+        categories: flagCounts,
+        anchored: verified.stats.anchored,
+        demoted: verified.stats.demoted,
+      },
+    });
     // Telemetry — the living fabrication monitor (counts only, no content).
     log.info('anchored-generation', 'verify split', {
       visitId: input.visitId,
@@ -350,7 +376,7 @@ export async function runLayer4GenerateSoap(
   // false positive, but if it ever were, a banner pointing at an empty review
   // lane would send them looking for cards that are not there.
   const anchorReview =
-    filledEmptySections.length > 0 && suggestedClaims !== undefined
+    filledEmptySections.length > 0
       ? {
           needsReview: true,
           reviewReason: `Anchored verification moved all drafted content out of ${filledEmptySections.length} section(s) — ${filledEmptySections.join(', ')} — to the review suggestions. Review and adopt before signing.`,
