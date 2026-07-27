@@ -7070,3 +7070,21 @@ body {
   color: var(--color-linear-amber);
   background: color-mix(in srgb, var(--color-linear-amber) 12%, transparent);
 }
+/* PDF / Word — the same bytes, drawn by a different engine. */
+.qm-vdoc-format { display: inline-flex; gap: 2px; margin: 0 0 8px; }
+.qm-vdoc-format button {
+  padding: 4px 12px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  color: var(--color-linear-text-3);
+  background: transparent;
+  border: 1px solid var(--color-linear-border);
+  cursor: pointer;
+}
+.qm-vdoc-format button:first-child { border-radius: 7px 0 0 7px; }
+.qm-vdoc-format button:last-child { border-radius: 0 7px 7px 0; }
+.qm-vdoc-format .qm-vdoc-format-on {
+  color: var(--color-linear-text);
+  border-color: var(--color-linear-sage);
+}

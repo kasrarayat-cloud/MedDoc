@@ -43,8 +43,15 @@ const MAX_CACHED_BYTES = 1_500_000;
  *    • ONE entry per visit — a write drops the visit's other versions first,
  *      so a long review session cannot accumulate a megabyte per adopt in the
  *      128 MB instance that also brokers the clinical pipeline. */
-function key(visitId: string, soapVersion: number): string {
-  return `visitdoc:v1:${visitId}:${soapVersion}`;
+/** The rendering VARIANT is part of the identity.
+ *
+ *  Without it, a styled entry written before certification was served to the
+ *  twin path afterwards: the doctor uploaded and certified their own form and
+ *  kept being shown QuillMD's layout for the rest of the TTL, silently. */
+export type FillVariant = 'twin' | 'styled';
+
+function key(visitId: string, soapVersion: number, variant: FillVariant): string {
+  return `visitdoc:v2:${variant}:${visitId}:${soapVersion}`;
 }
 
 export interface CachedFill {
@@ -60,10 +67,11 @@ export interface CachedFill {
 export async function readCachedFill(
   visitId: string,
   soapVersion: number,
+  variant: FillVariant,
 ): Promise<CachedFill | null> {
   if (!isRedisReady()) return null;
   try {
-    const raw = await getRedis().get(key(visitId, soapVersion));
+    const raw = await getRedis().get(key(visitId, soapVersion, variant));
     return raw ? (JSON.parse(raw) as CachedFill) : null;
   } catch {
     // A cache miss and a broken cache are the same thing to the caller.
@@ -90,7 +98,7 @@ export async function invalidateVisitFills(visitId: string): Promise<void> {
       const [next, found] = await redis.scan(
         cursor,
         'MATCH',
-        `visitdoc:v1:${visitId}:*`,
+        `visitdoc:v2:*:${visitId}:*`,
         'COUNT',
         100,
       );
@@ -106,6 +114,7 @@ export async function writeCachedFill(
   visitId: string,
   soapVersion: number,
   value: CachedFill,
+  variant: FillVariant,
 ): Promise<void> {
   // A cache that never stores anything is indistinguishable from one that is
   // working, because everything still renders — just slowly. Say which it is.
@@ -113,6 +122,7 @@ export async function writeCachedFill(
     console.info(`[visitdoc-cache] skipped write for ${visitId}: redis not ready`);
     return;
   }
+  const k = key(visitId, soapVersion, variant);
   const payload = JSON.stringify(value);
   if (payload.length > MAX_CACHED_BYTES) {
     console.info(
@@ -123,7 +133,7 @@ export async function writeCachedFill(
   try {
     // ONE entry per visit: drop the older versions before writing the new one.
     await invalidateVisitFills(visitId);
-    await getRedis().set(key(visitId, soapVersion), payload, 'EX', TTL_SECONDS);
+    await getRedis().set(k, payload, 'EX', TTL_SECONDS);
   } catch (err) {
     const cls = err instanceof Error ? err.constructor.name : 'Unknown';
     console.warn(`[visitdoc-cache] write failed for ${visitId} (${cls}); preview unaffected`);
