@@ -6491,3 +6491,627 @@ body {
   .qm-ux-doc-chev,
   .qm-ux-doc-dictation-body { transition: none; animation: none; }
 }
+
+/* ============================================================================
+   PRE-SIGN REVIEW AS THE DOCUMENT — flag NEXT_PUBLIC_REVIEW_DOC_VIEW
+   ----------------------------------------------------------------------------
+   The thing being signed is the page. Everything that used to be a tab is
+   either inline where it applies (suggestions, gates) or one slim row under it
+   (codes, dictation). Nothing is removed — it is linearised.
+
+   The visual idea is a LIT PAGE: the note sits on a slightly raised surface
+   with a hairline edge and a faint top-light, so it reads as a physical page
+   under the dark chrome without leaving the palette. A suggestion is the only
+   thing on the page that glows; accepting it makes the glow go away and the
+   text become ordinary body copy. The page gets quieter as you work, which is
+   the whole reward loop.
+   ========================================================================= */
+.qm-rdoc {
+  width: 100%;
+  padding-bottom: 104px;   /* clears the pinned bar (+ mobile nav under it) */
+}
+
+/* ── the page ────────────────────────────────────────────────────────── */
+.qm-rdoc-page {
+  position: relative;
+  border: 1px solid var(--color-linear-hairline);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.022) 0%, transparent 220px),
+    var(--color-linear-surface-1);
+  padding: 18px 16px 22px;
+  margin-top: 10px;
+}
+@media (min-width: 900px) {
+  .qm-rdoc-page { padding: 30px 34px 34px; }
+}
+
+/* Each section keeps its own rhythm; the slot sits inside the same column so a
+   suggestion lines up with the prose it will join. */
+.qm-lin-soap-section-slot { display: block; }
+.qm-rdoc-sugg-group { display: flex; flex-direction: column; gap: 10px; margin: 2px 0 18px; }
+
+/* ── a suggestion, in place ──────────────────────────────────────────── */
+.qm-rdoc-sugg {
+  position: relative;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--color-linear-sage) 26%, transparent);
+  border-left: 2px solid var(--color-linear-sage);
+  background: color-mix(in srgb, var(--color-linear-sage) 7%, transparent);
+  padding: 12px 14px 10px;
+  animation: qm-rdoc-suggest-in 260ms ease both;
+}
+@keyframes qm-rdoc-suggest-in {
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .qm-rdoc-sugg { animation: none; }
+}
+/* The proposed text reads as note prose, because that is what it is about to
+   become — not as a quotation of something the system wants. */
+.qm-rdoc-sugg-text {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.62;
+  color: var(--color-linear-text);
+  margin: 0 0 9px;
+  overflow-wrap: anywhere;
+}
+.qm-rdoc-sugg-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.qm-rdoc-sugg-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--color-linear-sage-bright);
+}
+.qm-rdoc-sugg-acts { display: inline-flex; align-items: center; gap: 4px; }
+
+.qm-rdoc-accept,
+.qm-rdoc-dismiss {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 7px;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  padding: 7px 12px;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+.qm-rdoc-accept {
+  border: 1px solid color-mix(in srgb, var(--color-linear-sage) 45%, transparent);
+  background: color-mix(in srgb, var(--color-linear-sage) 16%, transparent);
+  color: var(--color-linear-text);
+  font-weight: 500;
+}
+.qm-rdoc-accept:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-linear-sage) 26%, transparent);
+  border-color: var(--color-linear-sage);
+}
+.qm-rdoc-dismiss {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--color-linear-text-3);
+}
+.qm-rdoc-dismiss:hover:not(:disabled) { color: var(--color-linear-text-2); }
+.qm-rdoc-accept:disabled,
+.qm-rdoc-dismiss:disabled { opacity: 0.5; cursor: default; }
+
+.qm-rdoc-orphans { margin-top: 16px; }
+.qm-rdoc-orphan-h {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.07em;
+  color: var(--color-linear-text-3);
+  margin: 0 0 8px;
+}
+
+/* ── inline gates ────────────────────────────────────────────────────────
+   Amber, bordered, and impossible to mistake for prose. They sit in the
+   document because a blocker the doctor has to go looking for is a blocker
+   that gets signed around. */
+.qm-rdoc-gate {
+  margin-top: 20px;
+  border: 1px solid color-mix(in srgb, var(--color-linear-amber) 35%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-linear-amber) 8%, transparent);
+  overflow: hidden;
+}
+.qm-rdoc-gate-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-linear-amber) 22%, transparent);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--color-linear-amber);
+}
+.qm-rdoc-gate-body { padding: 12px 14px 14px; }
+.qm-rdoc-gate-text {
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--color-linear-text-2);
+  margin: 0 0 12px;
+}
+.qm-rdoc-em-code { font-family: var(--font-mono); color: var(--color-linear-text); }
+.qm-rdoc-gate-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--color-linear-amber) 55%, transparent);
+  background: color-mix(in srgb, var(--color-linear-amber) 15%, transparent);
+  color: var(--color-linear-text);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+.qm-rdoc-gate-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-linear-amber) 26%, transparent);
+}
+/* Cleared: the amber drains to sage so a resolved gate stops shouting but is
+   still visibly a thing that happened. */
+.qm-rdoc-gate-em.is-done {
+  border-color: color-mix(in srgb, var(--color-linear-sage) 30%, transparent);
+  background: color-mix(in srgb, var(--color-linear-sage) 6%, transparent);
+}
+.qm-rdoc-gate-em.is-done .qm-rdoc-gate-head {
+  color: var(--color-linear-sage-bright);
+  border-bottom-color: color-mix(in srgb, var(--color-linear-sage) 20%, transparent);
+}
+.qm-rdoc-gate-em.is-done .qm-rdoc-gate-btn {
+  border-color: color-mix(in srgb, var(--color-linear-sage) 40%, transparent);
+  background: transparent;
+  color: var(--color-linear-sage-bright);
+  cursor: default;
+}
+
+/* ── everything else, one slim row each ──────────────────────────────── */
+.qm-rdoc-meta { margin-top: 12px; }
+.qm-rdoc-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--color-linear-hairline);
+  border-radius: 10px;
+  background: var(--color-linear-surface-2);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 150ms ease;
+}
+.qm-rdoc-meta-row:hover { border-color: var(--color-linear-border); }
+.qm-rdoc-meta-key {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.07em;
+  color: var(--color-linear-text-3);
+  flex: none;
+}
+.qm-rdoc-meta-val {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-linear-text-2);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.qm-rdoc-chev { color: var(--color-linear-text-3); transition: transform 160ms ease; flex: none; }
+.qm-rdoc-chev.open { transform: rotate(90deg); }
+.qm-rdoc-meta-body { padding: 12px 12px 4px; }
+.qm-rdoc-meta-line {
+  display: flex;
+  gap: 10px;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  color: var(--color-linear-text-2);
+  padding: 4px 0;
+}
+.qm-rdoc-meta-code { font-family: var(--font-mono); color: var(--color-linear-text); flex: none; }
+.qm-rdoc-meta-muted { color: var(--color-linear-text-3); }
+
+/* ── the bar ─────────────────────────────────────────────────────────────
+   Reuses the review shell's sign-bar chrome (.qm-c3-rev2-signbar) so the two
+   surfaces are visibly one product; only the actions differ. */
+.qm-rdoc-bar-actions { display: inline-flex; align-items: center; gap: 8px; }
+.qm-rdoc-bulk {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 14px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--color-linear-sage) 40%, transparent);
+  background: transparent;
+  color: var(--color-linear-sage-bright);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 150ms ease;
+}
+.qm-rdoc-bulk:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-linear-sage) 12%, transparent);
+}
+.qm-rdoc-bulk:disabled { opacity: 0.5; cursor: default; }
+@media (max-width: 560px) {
+  .qm-rdoc-bulk { font-size: 12px; padding: 8px 10px; }
+  .qm-rdoc-page { padding: 14px 12px 18px; }
+}
+
+/* ── RIDER: the section header stops colliding at phone width ─────────────
+   `.qm-lin-soap-section-head` is space-between with a `white-space: nowrap`
+   pulse on the right. At 390px the eyebrow + label + REVIEWED pill and the
+   "GAP TO NEXT TIER" hint do not both fit, and nowrap turns that into an
+   overlap — the pill renders on top of the hint. Pre-existing on the tabbed
+   surface too; fixed here for both, because a doctor reading a note on a phone
+   should not have to decode two overlapping labels.
+
+   CSS-only and layout-only: the hint drops to its own line instead of being
+   painted over. Nothing above 560px changes. */
+@media (max-width: 560px) {
+  .qm-lin-soap-section-v6 .qm-lin-soap-section-head {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+  .qm-lin-soap-section-v6 .qm-lin-soap-section-head-left {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .qm-lin-soap-section-v6 .qm-lin-soap-section-pulse {
+    flex: 0 0 auto;
+  }
+}
+
+/* The read-sentinel: a zero-height marker at the bottom edge of a suggestion.
+   Reaching it IS having read the card, which is height-independent — unlike
+   inferring "read" from an intersection ratio, which cannot be satisfied at all
+   by a card taller than the viewport. */
+.qm-rdoc-sugg-end {
+  display: block;
+  height: 0;
+  width: 100%;
+}
+
+/* The expanded codes/billing row. Collapsing a surface is not removing it: the
+   real BillingCardC3 and CodesTab render here, so override / rescore / dispute
+   stay reachable without changing surfaces. */
+.qm-rdoc-meta-panels {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 12px 8px;
+}
+.qm-rdoc-panel { min-width: 0; }
+/* The dictation panel gained a heading when its standing row was folded into
+   "⋯ details" — without it the transcript would open under no label at all. */
+.qm-rdoc-panel-h {
+  margin: 0 0 8px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  color: var(--color-linear-text-3);
+}
+
+/* Settings › My Note Format — the ⋯ overflow. The advanced editor and
+   Duplicate live here so the row itself is name · Active · Replace · Delete. */
+.qm-tmpl-overflow {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  min-width: 168px;
+  padding: 4px;
+  border: 1px solid var(--color-linear-border);
+  border-radius: 9px;
+  background: var(--color-linear-surface-2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+}
+.qm-tmpl-overflow button {
+  text-align: left;
+  padding: 9px 10px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  color: var(--color-linear-text-2);
+  cursor: pointer;
+  min-height: 40px;
+}
+.qm-tmpl-overflow button:hover {
+  background: var(--color-linear-row-hover);
+  color: var(--color-linear-text);
+}
+
+/* ── Native document preview ────────────────────────────────────────────────
+   The doctor's own page, rendered. The stage is deliberately paper-coloured
+   inside a dark app: this is the one surface that is NOT ours, and it should
+   read as a document sitting on the desk rather than another panel.
+
+   Because the stage is light, text sitting ON it cannot use the app's dark-theme
+   muted grey — that lands around 2.6:1. Notes that appear over paper get their
+   own ink colour; notes outside the stage keep the app's. */
+.qm-npv { margin: 0; }
+.qm-npv-stage {
+  background: #f4f2ee;
+  border: 1px solid var(--color-linear-border);
+  border-radius: 10px;
+  overflow: auto;
+  max-height: min(72vh, 780px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+/* A scrollable region must be reachable by keyboard (axe: scrollable-region-
+   focusable) — a multi-page form always overflows. */
+.qm-npv-stage:focus-visible {
+  outline: 2px solid var(--color-linear-sage);
+  outline-offset: 2px;
+}
+.qm-npv-pdf { display: block; padding: 8px 0; }
+/* Each page is a canvas laid out at column width — no plugin, so it draws the
+   same on a phone as on a desktop. */
+.qm-npv-page {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0 auto 10px;
+  background: #fff;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.28);
+}
+.qm-npv-docx { padding: 8px 0; }
+/* docx-preview emits its own page boxes; give them the shadow it omits. */
+.qm-npv-docx .qm-docxp-wrapper > section.qm-docxp {
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.28);
+  margin: 8px auto;
+  background: #fff;
+}
+.qm-npv-note {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--color-linear-text-3);
+}
+/* On paper, not in the app. 4.5:1+ against #f4f2ee. */
+.qm-npv-stage .qm-npv-note {
+  color: #4a4640;
+  margin: 0;
+  padding: 14px 16px;
+}
+@media (max-width: 480px) {
+  .qm-npv-stage { max-height: 58vh; }
+}
+
+/* ── The visit page as the document (phase 2) ───────────────────────────────
+   Pages stack; cards sit BETWEEN them, at the page they belong to. The gap is
+   deliberate: a card must read as commentary on the page above, not as part of
+   the document. */
+.qm-vdoc { display: block; }
+.qm-vdoc-page { margin: 0 0 18px; }
+.qm-vdoc-pageslot { display: block; }
+.qm-vdoc-afterpage { margin: 10px 0 0; }
+.qm-vdoc-unplaced { margin: 18px 0 0; }
+.qm-vdoc-counts {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--color-linear-text-3);
+}
+/* Pages get the paper treatment individually, not one long scroll box: the
+   document is the page here, so it should not sit inside a second frame. */
+.qm-vdoc .qm-npv-page {
+  border-radius: 6px;
+  margin-bottom: 0;
+}
+
+/* Visually hidden, still announced. The document renders as canvases, so the
+   note's text lives here for anyone reading with assistive technology. */
+.qm-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── Tap-to-edit on the document view ───────────────────────────────────────
+   The control is quiet by default: the page is the document, and an edit
+   affordance should not compete with it. */
+.qm-vdoc-edit-open {
+  display: inline-flex;
+  align-items: center;
+  margin: 6px 0 0;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--color-linear-text-3);
+  background: transparent;
+  border: 1px solid var(--color-linear-border);
+  border-radius: 7px;
+  cursor: pointer;
+}
+.qm-vdoc-edit-open:hover:not(:disabled) {
+  color: var(--color-linear-text);
+  border-color: var(--color-linear-sage);
+}
+.qm-vdoc-edit-open:disabled { opacity: 0.4; cursor: default; }
+.qm-vdoc-edit {
+  margin: 8px 0 0;
+  padding: 12px;
+  border: 1px solid var(--color-linear-sage);
+  border-radius: 10px;
+  background: var(--color-linear-surface-1);
+}
+.qm-vdoc-edit-label {
+  display: block;
+  margin-bottom: 6px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-3);
+}
+.qm-vdoc-edit-ta {
+  width: 100%;
+  padding: 10px;
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--color-linear-text);
+  background: var(--color-linear-bg);
+  border: 1px solid var(--color-linear-border);
+  border-radius: 8px;
+  resize: vertical;
+}
+.qm-vdoc-edit-actions { display: flex; gap: 8px; margin-top: 10px; }
+.qm-vdoc-edit-err {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  color: var(--color-linear-amber);
+}
+
+/* ── The chat editor ────────────────────────────────────────────────────────
+   Sits above the document, deliberately compact: the document is the subject,
+   the conversation is a tool for changing it. */
+.qm-chat {
+  margin: 0 0 16px;
+  border: 1px solid var(--color-linear-border);
+  border-radius: 12px;
+  background: var(--color-linear-surface-1);
+  overflow: hidden;
+}
+.qm-chat-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--color-linear-border);
+}
+.qm-chat-title { font-size: 13px; font-weight: 500; color: var(--color-linear-text); }
+.qm-chat-sub { font-size: 11.5px; color: var(--color-linear-text-3); }
+.qm-chat-log { max-height: 320px; overflow-y: auto; padding: 12px 14px; }
+.qm-chat-empty { margin: 0; font-size: 12.5px; color: var(--color-linear-text-3); }
+.qm-chat-turn { margin: 0 0 12px; }
+.qm-chat-turn:last-child { margin-bottom: 0; }
+.qm-chat-text {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--color-linear-text-2, #b6bcc6);
+  white-space: pre-wrap;
+}
+.qm-chat-me .qm-chat-text {
+  color: var(--color-linear-text);
+  padding-left: 10px;
+  border-left: 2px solid var(--color-linear-sage);
+}
+/* What the SERVER did, not what the model said it did. */
+.qm-chat-actions {
+  margin: 6px 0 0;
+  padding-left: 16px;
+  font-size: 12px;
+  color: var(--color-linear-sage-bright, #9ec4ae);
+}
+.qm-chat-action-fail { color: var(--color-linear-amber); }
+.qm-chat-busy { margin: 4px 0 0; font-size: 12.5px; color: var(--color-linear-text-3); }
+.qm-chat-err { margin: 0; padding: 8px 14px; font-size: 12.5px; color: var(--color-linear-amber); }
+.qm-chat-compose {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  padding: 10px 14px 12px;
+  border-top: 1px solid var(--color-linear-border);
+}
+.qm-chat-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--color-linear-text);
+  background: var(--color-linear-bg);
+  border: 1px solid var(--color-linear-border);
+  border-radius: 8px;
+  resize: vertical;
+}
+@media (max-width: 480px) {
+  .qm-chat-log { max-height: 240px; }
+  .qm-chat-compose { flex-direction: column; align-items: stretch; }
+}
+.qm-vdoc-edit-na {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  color: var(--color-linear-text-3);
+}
+.qm-chat-action-none { color: var(--color-linear-text-3); }
+/* The billing level has not been checked against the note as it now stands. */
+.qm-rdoc-stale {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-linear-amber);
+  background: color-mix(in srgb, var(--color-linear-amber) 12%, transparent);
+}
+/* PDF / Word — the same bytes, drawn by a different engine. */
+.qm-vdoc-format { display: inline-flex; gap: 2px; margin: 0 0 8px; }
+.qm-vdoc-format button {
+  padding: 4px 12px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  color: var(--color-linear-text-3);
+  background: transparent;
+  border: 1px solid var(--color-linear-border);
+  cursor: pointer;
+}
+.qm-vdoc-format button:first-child { border-radius: 7px 0 0 7px; }
+.qm-vdoc-format button:last-child { border-radius: 0 7px 7px 0; }
+.qm-vdoc-format .qm-vdoc-format-on {
+  color: var(--color-linear-text);
+  border-color: var(--color-linear-sage);
+}
+/* A prescription list with no warning is not an alarm. Same card, no amber. */
+.qm-rdoc-gate-quiet { border-color: var(--color-linear-border); }
+.qm-rdoc-gate-quiet .qm-rdoc-gate-head { color: var(--color-linear-text-3); }
+/* The Word view is scaled to the container by fitDocxToWidth (see
+   native-document-preview.tsx). The transform needs a stable box to scale
+   inside, and the stage must never grow a horizontal scrollbar the PDF tab
+   does not have — the two formats frame identically or the toggle lies. */
+.qm-npv-docx { overflow-x: hidden; }
+/* docx-preview wraps its pages in ~90px of grey gutter each side. Fitting the
+   WRAPPER to the container therefore fits the gutter too, and the page lands
+   ~20% narrower than the PDF canvas beside it — same document, two different
+   sizes, which is the thing the toggle must never do. The stage supplies its
+   own padding, so the gutter goes and the PAGE is what gets fitted. */
+.qm-npv-docx .qm-docxp-wrapper {
+  transform-origin: top left;
+  padding-left: 0;
+  padding-right: 0;
+}

@@ -276,12 +276,38 @@ describe('bridgeTemplateFill — unified picks + numeric overlay', () => {
         String(opts).split('|').map((o) => o.trim()).filter(Boolean)[0] ?? '',
       ) + '\n' + NOTE;
 
-    const merged = bridgeTemplateFill({ facts: FIXTURE_FACTS, ir,
+    // Picks cite the SELECTION, which needs an approved mapping to satisfy.
+    const pickMappings = ir.fields
+      .filter((f) => f.kind === 'single_select')
+      .map((f) => ({
+        fieldId: f.fieldId,
+        sourceType: 'verified_note_selection' as const,
+        clinicalConcept: 'exam.vascular',
+        expectedDataType: 'single_select' as const,
+        polarityBehavior: 'value_only' as const,
+        temporality: 'current' as const,
+        laterality: 'optional' as const,
+        unitPolicy: 'not_applicable' as const,
+        approvedSynonyms: [],
+        required: false,
+        blankPolicy: 'blank' as const,
+        unknownPolicy: 'blank' as const,
+        practiceDefault: null,
+        status: 'certified' as const,
+      }));
+    const bridged = bridgeTemplateFill({ facts: FIXTURE_FACTS, ir,
       markerText,
       filledNote: pickedNote,
       baseline: blankBaseline(ir),
+      mappings: pickMappings,
     });
+    const merged = bridged.resolutions;
     expect(merged.length).toBe(ir.fields.length);
+    // Every filled pick brought its provenance fact out with it.
+    expect(bridged.facts.length).toBe(
+      merged.filter((r) => r.reasonCode === 'choice_slot_pick' && r.status === 'supported').length,
+    );
+    for (const f of bridged.facts) expect(f.sourceType).toBe('verified_note_selection');
 
     const filledSelects = merged.filter(
       (r) => r.status === 'supported' && r.reasonCode === 'choice_slot_pick',
@@ -293,5 +319,75 @@ describe('bridgeTemplateFill — unified picks + numeric overlay', () => {
     // Renders cleanly with both kinds of fill present.
     const rendered = await renderTemplateDocx({ source: wmIovBytes, ir, resolutions: merged, validation: VALIDATION });
     expect(rendered.verification.verified).toBe(true);
+  });
+});
+
+// ============================================================================
+// THE SPLIT-TABLE SHAPE — the one that filled six cells and dropped thirteen.
+// ----------------------------------------------------------------------------
+// The fixture above is the COMBINED shape: one table whose row labels carry the
+// leg word. L4 also emits the SPLIT shape — two tables, one per leg, with
+// IDENTICAL row labels and the leg only in the surrounding heading. Under a
+// single monotonic cursor over all 26 IR rows, the right-leg rows matched (and
+// consumed) the LEFT table's rows first. Every one of those pairings was
+// correctly refused on laterality — but the row was already spent, so the
+// left-leg rows that came after found nothing left to match. Six right cells
+// filled, thirteen left cells did not, from an encounter that dictated both
+// legs equally, and nothing in the logs said so.
+// ============================================================================
+
+const SPLIT_NOTE = [
+  'DIAMETER AND REFLUX TIME — ** Right Leg **',
+  '',
+  '| VEIN | DIAMETER (mm) | REFLUX TIME (seconds) |',
+  '| --- | --- | --- |',
+  '| GSV at the SFJ | 6.2 | 3.4 |',
+  '| GSV at the Knee | 5.1 | [not documented] |',
+  '',
+  'DIAMETER AND REFLUX TIME — ** Left Leg **',
+  '',
+  '| VEIN | DIAMETER (mm) | REFLUX TIME (seconds) |',
+  '| --- | --- | --- |',
+  '| GSV at the SFJ | 5.8 | 3.1 |',
+  '| GSV at the Proximal Thigh | 4.1 | 1.8 |',
+].join('\n');
+
+describe('bridgeNumericTableCells — split (per-leg) tables', () => {
+  const ir = compileTemplateDocx(wmIovBytes);
+
+  it('fills BOTH legs when the legs are separate tables with identical row labels', () => {
+    const res = bridgeNumericTableCells({ facts: FIXTURE_FACTS, ir, filledNote: SPLIT_NOTE });
+    const byField = new Map(res.map((r) => [r.fieldId, r]));
+
+    // Right leg, from the right table.
+    expect(byField.get(cell(ir, 1, 1).fieldId)?.value).toBe('6.2');
+    expect(byField.get(cell(ir, 1, 2).fieldId)?.value).toBe('3.4');
+    expect(byField.get(cell(ir, 3, 1).fieldId)?.value).toBe('5.1');
+
+    // Left leg, from the left table — the half that used to vanish.
+    expect(byField.get(cell(ir, 15, 1).fieldId)?.value).toBe('5.8');
+    expect(byField.get(cell(ir, 15, 2).fieldId)?.value).toBe('3.1');
+    expect(byField.get(cell(ir, 16, 1).fieldId)?.value).toBe('4.1');
+    expect(byField.get(cell(ir, 16, 2).fieldId)?.value).toBe('1.8');
+
+    // And nothing crossed: no left value landed on a right field or vice versa.
+    for (const r of res) {
+      expect(r.status).toBe('supported');
+      expect(r.sourceFactIds.length).toBeGreaterThan(0);
+    }
+    expect(res.length).toBe(7);
+  });
+
+  it('a note row is consumed only when it actually fills something', () => {
+    // The right table is offered to the left IR rows too. Every pairing is
+    // refused on laterality, and because refusal costs nothing, the left rows
+    // still find their own table intact.
+    const rightOnly = FIXTURE_FACTS.filter((f) => f.laterality === 'right');
+    const res = bridgeNumericTableCells({ facts: rightOnly, ir, filledNote: SPLIT_NOTE });
+    // Only right-leg cells fill; the left table's values have no supporting fact.
+    expect(res.length).toBe(3);
+    const byField = new Map(res.map((r) => [r.fieldId, r]));
+    expect(byField.get(cell(ir, 1, 1).fieldId)?.value).toBe('6.2');
+    expect(byField.has(cell(ir, 15, 1).fieldId)).toBe(false);
   });
 });

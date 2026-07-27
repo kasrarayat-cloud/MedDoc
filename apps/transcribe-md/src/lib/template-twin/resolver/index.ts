@@ -230,6 +230,10 @@ function missingResolution(
   field: TemplateField,
   mapping: SemanticMapping,
   facts: ReadonlyArray<EncounterFact>,
+  /** Overrides the reason when the field is unfilled for a NAMED reason more
+   *  specific than "nothing was said" — the reason must survive, the false
+   *  evidence trail must not. */
+  reason?: { unfilled: string; required: string },
 ): FieldResolution {
   const practiceDefault = practiceDefaultResolution(field, mapping, facts);
   if (practiceDefault) return practiceDefault;
@@ -244,7 +248,9 @@ function missingResolution(
     requiresInput ? 'needs_clinician_input' : 'not_mentioned',
     null,
     [],
-    requiresInput ? 'required_fact_not_mentioned' : 'fact_not_mentioned',
+    requiresInput
+      ? (reason?.required ?? 'required_fact_not_mentioned')
+      : (reason?.unfilled ?? 'fact_not_mentioned'),
   );
 }
 
@@ -389,6 +395,26 @@ function resolveOne(
       'field_or_mapping_unsupported',
     );
   }
+  // A MANUAL field carries no concept BY CONSTRUCTION — nothing in any encounter
+  // can say who the technologist on shift was — and the certificate attests that
+  // it renders blank. Reporting it as an unmapped field turned a designed state
+  // into a configuration error, and at visit time that error is BLOCKING: four
+  // such fields refused the native document on every visit, forever, and the
+  // export fell back to the styled path. Nothing was made safer by that — the
+  // fields are blank in both documents — so the only effect was that the doctor
+  // never got their own form back.
+  if (mapping.sourceType === 'manual') {
+    return makeResolution(field.fieldId, 'not_mentioned', null, [], 'manual_source_not_filled');
+  }
+  // A VERIFIED NOTE SELECTION is answered by the adopted note's own pick, which
+  // only the picks bridge can read. Resolving it here from raw facts produced
+  // `select_value_not_exact_option` — needs-clinician-input, and BLOCKING at
+  // visit time — for fourteen dropdowns the note had already answered. Same
+  // shape as the fixed-grid rule: the component that can address it, addresses
+  // it; the baseline is honestly blank.
+  if (mapping.sourceType === 'verified_note_selection') {
+    return makeResolution(field.fieldId, 'not_mentioned', null, [], 'awaiting_note_selection');
+  }
   if (!mapping.clinicalConcept) {
     return makeResolution(
       field.fieldId,
@@ -411,20 +437,73 @@ function resolveOne(
     return missingResolution(field, mapping, allFacts);
   }
 
+  // A FIXED-GRID TABLE CELL IS ADDRESSED BY ITS ROW, AND THE RESOLVER CANNOT
+  // SEE ROWS.
+  // Its only inputs are the field's concept and the fact set. In a 26-row vein
+  // grid every reflux cell shares one concept, so "the reflux facts" are
+  // candidates for all 26 of them and nothing here can say which row a given
+  // 2.4 seconds belongs to. It was guessing: sometimes filling the wrong leg,
+  // more often failing on type and returning needs_clinician_input for 33 cells
+  // that the encounter had said nothing about — noise that reads like missing
+  // evidence and blocks certification.
+  //
+  // Row addressing lives in the bridge, which matches a note row to an IR row by
+  // vein label and then requires the fact to satisfy laterality and segment. So
+  // the baseline for a table cell is the honest "not said here", and the bridge
+  // overlays the values it can actually address. Required cells still surface as
+  // needs-input through missingResolution, exactly as before.
+  // A repeating-row PROTOTYPE is the opposite case and keeps resolving here: it
+  // expands one row per fact, so there is no row to address and no ambiguity to
+  // resolve. Only the fixed grid — many rows, one shared concept — defers.
+  if (field.rendererBinding.bindingType === 'table_cell' && !field.rowPrototype) {
+    return missingResolution(field, mapping, allFacts);
+  }
+
+  // A SELECT CAN ONLY CONFLICT OVER ITS OWN OPTIONS.
+  // These dropdowns sit inside sentences ("Right deep venous system <choose>")
+  // and map to a coarse concept like `exam.vascular`, which every vascular
+  // statement in the encounter shares. Judging polarity and laterality across
+  // all of them made a "conflict" out of four unrelated sentences — one
+  // affirmed, one denied — and blocked certification on a field about which the
+  // encounter had said nothing selectable. Seven fields, every run.
+  //
+  // A fact whose value is not one of THIS field's enumerated options cannot
+  // fill it, so it is not evidence about it and cannot contradict anything
+  // here. When none qualify there is nothing to conflict about, and the field
+  // continues to the existing derivation path — which surfaces it as
+  // needs-input with select_value_not_exact_option, not as a silent blank and
+  // not as a conflict. Two facts that both name real options and disagree are
+  // still a genuine conflict, judged exactly as before.
+  const conflictCandidates =
+    field.kind === 'single_select' || field.kind === 'multi_select'
+      ? conceptCandidates.filter(
+          (fact) => typeof fact.value === 'string' && exactOption(field, fact.value) !== null,
+        )
+      : conceptCandidates;
+
   const expectedTemporality = mapping.temporality;
   const temporalCandidates =
     expectedTemporality === null || expectedTemporality === 'any'
       ? conceptCandidates
       : conceptCandidates.filter((fact) => fact.temporality === expectedTemporality);
   if (temporalCandidates.length === 0) {
-    return makeResolution(
-      field.fieldId,
-      'ambiguous',
-      null,
-      conceptCandidates,
-      'temporality_not_approved',
-    );
+    // NOT ambiguous, and NOT cited. The mapping approves one temporality and no
+    // fact carries it, so nothing was said about this field in the sense the
+    // mapping requires — that is absence, not conflicting evidence. Citing the
+    // rejected facts made the resolution contradict itself: it declared their
+    // temporality unapproved and then attached them as the field's evidence,
+    // and the validator (unchanged, and right) flagged both the mismatch and
+    // the ambiguity. The reason code still names exactly why.
+    return missingResolution(field, mapping, allFacts, {
+      unfilled: 'temporality_not_approved',
+      required: 'required_temporality_not_approved',
+    });
   }
+
+  // The facts eligible to fill THIS field (see conflictCandidates above), which
+  // are the only ones whose disagreement is a disagreement about it. For a
+  // non-select this is every temporal candidate, exactly as before.
+  const judged = temporalCandidates.filter((fact) => conflictCandidates.includes(fact));
 
   const permitsFamily = normalizeConcept(mapping.clinicalConcept).startsWith(
     'family_history.',
@@ -470,9 +549,7 @@ function resolveOne(
   }
 
   if (mapping.laterality === 'required') {
-    const lateralities = unique(
-      temporalCandidates.map((fact) => fact.laterality),
-    );
+    const lateralities = unique(judged.map((fact) => fact.laterality));
     if (lateralities.includes('unknown') || lateralities.includes('not_applicable')) {
       return makeResolution(
         field.fieldId,
@@ -493,13 +570,13 @@ function resolveOne(
     }
   }
 
-  const polarities = unique(temporalCandidates.map((fact) => fact.polarity));
+  const polarities = unique(judged.map((fact) => fact.polarity));
   if (polarities.includes('uncertain') || polarities.includes('conditional')) {
     return makeResolution(
       field.fieldId,
       'ambiguous',
       null,
-      temporalCandidates,
+      judged,
       'polarity_ambiguous',
     );
   }
@@ -508,7 +585,7 @@ function resolveOne(
       field.fieldId,
       'conflict',
       null,
-      temporalCandidates,
+      judged,
       'polarity_conflict',
     );
   }

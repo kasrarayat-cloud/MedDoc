@@ -6,6 +6,14 @@
 // certify a field, add/remove a field, alter options, or invent a default.
 // ============================================================================
 
+import {
+  classifyFieldSource,
+  conceptOverrideFor,
+  veinGridCellConcept,
+  isRegisteredConcept,
+  synonymsFor,
+  REGISTRY_CONCEPTS,
+} from '../concept-registry';
 import { z } from 'zod';
 
 import {
@@ -211,7 +219,23 @@ const SYSTEM_PROMPT = [
   'a practice default, or mark any mapping certified. If uncertain, use a null concept and',
   'needs_confirmation. Keep native dropdown options exactly as supplied.',
   '',
-  `Canonical concept vocabulary/patterns: ${TEMPLATE_TWIN_CANONICAL_CONCEPT_GUIDANCE.join(', ')}`,
+  // The extractor's REAL vocabulary, not a style hint. A concept outside it can
+  // never be matched by any fact, so the field would be permanently unfillable —
+  // which is exactly how 72/80 proposals came back unusable while looking, at
+  // certification, like missing evidence. Constrain at GENERATION rather than
+  // rejecting afterwards.
+  'CLINICAL CONCEPT — CLOSED VOCABULARY. You MUST choose clinicalConcept from',
+  'this list, or from one of the patterns below, or return null. A concept',
+  'outside it is rejected and the field becomes permanently unfillable.',
+  `  exact: ${REGISTRY_CONCEPTS.join(', ')}`,
+  '  patterns: test.<snake_case_study>.result | exam.<snake_case_thing> | hpi.<snake_case_thing>',
+  'NEVER put anatomy, laterality, a segment name or a unit in the concept: a',
+  'measurement concept is its KIND (measurement.diameter, measurement.reflux_time)',
+  'and the vein, side and segment travel as structured data. One concept must be',
+  'able to serve every row of a 26-row grid.',
+  'If no listed concept fits the field, return null with needs_confirmation —',
+  'that is a correct answer, not a failure.',
+  `Additional guidance: ${TEMPLATE_TWIN_CANONICAL_CONCEPT_GUIDANCE.join(', ')}`,
   delimiterSystemSuffix('transcript'),
 ].join('\n');
 
@@ -316,6 +340,15 @@ export async function proposeSemanticMappings(
     );
   }
 
+  // Cells grouped by their table row, so a cell can see its siblings — a vein
+  // grid row is identified by containing a REFLUX TIME cell.
+  const cellsByRow = new Map<string, TemplateField[]>();
+  for (const f of orderedFields) {
+    if (f.rendererBinding.bindingType !== 'table_cell') continue;
+    const key = `${f.tableId ?? ''}#${f.rendererBinding.rowIndex ?? -1}`;
+    (cellsByRow.get(key) ?? cellsByRow.set(key, []).get(key)!).push(f);
+  }
+
   const mappings = orderedFields.map((field) => {
     const mapping = byId.get(field.fieldId);
     if (!mapping) {
@@ -339,20 +372,65 @@ export async function proposeSemanticMappings(
       );
     }
 
+    // A structure or a label the compiler recognises decides its own concept;
+    // otherwise the model's proposal stands, and either way it must be in the
+    // registry.
+    const rowKey = `${field.tableId ?? ''}#${field.rendererBinding.rowIndex ?? -1}`;
+    const rowCells = cellsByRow.get(rowKey) ?? [];
+    const gridConcept = veinGridCellConcept({
+      originalLabel: field.originalLabel,
+      isReflux: /reflux/i.test(field.originalLabel),
+      rowHasRefluxCell: rowCells.some((c) => /reflux/i.test(c.originalLabel)),
+      isRowLabelCell: field.labelSource === 'left_cell',
+    });
+    const candidate =
+      gridConcept ?? conceptOverrideFor(field.originalLabel) ?? mapping.clinicalConcept;
+    const proposedConcept = candidate && isRegisteredConcept(candidate) ? candidate : null;
+
     // Compiler uncertainty always wins over a model's optimistic recognition.
     // Nothing from this helper can become certified or carry a default.
     return SemanticMappingSchema.parse({
       ...mapping,
       expectedDataType: compilerDataType,
+      // Classification is the COMPILER's label talking, not the model's guess —
+      // the same doctrine as expectedDataType above.
+      sourceType: classifyFieldSource(field.originalLabel, field),
+      // REGISTRY CONSTRAINT. A concept the extractor never emits can never be
+      // matched by any fact, so the field would be permanently unfillable —
+      // this is exactly how `filledCount=0` survived four sessions of fixes
+      // downstream. Off-registry proposals are dropped to null here, which
+      // leaves the mapping visibly `needs_confirmation` (see status below)
+      // rather than certifying a dead field. Approved synonyms come from the
+      // registry, not the model.
+      clinicalConcept: proposedConcept,
+      approvedSynonyms: proposedConcept
+        ? [...new Set([...(mapping.approvedSynonyms ?? []), ...synonymsFor(proposedConcept)])]
+        : [],
       practiceDefault: null,
       status:
-        mapping.clinicalConcept === null ||
+        proposedConcept === null ||
         field.detectionStatus !== 'recognized' ||
         mapping.status === 'needs_confirmation'
           ? 'needs_confirmation'
           : 'recognized',
     });
   });
+
+  // Visible at PROPOSAL time, not discovered at certification time.
+  const offRegistry = [
+    ...new Set(
+      mappings
+        .filter((m) => m.clinicalConcept === null)
+        .map((m) => m.fieldId),
+    ),
+  ];
+  if (offRegistry.length > 0) {
+    console.warn(
+      `[template-twin:mappings] ${offRegistry.length}/${mappings.length} proposals were ` +
+        'off-registry or unconcepted and are left unconfirmed: ' +
+        `${offRegistry.slice(0, 10).join(',')}${offRegistry.length > 10 ? ',…' : ''}`,
+    );
+  }
 
   return SemanticMappingProposalSchema.parse({ mappings }).mappings;
 }

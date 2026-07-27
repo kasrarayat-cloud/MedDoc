@@ -30,13 +30,37 @@ import type { EncounterFact, SemanticMapping } from './ir';
 // ── numeric table-cell fill ─────────────────────────────────────────────────
 
 /** A markdown pipe-table parsed out of the generated note. */
+interface ParsedMarkdownRow {
+  label: string;
+  cells: string[];
+}
+
 interface ParsedMarkdownTable {
   /** Header cells (column 0 is the row-label column). */
   header: string[];
-  rows: { label: string; cells: string[] }[];
+  rows: ParsedMarkdownRow[];
 }
 
-const TABLE_ROW_RE = /^\s*\|(.+)\|\s*(?:\[[^\]]*\].*)?$/; // trailing evidence anchor tolerated
+// A row may carry a trailing annotation AFTER its closing pipe. Two forms are
+// produced in practice and both must be tolerated:
+//   | GSV at the SFJ | 6.2 | 3.4 | [S1: "..."]      <- bracketed anchor
+//   | GSV at the SFJ | 6.2 | 3.4 | "Right great ..." <- inline evidence quote
+// Only the bracketed form was tolerated. A quoted row failed to match, and
+// because it is typically the FIRST data row, table accumulation ended with
+// ZERO rows — so all 52 measurement cells never reached the matcher and every
+// dictated measurement was silently dropped. Measured on a real visit:
+// parseMarkdownTables -> 2 tables, rows=0, filledCount=0.
+// Anything after the closing pipe is an annotation, in ANY form. Three have
+// been observed from L4 and enumerating them was a losing game:
+//   | GSV at the SFJ | 6.2 | 3.4 | [S1: "..."]          bracketed anchor
+//   | GSV at the SFJ | 6.2 | 3.4 | "Right great ..."    quoted evidence
+//   | GSV at the SFJ | 7 | 2.4 | Great saphenous vein ...  bare prose
+// Each unrecognised form silently killed the whole table: the row failed to
+// match, and being the FIRST data row, accumulation ended with zero rows and
+// every measurement was dropped. The cells are fixed by the pipes BEFORE the
+// annotation, so the trailing text simply does not matter — capture to the last
+// pipe and ignore the rest, rather than keep guessing at forms.
+const TABLE_ROW_RE = /^\s*\|(.+)\|\s*.*$/;
 const SEP_ROW_RE = /^[\s:|-]+$/; // the | --- | --- | separator
 
 /** Split one "| a | b | c |" line into its cell strings (trimmed). Any trailing
@@ -49,6 +73,12 @@ function splitRow(line: string): string[] | null {
 
 /** Extract every contiguous markdown pipe-table from the note. A table is a
  *  header row, a `---` separator row, then data rows. */
+/** Diagnostic alias — same function, exported so a QA harness can show what the
+ *  bridge actually parses out of a generated note. */
+export function parseMarkdownTablesForDiagnosis(note: string): ParsedMarkdownTable[] {
+  return parseMarkdownTables(note);
+}
+
 function parseMarkdownTables(note: string): ParsedMarkdownTable[] {
   const lines = note.split('\n');
   const tables: ParsedMarkdownTable[] = [];
@@ -57,7 +87,7 @@ function parseMarkdownTables(note: string): ParsedMarkdownTable[] {
     if (!header) continue;
     const sepCells = i + 1 < lines.length ? splitRow(lines[i + 1]) : null;
     if (!sepCells || !sepCells.every((c) => SEP_ROW_RE.test(c) && c.includes('-'))) continue;
-    const rows: { label: string; cells: string[] }[] = [];
+    const rows: ParsedMarkdownRow[] = [];
     let j = i + 2;
     for (; j < lines.length; j++) {
       const cells = splitRow(lines[j]);
@@ -121,10 +151,22 @@ interface IrTableRow {
   vein: string;
   diameterField: TemplateField | null;
   refluxField: TemplateField | null;
+  rowLaterality: 'right' | 'left' | 'unknown';
 }
 
 /** Group a table's cell fields into ordered data rows, tagging each row's
  *  diameter cell (the vein-name left_cell) and reflux cell (the header cell). */
+/** IR rows split into leg groups, in document order, so each group can be
+ *  walked against a candidate table with its own cursor. */
+function groupByLeg(rows: readonly IrTableRow[]): IrTableRow[][] {
+  const groups = new Map<string, IrTableRow[]>();
+  for (const row of rows) {
+    const key = row.rowLaterality;
+    (groups.get(key) ?? groups.set(key, []).get(key)!).push(row);
+  }
+  return [...groups.values()];
+}
+
 function irTableRows(fields: TemplateField[]): IrTableRow[] {
   const byRow = new Map<number, TemplateField[]>();
   for (const f of fields) {
@@ -144,7 +186,11 @@ function irTableRows(fields: TemplateField[]): IrTableRow[] {
       cells.find((c) => c !== refluxField) ??
       null;
     const vein = diameterField ? diameterField.originalLabel : cells[0]?.originalLabel ?? '';
-    rows.push({ rowIndex, vein, diameterField, refluxField });
+    // The row's leg, stamped at compile time from the document's own headings.
+    // The walk below is per-leg, so it has to travel with the row.
+    const rowLaterality =
+      (diameterField ?? refluxField ?? cells[0])?.rendererBinding.rowLaterality ?? 'unknown';
+    rows.push({ rowIndex, vein, diameterField, refluxField, rowLaterality });
   }
   return rows;
 }
@@ -152,6 +198,29 @@ function irTableRows(fields: TemplateField[]): IrTableRow[] {
 /** The markdown table most likely to be this vein grid: it must carry a diameter
  *  or reflux column, and we prefer the one whose row labels best match the IR
  *  vein names (guards against picking an unrelated table in the note). */
+/** ALL tables that plausibly belong to this IR grid, best first.
+ *
+ *  One grid in the document becomes TWO markdown tables in the note (Right Leg,
+ *  Left Leg), so returning a single winner left half the cells never offered.
+ *  Offering every candidate is safe now that addressing is fail-closed on row
+ *  laterality: a right-leg value simply cannot fill a left-leg row, so the
+ *  tables sort themselves out at the matcher instead of needing to be
+ *  pre-assigned to legs here. */
+function pickTables(tables: ParsedMarkdownTable[], irRows: IrTableRow[]): ParsedMarkdownTable[] {
+  const veinCores = irRows.map((r) => normVein(r.vein)).filter(Boolean);
+  const scored: Array<{ table: ParsedMarkdownTable; score: number }> = [];
+  for (const t of tables) {
+    if (!t.header.some((h) => classifyHeader(h) !== 'other')) continue;
+    let score = 0;
+    for (const row of t.rows) {
+      const core = normVein(row.label);
+      if (veinCores.some((v) => veinMatches(v, core))) score++;
+    }
+    if (score > 0) scored.push({ table: t, score });
+  }
+  return scored.sort((a, b) => b.score - a.score).map((x) => x.table);
+}
+
 function pickTable(tables: ParsedMarkdownTable[], irRows: IrTableRow[]): ParsedMarkdownTable | null {
   const veinCores = irRows.map((r) => normVein(r.vein)).filter(Boolean);
   let best: ParsedMarkdownTable | null = null;
@@ -177,8 +246,9 @@ function supportedNumeric(
   segmentLabel: string,
   facts: readonly EncounterFact[],
   mapping?: SemanticMapping,
+  rowLaterality?: 'right' | 'left' | 'unknown',
 ): FieldResolution | null {
-  const matched = matchMeasurementFact({ value, segmentLabel, facts, mapping });
+  const matched = matchMeasurementFact({ value, segmentLabel, facts, mapping, rowLaterality });
   if (!matched.ok) {
     console.info(
       `[template-twin:bridge] cell left blank field=${field.fieldId} reason=${matched.reason}`,
@@ -249,38 +319,96 @@ export function bridgeNumericTableCells(input: BridgeNumericTableCellsInput): Fi
 
   for (const fields of byTableId.values()) {
     const irRows = irTableRows(fields);
-    const md = pickTable(tables, irRows);
-    if (!md) continue;
+    const candidates = pickTables(tables, irRows);
+    if (candidates.length === 0) continue;
+    for (const md of candidates) {
 
     // Which markdown data column is diameter, which is reflux (by header).
     const roleByCol = md.header.map(classifyHeader);
     const diameterCol = roleByCol.findIndex((r) => r === 'diameter');
     const refluxCol = roleByCol.findIndex((r) => r === 'reflux');
 
-    let cursor = 0;
+    // HEADER/CELL ALIGNMENT. A data row is always [label, ...values], but the
+    // header does NOT always carry a column for the label:
+    //
+    //   | Segment | DIAMETER (mm) | REFLUX TIME (s) |   header 3, cells 3  -> offset 0
+    //   | DIAMETER (mm) | REFLUX TIME (s) |             header 2, cells 3  -> offset 1
+    //
+    // Both shapes come out of L4. Indexing cells by header position assumed the
+    // first form, so under the second the DIAMETER column read the row LABEL
+    // (dropped as non-numeric) and the REFLUX column read the DIAMETER value.
+    // Measured on the pinned note: filledCount=0, and a 7 mm diameter was
+    // offered to a reflux cell — refused only because the evidence matcher
+    // checks the fact's concept against the field's mapping. Alignment is a
+    // shape problem and belongs here, not behind the matcher.
+    //
+    // Detect it from the header's own first column: if that column already
+    // classifies as DATA, the header has no label column and every data cell
+    // sits one to the right.
+    const labelColumnOffset = roleByCol[0] === 'other' || roleByCol.length === 0 ? 0 : 1;
+
+    // ROW PAIRING. WM_IOV is a single 26-row grid; L4 renders it as two 13-row
+    // tables (Right Leg, Left Leg) — but it can also render one combined table,
+    // and the row labels are IDENTICAL between the legs. A single monotonic
+    // cursor over all 26 IR rows handled the combined shape and failed the split
+    // one: the right-leg rows consumed the LEFT table's rows before the
+    // left-leg rows were reached. The matcher correctly refused every one of
+    // those pairings on laterality — but the note row was already spent, so no
+    // left-leg cell could ever fill. Six right cells filled and thirteen left
+    // cells did not, from an encounter that dictated both legs equally.
+    //
+    // So pairing is decided by EVIDENCE, not by position: for each IR row, try
+    // every note row whose vein label matches, and keep the first one that
+    // actually produces a supported value. A note row is consumed only when it
+    // fills something, so a refused pairing costs nothing. Rows already
+    // consumed are not offered again, which preserves the one-note-row-per-IR-row
+    // property the cursor was there to guarantee.
+    //
+    // This is ADDRESSING only. Which fact may support a cell, and what it must
+    // cite, are unchanged.
+    const consumed = new Set<number>();
     for (const irRow of irRows) {
       const core = normVein(irRow.vein);
-      let matchedAt = -1;
-      for (let i = cursor; i < md.rows.length; i++) {
-        if (veinMatches(core, normVein(md.rows[i].label))) { matchedAt = i; break; }
-      }
-      if (matchedAt < 0) continue; // no row match → leave to the resolver baseline (blank)
-      cursor = matchedAt + 1;
-      const mdRow = md.rows[matchedAt];
 
-      const place = (field: TemplateField | null, col: number) => {
-        if (!field || col < 0 || col >= mdRow.cells.length) return;
-        const num = numericCell(mdRow.cells[col]);
-        if (num == null) return; // —/[not documented]/prose → blank
+      const place = (field: TemplateField | null, col: number, mdRow: ParsedMarkdownRow) => {
+        if (!field || col < 0) return false;
+        const cellIndex = col + labelColumnOffset;
+        if (cellIndex >= mdRow.cells.length) return false;
+        const num = numericCell(mdRow.cells[cellIndex]);
+        if (num == null) return false; // —/[not documented]/prose → blank
         // Laterality comes from the MATCHED FACT, never from row position.
-        const resolved = supportedNumeric(field, num, irRow.vein, facts, mappingById.get(field.fieldId));
-        if (resolved) out.push(resolved);
+        const resolved = supportedNumeric(
+          field,
+          num,
+          irRow.vein,
+          facts,
+          mappingById.get(field.fieldId),
+          field.rendererBinding.rowLaterality,
+        );
+        if (!resolved) return false;
+        out.push(resolved);
+        return true;
       };
-      place(irRow.diameterField, diameterCol);
-      place(irRow.refluxField, refluxCol);
+
+      for (let i = 0; i < md.rows.length; i++) {
+        if (consumed.has(i)) continue;
+        if (!veinMatches(core, normVein(md.rows[i].label))) continue;
+        const mdRow = md.rows[i];
+        const filledDiameter = place(irRow.diameterField, diameterCol, mdRow);
+        const filledReflux = place(irRow.refluxField, refluxCol, mdRow);
+        if (filledDiameter || filledReflux) {
+          consumed.add(i);
+          break;
+        }
+      }
     }
+    } // end candidate table
   }
-  return out;
+  // A field may be offered by BOTH note tables; fail-closed laterality means at
+  // most one can produce a resolution, but keep the first defensively so a
+  // future addressing change cannot introduce duplicates silently.
+  const seen = new Set<string>();
+  return out.filter((r) => (seen.has(r.fieldId) ? false : (seen.add(r.fieldId), true)));
 }
 
 // ── merge ───────────────────────────────────────────────────────────────────
@@ -349,24 +477,42 @@ export interface BridgeTemplateFillInput {
   baseline: readonly FieldResolution[];
 }
 
+export interface BridgeTemplateFillResult {
+  resolutions: FieldResolution[];
+  /** Provenance facts minted by the picks overlay, to be merged into the fact
+   *  set the manifest records and the validator checks against. */
+  facts: EncounterFact[];
+}
+
 /**
  * Produce the final FieldResolution[] for the renderer: the resolver baseline,
  * overlaid with the CHOICE_SLOT single-select picks and the numeric table-cell
  * fills recovered from the generated note. Exactly one resolution per ir.field.
  */
-export function bridgeTemplateFill(input: BridgeTemplateFillInput): FieldResolution[] {
+export function bridgeTemplateFill(input: BridgeTemplateFillInput): BridgeTemplateFillResult {
   const picks = bridgeChoiceSlotPicks({
     ir: input.ir,
     markerText: input.markerText,
     filledNote: input.filledNote,
     facts: input.facts,
     mappings: input.mappings,
-  }).filter((r) => r.status === 'supported');
+  });
   const numerics = bridgeNumericTableCells({
     ir: input.ir,
     filledNote: input.filledNote,
     facts: input.facts,
     mappings: input.mappings,
   });
-  return mergeFieldResolutions(input.ir, input.baseline, picks, numerics);
+  return {
+    resolutions: mergeFieldResolutions(
+      input.ir,
+      input.baseline,
+      picks.resolutions.filter((r) => r.status === 'supported'),
+      numerics,
+    ),
+    // The picks' provenance facts must travel WITH the resolutions: a citation
+    // to a fact that is not in the manifest's fact set is untraceable, and the
+    // validator says so.
+    facts: picks.facts,
+  };
 }

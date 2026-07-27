@@ -38,6 +38,7 @@ function field(
       tag: 'severity',
       alias: 'Synthetic severity',
       legacyName: null,
+      rowLaterality: 'unknown' as const,
       tableIndex: null,
       rowIndex: null,
       cellIndex: null,
@@ -60,6 +61,8 @@ function mapping(
 ): SemanticMapping {
   return {
     fieldId,
+    // An enumerated dropdown is answered by the adopted note's own pick.
+        sourceType: 'verified_note_selection' as const,
     clinicalConcept: 'hpi.severity',
     expectedDataType,
     polarityBehavior: 'value_only',

@@ -27,6 +27,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, FileText, Loader2, ShieldAlert, Sparkles } from 'lucide-react';
 
+import { NativeDocumentPreview } from '@/components/native-preview/native-document-preview';
+import type {
+  NativePreviewError,
+  NativePreviewKind,
+} from '@/actions/preview-native-document';
+
 const sans = 'var(--font-sans)';
 const mono = 'var(--font-mono)';
 
@@ -131,9 +137,17 @@ export interface ConfirmCardProps {
   name: string;
   sectionCount: number;
   headerFieldCount: number;
-  /** Rendered sample in the doctor's own format (markdown from
-   *  previewNoteTemplateAction). Null while still loading, '' on failure. */
+  /** THE DOCTOR'S OWN PAGE (flag NEXT_PUBLIC_DOC_PREVIEW). Null while still
+   *  rendering. `sampleFailed` means we could not draw it — never a substitute
+   *  mock in our own fonts. */
+  sample: {
+    kind: NativePreviewKind | null;
+    data: string | null;
+    reason: NativePreviewError | null;
+  } | null;
+  /** Flag OFF: the previous markdown sample, byte-identical. */
   sampleMarkdown: string | null;
+  docPreview: boolean;
   sampleFailed: boolean;
   /** True when the uploaded file was a flat PDF we can also certify for
    *  native export — the confirm then doubles as the preview-once. */
@@ -181,25 +195,67 @@ export function ConfirmCard(props: ConfirmCardProps) {
         </p>
       </header>
 
-      {/* The filled sample — the doctor's actual form, filled with a synthetic
-          demo visit. For a flat-PDF template this doubles as the preview-once
-          that the old "Set up native export" step used to demand separately. */}
+      {/* THE DOCTOR'S OWN PAGE. A flat PDF is shown FILLED — sample answers
+          sitting in their actual blanks, which is the whole question they came
+          to ask. A .docx is shown as the form itself; we can honestly render
+          the page at this point, not the fill, and we say which. What used to
+          be here was markdown in our fonts: it answered "did we read your
+          sections", which is our question, not theirs. */}
       <div className="qm-ux-sample-wrap">
         <div className="qm-ux-sample-label" style={{ fontFamily: mono }}>
-          SAMPLE — SYNTHETIC PATIENT, NOT A REAL VISIT
+          {!props.docPreview
+            ? 'SAMPLE — SYNTHETIC PATIENT, NOT A REAL VISIT'
+            : props.nativeCandidate
+              ? 'YOUR FORM — SAMPLE ANSWERS, NOT A REAL VISIT'
+              : 'YOUR FORM'}
         </div>
-        <div className="qm-ux-sample" data-testid="confirm-filled-sample">
-          {props.sampleMarkdown === null ? (
+        <div
+          className={props.docPreview ? undefined : 'qm-ux-sample'}
+          data-testid="confirm-filled-sample"
+        >
+          {(props.docPreview ? props.sample : props.sampleMarkdown) === null ? (
             <div className="qm-ux-sample-loading">
               <Loader2 className="h-4 w-4 qm-ux-spin" aria-hidden />
-              <span>Filling in a sample…</span>
+              <span>{props.docPreview ? 'Opening your form…' : 'Filling in a sample…'}</span>
             </div>
+          ) : props.docPreview && props.sampleFailed ? (
+            // Render through the same component so the NAMED reason reaches the
+            // doctor. Dropping it here made a 1 MB overflow, a dead MinIO and a
+            // failed fill all read as the same shrug.
+            <NativeDocumentPreview
+              kind={props.sample?.kind ?? null}
+              data={props.sample?.data ?? null}
+              reason={props.sample?.reason ?? 'sample_unavailable'}
+              label="your note format"
+            />
           ) : props.sampleFailed ? (
             <p className="qm-ux-sample-fallback">
-              We couldn&rsquo;t render a sample just now — your format was still
-              read correctly. You can confirm and check a real visit, or open the
-              advanced editor to review it section by section.
+              {props.docPreview ? (
+                <>
+                  We couldn&rsquo;t open your form just now — it was still read
+                  correctly. You can confirm and check a real visit, or open the
+                  advanced editor to review it section by section.
+                </>
+              ) : (
+                <>
+                  We couldn&rsquo;t render a sample just now — your format was
+                  still read correctly. You can confirm and check a real visit,
+                  or open the advanced editor to review it section by section.
+                </>
+              )}
             </p>
+          ) : props.docPreview && props.sample ? (
+            <NativeDocumentPreview
+              kind={props.sample.kind}
+              data={props.sample.data}
+              reason={props.sample.reason}
+              label="your note format"
+              caption={
+                props.nativeCandidate
+                  ? 'Sample answers, in your own blanks. A real visit fills these from what you dictate.'
+                  : 'Your form, as you uploaded it. The empty fields are where your answers go on a real visit.'
+              }
+            />
           ) : (
             <pre className="qm-ux-sample-pre">{props.sampleMarkdown}</pre>
           )}

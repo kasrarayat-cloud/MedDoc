@@ -12,12 +12,12 @@
 // down to each <SoapSection>.
 // ============================================================================
 
-import { useMemo } from 'react';
+import { Fragment, useMemo } from 'react';
 import { Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import { reportClipboardCopy } from '@/lib/clipboard-audit';
 
-import { parseNoteSections } from '@/lib/parse-note-sections';
+import { parseNoteSections, type NoteSection } from '@/lib/parse-note-sections';
 import type { SoapSectionKey } from '@/lib/parse-soap-sections';
 import { SoapSection, type SoapPulseHint, type SoapSectionStatus } from './SoapSection';
 
@@ -40,6 +40,12 @@ export interface SoapBodyProps {
    *  call so error toasts stay centralised. */
   onEdit: (next: string) => Promise<{ ok: boolean; error?: string }>;
   readonly: boolean;
+  /** Optional slot rendered directly BELOW a section's body, inside the same
+   *  column. The pre-sign document view uses it to place a verifier-demoted
+   *  claim where it would land if accepted, so reading the note and reviewing
+   *  the suggestion are one act. Omitted everywhere else — the note renders
+   *  byte-for-byte what it renders today. */
+  afterSection?: (section: NoteSection) => React.ReactNode;
   /** Visit this note belongs to — required so the full-note copy can be
    *  audited as a PHI disclosure (S4b). */
   visitId: string;
@@ -57,6 +63,7 @@ export function SoapBody({
   onEdit,
   readonly,
   lastEditLabel,
+  afterSection,
 }: SoapBodyProps) {
   // Custom-template + imaging notes render their OWN headings; classic SOAP
   // notes render byte-identically to the legacy parseSoapSections output
@@ -80,24 +87,35 @@ export function SoapBody({
 
   return (
     <div className="qm-lin-soap-body-v6">
-      {sections.map((section) => (
-        <SoapSection
-          key={section.id}
-          letter={section.letter}
-          label={section.label}
-          body={section.body}
-          fullText={text}
-          status={
-            section.soapKey
-              ? statusFor(section.soapKey)
-              : statusFor(null, section.body)
-          }
-          pulseHint={section.soapKey ? pulseHints?.[section.soapKey] ?? null : null}
-          highlight={section.soapKey ? highlightSet.has(section.soapKey) : false}
-          onEdit={onEdit}
-          readonly={readonly}
-        />
-      ))}
+      {sections.map((section) => {
+        const node = (
+          <SoapSection
+            letter={section.letter}
+            label={section.label}
+            body={section.body}
+            fullText={text}
+            status={
+              section.soapKey
+                ? statusFor(section.soapKey)
+                : statusFor(null, section.body)
+            }
+            pulseHint={section.soapKey ? pulseHints?.[section.soapKey] ?? null : null}
+            highlight={section.soapKey ? highlightSet.has(section.soapKey) : false}
+            onEdit={onEdit}
+            readonly={readonly}
+          />
+        );
+        // No slot → render EXACTLY what this component has always rendered.
+        // Wrapping unconditionally would change the DOM of every surface that
+        // does not use the slot, which is the opposite of what "additive" means.
+        if (!afterSection) return <Fragment key={section.id}>{node}</Fragment>;
+        return (
+          <div key={section.id} className="qm-lin-soap-section-slot">
+            {node}
+            {afterSection(section)}
+          </div>
+        );
+      })}
 
       <div className="qm-lin-soap-notebody-foot">
         <div className="qm-lin-soap-notebody-foot-meta">

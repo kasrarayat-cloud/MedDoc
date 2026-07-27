@@ -65,6 +65,11 @@ export const RendererBindingSchema = z
     alias: z.string().max(240).nullable(),
     legacyName: z.string().max(240).nullable(),
     tableIndex: z.number().int().nonnegative().nullable(),
+    /** Laterality of this binding's table ROW, stamped at compile time from the
+     *  document's own leg heading rows. 'unknown' when the document gives no
+     *  signal — never inferred from ordering. Addressing uses it fail-closed:
+     *  a sided fact may only fill a same-sided row. */
+    rowLaterality: z.enum(['right', 'left', 'unknown']).default('unknown'),
     rowIndex: z.number().int().nonnegative().nullable(),
     cellIndex: z.number().int().nonnegative().nullable(),
     repeatAncestorPath: z.string().max(512).nullable(),
@@ -259,6 +264,37 @@ export type TemplateDocIR = z.infer<typeof TemplateDocIRSchema>;
 export const SemanticMappingSchema = z
   .object({
     fieldId: z.string().regex(/^ttf_[a-f0-9]{24}$/),
+    /**
+     * WHERE this field's value legitimately comes from.
+     *
+     *  'extraction'      — dictated; fills from a cited EncounterFact. The only
+     *                      class that may ever produce a value today.
+     *  'manual'          — a per-visit human field (the technologist on shift).
+     *                      Nothing can know it, so it is attested BLANK with a
+     *                      named reason rather than blocking certification —
+     *                      the needs-input mechanism, applied by class.
+     *  'context_default' — RESERVED. Deterministic practice context (referring
+     *                      physician, machine, location). NOT implemented: a
+     *                      deterministic fill puts content into a signed note
+     *                      that the clinician did not dictate, and the flagged
+     *                      review-before-sign lane for that does not exist yet.
+     *                      Until it does, these classify as 'manual' and render
+     *                      honestly blank.
+     *  'visit_metadata'  — RESERVED. Deterministic from the visit record.
+     */
+    sourceType: z
+      .enum([
+        'extraction',
+        'context_default',
+        'visit_metadata',
+        'manual',
+        // An enumerated dropdown filled from the live brain's CHOICE_SLOT pick in
+        // the ADOPTED note. Its own provenance class with its own strict checks:
+        // verbatim option only, adopted note only, never from a set-aside
+        // section, and the marker + note version recorded on the cited fact.
+        'verified_note_selection',
+      ])
+      .default('extraction'),
     clinicalConcept: z.string().min(1).max(160).nullable(),
     expectedDataType: z.enum([
       'text',
@@ -302,6 +338,11 @@ export const EncounterFactSchema = z
       .enum([
         'encounter_evidence',
         'approved_practice_default',
+        // A pick the live brain made from the template's OWN enumerated options
+        // and the doctor adopted into the final note. Its provenance is the note
+        // selection itself — marker + note version — not a separately extracted
+        // fact, so it carries its own identity and anchor.
+        'verified_note_selection',
         'clinician_correction',
       ])
       .default('encounter_evidence'),

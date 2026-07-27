@@ -135,7 +135,26 @@ const MOCK_COMPLETE_FIXTURES: Partial<Record<ModelCallPurpose, unknown>> = {
   // (MOCK_TEMPLATE_PHI_SCAN_FLAGGED) is returned instead when
   // MOCK_TEMPLATE_PHI_FLAG=true, so the PHI-gate REJECT path is testable too.
   tm_template_phi_scan: { phiFields: [], anyUncertain: false },
-  tm_template_synthetic_phi_scan: { phiFields: [], anyUncertain: false },
+  // Synthetic-evidence gate at CERTIFY time — a DIFFERENT schema from the
+  // parsed-field scan above (SyntheticEvidencePrivacyScanSchema, and it is
+  // .strict()). This fixture was a copy of the `tm_template_phi_scan` shape,
+  // which cannot parse: `directIdentifierClasses` and
+  // `appearsExplicitlySynthetic` are both required and `phiFields` is not a
+  // member. Every call therefore threw inside mockComplete, surfaced as
+  // SCAN_UNAVAILABLE, and was rethrown by synthetic-test.ts as
+  // SYNTHETIC_EVIDENCE_REJECTED — so the certification path was unreachable
+  // under MOCK_AI_CALLS no matter how clean the evidence was.
+  //
+  // Returning the CLEAN verdict here mocks only the model's second opinion.
+  // The deterministic half of that gate is not mocked and still runs in full:
+  // the explicit synthetic-marker regex, detectStructuredPhi(), the length
+  // bounds and the prompt-injection check all still reject unlabeled or
+  // identifier-bearing evidence under MOCK.
+  tm_template_synthetic_phi_scan: {
+    directIdentifierClasses: [],
+    appearsExplicitlySynthetic: true,
+    anyUncertain: false,
+  },
 };
 
 // Note-format PHI gate — the FLAGGED counterpart to the clean

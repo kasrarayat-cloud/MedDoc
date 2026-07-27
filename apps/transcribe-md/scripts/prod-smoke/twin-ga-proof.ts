@@ -27,11 +27,16 @@ async function main() {
   const file = process.argv[2];
   const bytes = new Uint8Array(readFileSync(file));
 
+  // The actor is ALWAYS a synthetic fixture. Confirming eighty mappings is the
+  // clinical safety gate; a script asserting it on a real clinician's template
+  // would hollow it out. On QA that is the qa- user; on prod it is the
+  // smoke-doctor account, named explicitly rather than discovered.
+  const actorEmail = process.env.TWIN_SMOKE_ACTOR_EMAIL;
   const user = await prisma.user.findFirst({
-    where: { email: { contains: 'qa-' } },
+    where: actorEmail ? { email: actorEmail } : { email: { contains: 'qa-' } },
     select: { id: true, practiceId: true, email: true },
   });
-  if (!user) throw new Error('no QA user on this database');
+  if (!user) throw new Error(`no synthetic actor on this database (${actorEmail ?? 'qa-*'})`);
   const actor = { userId: user.id, userEmail: user.email, practiceId: user.practiceId };
   say(`actor ${user.email}`);
 
@@ -76,20 +81,28 @@ async function main() {
   // fictional | mock | test | example) so a mislabeled real encounter can
   // never be persisted as a certification proof. Satisfy it honestly rather
   // than routing around it.
+  // Dense bilateral reflux narrative. Three things it must do at once:
+  //   * state >= 10 enumerated picks IN THE OPTIONS' OWN WORDING, so the live
+  //     brain's CHOICE_SLOT picks have facts to cite;
+  //   * state multiple measurements per leg, so the measurement cells fill and
+  //     the >= 1-cell floor is met by real evidence;
+  //   * DELIBERATELY leave segments unmentioned (SSV, AAGSV, PAGSV, below-knee)
+  //     so the >= 1-blank invariant keeps exercising blank behaviour.
+  // The evidence gate still requires the explicit synthetic marker.
   const ENCOUNTER = [
     'SYNTHETIC TEST ENCOUNTER — fictional data, not a real patient.',
-    'Bilateral lower extremity venous duplex reflux study.',
-    'Right great saphenous vein reflux 2.4 seconds, diameter 7 mm.',
-    'Left great saphenous vein reflux 3.1 seconds, diameter 8 mm.',
-    'No deep venous thrombosis identified bilaterally.',
+    'Bilateral lower extremity venous duplex reflux study, bilateral detailed.',
+    'Clinical indication: chronic venous insufficiency with aching, heaviness and swelling.',
+    'Technique: patient examined standing, with augmentation and Valsalva maneuvers.',
+    'Right leg. Great saphenous vein at the saphenofemoral junction: diameter 7 millimeters, reflux 2.4 seconds.',
+    'Right great saphenous vein at the proximal thigh: diameter 6.4 millimeters, reflux 2.1 seconds.',
+    'Right great saphenous vein at the knee: diameter 5.1 millimeters, reflux 1.6 seconds.',
+    'Left leg. Great saphenous vein at the saphenofemoral junction: diameter 8 millimeters, reflux 3.1 seconds.',
+    'Left great saphenous vein at the proximal thigh: diameter 6.9 millimeters, reflux 2.8 seconds.',
+    'Left great saphenous vein at the knee: diameter 5.6 millimeters, reflux 1.2 seconds.',
+    'The small saphenous veins and the accessory saphenous veins were not evaluated on this study.',
+    'No deep venous thrombosis identified bilaterally. The deep system is competent.',
     'Impression: bilateral great saphenous vein incompetence, left greater than right.',
-    // The DIAGNOSIS control is an enumerated single_select mapped to the
-    // `assessment` concept. The resolver will not infer an enumerated
-    // diagnosis from prose — it raises FIELD_NEEDS_CLINICIAN_INPUT rather than
-    // guess, which is correct for a clinically material assessment field. So
-    // the synthetic encounter states the diagnosis in the template's own
-    // words, which is exactly the "add direct synthetic evidence" the error
-    // asks for — not a relaxation of the check.
     'Diagnosis: Chronic venous hypertension with other complications of bilateral lower extremities.',
   ].join(' ');
   try {
@@ -145,13 +158,28 @@ async function main() {
   say(`CERTIFY status=${compiled?.certificationStatus}`);
 
   // ── the payoff: the doctor's own document back, filled ──────────────────
-  const manifest = await prisma.templateTwinFillManifest.findFirst({
-    where: { compiledVersionId: compiled!.id },
-    orderBy: { createdAt: 'desc' },
-    select: { outputObjectKey: true, outputSha256: true, outputSizeBytes: true, fillStatus: true },
+  // The synthetic proof's artifact lives ON the compiled version — the separate
+  // fill-manifest table belongs to VISITS. Reading the wrong one reported
+  // "MANIFEST NONE" for a run that had in fact produced and verified a document.
+  const artifact = await prisma.templateTwinCompiledVersion.findUnique({
+    where: { id: compiled!.id },
+    select: {
+      latestTestOutputObjectKey: true,
+      latestTestOutputSha256: true,
+      latestTestMappingsSha256: true,
+    },
   });
+  const manifest = artifact?.latestTestOutputObjectKey
+    ? {
+        status: 'verified',
+        outputObjectKey: artifact.latestTestOutputObjectKey,
+        outputSha256: artifact.latestTestOutputSha256,
+        outputSizeBytes: null as number | null,
+      }
+    : null;
+  say(`MAPPINGS sha=${String(artifact?.latestTestMappingsSha256).slice(0, 12)}`);
   say(
-    `MANIFEST ${manifest ? `status=${manifest.fillStatus} bytes=${manifest.outputSizeBytes} sha=${String(manifest.outputSha256).slice(0, 12)}` : 'NONE'}`
+    `MANIFEST ${manifest ? `status=${manifest.status} bytes=${manifest.outputSizeBytes} sha=${String(manifest.outputSha256).slice(0, 12)}` : 'NONE'}`
   );
   if (manifest?.outputObjectKey) {
     const { createTemplateTwinArtifactStore } = await import('@/lib/template-twin/storage');
@@ -160,7 +188,6 @@ async function main() {
       practiceId: user.practiceId,
       objectKey: manifest.outputObjectKey,
       expectedSha256: manifest.outputSha256!,
-      expectedSizeBytes: manifest.outputSizeBytes ?? undefined,
     });
     writeFileSync('/app/twin-native-output.docx', Buffer.from(out));
     say(`NATIVE DOCX written: ${out.byteLength} bytes`);

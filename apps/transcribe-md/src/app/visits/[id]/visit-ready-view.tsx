@@ -32,13 +32,16 @@ import { placeholderSections } from '@/lib/parse-note-sections';
 import { ReviewTabsV2, type V2Tab } from './review-tabs-v2';
 // UX simplification pack (B) — flag-gated signed-visit document view.
 import { isUxSimplify } from '@/config/ux-simplify';
+// Pre-sign review as one document — flag-gated, UNSIGNED visits.
+import { isReviewDocView } from '@/config/review-doc-view';
+import { ReviewDocumentView } from './review-document-view';
 import { SignedDocumentView } from './signed-document-view';
 import { extractIcdRows } from '@/lib/em-coding/icd-rows';
 import { BillingCardC3 } from './billing-card-c3';
 import { SoapEditor } from './soap-editor';
 import { SuggestionsLane, type SuggestedClaimView } from './suggestions-lane';
 import { CodesTab, codesTabHasWarnings } from './codes-tab';
-import { RxTab, rxTabWarningLevel } from './rx-tab';
+import { RxTab, rxTabHasContent, rxTabWarningLevel } from './rx-tab';
 import { ExtrasTab, extrasTabHasFlag } from './extras-tab';
 import { CopySectionButton } from './copy-section-button';
 import { TranscriptTab, utterancesToSources } from './transcript-tab';
@@ -51,6 +54,18 @@ import {
   sectionExtras,
 } from '@/lib/ehr-formatters';
 import { formatLocalDateTime } from '@/lib/format-time';
+import { isVisitDocPage } from '@/config/visit-doc-page';
+import { isChatEditor } from '@/config/chat-editor';
+import { ChatEditorPanel } from './chat-editor-panel';
+import { saveNoteSectionAction } from '@/actions/save-note-section';
+import { rescoreEmAction } from '@/actions/rescore-em';
+import { readNoteSection } from '@/lib/splice-note-section';
+import { SectionEditCard } from './section-edit-card';
+import { parseNoteSections } from '@/lib/parse-note-sections';
+import {
+  VisitDocumentSurface,
+  VISIT_DOCUMENT_MISS_TEXT,
+} from './visit-document-surface';
 
 type VisitReadyViewTheme = 'legacy' | 'clinician';
 
@@ -159,6 +174,9 @@ export interface VisitReadyViewProps {
    *  or null when there is nothing to confirm. Hydrates the Sign & Send
    *  modal's confirm control; the sign route enforces it server-side. */
   emPendingChange?: { from: string; to: string } | null;
+  /** The note changed since the E/M level was scored — signing is refused
+   *  until the codes row re-checks it. */
+  emStale?: boolean;
 
   // Phase 5.1.1 — V4 Extras card-stream wiring.
   // Patient identity (powers DemographicsCard) + problem list (powers
@@ -202,6 +220,53 @@ export function VisitReadyView(props: VisitReadyViewProps) {
     version: number;
     seq: number;
   } | null>(null);
+
+  // ── PHASE 2 — the visit page IS the document ────────────────────────────
+  const docPage = isVisitDocPage();
+
+  const chatEditor = isChatEditor();
+  /** Set once the document turns out to be unavailable (not certified, fill
+   *  failed, could not be drawn). Latched so the page does not flicker between
+   *  two surfaces while the doctor is reading — and so the styled note, once
+   *  chosen, stays chosen for this visit. */
+  /** Mirrors the server's `emStale`. Every content mutation on this page sets
+   *  it server-side; the re-score clears it. Held locally so the badge and the
+   *  sign bar react without a round trip. */
+  const [emStale, setEmStale] = useState(props.emStale ?? false);
+  const [docPageMiss, setDocPageMiss] = useState<string | null>(null);
+  const docPageUnavailable = docPageMiss !== null;
+  const handleDocPageUnavailable = useCallback((reason: string | null) => {
+    setDocPageMiss(reason ?? 'no_render');
+  }, []);
+  /** The anchors cards are placed against. The KEY IS THE SECTION LABEL, which
+   *  is exactly what the suggestion map is keyed by — so a card placed on a
+   *  page and a card placed under a heading resolve through the same lookup. */
+  /** Save one section. Goes through saveNoteSectionAction (which splices and
+   *  delegates to the existing draft save), then bumps the same `adoption`
+   *  state an adopt does — so the document re-fills through one path, not two. */
+  const saveSection = useCallback(
+    async (label: string, body: string, expectedVersion: number) => {
+      const r = await saveNoteSectionAction(props.visitId, label, body, expectedVersion);
+      if (!r.ok || !r.soapFinal) return { ok: false, error: r.error };
+      setEmStale(true);
+      setAdoption((prev) => ({
+        text: r.soapFinal as string,
+        version: r.soapVersion ?? (prev?.version ?? props.soapVersion) + 1,
+        seq: (prev?.seq ?? 0) + 1,
+      }));
+      return { ok: true };
+    },
+    [props.visitId, props.soapVersion],
+  );
+
+  const docAnchors = useMemo(
+    () =>
+      (docPage ? parseNoteSections(adoption?.text ?? props.soapText) : []).map((sec) => ({
+        key: sec.label,
+        text: sec.label,
+      })),
+    [docPage, adoption?.text, props.soapText],
+  );
   // E/M visible-confirm (prod smoke #311) — the unacknowledged change the
   // Sign & Send modal must surface. Server-rendered prop is the source of
   // truth (re-synced on every RSC refresh via the adjust-state-during-
@@ -217,12 +282,25 @@ export function VisitReadyView(props: VisitReadyViewProps) {
     setSyncedPendingEm(propPendingEm);
     setPendingEmChange(propPendingEm);
   }
+
+  const rescoreEm = useCallback(async () => {
+    const r = await rescoreEmAction(props.visitId);
+    if (!r.ok) return;
+    setEmStale(r.stale);
+    // The level moved: hand it to the SAME confirm card an adopt would arm.
+    if (r.pending) setPendingEmChange(r.pending);
+  }, [props.visitId]);
+
+
   const handleSuggestionAdopted = useCallback(
     (r: {
       soapFinal: string;
       soapVersion: number;
       emPendingChange?: { from: string; to: string } | null;
     }) => {
+      // Adopting changes the note, so the server marked the level stale.
+      // Mirror it: the badge and the lazy re-score both key off this.
+      setEmStale(true);
       setAdoption((prev) => ({
         text: r.soapFinal,
         version: r.soapVersion,
@@ -271,6 +349,9 @@ export function VisitReadyView(props: VisitReadyViewProps) {
   // Per-tab warning badges driven by confidenceScores + wire-data.
   const codesWarn = codesTabHasWarnings(props.confidenceScores);
   const rxWarn = rxTabWarningLevel(props.rxDrafts);
+  /** Anything to show at all — medications or warnings. Distinct from rxWarn,
+   *  which is what makes a gate fire. */
+  const rxHasContent = rxTabHasContent(props.rxDrafts);
   const extrasWarn = extrasTabHasFlag(
     props.confidenceScores,
     Boolean(props.patientSummary)
@@ -541,6 +622,219 @@ export function VisitReadyView(props: VisitReadyViewProps) {
     //    The nodes are pulled straight out of the tab list that was just built,
     //    so the note and the transcript render byte-for-byte what the tabs
     //    render. Only the container changes.
+    // 3b. PRE-SIGN REVIEW AS THE DOCUMENT — flag NEXT_PUBLIC_REVIEW_DOC_VIEW.
+    //     The other half of the linearisation, for UNSIGNED visits. The gates
+    //     are NOT moved: RxTab is handed to the document verbatim (same
+    //     override modal, same recordOverride, one button per warning), the E/M
+    //     confirmation inside SignAndSendModal stays exactly where it is and
+    //     stays the enforcement, and POST /sign is untouched. What changes is
+    //     that a blocker can no longer hide behind a tab nobody opened.
+    if (isReviewDocView() && !isSigned) {
+      const dictationNode = tabs.find((t) => t.key === 'transcript')?.node ?? null;
+      const emBlob = (props.cptCodes as { em?: CptEm } | null | undefined)?.em ?? null;
+      const displayedEm = projectDisplayedEmCode(emBlob, false);
+
+      return (
+        <div className="w-full qm-c3-rev2-root">
+          {/* The PIPELINE review-reason banner — not the set-aside advisory the
+              inline highlights replace. It names why the pipeline flagged the
+              visit, which nothing else on this surface says, so it stays. */}
+        {props.needsReview && props.reviewReason && !props.signedAt && (
+          <div
+            role="status"
+            data-testid="review-reason-banner"
+            className="mb-4 rounded-lg border px-4 py-3 text-[13px] leading-relaxed"
+            style={{
+              borderColor:
+                'color-mix(in srgb, var(--color-linear-amber) 35%, transparent)',
+              background:
+                'color-mix(in srgb, var(--color-linear-amber) 8%, transparent)',
+              color: 'var(--color-linear-amber)',
+            }}
+          >
+            <span className="font-medium">Review before signing — </span>
+            <span style={{ color: 'var(--color-linear-text-2)' }}>
+              {props.reviewReason}
+            </span>
+          </div>
+        )}
+          {/* WHY the document is not on screen. The reason was carried all the
+              way here and then read as a boolean — so a doctor whose template
+              is not certified watched "Opening your document…" turn into a
+              styled note with no explanation. Silence is illegal. */}
+          {docPage && docPageMiss && VISIT_DOCUMENT_MISS_TEXT[docPageMiss] && (
+            <p
+              className="qm-vdoc-counts"
+              role="status"
+              data-testid="visit-document-miss"
+            >
+              {VISIT_DOCUMENT_MISS_TEXT[docPageMiss]}
+            </p>
+          )}
+          {chatEditor && !props.signedAt && (
+            <ChatEditorPanel
+              visitId={props.visitId}
+              disabled={props.readonly}
+              onNoteChanged={(r) => {
+                // The server marked the level stale for this change; mirror it
+                // locally or the badge never appears, the codes row never
+                // re-scores, and the doctor meets the sign gate with no visible
+                // way to resolve it.
+                setEmStale(true);
+                setAdoption((prev) => ({
+                  text: r.soapFinal,
+                  version: r.soapVersion ?? (prev?.version ?? props.soapVersion) + 1,
+                  seq: (prev?.seq ?? 0) + 1,
+                }));
+              }}
+              onHeaderChanged={() => {
+                // Bump the revision ONLY. The note is byte-identical — a header
+                // edit changes the drawn page, not the clinical content — so
+                // the text is carried forward untouched and the level is NOT
+                // marked stale: nothing that E/M scores on has moved.
+                setAdoption((prev) => ({
+                  text: prev?.text ?? props.soapText,
+                  version: prev?.version ?? props.soapVersion,
+                  seq: (prev?.seq ?? 0) + 1,
+                }));
+              }}
+              onScrollTo={(target) => {
+                // EVERY target the schema allows must resolve to something.
+                // `em_gate` and `suggestions` had no anchor at all, so the chat
+                // said "Took you to the E/M gate" and the page did not move —
+                // a navigation aid that lies about having navigated.
+                const el =
+                  target === 'rx_gate'
+                    ? document.querySelector('[data-testid="review-doc-rx-gate"]')
+                    : target === 'document'
+                      ? document.querySelector('[data-testid="visit-document"]')
+                      : target === 'suggestions'
+                        ? // The first outstanding card; the lane has no single
+                          // container, and scrolling to a group that may not
+                          // exist is the same failure one level down.
+                          document.querySelector('[data-testid="review-doc-suggestion"]')
+                        : document.querySelector(`[data-chat-target="${target}"]`);
+                // "Show billing" has to OPEN it, not scroll to a collapsed row.
+                // Now that codes and billing live behind one on-demand panel,
+                // taking the doctor to a shut drawer and calling it done would
+                // be the reachability ruling honoured in letter only. The panel
+                // is its own toggle, so ask it to open rather than mirroring
+                // its state up here where the two could drift apart.
+                if (
+                  el instanceof HTMLElement &&
+                  el.getAttribute('aria-expanded') === 'false'
+                ) {
+                  el.click();
+                }
+                el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }}
+            />
+          )}
+          <ReviewDocumentView
+            visitId={props.visitId}
+            doctorEmail={props.doctorEmail}
+            emailEnabled={props.emailEnabled}
+            soapFinal={adoption?.text ?? props.soapText}
+            /* PHASE 2 — the page becomes the doctor's own form. Returns null
+               when there is nothing to draw, and ReviewDocumentView then falls
+               back to renderNote below, unchanged. */
+            renderDocument={
+              docPage && !props.signedAt && !docPageUnavailable
+                ? (afterLabel) => (
+                    <VisitDocumentSurface
+                      visitId={props.visitId}
+                      revision={adoption?.seq ?? 0}
+                      anchors={docAnchors}
+                      renderAfterSection={(keys) => (
+                        <>
+                          {keys.map((k) => (
+                            /* Named, because "which section is this suggestion
+                               under" is the invariant that matters clinically:
+                               a claim reviewed under one heading and signed
+                               under another is the failure this placement
+                               exists to prevent. Nothing reads it at runtime. */
+                            <div key={k} data-section={k}>
+                              {afterLabel(k)}
+                              {/* Under the page the section appears on — the
+                                  only place this view can honestly offer it. */}
+                              <SectionEditCard
+                                label={k}
+                                body={readNoteSection(adoption?.text ?? props.soapText, k)}
+                                disabled={props.readonly || props.signedAt !== null}
+                                soapVersion={adoption?.version ?? props.soapVersion}
+                                onSave={saveSection}
+                              />
+                            </div>
+                          ))}
+                        </>
+                      )}
+                      renderUnplaced={(keys) => (
+                        <>
+                          {keys.map((k) => (
+                            <div key={k}>{afterLabel(k)}</div>
+                          ))}
+                        </>
+                      )}
+                      onUnavailable={handleDocPageUnavailable}
+                    />
+                  )
+                : undefined
+            }
+            renderNote={(afterSection) => (
+              <SoapEditor
+                key={`soap-editor-${adoption?.seq ?? 0}`}
+                visitId={props.visitId}
+                doctorEmail={props.doctorEmail}
+                emailEnabled={props.emailEnabled}
+                initialText={adoption?.text ?? props.soapText}
+                initialSoapVersion={adoption?.version ?? props.soapVersion}
+                readonly={props.readonly}
+                signedAt={props.signedAt}
+                sources={soapSources}
+                initialScore={props.initialEmScore}
+                emPendingChange={pendingEmChange}
+                chromeless
+                afterSection={afterSection}
+              />
+            )}
+            claims={props.suggestedClaims ?? []}
+            rxGateNode={
+              // PRESCRIPTIONS **OR** WARNINGS. Warnings alone was the old
+              // condition, which meant a visit with medications and no
+              // interaction had nowhere to show them; and an imaging study with
+              // neither still drew a "Prescription safety" heading over an empty
+              // panel. The GATE behaviour is untouched — it keys on
+              // `rxBlocking`, below, exactly as before.
+              rxHasContent ? (
+                <RxTab
+                  rx={props.rxDrafts}
+                  visitId={props.visitId}
+                  readonly={props.readonly}
+                  initialOverriddenIds={props.rxOverriddenWarningIds}
+                  onResolvedChange={setRxResolved}
+                />
+              ) : null
+            }
+            rxBlocking={!rxResolved}
+            rxHasWarnings={rxWarn !== null}
+            emPendingChange={pendingEmChange}
+            summary={{
+              icd: extractIcdRows(props.icdCodes),
+              emCode: displayedEm,
+              emNotApplicable: !!props.emNotApplicable,
+            }}
+            emStale={emStale}
+            onRescoreEm={rescoreEm}
+            billingNode={tabs.find((t) => t.key === 'billing')?.node ?? null}
+            codesNode={tabs.find((t) => t.key === 'codes')?.node ?? null}
+            dictationNode={dictationNode}
+            dictationLabel={secondTabLabel}
+            onAdopted={handleSuggestionAdopted}
+          />
+        </div>
+      );
+    }
+
     if (isUxSimplify() && isSigned) {
       const noteNode = tabs.find((t) => t.key === 'note')?.node ?? null;
       const dictationNode = tabs.find((t) => t.key === 'transcript')?.node ?? null;
@@ -554,6 +848,18 @@ export function VisitReadyView(props: VisitReadyViewProps) {
       return (
         <div className="w-full qm-c3-rev2-root">
           <SignedDocumentView
+              documentNode={
+                docPage && !docPageUnavailable ? (
+                  <VisitDocumentSurface
+                    visitId={props.visitId}
+                    revision={adoption?.seq ?? 0}
+                    anchors={[]}
+                    renderAfterSection={() => null}
+                    renderUnplaced={() => null}
+                    onUnavailable={handleDocPageUnavailable}
+                  />
+                ) : undefined
+              }
             visitId={props.visitId}
             doctorEmail={props.doctorEmail}
             emailEnabled={props.emailEnabled}

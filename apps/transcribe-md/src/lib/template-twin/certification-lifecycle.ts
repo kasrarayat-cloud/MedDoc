@@ -29,6 +29,11 @@ import { parseTemplateTwinArtifactKey } from './storage';
 import { canonicalSha256 } from './canonical';
 import { validateTemplateTwin } from './validation';
 
+/** Minimum filled fields a synthetic proof must produce before a template may
+ *  certify. Set from what the WM_IOV encounter legitimately supports; raise it
+ *  as encounters get richer, never lower it to make a fixture pass. */
+const MIN_CERTIFIED_FILLED_FIELDS = 10;
+
 export class TemplateTwinLifecycleError extends Error {
   readonly code:
     | 'NOT_FOUND'
@@ -61,6 +66,7 @@ export interface TemplateTwinActor {
 }
 
 interface PersistedMappingRow {
+  sourceType: string;
   clinicalConcept: string | null;
   expectedDataType: string;
   polarityBehavior: string;
@@ -81,6 +87,7 @@ function fromPersistedMapping(
 ): SemanticMapping {
   return SemanticMappingSchema.parse({
     fieldId,
+    sourceType: row.sourceType,
     clinicalConcept: row.clinicalConcept,
     expectedDataType: row.expectedDataType,
     polarityBehavior: row.polarityBehavior,
@@ -187,6 +194,7 @@ async function loadOwnedCompilation(
               mapping: {
                 select: {
                   id: true,
+                  sourceType: true,
                   clinicalConcept: true,
                   expectedDataType: true,
                   polarityBehavior: true,
@@ -418,7 +426,14 @@ export async function updateTemplateTwinMappings(input: {
           mapping.status === 'unsupported' ||
           !isMappingTypeCompatible(field, mapping) ||
           !validPracticeDefault(field, mapping) ||
-          (mapping.status === 'certified' && !mapping.clinicalConcept)
+          // A MANUAL field carries no clinical concept because there is no
+          // evidence to cite — it is a per-visit human value that renders
+          // BLANK. Confirming its CLASSIFICATION is what the doctor is
+          // approving, not a concept. Same carve-out as fieldsReady, and it can
+          // never produce a value, so no evidence rule is relaxed.
+          (mapping.status === 'certified' &&
+            !mapping.clinicalConcept &&
+            mapping.sourceType !== 'manual')
         ) {
           throw new TemplateTwinLifecycleError(
             'MAPPING_INVALID',
@@ -475,6 +490,9 @@ export async function updateTemplateTwinMappings(input: {
         await tx.templateTwinSemanticMapping.update({
           where: { id: persisted.mapping.id },
           data: {
+            // Persist the classification. Without this the manual carve-outs in
+            // the gate are inert: every mapping reads back as 'extraction'.
+            sourceType: mapping.sourceType,
             clinicalConcept: mapping.clinicalConcept,
             expectedDataType: mapping.expectedDataType,
             polarityBehavior: mapping.polarityBehavior,
@@ -580,9 +598,19 @@ export async function certifyAndActivateTemplateTwin(input: {
       const mappingById = new Map(mappings.map((mapping) => [mapping.fieldId, mapping]));
       const fieldsReady = ir.fields.every((field) => {
         const mapping = mappingById.get(field.fieldId);
+        if (!mapping) return false;
+        // A MANUAL field is a per-visit human value nobody can know — the
+        // technologist on shift. It carries no clinical concept because there
+        // is no evidence to cite, and it renders BLANK. Requiring a concept
+        // there would block certification on a field that is behaving
+        // correctly, so it is attested instead: the same mechanism
+        // needs-clinician-input already uses, applied narrowly by CLASS.
+        // Nothing about it can produce a value, so no evidence rule is relaxed.
+        if (mapping.sourceType === 'manual') {
+          return mapping.status === 'certified' && isMappingTypeCompatible(field, mapping);
+        }
         return Boolean(
-          mapping &&
-            mapping.status === 'certified' &&
+          mapping.status === 'certified' &&
             mapping.clinicalConcept &&
             isMappingTypeCompatible(field, mapping) &&
             validPracticeDefault(field, mapping),
@@ -653,8 +681,11 @@ export async function certifyAndActivateTemplateTwin(input: {
       const unreadyFieldIds = ir.fields
         .filter((field) => {
           const mapping = mappingById.get(field.fieldId);
+          if (!mapping) return true;
+          if (mapping.sourceType === 'manual') {
+            return !(mapping.status === 'certified' && isMappingTypeCompatible(field, mapping));
+          }
           return !(
-            mapping &&
             mapping.status === 'certified' &&
             mapping.clinicalConcept &&
             isMappingTypeCompatible(field, mapping) &&
@@ -717,6 +748,40 @@ export async function certifyAndActivateTemplateTwin(input: {
       const blankProofCount = roundTripFields.filter(
         (entry) => isRecord(entry) && entry.kind === 'blank',
       ).length;
+      // ── FILL-COVERAGE INVARIANT ──────────────────────────────────────────
+      // A template must not certify with a dead fill path. WM_IOV certified
+      // cleanly while the visit-time fill produced filledCount=0 — the
+      // certificate attested a template whose measurements never landed,
+      // because the synthetic proof exercised almost nothing.
+      //
+      // So: the synthetic encounter must produce a REALISTIC fill — enough
+      // filled fields, and at least one measurement CELL, which is the path
+      // that was silently broken. Both counts come from what the WM_IOV
+      // encounter legitimately supports; neither relaxes anything.
+      const filledResolutions = [...syntheticResolutions.values()].filter(
+        (r) => r != null && r.value !== null,
+      );
+      const cellFieldIds = new Set(
+        ir.fields.filter((f) => f.rendererBinding.bindingType === 'table_cell').map((f) => f.fieldId),
+      );
+      const filledCellCount = [...syntheticResolutions.entries()].filter(
+        ([fieldId, r]) => cellFieldIds.has(fieldId) && r != null && r.value !== null,
+      ).length;
+      if (testReady && filledResolutions.length < MIN_CERTIFIED_FILLED_FIELDS) {
+        blockers.push(
+          `fillCoverage=false (${filledResolutions.length} filled, need >= ${MIN_CERTIFIED_FILLED_FIELDS} — ` +
+            'the synthetic encounter must exercise a realistic fill, or the certificate ' +
+            'attests a template whose fill path is dead)',
+        );
+      }
+      if (testReady && cellFieldIds.size > 0 && filledCellCount === 0) {
+        blockers.push(
+          'fillCoverage=false (no measurement CELL was filled — that is the path ' +
+            'that silently produced empty documents; a template with table cells must ' +
+            'prove at least one)',
+        );
+      }
+
       if (testReady && blankProofCount === 0) {
         blockers.push(
           'blankVerification=false (no field was proven blank — the synthetic ' +

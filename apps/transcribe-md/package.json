@@ -16,7 +16,9 @@
     "minio:cleanup": "tsx scripts/minio-cleanup.ts",
     "patients:backfill": "tsx scripts/backfill-patients.ts",
     "patients:fix-drift": "tsx scripts/fix-patientname-drift.ts",
-    "eval:primock57": "tsx scripts/eval/primock57-run.ts"
+    "eval:primock57": "tsx scripts/eval/primock57-run.ts",
+    "eval:chat-editor": "tsx scripts/eval/chat-editor-eval.ts",
+    "eval:chat-editor:ci": "tsx scripts/eval/chat-editor-eval.ts --ci"
   },
   "dependencies": {
     "@meddoc/ai": "*",
@@ -37,6 +39,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.0.4",
     "docx": "^9.6.1",
+    "docx-preview": "^0.3.6",
     "fast-xml-parser": "^5.7.1",
     "geist": "^1.4.2",
     "ioredis": "^5.9.0",
@@ -48,6 +51,7 @@
     "next-auth": "5.0.0-beta.32",
     "otplib": "^13.4.0",
     "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^4.10.38",
     "pdfkit": "^0.15.1",
     "qrcode": "^1.5.4",
     "react": "19.2.4",
