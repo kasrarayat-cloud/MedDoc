@@ -73,7 +73,12 @@ test.describe('pre-sign review as the document', () => {
   test('renders the document, not the tab strip', async ({ page }) => {
     test.skip(!(await open(page, 'rdoc-1')), 'psql seeding unavailable');
     await expect(page.locator('.qm-c3-rev2-tabs')).toHaveCount(0);
-    await expect(page.locator(SUGG)).toHaveCount(3);
+    // The document itself, not a tab strip and not a card stack. This used to
+    // assert THREE suggestion cards — the fixture seeds three claims and the
+    // lane rendered them. The verifier is audit-only now, so the honest count
+    // is zero; the dedicated no-remnants test below covers the rest.
+    await expect(page.locator(SUGG)).toHaveCount(0);
+    await expect(page.getByTestId('review-document-view')).toBeVisible();
   });
 
   // ── THE LANE IS GONE ─────────────────────────────────────────────────
