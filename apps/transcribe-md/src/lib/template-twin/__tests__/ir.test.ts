@@ -83,6 +83,7 @@ function validIr(): TemplateDocIR {
           tag: 'synthetic_status',
           alias: 'Synthetic status',
           legacyName: null,
+          rowLaterality: 'unknown' as const,
           tableIndex: null,
           rowIndex: null,
           cellIndex: null,

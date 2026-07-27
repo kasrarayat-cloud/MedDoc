@@ -233,6 +233,18 @@ async function clearAutomationColumn(
 // effects — Worker creation, Redis connect, Sentry init — which make
 // it un-importable from tests).
 
+/** Does the review lane currently hold anything?
+ *
+ *  Read FRESH and with the column named explicitly — see the call site. */
+async function laneHasSuggestions(visitId: string): Promise<boolean> {
+  const row = await prisma.transcribeVisit.findUnique({
+    where: { id: visitId },
+    select: { suggestedClaims: true },
+  });
+  const claims = row?.suggestedClaims;
+  return Array.isArray(claims) && claims.length > 0;
+}
+
 async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
   const { visitId } = job.data;
 
@@ -690,6 +702,14 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         soapDraft,
         critique,
         noteTemplate,
+        // Only point the doctor at the review lane when there IS one.
+        //
+        // Read FRESH, and with the column named explicitly. The `visit` object
+        // above is loaded before L4 runs and does not select this field, so
+        // reading it from there would be `undefined` on every visit — prisma is
+        // untyped here, so nothing would have said so and the deferred-fix
+        // sentence would simply have stopped appearing.
+        hasSuggestions: await laneHasSuggestions(visitId),
       });
     }
 

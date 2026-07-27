@@ -25,3 +25,74 @@ Skip preflight for: single-file reads, single-file edits (<50 lines), read-only 
 
 Never bypass preflight on a major task. Never prompt the user "run preflight?" — just run it. Output is silent on GO, surfaced fully on FIX-AND-GO or BLOCK. Reports are always written to `docs/preflight-reports/preflight-<UTC-timestamp>.md` for the audit trail.
 <!-- END:preflight-gate -->
+
+## Production verification — standing law
+
+**A real doctor's visit is never a smoke target.** Not to take a screenshot, not
+to confirm a deploy, not "just this once". Signing, adopting into, or exporting
+someone's actual clinical note to prove your own change works is not a test —
+it is editing a medical record for your convenience.
+
+Production verification is **structural**:
+
+- container health, image digests, applied migrations
+- the flag is inlined in the shipped bundle (grep the built chunk — a
+  `NEXT_PUBLIC_*` read that survives at runtime means it was NOT inlined)
+- co-tenant HTTP status
+- DOM *presence* of the new surface on a route, without mutating anything
+- full flows ONLY on the synthetic smoke-doctor account, cleaned to baseline
+  afterwards, with the audit rows left in place
+
+The **full clinical walk lives on QA**, against a build that is byte-identical
+to the one promoted — same commit, same build args, separately tagged image.
+QA is the isolated `meddoc-qa` stack (`127.0.0.1:9020`, synthetic DB, MOCK_AI).
+It is localhost-only by design; reach it through an SSH tunnel. Never rebuild
+prod's `:latest` to stage something — tag a separate image and point a compose
+override at it.
+
+If a flow genuinely cannot be exercised on QA, say so in the report and leave it
+unverified. An unverified step named honestly is worth more than a green tick
+bought with a patient's record.
+
+## Tracked fixtures — a recorded decision
+
+`WM IOV Template.docx` at the repo root is a **known, accepted tracked
+fixture**. It is a customer's BLANK form — headings, dropdown content controls
+and letterhead, no patient data — and the repository is private. It is the only
+real-world template the Template Twin work can be exercised against, and a copy
+lives at `apps/transcribe-md/tests/e2e/fixtures/sample-form.docx` for the E2E
+packs.
+
+Decided 2026-07-26. **Do not re-flag it** in audits or reports, and do not
+rewrite history to remove it.
+
+What this does NOT cover, and what remains forbidden: any **filled** document or
+note. `twin-*.docx`, `diag-*`, and the other clinical artifacts at the repo root
+carry PHI and are gitignored. A filled document is never a fixture.
+
+## Branch cadence — standing rule
+
+**Branch from `main`. Merge back promptly. No long-lived divergence.**
+
+A feature branch is a short-lived thing. It exists to carry one change through
+the gate and then it is retired. It is not a parallel trunk.
+
+- Branch from `main`, not from another feature branch.
+- Merge back **as soon as the change is green**, not when the next one is ready.
+  A branch that ships to production is not "done" — it is done when `main`
+  carries it.
+- If a branch is deployed to production, `main` MUST be reconciled in the same
+  session. Production running code that `main` does not have is the failure
+  state this rule exists to prevent.
+- Retire the branch on merge. Delete it locally and on the remote.
+
+Why this is written down: `fix/twin-visit-export-harness` reached **78 commits
+and 217 files** ahead of `main` while production ran from the branch. Nothing
+was broken by it, but every guarantee `main` is supposed to give had quietly
+stopped being true — `main` was not what shipped, a rollback to `main` would
+have reverted weeks of live behaviour, and the required gate was measuring a
+branch nobody could merge. The longer the divergence, the more the merge stops
+being bookkeeping and starts being a risk of its own.
+
+The gate still applies in full: no merge past a red required check, and no
+override to get one green.

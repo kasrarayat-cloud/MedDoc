@@ -83,6 +83,9 @@ export function rowToListItem(row: {
     // PDF-native export setup state (surfaced so the doctor can finish setup).
     pdfNativeCertified: sp.pdfNativeCertified === true,
     pdfNativePendingPreview: sp.pdfNativePendingPreview === true,
+    // Flat-PDF answer. The .docx twin answer is OR-ed in by the list query,
+    // which is the only caller that joins the twin table.
+    nativePreviewAvailable: sp.pdfNativeCertified === true,
     updatedAt: row.updatedAt,
   };
 }
@@ -101,6 +104,15 @@ export async function listDoctorTemplates(doctorId: string): Promise<TemplateLis
       sections: true,
       styleProfile: true,
       updatedAt: true,
+      // A .docx twin is certified through a different table than a flat PDF, so
+      // "can we show this doctor their own page?" has two answers. The row asks
+      // one question, so it needs both.
+      templateTwinCompiledVersion: {
+        // BOTH halves — the preview action needs the key AND the hash to read
+        // the artifact, so offering the button on the key alone would promise a
+        // page and then deny it exists.
+        select: { latestTestOutputObjectKey: true, latestTestOutputSha256: true },
+      },
     },
     orderBy: [{ updatedAt: 'desc' }],
   });
@@ -114,7 +126,21 @@ export async function listDoctorTemplates(doctorId: string): Promise<TemplateLis
       sections: unknown;
       styleProfile: unknown;
       updatedAt: Date;
-    }) => rowToListItem(r),
+      templateTwinCompiledVersion?: {
+        latestTestOutputObjectKey: string | null;
+        latestTestOutputSha256: string | null;
+      } | null;
+    }) => ((base: TemplateListItem) => ({
+      ...base,
+      // The proof artifact is what the preview renders, so its presence — not
+      // the status alone — is the honest test of "there is a page to show".
+      nativePreviewAvailable:
+        base.pdfNativeCertified ||
+        Boolean(
+          r.templateTwinCompiledVersion?.latestTestOutputObjectKey &&
+            r.templateTwinCompiledVersion?.latestTestOutputSha256,
+        ),
+    }))(rowToListItem(r)),
   );
   // Active first, then drafts, then inactive — stable within each by recency.
   const rank: Record<TemplateStatus, number> = { active: 0, draft: 1, inactive: 2 };

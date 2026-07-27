@@ -1,6 +1,11 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import {
+  isImagingReportSpecialty,
+  ultrasoundSpecialtyEnabled,
+} from '@meddoc/shared/specialties';
+import { seedEmBaselineIfUnset } from '@/lib/em-coding/seed-baseline';
 import { z } from 'zod';
 
 import prisma from '@meddoc/db';
@@ -93,6 +98,15 @@ export async function saveSoapDraftAction(
       status: true,
       deletedAt: true,
       archivedAt: true,
+      // For the baseline seed: the note as it stands BEFORE this save, and
+      // the signals the level is scored from.
+      soapFinal: true,
+      emScoredCode: true,
+      specialty: true,
+      icdCodes: true,
+      rxDrafts: true,
+      cptCodes: true,
+      user: { select: { practiceId: true } },
     },
   });
   if (!visit || visit.userId !== session.user.id) {
@@ -120,6 +134,11 @@ export async function saveSoapDraftAction(
       where: { id: visitId, soapVersion: parsed.data.expectedVersion },
       data: {
         soapFinal: parsed.data.text,
+        // THE NOTE CHANGED. Every editing surface funnels here — the inline
+        // editor, tap-to-edit on the document, and the chat's section edit —
+        // so this one line closes the gap for all of them at once: an edit
+        // used to change the note without the E/M level ever being revisited.
+        emStale: true,
         soapVersion: { increment: 1 },
       },
     });
@@ -139,7 +158,24 @@ export async function saveSoapDraftAction(
         },
       };
     }
-    revalidatePath(`/visits/${visitId}`);
+    // Seed the E/M baseline from the PRE-EDIT note — AFTER the write, as adopt
+  // does. `visit.soapFinal` is still the pre-edit text here (it was read
+  // above), and scoring can be an LLM round-trip: inside the read→write window
+  // of the soapVersion check it widened the race on the AUTOSAVE path and
+  // produced spurious "the note changed in another tab" conflicts.
+  // Page view seeds it for most visits, but not for a doctor whose first
+  // action is an edit — and for them the first re-score would find no
+  // baseline, conclude nothing had moved, and clear the gate.
+  await seedEmBaselineIfUnset({
+    visitId,
+    priorSoap: visit.soapFinal,
+    currentScoredCode: visit.emScoredCode,
+    signals: { icdCodes: visit.icdCodes, rxDrafts: visit.rxDrafts, cptCodes: visit.cptCodes },
+    ctx: { practiceId: visit.user?.practiceId, userId: session.user.id },
+    applies: !(ultrasoundSpecialtyEnabled() && isImagingReportSpecialty(visit.specialty)),
+  });
+
+  revalidatePath(`/visits/${visitId}`);
     return { ok: true, newVersion: parsed.data.expectedVersion + 1 };
   }
 
@@ -150,6 +186,7 @@ export async function saveSoapDraftAction(
     where: { id: visitId },
     data: {
       soapFinal: parsed.data.text,
+      emStale: true,
       soapVersion: { increment: 1 },
     },
     select: { soapVersion: true },

@@ -57,6 +57,7 @@ export const TEMPLATE_TWIN_SIGNING_VISIT_SELECT = {
               detectionStatus: true,
               mapping: {
                 select: {
+                  sourceType: true,
                   clinicalConcept: true,
                   expectedDataType: true,
                   polarityBehavior: true,
@@ -169,6 +170,7 @@ export interface TemplateTwinSigningContext {
         fieldId: string;
         detectionStatus: string;
         mapping: {
+          sourceType: string;
           clinicalConcept: string | null;
           expectedDataType: string;
           polarityBehavior: string;
@@ -294,6 +296,7 @@ function parseCertifiedTemplateState(
     }
     const mapping = SemanticMappingSchema.safeParse({
       fieldId: field.fieldId,
+      sourceType: field.mapping.sourceType,
       clinicalConcept: field.mapping.clinicalConcept,
       expectedDataType: field.mapping.expectedDataType,
       polarityBehavior: field.mapping.polarityBehavior,

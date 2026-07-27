@@ -495,3 +495,17 @@ export function rxTabWarningLevel(rx: unknown): 'critical' | 'any' | null {
   if (warnings.length === 0) return null;
   return warnings.some((w) => w.severity === 'critical') ? 'critical' : 'any';
 }
+
+/**
+ * Is there any prescribing on this visit at all?
+ *
+ * SEPARATE from the warning level, because they answer different questions. The
+ * warning level decides whether a GATE fires; this decides whether the panel is
+ * worth drawing. An imaging study with no medications should not carry a
+ * prescription-safety heading at all — and a visit that HAS medications but no
+ * warnings still must, or the doctor cannot see what they prescribed.
+ */
+export function rxTabHasContent(rx: unknown): boolean {
+  const blob = (rx as RxBlob | null) ?? null;
+  return (blob?.prescriptions?.length ?? 0) > 0 || (blob?.warnings?.length ?? 0) > 0;
+}

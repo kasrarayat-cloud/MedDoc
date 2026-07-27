@@ -78,6 +78,12 @@ export default defineConfig({
       // 24-…rx-clinical-safety → the rx-safety project (needs MOCK_RX_WARNINGS=true,
       // whose critical warning would block every other spec's sign).
       testIgnore: [
+        // The pre-sign document surface — its own flag-ON project below.
+        '**/review-document.spec.ts',
+        // The real-document preview — flag-ON project below; also STOPS the
+        // converter mid-run, which no other spec should have to survive.
+        '**/doc-preview.spec.ts',
+        '**/visit-document.spec.ts',
         '**/a11y.spec.ts',
         '**/23-note-format-phi-parse-reject.spec.ts',
         '**/24-rx-clinical-safety.spec.ts',
@@ -124,6 +130,50 @@ export default defineConfig({
         '**/24-rx-clinical-safety.spec.ts',
         '**/25-rx-override-correlation.spec.ts',
       ],
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      // The pre-sign DOCUMENT surface (NEXT_PUBLIC_REVIEW_DOC_VIEW). Its own
+      // project because the default chromium run builds the pre-C3 skin with
+      // the flag OFF, where this surface does not exist — the pack would fail
+      // the required gate for an environment reason rather than a real one.
+      // Runs against an app built flag-ON, the same way phi-reject/rx-safety
+      // run against their own fixture builds.
+      name: 'review-doc',
+      testMatch: ['**/review-document.spec.ts'],
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      // Real-document preview (NEXT_PUBLIC_DOC_PREVIEW=true). Its own project
+      // because one spec deliberately STOPS the converter sidecar to prove the
+      // fallback — serialised so it cannot break a parallel spec.
+      name: 'doc-preview',
+      testMatch: ['**/doc-preview.spec.ts'],
+      fullyParallel: false,
+      workers: 1,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      // Phase 2 — the visit page as the document (NEXT_PUBLIC_VISIT_DOC_PAGE).
+      // Its OWN project and its OWN image: the doc-preview build does not carry
+      // this flag, so running these there would wait 120s for a surface that
+      // was never compiled in and red the gate for an environment reason.
+      // Serialised — one spec stops the converter sidecar on purpose.
+      // The chat editor. Named *.eval.spec.ts because it burns REAL Anthropic
+      // tokens on every run — that suffix is this repo's marker for the class,
+      // and it is already excluded from the default gate above. Run it
+      // deliberately, against a stack with a real key.
+      name: 'chat-editor',
+      testMatch: ['**/chat-editor.eval.spec.ts'],
+      fullyParallel: false,
+      workers: 1,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'visit-doc',
+      testMatch: ['**/visit-document.spec.ts'],
+      fullyParallel: false,
+      workers: 1,
       use: { ...devices['Desktop Chrome'] },
     },
     {
