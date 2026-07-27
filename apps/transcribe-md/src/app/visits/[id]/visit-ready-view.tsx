@@ -41,7 +41,7 @@ import { BillingCardC3 } from './billing-card-c3';
 import { SoapEditor } from './soap-editor';
 import { SuggestionsLane, type SuggestedClaimView } from './suggestions-lane';
 import { CodesTab, codesTabHasWarnings } from './codes-tab';
-import { RxTab, rxTabWarningLevel } from './rx-tab';
+import { RxTab, rxTabHasContent, rxTabWarningLevel } from './rx-tab';
 import { ExtrasTab, extrasTabHasFlag } from './extras-tab';
 import { CopySectionButton } from './copy-section-button';
 import { TranscriptTab, utterancesToSources } from './transcript-tab';
@@ -349,6 +349,9 @@ export function VisitReadyView(props: VisitReadyViewProps) {
   // Per-tab warning badges driven by confidenceScores + wire-data.
   const codesWarn = codesTabHasWarnings(props.confidenceScores);
   const rxWarn = rxTabWarningLevel(props.rxDrafts);
+  /** Anything to show at all — medications or warnings. Distinct from rxWarn,
+   *  which is what makes a gate fire. */
+  const rxHasContent = rxTabHasContent(props.rxDrafts);
   const extrasWarn = extrasTabHasFlag(
     props.confidenceScores,
     Boolean(props.patientSummary)
@@ -630,7 +633,6 @@ export function VisitReadyView(props: VisitReadyViewProps) {
       const dictationNode = tabs.find((t) => t.key === 'transcript')?.node ?? null;
       const emBlob = (props.cptCodes as { em?: CptEm } | null | undefined)?.em ?? null;
       const displayedEm = projectDisplayedEmCode(emBlob, false);
-      const hasRxWarnings = rxWarn !== null;
 
       return (
         <div className="w-full qm-c3-rev2-root">
@@ -685,6 +687,17 @@ export function VisitReadyView(props: VisitReadyViewProps) {
                   seq: (prev?.seq ?? 0) + 1,
                 }));
               }}
+              onHeaderChanged={() => {
+                // Bump the revision ONLY. The note is byte-identical — a header
+                // edit changes the drawn page, not the clinical content — so
+                // the text is carried forward untouched and the level is NOT
+                // marked stale: nothing that E/M scores on has moved.
+                setAdoption((prev) => ({
+                  text: prev?.text ?? props.soapText,
+                  version: prev?.version ?? props.soapVersion,
+                  seq: (prev?.seq ?? 0) + 1,
+                }));
+              }}
               onScrollTo={(target) => {
                 const el =
                   target === 'rx_gate'
@@ -692,6 +705,18 @@ export function VisitReadyView(props: VisitReadyViewProps) {
                     : target === 'document'
                       ? document.querySelector('[data-testid="visit-document"]')
                       : document.querySelector(`[data-chat-target="${target}"]`);
+                // "Show billing" has to OPEN it, not scroll to a collapsed row.
+                // Now that codes and billing live behind one on-demand panel,
+                // taking the doctor to a shut drawer and calling it done would
+                // be the reachability ruling honoured in letter only. The panel
+                // is its own toggle, so ask it to open rather than mirroring
+                // its state up here where the two could drift apart.
+                if (
+                  el instanceof HTMLElement &&
+                  el.getAttribute('aria-expanded') === 'false'
+                ) {
+                  el.click();
+                }
                 el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
               }}
             />
@@ -765,7 +790,13 @@ export function VisitReadyView(props: VisitReadyViewProps) {
             )}
             claims={props.suggestedClaims ?? []}
             rxGateNode={
-              hasRxWarnings ? (
+              // PRESCRIPTIONS **OR** WARNINGS. Warnings alone was the old
+              // condition, which meant a visit with medications and no
+              // interaction had nowhere to show them; and an imaging study with
+              // neither still drew a "Prescription safety" heading over an empty
+              // panel. The GATE behaviour is untouched — it keys on
+              // `rxBlocking`, below, exactly as before.
+              rxHasContent ? (
                 <RxTab
                   rx={props.rxDrafts}
                   visitId={props.visitId}

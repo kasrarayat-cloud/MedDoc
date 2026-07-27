@@ -189,7 +189,7 @@ test.describe('pre-sign review as the document', () => {
     // Collapsing a surface is not removing it. Override / rescore / dispute
     // must be reachable here, or a doctor who disagrees with a level would need
     // the flag toggled under them.
-    await page.getByTestId('review-doc-codes-toggle').click();
+    await page.getByTestId('review-doc-details-toggle').click();
     const panel = page.locator('.qm-rdoc-meta-panels');
     await expect(panel).toBeVisible();
     await expect(panel.locator('.qm-c3-bill-card')).toBeVisible();

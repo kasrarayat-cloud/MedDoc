@@ -111,13 +111,12 @@ export interface ReviewDocumentViewProps {
 
 export function ReviewDocumentView(props: ReviewDocumentViewProps) {
   const router = useRouter();
-  const dictationPanelId = useId();
-  const summaryPanelId = useId();
+  /** One panel now, where there were two standing rows. */
+  const detailsPanelId = useId();
 
   const [claims, setClaims] = useState<SuggestedClaimView[]>(props.claims);
   const [busy, setBusy] = useState<number | 'bulk' | null>(null);
-  const [openDictation, setOpenDictation] = useState(false);
-  const [openSummary, setOpenSummary] = useState(false);
+  const [openDetails, setOpenDetails] = useState(false);
   const [emConfirmed, setEmConfirmed] = useState(false);
 
   // Claims arrive fresh on every server refresh; the local copy is replaced
@@ -491,78 +490,72 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
         )}
       </article>
 
-      {/* Everything else, linearised: one slim row, tap to expand. */}
-      {hasSummary && (
-        <section className="qm-rdoc-meta">
-          <button
-            type="button"
-            className="qm-rdoc-meta-row qm-tap-44"
-            aria-expanded={openSummary}
-            aria-controls={summaryPanelId}
-            onClick={() => {
-              const next = !openSummary;
-              setOpenSummary(next);
-              // LAZY RE-SCORE. Opening this row is the moment the doctor is
-              // actually looking at the level, so it is the moment to check it
-              // — not on every keystroke-sized save, which would be an LLM
-              // judgement per edit.
-              if (next && props.emStale) void props.onRescoreEm?.();
-            }}
-            data-testid="review-doc-codes-toggle"
-          >
-            <ChevronRight
-              className={`h-3.5 w-3.5 qm-rdoc-chev ${openSummary ? 'open' : ''}`}
-              aria-hidden
-            />
-            <span className="qm-rdoc-meta-key">CODES · BILLING</span>
-            <span className="qm-rdoc-meta-val">
-              {/* Say WHY signing is blocked, at the control that resolves it.
-                  A gate the doctor cannot see the reason for is a dead end. */}
-              {props.emStale && (
-                <span className="qm-rdoc-stale" data-testid="em-stale-badge">
-                  needs re-check
-                </span>
-              )}
-              {props.summary.icd.map((r) => r.code).join(' · ') || '—'}
-              {props.summary.emNotApplicable
-                ? ''
-                : props.summary.emCode
-                  ? `  ·  ${props.summary.emCode}`
-                  : ''}
-            </span>
-          </button>
-          {openSummary && (
-            <div id={summaryPanelId} className="qm-rdoc-meta-body qm-rdoc-meta-panels">
-              {/* Verbatim: BillingCardC3 and CodesTab, the same components the
-                  tabs rendered. Override / rescore / dispute all live here, so
-                  a doctor who disagrees with a level never needs the surface
-                  changed under them. The inline confirm card above remains the
-                  gate; this is where the level is CHANGED, not acknowledged. */}
-              <div className="qm-rdoc-panel">{props.billingNode}</div>
-              <div className="qm-rdoc-panel">{props.codesNode}</div>
-            </div>
-          )}
-      </section>
-      )}
+      {/* ── ON DEMAND ─────────────────────────────────────────────────────
+          ONE affordance where there were two standing rows.
 
+          "CODES · BILLING" and the dictation row sat under every note, on every
+          visit, whether or not they had anything to say — an ultrasound report
+          carried a billing row for a level that does not apply to it. They are
+          not deleted, they are folded: everything both rows held is behind this
+          one, and the chat opens it by name ("show billing"). A test asserts
+          each datum is still reachable.
+
+          The E/M CONFIRM CARD above is untouched and remains the gate. This is
+          where a level is CHANGED or disputed — one tap, exactly as before. */}
       <section className="qm-rdoc-meta">
         <button
           type="button"
           className="qm-rdoc-meta-row qm-tap-44"
-          aria-expanded={openDictation}
-          aria-controls={dictationPanelId}
-          onClick={() => setOpenDictation((v) => !v)}
-          data-testid="review-doc-dictation-toggle"
+          aria-expanded={openDetails}
+          aria-controls={detailsPanelId}
+          data-chat-target="codes"
+          onClick={() => {
+            const next = !openDetails;
+            setOpenDetails(next);
+            // LAZY RE-SCORE, moved with the panel it belonged to. Opening this
+            // is the moment the doctor is actually looking at the level, so it
+            // is the moment to check it — not on every keystroke-sized save.
+            if (next && props.emStale) void props.onRescoreEm?.();
+          }}
+          data-testid="review-doc-details-toggle"
         >
           <ChevronRight
-            className={`h-3.5 w-3.5 qm-rdoc-chev ${openDictation ? 'open' : ''}`}
+            className={`h-3.5 w-3.5 qm-rdoc-chev ${openDetails ? 'open' : ''}`}
             aria-hidden
           />
-          <span className="qm-rdoc-meta-key">{props.dictationLabel.toUpperCase()}</span>
+          <span className="qm-rdoc-meta-key">⋯ details</span>
+          <span className="qm-rdoc-meta-val">
+            {/* Say WHY signing is blocked, at the control that resolves it. A
+                gate the doctor cannot see the reason for is a dead end — so
+                this badge follows the panel rather than staying on a row that
+                no longer exists. */}
+            {props.emStale && (
+              <span className="qm-rdoc-stale" data-testid="em-stale-badge">
+                needs re-check
+              </span>
+            )}
+          </span>
         </button>
-        {openDictation && (
-          <div id={dictationPanelId} className="qm-rdoc-meta-body">
-            {props.dictationNode}
+        {openDetails && (
+          <div id={detailsPanelId} className="qm-rdoc-meta-body qm-rdoc-meta-panels">
+            {/* Verbatim: BillingCardC3 and CodesTab, the same components the
+                tabs rendered. Override / rescore / dispute all live here, so a
+                doctor who disagrees with a level never needs the surface
+                changed under them. */}
+            {hasSummary && (
+              <>
+                <div className="qm-rdoc-panel" data-testid="review-doc-billing-panel">
+                  {props.billingNode}
+                </div>
+                <div className="qm-rdoc-panel" data-testid="review-doc-codes-panel">
+                  {props.codesNode}
+                </div>
+              </>
+            )}
+            <div className="qm-rdoc-panel" data-testid="review-doc-dictation-panel">
+              <h4 className="qm-rdoc-panel-h">{props.dictationLabel.toUpperCase()}</h4>
+              {props.dictationNode}
+            </div>
           </div>
         )}
       </section>

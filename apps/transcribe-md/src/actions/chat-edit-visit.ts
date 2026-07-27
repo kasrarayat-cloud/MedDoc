@@ -45,8 +45,10 @@ import {
   wereRendered,
 } from '@/lib/chat-edit/attestation';
 
+import { editTableCell, findSection, TABLE_EDIT_REASON } from '@/lib/note-table-edit';
 import { adoptSuggestionAction } from './suggestion-actions';
 import { saveNoteSectionAction } from './save-note-section';
+import { updateVisitHeaderAction } from './update-visit-header';
 
 const MODEL = process.env.TRANSCRIBE_MD_CHAT_MODEL || 'claude-opus-4-8';
 
@@ -59,10 +61,20 @@ export interface ChatTurn {
 /** What actually happened, named, for the doctor and for the transcript. */
 export interface ChatActionOutcome {
   kind: ChatIntent['kind'];
-  /** PHI-free label: a section name, an index, a target. */
+  /** PHI-free label: a section name, an index, a target, a column heading. */
   detail: string;
   ok: boolean;
   error?: string;
+  /**
+   * The before/after of a value, for the doctor's own screen ONLY.
+   *
+   * SEPARATE FROM `detail` on purpose. A measurement and a patient's name are
+   * the record itself; `detail` is a label, and it is the field that gets
+   * rendered into transcripts and read in passing. Keeping the values out of it
+   * means the PHI-free promise on `detail` stays true no matter what later
+   * decides to log it. This field is returned to the browser and never audited.
+   */
+  changed?: { from: string; to: string };
 }
 
 export interface ChatEditResult {
@@ -74,6 +86,9 @@ export interface ChatEditResult {
   /** Present when the note changed, so the page re-fills the document. */
   soapFinal?: string;
   soapVersion?: number;
+  /** A header edit changes the DRAWN page without changing the note, so
+   *  soapFinal stays undefined and the document would not otherwise redraw. */
+  headerChanged?: boolean;
   error?: string;
 }
 
@@ -240,6 +255,9 @@ export async function chatEditVisitAction(
   let scrollTo: string | null = null;
   let soapFinal: string | undefined;
   let soapVersion: number | undefined;
+  /** A header edit changes the DRAWN document without changing the note, so the
+   *  page needs a redraw signal that soapFinal alone would not give it. */
+  let headerChanged = false;
 
   for (const intent of parsed.intents) {
     // EVERY dispatch is wrapped. Without this, a throw partway through
@@ -250,6 +268,95 @@ export async function chatEditVisitAction(
         case 'refuse':
           actions.push({ kind: 'refuse', detail: intent.because, ok: true });
           break;
+
+        // A question, answered. Carried so that "nothing was written" is a
+        // declaration rather than an absence — see ChatReplySchema.intents.
+        case 'answer':
+          actions.push({ kind: 'answer', detail: 'answered', ok: true });
+          break;
+
+        // NO TOOL FOR IT. Distinct from refuse: the request is legitimate and
+        // we simply cannot serve it here, so the doctor is told what and where
+        // rather than left to rephrase at a surface that will never do it.
+        case 'cannot':
+          actions.push({
+            kind: 'cannot',
+            detail: `${intent.what} — ${intent.where}`,
+            ok: true,
+          });
+          break;
+
+        case 'edit_table_cell': {
+          if (budget <= 0) {
+            capped += 1;
+            break;
+          }
+          budget -= 1;
+          // The model named coordinates; the SERVER does the edit. It never
+          // sees a chance to rewrite the grid.
+          const section = findSection(soapFinal ?? visit.soapFinal ?? '', intent.sectionLabel);
+          const edit = editTableCell({
+            note: soapFinal ?? visit.soapFinal ?? '',
+            sectionLabel: intent.sectionLabel,
+            rowLabel: intent.rowLabel,
+            columnLabel: intent.columnLabel,
+            value: intent.value,
+          });
+          if (!edit.ok || !edit.body || !section) {
+            actions.push({
+              kind: 'edit_table_cell',
+              detail: intent.rowLabel,
+              ok: false,
+              error: edit.reason ? TABLE_EDIT_REASON[edit.reason] : 'I could not locate that cell.',
+            });
+            break;
+          }
+          // Through the SAME audited save the tap-to-edit button calls, with
+          // the version the model's snapshot was taken at.
+          const r = await saveNoteSectionAction(
+            visitId,
+            intent.sectionLabel,
+            edit.body,
+            soapVersion ?? visit.soapVersion,
+          );
+          actions.push({
+            kind: 'edit_table_cell',
+            // Column and row LABELS come from the template, not the patient.
+            detail: `${edit.row} · ${edit.column}`,
+            ok: r.ok,
+            error: r.error,
+            // The measurement itself, for the doctor's screen only.
+            changed: r.ok ? { from: edit.before || '—', to: intent.value } : undefined,
+          });
+          if (r.ok && r.soapFinal) {
+            soapFinal = r.soapFinal;
+            soapVersion = r.soapVersion;
+          }
+          break;
+        }
+
+        case 'edit_header': {
+          if (budget <= 0) {
+            capped += 1;
+            break;
+          }
+          budget -= 1;
+          const r = await updateVisitHeaderAction(visitId, intent.field, intent.value);
+          const label = intent.field === 'patient_name' ? 'Patient name' : 'Chief complaint';
+          actions.push({
+            kind: 'edit_header',
+            detail:
+              r.ok && r.affectsOtherVisits
+                ? `${label} (also on this patient’s other unsigned visits)`
+                : label,
+            ok: r.ok,
+            error: r.error,
+            changed: r.ok ? { from: r.before || '—', to: r.after ?? intent.value } : undefined,
+          });
+          // The header is part of the drawn document; the surface must redraw.
+          if (r.ok) headerChanged = true;
+          break;
+        }
 
         case 'scroll_to':
           scrollTo = intent.target;
@@ -371,6 +478,14 @@ export async function chatEditVisitAction(
       adopted: actions.filter((a) => a.kind.startsWith('adopt') && a.ok).length,
       capped,
       edited: actions.filter((a) => a.kind === 'edit_section' && a.ok).length,
+      // Counted SEPARATELY from `edited`. The row that started this work read
+      // `{intents: [], edited: 0, adopted: 0, refused: 0, failed: 0}` — every
+      // counter zero, and no way to tell a turn that did nothing from a turn
+      // that was never asked for anything. Each class now leaves a mark.
+      cells: actions.filter((a) => a.kind === 'edit_table_cell' && a.ok).length,
+      headers: actions.filter((a) => a.kind === 'edit_header' && a.ok).length,
+      answered: actions.filter((a) => a.kind === 'answer').length,
+      cannot: actions.filter((a) => a.kind === 'cannot').length,
       refused: actions.filter((a) => a.kind === 'refuse').length,
       failed: actions.filter((a) => !a.ok).length,
     },
@@ -391,5 +506,6 @@ export async function chatEditVisitAction(
     scrollTo,
     soapFinal,
     soapVersion,
+    headerChanged,
   };
 }

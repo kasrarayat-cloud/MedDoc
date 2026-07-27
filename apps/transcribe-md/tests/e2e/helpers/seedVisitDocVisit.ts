@@ -245,6 +245,14 @@ export function seedVisitDocVisit(): SeededVisitDoc | null {
       specialty = 'ultrasound',
       "emStale" = false,
       "emScoredCode" = null,
+      -- A CLEAN IMAGING REPORT: no medications, no warnings, no office-visit
+      -- level. This is what an ultrasound actually looks like, and it is the
+      -- fixture that proves the prescription-safety panel and the billing row
+      -- are gone rather than merely empty. The twin visit keeps its meds and
+      -- its warning, so the gate is still covered by a fixture that has one.
+      "rxDrafts" = null,
+      "icdCodes" = null,
+      "cptCodes" = null,
       -- Dollar-quoted, so the newlines survive: a standard SQL literal does
       -- not interpret escape sequences, and the note arrived as one long line
       -- with no table for the prose renderer to read a header from.

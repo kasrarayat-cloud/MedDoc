@@ -24,19 +24,36 @@ import {
   type ChatTurn,
 } from '@/actions/chat-edit-visit';
 
-/** Doctor-facing labels for what the server did. PHI-free by construction —
- *  `detail` is a section name, an index or a scroll target, never note text. */
+/** Doctor-facing labels for what the server did. `detail` is PHI-free by
+ *  construction — a section name, an index, a column heading, a scroll target.
+ *  The VALUES live on `a.changed`, which is why they are read from there and
+ *  not spliced into detail upstream. */
 function describe(a: ChatActionOutcome): string {
+  const moved = a.changed ? ` — ${a.changed.from} → ${a.changed.to}` : '';
   switch (a.kind) {
     case 'adopt_suggestion':
     case 'adopt_suggestions':
       return a.ok ? `Adopted a suggestion in ${a.detail}` : `Could not adopt: ${a.error}`;
     case 'edit_section':
       return a.ok ? `Changed ${a.detail}` : `Could not change ${a.detail}: ${a.error}`;
+    // The structural echo of the edit, drawn by the client rather than trusted
+    // from the model's prose: the doctor sees the cell and both values whether
+    // or not the reply remembered to mention them.
+    case 'edit_table_cell':
+      return a.ok
+        ? `Changed ${a.detail}${moved}`
+        : `Could not change ${a.detail}: ${a.error}`;
+    case 'edit_header':
+      return a.ok ? `Changed ${a.detail}${moved}` : `Could not change ${a.detail}: ${a.error}`;
     case 'scroll_to':
       return `Took you to ${a.detail.replace(/_/g, ' ')}`;
     case 'refuse':
       return a.detail;
+    // The reply IS the sentence — repeating it under the bubble would say the
+    // same thing twice.
+    case 'cannot':
+    case 'answer':
+      return '';
     default:
       return '';
   }
@@ -48,6 +65,8 @@ export interface ChatEditorPanelProps {
   /** Called when the note changed, so the page re-fills the document through
    *  the same path adopting and editing already use. */
   onNoteChanged: (r: { soapFinal: string; soapVersion?: number }) => void;
+  /** The header changed but the note did not — redraw the document anyway. */
+  onHeaderChanged?: () => void;
   /** Where the chat asked to take the doctor. */
   onScrollTo: (target: string) => void;
 }
@@ -91,6 +110,12 @@ export function ChatEditorPanel(props: ChatEditorPanelProps) {
         ]);
         if (r.soapFinal) {
           props.onNoteChanged({ soapFinal: r.soapFinal, soapVersion: r.soapVersion });
+        } else if (r.headerChanged) {
+          // A header edit changes the DRAWN page without touching the note, so
+          // there is no soapFinal to hand back and the document would sit there
+          // showing the old name — the change landing everywhere except the one
+          // place the doctor is looking.
+          props.onHeaderChanged?.();
         }
         if (r.scrollTo) props.onScrollTo(r.scrollTo);
       }
