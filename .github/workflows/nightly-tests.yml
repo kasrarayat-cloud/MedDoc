@@ -66,6 +66,24 @@ jobs:
         run: bash tests/automated/run-all.sh --smoke --e2e
         continue-on-error: true
 
+      # The chat editor's intelligence bar, against the REAL model.
+      #
+      # Nightly rather than per-PR on purpose: it makes paid model calls, and a
+      # required check that costs money per push is a check people learn to
+      # route around. The scripted subset is ~8 cases — the writes that had no
+      # tool before, the multi-step case, and every hard refusal — so a
+      # regression in what the chat will actually DO surfaces within a day.
+      #
+      # Skips cleanly when the key is absent (forks, and any run where the
+      # secret was not provisioned) rather than failing on infrastructure.
+      - name: Chat-editor eval (scripted subset)
+        id: chateval
+        if: env.ANTHROPIC_API_KEY != ''
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: cd apps/transcribe-md && npm run eval:chat-editor:ci
+        continue-on-error: true
+
       - name: Upload report artefact
         if: always()
         uses: actions/upload-artifact@v4

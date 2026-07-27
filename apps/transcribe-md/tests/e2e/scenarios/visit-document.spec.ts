@@ -150,7 +150,7 @@ test.describe('the visit page is the document', () => {
     // The edit made the billing level stale — that is the new gate, and it
     // refuses the signature. Re-check the level the way a doctor would: open
     // the codes row, then acknowledge if it moved.
-    await page.getByTestId('review-doc-codes-toggle').click();
+    await page.getByTestId('review-doc-details-toggle').click();
     await expect(page.getByTestId('em-stale-badge')).toHaveCount(0, { timeout: 120_000 });
     const emConfirm = page.getByRole('button', { name: /confirm|acknowledge/i }).first();
     if (await emConfirm.count()) {
@@ -224,7 +224,7 @@ test.describe('the visit page is the document', () => {
     // recorded. Without a baseline the re-score compares the current level to
     // itself, concludes nothing moved, and clears the flag every time — a gate
     // that cannot catch anything looks exactly like one that checked.
-    await page.getByTestId('review-doc-codes-toggle').click();
+    await page.getByTestId('review-doc-details-toggle').click();
     await expect
       .poll(() => isStale(), { timeout: 120_000, message: 'the re-score should clear the flag' })
       .toBe('f');
@@ -422,6 +422,53 @@ test.describe('the visit page is the document', () => {
     await page.getByTestId('preview-format-pdf').click();
     await page.getByTestId('visit-document').waitFor({ state: 'visible', timeout: 120_000 });
     await expect(page.getByTestId('preview-format-pdf')).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  // ── SURFACE CLEANUP ────────────────────────────────────────────────────
+  test('an imaging report carries NO prescription, billing or input chrome', async ({ page }) => {
+    test.setTimeout(300_000);
+    await page.setViewportSize({ width: 1500, height: 1050 });
+    await openVisit(page);
+    await page.goto(`/visits/${STYLED_VISIT_ID}`);
+    await page.getByTestId('visit-document').waitFor({ state: 'visible', timeout: 120_000 });
+
+    // No medications and no warnings on this visit, so there is nothing for a
+    // prescription-safety heading to be about. It used to draw anyway.
+    await expect(page.getByTestId('review-doc-rx-gate')).toHaveCount(0);
+    const body = await page.locator('body').innerText();
+    expect(body).not.toContain('Prescription safety');
+
+    // The two standing rows are gone — not emptied, gone.
+    expect(body).not.toContain('CODES · BILLING');
+    await expect(page.getByTestId('review-doc-codes-toggle')).toHaveCount(0);
+    await expect(page.getByTestId('review-doc-dictation-toggle')).toHaveCount(0);
+
+    // What remains is one quiet affordance.
+    await expect(page.getByTestId('review-doc-details-toggle')).toBeVisible();
+  });
+
+  test('NOTHING became unreachable — every datum is still one tap away', async ({ page }) => {
+    test.setTimeout(300_000);
+    await page.setViewportSize({ width: 1500, height: 1050 });
+    // The TWIN visit: it has codes, a level, medications and a warning, so it
+    // is the one that can prove each of them survived the fold.
+    const seeded = await openVisit(page);
+    await page.goto(`/visits/${seeded.visitId}`);
+    await page.getByTestId('visit-document').waitFor({ state: 'visible', timeout: 120_000 });
+
+    // A visit WITH prescriptions and a warning still gets the gate, unchanged.
+    await expect(page.getByTestId('review-doc-rx-gate')).toBeVisible();
+
+    await page.getByTestId('review-doc-details-toggle').click();
+    // Billing: the level, and the control that CHANGES it.
+    const billing = page.getByTestId('review-doc-billing-panel');
+    await expect(billing).toBeVisible();
+    await expect(billing.locator('.qm-c3-bill-card')).toBeVisible();
+    await expect(billing.locator('select, [role="combobox"]').first()).toBeVisible();
+    // Codes: the ICD list.
+    await expect(page.getByTestId('review-doc-codes-panel')).toBeVisible();
+    // And the original dictation, under its own heading.
+    await expect(page.getByTestId('review-doc-dictation-panel')).toBeVisible();
   });
 
   test('390px: the document draws and nothing overflows sideways', async ({ page }) => {
