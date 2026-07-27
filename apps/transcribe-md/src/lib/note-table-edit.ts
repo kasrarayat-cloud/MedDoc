@@ -15,15 +15,30 @@
 // AMBIGUITY IS A REFUSAL, NEVER A GUESS. A bilateral study renders one table
 // per leg with identical segment labels; picking whichever matched first would
 // write the right number onto the wrong leg, silently, in a document the doctor
-// is about to sign. Same rule claim-prose already follows.
+// is about to sign. The caller may disambiguate with the table's CAPTION —
+// which is what carries the laterality — and only then does the write proceed.
+//
+// ONE SECTION MATCHER, AND IT IS NOT THIS FILE'S.
+//
+// The section is resolved with readNoteSection, the same function
+// saveNoteSectionAction splices with. This module previously had its own
+// normaliser, and the two disagreed: `spliceNoteSection` strips ALL punctuation
+// ("FINDINGS (RIGHT)" -> "findings right") while the local one dropped a
+// trailing parenthetical ("FINDINGS (RIGHT)" -> "findings"). A note carrying
+// both a "FINDINGS" and a "FINDINGS (RIGHT)" heading would therefore have the
+// RIGHT leg's table read out and written back over the OTHER section, deleting
+// its rows. Sharing the matcher is what makes "read it, edit it, write it back"
+// refer to the same section three times.
 // ============================================================================
+
+import { readNoteSection } from './splice-note-section';
 
 /** `| --- | :--- |` — a table's alignment rule, never content. */
 const RULE_RE = /^\s*\|[\s:|-]+\|\s*$/;
 /** Any `| … | … |` line. */
 const ROW_RE = /^\s*\|.*\|\s*$/;
 /** `## HEADING` */
-const HEADING_RE = /^\s*#{1,6}\s+(.*)$/;
+const HEADING_RE = /^\s*#{1,6}\s/;
 
 export type TableEditFailure =
   | 'section_not_found'
@@ -31,7 +46,9 @@ export type TableEditFailure =
   | 'row_not_found'
   | 'row_ambiguous'
   | 'column_not_found'
-  | 'column_ambiguous';
+  | 'column_ambiguous'
+  | 'ragged_table'
+  | 'illegal_value';
 
 export interface TableEditResult {
   ok: boolean;
@@ -43,11 +60,17 @@ export interface TableEditResult {
   column?: string;
   /** The resolved row label. */
   row?: string;
+  /** The caption of the table that was written, when it has one. */
+  caption?: string | null;
+  /** On `row_ambiguous`: the captions the caller may choose between. */
+  choices?: string[];
   reason?: TableEditFailure;
 }
 
 /** Loose match: case, surrounding whitespace and a trailing unit parenthetical
- *  are all noise. "DIAMETER (mm)" is the same column a doctor calls "diameter". */
+ *  are all noise. "DIAMETER (mm)" is the same column a doctor calls "diameter".
+ *  Used ONLY for rows and columns — never for the section heading, which is
+ *  readNoteSection's business. */
 function norm(s: string): string {
   return s
     .trim()
@@ -69,49 +92,18 @@ function renderRow(parts: string[]): string {
 }
 
 /**
- * Make a value safe to sit inside one cell.
- *
- * A raw `|` in the value would close the cell early and hand the row an extra
- * column — the grid silently shifts, and every measurement to the right of it
- * ends up under the wrong heading. A newline would end the row entirely. The
- * model supplies this string, so neither can be assumed away.
+ * The caption above a table — the line before its header, when that line is
+ * prose rather than another row or a heading. On a bilateral study it is what
+ * carries the laterality, so it is the only honest disambiguator.
  */
-function sanitizeCell(value: string): string {
-  return value
-    .replace(/[\r\n]+/g, ' ')
-    .replace(/\|/g, '\\|')
-    .trim();
-}
-
-/**
- * Slice out one section's body from a note.
- *
- * Returns the body lines and the index range they occupy, so a caller can
- * splice the edited body back without touching the rest of the note.
- */
-export function findSection(
-  note: string,
-  sectionLabel: string,
-): { start: number; end: number; lines: string[] } | null {
-  const lines = note.split('\n');
-  const want = norm(sectionLabel);
-  let start = -1;
-  for (let i = 0; i < lines.length; i += 1) {
-    const m = HEADING_RE.exec(lines[i]);
-    if (m && norm(m[1]) === want) {
-      start = i + 1;
-      break;
-    }
+function captionFor(lines: string[], headerIdx: number): string | null {
+  for (let i = headerIdx - 1; i >= 0; i -= 1) {
+    const line = lines[i];
+    if (!line.trim()) return null;
+    if (HEADING_RE.test(line) || cells(line)) return null;
+    return line.trim();
   }
-  if (start === -1) return null;
-  let end = lines.length;
-  for (let i = start; i < lines.length; i += 1) {
-    if (HEADING_RE.test(lines[i])) {
-      end = i;
-      break;
-    }
-  }
-  return { start, end, lines: lines.slice(start, end) };
+  return null;
 }
 
 /**
@@ -126,11 +118,25 @@ export function editTableCell(params: {
   rowLabel: string;
   columnLabel: string;
   value: string;
+  /** Optional: which table, when the row label appears under more than one.
+   *  Matched loosely against the caption line above each table. */
+  tableCaption?: string | null;
 }): TableEditResult {
-  const section = findSection(params.note, params.sectionLabel);
-  if (!section) return { ok: false, reason: 'section_not_found' };
+  // A PIPE ENDS A CELL, AND NOTHING DOWNSTREAM UNDERSTANDS AN ESCAPE.
+  //
+  // This used to write `\|`, which is correct markdown and useless here: the
+  // note is consumed by claim-prose, the screen-reader block, the DOCX table
+  // builder and the export reconciler, none of which unescape it. The escape
+  // just moved the corruption from the note into every renderer, and made the
+  // next edit of that row read a cell that no longer matched. A measurement
+  // never legitimately contains a pipe, so this is a refusal.
+  if (/[|]/.test(params.value)) return { ok: false, reason: 'illegal_value' };
+  if (/[\r\n]/.test(params.value)) return { ok: false, reason: 'illegal_value' };
 
-  const lines = [...section.lines];
+  const sectionBody = readNoteSection(params.note, params.sectionLabel);
+  if (sectionBody === null) return { ok: false, reason: 'section_not_found' };
+
+  const lines = sectionBody.split('\n');
 
   // A section can hold several tables (one per leg, typically). Collect every
   // header row so a column can be resolved against the table its row is in,
@@ -142,26 +148,53 @@ export function editTableCell(params: {
   if (headerAt.length === 0) return { ok: false, reason: 'no_table' };
 
   const wantRow = norm(params.rowLabel);
-  const matches: { line: number; header: number }[] = [];
+  let matches: { line: number; header: number; caption: string | null }[] = [];
   for (let i = 0; i < lines.length; i += 1) {
     const c = cells(lines[i]);
     if (!c || headerAt.includes(i)) continue;
     if (norm(c[0]) !== wantRow) continue;
-    // Which table does this row belong to? The nearest header ABOVE it.
     const header = [...headerAt].reverse().find((h) => h < i);
     if (header === undefined) continue;
-    matches.push({ line: i, header });
+    matches.push({ line: i, header, caption: captionFor(lines, header) });
   }
 
   if (matches.length === 0) return { ok: false, reason: 'row_not_found' };
-  // TWO TABLES, ONE LABEL. On a bilateral study "GSV at the SFJ" exists under
-  // both legs. Writing to either one is a coin flip on which leg gets the
-  // measurement, so this is where we stop and ask.
-  if (matches.length > 1) return { ok: false, reason: 'row_ambiguous' };
 
-  const { line, header } = matches[0];
+  // TWO TABLES, ONE LABEL. On a bilateral study "GSV at the SFJ" exists under
+  // both legs. The caller may say WHICH — by the caption, which is what carries
+  // the laterality — and that narrowing is applied here rather than left to
+  // whichever row happened to come first.
+  if (matches.length > 1 && params.tableCaption) {
+    const want = norm(params.tableCaption);
+    const narrowed = matches.filter(
+      (m) => m.caption && (norm(m.caption) === want || norm(m.caption).includes(want)),
+    );
+    if (narrowed.length === 1) matches = narrowed;
+  }
+  if (matches.length > 1) {
+    return {
+      ok: false,
+      reason: 'row_ambiguous',
+      // Say what the caller may pick BETWEEN. Asking "which one?" while
+      // offering no way to answer is how the bilateral case — the main
+      // ultrasound case — became simply uneditable.
+      choices: matches.map((m) => m.caption).filter((c): c is string => Boolean(c)),
+    };
+  }
+
+  const { line, header, caption } = matches[0];
   const headerCells = cells(lines[header]);
-  if (!headerCells) return { ok: false, reason: 'no_table' };
+  const rowCells = cells(lines[line]);
+  if (!headerCells || !rowCells) return { ok: false, reason: 'no_table' };
+
+  // A RAGGED TABLE IS NOT WRITABLE.
+  //
+  // Column resolution indexes the header and writes the row at the SAME index.
+  // If a header omits the row-label column — `| DIAMETER | REFLUX |` over
+  // `| GSV at the SFJ | 6.2 | 3.4 |` — every index is off by one, and the write
+  // lands one column left of the one it then reports back. Refusing is the only
+  // safe reading of a grid that does not line up.
+  if (headerCells.length !== rowCells.length) return { ok: false, reason: 'ragged_table' };
 
   const wantCol = norm(params.columnLabel);
   const colIdx = headerCells
@@ -173,15 +206,9 @@ export function editTableCell(params: {
   if (colIdx.length === 0) return { ok: false, reason: 'column_not_found' };
   if (colIdx.length > 1) return { ok: false, reason: 'column_ambiguous' };
 
-  const rowCells = cells(lines[line]);
-  if (!rowCells) return { ok: false, reason: 'no_table' };
   const idx = colIdx[0];
-  // A row shorter than its header is malformed but survivable — pad rather
-  // than write past the end and corrupt the grid.
-  while (rowCells.length <= idx) rowCells.push('');
-
   const before = rowCells[idx];
-  rowCells[idx] = sanitizeCell(params.value);
+  rowCells[idx] = params.value.trim();
   lines[line] = renderRow(rowCells);
 
   return {
@@ -190,6 +217,7 @@ export function editTableCell(params: {
     before,
     column: headerCells[idx].trim(),
     row: rowCells[0].trim(),
+    caption,
   };
 }
 
@@ -199,7 +227,10 @@ export const TABLE_EDIT_REASON: Record<TableEditFailure, string> = {
   no_table: "That section doesn't have a measurements table.",
   row_not_found: "I couldn't find that row in the table.",
   row_ambiguous:
-    'That row appears in more than one table here — tell me which one (for example which leg) and I will change it.',
+    'That row appears in more than one table here — tell me which one and I will change it.',
   column_not_found: "I couldn't find that column in the table.",
   column_ambiguous: 'That column name appears twice in the table, so I stopped rather than guess.',
+  ragged_table:
+    "That table's header and its rows don't line up, so I can't tell which column is which.",
+  illegal_value: "A measurement can't contain a line break or a “|”.",
 };

@@ -121,25 +121,58 @@ export async function updateVisitHeaderAction(
       return { ok: false, error: 'That patient record is not available.' };
     }
 
-    const others = await prisma.transcribeVisit.count({
-      where: { patientId: visit.patientId, id: { not: visit.id }, deletedAt: null },
+    // EXACTLY the rows the rename will touch — same filter, counted first.
+    //
+    // This used to count every visit for the patient, including SIGNED and
+    // archived ones that the updateMany deliberately skips. So a doctor whose
+    // patient had one old signed note was told the rename had spread to other
+    // visits when it had not, and the audit row recorded the same untruth.
+    const otherIds = await prisma.transcribeVisit.findMany({
+      where: {
+        patientId: visit.patientId,
+        id: { not: visit.id },
+        signedAt: null,
+        deletedAt: null,
+        archivedAt: null,
+      },
+      select: { id: true },
     });
-    affectsOtherVisits = others > 0;
+    affectsOtherVisits = otherIds.length > 0;
 
     // Every UNSIGNED visit for this patient carries the denormalised copy, and
     // leaving them stale is how the chart starts disagreeing with itself.
     // SIGNED ones are deliberately excluded: their header is part of what was
     // signed, and rewriting it here would edit a finished record.
     await prisma.transcribeVisit.updateMany({
-      where: { patientId: visit.patientId, signedAt: null, deletedAt: null },
+      where: {
+        patientId: visit.patientId,
+        signedAt: null,
+        deletedAt: null,
+        archivedAt: null,
+      },
       data: { patientName: value },
     });
+
+    // EACH of those visits caches a RENDERING of the document, and the name is
+    // printed in its header. Invalidating only the visit in front of the doctor
+    // would leave every other one serving a preview of the old name for the
+    // rest of its TTL — the same staleness class the E/M override had, one
+    // table over.
+    await Promise.all(otherIds.map((o: { id: string }) => invalidateVisitFills(o.id)));
 
     void logAudit({
       action: 'TM_PATIENT_UPDATED',
       targetType: 'TranscribeMdPatient',
       targetId: visit.patientId,
-      metadata: { via: 'visit_header', field: 'name', fromVisit: visit.id },
+      // COUNT, not ids — but a count, because a rename reaching notes the
+      // doctor is not looking at should be visible in the trail of the patient
+      // record it happened to.
+      metadata: {
+        via: 'visit_header',
+        field: 'name',
+        fromVisit: visit.id,
+        otherUnsignedVisitsRenamed: otherIds.length,
+      },
     });
   } else {
     // No linked patient record — the visit's own denormalised name is all there

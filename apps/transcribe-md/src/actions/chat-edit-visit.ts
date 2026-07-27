@@ -45,7 +45,7 @@ import {
   wereRendered,
 } from '@/lib/chat-edit/attestation';
 
-import { editTableCell, findSection, TABLE_EDIT_REASON } from '@/lib/note-table-edit';
+import { editTableCell, TABLE_EDIT_REASON } from '@/lib/note-table-edit';
 import { adoptSuggestionAction } from './suggestion-actions';
 import { saveNoteSectionAction } from './save-note-section';
 import { updateVisitHeaderAction } from './update-visit-header';
@@ -281,7 +281,12 @@ export async function chatEditVisitAction(
         case 'cannot':
           actions.push({
             kind: 'cannot',
-            detail: `${intent.what} — ${intent.where}`,
+            // A FIXED STRING. `what` and `where` are model-authored free text
+            // echoing the doctor's own words, and `detail` is the field this
+            // file promises is PHI-free — a doctor who types a request with a
+            // name in it would otherwise have it land there. The sentence the
+            // doctor reads is the REPLY, which is where those belong.
+            detail: 'not something this editor can do',
             ok: true,
           });
           break;
@@ -293,26 +298,33 @@ export async function chatEditVisitAction(
           }
           budget -= 1;
           // The model named coordinates; the SERVER does the edit. It never
-          // sees a chance to rewrite the grid.
-          const section = findSection(soapFinal ?? visit.soapFinal ?? '', intent.sectionLabel);
+          // sees a chance to rewrite the grid. The section is resolved by
+          // readNoteSection INSIDE editTableCell — the same matcher the save
+          // below splices with, so both refer to the same section or both fail.
           const edit = editTableCell({
             note: soapFinal ?? visit.soapFinal ?? '',
             sectionLabel: intent.sectionLabel,
             rowLabel: intent.rowLabel,
             columnLabel: intent.columnLabel,
             value: intent.value,
+            tableCaption: intent.tableCaption,
           });
-          if (!edit.ok || !edit.body || !section) {
+          if (!edit.ok || !edit.body) {
+            const why = edit.reason ? TABLE_EDIT_REASON[edit.reason] : 'I could not locate that cell.';
             actions.push({
               kind: 'edit_table_cell',
               detail: intent.rowLabel,
               ok: false,
-              error: edit.reason ? TABLE_EDIT_REASON[edit.reason] : 'I could not locate that cell.',
+              // Name the tables it could have meant, so the next turn can
+              // actually answer the question this refusal asks.
+              error: edit.choices?.length
+                ? `${why} (${edit.choices.join(' or ')})`
+                : why,
             });
             break;
           }
-          // Through the SAME audited save the tap-to-edit button calls, with
-          // the version the model's snapshot was taken at.
+          // Through the SAME audited save the tap-to-edit button calls, at the
+          // version as of THIS point in the turn — see the note on edit_section.
           const r = await saveNoteSectionAction(
             visitId,
             intent.sectionLabel,
@@ -369,14 +381,20 @@ export async function chatEditVisitAction(
           break;
         }
         budget -= 1;
-          // The version the model's snapshot was taken at. Without it an adopt
-          // landing during the Opus round-trip is silently overwritten inside
-          // the edited section — the exact bug this parameter exists for.
+          // The version as of THIS POINT IN THE TURN, not the turn's start.
+          //
+          // The parameter exists so an adopt landing during the Opus
+          // round-trip is not silently overwritten. But a turn can now write
+          // more than once — "set the SFJ diameter to 7.1 and reword the
+          // technique" is two writes — and passing the turn-start version to
+          // the second one made it fail as a concurrency conflict against THIS
+          // TURN'S OWN first write. The doctor was told their edit collided
+          // with a change nobody else had made.
           const r = await saveNoteSectionAction(
             visitId,
             intent.sectionLabel,
             intent.body,
-            visit.soapVersion,
+            soapVersion ?? visit.soapVersion,
           );
           actions.push({
             kind: 'edit_section',

@@ -7097,3 +7097,6 @@ body {
   color: var(--color-linear-text);
   border-color: var(--color-linear-sage);
 }
+/* A prescription list with no warning is not an alarm. Same card, no amber. */
+.qm-rdoc-gate-quiet { border-color: var(--color-linear-border); }
+.qm-rdoc-gate-quiet .qm-rdoc-gate-head { color: var(--color-linear-text-3); }

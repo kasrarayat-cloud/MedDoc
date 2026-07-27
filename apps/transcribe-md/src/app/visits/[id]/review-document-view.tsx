@@ -84,6 +84,9 @@ export interface ReviewDocumentViewProps {
    *  the tabbed view computes from criticalWarningRefs — the same identity the
    *  sign route validates. */
   rxBlocking: boolean;
+  /** Whether the Rx panel has an actual WARNING, as opposed to just
+   *  medications. Drives the alarm styling only; the gate keys on rxBlocking. */
+  rxHasWarnings: boolean;
   /** Unacknowledged E/M level change ({from,to}) or null. */
   emPendingChange: { from: string; to: string } | null;
   summary: ReviewDocumentSummary;
@@ -444,11 +447,22 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
             At the position they belong to, one card per item, never a count.
             The Rx rail is the existing component: same override modal, same
             recordOverride action, one button per warning. */}
+        {/* THE ALARM IS FOR A WARNING, NOT FOR A PRESCRIPTION.
+            Widening this panel to render whenever there are medications was
+            right — a doctor must be able to see what they prescribed — but it
+            brought the amber triangle and the words "Prescription safety" with
+            it, so a visit with a routine refill and nothing wrong looked
+            exactly like a visit with an interaction. The card is BYTE-IDENTICAL
+            when a warning exists; without one it is a quiet list. */}
         {props.rxGateNode && (
-          <section className="qm-rdoc-gate" data-testid="review-doc-rx-gate">
+          <section
+            className={`qm-rdoc-gate${props.rxHasWarnings ? '' : ' qm-rdoc-gate-quiet'}`}
+            data-testid="review-doc-rx-gate"
+            data-rx-warnings={props.rxHasWarnings ? 'true' : 'false'}
+          >
             <div className="qm-rdoc-gate-head">
-              <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
-              <span>Prescription safety</span>
+              {props.rxHasWarnings && <AlertTriangle className="h-3.5 w-3.5" aria-hidden />}
+              <span>{props.rxHasWarnings ? 'Prescription safety' : 'Prescriptions'}</span>
             </div>
             <div className="qm-rdoc-gate-body">{props.rxGateNode}</div>
           </section>
