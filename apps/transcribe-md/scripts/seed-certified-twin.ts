@@ -294,8 +294,21 @@ async function main() {
   say('done — this stack now has a genuine CERTIFIED twin');
 }
 
+// EXIT EXPLICITLY. Disconnecting Prisma is not enough to end the process: the
+// object-store client keeps a keep-alive HTTP agent open, so the event loop
+// still has a live handle and node never returns. The work finishes in about
+// nine seconds and then the process sits there forever — which in CI is not a
+// hung script, it is a hung STEP that starves every project after it and then
+// reports as a job timeout naming nothing.
+//
+// It is a nasty failure to read, because the log looks completely successful:
+// the last line is "done — this stack now has a genuine CERTIFIED twin". The
+// tell is the absence of an exit, not the presence of an error.
 main()
-  .then(() => prisma.$disconnect())
+  .then(async () => {
+    await prisma.$disconnect();
+    process.exit(0);
+  })
   .catch(async (err) => {
     console.error(`[twin-seed] FAILED: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`);
     await prisma.$disconnect();
