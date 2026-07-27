@@ -63,6 +63,64 @@ function base64ToBytes(b64: string): Uint8Array {
   return out;
 }
 
+/**
+ * Make the Word preview frame like the PDF one.
+ *
+ * THE ASYMMETRY THIS FIXES. The PDF path draws each page to a canvas and lets
+ * CSS lay it out at `width: 100%` — fit-to-width for free, at any container
+ * size. docx-preview instead emits real page boxes at the document's NATURAL
+ * width (US Letter is ~816px at 96dpi) and honours it, because `ignoreWidth`
+ * is false — which is what keeps the layout faithful. Nothing then scaled it,
+ * so in any column narrower than a sheet of paper the Word view rendered at
+ * 1:1 and overflowed: to the doctor, "zoomed in and broken", and a horizontal
+ * scrollbar under a document the PDF tab had just shown them whole.
+ *
+ * So: measure the natural width, scale by the container, and pin the origin to
+ * the top-left so the page grows down and right from the corner it starts in.
+ * A transform does not affect layout size, so the host's height is set to the
+ * scaled height — otherwise the stage would keep scrolling over the empty space
+ * the unscaled document used to occupy.
+ *
+ * SCALES BOTH WAYS, because the PDF canvas does. `.qm-npv-page` is
+ * `width: 100%`, so in a 1440px column a Letter page is drawn at 1082px — wider
+ * than its natural 816. Capping this at 1x therefore did not give parity, it
+ * gave a Word view that stopped growing at 816 while the PDF beside it kept
+ * going: measured 1082 vs 816 at 1440, and 1562 vs 816 at 1920. Same document,
+ * two sizes, on a toggle whose whole promise is that it is the same document.
+ * Scaling up is also kinder here than in the PDF path — this is real DOM text,
+ * so it resamples cleanly rather than as a stretched raster.
+ */
+function fitDocxToWidth(host: HTMLElement): void {
+  const wrapper = host.querySelector<HTMLElement>('.qm-docxp-wrapper');
+  if (!wrapper) return;
+
+  // Measure UNSCALED — reading a width back through an existing transform
+  // compounds the scale on every resize until the document vanishes.
+  wrapper.style.transform = '';
+  wrapper.style.width = '';
+  wrapper.style.height = '';
+  host.style.height = '';
+
+  const available = host.clientWidth;
+  // THE PAGE, not the wrapper. The wrapper is a block and stretches to the
+  // host, so its scrollWidth reports the container's width back at us the
+  // moment the container is wider than a sheet of paper — scale came out
+  // exactly 1.0 at 1440 and 1920 and the Word view simply stopped growing
+  // while the PDF beside it filled the column.
+  const page = wrapper.querySelector<HTMLElement>('section.qm-docxp');
+  const natural = page?.offsetWidth ?? wrapper.scrollWidth;
+  if (!available || !natural) return;
+
+  // Hug the page so the scaled box is exactly the page, then fit that.
+  wrapper.style.width = `${natural}px`;
+  const scale = available / natural;
+  wrapper.style.transformOrigin = 'top left';
+  wrapper.style.transform = `scale(${scale})`;
+  // A scaled box still RESERVES its unscaled size, so the container has to be
+  // told what it now actually occupies.
+  host.style.height = `${wrapper.scrollHeight * scale}px`;
+}
+
 export function NativeDocumentPreview(props: NativeDocumentPreviewProps) {
   const { kind, data, reason, label } = props;
   const docxHost = useRef<HTMLDivElement | null>(null);
@@ -144,6 +202,7 @@ export function NativeDocumentPreview(props: NativeDocumentPreviewProps) {
   useEffect(() => {
     if (kind !== 'docx_fallback' || !data) return;
     let cancelled = false;
+    let cleanup: (() => void) | undefined;
     (async () => {
       try {
         const { renderAsync } = await import('docx-preview');
@@ -160,12 +219,21 @@ export function NativeDocumentPreview(props: NativeDocumentPreviewProps) {
           // Show the document as it stands, not as a diff of tracked edits.
           renderChanges: false,
         });
+        if (cancelled) return;
+        fitDocxToWidth(host);
+        // The container changes width on rotate, on a sidebar toggle, and on
+        // every drag of a desktop window — the fit has to follow it, or the
+        // first layout is the only correct one.
+        const ro = new ResizeObserver(() => fitDocxToWidth(host));
+        ro.observe(host);
+        cleanup = () => ro.disconnect();
       } catch {
         if (!cancelled) setDocxFailed(true);
       }
     })();
     return () => {
       cancelled = true;
+      cleanup?.();
     };
   }, [kind, data]);
 

@@ -207,10 +207,17 @@ const IMPRESSION_INSTRUCTIONS = [
 const ULTRASOUND_SECTIONS: NoteTemplateSection[] = [
   { key: 'exam', label: 'Exam', order: 1, formatHint: 'prose', styleInstructions: EXAM_INSTRUCTIONS, defaultText: null, defaultTextMode: 'omit_unless_supported' },
   { key: 'indication', label: 'Indication', order: 2, formatHint: 'prose', styleInstructions: INDICATION_INSTRUCTIONS, defaultText: null, defaultTextMode: 'omit_unless_supported' },
-  { key: 'technique', label: 'Technique', order: 3, formatHint: 'prose', styleInstructions: TECHNIQUE_INSTRUCTIONS, defaultText: null, defaultTextMode: 'omit_unless_supported' },
+  // TECHNIQUE is the scan PROTOCOL — the machine settings, the positions, the
+  // manoeuvres. It reads the same on every study because it describes how the
+  // lab performs the exam, not what this patient turned out to have. A
+  // sonographer does not dictate it, so anchoring it to the dictation demoted
+  // the whole section and emptied it.
+  { key: 'technique', label: 'Technique', order: 3, formatHint: 'prose', styleInstructions: TECHNIQUE_INSTRUCTIONS, defaultText: null, defaultTextMode: 'omit_unless_supported', provenance: 'template' },
   { key: 'comparison', label: 'Comparison', order: 4, formatHint: 'prose', styleInstructions: COMPARISON_INSTRUCTIONS, defaultText: null, defaultTextMode: 'omit_unless_supported' },
   { key: 'findings', label: 'Findings', order: 5, formatHint: 'prose', styleInstructions: FINDINGS_INSTRUCTIONS, defaultText: null, defaultTextMode: 'omit_unless_supported' },
-  { key: 'impression', label: 'Impression', order: 6, formatHint: 'numbered', styleInstructions: IMPRESSION_INSTRUCTIONS, defaultText: null, defaultTextMode: 'omit_unless_supported' },
+  // The closing sentence is mandated by IMPRESSION_INSTRUCTIONS — every report
+  // ends with it. No dictation will ever contain it.
+  { key: 'impression', label: 'Impression', order: 6, formatHint: 'numbered', styleInstructions: IMPRESSION_INSTRUCTIONS, defaultText: null, defaultTextMode: 'omit_unless_supported', mandatedLines: ['Clinical correlation with the above findings is required.'] },
 ];
 
 /** The ultrasound report template, shaped exactly like the resolved templates
