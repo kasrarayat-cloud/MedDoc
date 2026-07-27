@@ -162,24 +162,50 @@ jobs:
       #
       # Runs BEFORE the app starts: it is a direct DB + object-store script and
       # needs the audio bucket above, nothing else.
+      # BOUNDED. This step once ran 22 minutes against a 55-minute job budget
+      # while the identical work takes ~90 seconds on a warm stack — a hang, not
+      # slowness, and an unbounded hang starves every project after it and then
+      # reports as a job timeout, which names nothing. `timeout` turns that into
+      # a step failure with the seeder's own progress lines still in the log, so
+      # the last stage it reached is visible.
       - name: Seed a genuine CERTIFIED twin (real compile+certify, pinned, no model calls)
-        run: >
-          docker compose -f docker-compose.qa.yml run --rm -T
-          -e MOCK_AI_CALLS=true
-          -e AUTH_SECRET=qa-throwaway-secret-not-used-in-prod-000000000000000=
-          -e NEXTAUTH_SECRET=qa-throwaway-secret-not-used-in-prod-000000000000000=
-          -e AUTH_TRUST_HOST=true
-          -e AUTH_URL=http://localhost:9020
-          -e NEXTAUTH_URL=http://localhost:9020
-          -e REDIS_URL=redis://redis:6379
-          -e MINIO_ENDPOINT=minio:9000
-          -e MINIO_ACCESS_KEY=qa_minio
-          -e MINIO_SECRET_KEY=qa_minio_pw
-          -e TRANSCRIBE_MD_MINIO_BUCKET=transcribe-md-audio
-          -e MINIO_USE_SSL=false
-          -e NODE_ENV=production
-          --entrypoint sh db-migrate
-          -c 'cd /app/apps/transcribe-md && npx --no-install tsx scripts/seed-certified-twin.ts'
+        timeout-minutes: 9
+        run: |
+          echo "── buckets, as the object store itself reports them ──"
+          docker compose -f docker-compose.qa.yml exec -T minio sh -c \
+            'export MC_CONFIG_DIR=/tmp/mc; mc alias set local http://127.0.0.1:9000 qa_minio qa_minio_pw >/dev/null && mc ls local' || true
+          echo "── seeding ──"
+          # `bash -e` would abort on the timeout's non-zero exit and skip every
+          # diagnostic below — which is exactly the information this step exists
+          # to produce. Handle the status explicitly instead.
+          set +e
+          timeout --signal=TERM --kill-after=30s 7m \
+          docker compose -f docker-compose.qa.yml run --rm -T \
+            -e MOCK_AI_CALLS=true \
+            -e AUTH_SECRET=qa-throwaway-secret-not-used-in-prod-000000000000000= \
+            -e NEXTAUTH_SECRET=qa-throwaway-secret-not-used-in-prod-000000000000000= \
+            -e AUTH_TRUST_HOST=true \
+            -e AUTH_URL=http://localhost:9020 \
+            -e NEXTAUTH_URL=http://localhost:9020 \
+            -e REDIS_URL=redis://redis:6379 \
+            -e MINIO_ENDPOINT=minio:9000 \
+            -e MINIO_ACCESS_KEY=qa_minio \
+            -e MINIO_SECRET_KEY=qa_minio_pw \
+            -e TRANSCRIBE_MD_MINIO_BUCKET=transcribe-md-audio \
+            -e MINIO_USE_SSL=false \
+            -e NODE_ENV=production \
+            --entrypoint sh db-migrate \
+            -c 'cd /app/apps/transcribe-md && npx --no-install tsx scripts/seed-certified-twin.ts'
+          rc=$?
+          if [ $rc -eq 124 ] || [ $rc -eq 137 ]; then
+            echo "::error::the twin seed HUNG (killed at 7m). The last [twin-seed] line above is the stage it reached."
+            echo "── minio state ──"
+            docker compose -f docker-compose.qa.yml exec -T minio sh -c \
+              'export MC_CONFIG_DIR=/tmp/mc; mc alias set local http://127.0.0.1:9000 qa_minio qa_minio_pw >/dev/null && mc ls --recursive local' || true
+            docker compose -f docker-compose.qa.yml logs --tail=80 minio || true
+            df -h / | tail -1
+          fi
+          exit $rc
 
       - name: Start app + worker
         run: docker compose -f docker-compose.qa.yml up -d --wait transcribe-md transcribe-md-worker
