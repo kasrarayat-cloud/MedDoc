@@ -108,3 +108,54 @@ describe('a bilateral study must never be mislabelled', () => {
     expect(claimProse('| GSV | 6.2 mm |', note)).toBe('GSV: diameter 6.2 mm');
   });
 });
+
+// ============================================================================
+// A column name is DOCTOR-SUPPLIED TEXT, and it was being compiled.
+// ----------------------------------------------------------------------------
+// parse-note-to-template copies a template's columns VERBATIM, so the unit in
+// `READING (+/-)` is whatever the doctor typed into their own form. Building a
+// RegExp out of it threw `Nothing to repeat` — and claimProse runs inside the
+// render of every suggestion card, so the exception took down the entire review
+// surface for that doctor. Not a formatting bug; a page that would not load.
+// ============================================================================
+describe('a column header is never compiled as a pattern', () => {
+  const withColumn = (col: string) =>
+    [
+      'DIAMETER AND REFLUX — Right Leg',
+      `| Segment | DIAMETER (mm) | ${col} |`,
+      '| --- | --- | --- |',
+      '| GSV at the SFJ | 6.2 | + |',
+    ].join('\n');
+
+  // Every one of these is a plausible clinical column, and three of the five
+  // used to throw.
+  for (const col of ['REFLUX (+/-)', 'PATENCY (*)', 'FLOW (?)', 'NOTES ([x])', 'SIZE (a|b)']) {
+    it(`survives a column named "${col}"`, () => {
+      expect(() => claimProse('| GSV at the SFJ | 6.2 | + |', withColumn(col))).not.toThrow();
+    });
+  }
+
+  it('still reads the row, rather than merely not crashing', () => {
+    const out = claimProse('| GSV at the SFJ | 6.2 | + |', withColumn('REFLUX (+/-)'));
+    expect(out).toContain('GSV at the SFJ');
+    expect(out).toContain('diameter 6.2 mm');
+    // "reflux + +/-" — the parenthetical on a presence/absence column is a
+    // LEGEND, not a unit, and the existing heuristic appends it either way.
+    // Pinned as-is rather than quietly taught to tell them apart: this text is
+    // what a doctor reads before deciding a claim belongs in a record, and a
+    // guess that drops the wrong parenthetical is worse than one that reads
+    // awkwardly. Recorded in the run report as cosmetic.
+    expect(out).toContain('reflux +');
+  });
+
+  it('still suppresses a unit the cell already carries', () => {
+    const note = [
+      'SIZES — Right Leg',
+      '| Segment | DIAMETER (mm) |',
+      '| --- | --- |',
+      '| GSV at the SFJ | 6.2 mm |',
+    ].join('\n');
+    expect(claimProse('| GSV at the SFJ | 6.2 mm |', note)).toContain('diameter 6.2 mm');
+    expect(claimProse('| GSV at the SFJ | 6.2 mm |', note)).not.toContain('mm mm');
+  });
+});

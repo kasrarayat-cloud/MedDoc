@@ -102,7 +102,17 @@ export function claimProse(claimText: string, note: string): string {
     const { label, unit } = readHeading(header[i + 1] ?? '');
     // Do not append a unit the cell already carries: "6.2 mm" must not become
     // "6.2 mm mm".
-    const needsUnit = unit && !new RegExp(`${unit}\\s*$`, 'i').test(value);
+    //
+    // A PLAIN STRING COMPARE, never a constructed RegExp. `unit` is whatever is
+    // in the doctor's own column header — parse-note-to-template copies columns
+    // VERBATIM — so `REFLUX (+/-)` yielded `new RegExp('+/-\\s*$')` and threw
+    // "Nothing to repeat". claimProse runs inside the render of every
+    // suggestion card, so that SyntaxError took the whole review surface down
+    // for the one doctor whose form used a presence/absence column. `(*)`,
+    // `(?)` and `([x])` are the same bug. Escaping would also work; not
+    // building a pattern out of user text is better.
+    const needsUnit =
+      unit && !value.trimEnd().toLowerCase().endsWith(unit.toLowerCase());
     parts.push(label ? `${label} ${value}${needsUnit ? ` ${unit}` : ''}` : value);
   });
 
