@@ -189,3 +189,49 @@ describe('audit-only — the verifier still detects, it just no longer edits', (
     expect(out).toContain('bursitis');
   });
 });
+
+describe('custom templates — the path that actually regressed', () => {
+  // The real form that produced ten flags: EIGHT sections, `provenance` on
+  // NONE of them, and `defaultText` on ALL of them — including FINDINGS.
+  const CUSTOM_SECTIONS = [
+    { key: 'exam_metadata', label: 'Exam Metadata', order: 0, defaultText: 'Referring physician: [not documented]' },
+    { key: 'technique', label: 'TECHNIQUE', order: 1, defaultText: 'A duplex Doppler color flow ultrasound study was performed in the upright position.' },
+    { key: 'findings', label: 'FINDINGS', order: 2, defaultText: '| Vein | Diameter |' },
+    { key: 'impression', label: 'IMPRESSION', order: 3, defaultText: 'Clinical correlation with the above findings is required.' },
+    { key: 'procedures_em', label: 'PROCEDURES / E&M', order: 4, defaultText: '[not documented]' },
+    { key: 'patient_education', label: 'PATIENT SUMMARY', order: 5, defaultText: 'What we found' },
+  ] as never;
+
+  it('exempts protocol + cross-step sections, but NOT findings', async () => {
+    const { buildSectionPolicy } = await import('../04b-anchor-verify');
+    const policy = buildSectionPolicy(CUSTOM_SECTIONS);
+
+    // Protocol by nature — a scan protocol is never dictated.
+    expect(policy.byLabel.get('technique')).toBe('template');
+
+    // Written by a LATER step. These two are the precedence fix: the template
+    // DECLARES them, and before the fix that declaration won and marked them
+    // 'dictation'. Seven of the ten observed flags came through here.
+    expect(policy.byLabel.get('patient summary')).toBe('other_step');
+    expect(policy.byLabel.get('procedures / e&m')).toBe('other_step');
+
+    // THE ONE THAT MUST NOT BE EXEMPTED. Every section on this form carries
+    // defaultText, so a "has defaultText ⇒ template boilerplate" rule would
+    // exempt FINDINGS — the section the measurements live in — and quietly
+    // turn the verifier into a no-op exactly where it earns its keep.
+    expect(policy.byLabel.get('findings')).toBe('dictation');
+  });
+
+  it('derives mandated LINES from defaultText, so boilerplate is exempt per-line', async () => {
+    const { buildSectionPolicy } = await import('../04b-anchor-verify');
+    const policy = buildSectionPolicy(CUSTOM_SECTIONS);
+    // The form states this on the doctor's behalf — unanchorable by
+    // construction, and previously flagged no_anchor on IMPRESSION.
+    // Keys are norm()'d: lowercased, punctuation → space, collapsed.
+    expect(
+      policy.mandated.has('clinical correlation with the above findings is required')
+    ).toBe(true);
+    // Table markup is not prose and is not added.
+    expect(policy.mandated.has('vein diameter')).toBe(false);
+  });
+});
