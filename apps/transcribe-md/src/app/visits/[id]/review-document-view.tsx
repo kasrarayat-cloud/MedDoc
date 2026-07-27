@@ -472,6 +472,7 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
           <section
             className={`qm-rdoc-gate qm-rdoc-gate-em${emConfirmed ? ' is-done' : ''}`}
             data-testid="review-doc-em-gate"
+            data-chat-target="em_gate"
           >
             <div className="qm-rdoc-gate-head">
               <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
