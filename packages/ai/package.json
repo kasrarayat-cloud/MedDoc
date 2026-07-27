@@ -8,10 +8,10 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.85.0",
+    "@anthropic-ai/sdk": "^0.115.0",
     "@deepgram/sdk": "^4.11.3",
     "@meddoc/db": "*",
-    "openai": "^6.33.0",
-    "zod": "^4.3.6"
+    "openai": "^6.49.0",
+    "zod": "^4.4.3"
   }
 }
