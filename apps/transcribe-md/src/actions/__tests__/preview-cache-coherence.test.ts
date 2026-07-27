@@ -32,7 +32,6 @@ const WRITERS = [
   'src/app/api/visits/[id]/em-score/apply-additions/route.ts',
   'src/app/api/visits/[id]/sign/route.ts',
   'src/actions/soap.ts',
-  'src/actions/suggestion-actions.ts',
   'src/actions/save-note-section.ts',
 ];
 
