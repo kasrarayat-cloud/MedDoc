@@ -135,6 +135,45 @@ jobs:
           docker compose -f docker-compose.qa.yml exec -T minio sh -c
           'export MC_CONFIG_DIR=/tmp/mc; mc alias set local http://127.0.0.1:9000 qa_minio qa_minio_pw && mc mb --ignore-existing local/transcribe-md-audio'
 
+      # ── THE CERTIFIED TWIN the visit-doc project needs. ──────────────────
+      # visit-document.spec.ts refuses to skip — "no CERTIFIED twin in this
+      # stack — fixture missing" FAILS, which is right, but CI had no way to
+      # produce one, so all 14 specs failed on the fixture instead of the code.
+      #
+      # This runs the REAL path against the committed form: the real docx
+      # compiler, the real mapping confirmation, the real fill -> render ->
+      # roundtrip proof, and the real certification gate. Nothing is relaxed
+      # and no row is forced to CERTIFIED behind its back.
+      #
+      # It makes NO model calls. The three stochastic inputs on that path
+      # (mapping proposal, L3 extraction, note generation) come from a
+      # content-addressed pin minted once on QA against the live models and
+      # committed as tests/e2e/fixtures/twin-certified-pins.json. The seeder
+      # re-verifies every hash and injects extractor/generator seams that THROW
+      # if reached, so a compiler change fails loudly here rather than quietly
+      # reaching for a model that CI has only a dummy key for.
+      #
+      # Runs BEFORE the app starts: it is a direct DB + object-store script and
+      # needs the audio bucket above, nothing else.
+      - name: Seed a genuine CERTIFIED twin (real compile+certify, pinned, no model calls)
+        run: >
+          docker compose -f docker-compose.qa.yml run --rm -T
+          -e MOCK_AI_CALLS=true
+          -e AUTH_SECRET=qa-throwaway-secret-not-used-in-prod-000000000000000=
+          -e NEXTAUTH_SECRET=qa-throwaway-secret-not-used-in-prod-000000000000000=
+          -e AUTH_TRUST_HOST=true
+          -e AUTH_URL=http://localhost:9020
+          -e NEXTAUTH_URL=http://localhost:9020
+          -e REDIS_URL=redis://redis:6379
+          -e MINIO_ENDPOINT=minio:9000
+          -e MINIO_ACCESS_KEY=qa_minio
+          -e MINIO_SECRET_KEY=qa_minio_pw
+          -e TRANSCRIBE_MD_MINIO_BUCKET=transcribe-md-audio
+          -e MINIO_USE_SSL=false
+          -e NODE_ENV=production
+          --entrypoint sh db-migrate
+          -c 'cd /app/apps/transcribe-md && npx --no-install tsx scripts/seed-certified-twin.ts'
+
       - name: Start app + worker
         run: docker compose -f docker-compose.qa.yml up -d --wait transcribe-md transcribe-md-worker
 
