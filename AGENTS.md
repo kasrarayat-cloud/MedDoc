@@ -96,3 +96,47 @@ being bookkeeping and starts being a risk of its own.
 
 The gate still applies in full: no merge past a red required check, and no
 override to get one green.
+
+## Close-out hygiene — reap the scratch, every session
+
+**A filled clinical export outside a sanctioned path is treated as PHI —
+regardless of whether the patient is real or synthetic.** The posture does not
+depend on knowing which, because by the time you are asking, the file already
+exists somewhere it should not.
+
+Before a session ends, destroy the scratch:
+
+- `.playwright-mcp/` — browser downloads AND the `page-*.yml` accessibility
+  snapshots, which carry the rendered note text of every page walked.
+- `/tmp` — screenshots, `scratch-docx-*`, signed-preview PDFs.
+- `~/.local/share/Trash/` — **deleting a file does not remove it here.** A
+  filled twin export was found in Trash after its original had been cleaned.
+- Worktrees and staging/evidence dirs under `~` — `*-output.docx` is a filled
+  document by definition.
+- Repo root — `twin-*.docx`, `diag-*`, `visit-*.pdf|docx`.
+
+Use `shred -u -n 3 -z`, not `rm`. Root-owned artifacts need the documented
+root-via-docker path; a silent "Permission denied" from `shred` leaves the file
+exactly where it was.
+
+**Report paths, never contents.**
+
+### What is NOT a stray, and must survive the sweep
+
+- `WM IOV Template.docx` and its copies — the accepted BLANK tracked fixture
+  (see "Tracked fixtures" above). Do not re-flag it.
+- `colon_blank_answers.pdf` — likewise a committed blank form.
+- `apps/transcribe-md/tests/e2e/fixtures/**` and `__fixtures__/**` — committed
+  test fixtures.
+- Anything under `/opt/meddoc-pro/backups/`.
+
+The distinction is FILLED vs BLANK, not file type. A blank form is a fixture; a
+filled one never is.
+
+### Check `git ls-files` before deleting
+
+Deleting a *tracked* artifact from the working tree does not remove it from
+history. `docs/qa-reports/twin-real-visit-20260726.docx` — a filled document —
+was committed in `9d65cbfa` and reached `main`. The working-tree copy is gone;
+the blob is still reachable in history and clearing it needs a deliberate
+rewrite decision, which is not a close-out action.

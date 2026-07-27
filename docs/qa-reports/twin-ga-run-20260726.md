@@ -447,7 +447,8 @@ were unchanged).
 
 ## S5 — REAL-VISIT PROOF, COMPLETE ✅
 
-**QA** (`docs/qa-reports/twin-real-visit-20260726.docx`, 49 402 bytes):
+**QA** (artifact removed 2026-07-27 — a FILLED clinical export is never a
+committed fixture; see "Close-out hygiene" in AGENTS.md. It was 49 402 bytes):
 
 ```
 MANIFEST status=VERIFIED filledCount=21 needsReview=0 conflicts=0
