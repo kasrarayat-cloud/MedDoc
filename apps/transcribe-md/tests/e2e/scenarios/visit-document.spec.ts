@@ -373,6 +373,21 @@ test.describe('the visit page is the document', () => {
     // The review placeholder never reaches a review surface.
     expect(await page.locator('body').innerText()).not.toContain('All AI-drafted content');
 
+    // THE ACCESSIBLE SURFACE, held to the same standard.
+    //
+    // The page is drawn to a canvas, so this block is the reading order a
+    // screen reader gets — and asserting only on the CARDS let raw markup live
+    // here unnoticed: the table's HEADER row reached a listener verbatim,
+    // because claimProse rewrites a row by reading its table's header and a
+    // header has no header of its own. A blind doctor was the only one still
+    // being shown pipes.
+    const spoken = await page.getByTestId('visit-document-text').innerText();
+    expect(spoken, `raw markup in the screen-reader block: ${spoken}`).not.toMatch(/\|/);
+    expect(spoken).toContain('GSV at the SFJ: diameter 6.2 mm, reflux time 3.4 seconds');
+    // An undocumented row asserts nothing, and says so rather than staying mute.
+    expect(spoken).toContain('SSV at the Proximal Calf: nothing documented');
+    expect(spoken).toContain('Set aside for your review');
+
     // Same interaction model as a template visit.
     await expect(page.locator('[data-testid^="section-edit-"]').first()).toBeVisible();
     await expect(page.getByRole('button', { name: /sign & download/i })).toBeVisible();
@@ -380,6 +395,33 @@ test.describe('the visit page is the document', () => {
     // And the preview offers both formats.
     await expect(page.getByTestId('preview-format-pdf')).toBeVisible();
     await expect(page.getByTestId('preview-format-word')).toBeVisible();
+  });
+
+  test('the Word view is honest, and is not a one-way door', async ({ page }) => {
+    test.setTimeout(300_000);
+    await page.setViewportSize({ width: 1500, height: 1050 });
+    await openVisit(page);
+    await page.goto(`/visits/${STYLED_VISIT_ID}`);
+    await page.getByTestId('visit-document').waitFor({ state: 'visible', timeout: 120_000 });
+
+    await page.getByTestId('preview-format-word').click();
+    // Word hands the browser the true DOCX, which lands in the fallback branch.
+    await page.getByTestId('visit-document-fallback').waitFor({ state: 'visible', timeout: 120_000 });
+
+    // BOTH bugs this test exists for. The toggle used to render only in the PDF
+    // branch, so choosing Word removed the control that would bring you back;
+    // and the fallback branch called QuillMD's own layout "your form" — the
+    // exact false claim this surface exists to stop making.
+    await expect(page.getByTestId('preview-format-pdf')).toBeVisible();
+    await expect(page.getByTestId('preview-format-word')).toHaveAttribute('aria-pressed', 'true');
+    const inWord = await page.locator('body').innerText();
+    expect(inWord).not.toContain('Your form, filled so far');
+    expect(inWord).toContain('QuillMD’s layout');
+
+    // And back again — the door opens from both sides.
+    await page.getByTestId('preview-format-pdf').click();
+    await page.getByTestId('visit-document').waitFor({ state: 'visible', timeout: 120_000 });
+    await expect(page.getByTestId('preview-format-pdf')).toHaveAttribute('aria-pressed', 'true');
   });
 
   test('390px: the document draws and nothing overflows sideways', async ({ page }) => {
