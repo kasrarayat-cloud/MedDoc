@@ -79,12 +79,25 @@ test.describe('pre-sign review as the document', () => {
   test('each suggestion sits under the section it would join', async ({ page }) => {
     test.skip(!(await open(page, 'rdoc-2')), 'psql seeding unavailable');
     // Placement, not presence: a claim rendered in the wrong section is a claim
-    // the doctor reviews in one place and signs in another. The document view
-    // anchors each section's suggestions under that section's page slot, so the
-    // assertion is now against the slot's own label rather than the old
-    // card-wall's section container.
+    // the doctor reviews in one place and signs in another.
+    //
+    // TWO SURFACES CAN DRAW THIS, and this project builds only one of them.
+    // With the document flags on, suggestions hang off the page slot
+    // (`[data-section]`); with only REVIEW_DOC_VIEW — which is exactly what
+    // this CI project builds, and it starts no converter — the note itself is
+    // rendered and the slots are the note's own section containers. Pinning
+    // this to the document selector made it a test of the build, not of
+    // placement.
+    // Detect the surface by the DOCUMENT itself, not by `[data-section]`:
+    // SoapSection puts that attribute on every note section too (with the
+    // section LETTER), so "does any element have data-section" is true on both
+    // surfaces and picked the wrong branch every time.
+    const onDocument = (await page.getByTestId('visit-document').count()) > 0;
     for (const label of ['Subjective', 'Objective', 'Plan']) {
-      await expect(page.locator(`[data-section="${label}"] ${SUGG}`)).toHaveCount(1);
+      const scope = onDocument
+        ? page.locator(`[data-section="${label}"]`)
+        : page.locator('.qm-lin-soap-section-slot').filter({ hasText: label }).first();
+      await expect(scope.locator(SUGG)).toHaveCount(1);
     }
   });
 
@@ -127,11 +140,18 @@ test.describe('pre-sign review as the document', () => {
 
     await page.locator(ACCEPT).first().click();
     await expect(page.locator(SUGG)).toHaveCount(2);
-    // The accepted text is now note body, not a card. The document draws to a
-    // canvas, so the DOM copy of the note is the reading-order block the screen
-    // reader uses — which is the honest place to assert it landed, and doubles
-    // as a check that the block a blind doctor reads was refreshed too.
-    await expect(page.getByTestId('visit-document-text')).toContainText('nocturnal cough');
+    // The accepted text is now note body, not a card.
+    //
+    // WHERE the body is depends on which surface this build drew. When the
+    // document is up it draws to a canvas, so its DOM copy
+    // (`visit-document-text`) is the reading-order block a screen reader gets
+    // and the honest place to look. This project builds the note fallback and
+    // no converter, so the note is real DOM. Assert on whichever exists —
+    // otherwise this passes on the build it was written against and fails on
+    // the one CI actually runs.
+    const srBlock = page.getByTestId('visit-document-text');
+    const body = (await srBlock.count()) ? srBlock : page.locator('.qm-c3-rev2-root');
+    await expect(body).toContainText('nocturnal cough');
     await expect(page.locator(SUGG).filter({ hasText: 'nocturnal cough' })).toHaveCount(0);
     // And the bar does NOT fall back to "scroll to review" — the index-keyed
     // "seen" set used to un-read every surviving claim here.
