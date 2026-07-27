@@ -29,6 +29,7 @@ import {
   adoptSuggestionAction,
   dismissSuggestionAction,
 } from '@/actions/suggestion-actions';
+import { suggestionReasonLabel as reasonLabel } from '@/lib/suggestion-labels';
 
 /** Lane view of a verifier-demoted claim (mirror of the worker's
  *  SuggestedClaim / the action's SuggestedClaimDto). */
@@ -38,26 +39,6 @@ export interface SuggestedClaimView {
   section: string;
   /** The anchor quote(s) the model offered, joined — or 'no anchor'. */
   anchor: string;
-}
-
-/** DemotionReason → human-readable chip. Unknown reasons (future verifier
- *  classes) fall back to "couldn't verify" — never render a raw enum. */
-const REASON_LABELS: Record<string, string> = {
-  model_suggested: 'not stated',
-  no_anchor: 'not stated',
-  anchor_not_in_transcript: 'quote not in transcript',
-  anchor_overlaps_unclear: 'unclear audio',
-  digits_unsupported: 'numbers not supported',
-  negation_mismatch: 'negation mismatch',
-  gloss_unsupported: 'explanation not in transcript',
-  process_assertion_unsupported: 'reasoning not stated',
-  form_route_unsupported: 'form/route not stated',
-  not_entailed: "couldn't verify",
-  verifier_failed: "couldn't verify",
-};
-
-function reasonLabel(reason: string): string {
-  return REASON_LABELS[reason] ?? "couldn't verify";
 }
 
 interface SuggestionsLaneProps {

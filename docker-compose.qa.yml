@@ -24,6 +24,33 @@ x-qa-db-url: &qa-db-url postgresql://meddoc:qa_test_pw@postgres:5432/meddoc_qa_t
 x-qa-secret: &qa-secret "qa-throwaway-secret-not-used-in-prod-000000000000000="
 
 services:
+
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    restart: unless-stopped
+    # LibreOffice peaks well under this per conversion; the cap stops a
+    # pathological document from competing with the clinical pipeline.
+    mem_limit: 1g
+    cpus: '1.5'
+    networks:
+      - converter
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+    security_opt:
+      - no-new-privileges:true
+    command:
+      - gotenberg
+      - --api-port=3000
+      # Belt on top of the internal network: refuse any conversion that would
+      # dereference a remote resource.
+      - --chromium-deny-list=.*
+      - --api-timeout=25s
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
   postgres:
     image: pgvector/pgvector:pg16
     restart: "no"
@@ -155,6 +182,10 @@ services:
       start_period: 30s
     ports:
       - "127.0.0.1:9020:3011"
+    networks:
+      - default
+      - converter
+
 
   transcribe-md-worker:
     image: meddoc-pro-transcribe-md-worker:latest
@@ -216,6 +247,12 @@ services:
       start_period: 20s
     ports:
       - "127.0.0.1:9010:3010"
+
+networks:
+  default:
+  # Same isolation as prod: no gateway, so the converter has no route out.
+  converter:
+    internal: true
 
 volumes:
   qa_pgdata:

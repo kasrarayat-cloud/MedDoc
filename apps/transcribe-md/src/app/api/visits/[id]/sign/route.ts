@@ -31,6 +31,12 @@
 // ============================================================================
 
 import { NextResponse } from 'next/server';
+import { rescoreEmAction } from '@/actions/rescore-em';
+import {
+  isImagingReportSpecialty,
+  ultrasoundSpecialtyEnabled,
+} from '@meddoc/shared/specialties';
+import { invalidateVisitFills } from '@/lib/docx-preview/fill-cache';
 import { z } from 'zod';
 
 import prisma from '@meddoc/db';
@@ -169,6 +175,8 @@ export const POST = withApiHandler<{ id: string }>(
         deletedAt: true,
         archivedAt: true,
         emPendingChange: true,
+        emStale: true,
+        specialty: true,
       },
     });
     if (!visit || visit.userId !== userId) return apiError('not found', 404);
@@ -263,6 +271,67 @@ export const POST = withApiHandler<{ id: string }>(
     // a direct/scripted caller) can never sign through a silent level
     // change. Already-SIGNED visits skip the gate (this route only
     // re-delivers them; the change was acknowledged when they signed).
+    // ── E/M STALE gate ────────────────────────────────────────────────
+    // The note changed since the level was last validated. Until something
+    // re-scores it we do not know whether the level moved, and "we do not
+    // know" is not a state a note may be signed in.
+    //
+    // This closes a gap that predates the chat editor: a doctor could edit
+    // the note in the inline editor and sign, and nothing ever revisited the
+    // E/M level — only ADOPTING a suggestion computed a delta. There is one
+    // semantics now, whether a human or a model made the change.
+    //
+    // It only ADDS a condition; every existing check below is untouched.
+    // Imaging reports have no office-visit E/M level at all — the pipeline
+    // skips scoring them and the Billing surface says "not applicable". A
+    // staleness gate over a level that does not exist would make an ultrasound
+    // report permanently unsignable after any edit, and "resolving" it would
+    // mean inventing a clinic code. The flag may be set; here it is inert.
+    const emApplies = !(
+      ultrasoundSpecialtyEnabled() && isImagingReportSpecialty(visit.specialty)
+    );
+    if (visit.status === TranscribeVisitStatus.READY && visit.emStale && emApplies) {
+      // RE-SCORE HERE, don't just refuse.
+      //
+      // The first version returned 409 and told the doctor to open the codes
+      // row. That made a server-side gate depend on a client control that only
+      // exists behind NEXT_PUBLIC_REVIEW_DOC_VIEW — so with that flag off (its
+      // own documented rollback), every edited visit became PERMANENTLY
+      // unsignable, and in a second tab the named remedy did nothing.
+      //
+      // Doing the work here costs one scoring call on a path that is already
+      // slow, only when the note actually changed, and it means the gate is
+      // enforced by the route that owns the transition rather than by whichever
+      // surface happens to be rendered. The lazy row-open re-score stays as an
+      // optimisation, so most doctors meet the confirm card long before this.
+      const rescored = await rescoreEmAction(visitId);
+      if (!rescored.ok) {
+        void logAudit({
+          action: 'EM_SIGN_BLOCKED_STALE',
+          targetType: 'TranscribeVisit',
+          targetId: visitId,
+          metadata: { reason: 'rescore_failed' },
+        });
+        return apiError(
+          "We couldn't re-check the billing level for this note. Try again in a moment.",
+          409,
+        );
+      }
+      // Take the re-score's answer WHOLESALE, not just when it armed
+      // something. Patching only on `pending` left a cleared record in place:
+      // the level came back to the reviewed one, the DB record was dropped,
+      // and this still demanded acknowledgement of a change that no longer
+      // existed — while the refreshed UI showed no control to give it.
+      visit.emPendingChange = rescored.pending
+        ? ({
+            from: rescored.pending.from,
+            to: rescored.pending.to,
+            cause: 'note_edited',
+            at: new Date().toISOString(),
+          } as unknown as typeof visit.emPendingChange)
+        : null;
+    }
+
     const pendingEm =
       visit.status === TranscribeVisitStatus.READY
         ? unacknowledgedEmChange(visit.emPendingChange)
@@ -293,7 +362,15 @@ export const POST = withApiHandler<{ id: string }>(
         return NextResponse.json(
           {
             ok: false,
-            error: `Documentation level changed (${pendingEm.from} → ${pendingEm.to}) by an AI-suggestion action — confirm the new level before signing.`,
+            // Name the RIGHT cause. Every level change used to come from a
+            // suggestion; an edit can move it now too, and telling a doctor
+            // their own edit was "an AI-suggestion action" is a small lie in a
+            // message whose whole job is to be believed.
+            error: `Documentation level changed (${pendingEm.from} → ${pendingEm.to}) ${
+              pendingEm.cause === 'note_edited'
+                ? 'by an edit to the note'
+                : 'by an AI-suggestion action'
+            } — confirm the new level before signing.`,
             code: 'EM_CHANGE_UNACKNOWLEDGED',
             pendingEmChange: { from: pendingEm.from, to: pendingEm.to },
           },
@@ -363,6 +440,13 @@ export const POST = withApiHandler<{ id: string }>(
             : {}),
         },
       });
+      // The pre-sign preview cache is keyed on soapVersion, which SIGNING DOES
+      // NOT BUMP — so without this a signed visit could be served the pre-sign
+      // render for the rest of the TTL, defeating the rule that a signed
+      // document is never re-derived. Preview-side only; nothing here is read
+      // by this route's own gates.
+      void invalidateVisitFills(visitId);
+
       if (updated.count === 0) {
         // Another concurrent request got there first. Re-read.
         const refreshed = await prisma.transcribeVisit.findUnique({

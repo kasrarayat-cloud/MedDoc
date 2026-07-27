@@ -1,0 +1,28 @@
+# ============================================================================
+# The OFF contract for the document-first surfaces.
+#
+# Everything in this change is gated behind four build-time flags. Build-time
+# means the ONLY way to see what a rollback actually renders is to build with
+# them off and drive it — reading the source proves nothing, because the branch
+# that ships is decided by the compiler, not at runtime.
+#
+# This tag exists so that check is a real one. Deliberately NOT :latest —
+# production's compose resolves `meddoc-pro-transcribe-md:latest`, so retagging
+# it here would repoint prod on its next recreate.
+#
+#   docker build -f apps/transcribe-md/Dockerfile \
+#     --build-arg NEXT_PUBLIC_VISIT_DOC_PAGE=false \
+#     --build-arg NEXT_PUBLIC_REVIEW_DOC_VIEW=false \
+#     --build-arg NEXT_PUBLIC_CHAT_EDITOR=false \
+#     --build-arg NEXT_PUBLIC_DOC_PREVIEW=false \
+#     --build-arg NEXT_PUBLIC_SETTINGS_SIMPLE_ROW=true \
+#     --build-arg NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX=true \
+#     --build-arg NEXT_PUBLIC_SKIN_BETA=true \
+#     -t meddoc-pro-transcribe-md:flagoff .
+#
+#   docker compose -f docker-compose.qa.yml -f docker-compose.qa.flagoff.yml \
+#     up -d --wait transcribe-md
+# ============================================================================
+services:
+  transcribe-md:
+    image: meddoc-pro-transcribe-md:flagoff

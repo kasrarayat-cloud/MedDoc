@@ -44,6 +44,7 @@ import {
   NativeTemplateManager,
   type NativeTemplateListItem,
 } from './note-format/native-template-manager';
+import { isSettingsSimpleRow } from '@/config/settings-simple-row';
 import { templateNativeDocxEnabled } from '@/config/template-native-docx';
 import { templateNativePdfEnabled } from '@/config/template-native-pdf';
 import { listDoctorTemplates } from '@/lib/note-template-persist/read';
@@ -191,6 +192,7 @@ export default async function SettingsPage() {
     defaultCount: t.defaultCount,
     pdfNativeCertified: t.pdfNativeCertified,
     pdfNativePendingPreview: t.pdfNativePendingPreview,
+    nativePreviewAvailable: t.nativePreviewAvailable,
     updatedAtIso: t.updatedAt.toISOString(),
   }));
 
@@ -203,9 +205,15 @@ export default async function SettingsPage() {
 
   // Native-DOCX certify-once workspace (flag-gated). Flag OFF → nativeSlot is
   // null and the note-format section renders byte-identical to today.
-  const nativeSlot = templateNativeDocxEnabled() ? (
-    <NativeTemplateManager existing={await loadNativeTemplates(session.user.id)} />
-  ) : null;
+  //
+  // The simple row retires this block too. "Native template (beta) — upload
+  // your .docx to certify" is the same ritual the row-level CTA was: a second
+  // upload of a file we were already given, presented as homework. Replace on
+  // the row does it, so there is nothing here for the doctor to do.
+  const nativeSlot =
+    templateNativeDocxEnabled() && !isSettingsSimpleRow() ? (
+      <NativeTemplateManager existing={await loadNativeTemplates(session.user.id)} />
+    ) : null;
 
   // ── C3 calm-skin settings (Stage 3, flag-gated) ───────────────────────────
   // SKIN-ONLY: identical auth + Prisma reads + VIEWED_SETTINGS audit row + the

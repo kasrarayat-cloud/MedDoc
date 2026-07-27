@@ -44,6 +44,7 @@ function field(
       tag: 'synthetic',
       alias: null,
       legacyName: null,
+      rowLaterality: 'unknown' as const,
       tableIndex: overrides.tableId ? 0 : null,
       rowIndex: overrides.tableId ? 1 : null,
       cellIndex: overrides.tableId ? 0 : null,
@@ -77,6 +78,7 @@ function mapping(
   };
   return {
     fieldId: definition.fieldId,
+    sourceType: 'extraction' as const,
     clinicalConcept: concept,
     expectedDataType: types[definition.kind],
     polarityBehavior:

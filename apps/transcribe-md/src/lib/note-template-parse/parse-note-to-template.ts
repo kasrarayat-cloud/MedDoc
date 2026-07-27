@@ -152,6 +152,27 @@ const PHI_SCAN_SYSTEM = [
   'exam") is NOT PHI. A FORMAT instruction ("write as a numbered list") is NOT',
   'PHI. Only patient-specific content counts.',
   '',
+  // Measured 2026-07-26: this is the class that made a valid upload a coin
+  // flip. A specialty template's DEFAULT TEXT is, by its nature, boilerplate
+  // clinical prose — "No saphenous reflux in right lower extremity." names an
+  // anatomy and a side, so under "specific findings ... sites" above the model
+  // flagged it and set anyUncertain, refusing the whole template. It did that
+  // on some runs and not others, purely because the upstream structuring step
+  // captured that trailing sentence into defaultText on some runs and not
+  // others. The rule was genuinely ambiguous; this resolves it, and does NOT
+  // relax what counts as patient data.
+  'ANATOMY AND LATERALITY ARE NOT IDENTIFIERS. Boilerplate clinical prose that',
+  'names a body part, a side, or a normal/negative finding — "No saphenous',
+  'reflux in right lower extremity", "The deep venous system is patent",',
+  '"bilateral lower extremities" — is TEMPLATE CONTENT, not PHI, when it',
+  'carries no patient identifier and no measured value. This is exactly what a',
+  'specialty template\'s default text looks like.',
+  '',
+  'What DOES make such a sentence PHI is a patient identifier (a name, date,',
+  'age, MRN, contact detail) or a SPECIFIC MEASURED VALUE for this patient',
+  '("GSV 6.2 mm", "reflux 1.8 s"). Judge on that, not on the presence of',
+  'clinical vocabulary.',
+  '',
   'Submit via the submit_phi_scan tool.',
   delimiterSystemSuffix('transcript'),
 ].join('\n');

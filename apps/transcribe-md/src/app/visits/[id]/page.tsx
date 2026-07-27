@@ -191,6 +191,8 @@ export default async function VisitPage({
     suggestedClaims: unknown;
     /** E/M visible-confirm (prod smoke #311) — pending-change jsonb. */
     emPendingChange: unknown;
+  emStale: boolean;
+  emScoredCode: string | null;
     patientSummary: string | null;
     confidenceScores: unknown;
   };
@@ -256,6 +258,8 @@ export default async function VisitPage({
         referrals: true,
         suggestedClaims: true,
         emPendingChange: true,
+        emStale: true,
+        emScoredCode: true,
         patientSummary: true,
         confidenceScores: true,
       },
@@ -487,6 +491,8 @@ export default async function VisitPage({
           referrals={visit.referrals}
           suggestedClaims={visit.suggestedClaims}
           emPendingChange={visit.emPendingChange}
+          emStale={visit.emStale}
+          emScoredCode={visit.emScoredCode}
           patientSummary={visit.patientSummary}
           confidenceScores={visit.confidenceScores}
           // Phase 5.1.1 — V4 Extras card-stream wiring
@@ -548,6 +554,8 @@ interface VisitBodyProps {
   /** E/M visible-confirm (prod smoke #311) — pending-change jsonb (coerced
    *  via unacknowledgedEmChange before reaching VisitReadyView). */
   emPendingChange: unknown;
+  emStale: boolean;
+  emScoredCode: string | null;
   patientSummary: string | null;
   confidenceScores: unknown;
 
@@ -708,6 +716,35 @@ async function VisitBody(props: VisitBodyProps) {
       durationSec ?? 0,
       existingOverride
     );
+
+    // SEED THE BASELINE, once per visit.
+    //
+    // `emScoredCode` is what a re-score measures movement against. Nothing
+    // else writes it, so without this every visit's FIRST re-score would find
+    // no baseline, conclude nothing had moved, and clear the gate — one free
+    // unvalidated level change per visit, on the common path (edit once, sign).
+    //
+    // Here is the honest place: the level has just been computed against the
+    // note as it stands, and the note has not been edited since (an edit sets
+    // emStale, and a stale visit is re-scored before it can be signed). Guarded
+    // on null and on READY, so it writes once and never over a signed row.
+    if (props.emScoredCode == null && props.status === TranscribeVisitStatus.READY) {
+      // The DISPLAYED level: the doctor's override when they set one, else
+      // the rubric's suggestion — the same projection the rail renders and the
+      // re-score compares against.
+      const code =
+        initialEmScore?.override?.code ?? initialEmScore?.suggestedCode ?? null;
+      if (code) {
+        await prisma.transcribeVisit.updateMany({
+          where: {
+            id: props.visitId,
+            status: TranscribeVisitStatus.READY,
+            emScoredCode: null,
+          },
+          data: { emScoredCode: code },
+        });
+      }
+    }
   } catch (e) {
     console.error('[em-score] initial render failed:', e);
   }

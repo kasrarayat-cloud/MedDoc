@@ -5,6 +5,8 @@
 // proof that certification binds. PHI-gated (synthetic-evidence-gate); prisma
 // singleton + injectable storage + logTwinAudit only.
 // ============================================================================
+import { createHash } from 'node:crypto';
+
 import { Prisma } from '@prisma/client';
 import prisma from '@meddoc/db';
 
@@ -89,6 +91,7 @@ export class TemplateTwinSyntheticTestError extends Error {
 }
 
 interface MappingRow {
+  sourceType: string;
   clinicalConcept: string | null;
   expectedDataType: string;
   polarityBehavior: string;
@@ -106,6 +109,7 @@ interface MappingRow {
 function mapping(fieldId: string, row: MappingRow): SemanticMapping {
   return SemanticMappingSchema.parse({
     fieldId,
+    sourceType: row.sourceType,
     clinicalConcept: row.clinicalConcept,
     expectedDataType: row.expectedDataType,
     polarityBehavior: row.polarityBehavior,
@@ -152,6 +156,14 @@ export async function runTemplateTwinSyntheticTest(input: {
           id: true,
           compiledDocumentIr: true,
           certificationStatus: true,
+          structureSha256: true,
+          pinnedSyntheticNote: true,
+          pinnedSyntheticEntities: true,
+          pinnedSyntheticContextText: true,
+          pinnedNoteEncounterSha256: true,
+          pinnedNoteTemplateSha256: true,
+          pinnedNoteModelVersion: true,
+          pinnedNoteGeneratedAt: true,
           sourceArtifact: {
             select: {
               practiceId: true,
@@ -167,6 +179,7 @@ export async function runTemplateTwinSyntheticTest(input: {
               fieldId: true,
               mapping: {
                 select: {
+                  sourceType: true,
                   clinicalConcept: true,
                   expectedDataType: true,
                   polarityBehavior: true,
@@ -219,7 +232,16 @@ export async function runTemplateTwinSyntheticTest(input: {
       'Mappings changed after the page loaded. Reload before testing.',
     );
   }
-  if (mappings.some((item: SemanticMapping) => item.status !== 'certified' || !item.clinicalConcept)) {
+  if (
+    mappings.some(
+      (item: SemanticMapping) =>
+        item.status !== 'certified' ||
+        // A manual field has no concept BY CONSTRUCTION — nothing dictates who
+        // the technologist on shift was, so there is no fact to cite. It is
+        // ready when it is confirmed; it renders blank and is attested blank.
+        (item.sourceType !== 'manual' && !item.clinicalConcept),
+    )
+  ) {
     throw new TemplateTwinSyntheticTestError(
       'MAPPINGS_NOT_READY',
       'Every field needs a physician-confirmed mapping before testing.',
@@ -244,13 +266,120 @@ export async function runTemplateTwinSyntheticTest(input: {
 
   const ir = TemplateDocIRSchema.parse(compiled.compiledDocumentIr);
   const encounterMode = input.encounterMode ?? 'text';
-  const extracted = await input.extractEntities({
-    mode: encounterMode,
-    text: input.encounterText,
-    practiceId: input.actor.practiceId,
-    userId: input.actor.userId,
-    noteTemplateId: row.id,
-  });
+  const encounterSha256 = createHash('sha256').update(input.encounterText).digest('hex');
+
+  // Run the LIVE brain over the synthetic encounter, then recover the compiled
+  // {{one of}} marker form from the SAME verified source the IR came from —
+  // byte-for-byte what processTemplateTwinVisit does.
+  // ── PINNED SYNTHETIC NOTE ────────────────────────────────────────────────
+  // Generate ONCE, then reuse. Which sections L4 emits varies between runs, so
+  // an unpinned proof made certification a coin flip: one run filled the
+  // DIAGNOSIS control, the next left it NEEDS_CLINICIAN_INPUT and blocked.
+  // The pin fixes the stochastic INPUT only — the pinned note still goes
+  // through bridge -> matcher -> validator -> renderer -> roundtrip exactly as
+  // an unpinned one would. Nothing is bypassed and no requirement is relaxed.
+  const templateSha256 = compiled.structureSha256;
+  // CONTENT-ADDRESSED. The pin belongs to the (encounter, template structure)
+  // pair, not to a compiled-version row: re-uploading the same docx makes a NEW
+  // compiled version, so a per-row pin would never be reused and determinism
+  // could never be demonstrated. Look the pin up by its content hashes.
+  let pinned = compiled.pinnedSyntheticNote;
+  let pinnedModel = compiled.pinnedNoteModelVersion;
+  let pinnedAt = compiled.pinnedNoteGeneratedAt;
+  let pinnedEntities =
+    compiled.pinnedNoteEncounterSha256 === encounterSha256
+      ? compiled.pinnedSyntheticEntities
+      : null;
+  let pinnedContextText =
+    compiled.pinnedNoteEncounterSha256 === encounterSha256
+      ? compiled.pinnedSyntheticContextText
+      : null;
+  if (
+    !pinned ||
+    compiled.pinnedNoteEncounterSha256 !== encounterSha256 ||
+    compiled.pinnedNoteTemplateSha256 !== templateSha256
+  ) {
+    const sibling = await prisma.templateTwinCompiledVersion.findFirst({
+      where: {
+        pinnedNoteEncounterSha256: encounterSha256,
+        pinnedNoteTemplateSha256: templateSha256,
+        pinnedSyntheticNote: { not: null },
+      },
+      // Newest first, and prefer one that also carries the pinned EXTRACTION.
+      // An unordered findFirst kept selecting an older sibling that had only the
+      // note, so the extraction was re-run every time and the second half of the
+      // determinism guarantee never took effect.
+      orderBy: [{ pinnedSyntheticEntities: 'desc' }, { compiledAt: 'desc' }],
+      select: {
+        pinnedSyntheticNote: true,
+        pinnedSyntheticEntities: true,
+        pinnedSyntheticContextText: true,
+        pinnedNoteModelVersion: true,
+        pinnedNoteGeneratedAt: true,
+      },
+    });
+    if (sibling?.pinnedSyntheticNote) {
+      pinned = sibling.pinnedSyntheticNote;
+      pinnedModel = sibling.pinnedNoteModelVersion;
+      pinnedAt = sibling.pinnedNoteGeneratedAt;
+      pinnedEntities = sibling.pinnedSyntheticEntities;
+      pinnedContextText = sibling.pinnedSyntheticContextText;
+      // Copy it onto this compiled version so the proof it certifies is stored
+      // with it, not borrowed at read time.
+      await prisma.templateTwinCompiledVersion.update({
+        where: { id: compiled.id },
+        data: {
+          pinnedSyntheticNote: pinned,
+          pinnedSyntheticEntities: pinnedEntities ?? undefined,
+          pinnedSyntheticContextText: pinnedContextText,
+          pinnedNoteEncounterSha256: encounterSha256,
+          pinnedNoteTemplateSha256: templateSha256,
+          pinnedNoteModelVersion: pinnedModel,
+          pinnedNoteGeneratedAt: pinnedAt,
+        },
+      });
+    }
+  }
+  const pinValid = !!pinned;
+
+  // ── PINNED EXTRACTION ────────────────────────────────────────────────────
+  // Layer 3 is a model too. Re-extracting per attempt made the identical
+  // encounter yield a different fact set every run, so the same template
+  // blocked on a different set of fields each time and no two certifications
+  // could match. It is pinned beside the note, resolved through the SAME
+  // content-addressed lookup, and invalidated by the same encounter hash.
+  // The pinned entities still flow through projection -> resolver -> bridge ->
+  // matcher -> validator -> renderer -> roundtrip exactly as fresh ones would;
+  // only the stochastic INPUT is fixed.
+  const extracted =
+    pinnedEntities != null && pinnedContextText != null
+      ? { entities: pinnedEntities, contextText: pinnedContextText }
+      : await input.extractEntities({
+          mode: encounterMode,
+          text: input.encounterText,
+          practiceId: input.actor.practiceId,
+          userId: input.actor.userId,
+          noteTemplateId: row.id,
+        });
+  const extractionReused = pinnedEntities != null && pinnedContextText != null;
+  if (!extractionReused) {
+    // Pin it NOW, not only when a note is generated. A run that adopts an older
+    // note pin skips generation entirely, and pinning only there left the
+    // extraction unpinned forever — the run after it extracted fresh again and
+    // certification stayed non-reproducible.
+    await prisma.templateTwinCompiledVersion.update({
+      where: { id: compiled.id },
+      data: {
+        pinnedSyntheticEntities: asJson(extracted.entities),
+        pinnedSyntheticContextText: extracted.contextText,
+        pinnedNoteEncounterSha256: encounterSha256,
+      },
+    });
+  }
+  console.info(
+    `[template-twin:pin] EXTRACTION ${extractionReused ? 'REUSED' : 'FRESH'} ` +
+      `compiled=${compiled.id} encounterSha=${encounterSha256.slice(0, 12)}`,
+  );
   const facts = projectEncounterFacts({
     mode: encounterMode,
     contextText: extracted.contextText,
@@ -264,12 +393,18 @@ export async function runTemplateTwinSyntheticTest(input: {
     expectedSha256: compiled.sourceArtifact.sha256,
     expectedSizeBytes: compiled.sourceArtifact.sizeBytes,
   });
-  // Run the LIVE brain over the synthetic encounter, then recover the compiled
-  // {{one of}} marker form from the SAME verified source the IR came from —
-  // byte-for-byte what processTemplateTwinVisit does.
+
   let generatedNote: string | undefined;
   let markerText: string | undefined;
-  if (input.generateNote) {
+  if (pinValid) {
+    generatedNote = pinned!;
+    markerText = (await docxToTextWithControls(source)).text;
+    console.info(
+      `[template-twin:pin] REUSED compiled=${compiled.id} encounterSha=${encounterSha256.slice(0, 12)} ` +
+        `templateSha=${String(templateSha256).slice(0, 12)} model=${pinnedModel} ` +
+        `generatedAt=${pinnedAt?.toISOString()}`,
+    );
+  } else if (input.generateNote) {
     generatedNote = await input.generateNote({
       encounterText: input.encounterText,
       noteTemplateId: row.id,
@@ -279,6 +414,24 @@ export async function runTemplateTwinSyntheticTest(input: {
       roleLabeledTranscript: extracted.contextText,
     });
     markerText = (await docxToTextWithControls(source)).text;
+    // Pin it, with the provenance that decides when it must be regenerated.
+    await prisma.templateTwinCompiledVersion.update({
+      where: { id: compiled.id },
+      data: {
+        pinnedSyntheticNote: generatedNote,
+        pinnedSyntheticEntities: asJson(extracted.entities),
+        pinnedSyntheticContextText: extracted.contextText,
+        pinnedNoteEncounterSha256: encounterSha256,
+        pinnedNoteTemplateSha256: templateSha256,
+        pinnedNoteModelVersion:
+          process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-opus-4-8',
+        pinnedNoteGeneratedAt: new Date(),
+      },
+    });
+    console.info(
+      `[template-twin:pin] CREATED compiled=${compiled.id} encounterSha=${encounterSha256.slice(0, 12)} ` +
+        `templateSha=${String(templateSha256).slice(0, 12)}`,
+    );
   }
   const prepared = await prepareTemplateTwinFill({
     compiledVersionId: compiled.id,
@@ -336,6 +489,7 @@ export async function runTemplateTwinSyntheticTest(input: {
               fieldId: true,
               mapping: {
                 select: {
+                  sourceType: true,
                   clinicalConcept: true,
                   expectedDataType: true,
                   polarityBehavior: true,

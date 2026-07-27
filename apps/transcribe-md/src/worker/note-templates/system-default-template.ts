@@ -83,7 +83,60 @@ export interface NoteTemplateSection {
   /** First-class table/option-set structure. Absent/null = prose section
    *  (every template before 2026-07-02, incl. the system default). */
   structure?: SectionStructure | null;
+  /** WHERE THIS SECTION'S CONTENT COMES FROM.
+   *
+   *  The anchored verifier checks a drafted line against the DICTATION. That
+   *  is only a meaningful question for a section the dictation is the source
+   *  of. A protocol paragraph the template mandates, or a section another
+   *  pipeline step produces, has no transcript to be entailed by — verifying
+   *  it against one demotes correct content for failing a test that never
+   *  applied. Absent = 'dictation', so every existing section is unchanged. */
+  provenance?: SectionProvenance;
+  /** Lines this template MANDATES verbatim in the section.
+   *
+   *  A standing closing sentence ("Clinical correlation with the above findings
+   *  is required.") is correct because the format requires it, not because the
+   *  doctor said it — there is no transcript span for it and there never will
+   *  be. Declared here, next to the instructions that mandate it, rather than
+   *  as a phrase the verifier happens to know. */
+  mandatedLines?: string[];
 }
+
+/**
+ * Which producer a section's content is answerable to.
+ *
+ *  • `dictation` — the doctor said it. The anchored verifier's question ("is
+ *    this in the transcript?") is the right question. DEFAULT.
+ *  • `template`  — the template mandates this prose (a scan protocol, a
+ *    standing closing line). It is the doctor's own approved boilerplate, and
+ *    it is correct precisely BECAUSE it is fixed, not because it was spoken.
+ *  • `other_step` — a later pipeline layer writes it (coding, patient
+ *    summary). It anchors to that step's inputs; this layer must not judge it,
+ *    and must never evacuate it.
+ */
+export type SectionProvenance = 'dictation' | 'template' | 'other_step';
+
+/**
+ * Sections that appear in the COMPOSED document but are written by a later
+ * pipeline step, with how this layer should treat each.
+ *
+ *  • `PATIENT SUMMARY` — layer 07e. A deliberate re-explanation for the
+ *    patient; its phrasing IS the deliverable, so only the clinical facts
+ *    inside it are checkable (`facts_only`).
+ *  • `PROCEDURES / E&M` — the coding step. Nothing in it is dictated.
+ *  • `DIAGNOSES`, `MEDICATIONS` — likewise.
+ *
+ * Keyed by section name because a heading IS a section's identity here. This is
+ * a statement about which producer owns which section, not a list of sentences
+ * the verifier is told to ignore.
+ */
+export const PIPELINE_SECTION_POLICY: Record<string, SectionProvenance> = {
+  'patient summary': 'other_step',
+  'procedures / e&m': 'other_step',
+  'procedures': 'other_step',
+  'diagnoses': 'other_step',
+  'medications': 'other_step',
+};
 
 /** Document-level style + the immutable safety guardrails. Persisted as the
  *  `note_templates.styleProfile` JSONB column. The builder treats `preamble` +

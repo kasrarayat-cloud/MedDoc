@@ -36,6 +36,10 @@ export interface TemplateListItem {
   /** A prior form changed / a cert attempt didn't fully anchor — needs the doctor
    *  to finish (re-upload the blank form) to enable native export. */
   pdfNativePendingPreview: boolean;
+  /** There is a real page we can SHOW this doctor — either a flat-PDF canvas or
+   *  a .docx twin's verified proof artifact. Two certification paths, one
+   *  question, so the row does not have to know which one it is. */
+  nativePreviewAvailable: boolean;
   updatedAt: Date;
 }
 
@@ -51,5 +55,9 @@ export interface ClientTemplateListItem {
   defaultCount: number;
   pdfNativeCertified: boolean;
   pdfNativePendingPreview: boolean;
+  /** There is a real page we can SHOW this doctor — either a flat-PDF canvas or
+   *  a .docx twin's verified proof artifact. Two certification paths, one
+   *  question, so the row does not have to know which one it is. */
+  nativePreviewAvailable: boolean;
   updatedAtIso: string;
 }

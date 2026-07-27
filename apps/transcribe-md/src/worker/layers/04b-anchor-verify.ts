@@ -44,6 +44,12 @@ import {
 
 const MODEL = process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-sonnet-4-6';
 
+import {
+  PIPELINE_SECTION_POLICY,
+  type NoteTemplateSection,
+  type SectionProvenance,
+} from '../note-templates/system-default-template';
+
 export const ANCHOR_BLOCK_RE = /⟦A:([\s\S]*?)⟧/g;
 export const SUGGEST_MARK = '⟦S⟧';
 
@@ -257,11 +263,101 @@ export function anchorSubSpans(body: string): string[] {
   return sources.flatMap((s) => s.split(' ... ')).map((s) => s.trim()).filter(Boolean);
 }
 
+// ─── WHAT A LINE *IS*, before asking whether it is true ─────────────────────
+//
+// The verifier's question is "is this claim in the transcript?". That question
+// only has an answer for a line that MAKES a claim. Three kinds of line do not:
+//
+//   • a structural HEADING ("Right Leg:", "What we found") — it introduces the
+//     block beneath it and asserts nothing on its own;
+//   • a scaffolding placeholder ("[not documented]", an empty table cell);
+//   • template BOILERPLATE the doctor's own format mandates.
+//
+// Asking the transcript question anyway is what produced 22 suggestion cards on
+// a clean venous-reflux study, nine of which were literally the headings of the
+// patient-summary section. This predicate is the missing step: decide the line's
+// ROLE first, and only anchor the ones that assert something.
+
+/** A trailing-colon label with NO value after it — "Right Leg:", "Allergies:".
+ *  It names the block that follows; the claim, if any, is in that block. */
+const LABEL_ONLY_RE = /^(?:[-*]\s+)?(?:\*\*)?[A-Za-z][A-Za-z0-9 /&()'’-]{0,58}(?:\*\*)?:\s*$/;
+
+/**
+ * A short unpunctuated line that TITLES the block below it.
+ *
+ * "What we found", "Your next steps", "When to call us". No terminal
+ * punctuation, no finite clause that could be checked against a recording, and
+ * a non-blank line follows it. Requiring the follower is what keeps a genuine
+ * short finding ("No reflux") from being read as a heading: a finding stands at
+ * the end of its block or among siblings, a heading always has a body under it.
+ */
+function isTitleLine(t: string, next: string | undefined): boolean {
+  if (t.length === 0 || t.length > 60) return false;
+  if (/[.;!?,]$/.test(t)) return false; // a sentence, or a sign-off ("Take care,")
+  if (/^[-*\d]/.test(t)) return false; // a list item is content
+  if (/\|/.test(t)) return false; // a table row is content
+  if (/\d/.test(t)) return false; // any number is a measurement, never a title
+  const words = t.split(/\s+/).filter(Boolean);
+  if (words.length === 0 || words.length > 7) return false;
+  // Something must live under it, or it is not titling anything.
+  const follower = (next ?? '').trim();
+  return follower.length > 0 && !/^#{1,6}\s/.test(follower);
+}
+
+/**
+ * Scaffolding placeholders carry no assertion — and crucially, no POLARITY.
+ *
+ * "[not documented]" contains the token "not". Read as prose it looks like a
+ * denial, and the polarity rule below duly compared it against a transcript
+ * that denies nothing in particular and demoted the row. It is not a denial; it
+ * is an empty cell. Same for an em-dash or "N/A". Stripping them before any
+ * semantic test is the fix — not a whitelist of the rows they appear in.
+ */
+const PLACEHOLDER_RE =
+  /\[not\s+(?:documented|addressed)\]|(?:^|\s)(?:—|–|n\/a)(?=\s|$)/gi;
+
+/** The part of a line that actually asserts something about the patient. */
+export function assertionText(s: string): string {
+  return s.replace(PLACEHOLDER_RE, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/** Vessels a venous/arterial study names. Anatomy, not phrasing. */
+const VESSEL_RE =
+  /\b(?:great saphenous|small saphenous|accessory saphenous|anterior accessory|gsv|ssv|aagsv|femoral|popliteal|perforator|saphenofemoral|saphenopopliteal|tibial|peroneal|iliac)\b/gi;
+
+/**
+ * The checkable facts inside a patient-facing paraphrase.
+ *
+ * A summary sentence is written to be understood, not to be diffed — so the
+ * only honest thing to verify in it is the clinical content it carries:
+ * WHICH SIDE, WHICH VESSEL, WHAT MEASUREMENT, and whether something was said to
+ * be present or absent. Everything else is the re-explanation doing its job.
+ *
+ * Returns normalized fragments to look for in the transcript. An empty result
+ * means "this line asserts no checkable fact" — which is the common case and is
+ * exactly why the section stopped generating cards.
+ */
+export function extractClinicalFacts(line: string): string[] {
+  const t = assertionText(line);
+  const out = new Set<string>();
+  for (const m of t.matchAll(VESSEL_RE)) out.add(norm(m[0]));
+  // Measurements — a number with a clinical unit. A bare number in prose
+  // ("one of the main veins") is not a measurement and must not be checked.
+  for (const m of t.matchAll(/\b(\d+(?:\.\d+)?)\s*(mm|cm|sec|secs|seconds)\b/gi)) {
+    out.add(norm(m[1]));
+  }
+  return [...out];
+}
+
 function isExemptLine(stripped: string): boolean {
   const t = stripped.trim();
   if (t.length === 0) return true;
   if (/^#{1,6}\s/.test(t)) return true;
   if (/^\*\*[^*]+\*\*:?\s*$/.test(t)) return true;
+  // A label with nothing after it. The bold form was already exempt above; the
+  // plain form ("Right Leg:") was not, and it is the commonest heading shape in
+  // an imaging report — one per leg, per table, every study.
+  if (LABEL_ONLY_RE.test(t)) return true;
   // "[not documented]" placeholder — exempt after an optional list marker and
   // an optional label. The label may be BOLD ("**Allergies:**") OR a plain
   // "Label:" prefix ("Family History:", "Comparison:") — both are scaffolding,
@@ -321,10 +417,63 @@ interface ClaimRow {
 
 /** Deterministic stage. Returns claims that SURVIVE to entailment, plus the
  *  claims already demoted by hard rules (which entailment cannot overrule). */
+/**
+ * Which sections this layer is competent to judge.
+ *
+ * Built from the ACTIVE TEMPLATE's own declared sections, so it is provenance
+ * rather than a list of names. A section the template does not declare is one
+ * this layer did not draft and cannot check: `PROCEDURES / E&M` comes from the
+ * coding step, `PATIENT SUMMARY` from 07e, and a table caption rendered as a
+ * heading ("DIAMETER AND REFLUX TIME") is not a section at all. Before this,
+ * every heading in the composed document was treated as a transcript-derived
+ * section, which is how the verifier came to evacuate two whole sections it had
+ * never written.
+ */
+export interface SectionPolicy {
+  /** normalized label → provenance. Missing ⇒ not this layer's to judge. */
+  byLabel: Map<string, SectionProvenance>;
+  /** normalized mandated line → the section that mandates it. */
+  mandated: Set<string>;
+}
+
+export function buildSectionPolicy(sections: NoteTemplateSection[]): SectionPolicy {
+  const byLabel = new Map<string, SectionProvenance>();
+  const mandated = new Set<string>();
+  for (const s of sections) {
+    byLabel.set(normSection(s.label), s.provenance ?? 'dictation');
+    for (const line of s.mandatedLines ?? []) mandated.add(norm(line));
+  }
+  // Sections written by a LATER step. They are in the composed document but
+  // were never this layer's to draft or to judge.
+  for (const [label, prov] of Object.entries(PIPELINE_SECTION_POLICY)) {
+    if (!byLabel.has(label)) byLabel.set(label, prov);
+  }
+  return { byLabel, mandated };
+}
+
+/** What to do with a line in this section. */
+function sectionVerdict(
+  policy: SectionPolicy | undefined,
+  section: string
+): 'verify' | 'exempt' | 'facts_only' {
+  // No policy supplied → every section verifies, exactly as before.
+  if (!policy) return 'verify';
+  const p = policy.byLabel.get(normSection(section));
+  // Not a section this pipeline declares anywhere — a table caption rendered as
+  // a heading, or a block some other producer appended. Not ours to judge.
+  if (p === undefined) return 'exempt';
+  if (p === 'template') return 'exempt';
+  // A later step wrote it. We do not judge its PHRASING, but a hard clinical
+  // fact inside it is still checkable.
+  if (p === 'other_step') return 'facts_only';
+  return 'verify';
+}
+
 function deterministicStage(
   anchoredDraft: string,
   roleLabeledTranscript: string,
-  scaffold?: TemplateScaffold
+  scaffold?: TemplateScaffold,
+  policy?: SectionPolicy
 ): {
   exemptLines: Map<number, string>;
   toEntail: ClaimRow[];
@@ -350,6 +499,50 @@ function deterministicStage(
       .replace(/\s+$/g, '');
     if (isExemptLine(stripped)) {
       exemptLines.set(index, stripped);
+      return;
+    }
+    // A TITLE line — needs the next line, so it cannot live in isExemptLine.
+    if (isTitleLine(stripped.trim(), lines[index + 1])) {
+      exemptLines.set(index, stripped);
+      return;
+    }
+    // A line the TEMPLATE mandates verbatim. It is in the note because the
+    // format requires it; no dictation will ever contain it.
+    if (policy?.mandated.has(norm(stripped.trim()))) {
+      exemptLines.set(index, stripped);
+      return;
+    }
+    // SECTION PROVENANCE. Decided before any anchor work: a section this layer
+    // did not draft is not one it may demote, and a template's own protocol
+    // prose is correct because it is fixed, not because it was dictated.
+    const verdict = sectionVerdict(policy, section);
+    if (verdict === 'exempt') {
+      exemptLines.set(index, stripped);
+      return;
+    }
+    if (verdict === 'facts_only') {
+      // The patient summary is a deliberate RE-EXPLANATION for the patient. Its
+      // phrasing is its whole job, so "couldn't verify" on a narrative sentence
+      // is meaningless. What CAN be wrong is a clinical fact inside it — a side,
+      // a vessel, a measurement, a presence/absence. Verify those and nothing
+      // else; a line that carries none is prose and is exempt.
+      const facts = extractClinicalFacts(stripped);
+      if (facts.length === 0) {
+        exemptLines.set(index, stripped);
+        return;
+      }
+      const unsupported = facts.filter((f) => !asrNorm.includes(f));
+      if (unsupported.length === 0) {
+        exemptLines.set(index, stripped);
+        return;
+      }
+      demoted.push({
+        index,
+        text: stripped.trim(),
+        reason: 'not_entailed',
+        section,
+        anchor: 'no anchor',
+      });
       return;
     }
     // Table HEADER row (feat/structured-templates; pre-registered scope
@@ -473,8 +666,48 @@ function deterministicStage(
       if (!spanText.includes(t.slice(0, 5)))
         return demote('form_route_unsupported');
     }
-    if (NEGATION_RE.test(claimCore) !== NEGATION_RE.test(spanText))
-      return demote('negation_mismatch');
+    // ── POLARITY, SCOPED TO WHAT IS BEING DENIED ────────────────────────────
+    //
+    // This was a whole-line boolean: `NEGATION_RE.test(claim) !==
+    // NEGATION_RE.test(span)`. Two ways that misfires, both seen in production
+    // on a clean study:
+    //
+    //   1. "| GSV at the Knee | 3.4 | [not documented] |" — the placeholder's
+    //      "not" made the claim read as a denial. It is an empty cell.
+    //   2. "| AAGSV at the SFJ | 3.0 | — |" — the claim denies nothing, but the
+    //      anchoring span came from a reflux study whose transcript is full of
+    //      "no thrombus", "no reflux in the left". An unrelated denial ANYWHERE
+    //      in the span flipped the boolean and demoted a measurement.
+    //
+    // Polarity only mismatches when the two are talking about the SAME thing.
+    // So: strip placeholders, then compare only when the denial's subject is
+    // shared. A span that denies something else is not a contradiction — and
+    // the direction that actually risks fabrication (span denies X, claim
+    // asserts X) is still caught, which is the whole point of the rule.
+    const claimAssert = assertionText(claimCore);
+    const claimNeg = NEGATION_RE.test(claimAssert);
+    const spanNeg = NEGATION_RE.test(spanText);
+    if (!claimNeg && spanNeg) {
+      // The span denies something. Demote ONLY if the claim asserts that same
+      // subject — i.e. the dictation said "no X" and the draft says "X".
+      const spanDenied = spanText.match(
+        /\b(?:no|not|denies|denied|without|negative)\s+([a-z][a-z\s]{3,60})/
+      );
+      const deniedTokens = (spanDenied?.[1].match(/[a-z]{5,}/g) ?? []).filter(
+        (t) => !REGISTER_WORDS.includes(t)
+      );
+      const claimNorm = norm(claimAssert);
+      if (
+        deniedTokens.length > 0 &&
+        deniedTokens.some((t) => claimNorm.includes(t.slice(0, 5)))
+      ) {
+        return demote('negation_mismatch');
+      }
+    } else if (claimNeg && !spanNeg) {
+      // The draft denies something the span never denies. The subject check
+      // below is the precise form of this test; it runs on claimAssert so a
+      // placeholder can no longer be the thing "denied".
+    }
     // Iteration 2 — negation SUBJECT matching (deterministic): a negative
     // claim ("No nausea or vomiting") is only anchorable to a span that
     // mentions at least ONE content token of the negated phrase; a span
@@ -482,7 +715,7 @@ function deterministicStage(
     // recurring Gate-1 escape; boolean polarity alone could not see it).
     // Phrase-ANY (not ALL): "No prior diagnosis of migraines" passes via
     // "migraines" even though "prior"/"diagnosis" are register words.
-    const negPhrase = norm(claimCore).match(
+    const negPhrase = norm(claimAssert).match(
       /\b(?:no|not|denies|denied|without|negative)\s+([a-z][a-z\s]{3,60})/
     );
     if (negPhrase) {
@@ -788,12 +1021,18 @@ export async function runAnchorVerify(input: {
    *  Supplied ONLY when a doctor's custom template with `{{one of}}` choice
    *  slots is active; absent for every default SOAP path → byte-identical. */
   templateScaffold?: TemplateScaffold;
+  /** The ACTIVE template's sections. Supplied → this layer judges only the
+   *  sections that template declares, at the provenance it declares them with.
+   *  Absent → every section verifies, byte-identical to the previous
+   *  behaviour (every existing caller and test). */
+  templateSections?: NoteTemplateSection[];
 }): Promise<AnchorVerifyResult> {
   try {
     const det = deterministicStage(
       input.anchoredDraft,
       input.roleLabeledTranscript,
-      input.templateScaffold
+      input.templateScaffold,
+      input.templateSections ? buildSectionPolicy(input.templateSections) : undefined
     );
     const ent = await entailmentStage(det.toEntail, input.roleLabeledTranscript, input);
 

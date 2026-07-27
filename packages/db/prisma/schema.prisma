@@ -342,6 +342,16 @@ enum AuditAction {
   // claims enter the note as DOCTOR-attested. Metadata: { section, reason,
   // remaining } — never claim text (PHI).
   SUGGESTION_ADOPTED
+  /// One row per chat-editor turn. Every EFFECT the chat has is already
+  /// audited by the action it dispatches into — but a SUGGESTION_ADOPTED row
+  /// written by the chat is byte-identical to one written by a button, and
+  /// "did the model do this, or did the doctor?" is the first question anyone
+  /// will ask of this feature. Metadata is counts and intent KINDS only.
+  CHAT_EDIT_TURN
+  /// Sign refused: the note changed since the E/M level was last scored.
+  EM_SIGN_BLOCKED_STALE
+  /// The E/M level was re-scored against a changed note.
+  EM_RESCORED
   SUGGESTION_DISMISSED
 
   // E/M recompute on adoption — visible-confirm, never silent (2026-06-12,
@@ -1737,6 +1747,31 @@ model TranscribeVisit {
   /// new level; the winning READY→SIGNED transition stamps acknowledgedAt.
   /// NULL when no suggestion action has changed the level.
   emPendingChange       Json?
+
+  /// The note CHANGED since the E/M level was last validated.
+  ///
+  /// Every content mutation a doctor can make sets this — a draft save (the
+  /// inline editor, tap-to-edit and the chat's section edit all funnel
+  /// through it), adopting a suggestion, and applying E/M additions. The
+  /// sign route refuses while it is true, so there is exactly ONE semantics
+  /// for a changed note whether a human or a model changed it.
+  ///
+  /// Cleared by a re-score: the level either moved (and the existing confirm
+  /// card asks for acknowledgement, unchanged) or it did not (and the flag
+  /// simply clears). Fail-closed: the default for a note nobody has
+  /// re-scored is "needs validation", not "fine".
+  emStale          Boolean   @default(false)
+
+  /// The E/M code the level was last VALIDATED at.
+  ///
+  /// The displayed level is recomputed on read and never persisted, so a
+  /// re-score had nothing to compare against: it scored the current note,
+  /// called that the baseline, and concluded nothing had moved — every time.
+  /// The gate cleared itself. This is the missing "before".
+  ///
+  /// Null means never validated; the first re-score establishes it rather than
+  /// inventing a movement it cannot substantiate.
+  emScoredCode     String?
   patientSummary        String? @db.Text
   confidenceScores      Json?
 
@@ -2552,6 +2587,24 @@ model TemplateTwinCompiledVersion {
   latestTestRoundTrip           Json?
   latestTestVerifiedAt          DateTime? @db.Timestamptz(6)
 
+  /// PINNED SYNTHETIC NOTE — certification determinism. Generated once through
+  /// the real ephemeral-visit path, then reused so the proof is not re-sampled
+  /// on every attempt. Certification still runs the pinned note through the
+  /// whole production machinery; only the stochastic input is fixed.
+  pinnedSyntheticNote       String?
+  /// sha256 of the encounter text the pin was generated from — a changed
+  /// encounter invalidates the pin.
+  pinnedNoteEncounterSha256 String?   @db.Char(64)
+  /// sha256 of the template structure the pin was generated against.
+  pinnedNoteTemplateSha256  String?   @db.Char(64)
+  pinnedNoteModelVersion    String?
+  pinnedNoteGeneratedAt     DateTime? @db.Timestamptz(6)
+  /// The Layer-3 extraction pinned alongside the note. L3 is a model too: an
+  /// unpinned certification re-extracted every run and blocked on a different
+  /// set of fields each time. Keyed by the same encounter hash as the note.
+  pinnedSyntheticEntities    Json?
+  pinnedSyntheticContextText String?
+
   fields        TemplateTwinFieldDefinition[]
   certification TemplateTwinCertification?
   fills         TemplateTwinFillManifest[]
@@ -2598,6 +2651,11 @@ model TemplateTwinSemanticMapping {
   fieldDefinitionId String                      @unique
   fieldDefinition   TemplateTwinFieldDefinition @relation(fields: [fieldDefinitionId], references: [id], onDelete: Cascade)
 
+  /// Where this field's value legitimately comes from: extraction (cited
+  /// EncounterFact) | manual (per-visit human value, renders blank, attested) |
+  /// context_default / visit_metadata (RESERVED, unimplemented until the
+  /// flagged review-before-sign lane exists).
+  sourceType String @default("extraction")
   clinicalConcept  String?
   expectedDataType String
   polarityBehavior String

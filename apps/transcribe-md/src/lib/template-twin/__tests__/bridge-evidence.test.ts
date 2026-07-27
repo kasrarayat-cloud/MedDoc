@@ -159,13 +159,29 @@ describe('MUTATION GUARD — a stamper must not pass', () => {
     }
   });
 
-  it('both bridges route their citation through citationOf', () => {
+  it('the MEASUREMENT bridge routes its citation through citationOf', () => {
     // A stamper mutant that reintroduces a literal citation would bypass this.
     const { readFileSync } = require('node:fs') as typeof import('node:fs');
     const { join } = require('node:path') as typeof import('node:path');
-    for (const file of ['bridge-fill.ts', 'picks-bridge.ts']) {
-      const src = readFileSync(join(__dirname, '..', file), 'utf-8');
-      expect(src, `${file} no longer cites via citationOf`).toContain('citationOf(');
-    }
+    const src = readFileSync(join(__dirname, '..', 'bridge-fill.ts'), 'utf-8');
+    expect(src, 'bridge-fill.ts no longer cites via citationOf').toContain('citationOf(');
+  });
+
+  it('the PICKS bridge mints provenance only through the named class', () => {
+    // Picks legitimately do not cite an extracted fact — the options are
+    // protocol language no extractor emits, so requiring entailment left every
+    // dropdown blank on every real visit. They cite the SELECTION instead,
+    // through one auditable constructor whose identity includes the note
+    // version. What must never come back is a hand-rolled citation object.
+    const { readFileSync } = require('node:fs') as typeof import('node:fs');
+    const { join } = require('node:path') as typeof import('node:path');
+    const src = readFileSync(join(__dirname, '..', 'picks-bridge.ts'), 'utf-8');
+    expect(src).toContain('buildVerifiedNoteSelectionFact(');
+    // The citation is taken FROM the built fact, never composed beside it.
+    expect(src).toContain('sourceFactIds: [fact.factId]');
+    expect(src).toContain('evidenceAnchorIds: [...fact.evidenceAnchorIds]');
+    // And the facts leave the bridge — a citation to a fact that never reaches
+    // the manifest is untraceable, which is where this whole class started.
+    expect(src).toContain('facts.push(built.fact)');
   });
 });

@@ -59,6 +59,8 @@ function factSatisfiesMapping(fact: EncounterFact, mapping: SemanticMapping): bo
 export type BridgeMatchFailure =
   | 'no_supporting_fact'
   | 'ambiguous_laterality'
+  | 'laterality_mismatch'
+  | 'row_laterality_unknown'
   | 'ambiguous_candidates';
 
 export interface BridgeMatch {
@@ -72,15 +74,51 @@ export type BridgeMatchResult =
   | { ok: false; reason: BridgeMatchFailure };
 
 const norm = (s: string) =>
-  s
-    .toLocaleLowerCase('en-US')
+  foldAnatomy(s)
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
+
+/**
+ * ABBREVIATION <-> SPOKEN-FORM FOLD (addressing only).
+ *
+ * The template's row label says "GSV at the SFJ". The dictation — and therefore
+ * the fact — says "great saphenous vein at the saphenofemoral junction". Both
+ * name the same anatomy, and without a fold every measurement fact misses its
+ * row while looking, from the logs, exactly like missing evidence.
+ *
+ * Found by the Stage-1 eval, which scored 0/8 on segments for precisely this
+ * reason before the scorer learned the same fold.
+ *
+ * This is ADDRESSING: it decides which row a fact is offered to. It does not
+ * decide whether the value is written — that still requires the fact to satisfy
+ * factSatisfiesMapping and to match numerically, both untouched.
+ *
+ * Code-defined and enumerated on purpose: a fuzzy matcher here would quietly
+ * align "SSV" with "GSV" one day.
+ */
+const ANATOMY_FOLD: ReadonlyArray<readonly [RegExp, string]> = [
+  [/anterior accessory great saphenous vein/g, 'aagsv'],
+  [/posterior accessory great saphenous vein/g, 'pagsv'],
+  [/great saphenous vein/g, 'gsv'],
+  [/small saphenous vein/g, 'ssv'],
+  [/saphenofemoral junction/g, 'sfj'],
+  [/saphenopopliteal junction/g, 'spj'],
+  [/perforator vein/g, 'perforator'],
+];
+
+/** Fold spoken anatomy to the abbreviations templates use. Idempotent: applying
+ *  it to already-abbreviated text is a no-op. */
+export function foldAnatomy(text: string): string {
+  return ANATOMY_FOLD.reduce(
+    (acc, [pattern, abbrev]) => acc.replace(pattern, abbrev),
+    text.toLocaleLowerCase('en-US'),
+  );
+}
 
 /** Vein/segment tokens worth aligning on; generic words would match anything. */
 const STOP = new Set([
   'the', 'at', 'of', 'and', 'vein', 'veins', 'leg', 'reflux', 'time', 'diameter',
-  'sec', 'secs', 'seconds', 'mm', 'cm', 'level', 'proximal', 'distal', 'mid',
+  'sec', 'secs', 'seconds', 'mm', 'cm', 'level', 'junction',
 ]);
 
 function tokens(label: string): string[] {
@@ -93,7 +131,13 @@ function tokens(label: string): string[] {
 function segmentCongruent(label: string, fact: EncounterFact): boolean {
   const want = tokens(label);
   if (want.length === 0) return false;
-  const hay = `${norm(fact.concept)} ${norm(String(fact.value ?? ''))}`;
+  // The EVIDENCE QUOTE is part of the haystack because anatomy is deliberately
+  // NOT baked into the concept string — a measurement fact's concept is its
+  // KIND ("measurement.diameter") and the segment travels as data, with its
+  // spoken form in the quote. Reading the quote here is addressing, not
+  // evidence: it decides which row the fact is offered to, never whether the
+  // value is written.
+  const hay = `${norm(fact.concept)} ${norm(String(fact.value ?? ''))} ${norm(fact.evidenceQuote ?? '')}`;
   return want.some((t) => hay.includes(t));
 }
 
@@ -117,6 +161,11 @@ export function matchMeasurementFact(input: {
   facts: readonly EncounterFact[];
   /** The field's approved mapping — the citation must satisfy it. */
   mapping?: SemanticMapping;
+  /** The ROW's laterality, stamped at compile time from the document's own leg
+   *  headings. Addressing is FAIL-CLOSED on it: a sided fact may only fill a
+   *  same-sided row, and an unmarked row may never silently accept a sided
+   *  value. Omitted (legacy callers) means no row-side constraint. */
+  rowLaterality?: 'right' | 'left' | 'unknown';
 }): BridgeMatchResult {
   const n = Number(input.value);
   if (!Number.isFinite(n)) return { ok: false, reason: 'no_supporting_fact' };
@@ -136,7 +185,37 @@ export function matchMeasurementFact(input: {
 
   const fact = candidates[0]!;
   if (fact.laterality === 'unknown') return { ok: false, reason: 'ambiguous_laterality' };
+
+  if (input.rowLaterality !== undefined) {
+    const verdict = rowLateralityVerdict(fact, input.rowLaterality);
+    if (verdict !== 'ok') return { ok: false, reason: verdict };
+  }
+
   return { ok: true, match: { fact, laterality: fact.laterality } };
+}
+
+/**
+ * FAIL-CLOSED ROW CONGRUENCE. A right-leg measurement in a left-leg row is the
+ * error this whole chain exists to prevent, and it would pass silently: the
+ * value is real, the citation is real, only the ROW is wrong.
+ *
+ * Exported because the resolver needs the SAME rule. It did not have it, and
+ * that is how three right-leg reflux cells were filled from left-leg facts and
+ * only caught downstream as ASSERTION_NOT_SUPPORTED — the bridge refused them,
+ * the resolver baseline underneath did not. One rule, both callers.
+ */
+export function rowLateralityVerdict(
+  fact: Pick<EncounterFact, 'laterality'>,
+  rowLaterality: 'right' | 'left' | 'unknown',
+): 'ok' | 'laterality_mismatch' | 'row_laterality_unknown' {
+  const sidedFact = fact.laterality === 'left' || fact.laterality === 'right';
+  if (rowLaterality === 'unknown') {
+    // An unmarked row cannot accept a sided value. The document gave no leg
+    // signal, so filling here would be a guess wearing a citation.
+    return sidedFact ? 'row_laterality_unknown' : 'ok';
+  }
+  // Includes a bilateral/not_applicable fact offered to a sided row.
+  return sidedFact && fact.laterality === rowLaterality ? 'ok' : 'laterality_mismatch';
 }
 
 /**

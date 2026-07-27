@@ -55,6 +55,10 @@ export interface SignedDocumentViewProps {
   lockBanner: React.ReactNode;
   /** The note itself (SoapEditor, chromeless, readonly). */
   noteNode: React.ReactNode;
+  /** PHASE 2 — the FINAL FILE that was delivered, drawn. Null/absent when the
+   *  visit has no native document or it could not be produced, in which case
+   *  the note renders exactly as before. */
+  documentNode?: React.ReactNode;
   /** Transcript / dictation / raw-text view — the old "Input" tab, collapsed. */
   dictationNode: React.ReactNode;
   dictationLabel: string;
@@ -75,9 +79,11 @@ export function SignedDocumentView(props: SignedDocumentViewProps) {
     <div className="qm-ux-doc" data-testid="signed-document-view">
       {props.lockBanner}
 
-      {/* The note — the whole point of the page, so it gets the full measure
-          and nothing sits beside it at any width. */}
-      <article className="qm-ux-doc-note">{props.noteNode}</article>
+      {/* The FINAL FILE, when we have it: the delivered document itself, not a
+          re-typeset copy of it. A signed note is a record — what it looked like
+          when it was signed is the thing worth showing. Falls back to the note
+          whenever the file cannot be produced. */}
+      <article className="qm-ux-doc-note">{props.documentNode ?? props.noteNode}</article>
 
       {/* One slim summary row. Everything the Codes / Billing / Rx tabs carried
           for a SIGNED note, in a single glance-able strip. */}

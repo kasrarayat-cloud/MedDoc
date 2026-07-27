@@ -270,6 +270,11 @@ export async function runLayer4GenerateSoap(
       anchoredDraft: rawText,
       roleLabeledTranscript: input.roleLabeledTranscript,
       templateScaffold,
+      // The active template's own sections. This is what tells 04b which
+      // headings it drafted and which belong to another step — without it the
+      // verifier treats PROCEDURES / E&M, PATIENT SUMMARY and even a table
+      // caption as transcript-derived sections and empties them.
+      templateSections: template.sections,
     });
     text = verified.body;
     suggestedClaims = verified.suggestions.length > 0 ? verified.suggestions : undefined;
@@ -339,8 +344,13 @@ export async function runLayer4GenerateSoap(
   // An emptied-then-back-filled section is a fail-toward-completeness review
   // trigger (NOT a silent placeholder): surface it so the READY banner tells
   // the doctor where to look.
+  // BOTH conditions. A back-filled section only warrants a banner when the
+  // doctor has something to DO about it — a suggestion to read and adopt. With
+  // the provenance fix in 04b a section can no longer be emptied by a class of
+  // false positive, but if it ever were, a banner pointing at an empty review
+  // lane would send them looking for cards that are not there.
   const anchorReview =
-    filledEmptySections.length > 0
+    filledEmptySections.length > 0 && suggestedClaims !== undefined
       ? {
           needsReview: true,
           reviewReason: `Anchored verification moved all drafted content out of ${filledEmptySections.length} section(s) — ${filledEmptySections.join(', ')} — to the review suggestions. Review and adopt before signing.`,

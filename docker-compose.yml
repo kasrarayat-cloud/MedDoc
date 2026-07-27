@@ -446,7 +446,52 @@ services:
   # @meddoc/db). Redis is a dependency so BullMQ-based features in later
   # milestones have somewhere to enqueue work; today's shell doesn't use
   # it at runtime but we wire it now to avoid a compose edit later.
+  # ── DOCX → PDF converter (Gotenberg). Preview only. ──────────────────────
+  # Exists so a doctor can see THEIR OWN form, filled, before they trust it.
+  # Nothing downstream depends on it: certify, export and sign never call it,
+  # and the client falls back to rendering the true bytes in the browser when
+  # it is slow or absent. A preview that can block signing would be a worse
+  # feature than no preview.
+  #
+  # NO EGRESS. It sits on `converter`, an `internal: true` network — Docker
+  # installs no route off the host for it, so a PHI-bearing document cannot
+  # leave this box through this service even if the container were compromised.
+  # It is NOT on the default network and publishes NO port.
+  #
+  # STATELESS. /tmp is a tmpfs: conversion scratch lives in RAM and dies with
+  # the container. Nothing about a converted document touches disk, and there
+  # is no volume to retain it.
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    restart: unless-stopped
+    # LibreOffice peaks well under this per conversion; the cap stops a
+    # pathological document from competing with the clinical pipeline.
+    mem_limit: 1g
+    cpus: '1.5'
+    networks:
+      - converter
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+    security_opt:
+      - no-new-privileges:true
+    command:
+      - gotenberg
+      - --api-port=3000
+      # Belt on top of the internal network: refuse any conversion that would
+      # dereference a remote resource.
+      - --chromium-deny-list=.*
+      - --api-timeout=25s
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
   transcribe-md:
+    networks:
+      - default
+      - converter
     # Phase 19 — h16-cap-drop. Next app, binds 3011 inside the
     # container, runs as uid 1001. No default cap required.
     cap_drop:
@@ -497,6 +542,17 @@ services:
         # setting NEXT_PUBLIC_UX_SIMPLIFY=true in .env (compose reads .env here).
         # ROLLBACK: NEXT_PUBLIC_UX_SIMPLIFY=false docker compose build transcribe-md
         NEXT_PUBLIC_UX_SIMPLIFY: "${NEXT_PUBLIC_UX_SIMPLIFY:-false}"
+        # Pre-sign review as ONE document (the unsigned half of the
+        # linearisation). isReviewDocView() is read from CLIENT components, so
+        # this must be a build arg — a runtime env would leave both branches on
+        # the OFF path with no error. Default OFF.
+        # ROLLBACK: NEXT_PUBLIC_REVIEW_DOC_VIEW=false docker compose build transcribe-md
+        NEXT_PUBLIC_REVIEW_DOC_VIEW: "${NEXT_PUBLIC_REVIEW_DOC_VIEW:-false}"
+        # Settings row simplification. ROLLBACK: unset + rebuild.
+        NEXT_PUBLIC_SETTINGS_SIMPLE_ROW: "${NEXT_PUBLIC_SETTINGS_SIMPLE_ROW:-false}"
+        NEXT_PUBLIC_DOC_PREVIEW: "${NEXT_PUBLIC_DOC_PREVIEW:-false}"
+        NEXT_PUBLIC_VISIT_DOC_PAGE: "${NEXT_PUBLIC_VISIT_DOC_PAGE:-false}"
+        NEXT_PUBLIC_CHAT_EDITOR: "${NEXT_PUBLIC_CHAT_EDITOR:-false}"
     restart: unless-stopped
     logging:
       driver: json-file
@@ -701,3 +757,9 @@ volumes:
   minio_data:
   caddy_data:
   caddy_config:
+
+networks:
+  default:
+  # Internal-only: no gateway, so nothing on it can reach outside the host.
+  converter:
+    internal: true

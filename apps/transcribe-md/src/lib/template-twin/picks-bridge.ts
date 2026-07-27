@@ -18,8 +18,15 @@
 // Pure + deterministic. No I/O, no AI.
 // ============================================================================
 
-import { citationOf, matchPickFact } from './bridge-evidence';
+import { createHash } from 'node:crypto';
+
+import { EMPTY_SECTION_PLACEHOLDER } from '@/lib/soap-format';
+
 import type { EncounterFact, SemanticMapping } from './ir';
+import {
+  buildVerifiedNoteSelectionFact,
+  fieldLateralityFromLabel,
+} from './verified-note-selection';
 import {
   FieldResolutionSchema,
   type FieldResolution,
@@ -91,33 +98,62 @@ function alignLineFrom(
   return { picks: optionLists.map(() => null), matchedAt: -1 }; // line omitted -> blank
 }
 
-/** A pick is written ONLY when a real fact entails the selected option, and it
- *  cites THAT fact. No match -> notMentioned (blank), reason named. The note
- *  and the facts come from one transcript, so a genuinely dictated pick has a
- *  fact to cite; one the model chose without dictated support does not. */
+/** A pick is written ONLY under the verified-note-selection rules, and it cites
+ *  the selection itself. Every check is enforced here; none is waived.
+ *
+ *  The earlier rule — a pick must be entailed by an extracted fact — could not
+ *  hold: the options are protocol language ("Bilateral Detailed", "Swelling,
+ *  Heaviness") and no extractor emits facts that read like that. It left every
+ *  dropdown blank on every real visit while the note had selected them
+ *  correctly, and the native export refused the document as incomplete. */
 function supported(
   field: TemplateField,
   value: string,
   ordinal: number,
-  facts: readonly EncounterFact[],
+  markerOrdinal: number,
+  noteSha256: string,
   mapping?: SemanticMapping,
-): FieldResolution {
-  const matched = matchPickFact({ optionText: value, facts, mapping });
-  if (!matched.ok) {
+): { resolution: FieldResolution; fact: EncounterFact } | null {
+  // A citation needs a concept to satisfy. Without one there is nothing for the
+  // validator to check the fact against, so the field stays blank.
+  if (!mapping?.clinicalConcept) {
     console.info(
-      `[template-twin:bridge] pick left blank field=${field.fieldId} reason=${matched.reason}`,
+      `[template-twin:bridge] pick left blank field=${field.fieldId} reason=no_approved_concept`,
     );
-    return notMentioned(field);
+    return null;
   }
-  return FieldResolutionSchema.parse({
-    fieldId: field.fieldId,
-    status: 'supported',
-    value,
-    ...citationOf(matched.match),
-    selectedOptionOrdinal: ordinal,
-    reasonCode: 'choice_slot_pick',
-    clinicianReviewed: false,
+  // FAIL CLOSED ON SIDE. A mapping that REQUIRES laterality, on a field whose
+  // own label names no side, has nothing to say which leg the selection is
+  // about — and a right-leg finding in a left-leg sentence is exactly the error
+  // the measurement path fails closed on. Blank instead.
+  const fieldLaterality = fieldLateralityFromLabel(field.originalLabel);
+  if (mapping.laterality === 'required' && fieldLaterality === 'unknown') {
+    console.info(
+      `[template-twin:bridge] pick left blank field=${field.fieldId} reason=required_laterality_unknown`,
+    );
+    return null;
+  }
+  const fact = buildVerifiedNoteSelectionFact({
+    field,
+    mapping,
+    optionValue: value,
+    markerOrdinal,
+    noteSha256,
+    fieldLaterality,
   });
+  return {
+    fact,
+    resolution: FieldResolutionSchema.parse({
+      fieldId: field.fieldId,
+      status: 'supported',
+      value,
+      sourceFactIds: [fact.factId],
+      evidenceAnchorIds: [...fact.evidenceAnchorIds],
+      selectedOptionOrdinal: ordinal,
+      reasonCode: 'choice_slot_pick',
+      clinicianReviewed: false,
+    }),
+  };
 }
 function notMentioned(field: TemplateField): FieldResolution {
   return FieldResolutionSchema.parse({
@@ -134,14 +170,40 @@ function notMentioned(field: TemplateField): FieldResolution {
 
 export interface BridgeChoiceSlotPicksInput {
   ir: TemplateDocIR;
-  /** L3 EncounterFacts — every pick must cite one. */
+  /** L3 EncounterFacts. Picks no longer draw their evidence from here — see
+   *  verified-note-selection.ts — but the set is kept so a future class can. */
   facts: readonly EncounterFact[];
   /** Approved mappings — a citation must satisfy the validator's rule. */
   mappings?: readonly SemanticMapping[];
   /** The {{one of}} marker text the template was compiled/parsed from. */
   markerText: string;
-  /** The LIVE brain's generated note (markers filled with picks). */
+  /** The ADOPTED note (markers filled with picks). Single-source rule: this is
+   *  the note that will be signed and exported, never a draft or a suggestion
+   *  lane — a pick the doctor has not adopted is not a selection. */
   filledNote: string;
+}
+
+export interface BridgeChoiceSlotPicksResult {
+  resolutions: FieldResolution[];
+  /** The provenance facts the accepted picks cite. They MUST reach the manifest's
+   *  fact set, or the validator will (rightly) call the citations untraceable. */
+  facts: EncounterFact[];
+}
+
+/** Section labels whose body still carries the anchored verifier's set-aside
+ *  placeholder. Content there was DEMOTED for the clinician to review; a pick
+ *  inside it has not been adopted, so it cannot be a verified selection. The
+ *  verifier's grounding is cited, never rebuilt or second-guessed here. */
+function setAsideLineIndexes(filledLines: readonly string[]): Set<number> {
+  const out = new Set<number>();
+  let inSetAside = false;
+  filledLines.forEach((line, i) => {
+    const t = line.trim();
+    if (/^#{1,6}\s/.test(t)) inSetAside = false;
+    if (t === EMPTY_SECTION_PLACEHOLDER) inSetAside = true;
+    if (inSetAside) out.add(i);
+  });
+  return out;
 }
 
 /**
@@ -150,33 +212,81 @@ export interface BridgeChoiceSlotPicksInput {
  * else not_mentioned). Constrained-fill invariants hold: only listed options,
  * blank when unsaid, never off-list.
  */
-export function bridgeChoiceSlotPicks(input: BridgeChoiceSlotPicksInput): FieldResolution[] {
+export function bridgeChoiceSlotPicks(
+  input: BridgeChoiceSlotPicksInput,
+): BridgeChoiceSlotPicksResult {
   const { ir, markerText, filledNote } = input;
   const selectFields = ir.fields
     .filter((f) => f.kind === 'single_select' && f.detectionStatus !== 'unsupported' && !f.rowPrototype)
     .sort((a, b) => a.displayOrder - b.displayOrder || a.fieldId.localeCompare(b.fieldId));
 
   const filledLines = filledNote.split('\n');
-  const picks: (string | null)[] = [];
+  const setAside = setAsideLineIndexes(filledLines);
+  // The note's identity travels into every citation, so a re-generated or edited
+  // note can never reuse a prior manifest's provenance.
+  const noteSha256 = createHash('sha256').update(filledNote).digest('hex');
+
+  const picks: Array<{ value: string | null; lineIndex: number }> = [];
   let cursor = 0;
   for (const line of markerText.split('\n')) {
     MARKER_RE.lastIndex = 0;
     if (!MARKER_RE.test(line)) continue;
     MARKER_RE.lastIndex = 0;
     const { picks: linePicks, matchedAt } = alignLineFrom(line, filledLines, cursor);
-    picks.push(...linePicks);
+    picks.push(...linePicks.map((value) => ({ value, lineIndex: matchedAt })));
     if (matchedAt >= 0) cursor = matchedAt + 1;
   }
 
   // Nth pick -> Nth single_select field (document order).
-  const pickByFieldId = new Map<string, string | null>();
-  selectFields.forEach((field, i) => pickByFieldId.set(field.fieldId, picks[i] ?? null));
-
-  return ir.fields.map((field) => {
-    if (!pickByFieldId.has(field.fieldId)) return notMentioned(field);
-    const pick = pickByFieldId.get(field.fieldId);
-    if (pick == null || pick === '') return notMentioned(field);
-    const opt = field.allowedOptions.find((o) => norm(o.displayText) === norm(pick) || norm(o.value) === norm(pick));
-    return opt ? supported(field, opt.value, opt.ordinal, input.facts, (input.mappings ?? []).find((m) => m.fieldId === field.fieldId)) : notMentioned(field); // never off-list
+  const pickByFieldId = new Map<string, { value: string | null; lineIndex: number; ordinal: number }>();
+  selectFields.forEach((field, i) => {
+    const p = picks[i];
+    pickByFieldId.set(field.fieldId, {
+      value: p?.value ?? null,
+      lineIndex: p?.lineIndex ?? -1,
+      ordinal: i,
+    });
   });
+
+  const facts: EncounterFact[] = [];
+  const resolutions = ir.fields.map((field) => {
+    const pick = pickByFieldId.get(field.fieldId);
+    if (!pick) return notMentioned(field);
+    if (pick.value == null || pick.value === '') return notMentioned(field);
+
+    // (c) NOT FROM THE SET-ASIDE LANE. Content the anchored verifier demoted is
+    // awaiting the clinician; a pick sitting in it has not been adopted.
+    if (pick.lineIndex >= 0 && setAside.has(pick.lineIndex)) {
+      console.info(
+        `[template-twin:bridge] pick left blank field=${field.fieldId} reason=set_aside_not_adopted`,
+      );
+      return notMentioned(field);
+    }
+
+    // (a) VERBATIM, never fuzzy: the value must BE one of this field's own
+    // enumerated options. An off-list value is not a selection.
+    const opt = field.allowedOptions.find(
+      (o) => norm(o.displayText) === norm(pick.value!) || norm(o.value) === norm(pick.value!),
+    );
+    if (!opt) {
+      console.info(
+        `[template-twin:bridge] pick left blank field=${field.fieldId} reason=not_an_enumerated_option`,
+      );
+      return notMentioned(field);
+    }
+
+    const built = supported(
+      field,
+      opt.value,
+      opt.ordinal,
+      pick.ordinal,
+      noteSha256,
+      (input.mappings ?? []).find((m) => m.fieldId === field.fieldId),
+    );
+    if (!built) return notMentioned(field);
+    facts.push(built.fact);
+    return built.resolution;
+  });
+
+  return { resolutions, facts };
 }

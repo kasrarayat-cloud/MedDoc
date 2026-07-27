@@ -37,7 +37,12 @@ jobs:
   e2e:
     name: Playwright E2E (transcribe-md)
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    # 40 was sized for ONE image build and two projects. This job now builds
+    # four images and runs four projects; recovering the doc-preview timeouts
+    # above brings it back inside the budget, and this leaves headroom rather
+    # than sitting on the line. Splitting the projects into parallel jobs is the
+    # better long-term shape — noted, deliberately not bundled into a fix PR.
+    timeout-minutes: 55
 
     env:
       # Build args: point the client bundle + auth URL at the CI app (:9020)
@@ -53,6 +58,25 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      # ── RECLAIM RUNNER DISK, BEFORE ANYTHING BUILDS ──────────────────────
+      # This job builds FOUR ~435 MB app images plus the worker and db-migrate,
+      # and starts Gotenberg, whose chromium layer is another ~1.7 GB. A stock
+      # runner has ~14 GB free, and the job died twice with
+      #   "failed to register layer: write /usr/lib/chromium/chromium:
+      #    no space left on device"
+      # — once mid-suite, after 18 minutes of green tests, which reads as a
+      # test failure rather than as a full disk.
+      #
+      # The preinstalled Android/.NET/GHC/CodeQL toolchains are ~25 GB and this
+      # job uses none of them. Removing them is the standard remedy and it is
+      # far cheaper than discovering the ceiling again at minute 18.
+      - name: Free runner disk
+        run: |
+          echo "before:"; df -h / | tail -1
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc                       /usr/local/share/boost /opt/hostedtoolcache/CodeQL || true
+          sudo docker image prune -af || true
+          echo "after:"; df -h / | tail -1
 
       - uses: actions/setup-node@v4
         with:
@@ -106,10 +130,82 @@ jobs:
       # AFTER "Start app + worker", which made the gate a latent race against
       # docker compose's `--wait` strictness — green on lenient runners, red
       # on strict ones. minio is already up+healthy from the infra step.)
-      - name: Create the audio bucket in minio
+      # The SECOND bucket is not optional either. The Template Twin artifact
+      # store deliberately never creates or reconfigures a bucket — provisioning
+      # a private PHI-adjacent bucket is an infrastructure act, not something an
+      # app does on first write — so a missing one surfaces as
+      # TemplateTwinStorageUnavailableError at the first compile. The QA VPS had
+      # it provisioned by hand months ago, which is exactly why its absence here
+      # went unnoticed until CI tried to compile a template.
+      - name: Create the audio + template-artifact buckets in minio
         run: >
           docker compose -f docker-compose.qa.yml exec -T minio sh -c
-          'export MC_CONFIG_DIR=/tmp/mc; mc alias set local http://127.0.0.1:9000 qa_minio qa_minio_pw && mc mb --ignore-existing local/transcribe-md-audio'
+          'export MC_CONFIG_DIR=/tmp/mc; mc alias set local http://127.0.0.1:9000 qa_minio qa_minio_pw && mc mb --ignore-existing local/transcribe-md-audio && mc mb --ignore-existing local/transcribe-md-template-artifacts && mc ls local'
+
+      # ── THE CERTIFIED TWIN the visit-doc project needs. ──────────────────
+      # visit-document.spec.ts refuses to skip — "no CERTIFIED twin in this
+      # stack — fixture missing" FAILS, which is right, but CI had no way to
+      # produce one, so all 14 specs failed on the fixture instead of the code.
+      #
+      # This runs the REAL path against the committed form: the real docx
+      # compiler, the real mapping confirmation, the real fill -> render ->
+      # roundtrip proof, and the real certification gate. Nothing is relaxed
+      # and no row is forced to CERTIFIED behind its back.
+      #
+      # It makes NO model calls. The three stochastic inputs on that path
+      # (mapping proposal, L3 extraction, note generation) come from a
+      # content-addressed pin minted once on QA against the live models and
+      # committed as tests/e2e/fixtures/twin-certified-pins.json. The seeder
+      # re-verifies every hash and injects extractor/generator seams that THROW
+      # if reached, so a compiler change fails loudly here rather than quietly
+      # reaching for a model that CI has only a dummy key for.
+      #
+      # Runs BEFORE the app starts: it is a direct DB + object-store script and
+      # needs the audio bucket above, nothing else.
+      # BOUNDED. This step once ran 22 minutes against a 55-minute job budget
+      # while the identical work takes ~90 seconds on a warm stack — a hang, not
+      # slowness, and an unbounded hang starves every project after it and then
+      # reports as a job timeout, which names nothing. `timeout` turns that into
+      # a step failure with the seeder's own progress lines still in the log, so
+      # the last stage it reached is visible.
+      - name: Seed a genuine CERTIFIED twin (real compile+certify, pinned, no model calls)
+        timeout-minutes: 9
+        run: |
+          echo "── buckets, as the object store itself reports them ──"
+          docker compose -f docker-compose.qa.yml exec -T minio sh -c \
+            'export MC_CONFIG_DIR=/tmp/mc; mc alias set local http://127.0.0.1:9000 qa_minio qa_minio_pw >/dev/null && mc ls local' || true
+          echo "── seeding ──"
+          # `bash -e` would abort on the timeout's non-zero exit and skip every
+          # diagnostic below — which is exactly the information this step exists
+          # to produce. Handle the status explicitly instead.
+          set +e
+          timeout --signal=TERM --kill-after=30s 7m \
+          docker compose -f docker-compose.qa.yml run --rm -T \
+            -e MOCK_AI_CALLS=true \
+            -e AUTH_SECRET=qa-throwaway-secret-not-used-in-prod-000000000000000= \
+            -e NEXTAUTH_SECRET=qa-throwaway-secret-not-used-in-prod-000000000000000= \
+            -e AUTH_TRUST_HOST=true \
+            -e AUTH_URL=http://localhost:9020 \
+            -e NEXTAUTH_URL=http://localhost:9020 \
+            -e REDIS_URL=redis://redis:6379 \
+            -e MINIO_ENDPOINT=minio:9000 \
+            -e MINIO_ACCESS_KEY=qa_minio \
+            -e MINIO_SECRET_KEY=qa_minio_pw \
+            -e TRANSCRIBE_MD_MINIO_BUCKET=transcribe-md-audio \
+            -e MINIO_USE_SSL=false \
+            -e NODE_ENV=production \
+            --entrypoint sh db-migrate \
+            -c 'cd /app/apps/transcribe-md && npx --no-install tsx scripts/seed-certified-twin.ts'
+          rc=$?
+          if [ $rc -eq 124 ] || [ $rc -eq 137 ]; then
+            echo "::error::the twin seed HUNG (killed at 7m). The last [twin-seed] line above is the stage it reached."
+            echo "── minio state ──"
+            docker compose -f docker-compose.qa.yml exec -T minio sh -c \
+              'export MC_CONFIG_DIR=/tmp/mc; mc alias set local http://127.0.0.1:9000 qa_minio qa_minio_pw >/dev/null && mc ls --recursive local' || true
+            docker compose -f docker-compose.qa.yml logs --tail=80 minio || true
+            df -h / | tail -1
+          fi
+          exit $rc
 
       - name: Start app + worker
         run: docker compose -f docker-compose.qa.yml up -d --wait transcribe-md transcribe-md-worker
@@ -144,6 +240,107 @@ jobs:
         run: >
           MOCK_TEMPLATE_PHI_FLAG=true MOCK_RX_WARNINGS=true
           docker compose -f docker-compose.qa.yml up -d --wait transcribe-md transcribe-md-worker
+
+      # ── The pre-sign document surface. Needs the C3 skin AND the review-doc
+      #    flag baked in (both are read from CLIENT components, so a runtime env
+      #    would leave the OFF branch live with no error). Separately tagged so
+      #    the gate's own image is never overwritten. ──
+      - name: Build flag-ON image for the document surface
+        run: >
+          docker build -f apps/transcribe-md/Dockerfile
+          --build-arg NEXT_PUBLIC_REVIEW_DOC_VIEW=true
+          --build-arg NEXT_PUBLIC_SKIN_BETA=true
+          -t meddoc-pro-transcribe-md:review-doc .
+
+      - name: Recreate app on the flag-ON image
+        run: >
+          docker compose -f docker-compose.qa.yml -f docker-compose.qa.reviewdoc.yml
+          up -d --wait transcribe-md
+
+      - name: Run E2E (review-doc — the pre-sign document surface)
+        working-directory: apps/transcribe-md
+        env:
+          PW_BASE_URL: http://localhost:9020
+          CI: "true"
+        run: npx playwright test --project=review-doc
+
+      # ── Real-document preview. Its own flag-ON image, and the converter
+      #    sidecar, because one spec STOPS the converter on purpose to prove the
+      #    fallback — the guarantee the whole feature rests on. ──
+      # EVERY FLAG THE SURFACE READS, not just the one the project is named
+      # after. This image omitted NEXT_PUBLIC_UX_SIMPLIFY, and the confirm card
+      # the whole project asserts on renders only when that flag is on — so all
+      # four tests waited out their 180 s and the project had never once passed
+      # since it was added. It cost ~13 min of the job's 40-min budget on every
+      # run. Production sets UX_SIMPLIFY=true, so this was a gate defect, not a
+      # product one; with the flag the same four tests pass in 2.8 min.
+      # Each flag-ON image is a full app build. Their intermediate layers are
+      # what actually fills the disk, and nothing after this point needs them.
+      - name: Reclaim build cache before the next image
+        run: docker builder prune -af || true
+
+      - name: Build flag-ON image for the document preview
+        run: >
+          docker build -f apps/transcribe-md/Dockerfile
+          --build-arg NEXT_PUBLIC_DOC_PREVIEW=true
+          --build-arg NEXT_PUBLIC_SETTINGS_SIMPLE_ROW=true
+          --build-arg NEXT_PUBLIC_UX_SIMPLIFY=true
+          --build-arg NEXT_PUBLIC_SKIN_BETA=true
+          -t meddoc-pro-transcribe-md:doc-preview .
+
+      - name: Start the converter sidecar + app on the flag-ON image
+        run: >
+          docker compose -f docker-compose.qa.yml -f docker-compose.qa.docpreview.yml
+          up -d --wait gotenberg transcribe-md
+
+      - name: Run E2E (doc-preview — including the sidecar-down fallback)
+        working-directory: apps/transcribe-md
+        env:
+          PW_BASE_URL: http://localhost:9020
+          CI: "true"
+        run: npx playwright test --project=doc-preview
+
+      # ── Phase 2 — the visit page as the document. Its own flag-ON image
+      #    (the doc-preview build does not carry NEXT_PUBLIC_VISIT_DOC_PAGE),
+      #    and the converter sidecar, because one spec stops it on purpose. ──
+      - name: Reclaim build cache before the visit-doc image
+        run: docker builder prune -af || true
+
+      - name: Build flag-ON image for the document visit page
+        run: >
+          docker build -f apps/transcribe-md/Dockerfile
+          --build-arg NEXT_PUBLIC_VISIT_DOC_PAGE=true
+          --build-arg NEXT_PUBLIC_DOC_PREVIEW=true
+          --build-arg NEXT_PUBLIC_REVIEW_DOC_VIEW=true
+          --build-arg NEXT_PUBLIC_SETTINGS_SIMPLE_ROW=true
+          --build-arg NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX=true
+          --build-arg NEXT_PUBLIC_UX_SIMPLIFY=true
+          --build-arg NEXT_PUBLIC_SKIN_BETA=true
+          -t meddoc-pro-transcribe-md:visit-doc .
+
+      - name: Start the converter sidecar + app on the visit-doc image
+        run: >
+          docker compose -f docker-compose.qa.yml -f docker-compose.qa.visitdoc.yml
+          up -d --wait gotenberg transcribe-md
+
+      - name: Run E2E (visit-doc — the document page, incl. sidecar-down)
+        working-directory: apps/transcribe-md
+        env:
+          PW_BASE_URL: http://localhost:9020
+          CI: "true"
+        run: npx playwright test --project=visit-doc
+
+      # ── The chat editor is NOT run in CI: chat-editor.eval.spec.ts drives a
+      #    REAL model on real tokens, and *.eval.spec.ts is this repo's marker
+      #    for that class. It is run deliberately, against a stack with a live
+      #    key. What CI DOES cover is the unit layer that holds the safety
+      #    rules: the closed intent union, the attestation store, and the
+      #    E/M-stale invariants — all in the vitest gate.
+
+      - name: Restore the fixture app image
+        run: >
+          MOCK_TEMPLATE_PHI_FLAG=true MOCK_RX_WARNINGS=true
+          docker compose -f docker-compose.qa.yml up -d --wait transcribe-md
 
       - name: Run E2E (flag-on projects — phi-reject + rx-safety)
         working-directory: apps/transcribe-md
