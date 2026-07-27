@@ -19,8 +19,20 @@
 // NOTHING. No fill manifest is created by looking at a document, because the
 // sign gate validates a stored manifest and a mid-review one could be stale.
 //
-// NON-TEMPLATE VISITS ARE UNTOUCHED: no certified twin, no native page — the
-// styled note-as-page is the correct surface and stays exactly as it is.
+// EVERY VISIT GETS A DOCUMENT — superseded 2026-07-27.
+//
+// This block used to read: "NON-TEMPLATE VISITS ARE UNTOUCHED: no certified
+// twin, no native page — the styled note-as-page is the correct surface and
+// stays exactly as it is." That was wrong about its own consequences. In
+// production the set of visits with a CERTIFIED twin was EMPTY — 0 compiled
+// versions, 20 visits, every one of them missing — so "untouched" meant every
+// doctor saw the old wall of cards and this flag changed nothing for anyone.
+//
+// A visit with a note now renders as a paginated document whatever its template
+// state: the certified twin fills the doctor's OWN form; everything else is
+// built from the styled export — the same file they would download — and says
+// plainly that the layout is QuillMD's, with the one step that changes it.
+// One review surface, one interaction model.
 //
 // PREVIEW NEVER GATES. Sidecar down, fill failed, template not certified: the
 // styled review renders with a named reason and the doctor signs as before.

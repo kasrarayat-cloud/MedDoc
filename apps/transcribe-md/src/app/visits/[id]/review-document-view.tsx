@@ -35,8 +35,7 @@ import { toast } from 'sonner';
 
 import { adoptSuggestionAction, dismissSuggestionAction } from '@/actions/suggestion-actions';
 import { claimProse } from '@/lib/claim-prose';
-import { EMPTY_SECTION_PLACEHOLDER } from '@/lib/soap-format';
-import { EXPORT_EMPTY_SECTION_TEXT } from '@/lib/visit-export';
+import { spokenBody } from '@/lib/spoken-body';
 import { parseNoteSections, type NoteSection } from '@/lib/parse-note-sections';
 import {
   emChangeEq,
@@ -108,31 +107,6 @@ export interface ReviewDocumentViewProps {
     soapVersion: number;
     emPendingChange?: { from: string; to: string } | null;
   }) => void;
-}
-
-/** The note, for a screen reader.
- *
- *  Drops the set-aside marker (the inline highlight already says it) and reads
- *  measurement rows as sentences — pipes and dashes are punctuation to a
- *  sighted reader and noise to a listener. Presentation only; the stored note
- *  is never touched, exactly as the export sanitiser treats it. */
-function spokenBody(body: string, note: string): string {
-  const spoken = body
-    .split('\n')
-    // SUBSTITUTE, do not drop. Filtering the marker left the section silent
-    // for a listener while a sighted doctor read "Not documented." — removing
-    // the only signal that AI-drafted content is waiting on their review.
-    .map((l) =>
-      l.trim() === EMPTY_SECTION_PLACEHOLDER
-        ? 'Set aside for your review — see the suggestions below.'
-        : l,
-    )
-    .filter((l) => !/^\s*\|[\s:|-]+\|\s*$/.test(l))
-    .map((l) => claimProse(l.trim(), note))
-    .join('\n')
-    .trim();
-  // An otherwise-empty section reads the same way the drawn page does.
-  return spoken || EXPORT_EMPTY_SECTION_TEXT;
 }
 
 export function ReviewDocumentView(props: ReviewDocumentViewProps) {
