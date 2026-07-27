@@ -97,8 +97,13 @@ formats obey:
   a critical warning, so the override path was not walked on prod. It is covered
   by unit tests and by the structural fact that the sign route references
   `suggestedClaims` zero times, but this report does not claim a live pass.
+  → **SUPERSEDED — see the close-out pass below: it was exercised live and
+  PASSED**, with two `RX_OVERRIDE_RECORDED` rows and a successful sign.
 
 ## QA walker — DID NOT RUN
+> **SUPERSEDED — see the close-out pass below.** The diagnosis in this section
+> is wrong: the walker reads `QA_AUDITOR_APP_URL`, not `QA_AUDITOR_BASE_URL`, so
+> it had never been pointed at prod at all. Root-caused, fixed, and run.
 
 `sweep-visit-page.mjs` fails at its own login stage against prod
 (`page.waitForURL` timeout, no `LOGIN_SUCCESS`/`LOGIN_FAILED` audit row — the
@@ -123,6 +128,8 @@ preserved. Downloaded signed PDF removed from the box.
   is sitting in `.playwright-mcp/` on the box. Gitignored (line 117) and not
   tracked, so no PHI reached the repo — but it is a filled clinical document on
   disk and worth a deliberate clean-up decision.
+  → **RESOLVED in the close-out pass below: shredded, along with 141 other
+  files in that directory.**
 - The gap between the visit title row and the chat card is unchanged. The dead
   band this work removed is the one **above the page**, inside the document
   frame; the header spacing is a different surface.
