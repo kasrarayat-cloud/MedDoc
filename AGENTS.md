@@ -69,3 +69,30 @@ rewrite history to remove it.
 What this does NOT cover, and what remains forbidden: any **filled** document or
 note. `twin-*.docx`, `diag-*`, and the other clinical artifacts at the repo root
 carry PHI and are gitignored. A filled document is never a fixture.
+
+## Branch cadence — standing rule
+
+**Branch from `main`. Merge back promptly. No long-lived divergence.**
+
+A feature branch is a short-lived thing. It exists to carry one change through
+the gate and then it is retired. It is not a parallel trunk.
+
+- Branch from `main`, not from another feature branch.
+- Merge back **as soon as the change is green**, not when the next one is ready.
+  A branch that ships to production is not "done" — it is done when `main`
+  carries it.
+- If a branch is deployed to production, `main` MUST be reconciled in the same
+  session. Production running code that `main` does not have is the failure
+  state this rule exists to prevent.
+- Retire the branch on merge. Delete it locally and on the remote.
+
+Why this is written down: `fix/twin-visit-export-harness` reached **78 commits
+and 217 files** ahead of `main` while production ran from the branch. Nothing
+was broken by it, but every guarantee `main` is supposed to give had quietly
+stopped being true — `main` was not what shipped, a rollback to `main` would
+have reverted weeks of live behaviour, and the required gate was measuring a
+branch nobody could merge. The longer the divergence, the more the merge stops
+being bookkeeping and starts being a risk of its own.
+
+The gate still applies in full: no merge past a red required check, and no
+override to get one green.
