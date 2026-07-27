@@ -337,9 +337,103 @@ async function main() {
         specialty: 'ultrasound',
         inputMode: 'text',
         status: 'READY',
+        // THE CLONE INHERITS THESE, and three specs depend on it.
+        //
+        // seedVisitDocVisit overrides the note and the claims but carries the
+        // donor's clinical payload through, on purpose: the STYLED twin it
+        // derives explicitly NULLs rxDrafts/icdCodes/cptCodes to prove an
+        // imaging report has no prescription or billing chrome, which only
+        // means something if the OTHER fixture has them. Its own comment says
+        // so — "the twin visit keeps its meds and its warning, so the gate is
+        // still covered by a fixture that has one".
+        //
+        // An empty donor silently removes that coverage: the Rx gate simply
+        // does not render, and `review-doc-rx-gate` is missing rather than
+        // wrong. On the QA box the donor was a real visit that happened to
+        // carry meds, so this too was invisible until an ephemeral runner had
+        // nothing else to clone.
+        //
+        // Synthetic throughout — invented drugs/doses on a fixture patient.
+        rxDrafts: {
+          prescriptions: [
+            {
+              drug: 'Warfarin',
+              strength: '5 mg',
+              form: 'tablet',
+              sig: 'Take 1 tablet by mouth once daily',
+              quantity: '30',
+              refills: '0',
+              action: 'new',
+              evidence_quote: '[SYNTHETIC] start warfarin for new atrial fibrillation',
+            },
+            {
+              drug: 'Amoxicillin',
+              strength: '500 mg',
+              form: 'capsule',
+              sig: 'Take 1 capsule by mouth three times daily',
+              quantity: '21',
+              refills: '0',
+              action: 'new',
+              evidence_quote: '[SYNTHETIC] treat acute bacterial sinusitis',
+            },
+          ],
+          // DELIBERATELY NOT 'critical'. The Rx rail renders whenever there are
+          // prescriptions (severity only changes its styling), but a CRITICAL
+          // warning additionally blocks signing with OVERRIDE_REQUIRED — and
+          // that fires BEFORE the E/M-stale gate, so the two E/M specs that
+          // sign expecting 422 "confirm the new level" got 409 from a different
+          // gate instead. A fixture that trips an unrelated guard does not make
+          // the suite stricter, it makes it blind to the guard under test.
+          //
+          // The critical-override path has its own coverage: scenario 24 in the
+          // rx-safety project, whose MOCK_RX_WARNINGS fixture supplies one.
+          warnings: [
+            {
+              severity: 'major',
+              rx_drug: 'Warfarin',
+              message:
+                '[SYNTHETIC] Major: warfarin with a new antibiotic can raise INR — plan close monitoring.',
+              evidence_quote: '[SYNTHETIC] both newly started this visit',
+            },
+            {
+              severity: 'minor',
+              rx_drug: 'Amoxicillin',
+              message: '[SYNTHETIC] Minor: advise taking amoxicillin with food to reduce GI upset.',
+              evidence_quote: null,
+            },
+          ],
+        },
+        icdCodes: {
+          codes: [
+            {
+              code: 'I87.2',
+              confidence: 0.9,
+              description: 'Venous insufficiency (chronic) (peripheral)',
+              evidence_quote: '[SYNTHETIC] chronic venous insufficiency',
+            },
+          ],
+        },
+        cptCodes: {
+          em: {
+            code: '99213',
+            reasoning: {
+              data: '[SYNTHETIC] Bilateral venous duplex reviewed at this encounter.',
+              risk: 'low',
+              problems: [
+                {
+                  status: 'stable chronic',
+                  description: '[SYNTHETIC] Chronic venous insufficiency, stable.',
+                },
+              ],
+            },
+          },
+        },
       },
     });
-    say(`DONOR visit ${DONOR_VISIT_ID} created (survives qa-e2e-* cleanup)`);
+    say(
+      `DONOR visit ${DONOR_VISIT_ID} created (meds + a non-critical warning + codes; ` +
+        'survives qa-e2e-* cleanup)',
+    );
   } else {
     say(`DONOR visit ${DONOR_VISIT_ID} already present`);
   }
