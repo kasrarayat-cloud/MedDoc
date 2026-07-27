@@ -218,7 +218,7 @@ now   {"intents": ["edit_table_cell"], "cells":1,"headers":0,"answered":0,"canno
 | | |
 |---|---|
 | Rollback tag | **`pre-chatintel-20260727`** (`4884b5036ca0`) — verified a real previous build: **has** the old CODES·BILLING row, **lacks** the details toggle |
-| Promoted image | `9ba0ff7f9b38` |
+| Promoted image | `4f106bebfa64` (final, after the two audit-HIGH fixes) |
 | Containers | **10/10 healthy** |
 | Health | `{"status":"healthy"}` · postgres 14 ms · redis 5 ms · minio 6 ms |
 | Co-tenants | app 307 · pro 200 · admin 404 · quillmd.com 200 · leathererp 200 |
@@ -234,12 +234,34 @@ No real doctor's visit was opened, and **no chat turn was run against a real
 patient's note.** The whole clinical walk ran on QA against a same-commit,
 same-flags image. Production verification is structural only.
 
+## The two HIGHs fixed after the first promotion
+- **`scroll_to` could name five targets and only three resolved.** `em_gate` and
+  `suggestions` matched no element, so the chat said "Took you to the E/M gate"
+  and the page did not move.
+- **A patient rename left no row on the notes it changed.** In a shared practice
+  those can be a colleague's; a count on the patient record does not appear in
+  the trail of the note it happened to. One `EDITED_NOTE` row per note now.
+
+## The E2E flake, run down rather than shrugged off
+`E/M STALE: an edit blocks signing…` failed twice across four full packs, on two
+different tests in the same family. The QA log settled it:
+
+```
+api:visits:sign  "em change unacknowledged"
+from:99214 to:99212 cause:note_edited ackProvided:false
+```
+
+The route re-scored, found the level had **moved**, and refused the signature —
+exactly what the gate is for. The test asserted `emStale` is `'f'` afterwards,
+which only holds when the level does *not* move; leaving the visit stale with a
+recorded `emPendingChange` is the safer state. The re-score is a real model call,
+so which branch runs is not ours to choose, and **the test was failing the gate
+for working.**
+
+Corrected to the invariant that matters — signed ⇒ nothing stale; refused ⇒ what
+moved is recorded — which is **stricter**: a refusal that declined without
+recording anything used to pass and now does not. No product change. 24/24 twice.
+
 ## Open
-- One E2E (`E/M STALE: a MOVED level blocks the signature`) failed once in a full
-  pack and passed in isolation and on a clean re-run. The sign route re-scores
-  with a **real model** and the test's own comment concedes "we do not get to
-  choose its answer"; note content varies with test order, so occasionally there
-  is no level *move* to block on. Pre-existing nondeterminism, not introduced
-  here — recorded rather than explained away.
 - The QA styled fixture still carries a patient summary copied from the SOAP
   twin, so the imaging report reads oddly. Fixture only.
