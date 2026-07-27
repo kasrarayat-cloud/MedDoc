@@ -160,6 +160,25 @@ export async function updateVisitHeaderAction(
     // table over.
     await Promise.all(otherIds.map((o: { id: string }) => invalidateVisitFills(o.id)));
 
+    // A ROW ON EACH NOTE THAT CHANGED, not just on the one being looked at.
+    //
+    // In a shared practice these can be a COLLEAGUE'S unsigned notes: the
+    // patient record is practice-level, so keeping their denormalised header in
+    // step is right, but a doctor opening their own note tomorrow and finding a
+    // different name on it must be able to see why. A count on the patient
+    // record does not appear in the trail of the note it happened to.
+    await Promise.all(
+      otherIds.map((o: { id: string }) =>
+        logAudit({
+          action: 'EDITED_NOTE',
+          targetType: 'TranscribeVisit',
+          targetId: o.id,
+          // Field name and cause only — never the name itself.
+          metadata: { via: 'patient_rename', field: 'patient_name', fromVisit: visit.id },
+        }),
+      ),
+    );
+
     void logAudit({
       action: 'TM_PATIENT_UPDATED',
       targetType: 'TranscribeMdPatient',

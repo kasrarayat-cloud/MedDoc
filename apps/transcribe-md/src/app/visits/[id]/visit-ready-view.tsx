@@ -699,12 +699,21 @@ export function VisitReadyView(props: VisitReadyViewProps) {
                 }));
               }}
               onScrollTo={(target) => {
+                // EVERY target the schema allows must resolve to something.
+                // `em_gate` and `suggestions` had no anchor at all, so the chat
+                // said "Took you to the E/M gate" and the page did not move —
+                // a navigation aid that lies about having navigated.
                 const el =
                   target === 'rx_gate'
                     ? document.querySelector('[data-testid="review-doc-rx-gate"]')
                     : target === 'document'
                       ? document.querySelector('[data-testid="visit-document"]')
-                      : document.querySelector(`[data-chat-target="${target}"]`);
+                      : target === 'suggestions'
+                        ? // The first outstanding card; the lane has no single
+                          // container, and scrolling to a group that may not
+                          // exist is the same failure one level down.
+                          document.querySelector('[data-testid="review-doc-suggestion"]')
+                        : document.querySelector(`[data-chat-target="${target}"]`);
                 // "Show billing" has to OPEN it, not scroll to a collapsed row.
                 // Now that codes and billing live behind one on-demand panel,
                 // taking the doctor to a shut drawer and calling it done would
