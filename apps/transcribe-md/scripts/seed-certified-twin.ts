@@ -71,6 +71,10 @@ const FIXTURES = join(__dirname, '..', 'tests', 'e2e', 'fixtures');
 const PINS_PATH = join(FIXTURES, 'twin-certified-pins.json');
 const DOCX_PATH = join(FIXTURES, 'sample-form.docx');
 
+/** The visit seedVisitDocVisit() clones. Owned by the synthetic actor, NOT a
+ *  qa-e2e-* user, so afterEach cleanup cannot cascade it away. */
+const DONOR_VISIT_ID = 'qa_twin_donor';
+
 interface PinnedMapping {
   fieldId: string;
   [key: string]: unknown;
@@ -291,6 +295,55 @@ async function main() {
 
   say(`CERTIFY status=CERTIFIED proof=${rtCount}/${irCount} fields`);
   say(`FILL counts=${JSON.stringify(mf?.counts)}`);
+
+  // ── 7. A DONOR VISIT THAT SURVIVES CLEANUP ──────────────────────────────
+  // seedVisitDocVisit() needs two things, and returns null if EITHER is
+  // missing: a certified twin, and a visit row to clone. The caller reports
+  // both as "no CERTIFIED twin in this stack — fixture missing", so a missing
+  // donor accuses the wrong thing entirely.
+  //
+  // It clones rather than enumerating columns, deliberately — hand-listing this
+  // table's NOT NULL columns is how a seed drifts from production. But in an
+  // ephemeral stack there may be nothing to clone: cleanupTestUsers() runs in
+  // afterEach and deletes every qa-e2e-* user, and visits cascade from users.
+  // By the time the visit-doc project runs, every visit the earlier projects
+  // made is gone. On a long-lived QA box this is invisible — months of leftover
+  // visits mean a donor is always lying around — which is exactly why it took
+  // an ephemeral runner to expose it.
+  //
+  // So: leave one behind, owned by the SYNTHETIC ACTOR rather than a qa-e2e-*
+  // user, so the cleanup that removes the others cannot cascade this one away.
+  // Written through Prisma, so required columns are enforced by the schema
+  // instead of by hand — the drift the clone-don't-enumerate rule guards
+  // against does not apply here.
+  const existingDonor = await prisma.transcribeVisit.findFirst({
+    where: { id: DONOR_VISIT_ID },
+    select: { id: true },
+  });
+  if (!existingDonor) {
+    let patient = await prisma.transcribeMdPatient.findFirst({
+      where: { practiceId: user.practiceId, deletedAt: null },
+      select: { id: true },
+    });
+    patient ??= await prisma.transcribeMdPatient.create({
+      data: { practiceId: user.practiceId, name: 'Twin Donor (synthetic fixture)' },
+      select: { id: true },
+    });
+    await prisma.transcribeVisit.create({
+      data: {
+        id: DONOR_VISIT_ID,
+        userId: user.id,
+        patientId: patient.id,
+        specialty: 'ultrasound',
+        inputMode: 'text',
+        status: 'READY',
+      },
+    });
+    say(`DONOR visit ${DONOR_VISIT_ID} created (survives qa-e2e-* cleanup)`);
+  } else {
+    say(`DONOR visit ${DONOR_VISIT_ID} already present`);
+  }
+
   say('done — this stack now has a genuine CERTIFIED twin');
 }
 
