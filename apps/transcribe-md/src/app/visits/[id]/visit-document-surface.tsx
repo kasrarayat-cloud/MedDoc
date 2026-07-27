@@ -104,24 +104,40 @@ export function VisitDocumentSurface(props: VisitDocumentSurfaceProps) {
   // The converter was unavailable, so the browser draws the true DOCX. Page
   // anchoring needs pdf.js text, which this path does not have — the cards are
   // shown together under the document rather than at pages we cannot locate.
-  const toggle = (
-    <div className="qm-vdoc-format" role="group" aria-label="Preview format">
-      {(['pdf', 'word'] as const).map((f) => (
-        <button
-          key={f}
-          type="button"
-          className={f === format ? 'qm-vdoc-format-on' : undefined}
-          aria-pressed={f === format}
-          onClick={() => setFormat(f)}
-          data-testid={`preview-format-${f}`}
-        >
-          {f === 'pdf' ? 'PDF' : 'Word'}
-        </button>
-      ))}
+  const styledLayout = Boolean(result.fillSha?.startsWith('styled:'));
+
+  // ONE slim row. The format control and the "whose page is this" hint were two
+  // stacked blocks above the document, which is most of the dead band that used
+  // to sit between the heading and the page. Same controls, same words, one
+  // line — and the hint sits with the toggle it qualifies rather than floating
+  // over the paper.
+  const toolbar = (
+    <div className="qm-vdoc-toolbar">
+      <div className="qm-vdoc-format" role="group" aria-label="Preview format">
+        {(['pdf', 'word'] as const).map((f) => (
+          <button
+            key={f}
+            type="button"
+            className={f === format ? 'qm-vdoc-format-on' : undefined}
+            aria-pressed={f === format}
+            onClick={() => setFormat(f)}
+            data-testid={`preview-format-${f}`}
+          >
+            {f === 'pdf' ? 'PDF' : 'Word'}
+          </button>
+        ))}
+      </div>
+      {/* WHOSE page this is. A styled document is still a document — but the
+          doctor should know it is our layout, not their form, and what to do
+          about it. Quiet, and only when it is true. */}
+      {styledLayout && (
+        <p className="qm-vdoc-toolbar-hint" data-testid="visit-document-styled-note">
+          QuillMD&rsquo;s layout — upload your own blank form in Settings ›{' '}
+          <em>My Note Format</em> and this becomes your page.
+        </p>
+      )}
     </div>
   );
-
-  const styled = Boolean(result.fillSha?.startsWith('styled:'));
 
   if (result.kind === 'docx_fallback') {
     return (
@@ -129,14 +145,14 @@ export function VisitDocumentSurface(props: VisitDocumentSurfaceProps) {
         {/* The toggle lives in BOTH branches. Word mode returns here, and
             rendering the control only in the PDF branch made it a one-way
             trapdoor: click Word and there was no way back. */}
-        {toggle}
+        {toolbar}
         <NativeDocumentPreview
           kind={result.kind}
           data={result.data}
           reason={result.reason}
-          label={styled ? 'this visit' : 'this visit, on your form'}
+          label={styledLayout ? 'this visit' : 'this visit, on your form'}
           caption={
-            styled
+            styledLayout
               ? // NOT "your form" — this is our layout, and saying otherwise is
                 // the exact false claim this surface exists to stop making.
                 'QuillMD’s layout. Upload your own blank form in Settings › My Note Format and this becomes your page.'
@@ -152,16 +168,7 @@ export function VisitDocumentSurface(props: VisitDocumentSurfaceProps) {
 
   return (
     <>
-      {toggle}
-      {/* WHOSE page this is. A styled document is still a document — but the
-          doctor should know it is our layout, not their form, and what to do
-          about that. Quiet, and only when it is true. */}
-      {result.fillSha?.startsWith('styled:') && (
-        <p className="qm-vdoc-counts" data-testid="visit-document-styled-note">
-          QuillMD&rsquo;s layout — upload your own blank form in Settings ›{' '}
-          <em>My Note Format</em> and this becomes your page.
-        </p>
-      )}
+      {toolbar}
       {result.counts && (
         <p
           className="qm-vdoc-counts"
@@ -180,7 +187,7 @@ export function VisitDocumentSurface(props: VisitDocumentSurfaceProps) {
       )}
       <DocumentPages
         data={result.data}
-        label={styled ? 'this visit' : 'this visit, on your form'}
+        label={styledLayout ? 'this visit' : 'this visit, on your form'}
         anchors={props.anchors}
         renderAfterPage={props.renderAfterSection}
         renderUnplaced={props.renderUnplaced}

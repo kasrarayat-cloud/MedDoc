@@ -6853,13 +6853,26 @@ body {
    muted grey — that lands around 2.6:1. Notes that appear over paper get their
    own ink colour; notes outside the stage keep the app's. */
 .qm-npv { margin: 0; }
+/* ── THE STAGE — DARK CANVAS, PAPER ON IT ────────────────────────────────
+   Was a light #f4f2ee panel the page filled edge to edge, so at 1440 a Letter
+   sheet was drawn 1082px wide: not a document on a desk, a document stretched
+   to the furniture. The canvas is the app's own background now and the PAGE is
+   the light surface, capped near its natural width and centred, with the dark
+   gutters doing the framing.
+
+   `--qm-page-w` is the one number both formats obey — the PDF canvas and the
+   docx page box are laid out against the SAME width, which is what keeps the
+   toggle honest. Change it here and both move together. */
 .qm-npv-stage {
-  background: #f4f2ee;
+  --qm-page-w: 820px;
+  background: var(--color-linear-bg);
   border: 1px solid var(--color-linear-border);
   border-radius: 10px;
   overflow: auto;
   max-height: min(72vh, 780px);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  /* No top padding: the first page's own margin is the only space above it.
+     Anything here reads as a dead band between the toolbar and the paper. */
+  padding: 0 clamp(12px, 4vw, 40px) 20px;
 }
 /* A scrollable region must be reachable by keyboard (axe: scrollable-region-
    focusable) — a multi-page form always overflows. */
@@ -6867,22 +6880,35 @@ body {
   outline: 2px solid var(--color-linear-sage);
   outline-offset: 2px;
 }
-.qm-npv-pdf { display: block; padding: 8px 0; }
+/* The page column. Both formats are centred inside it at the same width, so
+   PDF and Word frame identically — the toggle's whole promise. */
+.qm-npv-pdf,
+.qm-npv-docx {
+  display: block;
+  width: min(100%, var(--qm-page-w, 820px));
+  margin: 0 auto;
+  padding: 20px 0 0;
+}
 /* Each page is a canvas laid out at column width — no plugin, so it draws the
    same on a phone as on a desktop. */
 .qm-npv-page {
   display: block;
   width: 100%;
   height: auto;
-  margin: 0 auto 10px;
+  margin: 0 auto 16px;
   background: #fff;
-  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.28);
+  border-radius: 2px;
+  /* Soft, not a slab — paper lifted off a dark surface. */
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.45);
 }
-.qm-npv-docx { padding: 8px 0; }
+
 /* docx-preview emits its own page boxes; give them the shadow it omits. */
 .qm-npv-docx .qm-docxp-wrapper > section.qm-docxp {
-  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.28);
-  margin: 8px auto;
+  /* Matched to .qm-npv-page above — the two formats must not be lit
+     differently, or the toggle looks like it changed the document. */
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.45);
+  border-radius: 2px;
+  margin: 0 auto 16px;
   background: #fff;
 }
 .qm-npv-note {
@@ -6891,9 +6917,10 @@ body {
   line-height: 1.5;
   color: var(--color-linear-text-3);
 }
-/* On paper, not in the app. 4.5:1+ against #f4f2ee. */
+/* The stage is the dark canvas again, so notes sitting on it take the app's
+   own muted ink rather than the paper-coloured one the light panel needed. */
 .qm-npv-stage .qm-npv-note {
-  color: #4a4640;
+  color: var(--color-linear-text-3);
   margin: 0;
   padding: 14px 16px;
 }
@@ -7080,7 +7107,26 @@ body {
   background: color-mix(in srgb, var(--color-linear-amber) 12%, transparent);
 }
 /* PDF / Word — the same bytes, drawn by a different engine. */
-.qm-vdoc-format { display: inline-flex; gap: 2px; margin: 0 0 8px; }
+/* ── THE PREVIEW TOOLBAR ─────────────────────────────────────────────────
+   ONE slim row: the format control, and the hint that qualifies it. These were
+   two stacked blocks, which together with the stage's own padding made a band
+   of empty chrome between the heading and the first line of the document — the
+   page appeared to float below a gap rather than sit on a surface. */
+.qm-vdoc-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0 0 10px;
+}
+.qm-vdoc-toolbar-hint {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--color-linear-text-3);
+}
+.qm-vdoc-toolbar-hint em { font-style: normal; color: var(--color-linear-text-2); }
+.qm-vdoc-format { display: inline-flex; gap: 2px; margin: 0; flex: none; }
 .qm-vdoc-format button {
   padding: 4px 12px;
   font-family: var(--font-mono);
