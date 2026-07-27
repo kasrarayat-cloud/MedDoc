@@ -343,12 +343,30 @@ export async function login(page) {
   await page.goto('/login', { waitUntil: 'domcontentloaded', timeout: 20_000 });
   await page.fill('input[type="email"]', TEST_EMAIL);
   await page.fill('input[type="password"]', password);
-  await Promise.all([
-    page.waitForURL((u) => !u.pathname.startsWith('/login'), {
+  await page.click('button[type="submit"]');
+
+  // WAIT ON THE URL, NOT ON A NAVIGATION.
+  //
+  // The login form is `<form action={formAction}>` — a React 19 server action.
+  // It resolves to a SOFT navigation, so no `load` event ever fires, and
+  // `page.waitForURL(...)` (which defaults to waitUntil:'load') sat there for
+  // its full timeout while the login had actually SUCCEEDED. The failure read
+  // as "login refused" and was neither: the walker was waiting for an event
+  // this app does not emit on this path.
+  //
+  // Polling the pathname is what we actually mean and is navigation-shape
+  // agnostic — it works for a hard redirect and a soft one alike.
+  await page
+    .waitForFunction(() => !window.location.pathname.startsWith('/login'), null, {
       timeout: 20_000,
-    }),
-    page.click('button[type="submit"]'),
-  ]);
+      polling: 250,
+    })
+    .catch(() => {
+      throw new Error(
+        `login did not leave /login within 20s (url=${page.url()}) — ` +
+          'check QA_AUDITOR_EMAIL / QA_AUDITOR_PASSWORD for this environment'
+      );
+    });
 }
 
 /** Returns a path to a cached Playwright `storageState` JSON file for
