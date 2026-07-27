@@ -27,6 +27,7 @@ import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
 import { auth } from '@/lib/nextauth';
 import { apiError, withApiHandler } from '@/lib/api-error';
+import { invalidateVisitFills } from '@/lib/docx-preview/fill-cache';
 import { computeEmScore } from '@/lib/em-coding/score';
 import { engineToUiScore } from '@/lib/em-coding/to-ui-score';
 import { extractIcdRows, extractRxRows } from '@/lib/em-coding/displayed-level';
@@ -178,6 +179,21 @@ export const POST = withApiHandler<{ id: string }>(
       where: { id: visitId },
       data: { cptCodes: nextCpt },
     });
+
+    // The override CHANGES THE DOCUMENT, so the cached rendering of it is now
+    // wrong. The E/M level is printed into the exported DOCX/PDF, and the
+    // preview cache is keyed on (visit, soapVersion) — which this route does
+    // not move, deliberately: an override is not a note edit, and bumping the
+    // note's version here would arm the stale-E/M gate against the doctor's own
+    // choice. So the key cannot expire this entry; the entry has to be dropped.
+    //
+    // Harmless until now, because the only cached variant was the twin one and
+    // no production visit had a certified twin. Every visit caches a STYLED
+    // rendering now, so without this a doctor overriding 99213 → 99214 would
+    // re-read a document still showing 99213 for the rest of the 30-minute TTL
+    // while the file they download — and the record they sign — says 99214.
+    // "What they read is what they sign" is the whole claim of that surface.
+    void invalidateVisitFills(visitId);
 
     void logAudit({
       action: 'EM_OVERRIDE_APPLIED',

@@ -158,6 +158,17 @@ export async function previewVisitDocumentAction(
       user: { select: { practiceId: true } },
     },
   });
+  // NO VISIT, NO DOCUMENT — and this guard must come FIRST.
+  //
+  // `findFirst` returns null for a visit that does not exist, belongs to
+  // another doctor, or is deleted/archived — all four are ordinary, and the
+  // WHERE clause above is what makes them null rather than a leak. Moving the
+  // signed branch up moved it ABOVE the only null check, so `visit.signedAt`
+  // dereferenced null and the action threw instead of returning a named miss.
+  // tsc cannot see it: prisma is `any` here, the same untyped-result class this
+  // file's own select comment is about.
+  if (!visit) return miss('not_template_visit');
+
   // SIGNED FIRST, above ANY path that could re-derive.
   //
   // This sat below the template lookup, so a doctor deleting a note template —
