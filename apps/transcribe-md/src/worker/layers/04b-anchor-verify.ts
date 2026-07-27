@@ -463,12 +463,35 @@ const PROTOCOL_SECTION_LABELS = new Set(['technique', 'comparison']);
  */
 function inferProvenance(s: NoteTemplateSection): SectionProvenance {
   if (PROTOCOL_SECTION_LABELS.has(normSection(s.label))) return 'template';
-  // Fixed prose the template itself supplies is boilerplate by construction:
-  // the doctor did not say it, the format did.
-  if (typeof s.defaultText === 'string' && s.defaultText.trim().length > 0) {
-    return 'template';
-  }
+  // NOT `defaultText` — see mandatedLinesFromDefaultText below. A structured
+  // custom template supplies defaultText for EVERY section including FINDINGS,
+  // so treating that as template-provenance would exempt the one section the
+  // measurements live in and make the verifier a no-op where it matters most.
   return 'dictation';
+}
+
+/**
+ * Lines the TEMPLATE supplies verbatim are boilerplate, not clinical claims.
+ *
+ * The section-level tool is too blunt for this: a custom template's
+ * `defaultText` is the form skeleton, and its sections are a mix of fixed
+ * scaffolding and dictated content — often in the same section. Exempting the
+ * SECTION would take the dictated content with it. Exempting the LINE is exact:
+ * "no prior study available for comparison" came from the form, the measurement
+ * beneath it came from the sonographer, and only the first is unanchorable by
+ * construction.
+ *
+ * This is the same mechanism `mandatedLines` gives the built-in templates,
+ * derived for the templates that never declared it.
+ */
+function mandatedLinesFromDefaultText(s: NoteTemplateSection): string[] {
+  if (typeof s.defaultText !== 'string') return [];
+  return s.defaultText
+    .split('\n')
+    .map((l) => l.trim())
+    // Placeholders and structural markup are already exempt upstream; what is
+    // worth adding here is real prose the form states on the doctor's behalf.
+    .filter((l) => l.length > 12 && !l.startsWith('|') && !l.startsWith('#'));
 }
 
 export function buildSectionPolicy(sections: NoteTemplateSection[]): SectionPolicy {
@@ -477,6 +500,9 @@ export function buildSectionPolicy(sections: NoteTemplateSection[]): SectionPoli
   for (const s of sections) {
     byLabel.set(normSection(s.label), s.provenance ?? inferProvenance(s));
     for (const line of s.mandatedLines ?? []) mandated.add(norm(line));
+    // …and the lines the form itself supplies, for every template that never
+    // declared mandatedLines (i.e. every template a clinician uploaded).
+    for (const line of mandatedLinesFromDefaultText(s)) mandated.add(norm(line));
   }
   // Sections written by a LATER step. They are in the composed document but
   // were never this layer's to draft or to judge.
