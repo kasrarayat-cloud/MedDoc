@@ -25,6 +25,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import {
   previewVisitDocumentAction,
+  type PreviewFormat,
   type VisitPreviewResult,
 } from '@/actions/preview-visit-document';
 import { DocumentPages, type DocumentAnchor } from '@/components/native-preview/document-pages';
@@ -33,8 +34,7 @@ import { NativeDocumentPreview } from '@/components/native-preview/native-docume
 /** Doctor-facing, PHI-free. Every miss is SAID, never swallowed. */
 const MISS_TEXT: Record<string, string> = {
   not_template_visit: '',
-  not_certified:
-    "This visit's template isn't set up to fill your own form yet, so the note is shown instead.",
+  not_certified: '',
   no_render: 'We could not draw your form for this visit, so the note is shown instead.',
   fill_failed: 'We could not fill your form for this visit, so the note is shown instead.',
   sample_unavailable: 'We could not open your form this time, so the note is shown instead.',
@@ -61,6 +61,9 @@ export function VisitDocumentSurface(props: VisitDocumentSurfaceProps) {
   const { visitId, revision, onOutcome, onUnavailable } = props;
   const [result, setResult] = useState<VisitPreviewResult | null>(null);
   const [drawFailed, setDrawFailed] = useState(false);
+  /** PDF is the faithful page; Word shows the file as Word will open it. Same
+   *  bytes underneath — only the engine that draws them differs. */
+  const [format, setFormat] = useState<PreviewFormat>('pdf');
 
   useEffect(() => {
     let cancelled = false;
@@ -68,7 +71,7 @@ export function VisitDocumentSurface(props: VisitDocumentSurfaceProps) {
       // Inside the async body — a synchronous setState in an effect cascades.
       setDrawFailed(false);
       try {
-        const r = await previewVisitDocumentAction(visitId);
+        const r = await previewVisitDocumentAction(visitId, format);
         if (cancelled) return;
         setResult(r);
         onOutcome?.({ ok: r.ok, reason: r.reason, counts: r.counts });
@@ -82,7 +85,7 @@ export function VisitDocumentSurface(props: VisitDocumentSurfaceProps) {
     return () => {
       cancelled = true;
     };
-  }, [visitId, revision, onOutcome, onUnavailable]);
+  }, [visitId, revision, format, onOutcome, onUnavailable]);
 
   const handleDrawFailed = useCallback(() => {
     setDrawFailed(true);
@@ -101,15 +104,44 @@ export function VisitDocumentSurface(props: VisitDocumentSurfaceProps) {
   // The converter was unavailable, so the browser draws the true DOCX. Page
   // anchoring needs pdf.js text, which this path does not have — the cards are
   // shown together under the document rather than at pages we cannot locate.
+  const toggle = (
+    <div className="qm-vdoc-format" role="group" aria-label="Preview format">
+      {(['pdf', 'word'] as const).map((f) => (
+        <button
+          key={f}
+          type="button"
+          className={f === format ? 'qm-vdoc-format-on' : undefined}
+          aria-pressed={f === format}
+          onClick={() => setFormat(f)}
+          data-testid={`preview-format-${f}`}
+        >
+          {f === 'pdf' ? 'PDF' : 'Word'}
+        </button>
+      ))}
+    </div>
+  );
+
+  const styled = Boolean(result.fillSha?.startsWith('styled:'));
+
   if (result.kind === 'docx_fallback') {
     return (
       <div data-testid="visit-document-fallback">
+        {/* The toggle lives in BOTH branches. Word mode returns here, and
+            rendering the control only in the PDF branch made it a one-way
+            trapdoor: click Word and there was no way back. */}
+        {toggle}
         <NativeDocumentPreview
           kind={result.kind}
           data={result.data}
           reason={result.reason}
-          label="this visit, on your form"
-          caption="Your form, filled so far. Blank fields are what has not been dictated yet."
+          label={styled ? 'this visit' : 'this visit, on your form'}
+          caption={
+            styled
+              ? // NOT "your form" — this is our layout, and saying otherwise is
+                // the exact false claim this surface exists to stop making.
+                'QuillMD’s layout. Upload your own blank form in Settings › My Note Format and this becomes your page.'
+              : 'Your form, filled so far. Blank fields are what has not been dictated yet.'
+          }
         />
         <div className="qm-vdoc-unplaced" data-testid="vdoc-unplaced">
           {props.renderUnplaced(props.anchors.map((a) => a.key))}
@@ -120,6 +152,16 @@ export function VisitDocumentSurface(props: VisitDocumentSurfaceProps) {
 
   return (
     <>
+      {toggle}
+      {/* WHOSE page this is. A styled document is still a document — but the
+          doctor should know it is our layout, not their form, and what to do
+          about that. Quiet, and only when it is true. */}
+      {result.fillSha?.startsWith('styled:') && (
+        <p className="qm-vdoc-counts" data-testid="visit-document-styled-note">
+          QuillMD&rsquo;s layout — upload your own blank form in Settings ›{' '}
+          <em>My Note Format</em> and this becomes your page.
+        </p>
+      )}
       {result.counts && (
         <p
           className="qm-vdoc-counts"
@@ -138,7 +180,7 @@ export function VisitDocumentSurface(props: VisitDocumentSurfaceProps) {
       )}
       <DocumentPages
         data={result.data}
-        label="this visit, on your form"
+        label={styled ? 'this visit' : 'this visit, on your form'}
         anchors={props.anchors}
         renderAfterPage={props.renderAfterSection}
         renderUnplaced={props.renderUnplaced}

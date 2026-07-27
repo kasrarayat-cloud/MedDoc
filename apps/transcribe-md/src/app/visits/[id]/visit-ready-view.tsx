@@ -714,7 +714,12 @@ export function VisitReadyView(props: VisitReadyViewProps) {
                       renderAfterSection={(keys) => (
                         <>
                           {keys.map((k) => (
-                            <div key={k}>
+                            /* Named, because "which section is this suggestion
+                               under" is the invariant that matters clinically:
+                               a claim reviewed under one heading and signed
+                               under another is the failure this placement
+                               exists to prevent. Nothing reads it at runtime. */
+                            <div key={k} data-section={k}>
                               {afterLabel(k)}
                               {/* Under the page the section appears on — the
                                   only place this view can honestly offer it. */}

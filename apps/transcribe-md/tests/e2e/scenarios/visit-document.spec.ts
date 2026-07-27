@@ -22,6 +22,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { loginUser } from '../helpers/auth';
 import { QA_COMPOSE, QA_DB } from '../helpers/qa-compose';
 import {
+  STYLED_VISIT_ID,
   prepareVisitDocLogin,
   restoreOwnerCredentials,
   seedVisitDocVisit,
@@ -345,6 +346,40 @@ test.describe('the visit page is the document', () => {
         { timeout: 120_000, message: 'the edit must seed the baseline' },
       )
       .toMatch(/^\d{5}$/);
+  });
+
+
+  test('a STYLED visit reviews as the SAME document', async ({ page }) => {
+    test.setTimeout(300_000);
+    await page.setViewportSize({ width: 1500, height: 1050 });
+    await openVisit(page); // seeds both the twin and its styled counterpart
+    await page.goto(`/visits/${STYLED_VISIT_ID}`);
+
+    // No template, no certified twin — and still a paginated document, not a
+    // wall of cards. This is the common case: a doctor who taught us a note
+    // FORMAT from a note, and never uploaded a FORM.
+    const doc = page.getByTestId('visit-document');
+    await doc.waitFor({ state: 'visible', timeout: 120_000 });
+    expect(Number(await doc.getAttribute('data-pages'))).toBeGreaterThan(0);
+
+    // It says whose layout this is, and what to do about it.
+    await expect(page.getByTestId('visit-document-styled-note')).toBeVisible();
+
+    // A table-row suggestion reads as a sentence, never as markup.
+    const cards = await page.locator('.qm-rdoc-sugg-text').allInnerTexts();
+    expect(cards.some((c) => c.includes('|')), `raw markup in a card: ${cards}`).toBe(false);
+    expect(cards.join(' ')).toContain('GSV at the Knee: diameter 3.4 mm');
+
+    // The review placeholder never reaches a review surface.
+    expect(await page.locator('body').innerText()).not.toContain('All AI-drafted content');
+
+    // Same interaction model as a template visit.
+    await expect(page.locator('[data-testid^="section-edit-"]').first()).toBeVisible();
+    await expect(page.getByRole('button', { name: /sign & download/i })).toBeVisible();
+
+    // And the preview offers both formats.
+    await expect(page.getByTestId('preview-format-pdf')).toBeVisible();
+    await expect(page.getByTestId('preview-format-word')).toBeVisible();
   });
 
   test('390px: the document draws and nothing overflows sideways', async ({ page }) => {
