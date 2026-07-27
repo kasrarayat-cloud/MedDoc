@@ -6,10 +6,6 @@
 // The model never touches the database. It returns a structured intent and this
 // dispatches each one into the SAME server actions the buttons call:
 //
-//   adopt_suggestion(s) -> adoptSuggestionAction, ONE CALL PER CLAIM. Never a
-//                          bulk endpoint: 'accept all' is a loop, so every
-//                          adopted suggestion gets its own SUGGESTION_ADOPTED
-//                          audit row, exactly as if each card were clicked.
 //   edit_section        -> saveNoteSectionAction, the same splice-and-save
 //                          tap-to-edit uses, the doctor-authored draft class.
 //   scroll_to           -> a hint returned to the client. Touches nothing.
@@ -20,13 +16,16 @@
 // conversation can talk its way through is not a gate. The chat can only carry
 // a doctor TO one.
 //
-// BULK ADOPTION REQUIRES HAVING READ THEM. `adopt_suggestions` is refused
-// unless a previous assistant turn contained every one of those suggestions'
-// text. Reading is the review; a conversational surface does not get to be the
-// exception, and the model asking nicely is not evidence the doctor read them.
+// NO ADOPTION, BECAUSE THERE IS NOTHING STAGED. The anchored verifier is
+// audit-only: it still judges, but every generated line is already in the
+// draft, so `adopt_suggestion(s)` and `listed_suggestions` are gone from the
+// closed union rather than left as intents the dispatcher could no longer
+// honour. The attestation store that gated bulk adoption went with them — it
+// existed to put the doctor's eyes between a suggestion being shown and being
+// accepted, and there is no longer either half.
 //
-// PHI: the same server-side path as generation. The visit's note and its
-// suggestions go to the model; nothing new is retained — see the transcript
+// PHI: the same server-side path as generation. The visit's note goes to the
+// model; nothing new is retained — see the transcript
 // note in chat-edit/README or the phase report. The transcript is held by the
 // CLIENT for the life of the page and is never persisted here.
 // ============================================================================
@@ -38,15 +37,8 @@ import { logAudit } from '@/lib/audit';
 import { requireSession } from '@/lib/auth';
 import { CHAT_EDIT_SYSTEM } from '@/lib/chat-edit/prompt';
 import { ChatReplySchema, type ChatIntent } from '@/lib/chat-edit/intent';
-import {
-  claimId,
-  clearAttestations,
-  recordRendered,
-  wereRendered,
-} from '@/lib/chat-edit/attestation';
 
 import { editTableCell, TABLE_EDIT_REASON } from '@/lib/note-table-edit';
-import { adoptSuggestionAction } from './suggestion-actions';
 import { saveNoteSectionAction } from './save-note-section';
 import { updateVisitHeaderAction } from './update-visit-header';
 
@@ -122,7 +114,6 @@ export async function chatEditVisitAction(
       status: true,
       soapFinal: true,
       soapVersion: true,
-      suggestedClaims: true,
       user: { select: { practiceId: true } },
     },
   });
@@ -137,13 +128,6 @@ export async function chatEditVisitAction(
     return fail('This note is still processing.');
   }
 
-  const claims = Array.isArray(visit.suggestedClaims)
-    ? (visit.suggestedClaims as Array<{
-        text: string;
-        section: string;
-        reason: string;
-      }>)
-    : [];
 
   // The model sees the note and the suggestions, wrapped as data — it is the
   // doctor's own visit, on the same server-side path as generation.
@@ -158,12 +142,8 @@ export async function chatEditVisitAction(
     JSON.stringify(
       {
         note: visit.soapFinal,
-        suggestions: claims.map((c, i) => ({
-          index: i,
-          section: c.section,
-          reason: c.reason,
-          text: c.text,
-        })),
+        // No `suggestions` array: the verifier is audit-only and there is
+        // nothing staged for the model to adopt or list.
         conversation: history.slice(-12),
       },
       null,
@@ -213,40 +193,6 @@ export async function chatEditVisitAction(
     );
   }
 
-  // ── THE LISTING, RECORDED BY THE SERVER ─────────────────────────────────
-  // The model DECLARES what its reply lists; the server verifies that each
-  // claim's FULL text actually appears in the reply it is about to send, and
-  // records only those. The client's transcript is not consulted — it is not
-  // evidence, because the client writes it.
-  const declaredListed = parsed.intents.flatMap((i) =>
-    i.kind === 'listed_suggestions' ? i.indexes : [],
-  );
-  const actuallyRendered = declaredListed
-    .map((i) => claims[i])
-    .filter((c): c is (typeof claims)[number] => Boolean(c))
-    .filter((c) => parsed.reply.includes(c.text));
-
-  // Bulk adoption is eligible only for claims recorded BEFORE this turn.
-  //
-  // Recording first and checking after let one reply both list and adopt: the
-  // model could satisfy, in the same breath, the gate that exists to put the
-  // doctor's eyes between the two. The property that matters is a turn of
-  // theirs in between, so the check runs against the PRE-EXISTING record and
-  // this turn's listing is written afterwards, for the next one.
-  const wanted = parsed.intents.flatMap((i) =>
-    i.kind === 'adopt_suggestion' ? [i.index] : i.kind === 'adopt_suggestions' ? i.indexes : [],
-  );
-  const bulkNeedsListing =
-    wanted.length > 1 &&
-    !(await wereRendered(
-      visitId,
-      session.user.id,
-      wanted.map((i) => claims[i]).filter(Boolean).map(claimId),
-    ));
-
-  if (actuallyRendered.length > 0) {
-    await recordRendered(visitId, session.user.id, actuallyRendered.map(claimId));
-  }
 
   let budget = MAX_ACTIONS_PER_TURN;
   let capped = 0;
@@ -409,61 +355,6 @@ export async function chatEditVisitAction(
           break;
         }
 
-        case 'adopt_suggestion':
-        case 'adopt_suggestions': {
-          const indexes =
-            intent.kind === 'adopt_suggestion'
-              ? [intent.index]
-              : [...intent.indexes];
-
-          // READING IS THE REVIEW — decided for the turn as a whole, above.
-          if (bulkNeedsListing) {
-            actions.push({
-              kind: intent.kind,
-              detail: `${indexes.length} suggestion${indexes.length === 1 ? '' : 's'}`,
-              ok: false,
-              error:
-                'I have not shown you all of those yet. Ask me to list them and they are yours to accept.',
-            });
-            break;
-          }
-
-          // ONE CALL PER CLAIM, highest index first so the earlier indexes stay
-          // valid as the array shrinks under us.
-          for (const index of [...indexes].sort((a, b) => b - a)) {
-            // THE CAP. Every adopt runs an uncached E/M judgement, so an
-            // "accept all" over a long lane is real work and real money. Stop
-            // at the cap and SAY so — a doctor who asked for 34 and got 20
-            // must not be left believing they got 34.
-            if (budget <= 0) {
-              capped += 1;
-              continue;
-            }
-            budget -= 1;
-            const claim = claims[index];
-            if (!claim) {
-              actions.push({
-                kind: intent.kind,
-                detail: `#${index}`,
-                ok: false,
-                error: 'That suggestion is no longer there.',
-              });
-              continue;
-            }
-            const r = await adoptSuggestionAction(visitId, index, claim.text);
-            actions.push({
-              kind: intent.kind,
-              detail: claim.section,
-              ok: r.ok,
-              error: r.ok ? undefined : r.error,
-            });
-            if (r.ok && r.soapFinal) {
-              soapFinal = r.soapFinal;
-              soapVersion = r.soapVersion;
-            }
-          }
-          break;
-        }
       }
     } catch (err) {
       const cls = err instanceof Error ? err.constructor.name : 'Unknown';
@@ -479,10 +370,6 @@ export async function chatEditVisitAction(
     }
   }
 
-  // The note changed, so what was read out is no longer what would be adopted:
-  // the remaining claims may have shifted, and a stale attestation would
-  // authorise a suggestion nobody has seen in its current form.
-  if (soapFinal) await clearAttestations(visitId, session.user.id);
 
   // PROVENANCE. Every effect above is audited by the action it went through,
   // but those rows look identical to a button click. This one says the chat did
@@ -493,7 +380,6 @@ export async function chatEditVisitAction(
     targetId: visit.id,
     metadata: {
       intents: parsed.intents.map((i) => i.kind),
-      adopted: actions.filter((a) => a.kind.startsWith('adopt') && a.ok).length,
       capped,
       edited: actions.filter((a) => a.kind === 'edit_section' && a.ok).length,
       // Counted SEPARATELY from `edited`. The row that started this work read

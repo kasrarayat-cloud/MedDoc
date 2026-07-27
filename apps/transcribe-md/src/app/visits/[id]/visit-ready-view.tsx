@@ -39,7 +39,6 @@ import { SignedDocumentView } from './signed-document-view';
 import { extractIcdRows } from '@/lib/em-coding/icd-rows';
 import { BillingCardC3 } from './billing-card-c3';
 import { SoapEditor } from './soap-editor';
-import { SuggestionsLane, type SuggestedClaimView } from './suggestions-lane';
 import { CodesTab, codesTabHasWarnings } from './codes-tab';
 import { RxTab, rxTabHasContent, rxTabWarningLevel } from './rx-tab';
 import { ExtrasTab, extrasTabHasFlag } from './extras-tab';
@@ -98,7 +97,6 @@ export interface VisitReadyViewProps {
    *  verifier demoted from the note body, rendered in the "Suggested by AI —
    *  not stated in this visit" lane below the SOAP editor for explicit
    *  doctor adoption. Null/empty (or signed) → lane hidden. */
-  suggestedClaims?: SuggestedClaimView[] | null;
   /** Determines which "input" tab is shown + whether speaker reassignment
    *  is available. */
   inputMode: string;
@@ -292,26 +290,6 @@ export function VisitReadyView(props: VisitReadyViewProps) {
   }, [props.visitId]);
 
 
-  const handleSuggestionAdopted = useCallback(
-    (r: {
-      soapFinal: string;
-      soapVersion: number;
-      emPendingChange?: { from: string; to: string } | null;
-    }) => {
-      // Adopting changes the note, so the server marked the level stale.
-      // Mirror it: the badge and the lazy re-score both key off this.
-      setEmStale(true);
-      setAdoption((prev) => ({
-        text: r.soapFinal,
-        version: r.soapVersion,
-        seq: (prev?.seq ?? 0) + 1,
-      }));
-      if (r.emPendingChange !== undefined) {
-        setPendingEmChange(r.emPendingChange);
-      }
-    },
-    []
-  );
 
   // V2 review (skin-only, flag-gated) — live mirror of the server's fail-closed
   // critical-Rx sign gate, so the V2 shell can disable the Sign trigger until
@@ -411,13 +389,10 @@ export function VisitReadyView(props: VisitReadyViewProps) {
   // OFF → the legacy tabs below run verbatim.
   if (isSkinBeta()) {
     const isSigned = props.readonly || props.signedAt !== null;
-    const showSuggestions =
-      !props.readonly &&
-      !props.signedAt &&
-      (props.suggestedClaims?.length ?? 0) > 0;
-    const suggestionCount = showSuggestions
-      ? (props.suggestedClaims?.length ?? 0)
-      : 0;
+    // The verifier is audit-only — nothing is ever staged for Accept/Dismiss.
+    // Kept as a literal so the advisory copy downstream reads "nothing
+    // outstanding" rather than being handed an undefined.
+    const suggestionCount = 0;
 
     const transcriptInner =
       props.inputMode === 'audio_upload' ? (
@@ -484,20 +459,6 @@ export function VisitReadyView(props: VisitReadyViewProps) {
         </>
       ),
     });
-    if (showSuggestions) {
-      tabs.push({
-        key: 'review',
-        label: 'Review',
-        badge: { tone: 'info', text: String(suggestionCount) },
-        node: (
-          <SuggestionsLane
-            visitId={props.visitId}
-            claims={props.suggestedClaims ?? []}
-            onAdopted={handleSuggestionAdopted}
-          />
-        ),
-      });
-    }
     tabs.push({
       key: 'rx',
       label: 'Rx',
@@ -700,26 +661,24 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               }}
               onScrollTo={(target) => {
                 // EVERY target the schema allows must resolve to something.
-                // `em_gate` and `suggestions` had no anchor at all, so the chat
-                // said "Took you to the E/M gate" and the page did not move —
-                // a navigation aid that lies about having navigated.
+                // `em_gate` had no anchor at all, so the chat said "Took you to
+                // the E/M gate" and the page did not move — a navigation aid
+                // that lies about having navigated.
+                //
+                // `suggestions` is gone with the lane it pointed at: the
+                // verifier is audit-only and there is no card to scroll to. It
+                // is removed from the intent union rather than left resolving
+                // to nothing, which would be that same lie in a new place.
                 const el =
                   target === 'rx_gate'
                     ? document.querySelector('[data-testid="review-doc-rx-gate"]')
                     : target === 'document'
                       ? document.querySelector('[data-testid="visit-document"]')
-                      : target === 'suggestions'
-                        ? // The first outstanding card; the lane has no single
-                          // container, and scrolling to a group that may not
-                          // exist is the same failure one level down.
-                          document.querySelector('[data-testid="review-doc-suggestion"]')
-                        : document.querySelector(`[data-chat-target="${target}"]`);
-                // "Show billing" has to OPEN it, not scroll to a collapsed row.
-                // Now that codes and billing live behind one on-demand panel,
-                // taking the doctor to a shut drawer and calling it done would
-                // be the reachability ruling honoured in letter only. The panel
-                // is its own toggle, so ask it to open rather than mirroring
-                // its state up here where the two could drift apart.
+                      : document.querySelector(`[data-chat-target="${target}"]`);
+                // Billing and codes render inline now — nothing to expand — but
+                // the click-to-open is kept for any target that is still its own
+                // toggle, so a future collapsed surface cannot silently become
+                // "scrolled to a shut drawer and called done".
                 if (
                   el instanceof HTMLElement &&
                   el.getAttribute('aria-expanded') === 'false'
@@ -797,7 +756,6 @@ export function VisitReadyView(props: VisitReadyViewProps) {
                 afterSection={afterSection}
               />
             )}
-            claims={props.suggestedClaims ?? []}
             rxGateNode={
               // PRESCRIPTIONS **OR** WARNINGS. Warnings alone was the old
               // condition, which meant a visit with medications and no
@@ -829,7 +787,6 @@ export function VisitReadyView(props: VisitReadyViewProps) {
             codesNode={tabs.find((t) => t.key === 'codes')?.node ?? null}
             dictationNode={dictationNode}
             dictationLabel={secondTabLabel}
-            onAdopted={handleSuggestionAdopted}
           />
         </div>
       );
@@ -1003,15 +960,6 @@ export function VisitReadyView(props: VisitReadyViewProps) {
                 explicit doctor adoption. Hidden once signed (the note is
                 locked; the lane's actions reject SIGNED anyway) and on
                 readonly views. */}
-            {!props.readonly &&
-              !props.signedAt &&
-              (props.suggestedClaims?.length ?? 0) > 0 && (
-                <SuggestionsLane
-                  visitId={props.visitId}
-                  claims={props.suggestedClaims ?? []}
-                  onAdopted={handleSuggestionAdopted}
-                />
-              )}
           </div>
         )}
         {tab === 'transcript' &&

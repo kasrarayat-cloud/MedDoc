@@ -31,9 +31,6 @@ import {
 function describe(a: ChatActionOutcome): string {
   const moved = a.changed ? ` — ${a.changed.from} → ${a.changed.to}` : '';
   switch (a.kind) {
-    case 'adopt_suggestion':
-    case 'adopt_suggestions':
-      return a.ok ? `Adopted a suggestion in ${a.detail}` : `Could not adopt: ${a.error}`;
     case 'edit_section':
       return a.ok ? `Changed ${a.detail}` : `Could not change ${a.detail}: ${a.error}`;
     // The structural echo of the edit, drawn by the client rather than trusted

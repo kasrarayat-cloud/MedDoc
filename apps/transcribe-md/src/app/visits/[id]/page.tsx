@@ -39,33 +39,6 @@ export const metadata: Metadata = { title: 'Visit' };
 // @/lib/em-coding/displayed-level so the initial render, the rescore route,
 // and the sign gate all coerce identically (2026-06-13 trigger-parity fix).
 
-/** Hybrid anchored generation (2026-06-11) — coerce the suggestedClaims
- *  jsonb into the lane's typed shape. STRICT: any malformed entry voids the
- *  whole array (returns null → lane hidden) so the lane's rendered indices
- *  can never drift from the DB array's indices, which the adopt/dismiss
- *  server actions validate against. */
-function extractSuggestedClaims(
-  raw: unknown
-): { text: string; reason: string; section: string; anchor: string }[] | null {
-  if (!Array.isArray(raw) || raw.length === 0) return null;
-  const out: { text: string; reason: string; section: string; anchor: string }[] = [];
-  for (const entry of raw) {
-    if (entry === null || typeof entry !== 'object') return null;
-    const c = entry as Record<string, unknown>;
-    if (
-      typeof c.text !== 'string' ||
-      typeof c.reason !== 'string' ||
-      typeof c.section !== 'string' ||
-      typeof c.anchor !== 'string'
-    ) {
-      return null;
-    }
-    out.push({ text: c.text, reason: c.reason, section: c.section, anchor: c.anchor });
-  }
-  return out;
-}
-
-
 const PROCESSING_STATES: ReadonlyArray<TranscribeVisitStatus> = [
   TranscribeVisitStatus.TRANSCRIBING,
   TranscribeVisitStatus.EXTRACTING,
@@ -188,7 +161,6 @@ export default async function VisitPage({
     rxDrafts: unknown;
     referrals: unknown;
     /** Hybrid anchored generation — verifier-demoted claims jsonb. */
-    suggestedClaims: unknown;
     /** E/M visible-confirm (prod smoke #311) — pending-change jsonb. */
     emPendingChange: unknown;
   emStale: boolean;
@@ -256,7 +228,6 @@ export default async function VisitPage({
         cptCodes: true,
         rxDrafts: true,
         referrals: true,
-        suggestedClaims: true,
         emPendingChange: true,
         emStale: true,
         emScoredCode: true,
@@ -489,7 +460,6 @@ export default async function VisitPage({
           rxDrafts={visit.rxDrafts}
           rxOverriddenWarningIds={rxOverrides.map((o) => o.warningId)}
           referrals={visit.referrals}
-          suggestedClaims={visit.suggestedClaims}
           emPendingChange={visit.emPendingChange}
           emStale={visit.emStale}
           emScoredCode={visit.emScoredCode}
@@ -548,9 +518,6 @@ interface VisitBodyProps {
    *  on initial paint so reload + cross-tab persistence works. */
   rxOverriddenWarningIds: string[];
   referrals: unknown;
-  /** Hybrid anchored generation — verifier-demoted claims jsonb (coerced
-   *  via extractSuggestedClaims before reaching VisitReadyView). */
-  suggestedClaims: unknown;
   /** E/M visible-confirm (prod smoke #311) — pending-change jsonb (coerced
    *  via unacknowledgedEmChange before reaching VisitReadyView). */
   emPendingChange: unknown;
@@ -785,7 +752,6 @@ async function VisitBody(props: VisitBodyProps) {
       referrals={props.referrals}
       // Hybrid anchored generation — lane claims (strictly coerced; null
       // when absent/malformed so the lane simply doesn't render).
-      suggestedClaims={extractSuggestedClaims(props.suggestedClaims)}
       // E/M visible-confirm (prod smoke #311) — the unacknowledged
       // suggestion-caused level change, hydrating the Sign & Send
       // modal's confirm control ({from, to} codes only; null = nothing

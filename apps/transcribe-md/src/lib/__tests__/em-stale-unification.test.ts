@@ -12,7 +12,7 @@
 // covers the behaviour end to end.
 // ============================================================================
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
@@ -22,10 +22,6 @@ const MUTATORS = [
   {
     file: 'src/actions/soap.ts',
     what: 'the draft save — the inline editor, tap-to-edit, and the chat’s section edit all funnel here',
-  },
-  {
-    file: 'src/actions/suggestion-actions.ts',
-    what: 'adopting a suggestion',
   },
   {
     file: 'src/app/api/visits/[id]/em-score/apply-additions/route.ts',
@@ -187,10 +183,12 @@ describe('the baseline is also seeded at the FIRST MUTATION', () => {
   // src/lib/em-coding/__tests__/seed-baseline.test.ts — against a stubbed
   // prisma, asserting the written value. These only check that the callers
   // exist, which is all a source-text test can honestly claim.
-  it('the three doctor-EDIT paths call it', () => {
+  it('the doctor-EDIT paths call it', () => {
+    // Was three. Adopting a suggestion was one of them, and the suggestion
+    // lane is gone — the verifier is audit-only and nothing is staged to
+    // adopt. The remaining paths are unchanged and still seed.
     for (const file of [
       'src/actions/soap.ts',
-      'src/actions/suggestion-actions.ts',
       'src/app/api/visits/[id]/em-score/apply-additions/route.ts',
     ]) {
       expect(readFileSync(file, 'utf8'), `${file} must seed`).toContain(
@@ -209,9 +207,12 @@ describe('the baseline is also seeded at the FIRST MUTATION', () => {
     );
   });
 
-  it('adopt hands over its own prior score, never the failure sentinel', () => {
-    const src = readFileSync('src/actions/suggestion-actions.ts', 'utf8');
-    expect(src).toContain('emDelta.from !== EM_DELTA_INDETERMINATE.from');
+  it('no adopt path survives to hand over a score at all', () => {
+    // The adopt action carried its own prior-score hand-off so a re-score
+    // measured movement against a real level rather than the sentinel. Both
+    // the action and the lane it served are deleted; this pins the deletion so
+    // the coupling cannot quietly return without the guard that made it safe.
+    expect(existsSync('src/actions/suggestion-actions.ts')).toBe(false);
   });
 
   it('apply-additions selects the signals the level depends on', () => {

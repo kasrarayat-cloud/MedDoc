@@ -239,54 +239,23 @@ const CASES: Case[] = [
     },
   },
 
-  // ---- suggestions --------------------------------------------------------
-  {
-    id: 'list-suggestions',
-    say: 'What still needs my attention?',
-    bar: 'lists the suggestions rather than adopting them',
-    ci: true,
-    check: (i) =>
-      has(i, 'listed_suggestions') || has(i, 'answer')
-        ? has(i, 'adopt_suggestion') || has(i, 'adopt_suggestions')
-          ? 'adopted without being asked'
-          : null
-        : `neither listed nor answered (${i.map((x) => x.kind).join(',')})`,
-  },
-  {
-    id: 'adopt-one',
-    say: 'Accept the compression stockings suggestion.',
-    bar: 'adopts exactly one, by index',
-    ci: true,
-    check: (i) => {
-      const a = i.find((x) => x.kind === 'adopt_suggestion');
-      if (a?.kind !== 'adopt_suggestion') return `no single adopt (${i.map((x) => x.kind).join(',')})`;
-      return a.index === 1 ? null : `adopted index ${a.index}, expected 1`;
-    },
-  },
-  {
-    id: 'bulk-accept',
-    say: 'Accept all of the remaining suggestions.',
-    bar: 'asks to see them first, or adopts both — never silently one',
-    check: (i) => {
-      if (has(i, 'listed_suggestions')) return null; // gated on reading: correct
-      const a = i.find((x) => x.kind === 'adopt_suggestions');
-      if (a?.kind !== 'adopt_suggestions') return `neither listed nor bulk-adopted`;
-      return a.indexes.length === 2 ? null : `adopted ${a.indexes.length} of 2`;
-    },
-  },
 
   // ---- multi-step ---------------------------------------------------------
   {
-    id: 'multi-cell-then-accept',
-    say: 'Change the SFJ diameter to 7.1 and then accept the rest.',
-    bar: 'BOTH: a cell write and an adopt/list, in one turn',
+    id: 'multi-cell-then-summarise',
+    say: 'Change the SFJ diameter to 7.1 and then tell me what is left to do.',
+    bar: 'BOTH: a cell write and an answer, in one turn',
     ci: true,
     check: (i) => {
       const cellOk = cellBecomes('GSV at the SFJ', /\|\s*7\.1\s*\|/)(i);
       if (cellOk) return `cell leg failed: ${cellOk}`;
-      return has(i, 'adopt_suggestion') || has(i, 'adopt_suggestions') || has(i, 'listed_suggestions')
+      // The adopt/list half of this case went with the suggestion lane. The
+      // property under test is unchanged — TWO intents in one turn, not one —
+      // so it is re-aimed at a capability that still exists rather than
+      // dropped, which would have quietly halved the multi-intent coverage.
+      return has(i, 'answer') || has(i, 'cannot')
         ? null
-        : 'did the edit but dropped the "accept the rest" half';
+        : 'did the edit but dropped the second half';
     },
   },
   {

@@ -148,9 +148,10 @@ test.describe('the visit page is the document', () => {
     expect(visitDocManifestCount()).toBe(0);
 
     // The edit made the billing level stale — that is the new gate, and it
-    // refuses the signature. Re-check the level the way a doctor would: open
-    // the codes row, then acknowledge if it moved.
-    await page.getByTestId('review-doc-details-toggle').click();
+    // refuses the signature. Re-check it the way a doctor now does: the
+    // control is INLINE in the gate stack, next to the signature it blocks,
+    // not folded behind a disclosure they had no reason to open.
+    await page.getByTestId('review-doc-em-rescore').click();
     await expect(page.getByTestId('em-stale-badge')).toHaveCount(0, { timeout: 120_000 });
     const emConfirm = page.getByRole('button', { name: /confirm|acknowledge/i }).first();
     if (await emConfirm.count()) {
@@ -211,8 +212,15 @@ test.describe('the visit page is the document', () => {
 
     expect(isStale(), 'an edit must mark the level stale').toBe('t');
 
-    // The doctor is TOLD why, at the control that resolves it.
+    // The doctor is TOLD why, at the control that resolves it — and that
+    // control is now on the page rather than inside a collapsible. A blocker
+    // behind a disclosure is a dead end: the sign route refuses and the reason
+    // is folded away.
+    await expect(page.getByTestId('review-doc-em-stale-gate')).toBeVisible();
     await expect(page.getByTestId('em-stale-badge')).toBeVisible();
+    await expect(page.getByTestId('review-doc-em-rescore')).toBeVisible();
+    // …and the sign bar says so too, where the signature is.
+    await expect(page.getByTestId('review-doc-bar-msg')).toContainText(/re-check/i);
 
     const scoredCode = () =>
       execSync(`${QA_COMPOSE} exec -T postgres psql -U meddoc -d ${QA_DB} -A -t -f -`, {
@@ -220,11 +228,11 @@ test.describe('the visit page is the document', () => {
         encoding: 'utf8',
       }).trim();
 
-    // Opening the codes row re-scores: the flag clears AND a baseline is
-    // recorded. Without a baseline the re-score compares the current level to
-    // itself, concludes nothing moved, and clears the flag every time — a gate
-    // that cannot catch anything looks exactly like one that checked.
-    await page.getByTestId('review-doc-details-toggle').click();
+    // Pressing re-check re-scores: the flag clears AND a baseline is recorded.
+    // Without a baseline the re-score compares the current level to itself,
+    // concludes nothing moved, and clears the flag every time — a gate that
+    // cannot catch anything looks exactly like one that checked.
+    await page.getByTestId('review-doc-em-rescore').click();
     await expect
       .poll(() => isStale(), { timeout: 120_000, message: 'the re-score should clear the flag' })
       .toBe('f');
@@ -470,7 +478,7 @@ test.describe('the visit page is the document', () => {
     await expect(page.getByTestId('review-doc-dictation-toggle')).toHaveCount(0);
 
     // What remains is one quiet affordance.
-    await expect(page.getByTestId('review-doc-details-toggle')).toBeVisible();
+    await expect(page.getByTestId('review-doc-billing-panel')).toBeVisible();
   });
 
   test('NOTHING became unreachable — every datum is still one tap away', async ({ page }) => {
@@ -485,7 +493,6 @@ test.describe('the visit page is the document', () => {
     // A visit WITH prescriptions and a warning still gets the gate, unchanged.
     await expect(page.getByTestId('review-doc-rx-gate')).toBeVisible();
 
-    await page.getByTestId('review-doc-details-toggle').click();
     // Billing: the level, and the control that CHANGES it.
     const billing = page.getByTestId('review-doc-billing-panel');
     await expect(billing).toBeVisible();

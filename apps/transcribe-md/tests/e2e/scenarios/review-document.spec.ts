@@ -76,102 +76,35 @@ test.describe('pre-sign review as the document', () => {
     await expect(page.locator(SUGG)).toHaveCount(3);
   });
 
-  test('each suggestion sits under the section it would join', async ({ page }) => {
+  // ── THE LANE IS GONE ─────────────────────────────────────────────────
+  // Five tests lived here: suggestions placed under their section, the
+  // read-gate, a taller-than-viewport card, accept-one, accept-remaining.
+  // They pinned a surface that no longer exists — the verifier is audit-only
+  // and nothing is staged for Accept/Dismiss.
+  //
+  // What replaces them is the assertion that matters now: NOTHING remains.
+  // Deleting a feature and leaving its empty container behind is the failure
+  // this guards, because an empty lane reads to a doctor as "nothing flagged"
+  // rather than "this surface is gone".
+  test('no suggestion surface remains — not even an empty one', async ({ page }) => {
     test.skip(!(await open(page, 'rdoc-2')), 'psql seeding unavailable');
-    // Placement, not presence: a claim rendered in the wrong section is a claim
-    // the doctor reviews in one place and signs in another.
-    //
-    // TWO SURFACES CAN DRAW THIS, and this project builds only one of them.
-    // With the document flags on, suggestions hang off the page slot
-    // (`[data-section]`); with only REVIEW_DOC_VIEW — which is exactly what
-    // this CI project builds, and it starts no converter — the note itself is
-    // rendered and the slots are the note's own section containers. Pinning
-    // this to the document selector made it a test of the build, not of
-    // placement.
-    // Detect the surface by the DOCUMENT itself, not by `[data-section]`:
-    // SoapSection puts that attribute on every note section too (with the
-    // section LETTER), so "does any element have data-section" is true on both
-    // surfaces and picked the wrong branch every time.
-    const onDocument = (await page.getByTestId('visit-document').count()) > 0;
-    for (const label of ['Subjective', 'Objective', 'Plan']) {
-      const scope = onDocument
-        ? page.locator(`[data-section="${label}"]`)
-        : page.locator('.qm-lin-soap-section-slot').filter({ hasText: label }).first();
-      await expect(scope.locator(SUGG)).toHaveCount(1);
+    for (const sel of [
+      SUGG,
+      ACCEPT,
+      BULK,
+      '[data-testid="suggestions-lane"]',
+      '[data-testid="suggestion-item"]',
+      '[data-testid="review-doc-details-toggle"]',
+    ]) {
+      await expect(page.locator(sel), `${sel} must not exist`).toHaveCount(0);
     }
+    // …and no copy that describes one.
+    await expect(page.locator('body')).not.toContainText(/set aside for your review/i);
+    await expect(page.locator('body')).not.toContainText(/suggestions? remaining/i);
+    // The document itself still renders.
+    await expect(page.getByTestId('review-document-view')).toBeVisible();
   });
 
-  test('the read-gate stays locked until every suggestion has been on screen', async ({ page }) => {
-    // A phone viewport, deliberately: at desktop height all three cards can be
-    // on screen at once, in which case the gate SHOULD unlock immediately and
-    // there is no lock to test. The invariant is "not until they have been
-    // seen", not "not until you have scrolled".
-    await page.setViewportSize({ width: 390, height: 700 });
-    test.skip(!(await open(page, 'rdoc-3')), 'psql seeding unavailable');
-    // The invariant is the BUTTON, not the bar copy: a blocking drug warning
-    // outranks "you have suggestions to read", and rightly so — asserting on
-    // bar text here would be testing the message priority, not the read-gate.
-    await expect(page.locator(BULK)).toHaveCount(0);
-    await scrollThroughSuggestions(page);
-    await expect(page.locator(BULK)).toBeVisible();
-  });
-
-  test('a card TALLER than the viewport still unlocks the gate', async ({ page }) => {
-    test.skip(!(await open(page, 'rdoc-4')), 'psql seeding unavailable');
-    // The regression that shipped: intersectionRatio can never reach 1 for a
-    // card taller than the root, so the gate stayed locked forever with nothing
-    // to report. The seeded third claim is long; force the case explicitly so
-    // the test does not depend on how the text happens to wrap.
-    await page.addStyleTag({
-      content: `${SUGG} { min-height: 105vh; }`,
-    });
-    const cards = page.locator(SUGG);
-    for (let i = 0; i < (await cards.count()); i++) {
-      await cards.nth(i).locator('.qm-rdoc-sugg-end').scrollIntoViewIfNeeded();
-      await page.waitForTimeout(300);
-    }
-    await expect(page.locator(BULK)).toBeVisible();
-  });
-
-  test('accepting one suggestion moves it into the note and keeps the gate open', async ({ page }) => {
-    test.skip(!(await open(page, 'rdoc-5')), 'psql seeding unavailable');
-    await scrollThroughSuggestions(page);
-    await expect(page.locator(BULK)).toBeVisible();
-
-    await page.locator(ACCEPT).first().click();
-    await expect(page.locator(SUGG)).toHaveCount(2);
-    // The accepted text is now note body, not a card.
-    //
-    // WHERE the body is depends on which surface this build drew. When the
-    // document is up it draws to a canvas, so its DOM copy
-    // (`visit-document-text`) is the reading-order block a screen reader gets
-    // and the honest place to look. This project builds the note fallback and
-    // no converter, so the note is real DOM. Assert on whichever exists —
-    // otherwise this passes on the build it was written against and fails on
-    // the one CI actually runs.
-    const srBlock = page.getByTestId('visit-document-text');
-    const body = (await srBlock.count()) ? srBlock : page.locator('.qm-c3-rev2-root');
-    await expect(body).toContainText('nocturnal cough');
-    await expect(page.locator(SUGG).filter({ hasText: 'nocturnal cough' })).toHaveCount(0);
-    // And the bar does NOT fall back to "scroll to review" — the index-keyed
-    // "seen" set used to un-read every surviving claim here.
-    await expect(page.locator(BULK)).toBeVisible();
-  });
-
-  test('accept-remaining clears them all, one adoption at a time', async ({ page }) => {
-    test.skip(!(await open(page, 'rdoc-6')), 'psql seeding unavailable');
-    await scrollThroughSuggestions(page);
-    await page.locator(BULK).click();
-    await expect(page.locator(SUGG)).toHaveCount(0, { timeout: 30_000 });
-    // The bar now reports the REMAINING blocker — this visit still has an
-    // un-overridden critical interaction, and a surface that said "Reviewed"
-    // with a drug warning outstanding would be lying. Clearing it yields
-    // "Reviewed" only once nothing is left.
-    await expect(page.locator(BAR)).toContainText('prescription');
-    await clearRxGate(page);
-    await page.getByTestId('review-doc-em-confirm').click();
-    await expect(page.locator(BAR)).toContainText('Reviewed');
-  });
 
   test('the critical-Rx card blocks signing until a typed override is recorded', async ({ page }) => {
     test.skip(!(await open(page, 'rdoc-7')), 'psql seeding unavailable');
@@ -204,12 +137,13 @@ test.describe('pre-sign review as the document', () => {
     await expect(page.getByRole('button', { name: /sign & download/i })).toBeEnabled();
   });
 
-  test('the codes row expands to the real billing panel — a level stays changeable', async ({ page }) => {
+  test('the billing panel renders inline — a level stays changeable', async ({ page }) => {
     test.skip(!(await open(page, 'rdoc-9')), 'psql seeding unavailable');
-    // Collapsing a surface is not removing it. Override / rescore / dispute
-    // must be reachable here, or a doctor who disagrees with a level would need
-    // the flag toggled under them.
-    await page.getByTestId('review-doc-details-toggle').click();
+    // The "⋯ details" disclosure is gone — it was hiding a sign-blocker (the
+    // E/M stale badge), and a disclosure that hides one blocker will hide the
+    // next. The PANELS are not: override / rescore / dispute must still be
+    // reachable, or a doctor who disagrees with a level would need the flag
+    // toggled under them. No click — they are simply on the page.
     const panel = page.locator('.qm-rdoc-meta-panels');
     await expect(panel).toBeVisible();
     await expect(panel.locator('.qm-c3-bill-card')).toBeVisible();

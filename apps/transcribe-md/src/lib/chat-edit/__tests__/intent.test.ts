@@ -17,8 +17,6 @@ import { CHAT_EDIT_SYSTEM } from '../prompt';
 describe('the intent union', () => {
   it('accepts everything the chat may do', () => {
     for (const intent of [
-      { kind: 'adopt_suggestion', index: 0 },
-      { kind: 'adopt_suggestions', indexes: [0, 1] },
       { kind: 'edit_section', sectionLabel: 'FINDINGS', body: 'Rewritten.' },
       {
         kind: 'edit_table_cell',
@@ -34,6 +32,21 @@ describe('the intent union', () => {
       { kind: 'refuse', because: 'That is not part of this visit.' },
     ]) {
       expect(ChatIntentSchema.safeParse(intent).success, JSON.stringify(intent)).toBe(true);
+    }
+  });
+
+  it('REFUSES the adopt intents — the lane they addressed is gone', () => {
+    // The union is CLOSED, and that is the point: the verifier is audit-only,
+    // nothing is staged, and an intent that survived here would be a capability
+    // the model could still emit and the dispatcher could no longer honour —
+    // a silent no-op wearing the name of an action.
+    for (const intent of [
+      { kind: 'adopt_suggestion', index: 0 },
+      { kind: 'adopt_suggestions', indexes: [0, 1] },
+      { kind: 'listed_suggestions', indexes: [0] },
+      { kind: 'scroll_to', target: 'suggestions' },
+    ]) {
+      expect(ChatIntentSchema.safeParse(intent).success, JSON.stringify(intent)).toBe(false);
     }
   });
 
@@ -77,9 +90,11 @@ describe('the intent union', () => {
 describe('the dispatcher', () => {
   const src = readFileSync('src/actions/chat-edit-visit.ts', 'utf8');
 
-  it('calls the per-claim adopt, never a bulk endpoint', () => {
-    expect(src).toContain('adoptSuggestionAction(visitId, index, claim.text)');
-    expect(src).not.toMatch(/adoptAll|bulkAdopt|acceptRemainingAction/);
+  it('has no adopt path at all, bulk or otherwise', () => {
+    // Was: "calls the per-claim adopt, never a bulk endpoint". The per-claim
+    // discipline mattered because each adopt produced its own audit row; with
+    // the lane gone the honest assertion is that neither shape exists.
+    expect(src).not.toMatch(/adoptSuggestionAction|adoptAll|bulkAdopt|acceptRemainingAction/);
   });
 
   it('never imports a signing, override or export path', () => {
@@ -99,15 +114,12 @@ describe('the dispatcher', () => {
     expect(beforeModel).toContain("visit.status === 'SIGNED'");
   });
 
-  it('decides the listing gate ONCE for the whole turn, not per intent', () => {
-    // Checking it inside the switch meant fifty separate `adopt_suggestion`
-    // intents adopted fifty suggestions with no listing requirement at all —
-    // the singular arm never reached the check.
-    const gate = src.slice(0, src.indexOf('for (const intent of parsed.intents)'));
-    expect(gate, 'the gate must be computed before the dispatch loop').toContain(
-      'bulkNeedsListing',
-    );
-    expect(src).toContain('parsed.intents.flatMap');
+  it('no longer carries a listing gate — there is nothing to list', () => {
+    // The gate existed to put the doctor's eyes between a suggestion being
+    // shown and being adopted in bulk. Both halves are gone; the attestation
+    // store that backed it is deleted.
+    expect(src).not.toContain('bulkNeedsListing');
+    expect(src).not.toContain('chat-edit/attestation');
   });
 
   it('wraps every dispatch so a throw cannot discard completed work', () => {
@@ -126,8 +138,10 @@ describe('the dispatcher', () => {
     expect(src).toContain('THE DOCTOR SAYS');
   });
 
-  it('adopts highest-index-first so indexes stay valid as the array shrinks', () => {
-    expect(src).toContain('sort((a, b) => b - a)');
+  it('the model is never handed a suggestions array to address', () => {
+    // It cannot adopt what it cannot see, and shipping an empty array would
+    // still invite the model to reason about a lane that no longer exists.
+    expect(src).not.toContain('suggestions: claims.map');
   });
 });
 

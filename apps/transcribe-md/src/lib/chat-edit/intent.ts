@@ -28,20 +28,6 @@
 
 import { z } from 'zod';
 
-/** Adopt ONE suggestion, by its index in the visit's claim array. */
-export const AdoptIntentSchema = z.object({
-  kind: z.literal('adopt_suggestion'),
-  /** Index into the DB array — the same address the button uses. */
-  index: z.number().int().min(0).max(199),
-});
-
-/** Adopt several. Dispatched as a LOOP of per-claim adopts, never a bulk
- *  endpoint, and refused unless the suggestions were read out first. */
-export const AdoptManyIntentSchema = z.object({
-  kind: z.literal('adopt_suggestions'),
-  indexes: z.array(z.number().int().min(0).max(199)).min(1).max(50),
-});
-
 /** Replace one section's body — the same splice-and-save tap-to-edit uses. */
 export const EditSectionIntentSchema = z.object({
   kind: z.literal('edit_section'),
@@ -52,20 +38,7 @@ export const EditSectionIntentSchema = z.object({
 /** Take the doctor to something. A hint to the client; touches no data. */
 export const ScrollIntentSchema = z.object({
   kind: z.literal('scroll_to'),
-  target: z.enum(['rx_gate', 'em_gate', 'codes', 'document', 'suggestions']),
-});
-
-/**
- * The model declares that its reply renders these suggestions IN FULL.
- *
- * A declaration, not a fact — the server VERIFIES it against the reply text it
- * is about to send, and records the attestation only for claims whose full text
- * actually appears there. The model cannot talk its way past this: the evidence
- * is the words the doctor will read.
- */
-export const ListedIntentSchema = z.object({
-  kind: z.literal('listed_suggestions'),
-  indexes: z.array(z.number().int().min(0).max(199)).min(1).max(50),
+  target: z.enum(['rx_gate', 'em_gate', 'codes', 'document']),
 });
 
 /** The model believes this is out of scope. Carried explicitly so a refusal is
@@ -142,12 +115,9 @@ export const CannotIntentSchema = z.object({
 });
 
 export const ChatIntentSchema = z.discriminatedUnion('kind', [
-  AdoptIntentSchema,
-  AdoptManyIntentSchema,
   EditSectionIntentSchema,
   EditTableCellIntentSchema,
   EditHeaderIntentSchema,
-  ListedIntentSchema,
   ScrollIntentSchema,
   RefuseIntentSchema,
   AnswerIntentSchema,
