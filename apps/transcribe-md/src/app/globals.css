@@ -6932,8 +6932,31 @@ body {
    Pages stack; cards sit BETWEEN them, at the page they belong to. The gap is
    deliberate: a card must read as commentary on the page above, not as part of
    the document. */
-.qm-vdoc { display: block; }
-.qm-vdoc-page { margin: 0 0 18px; }
+/* ── THE VISIT DOCUMENT — PAPER ON A DARK CANVAS ─────────────────────────
+   This is the surface the doctor reviews, and it renders through
+   DocumentPages, NOT NativeDocumentPreview — the two share `.qm-npv-page` for
+   the canvas but nothing else, so framing the preview component alone left
+   this page exactly as it was. Worth naming: the fix that "obviously" belonged
+   on the preview shell had to land here to be seen at all.
+
+   `--qm-page-w` is the ONE width both formats obey. The PDF canvas column and
+   the docx page box are laid out against the same value, which is what keeps
+   the toggle honest — neither format can drift from the other. Change it here
+   and both move together. */
+.qm-vdoc {
+  --qm-page-w: 820px;
+  display: block;
+  background: var(--color-linear-bg);
+  border: 1px solid var(--color-linear-border);
+  border-radius: 10px;
+  /* No top padding — the first page's own margin is the only space above it.
+     Stacked chrome above the paper is what read as a dead band. */
+  padding: 0 clamp(12px, 4vw, 40px) 20px;
+}
+.qm-vdoc-page {
+  width: min(100%, var(--qm-page-w, 820px));
+  margin: 20px auto 18px;
+}
 .qm-vdoc-pageslot { display: block; }
 .qm-vdoc-afterpage { margin: 10px 0 0; }
 .qm-vdoc-unplaced { margin: 18px 0 0; }
@@ -6945,8 +6968,22 @@ body {
 /* Pages get the paper treatment individually, not one long scroll box: the
    document is the page here, so it should not sit inside a second frame. */
 .qm-vdoc .qm-npv-page {
-  border-radius: 6px;
+  border-radius: 2px;
   margin-bottom: 0;
+  /* Soft, not a slab — paper lifted off a dark surface. Matched to the docx
+     page box below, because differently-lit paper reads as the toggle having
+     changed the document. */
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+/* The Word view inside the visit document, framed identically. */
+.qm-vdoc .qm-npv-docx {
+  width: min(100%, var(--qm-page-w, 820px));
+  margin: 20px auto 0;
+  padding: 0;
+}
+.qm-vdoc .qm-npv-docx .qm-docxp-wrapper > section.qm-docxp {
+  border-radius: 2px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
 /* Visually hidden, still announced. The document renders as canvases, so the
