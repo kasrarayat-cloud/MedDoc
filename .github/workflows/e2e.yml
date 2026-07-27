@@ -37,7 +37,12 @@ jobs:
   e2e:
     name: Playwright E2E (transcribe-md)
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    # 40 was sized for ONE image build and two projects. This job now builds
+    # four images and runs four projects; recovering the doc-preview timeouts
+    # above brings it back inside the budget, and this leaves headroom rather
+    # than sitting on the line. Splitting the projects into parallel jobs is the
+    # better long-term shape — noted, deliberately not bundled into a fix PR.
+    timeout-minutes: 55
 
     env:
       # Build args: point the client bundle + auth URL at the CI app (:9020)
@@ -171,11 +176,19 @@ jobs:
       # ── Real-document preview. Its own flag-ON image, and the converter
       #    sidecar, because one spec STOPS the converter on purpose to prove the
       #    fallback — the guarantee the whole feature rests on. ──
+      # EVERY FLAG THE SURFACE READS, not just the one the project is named
+      # after. This image omitted NEXT_PUBLIC_UX_SIMPLIFY, and the confirm card
+      # the whole project asserts on renders only when that flag is on — so all
+      # four tests waited out their 180 s and the project had never once passed
+      # since it was added. It cost ~13 min of the job's 40-min budget on every
+      # run. Production sets UX_SIMPLIFY=true, so this was a gate defect, not a
+      # product one; with the flag the same four tests pass in 2.8 min.
       - name: Build flag-ON image for the document preview
         run: >
           docker build -f apps/transcribe-md/Dockerfile
           --build-arg NEXT_PUBLIC_DOC_PREVIEW=true
           --build-arg NEXT_PUBLIC_SETTINGS_SIMPLE_ROW=true
+          --build-arg NEXT_PUBLIC_UX_SIMPLIFY=true
           --build-arg NEXT_PUBLIC_SKIN_BETA=true
           -t meddoc-pro-transcribe-md:doc-preview .
 
@@ -202,6 +215,7 @@ jobs:
           --build-arg NEXT_PUBLIC_REVIEW_DOC_VIEW=true
           --build-arg NEXT_PUBLIC_SETTINGS_SIMPLE_ROW=true
           --build-arg NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX=true
+          --build-arg NEXT_PUBLIC_UX_SIMPLIFY=true
           --build-arg NEXT_PUBLIC_SKIN_BETA=true
           -t meddoc-pro-transcribe-md:visit-doc .
 
