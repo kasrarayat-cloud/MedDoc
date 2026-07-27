@@ -32,6 +32,10 @@ import {
 // importing the Prisma enum spares us a cross-boundary-type issue with
 // the `@meddoc/db` barrel (which intentionally uses `any`).
 export type AuditAction =
+  // Anchored verifier — AUDIT-ONLY. It still runs and still judges, but
+  // nothing it finds becomes pending state; this row is the durable record.
+  // Metadata is category counts only (visitId + {reason: n}), never note text.
+  | 'ANCHOR_FLAGS_RECORDED'
   // Auth
   | 'LOGIN_SUCCESS'
   | 'LOGIN_FAILED'

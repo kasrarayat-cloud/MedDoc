@@ -386,6 +386,14 @@ enum AuditAction {
   TEMPLATE_TWIN_FIELD_REVIEWED
   TEMPLATE_TWIN_SIGN_BLOCKED
   TEMPLATE_TWIN_RENDER_VERIFIED
+
+  /// The anchored verifier ran and recorded what it found. AUDIT-ONLY: the
+  /// verifier no longer demotes anything into a pending-suggestion lane — all
+  /// generated content flows into the draft the physician reviews and signs,
+  /// and this row is the durable record of what the verifier thought.
+  /// Metadata is CATEGORY COUNTS ONLY (visitId + {reason: n}) — never a line
+  /// of note text, so the audit stream stays PHI-free.
+  ANCHOR_FLAGS_RECORDED
 }
 
 /// Document lifecycle status

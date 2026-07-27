@@ -113,6 +113,9 @@ export interface SuggestedClaim {
 
 export interface AnchorVerifyResult {
   body: string;
+  /** Every generated line, anchors stripped, nothing demoted away. This is the
+   *  draft the physician reviews and signs — see the AUDIT-ONLY note above. */
+  fullBody: string;
   suggestions: SuggestedClaim[];
   stats: {
     anchored: number;
@@ -436,17 +439,59 @@ export interface SectionPolicy {
   mandated: Set<string>;
 }
 
+/**
+ * Sections that are PROTOCOL by their nature, whoever declares them.
+ *
+ * A scan technique is the machine protocol; a comparison line is "no prior
+ * study available". Neither is ever dictated, in any template, by any
+ * sonographer — there is no transcript span for them and there never will be.
+ *
+ * This exists because `provenance` is an OPTIONAL field that only the BUILT-IN
+ * templates actually set. A doctor's uploaded form carries no provenance at
+ * all, so `?? 'dictation'` marked its every section fully verifiable — which is
+ * why TECHNIQUE and IMPRESSION were still being flagged on real visits after
+ * the provenance work shipped. Declaring it per-template only ever protected
+ * the templates we author, not the ones clinicians actually use.
+ */
+const PROTOCOL_SECTION_LABELS = new Set(['technique', 'comparison']);
+
+/**
+ * What a section's provenance is when the template does not say.
+ *
+ * Only reached for templates that never declared it — an explicit
+ * `provenance` on the section always wins over this.
+ */
+function inferProvenance(s: NoteTemplateSection): SectionProvenance {
+  if (PROTOCOL_SECTION_LABELS.has(normSection(s.label))) return 'template';
+  // Fixed prose the template itself supplies is boilerplate by construction:
+  // the doctor did not say it, the format did.
+  if (typeof s.defaultText === 'string' && s.defaultText.trim().length > 0) {
+    return 'template';
+  }
+  return 'dictation';
+}
+
 export function buildSectionPolicy(sections: NoteTemplateSection[]): SectionPolicy {
   const byLabel = new Map<string, SectionProvenance>();
   const mandated = new Set<string>();
   for (const s of sections) {
-    byLabel.set(normSection(s.label), s.provenance ?? 'dictation');
+    byLabel.set(normSection(s.label), s.provenance ?? inferProvenance(s));
     for (const line of s.mandatedLines ?? []) mandated.add(norm(line));
   }
   // Sections written by a LATER step. They are in the composed document but
   // were never this layer's to draft or to judge.
+  //
+  // THESE WIN — unconditionally, over anything the template says. The previous
+  // `if (!byLabel.has(label))` let a template's own declaration take precedence,
+  // and a doctor's form that lists "PATIENT SUMMARY" or "PROCEDURES / E&M" as
+  // one of its sections therefore got 'dictation' and was fully verified. No
+  // template can validly claim authorship of content a later step writes: 07e
+  // composes the patient summary and the coding step composes PROCEDURES / E&M,
+  // whatever the form happens to list. Seven of the ten flags on the visit that
+  // prompted this change were patient-summary paraphrase reaching the lane
+  // through exactly that inversion.
   for (const [label, prov] of Object.entries(PIPELINE_SECTION_POLICY)) {
-    if (!byLabel.has(label)) byLabel.set(label, prov);
+    byLabel.set(label, prov);
   }
   return { byLabel, mandated };
 }
@@ -1067,6 +1112,28 @@ export async function runAnchorVerify(input: {
       // exist (deterministicStage covers every line) — defensive: drop.
     });
 
+    // ── THE AUDIT-ONLY BODY ─────────────────────────────────────────────────
+    // Identical to the loop above except it never skips a demoted line. This
+    // is what the physician actually reviews and signs now that the verifier
+    // no longer stages anything: EVERY generated line, in original order, with
+    // the anchor markup stripped. No demotion, no back-filled placeholder, no
+    // section that silently lost its content.
+    //
+    // Kept alongside `body` rather than replacing it so the demotion machinery
+    // stays exercised and honest — `suggestions` is still computed in full and
+    // is what the audit row counts. The verifier still judges; it just no
+    // longer edits the note.
+    const fullBodyLines: string[] = [];
+    lines.forEach((rawLine, index) => {
+      if (det.exemptLines.has(index)) { fullBodyLines.push(det.exemptLines.get(index)!); return; }
+      fullBodyLines.push(
+        rawLine.replace(ANCHOR_BLOCK_RE, '').split(SUGGEST_MARK).join('').replace(/\s+$/g, '')
+      );
+    });
+    const fullBody = renumberOrderedLists(
+      fullBodyLines.join('\n').replace(/\n{3,}/g, '\n\n').trim()
+    );
+
     // FAIL TOWARD COMPLETENESS (live-smoke empty-Assessment blocker): a
     // section whose every drafted line demoted to the lane would otherwise
     // render as a bare header. Back-fill those — and ONLY those (a section
@@ -1100,6 +1167,7 @@ export async function runAnchorVerify(input: {
 
     return {
       body,
+      fullBody,
       suggestions,
       stats: {
         anchored: det.toEntail.length - entailmentDemotions,
@@ -1116,6 +1184,10 @@ export async function runAnchorVerify(input: {
     // labeled — never an unverified body.
     return {
       body: '',
+      // Even the catastrophic path serves the content now: audit-only means the
+      // physician sees the complete draft and the failure is recorded, rather
+      // than the note collapsing to a single quarantined blob.
+      fullBody: input.anchoredDraft.replace(ANCHOR_BLOCK_RE, '').split(SUGGEST_MARK).join(''),
       suggestions: [
         {
           text: input.anchoredDraft.replace(ANCHOR_BLOCK_RE, '').split(SUGGEST_MARK).join(''),
