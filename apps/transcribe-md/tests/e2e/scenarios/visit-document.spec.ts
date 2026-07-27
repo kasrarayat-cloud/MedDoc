@@ -243,7 +243,33 @@ test.describe('the visit page is the document', () => {
       data: { destinations: [] },
     });
     expect([200, 400, 409]).toContain(attempt.status());
-    expect(isStale(), 'the sign path must resolve staleness, not leave it').toBe('f');
+
+    // TWO LEGITIMATE OUTCOMES, and the re-score is a real model call so which
+    // one happens is not ours to choose:
+    //
+    //   • the level did NOT move  -> the route clears the flag and signs.
+    //   • the level MOVED         -> the route REFUSES and records the change
+    //                                for the doctor to acknowledge. Leaving the
+    //                                visit stale is the safer state, not a leak.
+    //
+    // This used to assert only the first, so a run where the scorer landed on a
+    // different code failed the gate for doing its job. The invariant that
+    // actually matters is that the sign path never leaves the visit stale with
+    // NOTHING recorded — a flag nobody can act on.
+    const pending = () =>
+      execSync(`${QA_COMPOSE} exec -T postgres psql -U meddoc -d ${QA_DB} -A -t -f -`, {
+        input: `select coalesce("emPendingChange"::text,'-') from transcribe_visits where id='${seeded.visitId}'`,
+        encoding: 'utf8',
+      }).trim();
+
+    if (attempt.status() === 200) {
+      expect(isStale(), 'a completed signature must leave nothing stale').toBe('f');
+    } else {
+      expect(
+        pending(),
+        'a refused signature must record WHAT moved, not just decline',
+      ).toMatch(/\d{5}/);
+    }
   });
 
 
