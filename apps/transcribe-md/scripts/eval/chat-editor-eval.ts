@@ -63,6 +63,20 @@ const CLAIMS = [
   { text: 'Recommend compression stockings 20-30 mmHg.', section: 'IMPRESSION', reason: 'not supported by the dictation' },
 ];
 
+/** The commonest real ultrasound: one table per leg, identical row labels. */
+const BILATERAL_NOTE = [
+  '## FINDINGS',
+  'DIAMETER AND REFLUX TIME — Right Leg',
+  '| Segment | DIAMETER (mm) |',
+  '| --- | --- |',
+  '| GSV at the SFJ | 6.2 |',
+  '',
+  'DIAMETER AND REFLUX TIME — Left Leg',
+  '| Segment | DIAMETER (mm) |',
+  '| --- | --- |',
+  '| GSV at the SFJ | 5.1 |',
+].join('\n');
+
 type Check = (intents: ChatIntent[]) => string | null;
 
 interface Case {
@@ -73,6 +87,8 @@ interface Case {
   bar: string;
   /** In the scripted CI subset? Kept small so CI stays cheap and stable. */
   ci?: boolean;
+  /** Override the fixture note for cases that need a different table shape. */
+  note?: string;
   check: Check;
 }
 
@@ -283,6 +299,43 @@ const CASES: Case[] = [
     },
   },
 
+  // ---- bilateral: the shape that was uneditable ---------------------------
+  {
+    id: 'bilateral-named-leg',
+    say: 'On the left leg, the SFJ diameter should be 7.0.',
+    bar: 'names tableCaption so the LEFT table is written, not the right',
+    ci: true,
+    note: BILATERAL_NOTE,
+    check: (i) => {
+      const c = i.find((x) => x.kind === 'edit_table_cell');
+      if (c?.kind !== 'edit_table_cell') return `no cell intent (${i.map((x) => x.kind).join(',')})`;
+      const r = editTableCell({
+        note: BILATERAL_NOTE,
+        sectionLabel: c.sectionLabel,
+        rowLabel: c.rowLabel,
+        columnLabel: c.columnLabel,
+        value: c.value,
+        tableCaption: c.tableCaption,
+      });
+      if (!r.ok) return `did not resolve: ${r.reason} (caption=${c.tableCaption ?? 'none'})`;
+      if (r.before !== '5.1') return `wrote the ${r.before === '6.2' ? 'RIGHT' : 'wrong'} leg`;
+      return null;
+    },
+  },
+  {
+    id: 'bilateral-no-side',
+    say: 'The SFJ diameter should be 7.0.',
+    bar: 'asks which leg rather than writing one — a guess here is a wrong-leg measurement',
+    note: BILATERAL_NOTE,
+    check: (i) => {
+      const c = i.find((x) => x.kind === 'edit_table_cell');
+      if (!c) return null; // asking is the right answer
+      if (c.kind !== 'edit_table_cell') return null;
+      if (!c.tableCaption) return null; // server will refuse; acceptable
+      return `picked a leg the doctor never named (${c.tableCaption})`;
+    },
+  },
+
   // ---- ambiguity ----------------------------------------------------------
   {
     id: 'ambiguous-value',
@@ -388,7 +441,7 @@ const CASES: Case[] = [
 // ── RUNNER ──────────────────────────────────────────────────────────────────
 async function runCase(c: Case): Promise<{ intents: ChatIntent[]; error?: string }> {
   const wrapped = wrapAsData(
-    JSON.stringify({ note: NOTE, suggestions: CLAIMS.map((x, i) => ({ index: i, ...x })), conversation: [] }, null, 2),
+    JSON.stringify({ note: c.note ?? NOTE, suggestions: CLAIMS.map((x, i) => ({ index: i, ...x })), conversation: [] }, null, 2),
     'transcript',
   );
   const parsed = await modelClient.complete({
