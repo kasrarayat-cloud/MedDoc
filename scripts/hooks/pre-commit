@@ -21,7 +21,9 @@
 # matters is FILLED vs BLANK, not file type — a blank form is a fixture, a
 # filled one never is. See "Close-out hygiene" in AGENTS.md.
 #
-# Install (once per clone):
+# Install: automatic. `npm install` runs the root `prepare` script, which sets
+# core.hooksPath. A guard that depends on every future contributor remembering
+# a setup command is a guard that is off. To wire it by hand:
 #     git config core.hooksPath scripts/hooks
 #
 # Deliberate exception, when you are certain the file is blank:

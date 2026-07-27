@@ -151,9 +151,9 @@ unreachable objects until its own GC.
 note belongs in the repository at all — not as evidence, not as a QA artifact,
 not "just this once". Reference it by path in a report; do not commit it.
 
-A pre-commit guard now blocks added `.docx`/`.pdf` outside the fixture
-allowlist (`scripts/hooks/pre-commit`). Enable it per clone with:
-
-    git config core.hooksPath scripts/hooks
+A pre-commit guard blocks added `.docx`/`.pdf` outside the fixture allowlist
+(`scripts/hooks/pre-commit`). It installs itself — the root `prepare` script
+sets `core.hooksPath` on `npm install`, because a guard that depends on every
+future contributor remembering a setup command is a guard that is off.
 
 It is a backstop, not the rule. The rule is the paragraph above.
