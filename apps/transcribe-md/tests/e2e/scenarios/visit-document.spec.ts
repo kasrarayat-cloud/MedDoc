@@ -3,11 +3,12 @@
 // ----------------------------------------------------------------------------
 // What these hold to:
 //   • a certified-template visit renders the doctor's OWN form, drawn
-//   • adopting a suggestion RE-FILLS it (asserted on the fill's identity, not
-//     the counts line — two different fills can report the same numbers)
+//   • an EDIT re-fills it (asserted on the fill's identity, not the counts
+//     line — two different fills can report the same numbers)
 //   • the preview WRITES NOTHING: no fill manifest appears, before or after,
 //     because the sign gate validates a stored manifest and a mid-review one
-//     could let a doctor sign a fill that predates their own adoptions
+//     could let a doctor sign a fill that predates their own edits
+//   • NO suggestion lane: the verifier is audit-only, nothing is staged
 //   • both gates still render, and Sign & Download still works
 //   • sidecar down → the page still works, with a named reason
 //
@@ -79,29 +80,12 @@ test.describe('the visit page is the document', () => {
     expect(visitDocManifestCount(), 'the preview must not write a fill manifest').toBe(0);
   });
 
-  test('adopting a suggestion re-fills the document', async ({ page }) => {
-    test.setTimeout(300_000);
-    await page.setViewportSize({ width: 1400, height: 1000 });
-    await openVisit(page);
-    await page.getByTestId('visit-document').waitFor({ state: 'visible', timeout: 120_000 });
-
-    const counts = page.getByTestId('visit-document-counts');
-    const shaBefore = await counts.getAttribute('data-fill-sha');
-    expect(shaBefore, 'the fill should have an identity').toBeTruthy();
-
-    const accept = page.getByRole('button', { name: /accept|add to note/i }).first();
-    await expect(accept, 'the seeded claim should render a card').toBeVisible();
-    await accept.click();
-
-    await expect
-      .poll(async () => counts.getAttribute('data-fill-sha').catch(() => shaBefore), {
-        timeout: 120_000,
-        message: 'the document should re-fill from the new note',
-      })
-      .not.toBe(shaBefore);
-
-    expect(visitDocManifestCount(), 'adopting must not write a fill manifest either').toBe(0);
-  });
+  // 'adopting a suggestion re-fills the document' lived here. The verifier is
+  // AUDIT-ONLY — nothing is staged and there is no Accept button to press, so
+  // the test is deleted rather than weakened into asserting the absence of a
+  // button, which the no-remnants test already covers. The re-fill path it
+  // exercised is still covered by the tap-to-edit test below, which drives the
+  // SAME re-fill through an edit.
 
   test('both gates still render, and signing is still reachable', async ({ page }) => {
     test.setTimeout(300_000);
@@ -399,10 +383,10 @@ test.describe('the visit page is the document', () => {
     // It says whose layout this is, and what to do about it.
     await expect(page.getByTestId('visit-document-styled-note')).toBeVisible();
 
-    // A table-row suggestion reads as a sentence, never as markup.
-    const cards = await page.locator('.qm-rdoc-sugg-text').allInnerTexts();
-    expect(cards.some((c) => c.includes('|')), `raw markup in a card: ${cards}`).toBe(false);
-    expect(cards.join(' ')).toContain('GSV at the Knee: diameter 3.4 mm');
+    // The card assertions that were here went with the lane. What they were
+    // really protecting is below and is UNCHANGED: raw table markup must never
+    // reach a reader. That check was always the stronger of the two — it is the
+    // one that caught a header row being read out verbatim.
 
     // The review placeholder never reaches a review surface.
     expect(await page.locator('body').innerText()).not.toContain('All AI-drafted content');
@@ -477,8 +461,21 @@ test.describe('the visit page is the document', () => {
     await expect(page.getByTestId('review-doc-codes-toggle')).toHaveCount(0);
     await expect(page.getByTestId('review-doc-dictation-toggle')).toHaveCount(0);
 
-    // What remains is one quiet affordance.
-    await expect(page.getByTestId('review-doc-billing-panel')).toBeVisible();
+    // DELIBERATELY NOT asserting on the billing panel here, either way.
+    //
+    // Its presence keys on `hasSummary`, which for an imaging visit depends on
+    // `emNotApplicable` — and that is derived from a BUILD FLAG
+    // (NEXT_PUBLIC_ULTRASOUND_SPECIALTY). Prod's image sets it, the CI
+    // visit-doc image does not, so the panel renders in one and not the other.
+    // An assertion either way passes in one environment and fails in the other
+    // while the product is behaving correctly in both.
+    //
+    // What this test is actually about is the PRESCRIPTION chrome, asserted
+    // above and flag-independent.
+
+    // What remains is the input panel — the one quiet affordance that is not
+    // billing chrome, and it renders inline now rather than behind a drawer.
+    await expect(page.getByTestId('review-doc-dictation-panel')).toBeVisible();
   });
 
   test('NOTHING became unreachable — every datum is still one tap away', async ({ page }) => {
