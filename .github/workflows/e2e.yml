@@ -59,6 +59,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # ── RECLAIM RUNNER DISK, BEFORE ANYTHING BUILDS ──────────────────────
+      # This job builds FOUR ~435 MB app images plus the worker and db-migrate,
+      # and starts Gotenberg, whose chromium layer is another ~1.7 GB. A stock
+      # runner has ~14 GB free, and the job died twice with
+      #   "failed to register layer: write /usr/lib/chromium/chromium:
+      #    no space left on device"
+      # — once mid-suite, after 18 minutes of green tests, which reads as a
+      # test failure rather than as a full disk.
+      #
+      # The preinstalled Android/.NET/GHC/CodeQL toolchains are ~25 GB and this
+      # job uses none of them. Removing them is the standard remedy and it is
+      # far cheaper than discovering the ceiling again at minute 18.
+      - name: Free runner disk
+        run: |
+          echo "before:"; df -h / | tail -1
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc                       /usr/local/share/boost /opt/hostedtoolcache/CodeQL || true
+          sudo docker image prune -af || true
+          echo "after:"; df -h / | tail -1
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -183,6 +202,11 @@ jobs:
       # since it was added. It cost ~13 min of the job's 40-min budget on every
       # run. Production sets UX_SIMPLIFY=true, so this was a gate defect, not a
       # product one; with the flag the same four tests pass in 2.8 min.
+      # Each flag-ON image is a full app build. Their intermediate layers are
+      # what actually fills the disk, and nothing after this point needs them.
+      - name: Reclaim build cache before the next image
+        run: docker builder prune -af || true
+
       - name: Build flag-ON image for the document preview
         run: >
           docker build -f apps/transcribe-md/Dockerfile
@@ -207,6 +231,9 @@ jobs:
       # ── Phase 2 — the visit page as the document. Its own flag-ON image
       #    (the doc-preview build does not carry NEXT_PUBLIC_VISIT_DOC_PAGE),
       #    and the converter sidecar, because one spec stops it on purpose. ──
+      - name: Reclaim build cache before the visit-doc image
+        run: docker builder prune -af || true
+
       - name: Build flag-ON image for the document visit page
         run: >
           docker build -f apps/transcribe-md/Dockerfile
