@@ -130,10 +130,17 @@ jobs:
       # AFTER "Start app + worker", which made the gate a latent race against
       # docker compose's `--wait` strictness — green on lenient runners, red
       # on strict ones. minio is already up+healthy from the infra step.)
-      - name: Create the audio bucket in minio
+      # The SECOND bucket is not optional either. The Template Twin artifact
+      # store deliberately never creates or reconfigures a bucket — provisioning
+      # a private PHI-adjacent bucket is an infrastructure act, not something an
+      # app does on first write — so a missing one surfaces as
+      # TemplateTwinStorageUnavailableError at the first compile. The QA VPS had
+      # it provisioned by hand months ago, which is exactly why its absence here
+      # went unnoticed until CI tried to compile a template.
+      - name: Create the audio + template-artifact buckets in minio
         run: >
           docker compose -f docker-compose.qa.yml exec -T minio sh -c
-          'export MC_CONFIG_DIR=/tmp/mc; mc alias set local http://127.0.0.1:9000 qa_minio qa_minio_pw && mc mb --ignore-existing local/transcribe-md-audio'
+          'export MC_CONFIG_DIR=/tmp/mc; mc alias set local http://127.0.0.1:9000 qa_minio qa_minio_pw && mc mb --ignore-existing local/transcribe-md-audio && mc mb --ignore-existing local/transcribe-md-template-artifacts && mc ls local'
 
       # ── THE CERTIFIED TWIN the visit-doc project needs. ──────────────────
       # visit-document.spec.ts refuses to skip — "no CERTIFIED twin in this
