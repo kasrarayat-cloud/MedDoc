@@ -173,6 +173,12 @@ export type AuditAction =
   // dispatches into, but those rows are byte-identical to a button click —
   // this one records that the chat was what did it.
   | 'CHAT_EDIT_TURN'
+  // A header field on an unsigned visit was corrected — the patient's name or
+  // the chief complaint. Present in the DB enum since the original schema;
+  // added to this union when updateVisitHeaderAction gave it a caller.
+  // Metadata: { via, field, affectsOtherVisits? } — field NAMES only, never the
+  // value, because the value is the patient's name.
+  | 'EDITED_NOTE'
   // Sign refused because the note changed since the E/M level was scored.
   | 'EM_SIGN_BLOCKED_STALE'
   // The E/M level was re-scored against a changed note.

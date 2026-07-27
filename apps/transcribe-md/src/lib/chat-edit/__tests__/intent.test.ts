@@ -15,12 +15,22 @@ import { ChatIntentSchema, ChatReplySchema } from '../intent';
 import { CHAT_EDIT_SYSTEM } from '../prompt';
 
 describe('the intent union', () => {
-  it('accepts the four things the chat may do', () => {
+  it('accepts everything the chat may do', () => {
     for (const intent of [
       { kind: 'adopt_suggestion', index: 0 },
       { kind: 'adopt_suggestions', indexes: [0, 1] },
       { kind: 'edit_section', sectionLabel: 'FINDINGS', body: 'Rewritten.' },
+      {
+        kind: 'edit_table_cell',
+        sectionLabel: 'FINDINGS',
+        rowLabel: 'GSV at the SFJ',
+        columnLabel: 'DIAMETER (mm)',
+        value: '6.8',
+      },
+      { kind: 'edit_header', field: 'patient_name', value: 'Jane Doe' },
       { kind: 'scroll_to', target: 'rx_gate' },
+      { kind: 'answer' },
+      { kind: 'cannot', what: 'change the letterhead', where: 'Settings › My Note Format' },
       { kind: 'refuse', because: 'That is not part of this visit.' },
     ]) {
       expect(ChatIntentSchema.safeParse(intent).success, JSON.stringify(intent)).toBe(true);
@@ -134,5 +144,81 @@ describe('the system prompt', () => {
 
   it('carries the prompt-injection delimiter suffix', () => {
     expect(CHAT_EDIT_SYSTEM).toMatch(/transcript/);
+  });
+});
+
+// ============================================================================
+// THE SILENT NO-OP, CLOSED AT THE SCHEMA.
+// ----------------------------------------------------------------------------
+// Production, 2026-07-27 02:36:17Z. One CHAT_EDIT_TURN row, kasra's:
+//
+//   {"intents": [], "edited": 0, "adopted": 0, "refused": 0, "failed": 0}
+//
+// The model was called, answered in 183 tokens of prose, declared no intents,
+// and the server wrote nothing and logged SUCCESS. The visit was untouched four
+// hours later. He asked for something and got sentences, and no counter, row or
+// error recorded that anything had been asked.
+//
+// The cause was one permitted value: an empty intents array, documented as
+// "empty when the turn is purely conversational". That made a request the model
+// could not map to a tool indistinguishable from a question.
+// ============================================================================
+describe('a turn always declares what kind of turn it was', () => {
+  it('REJECTS an empty intents array — the exact shape of kasra failed turn', () => {
+    expect(
+      ChatReplySchema.safeParse({ reply: 'I have updated the note for you.', intents: [] }).success,
+      'an empty intents array must not be representable',
+    ).toBe(false);
+  });
+
+  it('accepts a question answered, so a conversational turn stays possible', () => {
+    expect(
+      ChatReplySchema.safeParse({ reply: 'The level is 99213.', intents: [{ kind: 'answer' }] }).success,
+    ).toBe(true);
+  });
+
+  it('accepts a capability gap, which is what the failed turn should have been', () => {
+    expect(
+      ChatReplySchema.safeParse({
+        reply: "I can't change the letterhead here; that's in Settings › My Note Format.",
+        intents: [{ kind: 'cannot', what: 'change the letterhead', where: 'Settings › My Note Format' }],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('keeps `cannot` and `refuse` as DIFFERENT things', () => {
+    // capability vs policy. Collapsing them would let a hard gate be reported
+    // as "no tool for that", which reads like an oversight rather than a rule.
+    expect(ChatIntentSchema.safeParse({ kind: 'cannot', what: 'sign', where: 'x' }).success).toBe(true);
+    expect(ChatIntentSchema.safeParse({ kind: 'refuse', because: 'yours to do' }).success).toBe(true);
+    expect(ChatIntentSchema.safeParse({ kind: 'cannot', what: 'x' }).success).toBe(false);
+  });
+
+  it('a table-cell edit must carry all four coordinates', () => {
+    // A missing column would otherwise be a write to whichever cell matched.
+    const full = {
+      kind: 'edit_table_cell',
+      sectionLabel: 'FINDINGS',
+      rowLabel: 'GSV at the SFJ',
+      columnLabel: 'DIAMETER (mm)',
+      value: '6.8',
+    };
+    for (const drop of ['sectionLabel', 'rowLabel', 'columnLabel']) {
+      const partial = { ...full } as Record<string, unknown>;
+      delete partial[drop];
+      expect(ChatIntentSchema.safeParse(partial).success, `missing ${drop} must be rejected`).toBe(false);
+    }
+  });
+
+  it('the header tool reaches ONLY the two fields it names', () => {
+    expect(ChatIntentSchema.safeParse({ kind: 'edit_header', field: 'patient_name', value: 'A' }).success).toBe(true);
+    expect(ChatIntentSchema.safeParse({ kind: 'edit_header', field: 'chief_complaint', value: 'A' }).success).toBe(true);
+    // Not the signature, not the status, not the dates the record turns on.
+    for (const field of ['signedAt', 'status', 'userId', 'emScoredCode', 'soapFinal']) {
+      expect(
+        ChatIntentSchema.safeParse({ kind: 'edit_header', field, value: 'A' }).success,
+        `${field} must not be reachable from the chat`,
+      ).toBe(false);
+    }
   });
 });

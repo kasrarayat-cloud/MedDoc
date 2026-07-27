@@ -6801,6 +6801,15 @@ body {
   padding: 14px 12px 8px;
 }
 .qm-rdoc-panel { min-width: 0; }
+/* The dictation panel gained a heading when its standing row was folded into
+   "⋯ details" — without it the transcript would open under no label at all. */
+.qm-rdoc-panel-h {
+  margin: 0 0 8px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  color: var(--color-linear-text-3);
+}
 
 /* Settings › My Note Format — the ⋯ overflow. The advanced editor and
    Duplicate live here so the row itself is name · Active · Replace · Delete. */
