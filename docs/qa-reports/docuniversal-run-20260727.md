@@ -190,3 +190,143 @@ discriminates correctly in both directions.
 ---
 
 <!-- SECTIONS 7 (audit) AND 8 (promotion) APPENDED BELOW AFTER THEY COMPLETE -->
+
+## 7. The adversarial audit — 90 agents, and what survived
+
+Six independent lenses over the change (signed-visit integrity, cache
+correctness, claim-prose safety, flag gating, PHI/honesty, the untyped-Prisma
+class). Every finding was then attacked by **three** separate refuters — one
+reading the code, one trying to prove it impossible, one trying to reproduce it
+— and killed if two agreed it was wrong. **28 findings raised.** Three survived,
+and I reproduced each one myself before touching anything.
+
+### 7.1 A crash on a column name the doctor chose — HIGH
+
+`claim-prose.ts:105` built `new RegExp(\`${unit}\\s*$\`)` where `unit` is the
+parenthetical of a table column. `parse-note-to-template` copies a template's
+columns **verbatim**, so that string is whatever the doctor typed into their own
+form. A column named `REFLUX (+/-)` produced `new RegExp('+/-\s*$')` →
+`SyntaxError: Nothing to repeat`.
+
+`claimProse` runs **inside the React render** of every suggestion card. That
+exception took down the entire pre-sign review surface — not a formatting
+glitch, a page that would not load — for the one doctor whose form used a
+presence/absence column. Reproduced: **three of five** realistic clinical column
+names threw (`(+/-)`, `(*)`, `(?)`).
+
+Now a plain `endsWith`. Escaping would also work; not compiling user text at all
+is better.
+
+### 7.2 A null dereference the reorder introduced — HIGH
+
+Moving the SIGNED branch above everything that could re-derive moved it above
+the **only** null check. `visit.signedAt` then dereferenced null.
+`findFirst` returns null for a visit that is missing, another doctor's, deleted,
+or archived — all four ordinary — so the action **threw** instead of returning a
+named miss.
+
+`tsc` cannot see it: Prisma is `any` here. Which is precisely the class this
+change added a guard test for — except the guard checked **selects**, not
+null-ness. **Four of the six lenses found it independently.**
+
+### 7.3 The doctor could re-read a document they were not about to sign — HIGH
+
+The preview cache is keyed on `(visit, soapVersion)`. The E/M override route
+writes `cptCodes` — which is **printed into the document** — and bumps neither
+`soapVersion` nor the cache. It is the only export-visible writer that does
+neither; `apply-additions` does both, and its own comment explains why.
+
+Latent until this change: the sole cached variant was the twin one, and no
+production visit has a certified twin, so nothing was ever served from cache.
+**Every visit caches a styled rendering now.** A doctor overriding 99213 → 99214
+would re-read 99213 for the rest of the 30-minute TTL, while the file they
+download and the record they sign said 99214.
+
+That is the exact claim this surface makes about itself — *"the bytes are the
+ones the doctor would download … what they read is what they sign"*. The
+override deliberately must **not** bump `soapVersion` (an override is not a note
+edit; bumping it would arm the stale-E/M gate against the doctor's own choice),
+so the entry has to be **dropped** rather than aged out.
+
+### 7.4 How these are pinned
+
+A source guard over every writer of an export-visible column, plus one asserting
+the null check precedes the first field read. **Both negative controls verified**
+— remove either fix and the matching test fails. That mattered: my first version
+of the guard stripped string literals file-wide, and one apostrophe inside a
+double-quoted string ate **70% of `sign/route.ts`** — including the very call it
+was looking for — failing a module that was already correct. It now strips per
+line.
+
+### 7.5 Raised, examined, NOT acted on
+
+- **`—` treated as blank.** A lens argued an em-dash cell means "explicitly
+  normal", so `nothing documented` is wrong. In this pipeline `—` is what
+  `[not documented]` **renders as**, so the current reading is right. Not changed.
+- **`reflux + +/-`.** On a presence/absence column the parenthetical is a
+  *legend*, not a unit, and the heuristic appends it anyway. Cosmetic. Left
+  alone deliberately and pinned by test: this text is what a doctor reads before
+  deciding a claim belongs in a record, and a guess that strips the wrong
+  parenthetical is worse than one that reads awkwardly.
+- **The `not_certified` message was deleted.** A doctor who *has* uploaded a form
+  that is not yet certified is now told to upload one. Real, but unreachable
+  today — prod has zero compiled rows — and it is the path the feature grows
+  into. **Left open, named here.**
+- **Signed visits re-render on every mount, uncached.** Deliberate: a signed
+  record's rendering is not a preview. A cost, accepted.
+- **The select-grep guard is bypassable** by `visit!.x`, destructuring, aliasing
+  and bracket access. True. It is a tripwire, not a proof.
+- **`invalidateVisitFills` cannot delete old `v1` keys.** True; they age out on
+  TTL. Checked prod directly: **0 `v1` keys present**, so nothing was orphaned
+  by the key change.
+- **"The flags gate only the client render, so the server action is ungated."**
+  Refuted, and I verified it myself: both `VisitDocumentSurface` call sites are
+  behind `isVisitDocPage()`, so with flags OFF the action is never called.
+
+---
+
+## 8. Promotion
+
+Built via `docker compose build`, so the flags come from prod's own `.env`
+rather than anything I typed.
+
+| | |
+|---|---|
+| Rollback tag | **`meddoc-pro-transcribe-md:pre-docuniversal-20260727`** (`b9652e28e224`) |
+| Promoted image | `4884b5036ca0` |
+| BUILD_ID | `RWomoMkeaoZptkHyNnZxb` → `3e3pzJ_RhlaCIzF9W9tBX` — the bundle really changed |
+| Rollback proof | the rollback image contains **0** occurrences of the new surface — it is a real OFF build, not a relabel |
+| Containers | **10/10 healthy** |
+| Health | `{"status":"healthy"}` · postgres 4 ms · redis 3 ms · minio 5 ms |
+| Co-tenants | app 307 · pro 200 · admin 404 · quillmd.com 200 · leathererp 200 |
+| Gates inlined | all four: **0 surviving runtime reads** in the running container |
+| New surface in shipped chunks | styled-note ✓ · format toggle ✓ · spoken set-aside ✓ |
+| App errors since deploy | **0** |
+
+**The worker was not rebuilt.** No worker source changed; app and worker are the
+same commit. Rebuilding it would have produced a functionally identical image on
+a path this run never exercised.
+
+### What was deliberately NOT verified on production
+
+**No real doctor's visit was opened.** The full clinical walk ran on QA against
+a same-commit, same-flags, separately-tagged image (`:docuniversal`), which is
+where it belongs. On production the verification is structural only — health,
+digests, inlined gates, shipped strings, co-tenant status.
+
+So: **the styled document has not been rendered from a real patient's note in
+production.** It has been rendered from synthetic notes on QA, 22/22, and the
+prod path is the same code. Naming that gap is worth more than a green tick
+bought with a patient's record.
+
+## 9. Open, and honestly
+
+- **One unit-suite run failed** mid-session, while a docker build and a QA
+  container recreate were running concurrently. I captured only the tail, so the
+  detail is lost; it did not reproduce in **three** subsequent clean runs
+  (2518 passed). Most likely a scratch test an audit agent left in
+  `src/lib/__tests__/` while probing — one such file was found and removed — but
+  I cannot prove that, so it is recorded rather than explained away.
+- **The `not_certified` message** (§7.5) is still deleted.
+- **The stale `@reboot` H8 cron** still fires on every boot and dirties the tree.
+- **`openclaw-gateway`** is still crash-looping at 79k restarts.
