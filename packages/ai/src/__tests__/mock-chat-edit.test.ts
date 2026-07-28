@@ -75,6 +75,38 @@ describe('mockComplete(tm_chat_edit)', () => {
     expect((out.intents[0] as { body: string }).body).toContain('Line one.');
   });
 
+  it('uses the LATEST directive when the conversation carries earlier ones', () => {
+    // The envelope holds the last twelve turns, so from the second edit onward
+    // every earlier MOCKEDIT is still in the payload. Taking the first one made
+    // turn 2 re-apply turn 1's body — byte-identical to what was already saved,
+    // which saveNoteSectionAction correctly treats as a successful no-op. The
+    // chat reported success, nothing was written, and emStale never got set:
+    // the mock reproducing the exact silent-no-op class this surface exists to
+    // prevent, and it cost a 30-minute E2E to see.
+    const multiTurn = JSON.stringify(
+      {
+        note: '## FINDINGS\nOld body.\n',
+        conversation: [
+          { role: 'doctor', text: 'MOCKEDIT FINDINGS :: First probe.' },
+          { role: 'assistant', text: 'Updated FINDINGS.' },
+          { role: 'doctor', text: 'MOCKEDIT FINDINGS :: Second probe.' },
+        ],
+      },
+      null,
+      2,
+    );
+    const out = mockComplete({
+      purpose: 'tm_chat_edit',
+      schema: ReplySchema,
+      user: multiTurn,
+    });
+    expect(out.intents[0]).toEqual({
+      kind: 'edit_section',
+      sectionLabel: 'FINDINGS',
+      body: 'Second probe.',
+    });
+  });
+
   it('a turn with no directive is an ANSWER, never an empty intent list', () => {
     // `intents: []` was legal once, and it is the exact failure this schema was
     // changed to prevent: a request the model could not map to a tool looked
