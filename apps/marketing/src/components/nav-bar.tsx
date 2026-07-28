@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/cn';
-import { APP_URL, APP_SIGNUP_URL } from '@/lib/constants';
+import { APP_URL, APP_WAITLIST_URL } from '@/lib/constants';
 
 /**
  * Sub-page top nav — Linear V1 (Faithful).
@@ -90,7 +90,7 @@ export function NavBar() {
           >
             Sign in
           </a>
-          <a href={APP_SIGNUP_URL} className="btn btn-primary">
+          <a href={APP_WAITLIST_URL} className="btn btn-primary">
             Get started
           </a>
         </div>

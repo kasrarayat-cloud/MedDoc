@@ -4,7 +4,7 @@
 // seven sections + Footer. Scroll-reveal (.fx-reveal) rises sections in as they enter; under
 // reduced-motion or no-JS everything is shown immediately (the reveal is purely additive).
 import { useEffect } from 'react';
-import { APP_SIGNUP_URL, APP_URL } from '@/lib/constants';
+import { APP_WAITLIST_URL, APP_URL } from '@/lib/constants';
 import { HeroSplit } from './HeroSplit';
 import { VerificationSplit } from './VerificationSplit';
 import { HowItWorks, Comparison, Pricing, Faq, FinalCta } from './sections';
@@ -54,7 +54,7 @@ export function FinalLanding() {
           ))}
           <a href={`${APP_URL}/login`}>Sign in</a>
         </nav>
-        <a className="fx-nav-cta" href={APP_SIGNUP_URL}>
+        <a className="fx-nav-cta" href={APP_WAITLIST_URL}>
           Get started
         </a>
       </header>

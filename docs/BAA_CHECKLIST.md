@@ -30,7 +30,7 @@ This is the **operator's signing checklist**. For each processor:
 | **Anthropic** | LLM provider — `claude-opus-4-8` (L3/L4/L5/L7c-Rx + note-format parse + synthetic preview) + `claude-sonnet-4-6` (L2/L6/L7a/L7b/L7d/L7e); env-overridable via `TRANSCRIBE_MD_CLINICAL_MODEL` (default unchanged) | Cleaned transcript text, SOAP note text, Rx drafts, referral letters, patient summaries (note-format **preview** sends a FIXED SYNTHETIC demo transcript only — no PHI) | `packages/ai/src/anthropic.ts` → `api.anthropic.com` | [trust.anthropic.com](https://trust.anthropic.com/) → "Request a BAA" form. Available on Tier-2+ usage; lower tiers require Anthropic Sales engagement. | ☐ NOT YET |
 | **OpenAI** | ASR fallback (`whisper-1`) — **GATED, DISABLED BY DEFAULT** (2026-06-10 kill-switch, audit 4.2). Would fire on a Deepgram failure (5xx/408/429/network/timeout, audio ≤ 25 MB) ONLY if `TRANSCRIBE_MD_WHISPER_FALLBACK_ENABLED=true`. Unset/false → a Deepgram failure fails the visit into the retryable DLQ, never OpenAI. | Raw patient audio, transcribed text — **only if the flag is enabled** | `packages/ai/src/whisper-batch.ts` (via `transcribe.ts` orchestrator + worker L1) → `api.openai.com` `POST /v1/audio/transcriptions` | [openai.com/policies/business-associate-agreement](https://openai.com/policies/business-associate-agreement) — self-serve for orgs on Enterprise / Scale tiers via the Compliance API portal. | ☐ NOT REQUIRED while the fallback is disabled (current prod state). **Sign + file BEFORE setting the enable flag.** |
 | **Deepgram** | **PRIMARY batch ASR** (nova-3-medical) | Uploaded + dictation audio bytes, transcript text | `packages/ai/src/deepgram-batch.ts` (HTTPS `POST /v1/listen`) → `api.deepgram.com` | [deepgram.com/security/hipaa](https://deepgram.com/security/hipaa) → "Request HIPAA BAA" form. Nova-3 Medical is HIPAA-eligible by default; BAA must be on file before any nova-3-medical call carries identifiable audio. | ☐ NOT YET |
-| **Resend** | Transactional email delivery (visit-note export + auth emails) | **Visit-export email carries PHI: patient name in the subject + the signed SOAP note as a PDF attachment** (`apps/transcribe-md/src/lib/email.ts:80-83,117-122`; destination hard-gated to the caller's own account email). Auth emails (verification/reset/etc.) are link/text-only — no PHI. | `apps/transcribe-md/src/lib/email.ts` → `api.resend.com` | [resend.com/legal](https://resend.com/legal) → request a HIPAA BAA via Resend support. | ☐ NOT YET |
+| **Resend** | Transactional email delivery (visit-note notification + auth emails) | ⚠️ **NO PHI as of 2026-07-28 — pending deploy.** The visit email previously carried the patient name in the subject and the signed SOAP note as a PDF attachment. It now sends a GENERIC subject, no patient details, no attachment, and an authenticated portal link the doctor opens over their own session (`lib/email.ts`). Auth emails were always link/text-only. | `apps/transcribe-md/src/lib/email.ts` → `api.resend.com` | [resend.com/legal](https://resend.com/legal) → request a HIPAA BAA via Resend support. | ☑ **NOT REQUIRED once the change is live** — see "Resend" under Processor-specific notes for the reasoning and the one residual judgement call. **Re-classify to NOT YET the moment any PHI is put back on this path.** |
 | **Sentry (M7)** | Error + performance monitoring | Error messages, breadcrumbs, stack traces. `beforeSend` hook applies `redactPhi()` scrubber (email / phone / SSN masking + >20-word collapse) before events leave the process. **See `apps/*/sentry.*.config.ts` + `packages/ai/src/log.ts`.** | `sentry.io` (or self-hosted Sentry instance) | [sentry.io/legal/baa](https://sentry.io/legal/baa) — Business plan or above. | ☐ NOT YET — required before turning on `SENTRY_DSN_*` env vars; currently DSN unset in prod containers (SDK no-ops) |
 | **Dropbox** | Document storage (pre-Scribe clinical notes) | Uploaded clinical document files | `apps/meddoc-pro` legacy `Document.dropbox*` fields | [help.dropbox.com](https://help.dropbox.com/security/hipaa-baa) — Business / Advanced / Enterprise tier required. | ☐ VERIFY — was added pre-M7; meddoc-pro is decommissioned per memory + POST_MERGE_TODO §21, so BAA is only relevant if any meddoc-pro Document data still references Dropbox keys |
 | **DrChrono** (read-only cache) | External EHR — Patient identifier source-of-truth | Patient name, MRN, chart info (cached locally via `Patient.drChronoId`) | `apps/meddoc-pro/src/lib/data/patients.ts` (no writes from Scribe in M7) | DrChrono partnerships — contact `partnerships@drchrono.com` to request BAA. | ☐ VERIFY — meddoc-pro decommissioned; verify before flipping production |
@@ -214,3 +214,133 @@ Every new third party that will see PHI must:
 - `tracesSampleRate: 0` and `replaysSessionSampleRate: 0` disable
   performance + session replay until an explicit budget + scrubbing
   review is done.
+
+
+---
+
+# BAA facts memo — 2026-07-28
+
+Research only. No vendor was contacted, no account was created, no migration was
+executed. Every row ends in exactly ONE owner action for Kasra, because a memo
+that ends in three actions ends in none.
+
+> ⚠️ **Vendor terms move.** Every claim below is dated and sourced. Confirm with
+> the vendor before relying on it — this memo narrows the question, it does not
+> answer it on the vendor's behalf.
+
+## Deepgram — PRIMARY ASR, receives raw patient audio
+
+**A BAA exists and is obtainable.** Deepgram's own compliance page states
+*"Deepgram is considered a Business Associate as defined by the US HIPAA
+legislation"* and, for customers who qualify as a Covered Entity, *"Deepgram may
+qualify as a business associate."* The stated route is plain: *"To secure a BAA
+(Business Associate Agreement) with Deepgram, please contact us."*
+
+**No plan or tier requirement is documented.** The page conditions eligibility on
+the customer qualifying as a Covered Entity, not on a pricing tier. Do not assume
+an enterprise upgrade is required until Deepgram says so.
+
+**One caveat found, and it matters for scheduling.** A public Deepgram
+discussion thread reports customers submitting the BAA request form and receiving
+no response across multiple attempts. Treat the form as best-effort and expect to
+need a named human. Budget calendar time, not effort.
+
+Supporting facts already in QuillMD's favour: nova-3-medical is HIPAA-eligible by
+default, the default configuration is zero-retention after processing, and
+Deepgram holds SOC 2 Type II.
+
+> **OWNER ACTION (Kasra):** Request the Deepgram BAA — and if the web form is
+> silent for five business days, escalate to a named sales/compliance contact
+> rather than resubmitting.
+
+## The VPS host — every row of PHI lives here
+
+**The finding is not "unknown". It is "structurally unlikely", and that changes
+the shape of the decision.**
+
+The host is **ZAP-Hosting GmbH & Co. KG**, a German company. Third-party GDPR
+guidance treats it as a processor requiring an **Art. 28 GDPR
+Auftragsverarbeitungsvertrag (AVV)** — the European instrument. Nothing in the
+public material mentions HIPAA, a BAA, or US healthcare compliance at all. A
+German provider signing a US HIPAA BAA is unusual: an AVV and a BAA are different
+instruments under different statutes, and having one says nothing about
+willingness to sign the other.
+
+So the realistic planning assumption is **migration, not signature** — while
+still asking, because asking is free.
+
+### Realistic PHI-hosting options (options only — nothing executed)
+
+| Option | Shape | What it costs beyond money |
+|---|---|---|
+| **DigitalOcean** | Signs a BAA. ePHI restricted to Covered Products (Droplets, Kubernetes, Spaces, Volumes, Load Balancers, Firewalls, VPC, Monitoring, Backups) and **requires Standard or Premium Support** alongside the executed BAA. New customers via Sales; existing via Support. | Closest to today's shape — Docker Compose on Droplets is nearly a lift-and-shift. Support tier is a recurring line item. |
+| **AWS / GCP / Azure** | All sign BAAs, with a defined list of HIPAA-eligible services. | Most capable, least similar to the current single-box deployment. A real re-architecture, not a move. |
+| **Managed HIPAA platforms** (Aptible and similar) | BAA plus opinionated controls out of the box. | Highest per-month cost, lowest compliance effort. Sensible if the operator stays a team of one. |
+
+### Scope class of a migration
+
+**LARGE**, and it is the honest word. Not because any single step is hard, but
+because the inventory is: Postgres (the PHI store, on a LUKS volume), MinIO
+(patient audio), Redis, four app containers, the Gotenberg sidecar, host nginx
+holding TLS for five hostnames plus **four unrelated co-tenant projects on the
+same box**, cron-driven backups, and DNS. The co-tenants are the part that makes
+this a project rather than a weekend: QuillMD does not own that host alone, and
+the isolation rule in AGENTS.md exists precisely because breaking a neighbour is
+easy.
+
+It also has a natural sequencing constraint: it should happen **before** a pilot
+doctor's real data lands, not after. Migrating an empty system is an engineering
+task; migrating a populated one is an engineering task plus a PHI-handling
+exercise plus a downtime window.
+
+> **OWNER ACTION (Kasra):** Ask ZAP-Hosting directly whether they will sign a US
+> HIPAA BAA — and treat a "no" or a non-answer as the expected outcome that
+> starts the DigitalOcean conversation.
+
+## Resend — reclassified, pending this shipping
+
+**Post-mitigation, Resend no longer receives PHI**, and the reasoning is recorded
+here so the next reader does not have to re-derive it.
+
+What changed (`apps/transcribe-md/src/lib/email.ts`):
+
+- the subject is **generic and identical for every visit and every patient** —
+  it no longer carries the patient name
+- **no attachment**: the signed note is not sent
+- no patient name, date of birth, MRN, or note text in either body
+- the doctor gets a link and downloads from QuillMD over their **own
+  authenticated session**
+
+The function signature is the guard: `sendVisitPdfEmail` no longer *accepts* a
+`pdfBuffer` or a `patientName`. A future caller cannot leak them by forgetting,
+because there is no parameter to forget — both call sites failed to compile until
+they stopped passing PHI.
+
+Proven by `src/lib/__tests__/email-no-phi.test.ts`, which runs the **real message
+builder** with only the transport mocked, sweeps **every** sender that could
+reference a visit, and is negative-controlled: restoring the old
+patient-name-in-subject plus attachment turns it red.
+
+### The one residual judgement call, stated rather than buried
+
+The portal link contains an opaque visit id (a cuid). **That is a record
+locator, not a patient identifier** — it names nobody, reveals nothing on its
+own, and is useless without an authenticated session. It is the same class of
+value as the message-id Resend already assigns to every email it handles.
+
+Claiming the payload contains "no identifiers of any kind" would be false, so
+this memo does not claim it. The claim is narrower and true: **no patient
+identifier and no clinical content.** If a reviewer disagrees with that line, the
+fix is small — drop the deep link for a bare `/visits` link — and it should be
+made deliberately rather than discovered in an audit.
+
+> **OWNER ACTION (Kasra):** Confirm you accept the record-locator reasoning
+> above; if you would rather send no visit id at all, say so and the deep link
+> becomes a bare `/visits` link in one edit.
+
+## What this memo does NOT resolve
+
+The Anthropic BAA countersign is excluded by standing instruction and tracked
+elsewhere. Backblaze B2 (offsite backup) remains **☐ NOT YET** and is unchanged
+by any of the above — it is the same blocker as the open `h16-offsite-backup`
+finding seen from the other side.

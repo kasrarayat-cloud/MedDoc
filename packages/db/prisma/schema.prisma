@@ -58,6 +58,13 @@ enum Product {
 /// ALL_CAPS_SNAKE to match industry convention and make grep/queries easy.
 enum AuditAction {
   // Auth
+  /// Invite-only pilot (2026-07-28): a signup was refused for want of a valid
+  /// invite code. The REASON is in metadata for the operator; the email address
+  /// is deliberately NOT recorded — a rejected signup is not an account, and
+  /// logging the address would build the very list the gate exists to prevent.
+  SIGNUP_REJECTED_NO_INVITE
+  /// Someone asked to be told when there is room. Creates no account.
+  WAITLIST_JOINED
   LOGIN_SUCCESS
   LOGIN_FAILED
   LOGOUT
@@ -1104,8 +1111,8 @@ model AuditLog {
   /// describes: deleting an account must never delete its audit trail, and a
   /// RESTRICT here made account deletion impossible instead. The tenant is
   /// preserved in practiceIdSnapshot below, which carries no FK.
-  practiceId String?
-  practice   Practice? @relation(fields: [practiceId], references: [id], onDelete: SetNull)
+  practiceId         String?
+  practice           Practice? @relation(fields: [practiceId], references: [id], onDelete: SetNull)
   /// Tombstone: the practice id as it was at write time. Survives the practice
   /// row itself, so "which tenant did this happen in" stays answerable after a
   /// deletion. Same role userEmailSnapshot plays for the user.
@@ -1768,7 +1775,7 @@ model TranscribeVisit {
   /// card asks for acknowledgement, unchanged) or it did not (and the flag
   /// simply clears). Fail-closed: the default for a note nobody has
   /// re-scored is "needs validation", not "fine".
-  emStale          Boolean   @default(false)
+  emStale Boolean @default(false)
 
   /// The E/M code the level was last VALIDATED at.
   ///
@@ -1780,8 +1787,8 @@ model TranscribeVisit {
   /// Null means never validated; the first re-score establishes it rather than
   /// inventing a movement it cannot substantiate.
   emScoredCode     String?
-  patientSummary        String? @db.Text
-  confidenceScores      Json?
+  patientSummary   String? @db.Text
+  confidenceScores Json?
 
   // ── T-M4: audio metadata ──
   audioMimeType    String?
@@ -2599,14 +2606,14 @@ model TemplateTwinCompiledVersion {
   /// the real ephemeral-visit path, then reused so the proof is not re-sampled
   /// on every attempt. Certification still runs the pinned note through the
   /// whole production machinery; only the stochastic input is fixed.
-  pinnedSyntheticNote       String?
+  pinnedSyntheticNote        String?
   /// sha256 of the encounter text the pin was generated from — a changed
   /// encounter invalidates the pin.
-  pinnedNoteEncounterSha256 String?   @db.Char(64)
+  pinnedNoteEncounterSha256  String?   @db.Char(64)
   /// sha256 of the template structure the pin was generated against.
-  pinnedNoteTemplateSha256  String?   @db.Char(64)
-  pinnedNoteModelVersion    String?
-  pinnedNoteGeneratedAt     DateTime? @db.Timestamptz(6)
+  pinnedNoteTemplateSha256   String?   @db.Char(64)
+  pinnedNoteModelVersion     String?
+  pinnedNoteGeneratedAt      DateTime? @db.Timestamptz(6)
   /// The Layer-3 extraction pinned alongside the note. L3 is a model too: an
   /// unpinned certification re-extracted every run and blocked on a different
   /// set of fields each time. Keyed by the same encounter hash as the note.
@@ -2642,7 +2649,7 @@ model TemplateTwinFieldDefinition {
   criticality        String                      @default("routine")
   required           Boolean                     @default(false)
 
-  mapping         TemplateTwinSemanticMapping?
+  mapping TemplateTwinSemanticMapping?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
 
@@ -2662,7 +2669,7 @@ model TemplateTwinSemanticMapping {
   /// EncounterFact) | manual (per-visit human value, renders blank, attested) |
   /// context_default / visit_metadata (RESERVED, unimplemented until the
   /// flagged review-before-sign lane exists).
-  sourceType String @default("extraction")
+  sourceType       String                      @default("extraction")
   clinicalConcept  String?
   expectedDataType String
   polarityBehavior String
@@ -2757,3 +2764,78 @@ model TemplateTwinFillManifest {
   @@map("template_twin_fill_manifests")
 }
 
+// ---------------------------------------------------------------------------
+// Invite-only signup (2026-07-28)
+// ---------------------------------------------------------------------------
+// Registration was open, rate-limited at 5/hour/IP and nothing else. The data
+// showed what that buys: 195 accounts of which 172 had never logged in and only
+// 43 had verified an email, accruing at a steady 1–3/day — a cadence that sits
+// comfortably under the limit. No PHI was exposed (those accounts hold nothing)
+// but it is an unbounded account-creation surface on a system about to hold
+// patient records.
+//
+// Existing accounts are deliberately UNTOUCHED. They become inert behind the
+// gate rather than deleted: a deletion is irreversible and these cost nothing
+// to leave in place.
+// ---------------------------------------------------------------------------
+
+/// A code that permits exactly one class of signup. Codes are seeded by hand
+/// for the pilot — there is no self-service issuance, by design.
+model InviteCode {
+  id String @id @default(cuid())
+
+  /// SHA-256 hex of the raw code. The raw code is only ever in memory, in the
+  /// invite email, and in the operator's hands — same discipline as AuthToken.
+  /// Storing it hashed means a database read cannot mint signups.
+  codeHash String @unique
+
+  /// Free-text, for the operator. Who this was issued to and why. NEVER PHI —
+  /// it is an operational label, not a clinical record.
+  label String?
+
+  /// How many signups this code may create. 1 for a personal invite; higher for
+  /// a shared pilot-cohort code.
+  maxUses Int @default(1)
+
+  /// Incremented inside the signup transaction, so two concurrent signups
+  /// cannot both consume the last use.
+  usedCount Int @default(0)
+
+  /// Null = no expiry. An expired code fails closed.
+  expiresAt DateTime?
+
+  /// Set to revoke immediately, without deleting the audit trail of its use.
+  revokedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([revokedAt, expiresAt])
+  @@map("invite_codes")
+}
+
+/// Someone who asked to be told when there is room. This is NOT an account:
+/// no password, no practice, no products, no ability to sign in. The marketing
+/// CTA writes here and nowhere else.
+model WaitlistEntry {
+  id String @id @default(cuid())
+
+  email String  @unique
+  name  String?
+
+  /// Free-text context the person volunteered (specialty, practice size).
+  /// NEVER PHI — this is a prospect, not a patient, and the form says so.
+  note String?
+
+  /// Where the capture came from, e.g. "marketing-home", "pricing".
+  source String?
+
+  /// Set when an invite is actually sent, so the operator can see who is still
+  /// waiting without keeping a second list.
+  invitedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([invitedAt, createdAt])
+  @@map("waitlist_entries")
+}

@@ -7,6 +7,12 @@ import { expect } from '@playwright/test';
 
 import { TEST_PASSWORD, uniqueTestEmail } from './test-utils';
 
+/** Invite-only pilot (2026-07-28). The E2E stack sets SIGNUP_INVITE_CODES to
+ *  this value, so the suite exercises the gate the way production does —
+ *  WITH a valid code — instead of having the gate switched off for tests.
+ *  A suite that runs against a disabled gate proves nothing about the gate. */
+export const E2E_INVITE_CODE = 'E2E-PILOT-CODE';
+
 export interface SignupResult {
   email: string;
   password: string;
@@ -26,6 +32,7 @@ export async function signupFreshUser(
   const email = uniqueTestEmail(tag);
 
   await page.goto('/signup');
+  await page.getByLabel('Invite code').fill(E2E_INVITE_CODE);
   await page.getByLabel('Full name').fill(name);
   await page.getByLabel('Email').fill(email);
   // exact:true disambiguates "Password" from "Confirm password" — the

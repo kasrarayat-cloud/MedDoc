@@ -86,7 +86,40 @@ export function SignupForm() {
 
   return (
     <form action={formAction} onSubmit={handleSubmit}>
+      {/* Invite-only pilot (2026-07-28). First field, because it decides
+          whether the rest is worth filling in — and the server refuses before
+          it ever looks the email up, so a wrong code reveals nothing. */}
       <div style={{ marginTop: 18 }}>
+        <AuthFieldLabel htmlFor="inviteCode">Invite code</AuthFieldLabel>
+        <input
+          id="inviteCode"
+          name="inviteCode"
+          type="text"
+          autoComplete="off"
+          autoCapitalize="characters"
+          spellCheck={false}
+          defaultValue={values.inviteCode ?? ''}
+          required
+          maxLength={64}
+          style={{ ...inputStyle, marginTop: 6, letterSpacing: '0.04em' }}
+        />
+        <p
+          style={{
+            marginTop: 6,
+            fontSize: 12,
+            color: 'var(--color-linear-text-3, #8a8f98)',
+          }}
+        >
+          QuillMD is invite-only during the pilot.{' '}
+          <a href="/waitlist" style={{ textDecoration: 'underline' }}>
+            Join the waitlist
+          </a>{' '}
+          if you don&rsquo;t have a code.
+        </p>
+        <AuthFieldError message={errors.inviteCode} />
+      </div>
+
+      <div style={{ marginTop: 14 }}>
         <AuthFieldLabel htmlFor="name">Full name</AuthFieldLabel>
         <input
           id="name"

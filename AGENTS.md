@@ -225,7 +225,8 @@ Scratch is not the only thing a session can leave behind. Some defects write a
 COLUMN, and no sweep of the filesystem will find them.
 
 ```bash
-bash scripts/check-imaging-em-artifacts.sh   # READ-ONLY. 0 = clean, 1 = found, 2 = off-host
+bash scripts/check-imaging-em-artifacts.sh    # READ-ONLY. 0 = clean, 1 = found, 2 = off-host
+bash scripts/assert-migrations-applied.sh     # READ-ONLY. 0 = all applied, 1 = UNAPPLIED, 2 = off-host
 ```
 
 An imaging report has no office-visit E/M level. That invariant is enforced in
@@ -235,7 +236,15 @@ visits acquired `emScoredCode` from a page render by a build that predated the
 `specialtyLabel`-vs-`specialtyId` fix; no seeder wrote them, no test could see
 them, and they sat there for two days. Remediated 2026-07-28.
 
-**The script never mutates.** If it reports rows, classify before acting — a
+**A deploy that says it migrated may not have.** `docker compose run --rm
+db-migrate` runs whatever image was LAST BUILT, and `db-migrate` builds from the
+app Dockerfile — so rebuilding only the app services leaves it stale. On
+2026-07-28 it printed "79 migrations found / No pending migrations to apply" and
+exited 0 while the repo had eighty. **Never read that message as proof.** Deploy
+with `bash scripts/deploy-prod.sh`, which rebuilds db-migrate unconditionally,
+asserts afterwards, and aborts before recreating anything. Runbook §2.
+
+**The imaging script never mutates.** If it reports rows, classify before acting — a
 computed baseline (`emScoredCode`), a doctor-set `cptCodes.em.override`, and a
 frozen `cptCodes.em.signedCode` are three different findings and only the first
 is a routine clear. Remediation is a deliberate transactional act with an

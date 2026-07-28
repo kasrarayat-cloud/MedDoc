@@ -88,6 +88,9 @@ const ROUTES: RouteSpec[] = [
   // Public auth surfaces
   { path: '/login',                  label: 'login',           auth: 'none' },
   { path: '/signup',                 label: 'signup',          auth: 'none' },
+  // Invite-only pilot (2026-07-28): where every marketing CTA now lands, so it
+  // is the most-visited unauthenticated page in the product.
+  { path: '/waitlist',               label: 'waitlist',        auth: 'none' },
   { path: '/forgot-password',        label: 'forgot-password', auth: 'none' },
   { path: '/reset-password',         label: 'reset-password',  auth: 'none' },
   { path: '/check-email',            label: 'check-email',     auth: 'none' },

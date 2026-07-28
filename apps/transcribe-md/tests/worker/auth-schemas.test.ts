@@ -20,9 +20,25 @@ function emailOfLocalLen(localLen: number): string {
   return 'a'.repeat(localLen) + '@example.com';
 }
 
+describe('SignupSchema invite code — invite-only pilot (2026-07-28)', () => {
+  it('REQUIRES an invite code', () => {
+    // The gate's first line of defence: a signup with no code does not even
+    // reach the server-side check. Note the shape check is not the gate —
+    // whether a code is real, live and unspent is decided by checkInviteCode.
+    const r = SignupSchema.safeParse({
+      email: 'doctor@quillmd-test.local',
+      password: VALID_PASSWORD,
+      name: VALID_NAME,
+      acceptTerms: 'on',
+    });
+    expect(r.success, 'a signup without an invite code must not parse').toBe(false);
+  });
+});
+
 describe('SignupSchema email cap', () => {
   it('accepts a normal-length email', () => {
     const r = SignupSchema.safeParse({
+      inviteCode: 'PILOT-ALPHA',
       email: 'doctor@quillmd-test.local',
       password: VALID_PASSWORD,
       name: VALID_NAME,
@@ -35,6 +51,7 @@ describe('SignupSchema email cap', () => {
     const email = emailOfLocalLen(254 - 12); // 242 + '@example.com'
     expect(email.length).toBe(254);
     const r = SignupSchema.safeParse({
+      inviteCode: 'PILOT-ALPHA',
       email,
       password: VALID_PASSWORD,
       name: VALID_NAME,
@@ -47,6 +64,7 @@ describe('SignupSchema email cap', () => {
     const email = emailOfLocalLen(255 - 12);
     expect(email.length).toBe(255);
     const r = SignupSchema.safeParse({
+      inviteCode: 'PILOT-ALPHA',
       email,
       password: VALID_PASSWORD,
       name: VALID_NAME,
@@ -68,6 +86,7 @@ describe('SignupSchema email cap', () => {
     // index. Sentinel here is a 1024-char local-part — clearly
     // pathological, schema fires.
     const r = SignupSchema.safeParse({
+      inviteCode: 'PILOT-ALPHA',
       email: 'a'.repeat(1024) + '@quillmd-test.local',
       password: VALID_PASSWORD,
       name: VALID_NAME,
@@ -78,6 +97,7 @@ describe('SignupSchema email cap', () => {
 
   it('still rejects a malformed email regardless of length', () => {
     const r = SignupSchema.safeParse({
+      inviteCode: 'PILOT-ALPHA',
       email: 'not-an-email',
       password: VALID_PASSWORD,
       name: VALID_NAME,

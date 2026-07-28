@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { APP_URL, APP_SIGNUP_URL } from '@/lib/constants';
+import { APP_URL, APP_WAITLIST_URL } from '@/lib/constants';
 
 const LINKS = [
   { href: '/#how', label: 'How' },
@@ -38,7 +38,7 @@ export function Nav() {
           <a href={APP_URL} className="nav-item">
             Sign in
           </a>
-          <a href={APP_SIGNUP_URL} className="btn btn-primary">
+          <a href={APP_WAITLIST_URL} className="btn btn-primary">
             Get started
           </a>
         </div>

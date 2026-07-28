@@ -54,6 +54,12 @@ async function actionRateLimitOrError(
 // — not re-exported here because Next's "use server" boundary only
 // allows async-function exports from a server-actions file.
 import { LoginSchema, SignupSchema } from './auth-schemas';
+import {
+  INVITE_REJECTED_MESSAGE,
+  checkInviteCode,
+  consumeDbInviteCode,
+} from '@/lib/signup-invite';
+import { logAudit } from '@/lib/audit';
 
 export interface FormErrorState {
   ok: false;
@@ -376,6 +382,38 @@ export async function signupAction(
 
   const emailLower = parsed.data.email.trim().toLowerCase();
 
+  // ── INVITE GATE (2026-07-28) ─────────────────────────────────────────────
+  //
+  // Checked HERE, before the email lookup below, and the order is the point.
+  // That lookup deliberately returns an identical response for an existing and
+  // a new email (PR-F, below). Gating first means a prober without a code never
+  // reaches it and learns nothing about which emails exist — the gate makes
+  // enumeration strictly harder rather than opening a new oracle.
+  //
+  // The rejection message is the same for every reason (invalid / expired /
+  // revoked / exhausted). Distinguishing them would tell a prober which codes
+  // are real.
+  const invite = await checkInviteCode(String(raw.inviteCode ?? ''));
+  if (!invite.ok) {
+    void logAudit({
+      action: 'SIGNUP_REJECTED_NO_INVITE',
+      targetType: 'User',
+      targetId: null,
+      userId: null,
+      practiceId: null,
+      success: false,
+      // The REASON is recorded for the operator; the user is not told it.
+      // No email address — a rejected signup is not an account, and logging
+      // the address would build the very list the gate exists to prevent.
+      metadata: { reason: invite.reason },
+    });
+    return {
+      ok: false,
+      errors: { inviteCode: INVITE_REJECTED_MESSAGE },
+      values: { email: String(raw.email ?? ''), name: String(raw.name ?? '') },
+    };
+  }
+
   // Round 3 PR-F (A02-P1-001) — signup anti-enumeration.
   //
   // Pre-PR-F: existing-email path returned a UI-distinct error
@@ -473,6 +511,16 @@ export async function signupAction(
         select: { id: true },
       });
       createdUserId = user.id;
+
+      // Spend the invite in the SAME transaction that creates the account, so
+      // a code with one use left cannot be spent twice by concurrent signups.
+      // `updateMany` with the limit in its WHERE lets the database decide the
+      // race; count 0 means somebody else took the last use, and throwing here
+      // rolls the practice and user back with it.
+      if (invite.source === 'db') {
+        const spent = await consumeDbInviteCode(tx, invite.inviteCodeId);
+        if (!spent) throw new Error('INVITE_EXHAUSTED_RACE');
+      }
     });
   } catch (err) {
     console.error('[signup] create failed:', err);

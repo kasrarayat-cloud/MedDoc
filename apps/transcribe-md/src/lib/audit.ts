@@ -37,6 +37,11 @@ export type AuditAction =
   // Metadata is category counts only (visitId + {reason: n}), never note text.
   | 'ANCHOR_FLAGS_RECORDED'
   // Auth
+  // Invite-only pilot (2026-07-28). The reason is in metadata for the operator;
+  // the email address is deliberately NOT recorded — a rejected signup is not
+  // an account, and logging it would build the list the gate exists to prevent.
+  | 'SIGNUP_REJECTED_NO_INVITE'
+  | 'WAITLIST_JOINED'
   | 'LOGIN_SUCCESS'
   | 'LOGIN_FAILED'
   | 'LOGOUT'
