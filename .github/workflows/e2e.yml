@@ -245,11 +245,24 @@ jobs:
       #    flag baked in (both are read from CLIENT components, so a runtime env
       #    would leave the OFF branch live with no error). Separately tagged so
       #    the gate's own image is never overwritten. ──
+      #
+      # NEXT_PUBLIC_ULTRASOUND_SPECIALTY ADDED 2026-07-28. The pack now runs its
+      # core specs across BOTH specialty classes, and the imaging half asserts
+      # that an imaging report has no office-E/M surface. That suppression is
+      # `ultrasoundSpecialtyEnabled() && isImagingReportSpecialty(...)` — with the
+      # flag off the conjunction is false, so the app correctly (for that build)
+      # computes and PERSISTS an office level on an ultrasound visit, and the
+      # imaging specs fail on a product that is behaving as configured.
+      #
+      # It failed loudly rather than mysteriously: the fixture's own guard threw
+      # "IMAGING FIXTURE CARRIES OFFICE E/M STATE — emScoredCode=99212" — the
+      # original production bug, reproduced inside CI by a missing build arg.
       - name: Build flag-ON image for the document surface
         run: >
           docker build -f apps/transcribe-md/Dockerfile
           --build-arg NEXT_PUBLIC_REVIEW_DOC_VIEW=true
           --build-arg NEXT_PUBLIC_SKIN_BETA=true
+          --build-arg NEXT_PUBLIC_ULTRASOUND_SPECIALTY=true
           -t meddoc-pro-transcribe-md:review-doc .
 
       - name: Recreate app on the flag-ON image
