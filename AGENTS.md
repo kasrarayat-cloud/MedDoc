@@ -149,6 +149,28 @@ exactly where it was.
 
 **Report paths, never contents.**
 
+### And check the data invariants that nothing else watches
+
+Scratch is not the only thing a session can leave behind. Some defects write a
+COLUMN, and no sweep of the filesystem will find them.
+
+```bash
+./scripts/check-imaging-em-artifacts.sh     # READ-ONLY. 0 = clean, 1 = found, 2 = off-host
+```
+
+An imaging report has no office-visit E/M level. That invariant is enforced in
+the app's compute/store guards, in the review-doc E2E fixtures, and in
+`seed-certified-twin.ts` — **none of which watch production.** Five prod imaging
+visits acquired `emScoredCode` from a page render by a build that predated the
+`specialtyLabel`-vs-`specialtyId` fix; no seeder wrote them, no test could see
+them, and they sat there for two days. Remediated 2026-07-28.
+
+**The script never mutates.** If it reports rows, classify before acting — a
+computed baseline (`emScoredCode`), a doctor-set `cptCodes.em.override`, and a
+frozen `cptCodes.em.signedCode` are three different findings and only the first
+is a routine clear. Remediation is a deliberate transactional act with an
+abort-on-mismatch guard and an audit row, never a side effect of a check.
+
 ### What is NOT a stray, and must survive the sweep
 
 - `WM IOV Template.docx` and its copies — the accepted BLANK tracked fixture
