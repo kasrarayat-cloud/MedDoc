@@ -133,7 +133,16 @@ export function WaitlistForm() {
         }}
       >
         Already have an invite code?{' '}
-        <a href="/signup" style={{ color: 'var(--color-linear-sage-bright)' }}>
+        {/* Underlined, not just tinted. A link inside a text block that is
+            distinguished ONLY by colour fails axe's link-in-text-block at
+            SERIOUS — anyone who cannot separate the two hues sees prose. */}
+        <a
+          href="/signup"
+          style={{
+            color: 'var(--color-linear-sage-bright)',
+            textDecoration: 'underline',
+          }}
+        >
           Create your account
         </a>
       </p>
