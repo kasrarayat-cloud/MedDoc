@@ -155,7 +155,7 @@ Scratch is not the only thing a session can leave behind. Some defects write a
 COLUMN, and no sweep of the filesystem will find them.
 
 ```bash
-./scripts/check-imaging-em-artifacts.sh     # READ-ONLY. 0 = clean, 1 = found, 2 = off-host
+bash scripts/check-imaging-em-artifacts.sh   # READ-ONLY. 0 = clean, 1 = found, 2 = off-host
 ```
 
 An imaging report has no office-visit E/M level. That invariant is enforced in

@@ -29,7 +29,12 @@
 # Exit codes:  0 = clean   1 = artifacts found (report, do not auto-fix)
 #              2 = could not reach the database
 #
-# Usage:  ./scripts/check-imaging-em-artifacts.sh
+# Usage:  bash scripts/check-imaging-em-artifacts.sh
+#
+# Invoked via `bash`, not `./`, on purpose: this repo sets core.fileMode=false, so
+# the executable bit is not tracked — all 14 files in scripts/ are mode 100644 and
+# a fresh clone cannot run any of them directly. `./` worked on the machine that
+# wrote the file and failed on the next checkout.
 # ============================================================================
 set -uo pipefail
 
