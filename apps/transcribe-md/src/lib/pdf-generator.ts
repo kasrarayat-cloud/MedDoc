@@ -15,6 +15,7 @@ import {
   type VisitExportData,
   prescriptionOneLine,
   formatVisitDate,
+  procedureProvenanceNote,
 } from './visit-export';
 import { formSignatureLines } from './form-only';
 
@@ -465,10 +466,11 @@ function renderCpt(doc: PDFKit.PDFDocument, data: VisitExportData): void {
       .font(FONTS.labelBold)
       .fillColor(COLORS.textPrimary)
       .text(p.code, { continued: true });
+    const note = procedureProvenanceNote(p);
     doc
       .font(FONTS.bodyRegular)
       .fillColor(COLORS.textSecondary)
-      .text(`  ${p.description}`);
+      .text(`  ${p.description}${note ? `  (${note})` : ''}`);
   }
   if (data.modifiers.length > 0) {
     doc.moveDown(0.2);

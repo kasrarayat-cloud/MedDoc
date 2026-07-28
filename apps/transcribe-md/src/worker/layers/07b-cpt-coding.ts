@@ -59,6 +59,21 @@ export const ProcedureCpt = z.object({
    *  doctor should review before billing. The post-processor uses
    *  this to flip needsReview when any procedure lands "low". */
   confidenceLevel: z.enum(['high', 'medium', 'low']).default('high'),
+  /** WHERE THIS CODE CAME FROM, and it is not decoration.
+   *
+   *  'dictated'        — the clinician said it aloud ("bill this as 93970").
+   *                      An instruction.
+   *  'coach_suggested' — this layer's model proposed it from the note.
+   *                      A suggestion to review.
+   *
+   *  Billing cannot tell those apart if the note flattens them together, and
+   *  they are different claims about the world. Defaults to coach_suggested
+   *  because that is what the MODEL produces — the dictated path sets it
+   *  explicitly at the merge below. */
+  provenance: z.enum(['dictated', 'coach_suggested']).default('coach_suggested'),
+  // NB the default is a type convenience, NOT the mechanism. Provenance is
+  // stamped explicitly at the merge below, because the model must never get a
+  // vote on where its own output came from.
 });
 
 export const Modifier = z.object({
@@ -80,6 +95,50 @@ export interface Layer7bInput {
   specialty: string;
   soapFinal: string;
   entitiesJson: string;
+}
+
+/** Procedure codes the clinician DICTATED, as captured by L3 from the raw
+ *  transcript. Tolerant by construction: entitiesJson is model output, so a
+ *  malformed or absent field must yield "no dictated codes" rather than throw
+ *  and take the whole coding layer down with it. */
+function extractSpokenProcedureCodes(
+  entitiesJson: string,
+): Array<z.infer<typeof ProcedureCpt>> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(entitiesJson);
+  } catch {
+    return [];
+  }
+  if (typeof parsed !== 'object' || parsed === null) return [];
+  const raw = (parsed as { spoken_procedure_codes?: unknown }).spoken_procedure_codes;
+  if (!Array.isArray(raw)) return [];
+
+  const out: Array<z.infer<typeof ProcedureCpt>> = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (typeof item !== 'object' || item === null) continue;
+    const r = item as Record<string, unknown>;
+    const code = typeof r.code === 'string' ? r.code.trim() : '';
+    if (!/^[0-9]{5}$/.test(code) || seen.has(code)) continue;
+    seen.add(code);
+    out.push({
+      code,
+      description:
+        typeof r.description === 'string' && r.description.trim()
+          ? r.description.trim()
+          : 'Dictated procedure code',
+      // The doctor's own words are the evidence. Falling back to a synthesised
+      // quote would put words in their mouth on a billing line.
+      evidence_quote:
+        typeof r.evidence_quote === 'string' && r.evidence_quote.trim()
+          ? r.evidence_quote.trim()
+          : `Dictated code ${code}`,
+      confidenceLevel: 'high',
+      provenance: 'dictated',
+    });
+  }
+  return out;
 }
 
 export async function runLayer7bCptCoding(
@@ -184,7 +243,33 @@ export async function runLayer7bCptCoding(
     rejectedCodes.push(result.em.code);
     filteredEm = null;
   }
-  const filteredProcedures = result.procedures.filter((p) => {
+
+  // A CODE THE DOCTOR SAID ALOUD IS NOT IN THE SOAP NOTE.
+  //
+  // "Bill this as 93970" is an instruction to a biller, not clinical prose, so
+  // L4 correctly leaves it out of the note — and this layer only ever reads the
+  // note and the entities. A production smoke caught the consequence: a
+  // bilateral venous duplex was dictated with the CPT spoken and PROCEDURES came
+  // back empty. The code was in the transcript the whole time.
+  //
+  // L3 sees the raw dictation, so it captures these into
+  // `spoken_procedure_codes`, and they arrive here through entitiesJson. They
+  // are merged BEFORE the allowlist filter below, deliberately: one fail-closed
+  // floor, applied to every code regardless of who said it. A code the doctor
+  // dictated is still a claim, and a mistyped or misheard one is still a False
+  // Claims Act vector.
+  const spokenProcedures = extractSpokenProcedureCodes(input.entitiesJson);
+  // Deduped with the dictated entry winning: if the doctor said it AND the model
+  // proposed it, that is one procedure, and the instruction outranks the guess.
+  const modelProcedures = result.procedures
+    .filter((p) => !spokenProcedures.some((sp) => sp.code === p.code))
+    // Stamped here rather than left to the schema default: this function knows
+    // the origin, the model does not, and a claim about origin should be made
+    // by whoever actually knows.
+    .map((p) => ({ ...p, provenance: 'coach_suggested' as const }));
+  const mergedProcedures = [...spokenProcedures, ...modelProcedures];
+
+  const filteredProcedures = mergedProcedures.filter((p) => {
     const ok = isValidCpt(p.code);
     if (!ok) rejectedCodes.push(p.code);
     return ok;

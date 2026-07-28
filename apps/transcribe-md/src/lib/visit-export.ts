@@ -104,6 +104,23 @@ export interface CptProcedure {
   code: string;
   description: string;
   evidence_quote: string;
+  /** Where the code came from. OPTIONAL because every procedure coded before
+   *  this field existed has none — and an unmarked row must read as "we do not
+   *  claim the doctor said this", never as a claim that they did. */
+  provenance?: 'dictated' | 'coach_suggested';
+}
+
+/**
+ * The one-word note a biller needs: did the clinician SAY this code, or did the
+ * coding model propose it?
+ *
+ * Marked in one direction only, deliberately. "dictated" is a positive claim
+ * backed by a verbatim quote. Everything else — model-proposed, or coded before
+ * provenance was tracked — gets nothing, because labelling those "suggested"
+ * would assert a distinction we cannot actually make for the legacy rows.
+ */
+export function procedureProvenanceNote(p: CptProcedure): string {
+  return p.provenance === 'dictated' ? 'dictated' : '';
 }
 
 export interface CptModifier {

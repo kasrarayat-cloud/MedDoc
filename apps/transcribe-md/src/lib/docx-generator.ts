@@ -28,6 +28,7 @@ import {
   type RenderedHeaderField,
   prescriptionOneLine,
   formatVisitDate,
+  procedureProvenanceNote,
 } from './visit-export';
 import { formSignatureLines } from './form-only';
 
@@ -172,6 +173,9 @@ export async function generateVisitDocx(
           children: [
             new TextRun({ text: p.code, bold: true }),
             new TextRun({ text: `   ${p.description}` }),
+            ...(procedureProvenanceNote(p)
+              ? [new TextRun({ text: `   (${procedureProvenanceNote(p)})`, italics: true })]
+              : []),
           ],
         })
       );
