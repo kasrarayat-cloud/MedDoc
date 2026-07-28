@@ -97,6 +97,11 @@ export interface Layer7bInput {
   entitiesJson: string;
 }
 
+/** Placeholder when neither the clinician nor the coding model named the code.
+ *  Deliberately not a guess at the nomenclature — an invented description on a
+ *  billing line is worse than a bare one. */
+const DICTATED_DESCRIPTION_FALLBACK = 'Dictated procedure code';
+
 /** Procedure codes the clinician DICTATED, as captured by L3 from the raw
  *  transcript. Tolerant by construction: entitiesJson is model output, so a
  *  malformed or absent field must yield "no dictated codes" rather than throw
@@ -127,7 +132,7 @@ function extractSpokenProcedureCodes(
       description:
         typeof r.description === 'string' && r.description.trim()
           ? r.description.trim()
-          : 'Dictated procedure code',
+          : DICTATED_DESCRIPTION_FALLBACK,
       // The doctor's own words are the evidence. Falling back to a synthesised
       // quote would put words in their mouth on a billing line.
       evidence_quote:
@@ -258,9 +263,27 @@ export async function runLayer7bCptCoding(
   // floor, applied to every code regardless of who said it. A code the doctor
   // dictated is still a claim, and a mistyped or misheard one is still a False
   // Claims Act vector.
-  const spokenProcedures = extractSpokenProcedureCodes(input.entitiesJson);
   // Deduped with the dictated entry winning: if the doctor said it AND the model
   // proposed it, that is one procedure, and the instruction outranks the guess.
+  //
+  // The DESCRIPTION is the exception, and it is borrowed rather than won. A live
+  // check against the real model showed L3 returns the code with no description
+  // — correctly, because its prompt forbids supplying one from its own knowledge
+  // — which left a dictated code rendering as "93970 — Dictated procedure code"
+  // on a billing line. When the coding model independently proposed the same
+  // code it already carried the real nomenclature, and taking that is not an
+  // invention: it is the same source every other procedure description comes
+  // from. Provenance stays 'dictated' — where the CODE came from is the claim
+  // being made, and a borrowed label does not change who said the number.
+  const spokenProcedures = extractSpokenProcedureCodes(input.entitiesJson).map(
+    (sp) => {
+      if (sp.description !== DICTATED_DESCRIPTION_FALLBACK) return sp;
+      const proposed = result.procedures.find((p) => p.code === sp.code);
+      return proposed?.description
+        ? { ...sp, description: proposed.description }
+        : sp;
+    },
+  );
   const modelProcedures = result.procedures
     .filter((p) => !spokenProcedures.some((sp) => sp.code === p.code))
     // Stamped here rather than left to the schema default: this function knows

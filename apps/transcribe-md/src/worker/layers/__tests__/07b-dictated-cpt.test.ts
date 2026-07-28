@@ -273,3 +273,87 @@ describe('provenance as it reaches the page and the export', () => {
     expect(procedureProvenanceNote(base)).toBe('');
   });
 });
+
+// ============================================================================
+// THE DESCRIPTION, when the doctor said only the number.
+// ----------------------------------------------------------------------------
+// A live check against the real model showed L3 returns the code with NO
+// description — correctly, because its prompt forbids supplying one from its own
+// knowledge. That left a dictated code rendering as "93970 — Dictated procedure
+// code" on a billing line: honest, and close to useless.
+//
+// When the coding model independently proposed the same code it already carried
+// the real nomenclature. Borrowing it is not an invention — it is the same
+// source every other procedure description on the note comes from.
+// ============================================================================
+
+describe('a dictated code borrows a description rather than inventing one', () => {
+  const spokenBare = JSON.stringify({
+    spoken_procedure_codes: [{ code: '93970', evidence_quote: 'bill this as 93970' }],
+  });
+
+  it('takes the coding model’s nomenclature when it proposed the same code', async () => {
+    mocks.modelComplete.mockResolvedValue({
+      em: null,
+      procedures: [
+        {
+          code: '93970',
+          description: 'Duplex scan of extremity veins, complete bilateral',
+          evidence_quote: 'bilateral venous duplex performed',
+          confidenceLevel: 'high',
+        },
+      ],
+      modifiers: [],
+    });
+    const result = await codeWith(spokenBare);
+    const proc = result.procedures.find((p) => p.code === '93970')!;
+    expect(proc.description).toBe('Duplex scan of extremity veins, complete bilateral');
+    // Provenance is unchanged: where the CODE came from is the claim being made,
+    // and a borrowed label does not change who said the number.
+    expect(proc.provenance).toBe('dictated');
+    // And the doctor's own words stay the evidence.
+    expect(proc.evidence_quote).toBe('bill this as 93970');
+  });
+
+  it('falls back to a neutral label when NOBODY named it', async () => {
+    // The model found nothing, so there is no nomenclature to borrow. Guessing
+    // one from the code number would be inventing clinical text on a claim.
+    const result = await codeWith(spokenBare);
+    const proc = result.procedures.find((p) => p.code === '93970')!;
+    expect(proc.description).toBe('Dictated procedure code');
+  });
+
+  it('does not overwrite a description the CLINICIAN dictated', async () => {
+    mocks.modelComplete.mockResolvedValue({
+      em: null,
+      procedures: [
+        {
+          code: '93970',
+          description: 'Duplex scan of extremity veins, complete bilateral',
+          evidence_quote: 'bilateral venous duplex performed',
+          confidenceLevel: 'high',
+        },
+      ],
+      modifiers: [],
+    });
+    const result = await codeWith(
+      JSON.stringify({
+        spoken_procedure_codes: [
+          {
+            code: '93970',
+            description: 'bilateral leg vein scan',
+            evidence_quote: 'bill this as 93970, bilateral leg vein scan',
+          },
+        ],
+      }),
+    );
+    expect(result.procedures.find((p) => p.code === '93970')?.description).toBe(
+      'bilateral leg vein scan',
+    );
+  });
+});
+
+/** Runs L7b with a given entitiesJson against the shared base input. */
+async function codeWith(entitiesJson: string) {
+  return runLayer7bCptCoding({ ...baseInput, entitiesJson });
+}
