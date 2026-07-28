@@ -265,15 +265,38 @@ export function VisitReadyView(props: VisitReadyViewProps) {
 
   /** The level the gate stack shows. Null when E/M does not apply at all — an
    *  imaging report has no office visit level, so there is nothing to display
-   *  and nothing to adjust. */
-  const [emLevel, setEmLevel] = useState<string | null>(() =>
-    props.emNotApplicable
-      ? null
-      : projectDisplayedEmCode(
-          (props.cptCodes as { em?: CptEm } | null | undefined)?.em ?? null,
-          false,
-        ),
-  );
+   *  and nothing to adjust.
+   *
+   *  SEEDED FROM `initialEmScore`, not from the raw `cptCodes` blob. Those are
+   *  two different numbers: `cptCodes.em.code` is Layer-7b's LLM suggestion as
+   *  persisted, while `initialEmScore` is the rubric-engine projection the page
+   *  computes server-side — and it is what the confirm card, the export and the
+   *  signature all use. Seeding from the blob let the row state one level while
+   *  the card underneath it and the file being signed said another.
+   *  `projectDisplayedEmCode` on the blob stays as the fallback for the case
+   *  where the server sent no score at all. */
+  const emLevelFromProps = props.emNotApplicable
+    ? null
+    : (props.initialEmScore
+        ? (props.initialEmScore.override?.code ?? props.initialEmScore.suggestedCode)
+        : null) ??
+      projectDisplayedEmCode(
+        (props.cptCodes as { em?: CptEm } | null | undefined)?.em ?? null,
+        false,
+      );
+
+  const [emLevel, setEmLevel] = useState<string | null>(emLevelFromProps);
+  /** RE-SYNC ON EVERY RSC REFRESH, by value — the same adjust-state-during-
+   *  render pattern `pendingEmChange` uses just above, and for the same reason.
+   *  A `useState` initialiser runs once, so without this the row could not
+   *  follow the server: a level changed in another tab, or restored by a
+   *  refresh, never reached the display, and the local `setEmLevel` after a
+   *  save could never be corrected by the authority. */
+  const [syncedEmLevel, setSyncedEmLevel] = useState(emLevelFromProps);
+  if (syncedEmLevel !== emLevelFromProps) {
+    setSyncedEmLevel(emLevelFromProps);
+    setEmLevel(emLevelFromProps);
+  }
 
   /** The doctor sets the level themselves. Goes through the SAME audited route
    *  the retired billing dropdown called, and comes back with the pending
@@ -301,12 +324,27 @@ export function VisitReadyView(props: VisitReadyViewProps) {
         // client that only ever SET the pending change would keep blocking the
         // signature over a change that no longer exists.
         setPendingEmChange(data.pendingChange);
+        // THE DRAWN DOCUMENT IS NOW WRONG. The E/M code is printed into the
+        // page the doctor is reading, and the server has just dropped its
+        // cached fill — but nothing told this client to fetch the new one. So
+        // the paper kept showing the old level while the file the Sign button
+        // produces carried the new one, which is the one thing this surface
+        // promises cannot happen: what they read is what they sign.
+        //
+        // Bump the revision ONLY, exactly as a header edit does. The note text
+        // is byte-identical — an override is not a note edit — so the text and
+        // version are carried forward untouched and staleness is not armed.
+        setAdoption((prev) => ({
+          text: prev?.text ?? props.soapText,
+          version: prev?.version ?? props.soapVersion,
+          seq: (prev?.seq ?? 0) + 1,
+        }));
         return { ok: true };
       } catch {
         return { ok: false, error: 'That level could not be saved.' };
       }
     },
-    [props.visitId],
+    [props.visitId, props.soapText, props.soapVersion],
   );
 
   const rescoreEm = useCallback(async () => {
@@ -315,7 +353,20 @@ export function VisitReadyView(props: VisitReadyViewProps) {
     setEmStale(r.stale);
     // The level moved: hand it to the SAME confirm card an adopt would arm.
     if (r.pending) setPendingEmChange(r.pending);
-    setEmLevel(r.pending?.to ?? null);
+    // "IT DID NOT MOVE" IS NOT "THERE IS NO LEVEL".
+    //
+    // This read `r.pending?.to ?? null`, so the ordinary no-movement outcome —
+    // by far the commonest, and the guaranteed one on a first re-check where
+    // there is no baseline to move from — set the level to null. The row guards
+    // on it, so the whole "Documentation level" block unmounted: the level text
+    // and the Adjust button, i.e. the only place in the product a doctor can
+    // disagree with the scored level, gone until a full page reload. It also
+    // fired from the sign bar, which re-scores on click whenever the visit is
+    // stale, so merely opening Sign & Download could take it away.
+    //
+    // The action now reports the level it validated separately from whether it
+    // moved. Null there means "nothing was scored, keep what you have".
+    setEmLevel((prev) => r.code ?? prev);
   }, [props.visitId]);
 
   // V2 review (skin-only, flag-gated) — live mirror of the server's fail-closed

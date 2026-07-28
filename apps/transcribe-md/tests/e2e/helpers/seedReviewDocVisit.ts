@@ -113,13 +113,34 @@ const ICD = [
   { code: 'J45.909', description: 'Unspecified asthma, uncomplicated' },
   { code: 'I10', description: 'Essential (primary) hypertension' },
 ];
+/** THE DISPLAYED LEVEL MUST BE DETERMINISTIC, or a test cannot assert it.
+ *
+ *  The level a doctor sees is `override?.code ?? engineProjection` — and the
+ *  engine projection is computed from the note at render time, so with no
+ *  override the fixture's level is whatever the rubric makes of the seeded
+ *  prose. A spec then has to READ the level and adapt to it, which is how the
+ *  adjust test came to pass whether or not the row agreed with the confirm card
+ *  it had just cleared.
+ *
+ *  Seeding an override pins it at 99214 and makes the fixture coherent with
+ *  EM_PENDING (99213 → 99214): the level moved to 99214 and awaits confirming,
+ *  which is exactly the state the pending record describes. */
 const CPT = {
   em: {
     code: '99213',
     description: 'Office visit, established patient, low complexity',
     reasoning: { problems: [{ description: 'Asthma', status: 'stable' }] },
+    override: {
+      code: '99214',
+      reason: 'Seeded doctor-set level so the displayed code is deterministic.',
+      overriddenAt: new Date().toISOString(),
+    },
   },
 };
+
+/** The level the fixture displays — exported so specs assert against the seed
+ *  rather than against whatever the page happened to render. */
+export const SEEDED_EM_LEVEL = '99214';
 
 export interface SeededReviewDocVisit {
   visitId: string;
@@ -128,7 +149,14 @@ export interface SeededReviewDocVisit {
 
 /** Seed the visit. Returns null when the psql channel is unavailable, so the
  *  spec can skip cleanly rather than fail for an environment reason. */
-export function seedReviewDocVisit(email: string): SeededReviewDocVisit | null {
+export function seedReviewDocVisit(
+  email: string,
+  /** `emStale: true` seeds the note-changed state, so a spec that needs the
+   *  "Re-check level" control can REQUIRE it instead of skipping when it is
+   *  absent — a conditional assertion is a test that reports success for having
+   *  found nothing to check. */
+  opts: { emStale?: boolean } = {},
+): SeededReviewDocVisit | null {
   let userId: string;
   let practiceId: string;
   try {
@@ -157,7 +185,7 @@ export function seedReviewDocVisit(email: string): SeededReviewDocVisit | null {
          (id, "userId", "patientId", specialty, "inputMode", status,
           "transcriptText", "soapFinal", "soapVersion",
           "suggestedClaims", "rxDrafts", "emPendingChange",
-          "icdCodes", "cptCodes",
+          "icdCodes", "cptCodes", "emStale",
           "createdAt", "updatedAt")
        values
          ('${visitId}', '${userId}', '${patientId}', 'primary-care', 'text_notes', 'READY',
@@ -165,7 +193,7 @@ export function seedReviewDocVisit(email: string): SeededReviewDocVisit | null {
           '${NOTE.replace(/'/g, "''")}', 1,
           '${j(CLAIMS)}'::jsonb, '${j(RX)}'::jsonb,
           '${j(EM_PENDING)}'::jsonb,
-          '${j(ICD)}'::jsonb, '${j(CPT)}'::jsonb,
+          '${j(ICD)}'::jsonb, '${j(CPT)}'::jsonb, ${opts.emStale ? 'true' : 'false'},
           now(), now())
        on conflict (id) do nothing`,
     );

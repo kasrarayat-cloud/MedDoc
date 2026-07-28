@@ -380,7 +380,111 @@ describe('POST /api/visits/[id]/em-score/override', () => {
       ctx,
     );
     expect(res.status).toBe(409);
+    // WHICH 409, not just "a 409". Three different conditions in this route
+    // answer 409, so an assertion on the status alone passes when the imaging
+    // gate is deleted and some later gate catches the request by accident.
+    expect((await res.json()).code).toBe('EM_NOT_APPLICABLE');
     expect(mocks.visitUpdate).not.toHaveBeenCalled();
     delete process.env.NEXT_PUBLIC_ULTRASOUND_SPECIALTY;
+  });
+
+  it('STALENESS IS UNTOUCHED — the payload carries no soapVersion and no emStale', async () => {
+    // Requirement B, asserted on the WRITE rather than grepped for. Staleness
+    // keys on content change; an override is not a note edit. Bumping the note's
+    // version here would gate the doctor behind their own choice — the stale
+    // card would appear because they had set a level, and the only way out
+    // would be re-checking a level they had just chosen.
+    //
+    // The previous guard for this was a source grep for the strings
+    // `soapVersion: { increment` and `emStale: true`, which a reformat or a
+    // computed key defeats. This reads the payload the route actually sends.
+    mocks.auth.mockResolvedValue({
+      user: { id: FAKE_USER, practiceId: FAKE_PRACTICE },
+    });
+    mocks.visitFindUnique.mockResolvedValue(READY_VISIT);
+    mocks.visitUpdate.mockResolvedValue({});
+
+    const res = await POST(
+      makeReq({ overrideToCode: '99214', reason: 'Exam and MDM documented at this level.' }),
+      ctx,
+    );
+    expect(res.status).toBe(200);
+
+    const data = mocks.visitUpdate.mock.calls[0][0].data;
+    expect(data).not.toHaveProperty('soapVersion');
+    expect(data).not.toHaveProperty('emStale');
+  });
+
+  it('overriding BACK to the reviewed level clears the gate and moves the baseline with it', async () => {
+    // The doctor set 99215, then thought better of it and set 99213 again — the
+    // level the pending record was raised FROM. There is nothing left to
+    // confirm, so the record goes; leaving it would block the signature over a
+    // change that no longer exists.
+    //
+    // AND `emScoredCode` MOVES TOO. It still held the level the cleared record
+    // was measured against, so the next re-score computed a move the doctor had
+    // already resolved and raised a fresh confirm card for a level nothing had
+    // changed to.
+    mocks.auth.mockResolvedValue({
+      user: { id: FAKE_USER, practiceId: FAKE_PRACTICE },
+    });
+    mocks.visitFindUnique.mockResolvedValue({
+      ...READY_VISIT,
+      cptCodes: { em: { code: '99213', override: { code: '99215' } } },
+      emPendingChange: {
+        cause: 'doctor_override',
+        at: '2026-07-28T00:00:00.000Z',
+        from: '99213',
+        to: '99215',
+      },
+    });
+    mocks.visitUpdate.mockResolvedValue({});
+
+    const res = await POST(
+      makeReq({ overrideToCode: '99213', reason: 'On reflection the original level was right.' }),
+      ctx,
+    );
+    expect(res.status).toBe(200);
+
+    const data = mocks.visitUpdate.mock.calls[0][0].data;
+    expect(data.emPendingChange).toBeDefined();
+    expect(data.emPendingChange).not.toMatchObject({ to: '99213' }); // DbNull, not a record
+    expect(data.emScoredCode).toBe('99213');
+    expect((await res.json()).pendingChange).toBeNull();
+  });
+
+  it('EVERY IN-REPO CALLER SENDS A REASON — the route rejects one that does not', async () => {
+    // The reason became required with this route's rehoming, and two older
+    // callers (the C3 billing card's dropdown and the coding rail's) posted
+    // none. Both would have 400'd on every use: controls that look live and
+    // cannot work. They were retired rather than given a fabricated rationale.
+    //
+    // This is the guard that keeps a reasonless caller from reappearing. It is
+    // a source scan on purpose — the point is that no OTHER file posts to this
+    // route at all.
+    const { readFileSync, readdirSync, statSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const hits: string[] = [];
+    const walk = (dir: string) => {
+      for (const e of readdirSync(dir)) {
+        const p = join(dir, e);
+        if (statSync(p).isDirectory()) {
+          if (e === 'node_modules' || e === '.next') continue;
+          walk(p);
+        } else if (/\.tsx?$/.test(e) && !/__tests__|\.test\./.test(p)) {
+          // The route named INSIDE a fetch call — a doc comment that mentions
+          // the endpoint is not a caller, and matching those made this fail on
+          // CodingRail, whose only fetch goes to /em-score.
+          const src = readFileSync(p, 'utf8');
+          if (/fetch\(\s*`[^`]*em-score\/override/.test(src)) hits.push(p);
+        }
+      }
+    };
+    walk('src');
+
+    // Exactly one caller, and it sends the reason it collected.
+    expect(hits).toEqual(['src/app/visits/[id]/visit-ready-view.tsx']);
+    const caller = readFileSync(hits[0], 'utf8');
+    expect(caller).toContain('overrideToCode: code, reason');
   });
 });

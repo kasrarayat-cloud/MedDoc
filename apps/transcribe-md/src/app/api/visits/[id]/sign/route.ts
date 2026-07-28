@@ -59,9 +59,21 @@ import { redactPhi } from '@meddoc/ai';
 import { log } from '@/lib/log';
 import { logAudit } from '@/lib/audit';
 import { criticalWarningRefs } from '@/lib/rx-warnings';
-import { unacknowledgedEmChange } from '@/lib/em-pending-change';
+import { unacknowledgedEmChange, type EmChangeCause } from '@/lib/em-pending-change';
 
 export const runtime = 'nodejs';
+
+/** How the refusal message names WHY the level moved. Exhaustive over
+ *  `EmChangeCause` on purpose: a new cause must not be able to inherit some
+ *  other cause's wording, which is how a doctor's own override came to be
+ *  described to them as "an AI-suggestion action". Adding a cause without
+ *  adding a phrase here is a type error. */
+const EM_CAUSE_PHRASE: Record<EmChangeCause, string> = {
+  suggestion_adopted: 'by an AI-suggestion action',
+  suggestion_dismissed: 'by an AI-suggestion action',
+  note_edited: 'by an edit to the note',
+  doctor_override: 'because you set it',
+};
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
 
@@ -326,7 +338,11 @@ export const POST = withApiHandler<{ id: string }>(
         ? ({
             from: rescored.pending.from,
             to: rescored.pending.to,
-            cause: 'note_edited',
+            // CARRY THE CAUSE, don't assume it. Hardcoding 'note_edited' here
+            // relabelled a doctor's own override as an edit — the record the
+            // re-score preserves already knows which it was, and the refusal
+            // message below is built from this field.
+            cause: rescored.cause ?? 'note_edited',
             at: new Date().toISOString(),
           } as unknown as typeof visit.emPendingChange)
         : null;
@@ -366,10 +382,14 @@ export const POST = withApiHandler<{ id: string }>(
             // suggestion; an edit can move it now too, and telling a doctor
             // their own edit was "an AI-suggestion action" is a small lie in a
             // message whose whole job is to be believed.
+            //
+            // EXHAUSTIVE, not a ternary. The two-arm version put every cause it
+            // did not name into "by an AI-suggestion action", so the moment a
+            // doctor could set the level themselves it told them their own
+            // choice was the model's. A Record over EmChangeCause means a new
+            // cause fails to TYPECHECK instead of silently misattributing.
             error: `Documentation level changed (${pendingEm.from} → ${pendingEm.to}) ${
-              pendingEm.cause === 'note_edited'
-                ? 'by an edit to the note'
-                : 'by an AI-suggestion action'
+              EM_CAUSE_PHRASE[pendingEm.cause]
             } — confirm the new level before signing.`,
             code: 'EM_CHANGE_UNACKNOWLEDGED',
             pendingEmChange: { from: pendingEm.from, to: pendingEm.to },

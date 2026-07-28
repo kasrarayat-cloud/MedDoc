@@ -6726,6 +6726,12 @@ body {
   font-size: 11.5px;
   color: var(--color-linear-amber);
 }
+/* "The level moved while this was open" — informational, not a fault of the
+   doctor's, so it reads in muted text rather than the amber an error uses. */
+.qm-rdoc-emadj-note {
+  font-size: 11.5px;
+  color: var(--color-linear-text-muted);
+}
 .qm-rdoc-emadj-actions { display: flex; gap: 8px; align-items: center; }
 .qm-rdoc-emadj-actions .qm-rdoc-gate-btn:disabled { opacity: 0.45; cursor: default; }
 

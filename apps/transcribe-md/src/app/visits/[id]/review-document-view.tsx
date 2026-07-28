@@ -247,9 +247,21 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
               <span>Documentation level changed</span>
             </div>
             <div className="qm-rdoc-gate-body">
+              {/* DIRECTIONLESS, DELIBERATELY.
+                  This read "now supports {to}, up from {from}" — written when
+                  the only thing that moved a level was a model re-score, which
+                  in practice moved it up. The doctor can now set the level
+                  themselves, and the picker offers every code, so "up from" is
+                  rendered over a DOWNWARD adjustment: the one card standing
+                  between the doctor and a signature stated the opposite of what
+                  they had just done. "Supports", too, argues for the level
+                  rather than reporting it.
+                  A level describes work already done. Up and down read exactly
+                  the same here, and a test pins that they do. */}
               <p className="qm-rdoc-gate-text">
-                This visit now supports{' '}
-                <strong className="qm-rdoc-em-code">{props.emPendingChange.to}</strong>, up from{' '}
+                This visit is documented at{' '}
+                <strong className="qm-rdoc-em-code">{props.emPendingChange.to}</strong>, changed
+                from{' '}
                 <strong className="qm-rdoc-em-code">{props.emPendingChange.from}</strong>. Confirm
                 the level before signing.
                 {props.emStale && (

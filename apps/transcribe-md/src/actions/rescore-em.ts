@@ -37,7 +37,7 @@ import {
 import { requireSession } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 import { computeDisplayedEmCode } from '@/lib/em-coding/displayed-level';
-import { unacknowledgedEmChange } from '@/lib/em-pending-change';
+import { unacknowledgedEmChange, type EmChangeCause } from '@/lib/em-pending-change';
 import { log } from '@/lib/log';
 
 export interface RescoreEmResult {
@@ -46,6 +46,21 @@ export interface RescoreEmResult {
   stale: boolean;
   /** Set when the level moved and the doctor must acknowledge it. */
   pending: { from: string; to: string } | null;
+  /** The level this re-score validated — the displayed code, override projected
+   *  (`computeDisplayedEmCode`), which is what the gate and the signature use.
+   *
+   *  SEPARATE FROM `pending` ON PURPOSE. `pending` answers "did it move", and
+   *  null there means "it did not" — not "there is no level". A caller that
+   *  reads the level out of `pending.to` blanks its own display on the ordinary
+   *  no-movement outcome, which is exactly how the documentation-level row (and
+   *  with it the only place a doctor can disagree with the level) vanished from
+   *  the review page. Null here means the re-score did not score: it bailed
+   *  early, or the visit is an imaging report with no office level at all. */
+  code: string | null;
+  /** The cause carried on the pending record, so a consumer can say WHY the
+   *  level moved without guessing. The sign route used to hardcode
+   *  'note_edited', which told a doctor their own override was an edit. */
+  cause: EmChangeCause | null;
   error?: string;
 }
 
@@ -69,9 +84,14 @@ export async function rescoreEmAction(visitId: string): Promise<RescoreEmResult>
       user: { select: { practiceId: true } },
     },
   });
-  if (!visit) return { ok: false, stale: true, pending: null, error: 'Visit not found.' };
+  if (!visit) {
+    return { ok: false, stale: true, pending: null, code: null, cause: null, error: 'Visit not found.' };
+  }
   if (visit.status !== TranscribeVisitStatus.READY || !visit.emStale || !visit.soapFinal) {
-    return { ok: true, stale: visit.emStale, pending: null };
+    // Nothing was scored, so there is no level to report. `code: null` means
+    // "no new information" and the caller must keep what it is showing — it
+    // must never be read as "this visit has no level".
+    return { ok: true, stale: visit.emStale, pending: null, code: null, cause: null };
   }
 
   // Imaging reports have no office-visit E/M level — the pipeline skips scoring
@@ -95,10 +115,15 @@ export async function rescoreEmAction(visitId: string): Promise<RescoreEmResult>
         ok: false,
         stale: true,
         pending: null,
+        code: null,
+        cause: null,
         error: 'The note changed while we were checking — try again.',
       };
     }
-    return { ok: true, stale: false, pending: null };
+    // An imaging report genuinely has no office level. `code: null` is right
+    // here for the same reason it is right above — and harmless, because the
+    // level row never mounted on an imaging visit in the first place.
+    return { ok: true, stale: false, pending: null, code: null, cause: null };
   }
 
   let scored: string;
@@ -119,6 +144,8 @@ export async function rescoreEmAction(visitId: string): Promise<RescoreEmResult>
       ok: false,
       stale: true,
       pending: null,
+      code: null,
+      cause: null,
       error: "We couldn't re-check the billing level just now. Try again from the codes row.",
     };
   }
@@ -172,6 +199,8 @@ export async function rescoreEmAction(visitId: string): Promise<RescoreEmResult>
       ok: false,
       stale: true,
       pending: null,
+      code: null,
+      cause: null,
       error: 'The note changed while we were checking — open the codes row again.',
     };
   }
@@ -188,5 +217,9 @@ export async function rescoreEmAction(visitId: string): Promise<RescoreEmResult>
     ok: true,
     stale: false,
     pending: moved && baseline ? { from: baseline, to: scored } : null,
+    // THE LEVEL WE JUST VALIDATED, reported whether or not it moved. This is
+    // the field a display reads; `pending` is only for the confirm gate.
+    code: scored,
+    cause: moved && baseline ? (existing?.cause ?? 'note_edited') : null,
   };
 }

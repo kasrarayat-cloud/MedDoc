@@ -249,7 +249,17 @@ export const POST = withApiHandler<{ id: string }>(
             ? // Overridden back to the level already reviewed — nothing left to
               // confirm, and leaving the record would block the signature over
               // a change that no longer exists.
-              { emPendingChange: Prisma.DbNull }
+              //
+              // MOVE THE BASELINE WITH IT. `emScoredCode` is what the next
+              // re-score measures movement from, and it still held the level
+              // this record was raised against. Clearing the record without it
+              // left the two disagreeing, so the following re-score computed a
+              // move that the doctor had already resolved and raised a fresh
+              // confirm card for a level nothing had changed to.
+              {
+                emPendingChange: Prisma.DbNull,
+                emScoredCode: parsed.data.overrideToCode,
+              }
             : {}),
       },
     });

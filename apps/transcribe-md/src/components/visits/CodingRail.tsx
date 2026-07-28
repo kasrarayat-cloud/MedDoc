@@ -388,7 +388,15 @@ export function CodingRail({
               doctor-set
             </span>
           ) : null}
-          {readonly ? null : (
+          {/* HIDDEN WHEN THERE IS NO HANDLER, not just when readonly. This was
+              gated on `readonly` alone, so an unwired rail still drew the
+              control and clicking it produced "Override is not wired — reload
+              or contact support" — a dead control that blames the doctor's
+              browser. The parent stopped wiring it when the override moved to
+              the review page's gate stack (that route now requires a reason,
+              which this dropdown has nowhere to collect), so absent is the
+              correct rendering. */}
+          {readonly || !onApplyOverride ? null : (
             <div className="qm-lin-coding-override-wrap">
               <button
                 type="button"

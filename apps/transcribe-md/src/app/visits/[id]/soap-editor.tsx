@@ -43,7 +43,6 @@ import { isSkinBeta } from '@/config/skin-beta';
 import { CodingRail } from '@/components/visits/CodingRail';
 import { CodingRailSkeleton } from '@/components/visits/CodingRailSkeleton';
 import type {
-  EmCode,
   EmScore,
   SoapSectionKey as EmSoapSectionKey,
 } from '@/lib/em-coding-ui/types';
@@ -249,52 +248,10 @@ export function SoapEditor({
     };
   }, []);
 
-  // Override persistence — calls the new POST /em-score/override route
-  // and threads the refreshed score back into local state. The rail's
-  // success/failure toast handling lives inside CodingRail itself.
-  const handleApplyOverride = useCallback(
-    async (
-      code: EmCode,
-      reason?: string
-    ): Promise<{ ok: boolean; error?: string; newScore?: EmScore }> => {
-      try {
-        const res = await fetch(
-          `/api/visits/${visitId}/em-score/override`,
-          {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ overrideToCode: code, reason }),
-          }
-        );
-        if (!res.ok) {
-          const body = (await res.json().catch(() => ({}))) as {
-            error?: string;
-          };
-          return {
-            ok: false,
-            error: body.error ?? `Override failed (${res.status}).`,
-          };
-        }
-        const data = (await res.json()) as {
-          ok: boolean;
-          newScore?: EmScore;
-        };
-        if (data.ok && data.newScore) {
-          setEmScore(data.newScore);
-        }
-        return { ok: data.ok, newScore: data.newScore };
-      } catch (err) {
-        return {
-          ok: false,
-          error:
-            err instanceof Error
-              ? err.message
-              : 'Network error applying override.',
-        };
-      }
-    },
-    [visitId]
-  );
+  // The override POST that used to live here is GONE with the rail's dropdown.
+  // The level is set on the review page's gate stack now, which is also the only
+  // surface that can collect the REQUIRED reason the route asks for. Keeping a
+  // reasonless caller alive would have meant a control that 400s.
 
   // Batch H — signedAt is the canonical signal that the note is locked,
   // independent of how the lifecycle status enum was set. A signed
@@ -424,9 +381,13 @@ export function SoapEditor({
                   ? undefined
                   : () => requestSignOpen(true)
               }
-              onApplyOverride={
-                isReadonly || isSigned ? undefined : handleApplyOverride
-              }
+              // NO OVERRIDE FROM THE RAIL (2026-07-28). The rail's dropdown
+              // called the override route with no reason, and that route now
+              // requires one — the level moved to the gate stack on the review
+              // page, where the doctor types why. Leaving this wired would put a
+              // control on screen that 400s on every use. The rail hides the
+              // dropdown entirely when no handler is passed.
+              onApplyOverride={undefined}
               onHighlightCriteria={handleHighlightCriteria}
               onApplyAdditions={async (additions) => {
                 try {

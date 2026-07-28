@@ -68,14 +68,23 @@ export function EmLevelCard(props: EmLevelCardProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Keep the picker in step with the level when we are NOT editing — a
-  // re-score or a confirm elsewhere on the page moves it underneath us, and
-  // opening the picker on a stale value would let a doctor "keep" a level that
-  // is no longer the one shown.
+  // Keep the picker in step with the level when it moves underneath us — a
+  // re-score or a confirm elsewhere on the page can do that, and opening the
+  // picker on a stale value would let a doctor "keep" a level that is no longer
+  // the one shown.
+  //
+  // WHILE THE FORM IS OPEN, SAY SO RATHER THAN SWALLOW IT. Silently leaving the
+  // old selection in place meant the doctor could be looking at "changing 99213
+  // → 99214" while the level had already become 99215, and save a move away
+  // from a level that was never current. Closing the form under them would
+  // discard what they typed. So: keep their text, re-point the picker at the
+  // new level, and tell them it moved.
   const [prevLevel, setPrevLevel] = useState(level);
+  const [movedUnderneath, setMovedUnderneath] = useState<string | null>(null);
   if (prevLevel !== level) {
     setPrevLevel(level);
-    if (!editing) setCode(level ?? '99213');
+    setCode(level ?? '99213');
+    if (editing) setMovedUnderneath(level);
   }
 
   if (!level) return null;
@@ -105,6 +114,7 @@ export function EmLevelCard(props: EmLevelCardProps) {
                 setError(null);
                 setReason('');
                 setCode(level);
+                setMovedUnderneath(null);
                 setEditing(true);
               }}
               disabled={disabled}
@@ -149,6 +159,13 @@ export function EmLevelCard(props: EmLevelCardProps) {
               data-testid="em-level-reason"
             />
 
+            {movedUnderneath && movedUnderneath === level && (
+              <p className="qm-rdoc-emadj-note" role="status" data-testid="em-level-moved">
+                The level changed to {level} while this was open. Pick again if you still
+                want a different one.
+              </p>
+            )}
+
             {error && (
               <p className="qm-rdoc-emadj-err" role="alert" data-testid="em-level-error">
                 {error}
@@ -172,6 +189,7 @@ export function EmLevelCard(props: EmLevelCardProps) {
                   if (r.ok) {
                     setEditing(false);
                     setReason('');
+                    setMovedUnderneath(null);
                   } else {
                     // Keep the form OPEN with their words in it. Closing on
                     // failure discards what they typed and shows the old level
@@ -199,6 +217,7 @@ export function EmLevelCard(props: EmLevelCardProps) {
                   setCode(level);
                   setReason('');
                   setError(null);
+                  setMovedUnderneath(null);
                 }}
               >
                 Cancel
