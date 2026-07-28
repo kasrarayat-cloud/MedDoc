@@ -197,6 +197,35 @@ describe('the projection uses the stated polarity, not a regex over the prose', 
     expect(rosFact(facts, 'numbness').laterality).toBe('right');
   });
 
+  it('A VISIT STORED BEFORE THIS FIELD EXISTED still projects', () => {
+    // THE RESUME PATH, and it is live: `transcribe_visits.entities` is read back
+    // as `resumeState.entities as ExtractedEntities` — a CAST, not a parse — so
+    // the required-polarity schema never runs against it. Production holds 10
+    // visits with stored ROS entries and none of them has the field.
+    //
+    // Those rows must fall back to the inference they have always had, not throw
+    // and not silently become 'affirmed'. That is exactly why `polarity` is
+    // optional on the projection's snapshot type while being REQUIRED in the L3
+    // schema: new extractions must state it, old rows cannot be made to.
+    const contextText = 'She denies chest pain.';
+    const facts = projectEncounterFacts({
+      mode: 'conversation',
+      contextText,
+      entities: {
+        ...MINIMAL,
+        ros: [
+          {
+            system: 'cardiovascular',
+            finding: 'chest pain',
+            evidence_quote: contextText,
+            // no polarity, no laterality — a pre-2026-07-28 row
+          },
+        ],
+      },
+    });
+    expect(rosFact(facts, 'chest pain').polarity).toBe('denied');
+  });
+
   it('and every OTHER fact path still infers, byte-identically', () => {
     // The structured override is scoped to ROS. Medications, allergies and the
     // rest keep the heuristic they have always had — this change is not a
