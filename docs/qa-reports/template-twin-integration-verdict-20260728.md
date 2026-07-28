@@ -1,5 +1,23 @@
 # Template Twin — integration verdict
 
+> **FINAL STATUS: PARKED (2026-07-28).** The verdict below stands — absorb, not
+> retire — but the integrate column is **post-pilot roadmap**, not current work.
+>
+> **Trigger to un-park early:** a pilot doctor explicitly needs their native form
+> bytes back. Nothing else. Not tidiness, not "while we're in here".
+>
+> **`MAPPINGS_NOT_READY` stays strict, by decision.** The certify gate refuses
+> until every field has a physician-confirmed mapping, and the wall is 79 of 80
+> on a real customer form. **Never weaken the gate to shrink the wall** — the
+> gate is what makes a certified twin mean "a physician confirmed what each field
+> means". Shrinking the wall by lowering the bar produces a certified twin nobody
+> confirmed, which is worse than no twin. The work, when it comes, is the concept
+> registry and the confirmation flow — not the threshold.
+>
+> Steady state is recorded in `AGENTS.md` → "Template Twin — the parked steady
+> state". Read that before concluding anything about Twin.
+
+
 **2026-07-28. Read-only audit; zero code changes.** 7 evidence lenses, 173 facts,
 24 load-bearing claims adversarially challenged — **17 corrected**. A 71%
 correction rate on the claims that decide the verdict is the headline finding

@@ -70,6 +70,51 @@ What this does NOT cover, and what remains forbidden: any **filled** document or
 note. `twin-*.docx`, `diag-*`, and the other clinical artifacts at the repo root
 carry PHI and are gitignored. A filled document is never a fixture.
 
+## Template Twin — the parked steady state
+
+**Read this before concluding anything about Template Twin.** An audit in July
+2026 raised 173 facts about it and **17 of 24 load-bearing claims were corrected
+under challenge** — a 71% correction rate. That was the cost of illegibility, not
+of anyone's carelessness. This paragraph is the cure: it is the deliberate steady
+state, and none of it is a bug.
+
+**PARKED 2026-07-28.** Verdict: absorb into the shipped `note_templates` pipeline.
+The RETIRE column was executed (PR #442). The INTEGRATE column is **post-pilot
+roadmap**. **Trigger to un-park early: a pilot doctor explicitly needs their native
+form bytes back.** Nothing else.
+
+What is true, and intended:
+
+- **`NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX` stays ON in production.** It is not a
+  half-shipped feature left switched on by accident. It gates the OOXML ingest +
+  fail-closed security fork that runs on **every** `.docx` template upload
+  (`note-template-parse/docx-to-text.ts:39` dynamically imports the twin ingest),
+  and the shipped `pdf-native` feature imports twin storage. That code is
+  **absorbed in place and load-bearing** — deleting it breaks working paths.
+- **The per-visit fill step short-circuits `not_certified_twin` on every visit,
+  by design.** `worker.ts` calls it; it declines because no CERTIFIED compiled
+  version exists in production. That is the correct behaviour for a parked
+  feature, not a failure to investigate.
+- **The certification UI stays folded in production**
+  (`NEXT_PUBLIC_SETTINGS_SIMPLE_ROW=true` renders `NativeTemplateManager` as
+  null). There is therefore **no door in**, which is why prod has zero
+  certifications while the flag is on. That is the explanation — stop looking for
+  a broken gate.
+- **`MAPPINGS_NOT_READY` is a deliberate refusal and stays strict.** Certification
+  refuses until every field has a physician-confirmed mapping; on a real customer
+  form that is 79 of 80. **Never weaken the gate to shrink the wall** — a
+  certified twin that nobody confirmed is worse than no twin. The work, if the
+  park is lifted, is the imaging concept registry and the confirmation flow.
+- **The twin HAS worked end to end**, on QA, by hand: upload → compile (80 fields,
+  1 table) → fill manifest (`VERIFIED`, `roundTripVerified=true`) → native DOCX
+  export (`nativeTemplate=true`). Two earlier "never proven" conclusions were
+  wrong: `template_twin_fill_manifests` read empty because its `visitId` FK
+  cascades on fixture re-seed, and the "0 native exports ever" figure was
+  prod-scoped while QA held ten.
+
+Full evidence: `docs/qa-reports/template-twin-integration-verdict-20260728.md`
+and `…-absorb-plan-20260728.md`.
+
 ## Rollback constraints — known, accepted, do not "fix"
 
 A flag rollback is not always a clean inverse. Where it costs a capability, the
