@@ -70,6 +70,31 @@ What this does NOT cover, and what remains forbidden: any **filled** document or
 note. `twin-*.docx`, `diag-*`, and the other clinical artifacts at the repo root
 carry PHI and are gitignored. A filled document is never a fixture.
 
+## The Q1 backlog has ONE source of truth
+
+`docs/backlog/q1-fixpack-retriage-20260728.md`. Nothing else.
+
+The original triage (`docs/audit-reports/q1-fixpack-triage-20260506T190348Z.md`,
+PR #171) carries a SUPERSEDED banner and is kept only as the historical baseline.
+Do not work from it, and do not re-open items by reading it.
+
+**A backlog that predates a rewrite is a list of guesses until it is
+re-validated.** Six of sixteen findings had been closed by later work and nobody
+had marked them; a seventh had shipped as a product feature under another name.
+Every remaining row was re-checked against `main` by re-running its own evidence
+query — do the same before acting on any of them.
+
+Three shipped 2026-07-28: **N1** (a dictated CPT code reaches the note — the
+allowlist was never the cause), **§07.1** (L6 polish sees the visit, as a
+disambiguation source only — the fidelity gate still measures against the draft
+alone), **§02.9** (ROS polarity as data).
+
+The remaining six are **PARKED**, and the trigger is written down: *the pilot
+roster confirms the specialty.* They are specialty-shaped, so building them now
+is building them for a guess. Do not un-park on a feeling that there is time, and
+do not let "safety-adjacent" alone promote §01.3 — L5 is advisory and does not
+gate signing.
+
 ## Template Twin — the parked steady state
 
 **Read this before concluding anything about Template Twin.** An audit in July
