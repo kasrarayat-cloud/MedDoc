@@ -100,6 +100,24 @@ services:
 
   # One-shot schema apply (cached builder image — has the prisma CLI; no build).
   # Invoke: docker compose -f docker-compose.qa.yml run --rm db-migrate
+  # ⚠️ NO `build:` SECTION HERE, AND THAT IS DELIBERATE — but it has a sharp
+  # edge worth knowing before it bites you.
+  #
+  # This stack CONSUMES images by name; it never builds them. That is the whole
+  # point: QA must run a build byte-identical to the promoted one. Images are
+  # built from the PROD compose file, exactly as CI does it:
+  #
+  #     docker compose -p meddoc-pro -f docker-compose.yml build transcribe-md
+  #     docker compose -p meddoc-pro -f docker-compose.yml --profile migrations build db-migrate
+  #
+  # THE EDGE: because there is no build section, running
+  # `docker compose -f docker-compose.qa.yml build db-migrate` is a SILENT
+  # NO-OP. Compose has nothing to build, prints nothing, exits 0 — and the next
+  # `run --rm db-migrate` quietly uses a stale image. That is how new migrations
+  # went unapplied here on 2026-07-28 while the log read "No pending migrations
+  # to apply". Always follow with
+  # `bash scripts/assert-migrations-applied.sh meddoc-qa-postgres-1 meddoc_qa_test`,
+  # which caught exactly this on its first real use.
   db-migrate:
     image: meddoc-pro-db-migrate:latest
     restart: "no"
@@ -152,6 +170,13 @@ services:
       # production compose env.
       RATE_LIMIT_DISABLED: "true"
       RATE_LIMIT_DISABLE_ALLOW_IN_PROD: "true"
+      # Invite-only signup (2026-07-28). The suite drives real signups, so it
+      # needs a real code. NOTE THE POSTURE: the gate is NOT disabled for tests
+      # — there is no off switch, deliberately. The E2E stack is simply an
+      # invited tenant, so every scenario exercises the same code path a pilot
+      # doctor will. A suite that ran against a switched-off gate would prove
+      # nothing about the gate.
+      SIGNUP_INVITE_CODES: "E2E-PILOT-CODE"
       # No real API calls anywhere in this stack.
       MOCK_AI_CALLS: "${MOCK_AI_CALLS:-true}"
       # Note-format PHI-gate reject path (E2E scenario 23). Default empty (off)

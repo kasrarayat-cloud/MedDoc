@@ -18,14 +18,18 @@
 # the backstop that FAILS instead: it compares what the repo has against what the
 # database actually recorded, and knows nothing about how migrate was invoked.
 #
+# WHAT COUNTS AS A MIGRATION: a directory containing `migration.sql`. NOT a
+# name pattern. The first version of this script matched `^[0-9]{14}_` and so
+# silently skipped `0000_init` — a real migration directory with a short,
+# non-conforming name — then reported it as an unexplained extra row in the
+# database. A guard that quietly ignores part of what it is guarding is worse
+# than no guard, because it reads as coverage.
+#
 # THE ASSERTION IS DIRECTIONAL, and that is deliberate. It asserts that every
-# migration directory in the repo IS applied. It does NOT assert count equality:
-# the first run of this script failed on a legitimate `0000_init` baseline row
-# (2026-04-12, applied_steps_count=0, present in prod AND qa) that has no
-# directory because it was recorded with `prisma migrate resolve --applied`.
-# An extra applied row is a baseline or a since-removed migration — reported for
-# information, never a failure. A repo migration that is NOT applied is the
-# actual defect, and it is the only thing that fails this script.
+# migration in the repo IS applied. It does NOT assert count equality: an extra
+# applied row is a since-removed or renamed migration, which is reported for
+# information. A repo migration that is NOT applied is the actual defect, and it
+# is the only thing that fails this script.
 #
 # READ-ONLY. Never mutates anything.
 #
@@ -51,10 +55,11 @@ if ! docker inspect "$CONTAINER" >/dev/null 2>&1; then
   exit 2
 fi
 
-# Migration directories are timestamp-prefixed; migration_lock.toml is not one.
+# A migration is a directory holding a migration.sql. Name-agnostic on purpose
+# — see the header for the bug that taught this.
 repo_migrations() {
-  find "$MIGRATIONS_DIR" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null \
-    | grep '^[0-9]\{14\}_' | sort
+  find "$MIGRATIONS_DIR" -mindepth 2 -maxdepth 2 -name 'migration.sql' -printf '%h\n' 2>/dev/null \
+    | xargs -r -n1 basename | sort
 }
 
 # Only rows that genuinely landed: a started-but-unfinished or rolled-back row is

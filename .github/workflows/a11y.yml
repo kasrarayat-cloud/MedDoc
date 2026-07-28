@@ -83,6 +83,12 @@ jobs:
       MINIO_SECRET_KEY: meddoc
       MINIO_USE_SSL: 'false'
       TRANSCRIBE_MD_MINIO_BUCKET: transcribe-md-audio
+      # ---- Invite-only signup (2026-07-28) ---------------------------------
+      # The a11y sweep signs up a fresh user to reach authed routes, so it needs
+      # a valid code. The gate itself is NOT disabled — there is no off switch,
+      # deliberately. CI is simply an invited tenant, exercising the same path a
+      # pilot doctor will. Must match E2E_INVITE_CODE in tests/e2e/helpers/signup.ts.
+      SIGNUP_INVITE_CODES: E2E-PILOT-CODE
       # ---- App boot config -------------------------------------------------
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: '1'
