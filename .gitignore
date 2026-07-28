@@ -66,6 +66,11 @@ test-results/
 # pg_dump snapshots taken before schema migrations. Contains live PHI
 # and production user data — MUST NOT be committed under any circumstances.
 backups/
+
+# Deploy logs are RETAINED ON DISK deliberately (scripts/deploy-prod.sh writes
+# the full transcript there, never piped through `tail`) but are not versioned:
+# they are an operational record of one host, not source. See runbook §2.
+docs/deploy-logs/
 .design-preview-phase-6.html
 
 # Phase 5 exploration dead-ends (kept on disk for reference, not in repo).

@@ -141,33 +141,84 @@ npx playwright test --project=chromium
 
 ```bash
 cd /opt/meddoc-pro
-
-# 1. Backup first (1 minute, minimal downtime)
-BACKUP=/opt/meddoc-pro/backups/pre_deploy_$(date -u +%Y%m%d_%H%M%S).sql.gz
-docker compose exec -T postgres pg_dump -U meddoc -d meddoc --no-owner --no-acl | gzip > "$BACKUP"
-
-# 2. Pull latest
-git fetch origin main
-git log HEAD..origin/main --oneline      # review what's landing
+git fetch origin main && git log HEAD..origin/main --oneline   # review what's landing
 git merge --ff-only origin/main
-
-# 3. If migrations are present
-ls packages/db/prisma/migrations/        # check for new dirs
-docker compose run --rm db-migrate        # Prisma will apply + log diff
-
-# 4. Rebuild changed services (sequential — VPS can't parallel-build)
-#    Identify which services are affected by the diff, then:
-docker compose build transcribe-md-worker
-docker compose build transcribe-md
-# (meddoc-pro, marketing only if they changed)
-
-# 5. Recreate
-docker compose up -d transcribe-md transcribe-md-worker
-
-# 6. Verify (see §1.5)
+bash scripts/deploy-prod.sh
 ```
 
-**Zero-downtime tip**: `docker compose up -d` replaces containers one-by-one. In-flight HTTP requests drop (there's no bluegreen/rolling deploy today). For the worker, BullMQ's lock means in-flight jobs finish on the old container before the new one picks up; a restart mid-job triggers BullMQ retry.
+**Use the script.** The prose version of this section failed silently on
+2026-07-28 and the script exists so it cannot fail that way again. It does, in
+order: backup → **build db-migrate** → migrate → **assert** → build worker →
+build app → recreate → health.
+
+### 2.1 Why db-migrate is rebuilt every time
+
+`docker compose run --rm db-migrate` runs whatever image was **last built**.
+`db-migrate` builds from the app Dockerfile, so a deploy that rebuilds only
+`transcribe-md` and `transcribe-md-worker` leaves it stale.
+
+That happened. It printed:
+
+```
+79 migrations found in prisma/migrations
+No pending migrations to apply.
+```
+
+and exited **0**. The repo had eighty. The image physically did not contain the
+new migration directory, so there was nothing for it to find. A clean exit code,
+a reassuring message, and nothing done.
+
+**"No pending migrations to apply" from a stale image is indistinguishable from
+success.** Never read it as proof.
+
+### 2.2 Why the assertion exists on top of that
+
+Rebuilding is a step a person can forget; this section used to say "rebuild
+changed services" and list only the app services. The assertion cannot be
+forgotten, because it aborts the deploy before anything is recreated:
+
+```bash
+bash scripts/assert-migrations-applied.sh   # 0 = all applied · 1 = UNAPPLIED · 2 = off-host
+```
+
+It compares the repo's migration directories against `_prisma_migrations` and
+knows nothing about how migrate was invoked — which is the point.
+
+It is **directional**: it fails only when a repo migration is *not applied*. An
+applied row with no directory is a baseline (`0000_init`, 2026-04-12,
+`applied_steps_count=0`, present in prod and QA) or a since-removed migration,
+and is reported for information. Count equality would false-alarm on that
+baseline forever, and a guard that cries wolf gets switched off.
+
+### 2.3 The log is a file, never a pipe into `tail`
+
+`scripts/deploy-prod.sh` tees the full transcript to
+`docs/deploy-logs/deploy-<UTC>.log` (gitignored — retained on disk, not
+versioned). The first attempt at the failed deploy was run as
+`deploy.sh | tail -50`, which discarded the backup and migration output: exactly
+the two sections that would have shown the no-op. **The record of a deploy must
+outlive the terminal.**
+
+### 2.4 Manual equivalent, if you must
+
+```bash
+BACKUP=/opt/meddoc-pro/backups/pre_deploy_$(date -u +%Y%m%d_%H%M%S).sql.gz
+docker compose exec -T postgres pg_dump -U meddoc -d meddoc --no-owner --no-acl | gzip > "$BACKUP"
+docker compose build db-migrate          # <-- NOT optional
+docker compose run --rm db-migrate
+bash scripts/assert-migrations-applied.sh || exit 1
+docker compose build transcribe-md-worker
+docker compose build transcribe-md
+docker compose up -d transcribe-md transcribe-md-worker
+```
+
+Rebuild `meddoc-pro` / `marketing` only if they changed. `packages/shared` must be
+in `Dockerfile.worker` — the worker imports from it.
+
+**Zero-downtime tip**: `docker compose up -d` replaces containers one-by-one.
+In-flight HTTP requests drop (there's no blue/green today). For the worker,
+BullMQ's lock means in-flight jobs finish on the old container before the new one
+picks up; a restart mid-job triggers BullMQ retry.
 
 ---
 
