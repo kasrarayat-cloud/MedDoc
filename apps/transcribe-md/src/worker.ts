@@ -702,6 +702,12 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         soapDraft,
         critique,
         noteTemplate,
+        // Q1 audit §07.1 — the context L4 and L5 already read, and polish did
+        // not. A DISAMBIGUATION source only: the L6b fidelity gate still
+        // measures the polished note against the draft alone.
+        specialty: visit.specialty,
+        entitiesJson: JSON.stringify(entities),
+        roleLabeledTranscript: contextText,
         // Only point the doctor at the review lane when there IS one.
         //
         // Read FRESH, and with the column named explicitly. The `visit` object

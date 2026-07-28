@@ -50,6 +50,29 @@ export interface Layer6Input {
    *  lane is empty that sentence sends them hunting for cards that do not
    *  exist. Absent ⇒ true, so every existing caller and test is unchanged. */
   hasSuggestions?: boolean;
+
+  // --- Q1 audit §07.1: the context the worker already had, and polish did not.
+  //
+  // These are a DISAMBIGUATION source and never a content source. The L6b
+  // fidelity gate below still measures the polished note against the DRAFT
+  // ALONE — it is not weakened here, and it must never be, or the fabrication
+  // backstop disappears. Anything polish tried to import from the transcript
+  // would be rejected as novel and take the whole polish down with it.
+  //
+  // What they buy is the fixes polish previously had to GUESS at. "The
+  // Assessment contradicts the Subjective about chest pain" can be applied in
+  // either direction; both readings use vocabulary already in the draft, so
+  // both pass the gate, and until now L6 picked one blind.
+  //
+  // All three are optional, so every existing caller is byte-identical.
+
+  /** The visit's specialty. Polish has been editing ultrasound reports and
+   *  paediatric visits without knowing which it was looking at. */
+  specialty?: string;
+  /** L3's extracted entities, verbatim JSON. */
+  entitiesJson?: string;
+  /** The role-labeled transcript L4 and L5 already read. */
+  roleLabeledTranscript?: string;
 }
 
 export interface Layer6Output {
@@ -146,6 +169,9 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
   // untouched and pins only genuine custom templates (the KUK operative note),
   // whose draft DOES match these labels.
   const emitStructureLock = !template.isSystemDefault && requiredSections.length > 0;
+  // §07.1 — whether there is anything to disambiguate WITH. Specialty alone is
+  // a one-line hint and does not open the reference block.
+  const hasContext = Boolean(input.entitiesJson || input.roleLabeledTranscript);
   let soapFinal: string;
   // FIND-P1-016 (2026-05-14) — when the model edits the draft, the
   // output goes through the same SOAP-structure validator L4 uses.
@@ -222,6 +248,21 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
       '  information already present in the draft.',
       '- Output ONLY the revised SOAP markdown. No preamble, no summary',
       '  of changes.',
+      ...(input.specialty ? ['', `Specialty: ${input.specialty}.`] : []),
+      ...(hasContext
+        ? [
+            '',
+            'WHAT WAS ACTUALLY SAID — reference only.',
+            'The material below is provided so you can tell which reading of an',
+            'ambiguous fix is the correct one — for example when the draft',
+            'contradicts itself and the fix says only "reconcile these". Use it',
+            'to CHOOSE between statements already in the draft, and',
+            'never as content to add.',
+            'Rules 1–4 above still bind: if the right correction',
+            'would require a fact that is not in the draft, leave the flagged',
+            'area as-is and keep moving.',
+          ]
+        : []),
     ].join('\n');
 
     const fixesText = fixable
@@ -237,6 +278,12 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
       '',
       'Issues to apply (apply in order):',
       fixesText,
+      ...(input.entitiesJson
+        ? ['', 'Extracted entities (reference only):', input.entitiesJson]
+        : []),
+      ...(input.roleLabeledTranscript
+        ? ['', 'Transcript (reference only):', input.roleLabeledTranscript]
+        : []),
     ].join('\n');
 
     const { text } = await modelClient.completeText({
