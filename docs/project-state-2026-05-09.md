@@ -1,7 +1,7 @@
 # QuillMD project state — 2026-05-09
 
 > **Memory-priming snapshot.** Three-day delta since `project-state-2026-05-06.md`. Bullets, no prose.
-> Anchor SHA on main: **`cefb2be`** (PR #175 merge, 2026-05-06).
+> Anchor SHA on main: **`eb87a97`** (PR #175 merge, 2026-05-06).
 > Working tree on main: **dirty** — `Caddyfile` + `docker-compose.yml` carry the `_design-references → /_preview/*` wiring (uncommitted).
 
 ---
@@ -9,50 +9,50 @@
 ## 1 · PRs merged in last 14 days (oldest → newest)
 
 ### 2026-05-04 · Round-3 audit closures (PR-D…PR-J)
-- `b4150e7` PR #115 — **PR-D** AI safety deterministic backstops · Round-3
-- `5f7bdb2` PR #117 — **PR-C.1** docs · defer audit_logs immutability to Phase 7
-- `9b0c42a` PR #118 — **PR-E** data integrity · Rx warning unique + SOAP optimistic concurrency
-- `d063025` PR #119 — **PR-F** auth hardening · disable EMAIL_AUTO_CONFIRM in prod, signup anti-enum, NextAuth pin
-- `8884480` PR #120 — **PR-G** docs · BAA reality + IR runbook + DR runbook
-- `f8cb8a2` PR #121 — **PR-H** observability · Sentry source maps + user/visit context, Redis AOF, worker healthcheck
-- `9201981` PR #122 — **PR-I** a11y · skip-link target, focus indicators, contrast bump (text-3 → #828995, 4.6:1), audio toggle group
-- `3ba0e98` PR #123 — **PR-J** input validation · magic-byte audio sniff, prompt-injection delimiters, server-side caps
-- `a501ac2` PR #124 — docs · POST_MERGE_TODO §24.H/I/J closures + operator steps
+- `1899bde` PR #115 — **PR-D** AI safety deterministic backstops · Round-3
+- `52ae6a4` PR #117 — **PR-C.1** docs · defer audit_logs immutability to Phase 7
+- `dc723d3` PR #118 — **PR-E** data integrity · Rx warning unique + SOAP optimistic concurrency
+- `43e9118` PR #119 — **PR-F** auth hardening · disable EMAIL_AUTO_CONFIRM in prod, signup anti-enum, NextAuth pin
+- `c3b6817` PR #120 — **PR-G** docs · BAA reality + IR runbook + DR runbook
+- `cf1fbbc` PR #121 — **PR-H** observability · Sentry source maps + user/visit context, Redis AOF, worker healthcheck
+- `5a93da1` PR #122 — **PR-I** a11y · skip-link target, focus indicators, contrast bump (text-3 → #828995, 4.6:1), audio toggle group
+- `5a18ce7` PR #123 — **PR-J** input validation · magic-byte audio sniff, prompt-injection delimiters, server-side caps
+- `16c5540` PR #124 — docs · POST_MERGE_TODO §24.H/I/J closures + operator steps
 
 ### 2026-05-05 · Q0/Q1 quality fix-pack + QA-agent v1.x → v3.x
-- `e5e257e` PR #125 — Q0-2 L7c pediatric Rx framing (mg/kg + weight gate)
-- `86e2eea` PR #126 — Q0-1 wire `validateRxDose` into L7c · deterministic safety floor live
-- `4479285` PR #127 — Q0-3 upgrade L4/L5/L7c → **Opus 4.7**
-- `407c3dd` PR #128 — Q0-5 propagate Deepgram per-utterance confidence + auto-flag low-quality audio
-- `2294cd3` PR #129 — docs · POST_MERGE_TODO §26 closures + per-PR sub-agent reports
-- `6310e6d` PR #130 — Q2 quick-wins · temperature/schema/keyterm tightening + per-code confidence flag + Rx action coverage
-- `58a6d7a` PR #131 — fix(ai) · strip `temperature` for Opus 4.x + treat 400 invalid_request as permanent + capture API error bodies
-- `42357d6` PR #132 — fix(visits) · wire CodingRail confirm-sign + bump-additions persistence (Phase 5.2 stubs)
-- `fec2292` PR #133 — feat(agents) · **QA Interaction Auditor v1** added
-- `5b3c841` PR #134 — fix(visits) · wire remaining Phase 5.2 stubs (EM override + SOAP highlight/edit/boost) + seed QA test user
-- `a3cb8ed` PR #135 — feat(qa-agent) · full-site coverage expansion + seed-script F-07/F-08 fixes (**Phase 5.2 stub-wave cleanup complete**)
-- `aaaed00` PR #136 — feat(qa-agent v3.1) · storageState session reuse + rich fixture seeds + `deepWalk` helper
-- `286269f` PR #137 — feat(qa-agent v3.2) · deep walkers for 5 high-traffic doctor pages
-- `196dd14` PR #138 — fix(audit) · close 3 §164.312(b) gaps surfaced by QA agent v3.2
-- `e701608` PR #139 — fix(dashboard) · close F-12 NAB; tests pinning existing error boundary
-- `0dad69d` PR #140 — fix(qa-v3.2-cleanup) · close F-13/F-14/F-15/F-16 (orphan dispatcher + dead code + audit race + walker locator)
-- `36a1ba0` PR #141 — feat(security) · **PR-K** supply-chain hardening · Dependabot + base-image SHA pins + npm audit baseline (high+critical CI gate)
+- `dea0987` PR #125 — Q0-2 L7c pediatric Rx framing (mg/kg + weight gate)
+- `95b4dd7` PR #126 — Q0-1 wire `validateRxDose` into L7c · deterministic safety floor live
+- `5111615` PR #127 — Q0-3 upgrade L4/L5/L7c → **Opus 4.7**
+- `820bc38` PR #128 — Q0-5 propagate Deepgram per-utterance confidence + auto-flag low-quality audio
+- `47c8702` PR #129 — docs · POST_MERGE_TODO §26 closures + per-PR sub-agent reports
+- `1abe74f` PR #130 — Q2 quick-wins · temperature/schema/keyterm tightening + per-code confidence flag + Rx action coverage
+- `b0ebef8` PR #131 — fix(ai) · strip `temperature` for Opus 4.x + treat 400 invalid_request as permanent + capture API error bodies
+- `c25f35f` PR #132 — fix(visits) · wire CodingRail confirm-sign + bump-additions persistence (Phase 5.2 stubs)
+- `ccb3f00` PR #133 — feat(agents) · **QA Interaction Auditor v1** added
+- `30adacb` PR #134 — fix(visits) · wire remaining Phase 5.2 stubs (EM override + SOAP highlight/edit/boost) + seed QA test user
+- `280840d` PR #135 — feat(qa-agent) · full-site coverage expansion + seed-script F-07/F-08 fixes (**Phase 5.2 stub-wave cleanup complete**)
+- `8ceb25a` PR #136 — feat(qa-agent v3.1) · storageState session reuse + rich fixture seeds + `deepWalk` helper
+- `9dc4972` PR #137 — feat(qa-agent v3.2) · deep walkers for 5 high-traffic doctor pages
+- `751da08` PR #138 — fix(audit) · close 3 §164.312(b) gaps surfaced by QA agent v3.2
+- `a2e221b` PR #139 — fix(dashboard) · close F-12 NAB; tests pinning existing error boundary
+- `41edf2a` PR #140 — fix(qa-v3.2-cleanup) · close F-13/F-14/F-15/F-16 (orphan dispatcher + dead code + audit race + walker locator)
+- `58403cb` PR #141 — feat(security) · **PR-K** supply-chain hardening · Dependabot + base-image SHA pins + npm audit baseline (high+critical CI gate)
 
 ### 2026-05-06 · PR-L/M/N security wave + processing-screen UX + agents-v3.3
-- `479e579` PR #162 — feat(pipeline) · **PR-L** clinical-resilience · Whisper fallback + BullMQ DLQ + admin queue dashboard
-- `f4bbfc2` PR #163 — feat(pipeline) · wire `transcribe()` orchestrator into Layer-1 + provider audit (PR-L follow-up)
-- `1dc14c9` PR #164 — feat(security) · **PR-M** finalize MinIO SSE-S3 bootstrap (Path B; KES deferred per NAB)
-- `4ab2da6` PR #165 — feat(security) · **PR-N** `edge-security-apply.sh` operator wrapper
-- `0af99c3` PR #166 — docs(sentry) · close PR-O as NAB + refresh project state + capture polish backlog
-- `573ec10` PR #167 — feat(qa-agent) · visit-record walker · `getUserMedia` mock + draft-mode fixture (v3.3)
-- `ede05db` PR #168 — feat(qa-agent v3.3) · broader walker depth · 23 stubs promoted to ✅ deep (3-tier taxonomy)
-- `7c91309` PR #169 — feat(agents) · **AI Pipeline Auditor** design doc · DORMANT until pilot data
-- `30c7eed` PR #170 — feat(agents) · **HIPAA Compliance Auditor** design doc · staged activation
-- `c6c42c5` PR #171 — docs(audit) · Q1 fix-pack triage · re-baseline 19-finding backlog vs post-Round-3 + post-v3.x state
-- `8848037` PR #172 — feat(transcribe-md) · **typewriter-SOAP processing screen** · replaces minimal-dot post-upload
-- `f572747` PR #173 — feat(transcribe-md) · typewriter SOAP types real content (PATH B-lite preview)
-- `ccffe72` PR #174 — fix(transcribe-md) · typewriter content truncation + done-state freeze
-- `cefb2be` PR #175 — fix(transcribe-md) · typewriter typography + scope · max-width, markdown render, drop transcript phase
+- `ae2cd8e` PR #162 — feat(pipeline) · **PR-L** clinical-resilience · Whisper fallback + BullMQ DLQ + admin queue dashboard
+- `c845cf0` PR #163 — feat(pipeline) · wire `transcribe()` orchestrator into Layer-1 + provider audit (PR-L follow-up)
+- `861ae09` PR #164 — feat(security) · **PR-M** finalize MinIO SSE-S3 bootstrap (Path B; KES deferred per NAB)
+- `bc60261` PR #165 — feat(security) · **PR-N** `edge-security-apply.sh` operator wrapper
+- `b209650` PR #166 — docs(sentry) · close PR-O as NAB + refresh project state + capture polish backlog
+- `6d1de17` PR #167 — feat(qa-agent) · visit-record walker · `getUserMedia` mock + draft-mode fixture (v3.3)
+- `a977149` PR #168 — feat(qa-agent v3.3) · broader walker depth · 23 stubs promoted to ✅ deep (3-tier taxonomy)
+- `109c9a4` PR #169 — feat(agents) · **AI Pipeline Auditor** design doc · DORMANT until pilot data
+- `aa85826` PR #170 — feat(agents) · **HIPAA Compliance Auditor** design doc · staged activation
+- `f7d3f71` PR #171 — docs(audit) · Q1 fix-pack triage · re-baseline 19-finding backlog vs post-Round-3 + post-v3.x state
+- `4fe7f03` PR #172 — feat(transcribe-md) · **typewriter-SOAP processing screen** · replaces minimal-dot post-upload
+- `eb9703f` PR #173 — feat(transcribe-md) · typewriter SOAP types real content (PATH B-lite preview)
+- `f4a8d24` PR #174 — fix(transcribe-md) · typewriter content truncation + done-state freeze
+- `eb87a97` PR #175 — fix(transcribe-md) · typewriter typography + scope · max-width, markdown render, drop transcript phase
 
 ---
 
@@ -161,7 +161,7 @@ Ordered by criticality. Items below are NOT actionable by Lead — operator-sudo
 ### Local (no PR or stale)
 Local branches sorted by `committerdate` — top 14:
 - `2026-05-06 fix/rx-warnings-rail-override-button` → PR #176
-- `2026-05-06 main` → at `cefb2be`
+- `2026-05-06 main` → at `eb87a97`
 - `2026-05-04 chore/e2e-smoke-test-2026-05-04` — unclear merge state, likely stale
 - `2026-05-04 chore/audit-round2-cleanup-2026-05-03` — likely merged via Round-3 wave
 - `2026-05-04 chore/audit-cleanup-2026-05-03` — likely merged via Round-3 wave
@@ -209,7 +209,7 @@ Both are the **`/_preview/*` design-review wiring**. Comments in both files mark
 
 ## 9 · Memory-priming TL;DR
 
-- Main HEAD `cefb2be` (2026-05-06).
+- Main HEAD `eb87a97` (2026-05-06).
 - **One** substantive open PR (#176 — Rx override bridge, CI red on axe).
 - **Eighteen** dependabot bumps queued; no triage yet.
 - Working tree dirty by **design** — `/_preview/*` wiring is intentional + documented inline.

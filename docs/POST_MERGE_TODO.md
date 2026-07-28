@@ -18,7 +18,7 @@ QA Layer 3b's 404 on this route during Strategy A (production build) is therefor
 
 ## 2. ✅ Fixed: typo `processing-state.tsx:426` literal `’` in JSX text
 
-**Status:** fixed during merge prep, commit `87340e0`. Replaced the 8-character literal escape with the actual U+2019 character.
+**Status:** fixed during merge prep, commit `0424694`. Replaced the 8-character literal escape with the actual U+2019 character.
 
 **Original notes (kept for archival):**
 
@@ -37,7 +37,7 @@ JSX text content does NOT interpret backslash escapes like `’`, so users see t
 - **Or:** ASCII apostrophe `we'll`.
 - **Or:** template-wrap inside JSX: `we{'’'}ll`.
 
-Any of the above is a one-line change. Pre-existed before Phase 2; preserved verbatim through the Batch D dual-theme migration (commit `34e5dad remodel(clinician): processing-state dual-theme via theme prop`).
+Any of the above is a one-line change. Pre-existed before Phase 2; preserved verbatim through the Batch D dual-theme migration (commit `bcbcc98 remodel(clinician): processing-state dual-theme via theme prop`).
 
 ---
 
@@ -90,9 +90,9 @@ Implementation gap is content/data-emit, not visual — palette + typography 100
 
 Three post-deploy bugs from user QA fixed and deployed via PR #89:
 
-- **Bug 1 — visit-detail hero band too short.** `min-height` 280→360px on `.qm-cl-app .qm-cin-band-tall` so the cinematic photo crop opens up from ~30 % of vertical content to ~40 %. Recording band (`.qm-cin-band-short`, 200 px) unchanged. Commit `d153dc3`.
-- **Bug 2 — `/patients` route never migrated to Phase 2 Clinician.** `apps/transcribe-md/src/app/patients/page.tsx` and `[id]/page.tsx` were rendering the legacy dark navy + violet `app-redesign-v1` theme via `<AppFrame>` / `<PageHeader>` defaults. Both files now pass `theme="clinician"` to opt into the existing Clinician branches of those shared components — no new components created. `<PatientCard>`, server actions, Prisma queries, auth gates byte-identical. Commits `fff6460` + `cf9bea0`.
-- **Bug 3 — cream baseline too cool.** `--color-clinician-cream` `#FAF7F2 → #F2EBDC` in BOTH `apps/transcribe-md/src/app/globals.css` and `apps/marketing/src/app/globals.css`. Warmth +6 → +18; WCAG vs `--ink #2B2620`: 14.0:1 → 12.6:1 (still AAA Large + Normal). `--cream-card` and `--cream-2` tokens unchanged per user direction; revisit if section-band visibility looks off post-deploy. Commit `15d13f4`.
+- **Bug 1 — visit-detail hero band too short.** `min-height` 280→360px on `.qm-cl-app .qm-cin-band-tall` so the cinematic photo crop opens up from ~30 % of vertical content to ~40 %. Recording band (`.qm-cin-band-short`, 200 px) unchanged. Commit `944a744`.
+- **Bug 2 — `/patients` route never migrated to Phase 2 Clinician.** `apps/transcribe-md/src/app/patients/page.tsx` and `[id]/page.tsx` were rendering the legacy dark navy + violet `app-redesign-v1` theme via `<AppFrame>` / `<PageHeader>` defaults. Both files now pass `theme="clinician"` to opt into the existing Clinician branches of those shared components — no new components created. `<PatientCard>`, server actions, Prisma queries, auth gates byte-identical. Commits `ced79d2` + `cb52c55`.
+- **Bug 3 — cream baseline too cool.** `--color-clinician-cream` `#FAF7F2 → #F2EBDC` in BOTH `apps/transcribe-md/src/app/globals.css` and `apps/marketing/src/app/globals.css`. Warmth +6 → +18; WCAG vs `--ink #2B2620`: 14.0:1 → 12.6:1 (still AAA Large + Normal). `--cream-card` and `--cream-2` tokens unchanged per user direction; revisit if section-band visibility looks off post-deploy. Commit `22c233e`.
 
 **Live verification:**
 - `qm-cin-band-tall { min-height: 360px; padding: 32px 32px 28px; }` confirmed in `/_next/static/chunks/*.css` on `app.quillmd.com`.
@@ -220,7 +220,7 @@ Cards render correctly with empty-state UI for now.
 
 First production feature in QuillMD with real LLM cost in the chart-review path. Live AMA 2021 E&M scoring rail next to the SOAP body — competitive moat vs Athena/Epic/Cerner which only show coding feedback POST-sign.
 
-PR #94, 18 commits, ~3.5K LOC. Merge SHA `7f8e351`. Tag `phase-5.2-soap-coding-coach`.
+PR #94, 18 commits, ~3.5K LOC. Merge SHA `85349e2`. Tag `phase-5.2-soap-coding-coach`.
 
 ### Architecture
 - Path C (hybrid): deterministic for HPI/ROS/exam/PFSH counts; LLM-judged for MDM tier; both layers cached
@@ -356,8 +356,8 @@ to the production source-of-truth content map).
 
 ### PR + tag + release SHAs
 - PR: [#95](https://github.com/kasrarayat-cloud/MedDoc/pull/95) — squash-merged 2026-05-03
-- Squash SHA on main: `e4644dc`
-- Hotfix during deploy (May-3 backups dir blocking docker context): `dc4e36f`
+- Squash SHA on main: `c8dc8ec`
+- Hotfix during deploy (May-3 backups dir blocking docker context): `402436e`
   added `backups/` + `docs/` to `.dockerignore`
 - Tag: `phase-7-landing-v6-live` (pushed to origin)
 
@@ -640,10 +640,10 @@ Two known-red checks remain on `main` and were merged through:
 ### Tag + PR + release SHA
 
 - PR: https://github.com/kasrarayat-cloud/MedDoc/pull/99
-- Squash-merge SHA: `484d0e1`
+- Squash-merge SHA: `f0e2698`
 - Tag: `phase-7-qa-p1-001-fix`
 - Companion CI fix PR: https://github.com/kasrarayat-cloud/MedDoc/pull/100
-- Companion squash-merge SHA: `504ac87`
+- Companion squash-merge SHA: `8b67924`
 
 ### Verification (post-deploy, against production)
 
@@ -774,7 +774,7 @@ you're ready: `docker exec -i meddoc-pro-postgres-1 psql -U meddoc -d meddoc < s
 ### Tag + PR + release SHAs
 
 - PR: https://github.com/kasrarayat-cloud/MedDoc/pull/101
-- Squash-merge SHA: `08c5be4`
+- Squash-merge SHA: `16cd865`
 - Tag: `phase-7-qa-p2-002-fix`
 
 ### Verification (post-deploy, against production)
@@ -896,7 +896,7 @@ the `@media` gate keeps desktop chrome unchanged at ≥640px.
 ### Tag + PR + release SHAs
 
 - PR: https://github.com/kasrarayat-cloud/MedDoc/pull/102
-- Squash-merge SHA: `42e3d06`
+- Squash-merge SHA: `6ce6ab4`
 - Tag: `phase-7-qa-p2-003-fix`
 
 ### Verification (post-deploy, against production)
@@ -982,7 +982,7 @@ RFC 5321 caps `user@domain` at 254 chars. Without that floor:
 ### Tag + PR + release SHAs
 
 - PR: https://github.com/kasrarayat-cloud/MedDoc/pull/103
-- Squash-merge SHA: `343ef02`
+- Squash-merge SHA: `da25a61`
 - Tag: `phase-7-qa-p2-001-fix`
 
 ### Verification (post-deploy, against production)
@@ -1077,7 +1077,7 @@ Pre-fix UX let doctors click anywhere on a criterion row to jump to the matching
 ### Tag + PR + release SHA
 
 - PR: https://github.com/kasrarayat-cloud/MedDoc/pull/104
-- Squash-merge SHA: `de40409`
+- Squash-merge SHA: `3997186`
 - Tag: `ci-axe-baseline-restored`
 - **Merged with `gh pr merge --squash` — no `--admin` override.** First clean merge through this gate since 2026-05-01.
 
@@ -1109,7 +1109,7 @@ The `test` job has been red on every CI run for 100+ runs (back to at least 2026
 
 All 5 used the same `signIn(page, email, password)` helper, all timed out at `page.waitForURL` after 30s.
 
-Phase 13 (`b1710d6`, h9-meddoc-e2e-residual) tried to fix this — added the `[authorize:deny]` console.error debug helper and added a loopback rate-limit skip inside `authorize()` itself. **The fix was incomplete** — the same gate exists in a separate route that was overlooked.
+Phase 13 (`23f6857`, h9-meddoc-e2e-residual) tried to fix this — added the `[authorize:deny]` console.error debug helper and added a loopback rate-limit skip inside `authorize()` itself. **The fix was incomplete** — the same gate exists in a separate route that was overlooked.
 
 ### What
 
@@ -1151,7 +1151,7 @@ The per-account brute-force protection in `authorize()` step 4 (`failedLoginCoun
 ### Tag + PR + release SHA
 
 - PR: https://github.com/kasrarayat-cloud/MedDoc/pull/105
-- Squash-merge SHA: `cacd957`
+- Squash-merge SHA: `876c676`
 - Tag: `ci-test-baseline-restored`
 - **Merged with `gh pr merge --squash` — no `--admin`. Both `axe-core sweep` and `test` checks went GREEN before merge.**
 
@@ -1167,7 +1167,7 @@ Both green for the first time since the workflow has captured runs. Test step ra
 
 ### Combined with §19 (PR #104, axe-core baseline)
 
-Together with `de40409` (axe-core EmCheckList + EmCriterion fix) and `cacd957` (this PR), CI is fully green for the first time since at least 2026-04-26. Future PRs flow through normal `--squash` without `--admin`.
+Together with `3997186` (axe-core EmCheckList + EmCriterion fix) and `876c676` (this PR), CI is fully green for the first time since at least 2026-04-26. Future PRs flow through normal `--squash` without `--admin`.
 
 ### Open follow-ups
 
@@ -1221,7 +1221,7 @@ CI runs `npm run test:all -w meddoc-pro` per `.github/workflows/test.yml`; the e
 ### Tag + PR + release SHA
 
 - PR: https://github.com/kasrarayat-cloud/MedDoc/pull/106
-- Squash-merge SHA: `c4efdd9`
+- Squash-merge SHA: `0827c18`
 - Tag: `ci-fully-green`
 - **Merged with `gh pr merge --squash` — no `--admin`. Both CI checks green.**
 
@@ -1800,7 +1800,7 @@ Closes Round 3 audit findings:
 
 ## 24.E 🛠 PR-E — Data integrity — 2026-05-05 (live + structural)
 
-Branch: `fix/round-3-pr-e-data-integrity` → MERGED as #118 (`9b0c42a`). Tag `round-3-pr-e-complete`.
+Branch: `fix/round-3-pr-e-data-integrity` → MERGED as #118 (`dc723d3`). Tag `round-3-pr-e-complete`.
 
 Closes:
 - **A09-P0-001** — RxWarningOverride compound `@@unique([visitId, warningId])` constraint added; existing rows deduped (oldest retained); `recordOverride()` catches Prisma P2002 + returns existing-row id idempotently. Sign gate's distinct-warning count cannot be inflated by re-clicking.
@@ -1814,7 +1814,7 @@ Live verification (this run):
 
 ## 24.F 🛠 PR-F — Auth hardening — 2026-05-05
 
-Branch: `fix/round-3-pr-f-auth-hardening` → MERGED as #119 (`d063025`). Tag `round-3-pr-f-complete`.
+Branch: `fix/round-3-pr-f-auth-hardening` → MERGED as #119 (`43e9118`). Tag `round-3-pr-f-complete`.
 
 Closes:
 - **A02-P0-001** — `EMAIL_AUTO_CONFIRM` in production. `isAutoConfirmDomain()` now requires `NODE_ENV !== 'production'` OR explicit opt-in via `EMAIL_AUTO_CONFIRM_ALLOW_IN_PROD=true`. Default fails closed; QA harness can still opt in deliberately. 4 new vitest cases verify the gate.
@@ -2010,10 +2010,10 @@ wait, squash-merge, and tag.
 
 | PR | SHA | Tag | Sub-agent | Closes |
 |---|---|---|---|---|
-| [#125](https://github.com/kasrarayat-cloud/MedDoc/pull/125) | `e5e257e` | `quality-fix-q0-2-complete` | SA2 | Finding 01.1 — L7c pediatric Rx framing |
-| [#126](https://github.com/kasrarayat-cloud/MedDoc/pull/126) | `86e2eea` | `quality-fix-q0-1-complete` | SA1 | Finding 06.1 — `validateRxDose` wiring |
-| [#127](https://github.com/kasrarayat-cloud/MedDoc/pull/127) | `4479285` | `quality-fix-q0-3-complete` | SA3 | Finding 04.1 — Opus 4.7 at L4/L5/L7c |
-| [#128](https://github.com/kasrarayat-cloud/MedDoc/pull/128) | `407c3dd` | `quality-fix-q0-5-complete` | SA4 | Findings 07.3 + 02.5 — Deepgram confidence propagation |
+| [#125](https://github.com/kasrarayat-cloud/MedDoc/pull/125) | `dea0987` | `quality-fix-q0-2-complete` | SA2 | Finding 01.1 — L7c pediatric Rx framing |
+| [#126](https://github.com/kasrarayat-cloud/MedDoc/pull/126) | `95b4dd7` | `quality-fix-q0-1-complete` | SA1 | Finding 06.1 — `validateRxDose` wiring |
+| [#127](https://github.com/kasrarayat-cloud/MedDoc/pull/127) | `5111615` | `quality-fix-q0-3-complete` | SA3 | Finding 04.1 — Opus 4.7 at L4/L5/L7c |
+| [#128](https://github.com/kasrarayat-cloud/MedDoc/pull/128) | `820bc38` | `quality-fix-q0-5-complete` | SA4 | Findings 07.3 + 02.5 — Deepgram confidence propagation |
 
 ### 26.1 SA2 — L7c pediatric framing (PR #125)
 

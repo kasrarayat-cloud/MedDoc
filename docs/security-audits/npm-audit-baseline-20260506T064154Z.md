@@ -3,7 +3,7 @@
 - Source: `npm audit` against the monorepo root (covers all workspaces
   via `npm workspaces`).
 - Branch: `feat/pr-k-supply-chain-hardening`
-- HEAD at audit: `0dad69d` (PR-K base).
+- HEAD at audit: `41edf2a` (PR-K base).
 - Pre-PR-K verdict: **0 high + 0 critical** across the whole monorepo;
   the CI gate added in PR-K (`--audit-level=high`) passes cleanly.
 

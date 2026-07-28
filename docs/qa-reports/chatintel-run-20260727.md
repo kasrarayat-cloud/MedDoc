@@ -1,7 +1,7 @@
 # Chat intelligence + surface cleanup — the run
 
 **Date:** 2026-07-27 · **Branch:** `fix/twin-visit-export-harness`
-**Commits:** `771b5e0` → `4a1ba51` → `7ad0ff0`
+**Commits:** `e654dec` → `669bcda` → `e4c8a94`
 **Rollback:** `meddoc-pro-transcribe-md:pre-chatintel-20260727` (`4884b5036ca0`)
 
 ---

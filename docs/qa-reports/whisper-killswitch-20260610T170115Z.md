@@ -20,7 +20,7 @@ The Deepgram→OpenAI Whisper transcription fallback is now **fail-closed behind
 | `transcribe_visits.transcriptionProvider` (persisted per visit, PR #163) | **0** `whisper-fallback`. 17 `deepgram-batch` (2026-05-06→06-04) + 58 null/pre-field (2026-04-19→05-12). |
 | `audit_logs` action `TRANSCRIPTION_PROVIDER_FALLBACK` (emitted on every fallback) | **0 rows.** (In a table with 7,821 rows across 67 action types — instrumentation is demonstrably live, not missing.) |
 
-**Account-class of fallback events:** N/A — there were no fallback events for any account class (test or non-test). The 58 null/pre-field visits predate the fallback feature entirely (the orchestrator + the `transcriptionProvider` field + the audit action all shipped together in **PR #162, 2026-05-06**, commit `479e579`), so no OpenAI code path existed when they were created. The 2 prod `FAILED` visits were both `deepgram-batch` (failed downstream, never OpenAI).
+**Account-class of fallback events:** N/A — there were no fallback events for any account class (test or non-test). The 58 null/pre-field visits predate the fallback feature entirely (the orchestrator + the `transcriptionProvider` field + the audit action all shipped together in **PR #162, 2026-05-06**, commit `ae2cd8e`), so no OpenAI code path existed when they were created. The 2 prod `FAILED` visits were both `deepgram-batch` (failed downstream, never OpenAI).
 
 **Feeds Kasra's 4.0 decision:** OpenAI is **cleared** as an already-incurred PHI exposure — no real (or test) patient audio has ever reached it. (The Anthropic + Deepgram + Resend "real-patient?" question from the pre-pilot report stands on its own; this only clears OpenAI.)
 
@@ -54,7 +54,7 @@ The Deepgram→OpenAI Whisper transcription fallback is now **fail-closed behind
 1. **Unit (deterministic):** both layers × {disabled, false, absent, network-error, permanent-4xx} — the failure path (Deepgram-fail → eligible → disabled → `CrossProviderFallbackDisabledError` → suppressed audit + re-throw, Whisper never called) is asserted directly. This *is* "mock a Deepgram failure → DLQ + audit" at the unit level.
 2. **Adversarial review:** code-quality-auditor traced the full runtime path through the real `worker.ts → categorizeError → persistFailedState/DLQ` machinery and confirmed correctness + retryability.
 3. **QA stack (isolated `meddoc-qa`, new worker image `ffdfd6b0`):** booted clean — `ready — listening on queue transcribe-md (concurrency 2)`, flag unset → disabled, wired to DB/Redis/MinIO, no crash. Torn down `-v` (0 residue).
-4. **Build:** worker image rebuilt from committed `a7f06d9` (compiles + bundles the new `packages/ai` + worker source cleanly).
+4. **Build:** worker image rebuilt from committed `dfb2a54` (compiles + bundles the new `packages/ai` + worker source cleanly).
 
 **Not staged (transparency):** a live end-to-end *failure-path* fault-injection in the qa stack (network-blocking Deepgram + audio-submission across the qa-internal network) and a live prod UI transcription smoke were **not** run. Rationale: the failure path is exhaustively unit-verified + auditor-traced; the happy path is untouched **by construction** (the gate is catch-only — Deepgram-success returns before it) + unit-verified; the rebuilt worker boots clean in both qa and prod; and the fail-closed direction means the worst realistic wiring bug is a benign FAILED visit, never PHI egress. Rollback is one step.
 

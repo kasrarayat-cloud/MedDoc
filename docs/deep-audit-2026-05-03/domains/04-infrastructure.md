@@ -72,7 +72,7 @@ but missing at `docker run` standalone — see INF-02.
 
 `.dockerignore` properly excludes `node_modules`, `.next`, `.git`,
 `.env*`, `*.md`, `.claude`, `backups`, `docs` (the last two added
-during the Phase 7 deploy hotfix `dc4e36f`).
+during the Phase 7 deploy hotfix `402436e`).
 
 ---
 

@@ -609,7 +609,7 @@ deterministic regex layer and the post-scrub re-scan untouched.
 | after | **0 / 16** |
 
 The E2E retry is removed. A refusal there is a real regression again.
-Shipped separately as `21e52ae`.
+Shipped separately as `4f6acd8`.
 
 ---
 

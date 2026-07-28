@@ -4,15 +4,15 @@ Two deploys. Rollbacks `:pre-auditonly-20260727` and `:pre-lanedelete-20260727`.
 
 | | commit | app | worker |
 |---|---|---|---|
-| checkpoint (backend) | `195b2e84` | `8b72fe36cbcb` | `b76a991e84a1` |
-| lane delete + preview | `99800949` → `4719eef70099` | `4719eef70099` | `09ea62317b44` |
+| checkpoint (backend) | `2e7310ab` | `8b72fe36cbcb` | `b76a991e84a1` |
+| lane delete + preview | `5fc32e9b` → `4719eef70099` | `4719eef70099` | `09ea62317b44` |
 
 > **Commit SHAs rewritten 2026-07-27.** The `git filter-repo` purge below gave every
 > commit after 2026-07-26 a new hash. This table originally read `41ec3a44` and
 > `0e5257ce`; those objects no longer exist in any ref. Re-derived from evidence,
-> not from memory — `41ec3a44` → `195b2e84` by exact title match against the
+> not from memory — `41ec3a44` → `2e7310ab` by exact title match against the
 > retained GitHub Actions run record (`test(prod-smoke): a CUSTOM imaging template
-> fixture`, 19:42Z), and `0e5257ce` → `99800949` because that was the unique tip of
+> fixture`, 19:42Z), and `0e5257ce` → `5fc32e9b` because that was the unique tip of
 > `main` when app image `4719eef70099` was built at 20:36:01Z.
 
 Migration `20260727190000_anchor_flags_recorded` applied; enum value live.
@@ -173,7 +173,7 @@ reachable in git history.** Clearing it needs a deliberate rewrite decision, not
 a close-out `git rm`. ~~Open.~~
 
 **CLOSED 2026-07-27/28** — purged by `git filter-repo --invert-paths` (commit
-`45c7ef5a`), completed 2026-07-28. Blob `0c56522f…` is gone from every local
+`d6ed2b3c`), completed 2026-07-28. Blob `0c56522f…` is gone from every local
 clone, every bundle, every Docker image, and every **branch and tag** on origin.
 One residual survives and is NOT closable by us — see
 [`history-purge-completion-20260728.md`](../history-purge-completion-20260728.md).

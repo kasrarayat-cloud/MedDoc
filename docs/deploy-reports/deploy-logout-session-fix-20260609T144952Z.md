@@ -1,4 +1,4 @@
-# Deploy — logout-session revoke fix (#285 / `92163f7`) → prod
+# Deploy — logout-session revoke fix (#285 / `a805ba5`) → prod
 
 **When:** 2026-06-09 14:49 UTC
 **What:** Ship the merged-but-undeployed security fix that revokes the server-side
@@ -39,7 +39,7 @@ Two auto-fixes intentionally not applied: image-prune suppressed (co-tenant-shar
 deferred to post-build (preserve cache for the OOM-sensitive build).
 
 ## Safe app rebuild
-- Source verified clean at `HEAD == origin/main == 92163f7`; no uncommitted changes under
+- Source verified clean at `HEAD == origin/main == a805ba5`; no uncommitted changes under
   `apps/transcribe-md` or `packages/`. (The only dirty file, `Caddyfile`, is inert for the app image —
   runner stage copies only `.next/standalone`+static+fonts+prisma; `.dockerignore` excludes docs/*.bak.)
 - `docker compose build transcribe-md` — the Dockerfile builder stage already bakes the heap raise

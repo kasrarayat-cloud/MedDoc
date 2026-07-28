@@ -41,7 +41,7 @@ One real voice dictation (29s DVT study) through the prod recorder on app.quillm
 ## Ship trail
 - Unit tests: **1827/1827**. Frozen #346 surfaces byte-identical (no verifier-adjacent diff → no fabrication eval trigger).
 - code-quality-auditor: **SHIP-WITH-NITS, 0 BLOCK, 5/5 hard constraints PASS** (incl. mechanical theft-testing of the sig regex and the sole-guard analysis of the ICD dedup); WARN + 2 NITs remediated (comment scoping, DB-blip paragraph, blip canary).
-- CI (6): **ALL GREEN** · squash-merge: **main `ac91dfe`** (PR #352).
+- CI (6): **ALL GREEN** · squash-merge: **main `0c71ef1`** (PR #352).
 - prod deploy: **LIVE** — `db-migrate` rebuilt + `migrate deploy` applied `20260702153000` BEFORE the worker rollout (enum-precedent deploy order); app + worker rebuilt + deployed; enum value verified queryable on prod. Rollback tags **`pre-audio-20260702`** (app + worker; the migration is additive enum values — rollback-safe without reverting it).
 - prod audio smoke + baseline restore: **PASS** (Part 2 above).
 

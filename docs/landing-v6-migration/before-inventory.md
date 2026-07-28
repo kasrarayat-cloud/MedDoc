@@ -1,7 +1,7 @@
 # Landing v6 Apple-Product migration — before inventory (2026-05-03)
 
 ## Branch
-- Source: `main` @ 6a280de (phase6.1 reboot test reports)
+- Source: `main` @ 3c58a70 (phase6.1 reboot test reports)
 - New branch: `feature/phase7-landing-v6-apple`
 
 ## Marketing app structure

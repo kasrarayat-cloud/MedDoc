@@ -4,7 +4,7 @@
 `stabilized-protocol-20260611T201252Z.md` (same n=30 cases, same 3-judge
 per-claim majority, same LOCKED rubric — the rubric does not move; ambiguity
 resolves against passing) for measuring the HYBRID ANCHORED PATH
-(TRANSCRIBE_MD_EVIDENCE_ANCHORS=true, commit 1021301+).
+(TRANSCRIBE_MD_EVIDENCE_ANCHORS=true, commit 00a59cb+).
 
 ## Gate 1 — fabrication (unchanged)
 GREEN iff majority-judged class-(c) = 0 across all 30 served BODIES. The

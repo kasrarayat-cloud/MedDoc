@@ -7,7 +7,7 @@ critical warning has a matching override keyed by its REAL id; `recordOverride` 
 submitted warningId/severity against `rxDrafts` on write.
 **Result:** ✅ Deployed + verified in prod (4/4 gate assertions). No rollback. Worker + co-tenants untouched.
 
-Commit: `0efb7c3` on `fix/rx-override-gate-correlation`. Image: `f7b622c7cd7c` (`:latest`).
+Commit: `26d6d5c` on `fix/rx-override-gate-correlation`. Image: `f7b622c7cd7c` (`:latest`).
 
 ---
 
@@ -18,7 +18,7 @@ Builder/image prune deferred (cache all <72h → 0B; image prune suppressed on t
 rollback tags).
 
 ## Build once → validate → deploy the same artifact
-- Source committed at `0efb7c3` (branch `fix/rx-override-gate-correlation`); built from the working tree.
+- Source committed at `26d6d5c` (branch `fix/rx-override-gate-correlation`); built from the working tree.
 - **Rollback captured first:** `docker tag …:latest …:pre-rx-gate-fix` → `4464002` (the running prod image,
   today's logout fix) **before** the build moved `:latest`.
 - `docker compose build transcribe-md` — Dockerfile bakes the heap raise (`--max-old-space-size=6144`) +

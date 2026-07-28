@@ -1,6 +1,6 @@
 # Template Twin native-DOCX — Overnight Run report (20260722T084705Z)
 
-Branch: feat/template-ingestion-unified (9 commits, not pushed at start). Main: 1be1019.
+Branch: feat/template-ingestion-unified (9 commits, not pushed at start). Main: 1f221ef.
 Append-as-you-go. Hard rules: frozen surfaces byte-identical; flag default OFF; only Stage 1 touches prod.
 
 ## Pre-flight
@@ -15,7 +15,7 @@ anthropic HTTP 200 OK
 ## STAGE 1 — IOV drift fix
 Drift verified (md5 WT==PROD!=main) for FOUR files, not three: 07a-icd-coding.ts, build-ultrasound-prompt.ts, build-soap-prompt.ts, AND packages/ai/src/data/icd10-allowlist.ts.
 The ICD-polarity fix spans 07a + the allowlist (07a references allowlist entries); landing only 3 would leave the drift trap partially open. Following the evidence + the stated goal (prod==main), the fix set = these 4 source files + the fix's test (iov-report-fixes.test.ts, also present in the prod worker image). Documented deviation from the '3 files' wording.
-- Fix branch fix/iov-prod-drift @ b73210f off main; 4 IOV source files + test, all COMMITTED==PROD (byte-identical md5).
+- Fix branch fix/iov-prod-drift @ ae03af3 off main; 4 IOV source files + test, all COMMITTED==PROD (byte-identical md5).
 - Local: 370 tests green (IOV/prompt/ICD/worker-layers). PR: https://github.com/kasrarayat-cloud/MedDoc/pull/374
 - CI required checks (6): Playwright E2E, test, npm audit, axe-core, TruffleHog, unit tests. Monitoring...
 - CI result: 5/6 GREEN (Playwright E2E 9m12s ✓, test ✓, unit tests ✓, axe-core ✓, TruffleHog ✓). 1 FAIL: npm audit (high+critical gate).
@@ -67,7 +67,7 @@ The ICD-polarity fix spans 07a + the allowlist (07a references allowlist entries
 _Nothing pushed to prod. Nothing merged. Flag OFF. Frozen surfaces byte-identical (04b/sign/E-M/Rx/audit/auth). Kasra decides merge + promotion._
 
 ## NPM-AUDIT BATCH + DRIFT LAND — STOPPED at the gate (new sharp advisory)
-chore/npm-audit-batch-20260722 @ 83f0fdc, PR #376 (open).
+chore/npm-audit-batch-20260722 @ 07f7083, PR #376 (open).
 | advisory | from | -> patched | severity | mechanism |
 |---|---|---|---|---|
 | brace-expansion | vulnerable | 1.1.16 / 2.1.2 / 5.0.7 | HIGH | npm update (lockfile) |
@@ -94,18 +94,18 @@ _Nothing merged, nothing deployed, flag OFF. Frozen surfaces untouched. Prod saf
 - 1a (next patch): FAILED — no next release widens sharp; latest 16.2.11 still pins sharp ^0.34.5; no stable 16.3.x.
 - 1b (controlled re-resolve): LANDED. root override sharp ^0.35.0; sharp/@img 0.35.3 subtree spliced onto the baseline lockfile so ONLY sharp moves.
   PROOF: (a) runtime pins byte-identical — next 16.2.6 / react 19.2.5 / react-dom 19.2.5 / @prisma 7.7.0 / prisma 7.8.0 / @sentry 10.49.0 / tailwind 4.2.2 (grep-verified; ONLY sharp 0.34.5->0.35.3). (b) sharp loads + libvips render OK, @img linux-x64 binaries present. (c) npm ci reproduces the lockfile clean. (d) prod-mode next build (transcribe-md) BUILD_EXIT=0. (e) npm audit --audit-level=high exit 0 under exact CI scoping. Only package.json (1 override line) + package-lock.json changed.
-- Folded into PR #376 (commit a874976). CI (6 checks) running...
+- Folded into PR #376 (commit e47a87f). CI (6 checks) running...
 
 ## CHAIN COMPLETION (escalation-ladder run) — STAGE 1 + STAGE 2 DONE
 ### Stage 1 — audit gate green (#376)
-- Rung **1b** landed (controlled sharp re-resolve, commit a874976). #376 CI: **6/6 GREEN** (npm audit gate pass ~44s). Squash-merged. main = 2478d2c. Gate green on main.
+- Rung **1b** landed (controlled sharp re-resolve, commit e47a87f). #376 CI: **6/6 GREEN** (npm audit gate pass ~44s). Squash-merged. main = d1dcd1b. Gate green on main.
 
 ### Stage 2 — drift fix landed (re-vehicled #374 -> #377)
-- #374 was found **CLOSED** (manual close 2026-07-22T15:46:29Z by kasrarayat-cloud; single close event, no merge/force-push event). GitHub **refused reopen** ("Could not open the pull request") because the rebase force-push diverged the head from the closed snapshot (`refs/pull/374/head` frozen at b73210f; branch at 2caf943).
+- #374 was found **CLOSED** (manual close 2026-07-22T15:46:29Z by kasrarayat-cloud; single close event, no merge/force-push event). GitHub **refused reopen** ("Could not open the pull request") because the rebase force-push diverged the head from the closed snapshot (`refs/pull/374/head` frozen at ae03af3; branch at a088818).
 - Reissued as **PR #377** from the same branch fix/iov-prod-drift -> main, **byte-identical** drift fix (exactly the 5 IOV files, +209/-13, rebased onto main-with-#376). #374 commented as superseded.
-- #377 CI: **6/6 GREEN on its own merits** — Playwright E2E ✓, test ✓, unit tests ✓, axe-core ✓, TruffleHog ✓, **npm audit (high+critical gate) ✓** (the exact check that was RED on the stale pre-rebase SHA). Squash-merged, branch deleted. **new main = 8c5ec018**.
+- #377 CI: **6/6 GREEN on its own merits** — Playwright E2E ✓, test ✓, unit tests ✓, axe-core ✓, TruffleHog ✓, **npm audit (high+critical gate) ✓** (the exact check that was RED on the stale pre-rebase SHA). Squash-merged, branch deleted. **new main = 9efca9b6**.
 - **Post-merge md5 proof (main == running prod worker image):**
-  | file | main 8c5ec018 | prod worker image |
+  | file | main 9efca9b6 | prod worker image |
   |---|---|---|
   | worker/layers/07a-icd-coding.ts | e319e73a94d535aad4a8ef618b67433c | e319e73a94d535aad4a8ef618b67433c ✓ |
   | worker/note-templates/build-ultrasound-prompt.ts | cd0288f9251b35dfabec477b319b984d | cd0288f9251b35dfabec477b319b984d ✓ |
@@ -115,7 +115,7 @@ _Nothing merged, nothing deployed, flag OFF. Frozen surfaces untouched. Prod saf
 ### Stage 3 — prod deploy (prod == merged main)
 - Preflight/health GO: disk 65% (101G avail), 24Gi RAM avail, load 1.79, 9/9 healthy, balloon absent. Anthropic credit HTTP 200 (real completion).
 - **Rollback tags (taken FIRST):** `meddoc-pro-transcribe-md:pre-driftfix-20260722` = 95f57158e3fe, `meddoc-pro-transcribe-md-worker:pre-driftfix-20260722` = 412dd3157475 (the pre-deploy live images).
-- Rebuilt app + worker from main 8c5ec018 (`docker compose build`, BUILD_EXIT=0), recreated both `--no-deps --force-recreate`. New images: app **97143e480d44**, worker **998d4ee3d9c1**; both **healthy**. postgres/redis/minio/caddy untouched.
+- Rebuilt app + worker from main 9efca9b6 (`docker compose build`, BUILD_EXIT=0), recreated both `--no-deps --force-recreate`. New images: app **97143e480d44**, worker **998d4ee3d9c1**; both **healthy**. postgres/redis/minio/caddy untouched.
 - **sharp-in-image verification (the deploy's only real delta):** inside the running app image — sharp **0.35.3**, @img/sharp-linux-x64 + -linuxmusl-x64 **0.35.3**, libvips **1.3.2**; `require('sharp')` LOADS + renders a real PNG via libvips 8.18.3. next/image optimizer route is alive + enforces its contract (q=100 rejected, q=75 accepted, local-URL resolution). A byte-level optimized response could NOT be captured because this app bundles **zero raster assets** (dark text/SVG clinical UI — no /public rasters, only fonts) and standalone won't serve a runtime-injected public file; the sharp path itself is fully proven by the in-image load+render.
 - Post-deploy worker md5 in the RUNNING new container == main (07a e319e73a / build-ultrasound cd0288f9 / build-soap 75449ae8) — drift stays closed.
 - **NATIVE_DOCX flag absent/OFF** in both app + worker containers (confirmed via `env`).
@@ -127,7 +127,7 @@ _Nothing merged, nothing deployed, flag OFF. Frozen surfaces untouched. Prod saf
 - **One-shot rollback:** `docker tag meddoc-pro-transcribe-md:pre-driftfix-20260722 meddoc-pro-transcribe-md:latest && docker tag meddoc-pro-transcribe-md-worker:pre-driftfix-20260722 meddoc-pro-transcribe-md-worker:latest && docker compose -f /opt/meddoc-pro/docker-compose.yml up -d --no-deps --force-recreate transcribe-md transcribe-md-worker`
 
 ### Stage 4 — #375 rebased + green + OPEN
-- feat/template-ingestion-unified rebased onto main 8c5ec018 (12 commits, clean — no conflicts). New head **1db0cb6**. Diff vs main = 68 files (+15962/−30): the feature + additive Prisma migration (7 tables / 4 enums / 10 AuditAction values, zero ALTER) + schema. **Zero package.json/lockfile churn, zero IOV-file churn.**
+- feat/template-ingestion-unified rebased onto main 9efca9b6 (12 commits, clean — no conflicts). New head **8e02b5d**. Diff vs main = 68 files (+15962/−30): the feature + additive Prisma migration (7 tables / 4 enums / 10 AuditAction values, zero ALTER) + schema. **Zero package.json/lockfile churn, zero IOV-file churn.**
 - Frozen surfaces byte-identical (04b-anchor-verify / sign/route / em / 07b-cpt / rx-warnings / audit / auth — NONE appear in the diff).
 - **CI 6/6 GREEN on its own merits:** Playwright E2E ✓, test ✓, unit tests ✓, axe-core ✓, npm audit (high+critical gate) ✓ (inherits main's sharp-fixed lockfile), TruffleHog ✓.
 - **Left OPEN, unmerged** for Kasra's review (commented ready-for-review). `NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX` stays default OFF.
@@ -139,8 +139,8 @@ _Nothing merged, nothing deployed, flag OFF. Frozen surfaces untouched. Prod saf
 | stage | result |
 |---|---|
 | sharp audit ladder | **rung 1b** (controlled re-resolve), sharp 0.34.5→0.35.3 ONLY; 5 proofs green |
-| #376 (audit gate) | 6/6 CI green, squash-merged → main 2478d2c |
-| drift fix | #374 was CLOSED + un-reopenable → reissued **#377** (byte-identical), 6/6 green, squash-merged → main **8c5ec018** |
+| #376 (audit gate) | 6/6 CI green, squash-merged → main d1dcd1b |
+| drift fix | #374 was CLOSED + un-reopenable → reissued **#377** (byte-identical), 6/6 green, squash-merged → main **9efca9b6** |
 | md5 prod==main | 3 worker files identical (main == running prod image) ✓ |
 | prod deploy | rebuilt+recreated app 97143e480d44 / worker 998d4ee3d9c1 from main; both healthy; rollback tag `pre-driftfix-20260722` |
 | sharp-in-image | 0.35.3 + @img linux binaries + real libvips render ✓ |
@@ -152,10 +152,10 @@ _Nothing merged, nothing deployed, flag OFF. Frozen surfaces untouched. Prod saf
 **One-shot prod rollback:** `docker tag meddoc-pro-transcribe-md:pre-driftfix-20260722 meddoc-pro-transcribe-md:latest && docker tag meddoc-pro-transcribe-md-worker:pre-driftfix-20260722 meddoc-pro-transcribe-md-worker:latest && docker compose -f /opt/meddoc-pro/docker-compose.yml up -d --no-deps --force-recreate transcribe-md transcribe-md-worker`
 
 ## MASTER RUN — FINISH native-DOCX (Stages 1-5 done; STOPPED before Stage 6 prod flag-flip)
-Branch feat/native-docx-numeric-fill @ d5f1573 → **PR #378** (open). Base: main 8036a65b (after #375 merged in Stage 1).
+Branch feat/native-docx-numeric-fill @ 60cade4 → **PR #378** (open). Base: main 154cfe18 (after #375 merged in Stage 1).
 
 ### Stage 1 — #375 MERGED
-- Rebased on main, 6/6 green, squash-merged → main **8036a65b**. Feature (flag OFF) now on main.
+- Rebased on main, 6/6 green, squash-merged → main **154cfe18**. Feature (flag OFF) now on main.
 
 ### Stage 2 — numeric table-cell fill (bridge-fill.ts + tests)
 - `bridgeNumericTableCells`: parse the generated markdown table, align data rows to IR table-cell fields by vein-label + forward-cursor, fill BARE numerics; `—`/`[not documented]`/prose stay blank. `mergeFieldResolutions` overlays picks+numerics onto the resolver baseline (real evidence wins). Deterministic WM_IOV tests: exact values in exact cells, roundtrip, static byte-identical. One-leg-only regression proves no laterality mis-place.
@@ -190,13 +190,13 @@ Branch feat/native-docx-numeric-fill @ d5f1573 → **PR #378** (open). Base: mai
 
 ## UPDATE — PHI fix applied (per decision); NEW blocker found; prod still NOT deployed
 Decision taken: align twin PHI scan scope with note-format gate + fix-PHI-first-then-deploy.
-- **PHI fix DONE + verified:** twin source-PHI scan now body-only (letterhead header/footer excluded) + {{one of}} options neutralised → **WM_IOV passes the full gate (real-AI verified)**. Commits d5f1573 (WARN fixes + dropdown-option ZIP fix) + da040ab (letterhead-scope fix). **PR #378 now 6/6 CI GREEN.**
+- **PHI fix DONE + verified:** twin source-PHI scan now body-only (letterhead header/footer excluded) + {{one of}} options neutralised → **WM_IOV passes the full gate (real-AI verified)**. Commits 60cade4 (WARN fixes + dropdown-option ZIP fix) + 43b3273 (letterhead-scope fix). **PR #378 now 6/6 CI GREEN.**
 - **NEW BLOCKER (why prod deploy did NOT happen):** on the QA stack, `createTemplateTwinDraft` **hangs/does-not-complete (>5 min)** for the real 80-field WM_IOV template. Isolated to `proposeSemanticMappings` (semantic-mapping/index.ts:222, called create-draft.ts:219) — ONE 8192-max-token AI call mapping ALL 80 fields at once. Known-flaky (memory: "Real-AI mapping proposal is FLAKY, SCHEMA_FAIL even at 8192"); 80 fields overflow 8192 → schema-fail → retries → no completion in the request window. PHI gate alone passes in seconds; compile + fill + export all proven. **This is Codex-salvage backend (semantic-mapping / create-draft), NOT the Stages 2-4 code.**
 - Consequence: the browser certify-through-CERTIFIED + the full acceptance smoke can't go green, so per "fix-first-then-deploy" I did **NOT** touch prod. Prod 9/9 healthy, flag OFF, no rollback tags, no migration change.
 - **Decision needed:** fix the mapping proposal for large templates (batch the fields into chunks under the token ceiling, or fall back to fallbackSemanticMappings faster instead of retrying, or raise/stream maxTokens) — a backend change to Codex-salvage code — before the certify UX is usable for big templates (and before the WM_IOV acceptance + prod deploy). Options: (a) I implement field-batched mapping + re-test + deploy; (b) hold for review.
 
 ## UPDATE 2 — mapping FIXED; #378 MERGED; QA smoke surfaced 2 more certify issues; prod STILL not deployed
-- **Mapping batching FIXED (874e7f3):** chunk fields (20/call) + run concurrently + coerce expectedDataType to the compiler kind. In-process WM_IOV: hang→**49s, 80/80**. #378 re-greened 6/6 → **SQUASH-MERGED → main 73940a8d** (feature+all fixes on main, flag OFF).
+- **Mapping batching FIXED (470d1e2):** chunk fields (20/call) + run concurrently + coerce expectedDataType to the compiler kind. In-process WM_IOV: hang→**49s, 80/80**. #378 re-greened 6/6 → **SQUASH-MERGED → main cbd273ac** (feature+all fixes on main, flag OFF).
 - **QA acceptance smoke (real browser, my images, real AI) — got FURTHER, found 2 more real issues:**
   1. **Twin artifact bucket not provisioned** — the store uses a SEPARATE bucket `transcribe-md-template-artifacts` (not `transcribe-md-audio`) and DELIBERATELY never auto-creates it ("provisioning is an operations decision", artifact-store.ts:234). QA (and PROD — the twin has never run there) lacked it → certify draft failed at storeSourceArtifact. **Fixed in QA by `mc mb`. THIS IS A PROD DEPLOY PREREQUISITE: create `transcribe-md-template-artifacts` in prod MinIO before enabling the flag.** After provisioning, the browser certify **draft + 80-field review workspace rendered end-to-end** (~37s).
   2. **Certify synthetic-proof fails VALIDATION for WM_IOV** — `runTemplateTwinSyntheticTest` fills via the RESOLVER ONLY (no picks/numeric bridge), so a CHOICE_SLOT-driven template fills ~nothing → `validation.valid=false` → `render=null` → VALIDATION_FAILED (latestTestVerifiedAt/OutputSha256 both NULL). The certify-time proof mechanism predates the bridge and doesn't use it, so it can't produce a meaningful fill for bridge-dependent templates. **OPEN.**
@@ -211,4 +211,4 @@ While starting the (user-approved) "wire the bridge into the synthetic proof" fi
 - My in-process real-AI e2e passed ONLY because it CONSTRUCTED a ResolvedNoteTemplate from the docx markerText (buildNoteTemplate) — the real twin note template does not carry that structure. The e2e proved the bridge MECHANICS, but not the end-to-end wiring against a real twin note template.
 - **The real remaining work (the "bridge-into-manifest" gap in the memory):** create-draft must populate the twin NoteTemplate's sections with the DOCX's PARSED structure — sections whose defaultText carries the {{one of}} markers + a table section (kind:'table' rowLabels/columns) — the SAME representation the My Note Format parse (parseNoteToTemplate / reconcile-markers) produces and the structured-templates pipeline already fills. Only then does the worker note-gen emit a WM_IOV-structured note the bridge fills, the synthetic proof render, and native export return a filled document.
 - This is an ARCHITECTURAL piece (docx → note-template structure for the twin), not a quick fix — surfaced for a design decision rather than rushed at run end.
-- Prod remains UNTOUCHED (9/9, flag OFF). Feature (bridge + wiring + certify UI + mapping/PHI/bucket fixes) merged to main 73940a8d, all green, flag OFF — but native fill is not yet end-to-end functional against a real twin note template until the structure gap is closed.
+- Prod remains UNTOUCHED (9/9, flag OFF). Feature (bridge + wiring + certify UI + mapping/PHI/bucket fixes) merged to main cbd273ac, all green, flag OFF — but native fill is not yet end-to-end functional against a real twin note template until the structure gap is closed.

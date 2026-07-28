@@ -1,6 +1,6 @@
 # Gate re-run 20260612T060721Z — ⚠️ VOIDED (credits exhausted mid-run, n=15/30)
 
-Branch `fix/anchored-hybrid-iter2` (iteration 3, commit `5aac236`). The pre-registered
+Branch `fix/anchored-hybrid-iter2` (iteration 3, commit `ad71865`). The pre-registered
 n=30 re-run died at case 16/30: every remaining case failed with Anthropic
 `invalid_request_error: credit balance too low` (first failing request
 `req_011CbxuwwfcpBrF3SPyyMb94`, ~06:30Z). **A 15-case partial is not a protocol-valid

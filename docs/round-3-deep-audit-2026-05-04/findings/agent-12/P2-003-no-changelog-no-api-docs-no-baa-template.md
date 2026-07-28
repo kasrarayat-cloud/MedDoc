@@ -69,7 +69,7 @@ Skeleton for the existing history:
 ```
 ## [Phase 7 — landing-v6] - 2026-05-03
 ### Changed
-- marketing/quillmd.com redesigned to "Apple Product Page" (POST_MERGE_TODO §13, PR #95, e4644dc)
+- marketing/quillmd.com redesigned to "Apple Product Page" (POST_MERGE_TODO §13, PR #95, c8dc8ec)
 ### Performance
 - Lighthouse desktop 100 / mobile 88 (LCP-bound; documented optimization)
 

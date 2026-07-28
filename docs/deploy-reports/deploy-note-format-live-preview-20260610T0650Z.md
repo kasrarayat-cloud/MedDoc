@@ -7,7 +7,7 @@ demo visit) so they preview real output before activating.
 **Result:** ✅ Deployed + verified in prod (real-model sample renders in-format, labelled synthetic, no
 PHI, activate intact). No rollback. Worker + co-tenants untouched.
 
-Commit: `1289484` on `feat/note-format-live-preview`. Image: `a244dc1bc918` (`:latest`).
+Commit: `b36cb55` on `feat/note-format-live-preview`. Image: `a244dc1bc918` (`:latest`).
 
 ---
 

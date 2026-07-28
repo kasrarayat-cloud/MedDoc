@@ -1,7 +1,7 @@
 # Transcribe-MD Remodel — Phase 2 Plan
 
 Generated: 2026-04-29
-Branch: `feature/clinician-remodel` (cut from `main` at `b9f699a` — Phase 19)
+Branch: `feature/clinician-remodel` (cut from `main` at `0f27cb9` — Phase 19)
 Direction: **CLINICIAN** (humane medical, light-mode-first, sage + teal on warm cream)
 Reference mockups (the canonical visual contract for Phase 2):
 - `docs/design-directions-v3/clinician/landing-and-recording.html` (987 lines)
@@ -121,7 +121,7 @@ These are the rules every subagent must follow. Repeated here so no one has to d
 
 ## Strategy A exception: rx-warning-card.tsx
 
-The Rx warning card was migrated CSS-only (commit `d129fd4`) rather than via Strategy A theme prop. This is a deliberate architectural exception:
+The Rx warning card was migrated CSS-only (commit `1aeeb36`) rather than via Strategy A theme prop. This is a deliberate architectural exception:
 
 - **Severity is invariant.** Rx warnings always express their severity grammar (red = critical, amber = warning, blue = info) regardless of app theme. The `.qm-warn-*` class family encodes severity, not surface palette.
 - **Scope-based color override** (`.qm-cl-app .qm-warn-*`) cleanly separates "severity grammar" (the component) from "surface palette" (the consumer scope).

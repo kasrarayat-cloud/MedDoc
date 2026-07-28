@@ -2,7 +2,7 @@
 
 Completes the purge of `docs/qa-reports/twin-real-visit-20260726.docx`
 (blob `0c56522fa4c97678746fd8d4ba3dd6f6ab40b70d`, a FILLED clinical export,
-49 402 bytes) begun in commit `45c7ef5a` on 2026-07-27. That session was cut off
+49 402 bytes) begun in commit `d6ed2b3c` on 2026-07-27. That session was cut off
 before it verified its own result. This pass reconstructed the state from
 evidence and closed what was left.
 
@@ -17,7 +17,7 @@ see Residual.
 
 | Step | State found | Evidence |
 |---|---|---|
-| `filter-repo` rewrite ran | DONE | `9d65cbfa` (the introducing commit) does not resolve; every commit after 2026-07-26 re-hashed; pre-2026-07-24 SHAs (`6f39175`, `40c16d7`, `eefc994`, `03ef33a`, `1be1019`) unchanged |
+| `filter-repo` rewrite ran | DONE | `9d65cbfa` (the introducing commit) does not resolve; every commit after 2026-07-26 re-hashed; pre-2026-07-24 SHAs (`95d5898`, `26e4f4c`, `4088f10`, `3a369af`, `1f221ef`) unchanged |
 | Blob gone from working clone | DONE | `git cat-file -e 0c56522f…` fails; `git rev-list --objects --all \| grep twin-real-visit` empty |
 | Reflogs expired + gc | DONE | HEAD reflog 6 entries (all post-rewrite); only `main` and `origin/main` carry non-empty reflog files out of 196; `git fsck --unreachable` returns 4 objects, none the blob |
 | Origin re-added after rewrite | DONE | `filter-repo` strips remotes by design; `origin` present and functional |
@@ -28,7 +28,7 @@ see Residual.
 | Docker images | DONE | `.dockerignore:16` excludes `docs`. All 7 retained images (`:latest` + 5 rollback tags + worker variants) checked **from inside** via `docker run --entrypoint sh … find` — clean |
 | Prevention guard | DONE | `scripts/hooks/pre-commit` present; `core.hooksPath=scripts/hooks`; root `package.json` `prepare` re-installs it on every `npm install` |
 | AGENTS.md lesson | DONE | "A tracked clinical file means a HISTORY REWRITE, not `git rm`" |
-| CI on rewritten `main` | GREEN | `2bc9a07b`: CI ✅, secrets-scan ✅, e2e ✅ |
+| CI on rewritten `main` | GREEN | `079278cc`: CI ✅, secrets-scan ✅, e2e ✅ |
 
 ## What was NOT done, and was completed in this pass
 
@@ -61,9 +61,9 @@ The rewrite re-hashed every commit after 2026-07-26, leaving dangling SHAs:
 
 | Doc | Was | Now | How it was re-derived |
 |---|---|---|---|
-| `prod-lanedelete-20260727/README.md` | `41ec3a44` | `195b2e84` | Exact title match against GitHub's retained Actions run record (`test(prod-smoke): a CUSTOM imaging template fixture`, 19:42Z) |
-| `prod-lanedelete-20260727/README.md` | `0e5257ce` | `99800949` | Unique tip of `main` at 20:36:01Z, when app image `4719eef70099` was built |
-| `prod-verifierfix-20260727/README.md` | `0b98f952` | `45313570` | The merge of PR #415 — a unique commit |
+| `prod-lanedelete-20260727/README.md` | `41ec3a44` | `2e7310ab` | Exact title match against GitHub's retained Actions run record (`test(prod-smoke): a CUSTOM imaging template fixture`, 19:42Z) |
+| `prod-lanedelete-20260727/README.md` | `0e5257ce` | `5fc32e9b` | Unique tip of `main` at 20:36:01Z, when app image `4719eef70099` was built |
+| `prod-verifierfix-20260727/README.md` | `889f3748` | `943a1b6f` | The merge of PR #415 — a unique commit |
 
 Re-derived from evidence, not memory: `filter-repo`'s `commit-map` was gone with
 `.git/filter-repo/`. GitHub's workflow-run history survives a rewrite and still

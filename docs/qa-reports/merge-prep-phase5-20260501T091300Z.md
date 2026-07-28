@@ -1,6 +1,6 @@
 # Merge-prep — Phase 5 (Linear V1 Faithful) — 2026-05-01T09:13:00Z
 
-Branch: `feature/phase5-linear-v1` @ `07b0730` (86 commits ahead of `main`)
+Branch: `feature/phase5-linear-v1` @ `c865fdf` (86 commits ahead of `main`)
 Files changed vs main: 199
 Test instances: `http://localhost:8766` (transcribe-md) + `http://localhost:8770` (marketing)
 Production untouched: 9 containers stayed `Up ... (healthy)` throughout
@@ -15,7 +15,7 @@ Phase 5 is a complete visual replacement of QuillMD with the Linear V1 Faithful 
 | Stage | Result | Detail |
 |-------|--------|--------|
 | 1. Preflight                 | 🟢 | 16 GB / 13.4 GB available, balloon driver UNBOUND, all 9 containers healthy; `preflight-20260501T090216Z.md` |
-| 2. Baseline capture          | 🟢 | Branch `feature/phase5-linear-v1` @ `07b0730`, 86 commits ahead, 199 files changed; tree clean |
+| 2. Baseline capture          | 🟢 | Branch `feature/phase5-linear-v1` @ `c865fdf`, 86 commits ahead, 199 files changed; tree clean |
 | 3. Build + start :8766/:8770 | 🟢 | `tsc --noEmit` exit 0 both apps; `next build` exit 0 both apps (transcribe-md ≈30s, marketing ≈4s); /login reachable on first poll after env-load |
 | 4. Playwright smoke          | 🟢 | 22 captures: 17 routes clean (200/307), 5 with benign analytics 404s only |
 | 5. Visual identity vs mockup | 🟢 | Sample-checked dashboard / login / visits-empty / marketing-home: pure dark canvas, sage accent, Inter, JetBrains Mono labels, hairline borders, Cmd+K pill, 240px sidebar with sage active state, sage primary CTAs — all match v8-linear/dashboard-v1.html and landing-v1.html |

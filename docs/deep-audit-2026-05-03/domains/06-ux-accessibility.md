@@ -83,7 +83,7 @@ auth-surface a11y from 96 → 100):
 ```
 in `apps/transcribe-md/src/app/globals.css:56`. This token bump was
 already done for the marketing site in Phase 7 (`apps/marketing/src/
-app/landing.css` — commit `e4644dc`). Porting it to the auth-app
+app/landing.css` — commit `c8dc8ec`). Porting it to the auth-app
 globals is a 1-line change.
 
 For UX-03 (favicon): clone `apps/marketing/src/app/icon.svg` into

@@ -127,7 +127,7 @@
 > | Item | Detail |
 > |---|---|
 > | **PR** | [#251](https://github.com/kasrarayat-cloud/MedDoc/pull/251) — `fix(transcribe): VISIT_SIGNED audit emission on action path (FIND-P1-001)` |
-> | **Squash-merge commit** | `edad5090` on `main` |
+> | **Squash-merge commit** | `3fbc0a82` on `main` |
 > | **Branch** | `fix/audit-emission-sign-visit-action` (deleted on merge) |
 > | **Diff** | 244 LOC (+12 to `apps/transcribe-md/src/actions/soap.ts`, +232 new `tests/actions/sign-visit-audit.test.ts`) |
 > | **CI** | All 4 checks green — `test` (1m43s), `npm audit` (37s), TruffleHog (16s), axe-core (3m25s) |
@@ -144,7 +144,7 @@
 > | Item | Detail |
 > |---|---|
 > | **PR** | [#253](https://github.com/kasrarayat-cloud/MedDoc/pull/253) — `fix(worker): error-handling hardening (FIND-P1-011 + FIND-P1-014)` |
-> | **Squash-merge commit** | `64b19675` on `main` |
+> | **Squash-merge commit** | `8d8cff71` on `main` |
 > | **Branch** | `fix/worker-error-handling-hardening` (deleted on merge) |
 > | **Diff** | 633 insertions / 68 deletions across 5 files (worker.ts refactor, 2 new modules, 2 new test files) |
 > | **CI** | All 4 checks green — `test` (1m23s), `npm audit` (39s), TruffleHog (16s), axe-core (3m14s) |
@@ -161,7 +161,7 @@
 > | Item | Detail |
 > |---|---|
 > | **PR** | [#254](https://github.com/kasrarayat-cloud/MedDoc/pull/254) — `fix(ai): shared retry helper + 4 resilience fixes (FIND-P1-006/007/008/009)` |
-> | **Squash-merge commit** | `d66d028d` on `main` |
+> | **Squash-merge commit** | `69325157` on `main` |
 > | **Branch** | `fix/retry-helper-resilience-bundle` (deleted on merge) |
 > | **Diff** | 875 insertions / 25 deletions across 7 files (new helper + 31-case test suite + 2 wrapper-additions + 2 worker-layer swaps) |
 > | **CI** | All 4 checks green — `test` (1m34s), `npm audit` (46s), TruffleHog (18s), axe-core (3m42s) |
@@ -178,7 +178,7 @@
 > | Item | Detail |
 > |---|---|
 > | **PR** | [#255](https://github.com/kasrarayat-cloud/MedDoc/pull/255) — `fix(transcribe): SPEAKER_ROLE_REASSIGNED audit emission + enum migration (FIND-P1-003)` |
-> | **Squash-merge commit** | `f15556e6` on `main` |
+> | **Squash-merge commit** | `369e7393` on `main` |
 > | **Branch** | `fix/audit-emission-speaker-reassign` (deleted on merge) |
 > | **Diff** | 289 insertions / 1 deletion across 5 files (schema.prisma + new migration.sql + audit.ts TS union + actions/soap.ts emission + new test file) |
 > | **CI** | All 4 checks green — `test` (1m16s), `npm audit` (46s), TruffleHog (15s), axe-core (3m16s) |
@@ -197,7 +197,7 @@
 > | Item | Detail |
 > |---|---|
 > | **PR** | [#256](https://github.com/kasrarayat-cloud/MedDoc/pull/256) — `fix(l2): zod validation hardening — useToolUse + fallback parse (FIND-P1-017)` |
-> | **Squash-merge commit** | `f9ba2892` on `main` |
+> | **Squash-merge commit** | `7e2e7806` on `main` |
 > | **Branch** | `fix/l2-zod-validation-find-p1-017` (deleted on merge) |
 > | **Diff** | 248 insertions / 2 deletions across 2 files (L2 source edit + new test file). First sibling test for any L2-L6 layer. |
 > | **CI** | All 4 checks green — `test` (1m41s), `npm audit` (40s), TruffleHog (16s), axe-core (7m50s) |
@@ -214,7 +214,7 @@
 > | Item | Detail |
 > |---|---|
 > | **PR** | [#257](https://github.com/kasrarayat-cloud/MedDoc/pull/257) — `fix(transcribe): small P1 hardening bundle (FIND-P1-004 + #005 + #012)` |
-> | **Squash-merge commit** | `2d13481d` on `main` |
+> | **Squash-merge commit** | `6aff92ff` on `main` |
 > | **Branch** | `fix/small-p1-hardening-bundle` (deleted on merge) |
 > | **Diff** | 585 insertions / 13 deletions across 7 files (3 source edits + 1 new module + 2 new test files + 1 test extension) |
 > | **CI** | All 4 checks green — `test` (1m34s), `npm audit` (37s), TruffleHog (20s), axe-core (3m14s) |
@@ -231,7 +231,7 @@
 > | Item | Detail |
 > |---|---|
 > | **PR** | [#258](https://github.com/kasrarayat-cloud/MedDoc/pull/258) — `fix(ai): typed ModelOutputMalformedError on Anthropic JSON.parse fail (FIND-P1-010)` |
-> | **Squash-merge commit** | `068810a4` on `main` |
+> | **Squash-merge commit** | `87a5f6bb` on `main` |
 > | **Branch** | `fix/model-output-malformed-wrap-find-p1-010` (deleted on merge) |
 > | **Diff** | 422 insertions / 10 deletions across 8 files (new errors module + 2 new test files + 3 source edits + 1 test extension + index re-export) |
 > | **CI** | All 4 checks green — `test` (1m29s), `npm audit` (32s), TruffleHog (12s), axe-core (3m18s) |
@@ -248,7 +248,7 @@
 > | Item | Detail |
 > |---|---|
 > | **PR** | [#262](https://github.com/kasrarayat-cloud/MedDoc/pull/262) — `fix(transcribe): L4+L6 markdown validation + sibling tests bundle (FIND-P1-015/016/018-final)` |
-> | **Squash-merge commit** | `a340bccd` on `main` |
+> | **Squash-merge commit** | `ce7d0de5` on `main` |
 > | **Branch** | `fix/l4-l6-markdown-validation-and-tests-bundle` (deleted on merge) |
 > | **Diff** | 1,304 insertions / 4 deletions across 9 files (new validator + 3 new test files + 2 source edits + audit.ts union + schema.prisma + migration.sql) |
 > | **CI** | All 4 checks green — `test` (1m24s), `npm audit` (34s), TruffleHog (13s), axe-core (3m13s) |
@@ -293,7 +293,7 @@
 > | Item | Detail |
 > |---|---|
 > | **PR** | [#261](https://github.com/kasrarayat-cloud/MedDoc/pull/261) — `docs(soap): document FIND-P1-002 skip rationale in saveSoapDraftAction` |
-> | **Squash-merge commit** | `2c163753` on `main` |
+> | **Squash-merge commit** | `03fac66d` on `main` |
 > | **Branch** | `fix/find-p1-002-skip-with-documentation` (deleted on merge) |
 > | **Diff** | 37 insertions / 1 deletion in 1 file (JSDoc comment block on `saveSoapDraftAction`). Comment-only — no code logic, no tests, no deploy. |
 > | **CI** | All 4 checks green — `test` (1m29s), `npm audit` (34s), TruffleHog (13s), axe-core (3m12s) |
@@ -308,7 +308,7 @@
 > | Item | Detail |
 > |---|---|
 > | **PR** | [#260](https://github.com/kasrarayat-cloud/MedDoc/pull/260) — `test(l5): sibling unit tests for self-critique + classifyCritique helper (partial FIND-P1-018)` |
-> | **Squash-merge commit** | `953f434d` on `main` |
+> | **Squash-merge commit** | `a8dc6f5e` on `main` |
 > | **Branch** | `fix/l5-sibling-tests-find-p1-018-partial` (deleted on merge) |
 > | **Diff** | 507 insertions / 0 deletions in 1 new test file. Test-only — no production code touched, no container rebuild. |
 > | **CI** | All 4 checks green — `test` (1m25s), `npm audit` (41s), TruffleHog (13s), axe-core (2m50s) |
@@ -421,7 +421,7 @@ Prerequisites are mostly green (preflight, audit doc, gh auth, DB access, agent 
 | Production DB access | 🟢 `docker exec meddoc-pro-postgres-1 psql ...` works |
 | `audit_logs` baseline | 🟢 7 `VISIT_SIGNED` rows from route-path (latest 2026-05-12). Confirms route emits, action doesn't. **Note:** audit doc's example query used `created_at`; the actual column is `timestamp` — minor doc typo |
 | `AuditAction` enum live values | 🟢 105 values; `VISIT_SIGNED` present; **`SPEAKER_ROLE_REASSIGNED` NOT present** (confirms FIND-P1-003 needs migration) |
-| Repo state | 🟡 On `main`, clean HEAD at `e766ea3`. **Working tree dirty:** modified `Caddyfile` + 7 untracked docs/ subdirs from prior work. Branches off `main` would not include these unless I `git add` them. |
+| Repo state | 🟡 On `main`, clean HEAD at `50485a9`. **Working tree dirty:** modified `Caddyfile` + 7 untracked docs/ subdirs from prior work. Branches off `main` would not include these unless I `git add` them. |
 | Memory #19, #30 references | 🔴 **Don't exist in my MEMORY.md index** (which has 14 entries + 1 new SSH entry I added this morning). Prompt references that don't resolve. Not a blocker — interpreted as best-effort guidance to use the audit doc + code-quality-auditor — but worth flagging in case Kasra meant a specific older memory state. |
 
 ---

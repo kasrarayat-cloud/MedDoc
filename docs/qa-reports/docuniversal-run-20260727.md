@@ -29,7 +29,7 @@ at 00:16:55 and the flag-OFF image finished building at 00:49 — the crash
 caught the run *between building the rollback image and driving it*.
 
 **What survived:** the entire code change, uncommitted in the working tree, plus
-three screenshots. Committed as WIP `6947640` before continuing.
+three screenshots. Committed as WIP `5c58b48` before continuing.
 
 **The trap in what survived:** the three screenshots are timestamped **23:37**,
 and every fix in the tree landed **23:46–00:16**. They are the *before* pictures.

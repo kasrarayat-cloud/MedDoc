@@ -187,3 +187,44 @@ sets `core.hooksPath` on `npm install`, because a guard that depends on every
 future contributor remembering a setup command is a guard that is off.
 
 It is a backstop, not the rule. The rule is the paragraph above.
+
+#### The fixture allowlist is ONE list, and it lives in the hook
+
+`scripts/hooks/pre-commit` is the single source of truth for what may be a
+tracked `.docx`/`.pdf`. Nothing else gets a vote, and a sweep that "decides" a
+file is fine without checking that list is guessing. As of 2026-07-28 it is:
+
+| Allowed | Why |
+|---|---|
+| `WM IOV Template.docx` | the customer's BLANK form — recorded decision, see "Tracked fixtures" |
+| `colon_blank_answers.pdf` | committed blank form |
+| `apps/transcribe-md/tests/e2e/fixtures/**` | committed E2E fixtures |
+| `apps/transcribe-md/src/**/__tests__/__fixtures__/**` | committed unit fixtures |
+| `apps/transcribe-md/src/**/__fixtures__/**` | committed unit fixtures |
+
+Every one of these is BLANK or a sample input. **They must survive every future
+sweep** — a sweep that eats the blank fixtures breaks the twin work, which is
+why they are named here as carefully as what must not survive.
+
+Adding a row here means adding the same row to the hook. If the two ever
+disagree, the hook is right and this table is stale.
+
+#### A second purge, and what it cost — 2026-07-28
+
+`docs/smoke-test-2026-05-04/phase-C/export.docx` and `export.pdf` were tracked
+FILLED exports. The content was plainly synthetic ("Dr. Smoke Tester MD",
+patient "Smoke TestPatient One"), and the ruling was that **it makes no
+difference**: the close-out rule treats a filled clinical export as PHI
+regardless, so there is no adjudication class and no argument to have at the
+moment one is found. They were purged by `git filter-repo`. Do not re-add them;
+the rest of `docs/smoke-test-2026-05-04/` is untouched and stays.
+
+**It was ~200× the work of the first purge, for the same two files' worth of
+content, purely because it had been sitting there longer.** The twin export was
+four days old: one branch, ten tags, one commit pruned. These were committed on
+2026-05-04 in PR #108, so by the time they were removed they were in **75 of
+141 branches and tags**, 104 local branches, 31 stale clones on the box — and,
+permanently, in **300 `refs/pull/*` refs**, one per PR opened since. That last
+number is the one that does not come back down: `refs/pull/*` is GitHub-owned
+and unpushable, so the residual grew by one ref per PR for every day the files
+stayed. The cost of a tracked clinical file is not fixed. It compounds.

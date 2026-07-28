@@ -28,7 +28,7 @@ amplitude; the 12-case sample + single-judge variance could not distinguish
   day2_consultation06, day2_consultation07, day2_consultation08,
   day2_consultation09, day2_consultation10, day3_consultation02`
 
-## 2. Pipeline under test (as deployed, worker `b5672079` / main `c7d738f`)
+## 2. Pipeline under test (as deployed, worker `b5672079` / main `7fc1e3a`)
 
 Real Deepgram nova-3-medical → transcript-clarity marking → L3 → L4 (Opus 4.8,
 immutable rules) → L5 critique (Opus 4.8) → L6 polish + fail-closed fidelity

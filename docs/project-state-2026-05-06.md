@@ -19,7 +19,7 @@
   `postgres-backup`, `redis`, `minio`. Plus two utility containers:
   `db-migrate` (compose profile `migrations`, on-demand) and
   `openclaw-openclaw-gateway-1` (separate stack, not QuillMD).
-- **Current main HEAD:** `4ab2da6` (PR-N merge).
+- **Current main HEAD:** `bc60261` (PR-N merge).
 - **Postgres:** PG 16 via `pgvector/pgvector:pg16`. Encryption at
   rest via Phase 6.1 LUKS2 (`/mnt/pgdata-encrypted`,
   AES-256-XTS + Argon2id, virtio-balloon blacklisted).
@@ -40,7 +40,7 @@
 ### Phase 5.x — Coding Coach + stub-completion wave
 
 - **Phase 5.2 SOAP Coding Coach** (PR #94, tag
-  `phase-5.2-soap-coding-coach`, merge `7f8e351`). Hybrid scoring
+  `phase-5.2-soap-coding-coach`, merge `85349e2`). Hybrid scoring
   engine in `apps/transcribe-md/src/lib/em-coding/`. Deterministic
   for HPI/ROS/exam/PFSH; LLM-judged MDM tier via Claude Sonnet 4.6
   (direct SDK, NOT the shared ModelClient — explained in inline
@@ -66,7 +66,7 @@
 ### Phase 6.x — Encryption + backup + supply chain
 
 - **Phase 6.1 H8 — Postgres encryption at rest** (tag
-  `phase-6.1-h8-encrypted-postgres`, merge `f3435bb`). LUKS2
+  `phase-6.1-h8-encrypted-postgres`, merge `29af277`). LUKS2
   bind-mount migration; downtime 3m55s; row counts identical
   pre/post; encryption proof clean. Reboot-test of the systemd
   unit (`pgdata-encrypted.service`) **still pending** within
@@ -125,7 +125,7 @@ relevant to current state:
 - **v3.1** (PR #136) — storageState session reuse + rich fixture
   seeds + deepWalk helper.
 - **v3.2** (PR #137) — deep walkers for 5 high-traffic doctor pages
-  (`a3cb8ed` baseline). Memory #20 captured: every new
+  (`280840d` baseline). Memory #20 captured: every new
   `page.tsx` route must ship with site-map row + walker stub +
   sweep-all registry entry.
 - **F-09 / F-10 / F-11 / F-12 / F-13 / F-14 / F-15 / F-16 closures**
@@ -160,16 +160,16 @@ relevant to current state:
 
 | SHA | PR | Title (one-line) |
 |---|---|---|
-| `4ab2da6` | #165 | feat(security): edge-security-apply.sh — idempotent operator wrapper for PR-B (PR-N) |
-| `1dc14c9` | #164 | feat(security): finalize MinIO SSE-S3 bootstrap (Path B; KES deferred per NAB) |
-| `f4bbfc2` | #163 | feat(pipeline): wire transcribe() orchestrator into Layer-1 + provider audit (PR-L follow-up) |
-| `479e579` | #162 | feat(pipeline): clinical-resilience — Whisper fallback + BullMQ DLQ + admin queue dashboard (PR-L) |
-| `36a1ba0` | #141 | feat(security): supply chain hardening — Dependabot + base-image SHA pins + npm audit baseline (PR-K) |
-| `0dad69d` | #140 | fix(qa-v3.2-cleanup): close F-13..F-16 P3 findings |
-| `e701608` | #139 | fix(dashboard): close F-12 as NAB; add tests pinning the existing error boundary |
-| `196dd14` | #138 | fix(audit): close 3 §164.312(b) gaps surfaced by QA agent v3.2 deep walks |
-| `286269f` | #137 | feat(qa-agent v3.2): deep walkers for 5 high-traffic doctor pages |
-| `aaaed00` | #136 | feat(qa-agent v3.1): storageState session reuse + rich fixture seeds + deepWalk helper |
+| `bc60261` | #165 | feat(security): edge-security-apply.sh — idempotent operator wrapper for PR-B (PR-N) |
+| `861ae09` | #164 | feat(security): finalize MinIO SSE-S3 bootstrap (Path B; KES deferred per NAB) |
+| `c845cf0` | #163 | feat(pipeline): wire transcribe() orchestrator into Layer-1 + provider audit (PR-L follow-up) |
+| `ae2cd8e` | #162 | feat(pipeline): clinical-resilience — Whisper fallback + BullMQ DLQ + admin queue dashboard (PR-L) |
+| `58403cb` | #141 | feat(security): supply chain hardening — Dependabot + base-image SHA pins + npm audit baseline (PR-K) |
+| `41edf2a` | #140 | fix(qa-v3.2-cleanup): close F-13..F-16 P3 findings |
+| `a2e221b` | #139 | fix(dashboard): close F-12 as NAB; add tests pinning the existing error boundary |
+| `751da08` | #138 | fix(audit): close 3 §164.312(b) gaps surfaced by QA agent v3.2 deep walks |
+| `9dc4972` | #137 | feat(qa-agent v3.2): deep walkers for 5 high-traffic doctor pages |
+| `8ceb25a` | #136 | feat(qa-agent v3.1): storageState session reuse + rich fixture seeds + deepWalk helper |
 
 ## Standing rules from active memories (terse pointer; don't duplicate)
 
