@@ -89,7 +89,10 @@ describe('convertDocxToPdf', () => {
     // The paths that must never depend on a preview: certification, filling,
     // verification, export, and signing.
     const CLINICAL =
-      /(api\/visits\/.*\/sign|certification-lifecycle|synthetic-test|signing-gate|fill-engine|bridge-fill|native-export|artifact-compiler|validation\/|\/worker\/)/;
+      // `signing-gate` dropped 2026-07-28 with the module it named — a guard
+      // that lists a file which no longer exists protects nothing and reads as
+      // coverage it does not have.
+      /(api\/visits\/.*\/sign|certification-lifecycle|synthetic-test|fill-engine|bridge-fill|native-export|artifact-compiler|validation\/|\/worker\/)/;
     const violations = [...seen].filter((f) => CLINICAL.test(f));
     expect(
       violations,

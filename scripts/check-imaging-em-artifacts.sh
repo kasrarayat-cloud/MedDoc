@@ -92,8 +92,10 @@ cat <<'NOTE'
                                     chose. Needs its own decision, not a sweep.
       • cptCodes.em.signedCode    — frozen into a SIGNED record. Never touch.
 
-    Note also: loadVisitExportData projects cptCodes.em with no imaging guard
-    (src/lib/visit-export-server.ts:129), so any imaging visit holding an `em`
-    blob WILL print an office code in its PDF/DOCX/EHR output.
+    Since 2026-07-28 the EXPORT path is guarded too: projectDisplayedEmCode
+    takes a required `emApplies` and returns null for an imaging visit, so a row
+    holding an `em` blob no longer prints an office code in PDF/DOCX/EHR output.
+    A row reported here is therefore wrong DATA rather than a live leak — still
+    worth clearing, no longer urgent.
 NOTE
 exit 1

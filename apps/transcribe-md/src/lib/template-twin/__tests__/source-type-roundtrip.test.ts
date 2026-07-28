@@ -134,7 +134,8 @@ describe('the persistence chain — every link', () => {
       'workspace-read.ts',
       'synthetic-test.ts',
       'fill-engine.ts',
-      'signing-gate.ts',
+      // 'signing-gate.ts' removed 2026-07-28 with the module: it had zero
+      // production callers, so the projection it carried guarded nothing.
     ]) {
       const src = read(file);
       const selects = src.split('polarityBehavior: true').length - 1;

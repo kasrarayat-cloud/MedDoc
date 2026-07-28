@@ -1,8 +1,8 @@
 // ============================================================================
 // Template Twin audit wrapper — keeps @/lib/audit BYTE-IDENTICAL (frozen).
 // ----------------------------------------------------------------------------
-// The 10 TEMPLATE_TWIN_* actions ARE registered in the Prisma AuditAction enum
-// (additive migration 20260722063000). The shared @/lib/audit `AuditAction`
+// The 11 TEMPLATE_TWIN_* actions ARE registered in the Prisma AuditAction enum
+// (additive migrations 20260722063000 + 20260728180000_template_twin_certify_failed). The shared @/lib/audit `AuditAction`
 // mirror deliberately does NOT list them, so that frozen surface stays
 // byte-identical. This module owns the twin action type and widens at the single
 // logAudit boundary — the only cast, localized here rather than smeared across
@@ -22,7 +22,17 @@ export type TwinAuditAction =
   | 'TEMPLATE_TWIN_SYNTHETIC_TESTED'
   | 'TEMPLATE_TWIN_FIELD_REVIEWED'
   | 'TEMPLATE_TWIN_SIGN_BLOCKED'
-  | 'TEMPLATE_TWIN_RENDER_VERIFIED';
+  | 'TEMPLATE_TWIN_RENDER_VERIFIED'
+  // Certification THREW. Metadata carries the error's class + message and the
+  // stage it reached — never document content, because a template is a
+  // customer's form and its field labels are theirs.
+  //
+  // Added 2026-07-28: the certify action's catch-all returned a generic "please
+  // try again", logged nothing and audited nothing, so a hand-driven QA run
+  // reached this stage, failed, and left no way to learn why from either the
+  // database or the container log. A failure nobody can name is a failure
+  // nobody can fix.
+  | 'TEMPLATE_TWIN_CERTIFY_FAILED';
 
 type BaseEntry = Parameters<typeof baseLogAudit>[0];
 
