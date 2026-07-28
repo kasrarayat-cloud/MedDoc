@@ -58,10 +58,8 @@ const NOTE = [
   'The patient tolerated the study well.',
 ].join('\n');
 
-const CLAIMS = [
-  { text: 'Perforator incompetence noted at the mid-thigh.', section: 'FINDINGS', reason: 'not supported by the dictation' },
-  { text: 'Recommend compression stockings 20-30 mmHg.', section: 'IMPRESSION', reason: 'not supported by the dictation' },
-];
+/* No CLAIMS fixture. It fed a `suggestions` array to the model that production
+   stopped sending when the verifier became audit-only — see runCase below. */
 
 /** The commonest real ultrasound: one table per leg, identical row labels. */
 const BILATERAL_NOTE = [
@@ -317,30 +315,40 @@ const CASES: Case[] = [
   },
 
   // ---- ON-PAGE NAVIGATION -------------------------------------------------
-  // Added AFTER driving the real surface: "show billing" was refused as though
-  // the doctor had asked to reach an external billing SYSTEM, while the panel
-  // holding the level, the codes and the control that changes them sat
-  // collapsed on the same screen. With the standing CODES·BILLING row folded
-  // away, that refusal is what makes the reachability ruling false.
+  // This case has been INVERTED, and the reason is worth keeping.
+  //
+  // It was written because "show billing" got a `refuse` — as though the doctor
+  // had asked to reach an external billing SYSTEM — while the panel holding the
+  // level, the codes and the control that changes them sat collapsed on the
+  // same screen. The bar was `scroll_to codes`.
+  //
+  // That panel is now gone: the review page draws the document and nothing
+  // else. So the right answer moved, but only by one step — it is `cannot`
+  // (a legitimate ask, no tool on this surface, say where it lives), and it is
+  // STILL NOT `refuse`. Refusing would tell the doctor their own coding is out
+  // of bounds, which was the original defect and survives the panel it was
+  // found on.
   {
     id: 'show-billing',
     say: 'show billing',
-    bar: 'scroll_to codes — NEVER a refusal',
+    bar: 'cannot — names where it lives. NEVER a refusal, never a dead scroll',
     ci: true,
     check: (i) => {
-      if (has(i, 'refuse')) return 'refused a panel that is on this page';
+      if (has(i, 'refuse')) return 'refused the doctor their own coding';
       const s = i.find((x) => x.kind === 'scroll_to');
-      if (s?.kind !== 'scroll_to') return `no scroll_to (${i.map((x) => x.kind).join(',')})`;
-      return s.target === 'codes' ? null : `went to ${s.target}`;
+      if (s?.kind === 'scroll_to') return `scrolled to ${s.target} — the panel is gone`;
+      return has(i, 'cannot') || has(i, 'answer')
+        ? null
+        : `neither said cannot nor answered (${i.map((x) => x.kind).join(',')})`;
     },
   },
   {
     id: 'show-level',
     say: 'What level did this visit get, and can I change it?',
-    bar: 'takes them to the codes panel rather than refusing',
+    bar: 'says where it lives rather than refusing',
     check: (i) => {
       if (has(i, 'refuse')) return 'refused';
-      return has(i, 'scroll_to') || has(i, 'answer')
+      return has(i, 'cannot') || has(i, 'answer') || has(i, 'scroll_to')
         ? null
         : `neither showed nor answered (${i.map((x) => x.kind).join(',')})`;
     },
@@ -410,7 +418,12 @@ const CASES: Case[] = [
 // ── RUNNER ──────────────────────────────────────────────────────────────────
 async function runCase(c: Case): Promise<{ intents: ChatIntent[]; error?: string }> {
   const wrapped = wrapAsData(
-    JSON.stringify({ note: c.note ?? NOTE, suggestions: CLAIMS.map((x, i) => ({ index: i, ...x })), conversation: [] }, null, 2),
+    // BYTE-FOR-BYTE THE SHAPE PRODUCTION SENDS (chat-edit-visit.ts). This used
+    // to add a `suggestions` array that production removed with the verifier's
+    // adopt lane — so the eval was measuring a prompt no doctor could ever
+    // trigger, and would have scored an adopt intent as a pass long after the
+    // schema stopped having one.
+    JSON.stringify({ note: c.note ?? NOTE, conversation: [] }, null, 2),
     'transcript',
   );
   const parsed = await modelClient.complete({

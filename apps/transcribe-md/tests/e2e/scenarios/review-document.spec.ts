@@ -51,14 +51,6 @@ test.describe('pre-sign review as the document', () => {
     return seeded;
   }
 
-  async function scrollThroughSuggestions(page: import('@playwright/test').Page) {
-    const cards = page.locator(SUGG);
-    for (let i = 0; i < (await cards.count()); i++) {
-      await cards.nth(i).scrollIntoViewIfNeeded();
-      await page.waitForTimeout(250);
-    }
-  }
-
   async function clearRxGate(page: import('@playwright/test').Page) {
     const gate = page.getByTestId('review-doc-rx-gate');
     await gate.getByRole('button', { name: /override/i }).first().click();
@@ -142,18 +134,30 @@ test.describe('pre-sign review as the document', () => {
     await expect(page.getByRole('button', { name: /sign & download/i })).toBeEnabled();
   });
 
-  test('the billing panel renders inline — a level stays changeable', async ({ page }) => {
+  test('the page carries no billing worksheet — only the level GATE', async ({ page }) => {
     test.skip(!(await open(page, 'rdoc-9')), 'psql seeding unavailable');
-    // The "⋯ details" disclosure is gone — it was hiding a sign-blocker (the
-    // E/M stale badge), and a disclosure that hides one blocker will hide the
-    // next. The PANELS are not: override / rescore / dispute must still be
-    // reachable, or a doctor who disagrees with a level would need the flag
-    // toggled under them. No click — they are simply on the page.
-    const panel = page.locator('.qm-rdoc-meta-panels');
-    await expect(panel).toBeVisible();
-    await expect(panel.locator('.qm-c3-bill-card')).toBeVisible();
-    await expect(panel.getByText(/why this level/i)).toBeVisible();
-    await expect(panel.locator('select, [role="combobox"]').first()).toBeVisible();
+    // TWO MOVES, and this test has now seen both.
+    //
+    // First the "⋯ details" disclosure went, because it was hiding a
+    // sign-blocker (the E/M stale badge) and a disclosure that hides one
+    // blocker will hide the next. The panels came inline, and this test
+    // asserted they were all still reachable.
+    //
+    // Now the panels have gone too. Inline was better than hidden, but the
+    // question it answered — "can a doctor still dispute a level here?" — was
+    // the wrong one for a page whose job is to show what is being signed. The
+    // AMA rubric, the ICD table with confidence scores and the raw dictation
+    // are reference material for three different jobs; none of them is
+    // "read this and sign it".
+    //
+    // What stays is the part that BLOCKS the signature, because that belongs
+    // on the page that takes the signature.
+    await expect(page.locator('.qm-rdoc-meta-panels')).toHaveCount(0);
+    await expect(page.locator('.qm-c3-bill-card')).toHaveCount(0);
+    await expect(page.getByText(/why this level/i)).toHaveCount(0);
+    await expect(page.getByTestId('review-doc-billing-panel')).toHaveCount(0);
+    await expect(page.getByTestId('review-doc-codes-panel')).toHaveCount(0);
+    await expect(page.getByTestId('review-doc-dictation-panel')).toHaveCount(0);
   });
 
   test('sign delivers the file', async ({ page }) => {

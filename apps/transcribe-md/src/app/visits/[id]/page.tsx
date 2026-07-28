@@ -64,6 +64,14 @@ function specialtyLabel(raw: string): string {
   return findSpecialty(raw).label;
 }
 
+/** The CANONICAL id, for predicates. Routed through the same resolver as the
+ *  label so a legacy row ('Cardiology', 'pain') answers a predicate the same
+ *  way a canonical one does — a visit created before the catalog existed is
+ *  still the specialty it always was. */
+function specialtyId(raw: string): string {
+  return findSpecialty(raw).id;
+}
+
 void KNOWN_SPECIALTIES;
 
 // Phase 5 — collapse the seven-state TranscribeVisitStatus into the
@@ -432,6 +440,7 @@ export default async function VisitPage({
           doctorEmail={user.email}
           doctorName={user.name}
           specialty={specialtyLabel(visit.specialty)}
+          specialtyId={specialtyId(visit.specialty)}
           emailEnabled={isEmailDeliveryEnabled()}
           inputMode={visit.inputMode}
           status={visit.status}
@@ -483,8 +492,20 @@ interface VisitBodyProps {
    *  Threaded into VisitReadyView for the "Signed at … by …" card. */
   doctorName: string | null;
   /** Phase 5.1 — pretty-printed specialty for the Transcript V3
-   *  metadata rail. */
+   *  metadata rail. DISPLAY ONLY — never compare it against a specialty id. */
   specialty: string;
+  /** The RAW specialty id off the visit row ('ultrasound'), for predicates.
+   *
+   *  `specialty` above is `specialtyLabel(visit.specialty)` — 'Ultrasound', not
+   *  'ultrasound' — and it was being fed to `isImagingReportSpecialty`, which
+   *  compares against the id. That comparison was therefore ALWAYS false, so
+   *  `emNotApplicable` never became true on the one specialty it exists for:
+   *  every ultrasound visit computed an office E/M level and PERSISTED it to
+   *  `emScoredCode`. A clinic code on an imaging report is wrong as data, not
+   *  just as pixels — it reaches the billing surface, the export, and the
+   *  signed record. Two props now, because one string cannot be both a label
+   *  and a key. */
+  specialtyId: string;
   emailEnabled: boolean;
   inputMode: string;
   status: TranscribeVisitStatus;
@@ -657,8 +678,10 @@ async function VisitBody(props: VisitBodyProps) {
   // office-visit E/M level. Suppress the on-read coaching score (the pipeline
   // already skips L7b CPT/E&M). The Billing surface shows an explicit
   // "not applicable" note instead of a forced clinic-visit code.
+  // `props.specialtyId`, NOT `props.specialty` — the latter is the display
+  // label and this comparator takes an id. See the prop doc above.
   const emNotApplicable =
-    ultrasoundSpecialtyEnabled() && isImagingReportSpecialty(props.specialty);
+    ultrasoundSpecialtyEnabled() && isImagingReportSpecialty(props.specialtyId);
   // Imaging reports skip E/M scoring entirely (left null → the Billing surface
   // renders the "not applicable" note). Only clinic encounters are scored.
   let initialEmScore: import('@/lib/em-coding-ui/types').EmScore | null = null;

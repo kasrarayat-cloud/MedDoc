@@ -383,7 +383,23 @@ export function SoapEditor({
           pulseHints={boostHints}
           highlightedSections={highlightedSections}
           onEdit={onEdit}
-          readonly={isReadonly}
+          // THE PAPER IS READ-ONLY.
+          //
+          // `chromeless` is exactly "this editor is being rendered AS the
+          // document" — the pre-sign review page and the signed view. On those
+          // surfaces the note is the artifact being reviewed, and the way to
+          // change it is the chat editor, which goes through the same audited
+          // saveSoapDraftAction this affordance did.
+          //
+          // Leaving click-to-edit here would put a raw-markdown textarea on top
+          // of the page the doctor is about to sign — a second write path with
+          // no audit distinction from the first, and the thing the read-only
+          // paper decision exists to remove.
+          //
+          // The LEGACY tabbed editor (visit-ready-view.tsx, non-chromeless) is
+          // untouched and keeps inline editing: it is a workspace, not paper,
+          // and it is what the default CI project exercises.
+          readonly={isReadonly || chromeless}
           afterSection={afterSection}
         />
 

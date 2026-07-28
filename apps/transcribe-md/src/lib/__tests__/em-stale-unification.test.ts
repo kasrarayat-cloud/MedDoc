@@ -116,12 +116,28 @@ describe('the re-score', () => {
 describe('the gate cannot strand a doctor', () => {
   const src = readFileSync('src/app/visits/[id]/review-document-view.tsx', 'utf8');
 
-  it('the codes row opens even on a visit with nothing to summarise', () => {
-    // The row is the control that clears the flag. Gated on having codes, a
-    // visit with none would be refused at sign with no control on the page
-    // that could resolve it.
-    const decl = src.slice(src.indexOf('const hasSummary'), src.indexOf('const hasSummary') + 400);
-    expect(decl).toContain('props.emStale');
+  it('the re-check control is unconditional — it depends on no summary row', () => {
+    // HISTORY. This used to assert that `hasSummary` included `props.emStale`,
+    // because the codes row WAS the control that cleared the flag: gated on
+    // having codes, a visit with none was refused at sign with nothing on the
+    // page that could resolve it.
+    //
+    // The codes row is gone, and with it the whole class of bug — the re-check
+    // now lives in the gate stack and renders off `emStale` alone. So the
+    // stronger assertion is available: there is no summary condition left to
+    // get wrong.
+    expect(src).not.toContain('hasSummary');
+    expect(src).not.toContain('billingNode');
+    expect(src).not.toContain('codesNode');
+
+    // The stale gate, and its button, keyed on nothing but the flag.
+    const gate = src.slice(
+      src.indexOf('{props.emStale && !props.emPendingChange && ('),
+      src.indexOf('{props.emPendingChange && ('),
+    );
+    expect(gate).toContain('review-doc-em-stale-gate');
+    expect(gate).toContain('review-doc-em-rescore');
+    expect(gate).toContain('rescore()');
   });
 
   it('reaching for Sign re-checks first', () => {
