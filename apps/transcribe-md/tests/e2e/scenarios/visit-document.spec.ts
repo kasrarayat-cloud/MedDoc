@@ -64,9 +64,17 @@ async function chatEditSection(page: Page, section: string, body: string) {
   await expect(page.getByTestId('chat-turn-assistant')).toHaveCount(before + 1, {
     timeout: 120_000,
   });
-  // The turn must SAY it acted. A reply that names nothing is the silent no-op
-  // this surface was hardened against.
-  await expect(page.getByTestId('chat-actions').last()).toContainText(new RegExp(section, 'i'));
+  // The turn must SAY it acted, and say it SUCCEEDED.
+  //
+  // Naming the section is not enough: the failure line is
+  // "Could not change <section>: <error>", so an assertion that only looks for
+  // the section name passes on a refused edit. That is not hypothetical — it
+  // passed on one, and the test only failed two steps later when the staleness
+  // flag it expected never appeared.
+  const actions = page.getByTestId('chat-actions').last();
+  await expect(actions).toContainText(new RegExp(`Changed ${section}`, 'i'));
+  await expect(actions).not.toContainText(/could not/i);
+  await expect(actions.locator('.qm-chat-action-fail')).toHaveCount(0);
 }
 
 /** The first anchored section heading on the drawn document — whatever the

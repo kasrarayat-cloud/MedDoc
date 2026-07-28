@@ -359,7 +359,17 @@ const MOCK_DEEPGRAM_BATCH: DeepgramBatchResponse = {
  * keeps unrelated chat turns from throwing.
  */
 function mockChatEdit(user: string): unknown {
-  const m = /MOCKEDIT\s+(.+?)\s*::\s*([\s\S]+?)(?:\\n|\\"|"\s*[,}])/.exec(user);
+  // THE LAST DIRECTIVE, NOT THE FIRST.
+  //
+  // The envelope carries `conversation` — the last twelve turns — so from the
+  // second edit onward the payload holds every earlier MOCKEDIT too. Matching
+  // the first one made turn 2 re-apply turn 1's body: byte-identical to what
+  // was already saved, which `saveNoteSectionAction` correctly treats as a
+  // successful no-op. The chat reported success, nothing was written, and
+  // `emStale` was never set — a mock that faked the exact silent-no-op class
+  // this surface was hardened against.
+  const all = [...user.matchAll(/MOCKEDIT\s+(.+?)\s*::\s*([\s\S]+?)(?:\\n|\\"|"\s*[,}])/g)];
+  const m = all[all.length - 1];
   if (!m) {
     return {
       reply: 'This note is in front of me — ask me to change a section and I will.',
