@@ -266,8 +266,22 @@ German provider signing a US HIPAA BAA is unusual: an AVV and a BAA are differen
 instruments under different statutes, and having one says nothing about
 willingness to sign the other.
 
-So the realistic planning assumption is **migration, not signature** — while
-still asking, because asking is free.
+### ⚠️ Correction — the hardware is in the UNITED STATES
+
+Checked directly rather than assumed: the production IP `147.189.172.8` resolves
+to **Los Angeles, California (AS206996 ZAP-Hosting GmbH)**. So the marketing
+claim "US-hosted" is **TRUE**, and the first draft of this memo understated the
+case by implying a European deployment.
+
+That materially improves the odds. A German *contracting entity* operating a
+**US datacenter** is a far more plausible BAA counterparty than a
+Europe-only provider: the data residency question — usually the hard part — is
+already answered. The remaining question is purely contractual: will a GmbH sign
+a US-law instrument.
+
+So the planning assumption is: **ask first, and plan the migration in parallel
+rather than instead.** Asking is free, and the answer is less predictable than
+the corporate domicile alone suggests.
 
 ### Realistic PHI-hosting options (options only — nothing executed)
 
@@ -293,9 +307,9 @@ doctor's real data lands, not after. Migrating an empty system is an engineering
 task; migrating a populated one is an engineering task plus a PHI-handling
 exercise plus a downtime window.
 
-> **OWNER ACTION (Kasra):** Ask ZAP-Hosting directly whether they will sign a US
-> HIPAA BAA — and treat a "no" or a non-answer as the expected outcome that
-> starts the DigitalOcean conversation.
+> **OWNER ACTION (Kasra):** Ask ZAP-Hosting whether they will sign a US HIPAA
+> BAA — leading with the fact that the workload is already in their Los Angeles
+> datacenter, which removes the data-residency objection before it is raised.
 
 ## Resend — reclassified, pending this shipping
 
@@ -344,3 +358,42 @@ The Anthropic BAA countersign is excluded by standing instruction and tracked
 elsewhere. Backblaze B2 (offsite backup) remains **☐ NOT YET** and is unchanged
 by any of the above — it is the same blocker as the open `h16-offsite-backup`
 finding seen from the other side.
+
+
+---
+
+## ⚠️ A public claim that outruns the paperwork
+
+Not a vendor row, but it surfaced while verifying the ones above and it belongs
+in the same file.
+
+**"BAA included" is on the pricing page, the landing page, and the trust strip
+under every login, signup and waitlist form** (`auth-shell.tsx:79,250`;
+`landing-final/content.ts:42,53,96`; `marketing/app/page.tsx:34`).
+
+Read the way a customer reads it, that says: *sign up and QuillMD will sign a
+Business Associate Agreement with you.* QuillMD can genuinely offer that — it is
+the business associate to the doctor's covered entity, and it is a promise about
+its own signature, not a vendor's.
+
+**The problem is the chain underneath it.** §164.308(b) requires a business
+associate to have BAAs with its own subcontractors that handle PHI. Today
+Deepgram (raw patient audio) and the VPS host (every row of PHI) are unsigned.
+Signing a BAA with a doctor while those remain open is a commitment QuillMD is
+not yet in a position to honour.
+
+Sibling claims checked at the same time:
+
+| Claim | Verdict |
+|---|---|
+| **US-hosted** | ✅ TRUE — `147.189.172.8` is Los Angeles, California |
+| **HIPAA ready** | Defensible — "ready", not "certified", and there is no such thing as HIPAA certification |
+| **BAA included** | ⚠️ Outruns the paperwork until R1 and R3 close |
+
+This is **not** an engineering fix, which is why nothing here was changed. Either
+the claim comes down until the chain is closed, or closing the chain becomes the
+thing that unblocks the pilot — and it is the same two signatures either way.
+
+> **OWNER ACTION (Kasra):** Decide whether "BAA included" stays on the public
+> pages before the Deepgram and host BAAs are signed. It is one string in four
+> files, and it is a legal exposure rather than a technical one.
