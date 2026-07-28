@@ -6683,6 +6683,58 @@ body {
   cursor: default;
 }
 
+/* ── adjust the documentation level ──────────────────────────────────────
+   Deliberately the plainest form on the page. It carries no emphasis colour,
+   no arrow, no delta and no figure: a level is a description of work already
+   done, and a control that dresses one direction up as better is asking the
+   doctor to document for the number. Up and down look identical here. */
+.qm-rdoc-emadj { display: flex; flex-direction: column; gap: 6px; }
+.qm-rdoc-emadj-label {
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-linear-text-muted);
+}
+.qm-rdoc-emadj-select {
+  align-self: flex-start;
+  min-width: 116px;
+  padding: 7px 10px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--color-linear-text);
+  background: var(--color-linear-bg);
+  border: 1px solid var(--color-linear-border);
+  border-radius: 6px;
+}
+.qm-rdoc-emadj-ta {
+  width: 100%;
+  padding: 7px 10px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--color-linear-text);
+  background: var(--color-linear-bg);
+  border: 1px solid var(--color-linear-border);
+  border-radius: 6px;
+  resize: vertical;
+}
+.qm-rdoc-emadj-ta:focus-visible,
+.qm-rdoc-emadj-select:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-linear-sage) 55%, transparent);
+  outline-offset: 1px;
+}
+.qm-rdoc-emadj-err {
+  font-size: 11.5px;
+  color: var(--color-linear-amber);
+}
+/* "The level moved while this was open" — informational, not a fault of the
+   doctor's, so it reads in muted text rather than the amber an error uses. */
+.qm-rdoc-emadj-note {
+  font-size: 11.5px;
+  color: var(--color-linear-text-muted);
+}
+.qm-rdoc-emadj-actions { display: flex; gap: 8px; align-items: center; }
+.qm-rdoc-emadj-actions .qm-rdoc-gate-btn:disabled { opacity: 0.45; cursor: default; }
+
 /* ── everything else, one slim row each ──────────────────────────────── */
 .qm-rdoc-meta { margin-top: 12px; }
 .qm-rdoc-meta-row {

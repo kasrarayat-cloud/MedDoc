@@ -208,30 +208,37 @@ describe('CodingRail — onApplyOverride wiring (Bug F-01)', () => {
     expect(screen.queryByText(/doctor-set/i)).toBeNull();
   });
 
-  it('refuses + surfaces an error when no parent handler is wired', async () => {
-    const { toast } = await import('sonner');
+  it('DRAWS NO OVERRIDE CONTROL AT ALL when no parent handler is wired', () => {
+    // This used to assert that clicking the unwired dropdown produced an
+    // "Override is not wired — reload or contact support" toast. That was the
+    // best available answer while the rail was the override's home: better a
+    // real error than a lying success toast (Bug F-01).
+    //
+    // It is the wrong answer now. The override moved to the review page's gate
+    // stack, which is the only surface that can collect the reason the route
+    // requires, so the rail is deliberately passed no handler — and a control
+    // that renders only to tell the doctor their browser is broken is worse
+    // than no control. Absent is the honest rendering, and it is what keeps a
+    // reasonless caller from existing at all.
+    render(<CodingRail emScore={emScoreFixture()} visitId="v1" readonly={false} />);
+
+    expect(screen.queryByRole('button', { name: /override/i })).toBeNull();
+    expect(screen.queryByRole('option', { name: '99214' })).toBeNull();
+  });
+
+  it('still draws it when a handler IS wired — the rail is not dead, just unwired here', () => {
+    // The negative control for the test above: absence must be caused by the
+    // missing handler, not by the dropdown having been deleted outright.
     render(
       <CodingRail
         emScore={emScoreFixture()}
         visitId="v1"
         readonly={false}
+        onApplyOverride={vi.fn().mockResolvedValue({ ok: true })}
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /override/i }));
-    fireEvent.click(
-      screen
-        .getByRole('option', { name: '99214' })
-        .querySelector('button') as HTMLButtonElement,
-    );
-
-    await Promise.resolve();
-
-    // No "pretend success" — instead, an explicit unwired-handler toast.
-    expect(toast.error).toHaveBeenCalledWith(
-      expect.stringMatching(/not wired/i),
-    );
-    expect(toast.success).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /override/i })).toBeTruthy();
   });
 });
 

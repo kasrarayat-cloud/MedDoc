@@ -25,6 +25,41 @@ import {
 
 const read = (p: string) => readFileSync(p, 'utf8');
 
+/** The user-visible text of a TSX source: JSX text nodes plus the attributes
+ *  that render as words (placeholder, title, aria-label).
+ *
+ *  WHY NOT JUST GREP THE FILE. Two ways that lies in opposite directions. The
+ *  prose explaining a rule trips the rule — this file's own "no next-level-up
+ *  coaching" comment contains the words it bans, and the tempting fix is to
+ *  weaken the list. And identifiers collide: `toLowerCase` contains "lower", so
+ *  a direction check over raw source can never ban the word "lower".
+ *  Comments and code are stripped; what a doctor reads is what is checked. */
+function renderedText(src: string): string {
+  const jsxish = stripComments(src).replace(/=>/g, ' ');
+  const parts: string[] = [];
+  // A JSX text node starts after a tag close `>` or an expression close `}`,
+  // and ends at the next tag open `<` or expression open `{`. Both terminators
+  // matter: `This visit is documented at{' '}` ends at a brace, and the
+  // `, changed from` after it begins at one.
+  for (const m of jsxish.matchAll(/[>}]([^<>{}]+)[<{]/g)) {
+    const t = m[1].trim();
+    if (!/[A-Za-z]/.test(t)) continue;
+    if (/[;=:()[\]]/.test(t)) continue; // code, not copy
+    if (!/\s/.test(t) && !/^[A-Z]/.test(t)) continue; // a lone identifier
+    parts.push(t);
+  }
+  // Attribute-borne words a doctor still reads.
+  for (const m of jsxish.matchAll(
+    /(?:placeholder|title|aria-label|aria-description)=(?:"([^"]*)"|'([^']*)')/g,
+  )) {
+    parts.push(m[1] ?? m[2] ?? '');
+  }
+  return parts.join(' ').replace(/\s+/g, ' ').trim();
+}
+
+const stripComments = (src: string) =>
+  src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, ' ');
+
 const REVIEW_DOC = 'src/app/visits/[id]/review-document-view.tsx';
 const READY_VIEW = 'src/app/visits/[id]/visit-ready-view.tsx';
 const SOAP_EDITOR = 'src/app/visits/[id]/soap-editor.tsx';
@@ -112,6 +147,30 @@ describe('the inline panels are gone from the review page', () => {
     }
   });
 
+  it('EVERY GATE SIGNAL THE VIEW READS IS ACTUALLY PASSED TO IT', () => {
+    // The class of bug this catches: `emStale` was declared on VisitReadyView,
+    // consumed as `useState(props.emStale ?? false)`, and never passed by
+    // page.tsx. An optional prop with a falsy default is silent when it goes
+    // missing — the stale gate simply never rendered on a fresh load, so a visit
+    // whose level needed re-checking looked "Reviewed" until the doctor pressed
+    // Sign and met the server's refusal instead.
+    //
+    // Optional-with-a-default is the trap, so assert the wiring, which types
+    // cannot: the prop must appear in the JSX page.tsx renders.
+    const page = read(VISIT_PAGE);
+    const el = page.slice(page.indexOf('<VisitReadyView'));
+    const jsx = el.slice(0, el.indexOf('\n    />'));
+    for (const prop of [
+      'emStale={',
+      'emPendingChange={',
+      'emNotApplicable={',
+      'initialEmScore={',
+      'cptCodes={',
+    ]) {
+      expect(jsx, `VisitReadyView is never passed ${prop}`).toContain(prop);
+    }
+  });
+
   it('the gate stack and Sign survive — they were never part of the panels', () => {
     expect(src).toContain('review-doc-rx-gate');
     expect(src).toContain('review-doc-em-stale-gate');
@@ -125,6 +184,210 @@ describe('the inline panels are gone from the review page', () => {
     expect(read('src/app/visits/[id]/signed-document-view.tsx')).toContain(
       'signed-doc-dictation-toggle',
     );
+  });
+});
+
+describe('the level is shown, and the doctor may disagree with it', () => {
+  const card = read('src/app/visits/[id]/em-level-card.tsx');
+  const review = read(REVIEW_DOC);
+
+  it('the gate stack carries a level row with an adjust affordance', () => {
+    expect(review).toContain('<EmLevelCard');
+    expect(card).toContain('review-doc-em-level');
+    expect(card).toContain('em-level-current');
+    expect(card).toContain('em-level-adjust');
+    expect(card).toContain('em-level-select');
+    expect(card).toContain('em-level-reason');
+    expect(card).toContain('em-level-save');
+  });
+
+  it('it renders NOTHING when there is no level — imaging has none', () => {
+    // `emLevel` is null when emNotApplicable, so the row is absent rather than
+    // showing an office code on an imaging report. (The card's own null-guard is
+    // asserted by rendering it in em-level-card.test.tsx; here we only pin that
+    // the parent still derives the level from the not-applicable flag.)
+    expect(card).toContain('if (!level) return null;');
+    const ready = read(READY_VIEW);
+    const decl = ready.slice(
+      ready.indexOf('const emLevelFromProps'),
+      ready.indexOf('const [emLevel, setEmLevel]'),
+    );
+    expect(decl).toContain('props.emNotApplicable');
+    expect(decl).toContain('? null');
+  });
+
+  it('the row is fed the SAME projection the gate and the signature use', () => {
+    // Two different numbers live on a visit: `cptCodes.em.code` is Layer-7b's
+    // raw LLM suggestion as persisted, and `initialEmScore` is the rubric-engine
+    // projection the page computes — the one the confirm card, the export and
+    // the signed record all use. Seeding the row from the blob let it state one
+    // level while the card underneath it and the file being signed said another.
+    const ready = read(READY_VIEW);
+    const decl = ready.slice(
+      ready.indexOf('const emLevelFromProps'),
+      ready.indexOf('const [emLevel, setEmLevel]'),
+    );
+    expect(decl).toContain('props.initialEmScore');
+    expect(decl).toContain('override?.code ?? props.initialEmScore.suggestedCode');
+  });
+
+  it('A RE-CHECK THAT FINDS NO MOVEMENT MUST NOT BLANK THE ROW', () => {
+    // The bug this pins, and it took the whole affordance with it: the client
+    // read the level out of `pending?.to`, so the ordinary no-movement outcome —
+    // and the guaranteed outcome of a FIRST re-check, where there is no baseline
+    // to move from — set the level to null and unmounted the row. The level
+    // text and the Adjust button, i.e. the only place a doctor can disagree
+    // with the scored level, gone until a full page reload. It also fired from
+    // the sign bar, which re-scores on click whenever the visit is stale.
+    const ready = read(READY_VIEW);
+    // Comments stripped: the paragraph above this assertion, and the one in the
+    // source, both quote the broken expression in order to name it.
+    const cb = stripComments(
+      ready.slice(
+        ready.indexOf('const rescoreEm = useCallback'),
+        ready.indexOf('// V2 review (skin-only, flag-gated)'),
+      ),
+    );
+    expect(cb).not.toContain('r.pending?.to ?? null');
+    // Falls back to what is already displayed; never to null.
+    expect(cb).toContain('setEmLevel((prev) => r.code ?? prev)');
+  });
+
+  it('the reason is REQUIRED, in the UI and at the route', () => {
+    // Armed only when the change is real AND the reason is there — a disabled
+    // control rather than a told-off-after-the-fact validation message.
+    expect(card).toContain('disabled={saving || !reasonOk || !changed}');
+    expect(card).toContain('reason.trim().length >= 3');
+    const route = read('src/app/api/visits/[id]/em-score/override/route.ts');
+    expect(route).toContain('reason: z.string().trim().min(MIN_REASON_LENGTH)');
+    expect(route).not.toContain('reason: z.string().max(MAX_REASON_LENGTH).optional()');
+  });
+
+  it('the extractor actually extracts — negative control for the two guards below', () => {
+    // A word-list guard over an empty string passes every word list there is.
+    // If `renderedText` ever stops matching this file's JSX, the two tests after
+    // this one become decoration, and they are the enforcement for requirement
+    // C. So pin that the real copy is in what they scan, and that the extractor
+    // does the stripping it claims: no identifiers, no comment prose.
+    const prose = renderedText(card + review);
+    expect(prose).toContain('This visit is documented at');
+    expect(prose).toContain('Confirm the level before signing');
+    expect(prose).toContain('Documentation level');
+    expect(prose).toContain('Save level');
+    // Comment prose is stripped — this phrase exists ONLY in a comment.
+    expect(prose).not.toContain('document for the number');
+    // Identifiers are stripped — `toLowerCase` would otherwise smuggle "lower"
+    // past the direction check.
+    expect(prose).not.toContain('toLowerCase');
+  });
+
+  it('NO REVENUE FRAMING — not one word of it', () => {
+    // A level describes work already done. A surface that dresses one
+    // direction up as better is asking the doctor to document for the number.
+    //
+    // ONLY THE RENDERED STRINGS. This read the whole file, which meant the
+    // paragraph of prose EXPLAINING the rule tripped the rule — the honest fix
+    // for which is to weaken the list, so the guard was pushing the wrong way.
+    // The JSX-visible text is what a doctor sees.
+    const prose = renderedText(card + review).toLowerCase();
+    for (const word of [
+      'revenue',
+      'reimbursement',
+      'higher-paying',
+      'optimi', // optimise / optimize / optimization
+      'maximi', // maximise / maximize
+      'capture more',
+      'upcode',
+      'worth more',
+      'billable',
+      'rvu',
+      'collect',
+      'pays',
+    ]) {
+      expect(prose, `revenue framing leaked: ${word}`).not.toContain(word);
+    }
+    // Currency of any denomination, and spelled-out money.
+    expect(prose, 'a monetary figure on a clinical surface').not.toMatch(
+      /[$£€]\s?\d|\bdollars?\b/,
+    );
+  });
+
+  it('AND NO DIRECTION — up and down must read identically', () => {
+    // The word list above cannot express this, which is the whole lesson: it
+    // passed `up from` while `up from` was shipping in the very file it reads.
+    // A level moving down is not a loss and a level moving up is not a win, so
+    // the copy may not name a direction or argue for the level at all.
+    //
+    // "supports" is on the list because it argues: the visit does not "support"
+    // a code, it IS documented at one.
+    const prose = renderedText(card + review).toLowerCase();
+    for (const framing of [
+      'up from',
+      'down from',
+      'increased',
+      'decreased',
+      'higher',
+      'lower',
+      'supports',
+      'upgrade',
+      'downgrade',
+    ]) {
+      expect(prose, `directional framing on the level surface: ${framing}`).not.toContain(
+        framing,
+      );
+    }
+  });
+
+  it('SETTING a level is not ATTESTING to one — the gate is not weakened', () => {
+    const route = read('src/app/api/visits/[id]/em-score/override/route.ts');
+    // The override arms the same pending-change record a re-score raises…
+    expect(route).toContain("cause: 'doctor_override'");
+    // …which the sign route enforces, unchanged.
+    const sign = read('src/app/api/visits/[id]/sign/route.ts');
+    expect(sign).toContain('unacknowledgedEmChange(visit.emPendingChange)');
+    expect(sign).toContain('acknowledgedEmChange');
+    // …and the cause is one the parser accepts, or it coerces to the
+    // unknown→unknown sentinel and confronts the doctor with "unknown, up from
+    // unknown" for a code they just chose.
+    expect(read('src/lib/em-pending-change.ts')).toContain("'doctor_override'");
+  });
+
+  it('an override does NOT touch the note, so it cannot arm the STALE gate', () => {
+    // Staleness keys on content change. An override is not a note edit; if it
+    // bumped soapVersion it would gate the doctor behind their own choice.
+    const route = read('src/app/api/visits/[id]/em-score/override/route.ts');
+    expect(route).not.toContain('soapVersion: { increment');
+    expect(route).not.toContain('emStale: true');
+  });
+});
+
+describe('speaker reassignment is gone — no route with zero callers', () => {
+  it('the action no longer exists', () => {
+    const soap = read('src/actions/soap.ts');
+    expect(soap).not.toContain('export async function reassignSpeakerAction');
+    expect(soap).not.toContain('ReassignSpeakerSchema');
+  });
+
+  it('nothing imports or calls it', () => {
+    for (const f of ['src/app/visits/[id]/transcript-tab.tsx']) {
+      const src = read(f);
+      expect(src).not.toContain('reassignSpeakerAction');
+      expect(src).not.toContain('SpeakerRoleReassign');
+    }
+  });
+
+  it('but the AUDIT ACTION survives — old rows still reference it', () => {
+    // An audit enum that forgets its own history makes its own records
+    // unreadable. The value stays; nothing writes it.
+    expect(read('src/lib/audit.ts')).toContain("| 'SPEAKER_ROLE_REASSIGNED'");
+  });
+
+  it('and transcript-tab itself survives — it feeds the SOAP sources rail', () => {
+    // Deleting the file would break `utterancesToSources` on every path,
+    // including the signed view. Only the reassign surface came out.
+    const src = read('src/app/visits/[id]/transcript-tab.tsx');
+    expect(src).toContain('export function utterancesToSources');
+    expect(read(READY_VIEW)).toContain('utterancesToSources');
   });
 });
 
@@ -237,6 +500,19 @@ describe('an imaging visit has NO E/M level — not displayed, not computed, not
       );
     }
 
+    // THE OVERRIDE ROUTE IS A WRITER TOO, since it moves the baseline when it
+    // clears a pending record. It is unreachable for an imaging visit because
+    // the imaging gate 409s before the write — but the enumeration is the point:
+    // a new emScoredCode writer that is not on this list is not being checked.
+    const override = read('src/app/api/visits/[id]/em-score/override/route.ts');
+    expect(override).toContain('emScoredCode: parsed.data.overrideToCode');
+    const imagingGate = override.indexOf('isImagingReportSpecialty(visit.specialty)');
+    expect(imagingGate).toBeGreaterThan(-1);
+    expect(
+      override.indexOf('emScoredCode:'),
+      'the imaging 409 must come BEFORE any emScoredCode write',
+    ).toBeGreaterThan(imagingGate);
+
     // The re-score never scores an imaging visit — it clears the flag instead.
     const rescore = read('src/actions/rescore-em.ts');
     const imagingBranch = rescore.slice(
@@ -245,6 +521,23 @@ describe('an imaging visit has NO E/M level — not displayed, not computed, not
     );
     expect(imagingBranch).toContain('emStale: false');
     expect(imagingBranch).not.toContain('emScoredCode');
+  });
+
+  it('AND STALENESS IS SUPPRESSED TOO — no "re-check the level" on a report with no level', () => {
+    // Every note edit sets emStale regardless of specialty, and the stale gate
+    // renders on `emStale && !emPendingChange` with no applicability check of its
+    // own. So the moment the flag actually reached the view (it never did before
+    // 2026-07-28 — the prop was not passed), an edited ultrasound report drew
+    // "Documentation level needs re-checking" and the bottom bar told the doctor
+    // to "Re-check the documentation level above", pointing at a card that does
+    // not exist for a level the same page correctly refuses to show.
+    //
+    // Sign stayed enabled — the route exempts imaging — so this blocked nothing.
+    // It asked for something impossible, which is its own kind of broken.
+    const ready = read(READY_VIEW);
+    const el = ready.slice(ready.indexOf('<ReviewDocumentView'));
+    const jsx = el.slice(0, el.indexOf('\n          />'));
+    expect(jsx).toContain('emStale={props.emNotApplicable ? false : emStale}');
   });
 
   it('these guards all read the raw column, which IS an id', () => {

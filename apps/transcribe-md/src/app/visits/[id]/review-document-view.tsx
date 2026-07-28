@@ -36,6 +36,7 @@ import { spokenBody } from '@/lib/spoken-body';
 import { parseNoteSections, type NoteSection } from '@/lib/parse-note-sections';
 import { emChangeEq } from '@/lib/suggestion-labels';
 import { SignAndSendModal } from './sign-and-send-modal';
+import { EmLevelCard } from './em-level-card';
 
 export interface ReviewDocumentViewProps {
   visitId: string;
@@ -77,6 +78,15 @@ export interface ReviewDocumentViewProps {
   emStale?: boolean;
   /** Re-scores lazily. Returns whether the level moved. */
   onRescoreEm?: () => Promise<void>;
+  /** The level as displayed — the doctor's override if set, else the scored
+   *  code. Null when nothing has scored, or when E/M does not apply at all
+   *  (an imaging report has no office visit level), in which case the level
+   *  row does not render and there is nothing to adjust. */
+  emLevel?: string | null;
+  /** Persists a doctor-set level. Arms the confirm gate; never bypasses it. */
+  onAdjustEm?: (code: string, reason: string) => Promise<{ ok: boolean; error?: string }>;
+  /** Signed / archived / otherwise not editable. */
+  readonly?: boolean;
 }
 
 export function ReviewDocumentView(props: ReviewDocumentViewProps) {
@@ -171,6 +181,19 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
           </section>
         )}
 
+        {/* ── THE LEVEL, AND THE RIGHT TO DISAGREE WITH IT ────────────────
+            Calm and first, because it is not a blocker — the two cards below
+            are, and they belong nearest the signature they hold up. This one
+            only says what the visit is documented at, and offers to change it.
+            Absent entirely when E/M does not apply (imaging). */}
+        {props.emLevel && props.onAdjustEm && (
+          <EmLevelCard
+            level={props.emLevel}
+            disabled={Boolean(props.readonly)}
+            onAdjust={props.onAdjustEm}
+          />
+        )}
+
         {/* ── E/M STALE — THE SIGN-BLOCKER, INLINE ────────────────────────
             This used to live as a badge on the "⋯ details" disclosure, which
             meant the one thing standing between the doctor and a signature was
@@ -224,9 +247,21 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
               <span>Documentation level changed</span>
             </div>
             <div className="qm-rdoc-gate-body">
+              {/* DIRECTIONLESS, DELIBERATELY.
+                  This read "now supports {to}, up from {from}" — written when
+                  the only thing that moved a level was a model re-score, which
+                  in practice moved it up. The doctor can now set the level
+                  themselves, and the picker offers every code, so "up from" is
+                  rendered over a DOWNWARD adjustment: the one card standing
+                  between the doctor and a signature stated the opposite of what
+                  they had just done. "Supports", too, argues for the level
+                  rather than reporting it.
+                  A level describes work already done. Up and down read exactly
+                  the same here, and a test pins that they do. */}
               <p className="qm-rdoc-gate-text">
-                This visit now supports{' '}
-                <strong className="qm-rdoc-em-code">{props.emPendingChange.to}</strong>, up from{' '}
+                This visit is documented at{' '}
+                <strong className="qm-rdoc-em-code">{props.emPendingChange.to}</strong>, changed
+                from{' '}
                 <strong className="qm-rdoc-em-code">{props.emPendingChange.from}</strong>. Confirm
                 the level before signing.
                 {props.emStale && (

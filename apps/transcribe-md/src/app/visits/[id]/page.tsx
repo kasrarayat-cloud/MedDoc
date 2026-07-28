@@ -781,6 +781,20 @@ async function VisitBody(props: VisitBodyProps) {
       // to confirm). The server-side sign gate is the enforcement; this
       // is the visible half.
       emPendingChange={pendingEmChange}
+      // STALENESS WAS NEVER PASSED. `VisitReadyView` declared `emStale?` and
+      // seeded `useState(props.emStale ?? false)` from it, so on every page load
+      // it was false no matter what the column said. The stale gate — the card
+      // that says "the note changed after this visit's level was scored" and
+      // offers the re-check — therefore appeared ONLY inside the session that
+      // did the editing. Reload, second tab, or come back tomorrow, and a visit
+      // whose level needs re-checking rendered as "Reviewed" with nothing to do.
+      //
+      // Not a weakened gate: POST /sign re-scores a stale visit unconditionally
+      // and refuses, so nothing unvalidated could be signed. But it moved the
+      // warning from "before the signature" to "at the signature", which is the
+      // failure the inline gate stack exists to prevent — the same reason the
+      // stale badge came off the "⋯ details" disclosure.
+      emStale={props.emStale}
       patientSummary={props.patientSummary}
       confidenceScores={props.confidenceScores}
       durationSec={durationSec}

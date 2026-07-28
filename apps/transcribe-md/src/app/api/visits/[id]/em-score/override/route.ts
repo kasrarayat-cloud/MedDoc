@@ -24,7 +24,14 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import prisma from '@meddoc/db';
-import { TranscribeVisitStatus } from '@prisma/client';
+import { Prisma, TranscribeVisitStatus } from '@prisma/client';
+
+import {
+  isImagingReportSpecialty,
+  ultrasoundSpecialtyEnabled,
+} from '@meddoc/shared/specialties';
+
+import { unacknowledgedEmChange } from '@/lib/em-pending-change';
 import { auth } from '@/lib/nextauth';
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { invalidateVisitFills } from '@/lib/docx-preview/fill-cache';
@@ -50,13 +57,23 @@ const EM_CODES = [
   '99215',
 ] as const;
 
-// Reason is optional + length-capped so a fat-fingered payload can't
-// bloat audit metadata.
+// REASON IS REQUIRED, and that is a change from this route's first version.
+//
+// It was optional because the only caller was a dropdown in a coding rail,
+// where the level was one of several things on screen and the audit row was a
+// by-product. It is now reached from the gate stack — the surface a doctor
+// crosses on the way to a signature — and a level set there is a clinical
+// judgement recorded against a note they are about to attest to. "Who changed
+// it to what" without "and why" is the half of the audit row that cannot be
+// reconstructed later.
+//
+// Length-capped so a fat-fingered payload cannot bloat audit metadata.
+const MIN_REASON_LENGTH = 3;
 const MAX_REASON_LENGTH = 240;
 
 const BodySchema = z.object({
   overrideToCode: z.enum(EM_CODES),
-  reason: z.string().max(MAX_REASON_LENGTH).optional(),
+  reason: z.string().trim().min(MIN_REASON_LENGTH).max(MAX_REASON_LENGTH),
 });
 
 export const POST = withApiHandler<{ id: string }>(
@@ -93,6 +110,8 @@ export const POST = withApiHandler<{ id: string }>(
         deletedAt: true,
         archivedAt: true,
         signedAt: true,
+        specialty: true,
+        emPendingChange: true,
         soapDraft: true,
         soapFinal: true,
         audioDurationSec: true,
@@ -116,6 +135,22 @@ export const POST = withApiHandler<{ id: string }>(
         { code: 'VISIT_LOCKED' },
       );
     }
+    // AN IMAGING REPORT HAS NO OFFICE E/M LEVEL, so there is nothing here to
+    // override and no code that would be correct to write.
+    //
+    // The UI never offers this on an imaging visit — the level row does not
+    // render when E/M does not apply — but the route is the thing that owns the
+    // column, and "the caller wouldn't do that" is how an office code ends up
+    // on an ultrasound report. It reaches the export and the signed record from
+    // there, which is why this is a 409 and not a silent no-op.
+    if (ultrasoundSpecialtyEnabled() && isImagingReportSpecialty(visit.specialty)) {
+      return apiError(
+        'This visit is an imaging report and has no office E/M level.',
+        409,
+        { code: 'EM_NOT_APPLICABLE' },
+      );
+    }
+
     // Only allow on visits that have actually completed the pipeline —
     // earlier statuses mean the AI's suggestedCode isn't stable yet, so
     // the override semantics are undefined.
@@ -175,9 +210,58 @@ export const POST = withApiHandler<{ id: string }>(
       em: { ...existingEm, override: overrideRecord },
     };
 
+    // THE OVERRIDE ARMS THE CONFIRM GATE. It does not bypass it.
+    //
+    // Choosing a level and attesting to a level are two acts, and this route
+    // performs the first. The doctor still meets the same confirm card the
+    // model's own re-scores raise, and the sign route still refuses without a
+    // matching acknowledgement — so "I set it myself" never becomes a shortcut
+    // past the one control that records that a human looked.
+    //
+    // `from` is the level as displayed BEFORE this write. When an
+    // unacknowledged change already exists its original `from` is carried
+    // forward, exactly as the re-score does: the baseline is the level the
+    // doctor last had validated, not whatever the previous unconfirmed hop
+    // happened to say.
+    const priorEm = isPlainObject(existing.em)
+      ? (existing.em as { code?: string; override?: { code?: string } })
+      : null;
+    const displayedBefore =
+      priorEm?.override?.code ?? priorEm?.code ?? engineScore.code ?? null;
+    const alreadyPending = unacknowledgedEmChange(visit.emPendingChange);
+    const from = alreadyPending?.from ?? displayedBefore;
+    const moved = from !== null && from !== parsed.data.overrideToCode;
+
     await prisma.transcribeVisit.update({
       where: { id: visitId },
-      data: { cptCodes: nextCpt },
+      data: {
+        cptCodes: nextCpt,
+        ...(moved
+          ? {
+              emPendingChange: {
+                cause: 'doctor_override',
+                at: new Date().toISOString(),
+                from,
+                to: parsed.data.overrideToCode,
+              } as unknown as Prisma.InputJsonValue,
+            }
+          : alreadyPending
+            ? // Overridden back to the level already reviewed — nothing left to
+              // confirm, and leaving the record would block the signature over
+              // a change that no longer exists.
+              //
+              // MOVE THE BASELINE WITH IT. `emScoredCode` is what the next
+              // re-score measures movement from, and it still held the level
+              // this record was raised against. Clearing the record without it
+              // left the two disagreeing, so the following re-score computed a
+              // move that the doctor had already resolved and raised a fresh
+              // confirm card for a level nothing had changed to.
+              {
+                emPendingChange: Prisma.DbNull,
+                emScoredCode: parsed.data.overrideToCode,
+              }
+            : {}),
+      },
     });
 
     // The override CHANGES THE DOCUMENT, so the cached rendering of it is now
@@ -200,14 +284,26 @@ export const POST = withApiHandler<{ id: string }>(
       targetType: 'transcribe_visit',
       targetId: visitId,
       metadata: {
-        fromCode: engineScore.code,
+        // The level as DISPLAYED before this write, not the engine's raw
+        // suggestion — a doctor overriding their own earlier override was
+        // logged as moving from the model's code, which is a hop that never
+        // happened. CPT codes and a free-text reason the doctor typed about
+        // documentation level; no note text.
+        fromCode: displayedBefore,
+        engineCode: engineScore.code,
         toCode: parsed.data.overrideToCode,
-        reason: parsed.data.reason ?? null,
+        reason: parsed.data.reason,
+        requiresConfirmation: moved,
       },
     });
 
     return NextResponse.json(
-      { ok: true, newScore: newUiScore },
+      {
+        ok: true,
+        newScore: newUiScore,
+        // The client re-arms its confirm card from this rather than guessing.
+        pendingChange: moved ? { from, to: parsed.data.overrideToCode } : null,
+      },
       { status: 200 },
     );
   },

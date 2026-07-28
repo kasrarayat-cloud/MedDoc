@@ -19,7 +19,7 @@
 import { test, expect } from '@playwright/test';
 
 import { cleanupTestUsers } from '../helpers/cleanup';
-import { seedReviewDocVisit } from '../helpers/seedReviewDocVisit';
+import { seedReviewDocVisit, SEEDED_EM_LEVEL } from '../helpers/seedReviewDocVisit';
 import { signupFreshUser } from '../helpers/signup';
 
 const SUGG = '[data-testid="review-doc-suggestion"]';
@@ -36,9 +36,13 @@ test.describe('pre-sign review as the document', () => {
    *  it keeps each flow independent of what the previous one adopted or signed.
    *  Returns null when the psql channel is unavailable so the test skips for an
    *  environment reason rather than failing. */
-  async function open(page: import('@playwright/test').Page, tag: string) {
+  async function open(
+    page: import('@playwright/test').Page,
+    tag: string,
+    seedOpts: { emStale?: boolean; emPending?: boolean } = {},
+  ) {
     const { email } = await signupFreshUser(page, tag);
-    const seeded = seedReviewDocVisit(email);
+    const seeded = seedReviewDocVisit(email, seedOpts);
     if (!seeded) return null;
     await page.goto(`/visits/${seeded.visitId}`);
     await expect(page.getByTestId('review-document-view')).toBeVisible();
@@ -132,6 +136,109 @@ test.describe('pre-sign review as the document', () => {
     await page.getByTestId('review-doc-em-confirm').click();
     await expect(page.getByTestId('review-doc-em-confirm')).toContainText(/confirmed/i);
     await expect(page.getByRole('button', { name: /sign & download/i })).toBeEnabled();
+  });
+
+  test('the level can be adjusted — and an adjusted level still needs confirming', async ({
+    page,
+  }) => {
+    test.skip(!(await open(page, 'rdoc-11')), 'psql seeding unavailable');
+    await clearRxGate(page);
+
+    // Clear the seeded change first, so what follows is provably caused by the
+    // adjustment and not left over from the fixture.
+    await page.getByTestId('review-doc-em-confirm').click();
+    await expect(page.getByTestId('review-doc-em-confirm')).toContainText(/confirmed/i);
+    const sign = page.getByRole('button', { name: /sign & download/i });
+    await expect(sign).toBeEnabled();
+
+    // THE LEVEL ROW: calm, states the level, offers to change it.
+    const row = page.getByTestId('review-doc-em-level');
+    await expect(row).toBeVisible();
+    // ASSERT THE FIXTURE'S LEVEL, do not read it and adapt. Deriving `target`
+    // from whatever the row happened to say made this pass either way — it could
+    // not see the row disagreeing with the confirm card it had just cleared,
+    // which is exactly the bug that shipped (the row was seeded from the raw L7b
+    // blob while the card used the engine projection).
+    await expect(page.getByTestId('em-level-current')).toHaveText(SEEDED_EM_LEVEL);
+
+    await page.getByTestId('em-level-adjust').click();
+
+    // The save is not armed until the change is real AND a reason is given —
+    // no validation scolding, the control simply is not live yet.
+    const save = page.getByTestId('em-level-save');
+    await expect(save).toBeDisabled();
+    // DOWNWARD on purpose. A doctor disagreeing with a level disagrees in both
+    // directions, and the copy on the confirm card that follows used to say "up
+    // from" unconditionally — a downgrade rendered as an upgrade on the last
+    // card before a signature.
+    //
+    // 99212, not 99213: the fixture's unacknowledged record was raised FROM
+    // 99213, and the route carries that baseline forward, so setting 99213 would
+    // land back on the reviewed level and correctly clear the gate instead of
+    // arming it. Two levels down is unambiguously a change.
+    const target = '99212';
+    await page.getByTestId('em-level-select').selectOption(target);
+    await expect(save, 'still disabled with no reason').toBeDisabled();
+    await page.getByTestId('em-level-reason').fill('Exam and MDM documented at this level.');
+    await expect(save).toBeEnabled();
+    await save.click();
+
+    // THE GATE DID NOT WEAKEN. Setting a level is not attesting to one: the
+    // same confirm card the model's own re-scores raise comes back, and the
+    // signature is blocked until it is answered.
+    const gate = page.getByTestId('review-doc-em-gate');
+    await expect(gate).toBeVisible({ timeout: 30_000 });
+    await expect(gate).toContainText(target);
+    await expect(sign, 'an adjusted level must be confirmed before signing').toBeDisabled();
+    await expect(page.locator(BAR)).toContainText('documentation level');
+
+    // NO DIRECTION IN THE COPY. This adjustment went DOWN; the card must not
+    // describe it as going up, and must not argue for the level at all.
+    const gateText = (await gate.innerText()).toLowerCase();
+    expect(gateText).not.toMatch(/\bup from\b|\bdown from\b|\bsupports\b|\bhigher\b|\blower\b/);
+    expect(gateText).toContain('changed from');
+
+    await page.getByTestId('review-doc-em-confirm').click();
+    await expect(sign).toBeEnabled();
+
+    // And the row now states the level the doctor chose.
+    await expect(page.getByTestId('em-level-current')).toHaveText(target);
+  });
+
+  test('re-checking the level does NOT take the level row away', async ({ page }) => {
+    // Seeded STALE, so the re-check control is present by construction. A
+    // conditional `if (await control.count())` here would report success for
+    // having found nothing to click, which is how this whole class of bug
+    // survives a green suite.
+    // Stale AND no pending change: the stale gate renders only when there is
+    // nothing already awaiting confirmation, so seeding both hid the very
+    // control this test drives.
+    test.skip(
+      !(await open(page, 'rdoc-12', { emStale: true, emPending: false })),
+      'psql seeding unavailable',
+    );
+    await clearRxGate(page);
+
+    const row = page.getByTestId('review-doc-em-level');
+    await expect(row).toBeVisible();
+    await expect(page.getByTestId('em-level-current')).toHaveText(SEEDED_EM_LEVEL);
+
+    const recheck = page.getByTestId('review-doc-em-rescore');
+    await expect(recheck, 'a stale visit must offer the re-check').toBeVisible();
+    await recheck.click();
+
+    // THE REGRESSION THIS EXISTS FOR. The client read the new level out of the
+    // "did it move" field, so a re-check that found no movement — the ordinary
+    // outcome, and the guaranteed one when the level has not changed — set the
+    // level to null and unmounted the whole row: the level text AND the Adjust
+    // button, i.e. the only place a doctor can disagree with the level, gone
+    // until a full page reload.
+    await expect(row, 'the level row must survive a no-move re-check').toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(page.getByTestId('em-level-adjust')).toBeVisible();
+    // The level still reads as a real code — never blank, never absent.
+    await expect(page.getByTestId('em-level-current')).toHaveText(/^\d{5}$/);
   });
 
   test('the page carries no billing worksheet — only the level GATE', async ({ page }) => {

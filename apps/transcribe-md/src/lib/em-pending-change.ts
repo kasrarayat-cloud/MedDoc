@@ -43,6 +43,17 @@ export const EM_CHANGE_CAUSES = [
   // correct code was refused — the confirm card reading "unknown, up from
   // unknown" on the one path the gate exists to protect.
   'note_edited',
+  // The doctor set the level themselves, from the gate stack. Same rule as
+  // above and the same reason for spelling it out: a cause this parser does not
+  // recognise is coerced to the unknown→unknown sentinel, so an override
+  // recorded under an unlisted cause would confront the doctor with a confirm
+  // card reading "unknown, up from unknown" — for a code they had just chosen.
+  //
+  // It is a PENDING CHANGE and not a silent write on purpose. A doctor may
+  // disagree with the scored level; they may not skip confirming what they are
+  // about to sign, and the surface that asks is the same one that asks after
+  // the model moves a level.
+  'doctor_override',
 ] as const;
 
 export type EmChangeCause = (typeof EM_CHANGE_CAUSES)[number];

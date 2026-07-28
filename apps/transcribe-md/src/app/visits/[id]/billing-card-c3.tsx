@@ -10,7 +10,16 @@
 //   • a "Why this level?" disclosure holding the full AMA rubric (collapsed)
 //   • a NEUTRAL "documentation could also support 99215" line (no dollar
 //     figure, no green Bump CTA)
-//   • the manual code override as a calm SECONDARY control
+//
+// THE OVERRIDE CONTROL IS GONE FROM HERE (2026-07-28). It moved to the gate
+// stack on the read-only review page (<EmLevelCard>), which is the product's
+// single billing surface now, and that move made the REASON REQUIRED at
+// POST /em-score/override. This card's dropdown sent no reason, so every code
+// change through it would have 400'd — a control that looks live and cannot
+// work. It is not re-created here rather than fabricating a rationale to
+// satisfy the route: an audit row's "why" is the doctor's words or nothing.
+// This card is reachable only with NEXT_PUBLIC_REVIEW_DOC_VIEW off (its
+// documented rollback), and on that path the level is read-only.
 //
 // SKIN-ONLY: this is PRESENTATION over the SAME server-computed EmScore the
 // rail consumed. It reuses the existing <EmTimeTracker> + <EmCheckList>
@@ -21,18 +30,13 @@
 // (emPendingChange) and still fail-closes Sign. The deliberate, compliance-
 // motivated omission vs the rail: NO revenue-delta loop and NO rescore-on-edit
 // coaching loop — i.e. the upcoding-pressure feedback is intentionally gone.
-// The card shows the server level at load + on override.
+// The card shows the server level as loaded.
 // ============================================================================
-
-import { useState } from 'react';
-import { toast } from 'sonner';
 
 import { EmCheckList } from '@/components/visits/EmCheckList';
 import { EmTimeTracker } from '@/components/visits/EmTimeTracker';
-import type { EmCode, EmScore } from '@/lib/em-coding-ui/types';
+import type { EmScore } from '@/lib/em-coding-ui/types';
 
-const ESTABLISHED_CODES: EmCode[] = ['99211', '99212', '99213', '99214', '99215'];
-const NEW_CODES: EmCode[] = ['99202', '99203', '99204', '99205'];
 
 const MDM_LABEL: Record<EmScore['mdmTier'], string> = {
   straightforward: 'straightforward complexity',
@@ -43,14 +47,14 @@ const MDM_LABEL: Record<EmScore['mdmTier'], string> = {
 
 export function BillingCardC3({
   initialScore,
-  visitId,
-  readonly,
   emPendingChange,
   notApplicable,
 }: {
   initialScore: EmScore | null;
-  visitId: string;
-  readonly: boolean;
+  /** Kept on the interface, unread since the override control left: the callers
+   *  still pass both, and this card is a read-only presentation of the level. */
+  visitId?: string;
+  readonly?: boolean;
   /** E/M confirm gate signal (codes only). When set, surface — never block;
    *  the actual fail-closed enforcement stays in <SignAndSendModal>. */
   emPendingChange: { from: string; to: string } | null;
@@ -59,8 +63,8 @@ export function BillingCardC3({
    *  score (the pipeline already skips L7b CPT/E&M for these). */
   notApplicable?: boolean;
 }) {
-  const [score, setScore] = useState<EmScore | null>(initialScore);
-  const [overriding, setOverriding] = useState(false);
+  // Read-only since the override left: nothing on this card mutates the score.
+  const score = initialScore;
 
   if (notApplicable) {
     return (
@@ -89,33 +93,6 @@ export function BillingCardC3({
   const displayedCode = score.override?.code ?? score.suggestedCode;
   const level = Number(displayedCode.slice(-1));
   const patient = score.visitType === 'new' ? 'new' : 'established';
-  const overrideOptions = score.visitType === 'new' ? NEW_CODES : ESTABLISHED_CODES;
-
-  const applyOverride = async (code: EmCode) => {
-    if (code === displayedCode || overriding) return;
-    setOverriding(true);
-    try {
-      const res = await fetch(`/api/visits/${visitId}/em-score/override`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ overrideToCode: code }),
-      });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { error?: string };
-        toast.error(body.error ?? `Couldn't set ${code} — try again.`);
-        return;
-      }
-      const data = (await res.json()) as { ok: boolean; newScore?: EmScore };
-      if (data.ok && data.newScore) setScore(data.newScore);
-      toast.success(`Code set to ${code}`, {
-        description: 'Doctor-set code saved to the audit trail.',
-      });
-    } catch {
-      toast.error('Network error setting the code — try again.');
-    } finally {
-      setOverriding(false);
-    }
-  };
 
   return (
     <div className="qm-c3-bill-card">
@@ -162,27 +139,6 @@ export function BillingCardC3({
           )}
         </div>
       </details>
-
-      {!readonly && (
-        <div className="qm-c3-bill-override">
-          <label className="qm-c3-bill-override-label" htmlFor={`bill-ovr-${visitId}`}>
-            Set a different code
-          </label>
-          <select
-            id={`bill-ovr-${visitId}`}
-            className="qm-c3-bill-override-select"
-            value={displayedCode}
-            disabled={overriding}
-            onChange={(e) => applyOverride(e.target.value as EmCode)}
-          >
-            {overrideOptions.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
     </div>
   );
 }
