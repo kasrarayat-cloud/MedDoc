@@ -177,8 +177,25 @@ services:
       # doctor will. A suite that ran against a switched-off gate would prove
       # nothing about the gate.
       SIGNUP_INVITE_CODES: "E2E-PILOT-CODE"
-      # No real API calls anywhere in this stack.
-      MOCK_AI_CALLS: "${MOCK_AI_CALLS:-true}"
+      # ⚠️ NO REAL API CALLS ANYWHERE IN THIS STACK — and this line is how that
+      # promise is actually kept, after it was broken for weeks.
+      #
+      # This used to read `${MOCK_AI_CALLS:-true}`. The `:-true` looks like a
+      # safe default and is not one: it applies only when the variable is
+      # UNSET, and `.env` sets `MOCK_AI_CALLS=false` because PRODUCTION must
+      # make real calls. Compose reads that same `.env`, so the QA stack
+      # silently inherited prod's setting and made REAL calls — 298 recorded
+      # Anthropic calls and real Deepgram requests, on a stack whose entire
+      # purpose is to make none. It also burns the shared Anthropic balance
+      # that production depends on.
+      #
+      # HARD-CODED, not interpolated. No `${...}` here at all: an expression
+      # clever enough to express "default true unless opted out" is an
+      # expression clever enough to be wrong, which is precisely how this broke.
+      # If you genuinely need live models here, write an override compose file
+      # — the same pattern docker-compose.qa.reviewdoc.yml already uses — so the
+      # decision is a visible, reviewable file rather than an ambient variable.
+      MOCK_AI_CALLS: "true"
       # Note-format PHI-gate reject path (E2E scenario 23). Default empty (off)
       # so the normal suite's parses succeed; the e2e workflow recreates this
       # app with MOCK_TEMPLATE_PHI_FLAG=true for the dedicated phi-reject pass,
@@ -235,7 +252,10 @@ services:
       TRANSCRIBE_MD_MINIO_BUCKET: transcribe-md-audio
       MINIO_USE_SSL: "false"
       TRANSCRIBE_MD_WORKER_CONCURRENCY: "2"
-      MOCK_AI_CALLS: "${MOCK_AI_CALLS:-true}"
+      # HARD-CODED — see the long note on the app service above. The worker is
+      # the one that actually calls Deepgram and Anthropic, so this line is the
+      # one that was costing money.
+      MOCK_AI_CALLS: "true"
       # Rx clinical-safety (E2E scenario 24): L7c rx-drafting runs HERE. Default
       # empty (off); the e2e workflow recreates this worker with
       # MOCK_RX_WARNINGS=true for the rx-safety pass so new visits get the
