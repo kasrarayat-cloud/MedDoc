@@ -32,8 +32,50 @@ import {
   type OwnerCredentials,
 } from '../helpers/seedVisitDocVisit';
 
-/** Written by the tap-to-edit walk and looked for in the signed file. */
+/** One scalar out of the QA database. Hoisted: three tests declared it
+ *  locally and a fourth needed it, and four copies of a psql shell-out is
+ *  three chances for them to drift apart. */
+const sqlOne = (q: string) =>
+  execSync(`${QA_COMPOSE} exec -T postgres psql -U meddoc -d ${QA_DB} -A -t -f -`, {
+    input: q,
+    encoding: 'utf8',
+  }).trim();
+
+/** Written by the chat-editor walk and looked for in the signed file. */
 const EDIT_MARK = 'Bilateral study completed without complication.';
+
+/**
+ * Amend one section THROUGH THE CHAT EDITOR — the only way to change a note
+ * before signing now that the per-section edit pills are gone.
+ *
+ * The model is stubbed (MOCK_AI_CALLS; see the tm_chat_edit fixture in
+ * packages/ai/src/mock.ts) so the section and the body are ours to choose and
+ * the turn is deterministic. Everything downstream of the model is REAL: the
+ * intent goes through the same dispatcher, the same `saveNoteSectionAction`,
+ * the same splice, the same audit row and the same staleness flag the deleted
+ * pill used to reach. That shared write path is why parity holds.
+ */
+async function chatEditSection(page: Page, section: string, body: string) {
+  const editor = page.getByTestId('chat-editor');
+  await expect(editor, 'the chat editor is the edit surface').toBeVisible({ timeout: 60_000 });
+  const before = await page.getByTestId('chat-turn-assistant').count();
+  await page.getByTestId('chat-input').fill(`MOCKEDIT ${section} :: ${body}`);
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('chat-turn-assistant')).toHaveCount(before + 1, {
+    timeout: 120_000,
+  });
+  // The turn must SAY it acted. A reply that names nothing is the silent no-op
+  // this surface was hardened against.
+  await expect(page.getByTestId('chat-actions').last()).toContainText(new RegExp(section, 'i'));
+}
+
+/** The first anchored section heading on the drawn document — whatever the
+ *  doctor's own template happens to call it. */
+async function firstSectionLabel(page: Page): Promise<string> {
+  const anchored = page.locator('[data-section]').first();
+  await expect(anchored).toBeAttached({ timeout: 120_000 });
+  return (await anchored.getAttribute('data-section'))!;
+}
 
 function converter(action: 'stop' | 'start') {
   try {
@@ -100,7 +142,7 @@ test.describe('the visit page is the document', () => {
   });
 
 
-  test('tap-to-edit: the edit reaches the document AND the delivered file', async ({ page }) => {
+  test('chat edit: the edit reaches the document AND the delivered file', async ({ page }) => {
     test.setTimeout(420_000);
     await page.setViewportSize({ width: 1400, height: 1000 });
     const seeded = await openVisit(page);
@@ -109,17 +151,12 @@ test.describe('the visit page is the document', () => {
     const counts = page.getByTestId('visit-document-counts');
     const shaBefore = await counts.getAttribute('data-fill-sha');
 
-    const opener = page.locator('[data-testid^="section-edit-"]').first();
-    await expect(opener, 'every anchored section should offer an edit').toBeVisible();
-    const label = (await opener.getAttribute('data-testid'))!.replace('section-edit-', '');
-    await opener.click();
-    // By testid, not by `#edit-${label}`: the DOM id is slugified (an id may
-    // not contain whitespace), so a label like "Chief Complaint" would make
-    // that selector a descendant combinator matching nothing.
-    const ta = page.getByTestId(`section-textarea-${label}`);
-    await expect(ta).toBeVisible();
-    await ta.fill(`${await ta.inputValue()}\n${EDIT_MARK}`);
-    await page.getByTestId(`section-save-${label}`).click();
+    // NO EDIT PILLS. The paper is read-only; the chat is the way in.
+    await expect(page.locator('[data-testid^="section-edit-"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid^="section-textarea-"]')).toHaveCount(0);
+
+    const label = await firstSectionLabel(page);
+    await chatEditSection(page, label, EDIT_MARK);
 
     // The document re-fills through the SAME path an adopt uses.
     await expect
@@ -185,16 +222,18 @@ test.describe('the visit page is the document', () => {
         },
       ).trim();
 
-    // Edit through tap-to-edit — the surface every editor funnels into.
-    const opener = page.locator('[data-testid^="section-edit-"]').first();
-    const label = (await opener.getAttribute('data-testid'))!.replace('section-edit-', '');
-    await opener.click();
-    const ta = page.getByTestId(`section-textarea-${label}`);
-    await ta.fill(`${await ta.inputValue()}\nStale-gate probe.`);
-    await page.getByTestId(`section-save-${label}`).click();
+    // THE TRIGGERING EDIT COMES THROUGH THE CHAT.
+    //
+    // This is the assertion that matters after deleting the pills: the gate has
+    // to key on the note CHANGING, not on the surface that changed it. It does
+    // — every editor funnels into saveSoapDraftAction, and that is the one line
+    // that sets emStale. If the gate had been wired to the pill, deleting the
+    // pill would have silently removed the staleness check from every edit.
+    const label = await firstSectionLabel(page);
+    await chatEditSection(page, label, 'Stale-gate probe.');
     await page.waitForTimeout(3000);
 
-    expect(isStale(), 'an edit must mark the level stale').toBe('t');
+    expect(isStale(), 'a CHAT edit must mark the level stale').toBe('t');
 
     // The doctor is TOLD why, at the control that resolves it — and that
     // control is now on the page rather than inside a collapsible. A blocker
@@ -223,9 +262,7 @@ test.describe('the visit page is the document', () => {
     expect(scoredCode(), 'the validated level must be recorded').toMatch(/^\d{5}$/);
 
     // A SECOND edit is now gated against a real before.
-    await opener.click();
-    await ta.fill(`${await ta.inputValue()}\nSecond probe.`);
-    await page.getByTestId(`section-save-${label}`).click();
+    await chatEditSection(page, label, 'Second probe.');
     await expect.poll(() => isStale(), { timeout: 60_000 }).toBe('t');
 
     // Signing re-scores server-side rather than refusing and pointing at a
@@ -268,12 +305,6 @@ test.describe('the visit page is the document', () => {
   test('E/M STALE: a MOVED level blocks the signature', async ({ page }) => {
     test.setTimeout(300_000);
     const seeded = await openVisit(page);
-    const sqlOne = (q: string) =>
-      execSync(`${QA_COMPOSE} exec -T postgres psql -U meddoc -d ${QA_DB} -A -t -f -`, {
-        input: q,
-        encoding: 'utf8',
-      }).trim();
-
     // A validated level that differs from what this note scores at. Planting
     // the baseline is the only way to exercise "moved" deterministically — the
     // scorer is a real model and we do not get to choose its answer.
@@ -301,12 +332,6 @@ test.describe('the visit page is the document', () => {
   test('an existing baseline is NEVER overwritten', async ({ page }) => {
     test.setTimeout(300_000);
     const seeded = await openVisit(page);
-    const sqlOne = (q: string) =>
-      execSync(`${QA_COMPOSE} exec -T postgres psql -U meddoc -d ${QA_DB} -A -t -f -`, {
-        input: q,
-        encoding: 'utf8',
-      }).trim();
-
     // The baseline is the level the doctor last had VALIDATED. Re-seeding it
     // from a later note would quietly move the goalposts: the next comparison
     // would be against a level nobody confirmed.
@@ -330,12 +355,6 @@ test.describe('the visit page is the document', () => {
     test.setTimeout(300_000);
     const seeded = await openVisit(page);
     await page.getByTestId('visit-document').waitFor({ state: 'visible', timeout: 120_000 });
-    const sqlOne = (q: string) =>
-      execSync(`${QA_COMPOSE} exec -T postgres psql -U meddoc -d ${QA_DB} -A -t -f -`, {
-        input: q,
-        encoding: 'utf8',
-      }).trim();
-
     // Clear the baseline AFTER the page has loaded, so the page-view seed
     // cannot be what re-establishes it. This is the doctor whose first action
     // on a visit is an edit: without the save path seeding, their first
@@ -348,12 +367,8 @@ test.describe('the visit page is the document', () => {
         `where id='${seeded.visitId}'`,
     );
 
-    const opener = page.locator('[data-testid^="section-edit-"]').first();
-    const label = (await opener.getAttribute('data-testid'))!.replace('section-edit-', '');
-    await opener.click();
-    const ta = page.getByTestId(`section-textarea-${label}`);
-    await ta.fill(`${await ta.inputValue()}\nBaseline seed probe.`);
-    await page.getByTestId(`section-save-${label}`).click();
+    const label = await firstSectionLabel(page);
+    await chatEditSection(page, label, 'Baseline seed probe.');
 
     await expect
       .poll(
@@ -406,8 +421,10 @@ test.describe('the visit page is the document', () => {
     expect(spoken).toContain('SSV at the Proximal Calf: nothing documented');
     expect(spoken).toContain('Set aside for your review');
 
-    // Same interaction model as a template visit.
-    await expect(page.locator('[data-testid^="section-edit-"]').first()).toBeVisible();
+    // Same interaction model as a template visit: read-only paper, and the
+    // three things a doctor can act on — chat, the gates, and the signature.
+    await expect(page.locator('[data-testid^="section-edit-"]')).toHaveCount(0);
+    await expect(page.getByTestId('chat-editor')).toBeVisible();
     await expect(page.getByRole('button', { name: /sign & download/i })).toBeVisible();
 
     // And the preview offers both formats.
@@ -461,44 +478,61 @@ test.describe('the visit page is the document', () => {
     await expect(page.getByTestId('review-doc-codes-toggle')).toHaveCount(0);
     await expect(page.getByTestId('review-doc-dictation-toggle')).toHaveCount(0);
 
-    // DELIBERATELY NOT asserting on the billing panel here, either way.
+    // The billing panel used to be UNASSERTABLE here, and the reason is worth
+    // keeping because it is the shape of a whole class of bad test: its
+    // presence keyed on `hasSummary` → `emNotApplicable` → a BUILD FLAG
+    // (NEXT_PUBLIC_ULTRASOUND_SPECIALTY) that prod's image sets and the CI
+    // visit-doc image does not. An assertion either way passed in one
+    // environment and failed in the other while the product was correct in
+    // both, so the honest move was to assert nothing.
     //
-    // Its presence keys on `hasSummary`, which for an imaging visit depends on
-    // `emNotApplicable` — and that is derived from a BUILD FLAG
-    // (NEXT_PUBLIC_ULTRASOUND_SPECIALTY). Prod's image sets it, the CI
-    // visit-doc image does not, so the panel renders in one and not the other.
-    // An assertion either way passes in one environment and fails in the other
-    // while the product is behaving correctly in both.
-    //
-    // What this test is actually about is the PRESCRIPTION chrome, asserted
-    // above and flag-independent.
-
-    // What remains is the input panel — the one quiet affordance that is not
-    // billing chrome, and it renders inline now rather than behind a drawer.
-    await expect(page.getByTestId('review-doc-dictation-panel')).toBeVisible();
+    // It is assertable now, in every environment, because the panel is gone
+    // unconditionally. A surface that does not exist cannot be flag-dependent.
+    await expect(page.getByTestId('review-doc-billing-panel')).toHaveCount(0);
+    await expect(page.getByTestId('review-doc-codes-panel')).toHaveCount(0);
+    await expect(page.getByTestId('review-doc-dictation-panel')).toHaveCount(0);
   });
 
-  test('NOTHING became unreachable — every datum is still one tap away', async ({ page }) => {
+  test('the review page is PAPER — no panels, no pills, only the gates and Sign', async ({
+    page,
+  }) => {
     test.setTimeout(300_000);
     await page.setViewportSize({ width: 1500, height: 1050 });
-    // The TWIN visit: it has codes, a level, medications and a warning, so it
-    // is the one that can prove each of them survived the fold.
+    // The TWIN visit: it has codes, a level, medications and a warning — so it
+    // is the visit that WOULD have drawn every panel. If any survived, it is
+    // the one that shows it.
     const seeded = await openVisit(page);
     await page.goto(`/visits/${seeded.visitId}`);
     await page.getByTestId('visit-document').waitFor({ state: 'visible', timeout: 120_000 });
 
-    // A visit WITH prescriptions and a warning still gets the gate, unchanged.
-    await expect(page.getByTestId('review-doc-rx-gate')).toBeVisible();
+    // GONE: the billing card, the codes table, the input transcript, and the
+    // wrapper that held all three.
+    await expect(page.getByTestId('review-doc-billing-panel')).toHaveCount(0);
+    await expect(page.getByTestId('review-doc-codes-panel')).toHaveCount(0);
+    await expect(page.getByTestId('review-doc-dictation-panel')).toHaveCount(0);
+    await expect(page.locator('.qm-rdoc-meta')).toHaveCount(0);
+    await expect(page.locator('.qm-c3-bill-card')).toHaveCount(0);
 
-    // Billing: the level, and the control that CHANGES it.
-    const billing = page.getByTestId('review-doc-billing-panel');
-    await expect(billing).toBeVisible();
-    await expect(billing.locator('.qm-c3-bill-card')).toBeVisible();
-    await expect(billing.locator('select, [role="combobox"]').first()).toBeVisible();
-    // Codes: the ICD list.
-    await expect(page.getByTestId('review-doc-codes-panel')).toBeVisible();
-    // And the original dictation, under its own heading.
-    await expect(page.getByTestId('review-doc-dictation-panel')).toBeVisible();
+    // GONE: every per-section edit affordance.
+    await expect(page.locator('[data-testid^="section-edit-"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid^="section-textarea-"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid^="section-save-"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid^="section-uneditable-"]')).toHaveCount(0);
+    // …including the whole-blob click-to-edit on the styled-note fallback.
+    await expect(page.locator('[data-edit-affordance]')).toHaveCount(0);
+
+    // STILL HERE, and these three are the whole interaction model:
+    await expect(page.getByTestId('review-doc-rx-gate')).toBeVisible();
+    await expect(page.getByTestId('chat-editor')).toBeVisible();
+    await expect(page.getByRole('button', { name: /sign & download/i })).toBeVisible();
+
+    // The coding did not stop being COMPUTED — it stopped being drawn. It is
+    // still on the row, which is what export and billing read.
+    const codes = sqlOne(
+      `select case when "icdCodes" is null then 'null' else 'present' end ` +
+        `from transcribe_visits where id='${seeded.visitId}'`,
+    );
+    expect(codes, 'the coding must still be stored, only not rendered').toBe('present');
   });
 
   test('390px: the document draws and nothing overflows sideways', async ({ page }) => {

@@ -35,10 +35,19 @@ export const EditSectionIntentSchema = z.object({
   body: z.string().max(20_000),
 });
 
-/** Take the doctor to something. A hint to the client; touches no data. */
+/** Take the doctor to something. A hint to the client; touches no data.
+ *
+ *  EVERY MEMBER MUST RESOLVE TO A REAL ANCHOR. `suggestions` was removed when
+ *  its lane was deleted; `codes` is removed here with the billing panel, the
+ *  codes table and the input transcript. A target whose anchor no longer
+ *  renders does not fail — `querySelector` returns null and `scrollIntoView`
+ *  is never called — so the chat says "Took you to codes" and the page sits
+ *  still. A navigation aid that lies is worse than one that refuses, and the
+ *  refusal is free: outside the union the model cannot ask for it, and if it
+ *  asks anyway the schema rejects the whole reply. */
 export const ScrollIntentSchema = z.object({
   kind: z.literal('scroll_to'),
-  target: z.enum(['rx_gate', 'em_gate', 'codes', 'document']),
+  target: z.enum(['rx_gate', 'em_gate', 'document']),
 });
 
 /** The model believes this is out of scope. Carried explicitly so a refusal is

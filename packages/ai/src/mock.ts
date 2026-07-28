@@ -334,10 +334,56 @@ const MOCK_DEEPGRAM_BATCH: DeepgramBatchResponse = {
   },
 };
 
+/**
+ * tm_chat_edit — the one CONTENT-AWARE fixture.
+ *
+ * The chat editor's contract is "what the doctor typed becomes an intent", so a
+ * purpose-keyed fixture cannot exercise it: every turn would return the same
+ * canned edit regardless of the request, and the test would prove nothing about
+ * the dispatch it is meant to cover.
+ *
+ * Without this the purpose had NO fixture at all, so the whole surface threw
+ * under MOCK_AI_CALLS and its only spec was `.eval.spec.ts` — real tokens,
+ * operator-run, invisible to the gate. Deleting the per-section edit pills made
+ * the chat the sole way to amend a note before signing, and the sole way to
+ * amend a note before signing must be in CI.
+ *
+ * THE MODEL IS THE ONLY THING STUBBED. The intent goes through the real
+ * dispatcher, the real `saveNoteSectionAction`, the real splice, the real audit
+ * row and the real staleness flag — which is where the behaviour under test
+ * actually lives.
+ *
+ * Directive, chosen to survive JSON-encoding into the data envelope:
+ *   MOCKEDIT <section label> :: <the section's new body>
+ * Anything else is a question, and answers it — `answer` is a legal turn and
+ * keeps unrelated chat turns from throwing.
+ */
+function mockChatEdit(user: string): unknown {
+  const m = /MOCKEDIT\s+(.+?)\s*::\s*([\s\S]+?)(?:\\n|\\"|"\s*[,}])/.exec(user);
+  if (!m) {
+    return {
+      reply: 'This note is in front of me — ask me to change a section and I will.',
+      intents: [{ kind: 'answer' }],
+    };
+  }
+  const sectionLabel = m[1].trim();
+  // The envelope is JSON, so the body arrives with escapes intact.
+  const body = m[2].replace(/\\n/g, '\n').replace(/\\"/g, '"').trim();
+  return {
+    reply: `Updated ${sectionLabel}.`,
+    intents: [{ kind: 'edit_section', sectionLabel, body }],
+  };
+}
+
 export function mockComplete<T>(args: {
   purpose: ModelCallPurpose;
   schema: ZodType<T>;
+  /** The rendered user content. Only tm_chat_edit reads it. */
+  user?: string;
 }): T {
+  if (args.purpose === 'tm_chat_edit') {
+    return args.schema.parse(mockChatEdit(args.user ?? ''));
+  }
   // Note-format PHI gate: opt into the FLAGGED scan result (the reject path)
   // via env. The mock keys on `purpose` only and can't see the input, so a
   // content-aware "this note has PHI" branch isn't possible; the env flag is

@@ -44,6 +44,60 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SEEDED_IDS_PATH = resolve(__dirname, '..', 'fixtures', 'seeded-ids.json');
 
+// ---------------------------------------------------------------------------
+// FORBIDDEN BUTTONS — the safety net /settings has always had, and this walker
+// did not.
+//
+// The walker builds its element map at RUNTIME (`page.$$eval` over every
+// button/link) and clicks everything it finds. It never needed a deny-list
+// while the visit page's interactive surface was mostly per-section edit pills:
+// clicking "Edit FINDINGS" opened a textarea and the next navigation closed it.
+//
+// Those pills are gone — the page is read-only paper now — and what the
+// enumerator finds instead is the chat editor and the signature. Both of those
+// WRITE. `--scenario`/`QA_AUDITOR_BASE_URL` default to PRODUCTION, so an
+// unguarded pass could sign a real doctor's note to see what the button did.
+//
+// Enumerated, classified, and NOT clicked. `--skip-clicks` remains the
+// read-only mode for everything else.
+// ---------------------------------------------------------------------------
+const FORBIDDEN_BUTTONS = [
+  {
+    pattern: /\bsign\s*(&|and)\s*(download|deliver|send)\b/i,
+    risk: 'would-sign-a-clinical-note',
+    note: 'POST /api/visits/[id]/sign is the sole READY→SIGNED writer. Signing a real visit to prove a button works is editing a medical record.',
+  },
+  {
+    pattern: /^\s*sign\s*$/i,
+    risk: 'would-sign-a-clinical-note',
+    note: 'bare "Sign" trigger — same transition, shorter label.',
+  },
+  {
+    pattern: /\bsend\b/i,
+    risk: 'would-write-the-note-via-chat',
+    note: 'the chat editor\'s send. A turn dispatches real intents through saveNoteSectionAction — it can rewrite a section — and costs a live model call.',
+  },
+  {
+    pattern: /\b(confirm|acknowledge)\b.*\b(level|9\d{4})\b/i,
+    risk: 'would-satisfy-a-clinical-gate',
+    note: 'the E/M confirm card. A gate a walker can clear on the doctor\'s behalf is not a gate.',
+  },
+  {
+    pattern: /\boverride\b/i,
+    risk: 'would-satisfy-a-clinical-gate',
+    note: 'critical-Rx override. assertCriticalRxOverrideFlow walks this deliberately under --scenario criticalRx and cancels; blind clicking must not.',
+  },
+];
+
+function forbiddenMatch(label) {
+  const text = (label ?? '').trim();
+  if (!text) return null;
+  for (const entry of FORBIDDEN_BUTTONS) {
+    if (entry.pattern.test(text)) return entry;
+  }
+  return null;
+}
+
 function resolveScenarioToVisitId(scenario) {
   if (!scenario) return null;
   if (!existsSync(SEEDED_IDS_PATH)) return null;
@@ -213,7 +267,12 @@ async function main() {
     const elements = await enumerate(page);
     counters.elements = elements.length;
     for (const el of elements) {
-      emit({ event: 'element', ...el });
+      const forbidden = forbiddenMatch(el.text || el.ariaLabel || '');
+      emit({
+        event: 'element',
+        ...el,
+        ...(forbidden ? { forbidden: true, risk: forbidden.risk } : {}),
+      });
     }
 
     if (!opts.skipClicks) {
@@ -231,6 +290,17 @@ async function main() {
       for (const el of elements) {
         if (el.disabled) {
           emit({ event: 'click-skipped', label: el.text, reason: 'disabled' });
+          continue;
+        }
+        const forbidden = forbiddenMatch(el.text || el.ariaLabel || '');
+        if (forbidden) {
+          emit({
+            event: 'click-skipped',
+            label: el.text || el.ariaLabel,
+            reason: 'forbidden',
+            risk: forbidden.risk,
+            note: forbidden.note,
+          });
           continue;
         }
         // Outbound nav links would leave the page; enumerate but don't click.
