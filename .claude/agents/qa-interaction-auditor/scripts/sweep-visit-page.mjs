@@ -83,6 +83,11 @@ const FORBIDDEN_BUTTONS = [
     note: 'the E/M confirm card. A gate a walker can clear on the doctor\'s behalf is not a gate.',
   },
   {
+    pattern: /\bsave\s+level\b/i,
+    risk: 'would-set-a-billing-code',
+    note: 'the E/M level adjust form. Writes cptCodes.em.override, an EM_OVERRIDE_APPLIED audit row, and ARMS the confirm gate — a billing code set by a sweep, attributed to the doctor whose session it borrowed.',
+  },
+  {
     pattern: /\boverride\b/i,
     risk: 'would-satisfy-a-clinical-gate',
     note: 'critical-Rx override. assertCriticalRxOverrideFlow walks this deliberately under --scenario criticalRx and cancels; blind clicking must not.',

@@ -153,9 +153,14 @@ export type AuditAction =
   // thresholdMin, processingStartedAt } for admin forensics.
   | 'VISIT_PROCESSING_TIMEOUT'
   // FIND-P1-003 (2026-05-14) — Layer-2 manual speaker-role override
-  // closure. Emitted by reassignSpeakerAction when a doctor reassigns
-  // a speaker on the Transcript tab. Metadata carries { source,
-  // speakerId, previousRole, newRole } — no PHI.
+  // closure. Was emitted by reassignSpeakerAction when a doctor reassigned a
+  // speaker on the Transcript tab. Metadata carries { source, speakerId,
+  // previousRole, newRole } — no PHI.
+  //
+  // RETIRED 2026-07-28: nothing writes this any more. The action was deleted
+  // with the transcript panel (see the note in actions/soap.ts). The VALUE
+  // stays — rows written before that date still carry it, and an audit enum
+  // that forgets its own history makes its own records unreadable.
   | 'SPEAKER_ROLE_REASSIGNED'
   // FIND-P1-015 + FIND-P1-016 (2026-05-14) — emitted by L4 / L6 when
   // the lenient SOAP-structure validator (soap-structure-validator.ts)

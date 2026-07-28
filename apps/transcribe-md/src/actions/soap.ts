@@ -11,7 +11,6 @@ import { z } from 'zod';
 import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
 import { requireSession } from '@/lib/auth';
-import { logAudit } from '@/lib/audit';
 
 const SaveSoapSchema = z.object({
   visitId: z.string().min(1),
@@ -203,97 +202,28 @@ export async function saveSoapDraftAction(
 // override gate. The unified POST /api/visits/[id]/sign route is now the SOLE
 // path that transitions a visit to SIGNED, and it enforces the gate.
 
-const SpeakerRoleKeys = z.enum(['doctor', 'patient', 'family', 'other', 'unknown']);
+// SPEAKER REASSIGNMENT WAS REMOVED HERE — 2026-07-28.
+//
+// `reassignSpeakerAction` lost its only caller when the input-transcript panel
+// came off the review page. Rather than leave a server action nothing could
+// reach, it was deleted, and the reasoning is worth keeping because the obvious
+// move — re-surface it through the chat editor — is the wrong one:
+//
+//   1. To reassign a speaker you must first SEE which speaker is wrong, which
+//      means reading utterances attributed to speakers. Putting that in the
+//      chat rebuilds the transcript panel inside the chat.
+//   2. Decisive: it changed nothing about the artifact being signed. The action
+//      mutated `speakerMap` and never re-ran the pipeline — its own success
+//      toast said "Re-running the SOAP pipeline will pick up the new roles".
+//      On a pre-sign review page the note is already written. A control that
+//      appears to fix attribution while the document under it does not move is
+//      the pretend-success class, and realising it needs a regenerate, which
+//      would discard the doctor's edits.
+//
+// The 'SPEAKER_ROLE_REASSIGNED' audit action is KEPT in lib/audit.ts: rows
+// written before today still reference it, and an audit enum that forgets its
+// own history makes those rows unreadable.
+//
+// Logged in the Q1 fix-pack. If speaker attribution needs correcting again, the
+// place for it is before the pipeline runs, not after the note exists.
 
-const ReassignSpeakerSchema = z.object({
-  visitId: z.string().min(1),
-  speakerId: z.string().min(1),
-  role: SpeakerRoleKeys,
-});
-
-/** Manual override for Layer 2 — doctor can correct a mis-assigned
- *  speaker role from the Transcript tab. Updates speakerMap in place,
- *  keeps reasoning + confidence intact (just flips role).
- *  Does NOT re-run the downstream layers; surfaces a toast to the
- *  client asking them to regenerate if they want the SOAP updated. */
-export async function reassignSpeakerAction(
-  visitId: string,
-  speakerId: string,
-  role: string
-): Promise<SaveSoapResult> {
-  const session = await requireSession();
-  const parsed = ReassignSpeakerSchema.safeParse({ visitId, speakerId, role });
-  if (!parsed.success) {
-    return { ok: false, error: 'Invalid speaker role.' };
-  }
-
-  const visit = await prisma.transcribeVisit.findUnique({
-    where: { id: visitId },
-    select: {
-      id: true,
-      userId: true,
-      status: true,
-      speakerMap: true,
-      deletedAt: true,
-      archivedAt: true,
-    },
-  });
-  if (!visit || visit.userId !== session.user.id) {
-    return { ok: false, error: 'Visit not found.' };
-  }
-  if (visit.deletedAt !== null || visit.archivedAt !== null) {
-    return { ok: false, error: 'Visit is no longer active. Restore it first.' };
-  }
-  if (visit.status === TranscribeVisitStatus.SIGNED) {
-    return { ok: false, error: 'Signed notes cannot be edited.' };
-  }
-
-  // Prisma Json typing is loose; treat as record + write back.
-  const map = (visit.speakerMap as Record<string, {
-    role: string;
-    confidence: number;
-    reasoning: string;
-  }> | null) ?? {};
-  // Capture the previous role BEFORE mutating the map — feeds the
-  // audit metadata below so forensics can see what changed without
-  // reading DB row history.
-  const previousRole = map[parsed.data.speakerId]?.role ?? null;
-  map[parsed.data.speakerId] = {
-    ...(map[parsed.data.speakerId] ?? { confidence: 1, reasoning: '' }),
-    role: parsed.data.role,
-    // Manual override → high confidence, marker reasoning so the
-    // Pipeline tab can show "(manually reassigned)" later.
-    confidence: 1,
-    reasoning: `Manually reassigned by ${session.user.email}.`,
-  };
-
-  await prisma.transcribeVisit.update({
-    where: { id: visitId },
-    data: { speakerMap: map as unknown as object },
-  });
-
-  // FIND-P1-003 (2026-05-14) — HIPAA §164.312(b) audit row. The
-  // speakerMap mutation affects the SOAP note's history-vs-plan
-  // segmentation downstream; this row gives "who reassigned what,
-  // when" a single grep target rather than requiring DB row-history
-  // reconstruction. Fire-and-forget: logAudit never throws.
-  // Metadata has NO PHI: speakerId is an internal numeric label,
-  // role is the SpeakerRoleKeys enum (doctor/patient/family/other/
-  // unknown), source disambiguates against any future route-path
-  // emit. The user identity is captured by logAudit's own session
-  // resolution (audit_logs.userId + userEmailSnapshot columns).
-  void logAudit({
-    action: 'SPEAKER_ROLE_REASSIGNED',
-    targetType: 'TranscribeVisit',
-    targetId: visitId,
-    metadata: {
-      source: 'server_action',
-      speakerId: parsed.data.speakerId,
-      previousRole,
-      newRole: parsed.data.role,
-    },
-  });
-
-  revalidatePath(`/visits/${visitId}`);
-  return { ok: true };
-}

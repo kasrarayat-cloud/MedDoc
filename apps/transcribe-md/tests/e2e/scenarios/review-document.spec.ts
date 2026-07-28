@@ -134,6 +134,53 @@ test.describe('pre-sign review as the document', () => {
     await expect(page.getByRole('button', { name: /sign & download/i })).toBeEnabled();
   });
 
+  test('the level can be adjusted — and an adjusted level still needs confirming', async ({
+    page,
+  }) => {
+    test.skip(!(await open(page, 'rdoc-11')), 'psql seeding unavailable');
+    await clearRxGate(page);
+
+    // Clear the seeded change first, so what follows is provably caused by the
+    // adjustment and not left over from the fixture.
+    await page.getByTestId('review-doc-em-confirm').click();
+    await expect(page.getByTestId('review-doc-em-confirm')).toContainText(/confirmed/i);
+    const sign = page.getByRole('button', { name: /sign & download/i });
+    await expect(sign).toBeEnabled();
+
+    // THE LEVEL ROW: calm, states the level, offers to change it.
+    const row = page.getByTestId('review-doc-em-level');
+    await expect(row).toBeVisible();
+    const current = await page.getByTestId('em-level-current').innerText();
+    expect(current).toMatch(/^\d{5}$/);
+
+    await page.getByTestId('em-level-adjust').click();
+
+    // The save is not armed until the change is real AND a reason is given —
+    // no validation scolding, the control simply is not live yet.
+    const save = page.getByTestId('em-level-save');
+    await expect(save).toBeDisabled();
+    const target = current === '99214' ? '99213' : '99214';
+    await page.getByTestId('em-level-select').selectOption(target);
+    await expect(save, 'still disabled with no reason').toBeDisabled();
+    await page.getByTestId('em-level-reason').fill('Exam and MDM documented at this level.');
+    await expect(save).toBeEnabled();
+    await save.click();
+
+    // THE GATE DID NOT WEAKEN. Setting a level is not attesting to one: the
+    // same confirm card the model's own re-scores raise comes back, and the
+    // signature is blocked until it is answered.
+    await expect(page.getByTestId('review-doc-em-gate')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('review-doc-em-gate')).toContainText(target);
+    await expect(sign, 'an adjusted level must be confirmed before signing').toBeDisabled();
+    await expect(page.locator(BAR)).toContainText('documentation level');
+
+    await page.getByTestId('review-doc-em-confirm').click();
+    await expect(sign).toBeEnabled();
+
+    // And the row now states the level the doctor chose.
+    await expect(page.getByTestId('em-level-current')).toHaveText(target);
+  });
+
   test('the page carries no billing worksheet — only the level GATE', async ({ page }) => {
     test.skip(!(await open(page, 'rdoc-9')), 'psql seeding unavailable');
     // TWO MOVES, and this test has now seen both.

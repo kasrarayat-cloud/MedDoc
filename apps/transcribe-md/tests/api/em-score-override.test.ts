@@ -145,7 +145,7 @@ describe('POST /api/visits/[id]/em-score/override', () => {
   it('401 when unauthenticated', async () => {
     mocks.auth.mockResolvedValue(null);
     const res = await POST(
-      makeReq({ overrideToCode: '99214' }),
+      makeReq({ overrideToCode: '99214', reason: 'Level reflects the documented exam.' }),
       ctx
     );
     expect(res.status).toBe(401);
@@ -176,7 +176,7 @@ describe('POST /api/visits/[id]/em-score/override', () => {
       userId: 'someone_else',
     });
     const res = await POST(
-      makeReq({ overrideToCode: '99214' }),
+      makeReq({ overrideToCode: '99214', reason: 'Level reflects the documented exam.' }),
       ctx
     );
     expect(res.status).toBe(404);
@@ -192,7 +192,7 @@ describe('POST /api/visits/[id]/em-score/override', () => {
       signedAt: new Date(),
     });
     const res = await POST(
-      makeReq({ overrideToCode: '99214' }),
+      makeReq({ overrideToCode: '99214', reason: 'Level reflects the documented exam.' }),
       ctx
     );
     expect(res.status).toBe(409);
@@ -207,7 +207,7 @@ describe('POST /api/visits/[id]/em-score/override', () => {
       status: TranscribeVisitStatus.DRAFTING,
     });
     const res = await POST(
-      makeReq({ overrideToCode: '99214' }),
+      makeReq({ overrideToCode: '99214', reason: 'Level reflects the documented exam.' }),
       ctx
     );
     expect(res.status).toBe(409);
@@ -275,7 +275,7 @@ describe('POST /api/visits/[id]/em-score/override', () => {
     });
     mocks.visitUpdate.mockResolvedValue({});
 
-    const res = await POST(makeReq({ overrideToCode: '99214' }), ctx);
+    const res = await POST(makeReq({ overrideToCode: '99214', reason: 'Level reflects the documented exam.' }), ctx);
     expect(res.status).toBe(200);
 
     const updateArgs = mocks.visitUpdate.mock.calls[0][0];
@@ -288,18 +288,99 @@ describe('POST /api/visits/[id]/em-score/override', () => {
     expect(updateArgs.data.cptCodes.em.override.code).toBe('99214');
   });
 
-  it('200 + reason is optional', async () => {
+  it('200 + the reason is recorded on the audit row', async () => {
     mocks.auth.mockResolvedValue({
       user: { id: FAKE_USER, practiceId: FAKE_PRACTICE },
     });
     mocks.visitFindUnique.mockResolvedValue(READY_VISIT);
     mocks.visitUpdate.mockResolvedValue({});
 
-    const res = await POST(makeReq({ overrideToCode: '99214' }), ctx);
+    const res = await POST(makeReq({ overrideToCode: '99214', reason: 'Level reflects the documented exam.' }), ctx);
     expect(res.status).toBe(200);
 
     expect(mocks.logAudit).toHaveBeenCalledTimes(1);
     const audit = mocks.logAudit.mock.calls[0][0];
-    expect(audit.metadata.reason).toBeNull();
+    expect(audit.action).toBe('EM_OVERRIDE_APPLIED');
+    // The reason USED to be optional and this test asserted it was null. It is
+    // required now: the control moved from a coding rail, where the level was
+    // one of several things on screen, to the gate stack a doctor crosses on
+    // the way to a signature. "Who changed it to what" without "and why" is the
+    // half of the row nobody can reconstruct afterwards.
+    expect(audit.metadata.reason).toBe('Level reflects the documented exam.');
+    expect(audit.metadata.toCode).toBe('99214');
+  });
+
+  it('400 when no reason is given — the field is REQUIRED', async () => {
+    mocks.auth.mockResolvedValue({
+      user: { id: FAKE_USER, practiceId: FAKE_PRACTICE },
+    });
+    mocks.visitFindUnique.mockResolvedValue(READY_VISIT);
+
+    const res = await POST(makeReq({ overrideToCode: '99214' }), ctx);
+    expect(res.status).toBe(400);
+    expect(mocks.visitUpdate).not.toHaveBeenCalled();
+    expect(mocks.logAudit).not.toHaveBeenCalled();
+  });
+
+  it('400 when the reason is only whitespace', async () => {
+    mocks.auth.mockResolvedValue({
+      user: { id: FAKE_USER, practiceId: FAKE_PRACTICE },
+    });
+    mocks.visitFindUnique.mockResolvedValue(READY_VISIT);
+
+    const res = await POST(makeReq({ overrideToCode: '99214', reason: '   ' }), ctx);
+    expect(res.status).toBe(400);
+    expect(mocks.visitUpdate).not.toHaveBeenCalled();
+  });
+
+  it('ARMS THE CONFIRM GATE — an override writes a pending change', async () => {
+    // Setting a level is not attesting to one. The write raises the SAME
+    // pending-change record a model-driven re-score raises, so the existing
+    // confirm card blocks and the sign route still refuses without a matching
+    // acknowledgement. "I set it myself" must not be a shortcut past the one
+    // control that records that a human looked.
+    mocks.auth.mockResolvedValue({
+      user: { id: FAKE_USER, practiceId: FAKE_PRACTICE },
+    });
+    mocks.visitFindUnique.mockResolvedValue({
+      ...READY_VISIT,
+      cptCodes: { em: { code: '99213' } },
+      emPendingChange: null,
+    });
+    mocks.visitUpdate.mockResolvedValue({});
+
+    const res = await POST(
+      makeReq({ overrideToCode: '99215', reason: 'Time and complexity documented.' }),
+      ctx,
+    );
+    expect(res.status).toBe(200);
+
+    const data = mocks.visitUpdate.mock.calls[0][0].data;
+    expect(data.emPendingChange).toMatchObject({
+      cause: 'doctor_override',
+      from: '99213',
+      to: '99215',
+    });
+    const body = await res.json();
+    expect(body.pendingChange).toEqual({ from: '99213', to: '99215' });
+  });
+
+  it('409 on an IMAGING report — there is no office level to override', async () => {
+    // An office E/M code on an imaging report is wrong as DATA: it reaches the
+    // export and the signed record. The UI never offers it there, but the route
+    // owns the column and "the caller wouldn't do that" is how one lands.
+    process.env.NEXT_PUBLIC_ULTRASOUND_SPECIALTY = 'true';
+    mocks.auth.mockResolvedValue({
+      user: { id: FAKE_USER, practiceId: FAKE_PRACTICE },
+    });
+    mocks.visitFindUnique.mockResolvedValue({ ...READY_VISIT, specialty: 'ultrasound' });
+
+    const res = await POST(
+      makeReq({ overrideToCode: '99214', reason: 'should never land' }),
+      ctx,
+    );
+    expect(res.status).toBe(409);
+    expect(mocks.visitUpdate).not.toHaveBeenCalled();
+    delete process.env.NEXT_PUBLIC_ULTRASOUND_SPECIALTY;
   });
 });

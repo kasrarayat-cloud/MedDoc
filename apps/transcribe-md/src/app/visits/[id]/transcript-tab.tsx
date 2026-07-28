@@ -21,21 +21,17 @@
 //       transcript turns)
 //     - "Visit metadata" block — specialty / duration / recorded by /
 //       encounter id
-//     - Speaker-role reassign UI (collapsible) for audio_upload only.
 //   Mobile: collapses to single column at <=960px.
 //
 // PRESERVED CONTRACTS:
 //   - Utterance / SpeakerInfo shapes — unchanged
-//   - reassignSpeakerAction — unchanged
 //   - Audio playback uses a native <audio> element with the same MinIO
 //     stream URL pattern used elsewhere; no hooks are added.
 //   - The Download .txt button is preserved.
 // ============================================================================
 
-import { useMemo, useState, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
+import { useMemo, useState } from 'react';
 import {
-  ChevronDown,
   Download,
   Search,
   Pause,
@@ -43,19 +39,9 @@ import {
   RotateCcw,
   RotateCw,
 } from 'lucide-react';
-import { toast } from 'sonner';
 
 import { cn } from '@/lib/cn';
-import { reassignSpeakerAction } from '@/actions/soap';
 import type { Utterance, SpeakerInfo } from './visit-ready-view';
-
-const ROLE_OPTIONS: { value: string; label: string }[] = [
-  { value: 'doctor', label: 'Doctor' },
-  { value: 'patient', label: 'Patient' },
-  { value: 'family', label: 'Family' },
-  { value: 'other', label: 'Other clinical staff' },
-  { value: 'unknown', label: 'Unknown' },
-];
 
 const PLAYBACK_SPEEDS = [0.75, 1, 1.25, 1.5, 2] as const;
 type PlaybackSpeed = (typeof PLAYBACK_SPEEDS)[number];
@@ -64,7 +50,6 @@ interface TranscriptTabProps {
   visitId: string;
   utterances: Utterance[];
   speakerMap: Record<string, SpeakerInfo>;
-  readonly: boolean;
   /** Optional audio source — when provided we render the audio rail
    *  with a native <audio> element pointing at it. The visit page
    *  threads this only for audio_upload visits. */
@@ -81,18 +66,15 @@ export function TranscriptTab({
   visitId,
   utterances,
   speakerMap,
-  readonly,
   audioSrc,
   durationLabel,
   specialtyLabel,
   recordedByName,
   encounterId,
 }: TranscriptTabProps) {
-  const [pending, startTransition] = useTransition();
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
   const [search, setSearch] = useState('');
   const [speed, setSpeed] = useState<PlaybackSpeed>(1);
-  const router = useRouter();
 
   const speakerIds = useMemo(() => {
     const set = new Set<string>();
@@ -108,21 +90,6 @@ export function TranscriptTab({
     const q = search.toLowerCase();
     return utterances.filter((u) => u.transcript.toLowerCase().includes(q));
   }, [utterances, search]);
-
-  const reassign = (speakerId: string, role: string) => {
-    startTransition(async () => {
-      const res = await reassignSpeakerAction(visitId, speakerId, role);
-      if (!res.ok) {
-        toast.error('Could not reassign speaker', { description: res.error });
-        return;
-      }
-      toast.success('Speaker role updated', {
-        description:
-          'Re-running the SOAP pipeline will pick up the new roles.',
-      });
-      router.refresh();
-    });
-  };
 
   const downloadTxt = () => {
     const lines = utterances.map((u) => {
@@ -225,15 +192,6 @@ export function TranscriptTab({
             })
           )}
         </section>
-
-        {!readonly && speakerIds.length > 0 && (
-          <SpeakerRoleReassign
-            speakerIds={speakerIds}
-            speakerMap={speakerMap}
-            pending={pending}
-            onReassign={reassign}
-          />
-        )}
       </div>
 
       <div className="qm-lin-split-divider" aria-hidden />
@@ -417,79 +375,6 @@ function StaticWaveform() {
           style={{ height: `${h}%` }}
         />
       ))}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// SpeakerRoleReassign — collapsible list of mis-assigned speaker fixes.
-// ---------------------------------------------------------------------------
-function SpeakerRoleReassign({
-  speakerIds,
-  speakerMap,
-  pending,
-  onReassign,
-}: {
-  speakerIds: string[];
-  speakerMap: Record<string, SpeakerInfo>;
-  pending: boolean;
-  onReassign: (speakerId: string, role: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="mt-4 rounded-lg border border-linear-border bg-linear-surface-1">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between px-4 py-3 text-left font-mono text-[10.5px] font-medium uppercase tracking-[0.07em] text-linear-text-3 hover:text-linear-text-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-linear-sage focus-visible:ring-offset-2 focus-visible:ring-offset-linear-bg"
-        aria-expanded={open}
-      >
-        Speaker roles · {speakerIds.length}
-        <ChevronDown
-          className={cn('h-3 w-3 transition-transform', open && 'rotate-180')}
-          aria-hidden
-        />
-      </button>
-      {open && (
-        <div className="border-t border-linear-hairline px-4 py-3">
-          <div className="flex flex-wrap gap-3">
-            {speakerIds.map((sid) => {
-              const info = speakerMap[sid];
-              return (
-                <label
-                  key={sid}
-                  className="flex items-center gap-2 text-[12px] text-linear-text-2"
-                >
-                  <span className="font-medium text-linear-text">
-                    Speaker #{sid}
-                  </span>
-                  <div className="relative">
-                    <select
-                      disabled={pending}
-                      value={info?.role ?? 'unknown'}
-                      onChange={(e) => onReassign(sid, e.target.value)}
-                      className="appearance-none rounded-md border border-linear-border bg-linear-surface-2 py-1 pl-2 pr-6 text-[12px] text-linear-text outline-none focus:border-linear-sage focus:ring-2 focus:ring-linear-sage/30"
-                    >
-                      {ROLE_OPTIONS.map((r) => (
-                        <option key={r.value} value={r.value}>
-                          {r.label}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown
-                      className="pointer-events-none absolute right-1.5 top-1/2 h-3 w-3 -translate-y-1/2 text-linear-text-3"
-                      aria-hidden
-                    />
-                  </div>
-                  <span className="text-linear-text-3">
-                    · conf {(info?.confidence ?? 0).toFixed(2)}
-                  </span>
-                </label>
-              );
-            })}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -128,6 +128,114 @@ describe('the inline panels are gone from the review page', () => {
   });
 });
 
+describe('the level is shown, and the doctor may disagree with it', () => {
+  const card = read('src/app/visits/[id]/em-level-card.tsx');
+  const review = read(REVIEW_DOC);
+
+  it('the gate stack carries a level row with an adjust affordance', () => {
+    expect(review).toContain('<EmLevelCard');
+    expect(card).toContain('review-doc-em-level');
+    expect(card).toContain('em-level-current');
+    expect(card).toContain('em-level-adjust');
+    expect(card).toContain('em-level-select');
+    expect(card).toContain('em-level-reason');
+    expect(card).toContain('em-level-save');
+  });
+
+  it('it renders NOTHING when there is no level — imaging has none', () => {
+    // `emLevel` is null when emNotApplicable, so the row is absent rather than
+    // showing an office code on an imaging report.
+    expect(card).toContain('if (!level) return null;');
+    expect(read(READY_VIEW)).toContain('props.emNotApplicable\n      ? null');
+  });
+
+  it('the reason is REQUIRED, in the UI and at the route', () => {
+    // Armed only when the change is real AND the reason is there — a disabled
+    // control rather than a told-off-after-the-fact validation message.
+    expect(card).toContain('disabled={saving || !reasonOk || !changed}');
+    expect(card).toContain('reason.trim().length >= 3');
+    const route = read('src/app/api/visits/[id]/em-score/override/route.ts');
+    expect(route).toContain('reason: z.string().trim().min(MIN_REASON_LENGTH)');
+    expect(route).not.toContain('reason: z.string().max(MAX_REASON_LENGTH).optional()');
+  });
+
+  it('NO REVENUE FRAMING — not one word of it', () => {
+    // A level describes work already done. A surface that dresses one
+    // direction up as better is asking the doctor to document for the number.
+    const prose = (card + review).toLowerCase();
+    for (const word of [
+      'revenue',
+      'reimbursement',
+      'higher-paying',
+      'optimi', // optimise / optimize / optimization
+      'maximi', // maximise / maximize
+      'capture more',
+      'upcode',
+      'worth more',
+      'billable',
+    ]) {
+      expect(prose, `revenue framing leaked: ${word}`).not.toContain(word);
+    }
+    // Currency specifically — `$` alone is every template literal in the file,
+    // so match a figure: "$120", "$1,200.00".
+    expect(card + review, 'a monetary figure on a clinical surface').not.toMatch(
+      /\$\s?\d/,
+    );
+  });
+
+  it('SETTING a level is not ATTESTING to one — the gate is not weakened', () => {
+    const route = read('src/app/api/visits/[id]/em-score/override/route.ts');
+    // The override arms the same pending-change record a re-score raises…
+    expect(route).toContain("cause: 'doctor_override'");
+    // …which the sign route enforces, unchanged.
+    const sign = read('src/app/api/visits/[id]/sign/route.ts');
+    expect(sign).toContain('unacknowledgedEmChange(visit.emPendingChange)');
+    expect(sign).toContain('acknowledgedEmChange');
+    // …and the cause is one the parser accepts, or it coerces to the
+    // unknown→unknown sentinel and confronts the doctor with "unknown, up from
+    // unknown" for a code they just chose.
+    expect(read('src/lib/em-pending-change.ts')).toContain("'doctor_override'");
+  });
+
+  it('an override does NOT touch the note, so it cannot arm the STALE gate', () => {
+    // Staleness keys on content change. An override is not a note edit; if it
+    // bumped soapVersion it would gate the doctor behind their own choice.
+    const route = read('src/app/api/visits/[id]/em-score/override/route.ts');
+    expect(route).not.toContain('soapVersion: { increment');
+    expect(route).not.toContain('emStale: true');
+  });
+});
+
+describe('speaker reassignment is gone — no route with zero callers', () => {
+  it('the action no longer exists', () => {
+    const soap = read('src/actions/soap.ts');
+    expect(soap).not.toContain('export async function reassignSpeakerAction');
+    expect(soap).not.toContain('ReassignSpeakerSchema');
+  });
+
+  it('nothing imports or calls it', () => {
+    for (const f of ['src/app/visits/[id]/transcript-tab.tsx']) {
+      const src = read(f);
+      expect(src).not.toContain('reassignSpeakerAction');
+      expect(src).not.toContain('SpeakerRoleReassign');
+    }
+  });
+
+  it('but the AUDIT ACTION survives — old rows still reference it', () => {
+    // An audit enum that forgets its own history makes its own records
+    // unreadable. The value stays; nothing writes it.
+    expect(read('src/lib/audit.ts')).toContain("| 'SPEAKER_ROLE_REASSIGNED'");
+  });
+
+  it('and transcript-tab itself survives — it feeds the SOAP sources rail', () => {
+    // Deleting the file would break `utterancesToSources` on every path,
+    // including the signed view. Only the reassign surface came out.
+    const src = read('src/app/visits/[id]/transcript-tab.tsx');
+    expect(src).toContain('export function utterancesToSources');
+    expect(read(READY_VIEW)).toContain('utterancesToSources');
+  });
+});
+
 describe('no dangling chat intents', () => {
   it('scroll_to lost `codes` with the panel it pointed at', () => {
     const src = read(INTENT);

@@ -260,15 +260,63 @@ export function VisitReadyView(props: VisitReadyViewProps) {
     setPendingEmChange(propPendingEm);
   }
 
+
+
+
+  /** The level the gate stack shows. Null when E/M does not apply at all — an
+   *  imaging report has no office visit level, so there is nothing to display
+   *  and nothing to adjust. */
+  const [emLevel, setEmLevel] = useState<string | null>(() =>
+    props.emNotApplicable
+      ? null
+      : projectDisplayedEmCode(
+          (props.cptCodes as { em?: CptEm } | null | undefined)?.em ?? null,
+          false,
+        ),
+  );
+
+  /** The doctor sets the level themselves. Goes through the SAME audited route
+   *  the retired billing dropdown called, and comes back with the pending
+   *  change the server armed — so the existing confirm card blocks the
+   *  signature exactly as it does after a model-driven move. Choosing a level
+   *  and attesting to one stay two acts. */
+  const adjustEm = useCallback(
+    async (code: string, reason: string) => {
+      try {
+        const res = await fetch(`/api/visits/${props.visitId}/em-score/override`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ overrideToCode: code, reason }),
+        });
+        if (!res.ok) {
+          const body = (await res.json().catch(() => null)) as { error?: string } | null;
+          return { ok: false, error: body?.error ?? 'That level could not be saved.' };
+        }
+        const data = (await res.json()) as {
+          pendingChange: { from: string; to: string } | null;
+        };
+        setEmLevel(code);
+        // NULL IS A REAL ANSWER, not "leave it as it was": overriding back to
+        // the level already reviewed clears the record server-side, and a
+        // client that only ever SET the pending change would keep blocking the
+        // signature over a change that no longer exists.
+        setPendingEmChange(data.pendingChange);
+        return { ok: true };
+      } catch {
+        return { ok: false, error: 'That level could not be saved.' };
+      }
+    },
+    [props.visitId],
+  );
+
   const rescoreEm = useCallback(async () => {
     const r = await rescoreEmAction(props.visitId);
     if (!r.ok) return;
     setEmStale(r.stale);
     // The level moved: hand it to the SAME confirm card an adopt would arm.
     if (r.pending) setPendingEmChange(r.pending);
+    setEmLevel(r.pending?.to ?? null);
   }, [props.visitId]);
-
-
 
   // V2 review (skin-only, flag-gated) — live mirror of the server's fail-closed
   // critical-Rx sign gate, so the V2 shell can disable the Sign trigger until
@@ -379,7 +427,6 @@ export function VisitReadyView(props: VisitReadyViewProps) {
           visitId={props.visitId}
           utterances={props.utterances}
           speakerMap={props.speakerMap}
-          readonly={props.readonly}
           audioSrc={audioSrc}
           durationLabel={durationLabel}
           specialtyLabel={props.specialtyLabel}
@@ -744,6 +791,9 @@ export function VisitReadyView(props: VisitReadyViewProps) {
             emPendingChange={pendingEmChange}
             emStale={emStale}
             onRescoreEm={rescoreEm}
+            emLevel={emLevel}
+            onAdjustEm={adjustEm}
+            readonly={props.readonly || props.signedAt !== null}
           />
         </div>
       );
@@ -925,7 +975,6 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               visitId={props.visitId}
               utterances={props.utterances}
               speakerMap={props.speakerMap}
-              readonly={props.readonly}
               audioSrc={audioSrc}
               durationLabel={durationLabel}
               specialtyLabel={props.specialtyLabel}
