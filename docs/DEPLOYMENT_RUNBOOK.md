@@ -193,6 +193,49 @@ docker compose up -d <service>
 # Verify (see §1.5)
 ```
 
+### 3.1 Tagged image rollbacks
+
+Every promotion tags the outgoing images before recreating, so a rollback is a
+compose override rather than a rebuild:
+
+| Tag | What it restores | Notes |
+|---|---|---|
+| `:pre-readonlypaper-20260728` | the review page BEFORE it became read-only paper | app `4719eef70099` / worker `09ea62317b44` |
+| `:pre-emrehome-20260728` | the review page BEFORE the E/M level row returned to the gate stack | app `bc2bd303740f` / worker `10eb2d4baec1` |
+
+Never rebuild `:latest` to stage a rollback — tag a separate image and point a
+compose override at it.
+
+### 3.2 KNOWN CONSTRAINT — a flag rollback of `NEXT_PUBLIC_REVIEW_DOC_VIEW`
+### leaves E/M confirm-only, with no override control
+
+**Decided 2026-07-28. Accepted. Do not "fix" it by rebuilding the retired
+control.**
+
+Setting `NEXT_PUBLIC_REVIEW_DOC_VIEW=false` and rebuilding returns the legacy
+tabbed review view. On that surface there is **no way for a doctor to set a
+documentation level** — they can still see the level and still confirm a change,
+but not disagree with one.
+
+Why: the level override now lives only in the gate stack (`<EmLevelCard>`), which
+is part of the read-only paper. The legacy `BillingCardC3` dropdown and the
+coding rail's were retired in the same change, because `POST /em-score/override`
+requires a reason and neither surface had anywhere to collect one — they would
+have returned 400 on every use. A control that looks live and cannot work is
+worse than an absent one, and inventing a rationale to satisfy the route would
+put words in an audit row that no doctor said.
+
+**This is acceptable for an emergency rollback window.** The gate does not
+weaken: the confirm-before-sign path and the server-side refusal in
+`POST /api/visits/[id]/sign` are untouched by the flag, so nothing unreviewed can
+be signed. What is lost is one capability, temporarily.
+
+**Revisit only if a rollback has to live longer than an incident.** In that case
+the fix is to give `BillingCardC3` its own required-reason step — not to restore
+a reasonless caller. Rolling back the IMAGE (`:pre-emrehome-20260728`, §3.1)
+restores the old dropdown too and does not have this constraint; prefer it when
+the concern is the E/M surface specifically rather than the whole review page.
+
 ---
 
 ## 4. Restore from backup

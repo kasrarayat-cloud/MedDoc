@@ -70,6 +70,34 @@ What this does NOT cover, and what remains forbidden: any **filled** document or
 note. `twin-*.docx`, `diag-*`, and the other clinical artifacts at the repo root
 carry PHI and are gitignored. A filled document is never a fixture.
 
+## Rollback constraints — known, accepted, do not "fix"
+
+A flag rollback is not always a clean inverse. Where it costs a capability, the
+cost is recorded here so nobody rediscovers it mid-incident and starts building.
+
+### `NEXT_PUBLIC_REVIEW_DOC_VIEW=false` → E/M is confirm-only, no override
+
+**Decided 2026-07-28. Accepted.**
+
+Rolling that flag back returns the legacy tabbed review view, where a doctor can
+see the documentation level and confirm a change to it but **cannot set one**.
+The override lives only in the read-only paper's gate stack (`<EmLevelCard>`);
+`BillingCardC3`'s dropdown and the coding rail's were retired in the same change
+because `POST /em-score/override` requires a reason and neither had anywhere to
+collect one — they would 400 on every use.
+
+**The gate does not weaken** — confirm-before-sign and the server-side refusal in
+`POST /sign` are flag-independent. One capability is lost, temporarily.
+
+**Acceptable for an emergency window. Revisit only if a rollback must live
+long**, and then by giving `BillingCardC3` its own required-reason step — never by
+restoring a reasonless caller, and never by fabricating a rationale to satisfy
+the route. An audit row's "why" is the doctor's words or nothing.
+
+Prefer the IMAGE rollback (`:pre-emrehome-20260728`) when the concern is the E/M
+surface specifically — it has no such constraint. Full detail and the tag table:
+`docs/DEPLOYMENT_RUNBOOK.md` §3.1–3.2.
+
 ## Branch cadence — standing rule
 
 **Branch from `main`. Merge back promptly. No long-lived divergence.**

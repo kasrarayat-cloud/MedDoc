@@ -413,32 +413,84 @@ async function main() {
             },
           ],
         },
-        cptCodes: {
-          em: {
-            code: '99213',
-            reasoning: {
-              data: '[SYNTHETIC] Bilateral venous duplex reviewed at this encounter.',
-              risk: 'low',
-              problems: [
-                {
-                  status: 'stable chronic',
-                  description: '[SYNTHETIC] Chronic venous insufficiency, stable.',
-                },
-              ],
-            },
-          },
-        },
+        // NO cptCodes.em — AND THIS IS THE POINT, not an omission.
+        //
+        // This donor used to carry an office E/M blob (99213) so the STYLED
+        // twin derived from it could NULL the billing payload and prove an
+        // imaging report has no billing chrome. But the donor is itself
+        // `specialty: 'ultrasound'`, and an office-visit level on an imaging
+        // report is wrong as DATA: it reaches the export and the signed record,
+        // and it is exactly the state the specialtyLabel-vs-specialtyId fix
+        // exists to prevent. A fixture that models the bug teaches every walk
+        // and spec reading it that the bug is normal.
+        //
+        // The derived fixture's proof is intact: `rxDrafts` (2 prescriptions,
+        // 2 warnings) and `icdCodes` are still here, so NULLing them downstream
+        // still means something. E/M-present coverage belongs on a
+        // primary-care fixture, and lives on the review-doc pack's office-visit
+        // class — see REVIEW_DOC_CLASSES in tests/e2e/helpers/seedReviewDocVisit.ts.
       },
     });
     say(
-      `DONOR visit ${DONOR_VISIT_ID} created (meds + a non-critical warning + codes; ` +
-        'survives qa-e2e-* cleanup)',
+      `DONOR visit ${DONOR_VISIT_ID} created (meds + a non-critical warning + ICD; ` +
+        'NO office E/M — it is an imaging visit; survives qa-e2e-* cleanup)',
     );
   } else {
     say(`DONOR visit ${DONOR_VISIT_ID} already present`);
   }
 
+  // FAIL THE SEED ON AN IMAGING VISIT THAT CARRIES A BILLING LEVEL.
+  //
+  // Both artifacts this catches were acquired AFTER seeding, by a page render
+  // from a build that predated the specialtyLabel-vs-specialtyId fix. So the
+  // check is a read of the whole imaging population, not a review of what this
+  // script just wrote: the seeder was never the one lying.
+  //
+  // Loud on purpose. Left silent, a wrong fixture is read as truth by every
+  // walk and spec that touches it, and the thing they then prove is the bug.
+  const emArtifacts = await prisma.transcribeVisit.findMany({
+    where: {
+      specialty: 'ultrasound',
+      OR: [{ emScoredCode: { not: null } }, { emPendingChange: { not: null } }],
+    },
+    select: { id: true, emScoredCode: true },
+  });
+  const withEmBlob = (
+    await prisma.transcribeVisit.findMany({
+      where: { specialty: 'ultrasound' },
+      select: { id: true, cptCodes: true },
+    })
+  ).filter(
+    (v: { id: string; cptCodes: unknown }) =>
+      typeof v.cptCodes === 'object' &&
+      v.cptCodes !== null &&
+      !Array.isArray(v.cptCodes) &&
+      'em' in (v.cptCodes as Record<string, unknown>),
+  );
+
+  if (emArtifacts.length || withEmBlob.length) {
+    const named = [
+      ...emArtifacts.map(
+        (v: { id: string; emScoredCode: string | null }) =>
+          `${v.id} (emScoredCode=${v.emScoredCode ?? 'set'})`,
+      ),
+      ...withEmBlob.map((v: { id: string }) => `${v.id} (cptCodes.em present)`),
+    ];
+    throw new Error(
+      'IMAGING VISITS CARRY OFFICE E/M STATE:\n  ' +
+        named.join('\n  ') +
+        '\nAn office-visit level on an imaging report is wrong as data — it reaches ' +
+        'the export and the signed record. Purge it (set emScoredCode = null, ' +
+        "cptCodes = cptCodes - 'em') before using this stack as a fixture.",
+    );
+  }
+  say(`imaging E/M guard: clean (${await countImagingVisits()} imaging visits checked)`);
+
   say('done — this stack now has a genuine CERTIFIED twin');
+}
+
+async function countImagingVisits(): Promise<number> {
+  return prisma.transcribeVisit.count({ where: { specialty: 'ultrasound' } });
 }
 
 // EXIT EXPLICITLY. Disconnecting Prisma is not enough to end the process: the

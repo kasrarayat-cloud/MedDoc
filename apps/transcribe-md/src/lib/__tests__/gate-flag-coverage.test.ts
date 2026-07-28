@@ -53,8 +53,20 @@ const IMAGES: { tag: string; needs: string[]; why: string }[] = [
   },
   {
     tag: 'meddoc-pro-transcribe-md:review-doc',
-    needs: ['NEXT_PUBLIC_REVIEW_DOC_VIEW'],
-    why: 'the pre-sign document surface',
+    needs: [
+      'NEXT_PUBLIC_REVIEW_DOC_VIEW',
+      // ADDED 2026-07-28 — the third time this file's rule has been paid for,
+      // and the first time a fixture guard named the cause instead of a timeout.
+      //
+      // The pack now runs its core specs across BOTH specialty classes, and the
+      // imaging half asserts an imaging report has NO office-E/M surface. That
+      // suppression is `ultrasoundSpecialtyEnabled() && isImagingReportSpecialty()`.
+      // Without the flag the conjunction is false, so the build computes and
+      // persists an office level on an ultrasound visit — the original prod bug,
+      // reproduced in CI by a missing build arg. Three imaging specs failed.
+      'NEXT_PUBLIC_ULTRASOUND_SPECIALTY',
+    ],
+    why: 'the pre-sign document surface, across both specialty classes — imaging suppression is flag-gated',
   },
 ];
 
