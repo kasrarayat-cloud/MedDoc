@@ -57,6 +57,8 @@ interface ProcedureCpt {
   code: string;
   description: string;
   evidence_quote: string;
+  /** Optional by design — see procedureProvenanceNote() in visit-export.ts. */
+  provenance?: 'dictated' | 'coach_suggested';
 }
 
 interface Modifier {
@@ -638,6 +640,14 @@ function CptTable({
                   <td className="qm-lin-codes-col-center">
                     <span className="qm-lin-codes-cell-mono qm-lin-codes-cell-mono-muted">
                       Procedure
+                      {p.provenance === 'dictated' && (
+                        <>
+                          {' · '}
+                          <span title="You said this code aloud during the visit">
+                            dictated
+                          </span>
+                        </>
+                      )}
                     </span>
                   </td>
                   <td className="qm-lin-codes-col-evidence">

@@ -247,6 +247,36 @@ export const ExtractedEntities = z.object({
       })
     )
     .default([]),
+
+  /**
+   * PROCEDURE CODES THE CLINICIAN SPOKE ALOUD (additive).
+   *
+   * "Bill this as 93970" is an instruction to a biller, not clinical prose.
+   * L4 correctly leaves it out of the SOAP note — which is exactly why it used
+   * to vanish: L7b coding only ever reads the finished note and these entities,
+   * so by the time coding ran the sentence no longer existed anywhere. A prod
+   * smoke caught it on a bilateral venous duplex: the code was dictated, and
+   * PROCEDURES came back empty.
+   *
+   * This layer is the only one that sees the raw dictation, so the capture
+   * belongs here. It is a TRANSCRIPTION slot, not a coding one — this layer
+   * records what was said, and L7b's fail-closed allowlist still decides
+   * whether it is billable.
+   */
+  spoken_procedure_codes: z
+    .array(
+      z.object({
+        /** Exactly five digits, exactly as spoken. Never inferred from prose. */
+        code: z.string().regex(/^[0-9]{5}$/),
+        /** Only if the clinician also named it aloud. */
+        description: z.string().min(1).max(200).optional(),
+        /** Verbatim span. On a billing line this is the doctor's own words. */
+        evidence_quote: z.string().min(1),
+        speaker: z.string().optional(),
+        timestamp: z.number().nonnegative().optional(),
+      })
+    )
+    .default([]),
 });
 export type ExtractedEntities = z.infer<typeof ExtractedEntities>;
 
@@ -406,6 +436,20 @@ const COMMON_CATEGORIES = [
   '  for — an unstated segment is simply absent.',
   '- assessment_discussed: list of {finding, evidence_quote, ...}',
   '- plan_discussed: list of {item, evidence_quote, ...}',
+  '- spoken_procedure_codes: list of {code, description?, evidence_quote,',
+  '  ...}. ONLY for a CPT/procedure code the clinician SPOKE ALOUD as a',
+  '  billing instruction — "bill this as 93970", "code it 76856", "that is',
+  '  a 99213". Five digits, transcribed EXACTLY as said.',
+  '    * NEVER infer a code from a described procedure. If the clinician',
+  '      says "bilateral venous duplex" without saying a number, this list',
+  '      gets NOTHING. Suggesting the code is a different job, done later',
+  '      by a layer built for it.',
+  '    * NEVER correct a code you think is wrong. Transcribe what was said;',
+  '      a downstream allowlist decides what is billable.',
+  '    * description: only if they also named it aloud. Omit otherwise —',
+  '      do not supply one from your own knowledge.',
+  '  A visit with no spoken code yields an EMPTY list, which is the normal',
+  '  case for almost every visit.',
 ].join('\n');
 
 function buildConversationPrompt(): { system: string; userPrefix: string } {

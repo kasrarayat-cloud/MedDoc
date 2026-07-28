@@ -12,7 +12,7 @@
 // ============================================================================
 
 import type { VisitExportData } from './visit-export';
-import { prescriptionOneLine } from './visit-export';
+import { prescriptionOneLine, procedureProvenanceNote } from './visit-export';
 
 export type EhrFormat =
   | 'epic'
@@ -184,7 +184,8 @@ function cptSection(data: VisitExportData, label = 'PROCEDURES / E&M'): string[]
     lines.push(`  ${data.em.code} — ${data.em.description}`);
   }
   for (const p of data.procedures) {
-    lines.push(`  ${p.code} — ${p.description}`);
+    const note = procedureProvenanceNote(p);
+    lines.push(`  ${p.code} — ${p.description}${note ? ` (${note})` : ''}`);
   }
   for (const m of data.modifiers) {
     lines.push(`  Modifier -${m.code}: ${m.rationale}`);

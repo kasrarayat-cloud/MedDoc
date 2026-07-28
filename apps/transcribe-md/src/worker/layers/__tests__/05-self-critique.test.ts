@@ -99,6 +99,7 @@ function makeInput(
       plan_discussed: [],
       // Additive L3 slot; a SOAP fixture has none.
       measurements: [],
+  spoken_procedure_codes: [],
     },
     audioConfidenceStats: null,
     ...overrides,
