@@ -147,6 +147,30 @@ describe('the inline panels are gone from the review page', () => {
     }
   });
 
+  it('EVERY GATE SIGNAL THE VIEW READS IS ACTUALLY PASSED TO IT', () => {
+    // The class of bug this catches: `emStale` was declared on VisitReadyView,
+    // consumed as `useState(props.emStale ?? false)`, and never passed by
+    // page.tsx. An optional prop with a falsy default is silent when it goes
+    // missing — the stale gate simply never rendered on a fresh load, so a visit
+    // whose level needed re-checking looked "Reviewed" until the doctor pressed
+    // Sign and met the server's refusal instead.
+    //
+    // Optional-with-a-default is the trap, so assert the wiring, which types
+    // cannot: the prop must appear in the JSX page.tsx renders.
+    const page = read(VISIT_PAGE);
+    const el = page.slice(page.indexOf('<VisitReadyView'));
+    const jsx = el.slice(0, el.indexOf('\n    />'));
+    for (const prop of [
+      'emStale={',
+      'emPendingChange={',
+      'emNotApplicable={',
+      'initialEmScore={',
+      'cptCodes={',
+    ]) {
+      expect(jsx, `VisitReadyView is never passed ${prop}`).toContain(prop);
+    }
+  });
+
   it('the gate stack and Sign survive — they were never part of the panels', () => {
     expect(src).toContain('review-doc-rx-gate');
     expect(src).toContain('review-doc-em-stale-gate');

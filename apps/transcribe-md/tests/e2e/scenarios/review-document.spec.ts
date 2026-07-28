@@ -39,7 +39,7 @@ test.describe('pre-sign review as the document', () => {
   async function open(
     page: import('@playwright/test').Page,
     tag: string,
-    seedOpts: { emStale?: boolean } = {},
+    seedOpts: { emStale?: boolean; emPending?: boolean } = {},
   ) {
     const { email } = await signupFreshUser(page, tag);
     const seeded = seedReviewDocVisit(email, seedOpts);
@@ -210,7 +210,13 @@ test.describe('pre-sign review as the document', () => {
     // conditional `if (await control.count())` here would report success for
     // having found nothing to click, which is how this whole class of bug
     // survives a green suite.
-    test.skip(!(await open(page, 'rdoc-12', { emStale: true })), 'psql seeding unavailable');
+    // Stale AND no pending change: the stale gate renders only when there is
+    // nothing already awaiting confirmation, so seeding both hid the very
+    // control this test drives.
+    test.skip(
+      !(await open(page, 'rdoc-12', { emStale: true, emPending: false })),
+      'psql seeding unavailable',
+    );
     await clearRxGate(page);
 
     const row = page.getByTestId('review-doc-em-level');

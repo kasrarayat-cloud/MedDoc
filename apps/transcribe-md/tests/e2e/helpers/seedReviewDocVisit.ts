@@ -154,8 +154,14 @@ export function seedReviewDocVisit(
   /** `emStale: true` seeds the note-changed state, so a spec that needs the
    *  "Re-check level" control can REQUIRE it instead of skipping when it is
    *  absent — a conditional assertion is a test that reports success for having
-   *  found nothing to check. */
-  opts: { emStale?: boolean } = {},
+   *  found nothing to check.
+   *
+   *  `emPending: false` omits the unacknowledged level change. Needed WITH
+   *  emStale, because the stale gate renders only `emStale && !emPendingChange`
+   *  — with both seeded the pending card takes the slot and folds the staleness
+   *  into its own badge, so the "Re-check level" button never appears. Stale and
+   *  not-yet-moved is also the truthful state for a note edited since scoring. */
+  opts: { emStale?: boolean; emPending?: boolean } = {},
 ): SeededReviewDocVisit | null {
   let userId: string;
   let practiceId: string;
@@ -192,7 +198,7 @@ export function seedReviewDocVisit(
           'Asthma review. Continue current medications.',
           '${NOTE.replace(/'/g, "''")}', 1,
           '${j(CLAIMS)}'::jsonb, '${j(RX)}'::jsonb,
-          '${j(EM_PENDING)}'::jsonb,
+          ${opts.emPending === false ? 'null' : `'${j(EM_PENDING)}'::jsonb`},
           '${j(ICD)}'::jsonb, '${j(CPT)}'::jsonb, ${opts.emStale ? 'true' : 'false'},
           now(), now())
        on conflict (id) do nothing`,
