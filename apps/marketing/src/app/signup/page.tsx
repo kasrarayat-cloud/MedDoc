@@ -7,20 +7,24 @@ import { Footer } from '@/components/footer';
 import { GradientBorder } from '@/components/gradient-border';
 import { GradientText } from '@/components/gradient-text';
 import { SpecularButton } from '@/components/specular-button';
-import { APP_SIGNUP_URL } from '@/lib/constants';
+import { APP_WAITLIST_URL } from '@/lib/constants';
 
-// T-M2: signup happens on the real app at APP_URL/signup, not here. This
-// page now exists only so bookmarks + stale marketing links don't 404.
+// T-M2: signup happened on the real app, not here; this page exists so old
+// bookmarks don't 404.
+//
+// 2026-07-28 — INVITE-ONLY. It now forwards to the WAITLIST. A cold visitor
+// landing on the invite-gated signup form would only be able to fail, and
+// "here is a form you cannot submit" is a worse welcome than "join the list".
 // A meta-refresh gets users there automatically after a short pause; the
 // SpecularButton is the manual fallback.
 export const metadata: Metadata = {
-  title: 'Redirecting to signup',
-  description: 'Create your QuillMD account — redirecting to the app.',
+  title: 'Join the waitlist',
+  description: 'QuillMD is invite-only during the pilot — join the waitlist.',
   // 1-second meta-refresh to the real signup surface. Short enough that
   // the banner below is mostly informational, long enough that browsers
   // that block meta-refresh still render the CTA before the redirect.
   other: {
-    refresh: `1;url=${APP_SIGNUP_URL}`,
+    refresh: `1;url=${APP_WAITLIST_URL}`,
   },
 };
 
@@ -60,7 +64,7 @@ export default function SignupRedirectPage() {
                   redirect in a second, the button below takes you there.
                 </p>
                 <div style={{ marginTop: 28 }}>
-                  <SpecularButton href={APP_SIGNUP_URL} variant="primary" size="lg">
+                  <SpecularButton href={APP_WAITLIST_URL} variant="primary" size="lg">
                     Continue to signup
                     <ArrowRight className="h-4 w-4" />
                   </SpecularButton>
@@ -74,7 +78,7 @@ export default function SignupRedirectPage() {
                 >
                   Already have an account?{' '}
                   <Link
-                    href={`${APP_SIGNUP_URL.replace(/\/signup$/, '/login')}`}
+                    href={`${APP_WAITLIST_URL.replace(/\/signup$/, '/login')}`}
                     style={{
                       color: 'var(--color-linear-sage-bright)',
                       textDecoration: 'underline',

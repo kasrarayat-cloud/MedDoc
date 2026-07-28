@@ -98,14 +98,16 @@ export const POST = withApiHandler<{ id: string }>(
       );
     }
 
+    // The PDF is still GENERATED — it is what the delivery row measures, and
+    // generating it here still exercises the export path end to end. It is no
+    // longer SENT: the email carries a link, and the doctor downloads over their
+    // own authenticated session. See sendVisitPdfEmail for why.
     const pdf = await generateVisitPdf(data);
     try {
       const result = await sendVisitPdfEmail({
         toEmail,
         visitId,
-        pdfBuffer: pdf,
         doctorName: data.clinicianName,
-        patientName: data.patientName,
         visitDate: formatVisitDate(data.signedAt ?? data.createdAt),
       });
       logDelivery({

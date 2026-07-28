@@ -6,7 +6,7 @@ import { Badge } from '@/components/badge';
 import { GradientText } from '@/components/gradient-text';
 import { GradientBorder } from '@/components/gradient-border';
 import { SpecularButton } from '@/components/specular-button';
-import { APP_SIGNUP_URL } from '@/lib/constants';
+import { APP_WAITLIST_URL } from '@/lib/constants';
 
 export const metadata: Metadata = {
   title: 'Demo',
@@ -126,7 +126,7 @@ export default function DemoPage() {
               }}
               className="sm:flex-row"
             >
-              <SpecularButton href={APP_SIGNUP_URL} variant="primary" size="lg">
+              <SpecularButton href={APP_WAITLIST_URL} variant="primary" size="lg">
                 Start free trial instead
               </SpecularButton>
               <SpecularButton href="/" variant="secondary" size="lg" sweep={false}>

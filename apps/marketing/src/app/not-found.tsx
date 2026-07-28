@@ -6,7 +6,7 @@ import { NavBar } from '@/components/nav-bar';
 import { Footer } from '@/components/footer';
 import { GradientText } from '@/components/gradient-text';
 import { SpecularButton } from '@/components/specular-button';
-import { APP_SIGNUP_URL } from '@/lib/constants';
+import { APP_WAITLIST_URL } from '@/lib/constants';
 
 /**
  * 404 page — Linear V1 (Faithful).
@@ -91,7 +91,7 @@ export default function NotFound() {
                 <ArrowLeft className="h-4 w-4" />
                 Back to home
               </SpecularButton>
-              <SpecularButton href={APP_SIGNUP_URL} variant="secondary" size="lg" sweep={false}>
+              <SpecularButton href={APP_WAITLIST_URL} variant="secondary" size="lg" sweep={false}>
                 Start free trial
               </SpecularButton>
             </motion.div>

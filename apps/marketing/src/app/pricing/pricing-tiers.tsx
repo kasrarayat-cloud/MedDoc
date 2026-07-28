@@ -6,7 +6,7 @@ import { GlowCard } from '@/components/glow-card';
 import { GradientBorder } from '@/components/gradient-border';
 import { GradientText } from '@/components/gradient-text';
 import { SpecularButton } from '@/components/specular-button';
-import { APP_SIGNUP_URL } from '@/lib/constants';
+import { APP_WAITLIST_URL } from '@/lib/constants';
 
 /**
  * Pricing tiers — Linear V1 (Faithful).
@@ -230,7 +230,7 @@ function TierBody({ tier }: { tier: (typeof TIERS)[number] }) {
         }}
       >
         <SpecularButton
-          href={APP_SIGNUP_URL}
+          href={APP_WAITLIST_URL}
           variant={tier.highlight ? 'primary' : 'secondary'}
           size="md"
           className="w-full"

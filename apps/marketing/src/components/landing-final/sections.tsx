@@ -2,7 +2,7 @@
 
 // The full-width sections that resolve out of the split spine. They inherit the same palette,
 // type and seam-accent (a sage hairline / top-border) so the page reads as one cohesive thing.
-import { APP_SIGNUP_URL } from '@/lib/constants';
+import { APP_WAITLIST_URL } from '@/lib/constants';
 import { TRUST } from './shared';
 import { STEPS, COMPARE, PRICE_INCLUDES, FAQS } from './content';
 
@@ -81,7 +81,7 @@ export function Pricing() {
               </li>
             ))}
           </ul>
-          <a className="fx-btn fx-btn-primary fx-plan-cta" href={APP_SIGNUP_URL}>
+          <a className="fx-btn fx-btn-primary fx-plan-cta" href={APP_WAITLIST_URL}>
             Get started <span aria-hidden>→</span>
           </a>
         </div>
@@ -121,7 +121,7 @@ export function FinalCta() {
         <p className="fx-kicker fx-kicker-on-dark font-mono">Your notes, done</p>
         <h2 className="fx-final-h">Leave the room with<br />the note already written.</h2>
         <div className="fx-cta fx-final-cta">
-          <a className="fx-btn fx-btn-primary" href={APP_SIGNUP_URL}>
+          <a className="fx-btn fx-btn-primary" href={APP_WAITLIST_URL}>
             Get started <span aria-hidden>→</span>
           </a>
           <a className="fx-btn fx-btn-ghost fx-btn-ghost-dark" href="#faq">Read the FAQ</a>

@@ -57,13 +57,10 @@ const DEFAULT_FROM = 'QuillMD <noreply@quillmd.com>';
 export interface SendVisitPdfEmailArgs {
   toEmail: string;
   visitId: string;
-  /** Raw PDF bytes from pdf-generator. */
-  pdfBuffer: Buffer;
-  /** Display name for greeting + attachment filename. */
+  /** Display name for the greeting. The DOCTOR's name, never a patient's. */
   doctorName: string | null;
-  /** Optional patient name — shown in the subject line when present. */
-  patientName: string | null;
-  /** ISO YYYY-MM-DD of the visit — used in attachment filename. */
+  /** ISO YYYY-MM-DD of the visit. A date alone is not an identifier here — it
+   *  is the doctor's own calendar, in their own inbox. */
   visitDate: string;
 }
 
@@ -72,40 +69,76 @@ export interface SendVisitPdfEmailResult {
   toEmail: string;
 }
 
+/**
+ * "A note you signed is ready" — and nothing else.
+ *
+ * ============================================================================
+ * WHY THIS SENDS NO PHI (2026-07-28)
+ * ============================================================================
+ * This used to put the PATIENT'S NAME IN THE SUBJECT LINE and attach the signed
+ * SOAP note as a PDF. That made Resend a business associate handling PHI, and
+ * `docs/BAA_CHECKLIST.md` is explicit: *"Do not route real patient data through
+ * a processor whose BAA column is not COUNTERSIGNED."* Resend's is not. That one
+ * send path was, on its own, a pilot blocker.
+ *
+ * The cheapest way through a blocker is sometimes to stop needing the thing.
+ * The email now carries:
+ *
+ *   - a generic subject, identical for every visit and every patient
+ *   - no patient name, no date of birth, no MRN, no note text
+ *   - NO ATTACHMENT
+ *   - a link to the visit in QuillMD, which requires signing in
+ *
+ * The doctor clicks through and downloads from the app, over their own
+ * authenticated session, exactly as they would from the visit page.
+ *
+ * ON THE LINK, honestly: the URL carries an opaque visit id (a cuid). That is a
+ * RECORD LOCATOR, not a patient identifier — it names nobody, it reveals nothing
+ * on its own, and it is useless without an authenticated session. It is the same
+ * class of value as the message-id Resend already assigns. Claiming the payload
+ * has "zero identifiers of any kind" would be false; claiming it has no patient
+ * identifier and no clinical content is true, and is what the test asserts.
+ *
+ * THE SIGNATURE IS THE GUARD. This function no longer ACCEPTS a pdfBuffer or a
+ * patientName. A future caller cannot leak them through here by forgetting —
+ * there is no parameter to forget.
+ */
 export async function sendVisitPdfEmail(
   args: SendVisitPdfEmailArgs
 ): Promise<SendVisitPdfEmailResult> {
   const client = getClient();
   const from = process.env.RESEND_FROM?.trim() || DEFAULT_FROM;
 
-  const subjectTail = args.patientName?.trim()
-    ? ` — ${args.patientName.trim()}`
-    : ' — signed visit';
-  const subject = `Your QuillMD visit note${subjectTail}`;
+  // Identical for every visit and every patient. A subject that varies with the
+  // note is a subject that leaks — and subject lines are the part of an email
+  // most likely to appear on a lock screen.
+  const subject = 'Your signed note is ready in QuillMD';
   const greeting = args.doctorName?.trim()
     ? `Hi ${args.doctorName.trim()},`
     : 'Hi,';
 
+  const visitUrl = `${appUrl()}/visits/${args.visitId}`;
+
   const html = [
     `<p>${greeting}</p>`,
-    `<p>Your signed visit note is attached as a PDF.</p>`,
-    `<p style="color:#666;font-size:13px;">This email is for your records. Do not forward to patients — QuillMD does not handle patient-facing delivery yet. For patient hand-off, download the PDF and share through your usual secure channel.</p>`,
+    `<p>A note you signed on ${escapeHtml(args.visitDate)} is ready. Open it in QuillMD to read, download or export it.</p>`,
+    `<p><a href="${visitUrl}" style="display:inline-block;padding:10px 18px;background:#7C3AED;color:#fff;border-radius:6px;text-decoration:none;">Open the note</a></p>`,
+    `<p style="color:#666;font-size:13px;">You'll be asked to sign in. We don't send notes or patient details by email.</p>`,
     `<hr style="border:none;border-top:1px solid #eee;margin:24px 0;" />`,
-    `<p style="color:#999;font-size:12px;">QuillMD · signed ${args.visitDate}</p>`,
+    `<p style="color:#999;font-size:12px;">QuillMD</p>`,
   ].join('\n');
 
   const text = [
     greeting,
     '',
-    'Your signed visit note is attached as a PDF.',
+    `A note you signed on ${args.visitDate} is ready. Open it in QuillMD to read, download or export it.`,
     '',
-    'This email is for your records. Do not forward to patients — QuillMD does not handle patient-facing delivery yet. For patient hand-off, download the PDF and share through your usual secure channel.',
+    visitUrl,
     '',
-    `—`,
-    `QuillMD · signed ${args.visitDate}`,
+    "You'll be asked to sign in. We don't send notes or patient details by email.",
+    '',
+    '— QuillMD',
   ].join('\n');
-
-  const filename = `visit-${args.visitId}-${args.visitDate}.pdf`;
 
   const result = await client.emails.send({
     from,
@@ -115,12 +148,7 @@ export async function sendVisitPdfEmail(
     html,
     text,
     headers: buildDeliverabilityHeaders({ category: 'visit_pdf' }),
-    attachments: [
-      {
-        filename,
-        content: args.pdfBuffer,
-      },
-    ],
+    // NO attachments. Deliberately absent, not empty — see the header.
   });
 
   // Resend returns `{ data: { id }, error }` at runtime; the SDK's types
@@ -136,8 +164,6 @@ export async function sendVisitPdfEmail(
         : error.message ?? JSON.stringify(error);
     // Classify setup-level errors so callers can show them as a LOUD
     // "email isn't configured" banner rather than a per-message blip.
-    // Known Resend setup-error phrases as of 2026-04 — extend the
-    // list if Resend reshapes their error messages.
     if (
       /domain is not verified/i.test(message) ||
       /api key.*restricted/i.test(message) ||
@@ -154,10 +180,6 @@ export async function sendVisitPdfEmail(
     }
     throw new Error(`Resend rejected the message: ${message}`);
   }
-  // Phase 6Z (PHASE-6Z-07): one usage row per successful send. We don't
-  // know userId/practiceId at this layer (callers don't pass them),
-  // so the row attributes only by provider. Fire-and-forget — the
-  // logApiUsage internals never throw.
   logApiUsage(
     buildResendUsage(
       { metadata: { kind: 'visit_pdf', visitId: args.visitId } },

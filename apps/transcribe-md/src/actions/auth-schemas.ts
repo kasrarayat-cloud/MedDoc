@@ -22,6 +22,9 @@ export const LoginSchema = z.object({
 
 export const SignupSchema = z.object({
   email: z.string().email().max(254),
+  /** Invite-only pilot (2026-07-28). Validated for SHAPE here; whether the code
+   *  is real, live and unspent is decided server-side by checkInviteCode. */
+  inviteCode: z.string().min(1, 'An invite code is required').max(64),
   password: z
     .string()
     .min(10, 'Password must be at least 10 characters')
@@ -32,4 +35,16 @@ export const SignupSchema = z.object({
   acceptTerms: z.literal('on', {
     message: 'You must accept the terms of service',
   }),
+});
+
+/** Waitlist capture. Deliberately NOT a signup: no password, no terms
+ *  acceptance, no account. The only required field is an email to reply to. */
+export const WaitlistSchema = z.object({
+  email: z.string().email().max(254),
+  name: z.string().max(120).optional(),
+  /** Free-text context the person volunteers (specialty, practice size).
+   *  Capped short — this is a prospect note, and it must never become a place
+   *  anyone types clinical detail. */
+  note: z.string().max(500).optional(),
+  source: z.string().max(60).optional(),
 });

@@ -1,4 +1,4 @@
-import { APP_SIGNUP_URL } from '@/lib/constants';
+import { APP_WAITLIST_URL } from '@/lib/constants';
 
 /**
  * Pricing — Phase 7 v6 (Apple Product).
@@ -44,7 +44,7 @@ export function Pricing() {
             ))}
           </ul>
           <div className="price-cta">
-            <a href={APP_SIGNUP_URL} className="btn btn-lg btn-glow">
+            <a href={APP_WAITLIST_URL} className="btn btn-lg btn-glow">
               Start your trial →
             </a>
             <span className="price-caption">14 days free · no card</span>

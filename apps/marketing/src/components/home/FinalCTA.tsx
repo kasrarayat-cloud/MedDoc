@@ -1,4 +1,4 @@
-import { APP_SIGNUP_URL } from '@/lib/constants';
+import { APP_WAITLIST_URL } from '@/lib/constants';
 
 /**
  * Final CTA — Phase 7 v6 (Apple Product).
@@ -22,7 +22,7 @@ export function FinalCTA() {
         </p>
 
         <div className="hero-ctas reveal delay-3">
-          <a href={APP_SIGNUP_URL} className="btn btn-lg btn-glow">
+          <a href={APP_WAITLIST_URL} className="btn btn-lg btn-glow">
             Start 14-day free trial
             <svg
               width="14"

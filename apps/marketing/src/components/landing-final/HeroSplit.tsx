@@ -4,7 +4,7 @@
 // pile) ｜ RIGHT light "after" (the clean signed SOAP). A hard vertical seam between them.
 // On load the seam draws and the after-side note assembles (subtle, .js-gated). The page's
 // <h1> is the "after" headline.
-import { APP_SIGNUP_URL } from '@/lib/constants';
+import { APP_WAITLIST_URL } from '@/lib/constants';
 import { SOAP, TRUST } from './shared';
 
 const PILE = ['“finish notes”', 'BP ~150/90?', 'f/u 4 wks??', '+ amlodipine', 'home readings', '— 11:42 pm'];
@@ -49,7 +49,7 @@ export function HeroSplit() {
             </ol>
           </div>
           <div className="fx-cta">
-            <a className="fx-btn fx-btn-primary" href={APP_SIGNUP_URL}>
+            <a className="fx-btn fx-btn-primary" href={APP_WAITLIST_URL}>
               Get started <span aria-hidden>→</span>
             </a>
             <a className="fx-btn fx-btn-ghost" href="#how">See how it works</a>

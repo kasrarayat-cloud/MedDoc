@@ -552,13 +552,13 @@ export const POST = withApiHandler<{ id: string }>(
           // when present. Resolve to sessionEmail explicitly to
           // close the loop for any future refactor of the guard.
           const to = sessionEmail;
+          // Still generated (the delivery row records its size); no longer
+          // attached. See sendVisitPdfEmail.
           const pdf = await generateVisitPdf(data);
           await sendVisitPdfEmail({
             toEmail: to,
             visitId,
-            pdfBuffer: pdf,
             doctorName: data.clinicianName,
-            patientName: data.patientName,
             visitDate: formatVisitDate(data.signedAt ?? data.createdAt),
           });
           emailQueued = true;

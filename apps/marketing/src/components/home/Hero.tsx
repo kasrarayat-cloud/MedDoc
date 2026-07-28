@@ -1,4 +1,4 @@
-import { APP_SIGNUP_URL } from '@/lib/constants';
+import { APP_WAITLIST_URL } from '@/lib/constants';
 import { HeroVisual } from './HeroVisual';
 
 /**
@@ -33,7 +33,7 @@ export function Hero() {
           </p>
 
           <div className="hero-ctas">
-            <a href={APP_SIGNUP_URL} className="btn btn-lg btn-glow">
+            <a href={APP_WAITLIST_URL} className="btn btn-lg btn-glow">
               Begin a visit
               <svg
                 width="14"
