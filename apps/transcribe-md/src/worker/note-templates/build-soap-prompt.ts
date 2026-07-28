@@ -352,6 +352,26 @@ export function buildSoapSystemPrompt(
   return lines.filter((l): l is string => typeof l === 'string').join('\n');
 }
 
+/**
+ * Q1 audit §02.9 — polarity is stated as DATA now, and the note must render it.
+ * Nothing else in this prompt re-derives it, so a model that read the finding
+ * text and ignored the field would silently reintroduce exactly the "denies
+ * chest pain" → "chest pain" flip the field was added to stop.
+ *
+ * EXPORTED so the L4 golden-prompt guard can assert this block, and ONLY this
+ * block, as the delta against the pre-Phase-1 bytes. The golden file keeps its
+ * original contents; nothing here can drift from what that test measures.
+ */
+export const ROS_POLARITY_RULE = [
+  '',
+  'A review-of-systems entry carries an explicit "polarity". It is',
+  'authoritative — "denied" means the patient does NOT have that finding and',
+  'the note must say so, and "affirmed" means they DO. Never flip one, and',
+  'never let a denied finding in the same sentence turn an affirmed one',
+  "negative. Where a \"laterality\" is given it is that finding's own side —",
+  'do not widen it to bilateral.',
+].join('\n');
+
 export interface BuildUserPromptOpts {
   specialty: string;
   /** JSON.stringify(entities, null, 2) — computed by the caller. */
@@ -369,7 +389,10 @@ export function buildSoapUserPrompt(opts: BuildUserPromptOpts): string {
     `Specialty: ${opts.specialty}`,
     '',
     'Extracted entities (structured, with evidence):',
-    opts.entitiesJson,
+    // Appended to the entities line rather than added as its own array element,
+    // so the rule is one exactly-removable substring. That is what lets the L4
+    // golden guard keep its original bytes and assert this block as the delta.
+    opts.entitiesJson + ROS_POLARITY_RULE,
     '',
     'Role-labeled transcript:',
     opts.wrappedTranscript,

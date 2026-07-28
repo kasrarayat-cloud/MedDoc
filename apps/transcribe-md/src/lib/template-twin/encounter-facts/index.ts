@@ -80,7 +80,15 @@ export interface EncounterEntitySnapshot {
     occupation?: (EvidenceSnapshot & { value: string }) | null;
   };
   ros?: ReadonlyArray<
-    EvidenceSnapshot & { system: string; finding: string }
+    EvidenceSnapshot & {
+      system: string;
+      finding: string;
+      /** Q1 audit §02.9 — stated by L3. Optional HERE (not in the L3 schema,
+       *  where it is required) so a snapshot captured before the field existed
+       *  still projects, falling back to the inference it always used. */
+      polarity?: 'affirmed' | 'denied';
+      laterality?: 'left' | 'right' | 'bilateral';
+    }
   >;
   exam_findings?: ReadonlyArray<
     EvidenceSnapshot & { system: string; finding: string }
@@ -113,8 +121,9 @@ interface AddFactOptions {
   defaultTemporality: EncounterFact['temporality'];
   experiencer?: EncounterFact['experiencer'];
   conflicting?: boolean;
-  /** Structured overrides for measurement facts. Prose paths leave these unset
-   *  and keep the inferred values, so every existing fact is byte-identical. */
+  /** Structured overrides. Prose paths leave these unset and keep the inferred
+   *  values, so every existing fact is byte-identical. */
+  polarity?: EncounterFact['polarity'];
   laterality?: EncounterFact['laterality'];
   number?: number;
   unit?: string;
@@ -312,7 +321,9 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
     }
     const { occurrence, offsets } = evidenceLocation;
     const numberAndUnit = parseExplicitNumberAndUnit(options.value);
-    const polarity = inferPolarity(options.value, quote);
+    // A stated polarity beats an inferred one, always. The inference is a
+    // fallback for the paths L3 does not state it on, not a second opinion.
+    const polarity = options.polarity ?? inferPolarity(options.value, quote);
     const evidenceQuality: EncounterFact['quality']['evidence'] =
       options.conflicting
         ? 'conflicting'
@@ -504,6 +515,11 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
       value: item.finding,
       evidence: item,
       defaultTemporality: 'current',
+      // Q1 audit §02.9 — L3 states these now, so stop guessing them back out of
+      // the prose. Passed through only when present, so a snapshot taken before
+      // the field existed keeps the inferred value and stays byte-identical.
+      polarity: item.polarity,
+      laterality: item.laterality,
     });
   }
 
