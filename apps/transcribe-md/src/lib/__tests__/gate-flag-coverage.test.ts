@@ -37,8 +37,19 @@ const IMAGES: { tag: string; needs: string[]; why: string }[] = [
       'NEXT_PUBLIC_DOC_PREVIEW',
       'NEXT_PUBLIC_REVIEW_DOC_VIEW',
       'NEXT_PUBLIC_UX_SIMPLIFY',
+      // ADDED 2026-07-28, and it cost a 35-minute E2E to learn — which is
+      // precisely the expense this file exists to convert into a 30ms unit
+      // failure. Deleting the per-section edit pills made the chat editor the
+      // only way to amend a note before signing, so the spec now drives it —
+      // and `ChatEditorPanel` is behind isChatEditor(). The image did not carry
+      // the flag, so the panel never mounted and five tests failed on a
+      // missing testid while the product was correct.
+      //
+      // THE RULE, restated: the moment a spec drives a surface, that surface's
+      // flag belongs in this list. A flag a test needs is not optional.
+      'NEXT_PUBLIC_CHAT_EDITOR',
     ],
-    why: 'it drives the document page, its suggestions and the signed view',
+    why: 'it drives the document page, the chat editor that edits it, and the signed view',
   },
   {
     tag: 'meddoc-pro-transcribe-md:review-doc',
