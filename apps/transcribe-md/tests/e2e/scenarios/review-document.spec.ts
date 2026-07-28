@@ -23,11 +23,13 @@ import {
   seedReviewDocVisit,
   assertImagingHasNoEm,
   findImagingEmArtifacts,
+  psqlOne,
   REVIEW_DOC_CLASSES,
   SEEDED_EM_LEVEL,
   type ReviewDocClass,
 } from '../helpers/seedReviewDocVisit';
 import { signupFreshUser } from '../helpers/signup';
+import { extractExportText } from '../helpers/exportText';
 
 const SUGG = '[data-testid="review-doc-suggestion"]';
 const ACCEPT = '[data-testid="review-doc-accept"]';
@@ -65,6 +67,7 @@ test.describe('pre-sign review as the document', () => {
       emStale?: boolean;
       emPending?: boolean;
       specialtyClass?: ReviewDocClass;
+      imagingEmArtifact?: boolean;
     } = {},
   ) {
     const { email } = await signupFreshUser(page, tag);
@@ -434,6 +437,109 @@ test.describe('pre-sign review as the document', () => {
       });
 
       if (!cls.emApplies) {
+        test('EXPORTS NO OFFICE E/M EVEN WHEN THE ROW WRONGLY CARRIES ONE', async ({
+          page,
+        }, testInfo) => {
+          // THE EXPORT-LAYER GUARD, end to end, on the artifact fixture.
+          //
+          // Compute and store were guarded; export was not. `loadVisitExportData`
+          // projected `cptCodes.em` unconditionally and both renderers print
+          // `em.code` when truthy, so an imaging row that had ALREADY acquired a
+          // blob printed an office code. One unsigned production row did — a
+          // doctor-set 99212 whose EHR line read "99212 — undefined".
+          //
+          // A clean fixture cannot test this: it would pass with no guard at all.
+          // So this one is seeded WITH code + override + signedCode, and the
+          // assertion is on the exported BYTES, not on the screen.
+          const seeded = await open(page, `mx-exportguard-${cls.key}`, {
+            specialtyClass: cls.key,
+            imagingEmArtifact: true,
+          });
+          test.skip(!seeded, 'psql seeding unavailable');
+
+          // The row really is dirty — otherwise this test proves nothing.
+          const blob = psqlOne(
+            `select "cptCodes"->'em'->>'code' || '|' ||
+                    ("cptCodes"->'em'->'override'->>'code') || '|' ||
+                    ("cptCodes"->'em'->>'signedCode')
+               from transcribe_visits where id = '${seeded!.visitId}'`,
+          );
+          expect(blob, 'the artifact fixture must actually carry the blob').toBe(
+            '99213|99212|99214',
+          );
+
+          // And the screen shows none of it (the UI guard, already covered above,
+          // re-checked here so a failure localises to export vs render).
+          await expect(page.locator('body')).not.toContainText(/\b992\d\d\b/);
+
+          // Export BOTH formats and read the artifacts as text.
+          //
+          // Downloads are collected from an event listener registered BEFORE the
+          // submit, not two sequential waitForEvent calls: the second call can be
+          // registered after its download already fired, which reads as a 60s
+          // timeout and looks like a broken export rather than a racing test.
+          const downloads: import('@playwright/test').Download[] = [];
+          page.on('download', (d) => downloads.push(d));
+
+          await page.getByRole('button', { name: /sign & download/i }).click();
+          const dialog = page.getByRole('dialog');
+
+          // Toggles, not commands: PDF is pressed by default, so a blind click
+          // DESELECTS it. Press only what is not already pressed.
+          for (const label of [/download pdf/i, /download docx/i]) {
+            const btn = dialog.getByRole('button', { name: label });
+            if ((await btn.getAttribute('aria-pressed')) !== 'true') await btn.click();
+          }
+          for (const label of [/download pdf/i, /download docx/i]) {
+            await expect(
+              dialog.getByRole('button', { name: label }),
+              `${label} must be selected before submitting`,
+            ).toHaveAttribute('aria-pressed', 'true');
+          }
+
+          // dispatchEvent, not click(): the actionability check never settles
+          // behind a download, and the dialog is taller than the viewport.
+          await dialog.getByRole('button', { name: /sign & deliver/i }).dispatchEvent('click');
+
+          await expect
+            .poll(() => downloads.length, {
+              message: 'expected a PDF and a DOCX from the sign submit',
+              timeout: 90_000,
+            })
+            .toBeGreaterThanOrEqual(2);
+
+          const files = downloads.slice(0, 2);
+          expect(
+            files.map((f) => f.suggestedFilename().replace(/^.*\./, '')).sort(),
+            'one PDF and one DOCX',
+          ).toEqual(['docx', 'pdf']);
+
+          for (const f of files) {
+            const path = await f.path();
+            expect(path, `no path for ${f.suggestedFilename()}`).toBeTruthy();
+            // Non-vacuity marker: a heading from the seeded imaging note, which
+            // both artifacts render. NOT the patient name — exports anonymise
+            // PHI ("PATIENT Anonymous"), and that mistake is exactly what this
+            // check is for: it turned a wrong marker into a loud failure instead
+            // of letting an absence assertion run against text I had misread.
+            const text = await extractExportText(
+              path!,
+              f.suggestedFilename(),
+              'EXAM TYPE',
+            );
+            // THE ASSERTION. Not "no 99212" — no office E/M code at all, in
+            // either artifact, from a row that holds three of them.
+            expect(
+              text,
+              `${f.suggestedFilename()} leaked an office E/M code from an imaging row`,
+            ).not.toMatch(/\b992\d\d\b/);
+          }
+
+          await testInfo.attach('exported-filenames', {
+            body: files.map((f) => f.suggestedFilename()).join('\n'),
+          });
+        });
+
         test('NO office E/M is computed, stored, or exported', async ({ page }) => {
           const seeded = await open(page, `mx-store-${cls.key}`, {
             specialtyClass: cls.key,

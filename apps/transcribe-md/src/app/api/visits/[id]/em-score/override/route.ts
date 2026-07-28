@@ -27,6 +27,7 @@ import prisma from '@meddoc/db';
 import { Prisma, TranscribeVisitStatus } from '@prisma/client';
 
 import {
+  emAppliesToSpecialty,
   isImagingReportSpecialty,
   ultrasoundSpecialtyEnabled,
 } from '@meddoc/shared/specialties';
@@ -143,7 +144,7 @@ export const POST = withApiHandler<{ id: string }>(
     // column, and "the caller wouldn't do that" is how an office code ends up
     // on an ultrasound report. It reaches the export and the signed record from
     // there, which is why this is a 409 and not a silent no-op.
-    if (ultrasoundSpecialtyEnabled() && isImagingReportSpecialty(visit.specialty)) {
+    if (!emAppliesToSpecialty(visit.specialty)) {
       return apiError(
         'This visit is an imaging report and has no office E/M level.',
         409,

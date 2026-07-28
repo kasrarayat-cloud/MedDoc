@@ -283,6 +283,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
       projectDisplayedEmCode(
         (props.cptCodes as { em?: CptEm } | null | undefined)?.em ?? null,
         false,
+        !props.emNotApplicable,
       );
 
   const [emLevel, setEmLevel] = useState<string | null>(emLevelFromProps);
@@ -571,6 +572,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
       badge: codesWarn ? { tone: 'warn', text: '!' } : null,
       node: (
         <CodesTab
+          emApplies={!props.emNotApplicable}
           icd={props.icdCodes}
           cpt={props.cptCodes}
           readonly={props.readonly}
@@ -869,7 +871,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
       // artifact uses (signed ⇒ the frozen signedCode, else override ?? raw),
       // so the summary row can never disagree with the exported document.
       const emBlob = (props.cptCodes as { em?: CptEm } | null | undefined)?.em ?? null;
-      const displayedEm = projectDisplayedEmCode(emBlob, true);
+      const displayedEm = projectDisplayedEmCode(emBlob, true, !props.emNotApplicable);
       const overrodeCount = props.rxOverriddenWarningIds?.length ?? 0;
 
       return (
@@ -1063,6 +1065,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               />
             </div>
             <CodesTab
+              emApplies={!props.emNotApplicable}
               icd={props.icdCodes}
               cpt={props.cptCodes}
               readonly={props.readonly}
@@ -1311,7 +1314,9 @@ function buildSectionData(props: VisitReadyViewProps): VisitExportData {
     icdCodes: icdBlob?.codes ?? [],
     // #315 obs#2: project the displayed E/M code so the "Copy codes"
     // clipboard prints what the doctor reviewed, not the raw L7b suggestion.
-    em: projectEmForDisplay(cptBlob?.em ?? null, !!props.signedAt),
+    // Same guard as the server export loader: the "Copy codes" clipboard must
+    // not print an office level for an imaging report either.
+    em: projectEmForDisplay(cptBlob?.em ?? null, !!props.signedAt, !props.emNotApplicable),
     procedures: cptBlob?.procedures ?? [],
     modifiers: cptBlob?.modifiers ?? [],
     prescriptions: rxBlob?.prescriptions ?? [],

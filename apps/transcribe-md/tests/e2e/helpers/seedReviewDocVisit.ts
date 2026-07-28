@@ -211,6 +211,21 @@ const IMAGING_ICD = [
   { code: 'I87.2', description: 'Venous insufficiency (chronic) (peripheral)' },
 ];
 
+/** The office-E/M blob an imaging visit must never carry — seeded deliberately by
+ *  `imagingEmArtifact` so the export guard has something to suppress. Mirrors the
+ *  shape of prod row cms3k19d2001801mkyarrlq57 plus a raw code and a signedCode,
+ *  so `override ?? code` and `signedCode ?? …` both have a value to leak. */
+const IMAGING_EM_ARTIFACT = {
+  em: {
+    code: '99213',
+    description: 'Office visit, established patient, low complexity',
+    reasoning: { problems: [], data: '', risk: '' },
+    evidence_quote: '',
+    override: { code: '99212', overriddenAt: '2026-07-27T20:48:15.183Z' },
+    signedCode: '99214',
+  },
+};
+
 /** The specialty classes the review-doc pack runs across. `emApplies` is the
  *  single switch every specialty-conditional expectation reads. */
 export const REVIEW_DOC_CLASSES = [
@@ -303,6 +318,18 @@ export function seedReviewDocVisit(
     /** Which specialty class to seed. Defaults to the office visit, so every
      *  existing caller keeps the fixture it was written against. */
     specialtyClass?: ReviewDocClass;
+    /** SEED AN IMAGING VISIT THAT WRONGLY CARRIES AN OFFICE E/M BLOB, on purpose.
+     *
+     *  Everything else in this file exists to keep that state OUT of a fixture.
+     *  This one puts it in, because the export-layer guard's whole claim is
+     *  "an imaging report prints no office level EVEN IF the row holds one", and
+     *  a clean row cannot test that claim — it would pass against no guard at all.
+     *
+     *  Reproduces the real production row: `code` AND `override.code` AND
+     *  `signedCode`, so every branch of the projection has something to return.
+     *  Skips `assertImagingHasNoEm` (this fixture is the exception it exists to
+     *  make impossible everywhere else) — hence the explicit, ugly opt-in name. */
+    imagingEmArtifact?: boolean;
   } = {},
 ): SeededReviewDocVisit | null {
   const cls: ReviewDocClass = opts.specialtyClass ?? 'primary-care';
@@ -371,8 +398,9 @@ export function seedReviewDocVisit(
           -- have moved. Seeding one would be seeding the bug.
           ${imaging || opts.emPending === false ? 'null' : `'${j(EM_PENDING)}'::jsonb`},
           '${j(imaging ? IMAGING_ICD : ICD)}'::jsonb,
-          -- The whole point of the imaging fixture: NO office E/M blob.
-          ${imaging ? 'null' : `'${j(CPT)}'::jsonb`},
+          -- The whole point of the imaging fixture: NO office E/M blob …
+          -- …EXCEPT when a spec is testing the export guard, which needs one.
+          ${imaging ? (opts.imagingEmArtifact ? `'${j(IMAGING_EM_ARTIFACT)}'::jsonb` : 'null') : `'${j(CPT)}'::jsonb`},
           ${opts.emStale ? 'true' : 'false'},
           ${imaging ? `'${templateId}'` : 'null'}, ${imaging ? '1' : 'null'},
           now(), now())
@@ -384,7 +412,9 @@ export function seedReviewDocVisit(
 
   // Read it back. A seed that says the right thing and wrote the wrong thing is
   // the failure mode this whole fixture exists to answer for.
-  if (imaging) assertImagingHasNoEm(visitId);
+  // The artifact fixture is the ONE case that must skip this — it seeds the very
+  // state the guard rejects, deliberately, to prove the export suppresses it.
+  if (imaging && !opts.imagingEmArtifact) assertImagingHasNoEm(visitId);
 
   return { visitId, claimCount: CLAIMS.length, specialtyClass: cls };
 }
@@ -419,6 +449,13 @@ export function findImagingEmArtifacts(): string[] {
     // No psql channel — the caller is already skipping for that reason.
     return [];
   }
+}
+
+/** One read-only value from the QA database. Exported so a spec can assert the
+ *  fixture is in the state it claims to be — an "artifact suppressed" test proves
+ *  nothing unless the artifact was demonstrably there. */
+export function psqlOne(sql: string): string {
+  return psql(sql);
 }
 
 export function cleanupReviewDocVisit(visitId: string): void {

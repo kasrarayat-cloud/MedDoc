@@ -12,7 +12,7 @@
 
 import prisma from '@meddoc/db';
 import type { TranscribeVisitStatus } from '@prisma/client';
-import { findSpecialty } from '@meddoc/shared/specialties';
+import { emAppliesToSpecialty, findSpecialty } from '@meddoc/shared/specialties';
 import {
   projectEmForDisplay,
   sanitizeExportedSoap,
@@ -126,7 +126,16 @@ export async function loadVisitExportData(
   // em.code so every artifact (PDF, DOCX, all EHR clipboard formats) prints
   // what the doctor reviewed — never the raw L7b suggestion. The SAME helper
   // the client Codes tab + "Copy codes" use, so all surfaces agree.
-  const emForExport = projectEmForDisplay(cptBlob?.em ?? null, visit.status === 'SIGNED');
+  // AN IMAGING REPORT EXPORTS NO OFFICE E/M LEVEL, whatever the row carries.
+  //
+  // `visit.specialty` is the raw column, which IS an id — the label conversion
+  // happens below at `specialty:`, and feeding a label to the predicate is the
+  // exact mistake that caused this whole class (see emAppliesToSpecialty).
+  const emForExport = projectEmForDisplay(
+    cptBlob?.em ?? null,
+    visit.status === 'SIGNED',
+    emAppliesToSpecialty(visit.specialty),
+  );
 
   // Deterministically fill the header fields for THIS visit (never AI): NAME +
   // DATE from the visit record, SURGEON from the dictated note, DOB/ID blank.

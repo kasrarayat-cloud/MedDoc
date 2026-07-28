@@ -30,6 +30,7 @@ import prisma from '@meddoc/db';
 import { Prisma, TranscribeVisitStatus } from '@prisma/client';
 
 import {
+  emAppliesToSpecialty,
   isImagingReportSpecialty,
   ultrasoundSpecialtyEnabled,
 } from '@meddoc/shared/specialties';
@@ -98,7 +99,7 @@ export async function rescoreEmAction(visitId: string): Promise<RescoreEmResult>
   // them entirely. Gating on a level that does not exist would make an
   // ultrasound report unsignable after any edit, and "resolving" it would mean
   // inventing a clinic code.
-  if (ultrasoundSpecialtyEnabled() && isImagingReportSpecialty(visit.specialty)) {
+  if (!emAppliesToSpecialty(visit.specialty)) {
     const cleared = await prisma.transcribeVisit.updateMany({
       where: {
         id: visitId,

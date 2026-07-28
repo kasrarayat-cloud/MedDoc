@@ -33,6 +33,7 @@
 import { NextResponse } from 'next/server';
 import { rescoreEmAction } from '@/actions/rescore-em';
 import {
+  emAppliesToSpecialty,
   isImagingReportSpecialty,
   ultrasoundSpecialtyEnabled,
 } from '@meddoc/shared/specialties';
@@ -300,7 +301,7 @@ export const POST = withApiHandler<{ id: string }>(
     // report permanently unsignable after any edit, and "resolving" it would
     // mean inventing a clinic code. The flag may be set; here it is inert.
     const emApplies = !(
-      ultrasoundSpecialtyEnabled() && isImagingReportSpecialty(visit.specialty)
+      !emAppliesToSpecialty(visit.specialty)
     );
     if (visit.status === TranscribeVisitStatus.READY && visit.emStale && emApplies) {
       // RE-SCORE HERE, don't just refuse.

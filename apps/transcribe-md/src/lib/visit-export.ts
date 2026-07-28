@@ -54,21 +54,49 @@ export interface CptEm {
  *  construction only if all surfaces call THIS.) */
 export function projectDisplayedEmCode(
   em: CptEm | null | undefined,
-  isSigned: boolean
+  isSigned: boolean,
+  /** Does an office-visit E/M level apply to this visit at all?
+   *
+   *  REQUIRED, and deliberately not defaulted. An imaging report has no office
+   *  level, and this projection is the LAST place that can say so — every
+   *  renderer downstream simply prints `em.code` when it is truthy
+   *  (pdf-generator.ts, ehr-formatters.ts). Guarding here rather than in each
+   *  renderer means a new export format cannot reintroduce the bug.
+   *
+   *  A required parameter, not an optional one, for the reason
+   *  `seedEmBaselineIfUnset` takes `applies` the same way: a caller that has not
+   *  thought about applicability must fail to TYPECHECK, not silently inherit a
+   *  permissive default. Compute this from `emAppliesToSpecialty(specialtyId)`. */
+  emApplies: boolean
 ): string | null {
+  // THE EXPORT-LAYER GUARD. `loadVisitExportData` projected `cptCodes.em`
+  // unconditionally, so any imaging visit whose row had ALREADY acquired an `em`
+  // blob printed an office E/M code into its PDF, DOCX and every EHR clipboard
+  // format. One unsigned production row did exactly that: it held a doctor-set
+  // override of 99212 from a window when the specialty-label bug wrongly exposed
+  // the level surface on imaging visits, and its EHR line read "99212 —
+  // undefined". Compute and store were guarded; this was the hole.
+  if (!emApplies) return null;
   if (!em) return null;
   return isSigned
     ? em.signedCode ?? em.override?.code ?? em.code
     : em.override?.code ?? em.code;
 }
 
-/** `em` with its `code` projected to the authoritative displayed level. */
+/** `em` with its `code` projected to the authoritative displayed level, or null
+ *  when E/M does not apply — see `emApplies` on `projectDisplayedEmCode`.
+ *
+ *  Returns NULL rather than a code-less blob for an imaging visit: the renderers
+ *  branch on `if (data.em)`, so handing them an object with no code would print a
+ *  "Billing" heading over nothing. Absent means absent. */
 export function projectEmForDisplay(
   em: CptEm | null | undefined,
-  isSigned: boolean
+  isSigned: boolean,
+  emApplies: boolean
 ): CptEm | null {
+  if (!emApplies) return null;
   if (!em) return null;
-  const code = projectDisplayedEmCode(em, isSigned);
+  const code = projectDisplayedEmCode(em, isSigned, emApplies);
   return code ? { ...em, code } : em;
 }
 

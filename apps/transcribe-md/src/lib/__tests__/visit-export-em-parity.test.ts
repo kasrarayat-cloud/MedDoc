@@ -11,12 +11,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ findUnique: vi.fn() }));
 vi.mock('@meddoc/db', () => ({ default: { transcribeVisit: { findUnique: mocks.findUnique } } }));
-vi.mock('@meddoc/shared/specialties', () => ({
+vi.mock('@meddoc/shared/specialties', async (importOriginal) => ({
+  // findSpecialty stays stubbed — it only supplies a display label here.
+  ...(await importOriginal<typeof import('@meddoc/shared/specialties')>()),
   findSpecialty: (s: string) => ({ label: s, id: s }),
 }));
 
 import { loadVisitExportData } from '../visit-export-server';
-import { projectDisplayedEmCode } from '../visit-export';
+import { projectDisplayedEmCode, projectEmForDisplay } from '../visit-export';
+import { emAppliesToSpecialty } from '@meddoc/shared/specialties';
 
 const DOCTOR = 'doc1';
 const EM = {
@@ -102,20 +105,83 @@ describe('loadVisitExportData — printed E/M code === confirmed displayed level
 
 describe('projectDisplayedEmCode — the one projection all surfaces share', () => {
   const base = { code: '99213', description: '', reasoning: { problems: [], data: '', risk: '' }, evidence_quote: '' };
+  // Third arg = emApplies. An office visit; the imaging case is its own block.
+  const APPLIES = true;
   it('signed → frozen signedCode wins', () => {
-    expect(projectDisplayedEmCode({ ...base, signedCode: '99214', override: { code: '99212' } }, true)).toBe('99214');
+    expect(projectDisplayedEmCode({ ...base, signedCode: '99214', override: { code: '99212' } }, true, APPLIES)).toBe('99214');
   });
   it('signed, no signedCode → override', () => {
-    expect(projectDisplayedEmCode({ ...base, override: { code: '99215' } }, true)).toBe('99215');
+    expect(projectDisplayedEmCode({ ...base, override: { code: '99215' } }, true, APPLIES)).toBe('99215');
   });
   it('signed, neither → raw', () => {
-    expect(projectDisplayedEmCode(base, true)).toBe('99213');
+    expect(projectDisplayedEmCode(base, true, APPLIES)).toBe('99213');
   });
   it('unsigned → override ?? raw (signedCode ignored while unsigned)', () => {
-    expect(projectDisplayedEmCode({ ...base, signedCode: '99214', override: { code: '99215' } }, false)).toBe('99215');
-    expect(projectDisplayedEmCode(base, false)).toBe('99213');
+    expect(projectDisplayedEmCode({ ...base, signedCode: '99214', override: { code: '99215' } }, false, APPLIES)).toBe('99215');
+    expect(projectDisplayedEmCode(base, false, APPLIES)).toBe('99213');
   });
   it('null em → null', () => {
-    expect(projectDisplayedEmCode(null, true)).toBeNull();
+    expect(projectDisplayedEmCode(null, true, APPLIES)).toBeNull();
+  });
+});
+
+describe('THE EXPORT-LAYER GUARD — an imaging report projects no office level', () => {
+  // The gap this closes: compute and store were guarded, export was not. A row
+  // that had ALREADY acquired an `em` blob printed an office code into its PDF,
+  // DOCX and every EHR clipboard format. One unsigned production row did exactly
+  // that — a doctor-set override of 99212 whose EHR line read "99212 —
+  // undefined" — because the level surface had been wrongly exposed on imaging
+  // visits by the specialty-label bug.
+  //
+  // Asserted with the blob PRESENT and populated every way it can be. "No E/M on
+  // imaging" must not depend on the row being clean; the whole point is that it
+  // holds when the row is dirty.
+  const dirty = {
+    code: '99213',
+    description: 'Office visit, established patient',
+    reasoning: { problems: [], data: '', risk: '' },
+    evidence_quote: '',
+    override: { code: '99212' },
+    signedCode: '99214',
+  };
+
+  it('returns null for every combination the blob can hold', () => {
+    for (const isSigned of [true, false]) {
+      expect(projectDisplayedEmCode(dirty, isSigned, false)).toBeNull();
+      expect(projectDisplayedEmCode({ ...dirty, override: undefined }, isSigned, false)).toBeNull();
+      expect(projectDisplayedEmCode({ ...dirty, signedCode: undefined }, isSigned, false)).toBeNull();
+      expect(projectDisplayedEmCode({ ...dirty, code: '99215' }, isSigned, false)).toBeNull();
+    }
+  });
+
+  it('projectEmForDisplay returns NULL, not a code-less blob', () => {
+    // The renderers branch on `if (data.em)`, so an object with no code would
+    // print a "Billing" heading over nothing. Absent means absent.
+    expect(projectEmForDisplay(dirty, false, false)).toBeNull();
+    expect(projectEmForDisplay(dirty, true, false)).toBeNull();
+  });
+
+  it('and still projects normally when E/M DOES apply — the negative control', () => {
+    // Without this, the block above would pass on a projection that returned
+    // null unconditionally.
+    expect(projectDisplayedEmCode(dirty, false, true)).toBe('99212');
+    expect(projectDisplayedEmCode(dirty, true, true)).toBe('99214');
+    expect(projectEmForDisplay(dirty, false, true)?.code).toBe('99212');
+  });
+
+  it('emAppliesToSpecialty is the switch, and it takes the ID', () => {
+    // Pinned here because the projection's guard is only as good as what the
+    // caller passes it, and the original bug was a label reaching an id
+    // comparator. The label does NOT round-trip: findSpecialty('Ultrasound').id
+    // is 'unspecified', silently.
+    process.env.NEXT_PUBLIC_ULTRASOUND_SPECIALTY = 'true';
+    expect(emAppliesToSpecialty('ultrasound')).toBe(false);
+    expect(emAppliesToSpecialty('primary-care')).toBe(true);
+    expect(emAppliesToSpecialty(null)).toBe(true);
+    // A LABEL is not an id, and this is what made the original bug silent.
+    expect(emAppliesToSpecialty('Ultrasound')).toBe(true);
+    delete process.env.NEXT_PUBLIC_ULTRASOUND_SPECIALTY;
+    // Flag off → the ultrasound path is inert, as everywhere else.
+    expect(emAppliesToSpecialty('ultrasound')).toBe(true);
   });
 });
