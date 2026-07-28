@@ -64,8 +64,13 @@ export const SAMPLE_PREVIEW_ENTITIES: z.infer<typeof ExtractedEntities> =
       { name: 'Lisinopril', dose: '20 mg', frequency: 'daily', evidence_quote: 'lisinopril 20 milligrams daily for hypertension' },
       { name: 'Atorvastatin', dose: '20 mg', frequency: 'daily', evidence_quote: 'atorvastatin 20 milligrams daily for hyperlipidemia' },
     ],
+    // Q1 audit §02.9 — this entry used to read "Bilateral foot tingling, no
+    // ulceration": ONE row conflating an affirmed finding with a denied one,
+    // which is precisely the collapse structured polarity exists to prevent.
+    // Split, because they are two different claims about the patient.
     ros: [
-      { system: 'Neurological', finding: 'Bilateral foot tingling, no ulceration', evidence_quote: 'neuropathic tingling in both feet over the last two months without ulceration' },
+      { system: 'Neurological', finding: 'Foot tingling', polarity: 'affirmed', laterality: 'bilateral', evidence_quote: 'neuropathic tingling in both feet over the last two months without ulceration' },
+      { system: 'Neurological', finding: 'Ulceration', polarity: 'denied', laterality: 'bilateral', evidence_quote: 'neuropathic tingling in both feet over the last two months without ulceration' },
     ],
     exam_findings: [
       { system: 'Vitals', finding: 'Blood pressure 138/82', evidence_quote: 'Blood pressure today 138 over 82' },

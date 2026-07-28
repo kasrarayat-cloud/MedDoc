@@ -174,6 +174,26 @@ export const ExtractedEntities = z.object({
         // Q2 fix-pack — both system and finding meaningful.
         system: z.string().min(1),
         finding: z.string().min(1),
+        /**
+         * WHETHER THE PATIENT HAS THIS OR NOT — as DATA (Q1 audit §02.9).
+         *
+         * Polarity used to live only inside the prose of `finding`, so every
+         * consumer had to guess it back out with a regex. A regex over a
+         * clinical sentence is wrong in both directions: it over-fires when one
+         * quote carries two findings ("denies chest pain but does get short of
+         * breath" marks the dyspnoea denied), and under-fires whenever the
+         * patient speaks normally ("None at all" contains no charting token).
+         *
+         * REQUIRED, WITH NO DEFAULT, deliberately. Neither default is safe —
+         * absent → affirmed invents symptoms and drives L5 red-flag false
+         * positives; absent → denied hides real ones. A missing polarity is a
+         * malformed extraction, and the model client already retries a schema
+         * failure with the error fed back.
+         */
+        polarity: z.enum(['affirmed', 'denied']),
+        /** The side, when a side was STATED. Absent means none was — which is
+         *  a different claim from 'not_applicable', so the two are not merged. */
+        laterality: z.enum(['left', 'right', 'bilateral']).optional(),
         evidence_quote: z.string().min(1),
         speaker: z.string().optional(),
         timestamp: z.number().nonnegative().optional(),
@@ -381,7 +401,27 @@ const COMMON_CATEGORIES = [
   '            operative", "evidence_quote": "he works as a factory',
   '            operative at Simple Signs Ltd" } }',
   '  WRONG:    "social_history": { "occupation": "factory operative" }',
-  '- ros: list of {system, finding, evidence_quote, ...} (review of systems)',
+  '- ros: list of {system, finding, polarity, evidence_quote,',
+  '  laterality?, ...} (review of systems).',
+  '    * polarity: REQUIRED, "affirmed" (the patient HAS it) or "denied"',
+  '      (the patient does NOT). Never omit it and never guess it from the',
+  '      shape of the sentence.',
+  '    * Record the polarity of THIS finding, not of the sentence it came',
+  '      from — one sentence can carry BOTH. "She denies chest pain but',
+  '      does get short of breath" is TWO entries: chest pain denied, AND',
+  '      shortness of breath affirmed. Do not let the denial swallow the',
+  '      rest of the sentence.',
+  '    * Patients do not speak in charting language. "Any chest pain?" —',
+  '      "None at all" is polarity "denied". So are "nope", "nothing like',
+  '      that", "never had it". Absence of the word "no" is not absence of',
+  '      a denial.',
+  '    * Equally, do not read a denial into an affirmation: "it is not',
+  '      severe, but it is there" is AFFIRMED.',
+  '    * laterality: include it whenever a side was stated, and use the',
+  '      side of THIS finding — never widen one side to bilateral because',
+  '      the other was mentioned. "Numbness in the right hand, left hand is',
+  '      fine" is laterality "right". Omit the field when no side was',
+  '      stated; do not guess one.',
   '- exam_findings: list of {system, finding, evidence_quote, ...} — only',
   '  what the doctor stated/observed',
   '- tests_mentioned: list of {test, result_if_given?, evidence_quote, ...}',

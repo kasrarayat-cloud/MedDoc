@@ -17,6 +17,8 @@
 // ============================================================================
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { ROS_POLARITY_RULE } from '@/worker/note-templates/build-soap-prompt';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -133,8 +135,18 @@ describe('L4 GOLDEN prompt-equivalence (system-default path)', () => {
         );
       }
       mkdirSync(FIX_DIR, { recursive: true });
-      writeFileSync(USER_GOLDEN, userNorm, 'utf8');
+      writeFileSync(USER_GOLDEN, userNorm.replace(ROS_POLARITY_RULE, ''), 'utf8');
     }
-    expect(userNorm).toBe(readFileSync(USER_GOLDEN, 'utf8'));
+    // 2026-07-28, Q1 §02.9: L4's USER prompt gained ONE block — the ROS
+    // polarity rule. The golden file is deliberately NOT re-baselined: every
+    // pre-Phase-1 byte stays pinned, and the delta is named here so it is
+    // reviewable and cannot grow silently. Re-baselining would have thrown the
+    // reference away to hide a two-line change.
+    expect(userNorm, 'the rule must actually be in the prompt').toContain(
+      ROS_POLARITY_RULE
+    );
+    expect(userNorm.replace(ROS_POLARITY_RULE, '')).toBe(
+      readFileSync(USER_GOLDEN, 'utf8')
+    );
   });
 });
