@@ -17,6 +17,7 @@
 
 import { NextResponse } from 'next/server';
 import {
+  emAppliesToSpecialty,
   isImagingReportSpecialty,
   ultrasoundSpecialtyEnabled,
 } from '@meddoc/shared/specialties';
@@ -188,7 +189,7 @@ export const POST = withApiHandler<{ id: string }>(
       // and the doctor gets a phantom confirm forever.
       signals: { icdCodes: visit.icdCodes, rxDrafts: visit.rxDrafts, cptCodes: visit.cptCodes },
       ctx: { practiceId, userId },
-      applies: !(ultrasoundSpecialtyEnabled() && isImagingReportSpecialty(visit.specialty)),
+      applies: emAppliesToSpecialty(visit.specialty),
     });
 
     await prisma.transcribeVisit.update({

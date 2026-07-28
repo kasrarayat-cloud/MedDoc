@@ -6,6 +6,7 @@ import * as Sentry from '@sentry/nextjs';
 import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
 import {
+  emAppliesToSpecialty,
   findSpecialty,
   isImagingReportSpecialty,
   ultrasoundSpecialtyEnabled,
@@ -681,7 +682,7 @@ async function VisitBody(props: VisitBodyProps) {
   // `props.specialtyId`, NOT `props.specialty` — the latter is the display
   // label and this comparator takes an id. See the prop doc above.
   const emNotApplicable =
-    ultrasoundSpecialtyEnabled() && isImagingReportSpecialty(props.specialtyId);
+    !emAppliesToSpecialty(props.specialtyId);
   // Imaging reports skip E/M scoring entirely (left null → the Billing surface
   // renders the "not applicable" note). Only clinic encounters are scored.
   let initialEmScore: import('@/lib/em-coding-ui/types').EmScore | null = null;

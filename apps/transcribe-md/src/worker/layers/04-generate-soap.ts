@@ -36,6 +36,7 @@ import { SYSTEM_DEFAULT_NOTE_TEMPLATE } from '../note-templates/system-default-t
 import { ULTRASOUND_REPORT_TEMPLATE } from '../note-templates/ultrasound-report-template';
 import { buildUltrasoundSystemPrompt } from '../note-templates/build-ultrasound-prompt';
 import {
+  emAppliesToSpecialty,
   isImagingReportSpecialty,
   ultrasoundSpecialtyEnabled,
 } from '@meddoc/shared/specialties';
@@ -85,7 +86,7 @@ export async function runLayer4GenerateSoap(
   // structure validator, persistence) is report-agnostic and shared. Flag OFF
   // (prod default) → this is false and the SOAP path below is byte-identical.
   const isUltrasoundReport =
-    ultrasoundSpecialtyEnabled() && isImagingReportSpecialty(input.specialty);
+    !emAppliesToSpecialty(input.specialty);
 
   // SOAP specialty guidance does not apply to an imaging report — the
   // ultrasound study-type routing lives in the report template's Findings

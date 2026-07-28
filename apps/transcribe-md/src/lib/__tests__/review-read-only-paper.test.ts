@@ -496,7 +496,10 @@ describe('an imaging visit has NO E/M level — not displayed, not computed, not
       const src = read(caller);
       expect(src).toContain('seedEmBaselineIfUnset(');
       expect(src).toContain(
-        'applies: !(ultrasoundSpecialtyEnabled() && isImagingReportSpecialty(visit.specialty)),',
+        // ONE named switch, not a re-typed conjunction. The original bug in this
+        // area was a call site spelling the predicate's argument differently
+        // (a label where an id was wanted); a single helper removes the chance.
+        'applies: emAppliesToSpecialty(visit.specialty),',
       );
     }
 
@@ -506,7 +509,7 @@ describe('an imaging visit has NO E/M level — not displayed, not computed, not
     // a new emScoredCode writer that is not on this list is not being checked.
     const override = read('src/app/api/visits/[id]/em-score/override/route.ts');
     expect(override).toContain('emScoredCode: parsed.data.overrideToCode');
-    const imagingGate = override.indexOf('isImagingReportSpecialty(visit.specialty)');
+    const imagingGate = override.indexOf('emAppliesToSpecialty(visit.specialty)');
     expect(imagingGate).toBeGreaterThan(-1);
     expect(
       override.indexOf('emScoredCode:'),
@@ -516,7 +519,7 @@ describe('an imaging visit has NO E/M level — not displayed, not computed, not
     // The re-score never scores an imaging visit — it clears the flag instead.
     const rescore = read('src/actions/rescore-em.ts');
     const imagingBranch = rescore.slice(
-      rescore.indexOf('if (ultrasoundSpecialtyEnabled() && isImagingReportSpecialty(visit.specialty)) {'),
+      rescore.indexOf('if (!emAppliesToSpecialty(visit.specialty)) {'),
       rescore.indexOf('let scored: string;'),
     );
     expect(imagingBranch).toContain('emStale: false');
@@ -540,7 +543,29 @@ describe('an imaging visit has NO E/M level — not displayed, not computed, not
     expect(jsx).toContain('emStale={props.emNotApplicable ? false : emStale}');
   });
 
-  it('these guards all read the raw column, which IS an id', () => {
+  it('NOBODY RE-TYPES THE CONJUNCTION — emAppliesToSpecialty is the only copy', () => {
+    // The failure this prevents: seven call sites each spelling
+    // `!(ultrasoundSpecialtyEnabled() && isImagingReportSpecialty(x))` by hand.
+    // One of them spelled its argument differently — a display LABEL where the
+    // predicate wanted an id — and the comparison was silently, permanently
+    // false, so every ultrasound visit computed and stored an office E/M level.
+    // Seven copies is seven chances to make that mistake again.
+    const { execSync } = require('node:child_process') as typeof import('node:child_process');
+    const hits = execSync(
+      'grep -rln "ultrasoundSpecialtyEnabled() && isImagingReportSpecialty" src ../../packages/shared/src || true',
+      { encoding: 'utf8' },
+    )
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+      // The definition itself is allowed to contain it — it IS the copy.
+      .filter((f) => !f.endsWith('specialties.ts'))
+      // Tests may quote it while explaining the history.
+      .filter((f) => !/__tests__|\.test\./.test(f));
+    expect(hits, `open-coded copies of the E/M applicability switch: ${hits.join(', ')}`).toEqual([]);
+  });
+
+  it('these guards all read the raw column through the ONE switch', () => {
     // The page needed a new prop because it had already turned the column into
     // a label. Everywhere else reads `visit.specialty` straight off Prisma, so
     // the predicate gets an id and the same bug cannot be there.
@@ -549,7 +574,7 @@ describe('an imaging visit has NO E/M level — not displayed, not computed, not
       'src/actions/rescore-em.ts',
       'src/app/api/visits/[id]/sign/route.ts',
     ]) {
-      expect(read(f)).toContain('isImagingReportSpecialty(visit.specialty)');
+      expect(read(f)).toContain('emAppliesToSpecialty(visit.specialty)');
     }
   });
 });

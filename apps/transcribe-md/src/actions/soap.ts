@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import {
+  emAppliesToSpecialty,
   isImagingReportSpecialty,
   ultrasoundSpecialtyEnabled,
 } from '@meddoc/shared/specialties';
@@ -171,7 +172,7 @@ export async function saveSoapDraftAction(
     currentScoredCode: visit.emScoredCode,
     signals: { icdCodes: visit.icdCodes, rxDrafts: visit.rxDrafts, cptCodes: visit.cptCodes },
     ctx: { practiceId: visit.user?.practiceId, userId: session.user.id },
-    applies: !(ultrasoundSpecialtyEnabled() && isImagingReportSpecialty(visit.specialty)),
+    applies: emAppliesToSpecialty(visit.specialty),
   });
 
   revalidatePath(`/visits/${visitId}`);

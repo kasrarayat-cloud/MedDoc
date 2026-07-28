@@ -75,6 +75,35 @@ export function isImagingReportSpecialty(id: string | null | undefined): boolean
   return id === 'ultrasound';
 }
 
+/** DOES AN OFFICE-VISIT E/M LEVEL APPLY TO THIS VISIT AT ALL?
+ *
+ *  THE ONE SWITCH. `!(ultrasoundSpecialtyEnabled() && isImagingReportSpecialty(x))`
+ *  had been open-coded in seven places — the page, the sign route, two E/M
+ *  routes, two server actions and an L4 worker layer. Seven copies of a
+ *  conjunction is seven chances for one of them to be spelled differently, and
+ *  that is not hypothetical here: the ORIGINAL bug in this area was one call
+ *  site passing `specialtyLabel(...)` ('Ultrasound') where the predicate wanted
+ *  the id ('ultrasound'), which made the comparison silently and permanently
+ *  false. Every ultrasound visit then computed and stored an office E/M level.
+ *
+ *  So: one named function, one meaning, and callers that read as the question
+ *  they are actually asking.
+ *
+ *  ⚠️ TAKES THE SPECIALTY **ID**, never a display label. `findSpecialty('Ultrasound').id`
+ *  is `'unspecified'` — quietly the wrong specialty, no throw. If you have a
+ *  label, canonicalise it first.
+ *
+ *  Enforced at THREE layers, because a data invariant needs to hold wherever the
+ *  column is read, not only where it is written:
+ *    COMPUTE — the page skips scoring (`emNotApplicable`)
+ *    STORE   — `seedEmBaselineIfUnset` takes `applies` as a required param
+ *    EXPORT  — the projection returns null (`projectDisplayedEmCode`)
+ *  The export layer was the gap: a row that had ALREADY acquired an `em` blob
+ *  printed an office code on an ultrasound report regardless of specialty. */
+export function emAppliesToSpecialty(id: string | null | undefined): boolean {
+  return !(ultrasoundSpecialtyEnabled() && isImagingReportSpecialty(id));
+}
+
 /** Catalog filtered for the pickers: hides flag-gated specialties (Ultrasound)
  *  unless their flag is on. `forVisitCreate` additionally drops 'unspecified'.
  *  When the flag is OFF this returns exactly the pre-ultrasound list. */

@@ -79,6 +79,11 @@ interface CodesTabProps {
   cpt: unknown;
   /** Visit is SIGNED → suppress mutation affordances. */
   readonly?: boolean;
+  /** Does an office-visit E/M level apply? False for an imaging report, which
+   *  has none — the row would otherwise print one from whatever the blob holds.
+   *  Threaded from the parent because this component has no specialty of its
+   *  own, and guessing is how the original bug spread. */
+  emApplies?: boolean;
   /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: CodesTabTheme;
 }
@@ -90,13 +95,13 @@ type CptSortKey = 'code' | 'description';
 // Public component
 // ---------------------------------------------------------------------------
 
-export function CodesTab({ icd, cpt, readonly = false }: CodesTabProps) {
+export function CodesTab({ icd, cpt, readonly = false, emApplies = true }: CodesTabProps) {
   const icdBlob = (icd as IcdBlob | null) ?? null;
   const cptBlob = (cpt as CptBlob | null) ?? null;
   const icdCodes = icdBlob?.codes ?? [];
   // #315 obs#2: render the displayed E/M code (signed → frozen, else
   // override ?? raw), the same projection every export surface uses.
-  const em = projectEmForDisplay(cptBlob?.em ?? null, readonly);
+  const em = projectEmForDisplay(cptBlob?.em ?? null, readonly, emApplies);
   const procedures = cptBlob?.procedures ?? [];
   const modifiers = cptBlob?.modifiers ?? [];
 

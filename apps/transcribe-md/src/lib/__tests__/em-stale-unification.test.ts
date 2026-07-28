@@ -154,14 +154,14 @@ describe('imaging reports have no E/M, so the gate does not apply to them', () =
     // imaging report permanently unsignable after any edit, and "resolving"
     // it would mean inventing a clinic code.
     const src = readFileSync('src/app/api/visits/[id]/sign/route.ts', 'utf8');
-    expect(src).toContain('isImagingReportSpecialty(visit.specialty)');
+    expect(src).toContain('emAppliesToSpecialty(visit.specialty)');
     expect(src).toContain('visit.emStale && emApplies');
   });
 
   it('the re-score clears the flag without scoring one', () => {
     const src = readFileSync('src/actions/rescore-em.ts', 'utf8');
     const guard = src.slice(
-      src.indexOf('isImagingReportSpecialty(visit.specialty)'),
+      src.indexOf('emAppliesToSpecialty(visit.specialty)'),
       src.indexOf('let scored'),
     );
     expect(guard).toContain('emStale: false');
