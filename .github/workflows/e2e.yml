@@ -316,6 +316,7 @@ jobs:
           --build-arg NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX=true
           --build-arg NEXT_PUBLIC_UX_SIMPLIFY=true
           --build-arg NEXT_PUBLIC_SKIN_BETA=true
+          --build-arg NEXT_PUBLIC_CHAT_EDITOR=true
           -t meddoc-pro-transcribe-md:visit-doc .
 
       - name: Start the converter sidecar + app on the visit-doc image

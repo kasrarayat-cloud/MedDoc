@@ -37,12 +37,6 @@ import { parseNoteSections, type NoteSection } from '@/lib/parse-note-sections';
 import { emChangeEq } from '@/lib/suggestion-labels';
 import { SignAndSendModal } from './sign-and-send-modal';
 
-export interface ReviewDocumentSummary {
-  icd: { code: string; description?: string }[];
-  emCode: string | null;
-  emNotApplicable: boolean;
-}
-
 export interface ReviewDocumentViewProps {
   visitId: string;
   doctorEmail: string;
@@ -78,20 +72,11 @@ export interface ReviewDocumentViewProps {
   rxHasWarnings: boolean;
   /** Unacknowledged E/M level change ({from,to}) or null. */
   emPendingChange: { from: string; to: string } | null;
-  summary: ReviewDocumentSummary;
   /** The note changed since the level was scored — the sign route refuses while
    *  this holds. The inline card below is where it is re-checked. */
   emStale?: boolean;
   /** Re-scores lazily. Returns whether the level moved. */
   onRescoreEm?: () => Promise<void>;
-  /** The EXISTING billing panel and codes table, passed in verbatim. Rendered
-   *  inline: the doctor must be able to override, rescore or dispute a level
-   *  with the same components, the same enforcement and the same audit the
-   *  Billing/Codes tabs had. */
-  billingNode: React.ReactNode;
-  codesNode: React.ReactNode;
-  dictationNode: React.ReactNode;
-  dictationLabel: string;
 }
 
 export function ReviewDocumentView(props: ReviewDocumentViewProps) {
@@ -117,15 +102,6 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
 
   const emBlocking = props.emPendingChange != null && !emConfirmed;
   const blocked = props.rxBlocking || emBlocking;
-
-  // The codes row is also where a stale billing level gets re-checked, so a
-  // visit with nothing to summarise must still be able to reach it — otherwise
-  // the sign gate refuses and there is no control on the page that clears it.
-  const hasSummary =
-    props.summary.icd.length > 0 ||
-    props.summary.emCode !== null ||
-    props.summary.emNotApplicable ||
-    Boolean(props.emStale);
 
   async function rescore() {
     if (!props.onRescoreEm) return;
@@ -282,34 +258,22 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
         )}
       </article>
 
-      {/* ── BILLING · CODES · INPUT ────────────────────────────────────────
-          Formerly folded behind a "⋯ details" disclosure. The disclosure is
-          gone — it was hiding a sign-blocker (see the E/M card above) and a
-          disclosure that hides one blocker will hide the next.
+      {/* NO BILLING PANEL, NO CODES TABLE, NO INPUT TRANSCRIPT.
+          They were here, inline, and before that behind a "⋯ details"
+          disclosure. Both arrangements answered the wrong question. This page
+          is the document being signed; a coding worksheet, an ICD table with
+          confidence scores and the raw dictation are reference material for
+          three different jobs, none of which is "read this and sign it".
 
-          The PANELS are not deleted: everything both original rows held is
-          here, inline, and the chat still opens it by name ("show billing").
-          Override / rescore / dispute all live in these same components, so a
-          doctor who disagrees with a level never needs the surface changed
-          under them. A test asserts each datum is still reachable. */}
-      <section className="qm-rdoc-meta" data-chat-target="codes">
-        <div className="qm-rdoc-meta-body qm-rdoc-meta-panels">
-          {hasSummary && (
-            <>
-              <div className="qm-rdoc-panel" data-testid="review-doc-billing-panel">
-                {props.billingNode}
-              </div>
-              <div className="qm-rdoc-panel" data-testid="review-doc-codes-panel">
-                {props.codesNode}
-              </div>
-            </>
-          )}
-          <div className="qm-rdoc-panel" data-testid="review-doc-dictation-panel">
-            <h4 className="qm-rdoc-panel-h">{props.dictationLabel.toUpperCase()}</h4>
-            {props.dictationNode}
-          </div>
-        </div>
-      </section>
+          The coding still RUNS. Layer 7a still writes icdCodes, 7b still writes
+          cptCodes, the transcript is still stored, and export and billing read
+          all of it exactly as before — see the worker layers and
+          visit-export-server. What changed is only that this page stopped
+          drawing them.
+
+          The one billing control that belongs on a signing surface is the level
+          gate, and it is above, in the gate stack, where it blocks the
+          signature it applies to. */}
 
       {/* ── THE BAR ─────────────────────────────────────────────────────── */}
       <div className="qm-c3-rev2-signbar">

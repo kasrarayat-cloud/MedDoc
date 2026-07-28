@@ -45,8 +45,21 @@ describe('the intent union', () => {
       { kind: 'adopt_suggestions', indexes: [0, 1] },
       { kind: 'listed_suggestions', indexes: [0] },
       { kind: 'scroll_to', target: 'suggestions' },
+      // …and `codes`, retired with the billing panel, the codes table and the
+      // input transcript. Same rule, second application: the anchor stopped
+      // rendering, so the target had to stop existing. A `scroll_to` whose
+      // anchor is absent does not fail — querySelector returns null and
+      // scrollIntoView is never reached — so the chat reports "Took you to
+      // codes" over a page that never moved.
+      { kind: 'scroll_to', target: 'codes' },
     ]) {
       expect(ChatIntentSchema.safeParse(intent).success, JSON.stringify(intent)).toBe(false);
+    }
+  });
+
+  it('every surviving scroll target is one the page can actually satisfy', () => {
+    for (const target of ['rx_gate', 'em_gate', 'document']) {
+      expect(ChatIntentSchema.safeParse({ kind: 'scroll_to', target }).success, target).toBe(true);
     }
   });
 
@@ -75,13 +88,13 @@ describe('the intent union', () => {
   });
 
   it('bounds a reply so one turn cannot fan out unboundedly', () => {
-    const many = Array.from({ length: 51 }, () => ({ kind: 'scroll_to', target: 'codes' }));
+    const many = Array.from({ length: 51 }, () => ({ kind: 'scroll_to', target: 'em_gate' }));
     expect(ChatReplySchema.safeParse({ reply: 'x', intents: many }).success).toBe(false);
   });
 
   it('requires a reply — an action with no explanation is not allowed', () => {
     expect(
-      ChatReplySchema.safeParse({ reply: '', intents: [{ kind: 'scroll_to', target: 'codes' }] })
+      ChatReplySchema.safeParse({ reply: '', intents: [{ kind: 'scroll_to', target: 'em_gate' }] })
         .success,
     ).toBe(false);
   });

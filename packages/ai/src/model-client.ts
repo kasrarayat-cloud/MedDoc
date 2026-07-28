@@ -75,7 +75,13 @@ export const modelClient = {
     // T-M10: MOCK_AI_CALLS short-circuit. See packages/ai/src/mock.ts
     // for the contract. No-op unless the env flag is true.
     if (isMockEnabled()) {
-      return mockComplete({ purpose: args.purpose, schema: args.schema });
+      // `user` is passed so a fixture can be CONTENT-AWARE. Every fixture
+      // before this keyed on `purpose` alone, which is fine for a pipeline
+      // layer whose input is a transcript — but the chat editor's whole job is
+      // to turn what the doctor typed into an intent, and a fixture that
+      // cannot see the message can only ever return one canned intent. See the
+      // tm_chat_edit branch in mock.ts.
+      return mockComplete({ purpose: args.purpose, schema: args.schema, user: args.user });
     }
     if (args.provider !== 'anthropic') {
       throw new Error(
