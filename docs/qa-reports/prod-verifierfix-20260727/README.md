@@ -1,11 +1,16 @@
 # Prod deploy — verifier classification + Word-preview parity (2026-07-27)
 
-Deployed `main` @ `0b98f952` (merge of PR #415). Rollback tags
+Deployed `main` @ `45313570` (merge of PR #415). Rollback tags
 `meddoc-pro-transcribe-md{,-worker}:pre-verifierfix-20260727`
 (app `4f106bebfa64`, worker `3d15de5ddbf7`).
 
 Images: app `f37e51e93f57`, worker `be2cc0de04a4`. Code-only — every migration on
 `main` was already applied, so nothing touched the schema.
+
+> **Commit SHA rewritten 2026-07-27.** This line originally read `0b98f952`; the
+> `git filter-repo` purge of the filled clinical export re-hashed every commit
+> after 2026-07-26, and that object no longer exists in any ref. `45313570` is the
+> same commit — the merge of PR #415 — post-rewrite. Image digests are unaffected.
 
 ## Structural verification (runbook law)
 
