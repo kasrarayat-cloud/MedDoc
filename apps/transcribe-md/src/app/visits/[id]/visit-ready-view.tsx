@@ -840,7 +840,19 @@ export function VisitReadyView(props: VisitReadyViewProps) {
             rxBlocking={!rxResolved}
             rxHasWarnings={rxWarn !== null}
             emPendingChange={pendingEmChange}
-            emStale={emStale}
+            // STALENESS ONLY MEANS SOMETHING IF THERE IS A LEVEL.
+            //
+            // An imaging report has no office E/M level — the row does not
+            // render and the sign route exempts it from the gate entirely. But
+            // `emStale` is set by every note edit regardless of specialty, so
+            // once the flag actually reached this view an edited ultrasound
+            // report drew "Documentation level needs re-checking", with the
+            // bottom bar instructing the doctor to "Re-check the documentation
+            // level above" — directly above a card that does not exist, about a
+            // level the same page correctly declines to show. Sign stayed
+            // enabled, so it blocked nothing; it just asked for something
+            // impossible. Caught on a real ultrasound visit in the prod smoke.
+            emStale={props.emNotApplicable ? false : emStale}
             onRescoreEm={rescoreEm}
             emLevel={emLevel}
             onAdjustEm={adjustEm}

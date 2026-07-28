@@ -523,6 +523,23 @@ describe('an imaging visit has NO E/M level — not displayed, not computed, not
     expect(imagingBranch).not.toContain('emScoredCode');
   });
 
+  it('AND STALENESS IS SUPPRESSED TOO — no "re-check the level" on a report with no level', () => {
+    // Every note edit sets emStale regardless of specialty, and the stale gate
+    // renders on `emStale && !emPendingChange` with no applicability check of its
+    // own. So the moment the flag actually reached the view (it never did before
+    // 2026-07-28 — the prop was not passed), an edited ultrasound report drew
+    // "Documentation level needs re-checking" and the bottom bar told the doctor
+    // to "Re-check the documentation level above", pointing at a card that does
+    // not exist for a level the same page correctly refuses to show.
+    //
+    // Sign stayed enabled — the route exempts imaging — so this blocked nothing.
+    // It asked for something impossible, which is its own kind of broken.
+    const ready = read(READY_VIEW);
+    const el = ready.slice(ready.indexOf('<ReviewDocumentView'));
+    const jsx = el.slice(0, el.indexOf('\n          />'));
+    expect(jsx).toContain('emStale={props.emNotApplicable ? false : emStale}');
+  });
+
   it('these guards all read the raw column, which IS an id', () => {
     // The page needed a new prop because it had already turned the column into
     // a label. Everywhere else reads `visit.specialty` straight off Prisma, so
