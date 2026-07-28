@@ -68,6 +68,23 @@ Post-Office compatibility checks require:
    content, embedded object, or external relationship; and
 7. individually classified Open XML schema evidence.
 
+For `TAB_ONLY_BLANK_TABLE_CELL_V1`, QA field readback deliberately excludes
+paragraph-property tab stops (`w:pPr/w:tabs/w:tab`) from the clinical value.
+Content-level `w:tab` remains visible and changes the value. This normalization
+exists only in the QA-only reader after an Office save; immutable pre-delivery
+output must still pass exact path, profile, fingerprint, occurrence, and static
+invariance checks under production readback v2.
+
+`ORDINARY_PLACEHOLDER_TOKEN_V1` requires a separate final-SHA corpus run. Its
+pre-delivery output must pass strict binding/readback v2 at the exact certified
+token span and surrounding-static-context hashes. After an Office save, the
+QA-only contract may compare normalized visible replacement and surrounding
+static text while recording run/path normalization, but it may not authorize
+signing or reimport. The earlier tab-only LibreOffice result is not evidence
+that ordinary placeholders passed; that profile remains Office-QA pending
+until its synthetic corpus is opened, saved, exported, security-inspected, and
+visually compared. Desktop Microsoft Word remains pending independently.
+
 This assessment does not authorize a reimported or Office-edited clinical
 document. Reimport would require a separate product and threat model.
 
@@ -124,12 +141,15 @@ source or renderer error into a pass.
 
 The independent stage matrix is
 `docs/qa/template-twin-office-schema-error-matrix.json`. It records that the
-current schema-valid corpus and renderer outputs have zero errors, while
-LibreOffice 25.8.7.3 introduces 42 errors during save:
+current schema-valid corpus and renderer outputs have zero errors. The original
+four-case corpus records 42 LibreOffice 25.8.7.3 save diagnostics, the tab-only
+case adds seven, and the ordinary-placeholder case adds six, for 55 per target:
 
-- 20 font-character-set extension values;
-- 19 logical-alignment enumeration values; and
-- 3 table-row on/off lexical values.
+- 30 font-character-set extension values;
+- 20 logical-alignment enumeration values; and
+- 4 table-row on/off lexical values; and
+- one exact ordinary-placeholder `w:docGrid/@w:charSpace="4294963199"`
+  Int32-wrap serialization.
 
 The QA schema contract recognizes only those exact reviewed LibreOffice-stage
 patterns under its versioned registry. They remain
@@ -137,6 +157,16 @@ patterns under its versioned registry. They remain
 errors are never accepted for signing or reimport, and desktop Microsoft Word
 evidence remains mandatory. An unknown diagnostic, tool/version, part,
 element, attribute, value, target, or unreviewed classification fails closed.
+The `docGrid` classification is limited to that exact part, element, attribute,
+value, validator, version, LibreOffice stage, and Office target. It remains a
+LibreOffice-only external-tool finding pending desktop Word; it is never
+accepted for pre-delivery signing or reimport.
+
+When token replacement exposes certified static leading or trailing whitespace
+inside a Word text node, the renderer adds only the required
+`xml:space="preserve"` attribute as an approved field-bound patch. Strict v2
+then independently verifies the completed value, path, surrounding static
+context, and the required whitespace-preservation state before delivery.
 
 ## Isolated execution
 

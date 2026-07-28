@@ -9,6 +9,10 @@ import { z } from 'zod';
 
 import { AuthError, requireDoctorSession } from '@/lib/auth';
 import { enqueueTemplateTwinAudit } from '@/lib/template-twin/audit-outbox';
+import {
+  lockTemplateTwinRolloutForFinalClaim,
+  type TemplateTwinRolloutToken,
+} from '@/lib/template-twin/rollout';
 
 type TemplateTwinManagementCode =
   | 'INVALID_INPUT'
@@ -22,6 +26,7 @@ type TemplateTwinManagementCode =
   | 'ROLLBACK_REQUIRED'
   | 'ROLLBACK_NOT_ALLOWED'
   | 'CONFLICT'
+  | 'ROLLOUT_CHANGED'
   | 'FORBIDDEN'
   | 'PERSISTENCE_FAILED';
 
@@ -97,6 +102,7 @@ interface TemplateTwinActor {
   userId: string;
   userEmail: string;
   practiceId: string;
+  rolloutToken: TemplateTwinRolloutToken;
 }
 
 class TemplateTwinManagementError extends Error {
@@ -237,7 +243,26 @@ async function currentActor(): Promise<TemplateTwinActor> {
     userId: session.user.id,
     userEmail: session.user.email,
     practiceId: session.user.practiceId,
+    rolloutToken: session.templateTwinRolloutToken,
   };
+}
+
+async function assertManagementRolloutFinality(
+  tx: Prisma.TransactionClient,
+  actor: TemplateTwinActor,
+  operation: string,
+): Promise<void> {
+  const decision = await lockTemplateTwinRolloutForFinalClaim({
+    tx,
+    practiceId: actor.practiceId,
+    pinnedToken: actor.rolloutToken,
+  });
+  if (!decision.allowed) {
+    throw new TemplateTwinManagementError(
+      'ROLLOUT_CHANGED',
+      `${decision.code}: Template Twin availability changed while ${operation}. Reload and try again.`,
+    );
+  }
 }
 
 async function loadOwnedVersion(
@@ -373,6 +398,11 @@ export async function createTemplateTwinVersionAction(
     const compiledVersionId = randomUUID();
     const result = await prisma.$transaction(
       async (tx: Prisma.TransactionClient) => {
+        await assertManagementRolloutFinality(
+          tx,
+          actor,
+          'the new template version was being created',
+        );
         const source = await loadOwnedVersion(
           tx,
           input.data.sourceNoteTemplateId,
@@ -512,6 +542,10 @@ export async function createTemplateTwinVersionAction(
             structureSha256: sourceCompiled.structureSha256,
             fieldCount: fieldCreates.length,
             certificationReset: true,
+            rolloutGlobalGeneration:
+              actor.rolloutToken.globalGeneration.toString(),
+            rolloutPracticeGeneration:
+              actor.rolloutToken.practiceGeneration.toString(),
           },
         });
         return { version: nextVersion };
@@ -547,6 +581,11 @@ export async function activateTemplateTwinVersionAction(
     const operationId = randomUUID();
     const result = await prisma.$transaction(
       async (tx: Prisma.TransactionClient) => {
+        await assertManagementRolloutFinality(
+          tx,
+          actor,
+          'the template version was being activated',
+        );
         const target = await loadOwnedVersion(tx, id.data, actor);
         if (target.status === 'retired') {
           throw new TemplateTwinManagementError(
@@ -611,6 +650,10 @@ export async function activateTemplateTwinVersionAction(
             templateVersion: target.version,
             compiledVersionId: compiled(target).id,
             previousActiveId: current?.id ?? null,
+            rolloutGlobalGeneration:
+              actor.rolloutToken.globalGeneration.toString(),
+            rolloutPracticeGeneration:
+              actor.rolloutToken.practiceGeneration.toString(),
           },
         });
         return { changed: true };
@@ -636,6 +679,11 @@ export async function deactivateTemplateTwinVersionAction(
     const operationId = randomUUID();
     const result = await prisma.$transaction(
       async (tx: Prisma.TransactionClient) => {
+        await assertManagementRolloutFinality(
+          tx,
+          actor,
+          'the template version was being deactivated',
+        );
         const target = await loadOwnedVersion(tx, id.data, actor);
         if (target.status === 'retired') {
           throw new TemplateTwinManagementError(
@@ -696,6 +744,11 @@ export async function retireTemplateTwinVersionAction(
     const operationId = randomUUID();
     const result = await prisma.$transaction(
       async (tx: Prisma.TransactionClient) => {
+        await assertManagementRolloutFinality(
+          tx,
+          actor,
+          'the template version was being retired',
+        );
         const target = await loadOwnedVersion(tx, id.data, actor);
         if (target.status === 'retired') return { changed: false };
         const wasActive = target.status === 'active';
@@ -850,6 +903,11 @@ export async function rollbackTemplateTwinVersionAction(
     const operationId = randomUUID();
     const result = await prisma.$transaction(
       async (tx: Prisma.TransactionClient) => {
+        await assertManagementRolloutFinality(
+          tx,
+          actor,
+          'the prior template version was being restored',
+        );
         const target = await loadOwnedVersion(tx, id.data, actor);
         if (target.status === 'retired') {
           throw new TemplateTwinManagementError(

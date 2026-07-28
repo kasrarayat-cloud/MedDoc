@@ -256,6 +256,17 @@ function matchesReviewedLibreOfficeRegistry(
       diagnostic.observedValue === "true",
     );
   }
+  if (
+    diagnostic.familyCode ===
+    "LIBREOFFICE_DOCGRID_CHARSPACE_UINT32_OVERFLOW"
+  ) {
+    return Boolean(
+      diagnostic.partName === "/word/document.xml" &&
+      diagnostic.elementQName === "w:docGrid" &&
+      diagnostic.attributeQName === "w:charSpace" &&
+      diagnostic.observedValue === "4294963199",
+    );
+  }
   return false;
 }
 

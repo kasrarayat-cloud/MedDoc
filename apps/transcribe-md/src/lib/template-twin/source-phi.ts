@@ -21,6 +21,17 @@ import { PhiScanSchema } from '@/lib/note-template-parse/note-template-schema';
 import {
   type TemplateTwinSourcePhiScanEvidence,
 } from './source-phi-evidence';
+import {
+  TemplateTwinAuxiliaryPartUnsupportedError,
+  inspectStandardWordAuxiliaryParts,
+  isStandardWordAuxiliaryPartName,
+} from './auxiliary-parts';
+import {
+  TemplateTwinStaticAssetError,
+  assertTemplateTwinStaticAssetPackageMatchesApproval,
+  resolveApprovedTemplateTwinStaticAssets,
+  type TemplateTwinStaticAssetApprovalBinding,
+} from './static-assets';
 
 const MAX_PHI_SCAN_CHARS = 50_000;
 const MODEL = process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-opus-4-8';
@@ -69,9 +80,7 @@ export class TemplateTwinSourcePrivacyUnsupportedError extends Error {
 
 const SAFE_ALPHA_XML_PART_RE = /^(?:\[Content_Types\]\.xml|_rels\/\.rels|docProps\/(?:app|core|custom)\.xml|word\/(?:document|styles|numbering|settings|webSettings|fontTable|footnotes|endnotes|comments|commentsExtended|people)\.xml|word\/(?:header|footer)[1-9][0-9]{0,3}\.xml|word\/_rels\/(?:document|header[1-9][0-9]{0,3}|footer[1-9][0-9]{0,3}|footnotes|endnotes|comments)\.xml\.rels|word\/theme\/theme[1-9][0-9]{0,3}\.xml)$/i;
 const SAFE_ALPHA_MEDIA_PART_RE =
-  /^word\/media\/image[1-9][0-9]{0,5}\.(?:png|jpe?g|gif|bmp|tiff?)$/i;
-const APPROVED_ASSET_CONFIG_ENV =
-  'TEMPLATE_TWIN_APPROVED_STATIC_ASSETS_BY_PRACTICE_JSON';
+  /^word\/media\/image[1-9][0-9]{0,5}\.png$/i;
 export type { TemplateTwinSourcePhiScanEvidence } from './source-phi-evidence';
 
 interface ScannablePackageParts {
@@ -80,16 +89,32 @@ interface ScannablePackageParts {
     text: string;
     deterministicText: string;
   }>;
-  readonly usedApprovedStaticAssetSha256: readonly string[];
+  readonly staticAssetApprovalBindings: readonly TemplateTwinStaticAssetApprovalBinding[];
+  readonly auxiliaryPartCount: number;
+  readonly auxiliaryPartManifestSha256: string;
 }
 
-function scanPartNames(
+async function scanPartNames(
   source: Uint8Array,
-  approvedStaticAssetSha256: ReadonlySet<string>,
-): ScannablePackageParts {
+  practiceId: string,
+  approvalResolver: (
+    practiceId: string,
+    sha256: readonly string[],
+  ) => Promise<readonly TemplateTwinStaticAssetApprovalBinding[]>,
+): Promise<ScannablePackageParts> {
   const inspected = inspectDocxPackage(source);
+  let auxiliary;
+  try {
+    auxiliary = inspectStandardWordAuxiliaryParts(inspected);
+  } catch (error) {
+    if (error instanceof TemplateTwinAuxiliaryPartUnsupportedError) {
+      throw new TemplateTwinSourcePrivacyUnsupportedError();
+    }
+    throw error;
+  }
   const partNames: string[] = [];
-  const usedApprovedStaticAssetSha256 = new Set<string>();
+  const mediaSha256 = new Set<string>();
+  const mediaBytesBySha256 = new Map<string, Uint8Array>();
   for (const [partName, entry] of inspected.zip.entries) {
     if (/^customXml\//i.test(partName)) {
       throw new TemplateTwinSourcePrivacyUnsupportedError();
@@ -101,14 +126,18 @@ function scanPartNames(
       if (!SAFE_ALPHA_MEDIA_PART_RE.test(partName)) {
         throw new TemplateTwinSourcePrivacyUnsupportedError();
       }
-      const sha256 = createHash('sha256').update(entry.bytes).digest('hex');
-      if (!approvedStaticAssetSha256.has(sha256)) {
+      if (inspected.contentTypes.get(partName) !== 'image/png') {
         throw new TemplateTwinSourcePrivacyUnsupportedError();
       }
-      usedApprovedStaticAssetSha256.add(sha256);
+      const sha256 = createHash('sha256').update(entry.bytes).digest('hex');
+      mediaSha256.add(sha256);
+      mediaBytesBySha256.set(sha256, entry.bytes);
       continue;
     }
-    if (!SAFE_ALPHA_XML_PART_RE.test(partName)) {
+    if (
+      !SAFE_ALPHA_XML_PART_RE.test(partName) &&
+      !isStandardWordAuxiliaryPartName(partName)
+    ) {
       throw new TemplateTwinSourcePrivacyUnsupportedError();
     }
     if (partName.endsWith('.xml') || partName.endsWith('.rels')) {
@@ -133,9 +162,47 @@ function scanPartNames(
       };
     })
     .filter((part) => part.text.length > 0);
+  let staticAssetApprovalBindings: readonly TemplateTwinStaticAssetApprovalBinding[];
+  try {
+    staticAssetApprovalBindings = await approvalResolver(
+      practiceId,
+      [...mediaSha256].sort(),
+    );
+  } catch (error) {
+    if (error instanceof TemplateTwinStaticAssetError) {
+      throw new TemplateTwinSourcePrivacyUnsupportedError();
+    }
+    throw new TemplateTwinPhiScanUnavailableError(error);
+  }
+  const approvedDigests = staticAssetApprovalBindings
+    .map((binding) => binding.sha256)
+    .sort();
+  const requiredDigests = [...mediaSha256].sort();
+  if (
+    approvedDigests.length !== requiredDigests.length ||
+    approvedDigests.some((value, index) => value !== requiredDigests[index])
+  ) {
+    throw new TemplateTwinSourcePrivacyUnsupportedError();
+  }
+  for (const binding of staticAssetApprovalBindings) {
+    const bytes = mediaBytesBySha256.get(binding.sha256);
+    if (!bytes) throw new TemplateTwinSourcePrivacyUnsupportedError();
+    try {
+      assertTemplateTwinStaticAssetPackageMatchesApproval({ bytes, binding });
+    } catch (error) {
+      if (error instanceof TemplateTwinStaticAssetError) {
+        throw new TemplateTwinSourcePrivacyUnsupportedError();
+      }
+      throw error;
+    }
+  }
   return {
     parts,
-    usedApprovedStaticAssetSha256: [...usedApprovedStaticAssetSha256].sort(),
+    staticAssetApprovalBindings: [...staticAssetApprovalBindings].sort(
+      (left, right) => left.sha256.localeCompare(right.sha256),
+    ),
+    auxiliaryPartCount: auxiliary.parts.length,
+    auxiliaryPartManifestSha256: auxiliary.manifestSha256,
   };
 }
 
@@ -183,32 +250,6 @@ function privacyRelevantXmlText(
   return values.join('\n');
 }
 
-function configuredApprovedStaticAssets(practiceId: string): Set<string> {
-  const configured = process.env[APPROVED_ASSET_CONFIG_ENV];
-  if (!configured) return new Set();
-  try {
-    const parsed = JSON.parse(configured) as unknown;
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new Error('configuration must be an object');
-    }
-    const values = (parsed as Record<string, unknown>)[practiceId];
-    if (values === undefined) return new Set();
-    if (
-      !Array.isArray(values) ||
-      values.length > 100 ||
-      values.some(
-        (value) =>
-          typeof value !== 'string' || !/^[a-f0-9]{64}$/.test(value),
-      )
-    ) {
-      throw new Error('practice asset digests are invalid');
-    }
-    return new Set(values);
-  } catch (error) {
-    throw new TemplateTwinPhiScanUnavailableError(error);
-  }
-}
-
 /**
  * Fail-closed privacy gate before an immutable source is stored. The original
  * bytes and extracted text remain in memory only; ModelClient records prompt
@@ -219,11 +260,22 @@ export async function assertTemplateTwinSourcePhiFree(input: {
   practiceId: string;
   userId: string;
   client?: Pick<ModelClient, 'complete'>;
+  staticAssetApprovalResolver?: (
+    practiceId: string,
+    sha256: readonly string[],
+  ) => Promise<readonly TemplateTwinStaticAssetApprovalBinding[]>;
 }): Promise<TemplateTwinSourcePhiScanEvidence> {
-  const approvedStaticAssets = configuredApprovedStaticAssets(input.practiceId);
-  const { parts, usedApprovedStaticAssetSha256 } = scanPartNames(
+  const {
+    parts,
+    staticAssetApprovalBindings,
+    auxiliaryPartCount,
+    auxiliaryPartManifestSha256,
+  } = await scanPartNames(
     input.source,
-    approvedStaticAssets,
+    input.practiceId,
+    input.staticAssetApprovalResolver ??
+      ((practiceId, sha256) =>
+        resolveApprovedTemplateTwinStaticAssets({ practiceId, sha256 })),
   );
   const mainText =
     parts.find((part) => part.partName === 'word/document.xml')
@@ -275,7 +327,9 @@ export async function assertTemplateTwinSourcePhiFree(input: {
     ) {
       throw new TemplateTwinPhiRejectedError();
     }
-    const approvedStaticAssetDigests = [...approvedStaticAssets].sort();
+    const approvedStaticAssetDigests = staticAssetApprovalBindings.map(
+      (binding) => binding.sha256,
+    );
     return {
       profileVersion: 'template-twin-source-phi-safe-alpha-v1',
       provider: 'anthropic',
@@ -286,15 +340,20 @@ export async function assertTemplateTwinSourcePhiFree(input: {
         .update(
           JSON.stringify({
             practiceId: input.practiceId,
-            sha256: approvedStaticAssetDigests,
+            bindings: staticAssetApprovalBindings,
           }),
         )
         .digest('hex'),
       approvedStaticAssetCount: approvedStaticAssetDigests.length,
-      approvedStaticAssetUsedCount: usedApprovedStaticAssetSha256.length,
+      approvedStaticAssetUsedCount: staticAssetApprovalBindings.length,
       approvedStaticAssetUsageSha256: createHash('sha256')
-        .update(JSON.stringify(usedApprovedStaticAssetSha256))
+        .update(JSON.stringify(approvedStaticAssetDigests))
         .digest('hex'),
+      staticAssetApprovalBindings: [...staticAssetApprovalBindings],
+      auxiliaryInspectionProfileVersion:
+        'template-twin-word-auxiliary-safe-v1',
+      auxiliaryPartCount,
+      auxiliaryPartManifestSha256,
     };
   } catch (error) {
     if (error instanceof TemplateTwinPhiRejectedError) throw error;

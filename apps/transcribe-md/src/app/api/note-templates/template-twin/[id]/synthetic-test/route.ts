@@ -51,6 +51,7 @@ export async function POST(
         userId: session.user.id,
         userEmail: session.user.email,
         practiceId: session.user.practiceId,
+        rolloutToken: session.templateTwinRolloutToken,
       },
       ...parsed.data,
     });

@@ -117,6 +117,8 @@ function safeError(error: unknown): { status: number; message: string } {
           ? 400
           : error.code === 'NO_FILLABLE_FIELDS'
             ? 422
+            : error.code === 'ROLLOUT_CHANGED'
+              ? 409
             : 500,
       message: error.message,
     };
@@ -187,6 +189,7 @@ export async function POST(request: Request) {
         userId: session.user.id,
         userEmail: session.user.email,
         practiceId: session.user.practiceId,
+        rolloutToken: session.templateTwinRolloutToken,
       },
       identity: identity.data,
     });

@@ -9,6 +9,7 @@ import type {
 } from "../template-twin/ir";
 import {
   certifiedBindingFingerprintSha256,
+  deriveOrdinaryPlaceholderBinding,
   deriveOoxmlBindingIdentity,
   deriveTableLocation,
   indexBindingXmlPart,
@@ -31,11 +32,11 @@ import {
 } from "./xml";
 
 export const OFFICE_DOCX_BYTE_READBACK_QA_VERSION =
-  "template-twin-office-byte-readback-qa/1.0.0" as const;
+  "template-twin-office-byte-readback-qa/1.2.0" as const;
 export const OFFICE_ROUNDTRIP_QA_CONTRACT_VERSION =
-  "template-twin-office-roundtrip-qa/2.0.0" as const;
+  "template-twin-office-roundtrip-qa/2.2.0" as const;
 export const OFFICE_FIELD_READBACK_QA_CONTRACT_VERSION =
-  "template-twin-office-field-readback-qa/2.0.0" as const;
+  "template-twin-office-field-readback-qa/2.2.0" as const;
 
 export type OfficeQaControlKind =
   | "text_content_control"
@@ -47,7 +48,8 @@ export type OfficeQaControlKind =
   | "legacy_dropdown"
   | "legacy_date"
   | "legacy_checkbox"
-  | "fixed_table_cell";
+  | "fixed_table_cell"
+  | "ordinary_placeholder_text";
 
 export type OfficeCalculatedPresentation =
   | "none"
@@ -56,7 +58,21 @@ export type OfficeCalculatedPresentation =
 export interface OfficeCertifiedBindingExpectation {
   readonly partName: string;
   readonly canonicalPath: string;
-  readonly bindingType: "content_control" | "legacy_form_field" | "table_cell";
+  readonly bindingType:
+    | "content_control"
+    | "legacy_form_field"
+    | "table_cell"
+    | "ordinary_placeholder";
+  readonly bindingProfile?: RendererBinding["bindingProfile"];
+  readonly ordinaryPlaceholder?: RendererBinding["ordinaryPlaceholder"];
+  readonly ordinaryOfficeContext?: {
+    readonly logicalRegionId: string;
+    readonly visiblePrefixLength: number;
+    readonly visibleSuffixLength: number;
+    readonly visiblePrefixSha256: string;
+    readonly visibleSuffixSha256: string;
+    readonly visibleStaticContextSha256: string;
+  };
   readonly ordinal: number;
   readonly certifiedBindingSha256: string;
   readonly nativeIdentity: NativeBindingIdentity;
@@ -183,7 +199,15 @@ interface LocatedField {
   readonly nativeIdentity: NativeBindingIdentity;
   readonly tableLocation: BindingTableLocation;
   readonly actualOccurrences: number;
+  readonly ordinaryOfficeCandidate?: OrdinaryOfficeCandidate;
   ordinal: number;
+}
+
+interface OrdinaryOfficeCandidate {
+  readonly value: string;
+  readonly prefix: string;
+  readonly suffix: string;
+  readonly identitySha256: string;
 }
 
 const SHA256 = /^[a-f0-9]{64}$/;
@@ -302,7 +326,7 @@ export function buildOfficeExpectedValueManifest(
       rendererControlSerializationSha256: read.rawSerializationSha256,
       expectedOccurrences: 1 as const,
       expectedDisposition,
-      certifiedBinding: certifiedExpectation(field, read.controlKind),
+      certifiedBinding: located.expected.certifiedBinding,
     });
   });
   expectedFields.sort((left, right) =>
@@ -366,11 +390,13 @@ export function readOfficeSavedDocxFieldsQa(input: {
     });
 
   const fields = located.map((record) => {
-    const read = readLocatedValue(
-      record.indexedPart.part,
-      record.node,
-      expectedFieldShape(record.expected),
-    );
+    const read = record.ordinaryOfficeCandidate
+      ? readOrdinaryOfficeLocatedValue(record)
+      : readLocatedValue(
+          record.indexedPart.part,
+          record.node,
+          expectedFieldShape(record.expected),
+        );
     const actualValue = valueForDisposition(
       read.value,
       record.expected.expectedDisposition,
@@ -485,7 +511,42 @@ export function deriveOfficeVisibleStaticFromDocxBytesQa(input: {
     const structuralTokens: string[] = [];
     for (const node of packagePart.part.nodes) {
       const marker = markers.get(node);
-      if (marker) structuralTokens.push(marker);
+      if (marker) {
+        structuralTokens.push(marker);
+        const ordinary = partLocated.find(
+          (field) =>
+            field.node === node &&
+            field.expected.certifiedBinding.bindingType ===
+              "ordinary_placeholder",
+        );
+        if (ordinary) {
+          const candidate =
+            ordinary.ordinaryOfficeCandidate ??
+            readOrdinaryOfficeCandidate(
+              ordinary.indexedPart,
+              ordinary.node,
+              ordinary.expected,
+            );
+          if (!candidate) {
+            throw new Error(
+              `Ordinary-placeholder static context is invalid: ${ordinary.expected.fieldId}.`,
+            );
+          }
+          visibleTokens.push(candidate.prefix, candidate.suffix);
+          structuralTokens.push(
+            `ordinary-placeholder-static:${canonicalSha256({
+              logicalRegionId: ordinary.indexedPart.logicalRegionId,
+              tableLocation: ordinary.tableLocation,
+              visiblePrefixSha256: canonicalSha256(candidate.prefix),
+              visibleSuffixSha256: canonicalSha256(candidate.suffix),
+              visibleStaticContextSha256: canonicalSha256({
+                prefix: candidate.prefix,
+                suffix: candidate.suffix,
+              }),
+            })}`,
+          );
+        }
+      }
       if (node.visit.namespaceUri !== WORDPROCESSINGML_NAMESPACE) continue;
       if (node.visit.localName === "t" && !maskedNodes.has(node)) {
         visibleTokens.push(nodeText(node.node));
@@ -600,12 +661,36 @@ function validExpectedField(field: OfficeExpectedFieldValue): boolean {
     SHA256.test(binding.sourceBindingIdentitySha256) &&
     SHA256.test(binding.labelContextSha256) &&
     SHA256.test(binding.logicalFieldLocatorSha256) &&
+    (binding.bindingProfile === undefined ||
+      binding.bindingProfile === "TAB_ONLY_BLANK_TABLE_CELL_V1" ||
+      binding.bindingProfile === "ORDINARY_PLACEHOLDER_TOKEN_V1") &&
+    (binding.bindingType === "ordinary_placeholder"
+      ? Boolean(
+          binding.ordinaryPlaceholder &&
+          binding.ordinaryOfficeContext &&
+          binding.ordinaryOfficeContext.logicalRegionId.length > 0 &&
+          Number.isSafeInteger(
+            binding.ordinaryOfficeContext.visiblePrefixLength,
+          ) &&
+          binding.ordinaryOfficeContext.visiblePrefixLength >= 0 &&
+          Number.isSafeInteger(
+            binding.ordinaryOfficeContext.visibleSuffixLength,
+          ) &&
+          binding.ordinaryOfficeContext.visibleSuffixLength >= 0 &&
+          SHA256.test(binding.ordinaryOfficeContext.visiblePrefixSha256) &&
+          SHA256.test(binding.ordinaryOfficeContext.visibleSuffixSha256) &&
+          SHA256.test(binding.ordinaryOfficeContext.visibleStaticContextSha256),
+        )
+      : binding.ordinaryPlaceholder === undefined &&
+        binding.ordinaryOfficeContext === undefined) &&
     binding.certifiedBindingSha256 ===
       certifiedBindingFingerprintSha256({
         fieldId: field.fieldId,
         partName: binding.partName,
         canonicalPath: binding.canonicalPath,
         bindingType: binding.bindingType,
+        bindingProfile: binding.bindingProfile,
+        ordinaryPlaceholder: binding.ordinaryPlaceholder,
         bindingOrdinal: binding.ordinal,
         nativeIdentity: binding.nativeIdentity,
         sourceControlSha256: binding.sourceControlSha256,
@@ -658,6 +743,10 @@ function validActualField(field: OfficeActualFieldReadback): boolean {
 function certifiedExpectation(
   field: TemplateField,
   controlKind: OfficeQaControlKind,
+  located?: {
+    indexedPart: IndexedPackagePart;
+    node: IndexedBindingNode;
+  },
 ): OfficeCertifiedBindingExpectation {
   const binding = field.rendererBinding;
   const nativeIdentity = nativeIdentityFromRendererBinding(binding);
@@ -666,6 +755,21 @@ function certifiedExpectation(
     partName: binding.partName,
     canonicalPath: binding.canonicalPath,
     bindingType: supportedBindingType(binding.bindingType),
+    ...(binding.bindingProfile === undefined
+      ? {}
+      : { bindingProfile: binding.bindingProfile }),
+    ...(binding.ordinaryPlaceholder === undefined
+      ? {}
+      : { ordinaryPlaceholder: binding.ordinaryPlaceholder }),
+    ...(binding.bindingType === "ordinary_placeholder" && located
+      ? {
+          ordinaryOfficeContext: deriveOrdinaryOfficeContext(
+            located.indexedPart,
+            located.node,
+            field,
+          ),
+        }
+      : {}),
     ordinal: binding.ordinal,
     certifiedBindingSha256: binding.certifiedBindingSha256,
     nativeIdentity,
@@ -697,6 +801,8 @@ function assertCertifiedBinding(field: TemplateField): void {
       partName: binding.partName,
       canonicalPath: binding.canonicalPath,
       bindingType,
+      bindingProfile: binding.bindingProfile,
+      ordinaryPlaceholder: binding.ordinaryPlaceholder,
       bindingOrdinal: binding.ordinal,
       nativeIdentity,
       sourceControlSha256: binding.sourceControlSha256,
@@ -740,7 +846,7 @@ function supportedBindingType(
   bindingType: RendererBinding["bindingType"],
 ): OfficeCertifiedBindingExpectation["bindingType"] {
   if (bindingType === "repeating_row") {
-    throw new Error("Repeating rows are not eligible for Office QA.");
+    throw new Error("This binding is not yet eligible for Office QA.");
   }
   return bindingType;
 }
@@ -750,7 +856,8 @@ function dispositionFor(
   resolution: FieldResolution,
 ): OfficeExpectedFieldValue["expectedDisposition"] {
   if (resolution.value !== null) return "rendered";
-  return field.kind === "checkbox"
+  return field.kind === "checkbox" ||
+    field.rendererBinding.bindingType === "ordinary_placeholder"
     ? "preserved_unresolved"
     : "unresolved_blank";
 }
@@ -864,6 +971,99 @@ function parseOnOffLexical(value: string | undefined): boolean {
   throw new Error("Invalid WordprocessingML on/off lexical value.");
 }
 
+function deriveOrdinaryOfficeContext(
+  indexedPart: IndexedPackagePart,
+  paragraph: IndexedBindingNode,
+  field: TemplateField,
+): NonNullable<OfficeCertifiedBindingExpectation["ordinaryOfficeContext"]> {
+  const binding = field.rendererBinding.ordinaryPlaceholder;
+  if (!binding || !isWordElement(paragraph, "p")) {
+    throw new Error("Invalid ordinary-placeholder Office QA baseline.");
+  }
+  const strict = deriveOrdinaryPlaceholderBinding(
+    indexedPart.part,
+    paragraph,
+    binding,
+    "output",
+  );
+  if (!strict || strict.mutableValue.length === 0) {
+    throw new Error("Ordinary-placeholder Office QA baseline is ambiguous.");
+  }
+  const visible = visibleParagraphText(indexedPart.part, paragraph);
+  const start = visible.indexOf(strict.mutableValue);
+  if (
+    start < 0 ||
+    visible.indexOf(strict.mutableValue, start + strict.mutableValue.length) >=
+      0
+  ) {
+    throw new Error("Ordinary-placeholder Office QA baseline is ambiguous.");
+  }
+  const prefix = visible.slice(0, start);
+  const suffix = visible.slice(start + strict.mutableValue.length);
+  return Object.freeze({
+    logicalRegionId: indexedPart.logicalRegionId,
+    visiblePrefixLength: prefix.length,
+    visibleSuffixLength: suffix.length,
+    visiblePrefixSha256: canonicalSha256(prefix),
+    visibleSuffixSha256: canonicalSha256(suffix),
+    visibleStaticContextSha256: canonicalSha256({ prefix, suffix }),
+  });
+}
+
+function readOrdinaryOfficeCandidate(
+  indexedPart: IndexedPackagePart,
+  paragraph: IndexedBindingNode,
+  expected: OfficeExpectedFieldValue,
+): OrdinaryOfficeCandidate | null {
+  const context = expected.certifiedBinding.ordinaryOfficeContext;
+  if (
+    !context ||
+    indexedPart.logicalRegionId !== context.logicalRegionId ||
+    !isWordElement(paragraph, "p")
+  ) {
+    return null;
+  }
+  const visible = visibleParagraphText(indexedPart.part, paragraph);
+  if (
+    visible.length <
+    context.visiblePrefixLength + context.visibleSuffixLength
+  ) {
+    return null;
+  }
+  const prefix = visible.slice(0, context.visiblePrefixLength);
+  const suffix = context.visibleSuffixLength
+    ? visible.slice(-context.visibleSuffixLength)
+    : "";
+  if (
+    canonicalSha256(prefix) !== context.visiblePrefixSha256 ||
+    canonicalSha256(suffix) !== context.visibleSuffixSha256 ||
+    canonicalSha256({ prefix, suffix }) !== context.visibleStaticContextSha256
+  ) {
+    return null;
+  }
+  const value = visible.slice(
+    context.visiblePrefixLength,
+    context.visibleSuffixLength
+      ? visible.length - context.visibleSuffixLength
+      : visible.length,
+  );
+  return {
+    value,
+    prefix,
+    suffix,
+    identitySha256: canonicalSha256({
+      qaVersion: OFFICE_DOCX_BYTE_READBACK_QA_VERSION,
+      bindingType: "ordinary_placeholder",
+      controlKind: "ordinary_placeholder_text",
+      logicalRegionId: indexedPart.logicalRegionId,
+      tableLocation: deriveTableLocation(indexedPart.part, paragraph),
+      visiblePrefixSha256: canonicalSha256(prefix),
+      visibleSuffixSha256: canonicalSha256(suffix),
+      visibleStaticContextSha256: canonicalSha256({ prefix, suffix }),
+    }),
+  };
+}
+
 function locateAtCertifiedRendererPath(
   parts: readonly IndexedPackagePart[],
   field: TemplateField,
@@ -882,9 +1082,14 @@ function locateAtCertifiedRendererPath(
     indexedPart.part,
     node,
     bindingType,
+    field.rendererBinding.ordinaryPlaceholder,
+    "output",
   );
   if (!identity) throw new Error(`Invalid renderer binding ${field.fieldId}.`);
-  const controlKind = controlKindFor(indexedPart.part, node, field.kind);
+  const controlKind =
+    bindingType === "ordinary_placeholder"
+      ? "ordinary_placeholder_text"
+      : controlKindFor(indexedPart.part, node, field.kind);
   return {
     expected: {
       fieldId: field.fieldId,
@@ -896,7 +1101,10 @@ function locateAtCertifiedRendererPath(
       rendererControlSerializationSha256: "",
       expectedOccurrences: 1,
       expectedDisposition: "rendered",
-      certifiedBinding: certifiedExpectation(field, controlKind),
+      certifiedBinding: certifiedExpectation(field, controlKind, {
+        indexedPart,
+        node,
+      }),
     },
     indexedPart,
     node,
@@ -914,6 +1122,71 @@ function locateLogicalOutputBindings(
 ): Omit<LocatedField, "ordinal">[] {
   const binding = expected.certifiedBinding;
   const matches: Omit<LocatedField, "ordinal">[] = [];
+  if (binding.bindingType === "ordinary_placeholder") {
+    for (const indexedPart of parts) {
+      for (const node of indexedPart.part.nodes) {
+        if (!isWordElement(node, "p")) continue;
+        const candidate = readOrdinaryOfficeCandidate(
+          indexedPart,
+          node,
+          expected,
+        );
+        if (!candidate) continue;
+        const tableLocation = deriveTableLocation(indexedPart.part, node);
+        if (
+          canonicalSha256(tableLocation) !==
+          canonicalSha256(binding.tableLocation)
+        ) {
+          continue;
+        }
+        const valueMatches =
+          expected.expectedDisposition === "rendered"
+            ? hashOfficeQaSemanticValue(expected.fieldId, candidate.value) ===
+              expected.expectedValueSha256
+            : Boolean(
+                binding.ordinaryPlaceholder &&
+                candidate.value.length ===
+                  binding.ordinaryPlaceholder.tokenTextLength &&
+                canonicalSha256(candidate.value) ===
+                  binding.ordinaryPlaceholder.tokenTextSha256,
+              );
+        if (!valueMatches) continue;
+        const strictIdentity =
+          indexedPart.partName === binding.partName &&
+          node.canonicalPath === binding.canonicalPath &&
+          binding.ordinaryPlaceholder
+            ? deriveOoxmlBindingIdentity(
+                indexedPart.part,
+                node,
+                "ordinary_placeholder",
+                binding.ordinaryPlaceholder,
+                "output",
+              )
+            : null;
+        matches.push({
+          expected,
+          indexedPart,
+          node,
+          bindingIdentitySha256:
+            strictIdentity?.identitySha256 ?? candidate.identitySha256,
+          nativeIdentity: {
+            sdtId: null,
+            tag: null,
+            alias: null,
+            legacyName: null,
+          },
+          tableLocation,
+          actualOccurrences: 0,
+          ordinaryOfficeCandidate: candidate,
+        });
+      }
+    }
+    const occurrences = matches.length;
+    return matches.map((match) => ({
+      ...match,
+      actualOccurrences: occurrences,
+    }));
+  }
   for (const indexedPart of parts) {
     for (const node of indexedPart.part.nodes) {
       const identity = deriveOoxmlBindingIdentity(
@@ -1037,6 +1310,14 @@ function expectedFieldShape(expected: OfficeExpectedFieldValue): TemplateField {
     rendererBinding: {
       partName: expected.certifiedBinding.partName,
       bindingType: expected.certifiedBinding.bindingType,
+      ...(expected.certifiedBinding.bindingProfile === undefined
+        ? {}
+        : { bindingProfile: expected.certifiedBinding.bindingProfile }),
+      ...(expected.certifiedBinding.ordinaryPlaceholder === undefined
+        ? {}
+        : {
+            ordinaryPlaceholder: expected.certifiedBinding.ordinaryPlaceholder,
+          }),
       path: expected.certifiedBinding.canonicalPath,
       canonicalPath: expected.certifiedBinding.canonicalPath,
       ordinal: expected.certifiedBinding.ordinal,
@@ -1078,6 +1359,40 @@ function readLocatedValue(
   )[];
 } {
   const bindingType = field.rendererBinding.bindingType;
+  if (bindingType === "ordinary_placeholder") {
+    const binding = field.rendererBinding.ordinaryPlaceholder;
+    if (!binding || !isWordElement(node, "p")) {
+      throw new Error("Malformed ordinary-placeholder binding.");
+    }
+    const derived = deriveOrdinaryPlaceholderBinding(
+      part,
+      node,
+      binding,
+      "output",
+    );
+    if (!derived) {
+      throw new Error("Ordinary-placeholder output binding is invalid.");
+    }
+    const visible = visibleParagraphText(part, node);
+    const start = visible.indexOf(derived.mutableValue);
+    if (
+      start < 0 ||
+      visible.indexOf(
+        derived.mutableValue,
+        start + derived.mutableValue.length,
+      ) >= 0
+    ) {
+      throw new Error("Ordinary-placeholder output value is ambiguous.");
+    }
+    const prefix = visible.slice(0, start);
+    const suffix = visible.slice(start + derived.mutableValue.length);
+    return {
+      controlKind: "ordinary_placeholder_text",
+      value: derived.mutableValue,
+      controlState: ordinaryOfficeControlState(prefix, suffix),
+      rawSerializationSha256: canonicalSha256(node.node),
+    };
+  }
   if (bindingType === "content_control") {
     const properties = directWordChild(part, node, "sdtPr");
     const content = directWordChild(part, node, "sdtContent");
@@ -1447,21 +1762,51 @@ function readLocatedValue(
   }
 
   if (bindingType === "table_cell") {
+    const contentNodes = visibleTableCellContentNodes(part, node);
     return {
       controlKind: "fixed_table_cell",
-      value: wordText(part, node),
+      value: wordTextFromNodes(contentNodes),
       controlState: {
         tableLocation: deriveTableLocation(part, node),
         paragraphCount: descendantsWord(part, node, "p").length,
-        tabCount: descendantsWord(part, node, "tab").length,
-        breakCount:
-          descendantsWord(part, node, "br").length +
-          descendantsWord(part, node, "cr").length,
+        contentTabCount: contentNodes.filter(
+          (candidate) => candidate.visit.localName === "tab",
+        ).length,
+        breakCount: contentNodes.filter((candidate) =>
+          ["br", "cr"].includes(candidate.visit.localName),
+        ).length,
       },
       rawSerializationSha256: canonicalSha256(node.node),
     };
   }
   throw new Error("Unsupported Office QA binding.");
+}
+
+function readOrdinaryOfficeLocatedValue(
+  record: LocatedField,
+): ReturnType<typeof readLocatedValue> {
+  const candidate = record.ordinaryOfficeCandidate;
+  if (!candidate) {
+    throw new Error("Ordinary-placeholder Office candidate is missing.");
+  }
+  return {
+    controlKind: "ordinary_placeholder_text",
+    value: candidate.value,
+    controlState: ordinaryOfficeControlState(
+      candidate.prefix,
+      candidate.suffix,
+    ),
+    rawSerializationSha256: canonicalSha256(record.node.node),
+  };
+}
+
+function ordinaryOfficeControlState(prefix: string, suffix: string): unknown {
+  return {
+    bindingProfile: "ORDINARY_PLACEHOLDER_TOKEN_V1",
+    visiblePrefixSha256: canonicalSha256(prefix),
+    visibleSuffixSha256: canonicalSha256(suffix),
+    visibleStaticContextSha256: canonicalSha256({ prefix, suffix }),
+  };
 }
 
 /**
@@ -1687,8 +2032,78 @@ function namespacedAttribute(
 }
 
 function wordText(part: IndexedBindingPart, node: IndexedBindingNode): string {
+  return wordTextFromNodes([node, ...descendantsLocal(part, node, "")]);
+}
+
+/**
+ * Returns physician-visible text in one paragraph while excluding formatting,
+ * field instructions, tracked-deleted content, and non-Word namespaces.
+ * Ordinary-placeholder certification already rejects those structures; this
+ * second filter keeps Office QA from treating hidden/properties text as proof.
+ */
+function visibleParagraphText(
+  part: IndexedBindingPart,
+  paragraph: IndexedBindingNode,
+): string {
+  if (!isWordElement(paragraph, "p")) {
+    throw new Error("Visible paragraph readback requires w:p.");
+  }
+  const nodes = [paragraph, ...descendantsLocal(part, paragraph, "")].filter(
+    (candidate) => {
+      if (candidate.visit.namespaceUri !== WORDPROCESSINGML_NAMESPACE) {
+        return false;
+      }
+      let ancestor = candidate.parent;
+      while (ancestor && ancestor !== paragraph) {
+        if (
+          ancestor.visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+          ["pPr", "rPr", "del", "moveFrom", "instrText", "fldSimple"].includes(
+            ancestor.visit.localName,
+          )
+        ) {
+          return false;
+        }
+        ancestor = ancestor.parent;
+      }
+      return !["delText", "instrText"].includes(candidate.visit.localName);
+    },
+  );
+  return wordTextFromNodes(nodes);
+}
+
+/**
+ * Returns only visible table-cell content. Word stores paragraph tab-stop
+ * definitions as `w:pPr/w:tabs/w:tab`; those nodes affect layout but are not a
+ * literal tab in the physician-visible field value. Content-level `w:tab`
+ * nodes remain visible and are deliberately retained.
+ */
+function visibleTableCellContentNodes(
+  part: IndexedBindingPart,
+  cell: IndexedBindingNode,
+): IndexedBindingNode[] {
+  return [cell, ...descendantsLocal(part, cell, "")].filter((candidate) => {
+    if (candidate.visit.namespaceUri !== WORDPROCESSINGML_NAMESPACE) {
+      return false;
+    }
+    let ancestor = candidate.parent;
+    while (ancestor && ancestor !== cell) {
+      if (
+        ancestor.visit.namespaceUri === WORDPROCESSINGML_NAMESPACE &&
+        ["pPr", "rPr", "tcPr", "trPr", "tblPr"].includes(
+          ancestor.visit.localName,
+        )
+      ) {
+        return false;
+      }
+      ancestor = ancestor.parent;
+    }
+    return true;
+  });
+}
+
+function wordTextFromNodes(nodes: readonly IndexedBindingNode[]): string {
   const output: string[] = [];
-  for (const candidate of [node, ...descendantsLocal(part, node, "")]) {
+  for (const candidate of nodes) {
     if (candidate.visit.namespaceUri !== WORDPROCESSINGML_NAMESPACE) continue;
     if (candidate.visit.localName === "t")
       output.push(nodeText(candidate.node));
@@ -1855,7 +2270,10 @@ function normalizedStaticStructureToken(
       left: wordAttribute(node, "left") ?? null,
       header: wordAttribute(node, "header") ?? null,
       footer: wordAttribute(node, "footer") ?? null,
-      gutter: wordAttribute(node, "gutter") ?? null,
+      // Word/LibreOffice may materialize the semantically default zero gutter
+      // during save. This QA-only normalizer treats absent and explicit zero as
+      // equivalent; strict pre-delivery verification remains path-exact.
+      gutter: wordAttribute(node, "gutter") ?? "0",
     })}`;
   }
   if (local === "gridSpan" || local === "vMerge") {

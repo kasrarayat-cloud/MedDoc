@@ -6,6 +6,18 @@ import { toast } from "sonner";
 
 import type { SemanticMapping } from "@/lib/template-twin/ir";
 import type {
+  CustomScalarDataType,
+  TemplateFieldSpecificationContent,
+} from "@/lib/template-twin/custom-concepts/specification";
+import {
+  TEMPLATE_TWIN_CUSTOM_OPTION_LIMIT,
+  TEMPLATE_TWIN_CUSTOM_UNIT_LIMIT,
+} from "@/lib/template-twin/custom-concepts/specification";
+import {
+  defaultCustomAmbiguityEvidence,
+  synchronizeCustomSyntheticExamples,
+} from "@/lib/template-twin/custom-concepts/example-authoring";
+import type {
   TemplateTwinWorkspace,
   TemplateTwinWorkspaceField,
 } from "@/lib/template-twin/client-types";
@@ -17,6 +29,15 @@ import {
 import styles from "./template-twin-certification.module.css";
 
 type FieldFilter = "all" | "attention";
+
+type FieldIntentDraft =
+  | { intentKind: "unresolved" }
+  | { intentKind: "supported_concept"; supportedConcept: string }
+  | { intentKind: "static"; reason: string }
+  | {
+      intentKind: "custom_concept";
+      customSpec: TemplateFieldSpecificationContent;
+    };
 
 const EXPECTED_TYPES: SemanticMapping["expectedDataType"][] = [
   "text",
@@ -35,6 +56,134 @@ const SYNTHETIC_STARTER = [
   "They explicitly deny medication allergies.",
   "A synthetic measurement is 12 mm. No medication was prescribed.",
 ].join(" ");
+
+function contentOnlyCustomSpec(
+  item: TemplateTwinWorkspaceField,
+): TemplateFieldSpecificationContent | null {
+  const spec = item.intent.customSpec;
+  if (!spec) return null;
+  const { certification, ...content } = spec;
+  void certification;
+  return content;
+}
+
+function defaultCustomSpec(
+  item: TemplateTwinWorkspaceField,
+): TemplateFieldSpecificationContent | null {
+  const identity = item.customConceptScaffold;
+  if (!identity) return null;
+  const dataType: CustomScalarDataType =
+    item.field.kind === "single_select"
+      ? "single_select"
+      : item.field.kind === "checkbox"
+        ? "boolean"
+        : item.field.kind === "date"
+          ? "date"
+          : item.field.kind === "number"
+            ? "number"
+            : item.field.kind === "measurement"
+              ? "measurement"
+              : "narrative_text";
+  const syntheticValue: string | number | boolean =
+    dataType === "boolean"
+      ? true
+      : dataType === "number" || dataType === "measurement"
+        ? 1
+        : dataType === "single_select"
+          ? (item.field.allowedOptions[0]?.value ?? "synthetic")
+          : dataType === "date"
+            ? "2099-01-15"
+            : "Synthetic supported value";
+  const syntheticUnit = dataType === "measurement" ? "mm" : null;
+  return synchronizeCustomSyntheticExamples({
+    specificationVersion: "template-twin-field-specification/1.1.0",
+    ...identity,
+    physicianName: item.field.originalLabel.slice(0, 160),
+    physicianDescription: "",
+    approvedEvidenceCues: [item.field.originalLabel.slice(0, 120)],
+    dataType,
+    allowedOptions:
+      dataType === "single_select"
+        ? item.field.allowedOptions.map((option) => ({
+            ordinal: option.ordinal,
+            value: option.value,
+            displayText: option.displayText,
+          }))
+        : [],
+    allowedUnits: dataType === "measurement" ? ["mm"] : [],
+    permittedUnitConversions: [],
+    allowedTemporalities: ["current"],
+    allowedLateralities: ["not_applicable"],
+    polarityPolicy: {
+      allowExplicitDenial: false,
+      exactDeniedOutput: null,
+    },
+    required: item.mapping.required,
+    unknownPolicy: item.mapping.unknownPolicy,
+    maximumLength: dataType === "narrative_text" ? 500 : null,
+    numericRange: null,
+    evidenceRequirements: {
+      minimumAnchors: 1,
+      acceptedEvidenceQualities: ["direct"],
+    },
+    positiveSyntheticExamples: [
+      {
+        exampleId: "positive-1",
+        syntheticEvidence: `Synthetic example: ${item.field.originalLabel} is ${String(syntheticValue)}${syntheticUnit ? ` ${syntheticUnit}` : ""}.`,
+        expectedValue: syntheticValue,
+        expectedUnit: syntheticUnit,
+      },
+    ],
+    negativeSyntheticExamples: [
+      {
+        exampleId: "negative-1",
+        syntheticEvidence:
+          "Synthetic example: an unrelated encounter detail is documented.",
+        prohibitedValue: null,
+        reason: "The certified evidence cue is absent.",
+      },
+    ],
+    ambiguitySyntheticExamples: [],
+  });
+}
+
+function intentDraftFor(item: TemplateTwinWorkspaceField): FieldIntentDraft {
+  switch (item.intent.intentKind) {
+    case "supported_concept":
+      return {
+        intentKind: "supported_concept",
+        supportedConcept:
+          item.intent.supportedConcept ?? item.mapping.clinicalConcept ?? "",
+      };
+    case "static":
+      return { intentKind: "static", reason: item.intent.reason ?? "" };
+    case "custom_concept": {
+      const customSpec = contentOnlyCustomSpec(item) ?? defaultCustomSpec(item);
+      return customSpec
+        ? { intentKind: "custom_concept", customSpec }
+        : { intentKind: "unresolved" };
+    }
+    case "unresolved":
+      return { intentKind: "unresolved" };
+  }
+}
+
+function intentDraftsFor(fields: TemplateTwinWorkspaceField[]) {
+  return Object.fromEntries(
+    fields
+      .filter(
+        (item) =>
+          item.field.rendererBinding.bindingType === "ordinary_placeholder",
+      )
+      .map((item) => [item.field.fieldId, intentDraftFor(item)]),
+  ) as Record<string, FieldIntentDraft>;
+}
+
+function expectedTypeForCustom(
+  dataType: CustomScalarDataType,
+): SemanticMapping["expectedDataType"] {
+  return dataType === "narrative_text" ? "text" : dataType;
+}
 
 function titleCase(value: string): string {
   return value
@@ -71,10 +220,19 @@ const UNKNOWN_LABELS = {
   requires_input: "Require physician review",
 } as const;
 
-function fieldStatus(item: TemplateTwinWorkspaceField): {
+function fieldStatus(
+  item: TemplateTwinWorkspaceField,
+  intentDraft?: FieldIntentDraft,
+): {
   label: string;
   tone: "safe" | "review" | "block";
 } {
+  if (
+    item.field.rendererBinding.bindingType === "ordinary_placeholder" &&
+    (!intentDraft || intentDraft.intentKind === "unresolved")
+  ) {
+    return { label: "Needs intent", tone: "review" };
+  }
   if (item.mapping.status === "certified") {
     return { label: "Certified", tone: "safe" };
   }
@@ -90,8 +248,14 @@ function fieldStatus(item: TemplateTwinWorkspaceField): {
   return { label: "Recognized", tone: "safe" };
 }
 
-function StatusPill({ item }: { item: TemplateTwinWorkspaceField }) {
-  const status = fieldStatus(item);
+function StatusPill({
+  item,
+  intentDraft,
+}: {
+  item: TemplateTwinWorkspaceField;
+  intentDraft?: FieldIntentDraft;
+}) {
+  const status = fieldStatus(item, intentDraft);
   return (
     <span className={styles.status} data-tone={status.tone}>
       {status.label}
@@ -107,6 +271,9 @@ export function TemplateTwinCertificationWorkspace({
   const router = useRouter();
   const [workspace, setWorkspace] = useState(initial);
   const [fields, setFields] = useState(initial.fields);
+  const [intentDrafts, setIntentDrafts] = useState(() =>
+    intentDraftsFor(initial.fields),
+  );
   const [selectedId, setSelectedId] = useState(
     initial.fields.find((item) => item.mapping.status !== "certified")?.field
       .fieldId ??
@@ -115,7 +282,9 @@ export function TemplateTwinCertificationWorkspace({
   );
   const [filter, setFilter] = useState<FieldFilter>("all");
   const [dirty, setDirty] = useState(false);
-  const [busy, setBusy] = useState<"save" | "test" | "certify" | null>(null);
+  const [busy, setBusy] = useState<
+    "save" | "test" | "custom-examples" | "ack-custom-examples" | "certify" | null
+  >(null);
   const [announcement, setAnnouncement] = useState("");
   const [syntheticText, setSyntheticText] = useState(SYNTHETIC_STARTER);
   const [ackStructure, setAckStructure] = useState(false);
@@ -146,11 +315,18 @@ export function TemplateTwinCertificationWorkspace({
     () =>
       filter === "all"
         ? fields
-        : fields.filter((item) => fieldStatus(item).tone !== "safe"),
-    [fields, filter],
+        : fields.filter(
+            (item) =>
+              fieldStatus(item, intentDrafts[item.field.fieldId]).tone !==
+              "safe",
+          ),
+    [fields, filter, intentDrafts],
   );
   const confirmedCount = fields.filter(
-    (item) => item.mapping.status === "certified",
+    (item) =>
+      item.mapping.status === "certified" &&
+      (item.field.rendererBinding.bindingType !== "ordinary_placeholder" ||
+        intentDrafts[item.field.fieldId]?.intentKind !== "unresolved"),
   ).length;
   const allConfirmed = fields.length > 0 && confirmedCount === fields.length;
   const testMatches = Boolean(
@@ -184,6 +360,11 @@ export function TemplateTwinCertificationWorkspace({
   const waiversReady = waivableFields.every(
     (item) => (waiverReasons[item.field.fieldId] ?? "").trim().length >= 10,
   );
+  const hasCustomConcepts = fields.some(
+    (item) => item.intent.intentKind === "custom_concept",
+  );
+  const customExamplesReady =
+    !hasCustomConcepts || workspace.customExampleCoverage?.ready === true;
   const canCertify =
     workspace.canEdit &&
     !dirty &&
@@ -192,6 +373,7 @@ export function TemplateTwinCertificationWorkspace({
     !hasBlockingUnsupported &&
     unexercisedBlockingFields.length === 0 &&
     waiversReady &&
+    customExamplesReady &&
     ackStructure &&
     ackTest &&
     !busy;
@@ -211,6 +393,17 @@ export function TemplateTwinCertificationWorkspace({
     setAnnouncement("Mapping changed. Save the draft before running a test.");
   }
 
+  function updateIntent(fieldId: string, intent: FieldIntentDraft) {
+    setIntentDrafts((current) => ({ ...current, [fieldId]: intent }));
+    setDirty(true);
+    setAckStructure(false);
+    setAckTest(false);
+    setWaiverReasons({});
+    setAnnouncement(
+      "Field intent changed. Save this version before running a test.",
+    );
+  }
+
   async function saveMappings(): Promise<boolean> {
     if (!workspace.canEdit) return true;
     setBusy("save");
@@ -227,7 +420,20 @@ export function TemplateTwinCertificationWorkspace({
           },
           body: JSON.stringify({
             expectedMappingsSha256: workspace.mappingsSha256,
+            expectedFieldIntentsSha256: workspace.fieldIntentsSha256,
             mappings: fields.map((item) => item.mapping),
+            fieldIntents: fields.flatMap((item) => {
+              if (
+                item.field.rendererBinding.bindingType !==
+                "ordinary_placeholder"
+              ) {
+                return [];
+              }
+              const intent = intentDrafts[item.field.fieldId] ?? {
+                intentKind: "unresolved" as const,
+              };
+              return [{ fieldId: item.field.fieldId, ...intent }];
+            }),
           }),
         },
       );
@@ -246,6 +452,7 @@ export function TemplateTwinCertificationWorkspace({
       }
       setWorkspace(payload.workspace);
       setFields(payload.workspace.fields);
+      setIntentDrafts(intentDraftsFor(payload.workspace.fields));
       setDirty(false);
       setAckStructure(false);
       setAckTest(false);
@@ -284,6 +491,7 @@ export function TemplateTwinCertificationWorkspace({
           },
           body: JSON.stringify({
             expectedMappingsSha256: workspace.mappingsSha256,
+            expectedFieldIntentsSha256: workspace.fieldIntentsSha256,
             encounterText: syntheticText,
           }),
         },
@@ -303,6 +511,7 @@ export function TemplateTwinCertificationWorkspace({
       }
       setWorkspace(payload.workspace);
       setFields(payload.workspace.fields);
+      setIntentDrafts(intentDraftsFor(payload.workspace.fields));
       setAckStructure(false);
       setAckTest(false);
       setWaiverReasons({});
@@ -396,6 +605,10 @@ export function TemplateTwinCertificationWorkspace({
         ),
       );
       form.append("expectedMappingsSha256", workspace.mappingsSha256);
+      form.append(
+        "expectedFieldIntentsSha256",
+        workspace.fieldIntentsSha256,
+      );
       const response = await fetch(
         `/api/note-templates/template-twin/${encodeURIComponent(workspace.template.id)}/synthetic-test-voice`,
         {
@@ -420,6 +633,7 @@ export function TemplateTwinCertificationWorkspace({
       }
       setWorkspace(payload.workspace);
       setFields(payload.workspace.fields);
+      setIntentDrafts(intentDraftsFor(payload.workspace.fields));
       setAckStructure(false);
       setAckTest(false);
       setWaiverReasons({});
@@ -431,6 +645,90 @@ export function TemplateTwinCertificationWorkspace({
       toast.error("Synthetic voice test did not finish", {
         description:
           "No template was activated. Check your connection and try again.",
+      });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function runCustomExamples() {
+    setBusy("custom-examples");
+    setAnnouncement("Running every custom-field certification example.");
+    try {
+      const response = await fetch(
+        `/api/note-templates/template-twin/${encodeURIComponent(workspace.template.id)}/custom-examples`,
+        {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ action: "run" }),
+        },
+      );
+      const payload = (await response.json().catch(() => null)) as
+        | { ok: true; coverage: NonNullable<TemplateTwinWorkspace["customExampleCoverage"]> }
+        | { ok: false; error: string }
+        | null;
+      if (!response.ok || !payload?.ok) {
+        toast.error("Custom-field examples did not pass", {
+          description:
+            payload && !payload.ok
+              ? payload.error
+              : "No example review was recorded.",
+        });
+        return;
+      }
+      setWorkspace((current) => ({
+        ...current,
+        customExampleCoverage: payload.coverage,
+      }));
+      setAckStructure(false);
+      setAckTest(false);
+      setAnnouncement(
+        `${payload.coverage.passedCount} of ${payload.coverage.requiredCount} custom-field examples passed. Review and acknowledge the results.`,
+      );
+    } catch {
+      toast.error("Custom-field examples did not finish", {
+        description: "No example review was recorded. Check your connection and try again.",
+      });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function acknowledgeCustomExamples() {
+    const batchId = workspace.customExampleCoverage?.latestBatchId;
+    if (!batchId) return;
+    setBusy("ack-custom-examples");
+    try {
+      const response = await fetch(
+        `/api/note-templates/template-twin/${encodeURIComponent(workspace.template.id)}/custom-examples`,
+        {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ action: "acknowledge", batchId }),
+        },
+      );
+      const payload = (await response.json().catch(() => null)) as
+        | { ok: true; coverage: NonNullable<TemplateTwinWorkspace["customExampleCoverage"]> }
+        | { ok: false; error: string }
+        | null;
+      if (!response.ok || !payload?.ok) {
+        toast.error("Example review was not recorded", {
+          description:
+            payload && !payload.ok ? payload.error : "Reload and try again.",
+        });
+        return;
+      }
+      setWorkspace((current) => ({
+        ...current,
+        customExampleCoverage: payload.coverage,
+      }));
+      setAnnouncement("Every current custom-field example is passed and physician-reviewed.");
+      toast.success("Custom-field examples reviewed");
+    } catch {
+      toast.error("Example review was not recorded", {
+        description: "Check your connection and try again.",
       });
     } finally {
       setBusy(null);
@@ -455,6 +753,7 @@ export function TemplateTwinCertificationWorkspace({
           },
           body: JSON.stringify({
             expectedMappingsSha256: workspace.mappingsSha256,
+            expectedFieldIntentsSha256: workspace.fieldIntentsSha256,
             expectedSyntheticTestProvenanceSha256:
               workspace.latestSyntheticTest!.provenanceSha256,
             acknowledgeStructure: true,
@@ -481,6 +780,7 @@ export function TemplateTwinCertificationWorkspace({
       }
       setWorkspace(payload.workspace);
       setFields(payload.workspace.fields);
+      setIntentDrafts(intentDraftsFor(payload.workspace.fields));
       setAnnouncement("Template version certified and activated.");
       toast.success("Original Word template activated");
       router.refresh();
@@ -598,7 +898,10 @@ export function TemplateTwinCertificationWorkspace({
                     {item.field.displayOrder + 1}
                   </span>
                 </span>
-                <StatusPill item={item} />
+                <StatusPill
+                  item={item}
+                  intentDraft={intentDrafts[item.field.fieldId]}
+                />
               </button>
             ))}
             {visibleFields.length === 0 && (
@@ -619,8 +922,16 @@ export function TemplateTwinCertificationWorkspace({
                 item={selected}
                 canEdit={workspace.canEdit}
                 busy={busy !== null}
+                intentDraft={
+                  intentDrafts[selected.field.fieldId] ?? {
+                    intentKind: "unresolved",
+                  }
+                }
                 onChange={(patch) =>
                   updateMapping(selected.field.fieldId, patch)
+                }
+                onIntentChange={(intent) =>
+                  updateIntent(selected.field.fieldId, intent)
                 }
               />
             ) : (
@@ -680,6 +991,95 @@ export function TemplateTwinCertificationWorkspace({
                 </div>
               )}
             </div>
+
+            {hasCustomConcepts && (
+              <div className={styles.section}>
+                <h2 className={styles.sectionTitle}>Custom-field safety examples</h2>
+                <div className={styles.callout}>
+                  QuillMD runs every positive, negative, and unclear synthetic
+                  example you approved through the same extractor used for
+                  typed and voice visits. Activation stays blocked until every
+                  current example passes and you review the results.
+                </div>
+                <div className={styles.testStatus} style={{ marginTop: 12 }}>
+                  <span>
+                    {workspace.customExampleCoverage
+                      ? `${workspace.customExampleCoverage.passedCount}/${workspace.customExampleCoverage.requiredCount} passed · ${workspace.customExampleCoverage.acknowledgedCount}/${workspace.customExampleCoverage.requiredCount} reviewed`
+                      : "Examples have not been run for this version"}
+                  </span>
+                  <div className={styles.voiceActions}>
+                    <button
+                      type="button"
+                      className={styles.button}
+                      onClick={() => void runCustomExamples()}
+                      disabled={dirty || busy !== null || !allConfirmed}
+                    >
+                      {busy === "custom-examples" ? "Running…" : "Run all examples"}
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.primaryButton}
+                      onClick={() => void acknowledgeCustomExamples()}
+                      disabled={
+                        busy !== null ||
+                        !workspace.customExampleCoverage?.latestBatchId ||
+                        workspace.customExampleCoverage.passedCount !==
+                          workspace.customExampleCoverage.requiredCount ||
+                        workspace.customExampleCoverage.stale ||
+                        workspace.customExampleCoverage.ready
+                      }
+                    >
+                      {busy === "ack-custom-examples"
+                        ? "Recording review…"
+                        : "I reviewed these results"}
+                    </button>
+                  </div>
+                </div>
+                {workspace.customExampleCoverage?.examples.map((example) => {
+                  const expected =
+                    example.exampleKind === "positive"
+                      ? `Exact ${example.expectedStatus === "explicitly_denied" ? "denied" : "supported"} result: ${String(example.expectedValue)}${example.expectedUnit ? ` ${example.expectedUnit}` : ""}`
+                      : example.exampleKind === "negative"
+                        ? example.prohibitedValue === null
+                          ? "No renderable value"
+                          : `Must not produce: ${String(example.prohibitedValue)}`
+                        : `Must return unclear or conflict; possible values: ${example.possibleValues.map(String).join(", ")}`;
+                  return (
+                    <div
+                      key={`${example.fieldId}:${example.exampleKind}:${example.exampleId}`}
+                      className={styles.callout}
+                      data-tone={example.passed ? undefined : "block"}
+                      style={{ marginTop: 9 }}
+                    >
+                      <strong>{example.physicianName} · {titleCase(example.exampleKind)}</strong>
+                      <div style={{ marginTop: 5 }}>
+                        <span className={styles.monoLabel}>Synthetic evidence</span>
+                        <div>“{example.syntheticEvidence}”</div>
+                      </div>
+                      <div className={styles.fieldMeta} style={{ marginTop: 6 }}>
+                        Expected: {expected}
+                      </div>
+                      <div className={styles.fieldMeta} style={{ marginTop: 3 }}>
+                        Actual: {example.actualStatus ? titleCase(example.actualStatus) : "Not run"}
+                        {example.actualValue !== null
+                          ? ` · ${String(example.actualValue)}${example.actualUnit ? ` ${example.actualUnit}` : ""}`
+                          : ""}
+                        {` · ${example.actualEvidenceAnchorCount} evidence anchor${example.actualEvidenceAnchorCount === 1 ? "" : "s"} · ${example.actualSourceFactCount} source fact${example.actualSourceFactCount === 1 ? "" : "s"}`}
+                      </div>
+                      <div className={styles.fieldMeta} style={{ marginTop: 3 }}>
+                        {example.passed ? "Passed" : `Needs attention${example.failureCode ? ` · ${example.failureCode}` : ""}`} · {example.acknowledged ? "Reviewed" : "Not yet reviewed"}
+                      </div>
+                    </div>
+                  );
+                })}
+                {workspace.customExampleCoverage?.stale && (
+                  <p className={styles.warningText} role="alert">
+                    The saved results do not match the current field meaning or
+                    mapping. Run every example again.
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className={styles.section}>
               <h2 className={styles.sectionTitle}>Synthetic evidence test</h2>
@@ -927,15 +1327,111 @@ function FieldInspector({
   item,
   canEdit,
   busy,
+  intentDraft,
   onChange,
+  onIntentChange,
 }: {
   item: TemplateTwinWorkspaceField;
   canEdit: boolean;
   busy: boolean;
+  intentDraft: FieldIntentDraft;
   onChange: (patch: Partial<SemanticMapping>) => void;
+  onIntentChange: (intent: FieldIntentDraft) => void;
 }) {
   const { field, mapping } = item;
   const disabled = !canEdit || busy;
+  const requiresIntent =
+    field.rendererBinding.bindingType === "ordinary_placeholder";
+  const intentLocked = item.intent.lockedInVersion;
+  const mappingDisabled =
+    disabled ||
+    (requiresIntent &&
+      (intentDraft.intentKind === "custom_concept" ||
+        intentDraft.intentKind === "static"));
+
+  function changeIntent(next: FieldIntentDraft) {
+    onIntentChange(next);
+    if (next.intentKind === "supported_concept") {
+      onChange({
+        clinicalConcept: next.supportedConcept || null,
+        status: "needs_confirmation",
+      });
+    } else if (next.intentKind === "custom_concept") {
+      onChange({
+        clinicalConcept: next.customSpec.conceptId,
+        expectedDataType: expectedTypeForCustom(next.customSpec.dataType),
+        required: next.customSpec.required,
+        unknownPolicy: next.customSpec.unknownPolicy,
+        blankPolicy: next.customSpec.unknownPolicy,
+        approvedSynonyms: [],
+        temporality: "any",
+        laterality: "optional",
+        unitPolicy:
+          next.customSpec.dataType === "measurement"
+            ? "required"
+            : next.customSpec.dataType === "number"
+              ? "forbidden"
+              : "not_applicable",
+        practiceDefault: null,
+        polarityBehavior: next.customSpec.polarityPolicy.allowExplicitDenial
+          ? "explicit_denial_allowed"
+          : next.customSpec.dataType === "boolean"
+            ? "affirmative_only"
+            : "value_only",
+        status: "needs_confirmation",
+      });
+    } else {
+      onChange({ clinicalConcept: null, status: "needs_confirmation" });
+    }
+  }
+
+  function confirmField() {
+    if (requiresIntent) {
+      if (intentDraft.intentKind === "unresolved") return;
+      if (intentDraft.intentKind === "static") {
+        onChange({
+          clinicalConcept: null,
+          required: false,
+          practiceDefault: null,
+          status: "certified",
+        });
+        return;
+      }
+      if (intentDraft.intentKind === "supported_concept") {
+        onChange({
+          clinicalConcept: intentDraft.supportedConcept,
+          status: "certified",
+        });
+        return;
+      }
+      onChange({
+        clinicalConcept: intentDraft.customSpec.conceptId,
+        expectedDataType: expectedTypeForCustom(intentDraft.customSpec.dataType),
+        required: intentDraft.customSpec.required,
+        unknownPolicy: intentDraft.customSpec.unknownPolicy,
+        blankPolicy: intentDraft.customSpec.unknownPolicy,
+        approvedSynonyms: [],
+        temporality: "any",
+        laterality: "optional",
+        unitPolicy:
+          intentDraft.customSpec.dataType === "measurement"
+            ? "required"
+            : intentDraft.customSpec.dataType === "number"
+              ? "forbidden"
+              : "not_applicable",
+        practiceDefault: null,
+        polarityBehavior: intentDraft.customSpec.polarityPolicy
+          .allowExplicitDenial
+          ? "explicit_denial_allowed"
+          : intentDraft.customSpec.dataType === "boolean"
+            ? "affirmative_only"
+            : "value_only",
+        status: "certified",
+      });
+      return;
+    }
+    onChange({ status: "certified" });
+  }
   return (
     <>
       <div className={styles.section}>
@@ -953,9 +1449,18 @@ function FieldInspector({
               {field.originalLabel}
             </h2>
           </div>
-          <StatusPill item={item} />
+          <StatusPill item={item} intentDraft={intentDraft} />
         </div>
       </div>
+
+      {requiresIntent && (
+        <FieldIntentEditor
+          item={item}
+          draft={intentDraft}
+          disabled={disabled || intentLocked}
+          onChange={changeIntent}
+        />
+      )}
 
       <div className={styles.section}>
         <h3 className={styles.sectionTitle}>What this Word field does</h3>
@@ -1005,6 +1510,7 @@ function FieldInspector({
       <div className={styles.section}>
         <h3 className={styles.sectionTitle}>How QuillMD fills this field</h3>
         <div className={styles.formGrid}>
+          {!requiresIntent && (
           <label className={`${styles.field} ${styles.fieldWide}`}>
             <span className={styles.monoLabel}>Clinical detail to fill</span>
             <select
@@ -1016,7 +1522,7 @@ function FieldInspector({
                   status: "needs_confirmation",
                 })
               }
-              disabled={disabled}
+              disabled={mappingDisabled}
             >
               <option value="">Choose a supported clinical detail</option>
               {mapping.clinicalConcept &&
@@ -1039,6 +1545,7 @@ function FieldInspector({
                 </span>
               )}
           </label>
+          )}
           <label className={styles.field}>
             <span className={styles.monoLabel}>Expected data type</span>
             <select
@@ -1051,7 +1558,7 @@ function FieldInspector({
                   status: "needs_confirmation",
                 })
               }
-              disabled={disabled}
+              disabled={mappingDisabled}
             >
               {EXPECTED_TYPES.map((value) => (
                 <option key={value} value={value}>
@@ -1074,7 +1581,7 @@ function FieldInspector({
                   status: "needs_confirmation",
                 })
               }
-              disabled={disabled}
+              disabled={mappingDisabled}
             >
               {(
                 [
@@ -1102,7 +1609,7 @@ function FieldInspector({
                   status: "needs_confirmation",
                 })
               }
-              disabled={disabled}
+              disabled={mappingDisabled}
             >
               <option value="">Not constrained</option>
               {(["current", "historical", "planned", "any"] as const).map(
@@ -1126,7 +1633,7 @@ function FieldInspector({
                   status: "needs_confirmation",
                 })
               }
-              disabled={disabled}
+              disabled={mappingDisabled}
             >
               <option value="">Not set</option>
               {(["required", "optional", "not_applicable"] as const).map(
@@ -1150,7 +1657,7 @@ function FieldInspector({
                   status: "needs_confirmation",
                 })
               }
-              disabled={disabled}
+              disabled={mappingDisabled}
             >
               <option value="">Not set</option>
               {(
@@ -1176,7 +1683,7 @@ function FieldInspector({
                   status: "needs_confirmation",
                 })
               }
-              disabled={disabled}
+              disabled={mappingDisabled}
             >
               {(["blank", "not_documented", "requires_input"] as const).map(
                 (value) => (
@@ -1204,7 +1711,7 @@ function FieldInspector({
                   status: "needs_confirmation",
                 })
               }
-              disabled={disabled}
+              disabled={mappingDisabled}
             />
           </label>
           <label className={styles.checkLabel}>
@@ -1217,7 +1724,7 @@ function FieldInspector({
                   status: "needs_confirmation",
                 })
               }
-              disabled={disabled}
+              disabled={mappingDisabled}
             />
             Required before signing
           </label>
@@ -1233,8 +1740,12 @@ function FieldInspector({
             <button
               type="button"
               className={styles.primaryButton}
-              onClick={() => onChange({ status: "certified" })}
-              disabled={busy || mapping.status === "certified"}
+              onClick={confirmField}
+              disabled={
+                busy ||
+                mapping.status === "certified" ||
+                (requiresIntent && intentDraft.intentKind === "unresolved")
+              }
             >
               {mapping.status === "certified"
                 ? "Field confirmed"
@@ -1244,6 +1755,653 @@ function FieldInspector({
         )}
       </div>
     </>
+  );
+}
+
+function FieldIntentEditor({
+  item,
+  draft,
+  disabled,
+  onChange,
+}: {
+  item: TemplateTwinWorkspaceField;
+  draft: FieldIntentDraft;
+  disabled: boolean;
+  onChange: (intent: FieldIntentDraft) => void;
+}) {
+  const binding = item.field.rendererBinding;
+  const defaultSpec = defaultCustomSpec(item);
+  const updateSpec = (patch: Partial<TemplateFieldSpecificationContent>) => {
+    if (draft.intentKind !== "custom_concept") return;
+    onChange({
+      intentKind: "custom_concept",
+      customSpec: synchronizeCustomSyntheticExamples({
+        ...draft.customSpec,
+        ...patch,
+      }),
+    });
+  };
+  const scalarFromText = (
+    dataType: CustomScalarDataType,
+    raw: string,
+  ): string | number | boolean => {
+    if (dataType === "boolean") return raw === "true";
+    if (dataType === "number" || dataType === "measurement") {
+      const number = Number(raw);
+      return Number.isFinite(number) ? number : 0;
+    }
+    return raw;
+  };
+  const defaultScalarFor = (
+    dataType: CustomScalarDataType,
+  ): string | number | boolean => {
+    if (dataType === "boolean") return true;
+    if (dataType === "number" || dataType === "measurement") return 1;
+    if (dataType === "date") return "2099-01-15";
+    if (dataType === "single_select") {
+      return draft.intentKind === "custom_concept"
+        ? (draft.customSpec.allowedOptions[0]?.value ?? "Synthetic option")
+        : "Synthetic option";
+    }
+    return "Synthetic supported value";
+  };
+
+  return (
+    <div className={styles.section}>
+      <h3 className={styles.sectionTitle}>Physician field intent</h3>
+      <div className={styles.callout}>
+        <strong>What information belongs here?</strong>
+        <div style={{ marginTop: 4 }}>
+          Confirm this visible placeholder once. QuillMD will bind the decision
+          to this exact document location; it will not guess from the label.
+        </div>
+        <div className={styles.fieldMeta} style={{ marginTop: 7 }}>
+          {binding.tableIndex === null
+            ? `Document paragraph · ${binding.partName}`
+            : `Table ${binding.tableIndex + 1} · row ${(binding.rowIndex ?? 0) + 1} · cell ${(binding.cellIndex ?? 0) + 1}`}
+        </div>
+      </div>
+      {item.intent.lockedInVersion && (
+        <p className={styles.warningText} role="status">
+          This decision is recorded for version {item.intent.version}. Create a
+          new draft version to change its clinical meaning.
+        </p>
+      )}
+      <div className={styles.formGrid} style={{ marginTop: 12 }}>
+        <label className={`${styles.field} ${styles.fieldWide}`}>
+          <span className={styles.monoLabel}>Field intent</span>
+          <select
+            className={styles.select}
+            value={draft.intentKind}
+            disabled={disabled}
+            onChange={(event) => {
+              const value = event.target.value;
+              if (value === "supported_concept") {
+                onChange({ intentKind: "supported_concept", supportedConcept: "" });
+              } else if (value === "static") {
+                onChange({ intentKind: "static", reason: "" });
+              } else if (value === "custom_concept" && defaultSpec) {
+                onChange({ intentKind: "custom_concept", customSpec: defaultSpec });
+              } else {
+                onChange({ intentKind: "unresolved" });
+              }
+            }}
+          >
+            <option value="unresolved">Leave unresolved — blocks certification</option>
+            <option value="supported_concept">Use an existing clinical detail</option>
+            <option value="static">Keep this text static; never fill it</option>
+            <option value="custom_concept">Define a template-specific scalar detail</option>
+          </select>
+        </label>
+
+        {draft.intentKind === "supported_concept" && (
+          <label className={`${styles.field} ${styles.fieldWide}`}>
+            <span className={styles.monoLabel}>Clinical detail to fill</span>
+            <select
+              className={styles.select}
+              value={draft.supportedConcept}
+              disabled={disabled}
+              onChange={(event) =>
+                onChange({
+                  intentKind: "supported_concept",
+                  supportedConcept: event.target.value,
+                })
+              }
+            >
+              <option value="">Choose an existing supported detail</option>
+              {TEMPLATE_TWIN_SUPPORTED_CONCEPTS.map((concept) => (
+                <option key={concept.concept} value={concept.concept}>
+                  {concept.physicianLabel}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        {draft.intentKind === "static" && (
+          <label className={`${styles.field} ${styles.fieldWide}`}>
+            <span className={styles.monoLabel}>Why this remains static</span>
+            <textarea
+              className={styles.textarea}
+              rows={2}
+              minLength={10}
+              maxLength={500}
+              value={draft.reason}
+              disabled={disabled}
+              placeholder="Explain why this visible token is intentional fixed text."
+              onChange={(event) =>
+                onChange({ intentKind: "static", reason: event.target.value })
+              }
+            />
+          </label>
+        )}
+
+        {draft.intentKind === "custom_concept" && (
+          <>
+            <label className={styles.field}>
+              <span className={styles.monoLabel}>Physician-facing name</span>
+              <input
+                className={styles.input}
+                value={draft.customSpec.physicianName}
+                maxLength={160}
+                disabled={disabled}
+                onChange={(event) => updateSpec({ physicianName: event.target.value })}
+              />
+            </label>
+            <label className={styles.field}>
+              <span className={styles.monoLabel}>Field type</span>
+              <select
+                className={styles.select}
+                value={draft.customSpec.dataType}
+                disabled={disabled}
+                onChange={(event) => {
+                  const dataType = event.target.value as CustomScalarDataType;
+                  const next = defaultSpec!;
+                  const expectedValue = defaultScalarFor(dataType);
+                  const expectedUnit =
+                    dataType === "measurement" ? "mm" : null;
+                  const evidenceCue =
+                    draft.customSpec.approvedEvidenceCues[0] ??
+                    draft.customSpec.physicianName;
+                  updateSpec({
+                    dataType,
+                    allowedOptions:
+                      dataType === "single_select" ? next.allowedOptions : [],
+                    allowedUnits: dataType === "measurement" ? ["mm"] : [],
+                    maximumLength: dataType === "narrative_text" ? 500 : null,
+                    numericRange: null,
+                    polarityPolicy: {
+                      allowExplicitDenial: false,
+                      exactDeniedOutput: null,
+                    },
+                    positiveSyntheticExamples: [
+                      {
+                        exampleId: "positive-1",
+                        syntheticEvidence: `Synthetic example: ${evidenceCue} is ${String(expectedValue)}${expectedUnit ? ` ${expectedUnit}` : ""}.`,
+                        expectedValue,
+                        expectedUnit,
+                      },
+                    ],
+                    negativeSyntheticExamples: [
+                      {
+                        exampleId: "negative-1",
+                        syntheticEvidence:
+                          "Synthetic example: an unrelated encounter detail is documented.",
+                        prohibitedValue: null,
+                        reason: "The certified evidence cue is absent.",
+                      },
+                    ],
+                    ambiguitySyntheticExamples: [],
+                  });
+                }}
+              >
+                <option value="narrative_text">Narrative text</option>
+                <option value="number">Number</option>
+                <option value="measurement">Measurement with unit</option>
+                <option value="date">Date</option>
+                <option value="boolean">Yes or no</option>
+                <option value="single_select">Exact single-select option</option>
+              </select>
+            </label>
+            <label className={`${styles.field} ${styles.fieldWide}`}>
+              <span className={styles.monoLabel}>Clinical description</span>
+              <textarea
+                className={styles.textarea}
+                rows={3}
+                maxLength={1000}
+                value={draft.customSpec.physicianDescription}
+                disabled={disabled}
+                placeholder="Describe exactly what encounter evidence supports this field."
+                onChange={(event) =>
+                  updateSpec({ physicianDescription: event.target.value })
+                }
+              />
+            </label>
+            <label className={`${styles.field} ${styles.fieldWide}`}>
+              <span className={styles.monoLabel}>
+                Exact evidence cues · comma separated
+              </span>
+              <input
+                className={styles.input}
+                value={draft.customSpec.approvedEvidenceCues.join(", ")}
+                disabled={disabled}
+                onChange={(event) =>
+                  updateSpec({
+                    approvedEvidenceCues: event.target.value
+                      .split(",")
+                      .map((value) => value.trim())
+                      .filter(Boolean)
+                      .slice(0, 12),
+                  })
+                }
+              />
+              <span className={styles.fieldMeta}>
+                A value is accepted only when one of these exact phrases and
+                the value appear together in the same evidence clause.
+              </span>
+            </label>
+            {draft.customSpec.dataType === "single_select" && (
+              <label className={`${styles.field} ${styles.fieldWide}`}>
+                <span className={styles.monoLabel}>Allowed values · comma separated</span>
+                <input
+                  className={styles.input}
+                  value={draft.customSpec.allowedOptions
+                    .map((option) => option.value)
+                    .join(", ")}
+                  disabled={disabled}
+                  onChange={(event) => {
+                    const values = event.target.value
+                      .split(",")
+                      .map((value) => value.trim())
+                      .filter(Boolean);
+                    if (values.length > TEMPLATE_TWIN_CUSTOM_OPTION_LIMIT) {
+                      toast.error(
+                        `Safe alpha supports at most ${TEMPLATE_TWIN_CUSTOM_OPTION_LIMIT} exact options. No values were discarded.`,
+                      );
+                      return;
+                    }
+                    updateSpec({
+                      allowedOptions: values.map((value, ordinal) => ({
+                          ordinal,
+                          value,
+                          displayText: value,
+                        })),
+                    });
+                  }}
+                />
+              </label>
+            )}
+            {draft.customSpec.dataType === "measurement" && (
+              <label className={`${styles.field} ${styles.fieldWide}`}>
+                <span className={styles.monoLabel}>Allowed units · comma separated</span>
+                <input
+                  className={styles.input}
+                  value={draft.customSpec.allowedUnits.join(", ")}
+                  disabled={disabled}
+                  onChange={(event) => {
+                    const units = event.target.value
+                      .split(",")
+                      .map((value) => value.trim())
+                      .filter(Boolean);
+                    if (units.length > TEMPLATE_TWIN_CUSTOM_UNIT_LIMIT) {
+                      toast.error(
+                        `Safe alpha supports at most ${TEMPLATE_TWIN_CUSTOM_UNIT_LIMIT} exact units. No units were discarded.`,
+                      );
+                      return;
+                    }
+                    updateSpec({
+                      allowedUnits: units,
+                      permittedUnitConversions: [],
+                    });
+                  }}
+                />
+              </label>
+            )}
+            {draft.customSpec.dataType === "narrative_text" && (
+              <label className={styles.field}>
+                <span className={styles.monoLabel}>Maximum characters</span>
+                <input
+                  className={styles.input}
+                  type="number"
+                  min={1}
+                  max={4000}
+                  value={draft.customSpec.maximumLength ?? 500}
+                  disabled={disabled}
+                  onChange={(event) =>
+                    updateSpec({ maximumLength: Number(event.target.value) })
+                  }
+                />
+              </label>
+            )}
+            {(draft.customSpec.dataType === "number" ||
+              draft.customSpec.dataType === "measurement") && (
+              <>
+                <label className={styles.field}>
+                  <span className={styles.monoLabel}>Minimum value · optional</span>
+                  <input
+                    className={styles.input}
+                    type="number"
+                    value={draft.customSpec.numericRange?.minimum ?? ""}
+                    disabled={disabled}
+                    onChange={(event) =>
+                      updateSpec({
+                        numericRange: {
+                          minimum:
+                            event.target.value === ""
+                              ? null
+                              : Number(event.target.value),
+                          maximum:
+                            draft.customSpec.numericRange?.maximum ?? null,
+                        },
+                      })
+                    }
+                  />
+                </label>
+                <label className={styles.field}>
+                  <span className={styles.monoLabel}>Maximum value · optional</span>
+                  <input
+                    className={styles.input}
+                    type="number"
+                    value={draft.customSpec.numericRange?.maximum ?? ""}
+                    disabled={disabled}
+                    onChange={(event) =>
+                      updateSpec({
+                        numericRange: {
+                          minimum:
+                            draft.customSpec.numericRange?.minimum ?? null,
+                          maximum:
+                            event.target.value === ""
+                              ? null
+                              : Number(event.target.value),
+                        },
+                      })
+                    }
+                  />
+                </label>
+              </>
+            )}
+            <label className={styles.field}>
+              <span className={styles.monoLabel}>When it applies</span>
+              <select
+                className={styles.select}
+                value={draft.customSpec.allowedTemporalities[0] ?? "current"}
+                disabled={disabled}
+                onChange={(event) =>
+                  updateSpec({
+                    allowedTemporalities: [
+                      event.target.value as "current" | "historical" | "planned",
+                    ],
+                  })
+                }
+              >
+                <option value="current">Current encounter</option>
+                <option value="historical">Past history</option>
+                <option value="planned">Planned care</option>
+              </select>
+            </label>
+            <label className={styles.field}>
+              <span className={styles.monoLabel}>Laterality</span>
+              <select
+                className={styles.select}
+                value={draft.customSpec.allowedLateralities[0] ?? "not_applicable"}
+                disabled={disabled}
+                onChange={(event) =>
+                  updateSpec({
+                    allowedLateralities: [
+                      event.target.value as
+                        | "left"
+                        | "right"
+                        | "bilateral"
+                        | "midline"
+                        | "not_applicable",
+                    ],
+                  })
+                }
+              >
+                <option value="not_applicable">Not applicable</option>
+                <option value="left">Left only</option>
+                <option value="right">Right only</option>
+                <option value="bilateral">Bilateral only</option>
+                <option value="midline">Midline only</option>
+              </select>
+            </label>
+            <label className={styles.checkLabel}>
+              <input
+                type="checkbox"
+                checked={draft.customSpec.required}
+                disabled={disabled}
+                onChange={(event) => updateSpec({ required: event.target.checked })}
+              />
+              Required before signing
+            </label>
+            <label className={styles.checkLabel}>
+              <input
+                type="checkbox"
+                checked={draft.customSpec.polarityPolicy.allowExplicitDenial}
+                disabled={disabled || draft.customSpec.dataType === "measurement"}
+                onChange={(event) =>
+                  updateSpec({
+                    polarityPolicy: {
+                      allowExplicitDenial: event.target.checked,
+                      exactDeniedOutput: event.target.checked
+                        ? draft.customSpec.dataType === "boolean"
+                          ? false
+                          : draft.customSpec.dataType === "number" ||
+                              draft.customSpec.dataType === "measurement"
+                            ? 0
+                            : draft.customSpec.dataType === "date"
+                              ? "2099-01-15"
+                              : draft.customSpec.dataType === "single_select"
+                                ? (draft.customSpec.allowedOptions[0]?.value ??
+                                  "")
+                                : "Not present"
+                        : null,
+                    },
+                  })
+                }
+              />
+              Allow an exact evidence-backed negative output
+            </label>
+            {draft.customSpec.dataType === "measurement" && (
+              <div className={styles.fieldMeta}>
+                Measurement denial is unavailable in safe alpha because a
+                unit-bound negative value cannot yet be proved independently.
+              </div>
+            )}
+            {draft.customSpec.polarityPolicy.allowExplicitDenial && (
+              <label className={styles.field}>
+                <span className={styles.monoLabel}>Exact negative output</span>
+                <input
+                  className={styles.input}
+                  value={String(
+                    draft.customSpec.polarityPolicy.exactDeniedOutput ?? "",
+                  )}
+                  disabled={disabled}
+                  onChange={(event) =>
+                    updateSpec({
+                      polarityPolicy: {
+                        allowExplicitDenial: true,
+                        exactDeniedOutput: scalarFromText(
+                          draft.customSpec.dataType,
+                          event.target.value,
+                        ),
+                      },
+                    })
+                  }
+                />
+              </label>
+            )}
+            {draft.customSpec.positiveSyntheticExamples.map(
+              (example, exampleIndex) => (
+                <div
+                  className={`${styles.section} ${styles.fieldWide}`}
+                  key={example.exampleId}
+                >
+                  <div className={styles.monoLabel}>
+                    {example.expectedStatus === "explicitly_denied"
+                      ? "Explicit-denial synthetic test"
+                      : `Positive synthetic test ${exampleIndex + 1}`}
+                  </div>
+                  <label className={`${styles.field} ${styles.fieldWide}`}>
+                    <span className={styles.monoLabel}>Synthetic evidence</span>
+                    <textarea
+                      className={styles.textarea}
+                      rows={2}
+                      value={example.syntheticEvidence}
+                      disabled={disabled}
+                      onChange={(event) => {
+                        const examples = [
+                          ...draft.customSpec.positiveSyntheticExamples,
+                        ];
+                        examples[exampleIndex] = {
+                          ...example,
+                          syntheticEvidence: event.target.value,
+                        };
+                        updateSpec({ positiveSyntheticExamples: examples });
+                      }}
+                    />
+                  </label>
+                  <label className={styles.field}>
+                    <span className={styles.monoLabel}>Expected exact output</span>
+                    <input
+                      className={styles.input}
+                      value={String(example.expectedValue)}
+                      disabled={
+                        disabled ||
+                        draft.customSpec.dataType === "single_select" ||
+                        example.expectedStatus === "explicitly_denied"
+                      }
+                      onChange={(event) => {
+                        const examples = [
+                          ...draft.customSpec.positiveSyntheticExamples,
+                        ];
+                        examples[exampleIndex] = {
+                          ...example,
+                          expectedValue: scalarFromText(
+                            draft.customSpec.dataType,
+                            event.target.value,
+                          ),
+                        };
+                        updateSpec({ positiveSyntheticExamples: examples });
+                      }}
+                    />
+                  </label>
+                  {draft.customSpec.dataType === "measurement" && (
+                    <div className={styles.fieldMeta}>
+                      Exact unit: {example.expectedUnit ?? "none"}
+                    </div>
+                  )}
+                </div>
+              ),
+            )}
+            <label className={`${styles.field} ${styles.fieldWide}`}>
+              <span className={styles.monoLabel}>Negative synthetic evidence</span>
+              <textarea
+                className={styles.textarea}
+                rows={2}
+                value={
+                  draft.customSpec.negativeSyntheticExamples[0]
+                    ?.syntheticEvidence ?? ""
+                }
+                disabled={disabled}
+                onChange={(event) => {
+                  const first =
+                    draft.customSpec.negativeSyntheticExamples[0]!;
+                  updateSpec({
+                    negativeSyntheticExamples: [
+                      { ...first, syntheticEvidence: event.target.value },
+                    ],
+                  });
+                }}
+              />
+            </label>
+            <label className={`${styles.field} ${styles.fieldWide}`}>
+              <span className={styles.monoLabel}>Ambiguity synthetic evidence</span>
+              <textarea
+                className={styles.textarea}
+                rows={2}
+                value={
+                  draft.customSpec.ambiguitySyntheticExamples[0]
+                    ?.syntheticEvidence ?? ""
+                }
+                disabled={disabled}
+                onChange={(event) => {
+                  const first =
+                    draft.customSpec.ambiguitySyntheticExamples[0]!;
+                  updateSpec({
+                    ambiguitySyntheticExamples: [
+                      { ...first, syntheticEvidence: event.target.value },
+                    ],
+                  });
+                }}
+              />
+            </label>
+            <label className={`${styles.field} ${styles.fieldWide}`}>
+              <span className={styles.monoLabel}>
+                Ambiguous possible values · comma separated
+              </span>
+              <input
+                className={styles.input}
+                value={
+                  draft.customSpec.ambiguitySyntheticExamples[0]
+                    ?.possibleValues.map(String)
+                    .join(", ") ?? ""
+                }
+                disabled={disabled}
+                onChange={(event) => {
+                  const first =
+                    draft.customSpec.ambiguitySyntheticExamples[0]!;
+                  const possibleValues = event.target.value
+                    .split(",")
+                    .map((value) => value.trim())
+                    .filter(Boolean)
+                    .slice(0, 8)
+                    .map((value) =>
+                      scalarFromText(draft.customSpec.dataType, value),
+                    );
+                  updateSpec({
+                    ambiguitySyntheticExamples: [
+                      {
+                        ...first,
+                        possibleValues,
+                        syntheticEvidence: defaultCustomAmbiguityEvidence(
+                          draft.customSpec,
+                          possibleValues,
+                        ),
+                      },
+                    ],
+                  });
+                }}
+              />
+            </label>
+            <label className={styles.field}>
+              <span className={styles.monoLabel}>When not stated</span>
+              <select
+                className={styles.select}
+                value={draft.customSpec.unknownPolicy}
+                disabled={disabled}
+                onChange={(event) =>
+                  updateSpec({
+                    unknownPolicy: event.target.value as
+                      | "blank"
+                      | "not_documented"
+                      | "requires_input",
+                  })
+                }
+              >
+                <option value="blank">Leave blank</option>
+                <option value="requires_input">Require physician input</option>
+              </select>
+            </label>
+            <div className={`${styles.callout} ${styles.fieldWide}`}>
+              Positive, negative, and ambiguity examples are immutable parts of
+              this version. QuillMD requires direct evidence and physician
+              review before activation; unclear evidence never fills a value.
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 

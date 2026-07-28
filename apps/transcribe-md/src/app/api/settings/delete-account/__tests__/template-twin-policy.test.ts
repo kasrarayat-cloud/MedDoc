@@ -11,6 +11,11 @@ const mocks = vi.hoisted(() => ({
   sourceCount: vi.fn(),
   certificationCount: vi.fn(),
   waiverCount: vi.fn(),
+  fieldIntentCount: vi.fn(),
+  staticAssetCount: vi.fn(),
+  staticAssetDecisionCount: vi.fn(),
+  staticAssetReviewReceiptCount: vi.fn(),
+  customExampleExecutionCount: vi.fn(),
   noteTemplateCount: vi.fn(),
   fillCount: vi.fn(),
   objectLedgerCount: vi.fn(),
@@ -62,6 +67,17 @@ vi.mock("@meddoc/db", () => ({
     templateTwinSourceArtifact: { count: mocks.sourceCount },
     templateTwinCertification: { count: mocks.certificationCount },
     templateTwinFieldTestWaiver: { count: mocks.waiverCount },
+    templateTwinFieldIntentDecision: { count: mocks.fieldIntentCount },
+    templateTwinStaticAsset: { count: mocks.staticAssetCount },
+    templateTwinStaticAssetDecision: {
+      count: mocks.staticAssetDecisionCount,
+    },
+    templateTwinStaticAssetReviewReceipt: {
+      count: mocks.staticAssetReviewReceiptCount,
+    },
+    templateTwinCustomExampleExecution: {
+      count: mocks.customExampleExecutionCount,
+    },
     noteTemplate: { count: mocks.noteTemplateCount },
     templateTwinFillManifest: { count: mocks.fillCount },
     templateTwinObjectLedger: { count: mocks.objectLedgerCount },
@@ -103,6 +119,11 @@ beforeEach(() => {
   mocks.sourceCount.mockResolvedValue(0);
   mocks.certificationCount.mockResolvedValue(0);
   mocks.waiverCount.mockResolvedValue(0);
+  mocks.fieldIntentCount.mockResolvedValue(0);
+  mocks.staticAssetCount.mockResolvedValue(0);
+  mocks.staticAssetDecisionCount.mockResolvedValue(0);
+  mocks.staticAssetReviewReceiptCount.mockResolvedValue(0);
+  mocks.customExampleExecutionCount.mockResolvedValue(0);
   mocks.noteTemplateCount.mockResolvedValue(0);
   mocks.fillCount.mockResolvedValue(0);
   mocks.objectLedgerCount.mockResolvedValue(0);
@@ -125,6 +146,17 @@ beforeEach(() => {
         templateTwinSourceArtifact: { count: mocks.sourceCount },
         templateTwinCertification: { count: mocks.certificationCount },
         templateTwinFieldTestWaiver: { count: mocks.waiverCount },
+        templateTwinFieldIntentDecision: { count: mocks.fieldIntentCount },
+        templateTwinStaticAsset: { count: mocks.staticAssetCount },
+        templateTwinStaticAssetDecision: {
+          count: mocks.staticAssetDecisionCount,
+        },
+        templateTwinStaticAssetReviewReceipt: {
+          count: mocks.staticAssetReviewReceiptCount,
+        },
+        templateTwinCustomExampleExecution: {
+          count: mocks.customExampleExecutionCount,
+        },
         noteTemplate: { count: mocks.noteTemplateCount },
         templateTwinFillManifest: { count: mocks.fillCount },
         templateTwinObjectLedger: { count: mocks.objectLedgerCount },
@@ -208,6 +240,11 @@ describe("delete account with retained Template Twin records", () => {
     ["orphan object", "objectLedgerCount"],
     ["pending audit outbox", "auditOutboxCount"],
     ["delivered Twin audit", "auditLogCount"],
+    ["field-intent decision", "fieldIntentCount"],
+    ["practice static asset", "staticAssetCount"],
+    ["static-asset decision", "staticAssetDecisionCount"],
+    ["static-asset preview-review receipt", "staticAssetReviewReceiptCount"],
+    ["custom-example execution", "customExampleExecutionCount"],
   ] as const)(
     "blocks deletion for a retained %s without entering the transaction",
     async (_label, counter) => {

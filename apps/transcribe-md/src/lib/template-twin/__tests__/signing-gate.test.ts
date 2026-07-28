@@ -11,6 +11,7 @@ import type {
   TemplateTwinFillManifest,
 } from '../ir';
 import { templateTwinMappingsSha256 } from '../mapping-hash';
+import { templateTwinFieldIntentsSha256 } from '../field-intent';
 import {
   assessTemplateTwinSigning,
   type TemplateTwinSigningContext,
@@ -66,6 +67,7 @@ function persistedMapping(mapping: SemanticMapping) {
 
 beforeAll(async () => {
   const fixture = await buildTemplateTwinIntegrationFixture();
+  const fieldIntentsSha256 = templateTwinFieldIntentsSha256([]);
   const prepared = await prepareTemplateTwinFill({
     soapVersion: 7,
     soapFinal: REVIEWED_SOAP,
@@ -79,9 +81,12 @@ beforeAll(async () => {
     source: fixture.source,
     resolverModelVersion: 'synthetic-model-v1',
     validationNow: VALIDATION_NOW,
+    fieldIntentsSha256,
   });
   if (!prepared.render) {
-    throw new Error('Synthetic signing fixture did not produce a verified DOCX.');
+    throw new Error(
+      'Synthetic signing fixture did not produce a verified DOCX.',
+    );
   }
 
   const mappingsSha256 = templateTwinMappingsSha256(fixture.mappings);
@@ -134,8 +139,10 @@ beforeAll(async () => {
           );
           if (!mapping) throw new Error('Synthetic mapping is missing.');
           return {
+            id: `definition-${field.fieldId}`,
             fieldId: field.fieldId,
             detectionStatus: 'CERTIFIED',
+            intentDecisions: [],
             mapping: persistedMapping(mapping),
           };
         }),
@@ -143,6 +150,8 @@ beforeAll(async () => {
           id: 'certification-1',
           compiledStructureSha256: fixture.ir.structureSha256,
           approvedMappingsSha256: mappingsSha256,
+          approvedFieldIntentsSha256: fieldIntentsSha256,
+          approvedCustomExampleProofSha256: null,
           sourcePrivacyScanEvidenceSha256: canonicalSha256(
             SOURCE_PRIVACY_SCAN_EVIDENCE,
           ),
@@ -168,6 +177,7 @@ beforeAll(async () => {
       manifestVersion: prepared.manifest.manifestVersion,
       manifestSha256: prepared.manifestSha256,
       factSetSha256: prepared.factSetSha256,
+      fieldIntentsSha256,
       validationResult: prepared.manifest.validation,
       filledCount: prepared.manifest.counts.filled,
       needsReviewCount: prepared.manifest.counts.needsReview,
@@ -205,9 +215,7 @@ function validContext(
   context.templateTwinFill!.status =
     visitStatus === 'SIGNED' ? 'SIGNED' : 'VERIFIED';
   context.templateTwinFill!.signedDecisionAt =
-    visitStatus === 'SIGNED'
-      ? new Date('2026-07-15T12:05:00.000Z')
-      : null;
+    visitStatus === 'SIGNED' ? new Date('2026-07-15T12:05:00.000Z') : null;
   context.templateTwinFill!.signedGlobalRolloutGeneration =
     visitStatus === 'SIGNED' ? BigInt(1) : null;
   context.templateTwinFill!.signedPracticeRolloutGeneration =
@@ -372,42 +380,39 @@ describe('Template Twin server-side signing gate', () => {
     'static',
     'compiler',
     'provider object',
-  ] as const)(
-    'binds certification to the exact %s provenance',
-    (drift) => {
-      const input = validContext();
-      const compiled = input.noteTemplate!.templateTwinCompiledVersion!;
-      switch (drift) {
-        case 'mapping':
-          compiled.fields[0]!.mapping!.clinicalConcept = 'tampered.concept';
-          break;
-        case 'structure':
-          compiled.structureSha256 = '0'.repeat(64);
-          break;
-        case 'source':
-          compiled.sourceArtifact.sha256 = '0'.repeat(64);
-          break;
-        case 'source privacy evidence':
-          compiled.sourceArtifact.privacyScanEvidence = null;
-          break;
-        case 'static':
-          compiled.staticContentSha256 = '0'.repeat(64);
-          break;
-        case 'compiler':
-          compiled.compilerVersion = 'tampered-compiler/1.0.0';
-          break;
-        case 'provider object':
-          compiled.certification!.testOutputVersionId =
-            'provider-test-version-replaced';
-          break;
-      }
+  ] as const)('binds certification to the exact %s provenance', (drift) => {
+    const input = validContext();
+    const compiled = input.noteTemplate!.templateTwinCompiledVersion!;
+    switch (drift) {
+      case 'mapping':
+        compiled.fields[0]!.mapping!.clinicalConcept = 'tampered.concept';
+        break;
+      case 'structure':
+        compiled.structureSha256 = '0'.repeat(64);
+        break;
+      case 'source':
+        compiled.sourceArtifact.sha256 = '0'.repeat(64);
+        break;
+      case 'source privacy evidence':
+        compiled.sourceArtifact.privacyScanEvidence = null;
+        break;
+      case 'static':
+        compiled.staticContentSha256 = '0'.repeat(64);
+        break;
+      case 'compiler':
+        compiled.compilerVersion = 'tampered-compiler/1.0.0';
+        break;
+      case 'provider object':
+        compiled.certification!.testOutputVersionId =
+          'provider-test-version-replaced';
+        break;
+    }
 
-      const result = assessTemplateTwinSigning(input);
+    const result = assessTemplateTwinSigning(input);
 
-      expect(result.ready).toBe(false);
-      expect(result.blockerCodes).toContain('CERTIFICATION_INTEGRITY_FAILED');
-    },
-  );
+    expect(result.ready).toBe(false);
+    expect(result.blockerCodes).toContain('CERTIFICATION_INTEGRITY_FAILED');
+  });
 
   it('rejects a self-attested valid result when independent validation fails', () => {
     const input = validContext();
@@ -441,8 +446,9 @@ describe('Template Twin server-side signing gate', () => {
     const proof = input.templateTwinFill!.roundTripVerification as {
       fields: Array<{ fieldId: string; valueSha256: string }>;
     };
-    proof.fields.find((field) => field.fieldId === selectField.fieldId)!
-      .valueSha256 = canonicalSha256({
+    proof.fields.find(
+      (field) => field.fieldId === selectField.fieldId,
+    )!.valueSha256 = canonicalSha256({
       fieldId: selectField.fieldId,
       value: resolution.value,
     });
@@ -507,6 +513,28 @@ describe('Template Twin server-side signing gate', () => {
       }>;
     };
     delete proof.fields[0]!.bindingEvidence.outputNativeIdentity;
+
+    const result = assessTemplateTwinSigning(input);
+
+    expect(result.ready).toBe(false);
+    expect(result.blockerCodes).toContain('ROUND_TRIP_UNVERIFIED');
+    expect(result.claim).toBeNull();
+  });
+
+  it('requires the output-derived structural profile for a profiled table cell', () => {
+    const input = validContext();
+    const proof = input.templateTwinFill!.roundTripVerification as {
+      fields: Array<{
+        bindingEvidence?: { outputBindingProfile?: string };
+      }>;
+    };
+    const profiled = proof.fields.find(
+      (field) =>
+        field.bindingEvidence?.outputBindingProfile ===
+        'TAB_ONLY_BLANK_TABLE_CELL_V1',
+    );
+    expect(profiled).toBeDefined();
+    delete profiled!.bindingEvidence!.outputBindingProfile;
 
     const result = assessTemplateTwinSigning(input);
 

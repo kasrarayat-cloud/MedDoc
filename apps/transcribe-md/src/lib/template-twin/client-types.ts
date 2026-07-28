@@ -4,11 +4,23 @@ import type {
   TemplateField,
   UnsupportedElement,
 } from './ir';
+import type {
+  TemplateFieldSpecificationContent,
+} from './custom-concepts/specification';
+import type { TemplateTwinFieldIntentView } from './field-intent';
+import type { TemplateTwinCustomExampleCoverage } from './custom-concepts/example-coverage';
 
 export interface TemplateTwinWorkspaceField {
   definitionId: string;
   field: TemplateField;
   mapping: SemanticMapping;
+  /** Ordinary placeholder tokens require one explicit physician decision.
+   * Other native fields retain their existing semantic-mapping workflow. */
+  intent: TemplateTwinFieldIntentView;
+  customConceptScaffold: Pick<
+    TemplateFieldSpecificationContent,
+    'templateLineageId' | 'compiledVersionId' | 'fieldId' | 'conceptId'
+  > | null;
 }
 
 export interface TemplateTwinWorkspace {
@@ -37,6 +49,10 @@ export interface TemplateTwinWorkspace {
   fields: TemplateTwinWorkspaceField[];
   unsupported: UnsupportedElement[];
   mappingsSha256: string;
+  fieldIntentsSha256: string;
+  /** Separate physician-reviewed execution proof for every exact custom-field
+   * positive, negative, and ambiguity example. Null when no custom field exists. */
+  customExampleCoverage?: TemplateTwinCustomExampleCoverage | null;
   latestSyntheticTest: {
     provenanceSha256: string;
     verifiedAtIso: string;

@@ -13,6 +13,7 @@
 // ============================================================================
 
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 
@@ -43,6 +44,7 @@ import { NoteFormatManager } from './note-format/note-format-manager';
 import { listDoctorTemplates } from '@/lib/note-template-persist/read';
 import { findSpecialty } from '@meddoc/shared/specialties';
 import type { ClientTemplateListItem } from '@/lib/note-template-persist/types';
+import { evaluateTemplateTwinRollout } from '@/lib/template-twin/rollout';
 
 export const metadata: Metadata = { title: 'Settings' };
 
@@ -87,6 +89,8 @@ export default async function SettingsPage() {
     clinicName: string | null;
     timeZone: string | null;
     mfaEnabled: boolean;
+    role: string;
+    practice: { templateTwinEnabled: boolean } | null;
   };
 
   const [user, sessionId] = (await Promise.all([
@@ -101,6 +105,8 @@ export default async function SettingsPage() {
         clinicName: true,
         timeZone: true,
         mfaEnabled: true,
+        role: true,
+        practice: { select: { templateTwinEnabled: true } },
       },
     }),
     getCurrentSessionId(),
@@ -154,6 +160,12 @@ export default async function SettingsPage() {
 
   // Which upload formats can this image actually extract (see getUploadCaps).
   const uploadCaps = await getUploadCaps();
+  const canManageTemplateTwinStaticAssets =
+    (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') &&
+    user.practice !== null &&
+    evaluateTemplateTwinRollout({
+      practiceEnabled: user.practice.templateTwinEnabled,
+    }).allowed;
 
   // ── C3 calm-skin settings (Stage 3, flag-gated) ───────────────────────────
   // SKIN-ONLY: identical auth + Prisma reads + VIEWED_SETTINGS audit row + the
@@ -209,7 +221,10 @@ export default async function SettingsPage() {
         subtitle:
           'QuillMD writes in a standard SOAP format. Most doctors leave this as-is — teaching it your own template is an explicit, opt-in step below.',
         content: (
-          <NoteFormatManager templates={noteTemplates} uploadCaps={uploadCaps} />
+          <>
+            {canManageTemplateTwinStaticAssets && <StaticAssetSettingsLink />}
+            <NoteFormatManager templates={noteTemplates} uploadCaps={uploadCaps} />
+          </>
         ),
       },
       {
@@ -615,6 +630,7 @@ export default async function SettingsPage() {
             eyebrow="02 / Note format"
             title="My Note Format"
           >
+            {canManageTemplateTwinStaticAssets && <StaticAssetSettingsLink />}
             <NoteFormatManager templates={noteTemplates} uploadCaps={uploadCaps} />
           </Section>
 
@@ -835,6 +851,57 @@ export default async function SettingsPage() {
         </div>
       </div>
     </AppFrame>
+  );
+}
+
+function StaticAssetSettingsLink() {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 16,
+        flexWrap: 'wrap',
+        marginBottom: 16,
+        padding: '13px 14px',
+        border: '1px solid rgba(122,166,140,0.32)',
+        borderRadius: 8,
+        background: 'var(--color-linear-sage-tint)',
+      }}
+    >
+      <div style={{ minWidth: 220, flex: 1 }}>
+        <div
+          style={{
+            color: 'var(--color-linear-text)',
+            fontFamily: 'var(--font-sans)',
+            fontSize: 13,
+            fontWeight: 560,
+          }}
+        >
+          Reusable Word-template images
+        </div>
+        <p
+          style={{
+            margin: '4px 0 0',
+            color: 'var(--color-linear-text-2)',
+            fontFamily: 'var(--font-sans)',
+            fontSize: 12,
+            lineHeight: 1.5,
+          }}
+        >
+          Practice administrators can inspect and approve an exact blank logo
+          or mark before it appears in a new Template Twin version.
+        </p>
+      </div>
+      <Link
+        className="qm-lin-btn qm-tap-44"
+        href="/settings/note-format/static-assets"
+        style={{ textDecoration: 'none' }}
+      >
+        Review practice images
+      </Link>
+    </div>
   );
 }
 

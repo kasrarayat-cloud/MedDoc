@@ -19,6 +19,7 @@ export const WORDPROCESSINGML_2012_NAMESPACE =
   "http://schemas.microsoft.com/office/word/2012/wordml";
 export const MARKUP_COMPATIBILITY_NAMESPACE =
   "http://schemas.openxmlformats.org/markup-compatibility/2006";
+export const XML_NAMESPACE = "http://www.w3.org/XML/1998/namespace";
 
 export interface ExpandedXmlAttribute {
   readonly qualifiedName: string;
@@ -55,10 +56,7 @@ export function parseOrderedXml(
     throw new TemplateDocxError("XML_INVALID", { cause });
   }
   if (XML_DECLARATION_ATTACK_RE.test(xml)) failTemplateDocx("XML_DTD_REJECTED");
-  const withoutXmlDeclaration = xml.replace(
-    /^\uFEFF?\s*<\?xml\b[^?]*\?>/i,
-    "",
-  );
+  const withoutXmlDeclaration = xml.replace(/^\uFEFF?\s*<\?xml\b[^?]*\?>/i, "");
   if (XML_HIDDEN_CONTENT_RE.test(withoutXmlDeclaration)) {
     failTemplateDocx("XML_HIDDEN_CONTENT_UNSUPPORTED");
   }
@@ -137,9 +135,7 @@ function enforceParsedTreeLimits(
  * Resolves element and attribute names by namespace URI. Default namespaces
  * apply to elements only; OPC attributes are intentionally unqualified.
  */
-export function expandedXmlVisits(
-  roots: OrderedXmlNode[],
-): ExpandedXmlVisit[] {
+export function expandedXmlVisits(roots: OrderedXmlNode[]): ExpandedXmlVisit[] {
   const output: ExpandedXmlVisit[] = [];
   const walk = (
     nodes: OrderedXmlNode[],
@@ -149,18 +145,31 @@ export function expandedXmlVisits(
   ): void => {
     for (const node of nodes) {
       const qualifiedName = tagOf(node);
-      if (!qualifiedName || qualifiedName === "#text" || qualifiedName === "?xml") {
+      if (
+        !qualifiedName ||
+        qualifiedName === "#text" ||
+        qualifiedName === "?xml"
+      ) {
         continue;
       }
       const namespaces = new Map(inherited);
       for (const [rawName, rawValue] of Object.entries(node[":@"] ?? {})) {
         const name = rawName.startsWith("@_") ? rawName.slice(2) : rawName;
-        if (name === "xmlns") namespaces.set("", decodeXmlScalar(String(rawValue)));
-        else if (name.startsWith("xmlns:")) {
-          namespaces.set(
-            name.slice("xmlns:".length),
-            decodeXmlScalar(String(rawValue)),
-          );
+        if (name === "xmlns") {
+          const value = decodeXmlScalar(String(rawValue));
+          if (value === XML_NAMESPACE) failTemplateDocx("XML_INVALID");
+          namespaces.set("", value);
+        } else if (name.startsWith("xmlns:")) {
+          const prefix = name.slice("xmlns:".length);
+          const value = decodeXmlScalar(String(rawValue));
+          if (
+            prefix === "xmlns" ||
+            (prefix === "xml" && value !== XML_NAMESPACE) ||
+            (prefix !== "xml" && value === XML_NAMESPACE)
+          ) {
+            failTemplateDocx("XML_INVALID");
+          }
+          namespaces.set(prefix, value);
         }
       }
       const elementPrefix = prefixOf(qualifiedName);
@@ -190,7 +199,7 @@ export function expandedXmlVisits(
       walk(childrenOf(node), namespaces, depth + 1, visit);
     }
   };
-  walk(roots, new Map(), 0, null);
+  walk(roots, new Map([["xml", XML_NAMESPACE]]), 0, null);
   return output;
 }
 
@@ -202,10 +211,7 @@ export function exactExpandedAttribute(
   const collisions = visit.attributes.filter(
     (attribute) => attribute.localName === wantedLocalName,
   );
-  if (
-    collisions.length !== 1 ||
-    collisions[0]!.namespaceUri !== namespaceUri
-  ) {
+  if (collisions.length !== 1 || collisions[0]!.namespaceUri !== namespaceUri) {
     return undefined;
   }
   return collisions[0]!.value;

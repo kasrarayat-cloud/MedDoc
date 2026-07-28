@@ -1,15 +1,18 @@
-import { canonicalSha256 } from '../template-twin/canonical';
-import type {
-  FieldResolution,
-  TemplateDocIR,
-  TemplateField,
-} from '../template-twin/ir';
-import type { TemplateDocxLimits } from './limits';
-import { inspectDocxPackage } from './package-security';
+import { canonicalSha256 } from "../template-twin/canonical";
+import {
+  TemplateFieldSchema,
+  type FieldResolution,
+  type TemplateDocIR,
+  type TemplateField,
+} from "../template-twin/ir";
+import type { TemplateDocxLimits } from "./limits";
+import { inspectDocxPackage } from "./package-security";
 import {
   TEMPLATE_TWIN_BINDING_FINGERPRINT_VERSION,
   certifiedBindingFingerprintSha256,
+  deriveOrdinaryPlaceholderBinding,
   deriveOoxmlBindingIdentity,
+  deriveTableCellBindingProfile,
   deriveTableLocation,
   hasStrongNativeIdentity,
   indexBindingXmlPart,
@@ -20,7 +23,7 @@ import {
   type DerivedOoxmlBindingIdentity,
   type IndexedBindingNode as IndexedNode,
   type IndexedBindingPart as IndexedPart,
-} from './binding-fingerprint';
+} from "./binding-fingerprint";
 import {
   WORDPROCESSINGML_NAMESPACE,
   WORDPROCESSINGML_2010_NAMESPACE,
@@ -29,16 +32,18 @@ import {
   parseOrderedXml,
   tagOf,
   type OrderedXmlNode,
-} from './xml';
+} from "./xml";
 import {
   failTemplateDocxRender,
   type RenderedFieldProof,
-} from './roundtrip-verify';
+} from "./roundtrip-verify";
 
 export interface ReadbackTemplateDocxOutputInput {
   readonly source: Uint8Array;
   readonly output: Uint8Array;
   readonly ir: TemplateDocIR;
+  /** Certified scalar semantics; immutable package identity remains in `ir`. */
+  readonly effectiveFields?: readonly TemplateField[];
   readonly resolutions: readonly FieldResolution[];
   readonly limits?: Partial<TemplateDocxLimits>;
 }
@@ -49,6 +54,12 @@ interface FieldBindingRecord {
   readonly part: IndexedPart;
   readonly node: IndexedNode;
   readonly identity: DerivedOoxmlBindingIdentity;
+  readonly bindingProfile:
+    | TemplateField["rendererBinding"]["bindingProfile"]
+    | null;
+  readonly ordinaryPlaceholder:
+    | TemplateField["rendererBinding"]["ordinaryPlaceholder"]
+    | null;
   readonly tableLocation: BindingTableLocation;
   readonly repeatAncestorCanonicalPath: string | null;
   readonly occurrences: number;
@@ -64,6 +75,10 @@ export function readbackTemplateDocxOutput(
 ): RenderedFieldProof[] {
   const sourcePackage = inspectDocxPackage(input.source, input.limits);
   const outputPackage = inspectDocxPackage(input.output, input.limits);
+  const effectiveFields = parseEffectiveFields(input.ir, input.effectiveFields);
+  const effectiveById = new Map(
+    effectiveFields.map((field) => [field.fieldId, field]),
+  );
   const resolutions = new Map(
     input.resolutions.map((resolution) => [resolution.fieldId, resolution]),
   );
@@ -71,22 +86,19 @@ export function readbackTemplateDocxOutput(
     resolutions.size !== input.ir.fields.length ||
     input.resolutions.length !== input.ir.fields.length
   ) {
-    failTemplateDocxRender('FIELD_RESOLUTION_INVALID');
+    failTemplateDocxRender("FIELD_RESOLUTION_INVALID");
   }
 
   const sourceParts = new Map<string, IndexedPart>();
   const outputParts = new Map<string, IndexedPart>();
-  const loadPart = (
-    partName: string,
-    source: boolean,
-  ): IndexedPart => {
+  const loadPart = (partName: string, source: boolean): IndexedPart => {
     const cache = source ? sourceParts : outputParts;
     const existing = cache.get(partName);
     if (existing) return existing;
     const entry = (source ? sourcePackage : outputPackage).zip.entries.get(
       partName,
     );
-    if (!entry) failTemplateDocxRender('BINDING_NOT_FOUND');
+    if (!entry) failTemplateDocxRender("BINDING_NOT_FOUND");
     let indexed: IndexedPart;
     try {
       indexed = indexBindingXmlPart(
@@ -96,7 +108,7 @@ export function readbackTemplateDocxOutput(
         ),
       );
     } catch {
-      failTemplateDocxRender('ROUNDTRIP_PACKAGE_INVALID');
+      failTemplateDocxRender("ROUNDTRIP_PACKAGE_INVALID");
     }
     cache.set(partName, indexed);
     return indexed;
@@ -115,7 +127,7 @@ export function readbackTemplateDocxOutput(
       ...outputPackage.footerPartNames,
     ])
   ) {
-    failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+    failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
   }
   for (const partName of structuralPartNames) {
     loadPart(partName, true);
@@ -131,23 +143,28 @@ export function readbackTemplateDocxOutput(
     canonicalSha256(sourceIdentityPartNames) !==
     canonicalSha256(outputIdentityPartNames)
   ) {
-    failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+    failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
   }
   for (const partName of sourceIdentityPartNames) {
     loadPart(partName, true);
     loadPart(partName, false);
   }
-  assertPackageBindingCensus(
-    sourceParts,
-    outputParts,
-    sourceIdentityPartNames,
-  );
+  assertPackageBindingCensus(sourceParts, outputParts, sourceIdentityPartNames);
 
   const sourceRecords = input.ir.fields.map((field) =>
-    certifiedSourceRecord(field, loadPart(field.rendererBinding.partName, true)),
+    certifiedSourceRecord(
+      field,
+      loadPart(field.rendererBinding.partName, true),
+    ),
   );
   assignOutputDerivedOrdinals(sourceRecords, structuralPartNames);
   for (const record of sourceRecords) assertCertifiedSourceRecord(record);
+  assertOrdinaryPlaceholderCensus(
+    sourceRecords,
+    sourceParts,
+    outputParts,
+    structuralPartNames,
+  );
 
   const outputRecords = sourceRecords.map((sourceRecord) =>
     locateOutputBinding(sourceRecord, outputParts, structuralPartNames),
@@ -155,37 +172,42 @@ export function readbackTemplateDocxOutput(
   assignOutputDerivedOrdinals(outputRecords, structuralPartNames);
 
   return outputRecords.map((outputRecord) => {
-    const field = outputRecord.field;
+    const structuralField = outputRecord.field;
+    const field = effectiveById.get(structuralField.fieldId);
+    if (!field) failTemplateDocxRender("FIELD_RESOLUTION_INVALID");
     const resolution = resolutions.get(field.fieldId);
-    if (!resolution) failTemplateDocxRender('FIELD_RESOLUTION_INVALID');
+    if (!resolution) failTemplateDocxRender("FIELD_RESOLUTION_INVALID");
     const sourceRecord = sourceRecords.find(
       (candidate) => candidate.field.fieldId === field.fieldId,
     );
-    if (!sourceRecord) failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+    if (!sourceRecord) failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
     const bindingEvidence = verifiedBindingEvidence(sourceRecord, outputRecord);
     const occurrences = outputRecord.occurrences;
 
     if (field.rowPrototype) {
       // Repeating structures are certification-blocked in safe alpha. A
       // future extractor/renderer must introduce independent row identities.
-      if (resolution.value !== null) failTemplateDocxRender('UNSUPPORTED_BINDING');
+      if (resolution.value !== null)
+        failTemplateDocxRender("UNSUPPORTED_BINDING");
     }
 
-    if (resolution.value === null || field.detectionStatus === 'unsupported') {
-      if (resolution.value !== null) failTemplateDocxRender('FIELD_VALUE_INVALID');
+    if (resolution.value === null || field.detectionStatus === "unsupported") {
+      if (resolution.value !== null)
+        failTemplateDocxRender("FIELD_VALUE_INVALID");
       const mustBePreserved =
-        field.detectionStatus === 'unsupported' ||
-        field.kind === 'checkbox' ||
-        field.rowPrototype;
+        field.detectionStatus === "unsupported" ||
+        field.kind === "checkbox" ||
+        field.rowPrototype ||
+        field.rendererBinding.bindingType === "ordinary_placeholder";
       if (mustBePreserved) {
         if (
           canonicalSha256(proofContainer(sourceRecord.node)) !==
           canonicalSha256(proofContainer(outputRecord.node))
         ) {
-          failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+          failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
         }
       } else if (!isBlankBinding(outputRecord.part, outputRecord.node, field)) {
-        failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+        failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
       }
       return {
         fieldId: field.fieldId,
@@ -195,17 +217,20 @@ export function readbackTemplateDocxOutput(
         valueSha256: fieldValueSha256(field.fieldId, null),
         occurrences,
         disposition:
-          field.detectionStatus === 'unsupported'
-            ? 'preserved_unsupported'
+          field.detectionStatus === "unsupported"
+            ? "preserved_unsupported"
             : mustBePreserved
-              ? 'preserved_unresolved'
-              : 'unresolved_blank',
+              ? "preserved_unresolved"
+              : "unresolved_blank",
       };
     }
 
     const actual = readFieldValue(outputRecord.part, outputRecord.node, field);
-    if (fieldValueSha256(field.fieldId, actual) !== fieldValueSha256(field.fieldId, resolution.value)) {
-      failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+    if (
+      fieldValueSha256(field.fieldId, actual) !==
+      fieldValueSha256(field.fieldId, resolution.value)
+    ) {
+      failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
     }
     return {
       fieldId: field.fieldId,
@@ -214,8 +239,53 @@ export function readbackTemplateDocxOutput(
       bindingEvidence,
       valueSha256: fieldValueSha256(field.fieldId, actual),
       occurrences,
-      disposition: 'rendered',
+      disposition: "rendered",
     };
+  });
+}
+
+function parseEffectiveFields(
+  ir: TemplateDocIR,
+  rawFields: readonly TemplateField[] | undefined,
+): TemplateField[] {
+  if (!rawFields) return [...ir.fields];
+  if (rawFields.length !== ir.fields.length) {
+    failTemplateDocxRender("FIELD_RESOLUTION_INVALID");
+  }
+  const sourceById = new Map(ir.fields.map((field) => [field.fieldId, field]));
+  const seen = new Set<string>();
+  return rawFields.map((rawField) => {
+    const parsed = TemplateFieldSchema.safeParse(rawField);
+    if (!parsed.success || seen.has(parsed.data.fieldId)) {
+      failTemplateDocxRender("FIELD_RESOLUTION_INVALID");
+    }
+    seen.add(parsed.data.fieldId);
+    const source = sourceById.get(parsed.data.fieldId);
+    if (!source) failTemplateDocxRender("FIELD_RESOLUTION_INVALID");
+    if (source.rendererBinding.bindingType !== "ordinary_placeholder") {
+      if (canonicalSha256(source) !== canonicalSha256(parsed.data)) {
+        failTemplateDocxRender("FIELD_RESOLUTION_INVALID");
+      }
+      return parsed.data;
+    }
+    const structural = (candidate: TemplateField) => ({
+      fieldId: candidate.fieldId,
+      originalLabel: candidate.originalLabel,
+      labelSource: candidate.labelSource,
+      displayOrder: candidate.displayOrder,
+      detectionStatus: candidate.detectionStatus,
+      rendererBinding: candidate.rendererBinding,
+      criticality: candidate.criticality,
+      tableId: candidate.tableId,
+      rowPrototype: candidate.rowPrototype,
+    });
+    if (
+      canonicalSha256(structural(source)) !==
+      canonicalSha256(structural(parsed.data))
+    ) {
+      failTemplateDocxRender("FIELD_RESOLUTION_INVALID");
+    }
+    return parsed.data;
   });
 }
 
@@ -227,60 +297,204 @@ function assertPackageBindingCensus(
   const census = (parts: ReadonlyMap<string, IndexedPart>) =>
     identityPartNames.flatMap((partName) => {
       const part = parts.get(partName);
-      if (!part) failTemplateDocxRender('ROUNDTRIP_PACKAGE_INVALID');
+      if (!part) failTemplateDocxRender("ROUNDTRIP_PACKAGE_INVALID");
       return part.nodes.flatMap((node) => {
-        if (isWordElement(node, 'sdt')) {
+        if (isWordElement(node, "sdt")) {
           const identity = deriveOoxmlBindingIdentity(
             part,
             node,
-            'content_control',
+            "content_control",
           );
           return [
             identity
               ? {
                   partName,
                   canonicalPath: node.canonicalPath,
-                  bindingType: 'content_control',
+                  bindingType: "content_control",
                   nativeIdentity: identity.nativeIdentity,
                   identitySha256: identity.identitySha256,
                 }
               : {
                   partName,
                   canonicalPath: node.canonicalPath,
-                  bindingType: 'malformed_content_control',
+                  bindingType: "malformed_content_control",
                   nodeSha256: canonicalSha256(node.node),
                 },
           ];
         }
-        if (isWordElement(node, 'fldChar')) {
+        if (isWordElement(node, "fldChar")) {
           const identity = deriveOoxmlBindingIdentity(
             part,
             node,
-            'legacy_form_field',
+            "legacy_form_field",
           );
           return [
             identity
               ? {
                   partName,
                   canonicalPath: node.canonicalPath,
-                  bindingType: 'legacy_form_field',
+                  bindingType: "legacy_form_field",
                   nativeIdentity: identity.nativeIdentity,
                   identitySha256: identity.identitySha256,
                 }
               : {
                   partName,
                   canonicalPath: node.canonicalPath,
-                  bindingType: 'word_field_marker',
-                  fieldMarkerType: wordAttribute(node, 'fldCharType') ?? null,
+                  bindingType: "word_field_marker",
+                  fieldMarkerType: wordAttribute(node, "fldCharType") ?? null,
                   nodeSha256: canonicalSha256(node.node),
                 },
           ];
+        }
+        if (isWordElement(node, "tc")) {
+          const bindingProfile = deriveTableCellBindingProfile(part, node);
+          if (bindingProfile) {
+            const identity = deriveOoxmlBindingIdentity(
+              part,
+              node,
+              "table_cell",
+            );
+            if (!identity) {
+              failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
+            }
+            return [
+              {
+                partName,
+                canonicalPath: node.canonicalPath,
+                bindingType: "table_cell",
+                bindingProfile,
+                nativeIdentity: identity.nativeIdentity,
+                identitySha256: identity.identitySha256,
+                tableLocation: deriveTableLocation(part, node),
+              },
+            ];
+          }
         }
         return [];
       });
     });
-  if (canonicalSha256(census(sourceParts)) !== canonicalSha256(census(outputParts))) {
-    failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+  if (
+    canonicalSha256(census(sourceParts)) !==
+    canonicalSha256(census(outputParts))
+  ) {
+    failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
+  }
+}
+
+function assertOrdinaryPlaceholderCensus(
+  sourceRecords: readonly FieldBindingRecord[],
+  sourceParts: ReadonlyMap<string, IndexedPart>,
+  outputParts: ReadonlyMap<string, IndexedPart>,
+  structuralPartNames: readonly string[],
+): void {
+  const ordinary = sourceRecords.filter(
+    (record) =>
+      record.field.rendererBinding.bindingType === "ordinary_placeholder",
+  );
+  if (ordinary.length === 0) return;
+  // Count each distinct certified ordinary-slot shape across completed bytes.
+  // A global element census would incorrectly reject approved structural edits
+  // inside unrelated content controls (for example removing showingPlcHdr).
+  // Exact certified paths are checked below; this shape census independently
+  // catches an otherwise-valid slot copied to an unexpected location.
+  const shapeGroups = new Map<
+    string,
+    {
+      binding: NonNullable<
+        TemplateField["rendererBinding"]["ordinaryPlaceholder"]
+      >;
+      outputCensusSha256: string;
+      mutableValueSha256: string;
+      expectedOccurrences: number;
+    }
+  >();
+  for (const record of ordinary) {
+    const binding = record.field.rendererBinding.ordinaryPlaceholder;
+    if (!binding) failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
+    const outputPart = outputParts.get(record.partName);
+    const outputNode = outputPart?.byCanonicalPath.get(
+      record.node.canonicalPath,
+    );
+    if (!outputPart || !outputNode) {
+      failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
+    }
+    const certifiedOutput = deriveOrdinaryPlaceholderBinding(
+      outputPart,
+      outputNode,
+      binding,
+      "output",
+    );
+    if (
+      !certifiedOutput ||
+      certifiedOutput.identitySha256 !== record.identity.identitySha256
+    ) {
+      failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
+    }
+    const mutableValueSha256 = canonicalSha256(certifiedOutput.mutableValue);
+    const key = canonicalSha256({
+      outputCensusSha256: certifiedOutput.outputCensusSha256,
+      mutableValueSha256,
+    });
+    const existing = shapeGroups.get(key);
+    if (existing) {
+      existing.expectedOccurrences += 1;
+    } else {
+      shapeGroups.set(key, {
+        binding,
+        outputCensusSha256: certifiedOutput.outputCensusSha256,
+        mutableValueSha256,
+        expectedOccurrences: 1,
+      });
+    }
+  }
+  for (const group of shapeGroups.values()) {
+    let actualOccurrences = 0;
+    for (const partName of structuralPartNames) {
+      const part = outputParts.get(partName);
+      if (!part) failTemplateDocxRender("ROUNDTRIP_PACKAGE_INVALID");
+      for (const node of part.nodes) {
+        if (
+          node.visit.namespaceUri !== WORDPROCESSINGML_NAMESPACE ||
+          node.visit.localName !== "p"
+        ) {
+          continue;
+        }
+        const actual = deriveOrdinaryPlaceholderBinding(
+          part,
+          node,
+          group.binding,
+          "output",
+        );
+        if (
+          actual?.outputCensusSha256 === group.outputCensusSha256 &&
+          canonicalSha256(actual.mutableValue) === group.mutableValueSha256
+        ) {
+          actualOccurrences += 1;
+        }
+      }
+    }
+    if (actualOccurrences !== group.expectedOccurrences) {
+      failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
+    }
+  }
+  for (const record of ordinary) {
+    const binding = record.field.rendererBinding.ordinaryPlaceholder;
+    const outputPart = outputParts.get(record.partName);
+    const outputNode = outputPart?.byCanonicalPath.get(
+      record.node.canonicalPath,
+    );
+    if (!binding || !outputPart || !outputNode) {
+      failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
+    }
+    const actual = deriveOrdinaryPlaceholderBinding(
+      outputPart,
+      outputNode,
+      binding,
+      "output",
+    );
+    if (actual?.identitySha256 !== record.identity.identitySha256) {
+      failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
+    }
   }
 }
 
@@ -290,12 +504,14 @@ function deriveRepeatAncestorCanonicalPath(
   expectedCanonicalPath: string | null,
 ): string | null {
   if (!expectedCanonicalPath) return null;
-  const expectedSourceAncestor = part.byCanonicalPath.get(expectedCanonicalPath);
+  const expectedSourceAncestor = part.byCanonicalPath.get(
+    expectedCanonicalPath,
+  );
   if (expectedSourceAncestor && isAncestor(expectedSourceAncestor, node)) {
     return expectedSourceAncestor.canonicalPath;
   }
   const terminalSegment = expectedCanonicalPath.slice(
-    expectedCanonicalPath.lastIndexOf('/') + 1,
+    expectedCanonicalPath.lastIndexOf("/") + 1,
   );
   let ancestor = node.parent;
   while (ancestor) {
@@ -321,19 +537,28 @@ function certifiedSourceRecord(
   part: IndexedPart,
 ): FieldBindingRecord {
   const node = part.byPath.get(field.rendererBinding.path);
-  if (!node) failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+  if (!node) failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
   const identity = deriveOoxmlBindingIdentity(
     part,
     node,
     field.rendererBinding.bindingType,
+    field.rendererBinding.ordinaryPlaceholder,
+    "source",
   );
-  if (!identity) failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+  if (!identity) failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
   return {
     field,
     partName: field.rendererBinding.partName,
     part,
     node,
     identity,
+    bindingProfile:
+      field.rendererBinding.bindingType === "table_cell"
+        ? deriveTableCellBindingProfile(part, node)
+        : field.rendererBinding.bindingType === "ordinary_placeholder"
+          ? (field.rendererBinding.bindingProfile ?? null)
+          : null,
+    ordinaryPlaceholder: field.rendererBinding.ordinaryPlaceholder ?? null,
     tableLocation: deriveTableLocation(part, node),
     repeatAncestorCanonicalPath: deriveRepeatAncestorCanonicalPath(
       part,
@@ -354,6 +579,10 @@ function assertCertifiedSourceRecord(record: FieldBindingRecord): void {
     canonicalSha256(record.node.node) !== binding.sourceControlSha256 ||
     record.identity.bindingType !== binding.bindingType ||
     record.identity.identitySha256 !== binding.sourceBindingIdentitySha256 ||
+    (binding.bindingProfile !== undefined &&
+      record.bindingProfile !== binding.bindingProfile) ||
+    canonicalSha256(record.ordinaryPlaceholder) !==
+      canonicalSha256(binding.ordinaryPlaceholder ?? null) ||
     !sameNativeIdentity(
       record.identity.nativeIdentity,
       nativeIdentityFromRendererBinding(binding),
@@ -370,7 +599,7 @@ function assertCertifiedSourceRecord(record: FieldBindingRecord): void {
     rendererBindingFingerprintSha256(record.field.fieldId, unsignedBinding) !==
       certifiedBindingSha256
   ) {
-    failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+    failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
   }
 }
 
@@ -388,36 +617,66 @@ function locateOutputBinding(
   }> = [];
   for (const partName of structuralPartNames) {
     const part = outputParts.get(partName);
-    if (!part) failTemplateDocxRender('ROUNDTRIP_PACKAGE_INVALID');
+    if (!part) failTemplateDocxRender("ROUNDTRIP_PACKAGE_INVALID");
     const candidates =
-      binding.bindingType === 'table_cell'
+      binding.bindingType === "table_cell"
         ? partName === binding.partName
-          ? part.nodes.filter((node) => {
+          ? (() => {
+              // Resolve the certified path against the independently parsed
+              // completed bytes. The returned node still supplies its own
+              // canonical path, table location, profile, and fingerprint;
+              // the certified path is a lookup key, never accepted as proof.
+              const node = part.byCanonicalPath.get(binding.canonicalPath);
+              if (!node || !isWordElement(node, "tc")) return [];
               const location = deriveTableLocation(part, node);
-              return (
-                isWordElement(node, 'tc') &&
-                location.tableIndex === binding.tableIndex &&
+              return location.tableIndex === binding.tableIndex &&
                 location.rowIndex === binding.rowIndex &&
                 location.cellIndex === binding.cellIndex
-              );
-            })
+                ? [node]
+                : [];
+            })()
           : []
-        : part.nodes;
+        : binding.bindingType === "ordinary_placeholder"
+          ? partName === binding.partName
+            ? (() => {
+                const node = part.byCanonicalPath.get(binding.canonicalPath);
+                return node && isWordElement(node, "p") ? [node] : [];
+              })()
+            : []
+          : part.nodes;
     for (const node of candidates) {
-      const identity = deriveOoxmlBindingIdentity(part, node, binding.bindingType);
+      const identity = deriveOoxmlBindingIdentity(
+        part,
+        node,
+        binding.bindingType,
+        binding.ordinaryPlaceholder,
+        "output",
+      );
       if (!identity) continue;
-      const identityMatches = hasStrongNativeIdentity(source.identity.nativeIdentity)
-        ? sameNativeIdentity(identity.nativeIdentity, source.identity.nativeIdentity)
-        : identity.identitySha256 === source.identity.identitySha256;
+      const identityMatches =
+        binding.bindingType === "ordinary_placeholder"
+          ? identity.identitySha256 === source.identity.identitySha256
+          : hasStrongNativeIdentity(source.identity.nativeIdentity)
+            ? sameNativeIdentity(
+                identity.nativeIdentity,
+                source.identity.nativeIdentity,
+              )
+            : identity.identitySha256 === source.identity.identitySha256;
       if (
         identityMatches &&
-        identity.identitySha256 === source.identity.identitySha256
+        identity.identitySha256 === source.identity.identitySha256 &&
+        (binding.bindingProfile === undefined ||
+          (binding.bindingType === "table_cell"
+            ? deriveTableCellBindingProfile(part, node) ===
+              binding.bindingProfile
+            : binding.bindingType === "ordinary_placeholder" &&
+              binding.bindingProfile === "ORDINARY_PLACEHOLDER_TOKEN_V1"))
       ) {
         matches.push({ partName, part, node, identity });
       }
     }
   }
-  if (matches.length !== 1) failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+  if (matches.length !== 1) failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
   const match = matches[0]!;
   return {
     field: source.field,
@@ -425,6 +684,13 @@ function locateOutputBinding(
     part: match.part,
     node: match.node,
     identity: match.identity,
+    bindingProfile:
+      binding.bindingType === "table_cell"
+        ? deriveTableCellBindingProfile(match.part, match.node)
+        : binding.bindingType === "ordinary_placeholder"
+          ? (binding.bindingProfile ?? null)
+          : null,
+    ordinaryPlaceholder: binding.ordinaryPlaceholder ?? null,
     tableLocation: deriveTableLocation(match.part, match.node),
     repeatAncestorCanonicalPath: deriveRepeatAncestorCanonicalPath(
       match.part,
@@ -457,13 +723,21 @@ function assignOutputDerivedOrdinals(
 function verifiedBindingEvidence(
   source: FieldBindingRecord,
   output: FieldBindingRecord,
-): RenderedFieldProof['bindingEvidence'] {
+): RenderedFieldProof["bindingEvidence"] {
   const binding = source.field.rendererBinding;
   const outputFingerprintSha256 = certifiedBindingFingerprintSha256({
     fieldId: source.field.fieldId,
     partName: output.partName,
     canonicalPath: output.node.canonicalPath,
     bindingType: output.identity.bindingType,
+    bindingProfile:
+      binding.bindingProfile === undefined
+        ? undefined
+        : (output.bindingProfile ?? undefined),
+    ordinaryPlaceholder:
+      binding.ordinaryPlaceholder === undefined
+        ? undefined
+        : (output.ordinaryPlaceholder ?? undefined),
     bindingOrdinal: output.ordinal,
     nativeIdentity: output.identity.nativeIdentity,
     sourceControlSha256: binding.sourceControlSha256,
@@ -472,16 +746,19 @@ function verifiedBindingEvidence(
     canonicalRepeatAncestorPath: output.repeatAncestorCanonicalPath,
   });
   if (outputFingerprintSha256 !== binding.certifiedBindingSha256) {
-    failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+    failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
   }
   return {
     contractVersion: TEMPLATE_TWIN_BINDING_FINGERPRINT_VERSION,
-    status: 'verified',
+    status: "verified",
     certifiedFingerprintSha256: binding.certifiedBindingSha256,
     outputFingerprintSha256,
     outputPartName: output.partName,
     outputCanonicalPath: output.node.canonicalPath,
     outputBindingType: output.identity.bindingType,
+    ...(binding.bindingProfile === undefined
+      ? {}
+      : { outputBindingProfile: output.bindingProfile ?? undefined }),
     outputBindingOrdinal: output.ordinal,
     outputNativeIdentity: output.identity.nativeIdentity,
     outputBindingIdentitySha256: output.identity.identitySha256,
@@ -494,45 +771,51 @@ function isBlankBinding(
   bound: IndexedNode,
   field: TemplateField,
 ): boolean {
-  if (field.rendererBinding.bindingType === 'content_control') {
-    const properties = directWordChild(bound, 'sdtPr', part);
-    const content = directWordChild(bound, 'sdtContent', part);
-    if (!properties || !content || wordText(content, part) !== '') return false;
-    if (field.kind === 'date') {
-      return !wordAttribute(directWordChild(properties, 'date', part), 'fullDate');
+  if (field.rendererBinding.bindingType === "content_control") {
+    const properties = directWordChild(bound, "sdtPr", part);
+    const content = directWordChild(bound, "sdtContent", part);
+    if (!properties || !content || wordText(content, part) !== "") return false;
+    if (field.kind === "date") {
+      return !wordAttribute(
+        directWordChild(properties, "date", part),
+        "fullDate",
+      );
     }
-    if (field.kind === 'single_select') {
-      const combo = directWordChild(properties, 'comboBox', part);
-      return !combo || !wordAttribute(descendantsWord(combo, 'lastValue', part)[0], 'val');
+    if (field.kind === "single_select") {
+      const combo = directWordChild(properties, "comboBox", part);
+      return (
+        !combo ||
+        !wordAttribute(descendantsWord(combo, "lastValue", part)[0], "val")
+      );
     }
     return true;
   }
-  if (field.rendererBinding.bindingType === 'legacy_form_field') {
-    const formData = descendantsWord(bound, 'ffData', part)[0];
-    if (!formData || legacyResultText(bound, part) !== '') return false;
-    if (field.kind === 'single_select') {
-      const list = descendantsWord(formData, 'ddList', part)[0];
+  if (field.rendererBinding.bindingType === "legacy_form_field") {
+    const formData = descendantsWord(bound, "ffData", part)[0];
+    if (!formData || legacyResultText(bound, part) !== "") return false;
+    if (field.kind === "single_select") {
+      const list = descendantsWord(formData, "ddList", part)[0];
       return !wordAttribute(
-        list ? descendantsWord(list, 'result', part)[0] : undefined,
-        'val',
+        list ? descendantsWord(list, "result", part)[0] : undefined,
+        "val",
       );
     }
-    const textInput = descendantsWord(formData, 'textInput', part)[0];
+    const textInput = descendantsWord(formData, "textInput", part)[0];
     return !wordAttribute(
-      textInput ? descendantsWord(textInput, 'default', part)[0] : undefined,
-      'val',
+      textInput ? descendantsWord(textInput, "default", part)[0] : undefined,
+      "val",
     );
   }
-  if (field.rendererBinding.bindingType === 'table_cell') {
-    return wordText(bound, part) === '';
+  if (field.rendererBinding.bindingType === "table_cell") {
+    return tableCellText(bound, part, field) === "";
   }
   return false;
 }
 
 function proofContainer(node: IndexedNode): OrderedXmlNode {
-  if (node.visit.localName !== 'fldChar') return node.node;
+  if (node.visit.localName !== "fldChar") return node.node;
   let parent: IndexedNode | null = node;
-  while (parent && !isWordElement(parent, 'p')) parent = parent.parent;
+  while (parent && !isWordElement(parent, "p")) parent = parent.parent;
   return parent?.node ?? node.node;
 }
 
@@ -540,16 +823,28 @@ function readFieldValue(
   part: IndexedPart,
   bound: IndexedNode,
   field: TemplateField,
-): FieldResolution['value'] {
+): FieldResolution["value"] {
   switch (field.rendererBinding.bindingType) {
-    case 'content_control':
+    case "content_control":
       return readContentControl(part, bound, field);
-    case 'legacy_form_field':
+    case "legacy_form_field":
       return readLegacyField(part, bound, field);
-    case 'table_cell':
-      return convertDisplayedValue(field, wordText(bound, part));
-    case 'repeating_row':
-      failTemplateDocxRender('UNSUPPORTED_BINDING');
+    case "table_cell":
+      return convertDisplayedValue(field, tableCellText(bound, part, field));
+    case "ordinary_placeholder": {
+      const binding = field.rendererBinding.ordinaryPlaceholder;
+      if (!binding) failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
+      const derived = deriveOrdinaryPlaceholderBinding(
+        part,
+        bound,
+        binding,
+        "output",
+      );
+      if (!derived) failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
+      return convertOrdinaryPlaceholderValue(field, derived.mutableValue);
+    }
+    case "repeating_row":
+      failTemplateDocxRender("UNSUPPORTED_BINDING");
   }
 }
 
@@ -557,85 +852,89 @@ function readContentControl(
   part: IndexedPart,
   control: IndexedNode,
   field: TemplateField,
-): FieldResolution['value'] {
-  if (!isWordElement(control, 'sdt')) failTemplateDocxRender('BINDING_NOT_FOUND');
-  const properties = directWordChild(control, 'sdtPr', part);
-  const content = directWordChild(control, 'sdtContent', part);
-  if (!properties || !content) failTemplateDocxRender('BINDING_NOT_FOUND');
+): FieldResolution["value"] {
+  if (!isWordElement(control, "sdt"))
+    failTemplateDocxRender("BINDING_NOT_FOUND");
+  const properties = directWordChild(control, "sdtPr", part);
+  const content = directWordChild(control, "sdtContent", part);
+  if (!properties || !content) failTemplateDocxRender("BINDING_NOT_FOUND");
   if (
-    descendantsWord(properties, 'showingPlcHdr', part).length > 0 ||
-    descendantsWord(content, 'rStyle', part).some(
-      (style) => wordAttribute(style, 'val') === 'PlaceholderText',
+    descendantsWord(properties, "showingPlcHdr", part).length > 0 ||
+    descendantsWord(content, "rStyle", part).some(
+      (style) => wordAttribute(style, "val") === "PlaceholderText",
     )
   ) {
-    failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+    failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
   }
 
-  if (field.kind === 'checkbox') {
-    const checkbox = descendantsByLocal(properties, 'checkbox', part).find(
+  if (field.kind === "checkbox") {
+    const checkbox = descendantsByLocal(properties, "checkbox", part).find(
       (node) => node.visit.namespaceUri === WORDPROCESSINGML_2010_NAMESPACE,
     );
     const checked = checkbox
-      ? descendantsByLocal(checkbox, 'checked', part).find(
+      ? descendantsByLocal(checkbox, "checked", part).find(
           (node) => node.visit.namespaceUri === WORDPROCESSINGML_2010_NAMESPACE,
         )
       : undefined;
     const raw = namespacedAttribute(
       checked,
       WORDPROCESSINGML_2010_NAMESPACE,
-      'val',
+      "val",
     );
-    if (raw !== '0' && raw !== '1' && raw !== 'true' && raw !== 'false') {
-      failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+    if (raw !== "0" && raw !== "1" && raw !== "true" && raw !== "false") {
+      failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
     }
-    const value = raw === '1' || raw === 'true';
+    const value = raw === "1" || raw === "true";
     const state = checkbox
       ? descendantsByLocal(
           checkbox,
-          value ? 'checkedState' : 'uncheckedState',
+          value ? "checkedState" : "uncheckedState",
           part,
         ).find(
-          (node) =>
-            node.visit.namespaceUri === WORDPROCESSINGML_2010_NAMESPACE,
+          (node) => node.visit.namespaceUri === WORDPROCESSINGML_2010_NAMESPACE,
         )
       : undefined;
     const glyphCode = namespacedAttribute(
       state,
       WORDPROCESSINGML_2010_NAMESPACE,
-      'val',
+      "val",
     );
-    const glyph = glyphCode && /^[a-f0-9]{1,6}$/i.test(glyphCode)
-      ? String.fromCodePoint(Number.parseInt(glyphCode, 16))
-      : value
-        ? '☒'
-        : '☐';
+    const glyph =
+      glyphCode && /^[a-f0-9]{1,6}$/i.test(glyphCode)
+        ? String.fromCodePoint(Number.parseInt(glyphCode, 16))
+        : value
+          ? "☒"
+          : "☐";
     if (wordText(content, part) !== glyph) {
-      failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+      failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
     }
     return value;
   }
 
-  if (field.kind === 'date') {
-    const date = directWordChild(properties, 'date', part);
-    const fullDate = wordAttribute(date, 'fullDate');
-    const match = /^(\d{4}-\d{2}-\d{2})T/.exec(fullDate ?? '');
-    if (!date || !match) failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+  if (field.kind === "date") {
+    const date = directWordChild(properties, "date", part);
+    const fullDate = wordAttribute(date, "fullDate");
+    const match = /^(\d{4}-\d{2}-\d{2})T/.exec(fullDate ?? "");
+    if (!date || !match) failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
     const value = match[1]!;
-    const format = wordAttribute(descendantsWord(date, 'dateFormat', part)[0], 'val');
+    const format = wordAttribute(
+      descendantsWord(date, "dateFormat", part)[0],
+      "val",
+    );
     if (wordText(content, part) !== formatDate(value, format)) {
-      failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+      failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
     }
     return value;
   }
 
   const value = convertDisplayedValue(field, wordText(content, part));
-  if (field.kind === 'single_select') {
-    const combo = directWordChild(properties, 'comboBox', part);
+  if (field.kind === "single_select") {
+    const combo = directWordChild(properties, "comboBox", part);
     const lastValue = combo
-      ? wordAttribute(descendantsWord(combo, 'lastValue', part)[0], 'val')
+      ? wordAttribute(descendantsWord(combo, "lastValue", part)[0], "val")
       : undefined;
     if (lastValue !== undefined && lastValue !== value) {
-      failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+      failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
     }
   }
   return value;
@@ -645,47 +944,54 @@ function readLegacyField(
   part: IndexedPart,
   begin: IndexedNode,
   field: TemplateField,
-): FieldResolution['value'] {
-  const formData = descendantsWord(begin, 'ffData', part)[0];
-  if (!formData) failTemplateDocxRender('BINDING_NOT_FOUND');
+): FieldResolution["value"] {
+  const formData = descendantsWord(begin, "ffData", part)[0];
+  if (!formData) failTemplateDocxRender("BINDING_NOT_FOUND");
   const resultText = legacyResultText(begin, part);
-  if (field.kind === 'checkbox') {
-    const checkbox = descendantsWord(formData, 'checkBox', part)[0];
+  if (field.kind === "checkbox") {
+    const checkbox = descendantsWord(formData, "checkBox", part)[0];
     const raw = wordAttribute(
-      checkbox ? descendantsWord(checkbox, 'checked', part)[0] : undefined,
-      'val',
+      checkbox ? descendantsWord(checkbox, "checked", part)[0] : undefined,
+      "val",
     );
-    if (raw !== '0' && raw !== '1' && raw !== 'true' && raw !== 'false') {
-      failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+    if (raw !== "0" && raw !== "1" && raw !== "true" && raw !== "false") {
+      failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
     }
-    const value = raw === '1' || raw === 'true';
-    if (resultText && resultText !== (value ? '☒' : '☐')) {
-      failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+    const value = raw === "1" || raw === "true";
+    if (resultText && resultText !== (value ? "☒" : "☐")) {
+      failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
     }
     return value;
   }
-  if (field.kind === 'single_select') {
-    const list = descendantsWord(formData, 'ddList', part)[0];
+  if (field.kind === "single_select") {
+    const list = descendantsWord(formData, "ddList", part)[0];
     const raw = wordAttribute(
-      list ? descendantsWord(list, 'result', part)[0] : undefined,
-      'val',
+      list ? descendantsWord(list, "result", part)[0] : undefined,
+      "val",
     );
     if (!raw || !/^(?:0|[1-9][0-9]*)$/.test(raw)) {
-      failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+      failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
     }
-    const option = field.allowedOptions.find((candidate) => candidate.ordinal === Number(raw));
+    const option = field.allowedOptions.find(
+      (candidate) => candidate.ordinal === Number(raw),
+    );
     if (!option || (resultText && resultText !== option.displayText)) {
-      failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+      failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
     }
     return option.value;
   }
-  const textInput = descendantsWord(formData, 'textInput', part)[0];
+  const textInput = descendantsWord(formData, "textInput", part)[0];
   const defaultValue = wordAttribute(
-    textInput ? descendantsWord(textInput, 'default', part)[0] : undefined,
-    'val',
+    textInput ? descendantsWord(textInput, "default", part)[0] : undefined,
+    "val",
   );
-  if (defaultValue !== undefined && defaultValue !== null && resultText && defaultValue !== resultText) {
-    failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+  if (
+    defaultValue !== undefined &&
+    defaultValue !== null &&
+    resultText &&
+    defaultValue !== resultText
+  ) {
+    failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
   }
   return convertDisplayedValue(field, defaultValue ?? resultText);
 }
@@ -693,63 +999,81 @@ function readLegacyField(
 function convertDisplayedValue(
   field: TemplateField,
   displayed: string,
-): FieldResolution['value'] {
-  if (field.kind === 'single_select') {
+): FieldResolution["value"] {
+  if (field.kind === "single_select") {
     const options = field.allowedOptions.filter(
       (option) => option.displayText === displayed,
     );
-    if (options.length !== 1) failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+    if (options.length !== 1)
+      failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
     return options[0]!.value;
   }
-  if (field.kind === 'multi_select') {
-    const displayedOptions = displayed.split(';').map((value) => value.trim());
+  if (field.kind === "multi_select") {
+    const displayedOptions = displayed.split(";").map((value) => value.trim());
     const values = displayedOptions.map((display) => {
       const options = field.allowedOptions.filter(
         (option) => option.displayText === display,
       );
-      if (options.length !== 1) failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+      if (options.length !== 1)
+        failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
       return options[0]!.value;
     });
     if (new Set(values).size !== values.length) {
-      failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+      failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
     }
     return values;
   }
-  if (field.kind === 'number') {
+  if (field.kind === "number") {
     const number = Number(displayed);
     if (!Number.isFinite(number) || String(number) !== displayed) {
-      failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+      failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
     }
     return number;
   }
   return displayed;
 }
 
+function convertOrdinaryPlaceholderValue(
+  field: TemplateField,
+  displayed: string,
+): FieldResolution["value"] {
+  if (field.rendererBinding.bindingType !== "ordinary_placeholder") {
+    failTemplateDocxRender("UNSUPPORTED_BINDING");
+  }
+  if (field.kind === "checkbox") {
+    if (displayed === "true") return true;
+    if (displayed === "false") return false;
+    failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
+  }
+  return convertDisplayedValue(field, displayed);
+}
+
 function legacyResultText(begin: IndexedNode, part: IndexedPart): string {
   let paragraph: IndexedNode | null = begin;
-  while (paragraph && !isWordElement(paragraph, 'p')) paragraph = paragraph.parent;
-  if (!paragraph) return '';
-  const nodes = descendantsByLocal(paragraph, '', part);
+  while (paragraph && !isWordElement(paragraph, "p"))
+    paragraph = paragraph.parent;
+  if (!paragraph) return "";
+  const nodes = descendantsByLocal(paragraph, "", part);
   const startIndex = nodes.findIndex((node) => node === begin);
   let depth = 0;
   let inResult = false;
   const text: string[] = [];
   for (const node of nodes.slice(startIndex)) {
-    if (isWordElement(node, 'fldChar')) {
-      const type = wordAttribute(node, 'fldCharType');
-      if (type === 'begin') depth += 1;
-      else if (type === 'separate' && depth === 1) inResult = true;
-      else if (type === 'end') {
+    if (isWordElement(node, "fldChar")) {
+      const type = wordAttribute(node, "fldCharType");
+      if (type === "begin") depth += 1;
+      else if (type === "separate" && depth === 1) inResult = true;
+      else if (type === "end") {
         depth -= 1;
         if (depth === 0) break;
       }
       continue;
     }
-    if (inResult && depth === 1 && isWordElement(node, 't')) {
+    if (inResult && depth === 1 && isWordElement(node, "t")) {
       text.push(nodeText(node.node));
     }
   }
-  return text.join('');
+  return text.join("");
 }
 
 function directWordChild(
@@ -759,7 +1083,9 @@ function directWordChild(
 ): IndexedNode | undefined {
   return childrenOf(node.node)
     .map((child) => part.byNode.get(child))
-    .find((child): child is IndexedNode => Boolean(child && isWordElement(child, wanted)));
+    .find((child): child is IndexedNode =>
+      Boolean(child && isWordElement(child, wanted)),
+    );
 }
 
 function descendantsWord(
@@ -781,9 +1107,9 @@ function descendantsByLocal(
   const stack = [...childrenOf(node.node)].reverse();
   while (stack.length > 0) {
     const child = stack.pop()!;
-    if (tagOf(child) === '#text' || tagOf(child) === '?xml') continue;
+    if (tagOf(child) === "#text" || tagOf(child) === "?xml") continue;
     const indexed = part.byNode.get(child);
-    if (!indexed) failTemplateDocxRender('ROUNDTRIP_PACKAGE_INVALID');
+    if (!indexed) failTemplateDocxRender("ROUNDTRIP_PACKAGE_INVALID");
     if (!wanted || indexed.visit.localName === wanted) output.push(indexed);
     const grandchildren = childrenOf(child);
     for (let index = grandchildren.length - 1; index >= 0; index -= 1) {
@@ -808,6 +1134,51 @@ function wordAttribute(
   return exactExpandedAttribute(node.visit, WORDPROCESSINGML_NAMESPACE, local);
 }
 
+function tableCellText(
+  cell: IndexedNode,
+  part: IndexedPart,
+  field: TemplateField,
+): string {
+  if (field.rendererBinding.bindingProfile !== "TAB_ONLY_BLANK_TABLE_CELL_V1") {
+    return wordText(cell, part);
+  }
+  if (
+    deriveTableCellBindingProfile(part, cell) !== "TAB_ONLY_BLANK_TABLE_CELL_V1"
+  ) {
+    failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
+  }
+  const paragraphs = childrenOf(cell.node)
+    .map((child) => part.byNode.get(child))
+    .filter((child): child is IndexedNode =>
+      Boolean(child && isWordElement(child, "p")),
+    );
+  if (paragraphs.length !== 1) {
+    failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
+  }
+  const paragraphChildren = childrenOf(paragraphs[0]!.node)
+    .map((child) => part.byNode.get(child))
+    .filter((child): child is IndexedNode => Boolean(child));
+  const mutableChildren = paragraphChildren.filter(
+    (child) => !isWordElement(child, "pPr"),
+  );
+  if (mutableChildren.length === 0) return "";
+  if (
+    mutableChildren.length !== 1 ||
+    !isWordElement(mutableChildren[0]!, "r")
+  ) {
+    failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
+  }
+  const textNodes = childrenOf(mutableChildren[0]!.node)
+    .map((child) => part.byNode.get(child))
+    .filter((child): child is IndexedNode =>
+      Boolean(child && isWordElement(child, "t")),
+    );
+  if (textNodes.length !== 1) {
+    failTemplateDocxRender("ROUNDTRIP_FIELD_MISMATCH");
+  }
+  return nodeText(textNodes[0]!.node);
+}
+
 function namespacedAttribute(
   node: IndexedNode | undefined,
   namespaceUri: string,
@@ -819,60 +1190,69 @@ function namespacedAttribute(
 
 function wordText(node: IndexedNode, part: IndexedPart): string {
   const output: string[] = [];
-  const nodes = [node, ...descendantsByLocal(node, '', part)];
+  const nodes = [node, ...descendantsByLocal(node, "", part)];
   for (const candidate of nodes) {
     if (candidate.visit.namespaceUri !== WORDPROCESSINGML_NAMESPACE) continue;
-    if (candidate.visit.localName === 't') output.push(nodeText(candidate.node));
-    else if (candidate.visit.localName === 'tab') output.push('\t');
-    else if (candidate.visit.localName === 'br' || candidate.visit.localName === 'cr') {
-      output.push('\n');
+    if (candidate.visit.localName === "t")
+      output.push(nodeText(candidate.node));
+    else if (candidate.visit.localName === "tab") output.push("\t");
+    else if (
+      candidate.visit.localName === "br" ||
+      candidate.visit.localName === "cr"
+    ) {
+      output.push("\n");
     }
   }
-  return output.join('');
+  return output.join("");
 }
 
 function nodeText(node: OrderedXmlNode): string {
   const value = node[tagOf(node)];
-  if (!Array.isArray(value)) return typeof value === 'string' ? value : '';
+  if (!Array.isArray(value)) return typeof value === "string" ? value : "";
   return value
     .map((child) =>
-      tagOf(child as OrderedXmlNode) === '#text'
-        ? String((child as OrderedXmlNode)['#text'] ?? '')
-        : '',
+      tagOf(child as OrderedXmlNode) === "#text"
+        ? String((child as OrderedXmlNode)["#text"] ?? "")
+        : "",
     )
-    .join('')
+    .join("")
     .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) =>
       String.fromCodePoint(Number.parseInt(hex, 16)),
     )
     .replace(/&#([0-9]+);/g, (_, value: string) =>
       String.fromCodePoint(Number.parseInt(value, 10)),
     )
-    .replaceAll('&quot;', '"')
-    .replaceAll('&apos;', "'")
-    .replaceAll('&gt;', '>')
-    .replaceAll('&lt;', '<')
-    .replaceAll('&amp;', '&');
+    .replaceAll("&quot;", '"')
+    .replaceAll("&apos;", "'")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&amp;", "&");
 }
 
 function formatDate(value: string, format: string | undefined): string {
   if (!format) return value;
-  const [year, month, day] = value.split('-');
-  if (!year || !month || !day || /[A-Za-z]/.test(format.replace(/yyyy|yy|MM|M|dd|d/g, ''))) {
+  const [year, month, day] = value.split("-");
+  if (
+    !year ||
+    !month ||
+    !day ||
+    /[A-Za-z]/.test(format.replace(/yyyy|yy|MM|M|dd|d/g, ""))
+  ) {
     return value;
   }
   return format.replace(/yyyy|yy|MM|M|dd|d/g, (token) => {
-    if (token === 'yyyy') return year;
-    if (token === 'yy') return year.slice(-2);
-    if (token === 'MM') return month;
-    if (token === 'M') return String(Number(month));
-    if (token === 'dd') return day;
+    if (token === "yyyy") return year;
+    if (token === "yy") return year.slice(-2);
+    if (token === "MM") return month;
+    if (token === "M") return String(Number(month));
+    if (token === "dd") return day;
     return String(Number(day));
   });
 }
 
 function fieldValueSha256(
   fieldId: string,
-  value: FieldResolution['value'],
+  value: FieldResolution["value"],
 ): string {
   return canonicalSha256({ fieldId, value });
 }

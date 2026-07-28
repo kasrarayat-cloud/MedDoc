@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; object-src 'none'; base-uri 'none'"
+    />
+    <title>Template Twin Word visual checklist</title>
+    <style>
+      body {
+        font:
+          16px/1.5 Arial,
+          sans-serif;
+        max-width: 900px;
+        margin: auto;
+        padding: 24px;
+      }
+      section {
+        border: 1px solid #bbb;
+        padding: 18px;
+        margin: 18px 0;
+      }
+      li {
+        margin: 9px 0;
+      }
+      .warning {
+        border-left: 6px solid #a05c00;
+        background: #fff7e3;
+        padding: 12px;
+      }
+      @media print {
+        section {
+          break-inside: avoid;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Microsoft Word observation checklist</h1>
+    <p class="warning">
+      COM automation cannot determine repair dialogs or visual/layout
+      correctness. Observe Word and answer every console question. Do not enter
+      patient information or free-form clinical notes.
+    </p>
+    <section>
+      <h2>For every document</h2>
+      <ul>
+        <li>
+          No repair, unreadable-content, corruption, or conversion-loss dialog
+          appears.
+        </li>
+        <li>
+          Every expected visible synthetic value survives open, save, reopen,
+          and PDF export.
+        </li>
+        <li>
+          Dropdown and checkbox states behave as expected; any flattening is a
+          failure.
+        </li>
+        <li>
+          No expected field disappears, duplicates, moves, or appears under
+          another label.
+        </li>
+        <li>
+          Clinically meaningful static text remains present and unchanged.
+        </li>
+        <li>
+          Tables, cell boundaries, merged cells, headers, and footers remain
+          intact.
+        </li>
+        <li>
+          Margins, fonts, numbering, page breaks, and pagination remain
+          acceptable.
+        </li>
+      </ul>
+    </section>
+    <section>
+      <h2>Evidence rules</h2>
+      <ul>
+        <li>Use PASS only when directly observed.</li>
+        <li>Use FAIL for any observed defect.</li>
+        <li>Use BLOCKED when an item could not be observed.</li>
+        <li>Never infer a pass from automation alone.</li>
+      </ul>
+    </section>
+    <p>Commit: <code>__SOURCE_COMMIT__</code></p>
+  </body>
+</html>

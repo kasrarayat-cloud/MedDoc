@@ -19,10 +19,12 @@ import {
   TEMPLATE_TWIN_RESOLVER_VERSION,
   TemplateDocIRSchema,
   TemplateTwinFillManifestSchema,
+  TemplateTwinValidationResultSchema,
   templateTwinCounts,
   type FieldResolution,
   type SemanticMapping,
   type TemplateDocIR,
+  type TemplateField,
   type TemplateTwinFillManifest,
 } from "./ir";
 import { templateTwinMappingsSha256 } from "./mapping-hash";
@@ -46,6 +48,27 @@ import {
   type TemplateTwinArtifactStore,
 } from "./storage";
 import { validateTemplateTwin } from "./validation";
+import type { TemplateTwinConceptProvider } from "./supported-concepts";
+import type { CertifiedTemplateFieldSpecification } from "./custom-concepts/specification";
+import {
+  buildCanonicalCustomConceptEvidence,
+  createCertifiedCustomConceptProvider,
+  extractCertifiedCustomConcepts,
+  TEMPLATE_CUSTOM_EXTRACTION_DEFAULT_MODEL,
+  type CertifiedCustomExtractionProvenance,
+  type CustomConceptFieldOutcome,
+} from "./custom-concepts";
+import { assertTemplateTwinCustomExamplesReadyForCertification } from "./custom-example-service";
+import {
+  customConceptSpecifications,
+  fieldRequiresExplicitIntent,
+  fieldsWithCertifiedCustomIntent,
+  parsePersistedFieldIntent,
+  templateTwinFieldIntentsSha256,
+  unresolvedFieldIntent,
+  type PersistedTemplateTwinFieldIntent,
+} from "./field-intent";
+import { verifyCustomExtractionOutcomeProof } from "./custom-outcome-proof";
 
 /** The worker-owned review marker for an unresolved Template Twin fill.
  * Correction code may clear it only by exact equality after a fully verified
@@ -89,6 +112,21 @@ export interface PrepareTemplateTwinFillInput {
   resolverModelVersion: string | null;
   validationNow: Date | string;
   allowUncertifiedForSyntheticTest?: boolean;
+  fieldIntentsSha256?: string | null;
+  customExampleProofSha256?: string | null;
+  staticFieldIds?: readonly string[];
+  conceptProviders?: readonly TemplateTwinConceptProvider[];
+  customExtraction?:
+    | (CertifiedCustomExtractionProvenance & {
+        readonly fields?: readonly Omit<
+          CustomConceptFieldOutcome,
+          "value" | "unit"
+        >[];
+        readonly blocksSigning?: boolean;
+      })
+    | null;
+  effectiveFields?: readonly TemplateField[];
+  customSpecifications?: readonly CertifiedTemplateFieldSpecification[];
 }
 
 export interface PreparedTemplateTwinFill {
@@ -106,6 +144,42 @@ export interface FinalizeTemplateTwinFillInput extends Omit<
   resolutions: readonly FieldResolution[];
 }
 
+function applyCustomExtractionValidation(input: {
+  validation: ReturnType<typeof validateTemplateTwin>;
+  extraction: PrepareTemplateTwinFillInput["customExtraction"];
+  specifications: readonly CertifiedTemplateFieldSpecification[];
+  resolutions: readonly FieldResolution[];
+  facts: ReturnType<typeof projectEncounterFacts>;
+}) {
+  const issues = [...input.validation.issues];
+  const add = (fieldId: string | null, code: string, message: string) => {
+    issues.push({ fieldId, code, severity: "blocking" as const, message });
+  };
+  for (const issue of verifyCustomExtractionOutcomeProof({
+    specifications: input.specifications,
+    proof: input.extraction
+      ? {
+          ...input.extraction,
+          fields: (input.extraction.fields ?? []).map((field) => ({
+            ...field,
+            sourceFactIds: [...field.sourceFactIds],
+            evidenceAnchorIds: [...field.evidenceAnchorIds],
+          })),
+          blocksSigning: input.extraction.blocksSigning ?? false,
+        }
+      : null,
+    resolutions: input.resolutions,
+    facts: input.facts,
+  })) {
+    add(issue.fieldId, issue.code, issue.message);
+  }
+  return TemplateTwinValidationResultSchema.parse({
+    ...input.validation,
+    valid: issues.every((issue) => issue.severity !== "blocking"),
+    issues,
+  });
+}
+
 export async function finalizeTemplateTwinFill(
   input: FinalizeTemplateTwinFillInput,
 ): Promise<PreparedTemplateTwinFill> {
@@ -114,8 +188,9 @@ export async function finalizeTemplateTwinFill(
     SemanticMappingSchema.parse(mapping),
   );
   const fields = [...input.resolutions];
-  const validation = validateTemplateTwin({
-    fields: ir.fields,
+  const definitions = input.effectiveFields ?? ir.fields;
+  const independentValidation = validateTemplateTwin({
+    fields: definitions,
     mappings,
     facts: input.facts,
     resolutions: fields,
@@ -123,9 +198,19 @@ export async function finalizeTemplateTwinFill(
     unsupported: ir.unsupported,
     certifiedFieldIds: input.certifiedFieldIds,
     allowUncertifiedForSyntheticTest: input.allowUncertifiedForSyntheticTest,
+    staticFieldIds: input.staticFieldIds,
+    conceptProviders: input.conceptProviders,
+    customSpecifications: input.customSpecifications,
     now: input.validationNow,
   });
-  const counts = templateTwinCounts(fields, ir.fields);
+  const validation = applyCustomExtractionValidation({
+    validation: independentValidation,
+    extraction: input.customExtraction,
+    specifications: input.customSpecifications ?? [],
+    resolutions: fields,
+    facts: input.facts,
+  });
+  const counts = templateTwinCounts(fields, definitions);
   const manifest = TemplateTwinFillManifestSchema.parse({
     manifestVersion: 1,
     soapVersion: input.soapVersion,
@@ -137,6 +222,29 @@ export async function finalizeTemplateTwinFill(
     resolverVersion: TEMPLATE_TWIN_RESOLVER_VERSION,
     resolverModelVersion: input.resolverModelVersion,
     rendererVersion: TEMPLATE_TWIN_RENDERER_VERSION,
+    fieldIntentsSha256: input.fieldIntentsSha256 ?? null,
+    customExampleProofSha256: input.customExampleProofSha256 ?? null,
+    customExtraction: input.customExtraction
+      ? {
+          extractorVersion: input.customExtraction.extractorVersion,
+          extractionSchemaVersion:
+            input.customExtraction.extractionSchemaVersion,
+          extractionSchemaHash: input.customExtraction.extractionSchemaHash,
+          provider: input.customExtraction.provider,
+          model: input.customExtraction.model,
+          fields: (input.customExtraction.fields ?? []).map((outcome) => ({
+            fieldId: outcome.fieldId,
+            conceptId: outcome.conceptId,
+            status: outcome.status,
+            sourceFactIds: [...outcome.sourceFactIds],
+            evidenceAnchorIds: [...outcome.evidenceAnchorIds],
+            reasonCode: outcome.reasonCode,
+            needsClinicianReview: outcome.needsClinicianReview,
+            blocksSigning: outcome.blocksSigning,
+          })),
+          blocksSigning: input.customExtraction.blocksSigning ?? false,
+        }
+      : null,
     facts: input.facts,
     fields,
     validation,
@@ -157,6 +265,7 @@ export async function finalizeTemplateTwinFill(
     source: input.source,
     ir,
     resolutions: fields,
+    effectiveFields: definitions,
     validation,
   });
   return { manifest, manifestSha256, factSetSha256, render };
@@ -172,16 +281,54 @@ export async function prepareTemplateTwinFill(
     SemanticMappingSchema.parse(mapping),
   );
   const facts = withApprovedPracticeDefaultFacts({
-    fields: ir.fields,
+    fields: input.effectiveFields ?? ir.fields,
     mappings,
     facts: input.facts,
   });
-  const fields = resolveTemplateFields({
-    fields: ir.fields,
+  const resolvedFields = resolveTemplateFields({
+    fields: input.effectiveFields ?? ir.fields,
     mappings,
     facts,
     certifiedFieldIds: input.certifiedFieldIds,
     allowUncertifiedForSyntheticTest: input.allowUncertifiedForSyntheticTest,
+    staticFieldIds: input.staticFieldIds,
+    conceptProviders: input.conceptProviders,
+    customSpecifications: input.customSpecifications,
+  });
+  const outcomeByFieldId = new Map(
+    (input.customExtraction?.fields ?? []).map((outcome) => [
+      outcome.fieldId,
+      outcome,
+    ]),
+  );
+  const fields = resolvedFields.map((resolution) => {
+    const outcome = outcomeByFieldId.get(resolution.fieldId);
+    if (!outcome) return resolution;
+    if (outcome.status === "ambiguous" || outcome.status === "unknown") {
+      return {
+        fieldId: resolution.fieldId,
+        status: "ambiguous" as const,
+        value: null,
+        sourceFactIds: [...outcome.sourceFactIds],
+        evidenceAnchorIds: [...outcome.evidenceAnchorIds],
+        selectedOptionOrdinal: null,
+        reasonCode: outcome.reasonCode,
+        clinicianReviewed: false,
+      };
+    }
+    if (outcome.status === "conflict") {
+      return {
+        fieldId: resolution.fieldId,
+        status: "conflict" as const,
+        value: null,
+        sourceFactIds: [...outcome.sourceFactIds],
+        evidenceAnchorIds: [...outcome.evidenceAnchorIds],
+        selectedOptionOrdinal: null,
+        reasonCode: outcome.reasonCode,
+        clinicianReviewed: false,
+      };
+    }
+    return resolution;
   });
   return finalizeTemplateTwinFill({
     ...input,
@@ -205,6 +352,19 @@ interface PersistedMappingRow {
   unknownPolicy: string;
   practiceDefault: string | null;
   mappingStatus: string;
+}
+
+type PersistedIntentDecisionRow = Omit<
+  PersistedTemplateTwinFieldIntent,
+  "fieldDefinitionId" | "fieldId"
+>;
+
+interface PersistedFieldWithIntent {
+  id: string;
+  fieldId: string;
+  detectionStatus: string;
+  intentDecisions: PersistedIntentDecisionRow[];
+  mapping: PersistedMappingRow | null;
 }
 
 function mappingFromRow(
@@ -407,6 +567,8 @@ export async function processTemplateTwinVisit(
             select: {
               id: true,
               approvedMappingsSha256: true,
+              approvedFieldIntentsSha256: true,
+              approvedCustomExampleProofSha256: true,
               sourcePrivacyScanEvidenceSha256: true,
             },
           },
@@ -425,8 +587,25 @@ export async function processTemplateTwinVisit(
           fields: {
             orderBy: { displayOrder: "asc" },
             select: {
+              id: true,
               fieldId: true,
               detectionStatus: true,
+              intentDecisions: {
+                orderBy: { version: "desc" },
+                take: 1,
+                select: {
+                  id: true,
+                  version: true,
+                  intentKind: true,
+                  supportedConcept: true,
+                  customConceptId: true,
+                  customSpec: true,
+                  customSpecSha256: true,
+                  reason: true,
+                  decidedById: true,
+                  decidedAt: true,
+                },
+              },
               mapping: {
                 select: {
                   clinicalConcept: true,
@@ -486,29 +665,24 @@ export async function processTemplateTwinVisit(
       "The selected Template Twin provenance does not match this visit.",
     );
   }
+  const persistedFields = compiled.fields as PersistedFieldWithIntent[];
   const certifiedFieldIds: string[] = [];
-  const mappings = compiled.fields.map(
-    (field: {
-      fieldId: string;
-      detectionStatus: string;
-      mapping: PersistedMappingRow | null;
-    }) => {
-      if (!field.mapping) {
-        throw new TemplateTwinFillError(
-          "TEMPLATE_PROVENANCE_MISMATCH",
-          "The certified Template Twin mapping set is incomplete.",
-        );
-      }
-      if (field.detectionStatus !== "CERTIFIED") {
-        throw new TemplateTwinFillError(
-          "TEMPLATE_PROVENANCE_MISMATCH",
-          "The certified Template Twin field set is incomplete.",
-        );
-      }
-      certifiedFieldIds.push(field.fieldId);
-      return mappingFromRow(field.fieldId, field.mapping);
-    },
-  );
+  const mappings = persistedFields.map((field) => {
+    if (!field.mapping) {
+      throw new TemplateTwinFillError(
+        "TEMPLATE_PROVENANCE_MISMATCH",
+        "The certified Template Twin mapping set is incomplete.",
+      );
+    }
+    if (field.detectionStatus !== "CERTIFIED") {
+      throw new TemplateTwinFillError(
+        "TEMPLATE_PROVENANCE_MISMATCH",
+        "The certified Template Twin field set is incomplete.",
+      );
+    }
+    certifiedFieldIds.push(field.fieldId);
+    return mappingFromRow(field.fieldId, field.mapping);
+  });
   const ir = TemplateDocIRSchema.parse(compiled.compiledDocumentIr);
   if (
     mappings.length !== ir.fields.length ||
@@ -520,12 +694,106 @@ export async function processTemplateTwinVisit(
       "The certified Template Twin mappings no longer match their certification.",
     );
   }
-  const facts = projectEncounterFacts({
+  const persistedFieldById = new Map(
+    persistedFields.map((field) => [field.fieldId, field]),
+  );
+  const explicitIntents = ir.fields
+    .filter(fieldRequiresExplicitIntent)
+    .map((field) => {
+      const persisted = persistedFieldById.get(field.fieldId);
+      if (!persisted) {
+        throw new TemplateTwinFillError(
+          "TEMPLATE_PROVENANCE_MISMATCH",
+          "A certified placeholder field has no intent definition.",
+        );
+      }
+      const decision = persisted.intentDecisions[0];
+      return {
+        fieldId: field.fieldId,
+        intent: decision
+          ? parsePersistedFieldIntent({
+              ...decision,
+              fieldDefinitionId: persisted.id,
+              fieldId: field.fieldId,
+            } satisfies PersistedTemplateTwinFieldIntent)
+          : unresolvedFieldIntent(),
+      };
+    });
+  const fieldIntentsSha256 = templateTwinFieldIntentsSha256(explicitIntents);
+  if (
+    !compiled.certification.approvedFieldIntentsSha256 ||
+    compiled.certification.approvedFieldIntentsSha256 !== fieldIntentsSha256 ||
+    explicitIntents.some((entry) => entry.intent.intentKind === "unresolved")
+  ) {
+    throw new TemplateTwinFillError(
+      "TEMPLATE_PROVENANCE_MISMATCH",
+      "The certified placeholder intents no longer match their certification.",
+    );
+  }
+  const customSpecifications = customConceptSpecifications(explicitIntents);
+  const customExtractionModel =
+    input.resolverModelVersion ?? TEMPLATE_CUSTOM_EXTRACTION_DEFAULT_MODEL;
+  let customExampleProofSha256: string | null = null;
+  if (customSpecifications.length > 0) {
+    customExampleProofSha256 =
+      await assertTemplateTwinCustomExamplesReadyForCertification({
+        tx: prisma,
+        compiledVersionId: compiled.id,
+        specifications: customSpecifications,
+        mappingsSha256: templateTwinMappingsSha256(mappings),
+        fieldIntentsSha256,
+        physicianUserId: input.doctorId,
+        expectedModel: customExtractionModel,
+      });
+    if (
+      !compiled.certification.approvedCustomExampleProofSha256 ||
+      customExampleProofSha256 !==
+        compiled.certification.approvedCustomExampleProofSha256
+    ) {
+      throw new TemplateTwinFillError(
+        "TEMPLATE_PROVENANCE_MISMATCH",
+        "The physician-reviewed custom-field examples no longer match this certification.",
+      );
+    }
+  } else if (compiled.certification.approvedCustomExampleProofSha256 !== null) {
+    throw new TemplateTwinFillError(
+      "TEMPLATE_PROVENANCE_MISMATCH",
+      "A custom-field example proof exists without a certified custom field.",
+    );
+  }
+  const conceptProviders =
+    customSpecifications.length > 0
+      ? [createCertifiedCustomConceptProvider(customSpecifications)]
+      : [];
+  const staticFieldIds = explicitIntents.flatMap((entry) =>
+    entry.intent.intentKind === "static" ? [entry.fieldId] : [],
+  );
+  const effectiveFields = fieldsWithCertifiedCustomIntent({
+    fields: ir.fields,
+    intents: explicitIntents,
+  });
+  const projectedFacts = projectEncounterFacts({
     mode: input.inputMode,
     contextText: input.contextText,
     entities: input.entities as EncounterEntitySnapshot,
     asrQuality: input.asrQuality,
   });
+  const customExtraction =
+    customSpecifications.length > 0
+      ? await extractCertifiedCustomConcepts({
+          specifications: customSpecifications,
+          evidence: buildCanonicalCustomConceptEvidence({
+            mode: input.inputMode,
+            contextText: input.contextText,
+            asrQuality: input.asrQuality,
+          }),
+          practiceId: input.practiceId,
+          visitId: input.visitId,
+          userId: input.doctorId,
+          model: customExtractionModel,
+        })
+      : null;
+  const facts = [...projectedFacts, ...(customExtraction?.facts ?? [])];
   const storage = input.storage ?? createTemplateTwinArtifactStore();
   const source = await storage.readSourceArtifact({
     practiceId: input.practiceId,
@@ -544,6 +812,13 @@ export async function processTemplateTwinVisit(
     ir,
     mappings,
     facts,
+    fieldIntentsSha256,
+    customExampleProofSha256,
+    staticFieldIds,
+    conceptProviders,
+    customExtraction,
+    effectiveFields,
+    customSpecifications,
     certifiedFieldIds,
     source,
     resolverModelVersion: input.resolverModelVersion,
@@ -768,6 +1043,7 @@ export async function processTemplateTwinVisit(
     fillManifest: asJson(prepared.manifest),
     manifestSha256: prepared.manifestSha256,
     factSetSha256: prepared.factSetSha256,
+    fieldIntentsSha256,
     soapVersion: prepared.manifest.soapVersion,
     soapSha256: prepared.manifest.soapSha256,
     validationResult: asJson(prepared.manifest.validation),

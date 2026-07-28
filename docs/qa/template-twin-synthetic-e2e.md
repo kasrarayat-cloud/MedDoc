@@ -4,12 +4,14 @@ When executed successfully, this gate is designed to prove the safe-alpha
 vertical slice against the repository’s throwaway QA infrastructure. It is not
 a production, HIPAA, provider, Word, or LibreOffice attestation.
 
-**Execution status:** `PASS` on 2026-07-15 — one Playwright scenario completed
-in 24.9 seconds against freshly migrated disposable QA PostgreSQL, the real
-Redis/worker boundary, and versioned/object-lock-capable QA MinIO. All 70
-migrations applied and migration status reported up to date. The Compose stack
-and volumes were removed after the run. This is local synthetic evidence only;
-CI, desktop Word, and LibreOffice evidence remain separate gates.
+**Historical execution status:** `PASS` on 2026-07-15 — one Playwright scenario
+completed in 24.9 seconds against freshly migrated disposable QA PostgreSQL,
+the real Redis/worker boundary, and versioned/object-lock-capable QA MinIO. That
+run applied the then-current 70 migrations and removed the Compose stack and
+volumes afterward. It predates the ordinary-placeholder, custom-scalar, and
+static-asset compatibility work and must not be cited as current-branch proof.
+The final compatibility SHA requires a fresh isolated run. CI, desktop Word,
+and LibreOffice evidence remain separate gates.
 
 ## Infrastructure the scenario is designed to exercise
 
@@ -50,8 +52,9 @@ used. No provider network call is made by this project.
 - real provider behavior or model quality
 - production bucket encryption, object-lock, backup, restore, and IAM evidence
 - real PHI, real physician templates, and production migrations
-- arbitrary concepts or complex/repeating/rich-text structures that safe-alpha
-  certification blocks
+- unbounded or non-scalar custom concepts, plus complex/repeating/rich-text
+  structures that safe-alpha certification blocks; the historical scenario
+  does not prove the newer physician-certified scalar custom-concept path
 
 The test must not be cited as evidence that Template Twin is real-PHI-ready.
 QA readiness verifies the local bucket's private policy plus

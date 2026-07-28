@@ -310,7 +310,7 @@ describe('Template Twin maintenance execution and scheduling', () => {
 
   it('turns dependency failures into a stable non-sensitive worker error', async () => {
     drainAudit.mockRejectedValueOnce(
-      new Error('postgres://synthetic-user:synthetic-password@private-host'),
+      new Error('Synthetic database dependency failure at db.synthetic.test'),
     );
     const promise = runTemplateTwinMaintenance({
       env: enabledEnv,

@@ -3,6 +3,21 @@ import { z } from 'zod';
 import { canonicalSha256 } from './canonical';
 
 const SHA256 = /^[a-f0-9]{64}$/;
+export const TemplateTwinStaticAssetApprovalBindingSchema = z
+  .object({
+    sha256: z.string().regex(SHA256),
+    assetId: z.string().min(1).max(160),
+    decisionId: z.string().min(1).max(160),
+    decisionVersion: z.number().int().positive(),
+    inspectionEvidenceSha256: z.string().regex(SHA256),
+    mimeType: z.literal('image/png'),
+    width: z.number().int().min(1).max(4096),
+    height: z.number().int().min(1).max(4096),
+    sizeBytes: z.number().int().min(1).max(5 * 1024 * 1024),
+    scannerVersion: z.literal('template-twin-static-png/1.0.0'),
+    privacyEvidenceSha256: z.string().regex(SHA256),
+  })
+  .strict();
 
 /** Stable physician-visible safety gate for source artifacts created before,
  * outside, or after tampering with the current safe-alpha inspection
@@ -24,6 +39,18 @@ export const TemplateTwinSourcePhiScanEvidenceSchema = z
     approvedStaticAssetCount: z.number().int().min(0).max(100),
     approvedStaticAssetUsedCount: z.number().int().min(0).max(100),
     approvedStaticAssetUsageSha256: z.string().regex(SHA256),
+    staticAssetApprovalBindings: z
+      .array(TemplateTwinStaticAssetApprovalBindingSchema)
+      .max(100)
+      .optional(),
+    auxiliaryInspectionProfileVersion: z
+      .literal('template-twin-word-auxiliary-safe-v1')
+      .optional(),
+    auxiliaryPartCount: z.number().int().min(0).max(6).optional(),
+    auxiliaryPartManifestSha256: z
+      .string()
+      .regex(SHA256)
+      .optional(),
   })
   .strict()
   .superRefine((value, context) => {
@@ -32,6 +59,29 @@ export const TemplateTwinSourcePhiScanEvidenceSchema = z
         code: 'custom',
         path: ['approvedStaticAssetUsedCount'],
         message: 'Used static assets cannot exceed the approved set.',
+      });
+    }
+    if (
+      value.approvedStaticAssetUsedCount !==
+        (value.staticAssetApprovalBindings?.length ?? 0) ||
+      value.approvedStaticAssetCount !==
+        (value.staticAssetApprovalBindings?.length ?? 0)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['staticAssetApprovalBindings'],
+        message:
+          'Every used static asset must be bound to one current practice approval.',
+      });
+    }
+    const digests = (value.staticAssetApprovalBindings ?? []).map(
+      (item) => item.sha256,
+    );
+    if (new Set(digests).size !== digests.length) {
+      context.addIssue({
+        code: 'custom',
+        path: ['staticAssetApprovalBindings'],
+        message: 'Static asset approval bindings must be byte-distinct.',
       });
     }
   });

@@ -96,10 +96,17 @@ import { POST as certify } from '../[id]/certify/route';
 import { PATCH as updateMappings } from '../[id]/mappings/route';
 import { POST as runSyntheticTest } from '../[id]/synthetic-test/route';
 import { AuthError } from '@/lib/auth';
+import { canonicalSha256 } from '@/lib/template-twin/canonical';
 
 const HASH = 'a'.repeat(64);
+const EMPTY_FIELD_INTENTS_SHA256 = canonicalSha256([]);
 const FIELD_ID = `ttf_${'b'.repeat(24)}`;
 const SESSION = {
+  templateTwinRolloutToken: {
+    practiceId: 'practice-synthetic-1',
+    globalGeneration: BigInt(2),
+    practiceGeneration: BigInt(4),
+  },
   user: {
     id: 'doctor-synthetic-1',
     email: 'doctor@synthetic.test',
@@ -110,6 +117,7 @@ const ACTOR = {
   userId: SESSION.user.id,
   userEmail: SESSION.user.email,
   practiceId: SESSION.user.practiceId,
+  rolloutToken: SESSION.templateTwinRolloutToken,
 };
 const WORKSPACE = {
   template: { id: 'template-synthetic-1' },
@@ -213,8 +221,98 @@ describe('Template Twin route orchestration', () => {
       status: 'certified',
     };
     const mappingsResponse = await updateMappings(
-      jsonRequest({ expectedMappingsSha256: HASH, mappings: [mapping] }),
+      jsonRequest({
+        expectedMappingsSha256: HASH,
+        expectedFieldIntentsSha256: EMPTY_FIELD_INTENTS_SHA256,
+        mappings: [mapping],
+        fieldIntents: [],
+      }),
       { params: Promise.resolve({ id: 'template-synthetic-1' }) },
+    );
+    expect(mappingsResponse.status).toBe(200);
+    expect(mocks.updateMappings).toHaveBeenCalledWith({
+      noteTemplateId: 'template-synthetic-1',
+      actor: ACTOR,
+      expectedMappingsSha256: HASH,
+      expectedFieldIntentsSha256: EMPTY_FIELD_INTENTS_SHA256,
+      mappings: [mapping],
+      fieldIntents: [],
+    });
+
+    const syntheticResponse = await runSyntheticTest(
+      jsonRequest({
+        expectedMappingsSha256: HASH,
+        expectedFieldIntentsSha256: EMPTY_FIELD_INTENTS_SHA256,
+        encounterText: 'Synthetic encounter evidence only.',
+      }),
+      { params: Promise.resolve({ id: 'template-synthetic-1' }) },
+    );
+    expect(syntheticResponse.status).toBe(200);
+    expect(mocks.runSyntheticTest).toHaveBeenCalledWith({
+      noteTemplateId: 'template-synthetic-1',
+      actor: ACTOR,
+      expectedMappingsSha256: HASH,
+      expectedFieldIntentsSha256: EMPTY_FIELD_INTENTS_SHA256,
+      encounterText: 'Synthetic encounter evidence only.',
+    });
+
+    const certifyResponse = await certify(
+      jsonRequest({
+        expectedMappingsSha256: HASH,
+        expectedFieldIntentsSha256: EMPTY_FIELD_INTENTS_SHA256,
+        expectedSyntheticTestProvenanceSha256: HASH,
+        acknowledgeStructure: true,
+        acknowledgeSyntheticOutput: true,
+      }),
+      { params: Promise.resolve({ id: 'template-synthetic-1' }) },
+    );
+    expect(certifyResponse.status).toBe(200);
+    expect(mocks.certify).toHaveBeenCalledWith({
+      noteTemplateId: 'template-synthetic-1',
+      actor: ACTOR,
+      expectedMappingsSha256: HASH,
+      expectedFieldIntentsSha256: EMPTY_FIELD_INTENTS_SHA256,
+      expectedSyntheticTestProvenanceSha256: HASH,
+      optionalFieldWaivers: [],
+    });
+
+    expect(mocks.createDraft.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.updateMappings.mock.invocationCallOrder[0]!,
+    );
+    expect(mocks.updateMappings.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.runSyntheticTest.mock.invocationCallOrder[0]!,
+    );
+    expect(mocks.runSyntheticTest.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.certify.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('keeps no-placeholder Template Twin route payloads backward compatible', async () => {
+    const mapping = {
+      fieldId: FIELD_ID,
+      clinicalConcept: 'chief_complaint',
+      expectedDataType: 'text',
+      polarityBehavior: 'value_only',
+      temporality: 'any',
+      laterality: 'not_applicable',
+      unitPolicy: 'not_applicable',
+      approvedSynonyms: [],
+      required: true,
+      blankPolicy: 'requires_input',
+      unknownPolicy: 'requires_input',
+      practiceDefault: null,
+      status: 'certified',
+    };
+    const params = {
+      params: Promise.resolve({ id: 'template-synthetic-1' }),
+    };
+
+    const mappingsResponse = await updateMappings(
+      jsonRequest({
+        expectedMappingsSha256: HASH,
+        mappings: [mapping],
+      }),
+      params,
     );
     expect(mappingsResponse.status).toBe(200);
     expect(mocks.updateMappings).toHaveBeenCalledWith({
@@ -229,7 +327,7 @@ describe('Template Twin route orchestration', () => {
         expectedMappingsSha256: HASH,
         encounterText: 'Synthetic encounter evidence only.',
       }),
-      { params: Promise.resolve({ id: 'template-synthetic-1' }) },
+      params,
     );
     expect(syntheticResponse.status).toBe(200);
     expect(mocks.runSyntheticTest).toHaveBeenCalledWith({
@@ -246,26 +344,17 @@ describe('Template Twin route orchestration', () => {
         acknowledgeStructure: true,
         acknowledgeSyntheticOutput: true,
       }),
-      { params: Promise.resolve({ id: 'template-synthetic-1' }) },
+      params,
     );
     expect(certifyResponse.status).toBe(200);
     expect(mocks.certify).toHaveBeenCalledWith({
       noteTemplateId: 'template-synthetic-1',
       actor: ACTOR,
       expectedMappingsSha256: HASH,
+      expectedFieldIntentsSha256: undefined,
       expectedSyntheticTestProvenanceSha256: HASH,
       optionalFieldWaivers: [],
     });
-
-    expect(mocks.createDraft.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.updateMappings.mock.invocationCallOrder[0]!,
-    );
-    expect(mocks.updateMappings.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.runSyntheticTest.mock.invocationCallOrder[0]!,
-    );
-    expect(mocks.runSyntheticTest.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.certify.mock.invocationCallOrder[0]!,
-    );
   });
 
   it('rejects an upload without physician-readable identity and scope', async () => {
@@ -294,6 +383,7 @@ describe('Template Twin route orchestration', () => {
     const response = await certify(
       jsonRequest({
         expectedMappingsSha256: HASH,
+        expectedFieldIntentsSha256: EMPTY_FIELD_INTENTS_SHA256,
         acknowledgeStructure: true,
         acknowledgeSyntheticOutput: true,
       }),

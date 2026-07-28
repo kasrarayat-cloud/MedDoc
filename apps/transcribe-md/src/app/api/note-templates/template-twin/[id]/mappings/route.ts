@@ -43,6 +43,7 @@ export async function PATCH(
         userId: session.user.id,
         userEmail: session.user.email,
         practiceId: session.user.practiceId,
+        rolloutToken: session.templateTwinRolloutToken,
       },
       ...parsed.data,
     });

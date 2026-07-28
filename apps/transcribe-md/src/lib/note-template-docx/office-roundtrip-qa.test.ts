@@ -10,6 +10,11 @@ import {
   type TemplateTwinValidationResult,
 } from "../template-twin/ir";
 import { buildSyntheticDocx } from "./__tests__/synthetic-docx";
+import {
+  TAB_ONLY_OFFICE_FIELD_LABEL,
+  TAB_ONLY_OFFICE_FIELD_VALUE,
+  buildTabOnlyTableCellOfficeCorpusDocx,
+} from "./__tests__/tab-only-office-corpus";
 import { compileTemplateDocx } from "./compiler";
 import { readbackTemplateDocxOutput } from "./output-readback";
 import { renderTemplateDocx } from "./renderer";
@@ -174,6 +179,130 @@ async function fixtureForResolutions(
     source: fixture.source,
     ir: fixture.ir,
     resolutions: [...resolutions],
+    rendererOutput: rendered.document,
+    officeSaved,
+    expected,
+  };
+}
+
+async function tabOnlyTableCellFixture(
+  value: string | null = TAB_ONLY_OFFICE_FIELD_VALUE,
+): Promise<Fixture> {
+  const source = await buildTabOnlyTableCellOfficeCorpusDocx();
+  const ir = compileTemplateDocx(source);
+  const field = ir.fields.find(
+    (candidate) => candidate.originalLabel === TAB_ONLY_OFFICE_FIELD_LABEL,
+  );
+  if (!field || ir.fields.length !== 1) {
+    throw new Error(
+      "Synthetic tab-only Office field was not uniquely admitted.",
+    );
+  }
+  const resolutions = [
+    FieldResolutionSchema.parse({
+      fieldId: field.fieldId,
+      status: value === null ? "not_mentioned" : "supported",
+      value,
+      sourceFactIds: value === null ? [] : [FACT_ID],
+      evidenceAnchorIds:
+        value === null ? [] : ["synthetic-tab-only-office-anchor"],
+      selectedOptionOrdinal: null,
+      reasonCode:
+        value === null
+          ? "synthetic_tab_only_office_not_mentioned"
+          : "synthetic_tab_only_office_evidence",
+      clinicianReviewed: true,
+    }),
+  ];
+  const rendered = await renderTemplateDocx({
+    source,
+    ir,
+    resolutions,
+    validation: VALIDATION,
+  });
+  const expected = buildOfficeExpectedValueManifest({
+    syntheticOnly: true,
+    sourceDocxBytes: source,
+    rendererOutputDocxBytes: rendered.document,
+    ir,
+    resolutions,
+  });
+  const officeSaved = await mutatePackagePart(
+    rendered.document,
+    "[Content_Types].xml",
+    (xml) => xml.replace("</Types>", "  \n</Types>"),
+  );
+  return {
+    source,
+    ir,
+    resolutions,
+    rendererOutput: rendered.document,
+    officeSaved,
+    expected,
+  };
+}
+
+async function ordinaryPlaceholderFixture(): Promise<Fixture> {
+  const source = await buildSyntheticDocx({
+    documentXml: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
+<w:p><w:r><w:t>Synthetic finding: [[fi</w:t></w:r><w:r><w:t>nding]]</w:t></w:r></w:p>
+<w:sectPr><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720"/></w:sectPr></w:body></w:document>`,
+    extraEntries: {
+      "word/header1.xml": `<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Synthetic static header</w:t></w:r></w:p></w:hdr>`,
+      "word/footer1.xml": `<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Synthetic static footer</w:t></w:r></w:p></w:ftr>`,
+    },
+  });
+  const ir = compileTemplateDocx(source);
+  const field = ir.fields.find(
+    (candidate) =>
+      candidate.rendererBinding.bindingType === "ordinary_placeholder",
+  );
+  if (!field || ir.fields.length !== 1) {
+    throw new Error(
+      "Synthetic ordinary placeholder was not uniquely admitted.",
+    );
+  }
+  const resolutions = [
+    FieldResolutionSchema.parse({
+      fieldId: field.fieldId,
+      status: "supported",
+      value: "Synthetic stable finding",
+      sourceFactIds: [FACT_ID],
+      evidenceAnchorIds: ["synthetic-ordinary-office-anchor"],
+      selectedOptionOrdinal: null,
+      reasonCode: "synthetic_ordinary_office_evidence",
+      clinicianReviewed: true,
+    }),
+  ];
+  const rendered = await renderTemplateDocx({
+    source,
+    ir,
+    resolutions,
+    validation: VALIDATION,
+  });
+  const expected = buildOfficeExpectedValueManifest({
+    syntheticOnly: true,
+    sourceDocxBytes: source,
+    rendererOutputDocxBytes: rendered.document,
+    ir,
+    resolutions,
+  });
+  const officeSaved = await mutateDocument(rendered.document, (xml) =>
+    xml
+      .replace(
+        "<w:p><w:r><w:t>Synthetic finding: Synthetic stable finding</w:t></w:r><w:r><w:t></w:t></w:r></w:p>",
+        "<w:p><w:r><w:t>Synthetic finding: Synthetic stable finding</w:t></w:r></w:p>",
+      )
+      .replace(
+        'w:header="720" w:footer="720"/>',
+        'w:header="720" w:footer="720" w:gutter="0"/>',
+      ),
+  );
+  return {
+    source,
+    ir,
+    resolutions,
     rendererOutput: rendered.document,
     officeSaved,
     expected,
@@ -596,6 +725,92 @@ function classifiedExternalDiagnostics(
 }
 
 describe("completed-byte Office QA readback", () => {
+  it("accepts QA-only ordinary-placeholder run normalization while strict v2 remains separate", async () => {
+    const ordinary = await ordinaryPlaceholderFixture();
+    expect(() =>
+      readbackTemplateDocxOutput({
+        source: ordinary.source,
+        output: ordinary.officeSaved,
+        ir: ordinary.ir,
+        resolutions: ordinary.resolutions,
+      }),
+    ).toThrowError(
+      expect.objectContaining({ code: "ROUNDTRIP_FIELD_MISMATCH" }),
+    );
+
+    const result = verifyOfficeRoundTripQa(
+      validInput(ordinary.officeSaved, undefined, ordinary),
+    );
+    expect(result.status).toBe("passed");
+    expect(result.fields).toEqual([
+      expect.objectContaining({
+        status: "survived",
+        controlKindMatches: true,
+        valueMatches: true,
+        controlStateMatches: true,
+        occurrenceMatches: true,
+        logicalBindingIdentityMatches: true,
+        pathNormalizationObserved: false,
+        serializationNormalized: true,
+      }),
+    ]);
+  });
+
+  it.each([
+    ["unresolved blank", null],
+    ["maximum approved length", "x".repeat(32_767)],
+  ] as const)(
+    "round-trips a tab-only table cell at %s",
+    async (_name, value) => {
+      const tabOnly = await tabOnlyTableCellFixture(value);
+
+      expect(
+        verifyOfficeRoundTripQa(
+          validInput(tabOnly.officeSaved, undefined, tabOnly),
+        ).status,
+      ).toBe("passed");
+    },
+  );
+
+  it("round-trips a tab-stop-only table cell without treating its paragraph property as clinical text", async () => {
+    const tabOnly = await tabOnlyTableCellFixture();
+    const actual = readOfficeSavedDocxFieldsQa({
+      syntheticOnly: true,
+      officeSavedDocxBytes: tabOnly.officeSaved,
+      expected: tabOnly.expected,
+    });
+
+    expect(actual.fields).toHaveLength(1);
+    expect(actual.unexpectedBindingCount).toBe(0);
+    expect(actual.ambiguousBindingCount).toBe(0);
+    expect(actual.fields[0]).toMatchObject({
+      controlKind: "fixed_table_cell",
+      actualOccurrences: 1,
+      actualValueSha256: tabOnly.expected.fields[0]!.expectedValueSha256,
+      outputObservedValueSha256:
+        tabOnly.expected.fields[0]!.rendererObservedValueSha256,
+    });
+    expect(
+      verifyOfficeRoundTripQa(
+        validInput(tabOnly.officeSaved, undefined, tabOnly),
+      ).status,
+    ).toBe("passed");
+
+    const encodedValue = TAB_ONLY_OFFICE_FIELD_VALUE.replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;");
+    const changed = await mutateDocument(tabOnly.officeSaved, (xml) =>
+      xml.replace(
+        `<w:r><w:t>${encodedValue}</w:t></w:r>`,
+        `<w:r><w:tab/><w:t>${encodedValue}</w:t></w:r>`,
+      ),
+    );
+    expect(
+      verifyOfficeRoundTripQa(validInput(changed, undefined, tabOnly))
+        .blockerCodes,
+    ).toContain("OFFICE_QA_FIELD_VALUE_CHANGED");
+  });
+
   it("derives exact full-IR field values, control state, identity, and occurrences from bytes", () => {
     const actual = readOfficeSavedDocxFieldsQa({
       syntheticOnly: true,
@@ -1239,6 +1454,44 @@ describe("schema, security, static, and visual provenance gates", () => {
     expect(result.gates.schema.status).toBe("external_tool_pending_word");
     expect(result.desktopWordApprovalStatus).toBe("pending");
     expect(result.signingEligible).toBe(false);
+  });
+
+  it("classifies only the exact pinned LibreOffice docGrid Int32 wrap as Word-pending", () => {
+    const diagnostic: OfficeSchemaDiagnosticEvidence = {
+      diagnosticId: "diagnostic-docgrid",
+      validatorErrorId: "Sch_AttributeValueDataTypeDetailed",
+      severity: "error",
+      familyCode: "LIBREOFFICE_DOCGRID_CHARSPACE_UINT32_OVERFLOW",
+      disposition: "external_tool_pending_word",
+      descriptionSha256: sha("docgrid-description"),
+      classificationRationaleSha256: sha("docgrid-rationale"),
+      partName: "/word/document.xml",
+      pathSha256: sha("docgrid-path"),
+      elementQName: "w:docGrid",
+      attributeQName: "w:charSpace",
+      observedValue: "4294963199",
+    };
+    const schema = schemaFor(fixture.officeSaved, [diagnostic]);
+    expect(schema).toMatchObject({
+      status: "external_tool_pending_word",
+      compatibilityEngineeringEligible: true,
+      matrix: [
+        {
+          blocksQaGate: false,
+          requiresDesktopWordResolution: true,
+        },
+        {
+          blocksQaGate: false,
+          requiresDesktopWordResolution: true,
+        },
+      ],
+    });
+
+    const changedValue = schemaFor(fixture.officeSaved, [
+      { ...diagnostic, observedValue: "4294963198" },
+    ]);
+    expect(changedValue.status).toBe("failed");
+    expect(changedValue.compatibilityEngineeringEligible).toBe(false);
   });
 
   it("rejects unknown error values, validator versions, targets, and source-stage downgrades", () => {

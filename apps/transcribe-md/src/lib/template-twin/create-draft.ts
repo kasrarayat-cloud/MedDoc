@@ -26,12 +26,18 @@ import {
   type TemplateTwinSourcePhiScanEvidence,
 } from './source-phi';
 import { enqueueTemplateTwinAudit } from './audit-outbox';
+import { lockAndAssertTemplateTwinStaticAssetBindingsCurrent } from './static-assets';
+import {
+  lockTemplateTwinRolloutForFinalClaim,
+  type TemplateTwinRolloutToken,
+} from './rollout';
 
 export class TemplateTwinDraftError extends Error {
   readonly code:
     | 'INVALID_IDENTITY'
     | 'NO_FILLABLE_FIELDS'
     | 'SYSTEM_TEMPLATE_MISSING'
+    | 'ROLLOUT_CHANGED'
     | 'PERSISTENCE_FAILED';
 
   constructor(code: TemplateTwinDraftError['code'], message: string, cause?: unknown) {
@@ -58,6 +64,7 @@ export interface CreateTemplateTwinDraftInput {
     userId: string;
     userEmail: string;
     practiceId: string;
+    rolloutToken: TemplateTwinRolloutToken;
   };
   storage?: TemplateTwinArtifactStore;
 }
@@ -291,6 +298,27 @@ export async function createTemplateTwinDraft(
 
   try {
     await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      // The immutable PUT is deliberately performed before this transaction.
+      // Revalidate the admission epoch before any source/configuration claim;
+      // stale bytes remain WRITTEN_UNCLAIMED for durable reconciliation.
+      const finalRollout = await lockTemplateTwinRolloutForFinalClaim({
+        tx,
+        practiceId: input.actor.practiceId,
+        pinnedToken: input.actor.rolloutToken,
+      });
+      if (!finalRollout.allowed) {
+        throw new TemplateTwinDraftError(
+          'ROLLOUT_CHANGED',
+          `${finalRollout.code}: Template Twin availability changed while the template was being compiled. Upload it again.`,
+        );
+      }
+      await lockAndAssertTemplateTwinStaticAssetBindingsCurrent({
+        practiceId: input.actor.practiceId,
+        bindings: privacyScanEvidence.staticAssetApprovalBindings ?? [],
+        db: tx as unknown as Parameters<
+          typeof lockAndAssertTemplateTwinStaticAssetBindingsCurrent
+        >[0]['db'],
+      });
       await tx.noteTemplate.create({
         data: {
           id: noteTemplateId,
@@ -378,6 +406,26 @@ export async function createTemplateTwinDraft(
             privacyScanEvidence.approvedStaticAssetUsedCount,
         },
       });
+      for (const binding of
+        privacyScanEvidence.staticAssetApprovalBindings ?? []) {
+        await enqueueTemplateTwinAudit(tx, {
+          eventKey: `template-twin:static-asset-used:${sourceArtifactId}:${binding.decisionId}`,
+          practiceId: input.actor.practiceId,
+          actorId: input.actor.userId,
+          actorEmailSnapshot: input.actor.userEmail,
+          action: 'TEMPLATE_TWIN_STATIC_ASSET_USED',
+          targetType: 'TemplateTwinStaticAsset',
+          targetId: binding.assetId,
+          metadata: {
+            sha256: binding.sha256,
+            decisionId: binding.decisionId,
+            decisionVersion: binding.decisionVersion,
+            inspectionEvidenceSha256:
+              binding.inspectionEvidenceSha256,
+            sourceArtifactId,
+          },
+        });
+      }
       await enqueueTemplateTwinAudit(tx, {
         eventKey: `template-twin:compiled:${compiledVersionId}:${ir.structureSha256}`,
         practiceId: input.actor.practiceId,
@@ -394,10 +442,15 @@ export async function createTemplateTwinDraft(
           unsupportedCount: ir.stats.unsupported,
           blockingUnsupportedCount: ir.stats.blockingUnsupported,
           semanticProposalFallback: usedFallbackMappings,
+          rolloutGlobalGeneration:
+            input.actor.rolloutToken.globalGeneration.toString(),
+          rolloutPracticeGeneration:
+            input.actor.rolloutToken.practiceGeneration.toString(),
         },
       });
     }, { isolationLevel: 'ReadCommitted' });
   } catch (error) {
+    if (error instanceof TemplateTwinDraftError) throw error;
     // The put-once source remains recoverable in the dedicated private bucket.
     // No delete is attempted from this request path because source deletion is
     // intentionally unavailable; Operations can reconcile a DB-less object by
