@@ -386,6 +386,7 @@ enum AuditAction {
   TEMPLATE_TWIN_FIELD_REVIEWED
   TEMPLATE_TWIN_SIGN_BLOCKED
   TEMPLATE_TWIN_RENDER_VERIFIED
+  TEMPLATE_TWIN_CERTIFY_FAILED
 
   /// The anchored verifier ran and recorded what it found. AUDIT-ONLY: the
   /// verifier no longer demotes anything into a pending-suggestion lane — all
@@ -690,7 +691,6 @@ model User {
   templateTwinSourcesCreated   TemplateTwinSourceArtifact[]  @relation("TemplateTwinSourceCreator")
   templateTwinMappingsApproved TemplateTwinSemanticMapping[] @relation("TemplateTwinMappingApprover")
   templateTwinCertifications   TemplateTwinCertification[]   @relation("TemplateTwinCertifier")
-  templateTwinReviews          TemplateTwinReviewDecision[]  @relation("TemplateTwinReviewer")
 
   @@index([practiceId])
   @@index([role])
@@ -2643,7 +2643,6 @@ model TemplateTwinFieldDefinition {
   required           Boolean                     @default(false)
 
   mapping         TemplateTwinSemanticMapping?
-  reviewDecisions TemplateTwinReviewDecision[]
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
 
@@ -2752,38 +2751,9 @@ model TemplateTwinFillManifest {
   createdAt        DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt        DateTime  @updatedAt @db.Timestamptz(6)
 
-  reviewDecisions TemplateTwinReviewDecision[]
-
   @@index([practiceId, status, updatedAt])
   @@index([compiledVersionId, status])
   @@index([status, criticalUnresolvedCount])
   @@map("template_twin_fill_manifests")
 }
 
-model TemplateTwinReviewDecision {
-  id String @id @default(cuid())
-
-  fillManifestId String
-  fillManifest   TemplateTwinFillManifest @relation(fields: [fillManifestId], references: [id], onDelete: Cascade)
-
-  fieldId                 String
-  fieldDefinitionId       String
-  fieldDefinition         TemplateTwinFieldDefinition  @relation(fields: [fieldDefinitionId], references: [id], onDelete: Cascade)
-  resolutionStatus        TemplateTwinResolutionStatus
-  decisionKind            String
-  previousValue           Json?
-  correctedValue          Json?
-  sourceFactIds           Json
-  reasonCode              String?
-  createMappingRule       Boolean                      @default(false)
-  expectedManifestVersion Int
-
-  reviewerId String?
-  reviewer   User?    @relation("TemplateTwinReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
-  createdAt  DateTime @default(now()) @db.Timestamptz(6)
-
-  @@index([fillManifestId, fieldId, createdAt])
-  @@index([fieldDefinitionId, createdAt])
-  @@index([reviewerId, createdAt])
-  @@map("template_twin_review_decisions")
-}

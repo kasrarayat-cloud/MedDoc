@@ -42,6 +42,7 @@ import { TemplateTwinPhiRejectedError } from '@/lib/template-twin/source-phi';
 import type { TemplateTwinWorkspace } from '@/lib/template-twin/client-types';
 import { sendTemplateCertifiedEmail } from '@/lib/email';
 import { isEmailDeliveryEnabled } from '@/lib/email-enabled';
+import { logTwinAudit } from '@/lib/template-twin/twin-audit';
 
 // A synthetic, PHI-free clinical encounter used to prove the template renders +
 // roundtrips before certification (the certify step binds this verified proof).
@@ -60,7 +61,26 @@ const DISABLED = 'Native template fill is not enabled for your account.';
 
 export type CertifyActionResult<T> =
   | { ok: true; data: T }
-  | { ok: false; error: string };
+  | {
+      ok: false;
+      error: string;
+      /** WHY it failed, as a machine-readable class the UI can render honestly.
+       *
+       *  `unexpected` is the honest name for the case that used to be dressed up
+       *  as "Please try again." — an exception the action did not anticipate.
+       *  Telling a doctor to retry an operation that will fail identically every
+       *  time is worse than telling them it broke. */
+      reason?:
+        | 'disabled'
+        | 'conflict'
+        | 'certification_blocked'
+        | 'lifecycle'
+        | 'unexpected';
+      /** Present only for `unexpected`, and only the error's CLASS — never its
+       *  message, which can quote document content. The message goes to the
+       *  server log and the audit row, which are not the doctor's screen. */
+      errorClass?: string;
+    };
 
 function actorFrom(session: Session) {
   return {
@@ -126,20 +146,11 @@ export async function uploadNativeTemplateAction(
   return { ok: true, data: workspace };
 }
 
-/** Re-read the review workspace (fields, mappings, certification status). */
-export async function getNativeTemplateWorkspaceAction(
-  noteTemplateId: string,
-): Promise<CertifyActionResult<TemplateTwinWorkspace>> {
-  if (!templateNativeDocxEnabled()) return { ok: false, error: DISABLED };
-  const session = await requireSession();
-  const workspace = await readTemplateTwinWorkspace({
-    noteTemplateId,
-    doctorId: session.user.id,
-    practiceId: session.user.practiceId,
-  });
-  if (!workspace) return { ok: false, error: 'Template not found.' };
-  return { ok: true, data: workspace };
-}
+// `getNativeTemplateWorkspaceAction` removed 2026-07-28 — ZERO callers. A
+// server action is an HTTP endpoint: every exported one is reachable by a POST
+// from anyone with a session, so an unused one is attack surface that no test
+// covers and no reviewer reads. The upload and certify actions each return the
+// workspace they produce, which is how the UI has always obtained it.
 
 /**
  * Certify + activate: hash-locks the reviewed mapping set. Optimistic-locked on
@@ -210,13 +221,81 @@ export async function certifyNativeTemplateAction(
   } catch (err) {
     if (err instanceof TemplateTwinLifecycleError) {
       if (err.code === 'CONFLICT') {
-        return { ok: false, error: 'This template changed since you reviewed it. Reload and review again before certifying.' };
+        return {
+          ok: false,
+          reason: 'conflict',
+          error: 'This template changed since you reviewed it. Reload and review again before certifying.',
+        };
       }
       if (err.code === 'CERTIFICATION_BLOCKED') {
-        return { ok: false, error: 'This template can’t be certified — it has elements that can’t be safely reproduced. Simplify it in Word and re-upload.' };
+        return {
+          ok: false,
+          reason: 'certification_blocked',
+          error: 'This template can’t be certified — it has elements that can’t be safely reproduced. Simplify it in Word and re-upload.',
+        };
       }
-      return { ok: false, error: err.message };
+      return { ok: false, reason: 'lifecycle', error: err.message };
     }
-    return { ok: false, error: 'Certification failed. Please try again.' };
+
+    // AN UNANTICIPATED THROW. This branch used to return "Certification failed.
+    // Please try again." and do nothing else: no log line, no audit row, and a
+    // message that invites a retry which will fail identically every time.
+    //
+    // A hand-driven QA run reached this exact branch and there was no way to
+    // learn why — not from the database, not from the container log. That is the
+    // failure mode this codebase keeps paying for: a guard that reports without
+    // naming what it found teaches its reader to ignore it.
+    //
+    // So: name it three ways. The STACK to the server log (operators), the class
+    // and message to an audit row (durable, queryable, survives the container),
+    // and to the doctor an honest sentence plus the error class — never the
+    // message, which can quote the field labels of their own form.
+    // NAMING AN ERROR IN A MINIFIED BUNDLE. `err.constructor.name` is the
+    // obvious choice and it is wrong here: production minification renamed
+    // TemplateTwinSyntheticTestError to `w`, so the first audit row this branch
+    // ever wrote recorded `errorClass: "w"` — technically accurate, useless.
+    //
+    // Prefer, in order: a structured `code` the error carries (the twin's error
+    // classes expose one, and it is the most actionable thing available), then
+    // `name`, then the class name the STACK preserves, then the minified
+    // constructor. The stack is the only place the real class survives.
+    const asErr = err instanceof Error ? err : null;
+    const maybeCode = (asErr as unknown as { code?: unknown } | null)?.code;
+    const structuredCode = typeof maybeCode === 'string' ? maybeCode : null;
+    const stackClass = asErr?.stack?.match(/^\s*([A-Za-z_$][\w$]*Error)\b/)?.[1] ?? null;
+    const errorClass =
+      stackClass ??
+      (asErr && asErr.name && asErr.name !== 'Error' ? asErr.name : null) ??
+      (asErr ? asErr.constructor.name : typeof err);
+    const message = asErr ? asErr.message : String(err);
+    console.error(
+      `[template-twin:certify] UNEXPECTED failure noteTemplateId=${noteTemplateId} ` +
+        `class=${errorClass} message=${message}`,
+      err instanceof Error ? err.stack : undefined,
+    );
+    void logTwinAudit({
+      action: 'TEMPLATE_TWIN_CERTIFY_FAILED',
+      targetType: 'note_template',
+      targetId: noteTemplateId,
+      success: false,
+      errorCode: errorClass,
+      // Class + message only. NEVER document content: the template is the
+      // customer's form and its field labels are theirs.
+      metadata: {
+        errorClass,
+        // The typed refusal code when the error carries one — e.g.
+        // MAPPINGS_NOT_READY. This is the field that turns "it failed" into
+        // "it refused, and here is the rule".
+        code: structuredCode,
+        message,
+        stage: 'certifyNativeTemplateAction',
+      },
+    });
+    return {
+      ok: false,
+      reason: 'unexpected',
+      errorClass,
+      error: `Certification could not be completed (${structuredCode ?? errorClass}). This has been recorded — it will not succeed on a retry until it is fixed.`,
+    };
   }
 }
