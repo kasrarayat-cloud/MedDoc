@@ -19,7 +19,14 @@
 import { test, expect } from '@playwright/test';
 
 import { cleanupTestUsers } from '../helpers/cleanup';
-import { seedReviewDocVisit, SEEDED_EM_LEVEL } from '../helpers/seedReviewDocVisit';
+import {
+  seedReviewDocVisit,
+  assertImagingHasNoEm,
+  findImagingEmArtifacts,
+  REVIEW_DOC_CLASSES,
+  SEEDED_EM_LEVEL,
+  type ReviewDocClass,
+} from '../helpers/seedReviewDocVisit';
 import { signupFreshUser } from '../helpers/signup';
 
 const SUGG = '[data-testid="review-doc-suggestion"]';
@@ -28,6 +35,21 @@ const BULK = '[data-testid="review-doc-accept-remaining"]';
 const BAR = '[data-testid="review-doc-bar-msg"]';
 
 test.describe('pre-sign review as the document', () => {
+  test.beforeAll(() => {
+    // A DIRTY DATABASE FAILS THE PACK, LOUDLY. Two long-lived QA fixtures once
+    // carried office-E/M state written by a pre-label-fix page render — no
+    // seeder produced it, and every walk and spec that read those rows was
+    // reading the bug as truth. Asserting here means the next occurrence is a
+    // red pack with the offending ids named, not a quietly wrong green.
+    const dirty = findImagingEmArtifacts();
+    expect(
+      dirty,
+      'imaging visits in the QA database carry office-E/M state:\n  ' +
+        dirty.join('\n  ') +
+        '\nAn office level on an imaging report is wrong as data. Purge it before trusting this pack.',
+    ).toEqual([]);
+  });
+
   test.afterAll(async () => {
     await cleanupTestUsers();
   });
@@ -39,7 +61,11 @@ test.describe('pre-sign review as the document', () => {
   async function open(
     page: import('@playwright/test').Page,
     tag: string,
-    seedOpts: { emStale?: boolean; emPending?: boolean } = {},
+    seedOpts: {
+      emStale?: boolean;
+      emPending?: boolean;
+      specialtyClass?: ReviewDocClass;
+    } = {},
   ) {
     const { email } = await signupFreshUser(page, tag);
     const seeded = seedReviewDocVisit(email, seedOpts);
@@ -294,4 +320,148 @@ test.describe('pre-sign review as the document', () => {
     const file = await download;
     expect(file.suggestedFilename()).toMatch(/\.(docx|pdf)$/);
   });
+
+  // =====================================================================
+  // THE SPECIALTY MATRIX — every core review-doc spec, once per specialty
+  // class.
+  // ---------------------------------------------------------------------
+  // Added 2026-07-28 after a regression that CI could not have caught. The
+  // pack was entirely primary-care, so the E/M surface was only ever
+  // exercised in the direction where it EXISTS. When `emStale` was wired
+  // through, an edited ultrasound report began demanding "Re-check the
+  // documentation level above" — for a level the same page correctly
+  // refuses to show. It took a hand-run production smoke to see it.
+  //
+  // `emApplies` is the one switch. Each spec below asserts the SAME
+  // invariant from both sides, so a specialty-conditional surface cannot be
+  // half-tested again: what must be present for an office visit must be
+  // ABSENT for an imaging report, and the reverse.
+  // =====================================================================
+  for (const cls of REVIEW_DOC_CLASSES) {
+    test.describe(`${cls.label} (${cls.key})`, () => {
+      /** Every E/M control on this surface, in one place — so "absent" means
+       *  all of them and a newly added one has to be classified. */
+      const EM_SURFACE = [
+        'review-doc-em-level',
+        'em-level-current',
+        'em-level-adjust',
+        'review-doc-em-gate',
+        'review-doc-em-stale-gate',
+        'review-doc-em-rescore',
+      ];
+
+      test('renders as the document', async ({ page }) => {
+        test.skip(
+          !(await open(page, `mx-doc-${cls.key}`, { specialtyClass: cls.key })),
+          'psql seeding unavailable',
+        );
+        await expect(page.locator('.qm-c3-rev2-tabs')).toHaveCount(0);
+        await expect(page.getByTestId('review-document-view')).toBeVisible();
+        // Read-only paper, both classes: no edit pills, no worksheet panels.
+        await expect(page.locator('[data-testid^="section-edit-"]')).toHaveCount(0);
+        await expect(page.locator('.qm-rdoc-meta-panels')).toHaveCount(0);
+        await expect(page.locator('.qm-c3-bill-card')).toHaveCount(0);
+        await expect(page.locator('.qm-lin-coding-rail-slot')).toHaveCount(0);
+      });
+
+      test(`the E/M surface is ${cls.emApplies ? 'PRESENT' : 'ABSENT'}`, async ({ page }) => {
+        const seeded = await open(page, `mx-em-${cls.key}`, { specialtyClass: cls.key });
+        test.skip(!seeded, 'psql seeding unavailable');
+
+        if (cls.emApplies) {
+          await expect(page.getByTestId('review-doc-em-level')).toBeVisible();
+          await expect(page.getByTestId('em-level-current')).toHaveText(SEEDED_EM_LEVEL);
+          await expect(page.getByTestId('em-level-adjust')).toBeVisible();
+          // The fixture seeds an unacknowledged change, so the gate is up.
+          await expect(page.getByTestId('review-doc-em-gate')).toBeVisible();
+        } else {
+          // NOT ONE OF THEM. An imaging report has no office-visit level, so
+          // there is nothing to show, nothing to adjust and nothing to confirm.
+          for (const id of EM_SURFACE) {
+            await expect(page.getByTestId(id), `${id} must not exist on ${cls.key}`).toHaveCount(0);
+          }
+          // And no prose about one either — the bar included, which is where the
+          // regression actually spoke to the doctor.
+          await expect(page.locator('body')).not.toContainText(/documentation level/i);
+          await expect(page.locator('body')).not.toContainText(/\b992\d\d\b/);
+        }
+      });
+
+      test(`the prescription gate is ${cls.hasRxGate ? 'PRESENT' : 'ABSENT'}`, async ({ page }) => {
+        test.skip(
+          !(await open(page, `mx-rx-${cls.key}`, { specialtyClass: cls.key })),
+          'psql seeding unavailable',
+        );
+        // Gone, not present-and-empty: an imaging study with no medications drew
+        // a "Prescription safety" heading over an empty panel once.
+        await expect(page.getByTestId('review-doc-rx-gate')).toHaveCount(
+          cls.hasRxGate ? 1 : 0,
+        );
+      });
+
+      test(`a stale note ${cls.emApplies ? 'asks for a re-check' : 'asks for NOTHING'}`, async ({
+        page,
+      }) => {
+        // ⚠️ THE REGRESSION TEST. Seeded stale with no pending change, which is
+        // exactly the state a note edit leaves behind — and the state in which an
+        // ultrasound report demanded a re-check of a level it does not have.
+        const seeded = await open(page, `mx-stale-${cls.key}`, {
+          specialtyClass: cls.key,
+          emStale: true,
+          emPending: false,
+        });
+        test.skip(!seeded, 'psql seeding unavailable');
+
+        // The bar names the NEXT blocker, so an unresolved prescription warning
+        // outranks the level and the bar never reaches it. Clear Rx first where
+        // it exists, or this asserts the wrong sentence.
+        if (cls.hasRxGate) await clearRxGate(page);
+
+        if (cls.emApplies) {
+          await expect(page.getByTestId('review-doc-em-stale-gate')).toBeVisible();
+          await expect(page.getByTestId('review-doc-em-rescore')).toBeVisible();
+          await expect(page.locator(BAR)).toContainText(/documentation level/i);
+        } else {
+          await expect(
+            page.getByTestId('review-doc-em-stale-gate'),
+            'an imaging report has no level to re-check',
+          ).toHaveCount(0);
+          await expect(page.getByTestId('review-doc-em-rescore')).toHaveCount(0);
+          // The bar must not name a blocker that cannot be cleared.
+          await expect(page.locator(BAR)).not.toContainText(/documentation level/i);
+          await expect(page.locator('body')).not.toContainText(/re-check/i);
+        }
+      });
+
+      if (!cls.emApplies) {
+        test('NO office E/M is computed, stored, or exported', async ({ page }) => {
+          const seeded = await open(page, `mx-store-${cls.key}`, {
+            specialtyClass: cls.key,
+          });
+          test.skip(!seeded, 'psql seeding unavailable');
+
+          // The page has now RENDERED — which is where `emScoredCode` gets
+          // seeded for a visit that has none. That render is the exact writer
+          // the label-vs-id bug turned loose on every ultrasound visit, so
+          // asserting after it is the assertion that matters.
+          assertImagingHasNoEm(seeded!.visitId);
+
+          // Then the artifact. The signed export is what outlives every UI
+          // decision, so it gets checked as text rather than trusted.
+          const dl = page.waitForEvent('download', { timeout: 60_000 });
+          await page.getByRole('button', { name: /sign & download/i }).click();
+          const dialog = page.getByRole('dialog');
+          await dialog.getByRole('button', { name: /download docx/i }).click();
+          const modalEm = dialog.getByTestId('em-change-confirm-toggle');
+          await expect(modalEm, 'nothing to confirm on an imaging report').toHaveCount(0);
+          await dialog.getByRole('button', { name: /sign & deliver/i }).dispatchEvent('click');
+          const file = await dl;
+          expect(file.suggestedFilename()).toMatch(/\.(docx|pdf)$/);
+
+          // …and the level never appeared at sign time either.
+          assertImagingHasNoEm(seeded!.visitId);
+        });
+      }
+    });
+  }
 });

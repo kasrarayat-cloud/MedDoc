@@ -142,9 +142,145 @@ const CPT = {
  *  rather than against whatever the page happened to render. */
 export const SEEDED_EM_LEVEL = '99214';
 
+// ===========================================================================
+// THE IMAGING FIXTURE — added 2026-07-28, and it exists because of a live bug.
+// ---------------------------------------------------------------------------
+// Every fixture in this file was primary-care. So when `emStale` was finally
+// wired through to the view, an edited ULTRASOUND report started drawing
+// "Documentation level needs re-checking" with the bar instructing the doctor to
+// "Re-check the documentation level above" — pointing at a card that does not
+// exist, for a level the same page correctly refuses to show. Nothing in CI
+// could see it. It was found by hand, on production.
+//
+// A specialty-conditional surface needs a fixture per specialty class or the
+// condition is only ever exercised in one direction.
+//
+// This one is a venous duplex on the doctor's OWN template (WM_IOV-class: an
+// imaging report's headings, not S/O/A/P), because "custom template" and
+// "imaging" are the combination the real bug lived in.
+//
+// IT CARRIES NO E/M FIELDS AT ALL — no `cptCodes.em`, no `emScoredCode`, no
+// pending change. That is not tidiness, it is the invariant: an office E/M code
+// on an imaging report is wrong as DATA and reaches the export and the signed
+// record. `assertImagingHasNoEm` below enforces it after every seed.
+// ===========================================================================
+
+/** An imaging report reads as headings, not SOAP. Mirrors the shape the
+ *  WM_IOV-class templates produce. */
+const IMAGING_NOTE = [
+  '## EXAM TYPE',
+  'Bilateral lower extremity venous duplex ultrasound.',
+  '',
+  '## INDICATION',
+  'Screening for chronic venous insufficiency.',
+  '',
+  '## TECHNIQUE',
+  'Grayscale, color and spectral Doppler imaging, supine and standing.',
+  '',
+  '## FINDINGS — RIGHT',
+  'Common femoral, femoral and popliteal veins patent and compressible.',
+  'No superficial reflux.',
+  '',
+  '## FINDINGS — LEFT',
+  'Common femoral, femoral and popliteal veins patent and compressible.',
+  'No superficial reflux.',
+  '',
+  '## IMPRESSION',
+  '1. No evidence of deep venous thrombosis.',
+  '2. No significant superficial venous reflux.',
+  '',
+  '## RECOMMENDATION',
+  'Conservative management. Follow up as clinically indicated.',
+].join('\n');
+
+/** The doctor's own form — imaging headings. */
+const IMAGING_TEMPLATE_SECTIONS = [
+  { label: 'EXAM TYPE', order: 1 },
+  { label: 'INDICATION', order: 2 },
+  { label: 'TECHNIQUE', order: 3 },
+  { label: 'FINDINGS — RIGHT', order: 4 },
+  { label: 'FINDINGS — LEFT', order: 5 },
+  { label: 'IMPRESSION', order: 6 },
+  { label: 'RECOMMENDATION', order: 7 },
+];
+
+/** ICD is legitimate on an imaging report; CPT-E/M is not. Seeded so the
+ *  "no billing worksheet" assertions mean something — absence has to be the
+ *  product's decision, not an empty column. */
+const IMAGING_ICD = [
+  { code: 'I87.2', description: 'Venous insufficiency (chronic) (peripheral)' },
+];
+
+/** The specialty classes the review-doc pack runs across. `emApplies` is the
+ *  single switch every specialty-conditional expectation reads. */
+export const REVIEW_DOC_CLASSES = [
+  {
+    key: 'primary-care' as const,
+    /** How the spec name reads. */
+    label: 'an office visit',
+    /** E/M applies: level row, Adjust, confirm gate and stale gate all exist. */
+    emApplies: true,
+    /** The fixture carries a critical Rx interaction, so the Rx gate blocks. */
+    hasRxGate: true,
+  },
+  {
+    key: 'imaging' as const,
+    label: 'an imaging report',
+    emApplies: false,
+    // A venous duplex has no medications. The Rx gate is absent because there
+    // is nothing to prescribe, which is itself worth pinning: the panel must be
+    // GONE, not present-and-empty.
+    hasRxGate: false,
+  },
+] as const;
+
+export type ReviewDocClass = (typeof REVIEW_DOC_CLASSES)[number]['key'];
+
 export interface SeededReviewDocVisit {
   visitId: string;
   claimCount: number;
+  /** The class this fixture was seeded as, so a spec cannot drift from it. */
+  specialtyClass: ReviewDocClass;
+}
+
+/** THE GUARD. Read the row back and refuse to hand a spec an imaging fixture
+ *  that carries office-E/M state.
+ *
+ *  It runs on the seeded row rather than on the INSERT text on purpose: the
+ *  residue this exists to stop was not written by a seeder at all. Two fixtures
+ *  in the QA database acquired `emScoredCode` / `cptCodes.em` from a page render
+ *  made BEFORE the label-vs-id fix, months after their seeder was written — and
+ *  then sat there, being read by walks and specs as though it were the truth.
+ *
+ *  Throws rather than returning null: a missing fixture is an environment
+ *  problem and skips, but an imaging visit with a billing level is a wrong
+ *  fixture, and a spec that runs against it proves the opposite of what it says.
+ */
+export function assertImagingHasNoEm(visitId: string): void {
+  const row = psql(
+    `select coalesce("emScoredCode",'-') || '|' ||
+            coalesce("cptCodes"->'em'->>'code','-') || '|' ||
+            coalesce("cptCodes"->'em'->>'signedCode','-') || '|' ||
+            coalesce("cptCodes"->'em'->'override'->>'code','-') || '|' ||
+            case when "emPendingChange" is null then '-' else 'pending' end
+       from transcribe_visits where id = '${visitId}'`,
+  );
+  if (!row) throw new Error(`assertImagingHasNoEm: visit ${visitId} not found`);
+  const [scored, code, signedCode, overrideCode, pending] = row.split('|');
+  const offenders: string[] = [];
+  if (scored !== '-') offenders.push(`emScoredCode=${scored}`);
+  if (code !== '-') offenders.push(`cptCodes.em.code=${code}`);
+  if (signedCode !== '-') offenders.push(`cptCodes.em.signedCode=${signedCode}`);
+  if (overrideCode !== '-') offenders.push(`cptCodes.em.override.code=${overrideCode}`);
+  if (pending !== '-') offenders.push('emPendingChange is set');
+  if (offenders.length) {
+    throw new Error(
+      `IMAGING FIXTURE CARRIES OFFICE E/M STATE — ${visitId}: ${offenders.join(', ')}. ` +
+        'An imaging report has no office-visit level; this is wrong as data and ' +
+        'reaches the export and the signed record. Either the seed regressed or ' +
+        'a pre-label-fix page render wrote it back. Do not assert against it.',
+    );
+  }
 }
 
 /** Seed the visit. Returns null when the psql channel is unavailable, so the
@@ -161,8 +297,17 @@ export function seedReviewDocVisit(
    *  — with both seeded the pending card takes the slot and folds the staleness
    *  into its own badge, so the "Re-check level" button never appears. Stale and
    *  not-yet-moved is also the truthful state for a note edited since scoring. */
-  opts: { emStale?: boolean; emPending?: boolean } = {},
+  opts: {
+    emStale?: boolean;
+    emPending?: boolean;
+    /** Which specialty class to seed. Defaults to the office visit, so every
+     *  existing caller keeps the fixture it was written against. */
+    specialtyClass?: ReviewDocClass;
+  } = {},
 ): SeededReviewDocVisit | null {
+  const cls: ReviewDocClass = opts.specialtyClass ?? 'primary-care';
+  const imaging = cls === 'imaging';
+
   let userId: string;
   let practiceId: string;
   try {
@@ -178,7 +323,9 @@ export function seedReviewDocVisit(
   const stamp = Date.now().toString(36);
   const visitId = `rdoc_${stamp}`.padEnd(25, '0').slice(0, 25);
   const patientId = `rdocp_${stamp}`.padEnd(25, '0').slice(0, 25);
+  const templateId = `rdoct_${stamp}`.padEnd(25, '0').slice(0, 25);
   const j = (v: unknown) => JSON.stringify(v).replace(/'/g, "''");
+  const q = (s: string) => s.replace(/'/g, "''");
 
   try {
     psql(
@@ -186,33 +333,102 @@ export function seedReviewDocVisit(
        values ('${patientId}', '${practiceId}', 'E2E Review Doc', now(), now())
        on conflict (id) do nothing`,
     );
+
+    // THE DOCTOR'S OWN FORM, imaging only. "Custom template" and "imaging" is
+    // the combination the live bug lived in, so the fixture reproduces both
+    // rather than testing imaging on the built-in SOAP structure.
+    if (imaging) {
+      psql(
+        `insert into note_templates
+           (id, "doctorId", name, sections, version, status, "isSystemDefault",
+            "createdAt", "updatedAt")
+         values
+           ('${templateId}', '${userId}', 'E2E Venous Duplex Report',
+            '${j(IMAGING_TEMPLATE_SECTIONS)}'::jsonb, 1, 'active', false,
+            now(), now())
+         on conflict (id) do nothing`,
+      );
+    }
+
     psql(
       `insert into transcribe_visits
          (id, "userId", "patientId", specialty, "inputMode", status,
           "transcriptText", "soapFinal", "soapVersion",
           "suggestedClaims", "rxDrafts", "emPendingChange",
           "icdCodes", "cptCodes", "emStale",
+          "noteTemplateId", "noteTemplateVersion",
           "createdAt", "updatedAt")
        values
-         ('${visitId}', '${userId}', '${patientId}', 'primary-care', 'text_notes', 'READY',
-          'Asthma review. Continue current medications.',
-          '${NOTE.replace(/'/g, "''")}', 1,
-          '${j(CLAIMS)}'::jsonb, '${j(RX)}'::jsonb,
-          ${opts.emPending === false ? 'null' : `'${j(EM_PENDING)}'::jsonb`},
-          '${j(ICD)}'::jsonb, '${j(CPT)}'::jsonb, ${opts.emStale ? 'true' : 'false'},
+         ('${visitId}', '${userId}', '${patientId}',
+          '${imaging ? 'ultrasound' : 'primary-care'}', 'text_notes', 'READY',
+          '${imaging ? 'Bilateral venous duplex, screening study.' : 'Asthma review. Continue current medications.'}',
+          '${q(imaging ? IMAGING_NOTE : NOTE)}', 1,
+          '${j(CLAIMS)}'::jsonb,
+          -- No medications on an imaging report, so no Rx gate. Its ABSENCE is
+          -- asserted; the office fixture keeps the critical interaction.
+          ${imaging ? 'null' : `'${j(RX)}'::jsonb`},
+          -- AND NO PENDING E/M CHANGE, ever, on imaging: there is no level to
+          -- have moved. Seeding one would be seeding the bug.
+          ${imaging || opts.emPending === false ? 'null' : `'${j(EM_PENDING)}'::jsonb`},
+          '${j(imaging ? IMAGING_ICD : ICD)}'::jsonb,
+          -- The whole point of the imaging fixture: NO office E/M blob.
+          ${imaging ? 'null' : `'${j(CPT)}'::jsonb`},
+          ${opts.emStale ? 'true' : 'false'},
+          ${imaging ? `'${templateId}'` : 'null'}, ${imaging ? '1' : 'null'},
           now(), now())
        on conflict (id) do nothing`,
     );
   } catch {
     return null;
   }
-  return { visitId, claimCount: CLAIMS.length };
+
+  // Read it back. A seed that says the right thing and wrote the wrong thing is
+  // the failure mode this whole fixture exists to answer for.
+  if (imaging) assertImagingHasNoEm(visitId);
+
+  return { visitId, claimCount: CLAIMS.length, specialtyClass: cls };
+}
+
+/** THE DATABASE-WIDE NET, for artifacts that arrive from outside any seeder.
+ *
+ *  `assertImagingHasNoEm` guards the row a spec just seeded. This guards the
+ *  ones it did not: two long-lived QA fixtures acquired office-E/M state from a
+ *  page render made by a PRE-LABEL-FIX build — `qa_visitdoc_twin.emScoredCode =
+ *  99212` and `qa_twin_donor.cptCodes.em.code = 99213`. No seeder wrote either.
+ *  They simply sat in the database being read as truth, including by the walker.
+ *
+ *  Run at pack start. Returns the offenders rather than throwing, so the caller
+ *  decides whether a dirty database is a skip or a failure — and reports WHICH
+ *  rows, because "some fixture is wrong" is not actionable at 2am. */
+export function findImagingEmArtifacts(): string[] {
+  try {
+    const out = psql(
+      `select id || ' -> ' ||
+              concat_ws(', ',
+                nullif('emScoredCode=' || coalesce("emScoredCode",''), 'emScoredCode='),
+                case when "cptCodes" ? 'em' then 'cptCodes.em present' end,
+                case when "emPendingChange" is not null then 'emPendingChange set' end)
+         from transcribe_visits
+        where specialty = 'ultrasound'
+          and ("emScoredCode" is not null
+               or "cptCodes" ? 'em'
+               or "emPendingChange" is not null)`,
+    );
+    return out ? out.split('\n').map((l) => l.trim()).filter(Boolean) : [];
+  } catch {
+    // No psql channel — the caller is already skipping for that reason.
+    return [];
+  }
 }
 
 export function cleanupReviewDocVisit(visitId: string): void {
   try {
     psql(`delete from transcribe_visits where id = '${visitId}'`);
     psql(`delete from transcribe_md_patients where name = 'E2E Review Doc'`);
+    // The imaging fixture owns a template row. Left behind it would accumulate
+    // one per run and, worse, become an ACTIVE custom format on the seeded
+    // doctor — changing what a later visit renders as.
+    psql(`delete from note_templates where name = 'E2E Venous Duplex Report'`);
   } catch {
     /* best effort — the suite's own cleanup sweeps the user anyway */
   }
