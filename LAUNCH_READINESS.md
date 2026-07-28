@@ -31,7 +31,7 @@ Excluded by instruction, tracked elsewhere: **the Anthropic BAA countersign** an
 | 9 | **Containers** | All **10** prod containers healthy — see §A |
 | 10 | **Co-tenant isolation** | `quillmd.com` 200 · `pro.quillmd.com` 200 · `app.quillmd.com` 307 (auth redirect) · `admin.quillmd.com` 404 (allowlist) · `staging.quillmd.com` 200 |
 | 11 | **`/_preview/` no longer public** | `https://app.quillmd.com/_preview/` → 404. This was an open finding from the 2026-07-24 full-app audit; re-checked and it is closed |
-| 12 | **TLS renewal now reloads nginx** | **Fixed this pass** — see below |
+| 12 | **TLS renewal now reloads nginx** | **Fixed this pass.** The 2026-07-24 audit had diagnosed it exactly; it needed root, not analysis — see below |
 | 13 | **Backup running** | `postgres-backup` container healthy, 42h uptime |
 
 ### 🔴 Red — open, with what it would take
@@ -60,26 +60,42 @@ Excluded by instruction, tracked elsewhere: **the Anthropic BAA countersign** an
 
 ## The TLS fix, in full
 
-The 2026-07-24 audit recorded *"TLS expires 2026-09-01, NO auto-renew"*. That was
-half right, and the half that was wrong is the dangerous half.
+**The 2026-07-24 audit diagnosed this exactly right.** Quoting it, because a
+later reader deserves to know the analysis was not the gap:
 
-`certbot.timer` **is** active and ran 16 hours before this pass. A dry-run
-renewal of `quillmd.com` succeeds. So renewal was never the problem.
+> TLS renewal is scheduled and healthy, but `/etc/letsencrypt/renewal-hooks/deploy/`
+> is **empty** and `certbot.service` has no `--deploy-hook`, so nginx (a host
+> service holding the cert in memory since Jul 22) will never pick up a renewed
+> cert. … Fix is a 2-line root script + `certbot renew --dry-run`. **Needs root;
+> I have no sudo.** Same gap on `staging.quillmd.com`.
 
-The problem was that `/etc/letsencrypt/renewal-hooks/deploy/` was **empty** and no
-renewal config carried a hook line. Host nginx reads
+It stayed open for four days because it needed root, not because anyone
+misunderstood it. The condensed version that travelled around afterwards — "TLS
+expires 2026-09-01, no auto-renew" — is what was imprecise, and it is misleading
+in the direction that wastes time: it sends the next person to build a renewal
+timer that has been running all along.
+
+The real shape, restated so the short version stops propagating:
+
+`certbot.timer` **is** active and ran 16 hours before this pass; a dry-run renewal
+of `quillmd.com` succeeds. Renewal was never broken. Host nginx reads
 `/etc/letsencrypt/live/quillmd.com/fullchain.pem` once at start and holds it in
-memory. A renewed file on disk that nginx never re-reads is not a renewed
-certificate — **the site would have begun serving an expired certificate on
-2026-09-01 while every check reported that renewal was working.**
+memory, so **a renewed file on disk that nginx never re-reads is not a renewed
+certificate** — the site would have begun serving an expired cert on 2026-09-01
+while every renewal check reported success.
 
-Fixed: `renewal-hooks/deploy/reload-nginx.sh` runs `nginx -t && systemctl reload
-nginx`. Verified by executing the hook for real (graceful reload, no downtime)
-and re-checking all five hosts, which returned identical status codes.
+**Done:** `renewal-hooks/deploy/reload-nginx.sh` runs `nginx -t && systemctl
+reload nginx`. Verified by executing the hook for real — a graceful reload, no
+downtime — and re-checking all five hosts, which returned identical status codes.
+The hook is global, so it also closes the staging gap the audit named.
 
-Note for whoever tests this next: `certbot renew --dry-run` from inside a
-`docker run` without `--network host` fails on DNS resolution and looks exactly
-like a renewal failure. It is not one.
+Two traps for whoever tests this next:
+
+- `certbot renew --dry-run` does **not** execute deploy hooks. Run the hook
+  script directly to prove it works.
+- Running certbot through the documented root path
+  (`docker run --pid=host -v /:/host`) **without `--network host`** fails on DNS
+  resolution and looks exactly like a renewal failure. It is not one.
 
 ---
 
