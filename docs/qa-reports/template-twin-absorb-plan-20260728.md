@@ -1,5 +1,16 @@
 # Template Twin — absorb plan (keep / retire / integrate)
 
+> **FINAL STATUS: PARKED (2026-07-28).** The RETIRE column was executed (PR #442).
+> The KEEP column is absorbed in place and load-bearing — leave it alone. The
+> INTEGRATE column is **post-pilot roadmap**.
+>
+> **Trigger to un-park early:** a pilot doctor explicitly needs their native form
+> bytes back.
+>
+> **`MAPPINGS_NOT_READY` stays strict.** Never weaken the gate to shrink the
+> 79-of-80 wall — see the verdict doc for why.
+
+
 **2026-07-28. Plan only; no deletions this pass.** Built from a hand-driven QA
 run, not from reading. The drive changed two of the audit's conclusions, so the
 lists below rest on observed behaviour where behaviour was observable.
@@ -20,26 +31,35 @@ prod's `:latest` never touched. Driven by hand as `qa-auditor@quillmd.test`
 | 2 | Upload | ✅ | `TEMPLATE_TWIN_SOURCE_UPLOADED` sha256 `c1852a49…`, 52884 bytes; `source_artifacts` 44→45 |
 | 3 | Compile to IR | ✅ | `TEMPLATE_TWIN_COMPILED` `fieldCount: 80, tableCount: 1`, `template-docx-compiler/1.0.0`; `compiled_versions` 42→43 |
 | 4 | Review lane renders | ✅ | "80 fields · 28 dropdowns · 1 table", "1 RECOGNIZED / 79 NEEDS CONFIRMATION" |
-| 5 | **Certify** | ❌ **THE BROKEN STAGE** | "Certification failed. Please try again." — no new certification row, **no audit row, no log line** |
+| 5 | **Certify** | ⛔ **REFUSES, BY DESIGN** | `TemplateTwinSyntheticTestError` / `MAPPINGS_NOT_READY` — "Every field needs a physician-confirmed mapping before testing" (`synthetic-test.ts:221`). Named on the re-drive after the catch-all was replaced |
 | 6 | Per-visit fill manifest | ✅ | **first ever observed at rest in any environment**: `cms4x7bx1004r01s14clhsi96`, `status=VERIFIED`, `filledCount=6`, `conflictCount=0`, `roundTripVerified=TRUE`, 49312 bytes |
 | 7 | Native DOCX export | ✅ | `EXPORT_DOCX_DOWNLOADED` `nativeTemplate=true`, 49312 bytes, + `TEMPLATE_TWIN_RENDER_VERIFIED` `fieldCount: 6` |
 
-### Naming stage 5 precisely
+### Stage 5, now named (re-drive, 2026-07-28)
 
-`"Certification failed. Please try again."` is the **generic catch-all** at
-`actions/template-twin-certify.ts:220`. It is reached only when the thrown error is
-NOT a `TemplateTwinLifecycleError` — the two known refusals (`CONFLICT`,
-`CERTIFICATION_BLOCKED`) each have their own message. So this is an **unhandled
-exception whose identity is discarded**, and neither `audit_logs` nor the container
-log recorded anything.
+The generic catch-all was replaced with real surfacing — stack to the log, class +
+typed code + message to a `TEMPLATE_TWIN_CERTIFY_FAILED` audit row, an honest
+sentence to the doctor. The re-drive answered it:
 
-That is the defect to fix first, and it is not the gate: **you cannot yet tell
-whether the gate refused or the code threw.** Everything else about the certify
-stage is unknowable until the error is surfaced.
+```
+TemplateTwinSyntheticTestError: Every field needs a physician-confirmed mapping before testing.
+code: MAPPINGS_NOT_READY
+```
 
-Secondary, independent of the exception: the mapping resolver recognised **1 of
-80** fields (`[template-twin:mappings] 4/80 proposals were off-registry or
-unconcepted`). Even with certification fixed, a doctor faces 79 confirmations.
+**It is a DESIGN GATE, not a defect.** `synthetic-test.ts:221` refuses to run the
+synthetic proof until every field has a physician-confirmed mapping, and the review
+lane reported **1 recognized / 79 needing confirmation** on a real customer form.
+So the wall IS the gate, and the gate is the point: a certified twin means a
+physician confirmed what each field means.
+
+⚠️ **Never weaken `MAPPINGS_NOT_READY` to shrink the wall.** The work — post-pilot —
+is the concept registry (imaging vocabulary: side of exam, technologist, machine,
+indications) and a confirmation flow that makes ~79 confirmations tolerable on a
+form uploaded once. Not the threshold.
+
+⚠️ **Naming an error in a minified bundle:** the first audit row recorded
+`errorClass: "w"` because `err.constructor.name` is minified. Prefer a structured
+`code`, then `name`, then the class the STACK preserves.
 
 ### Two audit conclusions the drive overturned
 
@@ -67,7 +87,7 @@ unconcepted`). Even with certification fixed, a doctor faces 79 confirmations.
 | Piece | One line of evidence |
 |---|---|
 | `assessTemplateTwinSigning` (`signing-gate.ts:460`) | 702 lines, **10 tests inside a required CI gate, zero production callers** — only its own test imports it |
-| `request-security.ts` | 791 lines, **no importer anywhere** |
+| `request-security.ts` | **23** lines (the audit said 791 — wrong), no importer anywhere |
 | `contracts.ts` | no importer |
 | `template_twin_review_decisions` | table exists, **no code touches it**; 0 rows in prod and QA |
 | Twin's parallel certification *lifecycle* as a separate surface | the shipped `note_templates` already owns upload→parse→activate; two lifecycles over one concept is the duplication being absorbed |
@@ -82,30 +102,20 @@ unconcepted`). Even with certification fixed, a doctor faces 79 confirmations.
 | The fill manifest as the per-visit pin | drive stage 6 proved it works and is idempotent; it is the record that makes "what was filled, and verified how" auditable |
 | Surfacing the certify error | prerequisite for everything above — see stage 5 |
 
-## Proposed first step (unchanged in shape, now aimed)
+## First step — DONE (PR #442)
 
-**Surface the certification error before touching anything else.** Replace the
-catch-all at `template-twin-certify.ts:220` with a logged, audited failure that
-names the thrown error, and add a `TEMPLATE_TWIN_CERTIFICATION_FAILED` audit
-action. Re-run this same drive.
-
-Success is falsifiable: the drive fails again, but the log and an audit row say
-**why**. That single line decides whether stage 5 is a gate refusal (in which case
-the 79-of-80 mapping wall is the real work) or a bug (in which case certification
-may already be one fix from working).
-
-Everything else in the INTEGRATE column is blocked behind knowing that.
+The certification error was surfaced, the re-drive named it, and the RETIRE column
+was executed. Everything else is **parked** — see the header.
 
 ## What is still unknown
 
-- **Why certification throws.** The identity of the exception is discarded at the
-  catch-all; no log, no audit row.
-- Whether the gate is satisfiable at all with un-pinned live models, or on any form
-  other than `c1852a49…` — every certification in QA used pins.
-- Whether the 79-of-80 confirmation wall is inherent to the mapping registry or a
-  gap in the concept registry for imaging vocabulary.
-- Whether `65798574` hid the UI deliberately — ruled moot by direction; recorded
-  here only because its stated reason is verifiably false.
+- Whether the gate is satisfiable at all with **un-pinned** live models, or on any
+  form other than `c1852a49…` — every certification in QA used pins.
+- Whether the 79-of-80 wall is inherent to the mapping registry or a gap in the
+  **concept registry** for imaging vocabulary. This is the first question to answer
+  if the park is ever lifted.
+- Whether `65798574` hid the UI deliberately — ruled moot; recorded only because
+  its stated reason is verifiably false.
 
 ## Drive residue (deliberately retained as evidence)
 

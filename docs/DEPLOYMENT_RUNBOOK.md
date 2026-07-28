@@ -337,6 +337,48 @@ Restart the worker so it rediscovers the bucket via its client cache.
 
 ---
 
+## 5.6 TLS — the renewal timer is not the thing that can break
+
+Host nginx owns 80/443 and terminates TLS with the Let's Encrypt cert at
+`/etc/letsencrypt/live/quillmd.com/fullchain.pem`. Caddy sits behind it on
+`127.0.0.1:8443` with its own internal certs and is not involved.
+
+**`certbot.timer` renewing successfully is not enough.** nginx reads the cert
+file once at start and holds it in memory. A renewed file on disk that nginx
+never re-reads is not a renewed certificate — the site keeps serving the old one
+until it expires, while every renewal check reports success.
+
+This was the real state on 2026-07-28: the timer was active and a dry run
+succeeded, but `/etc/letsencrypt/renewal-hooks/deploy/` was **empty**. Fixed by
+installing:
+
+```sh
+# /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh   (chmod +x)
+#!/bin/sh
+set -e
+nginx -t && systemctl reload nginx
+```
+
+Verify it, from the host:
+
+```bash
+ls -l /etc/letsencrypt/renewal-hooks/deploy/          # must be non-empty
+certbot renew --dry-run --cert-name quillmd.com
+/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh  # graceful, no downtime
+echo | openssl s_client -servername quillmd.com -connect quillmd.com:443 \
+  2>/dev/null | openssl x509 -noout -enddate
+```
+
+⚠️ **Trap.** There is no sudo on this box, so the root path is
+`docker run --pid=host -v /:/host` (see AGENTS.md). Running `certbot renew
+--dry-run` that way **without `--network host`** fails on DNS resolution and
+looks exactly like a renewal failure. Always pass `--network host`.
+
+⚠️ `--dry-run` does not execute deploy hooks. Run the hook script directly to
+prove it works.
+
+---
+
 ## 6. Observability — Sentry + external uptime monitor
 
 T-M16.3 wired Sentry into both apps + the transcribe-md worker, and

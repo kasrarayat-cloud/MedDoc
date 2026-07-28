@@ -371,6 +371,44 @@ const STARTER_CPT_CODES: ReadonlyArray<string> = [
   '93978', // Duplex scan of aorta, IVC, iliac vasculature, complete
   '93979', // Same, unilateral or limited
 
+  // === Cardiology (2026-07-28, Q1 fix-pack §03.3/§03.7) ===
+  // A pilot specialty whose commonest procedures were absent, so the 07b
+  // validator dropped them and emitted CODING_COACH_REJECTED_INVALID_CPT —
+  // a correctly-coded echo read as an invalid one.
+  '93306', // TTE, complete, with spectral + color flow Doppler
+  '93307', // TTE, complete, without spectral/color Doppler
+  '93308', // TTE, follow-up or limited study
+  '93015', // Cardiovascular stress test, complete
+  '93016', // Same — supervision only
+  '93017', // Same — tracing only
+  '93018', // Same — interpretation and report only
+  '93224', // External ECG monitoring up to 48h — complete
+  '93225', // Same — recording
+  '93226', // Same — scanning analysis with report
+  '93227', // Same — review and interpretation
+
+  // === Pediatrics (2026-07-28, Q1 fix-pack §03.4/§03.7) ===
+  '96110', // Developmental screening, with scoring and documentation
+  '99188', // Topical fluoride varnish application
+  '92551', // Pure tone audiometry, screening
+  '92552', // Pure tone audiometry, threshold, air only
+
+  // === OB-GYN (2026-07-28, Q1 fix-pack §03.7) ===
+  // OB-GYN reached the specialty catalog (§03.1 closed); its codes had not.
+  '59025', // Fetal non-stress test
+  '76801', // OB ultrasound, <14 weeks, single/first gestation
+  '76802', // Same — each additional gestation
+  '76805', // OB ultrasound, >=14 weeks, single/first gestation
+  '76815', // OB ultrasound, limited
+  '76817', // OB ultrasound, transvaginal
+
+  // === Pain management (2026-07-28, Q1 fix-pack §03.7) ===
+  '64483', // Injection, transforaminal epidural, lumbar/sacral, single level
+  '64484', // Same — each additional level
+  '64493', // Injection, paravertebral facet joint, lumbar/sacral, single level
+  '64494', // Same — second level
+  '27096', // Injection, sacroiliac joint, with image guidance
+
   // === Modifiers (tracked separately from codes) ===
   // These are appended to a CPT code (e.g. "99213-25"). The validator
   // accepts a code with or without a trailing "-NN" modifier.

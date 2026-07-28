@@ -1,5 +1,24 @@
 # Q1 fix-pack triage — 20260506T190348Z
 
+> ## ⚠️ SUPERSEDED — 2026-07-28
+>
+> **The current source of truth is
+> [`docs/backlog/q1-fixpack-retriage-20260728.md`](../backlog/q1-fixpack-retriage-20260728.md).**
+>
+> This document is the ORIGINAL triage, taken on 2026-05-06 and shipped by
+> PR #171. It is kept verbatim as the historical baseline — do not work from it.
+>
+> Between that date and the re-triage the app went through the C3 redesign, the
+> document-first rewrite, the read-only-paper review screen, the chat editor,
+> the E/M rehome and the ultrasound specialty. Six of the sixteen findings below
+> had been closed by later work and nobody had marked them, and one more had
+> shipped as a product feature under a different name. **A backlog that predates
+> three rewrites is a list of guesses until it is re-validated** — every item was
+> re-checked against `main` by re-running its own evidence query.
+>
+> Three of the remainder were built on 2026-07-28 (N1, §07.1, §02.9); the rest
+> are parked with a written trigger. All of that is in the re-triage doc.
+
 **Source audit:** `docs/ai-pipeline-audit-phase-1-2026-05-05/` (2026-05-05)
 **Total Q1 findings in source:** 19
 **Triage date:** 2026-05-06T19:03:48Z
@@ -45,7 +64,11 @@
 
 - **07.5** (`07-context-flow.md` §07.5): Visit-level patient metadata (DOB / weight / allergies) doesn't reach the layers. Closed by **PR #125** (sha `dea0987`). PR cites "audit Finding 01.1" but the worker change it shipped — selecting `patient: { dateOfBirth, weightKg, allergies }` and threading into L7c — is exactly the safety-only Phase-1 fix the audit recommended in §07.5 ("Recommended fix (safety-only for Phase 1)"). Verified at `apps/transcribe-md/src/worker.ts:258-264, 679-683`. **Continuity scope not closed**: prior-visit history is still NOT pulled — the audit explicitly described that as "Phase 2 nice-to-have" and the safety scope is the Q1 Phase-1 ask.
 
-### STILL-OPEN (15)
+### STILL-OPEN (16)
+
+<!-- Header said 15 from 2026-05-06 until 2026-07-28; the list below has always
+     had 16 bullets. Sixteen is right — corrected rather than left to be
+     rediscovered by whoever counted next. -->
 
 - **01.2** (`01-prompt-quality.md` §01.2): L4 SOAP-gen is zero-shot; few-shot would significantly raise quality. Evidence: `apps/transcribe-md/src/worker/layers/04-generate-soap.ts:96-149` — system prompt still describes SOAP structure in prose with zero exemplars; no `prompts/soap-exemplars.ts` file exists. Suggested investigation: read the doctor-edit-pattern table from Phase 14.1 to see if anonymized real-visit exemplars are available; otherwise an inline 1-shot/2-shot anchor block is the audit's recommended path.
 - **01.3** (`01-prompt-quality.md` §01.3): L5 critique only enumerates 3 red-flag scenarios. Evidence: `apps/transcribe-md/src/worker/layers/05-self-critique.ts:109-112` — same three examples (chest pain, new-onset headache, pediatric fever) verbatim from the audit; no `prompts/red-flags.ts` file exists. Suggested investigation: confirm the audit's shortlist of ~30 chief complaints with red-flag questions is the right scope for short-term enumeration vs. the Phase-7 structured `red_flag_check` pass.
