@@ -78,6 +78,66 @@ audit-cited code allowed, each passing the real `isValidCpt` including the `-NN`
 modifier path, 93970 explicitly pinned so the N1 investigation starts upstream,
 and a no-duplicates guard with a non-vacuity check.
 
-**Not executed, deliberately:** everything ranked above is medium or large. Each
-needs an L3 schema change, a prompt change and eval coverage — not a mechanical
-edit, and not something to batch into a pass whose brief was the small tier.
+**Not executed in that pass, deliberately:** everything ranked above is medium
+or large. Each needs an L3 schema change, a prompt change and eval coverage —
+not a mechanical edit, and not something to batch into a pass whose brief was
+the small tier.
+
+---
+
+# Built — 2026-07-28
+
+The three items whose absence changes what a pilot doctor's own note SAYS. Each
+was proved red first; each shipped with both negative controls.
+
+| # | Item | PR | The proof |
+|---|---|---|---|
+| **N1** | A dictated CPT code reaches the note | #444 | 11 evals, 5 red. Root cause was NOT the allowlist: L7b's input is `{specialty, soapFinal, entitiesJson}` and never sees the dictation, while L4 correctly omits a billing instruction from clinical prose — so the sentence no longer existed by the time coding ran. Captured at L3, merged at L7b through the SAME fail-closed allowlist, `provenance` marked in one direction only |
+| **07.1** | L6 polish sees the visit | #445 | 8 evals, 6 red. A DISAMBIGUATION source, never a content source — the L6b fidelity gate still measures against the draft alone, asserted by a test that fails if the transcript is ever passed to it. Non-vacuity is the mirrored fixture: same draft, same critique, opposite entities, the resolution must flip |
+| **02.9** | ROS polarity as data | #446 | 11 evals, 11 red, in both directions — an affirmed symptom rendered denied (shared quote) AND a denied one rendered affirmed ("None at all" matches no charting token) — plus side collapse. Caught a live instance in the shipped sample fixture on its first run |
+
+---
+
+# Parked — with the trigger written down
+
+Everything below is real. None of it is refuted and none of it is being closed.
+It is parked because **the work is specialty-shaped and the pilot roster is not
+confirmed**, which means building it now is building it for a guess.
+
+**TRIGGER TO UN-PARK: the pilot roster confirms the specialty.** That is a
+single checkable fact, not a feeling that there is time. When it lands, take the
+rows whose specialty is on it, in the rank order already established, and leave
+the rest until a later roster names them.
+
+| # | Item | Scope | Why parked, specifically |
+|---|---|---|---|
+| **03.3** | Cardiology structured outputs (NYHA, EF, structured cardiac exam) | large | CPT half closed. The rest is an L3 schema + prompt + eval change **whose field list is only correct if cardiology is actually in the pilot**. A structured NYHA slot built for a roster with no cardiologist is dead schema that every future extraction still has to satisfy |
+| **03.4** | Pediatrics growth + developmental | large | Identical shape, identical dependency. Growth percentiles also need a reference-table decision (CDC vs WHO) that a real paediatrician should make, not this backlog |
+| **01.4** | L3 entity prompt is specialty-blind | large | The PARENT of 03.3 and 03.4. Doing it generally is strictly bigger than doing either specifically — and doing it generally FIRST means guessing the extension shape for every specialty at once. Two concrete extensions, once the roster names two specialties, will teach more about the right abstraction than designing the abstraction up front |
+| **02.3** | 3+ speakers / caregiver attribution | medium | Real misattribution risk, and not specialty-shaped — but the fix (a `relation` field on L3 + attribution rules in L4) is materially different for a paediatric clinic, where a parent routinely speaks FOR the patient, than for an adult clinic where a caregiver occasionally attends. The roster decides which problem is being solved |
+| **01.3** | L5 red-flag enumeration is 3 scenarios | medium | Safety-adjacent, which argues for doing it — but **L5 is advisory and does not gate signing**, so the honest severity is quality, not safety. The audit's own recommendation is a ~30-complaint shortlist, and a shortlist chosen without knowing the specialties is the same guess as 03.3. ⚠️ Do not let "safety-adjacent" alone promote this past the roster: the gate that actually stops an unsafe note is the critical-Rx typed override, and that one is live |
+| **01.2** | L4 SOAP-gen is zero-shot (few-shot exemplars) | medium | The only row here with **no correctness claim at all** — a quality lift. It also has a prerequisite the others do not: the doctor-edit-pattern corpus, which does not exist until doctors have edited notes. Writing exemplars before the pilot means writing them from imagination, which is the opposite of what few-shot is for |
+
+## What parking does NOT mean
+
+- **Not low-value.** 03.3 and 03.4 are pilot-specialty items and will matter the
+  day the roster names them.
+- **Not stale evidence.** Every row was re-validated against `main` on
+  2026-07-28, in the table at the top of this document.
+- **Not "revisit when convenient".** The trigger is a fact about the roster.
+  Nothing else un-parks them.
+
+---
+
+## Source of truth
+
+**This document.** The original triage
+(`docs/audit-reports/q1-fixpack-triage-20260506T190348Z.md`, shipped by PR #171)
+now carries a SUPERSEDED banner pointing here and is kept verbatim as the
+historical baseline.
+
+Its `STILL-OPEN (15)` header, which had always listed 16 bullets, is corrected
+to 16 in place rather than left for whoever counted next.
+
+PR #171 is a **merged pull request**, not an open issue — there is nothing to
+close or retitle. The reconciliation is entirely in the two documents.
