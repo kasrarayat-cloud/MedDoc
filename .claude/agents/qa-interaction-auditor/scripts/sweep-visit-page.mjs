@@ -88,6 +88,11 @@ const FORBIDDEN_BUTTONS = [
     note: 'the E/M level adjust form. Writes cptCodes.em.override, an EM_OVERRIDE_APPLIED audit row, and ARMS the confirm gate — a billing code set by a sweep, attributed to the doctor whose session it borrowed.',
   },
   {
+    pattern: /\bre-?check\s+level\b/i,
+    risk: 'would-rescore-a-billing-level',
+    note: 'the stale-level gate. Calls rescoreEmAction, which WRITES emStale + emScoredCode, can arm the confirm gate, and logs EM_RESCORED against whoever\'s session the sweep borrowed. Newly reachable on a page load (the emStale prop was never passed before 2026-07-28), so the walker meets it now where it previously could not.',
+  },
+  {
     pattern: /\boverride\b/i,
     risk: 'would-satisfy-a-clinical-gate',
     note: 'critical-Rx override. assertCriticalRxOverrideFlow walks this deliberately under --scenario criticalRx and cancels; blind clicking must not.',
@@ -199,6 +204,7 @@ async function enumerate(page) {
             href: el.getAttribute('href') ?? null,
             ariaLabel: el.getAttribute('aria-label') ?? null,
             role: el.getAttribute('role'),
+            testId: el.getAttribute('data-testid'),
           };
         })
         .filter(Boolean)
@@ -269,6 +275,28 @@ async function main() {
       emit({ event: 'critical-rx-override-flow', ...overrideAssertion });
     }
 
+    // E/M LEVEL ADJUST — the rehomed override, 2026-07-28.
+    //
+    // Needs its own flow for the same reason the Rx override does: the element
+    // map is built ONCE, and "Save level" / "Cancel" exist only while the Adjust
+    // form is open. So the bulk walk enumerates "Adjust", clicks it, re-navigates
+    // for the next element, and never sees the form — which means the deny-list
+    // entry protecting "Save level" is never exercised and could rot silently.
+    //
+    // This opens the form, asserts the deny-list would catch the save, and
+    // CANCELS. It never saves: that writes cptCodes.em.override, an
+    // EM_OVERRIDE_APPLIED row, and arms the confirm gate.
+    const emAssertion = await assertEmLevelAdjustFlow(page, opts.visitId);
+    if (!emAssertion.ok) counters.findings += 1;
+    emit({ event: 'em-level-adjust-flow', ...emAssertion });
+
+    // The form is closed again, but re-navigate so the bulk walk below starts
+    // from the same state it always did.
+    await page.goto(`${opts.base}${opts.url}`, {
+      waitUntil: 'networkidle',
+      timeout: opts.timeout,
+    });
+
     const elements = await enumerate(page);
     counters.elements = elements.length;
     for (const el of elements) {
@@ -320,9 +348,19 @@ async function main() {
         }
 
         // Build a Playwright-flavored selector spec for clickAndClassify.
-        const selectorSpec = el.ariaLabel
-          ? { role: el.role ?? 'button', name: el.ariaLabel }
-          : { text: el.text || el.ariaLabel || '?', exact: false };
+        //
+        // TESTID FIRST. The `{text}` fallback is a `getByText`, and this page
+        // renders the entire clinical note — so a button label that also occurs
+        // in the prose resolves to a paragraph. "Adjust" (the E/M level control)
+        // hit exactly that: getByText('Adjust') matched a Plan line reading
+        // "Adjust dose…", the document overlay then intercepted the click, and
+        // the walker reported CLICK_THREW against a button that was fine. Same
+        // collision class as the F-16 filter-pill hardening on /visits.
+        const selectorSpec = el.testId
+          ? { testId: el.testId }
+          : el.ariaLabel
+            ? { role: el.role ?? 'button', name: el.ariaLabel }
+            : { text: el.text || el.ariaLabel || '?', exact: false };
 
         const result = await clickAndClassify(page, {
           name: el.text || el.ariaLabel || `(${el.tag})`,
@@ -386,6 +424,112 @@ async function main() {
 }
 
 // ---------------------------------------------------------------------------
+// assertEmLevelAdjustFlow — the rehomed E/M override (2026-07-28).
+//
+// The doctor's right to disagree with the scored level moved off the deleted
+// billing panel and into the gate stack. What it adds to this page: a level row
+// (`review-doc-em-level`) stating the code, an "Adjust" button that opens a
+// picker + a REQUIRED reason, "Save level", and "Cancel".
+//
+// SAFE vs UNSAFE, explicitly. Adjust and Cancel only open and close a form —
+// they are clicked. "Save level" POSTs /em-score/override: it writes
+// cptCodes.em.override, logs EM_OVERRIDE_APPLIED, and ARMS the confirm gate, in
+// the name of whoever's session the sweep borrowed. It is on FORBIDDEN_BUTTONS
+// and this flow asserts that net is still in place rather than trusting it.
+//
+// Absent level row is NOT a finding: an imaging report has no office E/M level,
+// and a visit that has not scored has nothing to show.
+// ---------------------------------------------------------------------------
+async function assertEmLevelAdjustFlow(page, visitId) {
+  const row = page.getByTestId('review-doc-em-level');
+  if ((await row.count()) === 0) {
+    return { ok: true, skipped: 'no-em-level-row', visitId };
+  }
+
+  const current = (await page.getByTestId('em-level-current').textContent().catch(() => null)) ?? '';
+  if (!/^\s*9\d{4}\s*$/.test(current)) {
+    return {
+      ok: false,
+      step: 'assert-level-reads-a-code',
+      detail: `em-level-current should be a 5-digit CPT code, got ${JSON.stringify(current)}`,
+      visitId,
+    };
+  }
+
+  const adjust = page.getByTestId('em-level-adjust');
+  if ((await adjust.count()) === 0) {
+    return {
+      ok: false,
+      step: 'assert-adjust-present',
+      detail: 'the level row rendered but offers no Adjust — the override has no reachable caller',
+      visitId,
+      current,
+    };
+  }
+  if (await adjust.isDisabled()) {
+    // Signed / archived visits legitimately disable it.
+    return { ok: true, skipped: 'adjust-disabled', visitId, current };
+  }
+
+  await adjust.click({ timeout: 4000 });
+
+  const select = page.getByTestId('em-level-select');
+  const reason = page.getByTestId('em-level-reason');
+  const save = page.getByTestId('em-level-save');
+  try {
+    await select.waitFor({ state: 'visible', timeout: 4000 });
+    await reason.waitFor({ state: 'visible', timeout: 4000 });
+  } catch {
+    return {
+      ok: false,
+      step: 'assert-form-opens',
+      detail: 'Adjust clicked but the level picker / reason field did not appear',
+      visitId,
+      current,
+    };
+  }
+
+  // THE SAVE MUST BE DISARMED on open: nothing has changed and no reason has
+  // been given. A live save here would mean the required-reason discipline is
+  // enforced only by the server.
+  const armedOnOpen = !(await save.isDisabled());
+
+  // And the deny-list must still recognise it, so a future relabel cannot make
+  // a writing control clickable by a sweep.
+  const saveLabel = (await save.textContent().catch(() => '')) ?? '';
+  const denied = forbiddenMatch(saveLabel);
+
+  // CANCEL, never save.
+  const cancel = page.getByTestId('em-level-cancel');
+  const cancelled = (await cancel.count()) > 0;
+  if (cancelled) await cancel.click({ timeout: 4000 }).catch(() => undefined);
+  let closed = false;
+  try {
+    await select.waitFor({ state: 'hidden', timeout: 4000 });
+    closed = true;
+  } catch {
+    closed = false;
+  }
+
+  const problems = [];
+  if (armedOnOpen) problems.push('Save level was ENABLED on open (change + reason not required client-side)');
+  if (!denied) problems.push(`"${saveLabel.trim()}" is not matched by FORBIDDEN_BUTTONS — a sweep could set a billing code`);
+  if (!cancelled) problems.push('no Cancel control — the form cannot be closed without saving');
+  if (cancelled && !closed) problems.push('Cancel did not close the form');
+
+  return problems.length === 0
+    ? {
+        ok: true,
+        visitId,
+        current,
+        saveDisarmedOnOpen: true,
+        saveDeniedBy: denied.risk,
+        cancelClosesForm: true,
+      }
+    : { ok: false, step: 'assert-adjust-form-contract', detail: problems.join('; '), visitId, current };
+}
+
+// ---------------------------------------------------------------------------
 // assertCriticalRxOverrideFlow — Round 4 regression guard.
 // ---------------------------------------------------------------------------
 // Catches the class of bug where the sign-API enforces a critical-Rx-
@@ -431,6 +575,28 @@ async function assertCriticalRxOverrideFlow(page, visitId) {
   }
 
   // Step 3 — assert override button present.
+  //
+  // ALREADY-OVERRIDDEN IS NOT A MISSING BUTTON. The rail renders the button only
+  // while the warning is outstanding; once an override is recorded it becomes the
+  // "Overridden — sign cleared" chip. The fixture accumulates those rows — a
+  // prior run's override from 2026-07-26 was still in rx_warning_overrides — so
+  // this guard reported "rail is not wired to the override modal" about a rail
+  // that was working correctly, on every run since. A guard that cries wiring
+  // bug at a satisfied gate teaches the reader to ignore it.
+  const overriddenChip = await page.locator('.qm-warn-overridden').count();
+  if (overriddenChip > 0) {
+    return {
+      ok: true,
+      skipped: 'already-overridden',
+      detail:
+        'the critical warning on this fixture already has an override row, so the ' +
+        'rail correctly shows the Overridden chip instead of the button. Reset ' +
+        'rx_warning_overrides for this visit to exercise the modal flow again.',
+      visitId,
+      criticalCount,
+    };
+  }
+
   const overrideBtn = page.locator('.qm-warn-override-btn').first();
   const overrideCount = await page.locator('.qm-warn-override-btn').count();
   if (overrideCount < 1) {
@@ -438,8 +604,9 @@ async function assertCriticalRxOverrideFlow(page, visitId) {
       ok: false,
       step: 'assert-override-button-present',
       detail:
-        'Found .qm-warn-critical but no .qm-warn-override-btn — ' +
-        'rail is not wired to the override modal (the bug this guard catches)',
+        'Found .qm-warn-critical but no .qm-warn-override-btn and no ' +
+        '.qm-warn-overridden chip — rail is not wired to the override modal ' +
+        '(the bug this guard catches)',
       visitId,
       criticalCount,
     };
