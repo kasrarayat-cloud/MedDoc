@@ -32,7 +32,7 @@ old skin default until F.
 |---|---|---|---|---|
 | **F0** | Foundation: tokens doc, `rounds-tokens.css`, flag, fonts, `data-skin`, stage mapping | ✅ **DONE** | units green + exhaustiveness guard negative-controlled | `c2f35d2a` · 18 tests |
 | **F0b** | Board row model: lane kinds, run lengths, filters, ordering, day meter | ✅ **DONE** | units green, honesty rules pinned | 37 tests total, tsc clean |
-| **A1** | **Board component + units** | ✅ **DONE** | component renders all five lane kinds from the row model; positioning proved; typecheck clean | `components/rounds/board.tsx` · 21 component tests · 2719 suite green · tsc clean |
+| **A1** | **Board component + units** | ✅ **DONE, MERGED** | component renders all five lane kinds; positioning proved; retry integration correct; typecheck clean | PR **#453** merged · +retry fix · **24** component tests · 2719 suite green · tsc clean |
 | **A2** | Board E2E + axe + screenshots + merge | ⬜ **NEXT** | axe **zero serious/critical** on the board · chromium E2E (three status groups, critical ordering, retry, click-through) · screenshots **1440 + 1024** · merge on green · tagged QA image kept | — |
 | **B1** | Screen 2 — the stage | ⬜ TODO | pipeline strip from the same mapping; NOW REVIEWING; padlocked Signed node with correct **N**; sheet is the existing paper component restyled; identity header; next-up peek; chat drawer | — |
 | **B2** | Screen 3 — the gates | ⬜ TODO | full-screen sequential over EXISTING logic; only applicable gates exist; `> OVERRIDE` typed input unchanged; E/M only when `emApplies`; attestation; **sign-block E2Es pass with semantics unchanged** | — |
@@ -69,9 +69,15 @@ old skin default until F.
   stage kicker, which is honest, rather than to five unreadable slivers. The
   **1024 screenshot** in Gate A will therefore show the collapsed layout — that
   is correct, not a regression.
-- The retry control posts to `/api/visits/<id>/retry`. **Confirm that route
-  exists and accepts a POST before wiring the board into a page** — the form is
-  written against the convention, not against a verified handler.
+- ~~Confirm the retry route exists~~ — **DONE, and it found a real defect.**
+  `/api/visits/[id]/retry` exists and accepts POST, but it is a **JSON API
+  route**. The board's first cut used `<form action=… method="post">`, which
+  would have NAVIGATED the browser to a page showing `{"ok":true}` — the button
+  appears to work, the board vanishes, and nothing throws. A screenshot of the
+  click looks fine. Now a client `fetch` (`retry-button.tsx`), with the
+  form-vs-button contract pinned by tests so it cannot come back as a
+  "simplification". 409 `STILL_PROCESSING` is surfaced as information, not as an
+  error the doctor should retry into a duplicate job.
 
 ## Notes for whoever picks this up
 

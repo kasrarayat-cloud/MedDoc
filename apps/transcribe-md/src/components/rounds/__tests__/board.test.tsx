@@ -12,8 +12,16 @@
 //   - the empty state is an invitation, not a shrug
 // ============================================================================
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
+
+// The retry affordance is a CLIENT component that calls router.refresh() after
+// a successful retry — it needs the app router, which is not mounted in a bare
+// render. Mocked rather than avoided, because the alternative (a form POST to a
+// JSON route) is the bug this component exists to fix.
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
+}));
 
 import { RoundsBoard } from '../board';
 import { toBoardLane } from '@/lib/rounds/board-data';
@@ -182,5 +190,61 @@ describe('the legend explains every marker it uses', () => {
     for (const label of ['Ready', 'Recording', 'Processing', 'Critical', 'Signed']) {
       expect(within(legend).getByText(label)).toBeTruthy();
     }
+  });
+});
+
+// ============================================================================
+// RETRY MUST CALL THE API, NOT NAVIGATE TO IT.
+// ----------------------------------------------------------------------------
+// The board's first cut used <form action="/api/visits/[id]/retry" method="post">.
+// That route exists and accepts POST — but it is a JSON API route. A native
+// form submit would have NAVIGATED the browser to a page showing a JSON blob:
+// the button appears to work, the board vanishes, and the doctor is staring at
+// {"ok":true}. Nothing throws, and a screenshot of the click looks fine.
+//
+// Caught by verifying the route instead of trusting the convention. Pinned here
+// so it cannot come back as a "simplification".
+// ============================================================================
+
+import { fireEvent, waitFor } from '@testing-library/react';
+
+describe('retry integrates with the JSON route correctly', () => {
+  it('is a BUTTON, not a form submit that would navigate away', () => {
+    render(<RoundsBoard lanes={[lane({ status: 'FAILED' })]} />);
+    const btn = screen.getByTestId('rounds-retry-v1');
+    expect(btn.tagName).toBe('BUTTON');
+    expect(btn.getAttribute('type')).toBe('button');
+    // The killer: no ancestor form pointed at the JSON route.
+    expect(btn.closest('form')).toBeNull();
+  });
+
+  it('POSTs to the route and refreshes', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<RoundsBoard lanes={[lane({ status: 'FAILED' })]} />);
+    fireEvent.click(screen.getByTestId('rounds-retry-v1'));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/visits/v1/retry');
+    expect(init.method).toBe('POST');
+    vi.unstubAllGlobals();
+  });
+
+  it('surfaces STILL_PROCESSING as information, not as an error to retry', async () => {
+    // 409 STILL_PROCESSING means a live worker is making progress. Telling the
+    // doctor "failed, try again" would invite them to duplicate a running job.
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({ code: 'STILL_PROCESSING' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<RoundsBoard lanes={[lane({ status: 'FAILED' })]} />);
+    fireEvent.click(screen.getByTestId('rounds-retry-v1'));
+    await waitFor(() =>
+      expect(screen.getByTestId('rounds-retry-message-v1').textContent).toMatch(
+        /still processing/i,
+      ),
+    );
+    vi.unstubAllGlobals();
   });
 });
