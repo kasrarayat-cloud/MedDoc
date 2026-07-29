@@ -228,7 +228,39 @@ COLUMN, and no sweep of the filesystem will find them.
 bash scripts/check-imaging-em-artifacts.sh    # READ-ONLY. 0 = clean, 1 = found, 2 = off-host
 bash scripts/assert-migrations-applied.sh     # READ-ONLY. 0 = all applied, 1 = UNAPPLIED, 2 = off-host
 bash scripts/check-qa-mock-posture.sh         # READ-ONLY. 0 = severed, 1 = LIVE KEYS, 2 = stack down
+bash scripts/check-minio-encrypted-mount.sh   # READ-ONLY. 0 = encrypted, 1 = DRIFT, 2 = can't tell
+bash scripts/check-pg-encrypted-mount.sh      # READ-ONLY. 0 = encrypted, 1 = DRIFT, 2 = can't tell
 ```
+
+**A mountpoint directory exists whether or not anything is mounted on it**, and
+that sentence is the whole of a four-hour plaintext window on 2026-07-29. MinIO's
+compose bind, its systemd unit and this runbook all named the LUKS volume; the
+unit had only ever been `enabled`, never *started*, so the bind resolved to a
+plain directory on `/dev/sda2` and patient-audio-bucket data rested unencrypted
+while every artefact said otherwise. Health checks were green throughout —
+nothing was in an error state. The check above asks the one question that cannot
+be answered by a correct-looking config: **what device backs the directory the
+live container is writing into?** `docker inspect .Source` cannot answer it — it
+returns the same `/var/lib/docker/volumes/…/_data` string either way. Runbook §5.7.1.
+
+**Both stores are now fail-closed**, and the guard is the same shape: bind a
+path that exists ONLY on the encrypted filesystem (`…/data`, `…/pgdata`) via
+`driver_opts`, which docker will not create if missing. **Never use compose's
+short-form `- /host/path:/ctr` syntax for an encrypted volume — it auto-creates
+the host path**, which is what made this silent. Postgres's version of the
+failure is the worse one: an unmounted volume would have made the image `initdb`
+a brand-new empty cluster onto plaintext storage and come up *healthy*, with the
+real cluster sitting unmounted underneath. **Never `mkdir` one of those bind
+targets by hand to "fix" a failed start** — on an unmounted volume that is
+exactly how you convert a loud refusal into silent data loss.
+
+**`--pid=host` is not enough for device-mapper work — add `--ipc=host`.**
+libdevmapper syncs with udev through SysV semaphores, so a container with its own
+IPC namespace waits forever on a cookie host udev signals elsewhere. The dm
+operation *completes* and the process hangs afterwards, which is why it reads as
+a storage problem rather than a namespace one. Better: don't run `cryptsetup` in
+a container at all — `systemctl start <unit>` runs it as a host process and
+returns in seconds.
 
 **The QA stack must be incapable of reaching a vendor, and "incapable" needs two
 conditions.** `MOCK_AI_CALLS=true` stops calls only while every code path
