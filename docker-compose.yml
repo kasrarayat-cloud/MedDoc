@@ -784,15 +784,39 @@ volumes:
   # full shared volume takes the DATABASE down with it.
   #
   # Unlocked at boot by miniodata-encrypted.service (Before=docker.service).
-  # ROLLBACK: delete this driver_opts block and recreate — the pre-migration
-  # data is still in the old docker volume, copied and never moved.
-  # See docs/DEPLOYMENT_RUNBOOK.md §5.7.
+  # ROLLBACK: copy /mnt/miniodata-encrypted/data out to a staging path, delete
+  # this driver_opts block, recreate, copy back in — then SHRED the staging
+  # copy. There is deliberately no standing plaintext backup to roll back to:
+  # one would be a permanent unencrypted replica of the thing this volume
+  # exists to encrypt. See docs/DEPLOYMENT_RUNBOOK.md §5.7.
+  #
+  # ── THE DEVICE IS THE `data` SUBDIR, AND THAT IS THE FAIL-CLOSED GUARD ──
+  #
+  # It pointed at the MOUNTPOINT itself, and that is fail-OPEN. A mountpoint
+  # directory exists whether or not anything is mounted on it, so when
+  # miniodata-encrypted.service had not run, this bind silently resolved to a
+  # plain directory on /dev/sda2 and MinIO wrote patient audio to the
+  # UNENCRYPTED root filesystem — while compose, the unit name and the runbook
+  # all said LUKS. Nothing errored. That is exactly how it shipped on
+  # 2026-07-29 and ran for four hours (see §5.7).
+  #
+  # `data` exists ONLY on the encrypted filesystem. Docker's local bind driver
+  # does NOT create a missing driver_opts device (unlike compose's short-form
+  # bind syntax, which auto-creates and would reintroduce the bug) — so:
+  #
+  #     mount present → /mnt/miniodata-encrypted/data exists → MinIO starts
+  #     mount ABSENT  → path missing → docker refuses → MinIO FAILS CLOSED
+  #
+  # Never point this back at the bare mountpoint, and never `mkdir` a `data`
+  # dir on the underlying filesystem — either one silently restores fail-open.
+  # scripts/check-minio-encrypted-mount.sh asserts both, and the negative
+  # control for this guard is: unmount, `up -d minio`, expect a start failure.
   minio_data:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: /mnt/miniodata-encrypted
+      device: /mnt/miniodata-encrypted/data
   caddy_data:
   caddy_config:
 

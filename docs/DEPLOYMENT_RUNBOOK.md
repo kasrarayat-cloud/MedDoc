@@ -438,7 +438,10 @@ systemd unit ordered `Before=docker.service`.
 | Store | Backing file | Mapper | Mount | Size |
 |---|---|---|---|---|
 | Postgres (structured PHI) | `secrets/pgdata.luks` | `pg-encrypted` | `/mnt/pgdata-encrypted` | 1 GiB |
-| MinIO (patient AUDIO) | `secrets/miniodata.luks` | `minio-encrypted` | `/mnt/miniodata-encrypted` | 20 GiB |
+| MinIO (patient AUDIO) | `secrets/miniodata.luks` | `minio-encrypted` | `/mnt/miniodata-encrypted`**`/data`** | 20 GiB |
+
+**MinIO binds the `data` SUBDIRECTORY, not the mountpoint.** That is not
+cosmetic — it is the fail-closed guard, and §5.7.1 is why.
 
 ### Why MinIO got its own volume rather than sharing Postgres's
 
@@ -451,6 +454,71 @@ volume.
 
 20 GiB is ~2 months at pilot volume, against a 90-day retention sweep, and leaves
 60 GB+ free on the host.
+
+### 5.7.1 ⚠️ The migration did NOT complete on the day it was declared complete
+
+**2026-07-29, ~01:20–05:50 UTC. MinIO wrote patient-audio-bucket data to the
+UNENCRYPTED root filesystem for about four hours while every artefact in this
+repository said it was on LUKS.**
+
+Nothing was misconfigured in the usual sense. Each layer was correct in
+isolation:
+
+- `docker-compose.yml` bound `minio_data` to `/mnt/miniodata-encrypted` ✅
+- `miniodata-encrypted.service` existed and was **enabled** ✅
+- `secrets/miniodata.luks` existed, the mapping opened, `mkfs.ext4` ran ✅
+- this runbook said "encryption at rest" ✅
+
+**The unit was never STARTED.** `enabled` schedules a unit for the next boot; it
+does not run it now. So nothing was mounted at `/mnt/miniodata-encrypted` — and
+
+> **a mountpoint directory exists whether or not anything is mounted on it.**
+
+The bind therefore resolved to a plain directory on `/dev/sda2`. Docker created
+it, MinIO wrote into it, the health check went green, and `df` against the path
+reported the root filesystem's free space, which looks entirely normal. There
+was no error to find because nothing was in an error state.
+
+**Why the setup step left no trace.** The one-shot that opened and formatted the
+volume was run as `docker run --privileged --pid=host -v /:/host … chroot /host`
+— the documented root-via-docker path. It hung, was never noticed, and sat there
+for four hours as a stray container. It had in fact *done its work* (the mapping
+and the ext4 both existed); it simply never returned to run the `mount`.
+
+> **`--pid=host` is not enough for device-mapper work. You need `--ipc=host`.**
+>
+> libdevmapper synchronises with udev through **SysV semaphores**. `docker run`
+> gives the container its own IPC namespace, so `cryptsetup` waits on a cookie
+> that host udev signals in a *different* namespace. The dm operation completes;
+> the process blocks forever afterwards. Both the original `open` and a later
+> `close` hung this way and had to be killed — each after finishing its actual
+> work, which is what makes it so easy to misread.
+>
+> Better still: **do not run `cryptsetup` in a container at all.** Use
+> `systemctl start miniodata-encrypted` — systemd runs it as a host process,
+> with host IPC, and it returns in seconds.
+
+**The fix, and the guard.** The compose `device` now points at
+`/mnt/miniodata-encrypted/data`, a directory that exists **only on the encrypted
+filesystem**. Docker's local bind driver does not create a missing `driver_opts`
+device (compose's short-form `- /host/path:/ctr` syntax *does* — which is how
+this class of bug is normally introduced), so:
+
+| encrypted mount | result |
+|---|---|
+| present | `…/data` exists → MinIO starts |
+| **absent** | path missing → **docker refuses → MinIO FAILS CLOSED** |
+
+Negative-controlled 2026-07-29: with the unit stopped,
+`docker compose up -d minio` fails with
+`failed to mount local volume: mount /mnt/miniodata-encrypted/data: no such file
+or directory`, and the container never runs.
+
+**Never "fix" a failed MinIO start by creating that directory by hand.** A
+`mkdir -p /mnt/miniodata-encrypted/data` while the volume is unmounted lands on
+the plaintext filesystem and silently converts a loud refusal back into the
+four-hour failure above. `scripts/check-minio-encrypted-mount.sh` asserts
+against exactly that.
 
 ### ⚠️ ROLLBACK — written before the migration, and CORRECTED during it
 
@@ -511,17 +579,46 @@ encrypted volume.** It is the rollback, and it is the only one.
 ### Verifying the posture
 
 ```bash
-# both mapper devices present and mounted
-lsblk -o NAME,TYPE,MOUNTPOINT | grep crypt
-# and the containers actually use them
-docker inspect meddoc-pro-postgres-1 meddoc-pro-minio-1 \
-  --format '{{.Name}}{{range .Mounts}} {{.Source}}{{end}}'
+bash scripts/check-minio-encrypted-mount.sh   # READ-ONLY. 0 = encrypted, 1 = DRIFT, 2 = can't tell
 ```
 
-⚠️ **A mounted encrypted volume proves nothing on its own** — the container has
-to be *on* it. That is the whole reason MinIO was unencrypted for months while
-Postgres was fine: the volume existed, and nobody checked which containers used
-it.
+It asks the only question that cannot be answered wrongly by a correct-looking
+config: **what device backs the directory MinIO is writing into, right now?** It
+reads `findmnt` against the *live container's* resolved volume path, plus four
+supporting conditions (mount source is the dm device, `data/` present on the
+encrypted fs and absent from the underlying one, unit enabled). Negative-controlled
+in both directions on 2026-07-29.
+
+⚠️ **The recipe that used to live here could not have caught the four-hour
+plaintext window, and is kept below only to say why:**
+
+```bash
+lsblk -o NAME,TYPE,MOUNTPOINT | grep crypt          # ← says the volume EXISTS
+docker inspect … --format '{{range .Mounts}} {{.Source}}{{end}}'
+```
+
+`docker inspect .Source` returns
+`/var/lib/docker/volumes/meddoc-pro_minio_data/_data` — a path under
+`/var/lib/docker`, **the same string whether that path is a bind onto dm-crypt or
+a plain directory on `/dev/sda2`.** It describes docker's bookkeeping, not the
+kernel's mount table. And `lsblk` showed `minio-encrypted` present with a blank
+MOUNTPOINT, which reads as reassuring at a glance and is in fact the signature of
+the bug.
+
+Two distinct things have now gone wrong here, and both need checking:
+
+1. **The volume exists but no container is on it** (MinIO, for months).
+2. **A container is bound to the path but nothing is mounted there** (MinIO, for
+   four hours on 2026-07-29) — strictly worse, because the config *reads* fixed.
+
+⚠️ **Postgres carries latent exposure #2 as well.** It uses compose's short-form
+`- /mnt/pgdata-encrypted:/var/lib/postgresql/data`, which **auto-creates the host
+path**, so an unmounted `/mnt/pgdata-encrypted` would not refuse — `initdb` would
+populate a fresh plaintext cluster. It is mounted today and its unit has run
+since 2026-07-27, so this is a hardening item, not a live finding. The fix is the
+same shape as MinIO's: bind a subdirectory that exists only on the encrypted
+filesystem. **Do not attempt it as a side effect of another task** — Postgres
+holds the live clinical database.
 
 ---
 
