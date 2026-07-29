@@ -38,6 +38,47 @@ fail=0
 note() { printf '   %s\n' "$1"; }
 bad()  { printf '🔴 %s\n' "$1"; fail=1; }
 
+REPO=$(cd "$(dirname "$0")/.." && pwd)
+
+# ---------------------------------------------------------------------------
+# Assert a compose stack is COMPLETE, not merely non-empty.
+#
+# THREE false greens lived in sections 4-6 until 2026-07-29, all the same shape:
+# each asked "is anything wrong?" of a set whose size it never established.
+#
+#   §4 printed "🟢 every meddoc-pro container is up" against ZERO containers.
+#      `docker ps -a` returns nothing, the grep filters nothing, the emptiness
+#      test passes. That is green on a DEAD production stack — and green in
+#      precisely the case this proof exists to catch, because both stores now
+#      FAIL CLOSED: a lost boot race takes the stack down rather than reverting
+#      to plaintext. The check was blindest exactly where it had to see.
+#
+#   §4 also could not see an UNHEALTHY container, twice over:
+#      `grep -vi "healthy"` drops "unhealthy" as a substring, and `Up [0-9]`
+#      matches any running container whatever its health says.
+#
+#   §6 printed "🟢 QA stack: 1 container(s) up" with 5 of 6 down, because it
+#      tested `-eq 0`. Exactly one QA container is `unless-stopped`
+#      (gotenberg); the other five are `restart: "no"` and ARE the documented
+#      side effect this section exists to surface. The one survivor satisfied
+#      the test, so the section reported success on the very state it was
+#      written to report.
+#
+# The fix is the one section 1 already models: name what you expect, and
+# compare. Derive the expected service set from the compose file, resolve each
+# service to its container, and require running + (healthy | no healthcheck).
+# An assertion that names its expected set cannot be satisfied by an empty one.
+# ---------------------------------------------------------------------------
+stack_state() {   # $1 = compose file, $2 = project prefix → "service<TAB>status|health"
+  local f="$1" proj="$2" svc cname st
+  for svc in $(docker compose -f "$f" config --services 2>/dev/null | sort); do
+    cname="${proj}-${svc}-1"
+    st=$(docker inspect -f '{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cname" 2>/dev/null) \
+      || st="absent|none"
+    printf '%s\t%s\n' "$svc" "$st"
+  done
+}
+
 echo "── uptime ──────────────────────────────────────────────────────────"
 inhost "uptime -p; echo 'booted: '\$(uptime -s)"
 echo
@@ -97,28 +138,92 @@ rm -f /tmp/prb
 echo
 
 echo "── 4. prod stack ───────────────────────────────────────────────────"
-unhealthy=$(docker ps -a --filter "name=meddoc-pro-" --format '{{.Names}} {{.Status}}' | grep -viE "healthy|Up [0-9]" || true)
-if [ -n "$unhealthy" ]; then bad "prod containers not healthy:"; echo "$unhealthy" | sed 's/^/      /'
-else note "🟢 every meddoc-pro container is up"; fi
+prod_expected=$(docker compose -f "$REPO/docker-compose.yml" config --services 2>/dev/null | sort)
+if [ -z "$prod_expected" ]; then
+  # Must fail loudly. An unreadable compose file means we cannot establish what
+  # "complete" is, and "I could not check" must never render as "🟢".
+  bad "cannot read the prod compose service list — the stack's completeness is UNPROVEN, not fine"
+else
+  n_exp=$(printf '%s\n' "$prod_expected" | wc -l)
+  n_ok=0; prod_bad=""
+  while IFS=$'\t' read -r svc st; do
+    [ -z "$svc" ] && continue
+    status="${st%%|*}"; health="${st##*|}"
+    if [ "$status" != "running" ]; then
+      prod_bad="${prod_bad}      ${svc} → ${status}"$'\n'
+    elif [ "$health" != "healthy" ] && [ "$health" != "none" ]; then
+      prod_bad="${prod_bad}      ${svc} → running but ${health}"$'\n'
+    else
+      n_ok=$((n_ok + 1))
+    fi
+  done < <(stack_state "$REPO/docker-compose.yml" meddoc-pro)
+  if [ -n "$prod_bad" ]; then
+    bad "prod stack incomplete — $n_ok/$n_exp services running and healthy:"
+    printf '%s' "$prod_bad"
+    note "   (MinIO can read 'unhealthy' after losing its mc alias while serving fine —"
+    note "    classify before acting, do not assume either way)"
+  else
+    note "🟢 prod stack complete — $n_ok/$n_exp services running and healthy"
+  fi
+fi
 code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 https://quillmd.com || echo 000)
 [ "$code" = "200" ] && note "🟢 quillmd.com → 200" || bad "quillmd.com → $code"
 echo
 
 echo "── 5. co-tenants (this host is shared) ─────────────────────────────"
-for p in leathererp voiceassistmain openclaw; do
+# Count baselines observed 2026-07-29 on a clean boot. Weaker than §4's
+# service-identity check — these are other people's stacks and we do not own
+# their compose files — but strictly better than `-gt 0`, which passes on 1 of 6.
+for spec in "leathererp:3" "voiceassistmain:6" "openclaw:1"; do
+  p="${spec%%:*}"; want="${spec##*:}"
   n=$(docker ps --filter "name=$p" --format '{{.Names}}' | wc -l)
-  [ "$n" -gt 0 ] && note "🟢 $p: $n container(s) up" || bad "$p has NO containers up"
+  if [ "$n" -eq 0 ]; then
+    bad "$p has NO containers up (expected $want)"
+  elif [ "$n" -lt "$want" ]; then
+    bad "$p: only $n of $want container(s) up — a co-tenant lost something to the boot"
+  else
+    note "🟢 $p: $n/$want container(s) up"
+  fi
 done
 echo
 
 echo "── 6. KNOWN reboot side effects — expected, handle them ────────────"
-qa=$(docker ps --filter "name=meddoc-qa-" --format '{{.Names}}' | wc -l)
-if [ "$qa" -eq 0 ]; then
-  note "⚠️  QA stack is down — EXPECTED, it does not self-restart. Bring it back:"
-  note "     docker compose -f docker-compose.qa.yml up -d"
-  note "   Then re-run: bash scripts/check-qa-mock-posture.sh"
+# A PARTIAL QA stack is the normal post-boot state, not a rare one: exactly one
+# of its services (gotenberg) is `unless-stopped` and comes back on its own,
+# while the rest are `restart: "no"`. So "some containers are up" is precisely
+# what a reboot leaves behind, and it was the passing condition. Check the whole
+# set. `db-migrate` is one-shot — it exits 0 by design and is not expected up.
+QA_ONESHOT="db-migrate"
+qa_expected=$(docker compose -f "$REPO/docker-compose.qa.yml" config --services 2>/dev/null \
+                | grep -vx "$QA_ONESHOT" | sort)
+if [ -z "$qa_expected" ]; then
+  bad "cannot read the QA compose service list — QA posture UNPROVEN"
 else
-  note "🟢 QA stack: $qa container(s) up"
+  n_qa_exp=$(printf '%s\n' "$qa_expected" | wc -l)
+  n_qa_ok=0; qa_down=""
+  while IFS=$'\t' read -r svc st; do
+    [ -z "$svc" ] && continue
+    [ "$svc" = "$QA_ONESHOT" ] && continue
+    status="${st%%|*}"; health="${st##*|}"
+    if [ "$status" = "running" ] && { [ "$health" = "healthy" ] || [ "$health" = "none" ]; }; then
+      n_qa_ok=$((n_qa_ok + 1))
+    else
+      qa_down="${qa_down}      ${svc} → ${status}/${health}"$'\n'
+    fi
+  done < <(stack_state "$REPO/docker-compose.qa.yml" meddoc-qa)
+  if [ -n "$qa_down" ]; then
+    # Deliberately a warning, not a failure: this side effect is EXPECTED and
+    # this script reports rather than fixes. But it must report ACCURATELY —
+    # the bug was never that it warned too weakly, it was that it fell silent.
+    note "⚠️  QA stack incomplete — $n_qa_ok/$n_qa_exp up. EXPECTED, it does not self-restart:"
+    printf '%s' "$qa_down"
+    note "   Bring it back:  docker compose -f docker-compose.qa.yml up -d"
+    note "   Then re-run:    bash scripts/check-qa-mock-posture.sh"
+    note "   (the posture check reads the RUNNING containers, so it only means"
+    note "    anything once they are actually running again)"
+  else
+    note "🟢 QA stack complete — $n_qa_ok/$n_qa_exp services up"
+  fi
 fi
 # `git status` must be allowed to FAIL LOUDLY. Run from the boot unit this
 # executes as root against a repo owned by `claude`, and git then refuses with
@@ -127,7 +232,6 @@ fi
 # "🟢 working tree clean" off a hard error. An unreadable tree is not a clean
 # one. `safe.directory` is passed per-invocation rather than written to a global
 # config, because a check should not mutate the host it is checking.
-REPO=$(cd "$(dirname "$0")/.." && pwd)
 if ! git_out=$(git -c safe.directory="$REPO" -C "$REPO" status --porcelain 2>&1); then
   bad "cannot read the working tree — git said: ${git_out%%$'\n'*}"
   git_out=""

@@ -44,7 +44,7 @@ Excluded by instruction, tracked elsewhere: **the Anthropic BAA countersign** an
 | R2 | **Resend BAA** | **pilot-blocking** | ☐ NOT YET. Visit-export email carries PHI — patient name in the subject and the signed SOAP note as a PDF attachment (`lib/email.ts`). Auth emails are link-only and would be fine; the export path is not |
 | R3 | **VPS host BAA (Zap Hosting)** | **pilot-blocking** | ☐ VERIFY. Every row of PHI persists on this host. If Zap will not sign, the alternative is migration to a HIPAA-eligible host — which is a project, not a task, and needs to start before it is urgent |
 | R4 | **Backblaze B2 BAA** | high | ☐ NOT YET. Offsite backup target. Blobs are encrypted client-side before they leave, which mitigates but does not remove the obligation |
-| R5 | ~~**Open signup has no captcha**~~ → **the waitlist form has no captcha** | **was high; now low — the row was STALE, reconciled 2026-07-29** | **There is no open signup any more.** It went invite-only in `4455a7ce` (2026-07-28) and that is live in production, not merely on `main`: `app.quillmd.com/signup` serves an invite-code field and the copy *"QuillMD is invite-only during the pilot."* The account-creation surface this row was written about **no longer exists**, so "high" was describing a system that had already changed underneath it. What is left is the **waitlist form** (`/waitlist`, 200): same 5/hour/IP budget, still no captcha — but `joinWaitlistAction` writes exactly one `waitlist_entries` row and creates **no User, no Practice, no session, no auth token, no product grant**. There is nothing there to sign in with, which is what makes an open endpoint acceptable where open signup was not. **Low**, and the honest residue is spam rows in one table. ⚠️ **Two things this reconciliation does NOT close** — (1) the **residue**: 195 accounts / 23 ever logged in / 43 email-verified is *unchanged*, because closing the door does not empty the room; the population query is still polluted and §F still applies. (2) **Signup is currently closed to everyone, including a pilot doctor**: `invite_codes` has **0 rows** and `SIGNUP_INVITE_CODES` is **unset in the running app container**, so no valid code exists from either source. Minting one is a prerequisite of onboarding, not a step during it |
+| R5 | ~~**Open signup has no captcha**~~ → **the waitlist form has no captcha** | **was high; now low — the row was STALE, reconciled 2026-07-29** | **There is no open signup any more.** It went invite-only in `4455a7ce` (2026-07-28) and that is live in production, not merely on `main`: `app.quillmd.com/signup` serves an invite-code field and the copy *"QuillMD is invite-only during the pilot."* The account-creation surface this row was written about **no longer exists**, so "high" was describing a system that had already changed underneath it. What is left is the **waitlist form** (`/waitlist`, 200): same 5/hour/IP budget, still no captcha — but `joinWaitlistAction` writes exactly one `waitlist_entries` row and creates **no User, no Practice, no session, no auth token, no product grant**. There is nothing there to sign in with, which is what makes an open endpoint acceptable where open signup was not. **Low**, and the honest residue is spam rows in one table. ⚠️ **Two things this reconciliation does NOT close** — (1) the **residue**: 195 accounts / 23 ever logged in / 43 email-verified is *unchanged*, because closing the door does not empty the room; the population query is still polluted and §F still applies. (2) **Signup is currently closed to everyone, including a pilot doctor**: `invite_codes` has **0 rows** and `SIGNUP_INVITE_CODES` is **set to the empty string** in the running app container — re-checked 2026-07-29 with `[ -z "${SIGNUP_INVITE_CODES+x}" ]`, which distinguishes *unset* from *set-and-empty*; this row said "unset" until then. The outcome is identical (`envInviteCodeHashes()` filters empties, so env admits nobody) but the fact is not, and a row that says "unset" invites someone to go looking for a missing line in `.env` that is actually present and blank. Minting one is a prerequisite of onboarding, not a step during it — **see §"Minting the first invite code" below**, which is the how-to this row asked for three times without ever giving |
 | R6 | **`h8-h3-pilot-followup`** — disk encryption | high, **narrowed 2026-07-29, then CORRECTED the same day** | **Encryption at rest is now genuinely complete for both PHI stores: Postgres ✅ (`/mnt/pgdata-encrypted`) and MinIO ✅ (`/mnt/miniodata-encrypted/data`, 20 GiB LUKS).** ⚠️ **This row claimed exactly that several hours before it was true.** The MinIO migration was declared complete while `miniodata-encrypted.service` had only ever been `enabled`, never *started* — and a mountpoint directory exists whether or not anything is mounted on it, so the bind fell through to `/dev/sda2` and MinIO wrote to the plain root filesystem with every layer reporting success. Re-migrated with a sha256 manifest matched 33/33, made **fail-closed**, and now asserted by a standing check that reads the kernel rather than the config. What remains under this finding is the *managed-volume* migration, not the encryption itself. Runbook §5.7.1 |
 | R8 | **MinIO backup regime (encrypted) — define pre-pilot** | medium, open | Postgres has a daily dump with rotation; **MinIO has no backup regime at all.** The one that existed was a plaintext tarball of the object store sitting on the unencrypted root filesystem — a replica contradicting the posture it predated — and it was shredded 2026-07-29 once the migration was sha-proven and the fail-closed guard plus standing check protected the live state. Whatever replaces it must land encrypted and off-host, which folds into R4/R7. **Define before a pilot doctor records anything**, because the first real audio is the point at which "no backup" stops being an acceptable position |
 | R7 | **`h16-offsite-backup`** — backups co-located with the database | high, open | *"Single-failure-domain: backups co-located with database."* The daily dump lands on the same host as the Postgres it dumps, so the one event a backup exists for — losing the host — loses both. `infra/backup-offsite-sync.sh` targets Backblaze B2, which is R4's unsigned BAA: **R4 and R7 are the same blocker seen from two directions**, and closing R7 requires closing R4 first |
@@ -248,6 +248,60 @@ it, but do not read "R5 narrowed" as "R5 handled".
 
 And note the corollary before onboarding day: **signup is currently closed to
 everyone**, because no invite code exists in either source. Mint one first.
+
+## Minting the first invite code
+
+Written 2026-07-29. Three places in this document said *"mint one first"* and
+none said how — an instruction with no procedure is a reminder, not a runbook,
+and the cost of that lands on whoever is standing in front of a doctor who
+cannot sign up.
+
+`src/lib/signup-invite.ts` accepts a code matching **either** source. Both take
+the code **normalised**: `trim()` then `toUpperCase()`. Casing and surrounding
+whitespace are noise because these get read aloud and pasted out of emails.
+
+**Path A — env (bootstrap / break-glass).** Survives an empty database and needs
+no admin UI. It is checked first and costs no query, so a database outage cannot
+lock the operator out of onboarding.
+
+```bash
+# .env  — comma-separated, no spaces needed; they are trimmed
+SIGNUP_INVITE_CODES=QUILL-PILOT-001
+docker compose up -d transcribe-md      # env is read at process start
+```
+
+The trade is that the code sits in plaintext in `.env` and in the container's
+environment. Fine for one bootstrap code; not the mechanism for a cohort.
+
+**Path B — database (the real one).** Rows are stored **hashed** — `sha256` of
+the normalised code — so that a database read cannot mint signups, the same
+discipline `AuthToken` uses for reset tokens. It also gets use limits, expiry and
+revocation, which env has none of.
+
+```bash
+CODE='QUILL-PILOT-001'
+HASH=$(printf '%s' "$(echo "$CODE" | tr '[:lower:]' '[:upper:]' | xargs)" | sha256sum | cut -d' ' -f1)
+docker exec meddoc-pro-postgres-1 psql -U meddoc -d meddoc -c \
+  "INSERT INTO invite_codes (id,\"codeHash\",label,\"maxUses\",\"usedCount\",\"createdAt\",\"updatedAt\")
+   VALUES (gen_random_uuid()::text,'$HASH','pilot doctor 1',1,0,now(),now());"
+```
+
+`maxUses` is enforced in the WHERE clause of the consuming update, not by a
+read-then-write, so two concurrent signups cannot both spend the last use.
+
+**Verify without spending it:** a wrong code and an expired one and an exhausted
+one all return the *same* message by design — `INVITE_REJECTED_MESSAGE` — because
+distinguishing them tells a prober which codes are real. So do not read "rejected"
+as "the code is wrong"; check the row instead:
+
+```bash
+docker exec meddoc-pro-postgres-1 psql -U meddoc -d meddoc -tAc \
+  "SELECT label,\"maxUses\",\"usedCount\",\"expiresAt\",\"revokedAt\" FROM invite_codes;"
+```
+
+**Not done here, deliberately.** No code has been minted — that creates a live
+credential for production, and which code, for whom, with what expiry, is the
+operator's call at onboarding, not a side effect of an audit.
 
 ## Document history
 
