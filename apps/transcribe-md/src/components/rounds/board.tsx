@@ -27,6 +27,7 @@ import Link from 'next/link';
 
 import { ROUNDS_STAGES } from '@/lib/rounds/stages';
 import type { BoardLane } from '@/lib/rounds/board-data';
+import { RoundsRetryButton } from './retry-button';
 
 function hhmm(iso: string | null): string {
   if (!iso) return '';
@@ -339,30 +340,14 @@ export function RoundsBoard({
                 ))}
               </div>
 
+              {/* Retry is a CLIENT fetch, not a form POST: /api/visits/[id]/retry
+                  is a JSON route, and a native form submit would navigate the
+                  browser to a JSON blob — a failure that looks like success in
+                  a screenshot. See retry-button.tsx. */}
               {lane.kind === 'failed' ? (
-                <form
-                  action={`/api/visits/${lane.id}/retry`}
-                  method="post"
-                  style={{ marginTop: 6 }}
-                >
-                  <button
-                    type="submit"
-                    data-testid={`rounds-retry-${lane.id}`}
-                    style={{
-                      fontFamily: 'var(--rounds-font-ui)',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: 'var(--rounds-critical)',
-                      background: 'transparent',
-                      border: '1px solid var(--rounds-critical)',
-                      borderRadius: 'var(--rounds-radius-sm)',
-                      padding: '4px 10px',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Retry
-                  </button>
-                </form>
+                <div style={{ marginTop: 6 }}>
+                  <RoundsRetryButton visitId={lane.id} />
+                </div>
               ) : null}
             </li>
           );
