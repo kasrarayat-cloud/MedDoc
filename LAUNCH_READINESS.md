@@ -32,7 +32,8 @@ Excluded by instruction, tracked elsewhere: **the Anthropic BAA countersign** an
 | 10 | **Co-tenant isolation** | `quillmd.com` 200 · `pro.quillmd.com` 200 · `app.quillmd.com` 307 (auth redirect) · `admin.quillmd.com` 404 (allowlist) · `staging.quillmd.com` 200 |
 | 11 | **`/_preview/` no longer public** | `https://app.quillmd.com/_preview/` → 404. This was an open finding from the 2026-07-24 full-app audit; re-checked and it is closed |
 | 12 | **TLS renewal now reloads nginx** | **Fixed this pass.** The 2026-07-24 audit had diagnosed it exactly; it needed root, not analysis — see below |
-| 13 | **Backup running** | `postgres-backup` container healthy, 42h uptime |
+| 13 | **Backup running** | `postgres-backup` container healthy |
+| 14 | **Encryption at rest — BOTH stores** | Postgres → `/mnt/pgdata-encrypted`; MinIO → `/mnt/miniodata-encrypted`. Verified by container mount, not by the volume merely existing — that distinction is why audio was unencrypted for months while the database was fine |
 
 ### 🔴 Red — open, with what it would take
 
@@ -43,7 +44,7 @@ Excluded by instruction, tracked elsewhere: **the Anthropic BAA countersign** an
 | R3 | **VPS host BAA (Zap Hosting)** | **pilot-blocking** | ☐ VERIFY. Every row of PHI persists on this host. If Zap will not sign, the alternative is migration to a HIPAA-eligible host — which is a project, not a task, and needs to start before it is urgent |
 | R4 | **Backblaze B2 BAA** | high | ☐ NOT YET. Offsite backup target. Blobs are encrypted client-side before they leave, which mitigates but does not remove the obligation |
 | R5 | **Open signup has no captcha** | high | Rate-limited (5/hour/IP) but **not** bot-resistant, and the data shows it: **195 accounts, of which 172 have never logged in and only 43 verified an email**. 97 of them were created in the last 30 days at a steady 1–3/day — a cadence that sits comfortably under the rate limit. No PHI is exposed (these accounts have no data), but it is an unbounded account-creation surface on a system about to hold patient records, and it poisons every population query |
-| R6 | **`h8-h3-pilot-followup`** — disk encryption | high, open | Still open in `hipaa_findings`. Postgres data is on a LUKS dm-crypt volume (Phase 6.1); the finding tracks migrating to a Hetzner managed encrypted volume. Runbook: `docs/H3_ENCRYPTED_VOLUME_PROCEDURE.md` |
+| R6 | **`h8-h3-pilot-followup`** — disk encryption | high, **narrowed 2026-07-29** | **Encryption at rest is now complete for both PHI stores: Postgres ✅ (`/mnt/pgdata-encrypted`) and MinIO ✅ (`/mnt/miniodata-encrypted`, 20 GiB LUKS, migrated with a verified byte-identical manifest and an upload→transcribe→READY smoke).** Audio was previously on the plain root filesystem — the encrypted volume existed and nobody had checked which containers used it. What remains under this finding is the *managed-volume* migration, not the encryption itself. Runbook §5.7 |
 | R7 | **`h16-offsite-backup`** — backups co-located with the database | high, open | *"Single-failure-domain: backups co-located with database."* The daily dump lands on the same host as the Postgres it dumps, so the one event a backup exists for — losing the host — loses both. `infra/backup-offsite-sync.sh` targets Backblaze B2, which is R4's unsigned BAA: **R4 and R7 are the same blocker seen from two directions**, and closing R7 requires closing R4 first |
 | R8 | **No fresh end-to-end clinical smoke on a real doctor account** | — | And there will not be one. Production verification is structural by standing policy; the full clinical walk belongs on the QA stack. Named here so the gap is explicit rather than implied |
 
