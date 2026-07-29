@@ -26,6 +26,16 @@ const WORKFLOW = readFileSync('../../.github/workflows/e2e.yml', 'utf8');
  *  surfaces actually read. */
 const IMAGES: { tag: string; needs: string[]; why: string }[] = [
   {
+    tag: 'meddoc-pro-transcribe-md:rounds',
+    needs: ['NEXT_PUBLIC_SKIN_ROUNDS'],
+    why:
+      'Gate A. The board route 404s with the flag off, so a rounds image built ' +
+      'without the build-arg would fail the whole pack for an environment ' +
+      'reason. The Dockerfile must also DECLARE the ARG — docker silently ' +
+      'discards an undeclared build-arg ("were not consumed") and the flag ' +
+      'never inlines, which is how the first flag-ON build shipped the old skin.',
+  },
+  {
     tag: 'meddoc-pro-transcribe-md:doc-preview',
     needs: ['NEXT_PUBLIC_DOC_PREVIEW', 'NEXT_PUBLIC_UX_SIMPLIFY'],
     why: 'the confirm card it asserts on is behind isUxSimplify()',

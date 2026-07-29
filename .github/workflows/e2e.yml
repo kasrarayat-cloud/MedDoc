@@ -270,6 +270,35 @@ jobs:
           docker compose -f docker-compose.qa.yml -f docker-compose.qa.reviewdoc.yml
           up -d --wait transcribe-md
 
+      # ── ROUNDS Gate A. Its own flag-ON image; the board does not exist with
+      #    the flag off, which the pack asserts so a mis-built image fails
+      #    loudly rather than passing a suite that never exercised Rounds. ──
+      - name: Build Rounds flag-ON image
+        run: >
+          docker build -f apps/transcribe-md/Dockerfile
+          --build-arg NEXT_PUBLIC_SKIN_ROUNDS=true
+          --build-arg NEXT_PUBLIC_SKIN_BETA=true
+          --build-arg NEXT_PUBLIC_ULTRASOUND_SPECIALTY=true
+          --build-arg NEXT_PUBLIC_REVIEW_DOC_VIEW=true
+          -t meddoc-pro-transcribe-md:rounds .
+
+      - name: Recreate app on the Rounds image
+        run: >
+          docker compose -f docker-compose.qa.yml -f docker-compose.qa.rounds.yml
+          up -d --wait transcribe-md
+
+      - name: Run E2E (rounds-board — Gate A)
+        working-directory: apps/transcribe-md
+        env:
+          PW_BASE_URL: http://localhost:9020
+          CI: "true"
+        run: npx playwright test --project=rounds-board
+
+      - name: Restore app image for the remaining packs
+        run: >
+          docker compose -f docker-compose.qa.yml
+          up -d --wait --force-recreate transcribe-md
+
       - name: Run E2E (review-doc — the pre-sign document surface)
         working-directory: apps/transcribe-md
         env:

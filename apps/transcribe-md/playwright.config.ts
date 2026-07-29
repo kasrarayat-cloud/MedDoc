@@ -144,6 +144,16 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
     {
+      // ROUNDS Gate A — the Board. Its own project because it needs the
+      // flag-ON image (NEXT_PUBLIC_SKIN_ROUNDS=true), which no other pack
+      // wants. With the flag off /board 404s, so this pack would fail for an
+      // environment reason rather than a real one — same posture as review-doc
+      // above.
+      name: 'rounds-board',
+      testMatch: ['**/rounds-board.spec.ts'],
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
       // Real-document preview (NEXT_PUBLIC_DOC_PREVIEW=true). Its own project
       // because one spec deliberately STOPS the converter sidecar to prove the
       // fallback — serialised so it cannot break a parallel spec.

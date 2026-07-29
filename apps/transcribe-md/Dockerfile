@@ -74,6 +74,14 @@ ENV NEXT_PUBLIC_SHOW_PIPELINE_TAB=${NEXT_PUBLIC_SHOW_PIPELINE_TAB}
 ARG NEXT_PUBLIC_SKIN_BETA=false
 ENV NEXT_PUBLIC_SKIN_BETA=${NEXT_PUBLIC_SKIN_BETA}
 
+# ROUNDS — the full app re-skin. Build-time and DEFAULT OFF, like its sibling
+# above. It must be declared HERE or `--build-arg NEXT_PUBLIC_SKIN_ROUNDS=true`
+# is silently discarded ("were not consumed") and the flag never inlines: the
+# image builds, the tag says rounds, and the old skin renders. Caught exactly
+# that way on the first flag-ON build.
+ARG NEXT_PUBLIC_SKIN_ROUNDS=false
+ENV NEXT_PUBLIC_SKIN_ROUNDS=${NEXT_PUBLIC_SKIN_ROUNDS}
+
 # Ultrasound specialty gate. Like SKIN_BETA, NEXT_PUBLIC_* must be set in the
 # BUILDER env so `next build` inlines it into the frontend bundle (the specialty
 # pickers read it at build time; the worker reads the same var at runtime).

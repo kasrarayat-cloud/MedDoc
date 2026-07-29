@@ -177,6 +177,10 @@ services:
       # doctor will. A suite that ran against a switched-off gate would prove
       # nothing about the gate.
       SIGNUP_INVITE_CODES: "E2E-PILOT-CODE"
+      # Rounds is a BUILD-TIME flag, so this runtime value does nothing on its
+      # own — it is here only so `docker compose config` shows the intended
+      # posture. The flag that matters is the --build-arg on the tagged image.
+      NEXT_PUBLIC_SKIN_ROUNDS: "${NEXT_PUBLIC_SKIN_ROUNDS:-false}"
       # ⚠️ NO REAL API CALLS ANYWHERE IN THIS STACK — and this line is how that
       # promise is actually kept, after it was broken for weeks.
       #
