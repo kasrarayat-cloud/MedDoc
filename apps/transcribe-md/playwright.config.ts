@@ -84,6 +84,14 @@ export default defineConfig({
         // converter mid-run, which no other spec should have to survive.
         '**/doc-preview.spec.ts',
         '**/visit-document.spec.ts',
+        // ROUNDS Gate A — the board only exists on the flag-ON image built by
+        // its own project below. Omitting it here is not a slow failure: the
+        // default run reaches /board on a flag-OFF build, gets a 404, and reds
+        // the required gate BEFORE the step that would have built the flag-ON
+        // image ever runs — so the pack this line protects never executes at
+        // all, and the gate reports "rounds E2E red" for the one reason that
+        // has nothing to do with Rounds. Pinned by gate-flag-coverage.test.ts.
+        '**/rounds-board.spec.ts',
         '**/a11y.spec.ts',
         '**/23-note-format-phi-parse-reject.spec.ts',
         '**/24-rx-clinical-safety.spec.ts',

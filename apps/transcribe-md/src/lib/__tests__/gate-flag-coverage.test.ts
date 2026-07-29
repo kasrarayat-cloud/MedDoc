@@ -20,6 +20,8 @@ import { readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
+import PW_CONFIG from '../../../playwright.config';
+
 const WORKFLOW = readFileSync('../../.github/workflows/e2e.yml', 'utf8');
 
 /** Each flag-ON image build in the E2E workflow, and the flags its project's
@@ -102,6 +104,107 @@ describe('every flag-ON E2E image carries the flags its surface reads', () => {
         `${img.tag} omits ${missing.join(', ')} — its tests will fail on a ` +
           `missing element, which reads as a broken feature rather than a ` +
           `missing build arg, and each one will burn its full timeout first`,
+      ).toEqual([]);
+    });
+  }
+});
+
+// ============================================================================
+// The OTHER half of the same coupling: a flag-ON pack must be excluded from
+// the DEFAULT run.
+// ----------------------------------------------------------------------------
+// The block above pins "the flag-ON image carries the flag". This pins "the
+// flag-OFF run never sees the spec". Both are needed, and the second failure
+// mode is the nastier one.
+//
+// `rounds-board.spec.ts` was added with its own project and its own flag-ON
+// image build, correctly. But it was not added to the `chromium` project's
+// testIgnore — so the DEFAULT run, against the flag-OFF app, also collected it.
+// /board 404s there by design, all five tests failed, and the step exited 1.
+//
+// The damage is not five red tests. Everything downstream is `skipped`: the
+// rounds image is never built, `--project=rounds-board` never runs, and the
+// pack that was supposed to prove Gate A **never executed once**. The gate
+// reports the Rounds pack red for the only reason that is not about Rounds,
+// and a green local run against the flag-ON image says nothing about it.
+//
+// So: every project other than `chromium` runs against its own app env by
+// definition — that is why it is a separate project — and every glob it claims
+// must therefore be ignored by `chromium`.
+// ============================================================================
+
+/** Minimal shape we read off the config; Playwright's types allow more
+ *  (RegExp globs among them, which this repo does not use for projects). */
+type Project = {
+  name?: string;
+  testMatch?: string | string[];
+  testIgnore?: string | string[];
+};
+
+const PROJECTS = (PW_CONFIG.projects ?? []) as Project[];
+const CHROMIUM = PROJECTS.find((p) => p.name === 'chromium');
+
+/** A Playwright glob → RegExp, so an umbrella ignore (the `*.eval.spec.ts`
+ *  one) is recognised as covering a more specific project glob.
+ *
+ *  Written as an explicit scan rather than a split/join around a placeholder
+ *  character: a placeholder has to be a byte that cannot occur in a glob, and
+ *  choosing one is how this function first shipped four literal NUL bytes into
+ *  the file. The tests still passed — NUL separates as well as a space does
+ *  — but git reclassified the source as BINARY and stopped diffing it, so the
+ *  guard below would have landed unreviewable. */
+function globToRe(glob: string): RegExp {
+  let src = '';
+  for (let i = 0; i < glob.length; i += 1) {
+    const c = glob[i];
+    if (c !== '*') {
+      src += c.replace(/[.+?^${}()|[\]\\]/, '\\$&');
+    } else if (glob[i + 1] === '*') {
+      src += '.*';
+      i += 1;
+    } else {
+      src += '[^/]*';
+    }
+  }
+  return new RegExp(`^${src}$`);
+}
+
+describe('every flag-ON E2E project is excluded from the default chromium run', () => {
+  it('the chromium project still exists and still has a testIgnore', () => {
+    expect(CHROMIUM, 'no project named `chromium`').toBeDefined();
+    expect(Array.isArray(CHROMIUM?.testIgnore)).toBe(true);
+  });
+
+  const ignores = (
+    Array.isArray(CHROMIUM?.testIgnore) ? CHROMIUM.testIgnore : []
+  ) as string[];
+
+  for (const project of PROJECTS) {
+    if (!project.name || project.name === 'chromium') continue;
+
+    const globs =
+      typeof project.testMatch === 'string'
+        ? [project.testMatch]
+        : (project.testMatch ?? []);
+
+    it(`${project.name} — its specs are ignored by chromium`, () => {
+      expect(
+        globs.length,
+        `project \`${project.name}\` declares no testMatch, so the default ` +
+          `run's testIgnore cannot be checked against it`,
+      ).toBeGreaterThan(0);
+
+      const leaked = globs.filter(
+        (g) => !ignores.some((ig) => ig === g || globToRe(ig).test(g)),
+      );
+
+      expect(
+        leaked,
+        `\`${project.name}\` runs against its own app env, but chromium does ` +
+          `not ignore ${leaked.join(', ')} — the default flag-OFF run will ` +
+          `collect those specs and fail on an environment it was never meant ` +
+          `to meet. That failure exits the E2E step, so every later step is ` +
+          `SKIPPED and \`--project=${project.name}\` never runs at all.`,
       ).toEqual([]);
     });
   }
