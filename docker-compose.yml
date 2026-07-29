@@ -521,6 +521,12 @@ services:
         # ROLLBACK: NEXT_PUBLIC_SKIN_BETA=false docker compose build transcribe-md
         #           && docker compose up -d --no-deps transcribe-md  (→ old UI).
         NEXT_PUBLIC_SKIN_BETA: "${NEXT_PUBLIC_SKIN_BETA:-true}"
+        # ROUNDS — the full app re-skin (Ward Board × Focus Flow). Build-time,
+        # fail-closed, DEFAULT OFF. Presentation only: nothing behind it changes
+        # a gate's server semantics, and POST /sign stays the sole source of
+        # truth. docs/design-tokens.md is the authority for the visual side.
+        # ROLLBACK: NEXT_PUBLIC_SKIN_ROUNDS=false docker compose build transcribe-md
+        NEXT_PUBLIC_SKIN_ROUNDS: "${NEXT_PUBLIC_SKIN_ROUNDS:-false}"
         # Ultrasound specialty gate (build-time inlined into the frontend; the
         # worker reads the same var at runtime via env_file: .env). Default OFF
         # so a build with no override never offers Ultrasound; prod enables it
