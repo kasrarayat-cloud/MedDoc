@@ -580,6 +580,7 @@ encrypted volume.** It is the rollback, and it is the only one.
 
 ```bash
 bash scripts/check-minio-encrypted-mount.sh   # READ-ONLY. 0 = encrypted, 1 = DRIFT, 2 = can't tell
+bash scripts/check-pg-encrypted-mount.sh      # READ-ONLY. same, for the cluster
 ```
 
 It asks the only question that cannot be answered wrongly by a correct-looking
@@ -611,14 +612,50 @@ Two distinct things have now gone wrong here, and both need checking:
 2. **A container is bound to the path but nothing is mounted there** (MinIO, for
    four hours on 2026-07-29) — strictly worse, because the config *reads* fixed.
 
-⚠️ **Postgres carries latent exposure #2 as well.** It uses compose's short-form
-`- /mnt/pgdata-encrypted:/var/lib/postgresql/data`, which **auto-creates the host
-path**, so an unmounted `/mnt/pgdata-encrypted` would not refuse — `initdb` would
-populate a fresh plaintext cluster. It is mounted today and its unit has run
-since 2026-07-27, so this is a hardening item, not a live finding. The fix is the
-same shape as MinIO's: bind a subdirectory that exists only on the encrypted
-filesystem. **Do not attempt it as a side effect of another task** — Postgres
-holds the live clinical database.
+### 5.7.2 Postgres carried the same exposure — closed 2026-07-29
+
+Postgres used compose's short-form `- /mnt/pgdata-encrypted:/var/lib/postgresql/data`,
+which **auto-creates the host path**. Its version of the failure is worse than
+MinIO's:
+
+> unmounted `/mnt/pgdata-encrypted` → docker creates an empty dir on `/dev/sda2`
+> → the image finds no `PG_VERSION` → **`initdb` runs** → a brand-new empty
+> cluster starts, **healthy**, on plaintext storage → the app connects to an
+> empty database while the real cluster sits unmounted underneath, untouched
+> and invisible.
+
+`pg_isready` returns fine. The health check goes green. It is a silent, total,
+apparently-successful data outage.
+
+**The fix was a remap, not a data move.** The cluster already lived at
+`/mnt/pgdata-encrypted/pgdata`; the volume now binds *that subdirectory* — which
+exists only on the encrypted filesystem — and `PGDATA` became the mount root
+instead of a subdir of it. Same physical directory, one level deeper. Nothing
+was copied.
+
+```yaml
+# volumes:
+pgdata_encrypted:
+  driver: local
+  driver_opts: { type: none, o: bind, device: /mnt/pgdata-encrypted/pgdata }
+```
+
+Verified 2026-07-29: fresh `pg_dump` taken to `backups/` and **proven restorable**
+(schema-only into a throwaway — 38 tables, matching live) *before* the change;
+row-count fingerprint identical across it (`audit_logs=9084 note_templates=6
+patients=0 practices=196 transcribe_visits=23 users=195`); container data dir
+resolves to `/dev/mapper/pg-encrypted[/pgdata]`; app healthy with a real
+Postgres query through its own pool.
+
+**Negative-controlled without touching prod data** — a throwaway compose project
+replicating the volume definition, run both ways: device missing → docker
+refuses and the container never runs; device present → it runs (proving the
+refusal was the guard, not a syntax error).
+
+`scripts/check-pg-encrypted-mount.sh` asserts it, including a condition MinIO's
+sibling does not need: **`PG_VERSION` must be present**, because an
+initdb-on-plaintext incident produces a perfectly healthy Postgres and "is it
+running" therefore proves nothing.
 
 ---
 

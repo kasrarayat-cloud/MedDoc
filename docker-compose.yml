@@ -44,11 +44,14 @@ services:
       POSTGRES_DB: meddoc
       POSTGRES_USER: meddoc
       POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme_in_production}
-      # Phase 6.1 (h8): PGDATA points at a subdir of the LUKS-encrypted
-      # mount because ext4's `lost+found` at the mount root blocks
-      # initdb. Standard postgres-image pattern when bind-mounting an
-      # ext4 filesystem.
-      PGDATA: /var/lib/postgresql/data/pgdata
+      # The `pgdata` SUBDIR of the encrypted filesystem is now the volume
+      # itself (see the volumes: block below), so PGDATA is the mount root
+      # here rather than a subdir of it. Same physical directory on the host
+      # — /mnt/pgdata-encrypted/pgdata — bound one level deeper. Nothing moved.
+      #
+      # ext4's `lost+found` still sits at /mnt/pgdata-encrypted and would still
+      # block initdb; binding the subdir keeps it out of PGDATA's way as before.
+      PGDATA: /var/lib/postgresql/data
     # Phase 6.1 / HIPAA h8 — encryption-at-rest (MIGRATION COMPLETE, verified
     # 2026-06-10). The volume below bind-mounts the LUKS dm-crypt device
     # /dev/mapper/pg-encrypted (mounted at /mnt/pgdata-encrypted), so all
@@ -58,8 +61,25 @@ services:
     # live data path. The `pgdata` named volume declared at the bottom of this
     # file is now vestigial. Key-escrow/rotation + the boot-remount unit are
     # operator-owned per docs/RUNBOOK_ENCRYPTED_VOLUME.md.
+    #
+    # ── FAIL-CLOSED, 2026-07-29. This was a SHORT-FORM bind, and that is the
+    #    bug class that put patient audio on the plaintext root filesystem for
+    #    four hours the same day (runbook §5.7.1). Short-form binds AUTO-CREATE
+    #    the host path, so with the LUKS volume unmounted this line would have
+    #    silently handed Postgres an empty directory on /dev/sda2 — and the
+    #    postgres image would have `initdb`'d a BRAND NEW EMPTY CLUSTER into it
+    #    and started up healthy. An app pointed at an empty database, no error
+    #    anywhere, and the real cluster still sitting unmounted underneath.
+    #
+    #    Now a named volume whose device is the `pgdata` SUBDIR, which exists
+    #    only on the encrypted filesystem. Docker's local driver does NOT create
+    #    a missing driver_opts device, so:
+    #        mount present → cluster found → Postgres starts
+    #        mount ABSENT  → docker refuses → Postgres FAILS CLOSED
+    #    Verified by scripts/check-pg-encrypted-mount.sh; negative-controlled in
+    #    a throwaway compose project, never against this data.
     volumes:
-      - /mnt/pgdata-encrypted:/var/lib/postgresql/data
+      - pgdata_encrypted:/var/lib/postgresql/data
     ports:
       - "127.0.0.1:5432:5432"   # only accessible from localhost
     healthcheck:
@@ -767,6 +787,21 @@ services:
       start_period: 10s
 
 volumes:
+  # STRUCTURED PHI — the live cluster, on the LUKS volume, fail-closed.
+  # Device is the `pgdata` subdir (not the mountpoint) for the same reason
+  # minio_data binds `data` below: a mountpoint directory exists whether or not
+  # anything is mounted on it, so binding the mountpoint is fail-OPEN. Here it
+  # would be worse than for MinIO — the postgres image would initdb a fresh
+  # empty cluster onto the plaintext filesystem and come up healthy.
+  # Unlocked at boot by pgdata-encrypted.service (Before=docker.service).
+  pgdata_encrypted:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /mnt/pgdata-encrypted/pgdata
+  # Vestigial — the pre-encryption managed volume. Kept only because removing a
+  # declared volume from compose is a separate, deliberate act.
   pgdata:
   # prod pg_dump destination (postgres-backup service). Named volume so it
   # survives outside the repo tree — see the backup-fix note above (2026-06-08).
