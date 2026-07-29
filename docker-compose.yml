@@ -628,6 +628,18 @@ services:
       # inside isAutoConfirmDomain() — listing them here will not
       # bypass verification. Empty / unset ⇒ bypass never fires.
       EMAIL_AUTO_CONFIRM_DOMAINS: ${EMAIL_AUTO_CONFIRM_DOMAINS:-}
+      # Invite-only pilot (2026-07-28). Comma-separated codes that permit
+      # registration, checked BEFORE the email lookup so a prober without one
+      # learns nothing. Server-side and runtime, so changing it needs only a
+      # container recreate — no rebuild.
+      #
+      # DEFAULT EMPTY IS FAIL-CLOSED AND INTENTIONAL: with nothing here and no
+      # rows in invite_codes, NOBODY can create an account. Existing accounts
+      # are unaffected and keep signing in. Issue codes with
+      # `npx tsx scripts/issue-invite-code.ts`, which writes a hashed row —
+      # preferred over this variable, because a code here is a code in plaintext
+      # in a file. Use this only to bootstrap or to break glass.
+      SIGNUP_INVITE_CODES: ${SIGNUP_INVITE_CODES:-}
     ports:
       # Loopback only — public traffic arrives via Caddy on :9020.
       - "127.0.0.1:3011:3011"
