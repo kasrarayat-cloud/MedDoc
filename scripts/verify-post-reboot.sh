@@ -120,7 +120,19 @@ if [ "$qa" -eq 0 ]; then
 else
   note "🟢 QA stack: $qa container(s) up"
 fi
-dirty=$(git -C "$(dirname "$0")/.." status --porcelain | grep -v '^?? ' || true)
+# `git status` must be allowed to FAIL LOUDLY. Run from the boot unit this
+# executes as root against a repo owned by `claude`, and git then refuses with
+# "detected dubious ownership" — on stderr, with an empty stdout. The first
+# version piped that straight into an emptiness test and printed
+# "🟢 working tree clean" off a hard error. An unreadable tree is not a clean
+# one. `safe.directory` is passed per-invocation rather than written to a global
+# config, because a check should not mutate the host it is checking.
+REPO=$(cd "$(dirname "$0")/.." && pwd)
+if ! git_out=$(git -c safe.directory="$REPO" -C "$REPO" status --porcelain 2>&1); then
+  bad "cannot read the working tree — git said: ${git_out%%$'\n'*}"
+  git_out=""
+fi
+dirty=$(printf '%s\n' "$git_out" | grep -v '^?? ' | grep -v '^$' || true)
 if [ -n "$dirty" ]; then
   note "⚠️  working tree dirty — a stale @reboot cron does this. Inspect, do NOT clobber:"
   echo "$dirty" | sed 's/^/      /'
