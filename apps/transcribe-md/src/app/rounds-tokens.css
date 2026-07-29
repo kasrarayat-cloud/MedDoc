@@ -157,3 +157,64 @@ body[data-skin='rounds'] {
     scroll-behavior: auto !important;
   }
 }
+
+/* ── Board ──────────────────────────────────────────────────────────────── */
+/* Five stage columns. Grid rather than flex so every lane's cards line up
+ * across rows — the column alignment IS the position-awareness the board is
+ * for; if lanes drifted independently the matrix would say nothing. */
+[data-skin='rounds'] .qm-rounds-board-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+/* Below 1100px five columns stop being readable. Collapse to a single column
+ * and let each lane read as a card — the position information degrades to the
+ * stage kicker, which is honest, rather than to five unreadable slivers. */
+@media (max-width: 1100px) {
+  [data-skin='rounds'] .qm-rounds-board-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  [data-skin='rounds'] .qm-rounds-board-head {
+    display: none;
+  }
+  [data-skin='rounds'] .qm-rounds-lane-track {
+    display: none;
+  }
+}
+
+[data-skin='rounds'] .qm-rounds-kicker {
+  display: inline-block;
+  margin-top: 4px;
+  font-family: var(--rounds-font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--rounds-text-3);
+}
+
+[data-skin='rounds'] .qm-rounds-kicker--processing {
+  color: var(--rounds-em);
+}
+
+[data-skin='rounds'] .qm-rounds-kicker--rec {
+  color: var(--rounds-critical);
+  animation: qm-rounds-rec-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes qm-rounds-rec-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* The reduced-motion block at the top of this file neutralises the pulse; this
+ * makes the still state deliberate rather than a frozen mid-animation frame. */
+@media (prefers-reduced-motion: reduce) {
+  [data-skin='rounds'] .qm-rounds-kicker--rec {
+    animation: none;
+    opacity: 1;
+  }
+}
