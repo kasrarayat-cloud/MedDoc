@@ -1,13 +1,21 @@
 import type { Metadata, Viewport } from 'next';
 import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
-import { Inter, JetBrains_Mono } from 'next/font/google';
+import {
+  Bricolage_Grotesque,
+  Figtree,
+  Inter,
+  JetBrains_Mono,
+  Source_Serif_4,
+} from 'next/font/google';
 
 import { auth } from '@/lib/nextauth';
 import { CommandPalette } from '@/components/command-palette';
 import { GlobalShortcuts } from '@/components/global-shortcuts';
 import { Toaster } from '@/components/toaster';
+import { isSkinRounds } from '@/config/skin-rounds';
 import './globals.css';
+import './rounds-tokens.css';
 
 // Phase 5 Linear V1 font pair. Source Serif 4 + Inter Tight have been
 // retired — Linear V1 is Inter for chrome + body and JetBrains Mono for
@@ -27,6 +35,38 @@ const mono = JetBrains_Mono({
   variable: '--font-mono',
   display: 'swap',
   fallback: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+});
+
+// ── Rounds type ───────────────────────────────────────────────────────────
+// Loaded unconditionally rather than behind the flag: next/font resolves at
+// BUILD time, so a conditional import is not a thing that exists. The cost of
+// an unused face is a preload the browser skips; the cost of trying to be
+// clever here is a font that silently fails to load on the skin that needs it.
+//
+// Source Serif 4 carries ALL clinical prose, including the default paper
+// template — see docs/design-tokens.md. Clinical prose is read differently from
+// interface text and the typeface is the cue.
+const roundsDisplay = Bricolage_Grotesque({
+  subsets: ['latin'],
+  weight: ['500', '600', '700'],
+  variable: '--font-rounds-display',
+  display: 'swap',
+  fallback: ['system-ui', 'sans-serif'],
+});
+const roundsUi = Figtree({
+  subsets: ['latin'],
+  weight: ['400', '500', '600'],
+  variable: '--font-rounds-ui',
+  display: 'swap',
+  fallback: ['system-ui', 'sans-serif'],
+});
+const roundsClinical = Source_Serif_4({
+  subsets: ['latin'],
+  weight: ['400', '600'],
+  style: ['normal', 'italic'],
+  variable: '--font-rounds-clinical',
+  display: 'swap',
+  fallback: ['Georgia', 'Times New Roman', 'serif'],
 });
 
 export const metadata: Metadata = {
@@ -64,7 +104,11 @@ export default async function RootLayout({
     <html
       lang="en"
       data-theme="dark"
-      className={`${GeistSans.variable} ${GeistMono.variable} ${sans.variable} ${mono.variable} dark`}
+      // data-skin scopes the whole Rounds token layer, and it is set on <html>
+      // for two reasons: the stage gradient has to cascade from the root, and a
+      // screenshot of any page then carries evidence of which skin produced it.
+      {...(isSkinRounds() ? { 'data-skin': 'rounds' } : {})}
+      className={`${GeistSans.variable} ${GeistMono.variable} ${sans.variable} ${mono.variable} ${roundsDisplay.variable} ${roundsUi.variable} ${roundsClinical.variable} dark`}
       suppressHydrationWarning
     >
       <body className="min-h-screen antialiased">

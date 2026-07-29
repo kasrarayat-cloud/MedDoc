@@ -1,0 +1,220 @@
+/* ============================================================================
+ * ROUNDS — the token layer.
+ * ----------------------------------------------------------------------------
+ * docs/design-tokens.md is the authority. If this file and that document
+ * disagree, the document is right and this file is a bug.
+ *
+ * THE ONE IDEA: the stage is dark, the paper is not. Everything that is
+ * SOFTWARE sits on a dark stage; everything that is THE CLINICAL DOCUMENT sits
+ * on warm near-white paper. A clinician should be able to tell app from note
+ * without reading a word — which is why there are two colour families here
+ * rather than one, and why the paper family is not "the light theme".
+ *
+ * Scoped to [data-skin="rounds"] so the old skin is untouched while both exist.
+ * Phase C retires the old one.
+ * ========================================================================== */
+
+:root[data-skin='rounds'],
+[data-skin='rounds'] {
+  /* ── Stage: the application ────────────────────────────────────────────── */
+  /* Radial, not linear. The lightest point sits behind the content the
+   * clinician is meant to look at — that is what makes the sheet on the visit
+   * screen read as SPOTLIT rather than merely pasted onto a dark rectangle. */
+  --rounds-stage-bg-1: #232b3a;
+  --rounds-stage-bg-2: #171d27;
+  --rounds-stage-bg-3: #12161e;
+
+  --rounds-surface-1: #161b24;
+  --rounds-surface-2: #1e2530;
+  --rounds-surface-3: #252d3a;
+
+  --rounds-line-1: #2c3442;
+  --rounds-line-2: #3a4353;
+
+  --rounds-text-1: #e7ebf1;
+  --rounds-text-2: #98a2b1;
+  --rounds-text-3: #7c8694;
+
+  /* ── Paper: the clinical document ─────────────────────────────────────── */
+  /* Warm off-white, never #FFFFFF. Pure white beside a dark stage glares, and
+   * the document is what a clinician stares at longest. */
+  --rounds-paper-1: #fcfcfa;
+  --rounds-paper-2: #f3f4ef;
+  --rounds-paper-3: #ecede7;
+  --rounds-ink: #191e26;
+  --rounds-ink-muted: #525a66;
+  --rounds-paper-line-1: #e7e8e3;
+  --rounds-paper-line-2: #d8dad3;
+
+  /* ── Accent ───────────────────────────────────────────────────────────── */
+  --rounds-accent: #5b5bd6;
+  --rounds-accent-hover: #4a49c4;
+  --rounds-accent-tint-10: rgba(91, 91, 214, 0.1);
+  --rounds-accent-tint-16: rgba(91, 91, 214, 0.16);
+
+  /* ── Status ───────────────────────────────────────────────────────────── */
+  --rounds-critical: #c93a2e;
+  --rounds-ready: #187a4e;
+  --rounds-em: #c4841c;
+  /* Lighter than --rounds-em, and it exists for exactly one reason: an amber
+   * button must clear AA against dark label text. Never fill a button with
+   * --rounds-em. */
+  --rounds-em-fill: #e29a34;
+  --rounds-processing: #3b6fd4;
+  /* Grey on the stage. NOTE the asymmetry with the track: a signed CARD recedes
+   * in grey because it is finished business, while a completed track RUN draws
+   * in --rounds-ready green because it is a successful journey and should read
+   * as one at a glance across the whole board. Not an inconsistency. */
+  --rounds-signed: #6b7480;
+
+  /* ── Type ─────────────────────────────────────────────────────────────── */
+  --rounds-font-display: var(--font-rounds-display), system-ui, sans-serif;
+  --rounds-font-ui: var(--font-rounds-ui), system-ui, sans-serif;
+  /* ALL clinical prose, including the default QuillMD paper template. Not just
+   * quotes, not just the note body: if a clinician reads it as part of the
+   * record, it is serif. Clinical prose is read differently from interface
+   * text and the typeface is the cue. */
+  --rounds-font-clinical: var(--font-rounds-clinical), Georgia, 'Times New Roman', serif;
+  /* For things that are LOOKED UP rather than read — an MRN, a CPT code, a drug
+   * pair, a section kicker. If a human scans it character by character: mono. */
+  --rounds-font-mono: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --rounds-clinical-size: 16px;
+  --rounds-clinical-leading: 1.7;
+
+  /* ── Shape + depth ────────────────────────────────────────────────────── */
+  --rounds-radius-sm: 9px;
+  --rounds-radius-md: 12px;
+  --rounds-radius-lg: 18px;
+
+  /* Two layers, deliberately: a tight contact shadow plus a wide soft one. One
+   * layer looks flat against a radial stage; two is what sells the sheet as
+   * lifted off it. */
+  --rounds-paper-shadow:
+    0 1px 2px rgba(8, 10, 14, 0.28),
+    0 24px 56px -12px rgba(8, 10, 14, 0.55);
+}
+
+/* The stage itself. Radial so the light falls where the content is. */
+[data-skin='rounds'] body,
+body[data-skin='rounds'] {
+  background:
+    radial-gradient(
+      ellipse 90% 70% at 50% 0%,
+      var(--rounds-stage-bg-1) 0%,
+      var(--rounds-stage-bg-2) 45%,
+      var(--rounds-stage-bg-3) 100%
+    )
+    var(--rounds-stage-bg-3);
+  color: var(--rounds-text-1);
+  font-family: var(--rounds-font-ui);
+}
+
+/* ── Paper ──────────────────────────────────────────────────────────────── */
+[data-skin='rounds'] .rounds-paper {
+  background: var(--rounds-paper-1);
+  color: var(--rounds-ink);
+  border-radius: var(--rounds-radius-lg);
+  box-shadow: var(--rounds-paper-shadow);
+  /* The 820px paper width is an architecture invariant, not a style choice —
+   * PDF/Word parity is measured against it. Do not "improve" this number. */
+  max-width: 820px;
+}
+
+[data-skin='rounds'] .rounds-clinical {
+  font-family: var(--rounds-font-clinical);
+  font-size: var(--rounds-clinical-size);
+  line-height: var(--rounds-clinical-leading);
+  color: var(--rounds-ink);
+}
+
+[data-skin='rounds'] .rounds-kicker {
+  font-family: var(--rounds-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--rounds-ink-muted);
+}
+
+/* ── Focus: visible, everywhere, no exceptions ──────────────────────────── */
+[data-skin='rounds'] :focus-visible {
+  outline: 2px solid var(--rounds-accent);
+  outline-offset: 2px;
+  border-radius: var(--rounds-radius-sm);
+}
+
+/* ── Reduced motion ─────────────────────────────────────────────────────── */
+/* The board's pulsing REC kicker and the deck-advance transition both need a
+ * still fallback. A clinician who has asked the OS to stop animating things has
+ * asked us too. */
+@media (prefers-reduced-motion: reduce) {
+  [data-skin='rounds'] *,
+  [data-skin='rounds'] *::before,
+  [data-skin='rounds'] *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Board ──────────────────────────────────────────────────────────────── */
+/* Five stage columns. Grid rather than flex so every lane's cards line up
+ * across rows — the column alignment IS the position-awareness the board is
+ * for; if lanes drifted independently the matrix would say nothing. */
+[data-skin='rounds'] .qm-rounds-board-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+/* Below 1100px five columns stop being readable. Collapse to a single column
+ * and let each lane read as a card — the position information degrades to the
+ * stage kicker, which is honest, rather than to five unreadable slivers. */
+@media (max-width: 1100px) {
+  [data-skin='rounds'] .qm-rounds-board-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  [data-skin='rounds'] .qm-rounds-board-head {
+    display: none;
+  }
+  [data-skin='rounds'] .qm-rounds-lane-track {
+    display: none;
+  }
+}
+
+[data-skin='rounds'] .qm-rounds-kicker {
+  display: inline-block;
+  margin-top: 4px;
+  font-family: var(--rounds-font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--rounds-text-3);
+}
+
+[data-skin='rounds'] .qm-rounds-kicker--processing {
+  color: var(--rounds-em);
+}
+
+[data-skin='rounds'] .qm-rounds-kicker--rec {
+  color: var(--rounds-critical);
+  animation: qm-rounds-rec-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes qm-rounds-rec-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* The reduced-motion block at the top of this file neutralises the pulse; this
+ * makes the still state deliberate rather than a frozen mid-animation frame. */
+@media (prefers-reduced-motion: reduce) {
+  [data-skin='rounds'] .qm-rounds-kicker--rec {
+    animation: none;
+    opacity: 1;
+  }
+}
