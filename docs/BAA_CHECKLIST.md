@@ -335,22 +335,24 @@ builder** with only the transport mocked, sweeps **every** sender that could
 reference a visit, and is negative-controlled: restoring the old
 patient-name-in-subject plus attachment turns it red.
 
-### The one residual judgement call, stated rather than buried
+### The residual judgement call — CLOSED 2026-07-29
 
-The portal link contains an opaque visit id (a cuid). **That is a record
-locator, not a patient identifier** — it names nobody, reveals nothing on its
-own, and is useless without an authenticated session. It is the same class of
-value as the message-id Resend already assigns to every email it handles.
+The link used to carry an opaque visit id (a cuid), which is **defensibly** a
+record locator rather than a patient identifier: it names nobody and is useless
+without an authenticated session.
 
-Claiming the payload contains "no identifiers of any kind" would be false, so
-this memo does not claim it. The claim is narrower and true: **no patient
-identifier and no clinical content.** If a reviewer disagrees with that line, the
-fix is small — drop the deep link for a bare `/visits` link — and it should be
-made deliberately rather than discovered in an audit.
+**"Defensible" was the wrong bar** and the decision was taken to remove it. The
+point of this mitigation is to take Resend out of the PHI conversation
+altogether, and a claim needing a paragraph of reasoning to survive an auditor is
+a claim that can lose. The email now links to the bare `/visits` list.
 
-> **OWNER ACTION (Kasra):** Confirm you accept the record-locator reasoning
-> above; if you would rather send no visit id at all, say so and the deep link
-> becomes a bare `/visits` link in one edit.
+So the statement has no asterisk on it: **no patient identifier, no clinical
+content, and no record locator of any kind.** Asserted across every
+visit-referencing sender and negative-controlled — restoring the deep link turns
+the test red.
+
+> **OWNER ACTION (Kasra):** None. This one is closed — the deep link is gone and
+> the payload carries no locator at all.
 
 ## What this memo does NOT resolve
 
@@ -394,6 +396,47 @@ This is **not** an engineering fix, which is why nothing here was changed. Eithe
 the claim comes down until the chain is closed, or closing the chain becomes the
 thing that unblocks the pilot — and it is the same two signatures either way.
 
-> **OWNER ACTION (Kasra):** Decide whether "BAA included" stays on the public
-> pages before the Deepgram and host BAAs are signed. It is one string in four
-> files, and it is a legal exposure rather than a technical one.
+### ✅ DONE 2026-07-29 — the claim is down
+
+Decision taken: **remove now, restore the day the subcontractor chain closes.**
+Conservative default; trivially reversible — it is one string.
+
+`BAA included` → `Audit-logged` in all four files (`auth-shell.tsx` ×2,
+`marketing/app/page.tsx`, `landing-final/shared.ts`, `landing-final/content.ts`).
+Live on prod and on quillmd.com.
+
+**RESTORE IT when Deepgram (R1) AND the VPS host (R3) are both countersigned.**
+Not before, and not on the strength of one of them. Each file carries a comment
+pointing here so whoever restores it finds this paragraph first.
+
+⚠️ **Note the replacement was NOT "Encrypted at rest"**, which was the obvious
+choice and would have swapped one overclaim for another. Checked first: Postgres
+does sit on a LUKS volume (`/mnt/pgdata-encrypted`), but **MinIO — which holds
+the patient AUDIO — is on an ordinary docker volume on the root filesystem.**
+"Audit-logged" is verified, live, and unambiguous.
+
+### Two findings from the same sweep
+
+**1. Patient audio is not on the encrypted volume.** `meddoc-pro-postgres-1`
+mounts `/mnt/pgdata-encrypted` (LUKS). `meddoc-pro-minio-1` mounts
+`/var/lib/docker/volumes/meddoc-pro_minio_data/_data` — the plain root
+filesystem. The database is encrypted at rest; the audio is not. This is
+adjacent to the open `h8-h3-pilot-followup` finding but is not the same thing,
+and it does not appear to have been called out separately before.
+
+**2. Dead marketing copy makes a FALSE claim.**
+`apps/marketing/src/components/home/Features.tsx:94-97` reads *"HIPAA, BAA on
+file."* and *"PHI never leaves our US-hosted environment."* Both are false — zero
+BAAs are countersigned, and PHI demonstrably leaves for Deepgram (audio) and
+Anthropic (transcript text).
+
+**It is NOT served.** The file is imported by nothing and the strings do not
+appear in the live `quillmd.com` HTML — it is a leftover from an older landing
+variant, superseded by `landing-final/`. So this is not a live exposure. It is
+still a loaded gun in the repo: the next person building a page could import it
+in good faith.
+
+> **OWNER ACTION (Kasra):** Two small ones, neither urgent —
+> (a) decide whether patient audio should move onto the encrypted volume before
+> the pilot, and (b) delete `components/home/` if that landing variant is dead,
+> so its false claims cannot be re-imported.

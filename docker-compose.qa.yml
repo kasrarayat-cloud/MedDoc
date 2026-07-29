@@ -211,8 +211,45 @@ services:
       MOCK_RX_WARNINGS: "${MOCK_RX_WARNINGS:-}"
       # Real keys are injected via shell env ONLY for model evals (never committed);
       # default mock-key-qa keeps the standard MOCK qa/CI flow self-contained.
-      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-mock-key-qa}"
-      DEEPGRAM_API_KEY: "${DEEPGRAM_API_KEY:-mock-key-qa}"
+      # ⚠️ CREDENTIALS ARE SEVERED, NOT DEFAULTED — the second half of the
+      # 2026-07-28 fix, and the half that survives a code regression.
+      #
+      # These used to read `${ANTHROPIC_API_KEY:-mock-key-qa}`. Identical trap
+      # to MOCK_AI_CALLS: `:-` applies only when the variable is UNSET, and
+      # /opt/meddoc-pro/.env sets both because production needs them. Compose
+      # reads that same .env, so the "isolated" stack was holding a live
+      # `sk-ant-api03-…` and a live Deepgram key. Verified in the running
+      # container, not inferred from the file.
+      #
+      # MOCK_AI_CALLS=true stops the calls only while every code path honours
+      # the flag. One missed branch — a new layer, a retry helper, a script —
+      # and a real key is right there. Hard-coded dummies mean a mock
+      # regression FAILS AUTH instead of billing a vendor and leaking a
+      # synthetic transcript out of a stack that promised to hold nothing.
+      #
+      # Every vendor credential the codebase reads is listed, INCLUDING the
+      # ones prod leaves unset today: an unset key is one .env line away from
+      # being a real one, and this list is the thing that keeps that from
+      # mattering.
+      ANTHROPIC_API_KEY: "qa-dummy-anthropic-key-never-valid"
+      DEEPGRAM_API_KEY: "qa-dummy-deepgram-key-never-valid"
+      OPENAI_API_KEY: "qa-dummy-openai-key-never-valid"
+      # RESEND IS THE EXCEPTION: EMPTY, not a dummy.
+      #
+      # A dummy is stronger than absence for a vendor the code will call
+      # regardless. Resend is not one: `isEmailDeliveryEnabled()` gates on the
+      # key being TRUTHY, and when it is falsy the app logs a dev-only reset
+      # link instead of mailing it — which is exactly what the password-reset
+      # E2E reads. Handing it a dummy makes delivery look ENABLED, the link
+      # stops being logged, and scenario 17 fails. Caught by that test.
+      #
+      # Absence is the stronger posture here anyway: no key means the send path
+      # is switched off rather than attempted-and-rejected.
+      RESEND_API_KEY: ""
+      # Sentry: empty string, not a dummy. The SDK no-ops on an empty DSN and
+      # would spend every event retrying a malformed one.
+      SENTRY_DSN: ""
+      SENTRY_DSN_TRANSCRIBE_MD: ""
       # Clinical-model override for evals (feat/fable5-eval). Empty default →
       # the app/worker keep their hardcoded per-layer models (prod behaviour).
       TRANSCRIBE_MD_CLINICAL_MODEL: "${TRANSCRIBE_MD_CLINICAL_MODEL:-}"
@@ -263,8 +300,45 @@ services:
       MOCK_RX_WARNINGS: "${MOCK_RX_WARNINGS:-}"
       # Real keys are injected via shell env ONLY for model evals (never committed);
       # default mock-key-qa keeps the standard MOCK qa/CI flow self-contained.
-      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-mock-key-qa}"
-      DEEPGRAM_API_KEY: "${DEEPGRAM_API_KEY:-mock-key-qa}"
+      # ⚠️ CREDENTIALS ARE SEVERED, NOT DEFAULTED — the second half of the
+      # 2026-07-28 fix, and the half that survives a code regression.
+      #
+      # These used to read `${ANTHROPIC_API_KEY:-mock-key-qa}`. Identical trap
+      # to MOCK_AI_CALLS: `:-` applies only when the variable is UNSET, and
+      # /opt/meddoc-pro/.env sets both because production needs them. Compose
+      # reads that same .env, so the "isolated" stack was holding a live
+      # `sk-ant-api03-…` and a live Deepgram key. Verified in the running
+      # container, not inferred from the file.
+      #
+      # MOCK_AI_CALLS=true stops the calls only while every code path honours
+      # the flag. One missed branch — a new layer, a retry helper, a script —
+      # and a real key is right there. Hard-coded dummies mean a mock
+      # regression FAILS AUTH instead of billing a vendor and leaking a
+      # synthetic transcript out of a stack that promised to hold nothing.
+      #
+      # Every vendor credential the codebase reads is listed, INCLUDING the
+      # ones prod leaves unset today: an unset key is one .env line away from
+      # being a real one, and this list is the thing that keeps that from
+      # mattering.
+      ANTHROPIC_API_KEY: "qa-dummy-anthropic-key-never-valid"
+      DEEPGRAM_API_KEY: "qa-dummy-deepgram-key-never-valid"
+      OPENAI_API_KEY: "qa-dummy-openai-key-never-valid"
+      # RESEND IS THE EXCEPTION: EMPTY, not a dummy.
+      #
+      # A dummy is stronger than absence for a vendor the code will call
+      # regardless. Resend is not one: `isEmailDeliveryEnabled()` gates on the
+      # key being TRUTHY, and when it is falsy the app logs a dev-only reset
+      # link instead of mailing it — which is exactly what the password-reset
+      # E2E reads. Handing it a dummy makes delivery look ENABLED, the link
+      # stops being logged, and scenario 17 fails. Caught by that test.
+      #
+      # Absence is the stronger posture here anyway: no key means the send path
+      # is switched off rather than attempted-and-rejected.
+      RESEND_API_KEY: ""
+      # Sentry: empty string, not a dummy. The SDK no-ops on an empty DSN and
+      # would spend every event retrying a malformed one.
+      SENTRY_DSN: ""
+      SENTRY_DSN_TRANSCRIBE_MD: ""
       # Clinical-model override for evals (feat/fable5-eval). Empty default →
       # the app/worker keep their hardcoded per-layer models (prod behaviour).
       TRANSCRIBE_MD_CLINICAL_MODEL: "${TRANSCRIBE_MD_CLINICAL_MODEL:-}"

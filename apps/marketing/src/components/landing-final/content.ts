@@ -39,7 +39,7 @@ export const COMPARE: CompareRow[] = [
   { f: 'Review lane for anything unverifiable', q: true, e: 'varies' },
   { f: 'Writes in your own note format — tables & checklists included', q: true, e: 'varies' },
   { f: 'You sign every note', q: true, e: 'varies' },
-  { f: 'BAA included · US-hosted', q: true, e: 'varies' },
+  { f: 'Audit-logged · US-hosted', q: true, e: 'varies' },
   { f: 'Audio kept 90 days after signing, then deleted', q: true, e: 'varies' },
 ];
 
@@ -50,7 +50,7 @@ export const PRICE_INCLUDES = [
   'Ultrasound imaging reports (vein studies)',
   'Rx safety checks before you sign',
   'You sign every note',
-  'HIPAA-ready · BAA included',
+  'HIPAA-ready · Audit-logged',
   'US-hosted',
   'Audio retained 90 days after signing',
   'Runs on a current frontier model',
@@ -75,7 +75,7 @@ export const FAQS = [
   },
   {
     q: 'Is it HIPAA-compliant?',
-    a: 'QuillMD is HIPAA-ready and a BAA is included. Your data is US-hosted.',
+    a: 'QuillMD is HIPAA-ready, audit-logged at every layer, and your data is US-hosted.',
   },
   {
     q: 'What happens to the visit audio?',
@@ -93,7 +93,7 @@ export const FAQS = [
 
 export const FOOTER_TRUST = [
   'HIPAA-ready',
-  'BAA included',
+  'Audit-logged',
   'US-hosted',
   'Audio kept 90 days after signing',
   'You sign every note',
