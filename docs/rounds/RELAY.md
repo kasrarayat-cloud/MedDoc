@@ -82,7 +82,7 @@ old skin default until F.
 | **B4** | Gate B verification | ⬜ TODO | axe zero serious/critical on stage + all gates + signed · chromium E2E incl. sign-block · **fixture matrix both specialty classes** (imaging: no E/M gate, no strip blocker, anywhere) · **PDF/Word parity re-proven at 1440** · screenshots · merge on green | — |
 | **C1** | Auth / settings / templates / error-empty-loading | ⬜ TODO | all to tokens; copy register: plain verbs, sentence case, actions keep their names end-to-end | — |
 | **C2** | Default-paper typography + Gate C | ⬜ TODO | **exports match preview 1:1** (this is the report-template design deliverable) · axe on every restyled screen **incl. waitlist** · full suite + typecheck · E2E green · merge on green | — |
-| **F-pre** | **Reboot proof — BOTH encrypted stores** | ⬜ **REQUIRED BEFORE F** | one real host reboot, then `bash scripts/verify-post-reboot.sh` = 0. It asserts the whole chain: **both** units started AT BOOT (not by hand) · both mappings open · both mounts live on their dm devices · Postgres **and** MinIO healthy on those devices · both fail-closed guards intact · prod 200 · co-tenants up | Added 2026-07-29, widened the same day when Postgres got the same guard (PR #456). Both unlocks are `Before=docker.service` and **both stores now fail closed**, so a unit that loses its race with docker takes the stack down rather than reverting to plaintext — the right trade, but only if the ordering works, and a hand-start cannot prove ordering. **The script already narrows the job**: `pgdata-encrypted` started **8s after the 2026-07-27 boot**, so its ordering IS proven by a real reboot; only `miniodata-encrypted` (hand-started, +189687s) is unproven. **Chosen boundary: after A2 merges, before B1 opens.** Handle the two known side effects as part of the proof, not as surprises — the QA stack does NOT self-restart, and a stale `@reboot` cron dirties the tree. Script: `scripts/verify-post-reboot.sh`, PR **#457** merged as **`ff2078e2`**. Runbook §5.7.1–5.7.2. **⚠️ THE REBOOT CANNOT BE TRIGGERED FROM AN AGENT SESSION — Claude Code runs ON this host (`crimson-mink-43222`; its own PID is visible in the host PID namespace), so a reboot kills the session that would verify it.** It therefore records itself: `quillmd-postreboot-proof.service` (enabled, `After=docker.service`, 90s settle) runs the script on **every** boot and writes `/var/log/quillmd-postreboot-proof.<UTC>.log` + a `.latest.log` symlink, exit code **not** swallowed so a bad proof shows in `systemctl --failed`. That also covers the UNPLANNED hypervisor resets this host is known for — the ones nobody is watching. **To close F-pre: reboot the host from outside a session, then read `.latest.log` and expect `exit=0`.** Static evidence already gathered short of a boot: `systemctl show docker.service -p After` **contains both units** (the ordering edge is materialised, not just declared), both units `systemd-analyze verify` clean, and the two are byte-identical apart from `Description` — and pgdata's shape **is** boot-proven (started 8s after the 2026-07-27 boot) |
+| **F-pre** | **Reboot proof — BOTH encrypted stores** | ⬜ **REQUIRED BEFORE F** | one real host reboot, then `bash scripts/verify-post-reboot.sh` = 0. It asserts the whole chain: **both** units started AT BOOT (not by hand) · both mappings open · both mounts live on their dm devices · Postgres **and** MinIO healthy on those devices · both fail-closed guards intact · prod 200 · co-tenants up | Added 2026-07-29, widened the same day when Postgres got the same guard (PR #456). Both unlocks are `Before=docker.service` and **both stores now fail closed**, so a unit that loses its race with docker takes the stack down rather than reverting to plaintext — the right trade, but only if the ordering works, and a hand-start cannot prove ordering. **The script already narrows the job**: `pgdata-encrypted` started **8s after the 2026-07-27 boot**, so its ordering IS proven by a real reboot; only `miniodata-encrypted` (hand-started, +189687s) is unproven. **Chosen boundary: after A2 merges, before B1 opens.** Handle the two known side effects as part of the proof, not as surprises — the QA stack does NOT self-restart, and a stale `@reboot` cron dirties the tree. Script: `scripts/verify-post-reboot.sh`, PR **#457** merged as **`ff2078e2`**. Runbook §5.7.1–5.7.2. **⚠️ THE REBOOT CANNOT BE TRIGGERED FROM AN AGENT SESSION — Claude Code runs ON this host (`crimson-mink-43222`; its own PID is visible in the host PID namespace), so a reboot kills the session that would verify it.** It therefore records itself: `quillmd-postreboot-proof.service` (enabled, `After=docker.service`, 90s settle) runs the script on **every** boot and writes `/var/log/quillmd-postreboot-proof.<UTC>.log` + a `.latest.log` symlink, exit code **not** swallowed so a bad proof shows in `systemctl --failed`. That also covers the UNPLANNED hypervisor resets this host is known for — the ones nobody is watching. **To close F-pre: reboot the host from outside a session, then read `.latest.log` and expect `exit=0`.** Static evidence already gathered short of a boot: `systemctl show docker.service -p After` **contains both units** (the ordering edge is materialised, not just declared), both units `systemd-analyze verify` clean, and the two are byte-identical apart from `Description` — and pgdata's shape **is** boot-proven (started 8s after the 2026-07-27 boot). **ARMED 2026-07-29T14:3xZ — everything that can be done before the boot is done; only the boot is left.** Baseline run recorded: **exit 1, and on exactly one line** — `miniodata-encrypted.service started 189687s after boot (grace 120s)`. Every other assertion is already green (both mappings + mounts on their dm devices, both standing mount-checks 0, all 10 prod containers up, `quillmd.com` 200, all three co-tenants up, tree clean). Prep done this session: both LUKS units confirmed **`--key-file`**, so the unlock is unattended and a reboot **cannot** hang on a passphrase prompt; prod + all co-tenant containers are `unless-stopped` (they self-restart) while 5 of 6 QA containers are `no` (the documented side effect); `docker` and `nginx` both `enabled`; the proof unit's stale `failed` state — left by this morning's deliberate hand-run — **reset**, so `systemctl --failed` is empty and the post-boot signal is unambiguous; and **the stale `@reboot` cron is retired** (see below). **The property that makes this recoverable: section 1 compares `ActiveEnterTimestamp` against boot time, so it stays valid whenever it is run.** A hand re-run hours later still proves boot ordering. So if the boot unit's 90s settle turns out to be too short for a cold start and it false-reds on container health or `quillmd.com`, that is not a lost proof — re-run the script once the box settles |
 | **F** | Flip + old-skin retirement + prod smokes | ⬜ TODO | walker map updated, run on QA, `ok:true` · MOCK posture green · tag `:pre-rounds-<date>` **first** · flip via `scripts/deploy-prod.sh` only · **delete** old skin after the flip verifies · rollback docs updated · both prod smoke walks · standing checks green · co-tenants verified | — |
 
 ---
@@ -96,10 +96,54 @@ old skin default until F.
 
 ---
 
+## What arming F-pre found — a stale `@reboot` cron that could push to `main`
+
+Removed 2026-07-29, from the `claude` user crontab (backed up first; the 4
+monitoring lines are untouched):
+
+```
+@reboot /opt/meddoc-pro/scripts/h8-post-reboot.sh 20260503T040001Z > /tmp/h8-post-reboot.log 2>&1
+```
+
+This is the "stale `@reboot` cron dirties the tree" side effect that
+`verify-post-reboot.sh` §6 warns about — but reading it is worse than the warning
+suggests. It is a **Phase 6.1 script from May**, pinned to the timestamp
+`20260503T040001Z`, designed to fire **once** and then delete its own crontab
+line. It never did, and the reason is the interesting part:
+
+- step 3 appends a report section under `set -euo pipefail`
+- one of those appended lines shells out to device-mapper tooling, which fails as
+  non-root — *"Cannot initialize device-mapper, running as non-root user"* is the
+  last line in the tracked report
+- `set -e` kills the script **there**, before step 4 (self-remove) and step 5
+
+Step 5 is `git add` → `git commit` → **`git push origin main`**.
+
+So an **unreviewed auto-push to a protected branch, from a boot script, on every
+boot** has been sitting one bug away from firing for three months — and the bug
+is the only thing that has prevented it. It would also land in the worst possible
+way for this ledger: a push to `main` cancels any in-flight merge-commit E2E
+(rule 2a's corollary), so the first symptom would have been a *cancelled* run
+that nobody could explain.
+
+It has been superseded since 2026-07-29 by `quillmd-postreboot-proof.service`,
+which does the same job properly — no git writes at all, exit code not swallowed,
+and it records the **unplanned** hypervisor resets too. The script stays in the
+repo; only the cron line is gone.
+
+**The generalisation:** a one-shot `@reboot` job that self-removes on success is
+a job that runs forever if it ever fails. Its cleanup must not sit downstream of
+its work.
+
+---
+
 ## What A2 found (read before B1 — the same traps apply)
 
-Five defects, none visible in a screenshot. **The fifth is the one to read
-first, because B1 adds another flag-ON pack and will meet it again:**
+**Six** defects, none visible in a screenshot. (It said "five" until 2026-07-29:
+`0b` was found while fixing `0` and appended without moving the count. A ledger
+that miscounts its own findings is exactly the thing this file exists to prevent
+— so, six.) **`0` is the one to read first, because B1 adds another flag-ON pack
+and will meet it again:**
 
 0. **A new flag-ON spec must be added to the DEFAULT project's `testIgnore`,
    not just given its own project.** `rounds-board.spec.ts` got its own project
