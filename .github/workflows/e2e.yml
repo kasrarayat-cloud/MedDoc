@@ -257,6 +257,47 @@ jobs:
       # It failed loudly rather than mysteriously: the fixture's own guard threw
       # "IMAGING FIXTURE CARRIES OFFICE E/M STATE — emScoredCode=99212" — the
       # original production bug, reproduced inside CI by a missing build arg.
+      # ── ROUNDS Gate A. Its own flag-ON image; the board does not exist with
+      #    the flag off, which the pack asserts so a mis-built image fails
+      #    loudly rather than passing a suite that never exercised Rounds.
+      #
+      #    THIS BLOCK RUNS BEFORE THE review-doc BLOCK, AND THE ORDER IS LOAD-
+      #    BEARING. Its first arrangement sat BETWEEN "recreate app on the
+      #    review-doc image" and "run review-doc", and ended with a step that
+      #    recreated the app on the DEFAULT image "for the remaining packs". So
+      #    review-doc — already recreated on its own flag-ON image — then ran
+      #    against a flag-OFF build, and all 18 of its tests failed on a missing
+      #    `review-document-view` testid. The rounds pack itself passed; the
+      #    damage was entirely to the pack downstream of it.
+      #
+      #    There is no "restore" step now, and there should not be: every pack
+      #    below recreates the app on its OWN image as its last setup step, so
+      #    each one owns the environment it runs in. A shared restore step is
+      #    just a second place for the image to be wrong.
+      #
+      #    THE RULE: a pack's `--project=` run must be immediately preceded by
+      #    the recreate onto ITS image. `gate-project-env.test.ts` asserts it. ──
+      - name: Build Rounds flag-ON image
+        run: >
+          docker build -f apps/transcribe-md/Dockerfile
+          --build-arg NEXT_PUBLIC_SKIN_ROUNDS=true
+          --build-arg NEXT_PUBLIC_SKIN_BETA=true
+          --build-arg NEXT_PUBLIC_ULTRASOUND_SPECIALTY=true
+          --build-arg NEXT_PUBLIC_REVIEW_DOC_VIEW=true
+          -t meddoc-pro-transcribe-md:rounds .
+
+      - name: Recreate app on the Rounds image
+        run: >
+          docker compose -f docker-compose.qa.yml -f docker-compose.qa.rounds.yml
+          up -d --wait transcribe-md
+
+      - name: Run E2E (rounds-board — Gate A)
+        working-directory: apps/transcribe-md
+        env:
+          PW_BASE_URL: http://localhost:9020
+          CI: "true"
+        run: npx playwright test --project=rounds-board
+
       - name: Build flag-ON image for the document surface
         run: >
           docker build -f apps/transcribe-md/Dockerfile

@@ -1,0 +1,24 @@
+# ============================================================================
+# ROUNDS staging override — runs the isolated QA stack with the FLAG-ON image.
+#
+#   docker build -f apps/transcribe-md/Dockerfile \
+#     --build-arg NEXT_PUBLIC_SKIN_ROUNDS=true \
+#     --build-arg NEXT_PUBLIC_SKIN_BETA=true \
+#     --build-arg NEXT_PUBLIC_ULTRASOUND_SPECIALTY=true \
+#     --build-arg NEXT_PUBLIC_REVIEW_DOC_VIEW=true \
+#     -t meddoc-pro-transcribe-md:rounds .
+#   docker compose -f docker-compose.qa.yml -f docker-compose.qa.rounds.yml \
+#     up -d --wait transcribe-md
+#
+# Production is untouched: separate project / network / volumes, and this only
+# swaps the app image to the separately-tagged :rounds build. Prod's :latest is
+# never referenced here and never rebuilt by this file.
+#
+# ⚠️ NEXT_PUBLIC_SKIN_ROUNDS is BUILD-TIME. Setting it in an environment block
+# does nothing — the flag has to be a --build-arg, and the Dockerfile has to
+# declare the ARG or docker discards it silently ("were not consumed"). Verify
+# with the inlining grep, never by reading env.
+# ============================================================================
+services:
+  transcribe-md:
+    image: meddoc-pro-transcribe-md:rounds

@@ -54,6 +54,12 @@
 
   /* ── Status ───────────────────────────────────────────────────────────── */
   --rounds-critical: #c93a2e;
+  /* Critical red as TEXT on a dark surface. #c93a2e is a border/fill colour and
+   * fails AA as small text on --rounds-surface-2 — axe caught it on the REC
+   * kicker. Same pattern the spec already establishes for E/M, which carries a
+   * separate lighter fill so amber can clear AA. Borders and glyphs keep the
+   * true critical red; text on dark uses this. */
+  --rounds-critical-on-dark: #ff8d7e;
   --rounds-ready: #187a4e;
   --rounds-em: #c4841c;
   /* Lighter than --rounds-em, and it exists for exactly one reason: an amber
@@ -195,8 +201,24 @@ body[data-skin='rounds'] {
   color: var(--rounds-em);
 }
 
+/* The LABEL never animates. The first cut pulsed the text's opacity to .35 and
+ * axe caught it as a contrast failure — correctly: text at 35% opacity is
+ * genuinely unreadable at that instant, and "it comes back" is not an argument
+ * a person squinting at a screen finds persuasive. The pulse moved to a dot,
+ * which carries the same "live" affordance and has no text to obscure. */
 [data-skin='rounds'] .qm-rounds-kicker--rec {
-  color: var(--rounds-critical);
+  color: var(--rounds-critical-on-dark);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+[data-skin='rounds'] .qm-rounds-kicker--rec::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--rounds-critical-on-dark);
   animation: qm-rounds-rec-pulse 1.6s ease-in-out infinite;
 }
 
@@ -213,7 +235,7 @@ body[data-skin='rounds'] {
 /* The reduced-motion block at the top of this file neutralises the pulse; this
  * makes the still state deliberate rather than a frozen mid-animation frame. */
 @media (prefers-reduced-motion: reduce) {
-  [data-skin='rounds'] .qm-rounds-kicker--rec {
+  [data-skin='rounds'] .qm-rounds-kicker--rec::before {
     animation: none;
     opacity: 1;
   }

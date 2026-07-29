@@ -117,11 +117,16 @@ function LaneCard({ lane }: { lane: BoardLane }) {
         ? 'var(--rounds-surface-1)'
         : 'var(--rounds-surface-2)';
 
+  // A signed lane RECEDES, but the patient's name still has to be readable:
+  // --rounds-signed (#6B7480) on --rounds-surface-1 fails AA as small text, and
+  // axe caught exactly that. The muting belongs on the timestamp kicker, not on
+  // the name — "quieter" must not mean "not legible", which is the failure mode
+  // of every muted-state design that was never contrast-checked.
   const fg =
     lane.kind === 'ready'
       ? 'var(--rounds-ink)'
       : lane.kind === 'signed'
-        ? 'var(--rounds-signed)'
+        ? 'var(--rounds-text-2)'
         : 'var(--rounds-text-1)';
 
   return (
@@ -187,7 +192,11 @@ function LaneCard({ lane }: { lane: BoardLane }) {
             marginTop: 4,
             fontFamily: 'var(--rounds-font-mono)',
             fontSize: 11,
-            color: 'var(--rounds-critical)',
+            // Text on a card that may be dark → the AA-safe variant.
+            color:
+              lane.kind === 'ready'
+                ? 'var(--rounds-critical)'
+                : 'var(--rounds-critical-on-dark)',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
@@ -268,13 +277,17 @@ export function RoundsBoard({
   return (
     <div data-testid="rounds-board">
       {/* Numbered stage columns, with counts from the lanes actually present. */}
+      {/* NO role="row"/"columnheader" here. axe flagged aria-required-parent
+          (critical) on the first cut: those roles need a table/grid ancestor,
+          and this is a VISUAL matrix, not tabular data. Half-applied table
+          semantics announce a structure that does not exist, which is worse
+          for a screen reader than plain content. */}
       <div
         className="qm-rounds-board-grid qm-rounds-board-head"
-        role="row"
         style={{ display: 'grid', gap: 8, alignItems: 'end', marginBottom: 6 }}
       >
         {ROUNDS_STAGES.map((s, i) => (
-          <div key={s.id} role="columnheader" style={{ minWidth: 0 }}>
+          <div key={s.id} style={{ minWidth: 0 }}>
             <span
               style={{
                 fontFamily: 'var(--rounds-font-mono)',

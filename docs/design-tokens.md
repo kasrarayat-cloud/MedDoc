@@ -76,17 +76,23 @@ document is the thing a clinician stares at longest.
 
 | Token | Value | Meaning |
 |---|---|---|
-| `--rounds-critical` | `#C93A2E` | critical Rx, failure |
+| `--rounds-critical` | `#C93A2E` | critical Rx, failure — borders, glyphs, fills |
+| `--rounds-critical-on-dark` | `#FF8D7E` | critical red as **small text on a dark surface** |
 | `--rounds-ready` | `#187A4E` | ready to review; completed track runs |
 | `--rounds-em` | `#C4841C` | E/M amber |
 | `--rounds-em-fill` | `#E29A34` | **E/M action buttons only** |
 | `--rounds-processing` | `#3B6FD4` | in pipeline |
-| `--rounds-signed` | `#6B7480` | signed, on stage (muted) |
+| `--rounds-signed` | `#6B7480` | signed accents — **not small text on dark** (fails AA; use `--rounds-text-2`) |
 
 ⚠️ **`--rounds-signed` is grey on the stage, but a completed track run draws in
 `--rounds-ready` green.** Those are not the same thing and the difference is
 deliberate: the *card* is finished business and recedes; the *line* is a
 successful journey and should read as such at a glance across the board.
+
+⚠️ **Critical has two tokens, for the same reason E/M does.** `#C93A2E` is a
+border and fill colour; as small text on `--rounds-surface-2` it fails AA, which
+axe caught on the board's REC kicker. Borders and glyphs keep the true red; text
+on dark uses `--rounds-critical-on-dark`.
 
 ⚠️ **E/M has two tokens.** `--rounds-em` is the status colour; `--rounds-em-fill`
 is lighter and exists only so an amber button clears AA against dark text. Do not
