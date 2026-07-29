@@ -234,7 +234,18 @@ services:
       ANTHROPIC_API_KEY: "qa-dummy-anthropic-key-never-valid"
       DEEPGRAM_API_KEY: "qa-dummy-deepgram-key-never-valid"
       OPENAI_API_KEY: "qa-dummy-openai-key-never-valid"
-      RESEND_API_KEY: "qa-dummy-resend-key-never-valid"
+      # RESEND IS THE EXCEPTION: EMPTY, not a dummy.
+      #
+      # A dummy is stronger than absence for a vendor the code will call
+      # regardless. Resend is not one: `isEmailDeliveryEnabled()` gates on the
+      # key being TRUTHY, and when it is falsy the app logs a dev-only reset
+      # link instead of mailing it — which is exactly what the password-reset
+      # E2E reads. Handing it a dummy makes delivery look ENABLED, the link
+      # stops being logged, and scenario 17 fails. Caught by that test.
+      #
+      # Absence is the stronger posture here anyway: no key means the send path
+      # is switched off rather than attempted-and-rejected.
+      RESEND_API_KEY: ""
       # Sentry: empty string, not a dummy. The SDK no-ops on an empty DSN and
       # would spend every event retrying a malformed one.
       SENTRY_DSN: ""
@@ -312,7 +323,18 @@ services:
       ANTHROPIC_API_KEY: "qa-dummy-anthropic-key-never-valid"
       DEEPGRAM_API_KEY: "qa-dummy-deepgram-key-never-valid"
       OPENAI_API_KEY: "qa-dummy-openai-key-never-valid"
-      RESEND_API_KEY: "qa-dummy-resend-key-never-valid"
+      # RESEND IS THE EXCEPTION: EMPTY, not a dummy.
+      #
+      # A dummy is stronger than absence for a vendor the code will call
+      # regardless. Resend is not one: `isEmailDeliveryEnabled()` gates on the
+      # key being TRUTHY, and when it is falsy the app logs a dev-only reset
+      # link instead of mailing it — which is exactly what the password-reset
+      # E2E reads. Handing it a dummy makes delivery look ENABLED, the link
+      # stops being logged, and scenario 17 fails. Caught by that test.
+      #
+      # Absence is the stronger posture here anyway: no key means the send path
+      # is switched off rather than attempted-and-rejected.
+      RESEND_API_KEY: ""
       # Sentry: empty string, not a dummy. The SDK no-ops on an empty DSN and
       # would spend every event retrying a malformed one.
       SENTRY_DSN: ""

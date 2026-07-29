@@ -75,7 +75,7 @@ export const FAQS = [
   },
   {
     q: 'Is it HIPAA-compliant?',
-    a: 'QuillMD is HIPAA-ready and a BAA is included. Your data is US-hosted.',
+    a: 'QuillMD is HIPAA-ready, audit-logged at every layer, and your data is US-hosted.',
   },
   {
     q: 'What happens to the visit audio?',
