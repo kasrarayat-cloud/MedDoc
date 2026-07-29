@@ -16,11 +16,12 @@
 // production would put on the wire. A test that asserted against a hand-written
 // payload would prove nothing about what actually ships.
 //
-// WHAT IT DOES NOT CLAIM. The link carries an opaque visit id (a cuid). That is
-// a RECORD LOCATOR, not a patient identifier: it names nobody, reveals nothing
-// on its own, and is useless without an authenticated session. Asserting "no
-// identifiers of any kind" would be false, and a false assertion in a
-// compliance test is worse than no test.
+// AND IT NOW CLAIMS THE STRONGER THING. The email used to deep-link with the
+// visit's cuid, which is defensibly a record locator rather than a patient
+// identifier. "Defensible" was the wrong bar: a claim that needs a paragraph of
+// reasoning to survive an auditor is a claim that can lose. The link goes to the
+// bare visits list, so the assertion is now "NO RECORD LOCATOR OF ANY KIND" —
+// a sentence with no asterisk on it.
 // ============================================================================
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -99,11 +100,18 @@ describe('the visit email carries no patient and no note', () => {
     }
   });
 
-  it('and it does contain the portal link, so it is actually useful', () => {
+  it('carries NO RECORD LOCATOR — not even the opaque visit id', () => {
+    const payload = lastPayload();
+    expect(payload, 'the visit id must not appear anywhere').not.toContain(VISIT_ID);
+    // And not as a deep link in any form.
+    expect(payload).not.toMatch(/\/visits\/[A-Za-z0-9_-]+/);
+  });
+
+  it('and it does contain the bare portal link, so it is actually useful', () => {
     // Non-vacuity. An email that leaked nothing because it said nothing would
     // pass every assertion above and help nobody.
     const payload = lastPayload();
-    expect(payload).toContain(`/visits/${VISIT_ID}`);
+    expect(payload).toContain('/visits');
     expect(payload).toContain('sign in');
   });
 });
@@ -172,6 +180,11 @@ describe('EVERY email that references a visit, swept', () => {
         expect(payload, `${s.name} leaked ${label}`).not.toContain(value);
       }
       expect(lastCall().attachments, `${s.name} attached something`).toBeUndefined();
+      // No record locator of ANY kind, in ANY visit-referencing email.
+      expect(payload, `${s.name} leaked the visit id`).not.toContain(VISIT_ID);
+      expect(payload, `${s.name} carries a deep link`).not.toMatch(
+        /\/visits\/[A-Za-z0-9_-]+/,
+      );
     });
   }
 });

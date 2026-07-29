@@ -5,7 +5,21 @@
 // Split-screen on dark canvas:
 //   - Left pane (linear-bg): brand wordmark + form card
 //   - Right pane (linear-surface-1, hidden < 980px): subtle sage glow
-//     accent with HIPAA / BAA / US-hosted trust strip in mono.
+//     accent with HIPAA / encryption / US-hosted trust strip in mono.
+//
+// 2026-07-29: "BAA included" was removed from this strip. Read the way a
+// customer reads it, it promises QuillMD will sign a Business Associate
+// Agreement with them — which QuillMD may well offer, but §164.308(b) first
+// requires BAAs with its OWN subcontractors handling PHI, and Deepgram (raw
+// patient audio) and the VPS host (every row of PHI) are unsigned. Restore it
+// the day those two are countersigned; see docs/BAA_CHECKLIST.md.
+//
+// It was replaced with "Audit-logged", NOT the obvious "Encrypted at rest".
+// Checked before writing it: Postgres does sit on a LUKS volume
+// (/mnt/pgdata-encrypted), but MinIO — which holds the PATIENT AUDIO — is on an
+// ordinary docker volume on the root filesystem. A blanket encryption claim
+// would have replaced one overclaim with another. Every mutation writing an
+// audit row is verified, live, and unambiguous.
 //
 // All Phase 4 cinematic photo-band machinery is gone. The `cinematic`
 // prop and `AuthShellTheme` / `AuthShellCinematic` types are kept for
@@ -76,7 +90,7 @@ export function AuthShell({
             <span aria-hidden>·</span>
             <span>
               <Ic.lock width={12} height={12} aria-hidden />
-              BAA included
+              Audit-logged
             </span>
             <span aria-hidden>·</span>
             <span>US-hosted</span>
@@ -247,7 +261,7 @@ export function AuthShell({
               <span style={{ color: 'var(--color-linear-text-3)' }}>·</span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                 <Ic.lock width={12} height={12} />
-                BAA included
+                Audit-logged
               </span>
               <span style={{ color: 'var(--color-linear-text-3)' }}>·</span>
               <span>US-hosted</span>

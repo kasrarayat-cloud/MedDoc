@@ -7,7 +7,9 @@
 // product at promote time — see the trust list note in content.ts.
 // ============================================================================
 
-export const TRUST = ['HIPAA-ready', 'BAA included', 'US-hosted', 'You sign every note'];
+// 2026-07-29: "BAA included" removed pending the subcontractor chain — see
+// docs/BAA_CHECKLIST.md. Restore it when Deepgram and the host are signed.
+export const TRUST = ['HIPAA-ready', 'Audit-logged', 'US-hosted', 'You sign every note'];
 
 // One sample SOAP draft, shared by the hero card and the verification split.
 export const SOAP = [

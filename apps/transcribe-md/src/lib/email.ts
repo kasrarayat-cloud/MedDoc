@@ -92,12 +92,17 @@ export interface SendVisitPdfEmailResult {
  * The doctor clicks through and downloads from the app, over their own
  * authenticated session, exactly as they would from the visit page.
  *
- * ON THE LINK, honestly: the URL carries an opaque visit id (a cuid). That is a
- * RECORD LOCATOR, not a patient identifier — it names nobody, it reveals nothing
- * on its own, and it is useless without an authenticated session. It is the same
- * class of value as the message-id Resend already assigns. Claiming the payload
- * has "zero identifiers of any kind" would be false; claiming it has no patient
- * identifier and no clinical content is true, and is what the test asserts.
+ * ON THE LINK: it goes to the VISITS LIST, not to a specific visit. The earlier
+ * version deep-linked with the visit's cuid, which is defensibly a record
+ * locator rather than a patient identifier — it names nobody and is useless
+ * without an authenticated session.
+ *
+ * "Defensible" was the wrong bar. The point of this mitigation is to remove
+ * Resend from the PHI conversation entirely, and a claim that needs a paragraph
+ * of reasoning to survive an auditor is a claim that can lose. A bare /visits
+ * link costs the doctor one click and costs the argument nothing: the payload
+ * now carries NO record locator of any kind, which is a sentence with no
+ * asterisk on it.
  *
  * THE SIGNATURE IS THE GUARD. This function no longer ACCEPTS a pdfBuffer or a
  * patientName. A future caller cannot leak them through here by forgetting —
@@ -117,12 +122,14 @@ export async function sendVisitPdfEmail(
     ? `Hi ${args.doctorName.trim()},`
     : 'Hi,';
 
-  const visitUrl = `${appUrl()}/visits/${args.visitId}`;
+  // Deliberately NOT `/visits/${args.visitId}` — see the header. No record
+  // locator leaves this process.
+  const visitsUrl = `${appUrl()}/visits`;
 
   const html = [
     `<p>${greeting}</p>`,
-    `<p>A note you signed on ${escapeHtml(args.visitDate)} is ready. Open it in QuillMD to read, download or export it.</p>`,
-    `<p><a href="${visitUrl}" style="display:inline-block;padding:10px 18px;background:#7C3AED;color:#fff;border-radius:6px;text-decoration:none;">Open the note</a></p>`,
+    `<p>A note you signed on ${escapeHtml(args.visitDate)} is ready. Open QuillMD to read, download or export it.</p>`,
+    `<p><a href="${visitsUrl}" style="display:inline-block;padding:10px 18px;background:#7C3AED;color:#fff;border-radius:6px;text-decoration:none;">Open your visits</a></p>`,
     `<p style="color:#666;font-size:13px;">You'll be asked to sign in. We don't send notes or patient details by email.</p>`,
     `<hr style="border:none;border-top:1px solid #eee;margin:24px 0;" />`,
     `<p style="color:#999;font-size:12px;">QuillMD</p>`,
@@ -131,9 +138,9 @@ export async function sendVisitPdfEmail(
   const text = [
     greeting,
     '',
-    `A note you signed on ${args.visitDate} is ready. Open it in QuillMD to read, download or export it.`,
+    `A note you signed on ${args.visitDate} is ready. Open QuillMD to read, download or export it.`,
     '',
-    visitUrl,
+    visitsUrl,
     '',
     "You'll be asked to sign in. We don't send notes or patient details by email.",
     '',

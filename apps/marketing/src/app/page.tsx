@@ -31,7 +31,7 @@ const mono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: 'QuillMD — The note writes itself',
   description:
-    'Evidence-anchored clinical notes from the visit conversation, machine-verified, with a review lane for anything it can’t ground. You sign every note. $49 flat, HIPAA-ready, BAA included, US-hosted.',
+    'Evidence-anchored clinical notes from the visit conversation, machine-verified, with a review lane for anything it can’t ground. You sign every note. $49 flat, HIPAA-ready, US-hosted.',
 };
 
 export default function HomePage() {

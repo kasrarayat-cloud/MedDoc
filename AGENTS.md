@@ -227,7 +227,20 @@ COLUMN, and no sweep of the filesystem will find them.
 ```bash
 bash scripts/check-imaging-em-artifacts.sh    # READ-ONLY. 0 = clean, 1 = found, 2 = off-host
 bash scripts/assert-migrations-applied.sh     # READ-ONLY. 0 = all applied, 1 = UNAPPLIED, 2 = off-host
+bash scripts/check-qa-mock-posture.sh         # READ-ONLY. 0 = severed, 1 = LIVE KEYS, 2 = stack down
 ```
+
+**The QA stack must be incapable of reaching a vendor, and "incapable" needs two
+conditions.** `MOCK_AI_CALLS=true` stops calls only while every code path
+honours the flag; dummy credentials are what survives a code regression. The
+check reads the **running containers**, not the compose file, because on
+2026-07-28 the file read as safe and the containers were not:
+`${MOCK_AI_CALLS:-true}` and `${ANTHROPIC_API_KEY:-mock-key-qa}` both inherit
+from the shared `.env`, which sets them because PRODUCTION needs them. The
+result was 298 real Anthropic calls and live Deepgram requests from the stack
+whose header promised it could reach nothing — burning the same balance
+production depends on. **A `${VAR:-default}` in `docker-compose.qa.yml` is a
+bug until proven otherwise.**
 
 An imaging report has no office-visit E/M level. That invariant is enforced in
 the app's compute/store guards, in the review-doc E2E fixtures, and in
