@@ -25,6 +25,30 @@ to build; this says what is built, what is next, and what proof exists.
    **had never executed once in CI**. Two signals disagreed and the green one
    was the one being read. A ledger row is a claim about `main`; only CI on the
    merge commit can support it.
+
+   *Corollary, learned immediately after:* `main` has the same
+   `cancel-in-progress` concurrency group, so **merging a second PR cancels the
+   first one's merge-commit E2E**. A `cancelled` run is not a failed one and not
+   a green one — it is absence of evidence. Cite the run on the **latest** `main`
+   commit that CONTAINS your change (`git merge-base --is-ancestor <sha> main`);
+   it covers every ancestor. Never cite a cancelled run, and never read one as
+   green.
+2b. **Never push to a PR branch while its long E2E is in flight.** The
+   workflow's concurrency group is `cancel-in-progress`, so a push cancels the
+   running job and restarts a ~40-minute clock. **Batch commits; push at
+   boundaries.**
+
+   The rule is against *dribbling* — a stream of small pushes that each kill the
+   previous run and never let one finish. It is **not** a rule against ever
+   superseding: if the in-flight run is testing a state that will never merge
+   (you have already found the fix), pushing one complete batch immediately is
+   correct and *faster* than waiting for a doomed run to finish and then paying
+   for another. Supersede knowingly, once, with everything ready — that is a
+   boundary too.
+
+   *Cost that produced this:* a one-line ledger edit pushed mid-run cancelled a
+   Gate A E2E at ~20 minutes in.
+
 3. **`NEXT_PUBLIC_SKIN_ROUNDS` stays OFF until item F.** Every phase ships dark.
 4. **Stop-condition, unchanged:** if an item's gate cannot go green after genuine
    fix attempts, stop there, leave the flag OFF, and report. **Never flip a
@@ -51,14 +75,14 @@ old skin default until F.
 | **F0** | Foundation: tokens doc, `rounds-tokens.css`, flag, fonts, `data-skin`, stage mapping | ✅ **DONE** | units green + exhaustiveness guard negative-controlled | `c2f35d2a` · 18 tests |
 | **F0b** | Board row model: lane kinds, run lengths, filters, ordering, day meter | ✅ **DONE** | units green, honesty rules pinned | 37 tests total, tsc clean |
 | **A1** | **Board component + units** | ✅ **DONE, MERGED** | component renders all five lane kinds; positioning proved; retry integration correct; typecheck clean | PR **#453** merged · +retry fix · **24** component tests · 2719 suite green · tsc clean |
-| **A2** | Board E2E + axe + screenshots + merge | 🟨 **IN PROGRESS** — reverted under rule 2a | axe **0 serious/critical** across 7 views × 2 widths × 3 animation samples · rounds-board E2E 5/5 · screenshots 1440 + 1024 · suite green — **all LOCAL, and local does not close an item** | PR **#455 open**. Was marked DONE on local evidence while CI was red: the pack was missing from the default project's `testIgnore`, so the flag-OFF run collected it and 404'd, and `--project=rounds-board` never ran in CI at all. Fixed + pinned by a negative-controlled guard (`gate-flag-coverage.test.ts`). **Closes when #455 merges green — merge SHA + CI run to be cited here.** |
-| **B1** | Screen 2 — the stage | ⬜ NEXT (blocked on A2) | pipeline strip from the same mapping; NOW REVIEWING; padlocked Signed node with correct **N**; sheet is the existing paper component restyled; identity header; next-up peek; chat drawer | — |
+| **A2** | Board E2E + axe + screenshots + merge | ✅ **DONE, MERGED** | **CI green, and the `rounds-board` pack actually ran** — all six E2E packs success · axe 0 serious/critical (7 views × 2 widths × 3 animation samples) · screenshots 1440 + 1024 · 2742 units · tsc clean | PR **#455** squashed to **`17b03c8a`** · **merge-commit CI: run `30430612104` (e2e) + `30430612086` (CI) on `main@17b03c8a`, both success** — that is the citation rule 2a asks for. The PR-head run `30428489530` is where the per-pack detail is visible (chromium ✓ rounds-board ✓ review-doc ✓ doc-preview ✓ visit-doc ✓ phi-reject/rx-safety ✓), but a PR-head run is **not** a merge-commit run: a squash merge produces a new commit that neither run's SHA matches. Cite both, and never let the PR run stand alone. Took **three** CI cycles to actually close: (1) the pack was missing from the default project's `testIgnore`, so the flag-OFF run collected it, 404'd, and everything downstream **skipped** — `--project=rounds-board` had never run in CI at all; (2) fixed, and the pack passed, but the Rounds block sat between review-doc's setup and its run and reverted the app to the default image, reddening all 18 review-doc tests; (3) green. Both classes now pinned by negative-controlled guards: `gate-flag-coverage.test.ts`, `gate-project-env.test.ts` |
+| **B1** | Screen 2 — the stage | ⬜ **NEXT** | pipeline strip from the same mapping; NOW REVIEWING; padlocked Signed node with correct **N**; sheet is the existing paper component restyled; identity header; next-up peek; chat drawer | — |
 | **B2** | Screen 3 — the gates | ⬜ TODO | full-screen sequential over EXISTING logic; only applicable gates exist; `> OVERRIDE` typed input unchanged; E/M only when `emApplies`; attestation; **sign-block E2Es pass with semantics unchanged** | — |
 | **B3** | Screen 4 — signed + deck-advance | ⬜ TODO | strip fully checked; lock banner; safety trail shows **only what applied**; addendum footer; deck advances to next in-review | — |
 | **B4** | Gate B verification | ⬜ TODO | axe zero serious/critical on stage + all gates + signed · chromium E2E incl. sign-block · **fixture matrix both specialty classes** (imaging: no E/M gate, no strip blocker, anywhere) · **PDF/Word parity re-proven at 1440** · screenshots · merge on green | — |
 | **C1** | Auth / settings / templates / error-empty-loading | ⬜ TODO | all to tokens; copy register: plain verbs, sentence case, actions keep their names end-to-end | — |
 | **C2** | Default-paper typography + Gate C | ⬜ TODO | **exports match preview 1:1** (this is the report-template design deliverable) · axe on every restyled screen **incl. waitlist** · full suite + typecheck · E2E green · merge on green | — |
-| **F-pre** | **Reboot proof of the encrypted MinIO volume** | ⬜ **REQUIRED BEFORE F** | a real host reboot, then: `minio-encrypted` mapping present · `/mnt/miniodata-encrypted` mounted from it · MinIO healthy and its `/data` on the dm device · `check-minio-encrypted-mount.sh` = 0 · all co-tenants back · prod 200 | Added 2026-07-29. The unlock is `miniodata-encrypted.service`, `Before=docker.service`, and it has **never been exercised by an actual boot** — it was started by hand. Boot ordering is the one property a hand-start cannot prove, and MinIO now **fails closed**, so if the unit loses its race with docker MinIO does not start at all. Better to learn that on a chosen boundary than during F. **Chosen boundary: immediately after A2 merges, before B1 opens** — nothing uncommitted, no branch in flight, and it is the last such boundary before the work gets long. Expect the two known reboot side effects first (the QA stack does NOT self-restart; a stale `@reboot` cron dirties the tree) — bring QA back and clean the tree as part of the proof, not as a surprise. See runbook §5.7.1 |
+| **F-pre** | **Reboot proof — BOTH encrypted stores** | ⬜ **REQUIRED BEFORE F** | one real host reboot, then `bash scripts/verify-post-reboot.sh` = 0. It asserts the whole chain: **both** units started AT BOOT (not by hand) · both mappings open · both mounts live on their dm devices · Postgres **and** MinIO healthy on those devices · both fail-closed guards intact · prod 200 · co-tenants up | Added 2026-07-29, widened the same day when Postgres got the same guard (PR #456). Both unlocks are `Before=docker.service` and **both stores now fail closed**, so a unit that loses its race with docker takes the stack down rather than reverting to plaintext — the right trade, but only if the ordering works, and a hand-start cannot prove ordering. **The script already narrows the job**: `pgdata-encrypted` started **8s after the 2026-07-27 boot**, so its ordering IS proven by a real reboot; only `miniodata-encrypted` (hand-started, +189687s) is unproven. **Chosen boundary: after A2 merges, before B1 opens.** Handle the two known side effects as part of the proof, not as surprises — the QA stack does NOT self-restart, and a stale `@reboot` cron dirties the tree. Script: `scripts/verify-post-reboot.sh`, PR **#457** merged as **`ff2078e2`**. Runbook §5.7.1–5.7.2 |
 | **F** | Flip + old-skin retirement + prod smokes | ⬜ TODO | walker map updated, run on QA, `ok:true` · MOCK posture green · tag `:pre-rounds-<date>` **first** · flip via `scripts/deploy-prod.sh` only · **delete** old skin after the flip verifies · rollback docs updated · both prod smoke walks · standing checks green · co-tenants verified | — |
 
 ---
@@ -101,6 +125,27 @@ first, because B1 adds another flag-ON pack and will meet it again:**
    would have landed unreviewable. `file <path>` says `data` instead of
    `JavaScript source`; `git diff --stat` says `Bin`. Do not build regexes by
    splitting on a placeholder.
+
+0b. **And then the fixed pack broke a DIFFERENT one.** The Rounds block was
+   inserted between "recreate app on the review-doc image" and "run review-doc",
+   ending with a step that put the app back on the DEFAULT image "for the
+   remaining packs". The app is ONE container, so every recreate replaces the
+   last: review-doc ran flag-OFF and all 18 of its tests failed.
+
+   Every symptom pointed away from the cause — **the rounds pack passed**, and
+   the pack that went red was one the branch never opened, so it reads as a
+   product regression. ~25 minutes of a 55-minute job to find out.
+
+   **A uniform failure across every test in one pack is almost never the
+   product. It is the environment.** `gate-project-env.test.ts` now asserts that
+   nothing recreates the app between a pack's setup and its `--project=` run.
+   There is deliberately **no shared "restore" step** — every pack recreates the
+   app on its own image as its last setup step, because a shared restore is just
+   a second place for the image to be wrong.
+
+   **B1 adds another flag-ON pack, so it meets 0 and 0b both.** Put its spec in
+   `chromium`'s `testIgnore`, and keep its build + recreate + run contiguous,
+   ending with its own run — do not add a cleanup step after it.
 
 And the four from the board itself:
 
