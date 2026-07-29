@@ -766,7 +766,27 @@ volumes:
   # survives outside the repo tree — see the backup-fix note above (2026-06-08).
   pgbackups:
   redis_data:
+  # PATIENT AUDIO — bind-mounted onto the LUKS volume (2026-07-29).
+  #
+  # It used to be a plain docker-managed volume on the root filesystem, i.e.
+  # UNENCRYPTED, while Postgres sat on /mnt/pgdata-encrypted. The encrypted
+  # volume existed and nobody checked which containers were on it — so the
+  # structured PHI was covered for months and the audio was not.
+  #
+  # Its own 20 GiB volume rather than sharing the pg one: the pg volume had
+  # 828 MB free, which audio exhausts in about two days at pilot rate, and a
+  # full shared volume takes the DATABASE down with it.
+  #
+  # Unlocked at boot by miniodata-encrypted.service (Before=docker.service).
+  # ROLLBACK: delete this driver_opts block and recreate — the pre-migration
+  # data is still in the old docker volume, copied and never moved.
+  # See docs/DEPLOYMENT_RUNBOOK.md §5.7.
   minio_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /mnt/miniodata-encrypted
   caddy_data:
   caddy_config:
 

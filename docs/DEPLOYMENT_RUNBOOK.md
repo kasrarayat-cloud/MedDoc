@@ -430,6 +430,101 @@ prove it works.
 
 ---
 
+## 5.7 Encryption at rest — the two encrypted volumes
+
+Both PHI stores sit on LUKS-encrypted loop-backed volumes, unlocked at boot by a
+systemd unit ordered `Before=docker.service`.
+
+| Store | Backing file | Mapper | Mount | Size |
+|---|---|---|---|---|
+| Postgres (structured PHI) | `secrets/pgdata.luks` | `pg-encrypted` | `/mnt/pgdata-encrypted` | 1 GiB |
+| MinIO (patient AUDIO) | `secrets/miniodata.luks` | `minio-encrypted` | `/mnt/miniodata-encrypted` | 20 GiB |
+
+### Why MinIO got its own volume rather than sharing Postgres's
+
+The pg volume had 828 MB free and the audio was 1.2 MB, so it *fitted*. It was
+still the wrong home. Audio grows at roughly a visit's length in megabytes; at a
+five-doctor pilot that is a few hundred MB a day, which exhausts 828 MB in about
+two days — **and a full shared volume takes the database down with it.** Letting
+audio growth starve Postgres is a worse failure than the disk cost of a second
+volume.
+
+20 GiB is ~2 months at pilot volume, against a 90-day retention sweep, and leaves
+60 GB+ free on the host.
+
+### ⚠️ ROLLBACK — written before the migration, and CORRECTED during it
+
+**Correction, recorded rather than quietly fixed.** This section originally said
+the pre-migration directory was "left in place, untouched" and that the migration
+deleted nothing. That stopped being true mid-procedure: the named volume already
+existed pointing at the old path, and it has to be **recreated** to pick up new
+`driver_opts` — which means `docker volume rm meddoc-pro_minio_data`, which
+deletes the original `_data`. The copy-not-move was real; the volume recreate
+undid it.
+
+**So the rollback is the TARBALL**, taken before the stop window:
+`backups/pre_minio_move_<UTC>.data.tgz`. It is not a lesser rollback — it is a
+frozen, MinIO-stopped copy — but it must be restored rather than simply
+re-pointed at, and pretending otherwise would send whoever needs it looking for
+a directory that no longer exists.
+
+Note also that after the switch `/var/lib/docker/volumes/meddoc-pro_minio_data/_data`
+still appears to hold the data. It does: it is now a **bind mount of
+`/mnt/miniodata-encrypted`** — the same directory seen through two paths, not a
+second copy. Do not read its presence as an intact rollback.
+
+To go back:
+
+```bash
+cd /opt/meddoc-pro
+docker compose stop minio
+
+# 1. Point the compose volume back at the docker-managed directory:
+#    in docker-compose.yml, restore
+#        minio_data:
+#          driver: local            # (no driver_opts)
+#    i.e. delete the driver_opts block that binds /mnt/miniodata-encrypted.
+
+# 2. The named volume must be recreated to drop the bind, and its content
+#    restored from the tarball — the original directory is gone.
+docker compose rm -sf minio && docker volume rm meddoc-pro_minio_data
+docker compose up -d --no-deps minio          # recreates an empty local volume
+docker compose stop minio
+docker run --rm -v meddoc-pro_minio_data:/d -v /opt/meddoc-pro/backups:/b alpine \
+  sh -c 'tar xzf /b/pre_minio_move_<UTC>.data.tgz -C /d'
+docker compose start minio
+
+# 3. Verify object count matches the pre-migration figure recorded in
+#    docs/deploy-logs/ for the migration run.
+docker exec meddoc-pro-minio-1 sh -c \
+  'export MC_CONFIG_DIR=/tmp/mc; mc alias set local http://127.0.0.1:9000 \
+   "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null && mc ls --recursive local/ | wc -l'
+```
+
+The encrypted volume can then be left mounted and empty, or torn down with
+`systemctl stop miniodata-encrypted` + removing the unit and
+`secrets/miniodata.luks`.
+
+**Keep the tarball until a pilot's worth of traffic has run clean on the
+encrypted volume.** It is the rollback, and it is the only one.
+
+### Verifying the posture
+
+```bash
+# both mapper devices present and mounted
+lsblk -o NAME,TYPE,MOUNTPOINT | grep crypt
+# and the containers actually use them
+docker inspect meddoc-pro-postgres-1 meddoc-pro-minio-1 \
+  --format '{{.Name}}{{range .Mounts}} {{.Source}}{{end}}'
+```
+
+⚠️ **A mounted encrypted volume proves nothing on its own** — the container has
+to be *on* it. That is the whole reason MinIO was unencrypted for months while
+Postgres was fine: the volume existed, and nobody checked which containers used
+it.
+
+---
+
 ## 6. Observability — Sentry + external uptime monitor
 
 T-M16.3 wired Sentry into both apps + the transcribe-md worker, and
