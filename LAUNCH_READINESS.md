@@ -44,11 +44,15 @@ Excluded by instruction, tracked elsewhere: **the Anthropic BAA countersign** an
 | R2 | **Resend BAA** | **pilot-blocking** | ☐ NOT YET. Visit-export email carries PHI — patient name in the subject and the signed SOAP note as a PDF attachment (`lib/email.ts`). Auth emails are link-only and would be fine; the export path is not |
 | R3 | **VPS host BAA (Zap Hosting)** | **pilot-blocking** | ☐ VERIFY. Every row of PHI persists on this host. If Zap will not sign, the alternative is migration to a HIPAA-eligible host — which is a project, not a task, and needs to start before it is urgent |
 | R4 | **Backblaze B2 BAA** | high | ☐ NOT YET. Offsite backup target. Blobs are encrypted client-side before they leave, which mitigates but does not remove the obligation |
-| R5 | **Open signup has no captcha** | high | Rate-limited (5/hour/IP) but **not** bot-resistant, and the data shows it: **195 accounts, of which 172 have never logged in and only 43 verified an email**. 97 of them were created in the last 30 days at a steady 1–3/day — a cadence that sits comfortably under the rate limit. No PHI is exposed (these accounts have no data), but it is an unbounded account-creation surface on a system about to hold patient records, and it poisons every population query |
+| R5 | ~~**Open signup has no captcha**~~ → **the waitlist form has no captcha** | **was high; now low — the row was STALE, reconciled 2026-07-29** | **There is no open signup any more.** It went invite-only in `4455a7ce` (2026-07-28) and that is live in production, not merely on `main`: `app.quillmd.com/signup` serves an invite-code field and the copy *"QuillMD is invite-only during the pilot."* The account-creation surface this row was written about **no longer exists**, so "high" was describing a system that had already changed underneath it. What is left is the **waitlist form** (`/waitlist`, 200): same 5/hour/IP budget, still no captcha — but `joinWaitlistAction` writes exactly one `waitlist_entries` row and creates **no User, no Practice, no session, no auth token, no product grant**. There is nothing there to sign in with, which is what makes an open endpoint acceptable where open signup was not. **Low**, and the honest residue is spam rows in one table. ⚠️ **Two things this reconciliation does NOT close** — (1) the **residue**: 195 accounts / 23 ever logged in / 43 email-verified is *unchanged*, because closing the door does not empty the room; the population query is still polluted and §F still applies. (2) **Signup is currently closed to everyone, including a pilot doctor**: `invite_codes` has **0 rows** and `SIGNUP_INVITE_CODES` is **unset in the running app container**, so no valid code exists from either source. Minting one is a prerequisite of onboarding, not a step during it |
 | R6 | **`h8-h3-pilot-followup`** — disk encryption | high, **narrowed 2026-07-29, then CORRECTED the same day** | **Encryption at rest is now genuinely complete for both PHI stores: Postgres ✅ (`/mnt/pgdata-encrypted`) and MinIO ✅ (`/mnt/miniodata-encrypted/data`, 20 GiB LUKS).** ⚠️ **This row claimed exactly that several hours before it was true.** The MinIO migration was declared complete while `miniodata-encrypted.service` had only ever been `enabled`, never *started* — and a mountpoint directory exists whether or not anything is mounted on it, so the bind fell through to `/dev/sda2` and MinIO wrote to the plain root filesystem with every layer reporting success. Re-migrated with a sha256 manifest matched 33/33, made **fail-closed**, and now asserted by a standing check that reads the kernel rather than the config. What remains under this finding is the *managed-volume* migration, not the encryption itself. Runbook §5.7.1 |
 | R8 | **MinIO backup regime (encrypted) — define pre-pilot** | medium, open | Postgres has a daily dump with rotation; **MinIO has no backup regime at all.** The one that existed was a plaintext tarball of the object store sitting on the unencrypted root filesystem — a replica contradicting the posture it predated — and it was shredded 2026-07-29 once the migration was sha-proven and the fail-closed guard plus standing check protected the live state. Whatever replaces it must land encrypted and off-host, which folds into R4/R7. **Define before a pilot doctor records anything**, because the first real audio is the point at which "no backup" stops being an acceptable position |
 | R7 | **`h16-offsite-backup`** — backups co-located with the database | high, open | *"Single-failure-domain: backups co-located with database."* The daily dump lands on the same host as the Postgres it dumps, so the one event a backup exists for — losing the host — loses both. `infra/backup-offsite-sync.sh` targets Backblaze B2, which is R4's unsigned BAA: **R4 and R7 are the same blocker seen from two directions**, and closing R7 requires closing R4 first |
-| R8 | **No fresh end-to-end clinical smoke on a real doctor account** | — | And there will not be one. Production verification is structural by standing policy; the full clinical walk belongs on the QA stack. Named here so the gap is explicit rather than implied |
+| R9 | **No fresh end-to-end clinical smoke on a real doctor account** | — | And there will not be one. Production verification is structural by standing policy; the full clinical walk belongs on the QA stack. Named here so the gap is explicit rather than implied |
+
+*(This row was a second `R8` until 2026-07-29 — two different findings carried the
+same id, which is how one of them gets closed by a note about the other. It is
+`R9` now; nothing else referenced either number.)*
 
 ### 🟡 Amber — known, accepted, do not "fix"
 
@@ -58,6 +62,7 @@ Excluded by instruction, tracked elsewhere: **the Anthropic BAA countersign** an
 | **AI documentation disclosure — AMBER** | Enabled-with-disclosure, closed 2026-06-12. The doctor-facing paragraph is in §C below and must appear in pilot consent/onboarding |
 | **Template Twin is PARKED** | Deliberate. `MAPPINGS_NOT_READY` is a design gate, not a defect — 79 of 80 fields on a real customer form need physician confirmation. Never weaken it to shrink the wall. Trigger to un-park: a pilot doctor explicitly needs their native form bytes back |
 | **nginx duplicate `server_name` warnings** | `app.` / `pro.` / `admin.quillmd.com` are each declared twice on `[::]:443`; nginx ignores the duplicate and serves correctly (verified by status code on all five hosts). Cosmetic, but worth tidying before someone edits the wrong block |
+| **10 legacy objects carry no SSE-S3 — ACCEPTED 2026-07-29, do not rewrite** | Two encryption layers, and only one of them has a gap. **LUKS covers all ten unconditionally**; SSE-S3 encrypts new PUTs only, so objects predating it stay plaintext *at the object layer* inside an encrypted volume. Verified per-object against live prod, not from a prior report: the **patient-audio bucket has 0 objects**; all ten are in `transcribe-md-template-artifacts` — 5 byte-identical blank PDF canvases (orphans of deleted templates), 2 byte-identical blank twin sources, and **3 filled twin outputs**. The three filled ones are non-PHI **by ownership, not by being blank**: all five twin objects belong to practice `cmrzqiafm0000pd87qtubsj56` = *"QuillMD Smoke Test Practice (synthetic)"*, `smoke-doctor@smoke.quillmd.invalid`. Resolve by practice row, never by trusting a `synthetic_` filename. Not rewritten because a read-then-PUT sweep is a real mutation bought for a second layer over blank forms and synthetic smoke output. **Reverses on exactly one finding: an object with `NONE` owned by a real doctor's practice.** Both buckets now auto-encrypt, so this is a closed tail. Runbook §5.7.3 |
 
 ---
 
@@ -233,8 +238,16 @@ engineering task. Routing a real doctor's audio through Deepgram, or a real
 patient's note through Resend, before those are countersigned is the one thing
 this document exists to prevent.
 
-R5 is not pilot-blocking but should not be carried into the pilot either: 172
-accounts that have never logged in is a surface, and it will only grow.
+R5 is not pilot-blocking, and as of 2026-07-29 it is **half closed**: the open
+signup it described is gone — invite-only shipped 2026-07-28 and is live — so the
+surface no longer grows. *"It will only grow"* was true when written and is not
+true now. What has **not** changed is the residue: 195 accounts of which 23 have
+ever logged in. Closing the door did not empty the room, and those rows still
+poison every population query. Carry that into the pilot deliberately or clear
+it, but do not read "R5 narrowed" as "R5 handled".
+
+And note the corollary before onboarding day: **signup is currently closed to
+everyone**, because no invite code exists in either source. Mint one first.
 
 ## Document history
 
@@ -245,3 +258,13 @@ accounts that have never logged in is a surface, and it will only grow.
   red/green pilot table, and the TLS deploy-hook fix. Verdict changed to NO-GO on
   BAAs — not a regression, a correction: the BAAs were unsigned in April too, and
   the April document did not say so.
+- **2026-07-29**: two recorded rulings, and one stale row caught. **R5 was
+  describing a system that had already changed** — open signup went invite-only
+  the day before this row was last touched, so a `high` finding was being carried
+  against a surface that no longer existed; narrowed to the waitlist form, `low`,
+  with the unchanged residue and the closed-to-everyone corollary called out
+  separately. **The 10 legacy no-SSE-S3 objects were accepted**, with the
+  ownership evidence that makes "non-PHI" a fact rather than an assumption
+  (runbook §5.7.3). Fixed a duplicated `R8` id. *The lesson worth keeping is R5's:
+  a readiness row is a claim about a live system, and it goes stale the moment
+  the system moves — verify the row before you carry its severity.*

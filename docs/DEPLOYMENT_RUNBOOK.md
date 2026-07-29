@@ -657,6 +657,72 @@ sibling does not need: **`PG_VERSION` must be present**, because an
 initdb-on-plaintext incident produces a perfectly healthy Postgres and "is it
 running" therefore proves nothing.
 
+### 5.7.3 The 10 legacy objects with no SSE-S3 — ACCEPTED, do not rewrite them
+
+**Decided 2026-07-29. This is a recorded decision, not an open finding. Do not
+re-flag it in audits, and do not "fix" it with a rewrite sweep.**
+
+There are **two independent encryption layers** over the object store, and
+conflating them is what makes this look like a hole:
+
+| Layer | What it protects against | Covers these 10 objects? |
+|---|---|---|
+| **LUKS** (`/dev/mapper/minio-encrypted`) | the disk, the backing file, the host being seized or the volume being copied | **YES — all of them, unconditionally** |
+| **SSE-S3** (MinIO per-object) | an attacker who already has a live authenticated path into MinIO's own data dir | no, only objects PUT after it was enabled |
+
+`scripts/minio-enable-sse.sh` has always said it: **SSE-S3 encrypts only NEW
+PUTs.** Objects written before it was switched on stay plaintext *at the object
+layer* — while still sitting inside the LUKS mapping like everything else.
+
+**What the ten actually are.** Verified against live prod on 2026-07-29 by
+listing every object in every bucket and reading `X-Amz-Server-Side-Encryption`
+per object — not by reading a prior report:
+
+- `transcribe-md-audio` — **0 objects.** The patient-audio bucket is empty, so
+  none of this touches audio. (It is empty because of the §5.7.1 re-migration.)
+- `transcribe-md-template-artifacts` — 10 objects, **all ten `NONE`**:
+
+| Count | Path | What it is |
+|---|---|---|
+| 5 | `pdf-native/<templateId>/canvas.pdf` | **byte-identical to each other** (one etag, 55900 B). One blank PDF form re-uploaded five times — the "active template id rotates per upload" behaviour. None of the five template ids still exists in `note_templates`; they are orphans of deleted templates |
+| 2 | `template-twin/sources/**.docx` | **byte-identical to each other** (one etag, 52884 B). A *source* is an uploaded template — a BLANK form by definition |
+| 3 | `template-twin/outputs/**.docx` | three distinct FILLED documents |
+
+**The honest part: three of the ten are filled documents.** They are not
+non-PHI because they are blank — they are not blank. They are non-PHI because
+of **who owns them**: every one of the five `template-twin` objects sits under
+practice `cmrzqiafm0000pd87qtubsj56`, which resolves to *"QuillMD Smoke Test
+Practice (synthetic)"*, owner `smoke-doctor@smoke.quillmd.invalid` — the
+sanctioned synthetic account, from the 2026-07-26 twin GA run. Two of the three
+even carry a `synthetic_` path segment; the third
+(`outputs/cms18cnct00010iqt6zfwnz31/`) has no matching row in
+`transcribe_visits` at all, which is the FK-cascade-on-reseed behaviour AGENTS.md
+already records.
+
+Resolve ownership by practice, **not** by trusting a `synthetic_` filename. A
+filename is a claim; a practice row is a fact.
+
+**Why accepted rather than rewritten.** Rewriting an object to pick up SSE-S3 is
+a read-then-PUT — a real mutation of the store, with real ways to go wrong — and
+it would buy a second encryption layer over five copies of a blank form, a blank
+template uploaded twice, and three synthetic smoke outputs that are already
+under LUKS. The risk of the sweep exceeds the risk it removes.
+
+**What would reverse this ruling.** Exactly one thing: an object with `NONE`
+that belongs to a **real** doctor's practice. Then it is not a legacy artifact,
+it is PHI at rest missing a layer, and it gets moved — not left. Re-check with:
+
+```bash
+# every object, with its SSE state; anything NONE, resolve its practice id
+docker exec meddoc-pro-minio-1 sh -lc '
+  mc alias set local http://127.0.0.1:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null 2>&1
+  mc stat --recursive --json local/transcribe-md-template-artifacts'
+```
+
+Both buckets have `Auto encryption 'sse-s3' is enabled`, so **everything written
+from here on is covered at both layers.** This is a closed tail, not a growing
+one.
+
 ---
 
 ## 6. Observability — Sentry + external uptime monitor
