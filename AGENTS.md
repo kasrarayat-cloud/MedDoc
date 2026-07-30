@@ -250,6 +250,18 @@ So a stray-export sweep is not optional after a purge, and it has a shape:
 - **State the boundary in the report** — roots, depth, filesystem, file count.
   A sweep that does not say what it looked at cannot be checked, and "I found
   nothing" is worthless without "here is where I looked".
+- **Positive-control the traversal, not just the needle.** Confirming your
+  matcher finds a secret's value in `.env` proves the *needle* works. It says
+  nothing about whether the search ever entered the trees you named — and a
+  traversal that silently covers nothing returns zero for every needle you try.
+  Run the same matcher form against something known to be present in the
+  haystack (`meddoc`, `transcribe`) and report the hit count beside the zeros.
+  Without it, a clean sweep and a broken sweep are the same output.
+
+  This is the *third* face of one defect — after §4's dead stack and the
+  `-maxdepth 6` sample: **an answer about a set whose boundary was never
+  established.** Whenever a check reports "nothing wrong", ask what it would
+  have taken for it to say anything else.
 
 ### And check the data invariants that nothing else watches
 
