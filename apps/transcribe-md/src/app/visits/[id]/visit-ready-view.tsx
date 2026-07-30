@@ -12,7 +12,8 @@
 // is preserved as a no-op for caller back-compat.
 // ============================================================================
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import type { EmScore } from '@/lib/em-coding-ui/types';
 import {
   FileText as FileTextIcon,
@@ -34,6 +35,15 @@ import { ReviewTabsV2, type V2Tab } from './review-tabs-v2';
 import { isUxSimplify } from '@/config/ux-simplify';
 // Pre-sign review as one document — flag-gated, UNSIGNED visits.
 import { isReviewDocView } from '@/config/review-doc-view';
+// Rounds Screen 2 — the stage. Composes; never renders the note itself.
+import { isSkinRounds } from '@/config/skin-rounds';
+import { RoundsStage } from '@/components/rounds/stage';
+import {
+  applyRxResolved,
+  firstBlockingGateTarget,
+  type RoundsStageData,
+} from '@/lib/rounds/stage-view-model';
+import { createDeferredScroll } from '@/lib/rounds/deferred-scroll';
 import { ReviewDocumentView } from './review-document-view';
 import { SignedDocumentView } from './signed-document-view';
 import { extractIcdRows } from '@/lib/em-coding/icd-rows';
@@ -82,8 +92,55 @@ export interface SpeakerInfo {
   reasoning: string;
 }
 
+/**
+ * Resolve a chat scroll target to its element.
+ *
+ * ONE MATCHER, EVERY CALLER. This was inline in `onScrollTo`; the Rounds stage
+ * added a second caller (the deferred close-then-scroll) and a third (the
+ * action rail's "Review & sign" navigating to the first blocking gate). A read
+ * path and a write path that resolve the same identifier with two different
+ * matchers is a defect this project has shipped before — so there is one
+ * function and the callers differ only in *when* they call it.
+ */
+function resolveChatTarget(target: string): Element | null {
+  // EVERY target the schema allows must resolve to something. `em_gate` once
+  // had no anchor at all, so the chat said "Took you to the E/M gate" and the
+  // page did not move — a navigation aid that lies about having navigated.
+  //
+  // `suggestions` is gone with the lane it pointed at: the verifier is
+  // audit-only and there is no card to scroll to. It was removed from the
+  // intent union rather than left resolving to nothing, which would be that
+  // same lie in a new place.
+  if (target === 'rx_gate') {
+    return document.querySelector('[data-testid="review-doc-rx-gate"]');
+  }
+  if (target === 'document') {
+    return document.querySelector('[data-testid="visit-document"]');
+  }
+  return document.querySelector(`[data-chat-target="${target}"]`);
+}
+
+/** Resolve, open if it is a shut toggle, then scroll. */
+function scrollToChatTarget(target: string): void {
+  const el = resolveChatTarget(target);
+  // Billing and codes render inline now — nothing to expand — but the
+  // click-to-open is kept for any target that is still its own toggle, so a
+  // future collapsed surface cannot silently become "scrolled to a shut drawer
+  // and called done".
+  if (el instanceof HTMLElement && el.getAttribute('aria-expanded') === 'false') {
+    el.click();
+  }
+  el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
 export interface VisitReadyViewProps {
   visitId: string;
+  /**
+   * Rounds Screen 2's server-computed view model, or null when the skin flag
+   * is off. Computed in `VisitBody` because two of its three gate inputs are
+   * only correct on the server — see the block there.
+   */
+  rounds?: RoundsStageData | null;
   /** 2026-06-11 (L6-gate prod smoke finding): READY visits can carry a
    *  pipeline review flag (fabrication-gate rejection, unfixable critique
    *  criticals, allergy-conflict) — previously written to the DB but never
@@ -387,6 +444,74 @@ export function VisitReadyView(props: VisitReadyViewProps) {
   );
   const [rxResolved, setRxResolved] = useState(initialRxResolved);
 
+  // ── ROUNDS, Screen 2 ─────────────────────────────────────────────────────
+  // Computed unconditionally (hooks rule); only the flag-ON branch consumes it.
+  const router = useRouter();
+
+  const roundsView = useMemo(
+    () => (props.rounds ? applyRxResolved(props.rounds, rxResolved) : null),
+    [props.rounds, rxResolved]
+  );
+  // BOTH halves, deliberately. The flag alone would render a stage with no
+  // data if the prop were ever dropped; the prop alone would render one on a
+  // flag-off build. Requiring both means a wiring mistake shows as the old
+  // skin, never as a half-built new one.
+  const roundsActive = isSkinRounds() && roundsView !== null;
+
+  // The chat drawer sits OVER the sheet, so a scroll issued while it is open
+  // moves something the doctor cannot see. Record on the way in, release after
+  // the overlay is gone. See lib/rounds/deferred-scroll.ts.
+  const deferredScrollRef = useRef(
+    createDeferredScroll(scrollToChatTarget, (fn) =>
+      // TWO frames. One for React to unmount the drawer; a second because the
+      // drawer also returns focus to its trigger on a single frame and the
+      // browser may scroll that trigger into view. Ours has to land last.
+      requestAnimationFrame(() => requestAnimationFrame(fn))
+    )
+  );
+
+  const handleChatScrollTo = useCallback(
+    (target: string) => {
+      if (roundsActive) {
+        deferredScrollRef.current.record(target);
+        return;
+      }
+      scrollToChatTarget(target);
+    },
+    [roundsActive]
+  );
+
+  const handleChatBeforeClose = useCallback(() => {
+    deferredScrollRef.current.flush();
+  }, []);
+
+  // NAVIGATES; NEVER SIGNS. The in-sheet signing bar stays the only control
+  // that can start a signature, so there is exactly one place the gate logic
+  // lives and no second one to drift from it.
+  const handleReviewAndSign = useCallback(() => {
+    const target = roundsView ? firstBlockingGateTarget(roundsView.gates) : null;
+    if (target) {
+      scrollToChatTarget(target);
+      return;
+    }
+    const bar = document.querySelector(
+      '[data-testid="review-doc-signbar"] button'
+    );
+    bar?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (bar instanceof HTMLElement) bar.focus();
+  }, [roundsView]);
+
+  const nextVisitId = roundsView?.queue.nextVisitId ?? null;
+  const handleSkip = useCallback(() => {
+    if (nextVisitId) router.push(`/visits/${nextVisitId}`);
+  }, [router, nextVisitId]);
+
+  const handleOpenQueue = useCallback(() => {
+    // The board IS the queue, and it lives behind the same flag. B4 may
+    // replace this with an in-place drawer.
+    router.push('/board');
+  }, [router]);
+
   // The second tab is labelled "Input" for text_notes, "Transcript" for
   // the other two modes. Everything else renders identically.
   const secondTabLabel =
@@ -671,12 +796,25 @@ export function VisitReadyView(props: VisitReadyViewProps) {
     //     stays the enforcement, and POST /sign is untouched. What changes is
     //     that a blocker can no longer hide behind a tab nobody opened.
     if (isReviewDocView() && !isSigned) {
-      return (
-        <div className="w-full qm-c3-rev2-root">
-          {/* The PIPELINE review-reason banner — not the set-aside advisory the
-              inline highlights replace. It names why the pipeline flagged the
-              visit, which nothing else on this surface says, so it stays. */}
-        {props.needsReview && props.reviewReason && !props.signedAt && (
+      // HOISTED — so the Rounds branch below composes the SAME nodes instead of
+      // building second copies of them.
+      //
+      // It matters most for the paper. There must be exactly ONE review-document
+      // element in this file: the read-only guard slices the FIRST occurrence by
+      // brace balance, so a flag-ON duplicate that kept the imaging E/M
+      // suppression while the flag-OFF original quietly lost it would satisfy
+      // every assertion — the invariant proven on the branch that is off in
+      // production.
+      //
+      // (This comment deliberately does not spell the tag or the prop out. The
+      // guard is a source scan, so quoting either makes it match the comment
+      // instead of the element — A2 defect 2, and it caught this file again.)
+
+      // The PIPELINE review-reason banner — not the set-aside advisory the
+      // inline highlights replace. It names why the pipeline flagged the
+      // visit, which nothing else on this surface says, so it stays.
+      const banner =
+        props.needsReview && props.reviewReason && !props.signedAt ? (
           <div
             role="status"
             data-testid="review-reason-banner"
@@ -694,173 +832,203 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               {props.reviewReason}
             </span>
           </div>
-        )}
-          {/* WHY the document is not on screen. The reason was carried all the
-              way here and then read as a boolean — so a doctor whose template
-              is not certified watched "Opening your document…" turn into a
-              styled note with no explanation. Silence is illegal. */}
-          {docPage && docPageMiss && VISIT_DOCUMENT_MISS_TEXT[docPageMiss] && (
-            <p
-              className="qm-vdoc-counts"
-              role="status"
-              data-testid="visit-document-miss"
-            >
-              {VISIT_DOCUMENT_MISS_TEXT[docPageMiss]}
-            </p>
-          )}
-          {chatEditor && !props.signedAt && (
-            <ChatEditorPanel
+        ) : null;
+
+      // WHY the document is not on screen. The reason was carried all the way
+      // here and then read as a boolean — so a doctor whose template is not
+      // certified watched "Opening your document…" turn into a styled note with
+      // no explanation. Silence is illegal.
+      const missLine =
+        docPage && docPageMiss && VISIT_DOCUMENT_MISS_TEXT[docPageMiss] ? (
+          <p
+            className="qm-vdoc-counts"
+            role="status"
+            data-testid="visit-document-miss"
+          >
+            {VISIT_DOCUMENT_MISS_TEXT[docPageMiss]}
+          </p>
+        ) : null;
+
+      // Under the flag this same node moves INSIDE the drawer. `false` and
+      // `null` render identically, so the flag-off output is unchanged.
+      const chatPanel =
+        chatEditor && !props.signedAt ? (
+          <ChatEditorPanel
+            visitId={props.visitId}
+            disabled={props.readonly}
+            onNoteChanged={(r) => {
+              // The server marked the level stale for this change; mirror it
+              // locally or the badge never appears, the codes row never
+              // re-scores, and the doctor meets the sign gate with no visible
+              // way to resolve it.
+              setEmStale(true);
+              setAdoption((prev) => ({
+                text: r.soapFinal,
+                version: r.soapVersion ?? (prev?.version ?? props.soapVersion) + 1,
+                seq: (prev?.seq ?? 0) + 1,
+              }));
+            }}
+            onHeaderChanged={() => {
+              // Bump the revision ONLY. The note is byte-identical — a header
+              // edit changes the drawn page, not the clinical content — so
+              // the text is carried forward untouched and the level is NOT
+              // marked stale: nothing that E/M scores on has moved.
+              setAdoption((prev) => ({
+                text: prev?.text ?? props.soapText,
+                version: prev?.version ?? props.soapVersion,
+                seq: (prev?.seq ?? 0) + 1,
+              }));
+            }}
+            // The resolver moved to module scope (`resolveChatTarget` /
+            // `scrollToChatTarget`) — three callers now need it and a read path
+            // and a write path resolving one identifier with two matchers is a
+            // defect this project has already shipped once.
+            //
+            // Under the Rounds flag this DEFERS instead of scrolling: the chat
+            // is a drawer over the sheet, so scrolling now would move something
+            // the doctor cannot see while the message claims it navigated.
+            onScrollTo={handleChatScrollTo}
+          />
+        ) : null;
+      const paper = (
+        <ReviewDocumentView
+          visitId={props.visitId}
+          doctorEmail={props.doctorEmail}
+          emailEnabled={props.emailEnabled}
+          soapFinal={adoption?.text ?? props.soapText}
+          /* PHASE 2 — the page becomes the doctor's own form. Returns null
+             when there is nothing to draw, and ReviewDocumentView then falls
+             back to renderNote below, unchanged. */
+          renderDocument={
+            docPage && !props.signedAt && !docPageUnavailable
+              ? (afterLabel) => (
+                  <VisitDocumentSurface
+                    visitId={props.visitId}
+                    revision={adoption?.seq ?? 0}
+                    anchors={docAnchors}
+                    renderAfterSection={(keys) => (
+                      <>
+                        {keys.map((k) => (
+                          /* Named, because "which section is this suggestion
+                             under" is the invariant that matters clinically:
+                             a claim reviewed under one heading and signed
+                             under another is the failure this placement
+                             exists to prevent. Nothing reads it at runtime. */
+                          <div key={k} data-section={k}>
+                            {afterLabel(k)}
+                          </div>
+                        ))}
+                      </>
+                    )}
+                    renderUnplaced={(keys) => (
+                      <>
+                        {keys.map((k) => (
+                          <div key={k}>{afterLabel(k)}</div>
+                        ))}
+                      </>
+                    )}
+                    onUnavailable={handleDocPageUnavailable}
+                  />
+                )
+              : undefined
+          }
+          renderNote={(afterSection) => (
+            <SoapEditor
+              key={`soap-editor-${adoption?.seq ?? 0}`}
               visitId={props.visitId}
-              disabled={props.readonly}
-              onNoteChanged={(r) => {
-                // The server marked the level stale for this change; mirror it
-                // locally or the badge never appears, the codes row never
-                // re-scores, and the doctor meets the sign gate with no visible
-                // way to resolve it.
-                setEmStale(true);
-                setAdoption((prev) => ({
-                  text: r.soapFinal,
-                  version: r.soapVersion ?? (prev?.version ?? props.soapVersion) + 1,
-                  seq: (prev?.seq ?? 0) + 1,
-                }));
-              }}
-              onHeaderChanged={() => {
-                // Bump the revision ONLY. The note is byte-identical — a header
-                // edit changes the drawn page, not the clinical content — so
-                // the text is carried forward untouched and the level is NOT
-                // marked stale: nothing that E/M scores on has moved.
-                setAdoption((prev) => ({
-                  text: prev?.text ?? props.soapText,
-                  version: prev?.version ?? props.soapVersion,
-                  seq: (prev?.seq ?? 0) + 1,
-                }));
-              }}
-              onScrollTo={(target) => {
-                // EVERY target the schema allows must resolve to something.
-                // `em_gate` had no anchor at all, so the chat said "Took you to
-                // the E/M gate" and the page did not move — a navigation aid
-                // that lies about having navigated.
-                //
-                // `suggestions` is gone with the lane it pointed at: the
-                // verifier is audit-only and there is no card to scroll to. It
-                // is removed from the intent union rather than left resolving
-                // to nothing, which would be that same lie in a new place.
-                const el =
-                  target === 'rx_gate'
-                    ? document.querySelector('[data-testid="review-doc-rx-gate"]')
-                    : target === 'document'
-                      ? document.querySelector('[data-testid="visit-document"]')
-                      : document.querySelector(`[data-chat-target="${target}"]`);
-                // Billing and codes render inline now — nothing to expand — but
-                // the click-to-open is kept for any target that is still its own
-                // toggle, so a future collapsed surface cannot silently become
-                // "scrolled to a shut drawer and called done".
-                if (
-                  el instanceof HTMLElement &&
-                  el.getAttribute('aria-expanded') === 'false'
-                ) {
-                  el.click();
-                }
-                el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              }}
+              doctorEmail={props.doctorEmail}
+              emailEnabled={props.emailEnabled}
+              initialText={adoption?.text ?? props.soapText}
+              initialSoapVersion={adoption?.version ?? props.soapVersion}
+              readonly={props.readonly}
+              signedAt={props.signedAt}
+              sources={soapSources}
+              initialScore={props.initialEmScore}
+              emPendingChange={pendingEmChange}
+              chromeless
+              afterSection={afterSection}
             />
           )}
-          <ReviewDocumentView
-            visitId={props.visitId}
-            doctorEmail={props.doctorEmail}
-            emailEnabled={props.emailEnabled}
-            soapFinal={adoption?.text ?? props.soapText}
-            /* PHASE 2 — the page becomes the doctor's own form. Returns null
-               when there is nothing to draw, and ReviewDocumentView then falls
-               back to renderNote below, unchanged. */
-            renderDocument={
-              docPage && !props.signedAt && !docPageUnavailable
-                ? (afterLabel) => (
-                    <VisitDocumentSurface
-                      visitId={props.visitId}
-                      revision={adoption?.seq ?? 0}
-                      anchors={docAnchors}
-                      renderAfterSection={(keys) => (
-                        <>
-                          {keys.map((k) => (
-                            /* Named, because "which section is this suggestion
-                               under" is the invariant that matters clinically:
-                               a claim reviewed under one heading and signed
-                               under another is the failure this placement
-                               exists to prevent. Nothing reads it at runtime. */
-                            <div key={k} data-section={k}>
-                              {afterLabel(k)}
-                            </div>
-                          ))}
-                        </>
-                      )}
-                      renderUnplaced={(keys) => (
-                        <>
-                          {keys.map((k) => (
-                            <div key={k}>{afterLabel(k)}</div>
-                          ))}
-                        </>
-                      )}
-                      onUnavailable={handleDocPageUnavailable}
-                    />
-                  )
-                : undefined
-            }
-            renderNote={(afterSection) => (
-              <SoapEditor
-                key={`soap-editor-${adoption?.seq ?? 0}`}
+          rxGateNode={
+            // PRESCRIPTIONS **OR** WARNINGS. Warnings alone was the old
+            // condition, which meant a visit with medications and no
+            // interaction had nowhere to show them; and an imaging study with
+            // neither still drew a "Prescription safety" heading over an empty
+            // panel. The GATE behaviour is untouched — it keys on
+            // `rxBlocking`, below, exactly as before.
+            rxHasContent ? (
+              <RxTab
+                rx={props.rxDrafts}
                 visitId={props.visitId}
-                doctorEmail={props.doctorEmail}
-                emailEnabled={props.emailEnabled}
-                initialText={adoption?.text ?? props.soapText}
-                initialSoapVersion={adoption?.version ?? props.soapVersion}
                 readonly={props.readonly}
-                signedAt={props.signedAt}
-                sources={soapSources}
-                initialScore={props.initialEmScore}
-                emPendingChange={pendingEmChange}
-                chromeless
-                afterSection={afterSection}
+                initialOverriddenIds={props.rxOverriddenWarningIds}
+                onResolvedChange={setRxResolved}
               />
-            )}
-            rxGateNode={
-              // PRESCRIPTIONS **OR** WARNINGS. Warnings alone was the old
-              // condition, which meant a visit with medications and no
-              // interaction had nowhere to show them; and an imaging study with
-              // neither still drew a "Prescription safety" heading over an empty
-              // panel. The GATE behaviour is untouched — it keys on
-              // `rxBlocking`, below, exactly as before.
-              rxHasContent ? (
-                <RxTab
-                  rx={props.rxDrafts}
-                  visitId={props.visitId}
-                  readonly={props.readonly}
-                  initialOverriddenIds={props.rxOverriddenWarningIds}
-                  onResolvedChange={setRxResolved}
-                />
-              ) : null
-            }
-            rxBlocking={!rxResolved}
-            rxHasWarnings={rxWarn !== null}
-            emPendingChange={pendingEmChange}
-            // STALENESS ONLY MEANS SOMETHING IF THERE IS A LEVEL.
-            //
-            // An imaging report has no office E/M level — the row does not
-            // render and the sign route exempts it from the gate entirely. But
-            // `emStale` is set by every note edit regardless of specialty, so
-            // once the flag actually reached this view an edited ultrasound
-            // report drew "Documentation level needs re-checking", with the
-            // bottom bar instructing the doctor to "Re-check the documentation
-            // level above" — directly above a card that does not exist, about a
-            // level the same page correctly declines to show. Sign stayed
-            // enabled, so it blocked nothing; it just asked for something
-            // impossible. Caught on a real ultrasound visit in the prod smoke.
-            emStale={props.emNotApplicable ? false : emStale}
-            onRescoreEm={rescoreEm}
-            emLevel={emLevel}
-            onAdjustEm={adjustEm}
-            readonly={props.readonly || props.signedAt !== null}
-          />
+            ) : null
+          }
+          rxBlocking={!rxResolved}
+          rxHasWarnings={rxWarn !== null}
+          emPendingChange={pendingEmChange}
+          // STALENESS ONLY MEANS SOMETHING IF THERE IS A LEVEL.
+          //
+          // An imaging report has no office E/M level — the row does not
+          // render and the sign route exempts it from the gate entirely. But
+          // `emStale` is set by every note edit regardless of specialty, so
+          // once the flag actually reached this view an edited ultrasound
+          // report drew "Documentation level needs re-checking", with the
+          // bottom bar instructing the doctor to "Re-check the documentation
+          // level above" — directly above a card that does not exist, about a
+          // level the same page correctly declines to show. Sign stayed
+          // enabled, so it blocked nothing; it just asked for something
+          // impossible. Caught on a real ultrasound visit in the prod smoke.
+          emStale={props.emNotApplicable ? false : emStale}
+          onRescoreEm={rescoreEm}
+          emLevel={emLevel}
+          onAdjustEm={adjustEm}
+          readonly={props.readonly || props.signedAt !== null}
+        />
+      );
+
+      // ── ROUNDS, Screen 2 — the stage ────────────────────────────────────
+      // The SAME `paper` node passes through the sheet slot. It is never keyed
+      // and never conditionally mounted: `ReviewDocumentView` holds the
+      // in-session E/M confirm in local state, so anything that changed its
+      // React identity would silently re-block Sign and read as a flaky gate.
+      if (roundsActive && roundsView) {
+        return (
+          <div className="w-full qm-c3-rev2-root">
+            {banner}
+            {missLine}
+            <RoundsStage
+              status={roundsView.status}
+              signedAt={roundsView.signedAt}
+              identity={roundsView.identity}
+              queue={roundsView.queue}
+              gates={roundsView.gates}
+              n={roundsView.n}
+              emArtifact={roundsView.emArtifact}
+              criticalUnresolved={roundsView.criticalUnresolved}
+              chat={chatPanel}
+              onReviewAndSign={handleReviewAndSign}
+              // Given ONLY when there is somewhere to go. The button renders
+              // only when the prop is present, so "no next patient" is an
+              // absent control rather than a dead one.
+              onSkip={nextVisitId ? handleSkip : undefined}
+              onOpenQueue={handleOpenQueue}
+              onChatBeforeClose={handleChatBeforeClose}
+            >
+              {paper}
+            </RoundsStage>
+          </div>
+        );
+      }
+
+      return (
+        <div className="w-full qm-c3-rev2-root">
+          {banner}
+          {missLine}
+          {chatPanel}
+          {paper}
         </div>
       );
     }

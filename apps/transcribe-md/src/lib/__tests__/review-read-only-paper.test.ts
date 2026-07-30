@@ -209,6 +209,12 @@ describe('the inline panels are gone from the review page', () => {
       'emNotApplicable={',
       'initialEmScore={',
       'cptCodes={',
+      // Rounds Screen 2's whole view model. Exactly the same trap: `rounds` is
+      // optional with a falsy default, so a wiring that stopped passing it
+      // would render the OLD skin under the flag — and every stage test would
+      // simply not find a stage, which reads as "the feature is broken" rather
+      // than "the prop was dropped".
+      'rounds={',
     ]) {
       expect(jsx, `VisitReadyView is never passed ${prop}`).toContain(prop);
     }

@@ -131,7 +131,18 @@ export function RoundsStage({
           ) : null}
         </aside>
 
-        <main className="qm-rounds-sheet-wrap">
+        {/* A DIV, NOT A `<main>` — deliberately, and it must stay one.
+            `AppFrame` already renders `<main id="main" tabIndex={-1}>` around
+            every route, so a second one here is two main landmarks on the page
+            (axe: `landmark-no-duplicate-main`). /board avoids the same trap by
+            letting `RoundsBoardChrome` own the only one.
+
+            It is also load-bearing beyond a11y: the sign bar is
+            `position: sticky; bottom: 0` and resolves against AppFrame's
+            `<main>`, which is documented there as the deliberate overflow
+            parent. Introducing a nearer landmark ancestor is how a sticky
+            control silently stops sticking. */}
+        <div className="qm-rounds-sheet-wrap">
           {criticalUnresolved > 0 ? (
             // Across the TOP of the card, and it names where it gets cleared —
             // a warning that does not say what to do about it is decoration.
@@ -150,7 +161,7 @@ export function RoundsStage({
           <div className="rounds-paper qm-rounds-sheet" data-testid="rounds-sheet">
             {children}
           </div>
-        </main>
+        </div>
 
         {/* ── Next-up peek, right edge ────────────────────────────────── */}
         <aside className="qm-rounds-peek qm-rounds-peek-next" aria-hidden={!queue.nextVisitId}>

@@ -29,13 +29,33 @@ const WORKFLOW = readFileSync('../../.github/workflows/e2e.yml', 'utf8');
 const IMAGES: { tag: string; needs: string[]; why: string }[] = [
   {
     tag: 'meddoc-pro-transcribe-md:rounds',
-    needs: ['NEXT_PUBLIC_SKIN_ROUNDS'],
+    needs: [
+      'NEXT_PUBLIC_SKIN_ROUNDS',
+      // ADDED with Gate B (Screen 2). The stage pack drives the chat DRAWER,
+      // and the drawer only mounts when the stage is given a `chat` node —
+      // which VisitReadyView only builds behind isChatEditor(). Without this
+      // arg every drawer test would burn its full timeout on a missing
+      // `rounds-chat-trigger` and read as "the drawer is broken" rather than
+      // "the image is missing a flag".
+      //
+      // The rule, restated for the fourth time in this file: the moment a spec
+      // drives a surface, that surface's flag belongs in this list.
+      'NEXT_PUBLIC_CHAT_EDITOR',
+      // The stage wraps the read-only paper, which is itself behind this flag.
+      'NEXT_PUBLIC_REVIEW_DOC_VIEW',
+      // The imaging test asserts an ultrasound visit has NO E/M gate. With the
+      // specialty flag off, emAppliesToSpecialty is true for EVERY specialty —
+      // so that assertion would pass by never being exercised, which is worse
+      // than failing.
+      'NEXT_PUBLIC_ULTRASOUND_SPECIALTY',
+    ],
     why:
-      'Gate A. The board route 404s with the flag off, so a rounds image built ' +
-      'without the build-arg would fail the whole pack for an environment ' +
-      'reason. The Dockerfile must also DECLARE the ARG — docker silently ' +
-      'discards an undeclared build-arg ("were not consumed") and the flag ' +
-      'never inlines, which is how the first flag-ON build shipped the old skin.',
+      'Gate A + Gate B. The board route 404s with the flag off, so a rounds ' +
+      'image built without the build-arg would fail the whole pack for an ' +
+      'environment reason. The Dockerfile must also DECLARE the ARG — docker ' +
+      'silently discards an undeclared build-arg ("were not consumed") and the ' +
+      'flag never inlines, which is how the first flag-ON build shipped the ' +
+      'old skin.',
   },
   {
     tag: 'meddoc-pro-transcribe-md:doc-preview',

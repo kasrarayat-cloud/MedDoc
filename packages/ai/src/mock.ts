@@ -368,6 +368,24 @@ function mockChatEdit(user: string): unknown {
   // successful no-op. The chat reported success, nothing was written, and
   // `emStale` was never set — a mock that faked the exact silent-no-op class
   // this surface was hardened against.
+  // MOCKSCROLL <target> — the navigation intent, so the close-then-scroll
+  // ordering on Rounds Screen 2 can be proven in CI at all. Without it the only
+  // path that emits `scroll_to` is the real model, which lives in an
+  // `.eval.spec.ts` and burns real tokens; a mock that cannot express the
+  // intent means the drawer's "took you to the E/M gate" is untestable, and an
+  // untested handler that fires and does nothing is precisely the class this
+  // surface keeps producing.
+  //
+  // LAST OCCURRENCE, for the same history-replay reason as MOCKEDIT below.
+  const scrolls = [...user.matchAll(/MOCKSCROLL\s+([a-z_]+)/g)];
+  const scroll = scrolls[scrolls.length - 1];
+  if (scroll) {
+    return {
+      reply: `Took you to the ${scroll[1].replace(/_/g, ' ')}.`,
+      intents: [{ kind: 'scroll_to', target: scroll[1] }],
+    };
+  }
+
   const all = [...user.matchAll(/MOCKEDIT\s+(.+?)\s*::\s*([\s\S]+?)(?:\\n|\\"|"\s*[,}])/g)];
   const m = all[all.length - 1];
   if (!m) {

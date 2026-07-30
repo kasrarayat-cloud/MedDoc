@@ -63,6 +63,26 @@ describe('composition', () => {
     expect(screen.getByTestId('the-paper').textContent).toBe('the note');
   });
 
+  it('contributes NO main landmark — AppFrame already owns the only one', () => {
+    // The sheet wrapper was a `<main>`. Every route is already inside
+    // AppFrame's `<main id="main">`, so wiring this to /visits/[id] would have
+    // put two main landmarks on the page — an axe violation introduced by the
+    // wiring, not by the component, and invisible in a screenshot.
+    //
+    // It is also load-bearing beyond a11y: the sign bar is `position: sticky`
+    // against AppFrame's main, and a nearer landmark ancestor is how a sticky
+    // control silently stops sticking.
+    //
+    // /board avoids the same trap by letting RoundsBoardChrome own the only
+    // one. Pinned here so it cannot be "simplified" back to semantic-looking
+    // markup.
+    const { container } = renderStage();
+    expect(container.querySelector('main')).toBeNull();
+    // …and the class that carries the layout is still there, so this is a
+    // landmark change and not a deletion.
+    expect(container.querySelector('.qm-rounds-sheet-wrap')).toBeTruthy();
+  });
+
   it('the sheet keeps the 820px paper class — a parity invariant', () => {
     renderStage();
     expect(screen.getByTestId('rounds-sheet').className).toContain('rounds-paper');

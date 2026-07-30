@@ -33,6 +33,11 @@ import {
   extractEmOverride,
 } from '@/lib/em-coding/displayed-level';
 import { unacknowledgedEmChange } from '@/lib/em-pending-change';
+import { isSkinRounds } from '@/config/skin-rounds';
+import { signGates } from '@/lib/sign-gates';
+import { toStageIdentity, toQueuePosition } from '@/lib/rounds/stage-data';
+import { fetchStageQueueIds } from '@/lib/rounds/stage-queue';
+import type { RoundsStageData } from '@/lib/rounds/stage-view-model';
 
 export const metadata: Metadata = { title: 'Visit' };
 
@@ -479,6 +484,10 @@ export default async function VisitPage({
           patientName={visit.patientName}
           patient={visit.patient}
           createdAt={visit.createdAt}
+          // Selected since the meta strip needed it; threaded down now because
+          // the Rounds identity header renders it as the reason line. Inert on
+          // the flag-off path.
+          chiefComplaint={visit.chiefComplaint}
         />
       </div>
     </AppFrame>
@@ -560,6 +569,8 @@ interface VisitBodyProps {
     problemList: unknown;
   } | null;
   createdAt: Date;
+  /** The reason line on the Rounds identity header. Display only. */
+  chiefComplaint: string | null;
 }
 
 async function VisitBody(props: VisitBodyProps) {
@@ -751,8 +762,84 @@ async function VisitBody(props: VisitBodyProps) {
     ? { from: pendingEm.from, to: pendingEm.to }
     : null;
 
+  // ── ROUNDS, Screen 2 — computed HERE and handed down as data ──────────────
+  //
+  // WHY THE SERVER, AND WHY THIS LATE. Two of `signGates`' three inputs are
+  // only correct on this side of the boundary:
+  //
+  //   * the RAW specialty ID. The client has `specialtyLabel(...)` in scope,
+  //     and `findSpecialty('Ultrasound').id` is 'unspecified' with no throw.
+  //     That substitution is how every ultrasound visit once computed and
+  //     PERSISTED an office E/M level. Computing here means the wrong value is
+  //     not within reach of the right call.
+  //   * the RAW `emPendingChange` jsonb. Ten lines above it has already been
+  //     coerced to the `{from, to}` display pair, and the coercion fails CLOSED
+  //     on that shape — feeding it back would invent a blocker on every visit
+  //     carrying a pending change, silently and in the safe-looking direction.
+  //
+  // And it is placed after the E/M compute and after the `emScoredCode`
+  // baseline write on purpose: there is no early return between here and the
+  // top of the function, so a flag-off render executes every statement above
+  // in the same order and differs only by one prop whose value is null.
+  // `isSkinRounds()` inlines at build time, so flag-off never runs the query.
+  let rounds: RoundsStageData | null = null;
+  if (isSkinRounds()) {
+    const userId = session?.user?.id;
+    const queueIds = userId ? await fetchStageQueueIds(userId) : [];
+
+    if (userId) {
+      // The flag-on path reads OTHER visits' rows to place this one in the
+      // queue. §164.312(b) wants that recorded, exactly as /board records it.
+      // Names and free text stay out — a count is enough to show the read.
+      void logAudit({
+        action: 'VIEWED_VISIT_LIST',
+        targetType: 'TranscribeVisit',
+        metadata: {
+          source: 'rsc:/visits/[id]#rounds-queue',
+          count: queueIds.length,
+        },
+      });
+    }
+
+    const gateSet = signGates({
+      rxDrafts: props.rxDrafts,
+      overriddenWarningIds: props.rxOverriddenWarningIds,
+      specialty: props.specialtyId,
+      emPendingChange: props.emPendingChange,
+      emStale: props.emStale,
+    });
+
+    rounds = {
+      status: props.status,
+      signedAt: props.signedAt?.toISOString() ?? null,
+      identity: toStageIdentity({
+        id: props.visitId,
+        patientName: props.patient?.name ?? null,
+        patientFallback: props.patientName,
+        patientExternalId: props.patient?.externalId ?? null,
+        patientDob: props.patient?.dateOfBirth ?? null,
+        chiefComplaint: props.chiefComplaint,
+        createdAt: props.createdAt,
+        // The RESOLVED duration, not `props.audioDurationSec` — a dictated
+        // visit keeps its length in `dictationDurationSec`, so the raw column
+        // would render every one of them as a plausible empty slot.
+        audioDurationSec: durationSec,
+      }),
+      queue: toQueuePosition(props.visitId, queueIds),
+      gates: gateSet.gates,
+      n: gateSet.n,
+      emArtifact: gateSet.emArtifact,
+      // OFF THE SAME GATE SET. Deriving it a second time from
+      // `unmetCriticalWarnings` would put two computations of one number on
+      // one screen, and the band would eventually contradict the padlock.
+      criticalUnresolved:
+        gateSet.gates.find((g) => g.id === 'rx')?.unresolved ?? 0,
+    };
+  }
+
   return (
     <VisitReadyView
+      rounds={rounds}
       visitId={props.visitId}
       // 2026-06-11 L6-gate smoke finding: the review reason was DB-only —
       // the READY view never received it, so the doctor saw a bare

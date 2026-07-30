@@ -311,7 +311,11 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
           signature it applies to. */}
 
       {/* ── THE BAR ─────────────────────────────────────────────────────── */}
-      <div className="qm-c3-rev2-signbar">
+      {/* `data-testid` only — no copy, no behaviour. The Rounds action rail
+          NAVIGATES here rather than signing, so it needs a stable anchor, and
+          a class selector would make the styling a load-bearing contract. This
+          stays the ONE control that can start a signature. */}
+      <div className="qm-c3-rev2-signbar" data-testid="review-doc-signbar">
         <div className="qm-c3-rev2-signbar-in">
           <div className="qm-c3-rev2-sign-status">
             {blocked ? (

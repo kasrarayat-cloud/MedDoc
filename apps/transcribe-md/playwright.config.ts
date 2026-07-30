@@ -92,6 +92,12 @@ export default defineConfig({
         // all, and the gate reports "rounds E2E red" for the one reason that
         // has nothing to do with Rounds. Pinned by gate-flag-coverage.test.ts.
         '**/rounds-board.spec.ts',
+        // ROUNDS Gate B — Screen 2. Same reasoning as the board above, with one
+        // difference worth naming: /visits/[id] EXISTS with the flag off, so
+        // this pack would not 404 — it would fail on missing Rounds testids
+        // while the route rendered the old skin perfectly well. Slower to
+        // diagnose, identical downstream damage.
+        '**/rounds-stage.spec.ts',
         '**/a11y.spec.ts',
         '**/23-note-format-phi-parse-reject.spec.ts',
         '**/24-rx-clinical-safety.spec.ts',
@@ -159,6 +165,17 @@ export default defineConfig({
       // above.
       name: 'rounds-board',
       testMatch: ['**/rounds-board.spec.ts'],
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      // ROUNDS Gate B — Screen 2, the stage. Serialised: the queue tests seed
+      // three visits for ONE doctor and assert their order relative to each
+      // other, so a parallel worker seeding a fourth would change the answer
+      // under them.
+      name: 'rounds-stage',
+      testMatch: ['**/rounds-stage.spec.ts'],
+      fullyParallel: false,
+      workers: 1,
       use: { ...devices['Desktop Chrome'] },
     },
     {

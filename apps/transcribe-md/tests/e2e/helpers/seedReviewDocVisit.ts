@@ -330,6 +330,19 @@ export function seedReviewDocVisit(
      *  Skips `assertImagingHasNoEm` (this fixture is the exception it exists to
      *  make impossible everywhere else) — hence the explicit, ugly opt-in name. */
     imagingEmArtifact?: boolean;
+    /** DISTINGUISH TWO SEEDS MADE IN THE SAME MILLISECOND.
+     *
+     *  The ids below are keyed on `Date.now().toString(36)` alone, and the
+     *  insert is `on conflict do nothing` — so two seeds inside one millisecond
+     *  silently produce ONE visit and the second call returns the first one's
+     *  row. A queue spec seeds three and would then assert "1 of 1" against a
+     *  fixture it believes is three, with nothing erroring. */
+    idSalt?: string;
+    /** The reason line on the Rounds identity header. Not written otherwise. */
+    chiefComplaint?: string;
+    /** Fields the identity header's MRN / age cells read. Omitted by default so
+     *  every existing caller's fixture stays byte-identical. */
+    patient?: { dob?: string; externalId?: string };
   } = {},
 ): SeededReviewDocVisit | null {
   const cls: ReviewDocClass = opts.specialtyClass ?? 'primary-care';
@@ -347,7 +360,7 @@ export function seedReviewDocVisit(
     return null;
   }
 
-  const stamp = Date.now().toString(36);
+  const stamp = `${Date.now().toString(36)}${opts.idSalt ?? ''}`;
   const visitId = `rdoc_${stamp}`.padEnd(25, '0').slice(0, 25);
   const patientId = `rdocp_${stamp}`.padEnd(25, '0').slice(0, 25);
   const templateId = `rdoct_${stamp}`.padEnd(25, '0').slice(0, 25);
@@ -356,8 +369,12 @@ export function seedReviewDocVisit(
 
   try {
     psql(
-      `insert into transcribe_md_patients (id, "practiceId", name, "createdAt", "updatedAt")
-       values ('${patientId}', '${practiceId}', 'E2E Review Doc', now(), now())
+      `insert into transcribe_md_patients
+         (id, "practiceId", name, "dateOfBirth", "externalId", "createdAt", "updatedAt")
+       values ('${patientId}', '${practiceId}', 'E2E Review Doc',
+               ${opts.patient?.dob ? `'${q(opts.patient.dob)}'::timestamp` : 'null'},
+               ${opts.patient?.externalId ? `'${q(opts.patient.externalId)}'` : 'null'},
+               now(), now())
        on conflict (id) do nothing`,
     );
 
@@ -380,6 +397,7 @@ export function seedReviewDocVisit(
     psql(
       `insert into transcribe_visits
          (id, "userId", "patientId", specialty, "inputMode", status,
+          "chiefComplaint",
           "transcriptText", "soapFinal", "soapVersion",
           "suggestedClaims", "rxDrafts", "emPendingChange",
           "icdCodes", "cptCodes", "emStale",
@@ -388,6 +406,7 @@ export function seedReviewDocVisit(
        values
          ('${visitId}', '${userId}', '${patientId}',
           '${imaging ? 'ultrasound' : 'primary-care'}', 'text_notes', 'READY',
+          ${opts.chiefComplaint ? `'${q(opts.chiefComplaint)}'` : 'null'},
           '${imaging ? 'Bilateral venous duplex, screening study.' : 'Asthma review. Continue current medications.'}',
           '${q(imaging ? IMAGING_NOTE : NOTE)}', 1,
           '${j(CLAIMS)}'::jsonb,

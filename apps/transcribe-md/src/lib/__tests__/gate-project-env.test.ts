@@ -45,6 +45,7 @@ const LINES = WORKFLOW.split('\n');
 const EXPECTED: Record<string, string[]> = {
   chromium: [],
   'rounds-board': ['docker-compose.qa.rounds.yml'],
+  'rounds-stage': ['docker-compose.qa.rounds.yml'],
   'review-doc': ['docker-compose.qa.reviewdoc.yml'],
   'doc-preview': ['docker-compose.qa.docpreview.yml'],
   'visit-doc': ['docker-compose.qa.visitdoc.yml'],

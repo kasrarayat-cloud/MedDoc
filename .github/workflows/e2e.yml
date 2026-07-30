@@ -284,6 +284,7 @@ jobs:
           --build-arg NEXT_PUBLIC_SKIN_BETA=true
           --build-arg NEXT_PUBLIC_ULTRASOUND_SPECIALTY=true
           --build-arg NEXT_PUBLIC_REVIEW_DOC_VIEW=true
+          --build-arg NEXT_PUBLIC_CHAT_EDITOR=true
           -t meddoc-pro-transcribe-md:rounds .
 
       - name: Recreate app on the Rounds image
@@ -297,6 +298,29 @@ jobs:
           PW_BASE_URL: http://localhost:9020
           CI: "true"
         run: npx playwright test --project=rounds-board
+
+      # ── ROUNDS Gate B, Screen 2. Same image, its own recreate.
+      #
+      #    The recreate is idempotent here (same tag, same overrides) and it is
+      #    NOT decoration: the rule above is that a pack's run is immediately
+      #    preceded by the recreate onto its own image, and that rule is what
+      #    keeps a future pack inserted between these two from silently running
+      #    this one against someone else's build. `gate-project-env.test.ts`
+      #    reads the last recreate before each run and asserts exactly that.
+      #
+      #    Nothing cleanup-shaped goes after it — the next block recreates onto
+      #    its own image as its first act. ──
+      - name: Recreate app on the Rounds image (stage pack)
+        run: >
+          docker compose -f docker-compose.qa.yml -f docker-compose.qa.rounds.yml
+          up -d --wait transcribe-md
+
+      - name: Run E2E (rounds-stage — Gate B, Screen 2)
+        working-directory: apps/transcribe-md
+        env:
+          PW_BASE_URL: http://localhost:9020
+          CI: "true"
+        run: npx playwright test --project=rounds-stage
 
       - name: Build flag-ON image for the document surface
         run: >
