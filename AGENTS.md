@@ -211,13 +211,45 @@ Before a session ends, destroy the scratch:
   filled twin export was found in Trash after its original had been cleaned.
 - Worktrees and staging/evidence dirs under `~` — `*-output.docx` is a filled
   document by definition.
+- **Directory SNAPSHOTS of the repo under `~`** — `release-witness/`,
+  `reviewer-witness-*/`, `*/tracked-source-*/` and anything else that is a flat
+  copy of the tree. These are a **liability class, not evidence**, and they are
+  in scope forever. Reap them at the end of the session that made them.
 - Repo root — `twin-*.docx`, `diag-*`, `visit-*.pdf|docx`.
 
 Use `shred -u -n 3 -z`, not `rm`. Root-owned artifacts need the documented
 root-via-docker path; a silent "Permission denied" from `shred` leaves the file
 exactly where it was.
 
+**Shred, then CHECK EXIT CODES, then escalate the failures — and only then
+remove the directory.** Unlinking before the failures are resolved converts a
+recoverable "Permission denied" into a permanent one: the file is gone, so it
+can never be shredded, and the blocks stay on disk. This cost two files on
+2026-07-30 (`docs/qa-reports/history-purge-smoke-exports-20260728.md`).
+
 **Report paths, never contents.**
+
+#### A history purge does not clear the filesystem
+
+`docs/smoke-test-2026-05-04/phase-C/export.{docx,pdf}` were purged from every ref
+on 2026-07-28. **Six copies were still on this host on 2026-07-30**, in three
+plain directory snapshots dated 2026-07-21. The purge's own stale-copy scan was
+`find / -name .git` + `git cat-file -e <blob>` per repo — and a snapshot **is not
+a git repository**, so it had no `.git` to enumerate and no object database to
+query. The scan was right for clones and blind to snapshots.
+
+So a stray-export sweep is not optional after a purge, and it has a shape:
+
+- **Search the CONTENT PATH, not only git objects** — basenames *and* the path
+  fragment, not blob SHAs.
+- **Unbounded depth.** A first pass at `-maxdepth 6` returned **4 of the 6** and
+  read as complete; the other two sat at depth 7. A depth-limited sweep is a
+  sample, never an inventory — the same defect as an emptiness test that passes
+  on a set whose size it never established.
+- **`-xdev`,** and say which device you covered.
+- **State the boundary in the report** — roots, depth, filesystem, file count.
+  A sweep that does not say what it looked at cannot be checked, and "I found
+  nothing" is worthless without "here is where I looked".
 
 ### And check the data invariants that nothing else watches
 
