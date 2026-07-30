@@ -289,6 +289,39 @@ describe('the chat drawer is the only edit path', () => {
     renderStage();
     expect(screen.queryByTestId('rounds-chat-trigger')).toBeNull();
   });
+
+  it('onChatBeforeClose reaches the drawer and fires BEFORE it closes', () => {
+    // The seam exists so the route wiring can finish a scroll against a stage
+    // the drawer is no longer covering. If it never fires, "took you to the
+    // E/M gate" scrolls something the doctor cannot see — and the handler
+    // looks wired while doing nothing, which is worse than not having one.
+    const spy = vi.fn(() => {
+      expect(screen.queryByTestId('rounds-chat-drawer')).not.toBeNull();
+    });
+    renderStage({ chat: <div>chat</div>, onChatBeforeClose: spy });
+    fireEvent.click(screen.getByTestId('rounds-chat-trigger'));
+    fireEvent.click(screen.getByTestId('rounds-chat-close'));
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('rounds-chat-drawer')).toBeNull();
+  });
+
+  it('NEGATIVE CONTROL — without the prop, closing still works and calls nothing', () => {
+    renderStage({ chat: <div>chat</div> });
+    fireEvent.click(screen.getByTestId('rounds-chat-trigger'));
+    fireEvent.click(screen.getByTestId('rounds-chat-close'));
+    expect(screen.queryByTestId('rounds-chat-drawer')).toBeNull();
+  });
+
+  it('the scrim and Escape close through the same path', () => {
+    const spy = vi.fn();
+    renderStage({ chat: <div>chat</div>, onChatBeforeClose: spy });
+    fireEvent.click(screen.getByTestId('rounds-chat-trigger'));
+    fireEvent.click(screen.getByTestId('rounds-chat-scrim'));
+    expect(spy).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByTestId('rounds-chat-trigger'));
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('the paper stays read-only', () => {

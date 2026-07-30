@@ -144,7 +144,13 @@ export function RoundsPipelineStrip({
   const outstanding = gates.filter((g) => g.unresolved > 0);
 
   return (
-    <nav
+    // NOT <nav>. A nav landmark promises a block of navigation, and this strip
+    // contains no links — a screen-reader user cycling landmarks would land in
+    // a diagram looking for somewhere to go. `role="group"` is the honest
+    // reading: related elements with one label, and unlike role="row" it needs
+    // no particular parent to be valid.
+    <div
+      role="group"
       data-testid="rounds-pipeline-strip"
       aria-label="Note progress"
       className="qm-rounds-strip"
@@ -215,6 +221,6 @@ export function RoundsPipelineStrip({
           Signing will be refused until it is cleared.
         </p>
       ) : null}
-    </nav>
+    </div>
   );
 }

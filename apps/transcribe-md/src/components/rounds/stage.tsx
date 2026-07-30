@@ -26,8 +26,6 @@
 // the one a doctor acts on is the one on the button.
 // ============================================================================
 
-import { useCallback, useRef } from 'react';
-
 import type { SignGate } from '@/lib/sign-gates';
 import type { StageIdentity, StageQueuePosition } from '@/lib/rounds/stage-data';
 import { queueLabel } from '@/lib/rounds/stage-data';
@@ -56,6 +54,21 @@ export interface RoundsStageProps {
   onSkip?: () => void;
   /** Open the full queue list. */
   onOpenQueue?: () => void;
+  /**
+   * Runs just before the chat drawer closes.
+   *
+   * THE SEAM IS NAMED AND EMPTY ON PURPOSE. The review view's `onScrollTo`
+   * resolves an element and calls `scrollIntoView`; with the chat OVER the
+   * stage, "took you to the E/M gate" can scroll something the doctor cannot
+   * see. Close first, then scroll — so the owner of that callback (the route
+   * wiring) supplies this.
+   *
+   * B1 does NOT fake it. An earlier cut kept a private ref here and passed a
+   * handler that could never fire, which reads as "handled" to anyone
+   * skimming — the same pretend-success shape as a button that dispatches
+   * nothing.
+   */
+  onChatBeforeClose?: () => void;
 }
 
 function signLabel(n: number, signed: boolean): string {
@@ -78,19 +91,10 @@ export function RoundsStage({
   onReviewAndSign,
   onSkip,
   onOpenQueue,
+  onChatBeforeClose,
 }: RoundsStageProps) {
   const signed = !!signedAt;
-  const sheetRef = useRef<HTMLDivElement | null>(null);
   const posLabel = queueLabel(queue);
-
-  // The drawer covers the stage, so anything that scrolls the note has to wait
-  // until it is gone. See RoundsChatDrawer's onBeforeClose.
-  const pendingScroll = useRef<null | (() => void)>(null);
-  const runPendingScroll = useCallback(() => {
-    const fn = pendingScroll.current;
-    pendingScroll.current = null;
-    if (fn) requestAnimationFrame(fn);
-  }, []);
 
   return (
     <div className="qm-rounds-stage" data-testid="rounds-stage" data-status={status}>
@@ -143,7 +147,7 @@ export function RoundsStage({
           ) : null}
 
           {/* THE SHEET. The existing paper component, restyled. */}
-          <div ref={sheetRef} className="rounds-paper qm-rounds-sheet" data-testid="rounds-sheet">
+          <div className="rounds-paper qm-rounds-sheet" data-testid="rounds-sheet">
             {children}
           </div>
         </main>
@@ -213,7 +217,7 @@ export function RoundsStage({
         ) : null}
 
         {chat ? (
-          <RoundsChatDrawer onBeforeClose={runPendingScroll}>{chat}</RoundsChatDrawer>
+          <RoundsChatDrawer onBeforeClose={onChatBeforeClose}>{chat}</RoundsChatDrawer>
         ) : null}
 
         <span className="qm-rounds-rail-kbd" aria-hidden>

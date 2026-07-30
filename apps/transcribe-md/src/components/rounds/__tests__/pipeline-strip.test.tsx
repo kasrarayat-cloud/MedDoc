@@ -250,6 +250,17 @@ describe('accessibility contract', () => {
       .toBe('Note progress');
   });
 
+  it('is NOT a nav landmark — it contains no links to navigate to', () => {
+    // A nav landmark promises somewhere to go. A reader cycling landmarks
+    // would arrive in a diagram and find nothing actionable.
+    const { container } = render(<RoundsPipelineStrip status="READY" n={0} />);
+    expect(container.querySelector('nav')).toBeNull();
+    expect(container.querySelectorAll('a')).toHaveLength(0);
+    const strip = screen.getByTestId('rounds-pipeline-strip');
+    expect(strip.tagName).toBe('DIV');
+    expect(strip.getAttribute('role')).toBe('group');
+  });
+
   it('the NOW REVIEWING label itself never animates', () => {
     // axe samples mid-cycle; text at 35% opacity really is unreadable at that
     // instant. Motion belongs on the dot.
