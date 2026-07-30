@@ -25,6 +25,51 @@ import {
 
 const read = (p: string) => readFileSync(p, 'utf8');
 
+/**
+ * The source text of ONE self-closing JSX element, from `<Tag` to its matching
+ * `/>`, found by brace balance rather than by indentation.
+ *
+ * ⚠️ THIS REPLACED A GUARD THAT COULD PASS WHILE READING THE WRONG ELEMENT.
+ * Both call sites used to slice to a literal newline-plus-N-spaces-plus-`/>`
+ * marker — `'\n          />'` for `<ReviewDocumentView`, `'\n    />'` for
+ * `<VisitReadyView`. That boundary is not the element's boundary, it is a
+ * guess about how the file happens to be formatted, and it fails in the two
+ * worst ways:
+ *
+ *   - **Re-indent the element by one level** (wrapping it in anything — which
+ *     is exactly what putting the Rounds stage around it does) and the marker
+ *     is no longer there. `indexOf` returns -1, `slice(0, -1)` drops one
+ *     character instead of erroring, and the assertion runs against the whole
+ *     rest of the file. It passes, and it is checking nothing.
+ *   - **Or the marker matches some LATER element's close** at the new depth —
+ *     measured on this file: the 12-space marker resolves 6654 characters past
+ *     the real one — and the assertion then runs against a different
+ *     component's props entirely. It still passes.
+ *
+ * A guard whose scope is set by whitespace silently stops guarding the first
+ * time someone reformats. Brace balance is the property that actually holds.
+ */
+function jsxElement(src: string, tag: string): string {
+  const start = src.indexOf(`<${tag}`);
+  if (start === -1) throw new Error(`<${tag} not found`);
+  let depth = 0;
+  for (let i = start; i < src.length; i++) {
+    const c = src[i];
+    if (c === '{') depth++;
+    else if (c === '}') depth--;
+    else if (c === '/' && src[i + 1] === '>' && depth === 0) {
+      return src.slice(start, i + 2);
+    }
+    // A nested child element means this tag is not self-closing; the callers
+    // below all target self-closing elements, so that is a real error rather
+    // than something to tolerate quietly.
+    else if (c === '>' && depth === 0 && src[i - 1] !== '/') {
+      throw new Error(`<${tag} is not self-closing — this helper assumes it is`);
+    }
+  }
+  throw new Error(`<${tag} has no matching />`);
+}
+
 /** The user-visible text of a TSX source: JSX text nodes plus the attributes
  *  that render as words (placeholder, title, aria-label).
  *
@@ -157,9 +202,7 @@ describe('the inline panels are gone from the review page', () => {
     //
     // Optional-with-a-default is the trap, so assert the wiring, which types
     // cannot: the prop must appear in the JSX page.tsx renders.
-    const page = read(VISIT_PAGE);
-    const el = page.slice(page.indexOf('<VisitReadyView'));
-    const jsx = el.slice(0, el.indexOf('\n    />'));
+    const jsx = jsxElement(read(VISIT_PAGE), 'VisitReadyView');
     for (const prop of [
       'emStale={',
       'emPendingChange={',
@@ -537,10 +580,44 @@ describe('an imaging visit has NO E/M level — not displayed, not computed, not
     //
     // Sign stayed enabled — the route exempts imaging — so this blocked nothing.
     // It asked for something impossible, which is its own kind of broken.
-    const ready = read(READY_VIEW);
-    const el = ready.slice(ready.indexOf('<ReviewDocumentView'));
-    const jsx = el.slice(0, el.indexOf('\n          />'));
+    const jsx = jsxElement(read(READY_VIEW), 'ReviewDocumentView');
     expect(jsx).toContain('emStale={props.emNotApplicable ? false : emStale}');
+  });
+
+  it('NEGATIVE CONTROL — the extractor bounds the element, and the assertion can fail', () => {
+    // Two things a passing guard does not prove on its own.
+    //
+    // 1. That the slice STOPS at this element. The old indentation marker did
+    //    not: re-indent by one level and it ran to the end of the file, or
+    //    matched a later component's close. Both still passed.
+    const ready = read(READY_VIEW);
+    const jsx = jsxElement(ready, 'ReviewDocumentView');
+    expect(jsx.startsWith('<ReviewDocumentView')).toBe(true);
+    expect(jsx.endsWith('/>')).toBe(true);
+    // It must be a fraction of the file, not most of it.
+    expect(jsx.length).toBeLessThan(ready.length / 2);
+    // And it must not have swallowed the next sibling element.
+    expect(jsx).not.toContain('<SignedDocumentView');
+
+    // 2. That the assertion is capable of failing. Strip the prop from a COPY
+    //    and the same check must go red — otherwise it is satisfied by
+    //    something other than the thing it names.
+    const withoutProp = jsx.replace(
+      'emStale={props.emNotApplicable ? false : emStale}',
+      'emStale={emStale}',
+    );
+    expect(withoutProp).not.toContain(
+      'emStale={props.emNotApplicable ? false : emStale}',
+    );
+
+    // 3. And it survives re-indentation, which the indentation marker did not.
+    const reindented = ready.replace(
+      /^(\s*)(<ReviewDocumentView)/m,
+      '$1  $2',
+    );
+    expect(jsxElement(reindented, 'ReviewDocumentView')).toContain(
+      'emStale={props.emNotApplicable ? false : emStale}',
+    );
   });
 
   it('NOBODY RE-TYPES THE CONJUNCTION — emAppliesToSpecialty is the only copy', () => {
