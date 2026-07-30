@@ -13,6 +13,7 @@
 
 import { ExtrasCard, Kv } from './ExtrasCard';
 import { formatLocalDate } from '@/lib/format-time';
+import { ageYearsOf } from '@/lib/patient-display';
 
 export interface DemographicsCardData {
   name: string;
@@ -32,15 +33,6 @@ export interface DemographicsCardData {
 interface Props {
   data: DemographicsCardData;
   readonly: boolean;
-}
-
-function ageYearsOf(dob: string | null): number | null {
-  if (!dob) return null;
-  const d = new Date(dob);
-  if (Number.isNaN(d.getTime())) return null;
-  const diff = Date.now() - d.getTime();
-  const years = diff / (1000 * 60 * 60 * 24 * 365.25);
-  return years > 0 ? Math.floor(years) : null;
 }
 
 export function DemographicsCard({ data, readonly }: Props) {

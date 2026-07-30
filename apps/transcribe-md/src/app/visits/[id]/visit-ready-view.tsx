@@ -53,6 +53,7 @@ import {
   sectionExtras,
 } from '@/lib/ehr-formatters';
 import { formatLocalDateTime } from '@/lib/format-time';
+import { formatDurationLabel } from '@/lib/patient-display';
 import { isVisitDocPage } from '@/config/visit-doc-page';
 import { isChatEditor } from '@/config/chat-editor';
 import { ChatEditorPanel } from './chat-editor-panel';
@@ -1726,13 +1727,5 @@ function SignedStateCard({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Phase 5.1 — pretty-print a duration in seconds for the Transcript V3
-// metadata rail. Mirrors the "6m 04s" pattern from the mockup.
-// ---------------------------------------------------------------------------
-function formatDurationLabel(totalSec: number): string {
-  const t = Math.max(0, Math.floor(totalSec));
-  const m = Math.floor(t / 60);
-  const s = (t % 60).toString().padStart(2, '0');
-  return `${m}m ${s}s`;
-}
+// Phase 5.1's "6m 04s" duration formatter moved to `@/lib/patient-display` when
+// Rounds Screen 2's identity header needed the same one. Imported above.
