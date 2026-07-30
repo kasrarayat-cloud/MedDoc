@@ -83,6 +83,43 @@ describe('composition', () => {
     expect(container.querySelector('.qm-rounds-sheet-wrap')).toBeTruthy();
   });
 
+  it('reports the chat drawer opening and closing, so a deferred scroll is safe', () => {
+    // Deferring is only safe while something is guaranteed to flush, and the
+    // only flusher is the close. Without this transition the caller cannot
+    // tell "the drawer is over the sheet, defer" from "the drawer is shut, a
+    // recorded target will never be released" — and the second one strands a
+    // scroll that then fires on the next unrelated close.
+    const seen: boolean[] = [];
+    renderStage({
+      chat: <div data-testid="the-chat">chat</div>,
+      onChatOpenChange: (open: boolean) => seen.push(open),
+    });
+
+    fireEvent.click(screen.getByTestId('rounds-chat-trigger'));
+    expect(seen).toEqual([true]);
+
+    fireEvent.click(screen.getByTestId('rounds-chat-close'));
+    expect(seen).toEqual([true, false]);
+  });
+
+  it('the recorded time is NOT formatted during render — it would mismatch on hydration', () => {
+    // `formatLocalDateTime` is toLocale*(undefined, …): the container's
+    // timezone on the server, the browser's on hydration. This component is
+    // server-rendered, so formatting inline produced a React hydration error on
+    // every stage load and a visibly wrong time until the client render landed.
+    //
+    // <LocalTime> renders a placeholder via getServerSnapshot and formats only
+    // on the client. Asserting the <time dateTime=…> wrapper is how this stays
+    // fixed: a revert to inline formatting produces a bare string with no
+    // element to find.
+    const { container } = renderStage();
+    const cell = screen.getByTestId('rounds-stage-recorded');
+    const time = cell.querySelector('time');
+    expect(time).not.toBeNull();
+    expect(time!.getAttribute('dateTime')).toBe(identity.recordedAtIso);
+    expect(container).toBeTruthy();
+  });
+
   it('the sheet keeps the 820px paper class — a parity invariant', () => {
     renderStage();
     expect(screen.getByTestId('rounds-sheet').className).toContain('rounds-paper');

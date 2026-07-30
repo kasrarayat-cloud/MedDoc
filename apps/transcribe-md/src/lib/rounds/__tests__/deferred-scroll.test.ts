@@ -117,6 +117,43 @@ describe('createDeferredScroll', () => {
     expect(scrollTo).toHaveBeenCalledExactlyOnceWith('em_gate');
   });
 
+  it('discard() drops a stranded target so a later close cannot release it', () => {
+    // THE BUG THIS WAS ADDED FOR. `ChatEditorPanel.send` is async and its
+    // continuation is not cancelled on unmount, so a reply can call
+    // `onScrollTo` AFTER the doctor already closed the drawer. `flush()` has
+    // by then already run, with nothing pending, so the target would sit here
+    // and be released on the next unrelated close — the page scrolling to the
+    // E/M gate during a clinical review for no action the doctor took.
+    //
+    // The caller now scrolls immediately in that case; this is the second
+    // guard, applied when the drawer next OPENS.
+    const scrollTo = vi.fn();
+    const sched = manualScheduler();
+    const d = createDeferredScroll(scrollTo, sched.schedule);
+
+    d.record('em_gate'); // arrived while nothing will flush it
+    d.discard();
+    expect(d.pending()).toBeNull();
+
+    d.flush();
+    sched.runAll();
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('NEGATIVE CONTROL — without discard() the stale target DOES fire', () => {
+    // Proves the test above is watching something. If `discard()` became a
+    // no-op, the assertion below is what changes.
+    const scrollTo = vi.fn();
+    const sched = manualScheduler();
+    const d = createDeferredScroll(scrollTo, sched.schedule);
+
+    d.record('em_gate');
+    d.flush();
+    sched.runAll();
+
+    expect(scrollTo).toHaveBeenCalledExactlyOnceWith('em_gate');
+  });
+
   it('is reusable — open, ask, close, then do it again', () => {
     const scrollTo = vi.fn();
     const sched = manualScheduler();

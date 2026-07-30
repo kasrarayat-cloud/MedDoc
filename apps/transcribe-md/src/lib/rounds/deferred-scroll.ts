@@ -24,6 +24,23 @@ export interface DeferredScroll {
   record(target: string): void;
   /** Release the recorded target, at most once. No target ⇒ nothing happens. */
   flush(): void;
+  /**
+   * Throw the recorded target away without scrolling.
+   *
+   * DEFERRING IS ONLY SAFE WHILE SOMETHING IS GUARANTEED TO FLUSH. The only
+   * flusher is the drawer closing, so a target recorded when the drawer is
+   * already shut is STRANDED — and worse than stranded, because it survives in
+   * the ref and fires on the next unrelated close, scrolling the page for no
+   * action the doctor took.
+   *
+   * That is reachable: `ChatEditorPanel.send` is async and its continuation is
+   * not cancelled on unmount, so a reply that lands after the doctor pressed
+   * Escape still calls `onScrollTo`. The caller now scrolls immediately in that
+   * case; this exists so opening the drawer also clears anything left over —
+   * belt and braces, because a silent stale scroll during a clinical review is
+   * exactly the "handler that fires and does nothing" class in reverse.
+   */
+  discard(): void;
   /** For assertions and for deciding whether to defer at all. */
   pending(): string | null;
 }
@@ -47,6 +64,9 @@ export function createDeferredScroll(
   return {
     record(next: string) {
       target = next;
+    },
+    discard() {
+      target = null;
     },
     pending() {
       return target;

@@ -470,9 +470,27 @@ export function VisitReadyView(props: VisitReadyViewProps) {
     )
   );
 
+  // WHETHER DEFERRING IS SAFE AT ALL depends on the drawer being open, because
+  // closing it is the ONLY thing that flushes. `ChatEditorPanel.send` is async
+  // and its continuation is not cancelled on unmount, so a reply can arrive
+  // after the doctor pressed Escape — and a target recorded then would sit in
+  // the ref and release on the next unrelated close, scrolling the page during
+  // a clinical review for no action they took. A ref, not state: this must be
+  // readable by a callback without re-subscribing it.
+  const chatOpenRef = useRef(false);
+  const handleChatOpenChange = useCallback((open: boolean) => {
+    chatOpenRef.current = open;
+    // Clear anything left over on the way IN, so a stale target can never be
+    // released by a close the doctor did not connect it to.
+    if (open) deferredScrollRef.current.discard();
+  }, []);
+
   const handleChatScrollTo = useCallback(
     (target: string) => {
-      if (roundsActive) {
+      // Defer ONLY while the drawer is actually over the sheet. Otherwise
+      // scroll now — there is nothing covering the page, and a navigation the
+      // chat announced must not silently not happen.
+      if (roundsActive && chatOpenRef.current) {
         deferredScrollRef.current.record(target);
         return;
       }
@@ -482,6 +500,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
   );
 
   const handleChatBeforeClose = useCallback(() => {
+    chatOpenRef.current = false;
     deferredScrollRef.current.flush();
   }, []);
 
@@ -1016,6 +1035,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               onSkip={nextVisitId ? handleSkip : undefined}
               onOpenQueue={handleOpenQueue}
               onChatBeforeClose={handleChatBeforeClose}
+              onChatOpenChange={handleChatOpenChange}
             >
               {paper}
             </RoundsStage>

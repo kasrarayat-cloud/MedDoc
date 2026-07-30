@@ -69,6 +69,16 @@ export interface RoundsStageProps {
    * nothing.
    */
   onChatBeforeClose?: () => void;
+  /**
+   * Fires whenever the chat drawer opens or closes.
+   *
+   * Deferring a scroll is only safe while something is guaranteed to flush it,
+   * and the only flusher is the drawer closing. The owner of `onChatBeforeClose`
+   * needs to know the drawer's state so it can scroll IMMEDIATELY when a reply
+   * arrives after the doctor already closed it — otherwise that target sits
+   * unreleased and fires on the next unrelated close.
+   */
+  onChatOpenChange?: (open: boolean) => void;
 }
 
 function signLabel(n: number, signed: boolean): string {
@@ -92,6 +102,7 @@ export function RoundsStage({
   onSkip,
   onOpenQueue,
   onChatBeforeClose,
+  onChatOpenChange,
 }: RoundsStageProps) {
   const signed = !!signedAt;
   const posLabel = queueLabel(queue);
@@ -228,7 +239,12 @@ export function RoundsStage({
         ) : null}
 
         {chat ? (
-          <RoundsChatDrawer onBeforeClose={onChatBeforeClose}>{chat}</RoundsChatDrawer>
+          <RoundsChatDrawer
+            onBeforeClose={onChatBeforeClose}
+            onOpenChange={onChatOpenChange}
+          >
+            {chat}
+          </RoundsChatDrawer>
         ) : null}
 
         <span className="qm-rounds-rail-kbd" aria-hidden>
