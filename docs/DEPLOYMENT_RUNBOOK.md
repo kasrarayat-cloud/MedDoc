@@ -679,7 +679,21 @@ listing every object in every bucket and reading `X-Amz-Server-Side-Encryption`
 per object — not by reading a prior report:
 
 - `transcribe-md-audio` — **0 objects.** The patient-audio bucket is empty, so
-  none of this touches audio. (It is empty because of the §5.7.1 re-migration.)
+  none of this touches audio. **It has never held one** — corrected 2026-07-29;
+  the parenthetical that stood here blamed the emptiness on the §5.7.1
+  re-migration, which is false and in the worst possible direction. PR #456's own
+  commit message records *"the audio bucket was empty, so no patient audio was
+  among the moved objects"*, its sha256 manifest **matched 33/33 before and
+  after**, and all 23 prod visits carry `audioKey` = 0 / `dictationAudioKey` = 0.
+  The re-migration was a verified copy that deleted nothing.
+
+  Worth naming why one clause mattered enough to fix: it sat inside a **"do not
+  re-flag it"** block, so it was written to be trusted and not re-derived — and
+  it attributed a phantom loss of patient audio to the encryption work. A future
+  auditor reading only this section would have found documentary evidence that
+  the LUKS migration destroyed clinical data. **A cause is a claim; state it only
+  when it is checked.** The fact ("0 objects") was verified; the reason for it
+  was assumed, and rode along inside the verified sentence.
 - `transcribe-md-template-artifacts` — 10 objects, **all ten `NONE`**:
 
 | Count | Path | What it is |
@@ -722,6 +736,60 @@ docker exec meddoc-pro-minio-1 sh -lc '
 Both buckets have `Auto encryption 'sse-s3' is enabled`, so **everything written
 from here on is covered at both layers.** This is a closed tail, not a growing
 one.
+
+### 5.7.4 The standing post-reboot proof — it runs itself, on every boot
+
+Added here 2026-07-29. The unit and script had been live since PR #457 and were
+cited from the Rounds ledger as *"Runbook §5.7.1–5.7.2"* — **sections that never
+mentioned them.** A production safety mechanism documented only in a project
+ledger is documented for the wrong reader.
+
+**What it is.** `quillmd-postreboot-proof.service` (enabled, `After=docker.service`,
+90 s settle) runs `scripts/verify-post-reboot.sh` on **every** boot, writes
+`/var/log/quillmd-postreboot-proof.<UTC>.log` plus a `.latest.log` symlink, and
+does **not** swallow the exit code — a bad proof shows up in `systemctl --failed`.
+It therefore also covers the **unplanned** hypervisor resets this host is known
+for, the ones nobody is awake for.
+
+**Why it has to record itself.** Claude Code runs *on this host*, so a reboot
+kills the session that would otherwise verify it. The proof cannot be both
+triggered and observed from inside a session.
+
+```bash
+cat /var/log/quillmd-postreboot-proof.latest.log     # expect a trailing exit=0
+systemctl --failed                                   # expect empty
+bash scripts/verify-post-reboot.sh                   # re-runnable at any time
+bash scripts/test-verify-post-reboot.sh              # negative controls for the above
+```
+
+**What it asserts**, in order: both LUKS units started **at boot** (not by hand) ·
+both mappings open · both mounts live on their dm devices · Postgres and MinIO
+healthy **on those devices** · both fail-closed guards intact · prod stack
+complete · `quillmd.com` 200 · co-tenants up · and the two known reboot side
+effects surfaced rather than discovered.
+
+**§1 is the load-bearing one, and the only one immune to a stale artefact.** It
+compares each unit's `ActiveEnterTimestamp` against boot time (120 s grace)
+rather than asking "is it active", so it fails on a hand start and on a
+no-reboot alike — and it stays valid however long afterwards you re-run it. When
+this script and a written claim disagree, **the script wins**.
+
+**Read the container sections with their history in mind.** §4 and §6 reported
+success on states that needed action until 2026-07-29 — §4 printed *"every
+meddoc-pro container is up"* against **zero** containers and could not see an
+`unhealthy` one; §6 printed *"QA stack: 1 container(s) up"* with five of six
+down. Both now derive the expected service set from the compose files and name
+what is missing, and `scripts/test-verify-post-reboot.sh` pins that they can
+still go red. If you change either section, run that harness — it fails 7/7
+against the pre-fix script, which is the only reason to believe it works.
+
+**The two side effects are expected, not faults:** the QA stack does not
+self-restart (only `gotenberg` is `unless-stopped`; the other five are
+`restart: "no"`) — bring it back with
+`docker compose -f docker-compose.qa.yml up -d` and **then** re-run
+`scripts/check-qa-mock-posture.sh`, which reads live containers and means nothing
+while they are down. And a reboot **clears `/tmp`**, so an empty `/tmp` after a
+boot is never evidence that the previous session reaped its scratch.
 
 ---
 

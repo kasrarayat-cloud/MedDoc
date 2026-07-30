@@ -68,6 +68,20 @@ to build; this says what is built, what is next, and what proof exists.
    `ActiveEnterTimestamp` against boot time rather than reading "did it start",
    so it fails on a hand start and on a no-reboot alike. When a check and a
    sentence disagree, the check wins.
+2d. **The handoff prompt is an inherited claim, not a briefing.** Verify its
+   load-bearing facts against the host before acting on them — the same standard
+   rule 2c holds this ledger to.
+
+   Rule 2c disciplines what a session *writes*. It says nothing about what a
+   session is *handed*, and a prompt is the one artefact in the chain that no
+   reviewer ever sees. Check the independent fact first, then read the documents.
+
+   *Cost that produced this:* the session after F-pre's closure opened on *"the
+   host was just rebooted by the previous session, which died with it by design"*
+   — the boot was **27 hours** old and the prior session had survived it by 38
+   minutes, committing four times. This time the **ledger was correct and the
+   prompt was stale**, which is the inversion worth remembering: a trustworthy
+   ledger does not make the handoff trustworthy.
 
 3. **`NEXT_PUBLIC_SKIN_ROUNDS` stays OFF until item F.** Every phase ships dark.
 4. **Stop-condition, unchanged:** if an item's gate cannot go green after genuine
@@ -92,9 +106,9 @@ old skin default until F.
 
 | # | Item | Status | Gate | Evidence |
 |---|---|---|---|---|
-| **F0** | Foundation: tokens doc, `rounds-tokens.css`, flag, fonts, `data-skin`, stage mapping | ✅ **DONE** | units green + exhaustiveness guard negative-controlled | `c2f35d2a` · 18 tests |
+| **F0** | Foundation: tokens doc, `rounds-tokens.css`, flag, fonts, `data-skin`, stage mapping | ✅ **DONE** | units green + exhaustiveness guard negative-controlled | **`4d005112`** on `main` · 18 tests. Corrected 2026-07-29: this row cited **`c2f35d2a`** until then, which is the **pre-rebase commit PR #453 discarded** — `git merge-base --is-ancestor c2f35d2a main` is false and `git branch -a --contains c2f35d2a` returns nothing. The object still resolves locally, so `git show` on it looks perfectly healthy; it is reachable from no ref. **A SHA that no ref reaches is a citation nobody can check** — and it fails in the friendliest possible way, by working on the machine that wrote it |
 | **F0b** | Board row model: lane kinds, run lengths, filters, ordering, day meter | ✅ **DONE** | units green, honesty rules pinned | 37 tests total, tsc clean |
-| **A1** | **Board component + units** | ✅ **DONE, MERGED** | component renders all five lane kinds; positioning proved; retry integration correct; typecheck clean | PR **#453** merged · +retry fix · **24** component tests · 2719 suite green · tsc clean |
+| **A1** | **Board component + units** | ✅ **DONE, MERGED** | component renders all five lane kinds; positioning proved; retry integration correct; typecheck clean | PR **#453** merged as **`7e0c9c8f`** · **merge-commit CI on `7e0c9c8f`: `CI` success · `e2e` success · `secrets-scan` success** · +retry fix · **24** component tests · 2719 suite green · tsc clean. The citation was added 2026-07-29: until then this row cited only local test counts, which is exactly what rule 2a forbids — and A2's row two lines below spells out why. Worth recording that **the evidence existed the whole time and nobody had written it down**: the merge-commit runs were green on the day. The rule is not "go get evidence", it is "cite it", and an uncited row is indistinguishable from an unproven one |
 | **A2** | Board E2E + axe + screenshots + merge | ✅ **DONE, MERGED** | **CI green, and the `rounds-board` pack actually ran** — all six E2E packs success · axe 0 serious/critical (7 views × 2 widths × 3 animation samples) · screenshots 1440 + 1024 · 2742 units · tsc clean | PR **#455** squashed to **`17b03c8a`** · **merge-commit CI: run `30430612104` (e2e) + `30430612086` (CI) on `main@17b03c8a`, both success** — that is the citation rule 2a asks for. The PR-head run `30428489530` is where the per-pack detail is visible (chromium ✓ rounds-board ✓ review-doc ✓ doc-preview ✓ visit-doc ✓ phi-reject/rx-safety ✓), but a PR-head run is **not** a merge-commit run: a squash merge produces a new commit that neither run's SHA matches. Cite both, and never let the PR run stand alone. Took **three** CI cycles to actually close: (1) the pack was missing from the default project's `testIgnore`, so the flag-OFF run collected it, 404'd, and everything downstream **skipped** — `--project=rounds-board` had never run in CI at all; (2) fixed, and the pack passed, but the Rounds block sat between review-doc's setup and its run and reverted the app to the default image, reddening all 18 review-doc tests; (3) green. Both classes now pinned by negative-controlled guards: `gate-flag-coverage.test.ts`, `gate-project-env.test.ts` |
 | **B1** | Screen 2 — the stage | ⬜ **NEXT** | pipeline strip from the same mapping; NOW REVIEWING; padlocked Signed node with correct **N**; sheet is the existing paper component restyled; identity header; next-up peek; chat drawer | — |
 | **B2** | Screen 3 — the gates | ⬜ TODO | full-screen sequential over EXISTING logic; only applicable gates exist; `> OVERRIDE` typed input unchanged; E/M only when `emApplies`; attestation; **sign-block E2Es pass with semantics unchanged** | — |
@@ -102,7 +116,7 @@ old skin default until F.
 | **B4** | Gate B verification | ⬜ TODO | axe zero serious/critical on stage + all gates + signed · chromium E2E incl. sign-block · **fixture matrix both specialty classes** (imaging: no E/M gate, no strip blocker, anywhere) · **PDF/Word parity re-proven at 1440** · screenshots · merge on green | — |
 | **C1** | Auth / settings / templates / error-empty-loading | ⬜ TODO | all to tokens; copy register: plain verbs, sentence case, actions keep their names end-to-end | — |
 | **C2** | Default-paper typography + Gate C | ⬜ TODO | **exports match preview 1:1** (this is the report-template design deliverable) · axe on every restyled screen **incl. waitlist** · full suite + typecheck · E2E green · merge on green | — |
-| **F-pre** | **Reboot proof — BOTH encrypted stores** | ⬜ **REQUIRED BEFORE F** | one real host reboot, then `bash scripts/verify-post-reboot.sh` = 0. It asserts the whole chain: **both** units started AT BOOT (not by hand) · both mappings open · both mounts live on their dm devices · Postgres **and** MinIO healthy on those devices · both fail-closed guards intact · prod 200 · co-tenants up | Added 2026-07-29, widened the same day when Postgres got the same guard (PR #456). Both unlocks are `Before=docker.service` and **both stores now fail closed**, so a unit that loses its race with docker takes the stack down rather than reverting to plaintext — the right trade, but only if the ordering works, and a hand-start cannot prove ordering. **The script already narrows the job**: `pgdata-encrypted` started **8s after the 2026-07-27 boot**, so its ordering IS proven by a real reboot; only `miniodata-encrypted` (hand-started, +189687s) is unproven. **Chosen boundary: after A2 merges, before B1 opens.** Handle the two known side effects as part of the proof, not as surprises — the QA stack does NOT self-restart, and a stale `@reboot` cron dirties the tree. Script: `scripts/verify-post-reboot.sh`, PR **#457** merged as **`ff2078e2`**. Runbook §5.7.1–5.7.2. **⚠️ THE REBOOT CANNOT BE TRIGGERED FROM AN AGENT SESSION — Claude Code runs ON this host (`crimson-mink-43222`; its own PID is visible in the host PID namespace), so a reboot kills the session that would verify it.** It therefore records itself: `quillmd-postreboot-proof.service` (enabled, `After=docker.service`, 90s settle) runs the script on **every** boot and writes `/var/log/quillmd-postreboot-proof.<UTC>.log` + a `.latest.log` symlink, exit code **not** swallowed so a bad proof shows in `systemctl --failed`. That also covers the UNPLANNED hypervisor resets this host is known for — the ones nobody is watching. **To close F-pre: reboot the host from outside a session, then read `.latest.log` and expect `exit=0`.** Static evidence already gathered short of a boot: `systemctl show docker.service -p After` **contains both units** (the ordering edge is materialised, not just declared), both units `systemd-analyze verify` clean, and the two are byte-identical apart from `Description` — and pgdata's shape **is** boot-proven (started 8s after the 2026-07-27 boot). **ARMED 2026-07-29T14:3xZ — everything that can be done before the boot is done; only the boot is left.** Baseline run recorded: **exit 1, and on exactly one line** — `miniodata-encrypted.service started 189687s after boot (grace 120s)`. Every other assertion is already green (both mappings + mounts on their dm devices, both standing mount-checks 0, all 10 prod containers up, `quillmd.com` 200, all three co-tenants up, tree clean). Prep done this session: both LUKS units confirmed **`--key-file`**, so the unlock is unattended and a reboot **cannot** hang on a passphrase prompt; prod + all co-tenant containers are `unless-stopped` (they self-restart) while 5 of 6 QA containers are `no` (the documented side effect); `docker` and `nginx` both `enabled`; the proof unit's stale `failed` state — left by this morning's deliberate hand-run — **reset**, so `systemctl --failed` is empty and the post-boot signal is unambiguous; and **the stale `@reboot` cron is retired** (see below). **The property that makes this recoverable: section 1 compares `ActiveEnterTimestamp` against boot time, so it stays valid whenever it is run.** A hand re-run hours later still proves boot ordering. So if the boot unit's 90s settle turns out to be too short for a cold start and it false-reds on container health or `quillmd.com`, that is not a lost proof — re-run the script once the box settles. ⚠️ **THE REBOOT WAS AUTHORISED AND ARMED ON 2026-07-29 BUT WAS NEVER FIRED. F-pre is OPEN.** The session that armed it ended while waiting on CI for the rulings PR, before it reached its merge-then-reboot step. **The sentence that stood here until 2026-07-29T15:0xZ claimed the reboot HAD been fired.** It was written in anticipation, in the same commit that armed everything, and it was false the moment it was committed — the next session opened against it, believed it, and was one `cat` away from closing F-pre on a boot that never happened. Re-verified instead: `last -x reboot` shows the most recent boot is still **Mon 2026-07-27 01:11**, `uptime -s` is unchanged, `miniodata-encrypted`'s `ActiveEnterTimestamp` is still **2026-07-29 05:53:13** (the hand start, +189687s), and there is **no new proof log** — the newest is 08:35, from that morning's hand-runs. Corroborating, and the tell that is easiest to read: **both known reboot side effects are ABSENT** — the QA stack is UP (it is `restart: "no"` and cannot survive a boot) and the tree is clean. *The lesson is the one this ledger exists for: **do not write evidence for an event before the event.** A row that describes the future in the past tense is indistinguishable from a row that records the past, and rule 2a's whole point is that the ledger must only ever claim what has already been proven.* **To close F-pre, whoever picks this up:** fire the reboot from outside a session, then `cat /var/log/quillmd-postreboot-proof.latest.log` → expect `exit=0`, paste it into this row's Evidence column, flip the status. **First check `uptime -s` is newer than 2026-07-27 01:11:46** — if it is not, no reboot happened and nothing below it means anything. If it reads exit=1 on container health or `quillmd.com` rather than on section 1, that is the 90s settle being short on a cold boot, not a failed proof — re-run `bash scripts/verify-post-reboot.sh` and cite that. If it reds on **section 1**, the ordering genuinely did not hold and F-pre stays open |
+| **F-pre** | **Reboot proof — BOTH encrypted stores** | ✅ **DONE** | one real host reboot, then `bash scripts/verify-post-reboot.sh` = 0. It asserts the whole chain: **both** units started AT BOOT (not by hand) · both mappings open · both mounts live on their dm devices · Postgres **and** MinIO healthy on those devices · both fail-closed guards intact · prod 200 · co-tenants up | Added 2026-07-29, widened the same day when Postgres got the same guard (PR #456). Both unlocks are `Before=docker.service` and **both stores now fail closed**, so a unit that loses its race with docker takes the stack down rather than reverting to plaintext — the right trade, but only if the ordering works, and a hand-start cannot prove ordering. **The script already narrows the job**: `pgdata-encrypted` started **8s after the 2026-07-27 boot**, so its ordering IS proven by a real reboot; only `miniodata-encrypted` (hand-started, +189687s) is unproven. **Chosen boundary: after A2 merges, before B1 opens.** Handle the two known side effects as part of the proof, not as surprises — the QA stack does NOT self-restart, and a stale `@reboot` cron dirties the tree. Script: `scripts/verify-post-reboot.sh`, PR **#457** merged as **`ff2078e2`**. Runbook **§5.7.4** (added 2026-07-29 — this pointed at §5.7.1–5.7.2, neither of which ever mentioned the proof; a production safety mechanism documented only in a project ledger is documented for the wrong reader). **⚠️ THE REBOOT CANNOT BE TRIGGERED FROM AN AGENT SESSION — Claude Code runs ON this host (`crimson-mink-43222`; its own PID is visible in the host PID namespace), so a reboot kills the session that would verify it.** It therefore records itself: `quillmd-postreboot-proof.service` (enabled, `After=docker.service`, 90s settle) runs the script on **every** boot and writes `/var/log/quillmd-postreboot-proof.<UTC>.log` + a `.latest.log` symlink, exit code **not** swallowed so a bad proof shows in `systemctl --failed`. That also covers the UNPLANNED hypervisor resets this host is known for — the ones nobody is watching. **To close F-pre: reboot the host from outside a session, then read `.latest.log` and expect `exit=0`.** Static evidence already gathered short of a boot: `systemctl show docker.service -p After` **contains both units** (the ordering edge is materialised, not just declared), both units `systemd-analyze verify` clean, and the two are byte-identical apart from `Description` — and pgdata's shape **is** boot-proven (started 8s after the 2026-07-27 boot). **ARMED 2026-07-29T14:3xZ — everything that can be done before the boot is done; only the boot is left.** Baseline run recorded: **exit 1, and on exactly one line** — `miniodata-encrypted.service started 189687s after boot (grace 120s)`. Every other assertion is already green (both mappings + mounts on their dm devices, both standing mount-checks 0, all 10 prod containers up, `quillmd.com` 200, all three co-tenants up, tree clean). Prep done this session: both LUKS units confirmed **`--key-file`**, so the unlock is unattended and a reboot **cannot** hang on a passphrase prompt; prod + all co-tenant containers are `unless-stopped` (they self-restart) while 5 of 6 QA containers are `no` (the documented side effect); `docker` and `nginx` both `enabled`; the proof unit's stale `failed` state — left by this morning's deliberate hand-run — **reset**, so `systemctl --failed` is empty and the post-boot signal is unambiguous; and **the stale `@reboot` cron is retired** (see below). **The property that makes this recoverable: section 1 compares `ActiveEnterTimestamp` against boot time, so it stays valid whenever it is run.** A hand re-run hours later still proves boot ordering. So if the boot unit's 90s settle turns out to be too short for a cold start and it false-reds on container health or `quillmd.com`, that is not a lost proof — re-run the script once the box settles. ✅ **CLOSED 2026-07-29 on a real reboot.** **The independent fact first**, because the sentence that stood here until 15:00Z was false and rule 2c's corollary exists for precisely this: **`uptime -s` = `2026-07-29 15:04:02`**, `who -b` agrees, and `last -x reboot` now shows the 2026-07-27 01:11 boot **closed** at `- 15:03 (2+13:51)` with the new one `still running`. Independent readings of the event, none of them a document. **The honest limit on it: the boot's CAUSE cannot be established from inside a session.** This host is known for unplanned hypervisor resets, the prior boot's journal simply ends at 14:32:58, and nothing reachable here distinguishes an authorised reboot from a reset. It makes no difference to the gate — the proof unit was built to cover the unplanned ones too — but this row says *"boot at 15:04:02, cause not established"* rather than assert a deliberate fire it cannot show. **THE ASSERTION F-pre EXISTED FOR, GREEN:** both units' `ActiveEnterTimestamp` = **15:04:08, boot + 6s**, against a 120s grace — not marginal. `pgdata-encrypted`'s ordering was already boot-proven; **`miniodata-encrypted` was the one genuinely unproven** (previously +189687s, a hand start) and is now proven by a cold boot. That is §1, and §1 is the assertion that **cannot be satisfied by a stale artefact**: it compares against boot time, so it stays valid however long after the boot it is re-run. **The unattended path worked on the first real boot it has ever seen:** `quillmd-postreboot-proof.service` fired at **15:06:12**, wrote `/var/log/quillmd-postreboot-proof.20260729T150603Z.log` (`.latest.log` → it) ending **`exit=0`**, and reports `Result=success` / `ExecMainStatus=0`; **`systemctl --failed` is empty.** ⚠️ **But do NOT cite that log's §4 or §6 as evidence** — the committed script that produced it carried three false greens in exactly those two sections (see *What closing F-pre found*, below), so its "🟢 QA stack: 1 container(s) up" was **wrong at the instant it was written**. §1 is structurally immune to that class, and every other assertion below was **re-established by command** rather than read out of the log: `check-pg-encrypted-mount.sh` → **0**, `check-minio-encrypted-mount.sh` → **0**, both mappings open with both mounts on their dm devices, prod **10/10** up and healthy, `quillmd.com` → **200**, co-tenants 3/3 + 6/6 + 1/1. **Both known side effects behaved as documented, and were handled as part of the proof:** the QA stack came back **1 of 6** and was restored with `docker compose -f docker-compose.qa.yml up -d`, after which `check-qa-mock-posture.sh` was re-run **against the running containers** → **0** (flag true AND all three vendor keys dummy — that check reads live containers, so it means nothing until they are actually up again). The tree was **clean at boot**, and that is now proven rather than assumed: this was the **first boot since the stale `@reboot` cron was retired**, `/tmp/h8-post-reboot.log` was never written, and the unreviewed `git push origin main` that sat one bug away from firing on every boot for three months **did not fire**. **All five standing checks green** after the boot: imaging E/M artifacts **0 of 12**, migrations **83/83** applied, QA mock posture severed, both encrypted-mount checks 0. **One caveat to carry forward: the reboot cleared `/tmp`** (every entry is dated 15:04). So an empty `/tmp` after a boot is **not** evidence that the previous session reaped its scratch — it is evidence of nothing. Separately checked, and the answer was good: the pre-reboot session *had* completed its close-out sweep before it died. **RE-VERIFIED 2026-07-30T18:12Z by the next session — and this is the run to cite for §4 and §6.** The paragraph above deliberately refuses the boot log's §4/§6, so until now those two assertions rested on hand re-establishment rather than on the proof. `bash scripts/verify-post-reboot.sh` has now been run against the **fixed** script on the same boot: **exit 0, every section green from the script itself** — §1 both units **+6s** (unchanged, because it compares against boot time, which is exactly why it survived a 27-hour gap), §2 both mappings + mounts on their dm devices, §3 both mount-checks 0, §4 **prod stack complete — 10/10 running and healthy** + `quillmd.com` **200**, §5 co-tenants **3/3 + 6/6 + 1/1**, §6 **QA stack complete — 6/6** + tree clean. `scripts/test-verify-post-reboot.sh` **7/7** alongside it, so the green is one a guard was watched to be capable of denying. All five standing checks green: imaging E/M **0 of 12**, migrations **83/83**, QA mock posture severed in the live containers, both encrypted-mount checks **0**. **Neither known side effect was left to handle** — the QA stack was already 6/6 and the tree clean, both restored by the closing session |
 | **F** | Flip + old-skin retirement + prod smokes | ⬜ TODO | walker map updated, run on QA, `ok:true` · MOCK posture green · tag `:pre-rounds-<date>` **first** · flip via `scripts/deploy-prod.sh` only · **delete** old skin after the flip verifies · rollback docs updated · both prod smoke walks · standing checks green · co-tenants verified | — |
 
 ---
@@ -154,6 +168,129 @@ repo; only the cron line is gone.
 **The generalisation:** a one-shot `@reboot` job that self-removes on success is
 a job that runs forever if it ever fails. Its cleanup must not sit downstream of
 its work.
+
+---
+
+## What CLOSING F-pre found — the proof was still lying, in three more places
+
+PR #459 was titled *"the reboot proof reported success on a failed proof,
+twice"*. Running it against a real boot found **three more**, and they are all
+one defect wearing three hats:
+
+> **Each check asked "is anything wrong?" of a set whose size it never
+> established. On an empty set, nothing is wrong.**
+
+1. **§4 passed on a DEAD production stack.** `docker ps -a --filter name=meddoc-pro-`
+   returns nothing, the grep filters nothing, the emptiness test passes, and the
+   script prints **"🟢 every meddoc-pro container is up"**. Negative-controlled
+   against a filter matching nothing: green, exit 0.
+
+   This is the worst of the three, because of *where* it is blind. Both stores
+   now **fail closed** — the whole point of the trade this proof exists to
+   validate is that a lost boot race **takes the stack down** rather than
+   reverting to plaintext. So the one scenario the proof must catch is precisely
+   the one it reported as perfect.
+
+2. **§4 could not see an `unhealthy` container — twice over.** `grep -viE
+   "healthy|Up [0-9]"` drops `unhealthy` because it *contains* `healthy` as a
+   substring; and `Up [0-9]` matches any running container whatever its health
+   says. A simulated `postgres` at `Up 13 minutes (unhealthy)` was filtered out
+   as fine.
+
+3. **§6 passed on the partial QA stack — and did, on the day.** It tested
+   `-eq 0`. Exactly **one** of the six QA services (`gotenberg`) is
+   `unless-stopped`; the other five are `restart: "no"` and are *the documented
+   side effect the section exists to surface*. The boot log reads **"🟢 QA stack:
+   1 container(s) up"** with five down. The section written to report the side
+   effect reported success on it.
+
+**Fixed** in `scripts/verify-post-reboot.sh`: the expected service set is now
+derived from the compose files, each service resolved to its container and
+required `running` + (`healthy` | no healthcheck). Unreadable compose is a
+**red**, not a green — "I could not check" must never render as "🟢".
+
+**Pinned** by `scripts/test-verify-post-reboot.sh`, which builds a throwaway repo
+with synthetic compose files naming services that have no containers, and
+asserts the proof still *can* go red. It passes 7/7 against the fixed script and
+fails **7/7** against the pre-fix one — a guard nobody has watched fail is not
+known to be a guard.
+
+Two things that fell out of building it, both worth more than the fix:
+
+- **The first draft of the harness silently tested nothing.** Its "dead stack"
+  fixture named services `postgres` and `transcribe-md` — which resolve to
+  `meddoc-pro-postgres-1` and `meddoc-pro-transcribe-md-1`, the **real, running,
+  healthy** containers. The control passed by finding production. A negative
+  control whose fixture can collide with the live system is not a control.
+- **And then one control passed for the wrong reason.** Against the pre-fix
+  script, "overall exit is 1 on a dead stack" went green — but because the temp
+  dir was not a git repo, so §6's tree check failed and set the exit code. §4
+  was still blind. The harness now `git init`s the fixture so §4 is the only
+  thing that can red it. *An assertion that can be satisfied by something other
+  than the thing it names is the same bug as the one it is testing for.*
+
+**The same imprecision had already infected this ledger's reasoning.** The F-pre
+row's easiest-to-read tell was *"both known reboot side effects are ABSENT — the
+QA stack is UP"*. That inference is **unsound**: `meddoc-qa-gotenberg-1` is
+`unless-stopped` and survives every boot, so "the QA stack is up" is true after a
+reboot too. It reached the right answer that day for a reason that does not
+generalise. The sound form is **"the QA stack is FULLY up, 6 of 6"** — a partial
+stack reading as a whole one is the identical defect, in prose instead of bash.
+
+---
+
+## What VERIFYING F-pre found — the prompt was the stale artefact, and the fix was on a branch
+
+F-pre was already closed and closed correctly. The next session opened on this,
+verbatim:
+
+> *"The host was just rebooted by the previous session, which died with it by
+> design."*
+
+Both halves are false, and `uptime -s` said so before anything else ran:
+
+- **The boot was `2026-07-29 15:04:02` — 27 hours earlier, not "just".**
+  Every container on the box reads `Up 27 hours`, and `last -x reboot` shows that
+  boot `still running`.
+- **No session died with it.** Four commits land *after* it — `15:25`, `15:32`,
+  `15:36`, `15:42` — and the last one closes F-pre. The session that produced
+  them survived the boot by 38 minutes and then simply ended.
+
+Nothing was lost, because the one assertion that mattered is the one built not to
+care: §1 compares `ActiveEnterTimestamp` against boot time, so re-running it a day
+later re-proves the same +6s. **Rule 2c's corollary paid for itself a second
+time** — but note *what* was wrong this round. Last time the ledger carried the
+false sentence. This time **the ledger was right** (it says "boot at 15:04:02,
+cause not established" and refuses to cite its own log's §4/§6) and the **handoff
+prompt** was stale. Rule 2c disciplines what we *write*; it says nothing about
+what we are *handed*. Hence rule 2d.
+
+**And the fix was live only by accident of checkout.** `quillmd-postreboot-proof.service`
+runs `/usr/local/bin/quillmd-postreboot-proof`, a thin wrapper whose payload line
+is `bash /opt/meddoc-pro/scripts/verify-post-reboot.sh` — **the working tree**,
+not a snapshot. PR **#465** carried the three-false-greens fix, went green at
+`16:10:02Z`, and then sat **open and unmerged for 26 hours** because the session
+that opened it ended while its 27-minute E2E was still running. So for that whole
+window `origin/main`'s copy still read:
+
+```
+unhealthy=$(docker ps -a --filter "name=meddoc-pro-" ... | grep -viE "healthy|Up [0-9]")
+...
+note "🟢 every meddoc-pro container is up"
+```
+
+Had the tree been on `main` at the next boot — a checkout, a rollback, a clone —
+**the automatic proof would have gone green on a dead production stack**, in the
+exact scenario fail-closed storage creates. The unmerged branch was the only
+thing standing between the host and that. This is precisely the failure state
+`AGENTS.md`'s branch-cadence rule names: *production running code that `main`
+does not have.* A boot unit that executes the working tree makes "merge promptly"
+a **safety** property, not bookkeeping.
+
+**Generalisation, and it is the same shape as the three false greens above:** a
+green from a checker is a claim about *the checker that ran*, not about the one
+in version control. Pin the payload or merge the fix — an unmerged guard guards
+one directory.
 
 ---
 
