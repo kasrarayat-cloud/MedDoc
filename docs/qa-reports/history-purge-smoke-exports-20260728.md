@@ -225,3 +225,82 @@ for it.
 reporting resolution. `~/release-evidence` (570 MiB) was **not** in scope and is
 untouched. `/opt/meddoc-pro/backups/`, the blank fixtures and the committed E2E
 fixtures all verified intact afterwards.
+
+---
+
+## Second addendum, 2026-07-30 — the sweep's own boundary, closed to the device
+
+The addendum above swept **four named roots**. That is the shape of the defect it
+was written about: a claim whose boundary was chosen by hand. The relay session
+that followed re-ran the sweep with the boundary set to **the whole device**, and
+this section records where it looked so the answer can be checked rather than
+trusted.
+
+**Verification of the ruling, first — the two shredded roots are gone.**
+`~/staging` does not exist anywhere on the device (`find / -maxdepth 4 -type d
+-name staging` → nothing), and neither `~/release-witness` nor any
+`~/reviewer-witness-*` remains. The purge targets themselves are gone too:
+`find / -xdev` for `export.docx`, `export.pdf` and the path fragment
+`phase-C/export*` returns **zero**, unbounded, across the whole filesystem.
+
+### Boundary
+
+| | |
+|---|---|
+| **Roots** | `/` — whole device |
+| **Depth** | unbounded |
+| **Filesystem** | `-xdev`, `/dev/sda2`, ext4, mounted `/` |
+| **Documents censused** | 193 `.docx`/`.pdf` outside `node_modules` |
+| **Trees examined in detail** | `~/reviews`, `~/release-programs`, `~/release-reviews`, `~/release-evidence` — **1609 files, 782 MiB** |
+
+### Four directory trees the first ruling never scoped
+
+They are the same liability class `AGENTS.md` now names, and none of them was in
+the ruling's two globs. Scanned rather than assumed:
+
+| Class | Result |
+|---|---|
+| **Purged exports** | zero copies, device-wide |
+| **Credentials** | 11 credential-class variables from the live `.env` tested **by value**; `MINIO_ROOT_USER` skipped as under 12 characters and non-discriminating, 4 not set. **Zero hits.** |
+| **Clinical free text** | 16 files match `chief complaint` / `date of birth` / `Assessment and Plan`. All 16 classified: 4 are a Playwright **test title** in a results JSON, 12 are the system default template's `styleInstructions` scaffold inside `note_templates` migrations — and those 12 are **byte-identical (`cmp`) to the repo's own tracked migrations**. No patient data. |
+| **Audio** | none |
+
+### The control that makes the zeros mean something
+
+Every credential value **self-tested** against `/opt/meddoc-pro/.env` — proof the
+matcher works on that value. **That is not sufficient**, and the first addendum's
+own lesson says why: it does not prove the matcher ever reached the haystack. A
+traversal that silently covers nothing returns zero for everything.
+
+So the same `grep -rlF -- <needle> <roots>` form was run against needles known to
+be present: `meddoc` → **204** files, `transcribe` → **304**, `QuillMD` → **8**.
+The traversal genuinely enters those trees, so the credential zeros are **real
+absences** rather than an untested path.
+
+> A self-test proves the needle. A positive control proves the haystack. A sweep
+> needs both, or its zero is a claim about nothing.
+
+### Classified and cleared, so no future sweep re-litigates them
+
+- **170 `.docx` under `~/reviews/native-docx-*/artifacts/`** — synthetic OOXML
+  grammar fixtures (`bdo--customXml.docx`, `table-missing-properties.docx`,
+  `run-rt--sdt.docx`). Generated parser inputs for the native-DOCX review. Not
+  clinical, not filled.
+- **`docs/qa-reports/comprehensive-audit-20260514T030426Z.pdf`** — tracked,
+  predates the pre-commit guard (which blocks only *added* files), and carries
+  **zero** clinical-label hits. A system audit report, not a rendered note.
+- **8 third-party template `.docx`/`.pdf`** under `~/.codex/` and
+  `~/.claude/skills/` — vendored tooling assets.
+
+### Not destroyed, and why that is the call
+
+These four trees are **verified clean**, so there is no exposure to remediate.
+`AGENTS.md` now says repo snapshots are in scope forever and should be reaped by
+the session that made them — and these outlived theirs. But the first addendum
+deliberately scoped `~/release-evidence` **out**, and destroying 782 MiB of a
+prior session's review evidence that provably carries no PHI and no credentials
+buys no safety while it does discard the record other reports may cite.
+
+Recorded rather than acted on, with the census above so the next sweep starts
+from an inventory instead of repeating it. One removal was made: the empty
+leftover directory `~/native-docx-exact-review.MB7eB0` (0 files).
