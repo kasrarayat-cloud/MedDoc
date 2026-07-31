@@ -70,21 +70,83 @@ export function applyRxResolved(
   data: RoundsStageData,
   rxResolved: boolean
 ): RoundsStageData {
-  if (!rxResolved) return data;
+  // The narrow case of applyGateOverlay, kept because B1's callers and tests
+  // speak in this shape. `undefined` means "no in-session signal", which is
+  // different from 0 and must not collapse into it.
+  return applyGateOverlay(data, { rxUnresolved: rxResolved ? 0 : undefined });
+}
+
+/**
+ * Every in-session signal the gate flow can supply, applied at once.
+ *
+ * THIS IS THE WIDENING `applyRxResolved` ASKED FOR. Its residual was named
+ * rather than hidden: one boolean could not express partial Rx progress, and
+ * nothing carried the in-session E/M confirm or the attestation checkbox, so N
+ * over-stated by up to one on both. Screen 3 owns all three signals, so it can
+ * now report them — and the error direction stays the safe one, because every
+ * term still comes from the gate set the server's own primitives produced.
+ *
+ * A field left `undefined` means "no signal", NOT "zero". Passing 0 for an
+ * unknown would clear a blocker nobody cleared.
+ */
+export function applyGateOverlay(
+  data: RoundsStageData,
+  overlay: {
+    /** Unmet critical Rx warnings, counted — partial credit is the point. */
+    rxUnresolved?: number;
+    /** The doctor confirmed the level in this session. */
+    emConfirmed?: boolean;
+    /** The attestation checkbox. UI-only, exactly as the gate says. */
+    attested?: boolean;
+  }
+): RoundsStageData {
+  // NO SIGNAL ⇒ THE SAME OBJECT BACK, referentially. This is consumed through a
+  // `useMemo` whose result is passed to the stage, so returning a fresh object
+  // for a no-op overlay would hand every consumer a new identity on every
+  // recompute for no reason. B1's tests pin this with `toBe`.
+  const touchesNothing =
+    overlay.rxUnresolved === undefined && !overlay.emConfirmed && !overlay.attested;
+  if (touchesNothing) return data;
 
   // Map, never filter. A gate that applies stays present at zero — "this visit
   // has no Rx gate" and "this visit's Rx gate is clear" are different claims
   // and the strip draws them differently.
-  const gates = data.gates.map((g) =>
-    g.id === 'rx' ? { ...g, unresolved: 0 } : g
-  );
+  const gates = data.gates.map((g) => {
+    if (g.id === 'rx' && overlay.rxUnresolved !== undefined) {
+      return { ...g, unresolved: Math.max(0, overlay.rxUnresolved) };
+    }
+    if (g.id === 'em' && overlay.emConfirmed) return { ...g, unresolved: 0 };
+    if (g.id === 'attestation' && overlay.attested) return { ...g, unresolved: 0 };
+    return g;
+  });
 
   return {
     ...data,
     gates,
     n: blockerCount(gates),
-    criticalUnresolved: 0,
+    // OFF THE GATE SET, always. Two derivations of one number is what makes the
+    // critical band and the padlock contradict each other on one screen.
+    criticalUnresolved: gates.find((g) => g.id === 'rx')?.unresolved ?? 0,
   };
+}
+
+/**
+ * Which step the gate flow opens on: the first gate that still blocks.
+ *
+ * NEVER NULL. The flow always opens somewhere — with nothing outstanding that
+ * is the last gate (attestation), which is where the signature is taken. An
+ * "open on nothing" state would be a full-screen dialog with no content and no
+ * way forward.
+ *
+ * Deliberately NOT `firstBlockingGateTarget`, which answers a different
+ * question — which DOM anchor the CHAT should scroll to — and correctly
+ * excludes attestation because it has no anchor to scroll to.
+ */
+export function firstOpenStep(gates: readonly SignGate[]): SignGateId | null {
+  if (gates.length === 0) return null;
+  return (
+    gates.find((g) => g.unresolved > 0)?.id ?? gates[gates.length - 1].id
+  );
 }
 
 /**

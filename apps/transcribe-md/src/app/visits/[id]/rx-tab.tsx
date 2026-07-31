@@ -90,6 +90,18 @@ interface RxTabProps {
    *  warningId/severity identity the server validates; this callback
    *  reads state only and never changes the override flow. */
   onResolvedChange?: (allCriticalResolved: boolean) => void;
+  /** Rounds Screen 3 — the same fact as a COUNT rather than a boolean.
+   *
+   *  `onResolvedChange` is all-or-nothing, so a strip reading it can only say
+   *  "some outstanding" and must over-state N until the last critical clears.
+   *  The gate flow needs partial credit (2 of 3 overridden), so this reports
+   *  the number still unmet.
+   *
+   *  DERIVED FROM THE SAME `criticalRefIds`/`overriddenIds` as the boolean —
+   *  never computed a second way. A second derivation of the unmet-critical
+   *  count is precisely the defect `unmetCriticalWarnings` exists to prevent,
+   *  and the two would eventually disagree on the same screen. */
+  onUnresolvedChange?: (unresolvedCount: number) => void;
   /** @deprecated kept for back-compat; Linear V1 is single-theme. */
   theme?: RxTabTheme;
 }
@@ -103,6 +115,7 @@ export function RxTab({
   readonly = false,
   initialOverriddenIds = [],
   onResolvedChange,
+  onUnresolvedChange,
 }: RxTabProps) {
   const blob = (rx as RxBlob | null) ?? null;
   const prescriptions = blob?.prescriptions ?? [];
@@ -172,6 +185,18 @@ export function RxTab({
   useEffect(() => {
     onResolvedChange?.(allCriticalResolved);
   }, [allCriticalResolved, onResolvedChange]);
+
+  // Same two inputs, same identity, one subtraction apart from the boolean
+  // above. ⚠️ The handler must be referentially STABLE in the caller: this
+  // effect depends on its identity, so an inline arrow re-runs it every render,
+  // produces a fresh view-model object each time, and never converges.
+  const unresolvedCriticalCount = useMemo(
+    () => criticalRefIds.filter((id) => !overriddenIds.has(id)).length,
+    [criticalRefIds, overriddenIds]
+  );
+  useEffect(() => {
+    onUnresolvedChange?.(unresolvedCriticalCount);
+  }, [unresolvedCriticalCount, onUnresolvedChange]);
 
   // Active card → matching warnings rail highlight.
   const [activeRxId, setActiveRxId] = useState<string | null>(null);

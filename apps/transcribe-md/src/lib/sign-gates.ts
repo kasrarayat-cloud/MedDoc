@@ -179,19 +179,39 @@ export function signGates(input: SignGateInput): SignGateSet {
     // asks about it — but it only COUNTS when there is something the server
     // will refuse without: an unacknowledged pending change.
     //
-    // ⚠️ B2 OWNS THE OPEN HALF OF THIS. SPEC.md:101–104 ("critical Rx count +
-    // E/M where emApplies + attestation") can be read as +1 on every applicable
-    // visit, and SPEC.md:143–146 describes Gate 2 as a CONFIRM step that exists
-    // whenever E/M applies. If B2 decides the doctor must actively confirm a
-    // level that nothing changed, that is a UI-only term exactly like
-    // attestation, and it belongs here with `serverEnforced: false` — not
-    // folded into this branch, which is the server's term.
+    // ✅ SETTLED BY B2, and the shape below is unchanged by the ruling.
     //
-    // B1 deliberately does not guess: counting a blocker the route will not
-    // enforce makes the strip lie in the safe-looking direction, and "0
-    // blockers" that the server then refuses is the same defect mirrored. The
-    // shape below carries existence and count separately so B2 can settle it
-    // without redesigning the type.
+    // THE QUESTION B1 LEFT OPEN: does this gate count +1 on EVERY applicable
+    // visit (a confirm step the doctor must always clear), or only when there
+    // is something the server will refuse without?
+    //
+    // **Only when the server will refuse.** Three readings agree:
+    //
+    //  1. SPEC.md:101–104 — "N = this visit's applicable UNRESOLVED gates:
+    //     critical Rx COUNT + E/M where `emApplies` + attestation". "where
+    //     `emApplies`" scopes WHICH gates are applicable; "unresolved" and
+    //     "count" are what each contributes. Under a +1-always reading,
+    //     "critical Rx count" would have to mean +1-always too — and it plainly
+    //     does not.
+    //  2. SPEC.md:143–146 describes Gate 2's CONTENT (the level, confidence,
+    //     rationale, the amber CONFIRM, "Change code"). That establishes the
+    //     gate EXISTS, which it does, on every applicable visit. Existence is
+    //     membership in this array; the count is `unresolved`. The type already
+    //     carried both separately, which is why the ruling needs no redesign.
+    //  3. The route decides it. With no pending record `unacknowledgedEmChange`
+    //     returns null, the refusal branch in `sign/route.ts` is skipped
+    //     entirely, and the sign SUCCEEDS. A +1 here would be a blocker the
+    //     server does not have — the strip lying in the safe-looking direction,
+    //     which is the one thing this module exists to prevent.
+    //
+    // SPEC.md's binding constraint settles any residual doubt: "Server refusals
+    // remain the sole source of truth — the gates are UI over them."
+    //
+    // STILL TRUE, and still the instruction: if a future item decides the doctor
+    // must actively confirm a level that NOTHING changed, that is a UI-only term
+    // exactly like attestation. It belongs as its own entry with
+    // `serverEnforced: false` — never folded into this branch, which is the
+    // server's term and must keep meaning "the route will refuse without this".
     gates.push({
       id: 'em',
       unresolved: emUnconfirmed ? 1 : 0,
