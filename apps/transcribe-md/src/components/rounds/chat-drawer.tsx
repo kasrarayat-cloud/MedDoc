@@ -39,6 +39,16 @@ export interface RoundsChatDrawerProps {
    * exists to prevent. Close first, then scroll.
    */
   onBeforeClose?: () => void;
+  /**
+   * Called whenever the drawer opens or closes.
+   *
+   * The caller needs this to know whether DEFERRING a scroll is safe at all:
+   * the only thing that flushes a deferred target is this drawer closing, so a
+   * target recorded while it is shut would be stranded and then released on the
+   * next unrelated close. Reporting the transition lets the caller scroll
+   * immediately instead, and clear anything stale on the way in.
+   */
+  onOpenChange?: (open: boolean) => void;
   /** Open on mount. Only used by tests and by a deep link to the editor. */
   defaultOpen?: boolean;
 }
@@ -55,6 +65,7 @@ function isTypingTarget(el: EventTarget | null): boolean {
 export function RoundsChatDrawer({
   children,
   onBeforeClose,
+  onOpenChange,
   defaultOpen = false,
 }: RoundsChatDrawerProps) {
   const [open, setOpen] = useState(defaultOpen);
@@ -65,10 +76,11 @@ export function RoundsChatDrawer({
   const close = useCallback(() => {
     onBeforeClose?.();
     setOpen(false);
+    onOpenChange?.(false);
     // Return focus to where it came from, on the next frame so the panel is
     // gone before the trigger takes it back.
     requestAnimationFrame(() => triggerRef.current?.focus());
-  }, [onBeforeClose]);
+  }, [onBeforeClose, onOpenChange]);
 
   // Summon. Bound to the document because the doctor may be anywhere on the
   // stage — reading the note, in the gate rail — when they decide to edit.
@@ -87,11 +99,12 @@ export function RoundsChatDrawer({
       if (e.key.toLowerCase() === SHORTCUT_KEY) {
         e.preventDefault();
         setOpen(true);
+        onOpenChange?.(true);
       }
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [open, close]);
+  }, [open, close, onOpenChange]);
 
   // Move focus INTO the panel when it opens, so the next Tab lands in the
   // composer rather than back in the page behind it.
@@ -112,7 +125,10 @@ export function RoundsChatDrawer({
         className="qm-rounds-chat-trigger"
         aria-expanded={open}
         aria-haspopup="dialog"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setOpen(true);
+          onOpenChange?.(true);
+        }}
       >
         Edit with chat
         <kbd aria-hidden className="qm-rounds-kbd">

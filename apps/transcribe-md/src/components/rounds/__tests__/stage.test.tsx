@@ -63,6 +63,63 @@ describe('composition', () => {
     expect(screen.getByTestId('the-paper').textContent).toBe('the note');
   });
 
+  it('contributes NO main landmark — AppFrame already owns the only one', () => {
+    // The sheet wrapper was a `<main>`. Every route is already inside
+    // AppFrame's `<main id="main">`, so wiring this to /visits/[id] would have
+    // put two main landmarks on the page — an axe violation introduced by the
+    // wiring, not by the component, and invisible in a screenshot.
+    //
+    // It is also load-bearing beyond a11y: the sign bar is `position: sticky`
+    // against AppFrame's main, and a nearer landmark ancestor is how a sticky
+    // control silently stops sticking.
+    //
+    // /board avoids the same trap by letting RoundsBoardChrome own the only
+    // one. Pinned here so it cannot be "simplified" back to semantic-looking
+    // markup.
+    const { container } = renderStage();
+    expect(container.querySelector('main')).toBeNull();
+    // …and the class that carries the layout is still there, so this is a
+    // landmark change and not a deletion.
+    expect(container.querySelector('.qm-rounds-sheet-wrap')).toBeTruthy();
+  });
+
+  it('reports the chat drawer opening and closing, so a deferred scroll is safe', () => {
+    // Deferring is only safe while something is guaranteed to flush, and the
+    // only flusher is the close. Without this transition the caller cannot
+    // tell "the drawer is over the sheet, defer" from "the drawer is shut, a
+    // recorded target will never be released" — and the second one strands a
+    // scroll that then fires on the next unrelated close.
+    const seen: boolean[] = [];
+    renderStage({
+      chat: <div data-testid="the-chat">chat</div>,
+      onChatOpenChange: (open: boolean) => seen.push(open),
+    });
+
+    fireEvent.click(screen.getByTestId('rounds-chat-trigger'));
+    expect(seen).toEqual([true]);
+
+    fireEvent.click(screen.getByTestId('rounds-chat-close'));
+    expect(seen).toEqual([true, false]);
+  });
+
+  it('the recorded time is NOT formatted during render — it would mismatch on hydration', () => {
+    // `formatLocalDateTime` is toLocale*(undefined, …): the container's
+    // timezone on the server, the browser's on hydration. This component is
+    // server-rendered, so formatting inline produced a React hydration error on
+    // every stage load and a visibly wrong time until the client render landed.
+    //
+    // <LocalTime> renders a placeholder via getServerSnapshot and formats only
+    // on the client. Asserting the <time dateTime=…> wrapper is how this stays
+    // fixed: a revert to inline formatting produces a bare string with no
+    // element to find.
+    const { container } = renderStage();
+    const cell = screen.getByTestId('rounds-stage-recorded');
+    const time = cell.querySelector('time');
+    expect(time).not.toBeNull();
+    expect(time!.getAttribute('dateTime')).toBe(identity.recordedAtIso);
+    expect(container).toBeTruthy();
+  });
+
   it('the sheet keeps the 820px paper class — a parity invariant', () => {
     renderStage();
     expect(screen.getByTestId('rounds-sheet').className).toContain('rounds-paper');

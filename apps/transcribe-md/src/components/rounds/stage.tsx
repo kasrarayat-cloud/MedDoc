@@ -69,6 +69,16 @@ export interface RoundsStageProps {
    * nothing.
    */
   onChatBeforeClose?: () => void;
+  /**
+   * Fires whenever the chat drawer opens or closes.
+   *
+   * Deferring a scroll is only safe while something is guaranteed to flush it,
+   * and the only flusher is the drawer closing. The owner of `onChatBeforeClose`
+   * needs to know the drawer's state so it can scroll IMMEDIATELY when a reply
+   * arrives after the doctor already closed it — otherwise that target sits
+   * unreleased and fires on the next unrelated close.
+   */
+  onChatOpenChange?: (open: boolean) => void;
 }
 
 function signLabel(n: number, signed: boolean): string {
@@ -92,6 +102,7 @@ export function RoundsStage({
   onSkip,
   onOpenQueue,
   onChatBeforeClose,
+  onChatOpenChange,
 }: RoundsStageProps) {
   const signed = !!signedAt;
   const posLabel = queueLabel(queue);
@@ -131,7 +142,18 @@ export function RoundsStage({
           ) : null}
         </aside>
 
-        <main className="qm-rounds-sheet-wrap">
+        {/* A DIV, NOT A `<main>` — deliberately, and it must stay one.
+            `AppFrame` already renders `<main id="main" tabIndex={-1}>` around
+            every route, so a second one here is two main landmarks on the page
+            (axe: `landmark-no-duplicate-main`). /board avoids the same trap by
+            letting `RoundsBoardChrome` own the only one.
+
+            It is also load-bearing beyond a11y: the sign bar is
+            `position: sticky; bottom: 0` and resolves against AppFrame's
+            `<main>`, which is documented there as the deliberate overflow
+            parent. Introducing a nearer landmark ancestor is how a sticky
+            control silently stops sticking. */}
+        <div className="qm-rounds-sheet-wrap">
           {criticalUnresolved > 0 ? (
             // Across the TOP of the card, and it names where it gets cleared —
             // a warning that does not say what to do about it is decoration.
@@ -150,7 +172,7 @@ export function RoundsStage({
           <div className="rounds-paper qm-rounds-sheet" data-testid="rounds-sheet">
             {children}
           </div>
-        </main>
+        </div>
 
         {/* ── Next-up peek, right edge ────────────────────────────────── */}
         <aside className="qm-rounds-peek qm-rounds-peek-next" aria-hidden={!queue.nextVisitId}>
@@ -217,7 +239,12 @@ export function RoundsStage({
         ) : null}
 
         {chat ? (
-          <RoundsChatDrawer onBeforeClose={onChatBeforeClose}>{chat}</RoundsChatDrawer>
+          <RoundsChatDrawer
+            onBeforeClose={onChatBeforeClose}
+            onOpenChange={onChatOpenChange}
+          >
+            {chat}
+          </RoundsChatDrawer>
         ) : null}
 
         <span className="qm-rounds-rail-kbd" aria-hidden>

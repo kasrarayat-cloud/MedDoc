@@ -18,7 +18,7 @@
 // ============================================================================
 
 import type { StageIdentity } from '@/lib/rounds/stage-data';
-import { formatLocalDateTime } from '@/lib/format-time';
+import { LocalTime } from '@/components/ui/local-time';
 
 function MetaCell({
   label,
@@ -26,7 +26,7 @@ function MetaCell({
   testId,
 }: {
   label: string;
-  value: string;
+  value: React.ReactNode;
   testId: string;
 }) {
   return (
@@ -69,9 +69,24 @@ export function RoundsStageIdentity({ identity }: { identity: StageIdentity }) {
       ) : null}
 
       <div className="qm-rounds-ident-cells">
+        {/* <LocalTime>, NOT formatLocalDateTime, and the difference is a real
+            defect rather than a preference.
+
+            This component is inside the client boundary but Next still
+            SERVER-renders it, and `formatLocalDateTime` is `toLocale*(undefined,
+            …)` — the container's timezone on the server, the browser's on
+            hydration. Prod containers run UTC, so a doctor in Los Angeles got
+            "21:14" in the server HTML and "14:14" after hydration: a React
+            hydration error on every stage load, and a visibly wrong recorded
+            time until the client render landed.
+
+            `<LocalTime>` is the fix this codebase already had — it renders a
+            placeholder via getServerSnapshot and formats only on the client,
+            with suppressHydrationWarning. It cost nothing to reach for and the
+            component was written for exactly this. */}
         <MetaCell
           label="Recorded"
-          value={formatLocalDateTime(recordedAtIso)}
+          value={<LocalTime iso={recordedAtIso} variant="dateTime" />}
           testId="rounds-stage-recorded"
         />
         {durationLabel ? (
