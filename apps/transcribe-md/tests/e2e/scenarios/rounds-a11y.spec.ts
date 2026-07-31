@@ -138,6 +138,26 @@ test.describe('Rounds — axe across every surface, flag-ON', () => {
   const inherited: Finding[] = [];
   const incomplete: Finding[] = [];
 
+  /**
+   * Capture the state, alongside the axe pass that is already standing there.
+   *
+   * ⚠️ WHERE THESE MAY LIVE IS A RULE, NOT A PREFERENCE. A screenshot of a
+   * rendered note is a rendered note. AGENTS.md treats a filled clinical export
+   * as PHI "regardless of whether the patient is real or synthetic" — the
+   * posture deliberately does not depend on knowing which, because by the time
+   * you are asking, the file already exists somewhere it should not.
+   *
+   * So they go to `test-results/`, which is gitignored and swept by the
+   * close-out, and CI uploads them as a run ARTIFACT. They are never committed,
+   * and the ledger cites the run rather than a path in the repository.
+   */
+  async function shoot(page: Page, state: string, width: number) {
+    await page.screenshot({
+      path: `test-results/rounds-shots/${state.replace(/[^a-z0-9]+/gi, '-')}@${width}.png`,
+      fullPage: true,
+    });
+  }
+
   function record(state: string, width: number, run: AxeRun) {
     for (const e of blocking(run.violations)) violations.push({ state, width, entry: e });
     for (const e of inheritedBlocking(run.violations))
@@ -160,6 +180,7 @@ test.describe('Rounds — axe across every surface, flag-ON', () => {
   async function sampleAcrossAnimation(page: Page, state: string, width: number) {
     for (let i = 0; i < 3; i++) {
       record(state, width, await runAxe(page));
+      if (i === 0) await shoot(page, state, width);
       if (i < 2) await page.waitForTimeout(550);
     }
   }
@@ -210,13 +231,15 @@ test.describe('Rounds — axe across every surface, flag-ON', () => {
       // The chat drawer is an overlay with its own focus trap — a distinct DOM.
       await page.getByTestId('rounds-chat-trigger').click();
       await expect(page.getByTestId('rounds-chat-drawer')).toBeVisible();
-      record(`stage:chat-open`, width, await runAxe(page));
+      record('stage:chat-open', width, await runAxe(page));
+      await shoot(page, 'stage:chat-open', width);
       await page.getByTestId('rounds-chat-close').click();
 
       // ── The stage, imaging — a DIFFERENT gate set, so a different tree ───
       await page.goto(`/visits/${imaging!.visitId}`);
       await expect(page.getByTestId('rounds-stage')).toBeVisible();
       record('stage:imaging', width, await runAxe(page));
+      await shoot(page, 'stage:imaging', width);
 
       // ── The gate flow, every step ────────────────────────────────────────
       // A dialog behind a click, so a route-list sweep cannot reach it. Each
@@ -237,6 +260,7 @@ test.describe('Rounds — axe across every surface, flag-ON', () => {
       await page.getByTestId('rounds-review-sign').click();
       await expect(page.getByTestId('rounds-gate-flow')).toBeVisible();
       record('gates:rx-blocked', width, await runAxe(page));
+      await shoot(page, 'gates:rx-blocked', width);
 
       const host = page.getByTestId('rounds-gate-host-rx');
       await host.getByRole('button', { name: /override/i }).first().click();
@@ -244,16 +268,19 @@ test.describe('Rounds — axe across every surface, flag-ON', () => {
         .locator('[role="dialog"]')
         .filter({ has: page.locator('#override-reason') });
       record('gates:override-modal', width, await runAxe(page));
+      await shoot(page, 'gates:override-modal', width);
       await dialog
         .locator('#override-reason')
         .fill('Benefit outweighs risk; monitoring renal function weekly and patient counselled.');
       await dialog.getByRole('button', { name: /confirm override/i }).click();
       await expect(host).toContainText(/overridden/i);
       record('gates:rx-cleared', width, await runAxe(page));
+      await shoot(page, 'gates:rx-cleared', width);
 
       await page.getByTestId('rounds-gate-next').click();
       await expect(page.getByTestId('rounds-gate-flow')).toHaveAttribute('data-step', 'em');
       record('gates:em', width, await runAxe(page));
+      await shoot(page, 'gates:em', width);
 
       // ── The signed screen ────────────────────────────────────────────────
       await page.goto(`/visits/${signed!.visitId}`);
@@ -269,6 +296,7 @@ test.describe('Rounds — axe across every surface, flag-ON', () => {
     await page.goto(`/visits/${primary!.visitId}`);
     await expect(page.getByTestId('rounds-stage')).toBeVisible();
     record('stage:primary@1024', 1024, await runAxe(page));
+    await shoot(page, 'stage:primary', 1024);
 
     // ── ONE assertion, at the end ────────────────────────────────────────────
     // Collected rather than asserted per state, so a run enumerates every defect
