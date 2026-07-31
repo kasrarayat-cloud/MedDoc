@@ -10,9 +10,13 @@
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 
+import { isSkinRounds } from '@/config/skin-rounds';
+import { recoveryHref, recoveryLabel } from '@/lib/recovery-href';
+
 export default function VisitNotFound() {
   return (
     <div
+      className={isSkinRounds() ? 'qm-rounds-host qm-rounds-notfound' : undefined}
       style={{
         minHeight: '100vh',
         background: 'var(--color-linear-bg)',
@@ -54,9 +58,9 @@ export default function VisitNotFound() {
           This visit doesn&apos;t exist or you don&apos;t have access to it.
         </p>
         <div className="mt-10">
-          <Link href="/dashboard" className="qm-lin-btn">
+          <Link href={recoveryHref()} className="qm-lin-btn">
             <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
-            Back to dashboard
+            {recoveryLabel()}
           </Link>
         </div>
       </main>

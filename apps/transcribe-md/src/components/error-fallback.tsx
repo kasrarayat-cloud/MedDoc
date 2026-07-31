@@ -17,6 +17,8 @@ import { ArrowLeft, RefreshCw } from 'lucide-react';
 
 import { SpecularButton } from '@/components/specular-button';
 import { isStaleDeploymentError } from '@/lib/stale-deployment';
+import { isSkinRounds } from '@/config/skin-rounds';
+import { recoveryHref, recoveryLabel } from '@/lib/recovery-href';
 
 type ErrorFallbackTheme = 'legacy' | 'clinician';
 
@@ -94,6 +96,12 @@ export function ErrorFallback({
 
   return (
     <main
+      // THE BRIDGE, ADOPTED. `qm-rounds-host` redeclares the --color-linear-*
+      // names beneath it, so every inline object in this file retints without
+      // being touched. `qm-rounds-errorstate` is what axe's ownership rule
+      // spends: a violation on a node under a `qm-rounds-*` class blocks the
+      // Gate C sweep, and a node with no such class is classified inherited.
+      className={isSkinRounds() ? 'qm-rounds-host qm-rounds-errorstate' : undefined}
       style={{
         minHeight: '60vh',
         display: 'flex',
@@ -126,7 +134,15 @@ export function ErrorFallback({
             borderRadius: '50%',
             background: 'rgba(212, 87, 74, 0.10)',
             border: '1px solid rgba(212, 87, 74, 0.35)',
-            color: 'var(--color-linear-danger)',
+            // C1-b DEBT, PAID HERE. `--color-linear-danger` is used once as a
+            // foreground in the whole C1 surface set — this glyph — and once
+            // as a fill. The bridge maps it to `--rounds-critical` so the
+            // destructive fill stays red, which leaves this one site at
+            // 2.72:1. Forked to the text-safe token rather than bending the
+            // bridge and paling the fill.
+            color: isSkinRounds()
+              ? 'var(--rounds-critical-on-dark)'
+              : 'var(--color-linear-danger)',
             marginBottom: 18,
             fontSize: 18,
           }}
@@ -201,7 +217,7 @@ export function ErrorFallback({
             </SpecularButton>
           )}
           <Link
-            href="/dashboard"
+            href={recoveryHref()}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -216,7 +232,7 @@ export function ErrorFallback({
             className="hover:!text-linear-text-2"
           >
             <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
-            Back to dashboard
+            {recoveryLabel()}
           </Link>
         </div>
       </div>

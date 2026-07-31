@@ -1062,3 +1062,87 @@ body[data-skin='rounds'] {
   /* ── Interaction ─────────────────────────────────────────────────────── */
   --color-linear-row-hover: color-mix(in srgb, var(--rounds-text-1) 5%, transparent);
 }
+
+/* ============================================================================
+ * C1-c — error, empty and loading.
+ * ----------------------------------------------------------------------------
+ * These are the surfaces a doctor sees when something has gone wrong or is not
+ * ready yet. They carry `qm-rounds-host` (the bridge) plus a `qm-rounds-*`
+ * class of their own, because that class is the currency axe's ownership rule
+ * spends: a violation on a node beneath a `qm-rounds-*` class BLOCKS the Gate C
+ * sweep, and a node without one is classified inherited and merely reported.
+ * ========================================================================== */
+
+/* The stage is painted on `body`, but `loading.tsx` and `not-found.tsx` render
+ * OUTSIDE the AppFrame boundary, so they set their own ground. */
+[data-skin='rounds'] .qm-rounds-errorstate,
+[data-skin='rounds'] .qm-rounds-notfound,
+[data-skin='rounds'] .qm-rounds-loading {
+  background: var(--rounds-stage-bg-3);
+  color: var(--rounds-text-1);
+  font-family: var(--rounds-font-ui);
+}
+
+/* ── The first control primitive, landing WITH its consumer ───────────────
+ * C1-b deliberately shipped no control classes: a class with no consumer
+ * cannot be proven by rule 7, because nothing renders and nothing can be made
+ * to fail. This one has exactly one caller (`not-found.tsx`'s Rounds branch)
+ * and a test that renders it. */
+[data-skin='rounds'] .qm-rounds-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px;
+  border-radius: var(--rounds-radius-sm);
+  background: var(--rounds-accent);
+  /* #fff on --rounds-accent measures 5.37:1 — AA for small text. Stated
+   * because the value looks like a bare literal and is in fact checked. */
+  color: #fff;
+  font-family: var(--rounds-font-ui);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition: background 120ms ease;
+}
+[data-skin='rounds'] .qm-rounds-btn:hover {
+  background: var(--rounds-accent-hover);
+}
+[data-skin='rounds'] .qm-rounds-btn:focus-visible {
+  outline: 2px solid var(--rounds-accent-text);
+  outline-offset: 2px;
+}
+
+/* ── Skeletons ───────────────────────────────────────────────────────────
+ * The shipped `Skeleton` primitive paints `bg-linear-surface-2`, a Tailwind
+ * UTILITY rather than a `var()` — so the host bridge cannot reach it, and this
+ * is the one place in C1 where a class override is required rather than
+ * preferred. Worth stating: the bridge retints custom properties, not
+ * compiled utility classes. */
+[data-skin='rounds'] .qm-rounds-loading .animate-pulse,
+[data-skin='rounds'] .qm-rounds-skel-sheet .animate-pulse {
+  background-color: var(--rounds-surface-3);
+}
+
+/* The paper the visit route resolves to: 820px, per SPEC's Screen 2. */
+[data-skin='rounds'] .qm-rounds-skel-sheet {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 44px 56px;
+  border-radius: var(--rounds-radius-lg);
+  background: var(--rounds-surface-1);
+  border: 1px solid var(--rounds-line-1);
+}
+
+/* A board lane rides a hairline track — the skeleton says so too. */
+[data-skin='rounds'] .qm-rounds-skel-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: var(--rounds-line-1);
+}
+[data-skin='rounds'] .qm-rounds-skel-lane + .qm-rounds-skel-lane {
+  border-top: 1px solid color-mix(in srgb, var(--rounds-line-1) 55%, transparent);
+}

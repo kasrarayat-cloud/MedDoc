@@ -58,8 +58,18 @@ const SURFACE_FILES = [
   'src/components/error-fallback.tsx',
   'src/components/skeleton.tsx',
   'src/components/ui/empty-state.tsx',
-  'src/app/not-found.tsx',
 ];
+
+/**
+ * Next.js CONVENTION files are C1 surfaces wherever they live — `error.tsx`,
+ * `loading.tsx`, `not-found.tsx`. Collected by traversal across the whole app
+ * rather than listed, because that is the point: `visits/[id]/not-found.tsx`
+ * and `visits/[id]/loading.tsx` were both C1-c surfaces and NEITHER was in the
+ * hand-written list above. The list looked complete and was not — which is the
+ * same failure the `globstar` note below describes, arriving a second time
+ * from a different direction.
+ */
+const CONVENTION_FILES = ['error.tsx', 'loading.tsx', 'not-found.tsx'];
 
 function walk(dir: string): string[] {
   let out: string[] = [];
@@ -79,7 +89,10 @@ function surfaceFiles(): string[] {
       return [];
     }
   });
-  return [...new Set([...fromDirs, ...SURFACE_FILES])].sort();
+  const conventions = walk('src/app').filter((f) =>
+    CONVENTION_FILES.some((c) => f.endsWith(`/${c}`)),
+  );
+  return [...new Set([...fromDirs, ...conventions, ...SURFACE_FILES])].sort();
 }
 
 /** The declaration block of the host bridge, comments stripped. */
@@ -147,14 +160,6 @@ const DEFERRED_FORKS: Record<string, { sites: number; owner: string; why: string
       'the 7 fills stay right; two of the four foregrounds are aria-hidden ' +
       'glyphs that axe does not measure, and the other two need a forked ' +
       '--rounds-accent-text at their call site.',
-  },
-  '--color-linear-danger': {
-    sites: 1,
-    owner: 'C1-c (error-fallback.tsx)',
-    why:
-      'used 1× as a foreground and 1× as a fill. Mapped to --rounds-critical ' +
-      'so the destructive button keeps a red fill; the single foreground needs ' +
-      'a forked --rounds-critical-on-dark.',
   },
 };
 function tokenValue(name: string): string | null {
@@ -305,22 +310,28 @@ describe('C1 host bridge', () => {
     expect(contrast('#c4841c', '#252d3a')).toBeLessThan(4.5); // surface-3, the one it misses
   });
 
-  it('C1-b changes NOTHING at runtime — no surface has adopted the host yet', () => {
-    // The claim "zero runtime change" is the reason this lands as its own PR
-    // with no E2E of its own. Made executable rather than asserted: the class
-    // exists in exactly one place, the stylesheet, and in no component.
-    //
-    // ⚠️ THIS TEST IS EXPECTED TO BE DELETED, by C1-c — the first split that
-    // adopts the bridge. It is a claim about a moment, and it says so, rather
-    // than becoming a rule that blocks the work it exists to enable.
+  it('the surfaces C1-c restyled ADOPT the host, and pair it with an owned class', () => {
+    // Replaces C1-b's "nothing has adopted this yet" assertion, which said in
+    // its own message that C1-c should delete it. The claim now worth holding
+    // is the opposite one: adoption is real, and every adopter also carries a
+    // `qm-rounds-*` class of its own — because that class is the currency axe's
+    // ownership rule spends. A host without an owned class is a surface Gate C
+    // will classify as inherited and merely report.
     const adopters = files.filter((f) => readFileSync(f, 'utf8').includes('qm-rounds-host'));
+    expect(adopters.length, 'no surface adopts the bridge').toBeGreaterThan(2);
+    const hostOnly = adopters.filter((f) => {
+      const src = readFileSync(f, 'utf8');
+      const owned = [...src.matchAll(/qm-rounds-[a-z0-9-]+/g)]
+        .map((m) => m[0])
+        .filter((c) => c !== 'qm-rounds-host');
+      return owned.length === 0;
+    });
     expect(
-      adopters,
-      'a surface now carries qm-rounds-host, so this PR is no longer a no-op. ' +
-        'That is fine and expected from C1-c onward — DELETE this test in the ' +
-        'PR that adopts the bridge, and prove the adoption instead.',
+      hostOnly,
+      'these files carry qm-rounds-host but no owned qm-rounds-* class, so axe ' +
+        'will treat their violations as inherited and merely report them:\n  ' +
+        hostOnly.join('\n  '),
     ).toEqual([]);
-    expect(TOKENS).toContain('qm-rounds-host'); // positive control
   });
 
   it('the bridge is SCOPED — it must not repaint the whole app', () => {
