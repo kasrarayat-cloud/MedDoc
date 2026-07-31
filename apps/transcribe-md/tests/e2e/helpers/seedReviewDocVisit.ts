@@ -175,7 +175,11 @@ export const SEEDED_EM_LEVEL = '99214';
 
 /** An imaging report reads as headings, not SOAP. Mirrors the shape the
  *  WM_IOV-class templates produce. */
-const IMAGING_NOTE = [
+/** EXPORTED so a parity test derives its markers from the FIXTURE rather than
+ *  from a second hand-written copy of it. A parity assertion whose expected
+ *  strings drift from what was actually seeded proves nothing about parity —
+ *  it proves the two literals still match. */
+export const IMAGING_NOTE_SOURCE = [
   '## EXAM TYPE',
   'Bilateral lower extremity venous duplex ultrasound.',
   '',
@@ -199,7 +203,8 @@ const IMAGING_NOTE = [
   '',
   '## RECOMMENDATION',
   'Conservative management. Follow up as clinically indicated.',
-].join('\n');
+];
+const IMAGING_NOTE = IMAGING_NOTE_SOURCE.join('\n');
 
 /** The doctor's own form — imaging headings. */
 const IMAGING_TEMPLATE_SECTIONS = [

@@ -381,6 +381,25 @@ jobs:
           CI: "true"
         run: npx playwright test --project=rounds-a11y
 
+      # ── Gate B's screenshots clause, made retrievable. ──
+      # They are uploaded HERE rather than at the end of the job, and on
+      # `always()` rather than `failure()`, because both of those were the bug:
+      # the captures used to be written into `test-results/`, which every later
+      # `playwright test` invocation deletes in global setup, and the only step
+      # that uploaded that directory was `if: failure()`. So on a GREEN run —
+      # the only kind rule 2a lets the ledger cite — zero screenshots ever left
+      # the runner, and on a red one they had usually been wiped first.
+      # `rounds-shots/` sits outside every project's outputDir; uploading it
+      # immediately keeps it independent of anything downstream.
+      - name: Upload Rounds screenshots (Gate B)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rounds-shots
+          path: apps/transcribe-md/rounds-shots/
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Build flag-ON image for the document surface
         run: >
           docker build -f apps/transcribe-md/Dockerfile

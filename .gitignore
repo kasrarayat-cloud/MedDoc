@@ -49,6 +49,11 @@ next-env.d.ts
 # playwright / test artifacts
 playwright-report/
 test-results/
+# Gate B's Rounds screenshots. A screenshot of a rendered note IS a rendered
+# note, so these are never committed — CI uploads them as a run artefact and the
+# ledger cites the run. Deliberately OUTSIDE test-results/, which playwright
+# deletes at the start of every subsequent `playwright test` invocation.
+rounds-shots/
 
 # local tool state
 /venv/

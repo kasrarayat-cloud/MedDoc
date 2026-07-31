@@ -26,9 +26,11 @@
 import { expect, test } from '@playwright/test';
 
 import { cleanupTestUsers } from '../helpers/cleanup';
+import { extractExportText } from '../helpers/exportText';
 import {
   seedReviewDocVisit,
   findImagingEmArtifacts,
+  IMAGING_NOTE_SOURCE,
   type ReviewDocClass,
 } from '../helpers/seedReviewDocVisit';
 import { signupFreshUser } from '../helpers/signup';
@@ -293,6 +295,111 @@ test.describe('Rounds Screen 3 — the gates', () => {
       /server does not check/i,
     );
     await expect(page.getByTestId('rounds-gate-attest')).toBeVisible();
+  });
+
+  // ── 7b. PDF/WORD PARITY, RE-PROVEN UNDER THE SKIN, AT 1440 ─────────────
+  test('PARITY AT 1440 — signing through the flow exports what the paper showed', async ({
+    page,
+  }, testInfo) => {
+    // ⚠️ NOTHING HAD EVER PRODUCED AN EXPORT ON A FLAG-ON BUILD. Gate B asks
+    // for parity to be RE-proven, and the evidence offered for it was the
+    // `review-doc` and `visit-doc` packs — both of which run on images built
+    // WITHOUT NEXT_PUBLIC_SKIN_ROUNDS. They measure the old skin's parity:
+    // the same proof that existed before Rounds was written. A re-proof that
+    // runs under the pre-change condition establishes nothing about the change,
+    // and if the skin ever did alter what reaches the artifact, that whole
+    // evidence set would stay green.
+    //
+    // The other half of the hole: no Rounds pack signs. `rounds-signed` seeds
+    // `signed: true` straight into the database, and the walk above stops at
+    // the bar without clicking it — so `POST /sign`, the export path, and the
+    // artifacts had never been exercised with the skin on, at any width.
+    //
+    // Imaging, deliberately: it opens directly at attestation (no Rx gate, no
+    // E/M gate), so the walk is short, and it is the class where a leak is
+    // worst — an office E/M code on an ultrasound report is wrong as DATA and
+    // reaches the signed record.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const seeded = await openFlow(page, 'gates-parity', { specialtyClass: 'imaging' });
+    test.skip(!seeded, 'psql seeding unavailable');
+
+    // WHAT THE DOCTOR SEES, under the skin, at 1440 — read before signing,
+    // because signing replaces the screen with Screen 4.
+    const paper = await page.getByTestId('review-document-view').innerText();
+    expect(
+      paper.length,
+      'the Rounds paper rendered empty — a parity assertion against it would ' +
+        'pass on anything',
+    ).toBeGreaterThan(200);
+
+    // The markers come from the FIXTURE, not from a second hand-written copy,
+    // so they cannot drift into agreeing with themselves.
+    const HEADINGS = IMAGING_NOTE_SOURCE.filter((l) => l.startsWith('## ')).map((l) =>
+      l.replace(/^##\s*/, ''),
+    );
+    expect(HEADINGS.length, 'no headings derived from the fixture').toBeGreaterThan(4);
+    for (const h of HEADINGS) {
+      expect(paper, `the paper is missing "${h}" before signing`).toContain(h);
+    }
+
+    // Register the listener BEFORE submitting — two sequential waitForEvent
+    // calls can miss a download that already fired, which reads as a 60s
+    // timeout and looks like a broken export rather than a racing test.
+    const downloads: import('@playwright/test').Download[] = [];
+    page.on('download', (d) => downloads.push(d));
+
+    await page.getByTestId('rounds-gate-attest').check();
+    const bar = page.getByTestId('review-doc-signbar');
+    await bar.getByRole('button', { name: /sign & download/i }).click();
+    const dialog = page.getByRole('dialog');
+    // Toggles, not commands: PDF is pressed by default, so a blind click
+    // DESELECTS it. Press only what is not already pressed.
+    for (const label of [/download pdf/i, /download docx/i]) {
+      const btn = dialog.getByRole('button', { name: label });
+      if ((await btn.getAttribute('aria-pressed')) !== 'true') await btn.click();
+    }
+    await dialog.getByRole('button', { name: /sign & deliver/i }).dispatchEvent('click');
+
+    await expect
+      .poll(() => downloads.length, {
+        message: 'expected a PDF and a DOCX from the Rounds sign submit',
+        timeout: 90_000,
+      })
+      .toBeGreaterThanOrEqual(2);
+
+    const files = downloads.slice(0, 2);
+    expect(
+      files.map((f) => f.suggestedFilename().replace(/^.*\./, '')).sort(),
+      'one PDF and one DOCX',
+    ).toEqual(['docx', 'pdf']);
+
+    for (const f of files) {
+      const path = await f.path();
+      expect(path, `no path for ${f.suggestedFilename()}`).toBeTruthy();
+      // `extractExportText` throws rather than returning '' when it cannot find
+      // the marker — so a broken extractor cannot turn the assertions below
+      // into a no-op that reports success forever.
+      const text = await extractExportText(path!, f.suggestedFilename(), 'EXAM TYPE');
+
+      // PARITY: every section the doctor read on the Rounds paper is in the
+      // bytes they receive.
+      for (const h of HEADINGS) {
+        expect(
+          text,
+          `${f.suggestedFilename()} is missing the "${h}" section the paper showed`,
+        ).toContain(h);
+      }
+      // And the invariant the export path has no specialty guard for: no
+      // office E/M code may reach an imaging artifact.
+      expect(
+        text,
+        `${f.suggestedFilename()} leaked an office E/M code from an imaging visit`,
+      ).not.toMatch(/\b992\d\d\b/);
+    }
+
+    await testInfo.attach('rounds-parity-filenames', {
+      body: files.map((f) => f.suggestedFilename()).join('\n'),
+    });
   });
 
   // ── 8. The flow and the strip cannot disagree about N ──────────────────
