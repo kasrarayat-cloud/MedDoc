@@ -425,10 +425,10 @@ export function seedReviewDocVisit(
           "createdAt", "updatedAt")
        values
          ('${visitId}', '${userId}', '${patientId}',
-          ${opts.signed ? `'${SIGNED_AT}'::timestamptz` : 'null'},
-          ${opts.signed ? `'${q(imaging ? IMAGING_NOTE : NOTE)}'` : 'null'},
           '${imaging ? 'ultrasound' : 'primary-care'}', 'text_notes',
           '${opts.signed ? 'SIGNED' : 'READY'}',
+          ${opts.signed ? `'${SIGNED_AT}'::timestamptz` : 'null'},
+          ${opts.signed ? `'${q(imaging ? IMAGING_NOTE : NOTE)}'` : 'null'},
           ${opts.chiefComplaint ? `'${q(opts.chiefComplaint)}'` : 'null'},
           '${imaging ? 'Bilateral venous duplex, screening study.' : 'Asthma review. Continue current medications.'}',
           '${q(imaging ? IMAGING_NOTE : NOTE)}', 1,

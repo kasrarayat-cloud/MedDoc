@@ -41,6 +41,33 @@ test.describe('Rounds Screen 4 — signed & locked', () => {
     await cleanupTestUsers();
   });
 
+  /**
+   * ⚠️ IN CI, A SEEDER THAT CANNOT SEED IS A DEFECT, NOT A SKIP.
+   *
+   * Every test here ends `test.skip(!seeded, …)`, which is right locally — the
+   * psql channel genuinely may not exist. But **Playwright exits 0 on a fully
+   * skipped file.** When this pack's seeding broke on a misaligned column, all
+   * 11 tests skipped and the run went GREEN having proved nothing. That is A2
+   * defect 0's shape exactly: a gate reporting success for work that never ran.
+   *
+   * A probe of the psql CHANNEL does not catch it — I wrote that first and
+   * watched it pass while the pack skipped. The channel was fine; the INSERT was
+   * rejected. The question has to be "did this seed succeed", not "could I reach
+   * the database".
+   *
+   * In CI the channel is guaranteed, so a null here means the seeder is broken.
+   */
+  function requireSeed<T>(seeded: T | null, what: string): T | null {
+    if (seeded) return seeded;
+    if (process.env.CI) {
+      throw new Error(
+        `seeding FAILED for ${what}. In CI this is a defect, not a skip — ` +
+          'letting it skip would exit 0 on a pack that proved nothing.',
+      );
+    }
+    return null;
+  }
+
   async function openSigned(
     page: import('@playwright/test').Page,
     tag: string,
@@ -52,7 +79,10 @@ test.describe('Rounds Screen 4 — signed & locked', () => {
     } = {},
   ) {
     const { email } = await signupFreshUser(page, tag);
-    const seeded = seedReviewDocVisit(email, { ...seedOpts, signed: true });
+    const seeded = requireSeed(
+      seedReviewDocVisit(email, { ...seedOpts, signed: true }),
+      tag,
+    );
     if (!seeded) return null;
     await page.goto(`/visits/${seeded.visitId}`);
     await expect(page.getByTestId('rounds-signed')).toBeVisible();
@@ -213,8 +243,11 @@ test.describe('Rounds Screen 4 — signed & locked', () => {
     // One still to review, and one signed. The signed visit has LEFT the queue,
     // so its own `nextVisitId` is null by construction — the deck advance reads
     // the queue HEAD instead, which is what makes this test meaningful.
-    const pending = seedReviewDocVisit(email, { idSalt: 'p' });
-    const signed = seedReviewDocVisit(email, { idSalt: 's', signed: true });
+    const pending = requireSeed(seedReviewDocVisit(email, { idSalt: 'p' }), 'pending');
+    const signed = requireSeed(
+      seedReviewDocVisit(email, { idSalt: 's', signed: true }),
+      'signed',
+    );
     test.skip(!pending || !signed, 'psql seeding unavailable');
     expect(pending!.visitId).not.toBe(signed!.visitId);
 
