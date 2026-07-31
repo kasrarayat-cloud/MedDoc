@@ -55,9 +55,40 @@ const IMAGES: { tag: string; needs: string[]; why: string }[] = [
       // correct. The image had carried the other four flags since Gate A and
       // nothing noticed, because until now no pack opened a signed visit.
       'NEXT_PUBLIC_UX_SIMPLIFY',
+      // ── ADDED for C1: THE FOUR FLAGS PRODUCTION BUILDS AND THIS IMAGE DID
+      //    NOT. Every one is `true` in `.env` and passed in the prod service's
+      //    `args:` block, so until now the Rounds packs have been measuring a
+      //    build production does not ship.
+      //
+      //    B4 named the first two as a limit it would not close, because
+      //    changing the image's flag set alters what every Rounds pack renders
+      //    and that is not a verification item's work. C1 pays it, alone, in a
+      //    PR with no product code — so a red here can only mean one thing.
+      //
+      //    ⚠️ The delta was computed, not guessed: prod's `args:` block carries
+      //    13 entries, this image carried 6, and the two that legitimately
+      //    differ are the URLs (per-environment by design; the QA stack must
+      //    keep pointing at localhost:9020).
+      //
+      //    SETTINGS_SIMPLE_ROW decides which of TWO settings layouts exists at
+      //    all — C1-e restyles the C3 rail, and with this flag off the image
+      //    renders the legacy stacked one instead. A restyle proven against the
+      //    branch production does not ship is not a proof.
+      'NEXT_PUBLIC_SETTINGS_SIMPLE_ROW',
+      // DOC_PREVIEW and VISIT_DOC_PAGE change what the visit surface renders —
+      // which is the surface Screens 2 and 4 are built on. B4's parity test
+      // signs through the Rounds flow on this image; with these off it was
+      // exporting from a composition prod does not have.
+      'NEXT_PUBLIC_DOC_PREVIEW',
+      'NEXT_PUBLIC_VISIT_DOC_PAGE',
+      // The OOXML ingest + fail-closed security fork runs on every .docx
+      // template upload in production (AGENTS.md, "Template Twin — the parked
+      // steady state"). It is load-bearing and absorbed in place, so an image
+      // without it is missing a shipped code path.
+      'NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX',
     ],
     why:
-      'Gate A + Gate B. The board route 404s with the flag off, so a rounds ' +
+      'Gate A + Gate B + C1. The board route 404s with the flag off, so a rounds ' +
       'image built without the build-arg would fail the whole pack for an ' +
       'environment reason. The Dockerfile must also DECLARE the ARG — docker ' +
       'silently discards an undeclared build-arg ("were not consumed") and the ' +
