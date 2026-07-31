@@ -286,6 +286,10 @@ jobs:
           --build-arg NEXT_PUBLIC_REVIEW_DOC_VIEW=true
           --build-arg NEXT_PUBLIC_CHAT_EDITOR=true
           --build-arg NEXT_PUBLIC_UX_SIMPLIFY=true
+          --build-arg NEXT_PUBLIC_SETTINGS_SIMPLE_ROW=true
+          --build-arg NEXT_PUBLIC_DOC_PREVIEW=true
+          --build-arg NEXT_PUBLIC_VISIT_DOC_PAGE=true
+          --build-arg NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX=true
           -t meddoc-pro-transcribe-md:rounds .
 
       - name: Recreate app on the Rounds image
