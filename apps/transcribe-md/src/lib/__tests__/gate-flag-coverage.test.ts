@@ -70,10 +70,24 @@ const IMAGES: { tag: string; needs: string[]; why: string }[] = [
       //    differ are the URLs (per-environment by design; the QA stack must
       //    keep pointing at localhost:9020).
       //
-      //    SETTINGS_SIMPLE_ROW decides which of TWO settings layouts exists at
-      //    all — C1-e restyles the C3 rail, and with this flag off the image
-      //    renders the legacy stacked one instead. A restyle proven against the
-      //    branch production does not ship is not a proof.
+      //    ⚠️ SETTINGS_SIMPLE_ROW AND TEMPLATE_NATIVE_DOCX ARE ONE PAIR, and
+      //    adding either alone would be worse than adding neither.
+      //
+      //    `settings/page.tsx:213-215` reads
+      //        nativeSlot = templateNativeDocxEnabled() && !isSettingsSimpleRow()
+      //    — INVERTED on the second term. Production sets both `true`, so the
+      //    slot is `null`: that is the deliberate "no door in" recorded in
+      //    AGENTS.md, and it is why prod holds zero twin certifications while
+      //    the twin flag is on.
+      //
+      //    So an image carrying TEMPLATE_NATIVE_DOCX but NOT SETTINGS_SIMPLE_ROW
+      //    would MOUNT `NativeTemplateManager` — a surface production
+      //    deliberately folds away — and any pack walking settings would be
+      //    measuring a door that does not exist for a doctor. Both, or neither.
+      //
+      //    (It does NOT choose between the two settings LAYOUTS. That is
+      //    `isSkinBeta()` at `page.tsx:226`, which this image already carried.
+      //    `isSettingsSimpleRow` is read at exactly one place in that file.)
       'NEXT_PUBLIC_SETTINGS_SIMPLE_ROW',
       // DOC_PREVIEW and VISIT_DOC_PAGE change what the visit surface renders —
       // which is the surface Screens 2 and 4 are built on. B4's parity test
@@ -84,7 +98,8 @@ const IMAGES: { tag: string; needs: string[]; why: string }[] = [
       // The OOXML ingest + fail-closed security fork runs on every .docx
       // template upload in production (AGENTS.md, "Template Twin — the parked
       // steady state"). It is load-bearing and absorbed in place, so an image
-      // without it is missing a shipped code path.
+      // without it is missing a shipped code path. See the pairing note above:
+      // this one must never be added without SETTINGS_SIMPLE_ROW.
       'NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX',
     ],
     why:
