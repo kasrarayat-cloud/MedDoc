@@ -151,3 +151,45 @@ describe('queue position', () => {
     expect(queueLabel(p)).toBeNull();
   });
 });
+
+describe('headVisitId — what "next in-review" means once this visit is done', () => {
+  const QUEUE = ['a', 'b', 'c'];
+
+  it('is the head of the queue, for a visit IN the queue', () => {
+    expect(toQueuePosition('b', QUEUE).headVisitId).toBe('a');
+  });
+
+  it('SURVIVES when the visit has LEFT the queue — which is the whole point', () => {
+    // A signed visit is not in the queue: `kindOf` classifies anything with a
+    // signedAt as signed and the queue keeps only ready. So both neighbours go
+    // null, deliberately — claiming a place in a list it has left would put a
+    // signed note back in the review count.
+    //
+    // Screen 4's deck-advance therefore CANNOT use nextVisitId: it is null on
+    // 100% of signed visits and would render no control at all, reading as a
+    // wiring bug rather than a design decision.
+    const pos = toQueuePosition('signed-and-gone', QUEUE);
+    expect(pos.position).toBeNull();
+    expect(pos.nextVisitId).toBeNull();
+    expect(pos.prevVisitId).toBeNull();
+    expect(pos.headVisitId, 'the deck advance depends on this').toBe('a');
+  });
+
+  it('is null on an empty queue — absent, never "all done"', () => {
+    // The queue is a 200-row window, so a ready visit outside it yields the same
+    // empty result as a genuinely empty queue. The caller must render an ABSENT
+    // control, not a completion claim it cannot support.
+    const pos = toQueuePosition('x', []);
+    expect(pos.headVisitId).toBeNull();
+    expect(pos.total).toBe(0);
+  });
+
+  it('NEGATIVE CONTROL — head and next are genuinely different values', () => {
+    // Without this, headVisitId could be an alias for nextVisitId and every
+    // assertion above would still pass on the in-queue case.
+    const pos = toQueuePosition('a', QUEUE);
+    expect(pos.headVisitId).toBe('a');
+    expect(pos.nextVisitId).toBe('b');
+    expect(pos.headVisitId).not.toBe(pos.nextVisitId);
+  });
+});

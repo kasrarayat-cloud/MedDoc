@@ -32,7 +32,7 @@ import {
   extractRxRows,
   extractEmOverride,
 } from '@/lib/em-coding/displayed-level';
-import { unacknowledgedEmChange } from '@/lib/em-pending-change';
+import { parseEmPendingChange, unacknowledgedEmChange } from '@/lib/em-pending-change';
 import { isSkinRounds } from '@/config/skin-rounds';
 import { signGates } from '@/lib/sign-gates';
 import { toStageIdentity, toQueuePosition } from '@/lib/rounds/stage-data';
@@ -250,13 +250,22 @@ export default async function VisitPage({
       },
     }),
     prisma.rxWarningOverride.findMany({
+      // ⚠️ THE `where` IS DELIBERATELY UNNARROWED. This same array populates
+      // `rxOverriddenWarningIds`, which is the COVERAGE INPUT to `signGates`
+      // and mirrors what `POST /sign` validates. Adding `severity: 'critical'`
+      // here to serve Screen 4's trail card would silently narrow the gate's
+      // notion of what has been overridden. Select more; filter in the reader.
       where: { visitId: id },
-      select: { warningId: true },
+      select: {
+        warningId: true,
+        severity: true,
+        overriddenAt: true,
+      },
     }),
   ])) as [
     UserRow | null,
     VisitRow | null,
-    Array<{ warningId: string }>,
+    Array<{ warningId: string; severity: string; overriddenAt: Date }>,
   ];
 
   if (!user) redirect('/login');
@@ -488,6 +497,7 @@ export default async function VisitPage({
           // the Rounds identity header renders it as the reason line. Inert on
           // the flag-off path.
           chiefComplaint={visit.chiefComplaint}
+          rxOverrides={rxOverrides}
         />
       </div>
     </AppFrame>
@@ -571,6 +581,10 @@ interface VisitBodyProps {
   createdAt: Date;
   /** The reason line on the Rounds identity header. Display only. */
   chiefComplaint: string | null;
+  /** The persisted override rows, for Screen 4's safety trail. `severity` is
+   *  filtered by the READER, never by the query — the same rows are the sign
+   *  gate's coverage input. */
+  rxOverrides: { warningId: string; severity: string; overriddenAt: Date }[];
 }
 
 async function VisitBody(props: VisitBodyProps) {
@@ -834,6 +848,27 @@ async function VisitBody(props: VisitBodyProps) {
       // one screen, and the band would eventually contradict the padlock.
       criticalUnresolved:
         gateSet.gates.find((g) => g.id === 'rx')?.unresolved ?? 0,
+      // ── Screen 4's safety trail — only what a column can prove ──────────
+      trail: {
+        // Severity filtered HERE, not in the query: the same rows populate
+        // `rxOverriddenWarningIds`, which is the sign gate's coverage input.
+        // And compared against the signature rather than assumed — the override
+        // route guards ownership, not visit status, so a row CAN postdate a
+        // signature and "overridden before signing" has to mean it.
+        criticalOverridesBeforeSign: props.signedAt
+          ? props.rxOverrides.filter(
+              (o) =>
+                o.severity === 'critical' &&
+                o.overriddenAt.getTime() <= props.signedAt!.getTime()
+            ).length
+          : 0,
+        // The RAW column, not the coerced display pair — that one is null on
+        // every signed visit by construction, because the coercion returns null
+        // once the change has been acknowledged.
+        emAcknowledgedAt: emNotApplicable
+          ? null
+          : (parseEmPendingChange(props.emPendingChange)?.acknowledgedAt ?? null),
+      },
     };
   }
 

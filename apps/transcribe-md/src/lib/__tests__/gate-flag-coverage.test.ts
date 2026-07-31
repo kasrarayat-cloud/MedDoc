@@ -48,6 +48,13 @@ const IMAGES: { tag: string; needs: string[]; why: string }[] = [
       // so that assertion would pass by never being exercised, which is worse
       // than failing.
       'NEXT_PUBLIC_ULTRASOUND_SPECIALTY',
+      // ADDED with Gate B Screen 4. The ENTIRE signed branch of the review view
+      // is behind isUxSimplify(), so without this arg a signed visit renders the
+      // legacy tabbed view and Screen 4 is unreachable on the CI image — every
+      // rounds-signed test would fail on a missing testid while the product was
+      // correct. The image had carried the other four flags since Gate A and
+      // nothing noticed, because until now no pack opened a signed visit.
+      'NEXT_PUBLIC_UX_SIMPLIFY',
     ],
     why:
       'Gate A + Gate B. The board route 404s with the flag off, so a rounds ' +

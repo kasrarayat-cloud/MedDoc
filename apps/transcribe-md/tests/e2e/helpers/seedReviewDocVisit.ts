@@ -100,6 +100,14 @@ const RX = {
 /** parseEmPendingChange is STRICT and fails closed: `{from,to}` alone is
  *  malformed and coerces to null, which renders "unknown" and tests nothing.
  *  `cause` and `at` are required. */
+/** A fixed moment for the signature, so the trail's "overridden BEFORE signing"
+ *  comparison is deterministic rather than racing wall-clock now(). */
+const SIGNED_AT = '2026-07-30T12:00:00.000Z';
+/** Strictly earlier — the Rx card only counts rows at or before the signature,
+ *  because `recordOverride` guards ownership and not visit status, so a row CAN
+ *  postdate a signature and "before signing" has to be checked, not assumed. */
+const OVERRIDDEN_AT = '2026-07-30T11:00:00.000Z';
+
 const EM_PENDING = {
   from: '99213',
   to: '99214',
@@ -343,6 +351,17 @@ export function seedReviewDocVisit(
     /** Fields the identity header's MRN / age cells read. Omitted by default so
      *  every existing caller's fixture stays byte-identical. */
     patient?: { dob?: string; externalId?: string };
+    /** SEED A SIGNED VISIT — status SIGNED, signedSoap frozen, signedAt set.
+     *  Screen 4 exists only for these, and nothing else in the E2E helpers
+     *  produces one with the review-doc fixture's Rx/EM shape. */
+    signed?: boolean;
+    /** Record a REAL critical RxWarningOverride row, timestamped BEFORE the
+     *  signature, so the safety trail's Rx card has a persisted fact behind it
+     *  rather than an inference from "the visit is signed". */
+    withCriticalOverride?: boolean;
+    /** Stamp `emPendingChange.acknowledgedAt`, which is what the sign route
+     *  itself writes on the winning READY→SIGNED transition. */
+    emAcknowledged?: boolean;
   } = {},
 ): SeededReviewDocVisit | null {
   const cls: ReviewDocClass = opts.specialtyClass ?? 'primary-care';
@@ -397,6 +416,7 @@ export function seedReviewDocVisit(
     psql(
       `insert into transcribe_visits
          (id, "userId", "patientId", specialty, "inputMode", status,
+          "signedAt", "signedSoap",
           "chiefComplaint",
           "transcriptText", "soapFinal", "soapVersion",
           "suggestedClaims", "rxDrafts", "emPendingChange",
@@ -405,7 +425,10 @@ export function seedReviewDocVisit(
           "createdAt", "updatedAt")
        values
          ('${visitId}', '${userId}', '${patientId}',
-          '${imaging ? 'ultrasound' : 'primary-care'}', 'text_notes', 'READY',
+          ${opts.signed ? `'${SIGNED_AT}'::timestamptz` : 'null'},
+          ${opts.signed ? `'${q(imaging ? IMAGING_NOTE : NOTE)}'` : 'null'},
+          '${imaging ? 'ultrasound' : 'primary-care'}', 'text_notes',
+          '${opts.signed ? 'SIGNED' : 'READY'}',
           ${opts.chiefComplaint ? `'${q(opts.chiefComplaint)}'` : 'null'},
           '${imaging ? 'Bilateral venous duplex, screening study.' : 'Asthma review. Continue current medications.'}',
           '${q(imaging ? IMAGING_NOTE : NOTE)}', 1,
@@ -415,7 +438,11 @@ export function seedReviewDocVisit(
           ${imaging ? 'null' : `'${j(RX)}'::jsonb`},
           -- AND NO PENDING E/M CHANGE, ever, on imaging: there is no level to
           -- have moved. Seeding one would be seeding the bug.
-          ${imaging || opts.emPending === false ? 'null' : `'${j(EM_PENDING)}'::jsonb`},
+          ${
+            imaging || opts.emPending === false
+              ? 'null'
+              : `'${j(opts.emAcknowledged ? { ...EM_PENDING, acknowledgedAt: SIGNED_AT } : EM_PENDING)}'::jsonb`
+          },
           '${j(imaging ? IMAGING_ICD : ICD)}'::jsonb,
           -- The whole point of the imaging fixture: NO office E/M blob …
           -- …EXCEPT when a spec is testing the export guard, which needs one.
@@ -433,6 +460,24 @@ export function seedReviewDocVisit(
   // the failure mode this whole fixture exists to answer for.
   // The artifact fixture is the ONE case that must skip this — it seeds the very
   // state the guard rejects, deliberately, to prove the export suppresses it.
+    // A REAL override row — the same shape recordOverride writes, with a
+    // server-validated-length reason and a timestamp strictly before the
+    // signature. Screen 4's Rx card counts THESE; it does not infer from the
+    // visit being signed.
+    if (opts.withCriticalOverride) {
+      psql(
+        `insert into rx_warning_overrides
+           (id, "visitId", "rxLineNumber", "warningId", severity, headline,
+            reason, "overriddenBy", "overriddenAt")
+         values
+           ('${`ovr_${stamp}`.padEnd(25, '0').slice(0, 25)}', '${visitId}', 1, 'rx-warning-0',
+            'critical', 'NSAID with heart failure',
+            'Benefit outweighs risk; monitoring renal function weekly and patient counselled.',
+            '${userId}', '${OVERRIDDEN_AT}'::timestamptz)
+         on conflict do nothing`,
+      );
+    }
+
   if (imaging && !opts.imagingEmArtifact) assertImagingHasNoEm(visitId);
 
   return { visitId, claimCount: CLAIMS.length, specialtyClass: cls };
