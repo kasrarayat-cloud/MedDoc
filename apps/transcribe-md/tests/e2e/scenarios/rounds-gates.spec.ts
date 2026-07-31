@@ -53,16 +53,42 @@ test.describe('Rounds Screen 3 — the gates', () => {
   async function openFlow(
     page: import('@playwright/test').Page,
     tag: string,
-    seedOpts: { specialtyClass?: ReviewDocClass; emPending?: boolean } = {},
+    seedOpts: {
+      specialtyClass?: ReviewDocClass;
+      emPending?: boolean;
+      imagingEmPending?: boolean;
+    } = {},
   ) {
     const { email } = await signupFreshUser(page, tag);
-    const seeded = seedReviewDocVisit(email, seedOpts);
+    const seeded = requireSeed(seedReviewDocVisit(email, seedOpts), tag);
     if (!seeded) return null;
     await page.goto(`/visits/${seeded.visitId}`);
     await expect(page.getByTestId('rounds-stage')).toBeVisible();
     await page.getByTestId('rounds-review-sign').click();
     await expect(page.getByTestId('rounds-gate-flow')).toBeVisible();
     return seeded;
+  }
+
+  /**
+   * ⚠️ IN CI, A SEEDER THAT CANNOT SEED IS A DEFECT, NOT A SKIP.
+   *
+   * Playwright EXITS 0 ON A FULLY SKIPPED FILE. When rounds-signed's seeding
+   * broke on a misaligned column, all 11 of its tests skipped and the run went
+   * green having proved nothing — A2 defect 0's shape in a new place. In CI the
+   * psql channel is guaranteed, so a null here means the seeder is broken.
+   *
+   * (A probe of the CHANNEL does not catch it. That was tried and watched to
+   * pass while the pack skipped: the channel was fine, the INSERT was rejected.)
+   */
+  function requireSeed<T>(seeded: T | null, what: string): T | null {
+    if (seeded) return seeded;
+    if (process.env.CI) {
+      throw new Error(
+        `seeding FAILED for ${what}. In CI this is a defect, not a skip — ` +
+          'letting it skip would exit 0 on a pack that proved nothing.',
+      );
+    }
+    return null;
   }
 
   /** Clear Gate 1 the way a doctor does: the real per-warning override, with
@@ -211,9 +237,33 @@ test.describe('Rounds Screen 3 — the gates', () => {
     await expect(page.getByTestId('rounds-gate-step-em')).toHaveCount(0);
     await expect(page.getByTestId('rounds-gate-host-em')).toHaveCount(0);
     await expect(page.getByTestId('rounds-gate-summary-em')).toHaveCount(0);
+    // ⚠️ Vacuous on its own — see the companion test below. Every imaging
+    // fixture nulls `emPendingChange`, which is the only source of the anomaly,
+    // so this passes against a build with the anomaly deleted.
     await expect(page.getByTestId('rounds-gate-em-artifact')).toHaveCount(0);
     // Attestation only.
     await expect(page.getByTestId('rounds-gate-steps').locator('li')).toHaveCount(1);
+  });
+
+  test('THE COMPANION — the anomaly stops the flow and hosts no signature', async ({
+    page,
+  }) => {
+    // An imaging visit wrongly carrying an unacknowledged office E/M change.
+    // No E/M gate exists (the invariant is absolute) but POST /sign is not
+    // specialty-conditioned and WILL refuse — so the flow names the state and
+    // refuses to host the signing bar, rather than offering a signature that
+    // cannot succeed.
+    const seeded = await openFlow(page, 'gates-6b', {
+      specialtyClass: 'imaging',
+      imagingEmPending: true,
+    });
+    test.skip(!seeded, 'psql seeding unavailable');
+
+    await expect(page.getByTestId('rounds-gate-em-artifact')).toHaveCount(1);
+    // Still no E/M step — naming the anomaly is not growing a gate for it.
+    await expect(page.getByTestId('rounds-gate-step-em')).toHaveCount(0);
+    // And no signature host on the anomaly path.
+    await expect(page.getByTestId('rounds-gate-host-attestation')).toHaveCount(0);
   });
 
   // ── 7. Gate 3 — one control can sign, and the summary is honest ────────

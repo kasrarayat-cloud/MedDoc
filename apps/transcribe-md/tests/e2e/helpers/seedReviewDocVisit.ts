@@ -362,6 +362,22 @@ export function seedReviewDocVisit(
     /** Stamp `emPendingChange.acknowledgedAt`, which is what the sign route
      *  itself writes on the winning READY→SIGNED transition. */
     emAcknowledged?: boolean;
+    /** SEED AN IMAGING VISIT CARRYING AN UNACKNOWLEDGED OFFICE E/M CHANGE.
+     *
+     *  Like `imagingEmArtifact`, this deliberately creates the state everything
+     *  else exists to prevent — and for the same reason: the anomaly path
+     *  CANNOT BE TESTED WITHOUT IT.
+     *
+     *  `emArtifact` is set only when `emAppliesToSpecialty` is false AND
+     *  `emPendingChange` is non-null. Every imaging fixture hard-nulls that
+     *  column, so an assertion that the anomaly banner is ABSENT on a normal
+     *  imaging visit passes against a build with the anomaly deleted. It proves
+     *  nothing. This option is what turns those assertions into real ones.
+     *
+     *  Reproduces the shape found in production: five imaging visits acquired
+     *  office E/M state and sat there two days. Skips `assertImagingHasNoEm`,
+     *  hence the explicit opt-in name. */
+    imagingEmPending?: boolean;
   } = {},
 ): SeededReviewDocVisit | null {
   const cls: ReviewDocClass = opts.specialtyClass ?? 'primary-care';
@@ -439,7 +455,7 @@ export function seedReviewDocVisit(
           -- AND NO PENDING E/M CHANGE, ever, on imaging: there is no level to
           -- have moved. Seeding one would be seeding the bug.
           ${
-            imaging || opts.emPending === false
+            (imaging && !opts.imagingEmPending) || opts.emPending === false
               ? 'null'
               : `'${j(opts.emAcknowledged ? { ...EM_PENDING, acknowledgedAt: SIGNED_AT } : EM_PENDING)}'::jsonb`
           },
@@ -478,7 +494,8 @@ export function seedReviewDocVisit(
       );
     }
 
-  if (imaging && !opts.imagingEmArtifact) assertImagingHasNoEm(visitId);
+  if (imaging && !opts.imagingEmArtifact && !opts.imagingEmPending)
+    assertImagingHasNoEm(visitId);
 
   return { visitId, claimCount: CLAIMS.length, specialtyClass: cls };
 }
