@@ -35,6 +35,21 @@ const MRN = 'E2E-MRN-4417';
 const DOB = '1972-03-14';
 const REASON = 'Asthma review';
 
+/** Every E/M control the PAPER renders, in one place — so "absent" means all of
+ *  them and a newly added one has to be classified rather than quietly escaping
+ *  the imaging invariant. Kept identical to `review-document.spec.ts`'s list on
+ *  purpose: that pack proves the same suppression on the `:review-doc` image,
+ *  and this one proves it survives the Rounds composition, which ADOPTS these
+ *  nodes out of the paper and into the gate flow. */
+const EM_SURFACE = [
+  'review-doc-em-level',
+  'em-level-current',
+  'em-level-adjust',
+  'review-doc-em-gate',
+  'review-doc-em-stale-gate',
+  'review-doc-em-rescore',
+];
+
 test.describe('Rounds Screen 2 — the stage', () => {
   test.beforeAll(() => {
     // A DIRTY DATABASE FAILS THE PACK, LOUDLY — the same guard the document
@@ -194,14 +209,58 @@ test.describe('Rounds Screen 2 — the stage', () => {
     await expect(page.getByTestId('rounds-strip-em-artifact')).toHaveCount(0);
 
     // The imaging fixture has no medications and no E/M — attestation only.
-    // If NEXT_PUBLIC_ULTRASOUND_SPECIALTY were missing from the image, E/M
-    // would apply to every specialty and this would read 2, which is why that
-    // flag is pinned in gate-flag-coverage.test.ts.
+    //
+    // ⚠️ THIS IS NOT A NET FOR A MIS-BUILT IMAGE, and it used to claim it was.
+    // The old comment here said a missing NEXT_PUBLIC_ULTRASOUND_SPECIALTY
+    // would make this read 2. It would not. B2's ruling made the E/M gate
+    // EXIST wherever the specialty applies but COUNT only when the server would
+    // refuse, and this fixture nulls `emPendingChange` — so with the flag off
+    // the gate is pushed with `unresolved: 0` and the count is still 1. The
+    // assertion passes either way. A false claim about what a test would catch
+    // is worse than no claim: it is the reason the next reader stops looking.
+    // The real nets are `rounds-gates.spec.ts` (no E/M STEP on imaging) and
+    // `gate-flag-coverage.test.ts` (the flag is on the image at all).
     await expect(page.getByTestId('rounds-review-sign')).toHaveAttribute(
       'data-blockers',
       '1',
     );
     await expect(page.getByTestId('rounds-critical-band')).toHaveCount(0);
+
+    // ── "no E/M gate ANYWHERE" includes the PAPER, and nothing checked it ──
+    // The clause is absolute, and the Rounds packs only ever asserted the
+    // skin's OWN surfaces — the strip marker, the flow's step, the signed
+    // banner. The in-paper E/M stack was covered exclusively by
+    // `review-document.spec.ts`, which runs on the `:review-doc` image: a
+    // different build that does not carry NEXT_PUBLIC_SKIN_ROUNDS. So a
+    // flag-ON composition that lost the imaging suppression while the flag-OFF
+    // original kept it would satisfy every guard in the repo — and the Rounds
+    // gate flow ADOPTS these very nodes out of the paper, so the flag-ON
+    // composition genuinely is not the flag-OFF one. This pack's own header
+    // names that risk; until now it answered it with a renderer count.
+    for (const id of EM_SURFACE) {
+      await expect(
+        page.getByTestId(id),
+        `${id} must not exist on an imaging visit, flag-ON`,
+      ).toHaveCount(0);
+    }
+    await expect(page.getByTestId('rounds-stage')).not.toContainText(/documentation level/i);
+    await expect(page.getByTestId('rounds-stage')).not.toContainText(/\b992\d\d\b/);
+  });
+
+  test('the in-paper E/M surface IS present on primary care — flag-ON', async ({
+    page,
+  }) => {
+    // The presence half. Without it the absence loop above is satisfied by a
+    // build where the paper renders no E/M controls at all, in either
+    // specialty — which is the same defect class the strip's anomaly marker
+    // needed its own companion for.
+    const seeded = await open(page, 'stage-5c');
+    test.skip(!seeded, 'psql seeding unavailable');
+
+    await expect(page.getByTestId('review-doc-em-level')).toBeVisible();
+    await expect(page.getByTestId('em-level-adjust')).toBeVisible();
+    // The fixture seeds an unacknowledged change, so the in-paper gate is up.
+    await expect(page.getByTestId('review-doc-em-gate')).toBeVisible();
   });
 
   test('THE COMPANION — an imaging visit that DOES carry office E/M names it', async ({

@@ -76,6 +76,11 @@ test.describe('Rounds Screen 4 — signed & locked', () => {
       emPending?: boolean;
       withCriticalOverride?: boolean;
       emAcknowledged?: boolean;
+      /** Seed the ANOMALY: an imaging visit carrying office E/M state. Without
+       *  it every imaging fixture hard-nulls `emPendingChange`, and an absence
+       *  assertion over the trail passes against a build with the suppression
+       *  deleted. */
+      imagingEmPending?: boolean;
     } = {},
   ) {
     const { email } = await signupFreshUser(page, tag);
@@ -207,6 +212,48 @@ test.describe('Rounds Screen 4 — signed & locked', () => {
     await expect(page.getByTestId('rounds-signed-lock')).not.toContainText(
       /documentation level/i,
     );
+  });
+
+  test('THE COMPANION — an imaging visit carrying office E/M gets NO trail card', async ({
+    page,
+  }) => {
+    // ⚠️ THE TEST ABOVE PROVES NOTHING ON ITS OWN, and neither did anything
+    // else on this screen. `page.tsx` suppresses the trail's E/M card with
+    // `emNotApplicable ? null : …`, and that guard had no fixture behind it:
+    // every imaging seed hard-nulls `emPendingChange`, so the guarded and the
+    // unguarded expression both evaluate to null and the ternary could be
+    // deleted with the whole suite still green. The test above also scopes its
+    // prose check to `rounds-signed-lock`, and the trail is a SIBLING of that
+    // section — so the card's own text was outside it either way.
+    //
+    // The state is reachable in production: `POST /sign` is not
+    // specialty-conditioned, so a signed imaging visit really can carry an
+    // acknowledged office E/M change. Five imaging visits acquired office E/M
+    // state in prod and sat two days before anyone noticed. On this screen that
+    // would print "Documentation level change confirmed" on a signed ultrasound
+    // report — a safety trail asserting a step that does not apply, on the one
+    // surface whose entire job is to be true.
+    const seeded = await openSigned(page, 'signed-4c', {
+      specialtyClass: 'imaging',
+      imagingEmPending: true,
+      emAcknowledged: true,
+      withCriticalOverride: true,
+    });
+    test.skip(!seeded, 'psql seeding unavailable');
+
+    // NOT VACUOUS: the Rx card IS rendered from its own persisted row, so the
+    // trail is standing and populated — the E/M card's absence is a decision,
+    // not an empty screen.
+    await expect(page.getByTestId('rounds-signed-trail')).toBeVisible();
+    await expect(page.getByTestId('rounds-signed-trail-rx')).toBeVisible();
+
+    await expect(page.getByTestId('rounds-signed-trail-em')).toHaveCount(0);
+    // Scoped over the WHOLE screen, not one section — the card's text lives
+    // outside the lock banner.
+    await expect(page.getByTestId('rounds-signed')).not.toContainText(
+      /documentation level/i,
+    );
+    await expect(page.getByTestId('rounds-signed-em')).toHaveCount(0);
   });
 
   // ── 5. The paper and the footer ─────────────────────────────────────────
