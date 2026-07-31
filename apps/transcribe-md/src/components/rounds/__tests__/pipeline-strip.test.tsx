@@ -277,3 +277,49 @@ describe('accessibility contract', () => {
     }
   });
 });
+
+describe('a signed visit whose status column still says READY (regression)', () => {
+  // THE ROW SHAPE IS REAL, not hypothetical. `kindOf` in board-data keys on
+  // `status === 'SIGNED' || signedAt`; there is a stage-queue test named
+  // "EXCLUDES a signed visit whose status column still says READY"; `isSigned`
+  // in the review view accepts it; and tests/e2e/helpers/seedVisitStates.ts
+  // inserts exactly it.
+  //
+  // The strip used to ask only the status column. `stageOf('READY')` is stage 5
+  // — not null — so node 5 drew as CURRENT while the Signed node beside it drew
+  // a ✓: one track claiming "still ready" and "signed" simultaneously. The BOARD
+  // already handled this (`runTo: kind === 'signed' ? 5`); the strip did not, so
+  // one journey rendered two ways on two surfaces.
+  const SIGNED_AT = '2026-07-30T10:00:00.000Z';
+
+  it('draws every stage node done, and none current', () => {
+    render(<RoundsPipelineStrip status="READY" signedAt={SIGNED_AT} n={0} />);
+
+    for (let i = 1; i <= 5; i++) {
+      expect(
+        screen.getByTestId(`rounds-strip-node-${i}`).getAttribute('data-stage-state'),
+        `node ${i}`,
+      ).toBe('done');
+    }
+    // NOW REVIEWING is the tell: it renders on the current node, and a signed
+    // note has none.
+    expect(screen.queryByTestId('rounds-strip-now')).toBeNull();
+  });
+
+  it('and the Signed node reads done with no blockers', () => {
+    render(<RoundsPipelineStrip status="READY" signedAt={SIGNED_AT} n={0} />);
+    const signed = screen.getByTestId('rounds-strip-signed');
+    expect(signed.getAttribute('data-stage-state')).toBe('done');
+    expect(signed.getAttribute('data-blockers')).toBe('0');
+  });
+
+  it('NEGATIVE CONTROL — the SAME status without signedAt still draws node 5 current', () => {
+    // Without this, "always all done" would satisfy both assertions above and
+    // the strip would stop tracking progress entirely.
+    render(<RoundsPipelineStrip status="READY" signedAt={null} n={2} />);
+    expect(
+      screen.getByTestId('rounds-strip-node-5').getAttribute('data-stage-state'),
+    ).toBe('current');
+    expect(screen.getByTestId('rounds-strip-now')).toBeTruthy();
+  });
+});

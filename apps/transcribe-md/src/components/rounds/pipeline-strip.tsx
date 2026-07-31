@@ -61,10 +61,23 @@ export interface PipelineStripProps {
  *
  *  SIGNED is an outcome, not a stage, so `stageOf` returns null for it and the
  *  whole run reads as done. Anything else that reaches this screen is READY. */
-function nodeStates(status: string): StripNodeState[] {
+function nodeStates(status: string, signedAt: string | null): StripNodeState[] {
   const current = stageOf(status);
-  if (!current) {
-    // SIGNED (or any outcome): the run completed.
+  // SIGNED (or any outcome): the run completed.
+  //
+  // ⚠️ `signedAt` IS PART OF THE QUESTION, not decoration. This used to key on
+  // the status column alone, and `stageOf('READY')` is stage 5 — NOT null — so a
+  // row with `status: 'READY'` and a `signedAt` drew node 5 as CURRENT while the
+  // Signed node beside it drew a ✓. One track saying "still ready" and "signed"
+  // at the same time.
+  //
+  // That row shape is not hypothetical: `kindOf` in board-data keys on
+  // `status === 'SIGNED' || signedAt`, a stage-queue test exists named "EXCLUDES
+  // a signed visit whose status column still says READY", `isSigned` in the
+  // review view accepts it, and the E2E seed helper produces exactly it. The
+  // BOARD already handled it (`runTo: kind === 'signed' ? 5`); the strip did
+  // not, so the same journey rendered two different ways on two surfaces.
+  if (signedAt || !current) {
     return ROUNDS_STAGES.map(() => 'done' as const);
   }
   return ROUNDS_STAGES.map((s) =>
@@ -130,7 +143,7 @@ export function RoundsPipelineStrip({
   n,
   emArtifact = false,
 }: PipelineStripProps) {
-  const states = nodeStates(status);
+  const states = nodeStates(status, signedAt ?? null);
   const signed = !!signedAt;
 
   // The breakdown behind N, so the padlock is not a bare number. Only gates

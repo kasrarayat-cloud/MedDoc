@@ -103,6 +103,10 @@ export default defineConfig({
         // missing Rounds testids while the old skin rendered perfectly well,
         // and take every downstream pack with it.
         '**/rounds-gates.spec.ts',
+        // ROUNDS Gate B — Screen 4. Same reasoning again: /visits/[id] exists
+        // flag-OFF, so this would fail on missing testids rather than 404,
+        // taking every downstream pack with it.
+        '**/rounds-signed.spec.ts',
         '**/a11y.spec.ts',
         '**/23-note-format-phi-parse-reject.spec.ts',
         '**/24-rx-clinical-safety.spec.ts',
@@ -190,6 +194,17 @@ export default defineConfig({
       // fixture would move the number under them.
       name: 'rounds-gates',
       testMatch: ['**/rounds-gates.spec.ts'],
+      fullyParallel: false,
+      workers: 1,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      // ROUNDS Gate B — Screen 4, signed & locked. Serialised: the deck-advance
+      // test asserts which encounter is NEXT across a multi-visit fixture, so a
+      // parallel worker signing another visit would move the queue head under
+      // it.
+      name: 'rounds-signed',
+      testMatch: ['**/rounds-signed.spec.ts'],
       fullyParallel: false,
       workers: 1,
       use: { ...devices['Desktop Chrome'] },

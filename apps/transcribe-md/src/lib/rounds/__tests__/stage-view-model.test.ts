@@ -27,11 +27,12 @@ function data(gates: SignGate[]): RoundsStageData {
       recordedAtIso: '2026-07-30T10:00:00.000Z',
       durationLabel: null,
     },
-    queue: { position: 1, total: 1, nextVisitId: null, prevVisitId: null },
+    queue: { position: 1, total: 1, nextVisitId: null, prevVisitId: null, headVisitId: null },
     gates,
     n: gates.reduce((s, g) => s + g.unresolved, 0),
     emArtifact: false,
     criticalUnresolved: gates.find((g) => g.id === 'rx')?.unresolved ?? 0,
+    trail: { criticalOverridesBeforeSign: 0, emAcknowledgedAt: null },
   };
 }
 

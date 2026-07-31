@@ -52,6 +52,25 @@ export interface StageQueuePosition {
   nextVisitId: string | null;
   /** The previous one, for the peek's other edge. */
   prevVisitId: string | null;
+  /**
+   * The HEAD of the to-review queue — the next encounter to open, full stop.
+   *
+   * Distinct from `nextVisitId`, and Screen 4 needs this one. A signed visit has
+   * LEFT the queue (`kindOf` classifies anything with a `signedAt` as signed, and
+   * the queue keeps only `ready`), so `toQueuePosition` takes the not-found
+   * branch and both neighbours are null — deliberately, because claiming a place
+   * in a list it has left would put a signed note back in the review count.
+   *
+   * So a deck-advance wired to `nextVisitId` renders NOTHING on 100% of signed
+   * visits and reads as a wiring bug. The head is what "next in-review" means
+   * once this visit is done, and it is the same rule /board uses for its own
+   * "open next review".
+   *
+   * null when nothing is left to review — which must render as an ABSENT
+   * control, never as "all done for today": the queue is a 200-row window, and a
+   * ready visit outside it produces the same empty result.
+   */
+  headVisitId: string | null;
 }
 
 const UNNAMED = 'Unnamed encounter';
@@ -100,14 +119,22 @@ export function toQueuePosition(
   queue: readonly string[]
 ): StageQueuePosition {
   const i = queue.indexOf(visitId);
+  const headVisitId = queue[0] ?? null;
   if (i === -1) {
-    return { position: null, total: queue.length, nextVisitId: null, prevVisitId: null };
+    return {
+      position: null,
+      total: queue.length,
+      nextVisitId: null,
+      prevVisitId: null,
+      headVisitId,
+    };
   }
   return {
     position: i + 1,
     total: queue.length,
     nextVisitId: queue[i + 1] ?? null,
     prevVisitId: queue[i - 1] ?? null,
+    headVisitId,
   };
 }
 

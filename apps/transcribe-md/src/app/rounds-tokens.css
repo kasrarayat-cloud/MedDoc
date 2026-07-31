@@ -808,3 +808,113 @@ body[data-skin='rounds'] {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ROUNDS — Screen 4, SIGNED & LOCKED. Chrome only; the signed paper arrives
+   as children and keeps its own markup.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+[data-skin='rounds'] .qm-rounds-signed {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px 16px 64px;
+  max-width: 980px;
+  margin: 0 auto;
+}
+
+[data-skin='rounds'] .qm-rounds-signed-lock {
+  border: 1px solid var(--rounds-signed);
+  border-radius: var(--rounds-radius-lg);
+  padding: 18px 20px;
+  background: color-mix(in srgb, var(--rounds-signed) 8%, transparent);
+}
+
+[data-skin='rounds'] .qm-rounds-signed-lock-title {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--rounds-signed);
+}
+
+[data-skin='rounds'] .qm-rounds-signed-lock-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px 20px;
+  margin: 0;
+}
+
+[data-skin='rounds'] .qm-rounds-signed-lock-fields dt {
+  font-family: var(--rounds-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--rounds-text-3);
+}
+
+[data-skin='rounds'] .qm-rounds-signed-lock-fields dd {
+  margin: 2px 0 0;
+  font-size: 14px;
+  color: var(--rounds-text-1);
+}
+
+[data-skin='rounds'] .qm-rounds-signed-trail {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+[data-skin='rounds'] .qm-rounds-signed-trail-card {
+  border: 1px solid var(--rounds-line-1);
+  border-left: 3px solid var(--rounds-signed);
+  border-radius: var(--rounds-radius-md);
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--rounds-text-2);
+}
+
+[data-skin='rounds'] .qm-rounds-signed-foot {
+  margin: 0;
+  font-size: 12px;
+  color: var(--rounds-text-2);
+}
+
+[data-skin='rounds'] .qm-rounds-signed-deck {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid var(--rounds-line-1);
+  padding-top: 16px;
+}
+
+/* The signed card RECEDES — small and grey — with the arrow pointing on. This
+   is a mount-in state, not a continuous animation: signing calls
+   router.refresh(), the signed branch replaces the stage, and different
+   component types at one position remount regardless of where the branch sits. */
+[data-skin='rounds'] .qm-rounds-signed-deck-done {
+  color: var(--rounds-signed);
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+[data-skin='rounds'] .qm-rounds-signed-deck-arrow {
+  color: var(--rounds-text-3);
+}
+
+[data-skin='rounds'] .qm-rounds-signed-continue {
+  margin-left: auto;
+  border: 1px solid var(--rounds-accent);
+  border-radius: var(--rounds-radius-md);
+  padding: 9px 16px;
+  font-size: 13px;
+  color: var(--rounds-text-1);
+  background: var(--rounds-accent-tint-10);
+}
+
+[data-skin='rounds'] .qm-rounds-signed-continue:hover {
+  background: var(--rounds-accent-tint-16);
+}

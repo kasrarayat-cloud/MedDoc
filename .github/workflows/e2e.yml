@@ -285,6 +285,7 @@ jobs:
           --build-arg NEXT_PUBLIC_ULTRASOUND_SPECIALTY=true
           --build-arg NEXT_PUBLIC_REVIEW_DOC_VIEW=true
           --build-arg NEXT_PUBLIC_CHAT_EDITOR=true
+          --build-arg NEXT_PUBLIC_UX_SIMPLIFY=true
           -t meddoc-pro-transcribe-md:rounds .
 
       - name: Recreate app on the Rounds image
@@ -346,6 +347,22 @@ jobs:
           PW_BASE_URL: http://localhost:9020
           CI: "true"
         run: npx playwright test --project=rounds-gates
+
+      # ── ROUNDS Gate B, Screen 4. Same image, its own recreate — the rule is
+      #    that a pack's run is IMMEDIATELY preceded by the recreate onto its own
+      #    image, so a pack inserted here later cannot leave this one running
+      #    against someone else's build. Nothing cleanup-shaped after it. ──
+      - name: Recreate app on the Rounds image (signed pack)
+        run: >
+          docker compose -f docker-compose.qa.yml -f docker-compose.qa.rounds.yml
+          up -d --wait transcribe-md
+
+      - name: Run E2E (rounds-signed — Gate B, Screen 4)
+        working-directory: apps/transcribe-md
+        env:
+          PW_BASE_URL: http://localhost:9020
+          CI: "true"
+        run: npx playwright test --project=rounds-signed
 
       - name: Build flag-ON image for the document surface
         run: >

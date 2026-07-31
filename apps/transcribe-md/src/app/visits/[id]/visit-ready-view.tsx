@@ -39,6 +39,7 @@ import { isReviewDocView } from '@/config/review-doc-view';
 import { isSkinRounds } from '@/config/skin-rounds';
 import { RoundsStage } from '@/components/rounds/stage';
 import { RoundsGateFlow } from '@/components/rounds/gate-flow';
+import { RoundsSigned } from '@/components/rounds/signed';
 import type { SignGateId } from '@/lib/sign-gates';
 import {
   applyRxResolved,
@@ -545,6 +546,11 @@ export function VisitReadyView(props: VisitReadyViewProps) {
   const handleSkip = useCallback(() => {
     if (nextVisitId) router.push(`/visits/${nextVisitId}`);
   }, [router, nextVisitId]);
+
+  const headVisitId = roundsView?.queue.headVisitId ?? null;
+  const handleContinueToNext = useCallback(() => {
+    if (headVisitId) router.push(`/visits/${headVisitId}`);
+  }, [router, headVisitId]);
 
   const handleOpenQueue = useCallback(() => {
     // The board IS the queue, and it lives behind the same flag. B4 may
@@ -1110,8 +1116,10 @@ export function VisitReadyView(props: VisitReadyViewProps) {
       const displayedEm = projectDisplayedEmCode(emBlob, true, !props.emNotApplicable);
       const overrodeCount = props.rxOverriddenWarningIds?.length ?? 0;
 
-      return (
-        <div className="w-full qm-c3-rev2-root">
+      // Hoisted so the Rounds branch composes the SAME element instead of a
+      // second copy. One signed renderer, exactly as the unsigned path keeps
+      // one paper.
+      const signedPaper = (
           <SignedDocumentView
               documentNode={
                 docPage && !docPageUnavailable ? (
@@ -1155,6 +1163,38 @@ export function VisitReadyView(props: VisitReadyViewProps) {
                   : null,
             }}
           />
+      );
+
+      if (roundsActive && roundsView) {
+        return (
+          <div className="w-full qm-c3-rev2-root">
+            <RoundsSigned
+              status={roundsView.status}
+              signedAt={roundsView.signedAt ?? ''}
+              identity={roundsView.identity}
+              queue={roundsView.queue}
+              trail={roundsView.trail}
+              signedByLabel={props.signedByName ?? props.doctorEmail}
+              // Already projected by the caller through the SAME function every
+              // exported artifact uses, and null for imaging — so an ultrasound
+              // report renders no level row at all rather than a blank one.
+              emCode={displayedEm}
+              // THE HEAD OF THE QUEUE, never `queue.nextVisitId`: a signed visit
+              // has left the queue, so both peek neighbours are null by
+              // construction and a Continue wired to them would never render.
+              onContinue={
+                roundsView.queue.headVisitId ? handleContinueToNext : undefined
+              }
+            >
+              {signedPaper}
+            </RoundsSigned>
+          </div>
+        );
+      }
+
+      return (
+        <div className="w-full qm-c3-rev2-root">
+          {signedPaper}
         </div>
       );
     }

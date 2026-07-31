@@ -50,6 +50,58 @@ export interface RoundsStageData {
    * screen.
    */
   criticalUnresolved: number;
+  /**
+   * Screen 4's safety trail — ONLY what a persisted fact can prove.
+   *
+   * Each field is a real column read, not an inference from "the visit is
+   * signed, so the gates must have been cleared". A card with no field behind it
+   * is not rendered, and its absence means the step did not apply — which is the
+   * whole claim the trail makes.
+   *
+   * ⚠️ THERE IS NO `attested` FIELD, AND THAT IS THE FINDING. Attestation is
+   * never persisted: the sign body schema has no such field, there is no column,
+   * no audit action, and `signGates` marks the gate `serverEnforced: false` for
+   * exactly this reason. The only signal is a `useState(false)` that dies with
+   * the page. An "Attested ✓" card would re-assert on every reload a fact
+   * nothing recorded — and would contradict Screen 3's own sentence, which tells
+   * the doctor the server does not check it. PARKED; un-park when an
+   * `attestedAt` exists in the sign body and a column or audit action receives
+   * it. That is a schema and route change, not a reskin.
+   */
+  trail: SignedTrail;
+}
+
+export interface SignedTrail {
+  /**
+   * CRITICAL Rx overrides recorded at or before the signature.
+   *
+   * Counted from real `RxWarningOverride` rows, each of which carries a
+   * server-validated reason, a signer and a timestamp, and each correlated
+   * against the visit's persisted warnings before it could be written.
+   *
+   * Filtered on severity in the READER, never in the query — that array is also
+   * the coverage input to `signGates`, and narrowing it there would narrow the
+   * gate. And compared against `signedAt` rather than assumed: `recordOverride`
+   * guards ownership, not visit status, so nothing structurally prevents a row
+   * postdating the signature. A card that says "before signing" must mean it.
+   *
+   * 0 ⇒ no card. The visit had no critical interaction to clear.
+   */
+  criticalOverridesBeforeSign: number;
+  /**
+   * When an E/M change was acknowledged, off the RAW `emPendingChange` column,
+   * stamped by the winning READY→SIGNED transition.
+   *
+   * null ⇒ no card, and that is correct rather than a gap: with no pending
+   * change the sign route skips the E/M branch entirely and succeeds, so there
+   * is no record of a doctor "agreeing" to an unchanged level, because no such
+   * act happened.
+   *
+   * Read from the raw column, NOT from the coerced display pair — that one is
+   * null on every signed visit by construction. A delta field is not a display
+   * field.
+   */
+  emAcknowledgedAt: string | null;
 }
 
 /**
