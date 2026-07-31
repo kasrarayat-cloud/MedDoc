@@ -81,8 +81,13 @@ document is the thing a clinician stares at longest.
 | `--rounds-ready` | `#187A4E` | ready to review; completed track runs |
 | `--rounds-em` | `#C4841C` | E/M amber |
 | `--rounds-em-fill` | `#E29A34` | **E/M action buttons only** |
-| `--rounds-processing` | `#3B6FD4` | in pipeline |
-| `--rounds-signed` | `#6B7480` | signed accents — **not small text on dark** (fails AA; use `--rounds-text-2`) |
+| `--rounds-processing` | `#3B6FD4` | in pipeline — **fill/line only** |
+| `--rounds-processing-text` | `#7AB0F5` | the processing blue as **text on dark** |
+| `--rounds-em-text` | `#E8B168` | the E/M amber as **text on dark** |
+| `--rounds-ready-text` | `#6EE7A8` | the ready green as **text on dark** |
+| `--rounds-accent-text` | `#A5A5F0` | the accent as **text on dark** |
+| `--rounds-signed` | `#6B7480` | signed accents — **not small text on dark** |
+| `--rounds-signed-text` | `#9AA4B2` | the signed grey as **text on dark** |
 
 ⚠️ **`--rounds-signed` is grey on the stage, but a completed track run draws in
 `--rounds-ready` green.** Those are not the same thing and the difference is
@@ -97,6 +102,37 @@ on dark uses `--rounds-critical-on-dark`.
 ⚠️ **E/M has two tokens.** `--rounds-em` is the status colour; `--rounds-em-fill`
 is lighter and exists only so an amber button clears AA against dark text. Do not
 fill a button with `--rounds-em`.
+
+### THE RULE THE PAIRS ARE INSTANCES OF
+
+> **If a token names a STATE or a FILL, it needs a `-text` sibling before it is
+> used as a foreground.**
+
+This has now been learned **six times** in this palette — `--rounds-em`,
+`--rounds-accent`, `--rounds-signed`, `--rounds-ready`, `--rounds-processing`
+and the E/M amber again — so it is written here as a rule rather than as six
+separate warnings.
+
+Measured against the two backdrops C1 surfaces sit on (`--rounds-surface-1`
+`#161B24`, `--rounds-stage-bg-2` `#171D27`), against the 4.5:1 small-text bar:
+
+| Fill token | as text | `-text` sibling | as text |
+|---|---|---|---|
+| `--rounds-accent` | 3.22 / 3.15 ✗ | `--rounds-accent-text` | 6.10+ ✓ |
+| `--rounds-processing` | 3.63 / 3.55 ✗ | `--rounds-processing-text` | 7.69 / 7.54 ✓ |
+| `--rounds-critical` | 2.72 ✗ | `--rounds-critical-on-dark` | 6.18+ ✓ |
+| `--rounds-ready` | 2.60 ✗ | `--rounds-ready-text` | 9.02+ ✓ |
+| `--rounds-signed` | 2.93 ✗ | `--rounds-signed-text` | 5.50+ ✓ |
+| `--rounds-em` | 5.48 / 5.37 **✓** | `--rounds-em-text` | 8.98 / 8.80 ✓ |
+
+⚠️ **`--rounds-em` is the interesting row, and the reason this is a table rather
+than a sentence.** It *passes* on those two backdrops and on `--rounds-surface-2`
+(4.89) — and fails on `--rounds-surface-3` at **4.40**, a tenth under the bar.
+A near miss reads exactly like a pass to anyone eyeballing it. A text token has
+to be safe wherever it lands, not merely where it is used today.
+
+`gate-rounds-bridge.test.ts` computes these ratios rather than trusting this
+table, so the table cannot drift from the values without the suite noticing.
 
 ---
 
@@ -143,6 +179,55 @@ These are not style choices and a redesign does not get to overrule them.
 - **The paper is read-only.** No edit affordance renders on the document at any
   breakpoint. The chat editor is the only edit path. This is an architecture
   invariant, not a visual one — see AGENTS.md.
+
+---
+
+## The host bridge — how C1 reaches surfaces that have no classes
+
+The C1 surfaces (auth, settings, templates, error/empty/loading) do not use
+classes. They style themselves with **434 inline `style={{}}` objects across 43
+files**, reading `var(--color-linear-*)` — the old skin's token names.
+
+Forking all of them would be a 400-object diff no review could hold. So instead:
+
+```css
+[data-skin='rounds'] .qm-rounds-host {
+  --color-linear-text: var(--rounds-text-1);
+  /* …22 names in total… */
+}
+```
+
+Custom properties inherit and resolve at **computed-value time**, so redeclaring
+the old names on an ancestor retints every inline object beneath it without
+touching a line of TSX. **60% of those objects come to Rounds tokens for free**;
+only ~33 carry a colour literal and need a real fork.
+
+**Three rules, each of which has a guard:**
+
+1. **SCOPED to `.qm-rounds-host`, never `:root`.** A root-level redeclaration
+   repaints `/visits`, `/patients`, `/admin` and the board — a *replacement* of
+   the old skin rather than an addition, while the relay's standing rule is that
+   the old skin stays default until item F. Each split applies the host class to
+   the surface it restyles.
+
+2. **Every right-hand token must be DECLARED.** An undeclared one is not a build
+   error and not a console error: the declaration is invalid-at-computed-value-
+   time, the property becomes unset, and the affected CSS property falls to its
+   **initial value** — `background-color: transparent`, showing the stage through
+   the surface. The C1 plan shipped exactly this on paper by naming
+   `--rounds-surface-0`, which does not exist; it was caught by reproducing it in
+   headless chromium.
+
+3. **A name used as a FOREGROUND maps to a `-text` token.** See the rule above.
+   Where a name is used as *both* (e.g. `--color-linear-sage`: 4 foregrounds, 7
+   fills), the bridge follows the majority and the minority sites are forked by
+   the split that owns them — tracked as named debt, not as an exemption.
+
+**Why it wins the cascade**, stated because it looks like it should not:
+`--color-linear-*` are declared inside Tailwind's `@theme {}`, which compiles to
+`@layer theme { :root, :host { … } }`. `rounds-tokens.css` carries no `@layer`
+and is imported after `globals.css`, so it lands **unlayered** — and unlayered
+rules beat layered ones regardless of specificity.
 
 ---
 

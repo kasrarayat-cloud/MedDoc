@@ -95,6 +95,21 @@
      `--rounds-accent`/`--rounds-accent-text` (above), and now this. If a token
      names a STATE, assume it needs a text variant before it is used as one. */
   --rounds-signed-text: #9aa4b2;
+  /* THE AMBER AS TEXT, and this one is a NEAR MISS rather than a failure —
+     which is why it needs stating precisely. `--rounds-em` (#c4841c) measures
+     5.48 on surface-1, 5.37 on stage-bg-2, 4.89 on surface-2 and **4.40 on
+     surface-3**. So it clears AA on three of the four and fails on the
+     lightest one, by a tenth. A text token has to be safe wherever it lands,
+     not on the surfaces it happens to be used on today; this value is 7.21 at
+     its worst.
+     `--rounds-em-fill` (5.88 worst) would also clear, but that token is a
+     BUTTON BACKGROUND meant to carry dark label text — using it as a
+     foreground conflates two roles. Fifth instance of one lesson. */
+  --rounds-em-text: #e8b168;
+  /* THE PROCESSING BLUE AS TEXT. `--rounds-processing` (#3b6fd4) fails on
+     EVERY Rounds surface — 3.63 at best, 2.91 at worst. Not a near miss.
+     Sixth instance. */
+  --rounds-processing-text: #7ab0f5;
 
   /* ── Type ─────────────────────────────────────────────────────────────── */
   --rounds-font-display: var(--font-rounds-display), system-ui, sans-serif;
@@ -956,4 +971,94 @@ body[data-skin='rounds'] {
 
 [data-skin='rounds'] .qm-rounds-signed-continue:hover {
   background: var(--rounds-accent-tint-16);
+}
+
+/* ============================================================================
+ * THE HOST BRIDGE — C1's mechanism for reaching ~434 inline style objects.
+ * ----------------------------------------------------------------------------
+ * The surfaces C1 restyles (auth, settings, templates, error/empty/loading) do
+ * not use classes. They carry inline `style={{}}` objects reading
+ * `var(--color-linear-*)` — 434 of them across 43 files, of which **60% read a
+ * linear token and carry no literal at all**. Forking every one would be a
+ * 400-object diff that no review could hold.
+ *
+ * Custom properties inherit and resolve at COMPUTED-VALUE time, so redeclaring
+ * the linear names on an ancestor retints every one of those objects without
+ * touching a single line of TSX. That is what this block does.
+ *
+ * ⚠️ SCOPED TO `.qm-rounds-host`, DELIBERATELY — not `:root[data-skin]`.
+ * A root-level redeclaration would repaint /visits, /patients, /admin and the
+ * board: a REPLACEMENT of the old skin rather than an addition to it, while the
+ * relay's standing rule is that the old skin stays default until item F. The
+ * host class is applied per surface, by the split that restyles that surface.
+ *
+ * ⚠️ THIS BLOCK CHANGES NOTHING TODAY. No element carries `.qm-rounds-host`
+ * yet — C1-c onward add it, one surface at a time, each with its own proof.
+ *
+ * WHY IT WINS THE CASCADE, stated because it looks like it should not:
+ * `--color-linear-*` are declared inside Tailwind's `@theme {}` in globals.css,
+ * which compiles to `@layer theme { :root, :host { … } }`. This file carries no
+ * `@layer` at all and is imported AFTER globals.css, so it lands UNLAYERED —
+ * and unlayered rules beat every layered one regardless of specificity. There
+ * is no specificity fight to lose.
+ *
+ * ⚠️ EVERY RIGHT-HAND TOKEN MUST BE DECLARED. An undeclared one is not a build
+ * error and not a console error: the declaration is invalid-at-computed-value-
+ * time, the custom property becomes unset, and the affected property falls to
+ * its INITIAL value — `background-color: transparent`, showing the stage
+ * through the surface. The C1 plan shipped exactly this bug on paper by naming
+ * `--rounds-surface-0`, which does not exist. `gate-rounds-bridge` asserts both
+ * sides of every line here.
+ * ========================================================================== */
+[data-skin='rounds'] .qm-rounds-host {
+  /* ── Ground and surfaces ─────────────────────────────────────────────── */
+  /* The page ground is the DARKEST stage stop, not surface-1: these screens sit
+     on the stage, and the stage's gradient is painted on body. */
+  --color-linear-bg: var(--rounds-stage-bg-3);
+  --color-linear-surface-1: var(--rounds-surface-1);
+  --color-linear-surface-2: var(--rounds-surface-2);
+  --color-linear-surface-3: var(--rounds-surface-3);
+
+  /* ── Lines ───────────────────────────────────────────────────────────── */
+  --color-linear-border: var(--rounds-line-1);
+  --color-linear-border-strong: var(--rounds-line-2);
+  /* The hairlines are TRANSLUCENT in the old skin and must stay translucent:
+     they are drawn over surfaces of several different values, and an opaque
+     substitute reads as a hard rule on the lighter ones. */
+  --color-linear-hairline: color-mix(in srgb, var(--rounds-line-1) 55%, transparent);
+  --color-linear-hairline-strong: color-mix(in srgb, var(--rounds-line-2) 70%, transparent);
+
+  /* ── Text ────────────────────────────────────────────────────────────── */
+  --color-linear-text: var(--rounds-text-1);
+  --color-linear-text-2: var(--rounds-text-2);
+  --color-linear-text-3: var(--rounds-text-3);
+  /* Rounds has THREE text tiers and the old skin has four. text-4 (#4b5159) is
+     the faintest, used for de-emphasised metadata. It maps UP to text-3 rather
+     than to a new dimmer token: mapping up can only improve contrast, and a
+     fourth tier invented here would be a token with no design behind it. */
+  --color-linear-text-4: var(--rounds-text-3);
+
+  /* ── The brand action colour ─────────────────────────────────────────── */
+  /* Linear's sage family is the old brand green; Rounds' action colour is the
+     indigo accent. `sage-bright` is used almost exclusively as `color:` and as
+     an SVG `stroke` on these surfaces, so it takes the TEXT variant — mapping
+     it to --rounds-accent (2.58:1) would have failed AA on 13 call sites. */
+  --color-linear-sage: var(--rounds-accent);
+  --color-linear-sage-bright: var(--rounds-accent-text);
+  --color-linear-sage-deep: var(--rounds-accent-hover);
+  --color-linear-sage-tint: var(--rounds-accent-tint-10);
+  --color-linear-sage-glow: var(--rounds-accent-tint-16);
+
+  /* ── States ──────────────────────────────────────────────────────────── */
+  /* Split by ROLE, which is the whole reason the -text variants exist:
+     `coral` and `info` and `amber` are used as `color:` on these surfaces,
+     `danger` is used as a `background:`. Mapping a fill token onto a
+     foreground is how this palette has failed AA five times. */
+  --color-linear-coral: var(--rounds-critical-on-dark);
+  --color-linear-danger: var(--rounds-critical);
+  --color-linear-amber: var(--rounds-em-text);
+  --color-linear-info: var(--rounds-processing-text);
+
+  /* ── Interaction ─────────────────────────────────────────────────────── */
+  --color-linear-row-hover: color-mix(in srgb, var(--rounds-text-1) 5%, transparent);
 }
