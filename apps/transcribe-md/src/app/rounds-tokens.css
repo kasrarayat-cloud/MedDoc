@@ -68,6 +68,15 @@
    * true critical red; text on dark uses this. */
   --rounds-critical-on-dark: #ff8d7e;
   --rounds-ready: #187a4e;
+  /* THE READY GREEN AS TEXT. #187a4e is a FILL and LINE colour — it is a deep
+   * green chosen to read on the light paper and as a track run, and on the dark
+   * stage it lands near 2.3:1, far under AA for small text.
+   * FOURTH instance of one lesson: `--rounds-em`/`--rounds-em-fill` (A2),
+   * `--rounds-accent`/`--rounds-accent-text` and `--rounds-signed`/
+   * `--rounds-signed-text` (B4's axe run). If a token names a STATE or a FILL,
+   * assume it needs a text variant BEFORE it is used as one. Introduced for
+   * Screen 4's lock banner, which SPEC.md:161 requires to be green. */
+  --rounds-ready-text: #6ee7a8;
   --rounds-em: #c4841c;
   /* Lighter than --rounds-em, and it exists for exactly one reason: an amber
    * button must clear AA against dark label text. Never fill a button with
@@ -842,11 +851,19 @@ body[data-skin='rounds'] {
   margin: 0 auto;
 }
 
+/* GREEN, because SPEC.md:161 says "Green lock banner" and SPEC.md:4-6 says a
+ * component that disagrees with the spec is the bug. This was styled from
+ * `--rounds-signed` grey, which is the token for a signed CARD ON THE BOARD —
+ * finished business, receding. The lock banner is the opposite kind of object:
+ * it is the confirmation that the thing succeeded, and the board already draws
+ * a completed track RUN in `--rounds-ready` for exactly that reason. The
+ * asymmetry recorded at the token is between a card and a run; the banner is a
+ * run. Found by B4's verification after B3 had closed. */
 [data-skin='rounds'] .qm-rounds-signed-lock {
-  border: 1px solid var(--rounds-signed);
+  border: 1px solid var(--rounds-ready);
   border-radius: var(--rounds-radius-lg);
   padding: 18px 20px;
-  background: color-mix(in srgb, var(--rounds-signed) 8%, transparent);
+  background: color-mix(in srgb, var(--rounds-ready) 12%, transparent);
 }
 
 [data-skin='rounds'] .qm-rounds-signed-lock-title {
@@ -855,8 +872,9 @@ body[data-skin='rounds'] {
   font-weight: 600;
   letter-spacing: 0.02em;
   /* 15px semibold is NOT axe's "large text" (that needs 18.66px bold / 24px),
-     so it takes the 4.5:1 bar and the text variant. */
-  color: var(--rounds-signed-text);
+     so it takes the 4.5:1 bar and the text variant — the GREEN one now, never
+     `--rounds-ready` itself. */
+  color: var(--rounds-ready-text);
 }
 
 [data-skin='rounds'] .qm-rounds-signed-lock-fields {
