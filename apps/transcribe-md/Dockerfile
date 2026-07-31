@@ -134,6 +134,23 @@ ENV NEXT_PUBLIC_VISIT_DOC_PAGE=${NEXT_PUBLIC_VISIT_DOC_PAGE}
 ARG NEXT_PUBLIC_CHAT_EDITOR=false
 ENV NEXT_PUBLIC_CHAT_EDITOR=${NEXT_PUBLIC_CHAT_EDITOR}
 
+# /dev/states — the preview route for error, empty and loading surfaces.
+#
+# ⚠️ A BUILD FLAG RATHER THAN `NODE_ENV`, and that distinction is the whole
+# reason this exists. The obvious gate is `if (NODE_ENV === 'production')
+# notFound()`, which is what /dev/rx-warnings uses. But the QA stack RUNS a
+# production build — so a NODE_ENV-gated route returns 404 there, which is
+# exactly where Gate C's axe sweep needs it. Measured, not assumed:
+# /dev/rx-warnings returns 404 on QA against a /login control returning 200,
+# and no E2E spec references any /dev/ route.
+#
+# This flag is passed ONLY to the `:rounds` CI image. Production's compose
+# never passes it, so it defaults false here and the route 404s in production —
+# which `gate-devstates` asserts against the compose file rather than trusting
+# this default.
+ARG NEXT_PUBLIC_DEV_STATES=false
+ENV NEXT_PUBLIC_DEV_STATES=${NEXT_PUBLIC_DEV_STATES}
+
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # ── Build heap (incident 2026-06-04) ──

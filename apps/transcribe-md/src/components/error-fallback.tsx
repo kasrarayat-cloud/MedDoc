@@ -27,6 +27,21 @@ interface ErrorFallbackProps {
   error: Error & { digest?: string };
   /** Re-mounts the child subtree of this boundary. */
   reset: () => void;
+  /** PREVIEW MODE — render the UI, report nothing.
+   *
+   *  ⚠️ THIS EXISTS BECAUSE A PREVIEW WOULD OTHERWISE FILE REAL BUG REPORTS.
+   *  The effect below POSTs `scope`, `message`, `stack`, `digest` and `url` to
+   *  `/api/client-errors` on mount, unconditionally. `/dev/states` renders this
+   *  component deliberately, so without this flag every visit to that route
+   *  would put a synthetic error into the stream ops reads — indistinguishable
+   *  from a real one, and arriving from a URL that looks like a real page.
+   *
+   *  It suppresses the REPORT only, never the UI: the whole value of the
+   *  preview is that it renders exactly what a doctor would see. And
+   *  `gate-devstates` asserts the beacon STILL fires when this is falsy —
+   *  a suppression switch that silently disabled real error reporting would be
+   *  a far worse bug than the one it fixes. */
+  preview?: boolean;
   /** Human label identifying which boundary fired. Included in the
    *  client-errors POST body so ops can see *where* something broke. */
   scope:
@@ -49,6 +64,7 @@ function makeErrorId(digest: string | undefined): string {
 export function ErrorFallback({
   error,
   reset,
+  preview = false,
   scope,
 }: ErrorFallbackProps) {
   const errorId = useMemo(() => makeErrorId(error.digest), [error.digest]);
@@ -59,6 +75,8 @@ export function ErrorFallback({
   const isStale = useMemo(() => isStaleDeploymentError(error), [error]);
 
   useEffect(() => {
+    // A preview renders the UI and reports nothing — see the `preview` prop.
+    if (preview) return;
     // Fire-and-forget: sendBeacon if available (survives page unload),
     // fallback to fetch with keepalive. Never throw into the render
     // cycle — that would turn a recoverable error into an infinite
@@ -92,7 +110,7 @@ export function ErrorFallback({
     } catch {
       /* swallow — never let telemetry failure propagate */
     }
-  }, [error.digest, error.message, error.stack, errorId, scope]);
+  }, [error.digest, error.message, error.stack, errorId, scope, preview]);
 
   return (
     <main
