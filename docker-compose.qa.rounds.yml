@@ -6,6 +6,7 @@
 #     --build-arg NEXT_PUBLIC_SKIN_BETA=true \
 #     --build-arg NEXT_PUBLIC_ULTRASOUND_SPECIALTY=true \
 #     --build-arg NEXT_PUBLIC_REVIEW_DOC_VIEW=true \
+#     --build-arg NEXT_PUBLIC_CHAT_EDITOR=true \
 #     -t meddoc-pro-transcribe-md:rounds .
 #   docker compose -f docker-compose.qa.yml -f docker-compose.qa.rounds.yml \
 #     up -d --wait transcribe-md
@@ -18,6 +19,13 @@
 # does nothing — the flag has to be a --build-arg, and the Dockerfile has to
 # declare the ARG or docker discards it silently ("were not consumed"). Verify
 # with the inlining grep, never by reading env.
+#
+# CHAT_EDITOR joined the list with Gate B (Screen 2). The stage's chat DRAWER
+# only mounts when the view is given a chat node, and the view only builds one
+# behind isChatEditor() — so without this arg the drawer is absent and every
+# drawer test burns its full timeout on a missing trigger, reading as "the
+# drawer is broken" rather than "the image is missing a flag".
+# `gate-flag-coverage.test.ts` pins the whole list.
 # ============================================================================
 services:
   transcribe-md:

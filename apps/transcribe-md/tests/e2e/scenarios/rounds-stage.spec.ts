@@ -280,15 +280,56 @@ test.describe('Rounds Screen 2 — the stage', () => {
     await expect(page.getByTestId('rounds-chat-drawer')).toBeVisible();
   });
 
-  // ── 9. Close, THEN scroll — both halves ──────────────────────────────────
+  // ── 9. Close, THEN scroll — asserted on ORDER, not on geometry ──────────
   test('a chat navigation lands AFTER the drawer is gone', async ({ page }) => {
     // THE FAILURE THIS EXISTS FOR: the handler fires, the scroll runs while the
     // overlay is still mounted, the chat says "took you to the E/M gate", and
-    // nothing the doctor can see has moved. Asserting only that the drawer
-    // closed, or only that the handler ran, passes on exactly that bug — so
-    // both halves are asserted, in order.
+    // nothing the doctor can see has moved.
+    //
+    // THE FIRST VERSION OF THIS TEST ASSERTED THE WRONG PROPERTY, and CI was
+    // right to reject it. It used `not.toBeInViewport()` while the drawer was
+    // open — but that matcher measures geometric intersection with the viewport,
+    // NOT occlusion. The drawer covers the gate; the gate is still inside the
+    // viewport rectangle, so it reported "viewport ratio 1" and failed against a
+    // correct implementation. A scroll-position assertion is no better here: the
+    // seeded note is short enough that the whole document fits on screen, so
+    // `scrollIntoView` on an already-centred element is a no-op.
+    //
+    // The contract is not "the gate becomes visible". It is "the scroll is
+    // issued only once the overlay is gone" — an ORDER, not a geometry. So
+    // instrument the call and assert the order, which no layout can invalidate
+    // and which still fails on the original bug.
     const seeded = await open(page, 'stage-9');
     test.skip(!seeded, 'psql seeding unavailable');
+
+    type ScrollEntry = { target: string | null; drawerOpen: boolean };
+
+    await page.evaluate(() => {
+      const log: ScrollEntry[] = [];
+      (window as unknown as { __scrollLog: ScrollEntry[] }).__scrollLog = log;
+      const original = Element.prototype.scrollIntoView;
+      Element.prototype.scrollIntoView = function patched(
+        this: Element,
+        ...args: unknown[]
+      ) {
+        log.push({
+          target: this.getAttribute('data-chat-target'),
+          // The drawer UNMOUNTS on close, so its presence in the DOM is exactly
+          // its open state — no separate signal to get out of step.
+          drawerOpen: !!document.querySelector(
+            '[data-testid="rounds-chat-drawer"]',
+          ),
+        });
+        return (original as (...a: unknown[]) => void).apply(this, args);
+      } as typeof Element.prototype.scrollIntoView;
+    });
+
+    const gateScrolls = () =>
+      page.evaluate(() =>
+        (window as unknown as { __scrollLog: ScrollEntry[] }).__scrollLog.filter(
+          (e) => e.target === 'em_gate',
+        ),
+      );
 
     await page.getByTestId('rounds-chat-trigger').click();
     const drawer = page.getByTestId('rounds-chat-drawer');
@@ -300,16 +341,17 @@ test.describe('Rounds Screen 2 — the stage', () => {
     await drawer.getByRole('textbox').press('Enter');
     await expect(drawer).toContainText(/took you to the em gate/i);
 
-    const gate = page.locator('[data-chat-target="em_gate"]');
-    // HALF ONE: still open, and therefore NOT yet scrolled to.
+    // HALF ONE — the reply has arrived and the gate has NOT been scrolled to.
+    // This is the half that goes red on a synchronous scroll.
+    expect(await gateScrolls()).toEqual([]);
     await expect(drawer).toBeVisible();
-    await expect(gate).not.toBeInViewport();
 
     await page.getByTestId('rounds-chat-close').click();
-
-    // HALF TWO: the overlay is gone AND the target is on screen.
     await expect(page.getByTestId('rounds-chat-drawer')).toHaveCount(0);
-    await expect(gate).toBeInViewport();
+
+    // HALF TWO — it happened, exactly once, and with the drawer already gone.
+    await expect.poll(async () => (await gateScrolls()).length).toBe(1);
+    expect((await gateScrolls())[0].drawerOpen).toBe(false);
   });
 
   // ── 10. One control can start a signature ────────────────────────────────
