@@ -6,3 +6,10 @@ reports/playwright-html/
 !reports/.gitkeep
 # The template is source, not an artefact — keep it in-tree.
 !reports/template.html
+
+# …and the half-written ones. `reports/*.json` did not cover `*.json.tmp`, so a
+# report the monitoring cron was mid-write on got swept into a commit by an
+# unrelated `git add -A` on 2026-07-31. Nothing sensitive was in it — HTTP
+# statuses, container counts, disk and memory — but a scratch file has no
+# business in the tree, and the next one might not be so dull.
+reports/*.tmp
