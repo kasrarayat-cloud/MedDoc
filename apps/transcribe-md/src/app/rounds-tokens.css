@@ -643,3 +643,168 @@ body[data-skin='rounds'] {
     transform: scale(1.25);
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ROUNDS — Screen 3, THE GATES.
+
+   Chrome only. Every clinical control inside this layer arrives by PORTAL from
+   the read-only paper and keeps its own markup, so nothing here restyles
+   `.qm-warn-*`, `#override-reason`, `.qm-rdoc-gate*` or the sign bar in place —
+   the flag-OFF packs select those DOM contracts and a global rule would reach
+   them on every build. Skinning, where it happens at all, descends from
+   `.qm-rounds-gateflow`.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+[data-skin='rounds'] .qm-rounds-gateflow {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  padding: 32px 16px;
+  overflow-y: auto;
+  /* OPAQUE, not translucent. A sequential gate is a decision point; letting the
+     note show through invites reading it instead of the blocker. */
+  background: var(--rounds-stage-bg-1);
+}
+
+[data-skin='rounds'] .qm-rounds-gateflow-rail {
+  display: flex;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+[data-skin='rounds'] .qm-rounds-gateflow-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--rounds-line-1);
+  border-radius: 999px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--rounds-text-2);
+}
+
+[data-skin='rounds'] .qm-rounds-gateflow-step[data-state='current'] {
+  border-color: var(--rounds-accent);
+  color: var(--rounds-text-1);
+}
+
+[data-skin='rounds'] .qm-rounds-gateflow-step[data-state='done'] {
+  color: var(--rounds-signed);
+  border-color: var(--rounds-signed);
+}
+
+[data-skin='rounds'] .qm-rounds-gateflow-step-n {
+  font-family: var(--rounds-font-mono);
+  font-size: 11px;
+}
+
+[data-skin='rounds'] .qm-rounds-gateflow-panel {
+  width: min(820px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: var(--rounds-surface-1);
+  border: 1px solid var(--rounds-line-1);
+  border-radius: 12px;
+  padding: 24px;
+}
+
+[data-skin='rounds'] .qm-rounds-gateflow-panel:focus {
+  outline: 2px solid var(--rounds-accent);
+  outline-offset: 2px;
+}
+
+[data-skin='rounds'] .qm-rounds-gateflow-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+[data-skin='rounds'] .qm-rounds-gateflow-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--rounds-text-1);
+  margin: 0;
+}
+
+[data-skin='rounds'] .qm-rounds-gateflow-anomaly {
+  border: 1px solid var(--rounds-critical);
+  /* The AA-safe variant. Critical red as small text failed contrast on dark
+     once already — see the A2 findings. */
+  color: var(--rounds-critical-on-dark);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+[data-skin='rounds'] .qm-rounds-gateflow-summary {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--rounds-text-2);
+}
+
+[data-skin='rounds'] .qm-rounds-gateflow-summary li[data-cleared='true'] {
+  color: var(--rounds-signed);
+}
+
+[data-skin='rounds'] .qm-rounds-gateflow-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--rounds-text-1);
+}
+
+[data-skin='rounds'] .qm-rounds-gateflow-note,
+[data-skin='rounds'] .qm-rounds-gateflow-foot {
+  font-size: 12px;
+  color: var(--rounds-text-2);
+  margin: 0;
+}
+
+[data-skin='rounds'] .qm-rounds-gateflow-lock {
+  font-family: var(--rounds-font-mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--rounds-text-2);
+  border: 1px dashed var(--rounds-line-2);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 0;
+}
+
+[data-skin='rounds'] .qm-rounds-gateflow-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+[data-skin='rounds'] .qm-rounds-gateflow-count {
+  margin-left: auto;
+  font-family: var(--rounds-font-mono);
+  font-size: 12px;
+  color: var(--rounds-text-2);
+}
+
+[data-skin='rounds'] .qm-rounds-gateflow-nav button[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
