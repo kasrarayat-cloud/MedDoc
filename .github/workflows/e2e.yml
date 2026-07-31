@@ -364,6 +364,23 @@ jobs:
           CI: "true"
         run: npx playwright test --project=rounds-signed
 
+      # ── ROUNDS Gate B — axe, flag-ON. Same image, its own recreate. It runs
+      #    HERE rather than in a11y.yml on purpose: that workflow is a required
+      #    check on every unrelated PR and builds one app with plain
+      #    `npm run build`, so adding the skin there would make the required gate
+      #    measure a skin production is not running until item F. ──
+      - name: Recreate app on the Rounds image (a11y pack)
+        run: >
+          docker compose -f docker-compose.qa.yml -f docker-compose.qa.rounds.yml
+          up -d --wait transcribe-md
+
+      - name: Run E2E (rounds-a11y — Gate B, axe on every Rounds surface)
+        working-directory: apps/transcribe-md
+        env:
+          PW_BASE_URL: http://localhost:9020
+          CI: "true"
+        run: npx playwright test --project=rounds-a11y
+
       - name: Build flag-ON image for the document surface
         run: >
           docker build -f apps/transcribe-md/Dockerfile

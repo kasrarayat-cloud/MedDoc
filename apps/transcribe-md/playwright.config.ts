@@ -107,6 +107,7 @@ export default defineConfig({
         // flag-OFF, so this would fail on missing testids rather than 404,
         // taking every downstream pack with it.
         '**/rounds-signed.spec.ts',
+        '**/rounds-a11y.spec.ts',
         '**/a11y.spec.ts',
         '**/23-note-format-phi-parse-reject.spec.ts',
         '**/24-rx-clinical-safety.spec.ts',
@@ -205,6 +206,17 @@ export default defineConfig({
       // it.
       name: 'rounds-signed',
       testMatch: ['**/rounds-signed.spec.ts'],
+      fullyParallel: false,
+      workers: 1,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      // ROUNDS Gate B — axe across every Rounds surface, flag-ON. Axe has never
+      // run against one: a11y.yml builds with plain `npm run build` and none of
+      // the skin flags, so it has never seen the stage, the flow or the signed
+      // screen. One test walking many states, so no parallelism to gain.
+      name: 'rounds-a11y',
+      testMatch: ['**/rounds-a11y.spec.ts'],
       fullyParallel: false,
       workers: 1,
       use: { ...devices['Desktop Chrome'] },

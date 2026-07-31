@@ -48,6 +48,13 @@
 
   /* ── Accent ───────────────────────────────────────────────────────────── */
   --rounds-accent: #5b5bd6;
+  /* THE ACCENT AS TEXT, on dark. `--rounds-accent` is a FILL colour: at
+     #5b5bd6 on the stage background it measures ~2.7:1, which fails AA for
+     small text and fails it for large text too.
+     Two tokens, exactly as `--rounds-em` / `--rounds-em-fill` already are —
+     A2 recorded that split for the same reason and this is the second time the
+     lesson has been needed. Never use `--rounds-accent` for a text colour. */
+  --rounds-accent-text: #a5a5f0;
   --rounds-accent-hover: #4a49c4;
   --rounds-accent-tint-10: rgba(91, 91, 214, 0.1);
   --rounds-accent-tint-16: rgba(91, 91, 214, 0.16);
@@ -72,6 +79,13 @@
    * in --rounds-ready green because it is a successful journey and should read
    * as one at a glance across the whole board. Not an inconsistency. */
   --rounds-signed: #6b7480;
+  /* THE SIGNED GREY AS TEXT. `--rounds-signed` is a LINE and FILL colour — a
+     signed card is finished business and recedes — and at that value it lands
+     around 3.7:1 on the panel, which fails AA for small text.
+     Third instance of one lesson: `--rounds-em`/`--rounds-em-fill` (A2),
+     `--rounds-accent`/`--rounds-accent-text` (above), and now this. If a token
+     names a STATE, assume it needs a text variant before it is used as one. */
+  --rounds-signed-text: #9aa4b2;
 
   /* ── Type ─────────────────────────────────────────────────────────────── */
   --rounds-font-display: var(--font-rounds-display), system-ui, sans-serif;
@@ -330,7 +344,10 @@ body[data-skin='rounds'] {
   font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--rounds-accent);
+  /* 10px uppercase is small text: 4.5:1. Found by the first axe run ever made
+     against a Rounds surface — and it is A2 defect 4's own element, NOW
+     REVIEWING, failing on colour this time rather than on a pulsing opacity. */
+  color: var(--rounds-accent-text);
 }
 
 [data-skin='rounds'] .qm-rounds-strip-blockers {
@@ -520,7 +537,7 @@ body[data-skin='rounds'] {
   background: none;
   border: none;
   padding: 0;
-  color: var(--rounds-accent);
+  color: var(--rounds-accent-text);
   font: inherit;
   cursor: pointer;
   text-decoration: underline;
@@ -699,7 +716,9 @@ body[data-skin='rounds'] {
 }
 
 [data-skin='rounds'] .qm-rounds-gateflow-step[data-state='done'] {
-  color: var(--rounds-signed);
+  /* Text gets the legible variant; the BORDER keeps the state colour — a
+     border is not text and carries no contrast requirement at this size. */
+  color: var(--rounds-signed-text);
   border-color: var(--rounds-signed);
 }
 
@@ -835,7 +854,9 @@ body[data-skin='rounds'] {
   font-size: 15px;
   font-weight: 600;
   letter-spacing: 0.02em;
-  color: var(--rounds-signed);
+  /* 15px semibold is NOT axe's "large text" (that needs 18.66px bold / 24px),
+     so it takes the 4.5:1 bar and the text variant. */
+  color: var(--rounds-signed-text);
 }
 
 [data-skin='rounds'] .qm-rounds-signed-lock-fields {
@@ -896,7 +917,7 @@ body[data-skin='rounds'] {
    router.refresh(), the signed branch replaces the stage, and different
    component types at one position remount regardless of where the branch sits. */
 [data-skin='rounds'] .qm-rounds-signed-deck-done {
-  color: var(--rounds-signed);
+  color: var(--rounds-signed-text);
   font-size: 12px;
   opacity: 0.6;
 }
