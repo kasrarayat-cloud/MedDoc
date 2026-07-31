@@ -44,6 +44,119 @@ cites paths and line numbers precisely so that is cheap to do.
 
 ---
 
+## VERIFICATION PASS — 2026-07-31, before C1-b was written
+
+56 load-bearing claims were re-checked against the tree at `11fa33fd`, each by
+re-running its own evidence query. **31 CONFIRMED · 16 DRIFTED · 9 WRONG** — a
+45% correction rate, in line with this repo's history and exactly why the file
+carries the header above. **The corrections below OVERRIDE the body of this
+document.** Where they disagree, these win.
+
+### The one that would have shipped a silent visual bug
+
+**`--rounds-surface-0` DOES NOT EXIST.** §D1's code sample names it.
+`rounds-tokens.css` declares `--rounds-surface-1/2/3` (`:27-29`) and
+`--rounds-stage-bg-1/2/3` (`:23-25`); there is no `-0` anywhere in `src/`.
+
+Copying that sample verbatim does not fail loudly — it is invalid-at-computed-
+value-time, so `--color-linear-bg` becomes unset and `background-color` falls to
+its **initial value: transparent**. Proven in headless chromium: the plan's exact
+rule computes `rgba(0,0,0,0)` and shows the stage through the surface, with **no
+build error, no console error, no CSS parse error.** Written against
+`--rounds-surface-1` it computes `rgb(22,27,36)` correctly.
+
+> **Use `--rounds-surface-1`.** And C1-b's guard #2 must assert every token on the
+> **right-hand side** of the bridge block is declared — as specified it only
+> checks the left-hand names, so it would not have caught this.
+
+### The mechanism itself — CONFIRMED, and stronger than claimed
+
+- The bridge works. Proven empirically, not reasoned: reproducing the real
+  cascade (`@layer theme{:root,:host{…}}` + an unlayered host rule), an inline
+  `style="color: var(--color-linear-text)"` inside the host computed to the
+  Rounds value, a deep descendant retinted, and a negative control **outside**
+  the host kept the old-skin value.
+- **`data-skin` is on `<html>` in the ROOT layout** (`src/app/layout.tsx:110`),
+  and there are exactly two `layout.tsx` files of which only the root renders
+  `<html>`. So **every** auth route is inside `[data-skin='rounds']` — the risk
+  flagged as "the one that kills the idea if wrong" does not exist.
+- **`rounds-tokens.css` contains no `@layer` and is imported AFTER `globals.css`**
+  (`layout.tsx:17-18`), so the bridge lands unlayered and beats `@layer theme`
+  unconditionally. There is no specificity fight to lose.
+
+### Numbers that were inflated
+
+| Claim | Real value |
+|---|---|
+| "~560 inline style objects" | **434** on the plan's own strict surface list (477 on a superset); **472 / 516** including the 40 module-level `CSSProperties` consts |
+| "the 19 names C1 surfaces read" | **22** — a bridge written to 19 leaves 3 colours on old-skin values, which renders as *one component looking wrong on a correct screen* |
+| "~40 objects need forking" | **~33** carry any colour literal. **60.4% (285/472) come to tokens for free** |
+| "~9,600 lines of restyle without D3" | re-derive; it inherits the 22–29% inflation |
+
+### D2 — two rulings were right for the wrong reason, and one flag was misread
+
+- **⚠️ `settings/page.tsx`'s two-branch split is gated by `isSkinBeta()`
+  (`:226`), NOT by `SETTINGS_SIMPLE_ROW`.** `isSettingsSimpleRow()` is read at
+  exactly ONE place in that file — `:214`, inside `nativeSlot` — and only decides
+  whether `NativeTemplateManager` mounts, **inverted**:
+  `templateNativeDocxEnabled() && !isSettingsSimpleRow()`.
+  A rollback setting `SETTINGS_SIMPLE_ROW=false` expecting the legacy layout gets
+  the C3 rail **plus a resurrected `NativeTemplateManager`** — the opposite of the
+  intent. Verified behaviourally on the flag-ON image: `Native template` absent,
+  37 `qm-c3-set*` nodes present.
+- **The Linear split-screen fallthrough is LIVE IN TWO CI ENVIRONMENTS,** not
+  one. `e2e.yml:95-98` builds the default images with `SKIN_BETA: "false"` and
+  `:219-225` runs `--project=chromium` against them, so every login in the
+  default pack renders it. **Treat it as covered by the required e2e gate.**
+- **`docker inspect` / `docker exec … env` is NOT evidence of what the prod image
+  was BUILT with.** Every `NEXT_PUBLIC` ARG/ENV lives in the `builder` stage only;
+  the `runner` stage carries none, and compose injects `.env` at runtime — where
+  `NEXT_PUBLIC_SKIN_BETA` is **absent** despite being `true` in the build. Anyone
+  checking that way concludes SKIN_BETA is OFF and picks the wrong branch.
+- **A bundle grep cannot discriminate which branch is live** — both survive
+  minification (`qm-c3-auth` and `qm-auth-grid` are both in the shipped chunks).
+  Only the flag value plus a DOM read of the served route counts.
+
+### Line numbers that would corrupt an edit
+
+Several cited end-bounds stop short of the closing JSX, and one crosses a
+function boundary. **Anchor by content, never by these numbers.**
+
+| Cited | Real |
+|---|---|
+| auth-shell fallthrough `:103-366` | **`:103-369`** (`:367-368` are `</div>`, `:369` is `);`) |
+| settings legacy `:538-901` | **`:538-902`** |
+| TemplateRow simple `:770-908` | **`:770-905`** (`:908` is a shared comment) |
+| TemplateRow legacy `:909-968` | **`:909-965`** — **`:968` is inside `EntryState`**, a component this plan lists nowhere |
+| `color:'#fff'` at board.tsx `:259` | **`:260`** — `:259` is `background: 'var(--rounds-accent)'`, so an edit at `:259` changes the background instead of the white text |
+| `/board` 404 gate at `page.tsx:17-18` | **`:76`** (`if (!isSkinRounds()) notFound()`), predicate `skin-rounds.ts:42-44`. `:17-18` is **prose** — the fourth instance of the comment-vs-code hazard in this file set |
+| `isStaleDeploymentError` "Reload branch" at `:57` | `:57` is the **memo**. There are **FOUR** `isStale` fork sites: `:147`, `:160-162`, `:192-202`. The dev route must exercise both branches of all four |
+| signup checkbox locators `14-auth:33`, `:66` | **`:32`, `:65`** — `:33`/`:66` are the next statement (the button click). The three unqualified `getByRole('checkbox')` in the suite are `signup.ts:43`, `14-auth:32`, `:65` |
+
+### Four more, each changing what a session would do
+
+1. **`RoundsEmptyState` does not exist as a symbol.** `grep -rn RoundsEmptyState
+   src/` returns zero; the only hit in the repo is this plan. `board.tsx:219-271`
+   is an unnamed early return. This is a **naming decision, not a relocation** —
+   and its existing `data-testid="rounds-board-empty"` must survive extraction.
+2. **`visits/[id]/loading.tsx` does not draw "the old tabbed layout".** It is 40
+   lines: an **empty** 56px bar, a chip row, a title line and two content blocks.
+   The rewrite is still justified (`max-w-4xl` against an 820px paper is a real
+   shape contradiction) but the ledger must not record a false before-state.
+3. **38 spec files import the signup helper, not ~40** — and all five Rounds
+   packs *call* it, not merely import it. The prohibition stands at full strength.
+4. **`signup-form.tsx:114`'s underline carries NO comment.** The only
+   `link-in-text-block` comment in the repo is `waitlist-form.tsx:137`. That
+   underline sits against the file's own `linkStyle` default of
+   `textDecoration:'none'`, so it reads as an inconsistency a restyle would tidy
+   away. **Carry the waitlist comment across to it.**
+5. **The `14-auth-signup-onboarding` test is not wholly vacuous.** Only `:70-71`
+   is the defect; `:72` (`toHaveURL(/\/signup$/)`) and `:81` (the credential
+   replay proving the account was never created) have teeth. **Do not delete the
+   test — fix the one assertion.**
+
+---
+
 # C1 EXECUTION SHAPE
 
 **Verified against the tree at `34267bb6` (branch `feat/rounds-b4-shots`).** RELAY.md:117 is C1's row; :118 is C2's — Gate C (axe on every restyled screen incl. waitlist) is **C2's exit criterion, not C1's**. C1's own gate is *"all to tokens; copy register"*. C1's obligation is to leave those surfaces **axe-provable and photographable**, and to hand C2 a harness that cannot go green vacuously.
@@ -60,7 +173,7 @@ All three inventories hit this independently and each proposed the same three op
 
 > **A SCOPED custom-property bridge.** Not `:root[data-skin='rounds']` (rejected: repaints admin/patients/visits — a replacement, not an addition). A **host class**:
 > ```css
-> [data-skin='rounds'] .qm-rounds-host { --color-linear-bg: var(--rounds-surface-0); --color-linear-text: …; /* the 19 names C1 surfaces actually read */ }
+> [data-skin='rounds'] .qm-rounds-host { --color-linear-bg: var(--rounds-surface-1); --color-linear-text: …; /* the 22 names C1 surfaces actually read — SEE THE VERIFICATION PASS: --rounds-surface-0 does not exist and ships transparent */ }
 > ```
 > applied to the **root element of each C1 surface only**. Custom properties resolve at computed-value time and inherit, so an inline `style={{ color: 'var(--color-linear-text)' }}` **does** pick it up. Flag-OFF: the class attribute is present, no rule matches, zero pixels move — provable by inspection, not by a snapshot.
 
