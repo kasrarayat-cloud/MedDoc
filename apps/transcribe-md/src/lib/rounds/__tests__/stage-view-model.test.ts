@@ -6,8 +6,10 @@ import { describe, expect, it } from 'vitest';
 
 import type { SignGate } from '@/lib/sign-gates';
 import {
+  applyGateOverlay,
   applyRxResolved,
   firstBlockingGateTarget,
+  firstOpenStep,
   type RoundsStageData,
 } from '../stage-view-model';
 
@@ -122,5 +124,131 @@ describe('firstBlockingGateTarget', () => {
     expect(firstBlockingGateTarget([RX(1)])).toBe('rx_gate');
     expect(firstBlockingGateTarget([EM(1)])).toBe('em_gate');
     expect(firstBlockingGateTarget([])).toBeNull();
+  });
+});
+
+describe('applyGateOverlay — the widening applyRxResolved asked for', () => {
+  it('takes a COUNT, so partial Rx progress is expressible', () => {
+    // The residual `applyRxResolved` named: one boolean could not say "2 of 3
+    // overridden", so N over-stated until the very last critical cleared.
+    const out = applyGateOverlay(data([RX(3), EM(1), ATTEST]), { rxUnresolved: 1 });
+    expect(out.gates.find((g) => g.id === 'rx')?.unresolved).toBe(1);
+    expect(out.n).toBe(3); // rx 1 + em 1 + attestation 1
+    expect(out.criticalUnresolved).toBe(1);
+  });
+
+  it('UNDEFINED IS NOT ZERO — an absent signal clears nothing', () => {
+    // Passing 0 for "I do not know yet" would clear a blocker nobody cleared,
+    // which is the one direction this module must never fail in.
+    const d = data([RX(2), ATTEST]);
+    expect(applyGateOverlay(d, {}).n).toBe(3);
+    expect(applyGateOverlay(d, { rxUnresolved: undefined }).n).toBe(3);
+    expect(applyGateOverlay(d, { rxUnresolved: 0 }).n).toBe(1);
+  });
+
+  it('returns the SAME OBJECT when no term applies', () => {
+    // The result feeds a useMemo whose identity is handed to the stage; a fresh
+    // object for a no-op overlay hands every consumer a new identity for
+    // nothing.
+    const d = data([RX(2), ATTEST]);
+    expect(applyGateOverlay(d, {})).toBe(d);
+    expect(applyGateOverlay(d, { emConfirmed: false, attested: false })).toBe(d);
+  });
+
+  it('zeroes the E/M and attestation terms independently', () => {
+    const d = data([RX(1), EM(1), ATTEST]);
+    expect(applyGateOverlay(d, { emConfirmed: true }).n).toBe(2);
+    expect(applyGateOverlay(d, { attested: true }).n).toBe(2);
+    expect(
+      applyGateOverlay(d, { rxUnresolved: 0, emConfirmed: true, attested: true }).n
+    ).toBe(0);
+  });
+
+  it('never removes a gate, and never invents one', () => {
+    const out = applyGateOverlay(data([RX(2), EM(1), ATTEST]), {
+      rxUnresolved: 0,
+      emConfirmed: true,
+      attested: true,
+    });
+    expect(out.gates.map((g) => g.id)).toEqual(['rx', 'em', 'attestation']);
+  });
+
+  it('clamps a negative count rather than crediting it', () => {
+    const out = applyGateOverlay(data([RX(1), ATTEST]), { rxUnresolved: -5 });
+    expect(out.gates.find((g) => g.id === 'rx')?.unresolved).toBe(0);
+    expect(out.n).toBe(1);
+  });
+
+  it('keeps criticalUnresolved equal to the rx gate — one number, one source', () => {
+    for (const c of [0, 1, 4]) {
+      const out = applyGateOverlay(data([RX(4), ATTEST]), { rxUnresolved: c });
+      expect(out.criticalUnresolved).toBe(
+        out.gates.find((g) => g.id === 'rx')?.unresolved
+      );
+    }
+  });
+});
+
+describe('firstOpenStep', () => {
+  it('is the first gate that still blocks', () => {
+    expect(firstOpenStep([RX(1), EM(1), ATTEST])).toBe('rx');
+    expect(firstOpenStep([RX(0), EM(1), ATTEST])).toBe('em');
+  });
+
+  it('NEVER NULL on a non-empty set — with nothing outstanding it is the LAST gate', () => {
+    // A flow that opened on "nothing" would be a full-screen dialog with no
+    // content and no way forward. The last gate is where the signature is
+    // taken, so that is the honest destination.
+    expect(firstOpenStep([RX(0), EM(0), { ...ATTEST, unresolved: 0 }])).toBe(
+      'attestation'
+    );
+  });
+
+  it('is not firstBlockingGateTarget — it does NOT skip attestation', () => {
+    // The two answer different questions. The chat scrolls to a DOM anchor and
+    // attestation has none; the flow opens on a STEP and attestation is one.
+    expect(firstOpenStep([ATTEST])).toBe('attestation');
+    expect(firstBlockingGateTarget([ATTEST])).toBeNull();
+  });
+
+  it('returns null only for an empty set', () => {
+    expect(firstOpenStep([])).toBeNull();
+  });
+});
+
+describe('the host-ref factory contract (regression: React #185)', () => {
+  // Not a test of stage-view-model, but of the SHAPE the flow's hostRef must
+  // have — recorded here because the defect it prevents is invisible in every
+  // unit test and cost a whole E2E pack to find.
+  //
+  // A factory that returns a fresh arrow per call gives React a new ref
+  // identity every render, so it detaches (ref ← null) and reattaches
+  // (ref ← element) forever. The "bail when unchanged" guard cannot help: the
+  // value really does alternate.
+  function cachedFactory() {
+    const cache: Record<string, (el: unknown) => void> = {};
+    const sets: unknown[] = [];
+    const factory = (id: string) => {
+      cache[id] ??= (el: unknown) => sets.push(el);
+      return cache[id];
+    };
+    return { factory, sets };
+  }
+
+  it('returns the SAME function for the same id', () => {
+    const { factory } = cachedFactory();
+    expect(factory('rx')).toBe(factory('rx'));
+  });
+
+  it('returns DIFFERENT functions for different ids', () => {
+    const { factory } = cachedFactory();
+    expect(factory('rx')).not.toBe(factory('em'));
+  });
+
+  it('NEGATIVE CONTROL — the naive factory does NOT hold the property', () => {
+    // This is the exact code that shipped and looped. Kept so the difference
+    // is visible rather than asserted.
+    const naive = (id: string) => (el: unknown) => void [id, el];
+    expect(naive('rx')).not.toBe(naive('rx'));
   });
 });

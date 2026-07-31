@@ -29,7 +29,7 @@
 // in front of it, never around it.
 // ============================================================================
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Check, FileSignature, RefreshCw } from 'lucide-react';
 
 import { spokenBody } from '@/lib/spoken-body';
@@ -87,6 +87,32 @@ export interface ReviewDocumentViewProps {
   onAdjustEm?: (code: string, reason: string) => Promise<{ ok: boolean; error?: string }>;
   /** Signed / archived / otherwise not editable. */
   readonly?: boolean;
+  /**
+   * Rounds Screen 3 — RELOCATE a gate's DOM without re-rendering it.
+   *
+   * Returns the element that gate should be portaled into, or null to render it
+   * inline exactly as today. Absent ⇒ everything renders inline and this file's
+   * output is byte-identical to before.
+   *
+   * ⚠️ A PORTAL, NOT A SECOND MOUNT, AND THAT IS THE WHOLE POINT. Both
+   * cleared-gate states on this surface are lazily-seeded LOCAL state with no
+   * `router.refresh()` behind them — `RxTab`'s `overriddenIds`, and
+   * `emConfirmed` below. A sequential flow that re-mounted or duplicated these
+   * sections would silently revert a cleared override: the doctor would be
+   * asked to re-justify a warning already persisted, and the blocker count
+   * would tick back up. A portal keeps the subtree's position in the React
+   * tree — so the state survives — and changes only where the DOM lands.
+   *
+   * It also keeps exactly ONE `data-chat-target` anchor per gate. Two would
+   * make "took you to the E/M gate" resolve to whichever came first.
+   */
+  /**
+   * The in-session E/M confirm, reported out so the strip's N can see it.
+   *
+   * Fires on confirm AND on the value-compare re-arm below, so a real code
+   * change un-confirms the card and the count together.
+   */
+  onEmConfirmedChange?: (confirmed: boolean) => void;
 }
 
 export function ReviewDocumentView(props: ReviewDocumentViewProps) {
@@ -107,6 +133,33 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
     setPrevEm(props.emPendingChange);
     setEmConfirmed(false);
   }
+
+  // Mirror the confirm outward. An effect, not a call in the render body or
+  // inside the setter: it must fire for BOTH transitions (the confirm click and
+  // the re-arm above), and notifying a parent mid-render is not allowed.
+  const { onEmConfirmedChange } = props;
+  useEffect(() => {
+    onEmConfirmedChange?.(emConfirmed);
+  }, [emConfirmed, onEmConfirmedChange]);
+
+  // A STABLE WRAPPER, ALWAYS RENDERED HERE. The gate flow relocates these by
+  // MOVING THE DOM NODE, not by re-parenting the React element.
+  //
+  // ⚠️ THIS WAS A PORTAL AND THE PORTAL WAS THE BUG. `createPortal(node, host)`
+  // and a bare `node` are different element TYPES to React, so every time a
+  // step deactivated and its host vanished, the subtree unmounted and
+  // remounted — resetting `RxTab.overriddenIds` to the stale server prop and
+  // asking the doctor to re-justify a warning already persisted. That is
+  // exactly the defect the portal was chosen to prevent, reintroduced by the
+  // portal itself. Changing a portal's container remounts too, so "one host per
+  // step" could not fix it either.
+  //
+  // Moving a DOM node with appendChild does not touch React's tree at all:
+  // React keeps rendering into the same wrapper and never learns it sits
+  // somewhere else. State survives because nothing unmounted.
+  const slot = (id: 'rx' | 'em' | 'signbar', node: React.ReactNode) => (
+    <div data-gate-slot={id}>{node}</div>
+  );
 
   const sections = useMemo(() => parseNoteSections(props.soapFinal), [props.soapFinal]);
 
@@ -167,7 +220,7 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
             it, so a visit with a routine refill and nothing wrong looked
             exactly like a visit with an interaction. The card is BYTE-IDENTICAL
             when a warning exists; without one it is a quiet list. */}
-        {props.rxGateNode && (
+        {props.rxGateNode && slot('rx', (
           <section
             className={`qm-rdoc-gate${props.rxHasWarnings ? '' : ' qm-rdoc-gate-quiet'}`}
             data-testid="review-doc-rx-gate"
@@ -179,118 +232,122 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
             </div>
             <div className="qm-rdoc-gate-body">{props.rxGateNode}</div>
           </section>
-        )}
+        ))}
 
         {/* ── THE LEVEL, AND THE RIGHT TO DISAGREE WITH IT ────────────────
             Calm and first, because it is not a blocker — the two cards below
             are, and they belong nearest the signature they hold up. This one
             only says what the visit is documented at, and offers to change it.
             Absent entirely when E/M does not apply (imaging). */}
-        {props.emLevel && props.onAdjustEm && (
-          <EmLevelCard
-            level={props.emLevel}
-            disabled={Boolean(props.readonly)}
-            onAdjust={props.onAdjustEm}
-          />
-        )}
+        {slot('em', (
+          <>
+          {props.emLevel && props.onAdjustEm && (
+            <EmLevelCard
+              level={props.emLevel}
+              disabled={Boolean(props.readonly)}
+              onAdjust={props.onAdjustEm}
+            />
+          )}
 
-        {/* ── E/M STALE — THE SIGN-BLOCKER, INLINE ────────────────────────
-            This used to live as a badge on the "⋯ details" disclosure, which
-            meant the one thing standing between the doctor and a signature was
-            behind a control they had no reason to open: the sign route refused,
-            and the reason was folded away. A blocker that cannot be seen is a
-            dead end.
+          {/* ── E/M STALE — THE SIGN-BLOCKER, INLINE ────────────────────────
+              This used to live as a badge on the "⋯ details" disclosure, which
+              meant the one thing standing between the doctor and a signature was
+              behind a control they had no reason to open: the sign route refused,
+              and the reason was folded away. A blocker that cannot be seen is a
+              dead end.
 
-            So it renders here, in the gate stack, next to the signature it
-            blocks — and it carries the re-check itself. Opening a panel is no
-            longer what re-scores the level; pressing the control that says the
-            level needs re-checking is. */}
-        {props.emStale && !props.emPendingChange && (
-          <section
-            className="qm-rdoc-gate qm-rdoc-gate-em"
-            data-testid="review-doc-em-stale-gate"
-            data-chat-target="em_gate"
-          >
-            <div className="qm-rdoc-gate-head">
-              <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
-              <span>Documentation level needs re-checking</span>
-            </div>
-            <div className="qm-rdoc-gate-body">
-              <p className="qm-rdoc-gate-text">
-                The note changed after this visit&rsquo;s level was scored.{' '}
-                <span className="qm-rdoc-stale" data-testid="em-stale-badge">
-                  needs re-check
-                </span>
-              </p>
-              <button
-                type="button"
-                className="qm-rdoc-gate-btn qm-tap-44"
-                onClick={() => void rescore()}
-                disabled={rescoring}
-                data-testid="review-doc-em-rescore"
-              >
-                <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-                {rescoring ? 'Re-checking…' : 'Re-check level'}
-              </button>
-            </div>
-          </section>
-        )}
+              So it renders here, in the gate stack, next to the signature it
+              blocks — and it carries the re-check itself. Opening a panel is no
+              longer what re-scores the level; pressing the control that says the
+              level needs re-checking is. */}
+          {props.emStale && !props.emPendingChange && (
+            <section
+              className="qm-rdoc-gate qm-rdoc-gate-em"
+              data-testid="review-doc-em-stale-gate"
+              data-chat-target="em_gate"
+            >
+              <div className="qm-rdoc-gate-head">
+                <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
+                <span>Documentation level needs re-checking</span>
+              </div>
+              <div className="qm-rdoc-gate-body">
+                <p className="qm-rdoc-gate-text">
+                  The note changed after this visit&rsquo;s level was scored.{' '}
+                  <span className="qm-rdoc-stale" data-testid="em-stale-badge">
+                    needs re-check
+                  </span>
+                </p>
+                <button
+                  type="button"
+                  className="qm-rdoc-gate-btn qm-tap-44"
+                  onClick={() => void rescore()}
+                  disabled={rescoring}
+                  data-testid="review-doc-em-rescore"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+                  {rescoring ? 'Re-checking…' : 'Re-check level'}
+                </button>
+              </div>
+            </section>
+          )}
 
-        {props.emPendingChange && (
-          <section
-            className={`qm-rdoc-gate qm-rdoc-gate-em${emConfirmed ? ' is-done' : ''}`}
-            data-testid="review-doc-em-gate"
-            data-chat-target="em_gate"
-          >
-            <div className="qm-rdoc-gate-head">
-              <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
-              <span>Documentation level changed</span>
-            </div>
-            <div className="qm-rdoc-gate-body">
-              {/* DIRECTIONLESS, DELIBERATELY.
-                  This read "now supports {to}, up from {from}" — written when
-                  the only thing that moved a level was a model re-score, which
-                  in practice moved it up. The doctor can now set the level
-                  themselves, and the picker offers every code, so "up from" is
-                  rendered over a DOWNWARD adjustment: the one card standing
-                  between the doctor and a signature stated the opposite of what
-                  they had just done. "Supports", too, argues for the level
-                  rather than reporting it.
-                  A level describes work already done. Up and down read exactly
-                  the same here, and a test pins that they do. */}
-              <p className="qm-rdoc-gate-text">
-                This visit is documented at{' '}
-                <strong className="qm-rdoc-em-code">{props.emPendingChange.to}</strong>, changed
-                from{' '}
-                <strong className="qm-rdoc-em-code">{props.emPendingChange.from}</strong>. Confirm
-                the level before signing.
-                {props.emStale && (
-                  <>
-                    {' '}
-                    <span className="qm-rdoc-stale" data-testid="em-stale-badge">
-                      needs re-check
-                    </span>
-                  </>
-                )}
-              </p>
-              <button
-                type="button"
-                className="qm-rdoc-gate-btn qm-tap-44"
-                onClick={() => setEmConfirmed(true)}
-                disabled={emConfirmed}
-                data-testid="review-doc-em-confirm"
-              >
-                {emConfirmed ? (
-                  <>
-                    <Check className="h-3.5 w-3.5" aria-hidden /> Level confirmed
-                  </>
-                ) : (
-                  <>Confirm {props.emPendingChange.to}</>
-                )}
-              </button>
-            </div>
-          </section>
-        )}
+          {props.emPendingChange && (
+            <section
+              className={`qm-rdoc-gate qm-rdoc-gate-em${emConfirmed ? ' is-done' : ''}`}
+              data-testid="review-doc-em-gate"
+              data-chat-target="em_gate"
+            >
+              <div className="qm-rdoc-gate-head">
+                <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
+                <span>Documentation level changed</span>
+              </div>
+              <div className="qm-rdoc-gate-body">
+                {/* DIRECTIONLESS, DELIBERATELY.
+                    This read "now supports {to}, up from {from}" — written when
+                    the only thing that moved a level was a model re-score, which
+                    in practice moved it up. The doctor can now set the level
+                    themselves, and the picker offers every code, so "up from" is
+                    rendered over a DOWNWARD adjustment: the one card standing
+                    between the doctor and a signature stated the opposite of what
+                    they had just done. "Supports", too, argues for the level
+                    rather than reporting it.
+                    A level describes work already done. Up and down read exactly
+                    the same here, and a test pins that they do. */}
+                <p className="qm-rdoc-gate-text">
+                  This visit is documented at{' '}
+                  <strong className="qm-rdoc-em-code">{props.emPendingChange.to}</strong>, changed
+                  from{' '}
+                  <strong className="qm-rdoc-em-code">{props.emPendingChange.from}</strong>. Confirm
+                  the level before signing.
+                  {props.emStale && (
+                    <>
+                      {' '}
+                      <span className="qm-rdoc-stale" data-testid="em-stale-badge">
+                        needs re-check
+                      </span>
+                    </>
+                  )}
+                </p>
+                <button
+                  type="button"
+                  className="qm-rdoc-gate-btn qm-tap-44"
+                  onClick={() => setEmConfirmed(true)}
+                  disabled={emConfirmed}
+                  data-testid="review-doc-em-confirm"
+                >
+                  {emConfirmed ? (
+                    <>
+                      <Check className="h-3.5 w-3.5" aria-hidden /> Level confirmed
+                    </>
+                  ) : (
+                    <>Confirm {props.emPendingChange.to}</>
+                  )}
+                </button>
+              </div>
+            </section>
+          )}
+          </>
+        ))}
       </article>
 
       {/* NO BILLING PANEL, NO CODES TABLE, NO INPUT TRANSCRIPT.
@@ -315,70 +372,72 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
           NAVIGATES here rather than signing, so it needs a stable anchor, and
           a class selector would make the styling a load-bearing contract. This
           stays the ONE control that can start a signature. */}
-      <div className="qm-c3-rev2-signbar" data-testid="review-doc-signbar">
-        <div className="qm-c3-rev2-signbar-in">
-          <div className="qm-c3-rev2-sign-status">
-            {blocked ? (
-              <>
-                <AlertTriangle
-                  className="h-3.5 w-3.5 flex-none"
-                  aria-hidden
-                  style={{ color: 'var(--color-linear-amber)' }}
-                />
-                <span className="qm-c3-rev2-sign-msg" data-testid="review-doc-bar-msg">
-                  {props.rxBlocking
-                    ? 'Resolve the prescription warning above'
-                    : 'Confirm the documentation level above'}
-                </span>
-              </>
-            ) : props.emStale ? (
-              <>
-                <AlertTriangle
-                  className="h-3.5 w-3.5 flex-none"
-                  aria-hidden
-                  style={{ color: 'var(--color-linear-amber)' }}
-                />
-                <span className="qm-c3-rev2-sign-msg" data-testid="review-doc-bar-msg">
-                  Re-check the documentation level above
-                </span>
-              </>
-            ) : (
-              <>
-                <Check
-                  className="h-3.5 w-3.5 flex-none"
-                  aria-hidden
-                  style={{ color: 'var(--color-linear-sage-bright)' }}
-                />
-                <span className="qm-c3-rev2-sign-msg" data-testid="review-doc-bar-msg">
-                  Reviewed
-                </span>
-              </>
-            )}
-          </div>
+      {slot('signbar', (
+        <div className="qm-c3-rev2-signbar" data-testid="review-doc-signbar">
+          <div className="qm-c3-rev2-signbar-in">
+            <div className="qm-c3-rev2-sign-status">
+              {blocked ? (
+                <>
+                  <AlertTriangle
+                    className="h-3.5 w-3.5 flex-none"
+                    aria-hidden
+                    style={{ color: 'var(--color-linear-amber)' }}
+                  />
+                  <span className="qm-c3-rev2-sign-msg" data-testid="review-doc-bar-msg">
+                    {props.rxBlocking
+                      ? 'Resolve the prescription warning above'
+                      : 'Confirm the documentation level above'}
+                  </span>
+                </>
+              ) : props.emStale ? (
+                <>
+                  <AlertTriangle
+                    className="h-3.5 w-3.5 flex-none"
+                    aria-hidden
+                    style={{ color: 'var(--color-linear-amber)' }}
+                  />
+                  <span className="qm-c3-rev2-sign-msg" data-testid="review-doc-bar-msg">
+                    Re-check the documentation level above
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Check
+                    className="h-3.5 w-3.5 flex-none"
+                    aria-hidden
+                    style={{ color: 'var(--color-linear-sage-bright)' }}
+                  />
+                  <span className="qm-c3-rev2-sign-msg" data-testid="review-doc-bar-msg">
+                    Reviewed
+                  </span>
+                </>
+              )}
+            </div>
 
-          <div className="qm-c3-rev2-sign-action qm-rdoc-bar-actions">
-            {/* Re-check before the modal opens. The gate render IS a moment the
-                doctor is looking at the level, and it means they meet the
-                confirm card rather than a refusal they have to interpret. */}
-            <span
-              onClickCapture={() => {
-                if (props.emStale) void props.onRescoreEm?.();
-              }}
-            >
-              <SignAndSendModal
-                visitId={props.visitId}
-                doctorEmail={props.doctorEmail}
-                emailEnabled={props.emailEnabled}
-                signOnSubmit
-                emPendingChange={props.emPendingChange}
-                triggerLabel="Sign &amp; Download"
-                triggerIcon={<FileSignature className="h-3.5 w-3.5" aria-hidden />}
-                disabled={blocked}
-              />
-            </span>
+            <div className="qm-c3-rev2-sign-action qm-rdoc-bar-actions">
+              {/* Re-check before the modal opens. The gate render IS a moment the
+                  doctor is looking at the level, and it means they meet the
+                  confirm card rather than a refusal they have to interpret. */}
+              <span
+                onClickCapture={() => {
+                  if (props.emStale) void props.onRescoreEm?.();
+                }}
+              >
+                <SignAndSendModal
+                  visitId={props.visitId}
+                  doctorEmail={props.doctorEmail}
+                  emailEnabled={props.emailEnabled}
+                  signOnSubmit
+                  emPendingChange={props.emPendingChange}
+                  triggerLabel="Sign &amp; Download"
+                  triggerIcon={<FileSignature className="h-3.5 w-3.5" aria-hidden />}
+                  disabled={blocked}
+                />
+              </span>
+            </div>
           </div>
         </div>
-      </div>
+      ))}
     </div>
   );
 }

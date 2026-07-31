@@ -355,19 +355,34 @@ test.describe('Rounds Screen 2 — the stage', () => {
   });
 
   // ── 10. One control can start a signature ────────────────────────────────
-  test('the rail NAVIGATES; the sign bar is the only thing that signs', async ({
+  test('the rail opens the gate flow; the sign bar is still the only thing that signs', async ({
     page,
   }) => {
+    // ⚠️ DELIBERATE BEHAVIOUR CHANGE, MADE BY B2 — not a test fixed to match a
+    // surprise. In B1 this control NAVIGATED: it scrolled to the first blocking
+    // gate and asserted that no dialog opened. B2 makes it open Screen 3, which
+    // IS a dialog, so the old assertion could not survive and is replaced here
+    // rather than deleted.
+    //
+    // THE INVARIANT UNDERNEATH IS UNCHANGED and is what this test now pins:
+    // exactly one control in the document can start a signature. The gate flow
+    // does not add a second one — it ADOPTS the existing signing bar into its
+    // last step, so the count stays at one whether the flow is open or shut.
     const seeded = await open(page, 'stage-10');
     test.skip(!seeded, 'psql seeding unavailable');
 
-    await page.getByTestId('rounds-review-sign').click();
-
-    // It took the doctor to the first blocking gate. It did NOT open a signing
-    // modal — two controls that can both start a signature is two places for
-    // the gate logic to drift apart.
-    await expect(page.getByTestId('review-doc-rx-gate')).toBeInViewport();
-    await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(page.getByTestId('review-doc-signbar')).toHaveCount(1);
+
+    await page.getByTestId('rounds-review-sign').click();
+    await expect(page.getByTestId('rounds-gate-flow')).toBeVisible();
+
+    // Still exactly one, now living inside the flow.
+    await expect(page.getByTestId('review-doc-signbar')).toHaveCount(1);
+
+    // And closing it puts everything back — the bar returns to the paper.
+    await page.getByTestId('rounds-gate-close').click();
+    await expect(page.getByTestId('rounds-gate-flow')).toHaveCount(0);
+    await expect(page.getByTestId('review-doc-signbar')).toHaveCount(1);
+    await expect(page.getByTestId('review-document-view')).toHaveCount(1);
   });
 });

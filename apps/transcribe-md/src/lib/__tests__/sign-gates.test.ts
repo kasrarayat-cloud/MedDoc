@@ -311,3 +311,68 @@ describe('N — the number on the padlocked Signed node', () => {
     ]);
   });
 });
+
+describe('THE B2 RULING — the E/M gate exists always, counts only when the server refuses', () => {
+  // B1 left this open in a comment; B2 settled it. The ruling matters because
+  // it is otherwise INVISIBLE: the primary-care E2E fixture already carries a
+  // pending change and the imaging one has no E/M gate at all, so a build that
+  // switched to "+1 on every applicable visit" would redden nothing. These are
+  // the assertions that can only pass under the ruling.
+  beforeEach(() => {
+    process.env.NEXT_PUBLIC_ULTRASOUND_SPECIALTY = 'true';
+  });
+  afterEach(() => {
+    delete process.env.NEXT_PUBLIC_ULTRASOUND_SPECIALTY;
+  });
+
+  it('a QUIET applicable level contributes ZERO — the route would not refuse', () => {
+    // With no pending record the route skips the E/M branch entirely and the
+    // sign SUCCEEDS. Counting it would be a blocker the server does not have,
+    // which makes the padlock lie in the safe-looking direction.
+    const set = signGates(input({ specialty: PRIMARY, emPendingChange: null }));
+    const em = set.gates.find((g) => g.id === 'em');
+    expect(em, 'the gate must still EXIST — Screen 3 shows the level').toBeTruthy();
+    expect(em!.unresolved).toBe(0);
+  });
+
+  it('so a clean primary-care visit is attestation-only', () => {
+    // 1, not 2. This is the number a "+1 always" build would change.
+    const set = signGates(input({ specialty: PRIMARY, emPendingChange: null }));
+    expect(set.n).toBe(1);
+    expect(set.gates.filter((g) => g.unresolved > 0).map((g) => g.id)).toEqual([
+      'attestation',
+    ]);
+  });
+
+  it('NEGATIVE CONTROL — an unacknowledged change DOES count', () => {
+    // Without this, "always zero" would satisfy the two assertions above and
+    // the gate would be dead rather than correct.
+    const set = signGates(
+      input({ specialty: PRIMARY, emPendingChange: PENDING_EM })
+    );
+    expect(set.gates.find((g) => g.id === 'em')!.unresolved).toBe(1);
+    expect(set.n).toBe(2);
+  });
+
+  it('existence and count stay SEPARATE — that is what carried the ruling', () => {
+    // Existence is membership in the array; the count is `unresolved`. A future
+    // "confirm a quiet level" term is UI-only and belongs as its own entry with
+    // serverEnforced:false, never folded into this one.
+    const quiet = signGates(input({ specialty: PRIMARY, emPendingChange: null }));
+    const pending = signGates(
+      input({ specialty: PRIMARY, emPendingChange: PENDING_EM })
+    );
+    expect(quiet.gates.map((g) => g.id)).toEqual(pending.gates.map((g) => g.id));
+    expect(quiet.n).not.toBe(pending.n);
+  });
+
+  it('every gate reported as server-enforced corresponds to a real refusal', () => {
+    // The contract that makes N a promise about POST /sign. Attestation is the
+    // one term the route cannot see, and it says so.
+    const set = signGates(input({ specialty: PRIMARY, emPendingChange: PENDING_EM }));
+    expect(set.gates.find((g) => g.id === 'attestation')!.serverEnforced).toBe(false);
+    for (const g of set.gates.filter((x) => x.id !== 'attestation')) {
+      expect(g.serverEnforced, `${g.id} claims a refusal the route may not have`).toBe(true);
+    }
+  });
+});

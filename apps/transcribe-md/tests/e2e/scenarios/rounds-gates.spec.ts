@@ -1,0 +1,266 @@
+// ============================================================================
+// ROUNDS — Gate B E2E: Screen 3, THE GATES.
+// ----------------------------------------------------------------------------
+// docs/rounds/SPEC.md Screen 3. Flag-ON image only.
+//
+// THE BINDING CONSTRAINT IS WHAT THIS PACK IS FOR:
+//
+//   "Server refusals remain the sole source of truth — the gates are UI over
+//    them; existing sign-block E2Es pass with semantics unchanged."
+//
+// So the assertions here are mostly about things NOT changing. The Rx override
+// still goes through the real per-warning flow with its typed reason and its
+// RX_OVERRIDE_RECORDED row; the E/M card still carries the adjust-level flow;
+// the signature is still taken by the one existing SignAndSendModal. The flow
+// re-sequences and restyles; it decides nothing.
+//
+// THE ONE TEST THIS PACK EXISTS FOR is "stepping back does not un-clear a
+// gate". Both cleared-gate states are lazily-seeded local React state with no
+// router.refresh() behind them, so a sequential flow that re-mounted its gates
+// would send a doctor back to re-justify a warning already written to the
+// database — and the blocker count would tick back up. Stepping back is the
+// NORMAL interaction here, not an edge case, which is why the gates are moved
+// by portal rather than re-rendered. Nothing but a browser can prove that.
+// ============================================================================
+
+import { expect, test } from '@playwright/test';
+
+import { cleanupTestUsers } from '../helpers/cleanup';
+import {
+  seedReviewDocVisit,
+  findImagingEmArtifacts,
+  type ReviewDocClass,
+} from '../helpers/seedReviewDocVisit';
+import { signupFreshUser } from '../helpers/signup';
+
+const OVERRIDE_REASON =
+  'Benefit outweighs risk; monitoring renal function weekly and patient counselled.';
+
+test.describe('Rounds Screen 3 — the gates', () => {
+  test.beforeAll(() => {
+    const dirty = findImagingEmArtifacts();
+    expect(
+      dirty,
+      'imaging visits in the QA database carry office-E/M state:\n  ' +
+        dirty.join('\n  '),
+    ).toEqual([]);
+  });
+
+  test.afterAll(async () => {
+    await cleanupTestUsers();
+  });
+
+  async function openFlow(
+    page: import('@playwright/test').Page,
+    tag: string,
+    seedOpts: { specialtyClass?: ReviewDocClass; emPending?: boolean } = {},
+  ) {
+    const { email } = await signupFreshUser(page, tag);
+    const seeded = seedReviewDocVisit(email, seedOpts);
+    if (!seeded) return null;
+    await page.goto(`/visits/${seeded.visitId}`);
+    await expect(page.getByTestId('rounds-stage')).toBeVisible();
+    await page.getByTestId('rounds-review-sign').click();
+    await expect(page.getByTestId('rounds-gate-flow')).toBeVisible();
+    return seeded;
+  }
+
+  /** Clear Gate 1 the way a doctor does: the real per-warning override, with
+   *  its free-text clinical reason, writing a real RX_OVERRIDE_RECORDED row. */
+  async function clearGate1(page: import('@playwright/test').Page) {
+    const host = page.getByTestId('rounds-gate-host-rx');
+    await host.getByRole('button', { name: /override/i }).first().click();
+    // SCOPED BY ITS OWN TEXTAREA, not by role. The gate flow is itself a
+    // role="dialog" and the portaled gate inside it contains the word
+    // "Override", so getByRole('dialog') matches two elements and a text filter
+    // matches both. The reason field is the one thing only this modal has.
+    const dialog = page
+      .locator('[role="dialog"]')
+      .filter({ has: page.locator('#override-reason') });
+    await dialog.locator('#override-reason').fill(OVERRIDE_REASON);
+    await dialog.getByRole('button', { name: /confirm override/i }).click();
+    await expect(host).toContainText(/overridden/i);
+  }
+
+  // ── 1. The image is the right image, and the flow is reachable ───────────
+  test('the rail opens the flow, on the flag-ON build', async ({ page }) => {
+    const seeded = await openFlow(page, 'gates-1');
+    test.skip(!seeded, 'psql seeding unavailable');
+
+    await expect(page.locator('html')).toHaveAttribute('data-skin', 'rounds');
+    const dlg = page.getByTestId('rounds-gate-flow');
+    await expect(dlg).toHaveAttribute('aria-modal', 'true');
+    // It opens on the first thing that actually blocks — the Rx gate on this
+    // fixture, not step 1 by position.
+    await expect(dlg).toHaveAttribute('data-step', 'rx');
+  });
+
+  // ── 2. Gate 1 keeps the REAL mechanism ──────────────────────────────────
+  test('Gate 1 is the existing per-warning override, typed reason and all', async ({
+    page,
+  }) => {
+    const seeded = await openFlow(page, 'gates-2');
+    test.skip(!seeded, 'psql seeding unavailable');
+
+    // The gate arrives by PORTAL — the same section, the same testid, inside
+    // the step host. Not a re-implementation.
+    const host = page.getByTestId('rounds-gate-host-rx');
+    await expect(host.getByTestId('review-doc-rx-gate')).toHaveCount(1);
+    // And there is still exactly one of it in the whole document.
+    await expect(page.getByTestId('review-doc-rx-gate')).toHaveCount(1);
+
+    // Blocked until the real override is recorded.
+    await expect(page.getByTestId('rounds-gate-lock')).toBeVisible();
+    await expect(page.getByTestId('rounds-gate-next')).toBeDisabled();
+
+    // A FREE-TEXT CLINICAL REASON — there is no literal token to type. The
+    // `> OVERRIDE` in the spec is a prompt aesthetic, not a gate condition, and
+    // requiring a typed token would be a NEW condition on signing.
+    await clearGate1(page);
+    await expect(page.getByTestId('rounds-gate-lock')).toHaveCount(0);
+    await expect(page.getByTestId('rounds-gate-next')).toBeEnabled();
+  });
+
+  // ── 3. THE TEST THIS PACK EXISTS FOR ────────────────────────────────────
+  test('stepping BACK does not un-clear a gate', async ({ page }) => {
+    // If the flow re-mounted its gates instead of portaling them, RxTab's
+    // `overriddenIds` would reset to its seeded value and the doctor would be
+    // asked to re-justify a warning already in rx_warning_overrides. The count
+    // would climb back up too. Nothing about that failure is visible without a
+    // browser, and stepping back is the normal interaction, not an edge case.
+    //
+    // Seeded emPending:false so the E/M step does not block — this test is
+    // about the Rx gate surviving navigation, and a blocked step in the middle
+    // would stop the walk for an unrelated reason.
+    const seeded = await openFlow(page, 'gates-3', { emPending: false });
+    test.skip(!seeded, 'psql seeding unavailable');
+
+    await clearGate1(page);
+    const cleared = await page
+      .getByTestId('rounds-gate-n')
+      .getAttribute('data-blockers');
+
+    // Forward to the end, then all the way back.
+    await page.getByTestId('rounds-gate-next').click();
+    await expect(page.getByTestId('rounds-gate-flow')).toHaveAttribute('data-step', 'em');
+    await page.getByTestId('rounds-gate-next').click();
+    await expect(page.getByTestId('rounds-gate-flow')).toHaveAttribute(
+      'data-step',
+      'attestation',
+    );
+    await page.getByTestId('rounds-gate-back').click();
+    await page.getByTestId('rounds-gate-back').click();
+    await expect(page.getByTestId('rounds-gate-flow')).toHaveAttribute('data-step', 'rx');
+
+    // Still overridden, still not blocking, still the same count.
+    await expect(page.getByTestId('rounds-gate-host-rx')).toContainText(/overridden/i);
+    await expect(page.getByTestId('rounds-gate-lock')).toHaveCount(0);
+    await expect(page.getByTestId('rounds-gate-n')).toHaveAttribute(
+      'data-blockers',
+      cleared!,
+    );
+  });
+
+  // ── 4. Gate 2 on a quiet visit — never dropped, never counted ───────────
+  test('a quiet E/M step is a pass-through review screen', async ({ page }) => {
+    // The billing surface exists wherever the specialty applies: the code, the
+    // complexity, the rationale and the adjust-level flow live here and nowhere
+    // else. On a visit where nothing changed it must still be REACHABLE, and it
+    // must NOT be counted — the server would not refuse, so the padlock must
+    // not claim it would.
+    const seeded = await openFlow(page, 'gates-4', { emPending: false });
+    test.skip(!seeded, 'psql seeding unavailable');
+
+    // It is not where the flow opened, precisely BECAUSE it does not block.
+    await expect(page.getByTestId('rounds-gate-flow')).toHaveAttribute('data-step', 'rx');
+    await expect(page.getByTestId('rounds-gate-step-em')).toBeVisible();
+
+    await clearGate1(page);
+    await page.getByTestId('rounds-gate-next').click();
+    await expect(page.getByTestId('rounds-gate-flow')).toHaveAttribute('data-step', 'em');
+
+    // Present, hosting the level card, and not in the way.
+    await expect(page.getByTestId('rounds-gate-host-em')).toBeVisible();
+    await expect(page.getByTestId('rounds-gate-lock')).toHaveCount(0);
+    await expect(page.getByTestId('rounds-gate-next')).toBeEnabled();
+    // Attestation only — the E/M term contributes nothing.
+    await expect(page.getByTestId('rounds-gate-n')).toHaveAttribute('data-blockers', '1');
+  });
+
+  // ── 5. Gate 2 blocks exactly when the server would ─────────────────────
+  test('an unacknowledged E/M change blocks the step', async ({ page }) => {
+    const seeded = await openFlow(page, 'gates-5');
+    test.skip(!seeded, 'psql seeding unavailable');
+
+    // Clear Rx first so E/M becomes the open step.
+    await clearGate1(page);
+    await page.getByTestId('rounds-gate-next').click();
+    await expect(page.getByTestId('rounds-gate-flow')).toHaveAttribute(
+      'data-step',
+      'em',
+    );
+    await expect(page.getByTestId('rounds-gate-lock')).toBeVisible();
+    await expect(page.getByTestId('rounds-gate-next')).toBeDisabled();
+  });
+
+  // ── 6. Imaging — no Gate 2, anywhere ───────────────────────────────────
+  test('an imaging visit has no E/M step at all', async ({ page }) => {
+    const seeded = await openFlow(page, 'gates-6', { specialtyClass: 'imaging' });
+    test.skip(!seeded, 'psql seeding unavailable');
+
+    await expect(page.getByTestId('rounds-gate-step-em')).toHaveCount(0);
+    await expect(page.getByTestId('rounds-gate-host-em')).toHaveCount(0);
+    await expect(page.getByTestId('rounds-gate-summary-em')).toHaveCount(0);
+    await expect(page.getByTestId('rounds-gate-em-artifact')).toHaveCount(0);
+    // Attestation only.
+    await expect(page.getByTestId('rounds-gate-steps').locator('li')).toHaveCount(1);
+  });
+
+  // ── 7. Gate 3 — one control can sign, and the summary is honest ────────
+  test('the signature is the existing bar, and only applied gates are summarised', async ({
+    page,
+  }) => {
+    const seeded = await openFlow(page, 'gates-7', { specialtyClass: 'imaging' });
+    test.skip(!seeded, 'psql seeding unavailable');
+
+    await expect(page.getByTestId('rounds-gate-flow')).toHaveAttribute(
+      'data-step',
+      'attestation',
+    );
+
+    // The imaging fixture has no medications, so there is no Rx row to claim
+    // was cleared. A fabricated row would be a claim about work nobody did.
+    await expect(page.getByTestId('rounds-gate-summary-rx')).toHaveCount(0);
+
+    // The signing bar is PORTALED in — the same one, still the only one.
+    await expect(
+      page.getByTestId('rounds-gate-host-attestation').getByTestId('review-doc-signbar'),
+    ).toHaveCount(1);
+    await expect(page.getByTestId('review-doc-signbar')).toHaveCount(1);
+
+    // The attestation is labelled as UI-only, because the route cannot see it.
+    await expect(page.getByTestId('rounds-gate-attest-note')).toContainText(
+      /server does not check/i,
+    );
+    await expect(page.getByTestId('rounds-gate-attest')).toBeVisible();
+  });
+
+  // ── 8. The flow and the strip cannot disagree about N ──────────────────
+  test('the flow’s count and the padlock’s are the same number', async ({ page }) => {
+    const seeded = await openFlow(page, 'gates-8');
+    test.skip(!seeded, 'psql seeding unavailable');
+
+    const flowN = await page.getByTestId('rounds-gate-n').getAttribute('data-blockers');
+    await page.getByTestId('rounds-gate-close').click();
+    await expect(page.getByTestId('rounds-gate-flow')).toHaveCount(0);
+
+    await expect(page.getByTestId('rounds-strip-signed')).toHaveAttribute(
+      'data-blockers',
+      flowN!,
+    );
+    await expect(page.getByTestId('rounds-review-sign')).toHaveAttribute(
+      'data-blockers',
+      flowN!,
+    );
+  });
+});

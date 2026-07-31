@@ -38,9 +38,13 @@ import { isReviewDocView } from '@/config/review-doc-view';
 // Rounds Screen 2 — the stage. Composes; never renders the note itself.
 import { isSkinRounds } from '@/config/skin-rounds';
 import { RoundsStage } from '@/components/rounds/stage';
+import { RoundsGateFlow } from '@/components/rounds/gate-flow';
+import type { SignGateId } from '@/lib/sign-gates';
 import {
   applyRxResolved,
   firstBlockingGateTarget,
+  applyGateOverlay,
+  firstOpenStep,
   type RoundsStageData,
 } from '@/lib/rounds/stage-view-model';
 import { createDeferredScroll } from '@/lib/rounds/deferred-scroll';
@@ -448,9 +452,27 @@ export function VisitReadyView(props: VisitReadyViewProps) {
   // Computed unconditionally (hooks rule); only the flag-ON branch consumes it.
   const router = useRouter();
 
+  // ── Screen 3's three in-session signals ──────────────────────────────────
+  // `applyRxResolved`'s own comment asked for exactly this widening. A COUNT,
+  // not a boolean, so 2-of-3-overridden is expressible; `undefined` means "no
+  // signal yet", which is not the same as zero.
+  const [rxUnresolved, setRxUnresolved] = useState<number | undefined>(undefined);
+  const [emConfirmedSession, setEmConfirmedSession] = useState(false);
+  const [attested, setAttested] = useState(false);
+  const [flowOpen, setFlowOpen] = useState(false);
+  const [flowStep, setFlowStep] = useState<SignGateId | null>(null);
   const roundsView = useMemo(
-    () => (props.rounds ? applyRxResolved(props.rounds, rxResolved) : null),
-    [props.rounds, rxResolved]
+    () =>
+      props.rounds
+        ? applyGateOverlay(props.rounds, {
+            // Prefer the exact count when RxTab has reported one; fall back to
+            // the older boolean so the value is never invented.
+            rxUnresolved: rxUnresolved ?? (rxResolved ? 0 : undefined),
+            emConfirmed: emConfirmedSession,
+            attested,
+          })
+        : null,
+    [props.rounds, rxUnresolved, rxResolved, emConfirmedSession, attested]
   );
   // BOTH halves, deliberately. The flag alone would render a stage with no
   // data if the prop were ever dropped; the prop alone would render one on a
@@ -508,17 +530,16 @@ export function VisitReadyView(props: VisitReadyViewProps) {
   // that can start a signature, so there is exactly one place the gate logic
   // lives and no second one to drift from it.
   const handleReviewAndSign = useCallback(() => {
-    const target = roundsView ? firstBlockingGateTarget(roundsView.gates) : null;
-    if (target) {
-      scrollToChatTarget(target);
-      return;
-    }
-    const bar = document.querySelector(
-      '[data-testid="review-doc-signbar"] button'
-    );
-    bar?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    if (bar instanceof HTMLElement) bar.focus();
+    // OPENS THE GATE FLOW; still never signs. The signature is taken by the
+    // same `SignAndSendModal`, portaled into the last step — so there remains
+    // exactly ONE control that can start one, and the gate logic has no second
+    // home to drift from.
+    if (!roundsView) return;
+    setFlowStep(firstOpenStep(roundsView.gates));
+    setFlowOpen(true);
   }, [roundsView]);
+
+  const closeFlow = useCallback(() => setFlowOpen(false), []);
 
   const nextVisitId = roundsView?.queue.nextVisitId ?? null;
   const handleSkip = useCallback(() => {
@@ -982,6 +1003,10 @@ export function VisitReadyView(props: VisitReadyViewProps) {
                 readonly={props.readonly}
                 initialOverriddenIds={props.rxOverriddenWarningIds}
                 onResolvedChange={setRxResolved}
+                // The same fact as a COUNT, for the gate flow's partial
+                // credit. Only under the flag, so the flag-off render does not
+                // gain a state update it has no consumer for.
+                onUnresolvedChange={roundsActive ? setRxUnresolved : undefined}
               />
             ) : null
           }
@@ -1005,6 +1030,11 @@ export function VisitReadyView(props: VisitReadyViewProps) {
           emLevel={emLevel}
           onAdjustEm={adjustEm}
           readonly={props.readonly || props.signedAt !== null}
+          // ── Rounds Screen 3 ──────────────────────────────────────────────
+          // Both undefined unless the flag is on, so the flag-OFF render is
+          // exactly the tree it was before: `hosted()` returns its node
+          // untouched and nothing reports state upward.
+          onEmConfirmedChange={roundsActive ? setEmConfirmedSession : undefined}
         />
       );
 
@@ -1039,6 +1069,23 @@ export function VisitReadyView(props: VisitReadyViewProps) {
             >
               {paper}
             </RoundsStage>
+
+            {/* A SIBLING OF THE STAGE, never a wrapper around the paper — the
+                paper must keep its React identity, and the flow relocates the
+                gates by portal rather than by re-rendering them. */}
+            <RoundsGateFlow
+              open={flowOpen}
+              gates={roundsView.gates}
+              n={roundsView.n}
+              emArtifact={roundsView.emArtifact}
+              step={flowStep}
+              onStepChange={setFlowStep}
+              onClose={closeFlow}
+              attested={attested}
+              onAttestedChange={setAttested}
+              patientLabel={roundsView.identity.patientLabel}
+              visitDateLabel={roundsView.identity.recordedAtIso.slice(0, 10)}
+            />
           </div>
         );
       }
