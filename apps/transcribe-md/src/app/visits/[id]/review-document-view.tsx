@@ -30,7 +30,6 @@
 // ============================================================================
 
 import { useEffect, useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { AlertTriangle, Check, FileSignature, RefreshCw } from 'lucide-react';
 
 import { spokenBody } from '@/lib/spoken-body';
@@ -107,7 +106,6 @@ export interface ReviewDocumentViewProps {
    * It also keeps exactly ONE `data-chat-target` anchor per gate. Two would
    * make "took you to the E/M gate" resolve to whichever came first.
    */
-  gateHost?: (id: 'rx' | 'em' | 'signbar') => Element | null;
   /**
    * The in-session E/M confirm, reported out so the strip's N can see it.
    *
@@ -144,12 +142,24 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
     onEmConfirmedChange?.(emConfirmed);
   }, [emConfirmed, onEmConfirmedChange]);
 
-  // Relocate a gate's DOM, or leave it exactly where it is. The section JSX
-  // below is WRAPPED by this, never edited by it.
-  const hosted = (id: 'rx' | 'em' | 'signbar', node: React.ReactNode) => {
-    const host = props.gateHost?.(id) ?? null;
-    return host ? createPortal(node, host) : node;
-  };
+  // A STABLE WRAPPER, ALWAYS RENDERED HERE. The gate flow relocates these by
+  // MOVING THE DOM NODE, not by re-parenting the React element.
+  //
+  // ⚠️ THIS WAS A PORTAL AND THE PORTAL WAS THE BUG. `createPortal(node, host)`
+  // and a bare `node` are different element TYPES to React, so every time a
+  // step deactivated and its host vanished, the subtree unmounted and
+  // remounted — resetting `RxTab.overriddenIds` to the stale server prop and
+  // asking the doctor to re-justify a warning already persisted. That is
+  // exactly the defect the portal was chosen to prevent, reintroduced by the
+  // portal itself. Changing a portal's container remounts too, so "one host per
+  // step" could not fix it either.
+  //
+  // Moving a DOM node with appendChild does not touch React's tree at all:
+  // React keeps rendering into the same wrapper and never learns it sits
+  // somewhere else. State survives because nothing unmounted.
+  const slot = (id: 'rx' | 'em' | 'signbar', node: React.ReactNode) => (
+    <div data-gate-slot={id}>{node}</div>
+  );
 
   const sections = useMemo(() => parseNoteSections(props.soapFinal), [props.soapFinal]);
 
@@ -210,7 +220,7 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
             it, so a visit with a routine refill and nothing wrong looked
             exactly like a visit with an interaction. The card is BYTE-IDENTICAL
             when a warning exists; without one it is a quiet list. */}
-        {props.rxGateNode && hosted('rx', (
+        {props.rxGateNode && slot('rx', (
           <section
             className={`qm-rdoc-gate${props.rxHasWarnings ? '' : ' qm-rdoc-gate-quiet'}`}
             data-testid="review-doc-rx-gate"
@@ -229,7 +239,7 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
             are, and they belong nearest the signature they hold up. This one
             only says what the visit is documented at, and offers to change it.
             Absent entirely when E/M does not apply (imaging). */}
-        {hosted('em', (
+        {slot('em', (
           <>
           {props.emLevel && props.onAdjustEm && (
             <EmLevelCard
@@ -362,7 +372,7 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
           NAVIGATES here rather than signing, so it needs a stable anchor, and
           a class selector would make the styling a load-bearing contract. This
           stays the ONE control that can start a signature. */}
-      {hosted('signbar', (
+      {slot('signbar', (
         <div className="qm-c3-rev2-signbar" data-testid="review-doc-signbar">
           <div className="qm-c3-rev2-signbar-in">
             <div className="qm-c3-rev2-sign-status">

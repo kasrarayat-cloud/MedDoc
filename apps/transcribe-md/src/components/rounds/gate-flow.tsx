@@ -55,16 +55,6 @@ export interface RoundsGateFlowProps {
   patientLabel: string;
   /** The encounter date, already formatted by the caller. */
   visitDateLabel: string;
-  /**
-   * Callback-ref factory for each step's host element.
-   *
-   * CALLBACK REFS, NOT `useRef` — a ref mutation does not re-render, so the
-   * owner would never learn the element exists and the portal would never
-   * happen. The first render after opening has no host yet (the gates stay
-   * inline, under an opaque overlay); the state update in the same commit moves
-   * them.
-   */
-  hostRef: (id: SignGateId) => (el: HTMLDivElement | null) => void;
 }
 
 export function RoundsGateFlow({
@@ -79,10 +69,10 @@ export function RoundsGateFlow({
   onAttestedChange,
   patientLabel,
   visitDateLabel,
-  hostRef,
 }: RoundsGateFlowProps) {
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const hostElRef = useRef<HTMLDivElement | null>(null);
 
   const ids = useMemo(() => gates.map((g) => g.id), [gates]);
   const activeIndex = step ? ids.indexOf(step) : -1;
@@ -121,6 +111,43 @@ export function RoundsGateFlow({
     if (!open) return;
     panelRef.current?.focus();
   }, [open]);
+
+  // ── ADOPT THE LIVE GATE, BY MOVING ITS DOM ───────────────────────────────
+  // The gate is rendered by the read-only paper into a stable
+  // `[data-gate-slot]` wrapper and it STAYS mounted there for the whole
+  // session. This effect borrows that DOM node into the active step's host and
+  // puts it back on the way out.
+  //
+  // Why not a portal: `createPortal(node, host)` and a bare `node` are
+  // different element types to React, so flipping between them unmounts and
+  // remounts the subtree — which reset `RxTab.overriddenIds` to the stale
+  // server prop and un-cleared a gate the doctor had already justified.
+  // Changing a portal's container remounts for the same reason. Moving the DOM
+  // node touches React's tree not at all: it keeps rendering into the same
+  // wrapper and never learns it has moved.
+  //
+  // The restore is not optional. React will remove this wrapper from its
+  // ORIGINAL parent when the paper unmounts, and a node adopted elsewhere at
+  // that moment throws. Effect cleanup runs before unmount, so putting it back
+  // here is what keeps that safe.
+  useEffect(() => {
+    if (!open || !active || emArtifact) return;
+    const host = hostElRef.current;
+    const slot = document.querySelector<HTMLElement>(
+      `[data-gate-slot="${active.id === 'attestation' ? 'signbar' : active.id}"]`
+    );
+    if (!host || !slot) return;
+
+    const home = slot.parentElement;
+    const nextSibling = slot.nextSibling;
+    host.appendChild(slot);
+
+    return () => {
+      // Back exactly where it was, so the paper's own order is unchanged when
+      // the flow closes.
+      if (home) home.insertBefore(slot, nextSibling);
+    };
+  }, [open, active, emArtifact]);
 
   if (!open) return null;
 
@@ -195,7 +222,7 @@ export function RoundsGateFlow({
           <div
             className="qm-rounds-gateflow-host"
             data-testid={`rounds-gate-host-${active.id}`}
-            ref={hostRef(active.id)}
+            ref={hostElRef}
           />
         ) : null}
 

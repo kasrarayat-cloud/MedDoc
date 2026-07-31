@@ -461,30 +461,6 @@ export function VisitReadyView(props: VisitReadyViewProps) {
   const [attested, setAttested] = useState(false);
   const [flowOpen, setFlowOpen] = useState(false);
   const [flowStep, setFlowStep] = useState<SignGateId | null>(null);
-  // Callback refs, keyed by gate. NOT a `useRef` — a ref mutation does not
-  // re-render, so the portal target would never reach the paper.
-  const [gateHosts, setGateHosts] = useState<Record<string, Element | null>>({});
-
-  const hostRef = useCallback(
-    (id: SignGateId) => (el: HTMLDivElement | null) => {
-      // Bail when nothing moved, or every ref callback queues a new object and
-      // the render loop never settles.
-      setGateHosts((prev) => (prev[id] === el ? prev : { ...prev, [id]: el }));
-    },
-    []
-  );
-
-  const gateHost = useCallback(
-    (id: 'rx' | 'em' | 'signbar'): Element | null => {
-      if (!flowOpen) return null;
-      // The signing bar belongs to the attestation step; the other two are
-      // keyed by their own gate id.
-      const key = id === 'signbar' ? 'attestation' : id;
-      return gateHosts[key] ?? null;
-    },
-    [flowOpen, gateHosts]
-  );
-
   const roundsView = useMemo(
     () =>
       props.rounds
@@ -1058,7 +1034,6 @@ export function VisitReadyView(props: VisitReadyViewProps) {
           // Both undefined unless the flag is on, so the flag-OFF render is
           // exactly the tree it was before: `hosted()` returns its node
           // untouched and nothing reports state upward.
-          gateHost={roundsActive ? gateHost : undefined}
           onEmConfirmedChange={roundsActive ? setEmConfirmedSession : undefined}
         />
       );
@@ -1110,7 +1085,6 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               onAttestedChange={setAttested}
               patientLabel={roundsView.identity.patientLabel}
               visitDateLabel={roundsView.identity.recordedAtIso.slice(0, 10)}
-              hostRef={hostRef}
             />
           </div>
         );

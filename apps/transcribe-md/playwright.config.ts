@@ -98,6 +98,11 @@ export default defineConfig({
         // while the route rendered the old skin perfectly well. Slower to
         // diagnose, identical downstream damage.
         '**/rounds-stage.spec.ts',
+        // ROUNDS Gate B — Screen 3. Same reasoning as the stage pack: the route
+        // EXISTS with the flag off, so this would not 404 — it would fail on
+        // missing Rounds testids while the old skin rendered perfectly well,
+        // and take every downstream pack with it.
+        '**/rounds-gates.spec.ts',
         '**/a11y.spec.ts',
         '**/23-note-format-phi-parse-reject.spec.ts',
         '**/24-rx-clinical-safety.spec.ts',
@@ -174,6 +179,17 @@ export default defineConfig({
       // under them.
       name: 'rounds-stage',
       testMatch: ['**/rounds-stage.spec.ts'],
+      fullyParallel: false,
+      workers: 1,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      // ROUNDS Gate B — Screen 3, the sequential gate flow. Serialised: these
+      // tests record real RxWarningOverride rows for one doctor and then assert
+      // a blocker COUNT, so a parallel worker clearing another gate on the same
+      // fixture would move the number under them.
+      name: 'rounds-gates',
+      testMatch: ['**/rounds-gates.spec.ts'],
       fullyParallel: false,
       workers: 1,
       use: { ...devices['Desktop Chrome'] },

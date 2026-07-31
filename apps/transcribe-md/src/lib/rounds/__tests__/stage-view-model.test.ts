@@ -215,3 +215,40 @@ describe('firstOpenStep', () => {
     expect(firstOpenStep([])).toBeNull();
   });
 });
+
+describe('the host-ref factory contract (regression: React #185)', () => {
+  // Not a test of stage-view-model, but of the SHAPE the flow's hostRef must
+  // have — recorded here because the defect it prevents is invisible in every
+  // unit test and cost a whole E2E pack to find.
+  //
+  // A factory that returns a fresh arrow per call gives React a new ref
+  // identity every render, so it detaches (ref ← null) and reattaches
+  // (ref ← element) forever. The "bail when unchanged" guard cannot help: the
+  // value really does alternate.
+  function cachedFactory() {
+    const cache: Record<string, (el: unknown) => void> = {};
+    const sets: unknown[] = [];
+    const factory = (id: string) => {
+      cache[id] ??= (el: unknown) => sets.push(el);
+      return cache[id];
+    };
+    return { factory, sets };
+  }
+
+  it('returns the SAME function for the same id', () => {
+    const { factory } = cachedFactory();
+    expect(factory('rx')).toBe(factory('rx'));
+  });
+
+  it('returns DIFFERENT functions for different ids', () => {
+    const { factory } = cachedFactory();
+    expect(factory('rx')).not.toBe(factory('em'));
+  });
+
+  it('NEGATIVE CONTROL — the naive factory does NOT hold the property', () => {
+    // This is the exact code that shipped and looped. Kept so the difference
+    // is visible rather than asserted.
+    const naive = (id: string) => (el: unknown) => void [id, el];
+    expect(naive('rx')).not.toBe(naive('rx'));
+  });
+});

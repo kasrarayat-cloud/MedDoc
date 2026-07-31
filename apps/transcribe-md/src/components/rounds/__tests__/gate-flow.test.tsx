@@ -47,7 +47,6 @@ function renderFlow(
       onAttestedChange={() => {}}
       patientLabel="A Patient"
       visitDateLabel="2026-07-30"
-      hostRef={() => () => {}}
       {...over}
     />
   );
@@ -77,8 +76,8 @@ describe('the steps ARE the gate array', () => {
   });
 
   it('only the ACTIVE step gets a host — the others stay where they are', () => {
-    // A host per step would mean three portal targets and a gate rendered into
-    // whichever won. Exactly one exists at a time.
+    // One host at a time, because the live gate is a single DOM subtree that
+    // gets ADOPTED into it. Two hosts would be two homes for one node.
     renderFlow({ step: 'rx' });
     expect(screen.getByTestId('rounds-gate-host-rx')).toBeTruthy();
     expect(screen.queryByTestId('rounds-gate-host-em')).toBeNull();
@@ -86,12 +85,66 @@ describe('the steps ARE the gate array', () => {
   });
 
   it('renders NO clinical control of its own — the host is empty', () => {
-    // If this component ever grows its own override button or level card, the
-    // gate logic has a second home and the two will drift.
+    // Empty in isolation: the real gate is adopted in from the paper at
+    // runtime. If this component ever grows its own override button or level
+    // card, the gate logic has a second home and the two will drift.
     const { container } = renderFlow({ step: 'rx' });
     expect(screen.getByTestId('rounds-gate-host-rx').childNodes).toHaveLength(0);
     expect(container.querySelector('textarea')).toBeNull();
     expect(container.querySelector('[data-testid^="review-doc-"]')).toBeNull();
+  });
+});
+
+describe('Gate 2 on a QUIET visit — never dropped, never counted', () => {
+  // The ruling, expressed at the surface that could break it. E/M is the
+  // designed sole billing surface: it shows the code, the complexity and the
+  // rationale, and it carries the adjust-level flow. So it must EXIST wherever
+  // the specialty applies — even when nothing has changed and nothing blocks.
+  //
+  // The two failures this guards against are opposite and both plausible:
+  // dropping the step because it counts zero (the doctor loses the only place
+  // the level can be reviewed or changed), or counting it because it is shown
+  // (the padlock claims a blocker POST /sign does not have).
+  const QUIET = [EM(0), ATTEST()];
+
+  it('the step EXISTS in the sequence', () => {
+    renderFlow({ gates: QUIET, step: 'em' });
+    expect(screen.getByTestId('rounds-gate-step-em')).toBeTruthy();
+    expect(screen.getByTestId('rounds-gate-steps').children).toHaveLength(2);
+  });
+
+  it('and it still HOSTS the billing surface — that is what it is for', () => {
+    renderFlow({ gates: QUIET, step: 'em' });
+    expect(screen.getByTestId('rounds-gate-host-em')).toBeTruthy();
+  });
+
+  it('but it does not block: no lock, and Next advances', () => {
+    const onStepChange = vi.fn();
+    renderFlow({ gates: QUIET, step: 'em', onStepChange });
+
+    expect(screen.queryByTestId('rounds-gate-lock')).toBeNull();
+    expect(screen.getByTestId('rounds-gate-next')).toHaveProperty('disabled', false);
+    fireEvent.click(screen.getByTestId('rounds-gate-next'));
+    expect(onStepChange).toHaveBeenCalledWith('attestation');
+  });
+
+  it('and it contributes nothing to the count on the flow', () => {
+    renderFlow({ gates: QUIET, step: 'em' });
+    expect(screen.getByTestId('rounds-gate-n').getAttribute('data-blockers')).toBe('1');
+  });
+
+  it('NEGATIVE CONTROL — an unacknowledged change DOES block the same step', () => {
+    // Without this, "never blocks" would be satisfied by a step that can never
+    // block at all, and the server refusal would arrive unannounced.
+    renderFlow({ gates: [EM(1), ATTEST()], step: 'em' });
+    expect(screen.getByTestId('rounds-gate-lock')).toBeTruthy();
+    expect(screen.getByTestId('rounds-gate-next')).toHaveProperty('disabled', true);
+  });
+
+  it('the summary row says cleared, not absent', () => {
+    renderFlow({ gates: QUIET, step: 'attestation' });
+    const row = screen.getByTestId('rounds-gate-summary-em');
+    expect(row.getAttribute('data-cleared')).toBe('true');
   });
 });
 
