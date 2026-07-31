@@ -13,6 +13,7 @@
 import { expect, test } from '@playwright/test';
 
 import { signupFreshUser } from '../helpers/signup';
+import { seedReviewDocVisit } from '../helpers/seedReviewDocVisit';
 import { cleanupTestUsers } from '../helpers/cleanup';
 
 test.afterEach(() => {
@@ -83,4 +84,49 @@ test('the flag gates the route — a flag-OFF build has no board', async ({
   await signupFreshUser(page, 'board-flag');
   const res = await page.goto('/board');
   expect(res?.status()).toBe(200);
+});
+
+test.describe('the ultrasound filter splits on the ID, not the label', () => {
+  // THE ONLY SPECIALTY-CONDITIONAL BEHAVIOUR ON /board is
+  //   const isImaging = (s) => !emAppliesToSpecialty(s)
+  // and until now it had ZERO end-to-end coverage in either direction: every
+  // board test seeds no visits at all and asserts the empty state, and the unit
+  // test injects `isImaging` as a STUB.
+  //
+  // That is exactly the seam that once made every ultrasound visit compute and
+  // PERSIST an office E/M level — a display LABEL was fed to a comparator that
+  // takes an id, so the comparison was permanently false and nothing threw. A
+  // stubbed predicate cannot see that; only a real row with a real specialty
+  // column can.
+  //
+  // Both directions are asserted, because "the imaging visit appears under
+  // Ultrasound" alone is satisfied by a filter that lets EVERYTHING through.
+
+  function requireSeed<T>(seeded: T | null, what: string): T | null {
+    if (seeded) return seeded;
+    if (process.env.CI) {
+      throw new Error(`seeding FAILED for ${what}. In CI this is a defect, not a skip.`);
+    }
+    return null;
+  }
+
+  test('an imaging visit is under Ultrasound and a SOAP visit is not', async ({ page }) => {
+    const { email } = await signupFreshUser(page, 'board-imaging');
+    const soap = requireSeed(seedReviewDocVisit(email, { idSalt: 'q' }), 'soap');
+    const imaging = requireSeed(
+      seedReviewDocVisit(email, { idSalt: 'r', specialtyClass: 'imaging' }),
+      'imaging',
+    );
+    test.skip(!soap || !imaging, 'psql seeding unavailable');
+
+    await page.goto('/board?filter=ultrasound');
+    await expect(page.getByTestId(`rounds-lane-card-${imaging!.visitId}`)).toBeVisible();
+    await expect(page.getByTestId(`rounds-lane-card-${soap!.visitId}`)).toHaveCount(0);
+
+    // And the complement — a filter that passed everything would satisfy the
+    // assertion above and fail this one.
+    await page.goto('/board?filter=soap');
+    await expect(page.getByTestId(`rounds-lane-card-${soap!.visitId}`)).toBeVisible();
+    await expect(page.getByTestId(`rounds-lane-card-${imaging!.visitId}`)).toHaveCount(0);
+  });
 });
