@@ -35,6 +35,7 @@
 
 import { ROUNDS_STAGES, stageOf } from '@/lib/rounds/stages';
 import type { SignGate } from '@/lib/sign-gates';
+import { GATE_LABEL, blockerPhrase } from '@/lib/rounds/gate-labels';
 
 export type StripNodeState = 'done' | 'current' | 'pending';
 
@@ -52,15 +53,9 @@ export interface PipelineStripProps {
   emArtifact?: boolean;
 }
 
-const GATE_LABEL: Record<string, string> = {
-  rx: 'critical interaction',
-  em: 'documentation level',
-  attestation: 'attestation',
-};
-
-function blockerPhrase(n: number): string {
-  return n === 1 ? '1 blocker before Signed' : `${n} blockers before Signed`;
-}
+// Shared with Screen 3's step headings — see lib/rounds/gate-labels.ts. Two
+// copies of a label map is how a doctor gets told "documentation level" on one
+// surface and something else on the next.
 
 /** The done/current/pending state of each of the five stage nodes.
  *
