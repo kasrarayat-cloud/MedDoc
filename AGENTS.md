@@ -229,6 +229,47 @@ can never be shredded, and the blocks stay on disk. This cost two files on
 
 **Report paths, never contents.**
 
+#### Session evidence trees are EXTRACT-THEN-SHRED, at session end
+
+**Findings go into the repository; the raw tree is destroyed. An unowned
+snapshot never persists.** This is not conditional on the tree being dirty.
+
+The reasoning is the part to remember, because "it is clean, leave it" is the
+intuitive answer and it is wrong: **a tree that is provably clean today has to be
+re-proven clean by every future sweep, for as long as it exists.** The
+verification cost is paid again and again, by people who did not create it and
+cannot tell from the outside whether it matters. And the class is not
+theoretical — the 2026-07-28 history purge missed six copies of two filled
+exports because they sat in exactly this kind of tree, invisible to a stale-copy
+scan that enumerated git repositories.
+
+The shape:
+
+1. **EXTRACT the reports** — `.md`/`.txt` summaries, findings, conclusions. Never
+   source snapshots, build output, container ids, port files, temp paths or file
+   manifests: those are the machine's leftovers, and keeping them is how the
+   liability class reconstitutes itself. Land them under `docs/qa-reports/` and
+   **commit and push before shredding anything** — extraction must be durable
+   before destruction begins.
+2. **Check admission harder than the sweep did.** A file entering the repo enters
+   every future clone. Credentials by value AND by shape (`PGPASSWORD=`,
+   `postgres://user:pass@`, generic `password|secret|token|api_key` assignments,
+   `sk-`, `Bearer`, PEM headers, `AKIA`), negative-controlled against a canary
+   carrying those shapes; plus a prose read of anything whose title implies a
+   secret a pattern cannot see.
+3. **Read what you are about to destroy.** The 2026-07-30 extraction found a
+   document recording a service credential seen in a process command line, whose
+   own disposition made rotation a **release blocker** — and nothing in the repo
+   recorded that rotation happening. Shredding first would have destroyed the
+   only pointer to an open security item.
+4. **Then shred, per the rule above** — `chmod u+w` first (a mode-`0400` file is
+   the known failure), unlink symlinks rather than shredding *through* them (a
+   symlink is how a sweep destroys something outside its own boundary),
+   escalate root-owned files via root-via-docker, and remove the directories
+   **only** when the failure count is zero.
+5. **Verify with a controlled sweep and state the boundary** — including the
+   positive control, or the zero means nothing.
+
 #### A history purge does not clear the filesystem
 
 `docs/smoke-test-2026-05-04/phase-C/export.{docx,pdf}` were purged from every ref

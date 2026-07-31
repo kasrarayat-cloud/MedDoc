@@ -304,3 +304,69 @@ buys no safety while it does discard the record other reports may cite.
 Recorded rather than acted on, with the census above so the next sweep starts
 from an inventory instead of repeating it. One removal was made: the empty
 leftover directory `~/native-docx-exact-review.MB7eB0` (0 files).
+
+---
+
+## Third addendum, 2026-07-30 — the four clean trees, extracted then destroyed
+
+**Summary line:** the four unowned evidence trees the second addendum censused
+and cleared — `~/reviews`, `~/release-programs`, `~/release-reviews`,
+`~/release-evidence`, **1609 files / 782 MiB** — had their **36 report/findings
+files extracted** to `docs/qa-reports/witness-archive-20260730/` (244 KiB,
+committed and pushed BEFORE anything was destroyed) and the **remaining 1573
+files plus 5 symlinks shredded** with `shred -u -n 3 -z`, **0 failures**, after
+which the four directories were removed and their absence verified.
+
+**Why destroy something already proven clean.** Because being clean is not the
+same as being free. A tree that is provably clean today must be **re-proven**
+clean by every future sweep for as long as it exists, by people who did not
+create it — and the purge these addenda are attached to missed six copies of two
+filled exports that sat in precisely this class of tree. The ruling is therefore
+extract-then-shred regardless of contents; `AGENTS.md` now carries it as a
+standing close-out rule.
+
+### What was extracted, and what was not
+
+| Kept (36) | Discarded (1573) |
+|---|---|
+| `.md` review receipts, security audits, incident records, verification reports, and the small `*-summary.txt` scan conclusions | source snapshots, build output, container ids, port files, temp paths, file manifests and censuses, 170 synthetic OOXML grammar fixtures, 30 synthesised audit `.wav` |
+
+Archived filenames preserve the original path (`/` → `~`), so each file still
+says where it came from.
+
+### The extraction was not a formality
+
+One rescued document records a **service credential observed in a process
+command line** on 2026-07-19. It states the value was deliberately omitted, and
+its *Required disposition* makes rotation through the approved path a **release
+blocker for production authorization**. Nothing in this repository records that
+rotation having happened. Six other rescued files carry unresolved-blocker
+language; all seven are named in the archive's README.
+
+**Shredding first would have destroyed the only remaining pointer to an open
+security item.** That is the argument for step 3 of the new rule: read what you
+are about to destroy.
+
+### Controls
+
+- **Admission**, before anything entered the repo: sha1 against every tracked
+  file (**0 of 36 already committed** — no duplicates); credentials by value
+  (10 vars, **0 hits**); credential *shapes* — `PGPASSWORD=`,
+  `postgres://user:pass@`, generic `password|secret|token|api_key` assignments,
+  `sk-`, `Bearer`, PEM headers, `AKIA` — **0 hits, negative-controlled against a
+  canary** carrying two of those shapes (the canary was then shredded); positive
+  control on the traversal (`meddoc` → 18 of 36, `review` → 29).
+- **Destruction**: `chmod u+w` applied FIRST — 7 files were read-only, and **6 of
+  those were root-owned** and were shredded through the documented
+  root-via-docker path rather than unlinked as the owner of the parent
+  directory, which is what produced the two-file residual recorded above. 5
+  symlinks were **unlinked, never shredded through** — `shred` follows a symlink
+  to its target, which is how a sweep destroys something outside its boundary.
+  Directory removal was **conditional on zero failures**, not unconditional.
+- **Verification**: all four roots absent; a device-wide `find / -xdev` for
+  witness-class directory names returns only OS paths
+  (`/etc/update-manager/release-upgrades.d`, kernel `drivers/staging`);
+  positive-controlled by the same find form returning `/opt/meddoc-pro`.
+
+**Disk:** 73% before, 73% after — 782 MiB against a 296 G filesystem, `avail`
+79 G → 80 G. Space was never the reason.

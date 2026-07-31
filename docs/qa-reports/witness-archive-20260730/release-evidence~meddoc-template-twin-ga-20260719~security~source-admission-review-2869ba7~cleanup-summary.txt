@@ -1,0 +1,1 @@
+disposable_containers_stopped_and_auto_removed=true
