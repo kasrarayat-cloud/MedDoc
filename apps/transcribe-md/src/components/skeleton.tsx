@@ -146,3 +146,45 @@ export function SkeletonSettingsRow({
     </div>
   );
 }
+
+/**
+ * A Rounds BOARD lane placeholder.
+ *
+ * ⚠️ SHAPE IS THE POINT, not colour. A skeleton exists to say "what resolves
+ * here will look roughly like this" — so one whose shape contradicts what
+ * arrives is worse than none at all: it moves the doctor's eye to where the
+ * content is not. The board resolves to patient lanes on a hairline track, so
+ * this is a lane: an identity block, then stage markers along a rule.
+ *
+ * Kept in this file rather than under `components/rounds/` on purpose — item F
+ * deletes the skin's component namespace, and `loading.tsx` files survive it.
+ * Same reasoning as `lib/recovery-href.ts`.
+ */
+export function SkeletonRoundsLane({ markers = 5 }: { markers?: number }) {
+  return (
+    <div
+      aria-hidden
+      className="qm-rounds-skel-lane"
+      style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '14px 0' }}
+    >
+      <div style={{ flex: '0 0 168px', display: 'grid', gap: 6 }}>
+        <Skeleton className="h-3.5 w-28 rounded" />
+        <Skeleton className="h-2.5 w-20 rounded" />
+      </div>
+      <div
+        style={{
+          flex: 1,
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <span className="qm-rounds-skel-track" aria-hidden />
+        {Array.from({ length: markers }).map((_, i) => (
+          <Skeleton key={i} className="h-2.5 w-2.5 rounded-full" />
+        ))}
+      </div>
+    </div>
+  );
+}
