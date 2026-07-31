@@ -48,6 +48,7 @@ const EXPECTED: Record<string, string[]> = {
   'rounds-stage': ['docker-compose.qa.rounds.yml'],
   'rounds-gates': ['docker-compose.qa.rounds.yml'],
   'rounds-signed': ['docker-compose.qa.rounds.yml'],
+  'rounds-a11y': ['docker-compose.qa.rounds.yml'],
   'review-doc': ['docker-compose.qa.reviewdoc.yml'],
   'doc-preview': ['docker-compose.qa.docpreview.yml'],
   'visit-doc': ['docker-compose.qa.visitdoc.yml'],

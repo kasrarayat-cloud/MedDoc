@@ -53,18 +53,41 @@ test.describe('Rounds Screen 2 — the stage', () => {
     await cleanupTestUsers();
   });
 
+  /**
+   * ⚠️ IN CI, A SEEDER THAT CANNOT SEED IS A DEFECT, NOT A SKIP.
+   *
+   * Playwright EXITS 0 ON A FULLY SKIPPED FILE. When rounds-signed's seeding
+   * broke on a misaligned column, all 11 of its tests skipped and the run went
+   * green having proved nothing — A2 defect 0's shape in a new place. In CI the
+   * psql channel is guaranteed, so a null here means the seeder is broken.
+   *
+   * (A probe of the CHANNEL does not catch it. That was tried and watched to
+   * pass while the pack skipped: the channel was fine, the INSERT was rejected.)
+   */
+  function requireSeed<T>(seeded: T | null, what: string): T | null {
+    if (seeded) return seeded;
+    if (process.env.CI) {
+      throw new Error(
+        `seeding FAILED for ${what}. In CI this is a defect, not a skip — ` +
+          'letting it skip would exit 0 on a pack that proved nothing.',
+      );
+    }
+    return null;
+  }
+
   async function open(
     page: import('@playwright/test').Page,
     tag: string,
     seedOpts: {
       specialtyClass?: ReviewDocClass;
       emPending?: boolean;
+      imagingEmPending?: boolean;
       chiefComplaint?: string;
       patient?: { dob?: string; externalId?: string };
     } = {},
   ) {
     const { email } = await signupFreshUser(page, tag);
-    const seeded = seedReviewDocVisit(email, seedOpts);
+    const seeded = requireSeed(seedReviewDocVisit(email, seedOpts), tag);
     if (!seeded) return null;
     await page.goto(`/visits/${seeded.visitId}`);
     await expect(page.getByTestId('rounds-stage')).toBeVisible();
@@ -160,10 +183,14 @@ test.describe('Rounds Screen 2 — the stage', () => {
     const seeded = await open(page, 'stage-5', { specialtyClass: 'imaging' });
     test.skip(!seeded, 'psql seeding unavailable');
 
-    // No artifact marker: the fixture is clean, so there is nothing anomalous
-    // to name. (The marker exists for an imaging row that WRONGLY carries an
-    // unacknowledged E/M change — the server would refuse that sign while the
-    // invariant forbids drawing a gate for it.)
+    // The fixture is clean, so there is nothing anomalous to name.
+    //
+    // ⚠️ THIS ASSERTION ALONE PROVES NOTHING and the companion test below is
+    // what makes it mean something. Every imaging fixture hard-nulls
+    // `emPendingChange`, and `emArtifact` is set ONLY when that column is
+    // non-null on a non-applicable specialty — so this passes against a build
+    // with the anomaly rendering deleted entirely. Absence is only evidence
+    // when presence has been shown to be reachable.
     await expect(page.getByTestId('rounds-strip-em-artifact')).toHaveCount(0);
 
     // The imaging fixture has no medications and no E/M — attestation only.
@@ -175,6 +202,32 @@ test.describe('Rounds Screen 2 — the stage', () => {
       '1',
     );
     await expect(page.getByTestId('rounds-critical-band')).toHaveCount(0);
+  });
+
+  test('THE COMPANION — an imaging visit that DOES carry office E/M names it', async ({
+    page,
+  }) => {
+    // The production defect, reproduced: five imaging visits acquired office E/M
+    // state and sat there two days. The invariant forbids drawing an E/M GATE
+    // for them, but `POST /sign` is not specialty-conditioned and WILL refuse —
+    // so the strip names the anomaly rather than rendering a clean zero and
+    // walking the doctor into a 400 they were not warned about.
+    //
+    // This is the presence half. Without it the absence assertion above is
+    // satisfied by a build that cannot produce the marker at all.
+    const seeded = await open(page, 'stage-5b', {
+      specialtyClass: 'imaging',
+      imagingEmPending: true,
+    });
+    test.skip(!seeded, 'psql seeding unavailable');
+
+    await expect(page.getByTestId('rounds-strip-em-artifact')).toHaveCount(1);
+    // And STILL no E/M gate — the invariant is absolute even when the data is
+    // wrong. Naming the anomaly is not the same as growing a gate for it.
+    await expect(page.getByTestId('rounds-review-sign')).toHaveAttribute(
+      'data-blockers',
+      '1',
+    );
   });
 
   // ── 6. The identity header, from real columns ────────────────────────────
