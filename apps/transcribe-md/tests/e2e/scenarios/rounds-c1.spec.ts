@@ -1183,6 +1183,38 @@ test.describe('Rounds C1-f — templates, flag-ON', () => {
     ).toBeGreaterThanOrEqual(4);
   });
 
+  test('C1-g — /settings/note-format preselects the panel on the C3 rail', async ({ page }) => {
+    // ⚠️ THIS IS THE BRANCH PRODUCTION RENDERS, and it is the one where the
+    // route's whole point lives. The default chromium pack covers the LEGACY
+    // stack (`SKIN_BETA=false`), where the section simply renders in a long
+    // scroll and "preselect" means nothing. Here all seven panels stay mounted
+    // with `hidden`, so a doctor arriving from the nav item or from the
+    // certified-template email lands on Profile unless the segment preselects —
+    // which looks exactly like a link that went nowhere in particular.
+    await signupFreshUser(page, 'c1g-preselect');
+    await page.setViewportSize({ width: WIDE, height: 1000 });
+
+    const res = await page.goto('/settings/note-format');
+    expect(res?.status(), 'the note-format route did not serve on the C3 build').toBe(200);
+
+    await expect(
+      page.locator('#note-format'),
+      'the note-format panel is still `hidden` — the segment served but did not ' +
+        'preselect, so the link lands the doctor on Profile',
+    ).toBeVisible({ timeout: 10_000 });
+
+    // …and it is THIS panel, not merely some visible one. All seven are in the
+    // DOM; asserting only visibility of one would pass if the rail opened a
+    // different section that happened to render.
+    await expect(
+      page.locator('.qm-c3-set-panel:not([hidden])'),
+      'more than one panel is open, so "visible" says nothing about which',
+    ).toHaveCount(1);
+    await expect(page.locator('.qm-c3-set-panel:not([hidden])')).toHaveAttribute('id', 'note-format');
+
+    await sweep(page, 'tmpl:route', WIDE);
+  });
+
   test('the two views a walk cannot reach are rendered, and measured', async ({ page }) => {
     // ⚠️ NOT A CONVENIENCE. `parsing` paints only while four server actions are
     // in flight and `rejected` needs a container env this image does not carry,
@@ -1317,7 +1349,7 @@ test.describe('Rounds C1-f — templates, flag-ON', () => {
     expect(
       measured.length,
       'nothing was measured — the assertions below would pass on an empty set',
-    ).toBeGreaterThanOrEqual(6);
+    ).toBeGreaterThanOrEqual(7);
     expect(
       hiddenTraps,
       'focusable elements inside an aria-hidden Rounds container on the templates surfaces',

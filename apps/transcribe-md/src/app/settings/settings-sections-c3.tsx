@@ -29,10 +29,25 @@ export interface SettingsSectionC3 {
 
 export function SettingsSectionsC3({
   sections,
+  initialSection,
 }: {
   sections: SettingsSectionC3[];
+  /** Which panel opens first. Used by the `/settings/<section>` route segments,
+   *  which exist because a nav item and a customer email both link straight to
+   *  one — and until C1-g those links 404'd.
+   *
+   *  ⚠️ VALIDATED AGAINST THE REAL SECTION LIST, never trusted. The value comes
+   *  from a URL path, and an unknown id would leave `active` matching no panel:
+   *  all seven stay mounted with `hidden`, so the page would render the rail
+   *  above an empty column and throw nothing. Falling back to the first section
+   *  is the honest failure — the doctor lands somewhere real. */
+  initialSection?: string;
 }) {
-  const [active, setActive] = useState(sections[0]?.id ?? '');
+  const [active, setActive] = useState(
+    initialSection && sections.some((s) => s.id === initialSection)
+      ? initialSection
+      : sections[0]?.id ?? '',
+  );
 
   return (
     <div className="qm-c3-set-body">

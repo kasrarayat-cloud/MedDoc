@@ -57,3 +57,33 @@ test('account: logged-in password change takes effect at next login', async ({
   await loginUser(page, email, newPassword);
   await expect(page).toHaveURL(/\/dashboard$/);
 });
+
+// ── C1-g ────────────────────────────────────────────────────────────────────
+// `/settings/note-format` is linked from the Rounds nav and from the
+// certified-template EMAIL, and it 404'd. This runs in the DEFAULT chromium
+// project on purpose: that image builds `NEXT_PUBLIC_SKIN_BETA=false`
+// (e2e.yml:97), so it exercises the LEGACY settings stack — the branch a
+// Rounds-only pack would never touch, and the one where "preselect a panel"
+// means nothing because the section simply renders in a long scroll.
+//
+// The unit guard proves a `page.tsx` exists at that path. Only this can prove
+// the route SERVES: a segment can exist and still throw at render, and the
+// difference is invisible to a file-existence check.
+test('account: /settings/note-format serves, and renders the manager', async ({ page }) => {
+  await signupFreshUser(page, 'nf-route');
+
+  const res = await page.goto('/settings/note-format');
+  expect(
+    res?.status(),
+    'the route that the Rounds nav and the certified-template email both link ' +
+      'to did not serve. An email already in a doctor\'s inbox points here',
+  ).toBe(200);
+
+  // The manager itself, not merely a 200 — a settings page that rendered
+  // without this section would satisfy the status check and nothing else.
+  // A fresh doctor has no templates, so the manager opens on its entry view.
+  await expect(
+    page.getByRole('button', { name: /read my format/i }),
+    'the note-format manager did not render on its own route',
+  ).toBeVisible({ timeout: 15_000 });
+});
