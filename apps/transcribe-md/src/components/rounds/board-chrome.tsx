@@ -78,7 +78,17 @@ export function RoundsBoardChrome({
   });
 
   return (
-    <div style={{ minHeight: '100vh', padding: '0 24px 40px' }}>
+    /* C2 — THE OWNERSHIP ANCHOR, and it is the whole reason `/board` was green.
+       `ownedByDom` stops at the first ancestor-or-self carrying ANY class and
+       gates only a `qm-rounds-*` one. Every node in this file is inline-styled
+       and classless — the top bar, the filter group, the search form, the
+       pagination, the day meter — so each climbed past this root to
+       `<body className="min-h-screen antialiased">` and filed as *inherited*:
+       reported, never blocking. The `board` sweep has been passing on the lane
+       rows alone, which carry classes of their own.
+       One class here owns the whole subtree, because everything under it is
+       classless by construction. */
+    <div className="qm-rounds-boardchrome" style={{ minHeight: '100vh', padding: '0 24px 40px' }}>
       {/* ── Top bar ─────────────────────────────────────────────────────── */}
       <header
         style={{
@@ -163,7 +173,10 @@ export function RoundsBoardChrome({
             style={{
               fontFamily: 'var(--rounds-font-mono)',
               fontSize: 11.5,
-              color: 'var(--rounds-critical)',
+              // C2: the LABEL takes the on-dark variant, the BORDER keeps the
+              // true red. Same token, two roles — which is the whole reason
+              // this palette carries `-text` siblings.
+              color: 'var(--rounds-critical-on-dark)',
               border: '1px solid var(--rounds-critical)',
               borderRadius: 999,
               padding: '3px 10px',
@@ -293,7 +306,7 @@ export function RoundsBoardChrome({
               fontFamily: 'var(--rounds-font-ui)',
               fontSize: 13,
               fontWeight: 600,
-              color: 'var(--rounds-accent)',
+              color: 'var(--rounds-accent-text)',
               textDecoration: 'none',
             }}
           >
@@ -358,9 +371,9 @@ function RoundsDayMeter({
           marginBottom: 4,
         }}
       >
-        <span style={{ color: 'var(--rounds-ready)' }}>{progress.signed} signed</span>
+        <span style={{ color: 'var(--rounds-ready-text)' }}>{progress.signed} signed</span>
         <span>{progress.toReview} to review</span>
-        <span style={{ color: 'var(--rounds-processing)' }}>{progress.live} live</span>
+        <span style={{ color: 'var(--rounds-processing-text)' }}>{progress.live} live</span>
       </div>
       <div
         style={{

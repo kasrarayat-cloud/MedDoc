@@ -153,7 +153,11 @@ function LaneCard({ lane }: { lane: BoardLane }) {
           // The glyph is part of the text, not an icon-only signal — a screen
           // reader gets "warning" in the label above, and a greyscale printout
           // still shows it.
-          <span aria-hidden style={{ color: 'var(--rounds-critical)' }}>
+          // C2: takes the on-dark variant, on this file's OWN argument. The
+          // comment above says the glyph "is part of the text, not an icon-only
+          // signal" — and text takes the text token. At 2.72:1 it was under
+          // even the 3:1 bar a decorative graphic would get.
+          <span aria-hidden style={{ color: 'var(--rounds-critical-on-dark)' }}>
             ⚠
           </span>
         ) : null}
@@ -221,6 +225,10 @@ export function RoundsBoard({
     // yet" shrug — the one thing a doctor would want to do next.
     return (
       <div
+        /* C2 — anchored so the gate can see it. This state is only reachable
+           by a doctor with zero visits, which is exactly the doctor nobody
+           tests with: the a11y pack seeds three. */
+        className="qm-rounds-board-empty"
         data-testid="rounds-board-empty"
         style={{
           padding: '48px 24px',

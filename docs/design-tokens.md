@@ -293,6 +293,9 @@ class must have a rule, and every rule must have a caller.
 | `.qm-rounds-dialog` | a portalled `Dialog.Content` | C1-e. **Must be applied together with `qm-rounds-host`** — a Radix portal mounts on `<body>` and inherits no bridge |
 | `.qm-rounds-dialog-overlay` | the modal scrim | C1-e. Deliberately deeper than the old `rgba(0,0,0,.55)`: the Rounds stage is lighter, so the same alpha reads weaker over it |
 | `.qm-rounds-select` | native `<select>` | C1-e. Not folded into `-input` — a select draws its own indicator |
+| `.qm-rounds-errorid` | the error boundary's Error-ID chip | C2. Repaints its ground to surface-2, so it lifts the faintest text tier for its own subtree — 4.17:1 → 5.97:1 |
+| `.qm-rounds-setpanel` | the settings panel — heading + subtitle | C2. **Ownership anchor.** The markup is C3's; under this skin the colours are ours, so a contrast failure inside it must BLOCK rather than file as inherited |
+| `.qm-rounds-setbody` | the settings panel's content column | C2. The second shield — `.qm-c3-set-content` owns everything a panel renders inside it, so the panel anchor alone does not reach it |
 | `.qm-rounds-tmpl-*` | the templates surfaces — `-row`, `-card`, `-alert`, `-editor`, `-actionbar`, `-proc`, `-confirm` | C1-f. **Ownership anchors first, styling second.** Two of them (`-actionbar`, `-proc`) set no colour at all: a non-Rounds class at that node shields its whole subtree from the axe gate, and what `-actionbar` shielded was the primary CTA. The three that repaint their ground to surface-2 also re-bridge the faintest text tiers upward for their own subtree — `--rounds-text-3` is 4.68:1 on surface-1 and 4.18:1 one step lighter |
 
 **A class that was declared and then removed, in the change that declared it.**

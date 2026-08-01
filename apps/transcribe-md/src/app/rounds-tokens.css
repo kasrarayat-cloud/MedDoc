@@ -1781,3 +1781,33 @@ body[data-skin='rounds'] {
  * it is strictly safer: `.qm-ux-primary` is also rendered by
  * `chat-editor-panel.tsx` on `/visits/[id]`, and off the host those names still
  * resolve to the values globals.css types, so that surface cannot move. */
+
+/* ============================================================================
+ * C2 — Gate C: the surfaces the gate could not see.
+ * ----------------------------------------------------------------------------
+ * These are OWNERSHIP ANCHORS on surfaces Rounds bridges but did not author.
+ *
+ * The settings panels are C3's markup. Under this skin their COLOURS are ours —
+ * the host bridge redeclares every `--color-linear-*` they read — so a contrast
+ * failure inside them is a Rounds choice wearing C3 structure, and it must be
+ * able to BLOCK rather than file as inherited. C1-d made the same call for the
+ * auth form; C1-e named this one as C2's to decide, and this is the decision.
+ *
+ * They set the UI font explicitly rather than nothing, so the class is a real
+ * declaration and not a no-op: `gate-controls-contract` counts an applied class
+ * with no rule as a finding everywhere except the one recorded `-devstates`
+ * exclusion, and a second silent one is exactly what that guard exists to stop.
+ * ========================================================================== */
+[data-skin='rounds'] .qm-rounds-setpanel,
+[data-skin='rounds'] .qm-rounds-setbody {
+  font-family: var(--rounds-font-ui);
+}
+
+/* The error boundary's "Error ID" chip. It repaints its ground to surface-2
+ * inside a state grounded on the stage, so the faintest tier goes from 4.91:1
+ * to 4.17:1 with no text edited. Lifted for this subtree only — the same
+ * mechanism `.qm-rounds-tmpl-row` uses, and the same one `.qm-rounds-panel`
+ * introduced. Measured: text-2 on surface-2 is 5.97:1. */
+[data-skin='rounds'] .qm-rounds-errorid {
+  --color-linear-text-3: var(--rounds-text-2);
+}
