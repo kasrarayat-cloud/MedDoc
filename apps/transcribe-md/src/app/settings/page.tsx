@@ -14,6 +14,7 @@
 
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import prisma from '@meddoc/db';
@@ -119,7 +120,19 @@ async function loadNativeTemplates(doctorId: string): Promise<NativeTemplateList
   }));
 }
 
-export default async function SettingsPage() {
+/** The settings surface.
+ *
+ *  `initialSection` is passed ONLY by the `/settings/<section>` route segments
+ *  (C1-g). Next never supplies it for `/settings` itself, so the default is the
+ *  behaviour that shipped: the first panel. It is threaded rather than read
+ *  from a search param because the links that need it — `board-chrome.tsx`'s
+ *  Templates item and the certified-template email — are PATHS, and rewriting
+ *  a live customer email is not a thing we can do retroactively. */
+export default async function SettingsPage({
+  initialSection,
+}: {
+  initialSection?: string;
+} = {}) {
   const session = await auth();
   if (!session?.user?.id) redirect('/login');
 
@@ -335,10 +348,21 @@ export default async function SettingsPage() {
                     lineHeight: 1.55,
                   }}
                 >
-                  TOTP setup + recovery codes UI lands in the next batch of
-                  Settings work. The database supports it today (mfaSecret,
-                  mfaBackupCodes[]).
+                  {user.mfaEnabled
+                    ? 'An authenticator app is required when you sign in. You can replace it or regenerate your recovery codes at any time.'
+                    : 'Add an authenticator app so a password alone is not enough to sign in. You will get recovery codes to keep somewhere safe.'}
                 </p>
+                {/* C1-g — THE DOOR. This card described the feature as
+                    unbuilt for months after it shipped, and its only entrances
+                    were a typed URL and `app/admin/layout.tsx:84`'s redirect.
+                    Restyling a lie into new type is the failure this fixes. */}
+                <Link
+                  href="/settings/security/mfa"
+                  className="qm-lin-link"
+                  style={{ fontSize: 12.5, marginTop: 8, display: 'inline-block' }}
+                >
+                  {user.mfaEnabled ? 'Manage two-factor authentication' : 'Set up two-factor authentication'}
+                </Link>
               </div>
             </div>
           </>
@@ -443,8 +467,8 @@ export default async function SettingsPage() {
                 maxWidth: 400,
               }}
             >
-              Stripe customer portal integration lands in the next Settings
-              wave. Trial usage + invoices will appear here.
+              Billing is handled for you during the pilot. When self-serve
+              billing opens, this is where it will live. Trial usage + invoices will appear here.
             </p>
             <button
               type="button"
@@ -541,7 +565,7 @@ export default async function SettingsPage() {
             </h1>
           </div>
           <div style={{ padding: '20px 24px 48px', maxWidth: 1100 }}>
-            <SettingsSectionsC3 sections={c3Sections} />
+            <SettingsSectionsC3 sections={c3Sections} initialSection={initialSection} />
           </div>
         </div>
       </AppFrame>
@@ -753,10 +777,21 @@ export default async function SettingsPage() {
                     lineHeight: 1.55,
                   }}
                 >
-                  TOTP setup + recovery codes UI lands in the next batch of
-                  Settings work. The database supports it today (mfaSecret,
-                  mfaBackupCodes[]).
+                  {user.mfaEnabled
+                    ? 'An authenticator app is required when you sign in. You can replace it or regenerate your recovery codes at any time.'
+                    : 'Add an authenticator app so a password alone is not enough to sign in. You will get recovery codes to keep somewhere safe.'}
                 </p>
+                {/* C1-g — THE DOOR. This card described the feature as
+                    unbuilt for months after it shipped, and its only entrances
+                    were a typed URL and `app/admin/layout.tsx:84`'s redirect.
+                    Restyling a lie into new type is the failure this fixes. */}
+                <Link
+                  href="/settings/security/mfa"
+                  className="qm-lin-link"
+                  style={{ fontSize: 12.5, marginTop: 8, display: 'inline-block' }}
+                >
+                  {user.mfaEnabled ? 'Manage two-factor authentication' : 'Set up two-factor authentication'}
+                </Link>
               </div>
             </div>
           </Section>
@@ -858,8 +893,8 @@ export default async function SettingsPage() {
                   maxWidth: 400,
                 }}
               >
-                Stripe customer portal integration lands in the next Settings
-                wave. Trial usage + invoices will appear here.
+                Billing is handled for you during the pilot. When self-serve
+                billing opens, this is where it will live. Trial usage + invoices will appear here.
               </p>
               <button
                 type="button"
