@@ -820,7 +820,7 @@ function SampleMarkdown({ text }: { text: string }) {
       const checked = task[1].toLowerCase() === 'x';
       out.push(
         <div key={k} style={{ display: 'flex', gap: 6, alignItems: 'baseline', fontSize: 12, color: 'var(--color-linear-text-2)', lineHeight: 1.55 }}>
-          <span aria-hidden="true" style={{ flex: 'none', color: checked ? 'var(--color-linear-sage)' : 'var(--color-linear-text-3)' }}>{checked ? '☒' : '☐'}</span>
+          <span aria-hidden="true" style={{ flex: 'none', color: checked ? 'var(--color-linear-sage-bright)' : 'var(--color-linear-text-3)' }}>{checked ? '☒' : '☐'}</span>
           <span className="sr-only">{checked ? 'Checked:' : 'Not checked:'}</span>
           <span>{renderInlineBold(task[2], k)}</span>
         </div>
