@@ -152,41 +152,77 @@ const BACKDROPS = ['#161b24', '#171d27'];
  * rots into decoration.
  */
 const DEFERRED_FORKS: Record<string, { sites: number; owner: string; why: string }> = {
-  '--color-linear-sage': {
-    // ⚠️ 4 → 2, C1-f. The two foregrounds that were REAL TEXT are forked and
-    // this entry no longer covers them: `upload-flow.tsx`'s "your own PDF page"
-    // and `template-review-editor.tsx`'s "Demo visit · synthetic" chip both now
-    // read --color-linear-sage-bright (3.22:1 → 7.60:1 bridged; 7.04:1 → 9.98:1
-    // on the old skin, so neither skin regressed).
-    //
-    // What remains is NOT the same debt wearing a smaller number. The two
-    // survivors are the 🛡 spans in note-format-manager.tsx (EntryState and
-    // RejectedState), and `color` on a bare-emoji element is inert in every
-    // engine that draws emoji as colour glyphs — there is no foreground being
-    // set, which is also why axe never evaluates them (see the mechanism note
-    // below). They are kept on the list rather than silently fixed because the
-    // entry is what keeps this guard non-vacuous, and because the day either
-    // span gains real text beside the glyph it becomes a genuine 3.22:1.
-    sites: 2,
-    owner: 'C1-f closed the two measurable sites; the 2 left are bare-emoji spans',
-    why:
-      'used 2× as a foreground and 7× as a fill. Mapped to --rounds-accent so ' +
-      'the 7 fills stay right; both remaining foregrounds are emoji glyphs ' +
-      'that axe does not measure and that `color` does not tint. ' +
-      // ⚠️ CORRECTED 2026-08-01. This said "aria-hidden glyphs that axe does
-      // not measure", conflating two different escapes and getting the
-      // load-bearing one wrong. aria-hidden does NOT hide text from axe's
-      // contrast rule (`excludeHidden: false`, axe.js:31653). Those two spans
-      // are 🛡 emoji, and a bare-emoji element never reaches
-      // colorContrastEvaluate at all — colorContrastMatches rejects it via
-      // hasRealTextChildren (axe.js:27704), which strips unicode. Measured:
-      // they land in neither violations, incomplete, nor passes, while
-      // "🛡 verified" in the same run is a full violation. Three distinct
-      // mechanisms hide contrast from this gate — aria-hidden is not one of
-      // them; single-character text and bare emoji are.
-      'The outcome is unchanged; the mechanism recorded here was not.',
-  },
+  // ⚠️ EMPTY, AND THAT IS THE POINT — C1-f2.
+  //
+  // `--color-linear-sage` lived here from C1-b. C1-f forked the two REAL-TEXT
+  // sites and wrote `sites: 2`, leaving the 🛡 glyphs. That number was produced
+  // by a MATCHER BLIND TO ITS OWN SHAPE (see below): the real count was 3, and
+  // the third — `template-review-editor.tsx`'s ☒/☐ state glyph, written as a
+  // TERNARY — had never been in the guard's universe at all.
+  //
+  // All three are forked now (`--color-linear-sage-bright`, i.e.
+  // `--rounds-accent-text`, 7.60:1 bridged), so the list is empty and the
+  // AA check below governs `--color-linear-sage` directly again: write
+  // `color: var(--color-linear-sage)` on a C1 surface and it reds.
+  //
+  // An empty allowlist makes the "still real debt" test iterate nothing, so
+  // that test now asserts the emptiness EXPLICITLY rather than passing over a
+  // set whose size it never established — the defect this whole file exists
+  // to catch, which had already reached the allowlist meant to prevent it.
 };
+
+// ── the foreground matcher, and the blind spot it used to have ──────────────
+//
+// ⚠️ THE OLD MATCHER WAS `/(?:color|stroke)\s*:\s*'?var\((--color-linear-[\w-]+)\)/`
+// — it required the value to START with `var(` and the `)` to follow the name
+// immediately. Two shapes this codebase actually writes slipped straight
+// through:
+//
+//   • TERNARY  — `color: checked ? 'var(--color-linear-sage)' : '…'`
+//   • FALLBACK — `color: 'var(--color-linear-sage, #7AA68C)'`
+//
+// and the fallback form is the one flag-safety guidance RECOMMENDS, so the
+// blind spot was set to GROW.
+//
+// ⚠️ WHAT MADE IT INVISIBLE IS WORSE THAN THE REGEX. The assertion meant to
+// catch a stale `sites:` count RECOMPUTED that count with the SAME regex. A
+// closed loop cannot detect its own blind spot: it reported `sites: 2` in
+// bright green while the source held 3. The cure is therefore NOT a cleverer
+// regex — it is `matcher shapes` below, which states the expected answers as
+// hand-written fixtures the matcher did not produce.
+//
+// Values are captured with balanced parens so `color-mix(in srgb, var(--a) …)`
+// is read whole rather than truncated at its first `)`.
+const FOREGROUND_DECL =
+  /(?<![a-zA-Z-])(?:color|stroke|fill)\s*:\s*((?:\((?:[^()]|\([^()]*\))*\)|[^,;}()])*)/g;
+const LINEAR_NAME = /--color-linear-[a-zA-Z0-9-]+/g;
+
+/** Identifiers bound to `isSkinRounds()` in a file, so a value gated on one can
+ *  be recognised. A `--color-linear-*` name in the FALSE branch of such a
+ *  ternary is the flag-OFF path and never renders on a Rounds surface, so it is
+ *  not a bridged foreground and must not be counted as one. */
+function skinTestIds(src: string): string[] {
+  const ids = ['isSkinRounds()'];
+  for (const m of src.matchAll(/const\s+([A-Za-z_$][\w$]*)\s*=\s*isSkinRounds\(\)/g)) ids.push(m[1]);
+  return ids;
+}
+
+/** Every `--color-linear-*` name used as a FOREGROUND in `src`. */
+function foregroundSites(src: string): { name: string; skinForked: boolean; value: string }[] {
+  const ids = skinTestIds(src);
+  const out: { name: string; skinForked: boolean; value: string }[] = [];
+  for (const m of src.matchAll(FOREGROUND_DECL)) {
+    const value = m[1] ?? '';
+    const forked = ids.some((id) =>
+      new RegExp(`(?:^|[^\\w$])${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\?`).test(value),
+    );
+    for (const name of value.match(LINEAR_NAME) ?? []) {
+      out.push({ name, skinForked: forked, value: value.replace(/\s+/g, ' ').trim() });
+    }
+  }
+  return out;
+}
+
 function tokenValue(name: string): string | null {
   const m = TOKENS.match(new RegExp(`${name}:\\s*(#[0-9a-fA-F]{6})\\s*;`));
   return m ? m[1] : null;
@@ -246,9 +282,10 @@ describe('C1 host bridge', () => {
     // colour and must clear 4.5:1 on the worst Rounds backdrop.
     const foreground = new Set<string>();
     for (const f of files) {
-      const src = readFileSync(f, 'utf8');
-      for (const m of src.matchAll(/(?:color|stroke)\s*:\s*'?var\((--color-linear-[a-zA-Z0-9-]+)\)/g)) {
-        foreground.add(m[1]);
+      for (const site of foregroundSites(readFileSync(f, 'utf8'))) {
+        // A name in the flag-OFF branch of an `isSkinRounds() ? …` fork never
+        // renders on a Rounds surface, so it is not a bridged foreground.
+        if (!site.skinForked) foreground.add(site.name);
       }
     }
     expect(foreground.size, 'no foreground usages found — the matcher is broken').toBeGreaterThan(3);
@@ -273,38 +310,94 @@ describe('C1 host bridge', () => {
     ).toEqual([]);
   });
 
-  it('the deferred forks are real debt, not a stale exemption', () => {
-    // An allowlist entry that no longer matches anything is worse than no
-    // allowlist: it silently exempts a name that may since have been remapped.
-    // So each entry must still describe the source.
-    for (const [name, debt] of Object.entries(DEFERRED_FORKS)) {
-      const fg = files.reduce((n, f) => {
-        const src = readFileSync(f, 'utf8');
-        return (
-          n +
-          [...src.matchAll(new RegExp(`(?:color|stroke)\\s*:\\s*'?var\\(${name}\\)`, 'g'))].length
-        );
-      }, 0);
+  it('the deferred-fork list is EMPTY, and that is asserted rather than iterated', () => {
+    // ⚠️ THIS TEST USED TO RECOMPUTE EACH ENTRY'S `sites:` COUNT WITH THE SAME
+    // REGEX THE GUARD USED, which is a closed loop: it confirmed the number the
+    // matcher would produce, not the number in the source. It reported
+    // `--color-linear-sage: sites 2` green while the tree held 3, because the
+    // third was written as a ternary and neither the guard nor its own
+    // staleness check could see that shape.
+    //
+    // The list is empty now. An empty list makes a `for…of` over it vacuous —
+    // the exact defect this file exists to catch — so emptiness is asserted
+    // DIRECTLY, and any future entry is validated against `foregroundSites`,
+    // which is itself pinned by the fixtures below rather than by itself.
+    const entries = Object.entries(DEFERRED_FORKS);
+    expect(
+      entries.map(([n]) => n),
+      'a deferred fork is back. That is allowed — but its count must be checked ' +
+        'against `foregroundSites`, never against the matcher that produced it',
+    ).toEqual([]);
+
+    for (const [name, debt] of entries) {
+      const fg = files.reduce(
+        (n, f) => n + foregroundSites(readFileSync(f, 'utf8')).filter((s2) => !s2.skinForked && s2.name === name).length,
+        0,
+      );
       expect(
         fg,
-        `${name} is on the deferred-fork list claiming ${debt.sites} foreground ` +
-          `site(s) owned by ${debt.owner}, but the source now has ${fg}. ` +
-          `Update the count, or drop the entry if the fork has landed.`,
+        `${name} claims ${debt.sites} foreground site(s) owned by ${debt.owner}, ` +
+          `but the source has ${fg}. Update the count, or drop the entry.`,
       ).toBe(debt.sites);
-      // And it must still be mapped to something that would FAIL — otherwise
-      // the debt is already paid and the entry is dead weight.
-      const line = body.match(new RegExp(`${name}:\\s*([^;]+);`));
-      const target = line?.[1].match(/var\((--rounds-[a-zA-Z0-9-]+)\)/)?.[1];
-      const hex = target ? tokenValue(target) : null;
-      if (hex) {
-        const worst = Math.min(...BACKDROPS.map((b) => contrast(hex, b)));
-        expect(
-          worst,
-          `${name} → ${target} now clears AA at ${worst.toFixed(2)}:1, so the ` +
-            `deferred-fork entry is obsolete. Delete it.`,
-        ).toBeLessThan(4.5);
-      }
     }
+  });
+
+  it('matcher shapes — the fixtures the matcher did NOT produce', () => {
+    // ⚠️ THE WHOLE POINT OF THIS TEST IS THAT THE ANSWERS ARE HAND-WRITTEN.
+    // Every other assertion about foregrounds asks the matcher what it sees; if
+    // the matcher is blind to a shape, they all agree with each other and stay
+    // green. These state the expected answer independently, so a regression in
+    // the matcher reddens HERE, naming the shape it stopped seeing.
+    const plain = foregroundSites(`style={{ color: 'var(--color-linear-sage)' }}`);
+    expect(plain.map((f) => f.name), 'PLAIN shape').toEqual(['--color-linear-sage']);
+
+    // The shape C1-f's count was blind to.
+    const ternary = foregroundSites(
+      `style={{ color: checked ? 'var(--color-linear-sage)' : 'var(--color-linear-text-3)' }}`,
+    );
+    expect(ternary.map((f) => f.name), 'TERNARY shape — both branches').toEqual([
+      '--color-linear-sage',
+      '--color-linear-text-3',
+    ]);
+
+    // The shape flag-safety guidance recommends, so the blind spot would grow.
+    const fallback = foregroundSites(`style={{ color: 'var(--color-linear-sage, #7AA68C)' }}`);
+    expect(fallback.map((f) => f.name), 'FALLBACK shape').toEqual(['--color-linear-sage']);
+
+    // color-mix must be read WHOLE, not truncated at its first ')'.
+    const mixed = foregroundSites(
+      `style={{ color: 'color-mix(in srgb, var(--color-linear-sage) 40%, var(--color-linear-text))' }}`,
+    );
+    expect(mixed.map((f) => f.name), 'COLOR-MIX shape').toEqual([
+      '--color-linear-sage',
+      '--color-linear-text',
+    ]);
+
+    // A skin fork: the --color-linear-* branch is the flag-OFF path.
+    const forked = foregroundSites(
+      `color: isSkinRounds() ? 'var(--rounds-critical-on-dark)' : 'var(--color-linear-danger)'`,
+    );
+    expect(forked.map((f) => f.skinForked), 'SKIN-FORK shape').toEqual([true]);
+
+    // …and via a const binding, which is how the surfaces actually write it.
+    const viaConst = foregroundSites(
+      `const rounds = isSkinRounds();\ncolor: rounds ? 'var(--rounds-text-1)' : 'var(--color-linear-text)'`,
+    );
+    expect(viaConst.map((f) => f.skinForked), 'SKIN-FORK via const').toEqual([true]);
+
+    // NEGATIVE CONTROLS — things that must NOT read as a foreground.
+    expect(
+      foregroundSites(`style={{ background: 'var(--color-linear-sage)' }}`).map((f) => f.name),
+      'a BACKGROUND is not a foreground',
+    ).toEqual([]);
+    expect(
+      foregroundSites(`style={{ backgroundColor: 'var(--color-linear-sage)' }}`).map((f) => f.name),
+      '`backgroundColor` must not match on its `color` suffix — the substring trap',
+    ).toEqual([]);
+    expect(
+      foregroundSites(`style={{ borderColor: 'var(--color-linear-sage)' }}`).map((f) => f.name),
+      '`borderColor` is a border, not text',
+    ).toEqual([]);
   });
 
   it('the contrast maths is right — negative control', () => {

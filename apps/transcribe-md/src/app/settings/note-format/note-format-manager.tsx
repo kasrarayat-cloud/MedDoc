@@ -1056,7 +1056,7 @@ function EntryState({
       </div>
 
       <div role="note" style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '12px 14px', border: '1px solid var(--color-linear-hairline-strong)', borderRadius: 8, background: 'var(--color-linear-surface-2)', marginTop: 14 }}>
-        <span aria-hidden style={{ color: 'var(--color-linear-sage)' }}>🛡</span>
+        <span aria-hidden style={{ color: 'var(--color-linear-sage-bright)' }}>🛡</span>
         <p style={{ margin: 0, fontSize: 12, color: 'var(--color-linear-text-2)', lineHeight: 1.55 }}>
           Your note is read <b style={{ color: 'var(--color-linear-text)', fontWeight: 500 }}>for format only</b>. Patient details — names, dates, findings — are removed automatically before anything is shown, and <b style={{ color: 'var(--color-linear-text)', fontWeight: 500 }}>the note itself is never saved</b>. QuillMD keeps your structure, not your patients.
         </p>
@@ -1100,7 +1100,7 @@ export function RejectedState({ reason, onStandard, onRetry }: { reason: string;
         </div>
       </div>
       <div role="note" style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '12px 14px', border: '1px solid var(--color-linear-hairline-strong)', borderRadius: 8, background: 'var(--color-linear-surface-2)', marginTop: 16 }}>
-        <span aria-hidden style={{ color: 'var(--color-linear-sage)' }}>🛡</span>
+        <span aria-hidden style={{ color: 'var(--color-linear-sage-bright)' }}>🛡</span>
         <p style={{ margin: 0, fontSize: 12, color: 'var(--color-linear-text-2)', lineHeight: 1.55 }}>
           The note you pasted was <b style={{ color: 'var(--color-linear-text)', fontWeight: 500 }}>not saved</b> — it was discarded the moment we finished reading it.
         </p>
