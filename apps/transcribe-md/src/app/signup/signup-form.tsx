@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/auth-shell';
 import { signupAction, type AuthActionState } from '@/actions/auth';
 import { MARKETING_URL } from '@/lib/constants';
+import { isSkinRounds } from '@/config/skin-rounds';
 
 const initialState: AuthActionState = null;
 
@@ -41,6 +42,9 @@ const linkStyle: React.CSSProperties = {
 };
 
 export function SignupForm() {
+  // Build-time, so flag-OFF folds to a constant and this component renders
+  // exactly as it does today.
+  const rounds = isSkinRounds();
   const [state, formAction, pending] = useActionState(signupAction, initialState);
   const router = useRouter();
   const [password, setPassword] = useState('');
@@ -101,6 +105,7 @@ export function SignupForm() {
           defaultValue={values.inviteCode ?? ''}
           required
           maxLength={64}
+          className={rounds ? 'qm-rounds-input' : undefined}
           style={{ ...inputStyle, marginTop: 6, letterSpacing: '0.04em' }}
         />
         <p
@@ -111,7 +116,17 @@ export function SignupForm() {
           }}
         >
           QuillMD is invite-only during the pilot.{' '}
-          <a href="/waitlist" style={{ textDecoration: 'underline' }}>
+          {/* Underlined, not just tinted — the reciprocal of the /waitlist →
+              /signup link, and the same recorded axe fix. A link inside a text
+              block distinguished ONLY by colour fails `link-in-text-block` at
+              SERIOUS. The comment was on the waitlist half only; carried across
+              so the next reader does not tidy this one away as an
+              inconsistency with the file's own `linkStyle` default. */}
+          <a
+            href="/waitlist"
+            className={rounds ? 'qm-rounds-link' : undefined}
+            style={{ textDecoration: 'underline' }}
+          >
             Join the waitlist
           </a>{' '}
           if you don&rsquo;t have a code.
@@ -128,6 +143,7 @@ export function SignupForm() {
           autoComplete="name"
           defaultValue={values.name ?? ''}
           required
+          className={rounds ? 'qm-rounds-input' : undefined}
           style={{ ...inputStyle, marginTop: 6 }}
         />
         <AuthFieldError message={errors.name} />
@@ -143,6 +159,7 @@ export function SignupForm() {
           defaultValue={values.email ?? ''}
           required
           maxLength={254}
+          className={rounds ? 'qm-rounds-input' : undefined}
           style={{ ...inputStyle, marginTop: 6 }}
         />
         <AuthFieldError message={errors.email} />
@@ -158,6 +175,7 @@ export function SignupForm() {
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          className={rounds ? 'qm-rounds-input' : undefined}
           style={{ ...inputStyle, marginTop: 6 }}
         />
         <p
@@ -184,6 +202,7 @@ export function SignupForm() {
           required
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
+          className={rounds ? 'qm-rounds-input' : undefined}
           style={{ ...inputStyle, marginTop: 6 }}
         />
         <AuthFieldError message={mismatchMessage} />
@@ -201,10 +220,18 @@ export function SignupForm() {
           lineHeight: 1.5,
         }}
       >
+        {/* ⚠️ NO id, NO htmlFor, and that is deliberate: the wrapping <label>
+            gives it an implicit association, and its accessible name is the
+            whole label's prose. That is why 38 spec files reach it as the
+            single unqualified `getByRole('checkbox')` on /signup. Do not give
+            it an id and an external label, and never add a second checkbox to
+            this page — either throws Playwright strict mode across the suite.
+            A className is safe; the accessible name does not change. */}
         <input
           type="checkbox"
           name="acceptTerms"
           required
+          className={rounds ? 'qm-rounds-check' : undefined}
           style={{
             marginTop: 3,
             width: 14,
@@ -218,7 +245,7 @@ export function SignupForm() {
             href={`${MARKETING_URL}/terms`}
             target="_blank"
             rel="noopener noreferrer"
-            style={linkStyle}
+            className={rounds ? 'qm-rounds-link' : undefined} style={linkStyle}
           >
             terms of service
           </a>{' '}
@@ -227,7 +254,7 @@ export function SignupForm() {
             href={`${MARKETING_URL}/privacy`}
             target="_blank"
             rel="noopener noreferrer"
-            style={linkStyle}
+            className={rounds ? 'qm-rounds-link' : undefined} style={linkStyle}
           >
             privacy policy
           </a>
@@ -241,7 +268,7 @@ export function SignupForm() {
         type="submit"
         disabled={pending}
         aria-disabled={pending || Boolean(mismatchMessage)}
-        className="qm-lin-btn-primary"
+        className={rounds ? 'qm-lin-btn-primary qm-rounds-btn-primary' : 'qm-lin-btn-primary'}
         style={{
           width: '100%',
           marginTop: 22,
@@ -265,7 +292,7 @@ export function SignupForm() {
         }}
       >
         Have an account?{' '}
-        <Link href="/login" style={linkStyle}>
+        <Link href="/login" className={rounds ? 'qm-rounds-link' : undefined} style={linkStyle}>
           Sign in →
         </Link>
       </div>

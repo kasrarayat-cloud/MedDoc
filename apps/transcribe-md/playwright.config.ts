@@ -108,6 +108,17 @@ export default defineConfig({
         // taking every downstream pack with it.
         '**/rounds-signed.spec.ts',
         '**/rounds-a11y.spec.ts',
+        // ROUNDS C1-d — the auth surface. Unlike /board this is NOT a fast 404:
+        // /login, /signup and the other four EXIST flag-OFF and render the old
+        // skin perfectly. Omitting this line means the default run collects the
+        // pack, fails on missing Rounds testids while the product is correct,
+        // and exits BEFORE the step that builds the flag-ON image — so the pack
+        // this line protects never executes at all, and the required gate reads
+        // "rounds E2E red" for the one reason that has nothing to do with
+        // Rounds. A2 defect 0's slower variant. Pinned by
+        // gate-flag-coverage.test.ts, which derives the pairing from the
+        // projects array rather than from a maintained list.
+        '**/rounds-c1.spec.ts',
         '**/a11y.spec.ts',
         '**/23-note-format-phi-parse-reject.spec.ts',
         '**/24-rx-clinical-safety.spec.ts',
@@ -217,6 +228,22 @@ export default defineConfig({
       // screen. One test walking many states, so no parallelism to gain.
       name: 'rounds-a11y',
       testMatch: ['**/rounds-a11y.spec.ts'],
+      fullyParallel: false,
+      workers: 1,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      // ROUNDS C1-d — the six auth routes, flag-ON. Its own project rather than
+      // a describe inside rounds-a11y for two reasons, neither of them the one
+      // the plan gave: keeping Gate B's pack unchanged means a C1 red can never
+      // be misread as a Gate B regression, and `gate-project-env` wants one
+      // contiguous recreate→run block per project.
+      // SERIALISED, and here that is load-bearing rather than tidy:
+      // `helpers/reset-token.ts` reads the LAST dev-only reset link out of the
+      // container log, so two workers racing password resets read each other's
+      // tokens.
+      name: 'rounds-c1',
+      testMatch: ['**/rounds-c1.spec.ts'],
       fullyParallel: false,
       workers: 1,
       use: { ...devices['Desktop Chrome'] },

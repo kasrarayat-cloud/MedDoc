@@ -32,12 +32,29 @@
 // has now caught three separate guards in this repo.
 // ============================================================================
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
-const SPEC_PATH = 'tests/e2e/scenarios/rounds-a11y.spec.ts';
-const SPEC = readFileSync(SPEC_PATH, 'utf8');
+// ⚠️ THE SOURCE SET IS DERIVED, NOT NAMED. This gate used to read exactly one
+// path — `tests/e2e/scenarios/rounds-a11y.spec.ts` — because that was the only
+// pack taking screenshots. C1-d moved the sink into `helpers/rounds-axe.ts` so
+// a second pack could share it, and the hard-coded path reddened immediately.
+// That was the gate working; pinning it back to two named paths would not have
+// been. A third pack that writes shots must be covered the day it lands, not
+// the day someone remembers to add it here, so the list comes from a traversal
+// and the non-vacuity assertion below fails if the traversal ever returns a set
+// that has lost a member.
+const SCENARIO_DIR = 'tests/e2e/scenarios';
+const SOURCE_PATHS = [
+  'tests/e2e/helpers/rounds-axe.ts',
+  ...readdirSync(SCENARIO_DIR)
+    .filter((f) => /^rounds-.*\.spec\.ts$/.test(f))
+    .sort()
+    .map((f) => `${SCENARIO_DIR}/${f}`),
+];
+const SOURCES = SOURCE_PATHS.map((p) => ({ path: p, src: readFileSync(p, 'utf8') }));
+const ALL_SRC = SOURCES.map((s) => s.src).join('\n');
 const WORKFLOW = readFileSync('../../.github/workflows/e2e.yml', 'utf8');
 
 /** Drop `//` line comments and `/* *\/` blocks. Deliberately crude: it only has
@@ -51,12 +68,22 @@ function executableOnly(src: string): string {
 }
 
 describe('Gate B screenshots — durable, and actually uploaded', () => {
-  const code = executableOnly(SPEC);
+  const code = SOURCES.map((s) => executableOnly(s.src)).join('\n');
+
+  it('the traversal found the shot sink and every Rounds pack — non-vacuity', () => {
+    // Without this, a traversal that silently returns [] makes every assertion
+    // below pass by covering nothing — the defect this repo keeps re-finding.
+    expect(SOURCE_PATHS).toContain('tests/e2e/helpers/rounds-axe.ts');
+    expect(SOURCE_PATHS).toContain('tests/e2e/scenarios/rounds-a11y.spec.ts');
+    expect(SOURCE_PATHS).toContain('tests/e2e/scenarios/rounds-c1.spec.ts');
+    // Five Gate A/B packs + rounds-c1 + the helper.
+    expect(SOURCE_PATHS.length).toBeGreaterThanOrEqual(7);
+  });
 
   it('the comment-stripper works — negative control', () => {
     // If this ever stops removing prose, every assertion below silently starts
     // reading comments again and the guard reverts to the thing it replaced.
-    expect(SPEC).toContain('test-results/rounds-shots/'); // it IS discussed…
+    expect(ALL_SRC).toContain('test-results/rounds-shots/'); // it IS discussed…
     expect(code).not.toContain('test-results/rounds-shots/'); // …only in prose.
   });
 
@@ -68,6 +95,32 @@ describe('Gate B screenshots — durable, and actually uploaded', () => {
     expect(code).not.toMatch(/path:\s*[`'"]test-results/);
   });
 
+  it('every pack that screenshots writes through the shared sink', () => {
+    // Two packs writing to the same directory by two different literals is how
+    // one of them ends up under an outputDir again. `page.screenshot({path})`
+    // may appear in exactly one place: the helper's `shoot`.
+    // ⚠️ THE OFFENDER SCAN AND ITS CONTROL MUST USE THE SAME REGEX. The first
+    // draft scanned with `[^}]*` and controlled with `[\s\S]*?` — and `[^}]*`
+    // cannot cross a `}`, so a pack writing
+    // `page.screenshot({ clip: {...}, path: 'test-results/…' })` — precisely
+    // the outputDir leak the sibling test forbids — was invisible to the scan
+    // while the looser control still matched the helper. Two different
+    // questions, one reported as the answer to the other.
+    const SHOT_PATH = /\.screenshot\(\s*\{[\s\S]*?path:/;
+    const offenders = SOURCES.filter(
+      (s) =>
+        s.path !== 'tests/e2e/helpers/rounds-axe.ts' &&
+        SHOT_PATH.test(executableOnly(s.src)),
+    ).map((s) => s.path);
+    expect(offenders, 'these write a screenshot path directly instead of via shoot()').toEqual([]);
+    // …and the sink really does exist, or the emptiness above means nothing.
+    const helper = SOURCES.find((s) => s.path === 'tests/e2e/helpers/rounds-axe.ts')!;
+    expect(SHOT_PATH.test(executableOnly(helper.src))).toBe(true);
+    // The matcher can see the multi-property form too — the shape that was
+    // slipping through.
+    expect(SHOT_PATH.test("page.screenshot({ clip: { x: 0 }, path: 'x.png' })")).toBe(true);
+  });
+
   it('no project overrides outputDir to point back at the shot directory', () => {
     // The other way to reintroduce defect 1: leave the path alone and move the
     // outputDir onto it.
@@ -76,14 +129,39 @@ describe('Gate B screenshots — durable, and actually uploaded', () => {
   });
 
   it('CI uploads the shots on a GREEN run, not only on failure', () => {
-    const step = WORKFLOW.split(/\n(?=      - name: )/).find((s) =>
+    // ⚠️ `filter`, not `find`. The original took the FIRST matching step, so a
+    // second rounds-shots upload added later would never have been checked —
+    // and the one that IS checked might not be the one that runs.
+    const steps = WORKFLOW.split(/\n(?=      - name: )/).filter((s) =>
       /path:\s*apps\/transcribe-md\/rounds-shots/.test(s),
     );
-    expect(step, 'no upload step whose path is the rounds-shots directory').toBeDefined();
-    expect(step).toMatch(/if:\s*always\(\)/);
-    expect(step).not.toMatch(/if:\s*failure\(\)/);
-    // An empty upload is the same as no upload, and it would read as success.
-    expect(step).toMatch(/if-no-files-found:\s*error/);
+    expect(steps.length, 'expected exactly one rounds-shots upload step').toBe(1);
+    for (const step of steps) {
+      expect(step).toMatch(/if:\s*always\(\)/);
+      expect(step).not.toMatch(/if:\s*failure\(\)/);
+      // An empty upload is the same as no upload, and it would read as success.
+      expect(step).toMatch(/if-no-files-found:\s*error/);
+    }
+  });
+
+  it('every Rounds pack runs BEFORE the upload step — nothing no unit can see', () => {
+    // The ordering constraint the helper's header names, made executable. One
+    // upload serves every pack, and it runs immediately after the last of them.
+    // A pack added AFTER it writes shots nothing collects, and
+    // `if-no-files-found: error` cannot catch that: the directory is non-empty
+    // from the earlier packs, so the upload succeeds and the new pack's
+    // evidence is silently absent. That is a green tick over missing evidence,
+    // which is the exact defect this file exists for.
+    const uploadAt = WORKFLOW.indexOf('path: apps/transcribe-md/rounds-shots');
+    expect(uploadAt, 'rounds-shots upload step not found').toBeGreaterThan(-1);
+
+    const packRuns = [...WORKFLOW.matchAll(/--project=(rounds-[\w-]+)/g)];
+    // Non-vacuity: if this regex ever stops matching, "all packs precede the
+    // upload" is trivially true of an empty set.
+    expect(packRuns.length, 'no --project=rounds-* runs found in the workflow').toBeGreaterThanOrEqual(6);
+
+    const late = packRuns.filter((m) => m.index! > uploadAt).map((m) => m[1]);
+    expect(late, 'these Rounds packs run after the screenshot upload').toEqual([]);
   });
 
   it('the workflow matcher is capable of finding a failure()-gated upload — positive control', () => {

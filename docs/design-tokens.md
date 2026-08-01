@@ -231,6 +231,76 @@ rules beat layered ones regardless of specificity.
 
 ---
 
+## Controls
+
+**This section did not exist until C1-d, and two records said it did.** The
+relay ledger and commit `7d181ae8` both state that C1-b landed "the naming
+CONTRACT" here. It did not — C1-b's 87 lines into this file were the contrast
+table above and the host-bridge section; the seventeen class names it listed
+never appeared anywhere but the plan. Anyone building against the promised
+contract would have found nothing and invented their own. The ledger row is
+corrected; this is the contract.
+
+**The rule that governs the whole layer:** a class lands **with its consumer**,
+never ahead of one. C1-b deliberately shipped none of these for that reason — a
+class nothing renders cannot be proven by rule 7, because nothing can be made to
+fail — and `gate-c1d-auth` now enforces it in both directions: every applied
+class must have a rule, and every rule must have a caller.
+
+| Class | What it is | Notes |
+|---|---|---|
+| `.qm-rounds-host` | **the bridge.** Redeclares the 22 `--color-linear-*` names on a scoped class | Applied to the ROOT of a restyled surface. Colour only |
+| `.qm-rounds-<surface>` | a surface marker — `-auth`, `-notfound`, `-errorstate`, `-loading` | Pairs with the host. One per screen |
+| `.qm-rounds-btn` | primary action, accent fill | Text is `--rounds-on-accent` |
+| `.qm-rounds-btn-primary` | the same treatment applied **over** an old-skin `.qm-lin-btn-primary` | Fork, not replacement — item F removes the pairing |
+| `.qm-rounds-btn-secondary` | outlined action | |
+| `.qm-rounds-input` | text input / textarea | Carries its own `:focus-visible` |
+| `.qm-rounds-label` | field label, mono smallcaps | `--rounds-text-3` |
+| `.qm-rounds-error` | field-level error, `role="alert"` | `--rounds-critical-on-dark`, never `--rounds-critical` |
+| `.qm-rounds-check` | native checkbox / radio | `accent-color` is the only property that retints one |
+| `.qm-rounds-link` | inline link inside a text block | **Underlined** — see below |
+| `.qm-rounds-panel` | a bordered block of prose | Success / submitted / refusal panels |
+| `.qm-rounds-skel-*` | skeleton geometry | C1-c |
+
+### Two rules that are not style preferences
+
+**`.qm-rounds-link` is underlined, and that is a recorded axe fix.** A link
+distinguished from surrounding prose ONLY by hue fails `link-in-text-block` at
+SERIOUS: anyone who cannot separate the two hues sees prose. Both the inline
+style and this class carry it, so neither half alone can be tidied away.
+
+**A class is how a node enters Gate C.** Ownership resolves to the nearest
+ancestor-or-self carrying ANY class, and tests it for `qm-rounds-`. So on a
+densely classed surface the host buys nothing for the nodes beneath it — the
+walk stops at the first `qm-c3-*` it meets and reports NOT owned. Every node
+whose appearance Rounds changes needs its own `qm-rounds-*`, and an
+intermediate container needs one so that its CLASSLESS descendants resolve
+somewhere useful. This is not decoration; it is the difference between a gate
+and a green tick.
+
+### What a bridge cannot do
+
+Learned on the auth surface, at the cost of three AA failures that shipped
+nowhere only because they were computed before the build:
+
+- **A literal.** `.qm-lin-btn-primary` hardcodes `color: #0d1611` over a
+  `var(--color-linear-sage)` fill. Bridging sage → `--rounds-accent` retints
+  the fill and leaves the label: **6.72:1 → 3.43:1**. Same shape inline on
+  /waitlist (**7.27:1 → 3.71:1**) and on the brand mark (**6.82:1 → 3.48:1**,
+  and 2.71:1 on the gradient's far stop).
+- **A token whose ROLE flips at one site.** `--color-linear-sage-bright` is a
+  `color:` at ~13 sites and a `background:` at exactly one —
+  `.qm-lin-btn-primary:hover`. One bridge line cannot serve both; the minority
+  site gets an explicit rule.
+- **A Tailwind utility, or a component that paints its own colours.** The
+  skeleton's `bg-linear-surface-2` and the root 404's `AnimatedGrid` are both
+  class overrides / forks, not bridge work.
+
+`--rounds-on-accent` (#fff — 5.37:1 on the accent, 6.90:1 on its hover) exists
+for the first of those.
+
+---
+
 ## What Rounds does NOT restyle
 
 - **Custom templates.** A doctor's uploaded form renders exactly as it does

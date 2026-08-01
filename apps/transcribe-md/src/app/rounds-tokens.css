@@ -55,6 +55,18 @@
      A2 recorded that split for the same reason and this is the second time the
      lesson has been needed. Never use `--rounds-accent` for a text colour. */
   --rounds-accent-text: #a5a5f0;
+  /* TEXT SITTING **ON** THE ACCENT FILL — the other direction, and the one that
+     bit C1-d. `--rounds-accent-text` is the accent read AGAINST a dark surface;
+     this is what a label on an accent-filled button has to be. Measured:
+     #fff on --rounds-accent 5.37:1, on --rounds-accent-hover 6.90:1 — AA both.
+     It exists because the old skin hardcodes a near-black label on its sage
+     fill (`.qm-lin-btn-primary` globals.css:417 `#0d1611`, and the same shape
+     inline at waitlist-form.tsx), and sage→accent takes that pair from 6.72:1
+     to **3.43:1 — a FAIL the bridge introduces silently**, on the submit button
+     of /login, /signup, /forgot-password, /reset-password and /waitlist.
+     A bridge can retint a custom property; it cannot retint a literal, and the
+     literal is on the most important control on the screen. */
+  --rounds-on-accent: #fff;
   --rounds-accent-hover: #4a49c4;
   --rounds-accent-tint-10: rgba(91, 91, 214, 0.1);
   --rounds-accent-tint-16: rgba(91, 91, 214, 0.16);
@@ -992,8 +1004,17 @@ body[data-skin='rounds'] {
  * relay's standing rule is that the old skin stays default until item F. The
  * host class is applied per surface, by the split that restyles that surface.
  *
- * ⚠️ THIS BLOCK CHANGES NOTHING TODAY. No element carries `.qm-rounds-host`
- * yet — C1-c onward add it, one surface at a time, each with its own proof.
+ * ⚠️ THE BRIDGE IS LIVE. It was written under C1-b with the note "this block
+ * changes nothing today — no element carries `.qm-rounds-host` yet"; C1-c and
+ * C1-d have since adopted it, one surface at a time, each with its own proof.
+ * `gate-rounds-bridge` asserts the adopter count is greater than two, so the
+ * sentence cannot silently become false again in either direction.
+ *
+ * ⚠️ WHAT A BRIDGE CANNOT DO, learned on the auth surface: it retints custom
+ * properties. It cannot touch a LITERAL, a Tailwind utility, or a component
+ * that paints its own colours. Every one of those has now cost a surface —
+ * see `--rounds-on-accent` above, the `.animate-pulse` override below, and the
+ * root 404's forked branch. Bridging is the first move, never the whole move.
  *
  * WHY IT WINS THE CASCADE, stated because it looks like it should not:
  * `--color-linear-*` are declared inside Tailwind's `@theme {}` in globals.css,
@@ -1095,9 +1116,11 @@ body[data-skin='rounds'] {
   padding: 9px 16px;
   border-radius: var(--rounds-radius-sm);
   background: var(--rounds-accent);
-  /* #fff on --rounds-accent measures 5.37:1 — AA for small text. Stated
-   * because the value looks like a bare literal and is in fact checked. */
-  color: #fff;
+  /* Was a bare `#fff` with a comment saying it measures 5.37:1. C1-d needed the
+   * same pair in four more places, so it became `--rounds-on-accent` — one
+   * declaration the contrast guard can read, instead of five literals each
+   * carrying their own promise. */
+  color: var(--rounds-on-accent);
   font-family: var(--rounds-font-ui);
   font-size: 13px;
   font-weight: 500;
@@ -1145,4 +1168,260 @@ body[data-skin='rounds'] {
 }
 [data-skin='rounds'] .qm-rounds-skel-lane + .qm-rounds-skel-lane {
   border-top: 1px solid color-mix(in srgb, var(--rounds-line-1) 55%, transparent);
+}
+
+/* ============================================================================
+ * C1-d — auth: /login, /signup, /waitlist, /forgot-password, /reset-password
+ *              and /check-email.
+ * ----------------------------------------------------------------------------
+ * The six auth routes render OUTSIDE `AppFrame`, through `auth-shell.tsx`'s C3
+ * branch (`isSkinBeta()`, which prod defaults true and the `:rounds` image
+ * builds true). Their appearance is `globals.css:5233-5330` plus inline style
+ * objects in five form files — no Tailwind, no CSS modules.
+ *
+ * So the bridge does most of the colour work: all twelve `--color-linear-*`
+ * names the shell reads, and all of the forms', are already declared in the
+ * host block above. Adding `qm-rounds-host` to the shell root retints the
+ * inline objects AND the globals.css card in one move.
+ *
+ * ⚠️ AND IT WOULD HAVE SHIPPED THREE AA FAILURES DOING IT. This is the part
+ * that is not visible from reading the plan, and the part Gate C could not have
+ * caught. The old skin paints its primary CTA with a near-BLACK label on a
+ * light-ish sage fill. Rounds' accent is a mid-indigo. Retinting the fill and
+ * leaving the label is a contrast regression, measured:
+ *
+ *     .qm-lin-btn-primary  #0d1611  on sage 6.72:1 → on accent **3.43:1**
+ *     waitlist submit      #08090a  on sage 7.27:1 → on accent **3.71:1**
+ *     .qm-c3-auth-mark     #0c1410  on sage 6.82:1 → on accent **3.48:1**
+ *
+ * ⚠️ AND ONE OF THOSE FOUR ROWS WAS WRONG IN THE FIRST DRAFT, corrected here
+ * because a wrong number in a contrast note is worse than no note. It claimed
+ * the mark's gradient FAR stop went "4.78:1 → 2.71:1", i.e. that the bridge
+ * broke it. `--color-linear-sage-deep` is #2F5040, and #0c1410 on it is
+ * **2.09:1** — so the old skin was ALREADY failing at that stop and the bridge
+ * (2.71:1) improves it. The regression is real at the NEAR stop and the fix is
+ * unchanged; the far stop was a remembered number from a different question.
+ *
+ * That is the submit button of /login, /signup, /forgot-password and
+ * /reset-password, plus /waitlist — the most-visited unauthenticated page in
+ * the product. `--rounds-on-accent` (#fff: 5.37:1 / 6.90:1) is the fix.
+ *
+ * ⚠️ AND GATE C CANNOT SEE IT, which is why the fix is a rule and not a patch.
+ * `ownedByDom` climbs to the nearest ancestor-or-self carrying ANY class. A
+ * `<button class="qm-lin-btn-primary">` answers for itself and resolves NOT
+ * owned, so the violation would be logged "inherited" and never block. The
+ * brand mark is worse: both spans are `aria-hidden`, so axe never evaluates
+ * them at all. A contrast bug on the most important control on the screen,
+ * invisible to the gate written to catch contrast bugs. `gate-c1d-auth`
+ * computes these ratios in a unit instead.
+ *
+ * ⚠️ THE HOVER FILL INVERTS, from the same root cause in the other direction.
+ * `.qm-lin-btn-primary:hover` fills with `--color-linear-sage-bright`, which
+ * the bridge maps to `--rounds-accent-text` (#a5a5f0) — correct for the ~13
+ * sites that read sage-bright as `color:`, wrong here, because this one site
+ * reads it as a `background:`. Un-forked, hovering the primary CTA turns it
+ * pale lavender. One bridge line cannot serve both roles; the minority site
+ * gets an explicit rule, exactly as C1-b's `sage`/`danger` split did.
+ * ========================================================================== */
+
+/* ── The shell ─────────────────────────────────────────────────────────────
+ * `.qm-c3-auth` is the host. `.qm-c3-auth-form` gets an owned class too, and
+ * that second one is not decoration: the forms are inline-styled with almost
+ * no classes of their own, so every violation inside them resolves UP to the
+ * nearest classed ancestor. Without `qm-rounds-authform` that ancestor is
+ * `.qm-c3-auth-form`, which does not match `/qm-rounds-/`, and the entire form
+ * — every input, every label, every error — is invisible to the gate. */
+[data-skin='rounds'] .qm-rounds-auth {
+  background: var(--rounds-stage-bg-3);
+  font-family: var(--rounds-font-ui);
+}
+/* Radius only, and NO shadow — deliberately. The two-layer lift is
+ * `--rounds-paper-shadow`, and it belongs to PAPER: it is what sells the
+ * clinical sheet as a physical thing on the stage. No Rounds stage surface
+ * carries a shadow (grep: the paper is the only consumer), so giving the auth
+ * card one would make it the single lifted stage surface in the skin. The
+ * hairline border, retinted through the bridge, is the treatment. */
+[data-skin='rounds'] .qm-rounds-auth .qm-c3-auth-card {
+  border-radius: var(--rounds-radius-lg);
+}
+[data-skin='rounds'] .qm-rounds-auth .qm-c3-auth-h,
+[data-skin='rounds'] .qm-rounds-auth .qm-c3-auth-word {
+  font-family: var(--rounds-font-display);
+  letter-spacing: -0.02em;
+}
+[data-skin='rounds'] .qm-rounds-auth .qm-c3-auth-eyebrow,
+[data-skin='rounds'] .qm-rounds-auth .qm-c3-auth-trust {
+  font-family: var(--rounds-font-mono);
+}
+/* The brand mark: gradient stops come through the bridge (sage → accent,
+ * sage-deep → accent-hover); the GLYPH is a literal and does not. */
+[data-skin='rounds'] .qm-rounds-auth .qm-c3-auth-mark {
+  color: var(--rounds-on-accent);
+  border-radius: var(--rounds-radius-sm);
+}
+/* The `<em>` accent in the title. Reads as `color:`, so it takes the TEXT
+ * variant — never `--rounds-accent`, which is 3.22:1 on surface-1. */
+[data-skin='rounds'] .qm-rounds-auth .qm-auth-em-host em {
+  color: var(--rounds-accent-text);
+}
+/* The form container. Its FIRST job is axe ownership — see the note at
+ * auth-shell.tsx — and `gate-c1d-auth` refused to let it ship as a class with
+ * no declaration, which was right: a class that styles nothing reads as dead
+ * code to the next person, and an ownership marker nobody can find in the
+ * stylesheet is worse than one that does something.
+ * So it carries the one thing the surface genuinely wants and nothing else
+ * supplies: the Rounds UI face, inherited by every node in the form that does
+ * not set its own. */
+[data-skin='rounds'] .qm-rounds-authform {
+  font-family: var(--rounds-font-ui);
+}
+
+/* ── The primary CTA, forked for contrast ─────────────────────────────────
+ * Scoped to the host rather than declared globally: `.qm-lin-btn-primary` is
+ * shipped product used across the authenticated app, and item F — not this
+ * item — retires the old skin. */
+[data-skin='rounds'] .qm-rounds-host .qm-lin-btn-primary,
+[data-skin='rounds'] .qm-rounds-btn-primary {
+  color: var(--rounds-on-accent);
+  /* The old ring is a raw sage tint — `rgba(122,166,140,0.3)` — which the
+   * bridge cannot reach and which reads as a green halo on an indigo button. */
+  box-shadow: none;
+  border-radius: var(--rounds-radius-sm);
+  font-family: var(--rounds-font-ui);
+}
+[data-skin='rounds'] .qm-rounds-host .qm-lin-btn-primary:hover,
+[data-skin='rounds'] .qm-rounds-btn-primary:hover {
+  background: var(--rounds-accent-hover);
+}
+[data-skin='rounds'] .qm-rounds-host .qm-lin-btn-primary:focus-visible,
+[data-skin='rounds'] .qm-rounds-btn-primary:focus-visible {
+  outline: 2px solid var(--rounds-accent-text);
+  outline-offset: 2px;
+}
+
+/* ── Control primitives ────────────────────────────────────────────────────
+ * C1-b listed seventeen of these and shipped none, deliberately: "a class with
+ * no consumer cannot be proven by rule 7 — nothing renders and nothing can be
+ * made to fail." C1-c landed the first, `.qm-rounds-btn`, with its one caller.
+ * The rule holds here: every class below has at least one consumer in this
+ * same change, and `gate-c1d-auth` asserts that — a primitive that loses its
+ * last caller reds, rather than rotting into vocabulary nobody renders.
+ *
+ * The naming contract is `docs/design-tokens.md` § Controls. Note for the
+ * next reader: the relay ledger claimed C1-b had already written that section.
+ * It had not — the section did not exist until C1-d, and the ledger row has
+ * been corrected. */
+
+/* Field label. Mono smallcaps, one tier down from body. */
+[data-skin='rounds'] .qm-rounds-label {
+  font-family: var(--rounds-font-mono);
+  color: var(--rounds-text-3);
+  letter-spacing: 0.08em;
+}
+/* Field-level error, `role="alert"`. Takes the ON-DARK critical, never
+ * `--rounds-critical` (#c93a2e), which is a border/fill value. */
+[data-skin='rounds'] .qm-rounds-error {
+  font-family: var(--rounds-font-ui);
+  color: var(--rounds-critical-on-dark);
+}
+/* Text input / textarea. */
+[data-skin='rounds'] .qm-rounds-input {
+  background: var(--rounds-surface-2);
+  border: 1px solid var(--rounds-line-1);
+  border-radius: var(--rounds-radius-sm);
+  color: var(--rounds-text-1);
+  font-family: var(--rounds-font-ui);
+}
+/* ⚠️ THE PLACEHOLDER TAKES text-2, NOT text-3 — the same 4.18:1 the panel
+ * below had to fix, and the first draft of this block fixed it there and not
+ * here. The input's own ground is surface-2, so the faintest tier fails on it
+ * exactly as it does inside the panel: 4.18:1 against 5.97:1 for text-2. Three
+ * real placeholders render through this rule. Same lesson, same file, two
+ * declarations apart. */
+[data-skin='rounds'] .qm-rounds-input::placeholder {
+  color: var(--rounds-text-2);
+}
+/* ⚠️ A `box-shadow` RING, NOT AN `outline`, AND THAT IS THE WHOLE POINT.
+ * All five auth forms declare `inputStyle` with an INLINE `outline: 'none'`,
+ * and an inline declaration beats any class rule without `!important`. The
+ * first draft of this block used `outline:` — so it declared a focus indicator
+ * that could never render, and every auth input would have had NO visible
+ * keyboard focus under Rounds (WCAG 2.4.7). Dead promises are worse than no
+ * promise: the next reader sees a focus style and stops checking.
+ * `box-shadow` is not set inline anywhere in `inputStyle`, so it applies
+ * cleanly at class specificity. `border-color` is dropped for the same reason
+ * the outline was — the inline `border` shorthand wins. */
+[data-skin='rounds'] .qm-rounds-input:focus-visible {
+  box-shadow: 0 0 0 2px var(--rounds-accent-text);
+}
+/* A bordered block of prose — the waitlist success panel, the reset-sent
+ * panel, the no-token panel.
+ *
+ * ⚠️ IT RE-BRIDGES ONE TIER, AND GATE C IS WHAT FOUND OUT WHY. The panel sits
+ * INSIDE the auth card, so it is a step LIGHTER than its container
+ * (surface-1 → surface-2). That is the right visual direction and it
+ * invalidates the faintest text tier underneath it: `--rounds-text-3` measures
+ * 4.91:1 on the stage and 4.68:1 on surface-1 — both AA — but only **4.18:1**
+ * on surface-2. Applying this class to the forgot-password submitted panel
+ * therefore BROKE a paragraph that had been passing, by lightening the ground
+ * beneath it rather than by touching the text at all.
+ *
+ * The cure is the bridge mechanism again, one level down: a nested
+ * redeclaration mapping the faintest tier UP for the duration of the panel.
+ * Mapping up can only improve contrast, which is the same reasoning the host
+ * block uses for `--color-linear-text-4`. text-2 on surface-2 is 5.97:1.
+ *
+ * The general rule, since this is now the seventh instance of one lesson: a
+ * text token has to be safe wherever it LANDS, and a surface that changes what
+ * is underneath the text is as much a contrast change as recolouring it.
+ * `gate-c1d-auth` pins the pairing so a future panel colour cannot silently
+ * re-break it. */
+[data-skin='rounds'] .qm-rounds-panel {
+  background: var(--rounds-surface-2);
+  border: 1px solid var(--rounds-line-1);
+  border-radius: var(--rounds-radius-md);
+  /* Three of the four consumers are bare flex/text wrappers with no padding of
+   * their own — this class is what turns them into a BOX, so it owes them the
+   * inside space too, or the prose renders flush against the border it just
+   * gained. (waitlist-form supplies `padding: 16` inline and keeps it; inline
+   * wins, and the two values match.) */
+  padding: 16px;
+  color: var(--rounds-text-1);
+  font-family: var(--rounds-font-ui);
+  --color-linear-text-3: var(--rounds-text-2);
+  --color-linear-text-4: var(--rounds-text-2);
+}
+/* A link.
+ * ⚠️ THE UNDERLINE IS A RECORDED AXE FIX, not a style choice. A link
+ * distinguished from surrounding prose ONLY by hue fails `link-in-text-block`
+ * at SERIOUS — anyone who cannot separate the two hues sees prose. It is
+ * declared here as a NET: a restyle that drops the inline `textDecoration` on
+ * /signup's or /waitlist's in-prose link still renders underlined, and
+ * `gate-c1d-auth` asserts both halves.
+ *
+ * ⚠️ AND THE NET DOES NOT COVER EVERY CALLER, which is worth stating rather
+ * than leaving as a pleasant assumption. The standalone "Back to sign in"
+ * links spread each file's `linkStyle` const, which sets
+ * `textDecoration: 'none'` INLINE — and inline beats a class. Measured on the
+ * flag-ON build: /signup and /waitlist compute `underline`; /login,
+ * /forgot-password and /check-email compute `none`. That is CORRECT, not a
+ * miss: those three are centred navigation links standing alone, not links
+ * inside a text block, so the rule does not apply to them. The class gives
+ * them the accent colour; the underline is for the two that sit in prose. */
+[data-skin='rounds'] .qm-rounds-link {
+  color: var(--rounds-accent-text);
+  text-decoration: underline;
+}
+/* The terms checkbox. `accent-color` is the one property that retints a native
+ * control, and it takes the FILL, because the check glyph the browser draws on
+ * top of it is white — the same pair as the button. */
+[data-skin='rounds'] .qm-rounds-check {
+  accent-color: var(--rounds-accent);
+}
+/* Secondary CTA — outlined, not filled. */
+[data-skin='rounds'] .qm-rounds-host .qm-lin-btn,
+[data-skin='rounds'] .qm-rounds-btn-secondary {
+  border-radius: var(--rounds-radius-sm);
+  font-family: var(--rounds-font-ui);
+  color: var(--rounds-text-1);
 }

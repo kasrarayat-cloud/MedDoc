@@ -66,19 +66,47 @@ test('signup: WITHOUT an invite code, no account is created', async ({ page }) =
   await page.getByRole('button', { name: /create account/i }).click();
 
   // Refused, and still on the form — not bounced to a dashboard.
+  //
+  // ⚠️ SCOPED TO THE ALERT, and the unscoped version asserted nothing.
+  // `getByText(/invite-only during the pilot/i).first()` DOM-order-resolves to
+  // the STATIC helper paragraph at `signup-form.tsx:113`, which is on the page
+  // before the form is ever submitted. It was visible at t=0, so the assertion
+  // passed whether or not the gate fired — and the `toHaveURL(/\/signup$/)`
+  // below inherited that, because it ran before the server action had returned
+  // and the page was trivially still on /signup.
+  //
+  // `AuthFieldError` (auth-shell.tsx) is the only `role="alert"` reachable on
+  // /signup — verified against every globally-mounted component, including the
+  // toaster, which carries no role at all. On this path `actions/auth.ts` sets
+  // exactly one field error, so precisely one alert is in the DOM. Waiting on
+  // it is waiting on the server's refusal.
   await expect(
-    page.getByText(/invite-only during the pilot/i).first(),
+    page.getByRole('alert').filter({ hasText: /invite/i }),
   ).toBeVisible({ timeout: 10_000 });
   await expect(page).toHaveURL(/\/signup$/);
 
   // AND THE ACCOUNT MUST NOT EXIST. A gate that shows an error while still
   // writing the row is the failure this whole change exists to prevent — so the
   // proof is that logging in with those credentials cannot work.
+  //
+  // ⚠️ THE NEGATED URL ASSERTION BELOW CANNOT FAIL ON ITS OWN, so it is no
+  // longer asked to. `expect(page).not.toHaveURL(...)` compiles to
+  // `waitForURL(url => !isNot === matches)`, and `waitForURL` tests the CURRENT
+  // url first and returns immediately when the predicate holds. The click does
+  // not await navigation, so at the first poll the page is still /login and the
+  // assertion resolves green — before a leaked account's redirect to /dashboard
+  // could possibly have landed. It passes on a broken gate.
+  // The cure is a POSITIVE wait on the refusal that must happen first; only
+  // then does the URL check have anything to say.
   await page.goto('/login');
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password', { exact: true }).fill(TEST_PASSWORD);
-  await page.getByRole('button', { name: /sign in/i }).click();
-  await expect(page).not.toHaveURL(/\/dashboard$/, { timeout: 8_000 });
+  await page.getByRole('button', { name: /^sign in$/i }).click();
+  await expect(
+    page.getByRole('alert'),
+    'no sign-in refusal appeared — the credentials may have been accepted',
+  ).toBeVisible({ timeout: 10_000 });
+  await expect(page).not.toHaveURL(/\/dashboard$/);
 });
 
 test('the waitlist is reachable and creates no session', async ({ page }) => {
