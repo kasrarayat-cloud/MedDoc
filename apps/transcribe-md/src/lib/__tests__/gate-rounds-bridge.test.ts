@@ -153,13 +153,26 @@ const BACKDROPS = ['#161b24', '#171d27'];
  */
 const DEFERRED_FORKS: Record<string, { sites: number; owner: string; why: string }> = {
   '--color-linear-sage': {
-    sites: 4,
-    owner: 'C1-e / C1-f (all four sites are under settings/note-format)',
+    // ⚠️ 4 → 2, C1-f. The two foregrounds that were REAL TEXT are forked and
+    // this entry no longer covers them: `upload-flow.tsx`'s "your own PDF page"
+    // and `template-review-editor.tsx`'s "Demo visit · synthetic" chip both now
+    // read --color-linear-sage-bright (3.22:1 → 7.60:1 bridged; 7.04:1 → 9.98:1
+    // on the old skin, so neither skin regressed).
+    //
+    // What remains is NOT the same debt wearing a smaller number. The two
+    // survivors are the 🛡 spans in note-format-manager.tsx (EntryState and
+    // RejectedState), and `color` on a bare-emoji element is inert in every
+    // engine that draws emoji as colour glyphs — there is no foreground being
+    // set, which is also why axe never evaluates them (see the mechanism note
+    // below). They are kept on the list rather than silently fixed because the
+    // entry is what keeps this guard non-vacuous, and because the day either
+    // span gains real text beside the glyph it becomes a genuine 3.22:1.
+    sites: 2,
+    owner: 'C1-f closed the two measurable sites; the 2 left are bare-emoji spans',
     why:
-      'used 4× as a foreground and 7× as a fill. Mapped to --rounds-accent so ' +
-      'the 7 fills stay right; two of the four foregrounds are emoji glyphs ' +
-      'that axe does not measure, and the other two need a forked ' +
-      '--rounds-accent-text at their call site. ' +
+      'used 2× as a foreground and 7× as a fill. Mapped to --rounds-accent so ' +
+      'the 7 fills stay right; both remaining foregrounds are emoji glyphs ' +
+      'that axe does not measure and that `color` does not tint. ' +
       // ⚠️ CORRECTED 2026-08-01. This said "aria-hidden glyphs that axe does
       // not measure", conflating two different escapes and getting the
       // load-bearing one wrong. aria-hidden does NOT hide text from axe's

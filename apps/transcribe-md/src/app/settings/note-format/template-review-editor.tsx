@@ -75,12 +75,15 @@ const btn: React.CSSProperties = {
   color: 'var(--color-linear-text-2)',
   border: '1px solid var(--color-linear-border)',
 };
+// C1-f: `color` and the ring were literals — see note-format-manager.tsx. This
+// is the "Save & activate" button, and it sits inside `.qm-tpl-actionbar`,
+// which shielded it from the axe gate as well as from the bridge.
 const btnPrimary: React.CSSProperties = {
   ...btn,
   background: 'var(--color-linear-sage)',
-  color: '#0d1611',
+  color: 'var(--color-linear-on-sage)',
   border: 'none',
-  boxShadow: '0 0 0 1px rgba(122,166,140,0.3)',
+  boxShadow: '0 0 0 1px var(--color-linear-sage-ring)',
 };
 
 const FORMATS: { value: SectionFormatHint; label: string }[] = [
@@ -286,7 +289,14 @@ export function TemplateReviewEditor({
   );
 
   return (
-    <div>
+    /* C1-f — the ownership anchor. Every node in this 927-line file is
+       classless, so `ownedByDom` walked past all of them and halted on
+       `.qm-c3-set-content`: not a Rounds class, so every violation in the
+       densest file in C1 filed as "inherited" and none could block. One class
+       here makes the whole subtree measurable. It also lifts the faintest text
+       tiers, which the section cards and the structure outline write over a
+       surface-2 ground (4.18:1 before, 5.97:1 after). */
+    <div className="qm-rounds-tmpl-editor">
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
@@ -406,7 +416,7 @@ export function TemplateReviewEditor({
                       gap: 11,
                       alignItems: 'center',
                       padding: '11px 13px',
-                      border: '1px solid rgba(122,166,140,0.22)',
+                      border: '1px solid var(--color-linear-sage-edge-soft)',
                       borderRadius: 9,
                       background: 'var(--color-linear-sage-tint)',
                     }}
@@ -468,7 +478,11 @@ export function TemplateReviewEditor({
           unclickable on a phone. Same treatment `.qm-c3-rev2-signbar` already
           gets on the review screen. See globals.css. */}
       <div
-        className="qm-tpl-actionbar"
+        /* `qm-tpl-actionbar` is a SECOND shield: it is a class, so ownership
+           stops here and never reaches the root anchor above — and what it
+           shields is the primary CTA, the one node carrying the 3.43:1
+           failure. The Rounds class is what makes the fix checkable. */
+        className="qm-tpl-actionbar qm-rounds-tmpl-actionbar"
         style={{
           position: 'sticky',
           bottom: 0,
@@ -653,9 +667,9 @@ const pillInfo: React.CSSProperties = {
   borderRadius: 4,
   fontSize: 10,
   fontWeight: 500,
-  background: 'rgba(91,141,184,0.08)',
+  background: 'var(--color-linear-info-wash)',
   color: 'var(--color-linear-info)',
-  border: '1px solid rgba(91,141,184,0.25)',
+  border: '1px solid var(--color-linear-info-edge)',
 };
 
 // ── Safety callout (verbatim from the mockup) ───────────────────────────────
@@ -665,8 +679,8 @@ function SafetyCallout() {
       role="note"
       style={{
         position: 'relative',
-        border: '1px solid rgba(91,141,184,0.25)',
-        background: 'rgba(91,141,184,0.06)',
+        border: '1px solid var(--color-linear-info-edge)',
+        background: 'var(--color-linear-info-wash-soft)',
         borderRadius: 9,
         padding: '11px 13px 11px 15px',
         display: 'flex',
@@ -879,7 +893,10 @@ function SamplePreview({
           <span style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--color-linear-text)' }}>Sample note in your format</span>
           <span
             title="Generated from a synthetic demo visit — not a real patient."
-            style={{ fontFamily: mono, fontSize: 9.5, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-linear-sage)', border: '1px solid rgba(122,166,140,0.32)', borderRadius: 5, padding: '2px 6px' }}
+            /* C1-f: `color` was the sage FILL token — 3.22:1 bridged, and this
+               is real text at 9.5px. The text variant is 7.60:1. This is one of
+               the two sites `gate-rounds-bridge`'s deferred-fork entry named. */
+            style={{ fontFamily: mono, fontSize: 9.5, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--color-linear-sage-bright)', border: '1px solid var(--color-linear-sage-edge)', borderRadius: 5, padding: '2px 6px' }}
           >
             Demo visit · synthetic
           </span>

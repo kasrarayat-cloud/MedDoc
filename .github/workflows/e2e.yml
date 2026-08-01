@@ -401,7 +401,7 @@ jobs:
           docker compose -f docker-compose.qa.yml -f docker-compose.qa.rounds.yml
           up -d --wait transcribe-md
 
-      - name: Run E2E (rounds-c1 — C1-d, auth to tokens)
+      - name: Run E2E (rounds-c1 — C1-d, C1-e and C1-f — auth, settings, templates)
         working-directory: apps/transcribe-md
         env:
           PW_BASE_URL: http://localhost:9020

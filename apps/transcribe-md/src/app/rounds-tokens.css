@@ -1089,6 +1089,17 @@ body[data-skin='rounds'] {
   --color-linear-sage-tint: var(--rounds-accent-tint-10);
   --color-linear-sage-glow: var(--rounds-accent-tint-16);
 
+  /* C1-f — the fork points. These names exist because the templates surfaces
+     typed these values as LITERALS, which a bridge cannot reach. `on-sage` is
+     the ink ON the brand fill, so it takes the on-accent variant: #0d1611 on
+     --rounds-accent is 3.43:1, #fff is 5.37:1. The rings and edges keep their
+     original ALPHA and only change hue, so the chrome follows the content it
+     wraps instead of staying green around indigo. */
+  --color-linear-on-sage: var(--rounds-on-accent);
+  --color-linear-sage-ring: color-mix(in srgb, var(--rounds-accent) 30%, transparent);
+  --color-linear-sage-edge: color-mix(in srgb, var(--rounds-accent) 32%, transparent);
+  --color-linear-sage-edge-soft: color-mix(in srgb, var(--rounds-accent) 22%, transparent);
+
   /* ── States ──────────────────────────────────────────────────────────── */
   /* Split by ROLE, which is the whole reason the -text variants exist:
      `coral` and `info` and `amber` are used as `color:` on these surfaces,
@@ -1098,6 +1109,19 @@ body[data-skin='rounds'] {
   --color-linear-danger: var(--rounds-critical);
   --color-linear-amber: var(--rounds-em-text);
   --color-linear-info: var(--rounds-processing-text);
+  /* C1-f — the rejected card's chrome. Same alphas as the old skin; the hue
+     follows --rounds-em-text so the border and the wash agree with the ⚠ and
+     the heading they surround. */
+  --color-linear-amber-edge: color-mix(in srgb, var(--rounds-em-text) 28%, transparent);
+  --color-linear-amber-wash: color-mix(in srgb, var(--rounds-em-text) 5%, transparent);
+  /* The advanced editor's info chrome. Lower stakes than the sage set — both
+     the old and the Rounds value are blue, so a literal here would have read as
+     a slightly-wrong shade rather than a clash. Tokenised anyway: an exemption
+     for "close enough" is a judgement the next reader cannot re-derive, and the
+     guard that forbids literals is worth more than four saved lines. */
+  --color-linear-info-edge: color-mix(in srgb, var(--rounds-processing-text) 25%, transparent);
+  --color-linear-info-wash: color-mix(in srgb, var(--rounds-processing-text) 8%, transparent);
+  --color-linear-info-wash-soft: color-mix(in srgb, var(--rounds-processing-text) 6%, transparent);
 
   /* ── Interaction ─────────────────────────────────────────────────────── */
   --color-linear-row-hover: color-mix(in srgb, var(--rounds-text-1) 5%, transparent);
@@ -1675,3 +1699,85 @@ body[data-skin='rounds'] {
   color: var(--rounds-text-2);
   cursor: not-allowed;
 }
+
+/* ============================================================================
+ * C1-f — templates: the note-format panel and its six views.
+ * ----------------------------------------------------------------------------
+ * THE DEFECT THIS BLOCK EXISTS FOR IS OWNERSHIP, NOT COLOUR.
+ *
+ * C1-e extended `qm-rounds-host` over the whole settings page, so every
+ * `--color-linear-*` these surfaces read has ALREADY resolved to a Rounds token
+ * since that merge, with no edit to any templates file. What did not happen is
+ * measurement. `rounds-axe`'s `ownedByDom` walks ancestor-or-self and stops at
+ * the FIRST node carrying any class: every node in `note-format-manager.tsx`
+ * and `template-review-editor.tsx` is classless, so the walk runs past them and
+ * halts on `.qm-c3-set-content` — not a `qm-rounds-*` name, therefore NOT
+ * OWNED. Every violation underneath filed as "inherited": reported, never
+ * blocking. That is `violations: []` over an unmeasured panel, the same shape
+ * C1-d found inside the auth form, and it is why C1-e could extend the host
+ * across this surface and leave four AA failures standing under it.
+ *
+ * So these classes are ownership anchors first and styling second. Two of them
+ * (`-actionbar`, `-proc`) style NOTHING beyond the anchor: they exist because a
+ * non-Rounds class at that node (`qm-tpl-actionbar`, `qm-ux-proc`) is itself a
+ * shield, and the sticky bar it shields holds the primary CTA — the exact node
+ * carrying the 3.43:1 failure this item fixes.
+ *
+ * THE SECOND DEFECT IS A GROUND CHANGE, and it is C1-d's lesson arriving here:
+ * a surface that changes what is UNDER the text is a contrast change even when
+ * no colour is edited. `.qm-c3-set-panel` grounds this panel on surface-1,
+ * where `--rounds-text-3` is 4.68:1 and safe. But the list rows, the entry
+ * cards and the rejected alert paint their OWN backgrounds a step lighter, and
+ * on surface-2 that same token is 4.18:1. Nothing about the text changed. So
+ * each class that repaints its ground also re-bridges the faintest tiers
+ * upward for its own subtree — the `.qm-rounds-panel` mechanism, one level
+ * down. Measured: text-2 on surface-2 is 5.97:1.
+ * ========================================================================== */
+
+/* The surface marker. Pairs with the host like every other `-<surface>`, and is
+ * the anchor that makes the panel visible to the gate at all. */
+[data-skin='rounds'] .qm-rounds-tmpl {
+  color: var(--rounds-text-1);
+  font-family: var(--rounds-font-ui);
+}
+
+/* The three grounds that step up to surface-2, and therefore owe the lift.
+ * `-row` is the template list row, `-card` the two entry choices, `-alert` the
+ * rejected card's amber block. Each is also an ownership anchor for the text
+ * inside it. */
+[data-skin='rounds'] .qm-rounds-tmpl-row,
+[data-skin='rounds'] .qm-rounds-tmpl-card,
+[data-skin='rounds'] .qm-rounds-tmpl-alert {
+  --color-linear-text-3: var(--rounds-text-2);
+  --color-linear-text-4: var(--rounds-text-2);
+}
+
+/* The advanced editor. BRIDGE-ONLY by the plan's ruling — colour follows the
+ * host, geometry and the five sub-components keep their shape — plus the same
+ * tier lift, because its section cards and the structure outline both write
+ * `--color-linear-text-4` over a surface-2 ground (4.18:1 before the lift).
+ * Anchoring here turns ~900 classless nodes Rounds-owned in one step, which is
+ * the point: it is the densest file in C1 and the gate has never seen it. */
+[data-skin='rounds'] .qm-rounds-tmpl-editor {
+  --color-linear-text-3: var(--rounds-text-2);
+  --color-linear-text-4: var(--rounds-text-2);
+}
+
+/* Pure ownership anchors. They set no colour ON PURPOSE — a `qm-rounds-*` class
+ * has two jobs and may legitimately do only the second (C1-e recorded the same
+ * of `qm-rounds-devstates`). Without them the non-Rounds class already at each
+ * node shields its whole subtree from the gate. */
+[data-skin='rounds'] .qm-rounds-tmpl-actionbar,
+[data-skin='rounds'] .qm-rounds-tmpl-proc,
+[data-skin='rounds'] .qm-rounds-tmpl-confirm {
+  color: inherit;
+}
+
+/* NOTE — there is deliberately NO `.qm-ux-primary` rule here.
+ * The confirm card's CTA had a literal `color: #0d1611` (3.43:1 once the bridge
+ * maps its fill to `--rounds-accent`), and the first cut of this block forked it
+ * on the host. That was two mechanisms for one defect. Tokenising the literal in
+ * globals.css does the whole job through the bridge already declared above, and
+ * it is strictly safer: `.qm-ux-primary` is also rendered by
+ * `chat-editor-panel.tsx` on `/visits/[id]`, and off the host those names still
+ * resolve to the values globals.css types, so that surface cannot move. */

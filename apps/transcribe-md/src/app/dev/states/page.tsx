@@ -40,6 +40,7 @@ import { isSkinRounds } from '@/config/skin-rounds';
 import BoardLoadingPreview from '@/app/board/loading';
 import VisitLoadingPreview from '@/app/visits/[id]/loading';
 import { DevErrorState } from './client';
+import { DevTmplProcessing, DevTmplRejected } from './templates-preview';
 
 export const metadata: Metadata = { title: 'States — preview' };
 
@@ -51,6 +52,14 @@ const STATES = [
   'loading-visit',
   'loading-board',
   'skeletons',
+  // C1-f. Two of the note-format machine's six views are unreachable by a
+  // walk: `parsing` paints only while four server actions are in flight, and
+  // `rejected` needs the parse-time PHI gate to fire, which on the QA stack
+  // means a container env the Rounds image does not carry. Both are rendered
+  // here from the REAL components and the REAL stage builder — a hand-written
+  // copy would measure something the product never draws.
+  'tmpl-processing',
+  'tmpl-rejected',
 ] as const;
 type State = (typeof STATES)[number];
 
@@ -135,6 +144,9 @@ export default async function DevStatesPage({
           <BoardLoadingPreview />
         </div>
       ) : null}
+
+      {state === 'tmpl-processing' ? <DevTmplProcessing /> : null}
+      {state === 'tmpl-rejected' ? <DevTmplRejected /> : null}
 
       {state === 'skeletons' ? (
         <div style={{ padding: 32, display: 'grid', gap: 28 }} data-testid="dev-skeletons">
