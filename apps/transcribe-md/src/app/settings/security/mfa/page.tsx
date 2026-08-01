@@ -57,7 +57,16 @@ export default async function MfaSettingsPage({
 
   return (
     <AppFrame>
+      {/* THE BRIDGE, ADOPTED. `/settings/security/mfa` is its OWN route leaf —
+          there is no `settings/layout.tsx`, so this page inherits nothing from
+          `/settings` and cannot pick up that page's host. This div is the
+          highest element the route owns (`AppFrame` is shared chrome for every
+          authenticated surface and is not C1-e's to repaint), so the host goes
+          here. Applied UNCONDITIONALLY: every rule behind these two classes is
+          prefixed `[data-skin='rounds']`, so with the flag off they select
+          nothing and the surface renders exactly what it renders today. */}
       <div
+        className="qm-rounds-host qm-rounds-settings"
         style={{
           maxWidth: 640,
           margin: '0 auto',

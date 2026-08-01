@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 
 import { Ic } from '@/components/ui/icon';
+import { isSkinRounds } from '@/config/skin-rounds';
 
 interface Props {
   userRole: string;
@@ -31,6 +32,7 @@ export function MfaManagementPanel({ userRole, verifiedAt }: Props) {
   const [loading, setLoading] = useState(false);
 
   const isSuperAdmin = userRole === 'SUPER_ADMIN';
+  const rounds = isSkinRounds();
 
   async function disableMfa() {
     setLoading(true);
@@ -77,18 +79,47 @@ export function MfaManagementPanel({ userRole, verifiedAt }: Props) {
           marginBottom: 16,
         }}
       >
+        {/* ⚠️ THE "ON" PILL IS FORKED TO THE READY FAMILY, AND THE BRIDGE IS
+            WHY IT HAD TO BE. Both chrome values here are raw SAGE literals —
+            `rgba(122,166,140,·)` is `--color-linear-sage` at 13% / 32% — while
+            the label reads `--color-linear-sage-bright`, which the host bridge
+            maps to `--rounds-accent-text` (#a5a5f0). Bridged and left alone,
+            this pill renders an INDIGO label inside a GREEN wash with a GREEN
+            border, on an indigo stage.
+            `--color-linear-sage` is not the escape: it bridges to
+            `--rounds-accent`, so recolouring the chrome through it makes the
+            pill BRAND-coloured — hue-identical to every CTA on the page — and
+            the one thing it exists to say ("you are protected") stops being
+            legible at a glance. Green is right here; it is the wrong green.
+            Rounds separates brand from success and carries a positive family
+            for exactly this, and the shape below is `.qm-rounds-signed-lock`'s,
+            which the spec requires green for the same reason.
+            A bare `var(--rounds-ready)` cannot be used: it is declared only
+            under `[data-skin='rounds']`, so with the flag off the `color-mix`
+            would be invalid at computed-value time and `background` would fall
+            to `transparent`. There is no old-skin token equal to a 12% wash to
+            put in a `var()` fallback, so this one takes the build-time fork.
+            Flag OFF → byte-identical to today. Flag ON → #6ee7a8 on the wash
+            over surface-1, 10.2:1. The `Ic.check` is `currentColor` and
+            follows the label. */}
         <span
           style={{
             display: 'inline-flex',
             alignItems: 'center',
             gap: 6,
             padding: '4px 10px',
-            background: 'rgba(122, 166, 140, 0.13)',
-            border: '1px solid rgba(122, 166, 140, 0.32)',
+            background: rounds
+              ? 'color-mix(in srgb, var(--rounds-ready) 12%, transparent)'
+              : 'rgba(122, 166, 140, 0.13)',
+            border: rounds
+              ? '1px solid var(--rounds-ready)'
+              : '1px solid rgba(122, 166, 140, 0.32)',
             borderRadius: 999,
             fontSize: 12,
             fontWeight: 500,
-            color: 'var(--color-linear-sage-bright)',
+            color: rounds
+              ? 'var(--rounds-ready-text)'
+              : 'var(--color-linear-sage-bright)',
             fontFamily: 'var(--font-sans)',
           }}
         >

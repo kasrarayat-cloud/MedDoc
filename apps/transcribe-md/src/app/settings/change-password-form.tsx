@@ -93,7 +93,11 @@ export function ChangePasswordForm() {
       noValidate
     >
       <div>
-        <label htmlFor="currentPassword" style={labelStyle}>
+        <label
+          htmlFor="currentPassword"
+          className="qm-rounds-label"
+          style={labelStyle}
+        >
           Current password
         </label>
         <input
@@ -104,17 +108,21 @@ export function ChangePasswordForm() {
           value={currentPassword}
           onChange={(e) => setCurrentPassword(e.target.value)}
           disabled={pending}
-          className="qm-tap-44-input" style={inputStyle}
+          className="qm-tap-44-input qm-rounds-input" style={inputStyle}
         />
         {fieldError === 'currentPassword' && (
-          <p role="alert" style={errorStyle}>
+          <p role="alert" className="qm-rounds-error" style={errorStyle}>
             {error?.error}
           </p>
         )}
       </div>
 
       <div>
-        <label htmlFor="newPassword" style={labelStyle}>
+        <label
+          htmlFor="newPassword"
+          className="qm-rounds-label"
+          style={labelStyle}
+        >
           New password
         </label>
         <input
@@ -126,7 +134,7 @@ export function ChangePasswordForm() {
           value={newPassword}
           onChange={(e) => setNewPassword(e.target.value)}
           disabled={pending}
-          className="qm-tap-44-input" style={inputStyle}
+          className="qm-tap-44-input qm-rounds-input" style={inputStyle}
         />
         <p
           style={{
@@ -139,14 +147,18 @@ export function ChangePasswordForm() {
           At least 10 characters, with upper + lowercase letters and a digit.
         </p>
         {fieldError === 'newPassword' && (
-          <p role="alert" style={errorStyle}>
+          <p role="alert" className="qm-rounds-error" style={errorStyle}>
             {error?.error}
           </p>
         )}
       </div>
 
       <div>
-        <label htmlFor="confirmPassword" style={labelStyle}>
+        <label
+          htmlFor="confirmPassword"
+          className="qm-rounds-label"
+          style={labelStyle}
+        >
           Confirm new password
         </label>
         <input
@@ -158,17 +170,17 @@ export function ChangePasswordForm() {
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
           disabled={pending}
-          className="qm-tap-44-input" style={inputStyle}
+          className="qm-tap-44-input qm-rounds-input" style={inputStyle}
         />
         {fieldError === 'confirmPassword' && (
-          <p role="alert" style={errorStyle}>
+          <p role="alert" className="qm-rounds-error" style={errorStyle}>
             {error?.error}
           </p>
         )}
       </div>
 
       {formError && (
-        <p role="alert" style={errorStyle}>
+        <p role="alert" className="qm-rounds-error" style={errorStyle}>
           {formError}
         </p>
       )}

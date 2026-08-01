@@ -23,10 +23,33 @@
 // than a line in the pack. `rounds-a11y`'s ownership rule climbs to the nearest
 // ancestor-or-self carrying ANY class; a `<button class="qm-lin-btn-primary">`
 // answers for ITSELF, matches no `qm-rounds-`, and its violation is filed
-// "inherited" — reported, never blocking. The brand mark is worse still: both
-// spans are `aria-hidden`, so axe never evaluates them at all. A contrast bug
-// on the most important control on the screen, invisible to the gate written
-// to catch contrast bugs.
+// "inherited" — reported, never blocking. A contrast bug on the most important
+// control on the screen, invisible to the gate written to catch contrast bugs.
+//
+// ⚠️ CORRECTED 2026-08-01 — THE BRAND MARK ESCAPES FOR A DIFFERENT REASON, AND
+// THE ONE RECORDED HERE WAS WRONG. This said "both spans are `aria-hidden`, so
+// axe never evaluates them at all". Both clauses are false, measured against
+// the shipped axe-core 4.11.3 in real chromium:
+//
+//   1. `aria-hidden` DOES NOT hide text from the contrast rule. `color-contrast`
+//      declares `excludeHidden: false` (axe.js:31653) and `colorContrastEvaluate`
+//      gates only on `_isVisibleOnScreen` (axe.js:26245) — visual visibility, not
+//      `aria-hidden`, which is a different function. A block `<p aria-hidden>`
+//      with these colours returns a full SERIOUS violation, identical to its
+//      non-hidden twin.
+//   2. Only ONE of the two spans is hidden anyway — `.qm-c3-auth-word`
+//      (auth-shell.tsx:96) is not.
+//
+// The real escape is SINGLE-CHARACTER TEXT. `axe.js:26332` sets
+// `shortTextContent = visibleText.length === 1` and bails to INCOMPLETE with the
+// ratio recorded but no violation. The control that isolates it: a one-character
+// element with NO `aria-hidden` is *also* incomplete, while "QuillMD" — same
+// colours, not hidden — is a full violation. And `rounds-a11y.spec.ts:279-283`
+// says in as many words that `incomplete` is reported and never asserted on.
+//
+// So the conclusion this file was built on survives, at three removes rather
+// than one — but the *reason* matters, because "it was aria-hidden" invites the
+// fix of un-hiding it, which would change nothing.
 //
 // So the ratios are computed here, from the SHIPPED token values, and the
 // arithmetic is negative-controlled against the pre-fix literals — if the

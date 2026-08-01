@@ -110,7 +110,8 @@ export function SessionPanel(props: SessionPanelProps) {
           onClick={doSignOutAll}
           className="qm-lin-btn"
           style={{
-            borderColor: 'rgba(212, 87, 74, 0.40)',
+            borderColor:
+              'color-mix(in srgb, var(--color-linear-danger) 40%, transparent)',
             color: 'var(--color-linear-coral)',
           }}
         >

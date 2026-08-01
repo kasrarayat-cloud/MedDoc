@@ -1,8 +1,14 @@
 'use client';
 
-// New-visit error boundary — Phase 5 (Linear V1) renders on the
-// dark canvas. error.tsx is outside the AppFrame boundary so the
-// wrapper sets linear-bg directly.
+// New-visit error boundary — renders on the dark canvas.
+//
+// ⚠️ THE 100vh `--color-linear-bg` WRAPPER WAS REMOVED — same seam, same fix as
+// `visits/[id]/error.tsx`, and the full note lives there (including why this
+// comment must not spell the bridge class out). In short: the wrapper sat
+// outside the bridged `<main>` that `ErrorFallback` renders, so under Rounds it
+// painted the old skin's #08090a beneath a #12161e band that stops at 60vh.
+// `body` already supplies the ground, which is why the root, dashboard and
+// settings boundaries never needed a wrapper.
 
 import { ErrorFallback } from '@/components/error-fallback';
 
@@ -13,14 +19,5 @@ export default function VisitsNewError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  return (
-    <div
-      style={{
-        minHeight: '100vh',
-        background: 'var(--color-linear-bg)',
-      }}
-    >
-      <ErrorFallback error={error} reset={reset} scope="visits:new" />
-    </div>
-  );
+  return <ErrorFallback error={error} reset={reset} scope="visits:new" />;
 }

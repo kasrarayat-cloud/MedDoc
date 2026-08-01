@@ -500,36 +500,49 @@ export default async function SettingsPage() {
         <Suspense fallback={null}>
           <EmailChangeToast />
         </Suspense>
-        <div style={{ padding: '18px 24px 0' }}>
-          <div
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 10.5,
-              fontWeight: 500,
-              color: 'var(--color-linear-text-3)',
-              letterSpacing: '0.07em',
-              textTransform: 'uppercase',
-              marginBottom: 8,
-            }}
-          >
-            Account
+        {/* C1-e — THE BRIDGE, ADOPTED. `qm-rounds-host` redeclares the
+            --color-linear-* names on this node, so every descendant that reads
+            one (this header, and every rule behind `qm-c3-set-*` in
+            globals.css) resolves to a Rounds token. Applied UNCONDITIONALLY:
+            every rule in rounds-tokens.css is prefixed `[data-skin='rounds']`,
+            so with the flag off this wrapper is inert.
+            Layout-inert by construction: a plain <div> with no style, whose two
+            children are already block-level and carry no margins, inside a
+            <main> that is itself the flex item. It sets no overflow/transform/
+            contain, so it is not a scroll container and does not break the
+            §8.2 sticky contract the settings rail depends on. */}
+        <div className="qm-rounds-host qm-rounds-settings">
+          <div style={{ padding: '18px 24px 0' }}>
+            <div
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10.5,
+                fontWeight: 500,
+                color: 'var(--color-linear-text-3)',
+                letterSpacing: '0.07em',
+                textTransform: 'uppercase',
+                marginBottom: 8,
+              }}
+            >
+              Account
+            </div>
+            <h1
+              style={{
+                margin: 0,
+                fontFamily: 'var(--font-sans)',
+                fontSize: 22,
+                fontWeight: 500,
+                color: 'var(--color-linear-text)',
+                letterSpacing: '-0.012em',
+                lineHeight: 1.2,
+              }}
+            >
+              Settings
+            </h1>
           </div>
-          <h1
-            style={{
-              margin: 0,
-              fontFamily: 'var(--font-sans)',
-              fontSize: 22,
-              fontWeight: 500,
-              color: 'var(--color-linear-text)',
-              letterSpacing: '-0.012em',
-              lineHeight: 1.2,
-            }}
-          >
-            Settings
-          </h1>
-        </div>
-        <div style={{ padding: '20px 24px 48px', maxWidth: 1100 }}>
-          <SettingsSectionsC3 sections={c3Sections} />
+          <div style={{ padding: '20px 24px 48px', maxWidth: 1100 }}>
+            <SettingsSectionsC3 sections={c3Sections} />
+          </div>
         </div>
       </AppFrame>
     );

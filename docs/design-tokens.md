@@ -289,6 +289,19 @@ class must have a rule, and every rule must have a caller.
 | `.qm-rounds-link` | inline link inside a text block | **Underlined** — see below |
 | `.qm-rounds-panel` | a bordered block of prose | Success / submitted / refusal panels |
 | `.qm-rounds-skel-*` | skeleton geometry | C1-c |
+| `.qm-rounds-settings` | the settings surface marker — **and it paints the ground** | C1-e. The only surface marker that sets a `background`, because `/settings` is the first Rounds surface inside `AppFrame` and `.qm-lin-app` paints an opaque canvas *above* the host. See the note in `rounds-tokens.css` |
+| `.qm-rounds-dialog` | a portalled `Dialog.Content` | C1-e. **Must be applied together with `qm-rounds-host`** — a Radix portal mounts on `<body>` and inherits no bridge |
+| `.qm-rounds-dialog-overlay` | the modal scrim | C1-e. Deliberately deeper than the old `rgba(0,0,0,.55)`: the Rounds stage is lighter, so the same alpha reads weaker over it |
+| `.qm-rounds-select` | native `<select>` | C1-e. Not folded into `-input` — a select draws its own indicator |
+
+**A class that was declared and then removed, in the change that declared it.**
+`.qm-rounds-btn-danger` is not in this table because it does not exist. C1-e
+wrote it up front for an obviously destructive button, and the only candidate
+kept an inline `background` it needs with the flag off — inline beats a class,
+so the primitive's fill could never apply and the rest duplicated the C1-d
+`.qm-lin-btn-primary` fork. `gate-c1d-auth`'s orphan assertion caught it. The
+rule is *with its consumer, never ahead of one*, and the remedy for breaking it
+is to delete the class, not to go looking for a caller.
 
 ### Two rules that are not style preferences
 
@@ -320,9 +333,24 @@ nowhere only because they were computed before the build:
   `color:` at ~13 sites and a `background:` at exactly one —
   `.qm-lin-btn-primary:hover`. One bridge line cannot serve both; the minority
   site gets an explicit rule.
-- **A Tailwind utility, or a component that paints its own colours.** The
-  skeleton's `bg-linear-surface-2` and the root 404's `AnimatedGrid` are both
-  class overrides / forks, not bridge work.
+- **A component that paints its own colours.** The root 404's `AnimatedGrid`
+  is a fork, not bridge work.
+- **A portalled node.** A Radix `<Dialog.Portal>` with no `container` mounts on
+  `<body>`, so it is not a descendant of the host and inherits none of the
+  bridge. Both settings modals were shipping old-skin interiors on a Rounds
+  page. The host goes on `Dialog.Content` itself — and it must, because the
+  danger *fill* and its label fork have to arrive through the same selector or
+  fixing the fill pushes the label under AA. (C1-e.)
+
+⚠️ **"A Tailwind utility" was in this list until 2026-08-01 and was wrong.**
+Tailwind v4's `@theme` emits custom properties, so `bg-linear-surface-2`
+compiles to `background-color: var(--color-linear-surface-2)` — verified in the
+compiled chunk and at runtime, where a skeleton under the host with no override
+in scope computes a Rounds token. It cost nothing yet only because the override
+that "needed" it was elective anyway; the direction of the error is the
+expensive one, since a split reading it forks files that bridge for free.
+**A claim about what a mechanism cannot do is worth measuring before it is
+written down beside claims that were.**
 
 `--rounds-on-accent` (#fff — 5.37:1 on the accent, 6.90:1 on its hover) exists
 for the first of those.
