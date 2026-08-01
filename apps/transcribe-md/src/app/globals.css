@@ -74,6 +74,35 @@
   --color-linear-sage-tint: rgba(122, 166, 140, 0.13);
   --color-linear-sage-glow: rgba(122, 166, 140, 0.18);
 
+  /* ── C1-f FORK POINTS — literals that used to be typed inline ──────────────
+   * Every value below is BYTE-IDENTICAL to the literal it replaces. This is a
+   * rename, not a restyle, and the old skin renders exactly as it did.
+   *
+   * Why it has to be a rename: the Rounds host bridge works by REDECLARING
+   * `--color-linear-*` names on an ancestor, so it retints anything that reads
+   * one — and it can never reach a hex or an rgba() typed straight into a
+   * style object. The templates surfaces had eight such literals, all of them
+   * sage or amber chrome, so under Rounds they drew GREEN borders and rings
+   * around INDIGO content while every neighbouring token moved. `on-sage` is
+   * the sharper case: it is the ink on the sage fill, and at #0d1611 on the
+   * bridged accent it computes 3.43:1 — a literal is how a passing button
+   * becomes an AA failure without anyone editing the button.
+   *
+   * Named for the ROLE, not the colour, so the bridge can map each one to a
+   * Rounds token whose role matches (see rounds-tokens.css, the C1-f block). */
+  --color-linear-on-sage: #0d1611;
+  --color-linear-sage-ring: rgba(122, 166, 140, 0.3);
+  --color-linear-sage-edge: rgba(122, 166, 140, 0.32);
+  --color-linear-sage-edge-soft: rgba(122, 166, 140, 0.22);
+  --color-linear-amber-edge: rgba(212, 164, 55, 0.28);
+  --color-linear-amber-wash: rgba(212, 164, 55, 0.05);
+  /* The advanced editor's info chrome. Two wash alphas, kept distinct rather
+   * than averaged: 0.08 is a pill, 0.06 is a full-width callout, and the same
+   * alpha does not read the same at those two sizes. */
+  --color-linear-info-edge: rgba(91, 141, 184, 0.25);
+  --color-linear-info-wash: rgba(91, 141, 184, 0.08);
+  --color-linear-info-wash-soft: rgba(91, 141, 184, 0.06);
+
   /* ── Row hover / active — subtle white tints over the dark canvas ── */
   --color-linear-row-hover: rgba(255, 255, 255, 0.03);
   --color-linear-row-active: rgba(255, 255, 255, 0.05);
@@ -6343,11 +6372,17 @@ body {
   font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 500;
-  color: #0d1611;
+  /* C1-f: both were literals. `#0d1611` on this sage fill is 6.72:1, but the
+     Rounds host bridges the fill to --rounds-accent and a literal cannot
+     follow — it lands at 3.43:1 on the confirm card's primary CTA. Tokenised
+     rather than overridden in rounds-tokens.css so there is ONE mechanism:
+     off the host (e.g. `/visits/[id]`'s chat editor, the other caller) these
+     names still resolve to the values typed here, byte-identical. */
+  color: var(--color-linear-on-sage);
   background: var(--color-linear-sage);
   border: none;
   cursor: pointer;
-  box-shadow: 0 0 0 1px rgba(122, 166, 140, 0.3);
+  box-shadow: 0 0 0 1px var(--color-linear-sage-ring);
   transition: filter 160ms ease, transform 160ms ease;
 }
 .qm-ux-primary:hover:not(:disabled) { filter: brightness(1.06); }

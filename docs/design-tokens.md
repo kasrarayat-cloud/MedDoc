@@ -277,7 +277,7 @@ class must have a rule, and every rule must have a caller.
 | Class | What it is | Notes |
 |---|---|---|
 | `.qm-rounds-host` | **the bridge.** Redeclares the 22 `--color-linear-*` names on a scoped class | Applied to the ROOT of a restyled surface. Colour only |
-| `.qm-rounds-<surface>` | a surface marker — `-auth`, `-notfound`, `-errorstate`, `-loading` | Pairs with the host. One per screen |
+| `.qm-rounds-<surface>` | a surface marker — `-auth`, `-notfound`, `-errorstate`, `-loading`, `-tmpl` | Pairs with the host. One per screen |
 | `.qm-rounds-authform` | the auth form container — a **second** ownership anchor inside `-auth` | Not decoration. Without it a violation inside the form climbs to `.qm-c3-auth-form`, matches no owned class, and files as *inherited* — reported, never gated. See "What a bridge cannot do" |
 | `.qm-rounds-btn` | primary action, accent fill | Text is `--rounds-on-accent` |
 | `.qm-rounds-btn-primary` | the same treatment applied **over** an old-skin `.qm-lin-btn-primary` | Fork, not replacement — item F removes the pairing |
@@ -293,6 +293,7 @@ class must have a rule, and every rule must have a caller.
 | `.qm-rounds-dialog` | a portalled `Dialog.Content` | C1-e. **Must be applied together with `qm-rounds-host`** — a Radix portal mounts on `<body>` and inherits no bridge |
 | `.qm-rounds-dialog-overlay` | the modal scrim | C1-e. Deliberately deeper than the old `rgba(0,0,0,.55)`: the Rounds stage is lighter, so the same alpha reads weaker over it |
 | `.qm-rounds-select` | native `<select>` | C1-e. Not folded into `-input` — a select draws its own indicator |
+| `.qm-rounds-tmpl-*` | the templates surfaces — `-row`, `-card`, `-alert`, `-editor`, `-actionbar`, `-proc`, `-confirm` | C1-f. **Ownership anchors first, styling second.** Two of them (`-actionbar`, `-proc`) set no colour at all: a non-Rounds class at that node shields its whole subtree from the axe gate, and what `-actionbar` shielded was the primary CTA. The three that repaint their ground to surface-2 also re-bridge the faintest text tiers upward for their own subtree — `--rounds-text-3` is 4.68:1 on surface-1 and 4.18:1 one step lighter |
 
 **A class that was declared and then removed, in the change that declared it.**
 `.qm-rounds-btn-danger` is not in this table because it does not exist. C1-e

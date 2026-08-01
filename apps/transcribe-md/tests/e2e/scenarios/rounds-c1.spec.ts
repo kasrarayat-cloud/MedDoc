@@ -979,3 +979,362 @@ test.describe('Rounds C1-e — settings, flag-ON', () => {
     ).toEqual([]);
   });
 });
+
+// ============================================================================
+// C1-f — templates: the note-format panel and its six views.
+// ----------------------------------------------------------------------------
+// ⚠️ ITS OWN ACCUMULATORS, for the reason C1-e's describe states: a shared
+// floor would make a C1-f red read as a C1-d or C1-e regression, which is
+// exactly the diagnosis cost `gate-project-env` exists to remove.
+//
+// ⚠️ THE PLAN'S E2E PATH FOR THIS ITEM CANNOT WORK, AND IT WAS MEASURED RATHER
+// THAN REASONED. `C1-PLAN.md:315` says to drive the machine through
+// `helpers/noteFormat.ts`'s `parseToReview()`. That helper does
+// `goto('/settings')` and then waits for **"Save & activate"** — which is the
+// REVIEW EDITOR. On this image `NEXT_PUBLIC_UX_SIMPLIFY=true`, and
+// `note-format-manager.tsx:195` routes a completed parse to `confirm`, never to
+// `review`. The helper would also `fill()` a panel that is still `hidden`,
+// because the C3 rail keeps all seven mounted. Following the plan here gives a
+// pack that hangs for its full timeout and reports the product as broken.
+// `doc-preview.spec.ts` is the only existing spec that drives this machine on a
+// UX_SIMPLIFY build, and its two drivers are the model copied below.
+//
+// The six views, and how each is reached — stated because two of them cannot be
+// walked to and that is a fact about the product, not a gap in the pack:
+//   entry     — a fresh doctor has no templates, so this is the landing view
+//   confirm   — upload the BLANK fixture form; MOCK_AI does the parse
+//   review    — the confirm card's "Something's off" (the advanced editor)
+//   home      — after the format is confirmed
+//   parsing   — paints only while four server actions are in flight
+//   rejected  — needs the parse-time PHI gate, i.e. a container env this image
+//               does not carry
+// The last two are rendered by `/dev/states`, the door C1-c2 built for exactly
+// this, from the REAL components and the REAL stage builder.
+// ============================================================================
+
+/** Ink on the brand fill, and the literal it replaces. `#0d1611` was typed into
+ *  three style objects and one globals.css rule; on the bridged accent it is
+ *  3.43:1. The arithmetic is pinned in `gate-c1f-templates.test.ts`; this pack
+ *  pins the PIXELS, which is the half a source guard cannot reach. */
+const ACCENT_FILL = ROUNDS('--rounds-accent');
+/** The faint tier, and the one the grounding classes lift it to. text-3 is
+ *  4.68:1 on surface-1 and 4.18:1 on surface-2 — the rows repaint the ground,
+ *  so the token that was safe on the panel is not safe inside them. */
+const TEXT_2 = ROUNDS('--rounds-text-2');
+const TEXT_3 = ROUNDS('--rounds-text-3');
+
+test.describe('Rounds C1-f — templates, flag-ON', () => {
+  const violations: Finding[] = [];
+  const inherited: Finding[] = [];
+  const hiddenTraps: Array<{ state: string; width: number; sel: string }> = [];
+  const measured: string[] = [];
+
+  function record(state: string, width: number, run: AxeRun) {
+    measured.push(`${state}@${width}`);
+    for (const e of blocking(run.violations)) violations.push({ state, width, entry: e });
+    for (const e of inheritedBlocking(run.violations)) inherited.push({ state, width, entry: e });
+    for (const sel of run.ariaHiddenFocusable) hiddenTraps.push({ state, width, sel });
+  }
+
+  async function sweep(page: Page, state: string, width: number): Promise<AxeRun> {
+    const run = await runAxe(page);
+    record(state, width, run);
+    await shoot(page, state, width);
+    return run;
+  }
+
+  /** Open the note-format panel and PROVE it is visible.
+   *
+   *  ⚠️ The click is not optional and the assertion is not decoration. All
+   *  seven C3 panels stay mounted with the `hidden` attribute, so a `fill()` or
+   *  a `setInputFiles()` without this acts on an invisible node and PASSES —
+   *  the pack would then measure nothing while reporting success. */
+  async function openNoteFormat(page: Page) {
+    await page.goto('/settings');
+    await page
+      .locator('nav[aria-label="Settings sections"]')
+      .getByRole('button', { name: /note format/i })
+      .click();
+    await expect(
+      page.locator('#note-format'),
+      'the note-format panel never became visible — every interaction after ' +
+        'this would act on a hidden node and pass',
+    ).toBeVisible({ timeout: 10_000 });
+  }
+
+  /** The templates surface really is Rounds-owned.
+   *
+   *  This is the assertion C1-e could not make: the host reached this panel in
+   *  C1-e, but every node under it was classless, so `ownedByDom` halted on
+   *  `.qm-c3-set-content` and nothing here could ever block. */
+  async function assertTemplatesOwned(page: Page, where: string) {
+    await expect(
+      page.locator('.qm-rounds-host.qm-rounds-settings'),
+      `${where}: not a flag-ON build — every result below would measure the old skin`,
+    ).toHaveCount(1);
+    // All three view roots, named individually rather than by a `class*=`
+    // substring match: `qm-rounds-tmpl` is a prefix of every class in the
+    // family, so a substring selector would be satisfied by any one of them
+    // and could never tell me WHICH view I am on. That is the same trap that
+    // made C1-c's label guard vacuous ('dashboard' contains 'board').
+    await expect(
+      page.locator(
+        '#note-format .qm-rounds-tmpl, #note-format .qm-rounds-tmpl-editor, ' +
+          '#note-format .qm-rounds-tmpl-confirm, #note-format .qm-rounds-tmpl-proc',
+      ),
+      `${where}: no Rounds ownership anchor inside the note-format panel. The ` +
+        'axe walk stops at the first classed ancestor, so without one every ' +
+        'violation here files as "inherited" and none can block',
+    ).not.toHaveCount(0);
+  }
+
+  test.afterAll(async () => {
+    await cleanupTestUsers();
+  });
+
+  test('the templates views render under Rounds, and the forked ink computes', async ({ page }) => {
+    test.setTimeout(110_000);
+    await signupFreshUser(page, 'c1f-views');
+
+    // ── entry ────────────────────────────────────────────────────────────
+    await page.setViewportSize({ width: WIDE, height: 1000 });
+    await openNoteFormat(page);
+    await assertTemplatesOwned(page, 'entry');
+
+    // The primary CTA's ink and fill asserted TOGETHER. Asserting the fill
+    // alone would pass on the literal; asserting the ink alone would pass on a
+    // white label over a fill that never became the accent. C1-e's trap was
+    // exactly this — a fix that brought one half across and left the other.
+    const readMyFormat = page.getByRole('button', { name: /read my format/i });
+    await expect(readMyFormat).toBeVisible();
+    const cta = await readMyFormat.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { color: s.color, background: s.backgroundColor };
+    });
+    expect(
+      cta,
+      'the entry CTA is not white-on-accent. `#0d1611` on --rounds-accent is ' +
+        '3.43:1; --rounds-on-accent is 5.37:1',
+    ).toEqual({ color: ON_ACCENT, background: ACCENT_FILL });
+    expect(
+      cta.color,
+      'the CTA still carries the old skin literal — the fork did not land',
+    ).not.toBe(OLD_PRIMARY_LABEL);
+
+    await sweep(page, 'tmpl:entry', WIDE);
+    await page.setViewportSize({ width: NARROW, height: 1000 });
+    await sweep(page, 'tmpl:entry', NARROW);
+
+    // ── confirm ──────────────────────────────────────────────────────────
+    // The BLANK tracked fixture, and only ever that one. `rounds-shots/` is
+    // uploaded and retained for 14 days, so anything rendered here leaves the
+    // runner — a filled document never becomes a fixture (AGENTS.md).
+    await page.setViewportSize({ width: WIDE, height: 1000 });
+    const [chooser] = await Promise.all([
+      page.waitForEvent('filechooser'),
+      page.getByRole('button', { name: /upload a file/i }).click(),
+    ]);
+    await chooser.setFiles('tests/e2e/fixtures/sample-form.docx');
+
+    await expect(
+      page.getByTestId('confirm-filled-sample'),
+      'the confirm card never arrived. On this image UX_SIMPLIFY routes a parse ' +
+        'to `confirm`, not to the review editor — if this timed out, check ' +
+        'MOCK_AI_CALLS on the container before suspecting the surface',
+    ).toBeVisible({ timeout: 90_000 });
+
+    await assertTemplatesOwned(page, 'confirm');
+    const confirmCta = page.getByTestId('confirm-use-format');
+    const confirmStyle = await confirmCta.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { color: s.color, background: s.backgroundColor };
+    });
+    expect(
+      confirmStyle,
+      '`.qm-ux-primary` hardcoded `color: #0d1611` in globals.css — a rule a ' +
+        '.tsx-only foreground scan structurally cannot see. On the bridged ' +
+        'fill that is 3.43:1',
+    ).toEqual({ color: ON_ACCENT, background: ACCENT_FILL });
+    await sweep(page, 'tmpl:confirm', WIDE);
+
+    // ── review (the advanced editor) ──────────────────────────────────────
+    await page.getByRole('button', { name: /something.s off/i }).click();
+    await expect(
+      page.locator('.qm-rounds-tmpl-editor'),
+      'the advanced editor has no ownership anchor — its ~900 classless nodes ' +
+        'would climb to `.qm-c3-set-content` and file as inherited',
+    ).toHaveCount(1);
+    // The sticky bar is a SECOND shield, and what it shields is the CTA.
+    await expect(
+      page.locator('.qm-tpl-actionbar.qm-rounds-tmpl-actionbar'),
+      'the action bar lost its Rounds class, so the Save & activate button it ' +
+        'contains is invisible to the gate again',
+    ).toHaveCount(1);
+    const saveActivate = page.getByRole('button', { name: /save & activate/i });
+    expect(
+      await saveActivate.evaluate((el) => getComputedStyle(el).color),
+      'the editor CTA ink did not fork',
+    ).toBe(ON_ACCENT);
+    await sweep(page, 'tmpl:review', WIDE);
+
+    expect(
+      measured.length,
+      'the templates sweep measured fewer states than it drove',
+    ).toBeGreaterThanOrEqual(4);
+  });
+
+  test('the two views a walk cannot reach are rendered, and measured', async ({ page }) => {
+    // ⚠️ NOT A CONVENIENCE. `parsing` paints only while four server actions are
+    // in flight and `rejected` needs a container env this image does not carry,
+    // so without this door both ship unmeasured — which is precisely how C1-e
+    // extended the host over this panel and left four AA failures under it.
+    await signupFreshUser(page, 'c1f-preview');
+    await page.setViewportSize({ width: WIDE, height: 1000 });
+
+    for (const state of ['tmpl-processing', 'tmpl-rejected']) {
+      const res = await page.goto(`/dev/states?state=${state}`);
+      expect(
+        res?.status(),
+        `/dev/states?state=${state} did not serve. This route is gated on the ` +
+          'NEXT_PUBLIC_DEV_STATES build arg, which only the :rounds image passes',
+      ).toBe(200);
+      await expect(
+        page.locator(`[data-testid="dev-${state}"]`),
+        `${state} resolved to the fallback branch — the STATES enum and the ` +
+          'render branch have drifted apart',
+      ).toBeVisible({ timeout: 10_000 });
+      await expect(page.locator('.qm-rounds-host.qm-rounds-devstates')).toHaveCount(1);
+      await sweep(page, `tmpl:${state.replace('tmpl-', '')}`, WIDE);
+    }
+
+    // The rejected card's own ownership anchor — it is a `role="alert"` with a
+    // repainted ground, so it both needs the tier lift and must be gateable.
+    await expect(
+      page.locator('.qm-rounds-tmpl-alert'),
+      'the rejected alert has no anchor',
+    ).toHaveCount(1);
+
+    expect(
+      measured.filter((m) => /^tmpl:(processing|rejected)@/.test(m)).length,
+      'the preview sweep measured fewer states than it drove',
+    ).toBe(2);
+  });
+
+  test('⚠️ the ground change is real — the lifted tier is what renders', async ({ page }) => {
+    // The defect with no colour edit behind it. `.qm-c3-set-panel` grounds the
+    // panel on surface-1 where text-3 is 4.68:1; the entry cards repaint to
+    // surface-2 where the SAME token is 4.18:1. This asserts the lift actually
+    // reaches the text, which no source guard can: only the cascade decides.
+    await signupFreshUser(page, 'c1f-ground');
+    await page.setViewportSize({ width: WIDE, height: 1000 });
+    await openNoteFormat(page);
+
+    const cardSubLabel = page.locator('.qm-rounds-tmpl-card').first().locator('div').last();
+    const colour = await cardSubLabel.evaluate((el) => getComputedStyle(el).color);
+    expect(
+      colour,
+      'the faintest tier inside a repainted card is still text-3. Nothing about ' +
+        'the text changed — the GROUND did, and that is a contrast change: ' +
+        `4.18:1 at ${TEXT_3} versus 5.97:1 at ${TEXT_2}`,
+    ).toBe(TEXT_2);
+    expect(colour, 'the lift did not apply').not.toBe(TEXT_3);
+  });
+
+  test('the ownership rule can still fail here — positive control', async ({ page }) => {
+    // ⚠️ Without this the sweeps above are worthless: a walk that owns NOTHING
+    // reports `violations: []` for every page it visits, and a walk that owns
+    // EVERYTHING reports the inherited backlog as this item's defects. Both
+    // read identically to a clean run. So plant one node of each kind and
+    // assert the adjudicator sorts them.
+    await signupFreshUser(page, 'c1f-control');
+    await openNoteFormat(page);
+
+    // The surface must start clean, or "planting a violation made it red" is
+    // not evidence of anything.
+    expect(
+      blocking((await runAxe(page)).violations),
+      "the control's own surface must start clean",
+    ).toEqual([]);
+
+    // ⚠️ ONE PROBE AT A TIME, and the reason is a property of the shared
+    // helper that cost this test a CI cycle to find. `runAxe` computes `owned`
+    // per VIOLATION ENTRY, with `v.nodes.some(…)` — so two probes sharing a
+    // rule id (both of these are `color-contrast`) collapse into ONE entry,
+    // and the owned probe drags the unowned probe's target into `blocking()`
+    // with it. The first draft planted both together and read that as
+    // "ownership has widened to the whole page". It had not; the assertion was
+    // measuring at the wrong granularity. Planting serially is also what C1-d's
+    // four controls do, for the same reason.
+
+    // ── (1) a Rounds-owned failure MUST gate ──────────────────────────────
+    await page.evaluate(() => {
+      const panel = document.querySelector('#note-format');
+      const el = document.createElement('p');
+      el.className = 'qm-rounds-tmpl-probe';
+      el.setAttribute('style', 'color:#777;background:#888;font-size:12px;padding:4px');
+      el.textContent = 'planted owned probe';
+      panel!.appendChild(el);
+    });
+    expect(
+      blocking((await runAxe(page)).violations).some((e) =>
+        e.targets.some((t) => t.includes('qm-rounds-tmpl-probe')),
+      ),
+      'a Rounds-owned contrast failure inside the templates panel was NOT ' +
+        'gated — the adjudicator is not seeing this surface, so every empty ' +
+        'result above means nothing',
+    ).toBe(true);
+
+    // ── (2) the same failure under a NON-Rounds class must NOT gate ───────
+    // The bridge blind spot, asserted as a blind spot rather than wished away:
+    // `ownedByDom` stops at the first classed ancestor-or-self, so a node with
+    // its own `qm-lin-*` class answers for itself. C2 inherits this.
+    await page.evaluate(() => {
+      document.querySelector('.qm-rounds-tmpl-probe')?.remove();
+      const panel = document.querySelector('#note-format');
+      const el = document.createElement('p');
+      el.className = 'qm-lin-tmpl-probe';
+      el.setAttribute('style', 'color:#777;background:#888;font-size:12px;padding:4px');
+      el.textContent = 'planted bridged probe';
+      panel!.appendChild(el);
+    });
+    const bridgedRun = await runAxe(page);
+    expect(
+      blocking(bridgedRun.violations).some((e) =>
+        e.targets.some((t) => t.includes('qm-lin-tmpl-probe')),
+      ),
+      'a node under a NON-Rounds class was gated — ownership has widened to the ' +
+        'whole page and this pack would now block on the inherited backlog',
+    ).toBe(false);
+    expect(
+      inheritedBlocking(bridgedRun.violations).some((e) =>
+        e.targets.some((t) => t.includes('qm-lin-tmpl-probe')),
+      ),
+      'the bridged probe was neither gated nor reported — it was not measured at all',
+    ).toBe(true);
+  });
+
+  test('no serious or critical violation on a Rounds-owned templates node', async () => {
+    expect(
+      measured.length,
+      'nothing was measured — the assertions below would pass on an empty set',
+    ).toBeGreaterThanOrEqual(6);
+    expect(
+      hiddenTraps,
+      'focusable elements inside an aria-hidden Rounds container on the templates surfaces',
+    ).toEqual([]);
+    if (inherited.length > 0) {
+      const set = new Set<string>();
+      for (const f of inherited)
+        f.entry.targets.filter((t) => !ROUNDS_OWNED.test(t)).forEach((t) => set.add(t));
+      console.log(
+        `\n[rounds-c1f] ${inherited.length} inherited serious/critical finding(s) ` +
+          'on the templates surfaces — reported, not gated:\n' +
+          [...set].slice(0, 20).map((t) => `    ${t}`).join('\n') + '\n',
+      );
+    }
+    expect(
+      violations.map((f) => `${f.state}@${f.width} ${f.entry.id} (${f.entry.impact})`),
+      'serious/critical axe violations on Rounds-owned templates nodes',
+    ).toEqual([]);
+  });
+});

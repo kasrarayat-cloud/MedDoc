@@ -89,7 +89,7 @@ export function ProcessingStages({ stages }: { stages: StageModel[] }) {
   const liveRow = visible.find((s) => s.state === 'active');
 
   return (
-    <div className="qm-ux-proc" role="status" aria-live="polite">
+    <div className="qm-ux-proc qm-rounds-tmpl-proc" role="status" aria-live="polite">
       {/* One honest sentence for screen readers — mirrors the visible rows. */}
       <span className="sr-only">
         {liveRow ? `${liveRow.label}…` : 'Reading your form'}
@@ -169,7 +169,7 @@ export interface ConfirmCardProps {
 
 export function ConfirmCard(props: ConfirmCardProps) {
   return (
-    <div className="qm-ux-confirm">
+    <div className="qm-ux-confirm qm-rounds-tmpl-confirm">
       <header className="qm-ux-confirm-head">
         <div className="qm-ux-confirm-eyebrow" style={{ fontFamily: mono }}>
           YOUR FORMAT
@@ -187,7 +187,13 @@ export function ConfirmCard(props: ConfirmCardProps) {
           {props.nativeCandidate && (
             <>
               {' · '}
-              <span style={{ color: 'var(--color-linear-sage)' }}>
+              {/* C1-f: was `--color-linear-sage`. That name is a FILL — the
+                  bridge maps it to --rounds-accent (#5b5bd6), which is 3.22:1
+                  on this card's surface-1 ground. This is real text, not a
+                  glyph, so it is the text variant's job: sage-bright bridges to
+                  --rounds-accent-text at 7.60:1, and on the old skin it goes
+                  7.04:1 → 9.98:1, so BOTH skins improve. */}
+              <span style={{ color: 'var(--color-linear-sage-bright)' }}>
                 your own PDF page
               </span>
             </>

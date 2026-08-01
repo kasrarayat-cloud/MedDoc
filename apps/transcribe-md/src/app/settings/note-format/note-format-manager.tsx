@@ -63,9 +63,13 @@ const btn: React.CSSProperties = {
   cursor: 'pointer', background: 'transparent', color: 'var(--color-linear-text-2)',
   border: '1px solid var(--color-linear-border)',
 };
+// C1-f: `color` and the ring were LITERALS. The Rounds host bridge retints
+// custom properties and cannot touch a hex, so #0d1611 rode the bridged accent
+// down to 3.43:1 on every primary button here. Both are tokens now; the old
+// skin's values are unchanged (globals.css declares them as what was typed).
 const btnPrimary: React.CSSProperties = {
-  ...btn, background: 'var(--color-linear-sage)', color: '#0d1611', border: 'none',
-  boxShadow: '0 0 0 1px rgba(122,166,140,0.3)',
+  ...btn, background: 'var(--color-linear-sage)', color: 'var(--color-linear-on-sage)', border: 'none',
+  boxShadow: '0 0 0 1px var(--color-linear-sage-ring)',
 };
 const subLabel: React.CSSProperties = {
   fontFamily: mono, fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase',
@@ -652,7 +656,7 @@ export function NoteFormatManager({
 
   // view === 'home'
   return (
-    <div>
+    <div className="qm-rounds-tmpl">
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
         <p style={{ fontSize: 12.5, color: 'var(--color-linear-text-2)', lineHeight: 1.55, margin: 0, maxWidth: '70ch' }}>
           Your formats and which visits use them. QuillMD picks the right one per visit; without a match it uses the
@@ -678,7 +682,7 @@ export function NoteFormatManager({
           />
         ))}
         {/* Built-in fallback row (the standard format — not editable) */}
-        <div style={{ ...rowStyle, borderBottom: 'none' }}>
+        <div className="qm-rounds-tmpl-row" style={{ ...rowStyle, borderBottom: 'none' }}>
           <div>
             <div style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--color-linear-text)' }}>Standard format</div>
             <div style={{ fontSize: 11.5, color: 'var(--color-linear-text-3)', marginTop: 2 }}>
@@ -712,7 +716,7 @@ function pill(kind: 'active' | 'draft' | 'inactive' | 'fallback'): React.CSSProp
     background: 'var(--color-linear-surface-2)', color: 'var(--color-linear-text-2)',
     border: '1px solid var(--color-linear-border)',
   };
-  if (kind === 'active') return { ...base, background: 'var(--color-linear-sage-tint)', color: 'var(--color-linear-sage-bright)', border: '1px solid rgba(122,166,140,0.3)' };
+  if (kind === 'active') return { ...base, background: 'var(--color-linear-sage-tint)', color: 'var(--color-linear-sage-bright)', border: '1px solid var(--color-linear-sage-ring)' };
   return base;
 }
 
@@ -768,7 +772,7 @@ function TemplateRow({
   // report on one line, not a task we hand back.
   if (simpleRow) {
     return (
-      <div style={rowStyle}>
+      <div className="qm-rounds-tmpl-row" style={rowStyle}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--color-linear-text)' }}>
             {t.name}
@@ -996,7 +1000,7 @@ function EntryState({
   const uploadSubLabel = ['Paste', ...uploadKinds.map((k) => k.label)].join(' · ');
   const uploadAccept = uploadKinds.map((k) => k.accept).join(',');
   return (
-    <div>
+    <div className="qm-rounds-tmpl">
       {onBack && (
         <button type="button" style={{ ...btn, marginBottom: 14 }} onClick={onBack}>← Back to my formats</button>
       )}
@@ -1006,7 +1010,7 @@ function EntryState({
       </p>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <div style={{ padding: 18, border: '1px solid rgba(122,166,140,0.32)', borderRadius: 10, background: 'linear-gradient(180deg, var(--color-linear-sage-tint), var(--color-linear-surface-2))' }}>
+        <div className="qm-rounds-tmpl-card" style={{ padding: 18, border: '1px solid var(--color-linear-sage-edge)', borderRadius: 10, background: 'linear-gradient(180deg, var(--color-linear-sage-tint), var(--color-linear-surface-2))' }}>
           <div style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-0.01em', color: 'var(--color-linear-text)' }}>Bring your own note</div>
           <div style={{ fontSize: 12, color: 'var(--color-linear-text-2)', lineHeight: 1.5, marginTop: 8 }}>
             Paste one of your notes, or upload a file. QuillMD reads the format and shows you what it understood — you
@@ -1017,6 +1021,7 @@ function EntryState({
         <button
           type="button"
           onClick={onStandard}
+          className="qm-rounds-tmpl-card"
           style={{ textAlign: 'left', padding: 18, border: '1px solid var(--color-linear-border)', borderRadius: 10, background: 'var(--color-linear-surface-2)', cursor: 'pointer', display: 'block' }}
         >
           <div style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-0.01em', color: 'var(--color-linear-text)' }}>Start from the standard format</div>
@@ -1075,13 +1080,13 @@ function ParsingState() {
 }
 
 // ── Rejected ────────────────────────────────────────────────────────────────
-function RejectedState({ reason, onStandard, onRetry }: { reason: string; onStandard: () => void; onRetry: () => void }) {
+export function RejectedState({ reason, onStandard, onRetry }: { reason: string; onStandard: () => void; onRetry: () => void }) {
   return (
-    <div>
+    <div className="qm-rounds-tmpl">
       <div style={{ fontSize: 18, fontWeight: 500, letterSpacing: '-0.012em', color: 'var(--color-linear-text)' }}>
         We couldn’t safely read this note
       </div>
-      <div role="alert" style={{ display: 'flex', gap: 13, alignItems: 'flex-start', padding: 16, border: '1px solid rgba(212,164,55,0.28)', borderRadius: 10, background: 'rgba(212,164,55,0.05)', marginTop: 16 }}>
+      <div role="alert" className="qm-rounds-tmpl-alert" style={{ display: 'flex', gap: 13, alignItems: 'flex-start', padding: 16, border: '1px solid var(--color-linear-amber-edge)', borderRadius: 10, background: 'var(--color-linear-amber-wash)', marginTop: 16 }}>
         <span aria-hidden style={{ color: 'var(--color-linear-amber)', fontSize: 18, lineHeight: 1 }}>⚠</span>
         <div>
           <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-linear-text)' }}>This note has details we can’t fully separate</div>

@@ -337,35 +337,68 @@ describe('C1-e — the § Controls table parses to something real', () => {
       'a row uses a pattern shape `classify()` does not handle — teach it, do not skip it',
     ).toEqual([]);
 
-    // The document names the two patterns; if a third appears, or one of these
-    // stops parsing as a pattern, this is where it is noticed.
-    expect(SURFACE_ROWS.length, 'the `.qm-rounds-<surface>` row stopped parsing').toBe(1);
-    expect(PREFIX_ROWS.length, 'the `.qm-rounds-skel-*` row stopped parsing').toBe(1);
+    // ⚠️ These two were `toBe(1)` until C1-f, which is a COUNT standing in for
+    // an identity. It answers "did anything stop parsing?" only while the table
+    // holds exactly one row of each kind — and C1-f's second prefix row made it
+    // fail while nothing had stopped parsing at all. Worse, the inverse is the
+    // real hazard: had `.qm-rounds-skel-*` degraded to `unknown` in the same
+    // change that added `-tmpl-*`, the count would still have been 1 and this
+    // assertion would have passed on a rotted row.
+    //
+    // So assert the thing meant instead of a number that correlates with it:
+    // each pattern the document relies on is present AND classified as a
+    // pattern. `UNKNOWN_ROWS` above already catches a shape the parser cannot
+    // handle; this catches one it handles as the WRONG kind.
+    const prefixTokens = PREFIX_ROWS.map((r) => r.prefix);
+    expect(SURFACE_ROWS.map((r) => r.token), 'the `.qm-rounds-<surface>` row stopped parsing as a pattern')
+      .toContain('qm-rounds-<surface>');
+    expect(prefixTokens, 'the `.qm-rounds-skel-*` row stopped parsing as a pattern')
+      .toContain('qm-rounds-skel-');
+    expect(prefixTokens, 'the `.qm-rounds-tmpl-*` row stopped parsing as a pattern')
+      .toContain('qm-rounds-tmpl-');
   });
 
-  it('both pattern rows expand to real members — neither nothing nor everything', () => {
+  it('EVERY pattern row expands to real members — neither nothing nor everything', () => {
     // ⚠️ A pattern that expands to NOTHING makes direction (1) skip it and
     // direction (2) reject every one of its members. A pattern that expands to
     // EVERYTHING makes direction (2) accept anything. Both are silent.
-    const surfaces = SURFACE_ROWS[0].members;
-    expect(surfaces.length, 'the surface row enumerates no surfaces').toBeGreaterThanOrEqual(3);
-    for (const s of surfaces) {
-      expect(s.startsWith('qm-rounds-'), `${s} is not a qm-rounds class`).toBe(true);
-      // …and the enumeration must not have degenerated into the stem itself.
-      expect(s.length, `${s} is the bare stem, not a surface`).toBeGreaterThan('qm-rounds-'.length);
+    //
+    // ⚠️ THIS TEST READ `SURFACE_ROWS[0]` AND `PREFIX_ROWS[0]` UNTIL C1-f, AND
+    // THAT IS THE DEFECT IT EXISTS TO CATCH, IN ITSELF. With one row of each
+    // kind in the table the index was invisible; the moment C1-f added a second
+    // prefix row (`qm-rounds-tmpl-*`) it would have shipped UNCHECKED — free to
+    // expand to nothing, or to the bare namespace, with this guard green. A
+    // check written against the only member of a set silently stops covering
+    // that set the day it grows, which is this project's recurring shape:
+    // an answer about a set whose boundary was never established.
+    expect(SURFACE_ROWS.length + PREFIX_ROWS.length, 'no pattern rows parsed at all').toBeGreaterThan(1);
+
+    for (const row of SURFACE_ROWS) {
+      expect(
+        row.members.length,
+        `the surface row \`${row.token}\` enumerates no surfaces`,
+      ).toBeGreaterThanOrEqual(3);
+      for (const s of row.members) {
+        expect(s.startsWith('qm-rounds-'), `${s} is not a qm-rounds class`).toBe(true);
+        // …and the enumeration must not have degenerated into the stem itself.
+        expect(s.length, `${s} is the bare stem, not a surface`).toBeGreaterThan('qm-rounds-'.length);
+      }
     }
 
-    const prefix = PREFIX_ROWS[0].prefix!;
-    const members = [...DECLARED].filter((c) => c.startsWith(prefix) && c.length > prefix.length);
-    expect(members.length, `${prefix}* names no shipped class — the row has rotted`).toBeGreaterThan(
-      0,
-    );
+    for (const row of PREFIX_ROWS) {
+      const prefix = row.prefix!;
+      const members = [...DECLARED].filter((c) => c.startsWith(prefix) && c.length > prefix.length);
+      expect(
+        members.length,
+        `${prefix}* names no shipped class — the row has rotted`,
+      ).toBeGreaterThan(0);
 
-    // The prefix must not be so short it swallows the layer. `qm-rounds-` alone
-    // would make `coveredByTable` return true for every class in the product.
-    expect(prefix.length, 'the wildcard prefix is the bare namespace').toBeGreaterThan(
-      'qm-rounds-'.length,
-    );
+      // The prefix must not be so short it swallows the layer. `qm-rounds-`
+      // alone would make `coveredByTable` true for every class in the product.
+      expect(prefix.length, `${prefix} is the bare namespace`).toBeGreaterThan(
+        'qm-rounds-'.length,
+      );
+    }
   });
 });
 
