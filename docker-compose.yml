@@ -525,12 +525,14 @@ services:
         NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL: ${TRANSCRIBE_MD_AUTH_URL:-http://5.231.107.93:9020}
         NEXT_PUBLIC_MARKETING_URL: ${MARKETING_URL:-http://5.231.107.93:9010}
         # T-M20.3: Pipeline tab gate. Build-time default is "false"
-        # (host env not set → image ships with tab hidden). Runtime
-        # override via the `environment:` block below — dev flips
-        # `NEXT_PUBLIC_SHOW_PIPELINE_TAB=true` on the host, runs
-        # `docker compose up -d --force-recreate transcribe-md` (no
-        # rebuild needed because the gate is read server-side at
-        # request time, not inlined into the client bundle).
+        # (host env not set → image ships with tab hidden).
+        # ⚠️ CORRECTED 2026-08-01 — this said the `environment:` block below
+        # gives a runtime override with "no rebuild needed ... not inlined into
+        # the client bundle". The client half is true (0 client reads) and the
+        # conclusion does not follow: NEXT_PUBLIC_* is inlined into the SERVER
+        # bundle too. THIS args: LINE IS THE ONE THAT DECIDES THE VALUE, and it
+        # is frozen at build time. See the corrected note at the
+        # `environment:` entry for the measurement.
         NEXT_PUBLIC_SHOW_PIPELINE_TAB: ${NEXT_PUBLIC_SHOW_PIPELINE_TAB:-false}
         # PROMOTED 2026-06-15 — Stage-1 C3 calm-skin redesign is the production
         # UI (PRs #331/#332/#333). Build-time inlined into the client bundle.
@@ -632,11 +634,25 @@ services:
       # stamp a git-sha or milestone tag without a source-tree edit.
       # Falls back to "T-M18.3" in the route handler if unset.
       APP_VERSION: ${APP_VERSION:-}
-      # T-M20.3: runtime override of the Pipeline-tab gate. Unset on
-      # the host ⇒ falls back to the Dockerfile ARG default ("false").
-      # Dev flips to "true" on the host + force-recreates the
-      # container — no rebuild needed because /visits/[id]/page.tsx
-      # is a server component reading process.env at request time.
+      # T-M20.3: Pipeline-tab gate.
+      # ⚠️ CORRECTED 2026-08-01 — THIS ENTRY IS A KNOB WIRED TO NOTHING.
+      # It used to claim "no rebuild needed because /visits/[id]/page.tsx is a
+      # server component reading process.env at request time". The premise is
+      # true and the conclusion is false: Next 16 inlines NEXT_PUBLIC_* into the
+      # SERVER bundle as well, whenever the key is present in the builder env
+      # (next/dist/lib/static-env.js emits a define entry for every key where
+      # `value != null`; next/dist/build/define-env.js:61 spreads it BEFORE any
+      # isClient/isNodeServer branching). Dockerfile:66 declares
+      # `ARG NEXT_PUBLIC_SHOW_PIPELINE_TAB=false` + ENV, so the key is always
+      # present at build time and the value is always frozen.
+      # Measured on the shipped prod image: 0 surviving reads of
+      # process.env.NEXT_PUBLIC_SHOW_PIPELINE_TAB in 579 server chunks, and the
+      # folded constant is visible as `showPipelineTab:!1`. Positive control:
+      # `process.env` matches 90 of those 579 files.
+      # So setting this on the host and force-recreating changes NOTHING.
+      # To flip the tab you must rebuild with the build arg.
+      # Kept (not deleted) because deleting it would silently change the value
+      # compose passes; the lie was the comment, not the line.
       NEXT_PUBLIC_SHOW_PIPELINE_TAB: ${NEXT_PUBLIC_SHOW_PIPELINE_TAB:-}
       # feat/pdf-native-fill: runtime gate for PDF native fill. Read SERVER-SIDE
       # in nativePdfExport (the /export/pdf route handler), so flipping it "true"

@@ -59,10 +59,27 @@ ENV NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL=${NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL}
 ENV NEXT_PUBLIC_MARKETING_URL=${NEXT_PUBLIC_MARKETING_URL}
 
 # T-M20.3: NEXT_PUBLIC_SHOW_PIPELINE_TAB gates the dev-facing Pipeline
-# tab on /visits/[id]. The gate is read in the server page at request
-# time — a dev can flip the runtime env (via compose `environment:`)
-# and reload without rebuilding. Default here is "false" so an image
-# built with no override ships the tab hidden (production posture).
+# tab on /visits/[id]. Default here is "false" so an image built with
+# no override ships the tab hidden (production posture).
+#
+# ⚠️ CORRECTED 2026-08-01 — this comment used to say "a dev can flip the
+# runtime env (via compose `environment:`) and reload without rebuilding".
+# NOT TRUE, and the reasoning error is worth keeping because it is subtle:
+# it verified that the gate is NOT inlined into the CLIENT bundle (true —
+# 0 client reads, measured) and generalised that to "read at runtime".
+# Next 16 inlines NEXT_PUBLIC_* into the SERVER bundle as well. The trigger
+# is the key merely BEING PRESENT in the builder env — which the two lines
+# below guarantee, ARG default and all, whether or not compose passes an arg
+# (next/dist/lib/static-env.js keeps every key where `value != null`;
+# next/dist/build/define-env.js:61 spreads that map before any
+# isClient/isNodeServer branching). Measured on the shipped prod image:
+# 0 surviving `process.env.NEXT_PUBLIC_SHOW_PIPELINE_TAB` reads across 579
+# server chunks, folded to the literal `showPipelineTab:!1`.
+#
+# **"Not in the client bundle" does not mean "read at runtime."**
+# The ONLY NEXT_PUBLIC_* flag in this stack that is genuinely runtime-read is
+# NEXT_PUBLIC_TEMPLATE_NATIVE_PDF, and it stays that way precisely BECAUSE it
+# has no ARG here. Do not add one for it. See docs/rounds/RELAY.md, parked row.
 ARG NEXT_PUBLIC_SHOW_PIPELINE_TAB=false
 ENV NEXT_PUBLIC_SHOW_PIPELINE_TAB=${NEXT_PUBLIC_SHOW_PIPELINE_TAB}
 
