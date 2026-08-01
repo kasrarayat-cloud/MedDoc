@@ -238,8 +238,35 @@ relay ledger and commit `7d181ae8` both state that C1-b landed "the naming
 CONTRACT" here. It did not — C1-b's 87 lines into this file were the contrast
 table above and the host-bridge section; the seventeen class names it listed
 never appeared anywhere but the plan. Anyone building against the promised
-contract would have found nothing and invented their own. The ledger row is
-corrected; this is the contract.
+contract would have found nothing and invented their own. This is the contract.
+
+⚠️ **And the sentence that stood here said "The ledger row is corrected" — in
+the past tense, in the commit that did not correct it.** `46d7ee6c` touched 24
+files and `docs/rounds/RELAY.md` was not among them; the false clause survived
+that merge and was still on `RELAY.md:174` a day later. It is corrected now, in
+`docs(rounds)` on 2026-08-01, and the fix is checkable rather than asserted:
+`grep -c "17 control-primitive" docs/rounds/RELAY.md` finds the row, and the row
+names this section by line. **This is rule 2c — an evidence sentence written
+before the event it describes — arriving inside the very section whose subject
+is a record that said something it had not done.** The cure is the same one the
+rule prescribes: write it after, from the artefact, and cite something a reader
+can re-run.
+
+⚠️ **THIS TABLE HAS NO GUARD, AND THAT IS HOW IT DRIFTED.** `gate-c1d-auth`
+asserts CSS ↔ TSX in both directions — every applied class has a rule, every rule
+has a caller — so **the stylesheet and the product cannot disagree.** Nothing
+compares either of them to *this table*, which is why `.qm-rounds-authform`
+shipped with a rule (`rounds-tokens.css:1275`), a consumer
+(`auth-shell.tsx:115`) and a mention in a gate's own comment while appearing in
+no row here until 2026-08-01. **A contract that cannot fail is a description, not
+a contract.** Deliberately not built yet: C1-e adds roughly seven primitives
+(`-select`, `-field`, `-help`, `-btn-danger`, `-btn[disabled]`, `-dialog`,
+`-settings`), so a guard written against today's twelve rows gets rewritten by
+the split that first needs it — the same reasoning that kept the classes
+themselves from landing ahead of their consumers. **It lands with C1-e**, and it
+must derive the applied set by traversal (never a maintained array — see the
+`globstar` miss and the convention-file miss) and carry a non-vacuity assertion
+on the row count, so a parser that matches nothing reddens instead of passing.
 
 **The rule that governs the whole layer:** a class lands **with its consumer**,
 never ahead of one. C1-b deliberately shipped none of these for that reason — a
@@ -251,6 +278,7 @@ class must have a rule, and every rule must have a caller.
 |---|---|---|
 | `.qm-rounds-host` | **the bridge.** Redeclares the 22 `--color-linear-*` names on a scoped class | Applied to the ROOT of a restyled surface. Colour only |
 | `.qm-rounds-<surface>` | a surface marker — `-auth`, `-notfound`, `-errorstate`, `-loading` | Pairs with the host. One per screen |
+| `.qm-rounds-authform` | the auth form container — a **second** ownership anchor inside `-auth` | Not decoration. Without it a violation inside the form climbs to `.qm-c3-auth-form`, matches no owned class, and files as *inherited* — reported, never gated. See "What a bridge cannot do" |
 | `.qm-rounds-btn` | primary action, accent fill | Text is `--rounds-on-accent` |
 | `.qm-rounds-btn-primary` | the same treatment applied **over** an old-skin `.qm-lin-btn-primary` | Fork, not replacement — item F removes the pairing |
 | `.qm-rounds-btn-secondary` | outlined action | |

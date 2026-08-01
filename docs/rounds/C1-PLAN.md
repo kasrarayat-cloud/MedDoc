@@ -35,8 +35,26 @@ cites paths and line numbers precisely so that is cheap to do.
    promises build-time inlining that never happens for this var, and there is no
    `ARG` in the Dockerfile at all. The first time anyone reads it from a client
    component it silently becomes `undefined` → `false`, the feature dies, and
-   nothing errors. Add the `ARG`+`ENV` as hardening, but do not describe it as a
-   live outage.
+   nothing errors. ~~Add the `ARG`+`ENV` as hardening~~, but do not describe it
+   as a live outage.
+
+   ⚠️ **CORRECTED 2026-08-01 — DO NOT ADD THE `ARG`+`ENV`. It is not hardening;
+   it is the destruction of the thing this correction exists to protect.**
+   Next 16 spreads `nextPublicEnv` into the define map **before** any
+   `isClient`/`isNodeServer` branching (`next/dist/build/define-env.js:61`, map
+   built by `next/dist/lib/static-env.js`, which keeps every key where
+   `value != null`). So `NEXT_PUBLIC_*` is inlined into the **server** bundle
+   too, and the trigger is the key merely BEING PRESENT in the builder env —
+   **an `ARG`'s own default is enough, whether or not compose passes anything.**
+   Adding it would freeze this flag at build time, kill the only no-rebuild flag
+   flip in the stack (`docker-compose.yml:646`), and — with `ENV …=false` and no
+   matching `args:` row — turn PDF-native fill **silently off in production**.
+   Measured proof that this is not theoretical: `NEXT_PUBLIC_SHOW_PIPELINE_TAB`
+   is read by a server component and had **0 surviving reads across 579 prod
+   server chunks**, folded to `showPipelineTab:!1`. Close the latent trap with a
+   **source guard** instead (never a client import; exactly one `process.env`
+   read) — same protection, no capability lost, no rebuild. Full reasoning and
+   the corrected instruction: `RELAY.md`, parked row.
 
 2. **Gate C belongs to C2, not C1.** The plan is right about this and it is worth
    repeating here: `RELAY.md`'s C1 row asks for *"all to tokens; copy register"*.
@@ -210,7 +228,7 @@ Without D3 written down, C1 is ~9,600 lines of restyle. With it, FULL is ~1,400.
 **No product code. Merge this first and alone.**
 
 - `/opt/meddoc-pro/.github/workflows/e2e.yml:280-289` — add `--build-arg NEXT_PUBLIC_SETTINGS_SIMPLE_ROW=true`, `NEXT_PUBLIC_DOC_PREVIEW=true`, `NEXT_PUBLIC_TEMPLATE_NATIVE_PDF=true`, `NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX=true`, `NEXT_PUBLIC_VISIT_DOC_PAGE=true` (the last two are B4's named inheritance to C2 — pay them here).
-- ⚠️ **`/opt/meddoc-pro/apps/transcribe-md/Dockerfile` does NOT declare `ARG NEXT_PUBLIC_TEMPLATE_NATIVE_PDF`** (declared: SKIN_BETA:74, SKIN_ROUNDS:82, ULTRASOUND:93, TEMPLATE_NATIVE_DOCX:104, UX_SIMPLIFY:114, REVIEW_DOC_VIEW:123, SETTINGS_SIMPLE_ROW:128, DOC_PREVIEW:130, VISIT_DOC_PAGE:132, CHAT_EDITOR:134). Docker discards an undeclared build-arg **silently** — this is the exact failure that shipped the first flag-ON build with the old skin. Add ARG+ENV at :128.
+- ⚠️ **`/opt/meddoc-pro/apps/transcribe-md/Dockerfile` does NOT declare `ARG NEXT_PUBLIC_TEMPLATE_NATIVE_PDF`** (declared: SKIN_BETA:74, SKIN_ROUNDS:82, ULTRASOUND:93, TEMPLATE_NATIVE_DOCX:104, UX_SIMPLIFY:114, REVIEW_DOC_VIEW:123, SETTINGS_SIMPLE_ROW:128, DOC_PREVIEW:130, VISIT_DOC_PAGE:132, CHAT_EDITOR:134). Docker discards an undeclared build-arg **silently** — this is the exact failure that shipped the first flag-ON build with the old skin. ~~Add ARG+ENV at :128.~~ ⚠️ **CORRECTED 2026-08-01 — DO NOT.** For this flag the missing `ARG` is the feature, not the defect: it is what keeps the only no-rebuild `NEXT_PUBLIC_*` flip in the stack alive. See correction 1 above and `RELAY.md`'s parked row.
 - `/opt/meddoc-pro/apps/transcribe-md/src/lib/__tests__/gate-flag-coverage.test.ts` — five new rows in the `:rounds` `needs` list, each with its `why` in the file's established voice.
 - `/opt/meddoc-pro/docker-compose.qa.rounds.yml` — header comment updated (it already lists the build line; a stale comment here is how the next reader builds the wrong image by hand).
 
@@ -330,7 +348,7 @@ Small, flag-independent, unit-provable, and it fixes a **live customer email** �
 ## 3. Traps, ranked by expected CI cost
 
 1. **C1-a's flag additions redden `rounds-board/stage/gates/signed`.** `DOC_PREVIEW` and `VISIT_DOC_PAGE` change the visit surface those packs walk; `SETTINGS_SIMPLE_ROW` changes `TemplateRow`. B4 named this and deferred it. ~55 min per cycle, likely ≥2. **Merge C1-a alone so a red is unambiguous.**
-2. **`TEMPLATE_NATIVE_PDF` has no `ARG` in the Dockerfile.** Docker discards it *silently*. The build goes green, the image is wrong, and the pack fails somewhere else entirely. Verified above — declare it at Dockerfile:128, and confirm by the inlining grep on the shipped chunk, never by reading env.
+2. ~~**`TEMPLATE_NATIVE_PDF` has no `ARG` in the Dockerfile.**~~ ⚠️ **WITHDRAWN 2026-08-01 — THIS TRAP WAS BACKWARDS.** It is true that Docker discards an undeclared build-arg silently, and that is a real trap *for the ten flags that need to be inlined*. This flag is not one of them: **both its readers are server-side, so the absent `ARG` is what keeps it readable at RUNTIME** — the only no-rebuild `NEXT_PUBLIC_*` flip in the stack. Declaring it at `Dockerfile:128` would freeze it at build time and, with `ENV …=false`, disable PDF-native fill in production silently. The instruction also fails its own advice: *"confirm by the inlining grep on the shipped chunk"* is a **client**-chunk grep, and this value's inlining would land in the **server** bundle, where that grep does not look. See correction 1 and `RELAY.md`'s parked row.
 3. **The axe gate goes green vacuously on every C1 surface.** `grep -rn qm-rounds app/settings/ app/login/ app/signup/ app/waitlist/ app/not-found.tsx components/error-fallback.tsx components/ui/empty-state.tsx components/skeleton.tsx` returns **zero**. Ownership climbs to the nearest classed ancestor — a `qm-lin-*`/`qm-c3-*` node, or `<body className="min-h-screen antialiased">` — and every violation is logged as inherited, not gated. `violations: []` while measuring nothing. This does not cost a cycle; it costs the gate, silently, which is worse. **Cure: contract rule 2, plus the third positive-control case.**
 4. **The D1 mechanism decided *after* implementation starts.** All three inventories independently proposed the same three losing options. If a session starts restyling `login-form.tsx` before D1 is written down, the work is thrown away. **C1-b exists to prevent exactly this.**
 5. **`signupFreshUser`'s selectors.** `helpers/signup.ts:35-43` is imported by 40 specs including every Rounds pack. Break a label association or add a second checkbox to `/signup` and the **entire suite** reds — auth, rounds, a11y, mobile-tap-targets, doc-preview. ~55 min, and the failure reads as "Rounds broke everything".
