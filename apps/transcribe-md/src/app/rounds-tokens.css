@@ -82,7 +82,11 @@
   --rounds-ready: #187a4e;
   /* THE READY GREEN AS TEXT. #187a4e is a FILL and LINE colour — it is a deep
    * green chosen to read on the light paper and as a track run, and on the dark
-   * stage it lands near 2.3:1, far under AA for small text.
+   * stage it lands at 3.39:1 — far under AA for small text.
+   * (⚠️ "near 2.3:1" stood here until 2026-08-01 and was wrong: measured,
+   * #187a4e is 3.392 on --rounds-stage-bg-3, 3.233 on surface-1, and 2.661 at
+   * its worst on any declared Rounds backdrop. The conclusion is unchanged —
+   * it needs a text variant — but do not carry 2.3 forward as a measurement.)
    * FOURTH instance of one lesson: `--rounds-em`/`--rounds-em-fill` (A2),
    * `--rounds-accent`/`--rounds-accent-text` and `--rounds-signed`/
    * `--rounds-signed-text` (B4's axe run). If a token names a STATE or a FILL,
@@ -1011,10 +1015,25 @@ body[data-skin='rounds'] {
  * sentence cannot silently become false again in either direction.
  *
  * ⚠️ WHAT A BRIDGE CANNOT DO, learned on the auth surface: it retints custom
- * properties. It cannot touch a LITERAL, a Tailwind utility, or a component
- * that paints its own colours. Every one of those has now cost a surface —
- * see `--rounds-on-accent` above, the `.animate-pulse` override below, and the
- * root 404's forked branch. Bridging is the first move, never the whole move.
+ * properties. It cannot touch a LITERAL, or a component that paints its own
+ * colours. Both have now cost a surface — see `--rounds-on-accent` above and
+ * the root 404's forked branch. Bridging is the first move, never the whole
+ * move.
+ *
+ * ⚠️ CORRECTED 2026-08-01 — "a Tailwind utility" WAS IN THAT LIST AND DOES NOT
+ * BELONG. Tailwind v4's `@theme` (globals.css:36) emits custom properties, so
+ * `bg-linear-surface-2` compiles to
+ * `background-color: var(--color-linear-surface-2)` — read out of the COMPILED
+ * chunk in both the prod and the flag-ON QA container, not inferred from
+ * source. The bridge reaches it like anything else. Measured at runtime: a
+ * `.animate-pulse.bg-linear-surface-2` under `.qm-rounds-host` with NO override
+ * in scope computes `rgb(30,37,48)` = `--rounds-surface-2`.
+ *
+ * This was not a harmless slip. It sat in a list beside two real cases and
+ * inherited their credibility, and its consequence is the expensive direction:
+ * a later split reading it forks files that would have bridged for free. The
+ * `.animate-pulse` override below is therefore ELECTIVE, not required — see
+ * its own note.
  *
  * WHY IT WINS THE CASCADE, stated because it looks like it should not:
  * `--color-linear-*` are declared inside Tailwind's `@theme {}` in globals.css,
@@ -1137,11 +1156,27 @@ body[data-skin='rounds'] {
 }
 
 /* ── Skeletons ───────────────────────────────────────────────────────────
- * The shipped `Skeleton` primitive paints `bg-linear-surface-2`, a Tailwind
- * UTILITY rather than a `var()` — so the host bridge cannot reach it, and this
- * is the one place in C1 where a class override is required rather than
- * preferred. Worth stating: the bridge retints custom properties, not
- * compiled utility classes. */
+ * ⚠️ CORRECTED 2026-08-01. THIS COMMENT WAS FALSE, AND IT IS THE ONE PLACE THE
+ * ERROR ORIGINATED. It read: "The shipped `Skeleton` primitive paints
+ * `bg-linear-surface-2`, a Tailwind UTILITY rather than a `var()` — so the host
+ * bridge cannot reach it, and this is the one place in C1 where a class
+ * override is required rather than preferred."
+ *
+ * `bg-linear-surface-2` compiles to `background-color:var(--color-linear-surface-2)`
+ * — verified in the compiled chunk of both the prod and the flag-ON QA image,
+ * and at runtime: the same node under `.qm-rounds-host` with this override OUT
+ * of scope computes `rgb(30,37,48)` = `--rounds-surface-2`, reached by the
+ * bridge alone. Nothing here is required.
+ *
+ * The rule below is KEPT, on an honest reason: a skeleton bar one step lighter
+ * than the card it sits in reads as content-shaped absence rather than as part
+ * of the card. That is a design choice, and it should look like one.
+ *
+ * ⚠️ Consequence worth carrying: because the class was believed mandatory,
+ * nobody asked whether the surfaces LACKING it were covered — and
+ * `settings/loading.tsx` had no Rounds class at all, which under the true
+ * premise is a *bridge* miss (old-skin #0d0e10 on the Rounds stage) and far
+ * more visible than a missing tint. A false "must" hides the "did we?". */
 [data-skin='rounds'] .qm-rounds-loading .animate-pulse,
 [data-skin='rounds'] .qm-rounds-skel-sheet .animate-pulse {
   background-color: var(--rounds-surface-3);
@@ -1209,11 +1244,18 @@ body[data-skin='rounds'] {
  * ⚠️ AND GATE C CANNOT SEE IT, which is why the fix is a rule and not a patch.
  * `ownedByDom` climbs to the nearest ancestor-or-self carrying ANY class. A
  * `<button class="qm-lin-btn-primary">` answers for itself and resolves NOT
- * owned, so the violation would be logged "inherited" and never block. The
- * brand mark is worse: both spans are `aria-hidden`, so axe never evaluates
- * them at all. A contrast bug on the most important control on the screen,
- * invisible to the gate written to catch contrast bugs. `gate-c1d-auth`
- * computes these ratios in a unit instead.
+ * owned, so the violation would be logged "inherited" and never block. A
+ * contrast bug on the most important control on the screen, invisible to the
+ * gate written to catch contrast bugs. `gate-c1d-auth` computes these ratios in
+ * a unit instead.
+ *
+ * ⚠️ CORRECTED 2026-08-01: this used to add "the brand mark is worse: both
+ * spans are `aria-hidden`, so axe never evaluates them at all". Both clauses
+ * are false. `aria-hidden` does not hide text from axe's contrast rule
+ * (`excludeHidden: false`), and only one of the two spans carries it. The real
+ * escape is single-CHARACTER text — axe files a one-glyph node as INCOMPLETE,
+ * never a violation, and the pack does not assert on incomplete. Full
+ * derivation in `gate-c1d-auth.test.ts`.
  *
  * ⚠️ THE HOVER FILL INVERTS, from the same root cause in the other direction.
  * `.qm-lin-btn-primary:hover` fills with `--color-linear-sage-bright`, which
@@ -1391,6 +1433,56 @@ body[data-skin='rounds'] {
   --color-linear-text-3: var(--rounds-text-2);
   --color-linear-text-4: var(--rounds-text-2);
 }
+/* ⚠️ AND THE RE-BRIDGE ABOVE CANNOT REACH A ROUNDS PRIMITIVE — the subtlest
+ * thing C1-e found, because it is C1-d's fix failing to cover C1-d's own class.
+ *
+ * `.qm-rounds-panel` lifts the faintest tiers by REDECLARING `--color-linear-*`
+ * for its subtree. That protects everything reading a bridged name. It does NOT
+ * protect `.qm-rounds-label`, which sets `color: var(--rounds-text-3)`
+ * DIRECTLY — a Rounds token, not a bridged one — so it sails past the
+ * redeclaration and lands on the panel's lighter ground at **4.18:1**.
+ * Measured: text-3 #7c8694 is 4.68 on surface-1 and 4.18 on surface-2;
+ * text-2 #98a2b1 is 5.97 there.
+ *
+ * The general shape is worth more than the instance: **a correction expressed
+ * in the bridge's vocabulary protects only what speaks the bridge's
+ * vocabulary.** Every primitive naming a `--rounds-*` token directly is opted
+ * out of every subtree correction, silently and permanently. Three primitives
+ * do that today — `-label`, `-error`, `-input::placeholder` — and the latter
+ * two already take values clearing AA on both grounds, so `-label` was the one
+ * exposed.
+ *
+ * Found by the E2E, not by a unit. `gate-c1d-auth` computes the pairs it is
+ * TOLD to compute, and nobody thought to tell it about a label inside a panel
+ * inside a portal. */
+[data-skin='rounds'] .qm-rounds-panel .qm-rounds-label {
+  color: var(--rounds-text-2);
+}
+
+/* ⚠️ THE DANGER HEADING IS A FILL TOKEN USED AS TEXT — the palette's standing
+ * lesson, arriving for the EIGHTH time and from a direction no guard watches.
+ *
+ * `globals.css:5184,5216` set `color: var(--color-linear-danger)` on
+ * `.qm-c3-set-tab.danger.on` and `.qm-c3-set-h.danger`. The bridge maps that
+ * name to `--rounds-critical` #c93a2e — correctly, because its MAJORITY use is
+ * a border/fill. As text on the dialog ground that is **3.39:1**. The on-dark
+ * variant is **7.70:1**.
+ *
+ * Why every existing guard was blind to it: `gate-rounds-bridge`'s
+ * foreground-AA scan walks `.tsx` ONLY, so a `color:` written in `globals.css`
+ * is outside its universe entirely — not missed, never in scope. C1-b's
+ * deferred-fork ledger for `--color-linear-danger` was closed by C1-c on the
+ * strength of a survey that could not have seen these two sites.
+ *
+ * Forked here rather than by changing the bridge line: the bridge mapping is
+ * right for the seven fills that depend on it, and one line cannot serve both
+ * roles. That is the same adjudication C1-b made for `sage`. */
+[data-skin='rounds'] .qm-rounds-host .qm-c3-set-h.danger,
+[data-skin='rounds'] .qm-rounds-host .qm-c3-set-tab.danger.on,
+[data-skin='rounds'] .qm-rounds-dialog .qm-c3-set-h.danger {
+  color: var(--rounds-critical-on-dark);
+}
+
 /* A link.
  * ⚠️ THE UNDERLINE IS A RECORDED AXE FIX, not a style choice. A link
  * distinguished from surrounding prose ONLY by hue fails `link-in-text-block`
@@ -1424,4 +1516,162 @@ body[data-skin='rounds'] {
   border-radius: var(--rounds-radius-sm);
   font-family: var(--rounds-font-ui);
   color: var(--rounds-text-1);
+}
+
+/* ── C1-e · Settings ───────────────────────────────────────────────────────
+ * The settings surface is the cheapest in C1 and the most instructive. Its
+ * chrome (`settings-sections-c3.tsx`) is FULLY CLASSED and its rules read
+ * `--color-linear-*` from `globals.css`, so the rail, the panels and the
+ * headings come to Rounds for free the moment an ancestor carries the host.
+ * Almost nothing below is a restyle; it is the handful of places the bridge
+ * structurally cannot reach. */
+
+/* The surface marker. Pairs with the host on the settings page root.
+ * It carries the UI face rather than nothing, for the reason
+ * `.qm-rounds-authform` does: `gate-c1d-auth` refuses a class that declares
+ * nothing, and an ownership marker that cannot be found in the stylesheet is
+ * worse than one that does a job. */
+[data-skin='rounds'] .qm-rounds-settings {
+  font-family: var(--rounds-font-ui);
+  /* ⚠️ AND IT PAINTS ITS OWN GROUND, WHICH NO EARLIER C1 SURFACE HAD TO.
+   * `/settings` is the first Rounds surface that renders inside `AppFrame`.
+   * `.qm-lin-app` (globals.css:169) paints an OPAQUE
+   * `background: var(--color-linear-bg)` at `min-height:100vh` — and it is an
+   * ANCESTOR of this host, so the host's own `--color-linear-bg` redeclaration
+   * cannot reach it. The Rounds stage gradient painted on `body` sits
+   * underneath, covered. Flag ON, the result is Rounds-tinted panels on the
+   * old skin's near-black #08090a canvas.
+   *
+   * Every earlier adopter escaped by accident: `/board` does not use
+   * `AppFrame` at all, `not-found` / `loading` / `error-fallback` render
+   * outside it, and `auth-shell` puts the host on the element that paints.
+   * The rule the near-miss yields: THE HOST MUST BE ON, OR ABOVE, THE ELEMENT
+   * THAT PAINTS THE GROUND — a bridge under an opaque ancestor is invisible.
+   *
+   * Fixed here for this subtree only, deliberately. The tempting fix is
+   * `qm-rounds-host` on `.qm-lin-app` in `AppFrame`, and it is wrong for C1:
+   * it would bridge EVERY authenticated page — dashboard, visits, record —
+   * none of them designed for Rounds, none axe-walked, and rule 4 forbids
+   * flipping a partial skin. */
+  background: var(--rounds-stage-bg-3);
+}
+/* ⚠️ NOT FIXED, AND NAMED RATHER THAN LEFT TO BE REDISCOVERED: the app CHROME
+ * around this surface — `.qm-lin-app`'s canvas, the C3 sidebar, the top nav —
+ * stays old-skin under the flag. That is the honest state of a partial skin at
+ * C1, not an oversight, and it belongs to C2/F which own the chrome. What C2
+ * inherits is the decision, not the discovery: either `AppFrame` gains the
+ * host when every surface it wraps is skinned, or the chrome gets its own
+ * fork. Do not solve it by widening this selector. */
+
+/* ── The portalled dialogs ─────────────────────────────────────────────────
+ * ⚠️ THE BRIDGE DOES NOT REACH A RADIX PORTAL, AND NOTHING SAID SO.
+ * `delete-account-dialog` and `change-email-dialog` render `<Dialog.Portal>`
+ * with no `container`, so Radix mounts them on `<body>`. `data-skin` is on
+ * `<html>` so `[data-skin='rounds']` still matches — but the bridge is
+ * `[data-skin='rounds'] .qm-rounds-host`, DELIBERATELY scoped, and a portalled
+ * node is not a descendant of the page root. Every `--color-linear-*` inside
+ * keeps its old-skin value — NINE distinct names in each dialog. Measured,
+ * that is a near-black #0d0e10 dialog opening on top of a #161b24 Rounds page.
+ * (⚠️ "seven in the delete dialog, nine in change-email" stood here first and
+ * mixed two counting methods: seven is what you get counting only names
+ * appearing literally between the `<Dialog.Portal>` tags, which drops the
+ * three module-level `inputStyle`/`labelStyle`/`errorStyle` consts — objects
+ * that render INSIDE the portal and carry its colours. Counted the same way,
+ * change-email is seven too. Consts-inclusive is the right method and the
+ * answer is nine, nine.)
+ *
+ * `gate-rounds-bridge`'s adopter check could not see it — it asks whether the
+ * FILE contains `qm-rounds-host`, and the file does. The class was on the
+ * trigger, not on the portalled content.
+ *
+ * So the host goes on `Dialog.Content` ITSELF. Not on a wider selector and not
+ * by redeclaring at `:root` — and that is not fussiness. `.qm-lin-btn-primary`
+ * hardcodes `color: #0d1611`, which is 4.62:1 on the old danger fill and
+ * **3.62:1** on `--rounds-critical`. Bridging the FILL into the portal by any
+ * route that does not also bring the C1-d label fork above would retint the
+ * button and leave its label failing AA — a contrast regression created by the
+ * act of fixing a colour. Fill and label must arrive through the same
+ * selector. */
+[data-skin='rounds'] .qm-rounds-dialog {
+  background: var(--rounds-surface-1);
+  border: 1px solid var(--rounds-line-1);
+  border-radius: var(--rounds-radius-md);
+  color: var(--rounds-text-1);
+  font-family: var(--rounds-font-ui);
+  /* ⚠️ AND IT RE-BRIDGES THE FAINTEST TIERS UPWARD, exactly as
+   * `.qm-rounds-panel` does — because on this surface the CLASS IS NOT THE
+   * AUTHORITY and cannot be.
+   *
+   * Both dialogs render their labels as
+   * `<label className="qm-rounds-label" style={labelStyle}>`, and `labelStyle`
+   * is a module const carrying `color: 'var(--color-linear-text-3)'` INLINE.
+   * Inline beats a class, so `.qm-rounds-label`'s own `color` never applies —
+   * and neither does a `.qm-rounds-panel .qm-rounds-label` override, which was
+   * this fix's first draft and moved nothing. The label's colour arrives
+   * through the BRIDGE, not through the primitive, so the only lever that
+   * reaches it is a redeclaration on an ancestor.
+   *
+   * This is the C1-d panel mechanism one surface over, and the second time in
+   * one item that the same question — *what is actually deciding this pixel?* —
+   * had a different answer than the class list suggested. A primitive tells you
+   * what a surface INTENDS; only the cascade tells you what it DOES. */
+  --color-linear-text-3: var(--rounds-text-2);
+  --color-linear-text-4: var(--rounds-text-2);
+}
+/* The scrim. The old value is a raw `rgba(0,0,0,0.55)` literal, which is
+ * skin-neutral and would have been fine to leave — but the Rounds stage is
+ * lighter than the old near-black canvas, so the same alpha reads weaker over
+ * it. This is a deliberate deepening, not a token substitution. */
+[data-skin='rounds'] .qm-rounds-dialog-overlay {
+  background: rgba(6, 9, 14, 0.66);
+}
+
+/* ⚠️ `.qm-rounds-btn-danger` WAS DECLARED HERE AND HAS BEEN REMOVED, by its
+ * own gate, in the same change that wrote it. Recorded because it is the rule
+ * working on the person who wrote the rule.
+ *
+ * C1-b's ruling is "a class lands WITH its consumer, never ahead of one". I
+ * declared a destructive-action primitive up front because the surface has an
+ * obviously destructive button — and then the only candidate turned out not to
+ * want it. `delete-account-dialog`'s confirm keeps an INLINE
+ * `background: var(--color-linear-danger)`, which it must, or the button loses
+ * its fill with the flag OFF. An inline value beats a class, so the primitive's
+ * `background` could never apply; everything else it declared duplicated the
+ * C1-d `.qm-lin-btn-primary` fork, which was traced and does reach this button
+ * inside the portal now that the host is on `Dialog.Content`.
+ *
+ * So the class would have shipped as four dead declarations and one redundant
+ * one. `gate-c1d-auth`'s orphan check caught it — `expected [
+ * 'qm-rounds-btn-danger' ] to deeply equal []` — which is exactly what that
+ * assertion is for. The fix is to delete the class, not to find it a caller. */
+
+/* Native select. `.qm-rounds-input` cannot simply be reused: a `<select>`
+ * draws its own indicator, and the UA stylesheet's `background` shorthand on a
+ * select would blow away a `background-image` arrow if one is ever added. Kept
+ * to the same face as the input so the two read as one family. */
+[data-skin='rounds'] .qm-rounds-select {
+  background-color: var(--rounds-surface-2);
+  border: 1px solid var(--rounds-line-1);
+  border-radius: var(--rounds-radius-sm);
+  color: var(--rounds-text-1);
+  font-family: var(--rounds-font-ui);
+}
+[data-skin='rounds'] .qm-rounds-select:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--rounds-accent-text);
+}
+
+/* A disabled control. C1-PLAN listed `-btn[disabled]` among the seventeen and
+ * this is the first surface with a real one: Billing's button is permanently
+ * disabled by design, so the state is not a transient — it is what that panel
+ * always looks like.
+ * ⚠️ `text-3` is NOT used here even though "disabled" invites the faintest
+ * tier. On surface-2 it is 4.18:1, the same near-miss C1-d found inside
+ * `.qm-rounds-panel`. Disabled text is still text. */
+[data-skin='rounds'] .qm-rounds-btn:disabled,
+[data-skin='rounds'] .qm-rounds-host .qm-lin-btn:disabled {
+  background: var(--rounds-surface-2);
+  border-color: var(--rounds-line-1);
+  color: var(--rounds-text-2);
+  cursor: not-allowed;
 }

@@ -157,9 +157,21 @@ const DEFERRED_FORKS: Record<string, { sites: number; owner: string; why: string
     owner: 'C1-e / C1-f (all four sites are under settings/note-format)',
     why:
       'used 4× as a foreground and 7× as a fill. Mapped to --rounds-accent so ' +
-      'the 7 fills stay right; two of the four foregrounds are aria-hidden ' +
-      'glyphs that axe does not measure, and the other two need a forked ' +
-      '--rounds-accent-text at their call site.',
+      'the 7 fills stay right; two of the four foregrounds are emoji glyphs ' +
+      'that axe does not measure, and the other two need a forked ' +
+      '--rounds-accent-text at their call site. ' +
+      // ⚠️ CORRECTED 2026-08-01. This said "aria-hidden glyphs that axe does
+      // not measure", conflating two different escapes and getting the
+      // load-bearing one wrong. aria-hidden does NOT hide text from axe's
+      // contrast rule (`excludeHidden: false`, axe.js:31653). Those two spans
+      // are 🛡 emoji, and a bare-emoji element never reaches
+      // colorContrastEvaluate at all — colorContrastMatches rejects it via
+      // hasRealTextChildren (axe.js:27704), which strips unicode. Measured:
+      // they land in neither violations, incomplete, nor passes, while
+      // "🛡 verified" in the same run is a full violation. Three distinct
+      // mechanisms hide contrast from this gate — aria-hidden is not one of
+      // them; single-character text and bare emoji are.
+      'The outcome is unchanged; the mechanism recorded here was not.',
   },
 };
 function tokenValue(name: string): string | null {

@@ -111,6 +111,7 @@ export function ProfileForm({
       {errors._form && (
         <p
           role="alert"
+          className="qm-rounds-error"
           style={{
             fontFamily: 'var(--font-sans)',
             fontSize: 12,
@@ -190,6 +191,7 @@ function Field({
     <div>
       <label
         htmlFor={id}
+        className="qm-rounds-label"
         style={{
           display: 'block',
           marginBottom: 6,
@@ -208,7 +210,7 @@ function Field({
           id={id}
           name={name}
           defaultValue={defaultValue}
-          className="qm-tap-44-input"
+          className="qm-tap-44-input qm-rounds-select"
           style={inputStyle}
         >
           {options?.map((o) => (
@@ -225,13 +227,14 @@ function Field({
           defaultValue={defaultValue}
           required={required}
           placeholder={placeholder}
-          className="qm-tap-44-input"
+          className="qm-tap-44-input qm-rounds-input"
           style={inputStyle}
         />
       )}
       {error && (
         <p
           role="alert"
+          className="qm-rounds-error"
           style={{
             marginTop: 6,
             fontFamily: 'var(--font-sans)',

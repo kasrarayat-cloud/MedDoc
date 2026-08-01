@@ -71,6 +71,8 @@
 // honestly is worth more than a green tick that cost an invariant.
 // ============================================================================
 
+import { readFileSync } from 'node:fs';
+
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
@@ -92,6 +94,53 @@ import { TEST_EMAIL_PREFIX, TEST_PASSWORD } from '../helpers/test-utils';
 /** Widths the spec's screenshot clause names. */
 const WIDE = 1440;
 const NARROW = 1024;
+
+// ── Expected computed values, DERIVED FROM THE SHIPPED STYLESHEETS ─────────
+//
+// ⚠️ NEVER A HARDCODED `rgb(…)` LITERAL. A pack carrying its own copy of the
+// value it is checking asserts that the copy is self-consistent, which is not a
+// fact about the product — and a token edit would leave this pack green while
+// the surface changed underneath it. Read the token, convert, compare EXACTLY.
+//
+// Paths are relative to the Playwright CWD (apps/transcribe-md), the same
+// convention `doc-preview.spec.ts` documents for its fixture. An absolute
+// /opt/meddoc-pro path only exists on the VPS and made a helper a silent no-op
+// in CI once already.
+const ROUNDS_CSS = readFileSync('src/app/rounds-tokens.css', 'utf8');
+const GLOBALS_CSS = readFileSync('src/app/globals.css', 'utf8');
+
+function hexToRgb(hex: string): string {
+  let h = hex.replace('#', '').trim();
+  if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
+  return `rgb(${r}, ${g}, ${b})`;
+}
+function cssToken(sheet: string, name: string, where: string): string {
+  const m = sheet.match(new RegExp(`^\\s*${name}:\\s*(#[0-9a-fA-F]{3,8})\\s*;`, 'm'));
+  if (!m) throw new Error(`${name} is not declared in ${where} — this pack cannot state an expectation`);
+  return hexToRgb(m[1]);
+}
+const ROUNDS = (n: string) => cssToken(ROUNDS_CSS, n, 'rounds-tokens.css');
+const LINEAR = (n: string) => cssToken(GLOBALS_CSS, n, 'globals.css');
+
+/** The Rounds stage `.qm-rounds-settings` paints. */
+const STAGE_BG_3 = ROUNDS('--rounds-stage-bg-3');
+/** The dialog ground `.qm-rounds-dialog` paints — and the old skin's, which it
+ *  must not equal. #0d0e10 is a near-black dialog opening on a #12161e page. */
+const SURFACE_1 = ROUNDS('--rounds-surface-1');
+const OLD_SURFACE_1 = LINEAR('--color-linear-surface-1');
+/** Text sitting ON an accent or critical fill, and the near-black literal the
+ *  old skin hardcodes at `globals.css` `.qm-lin-btn-primary` — 6.72:1 on sage,
+ *  3.62:1 on `--rounds-critical`. The arithmetic is pinned in
+ *  `gate-c1e-settings.test.ts`; this pack pins the PIXELS. */
+const ON_ACCENT = ROUNDS('--rounds-on-accent');
+const OLD_PRIMARY_LABEL = hexToRgb('#0d1611');
+const CRITICAL = ROUNDS('--rounds-critical');
+/** The MFA pill's forked label, and the value it would have had un-forked:
+ *  `--color-linear-sage-bright` bridges to `--rounds-accent-text`, i.e. an
+ *  INDIGO label inside a green border. */
+const READY_TEXT = ROUNDS('--rounds-ready-text');
+const ACCENT_TEXT = ROUNDS('--rounds-accent-text');
 
 test.describe('Rounds C1 — auth to tokens, flag-ON', () => {
   const violations: Finding[] = [];
@@ -246,7 +295,16 @@ test.describe('Rounds C1 — auth to tokens, flag-ON', () => {
 
     expect(
       violations.map((f) => `${f.state}@${f.width} ${f.entry.id} (${f.entry.impact}) ` +
-        `${f.entry.targets.slice(0, 4).join(', ')}`),
+        `${f.entry.targets.slice(0, 4).join(', ')}` +
+        // The measured pair, so a colour failure is diagnosable from its own
+        // message rather than from a rebuild cycle and a guess.
+        (f.entry.data?.length
+          ? ' :: ' + f.entry.data
+              .filter((d) => d && (d as any).contrastRatio !== undefined)
+              .slice(0, 4)
+              .map((d: any) => `${d.fgColor} on ${d.bgColor} = ${d.contrastRatio} (needs ${d.expectedContrastRatio})`)
+              .join(' | ')
+          : '')),
       'serious/critical axe violations on Rounds-owned auth nodes',
     ).toEqual([]);
   });
@@ -350,7 +408,7 @@ test.describe('Rounds C1 — auth to tokens, flag-ON', () => {
     ).toEqual([]);
   });
 
-  test('the ownership rule can fail — three positive controls', async ({ page }) => {
+  test('the ownership rule can fail — four positive controls', async ({ page }) => {
     test.setTimeout(180_000);
     await page.setViewportSize({ width: WIDE, height: 900 });
     await page.goto('/login');
@@ -436,6 +494,488 @@ test.describe('Rounds C1 — auth to tokens, flag-ON', () => {
     ).toBe(true);
 
     await page.evaluate(() => document.querySelector('#rounds-c1-bridged-probe')?.remove());
+
+    // ── (4) THE SAME BLIND SPOT ON SETTINGS, WHICH IS THE WORSE CASE ───────
+    // Added by C1-e, here rather than in its own describe, because it is the
+    // FOURTH case of one control and splitting a control across two tests is
+    // how one half gets fixed and the other rots.
+    //
+    // ⚠️ CASE (2) AND THIS CASE ARE THE SAME PROBE WITH OPPOSITE VERDICTS, and
+    // the difference is the whole argument for what C1-d did. A classless node
+    // inside `.qm-rounds-authform` IS gated — C1-d pinned an owned class onto
+    // that intermediate container precisely so the walk would reach it. The
+    // settings surface is chromed by the SHIPPED C3 classes (`qm-c3-set-panel`,
+    // `-h`, `-sub`, `-content`) and none of them was paired with a `qm-rounds-*`
+    // class, so the walk stops one node early and answers FALSE. Every field,
+    // label and paragraph inside a settings panel is therefore REPORTED, never
+    // gated.
+    //
+    // Asserted as a blind spot rather than closed. Closing it means classing
+    // shipped C3 chrome, which belongs to C2/F — and rule 4 forbids widening a
+    // partial skin to make a gate greener. What C2 inherits is the decision,
+    // not the discovery: either the C3 chrome gains paired owned classes when
+    // C2 takes it, or the settings panels stay outside the gate and that is
+    // said out loud. If a future change makes the adjudicator climb PAST a
+    // classed node, this reddens and sends the reader here.
+    await signupFreshUser(page, 'rounds-c1e-ctl');
+    await page.goto('/settings');
+    await expect(
+      page.locator('.qm-rounds-host.qm-rounds-settings'),
+      'the settings host is absent — this build is not flag-ON, so the control ' +
+        'below would be measuring the old skin',
+    ).toHaveCount(1);
+    // Exactly one panel is not `hidden`; axe skips hidden content entirely, so
+    // a probe in the wrong panel would be invisible and read as "not gated".
+    const live = page.locator('.qm-c3-set-panel:not([hidden])');
+    await expect(live, 'the C3 section rail renders no visible panel').toHaveCount(1);
+    await page.evaluate(() => {
+      const panel = document.querySelector('.qm-c3-set-panel:not([hidden])');
+      const el = document.createElement('p');
+      el.setAttribute('id', 'rounds-c1e-panel-probe');
+      el.setAttribute('style', 'color:#777;background:#888;font-size:12px;padding:4px');
+      el.textContent = 'classless probe inside a classed C3 settings panel';
+      panel!.appendChild(el);
+    });
+    const panelRun = await runAxe(page);
+    expect(
+      blocking(panelRun.violations).some((e) =>
+        e.targets.some((t) => t.includes('rounds-c1e-panel-probe')),
+      ),
+      'a classless node inside a C3 settings panel was GATED — the ownership ' +
+        'rule changed. That may be an improvement, but C1-e and C2 both reason ' +
+        'from the documented blind spot, so update them together',
+    ).toBe(false);
+    expect(
+      inheritedBlocking(panelRun.violations).some((e) =>
+        e.targets.some((t) => t.includes('rounds-c1e-panel-probe')),
+      ),
+      'the settings probe was neither gated NOR reported as inherited — it fell ' +
+        'out of the harness entirely, which is worse than either',
+    ).toBe(true);
+    await page.evaluate(() => document.querySelector('#rounds-c1e-panel-probe')?.remove());
+
     cleanupTestUsers();
+  });
+});
+
+// ============================================================================
+// ROUNDS C1-e — the settings surface, FLAG-ON: the portal the bridge cannot
+// reach, and two computed colours no file-level check can see.
+// ----------------------------------------------------------------------------
+// A SEPARATE top-level describe, with its OWN accumulators. C1-d's three tests
+// share four describe-scope arrays and assert them with a floor of 17 measured
+// states; pushing settings states into those would move that floor for a reason
+// unrelated to the auth surface, and a C1-e red would read as a C1-d
+// regression. `record`/`sweep` are therefore duplicated here rather than
+// hoisted — hoisting them would mean rewriting the C1-d block, and the point of
+// the split is that the two packs cannot move each other.
+//
+// ─── WHAT THIS PACK EXISTS FOR, THAT NOTHING ELSE CAN DO ───────────────────
+//
+//  1. ⚠️ THE PORTAL. `delete-account-dialog` and `change-email-dialog` render
+//     `<Dialog.Portal>` with no `container`, so Radix mounts them on `<body>`.
+//     `data-skin` is on `<html>` so `[data-skin='rounds']` still matches — but
+//     the bridge is `[data-skin='rounds'] .qm-rounds-host`, deliberately
+//     scoped, and a portalled node is not a descendant of the page root. NINE
+//     `--color-linear-*` names inside each dialog keep their old-skin values:
+//     measured, a near-black #0d0e10 dialog opening on a #12161e Rounds page.
+//     `gate-rounds-bridge` cannot see it (it asks whether the FILE contains
+//     `qm-rounds-host`, and the file does — on the trigger). `gate-c1e-settings`
+//     pins the class onto the right ELEMENT, which is as far as source can go.
+//     ONLY a browser can say what the dialog actually computes, and only with
+//     it open. That is this pack.
+//
+//  2. ⚠️ EVERY PANEL STAYS MOUNTED, `hidden`. `settings-sections-c3.tsx` keeps
+//     all seven in the DOM so an in-progress edit survives a section switch —
+//     so a `fill()` or a `click()` on a control in an inactive panel resolves,
+//     acts on an invisible node, and PASSES. Every interaction below clicks the
+//     rail tab first and asserts the panel is visible, the idiom
+//     `doc-preview.spec.ts:40-41` uses. `hidden` also makes axe skip the
+//     subtree entirely, so a sweep of the wrong panel is a green tick over an
+//     unmeasured surface.
+//
+//  3. ⚠️ THE CONTRAST AXE CANNOT BLOCK ON. Both fixed nodes carry a
+//     non-Rounds class of their own — the stepper disc is a bare `<span>` in a
+//     densely-classed C3 panel, the confirm button is
+//     `<button class="qm-lin-btn-primary">` — so `ownedByDom` answers for the
+//     nearest classed ancestor-or-self, resolves NOT owned, and files any
+//     violation "inherited": reported, never blocking. Positive control (4) in
+//     the C1-d describe asserts that blind spot directly. So the colours are
+//     read with `getComputedStyle` and compared EXACTLY, against values derived
+//     from the shipped stylesheet at the top of this file.
+//
+// ─── ONE STATE IS NOT DRIVEN, AND THE REASON IS RECORDED ───────────────────
+// The delete-account dialog is opened and ARMED — both fields filled so the
+// confirm button is enabled and computes its real colours — and the confirm is
+// NEVER clicked. Not "not clicked in this test": there is no assertion anywhere
+// below that depends on the account being deleted. Driving a destructive
+// confirm to photograph a button is the shape of thing AGENTS.md's production-
+// verification rule forbids, and a synthetic account does not make it a better
+// habit. The post-confirm state is therefore UNVERIFIED and named, not bought.
+// ============================================================================
+
+test.describe('Rounds C1-e — settings, flag-ON', () => {
+  const violations: Finding[] = [];
+  const inherited: Finding[] = [];
+  const incomplete: Finding[] = [];
+  const hiddenTraps: Array<{ state: string; width: number; sel: string }> = [];
+  const measured: string[] = [];
+
+  function record(state: string, width: number, run: AxeRun) {
+    measured.push(`${state}@${width}`);
+    for (const e of blocking(run.violations)) violations.push({ state, width, entry: e });
+    for (const e of inheritedBlocking(run.violations))
+      inherited.push({ state, width, entry: e });
+    for (const e of run.incomplete) incomplete.push({ state, width, entry: e });
+    for (const sel of run.ariaHiddenFocusable) hiddenTraps.push({ state, width, sel });
+  }
+
+  /** Sweep AND hand the run back, so a caller can assert on `modal`. */
+  async function sweep(page: Page, state: string, width: number): Promise<AxeRun> {
+    const run = await runAxe(page);
+    record(state, width, run);
+    await shoot(page, state, width);
+    return run;
+  }
+
+  /** The Rounds settings surface really is applied, AND it really is painting.
+   *
+   *  ⚠️ THE SECOND HALF IS NOT DECORATION. `/settings` is the first Rounds
+   *  surface rendered inside `AppFrame`, and `.qm-lin-app` paints an OPAQUE
+   *  `var(--color-linear-bg)` at 100vh as an ANCESTOR of this host — so the
+   *  host's own redeclaration cannot reach it. A marker class that only set a
+   *  font would leave Rounds-tinted panels on the old skin's near-black canvas,
+   *  and every axe result below would be measured against the wrong ground
+   *  while looking perfectly normal. */
+  async function assertSettingsSurface(page: Page, where: string) {
+    const host = page.locator('.qm-rounds-host.qm-rounds-settings');
+    await expect(
+      host,
+      `${where}: the Rounds settings host is absent — this build is not flag-ON ` +
+        '(NEXT_PUBLIC_SKIN_ROUNDS + NEXT_PUBLIC_SKIN_BETA), so every result ' +
+        'below would be measuring the old skin',
+    ).toHaveCount(1);
+    // EXACT, not a substring. `'rgb(18, 22, 30)'.includes('rgb(1')` is true of
+    // half the palette — the substring trap that made C1-c's label guard
+    // vacuous, and it is just as available here.
+    expect(
+      await host.evaluate((el) => getComputedStyle(el).backgroundColor),
+      `${where}: the settings surface is not painting the Rounds stage — the ` +
+        'opaque AppFrame canvas is showing through',
+    ).toBe(STAGE_BG_3);
+  }
+
+  const rail = (page: Page) => page.locator('nav[aria-label="Settings sections"]');
+
+  /** Click a rail tab and PROVE its panel became visible.
+   *  Never touch a control without this: all seven panels stay mounted with the
+   *  `hidden` attribute, and a `fill()` on a hidden one is a false pass. */
+  async function openSection(page: Page, label: RegExp, id: string) {
+    await rail(page).getByRole('button', { name: label }).click();
+    await expect(
+      page.locator(`#${id}`),
+      `the ${id} panel did not become visible — every interaction after this ` +
+        'would act on a hidden node and pass',
+    ).toBeVisible({ timeout: 10_000 });
+  }
+
+  /** The portalled dialog, asserted as ONE element carrying BOTH classes.
+   *
+   *  `.qm-rounds-host.qm-rounds-dialog` is a compound selector, so this cannot
+   *  be satisfied by the host sitting on an ancestor and the marker on the
+   *  content — which is exactly the move that silently un-bridges the dialog
+   *  while leaving `gate-rounds-bridge` green. */
+  async function assertDialogBridged(page: Page, where: string) {
+    const dialog = page.locator('.qm-rounds-host.qm-rounds-dialog');
+    await expect(
+      dialog,
+      `${where}: no single element carries BOTH qm-rounds-host and ` +
+        'qm-rounds-dialog — a portalled node is not a descendant of the page ' +
+        'host, so the bridge does not reach it',
+    ).toHaveCount(1);
+    await expect(dialog).toBeVisible({ timeout: 10_000 });
+
+    // ⚠️ WAIT FOR THE ENTRY ANIMATION TO SETTLE BEFORE MEASURING ANYTHING.
+    // Radix opens this dialog with `fade-in-0` + `zoom-in-95`, so for the first
+    // ~150ms every colour in it is a COMPOSITE of the real value and whatever
+    // is behind. Measured mid-fade, axe reported `#5f6772 on #13171f = 3.13`
+    // — neither of which is a token in this palette: that is
+    // `--rounds-text-2` (#98a2b1) and `--rounds-surface-1` (#161b24) blended
+    // toward the stage. The nodes named were real, the colours were not, and
+    // three separate "fixes" were aimed at rules that were never the cause.
+    //
+    // This is A2 defect 4 in a second place — an animation that makes text
+    // unreadable AT THE SAMPLING INSTANT. Waiting on `getAnimations()` rather
+    // than on a sleep, because the settle condition is the animation itself
+    // finishing, not a duration someone guessed.
+    await dialog.evaluate(async (el) => {
+      await Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished.catch(() => {})));
+    });
+    await expect
+      .poll(async () => dialog.evaluate((el) => getComputedStyle(el).opacity), { timeout: 5_000 })
+      .toBe('1');
+
+    const bg = await dialog.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(bg, `${where}: the dialog ground is not the Rounds surface`).toBe(SURFACE_1);
+    expect(
+      bg,
+      `${where}: the dialog is painting the OLD SKIN ground — a near-black ` +
+        'dialog opening on a Rounds page. This is the defect C1-e exists to fix',
+    ).not.toBe(OLD_SURFACE_1);
+    return dialog;
+  }
+
+  test.afterAll(async () => {
+    cleanupTestUsers();
+  });
+
+  test('the settings surface and BOTH portalled dialogs compute Rounds', async ({ page }) => {
+    test.setTimeout(300_000);
+    const user = await signupFreshUser(page, 'rounds-c1e-set');
+
+    for (const width of [WIDE, NARROW]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/settings');
+      await assertSettingsSurface(page, `settings@${width}`);
+      // Profile is `sections[0]` and therefore already active — clicked anyway,
+      // because "it happens to be first" is a fact about today's section order
+      // and this pack should not silently start measuring a different panel the
+      // day someone reorders them.
+      await openSection(page, /^profile$/i, 'profile');
+      await sweep(page, 'settings:profile', width);
+    }
+
+    await page.setViewportSize({ width: WIDE, height: 900 });
+
+    // ── The danger zone, and the destructive dialog ────────────────────────
+    await openSection(page, /^danger zone$/i, 'danger');
+    await sweep(page, 'settings:danger', WIDE);
+
+    await page.getByRole('button', { name: /delete my account/i }).click();
+    const del = await assertDialogBridged(page, 'settings:danger-dialog');
+
+    // ARM the confirm — both fields, so `canSubmit` is true and the button
+    // computes its enabled colours rather than a disabled variant. It is NEVER
+    // clicked; see this describe's header.
+    await page.locator('#delete-password').fill(TEST_PASSWORD);
+    await page.locator('#delete-confirmation').fill('DELETE');
+    const confirm = del.getByRole('button', { name: /^delete account$/i });
+    await expect(confirm, 'the confirm never armed — its colours would be the ' +
+      'disabled variant and the assertion below would measure nothing real')
+      .toBeEnabled();
+
+    // ⚠️ THE ASSERTION C1-e EXISTS FOR. The fill arrives through the host's
+    // `--color-linear-danger` redeclaration; the label arrives through
+    // `[data-skin='rounds'] .qm-rounds-host .qm-lin-btn-primary`. BOTH are keyed
+    // on the host being on THIS element. Bridge the fill by any route that does
+    // not also carry the label fork and the label sits at 3.62:1 — a contrast
+    // regression created by the act of fixing a colour. Asserting the pair
+    // together is what makes that impossible to ship half of.
+    const [labelColor, fillColor] = await confirm.evaluate((el) => [
+      getComputedStyle(el).color,
+      getComputedStyle(el).backgroundColor,
+    ]);
+    expect(labelColor, 'the destructive confirm label is not white-on-critical').toBe(ON_ACCENT);
+    expect(
+      labelColor,
+      'the destructive confirm still carries the old skin\'s near-black label ' +
+        '(#0d1611) — 3.62:1 on --rounds-critical, a FAIL the bridge introduced',
+    ).not.toBe(OLD_PRIMARY_LABEL);
+    expect(
+      fillColor,
+      'the fill did not arrive with the label — they must come through ONE selector',
+    ).toBe(CRITICAL);
+
+    const delRun = await sweep(page, 'settings:danger-dialog', WIDE);
+    // Non-vacuity on the sweep itself: the harness suppresses its aria-hidden
+    // probe while a modal stands, and substitutes the focus-trap question. If
+    // axe did not see an open dialog, this state measured the page behind it.
+    expect(delRun.modal.open, 'axe saw no open dialog — this state swept the ' +
+      'settings page, not the modal').toBe(true);
+    expect(delRun.modal.focusInside, 'focus is not inside the open dialog').toBe(true);
+
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.qm-rounds-dialog')).toHaveCount(0, { timeout: 10_000 });
+
+    // ── The change-email dialog, on the other end of the surface ───────────
+    await openSection(page, /^profile$/i, 'profile');
+    await page.locator('#profile').getByRole('button', { name: /^change$/i }).click();
+    await assertDialogBridged(page, 'settings:change-email-dialog');
+    const emailRun = await sweep(page, 'settings:change-email-dialog', WIDE);
+    expect(emailRun.modal.open, 'axe saw no open dialog on the change-email state').toBe(true);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.qm-rounds-dialog')).toHaveCount(0, { timeout: 10_000 });
+
+    // ⚠️ AND THE ACCOUNT IS UNCHANGED, ASSERTED RATHER THAN ASSUMED. The first
+    // draft of this line was `expect(user.email).toContain(TEST_EMAIL_PREFIX)`
+    // — which compares the value `signupFreshUser` returned against a constant
+    // and could not have failed for any product reason at all. It asserted a
+    // property of a local variable, not a fact about the account. The real
+    // question is what the SERVER still holds, so re-read the rendered profile.
+    // `toContainText` rather than an equality: the panel carries other prose,
+    // and the needle is a whole unique address, not a label whose identity a
+    // superstring could satisfy.
+    await openSection(page, /^profile$/i, 'profile');
+    await expect(
+      page.locator('#profile'),
+      'the account no longer shows the signup address — something in this test ' +
+        'COMMITTED a change it was only supposed to arm',
+    ).toContainText(user.email);
+    expect(user.email).toContain(TEST_EMAIL_PREFIX); // …and cleanup will reap it
+
+    // ── The report ────────────────────────────────────────────────────────
+    // Non-vacuity FIRST: 2 widths of the base surface + danger + two dialogs.
+    expect(
+      measured.length,
+      `only ${measured.length} settings states were measured — the walk covered ` +
+        'less than it claims, so an empty violations list means nothing',
+    ).toBeGreaterThanOrEqual(5);
+
+    if (inherited.length > 0) {
+      const set = new Set<string>();
+      for (const f of inherited)
+        f.entry.targets.filter((t) => !ROUNDS_OWNED.test(t)).forEach((t) => set.add(t));
+      console.log(
+        `\n[rounds-c1e] ${inherited.length} inherited serious/critical finding(s) ` +
+          'on composed C3 settings chrome — reported, not gated. This is the ' +
+          'blind spot positive control (4) asserts; C2 owns closing it:\n' +
+          [...set].slice(0, 40).map((t) => `    ${t}`).join('\n') +
+          '\n',
+      );
+    }
+    if (incomplete.length > 0) {
+      console.log(`\n[rounds-c1e] ${incomplete.length} axe "incomplete" entries (reported only).\n`);
+    }
+
+    expect(
+      hiddenTraps,
+      'focusable elements inside an aria-hidden container Rounds owns',
+    ).toEqual([]);
+    expect(
+      violations.map((f) => `${f.state}@${f.width} ${f.entry.id} (${f.entry.impact}) ` +
+        `${f.entry.targets.slice(0, 4).join(', ')}` +
+        // The measured pair, so a colour failure is diagnosable from its own
+        // message rather than from a rebuild cycle and a guess.
+        (f.entry.data?.length
+          ? ' :: ' + f.entry.data
+              .filter((d) => d && (d as any).contrastRatio !== undefined)
+              .slice(0, 4)
+              .map((d: any) => `${d.fgColor} on ${d.bgColor} = ${d.contrastRatio} (needs ${d.expectedContrastRatio})`)
+              .join(' | ')
+          : '')),
+      'serious/critical axe violations on Rounds-owned settings nodes',
+    ).toEqual([]);
+  });
+
+  test('the MFA route carries the surface, and its two forked colours compute', async ({
+    page,
+  }) => {
+    test.setTimeout(240_000);
+    await page.setViewportSize({ width: WIDE, height: 900 });
+    const mfaUser = await signupFreshUser(page, 'rounds-c1e-mfa');
+
+    // ⚠️ ITS OWN ROUTE LEAF. There is no `settings/layout.tsx`, so this page
+    // inherits nothing from `/settings` and carries its own host. If that ever
+    // regressed to relying on the parent, this is where it shows.
+    await page.goto('/settings/security/mfa');
+    await assertSettingsSurface(page, 'mfa:enroll');
+
+    // ── The stepper disc ──────────────────────────────────────────────────
+    // Step 1 is active on arrival, so the disc fills with `--color-linear-sage`
+    // → bridged to `--rounds-accent`. The label was a hardcoded #0d1611:
+    // 6.72:1 on sage, 3.43:1 on the accent, at 10.5px.
+    const stepper = page.locator('ol[aria-label="Enrollment steps"]');
+    await expect(stepper, 'the enrollment stepper is absent — this account is ' +
+      'already enrolled, so the disc below would not be the step-1 disc')
+      .toHaveCount(1);
+    // ⚠️ COUNTED, NOT `.first()`. Each `<li>` renders exactly ONE span — the
+    // disc — with the step label as a bare text node beside it. If a restyle
+    // ever wraps that label in a span of its own, `.first()` would silently keep
+    // measuring the right node today and the wrong one the day the order
+    // changed; a count assertion says so instead.
+    const step1 = stepper.locator('li').first();
+    await expect(
+      step1.locator('span'),
+      'the stepper step now renders more than one span — `.first()` is no longer ' +
+        'unambiguously the disc',
+    ).toHaveCount(1);
+    const disc = step1.locator('span');
+    const discColor = await disc.evaluate((el) => getComputedStyle(el).color);
+    expect(discColor, 'the stepper disc glyph is not the on-accent token').toBe(ON_ACCENT);
+    expect(
+      discColor,
+      'the stepper disc still carries #0d1611 — 3.43:1 on --rounds-accent, and ' +
+        'axe files it INCOMPLETE (single-character text), never a violation',
+    ).not.toBe(OLD_PRIMARY_LABEL);
+    // …and the fill really is the accent, or "white on it" is a claim about a
+    // colour that is not there.
+    expect(await disc.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(
+      ROUNDS('--rounds-accent'),
+    );
+    await sweep(page, 'mfa:enroll', WIDE);
+
+    // ── The "on" pill, on the management panel ────────────────────────────
+    // Reached by flipping `mfaEnabled` directly: enrolling for real needs a
+    // live TOTP secret and a valid 6-digit code, which this stack cannot mint.
+    // The pill's own render path is identical either way — it reads
+    // `user.mfaEnabled`, not how the flag got set.
+    enableMfaPromptOnly(mfaUser.email);
+    await page.goto('/settings/security/mfa');
+    await assertSettingsSurface(page, 'mfa:on');
+    const pill = page.getByText('MFA enabled');
+    // A POSITIVE ASSERTION that the MANAGEMENT panel arrived — the enrollment
+    // panel is absent, not merely "the pill is present". `getByText` resolves to
+    // the smallest element containing the text, i.e. the pill span; the count
+    // assertion is what stops a second occurrence turning `.evaluate()` into a
+    // strict-mode error whose message would be about Playwright, not about
+    // Rounds.
+    await expect(
+      pill,
+      'the management panel did not render — the DB write did not take, and this ' +
+        'state is still the enrollment panel',
+    ).toHaveCount(1, { timeout: 15_000 });
+    await expect(pill).toBeVisible();
+    await expect(
+      page.locator('ol[aria-label="Enrollment steps"]'),
+      'the enrollment stepper is still on screen — this is not the management panel',
+    ).toHaveCount(0);
+    const pillColor = await pill.evaluate((el) => getComputedStyle(el).color);
+    expect(pillColor, 'the MFA pill label is not the Rounds ready-text token').toBe(READY_TEXT);
+    expect(
+      pillColor,
+      'the pill label is the bridged accent — an INDIGO label inside a GREEN ' +
+        'border, brand-coloured where the surface exists to say "protected"',
+    ).not.toBe(ACCENT_TEXT);
+    await sweep(page, 'mfa:on', WIDE);
+
+    // ── The report, for this test's own states ────────────────────────────
+    // ⚠️ ASSERT EVERYTHING THIS TEST FILLED, not just `violations`. `record()`
+    // pushes into four accumulators and the first test has already finished by
+    // the time this runs — the same defect C1-d's second test records.
+    expect(
+      measured.filter((m) => m.startsWith('mfa:')).length,
+      'the MFA sweep measured fewer states than it drove',
+    ).toBeGreaterThanOrEqual(2);
+    expect(
+      hiddenTraps.filter((t) => t.state.startsWith('mfa:')),
+      'focusable elements inside an aria-hidden Rounds container on the MFA route',
+    ).toEqual([]);
+    const mfaInherited = inherited.filter((f) => f.state.startsWith('mfa:'));
+    if (mfaInherited.length > 0) {
+      const set = new Set<string>();
+      for (const f of mfaInherited)
+        f.entry.targets.filter((t) => !ROUNDS_OWNED.test(t)).forEach((t) => set.add(t));
+      console.log(
+        `\n[rounds-c1e] ${mfaInherited.length} inherited serious/critical finding(s) ` +
+          'on the MFA route — reported, not gated:\n' +
+          [...set].slice(0, 20).map((t) => `    ${t}`).join('\n') + '\n',
+      );
+    }
+    expect(
+      violations
+        .filter((f) => f.state.startsWith('mfa:'))
+        .map((f) => `${f.state}@${f.width} ${f.entry.id} (${f.entry.impact})`),
+      'serious/critical axe violations on Rounds-owned MFA nodes',
+    ).toEqual([]);
   });
 });

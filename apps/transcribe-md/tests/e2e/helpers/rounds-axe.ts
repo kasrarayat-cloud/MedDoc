@@ -43,6 +43,19 @@ export interface AxeEntry {
    *  the log filters the already-truncated array. Truncation now happens where
    *  it belongs — at the print site. */
   targets: string[];
+  /** ⚠️ THE MEASURED PAIR, because a colour failure that names only NODES is
+   *  not diagnosable and sends the reader guessing at the cascade.
+   *
+   *  C1-e spent three rebuild cycles on one `color-contrast` hit that reported
+   *  four selectors and no colours. Each fix was a hypothesis about which rule
+   *  was deciding the pixel — panel override, then dialog re-bridge, then an
+   *  animation-timing theory — and the first two were wrong for the same
+   *  reason: an INLINE `style` const outranked the class being adjusted, which
+   *  a target list cannot show and a computed-style probe answers instantly.
+   *
+   *  axe already carries `fgColor` / `bgColor` / `contrastRatio` on every
+   *  `color-contrast` node. Dropping it on the floor was the whole cost. */
+  data: Array<Record<string, unknown>>;
   /** OWNERSHIP, DECIDED IN THE DOM RATHER THAN ON THE SELECTOR STRING.
    *
    *  axe names an element by `#id`, or by `tag[attr]` when that is unique, and
@@ -156,6 +169,11 @@ export async function runAxe(page: Page): Promise<AxeRun> {
         help: v.help,
         nodeCount: v.nodes.length,
         targets: v.nodes.flatMap((n) => n.target ?? []),
+        // `any[0].data` is where the colour-contrast check puts fg/bg/ratio.
+        // Kept per NODE and untruncated, for the same reason `targets` is.
+        data: v.nodes.map(
+          (n) => ((n as { any?: Array<{ data?: unknown }> }).any?.[0]?.data ?? {}) as Record<string, unknown>,
+        ),
         owned: v.nodes.some((n) => {
           // Belt and braces: a selector that literally names a Rounds class is
           // the element's OWN class, so the two rules agree where both apply.

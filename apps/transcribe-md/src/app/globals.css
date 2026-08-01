@@ -5193,7 +5193,16 @@ body {
   border-radius: 12px;
 }
 .qm-c3-set-panel.danger {
-  border-color: rgba(212, 87, 74, 0.3);
+  /* C1-e: was the literal `rgba(212, 87, 74, 0.3)`. A literal is the one thing
+   * the Rounds host bridge structurally cannot retint, so the Danger-zone
+   * panel kept an old-skin coral border while its own fill and heading came
+   * from Rounds tokens — the two sibling rules below already name
+   * `--color-linear-danger`, so this line was the odd one out rather than a
+   * considered exception. `color-mix` over the same name is byte-identical
+   * here (`--color-linear-danger` is #d4574a = rgb(212,87,74)) and follows the
+   * bridge. It is a `border-color`, not a `color:`, so it stays visible to
+   * `gate-rounds-bridge`'s foreground matcher by not being in its scope. */
+  border-color: color-mix(in srgb, var(--color-linear-danger) 30%, transparent);
 }
 .qm-c3-set-h {
   margin: 0;

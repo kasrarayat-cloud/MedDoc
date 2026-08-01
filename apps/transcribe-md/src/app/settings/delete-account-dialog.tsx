@@ -117,9 +117,11 @@ export function DeleteAccountDialog() {
           type="button"
           className="qm-lin-btn"
           style={{
-            borderColor: 'rgba(212, 87, 74, 0.40)',
+            borderColor:
+              'color-mix(in srgb, var(--color-linear-danger) 40%, transparent)',
             color: 'var(--color-linear-coral)',
-            background: 'rgba(212, 87, 74, 0.05)',
+            background:
+              'color-mix(in srgb, var(--color-linear-danger) 5%, transparent)',
           }}
         >
           <AlertTriangle className="h-3.5 w-3.5" />
@@ -136,7 +138,7 @@ export function DeleteAccountDialog() {
             background: 'rgba(0, 0, 0, 0.55)',
             backdropFilter: 'blur(2px)',
           }}
-          className="data-[state=open]:animate-in data-[state=open]:fade-in-0"
+          className="qm-rounds-dialog-overlay data-[state=open]:animate-in data-[state=open]:fade-in-0"
         />
         <Dialog.Content
           aria-describedby={undefined}
@@ -155,7 +157,7 @@ export function DeleteAccountDialog() {
               '0 30px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.03)',
             color: 'var(--color-linear-text)',
           }}
-          className="data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
+          className="qm-rounds-host qm-rounds-dialog data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
         >
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
             <div style={{ flex: 1 }}>
@@ -222,7 +224,11 @@ export function DeleteAccountDialog() {
             }}
           >
             <div>
-              <label htmlFor="delete-password" style={labelStyle}>
+              <label
+                htmlFor="delete-password"
+                className="qm-rounds-label"
+                style={labelStyle}
+              >
                 Current password
               </label>
               <input
@@ -234,17 +240,22 @@ export function DeleteAccountDialog() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={pending}
+                className="qm-rounds-input"
                 style={inputStyle}
               />
               {error?.field === 'password' && (
-                <p role="alert" style={errorStyle}>
+                <p role="alert" className="qm-rounds-error" style={errorStyle}>
                   {error.message}
                 </p>
               )}
             </div>
 
             <div>
-              <label htmlFor="delete-confirmation" style={labelStyle}>
+              <label
+                htmlFor="delete-confirmation"
+                className="qm-rounds-label"
+                style={labelStyle}
+              >
                 Type{' '}
                 <strong style={{ color: 'var(--color-linear-text)' }}>
                   DELETE
@@ -263,17 +274,18 @@ export function DeleteAccountDialog() {
                 value={confirmation}
                 onChange={(e) => setConfirmation(e.target.value)}
                 disabled={pending}
+                className="qm-rounds-input"
                 style={inputStyle}
               />
               {error?.field === 'confirmation' && (
-                <p role="alert" style={errorStyle}>
+                <p role="alert" className="qm-rounds-error" style={errorStyle}>
                   {error.message}
                 </p>
               )}
             </div>
 
             {error && !error.field && (
-              <p role="alert" style={errorStyle}>
+              <p role="alert" className="qm-rounds-error" style={errorStyle}>
                 {error.message}
               </p>
             )}
@@ -300,7 +312,8 @@ export function DeleteAccountDialog() {
               className="qm-lin-btn-primary"
               style={{
                 background: 'var(--color-linear-danger)',
-                boxShadow: '0 0 0 1px rgba(212, 87, 74, 0.45)',
+                boxShadow:
+                  '0 0 0 1px color-mix(in srgb, var(--color-linear-danger) 45%, transparent)',
                 opacity: canSubmit ? 1 : 0.5,
                 cursor: canSubmit ? 'pointer' : 'not-allowed',
               }}

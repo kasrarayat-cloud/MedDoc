@@ -131,7 +131,7 @@ export function ChangeEmailDialog({ currentEmail }: Props) {
             background: 'rgba(0, 0, 0, 0.55)',
             backdropFilter: 'blur(2px)',
           }}
-          className="data-[state=open]:animate-in data-[state=open]:fade-in-0"
+          className="qm-rounds-dialog-overlay data-[state=open]:animate-in data-[state=open]:fade-in-0"
         />
         <Dialog.Content
           aria-describedby={undefined}
@@ -150,7 +150,7 @@ export function ChangeEmailDialog({ currentEmail }: Props) {
               '0 30px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.03)',
             color: 'var(--color-linear-text)',
           }}
-          className="data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
+          className="qm-rounds-host qm-rounds-dialog data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
         >
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
             <div style={{ flex: 1 }}>
@@ -240,8 +240,11 @@ export function ChangeEmailDialog({ currentEmail }: Props) {
               noValidate
             >
               <div>
-                <label style={labelStyle}>Current email</label>
+                <label className="qm-rounds-label" style={labelStyle}>
+                  Current email
+                </label>
                 <div
+                  className="qm-rounds-panel"
                   style={{
                     padding: '8px 12px',
                     border: '1px solid var(--color-linear-hairline)',
@@ -258,7 +261,11 @@ export function ChangeEmailDialog({ currentEmail }: Props) {
               </div>
 
               <div>
-                <label htmlFor="newEmail" style={labelStyle}>
+                <label
+                  htmlFor="newEmail"
+                  className="qm-rounds-label"
+                  style={labelStyle}
+                >
                   New email
                 </label>
                 <input
@@ -270,17 +277,22 @@ export function ChangeEmailDialog({ currentEmail }: Props) {
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
                   disabled={pending}
+                  className="qm-rounds-input"
                   style={inputStyle}
                 />
                 {fieldError === 'newEmail' && (
-                  <p role="alert" style={errorStyle}>
+                  <p role="alert" className="qm-rounds-error" style={errorStyle}>
                     {error?.error}
                   </p>
                 )}
               </div>
 
               <div>
-                <label htmlFor="password-for-change" style={labelStyle}>
+                <label
+                  htmlFor="password-for-change"
+                  className="qm-rounds-label"
+                  style={labelStyle}
+                >
                   Confirm with password
                 </label>
                 <input
@@ -291,17 +303,18 @@ export function ChangeEmailDialog({ currentEmail }: Props) {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={pending}
+                  className="qm-rounds-input"
                   style={inputStyle}
                 />
                 {fieldError === 'password' && (
-                  <p role="alert" style={errorStyle}>
+                  <p role="alert" className="qm-rounds-error" style={errorStyle}>
                     {error?.error}
                   </p>
                 )}
               </div>
 
               {formError && (
-                <p role="alert" style={errorStyle}>
+                <p role="alert" className="qm-rounds-error" style={errorStyle}>
                   {formError}
                 </p>
               )}
