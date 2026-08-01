@@ -101,6 +101,23 @@ const IMAGES: { tag: string; needs: string[]; why: string }[] = [
       // without it is missing a shipped code path. See the pairing note above:
       // this one must never be added without SETTINGS_SIMPLE_ROW.
       'NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX',
+      // ⚠️ ADDED BY C1-d, AND IT WAS THE ONE BUILD-ARG THIS FILE DID NOT WATCH.
+      // The image has passed `NEXT_PUBLIC_SKIN_BETA=true` since Gate A, and
+      // nothing asserted it — the name appeared nowhere under `src/lib/__tests__`
+      // (positive control: SKIN_ROUNDS appears in three files there). It is not
+      // cosmetic. `isSkinBeta()` chooses which BRANCH of `auth-shell.tsx`
+      // renders — the `qm-c3-auth` card that C1-d restyles, or a ~270-line
+      // split-screen fallthrough that Rounds never touched. Drop the arg and
+      // the rounds-c1 pack fails on missing selectors while the product is
+      // perfectly correct, which is the exact diagnosis cost this file exists
+      // to remove. It also selects the C3 section-rail in `settings/page.tsx`,
+      // so C1-e and C1-f inherit the same dependency.
+      'NEXT_PUBLIC_SKIN_BETA',
+      // C1-c2's preview door for the state families a walk cannot reach. Its
+      // own gate (`gate-devstates`) asserts the Dockerfile ARG and prod's
+      // absence; this row is what asserts the IMAGE carries it, which is the
+      // half that decides whether /dev/states resolves 200 or 404 on QA.
+      'NEXT_PUBLIC_DEV_STATES',
     ],
     why:
       'Gate A + Gate B + C1. The board route 404s with the flag off, so a rounds ' +

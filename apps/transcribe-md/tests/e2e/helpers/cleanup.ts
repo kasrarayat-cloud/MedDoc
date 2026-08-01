@@ -107,9 +107,20 @@ export function cleanupTestUsers(): void {
     )
     SELECT COUNT(*) FROM deleted_users;
   `;
+  // waitlist_entries is NOT reachable from `users` — joining the waitlist is a
+  // deliberately unauthenticated action, so the row has no userId and the
+  // cascade above can never see it. Nothing has ever deleted these: the table
+  // had no reaper at all, and every run that exercised /waitlist left a
+  // permanent row behind. C1-d's pack drives the success panel on every run, so
+  // it would have been the first steady leak rather than an occasional one.
+  // Scoped to the test-email prefix, like every other statement here.
+  const waitlistSql = `
+    DELETE FROM waitlist_entries WHERE email LIKE '${TEST_EMAIL_PREFIX}%';
+  `;
   try {
     psql(auditSql);
     psql(rxOverrideSql);
+    psql(waitlistSql);
     psql(sql);
   } catch (err) {
     // Don't fail the whole suite if cleanup hits a transient DB

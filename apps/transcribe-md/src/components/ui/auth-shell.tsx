@@ -21,13 +21,21 @@
 // would have replaced one overclaim with another. Every mutation writing an
 // audit row is verified, live, and unambiguous.
 //
-// All Phase 4 cinematic photo-band machinery is gone. The `cinematic`
-// prop and `AuthShellTheme` / `AuthShellCinematic` types are kept for
-// back-compat with login/page.tsx etc. that still pass them — the
-// runtime ignores both. Stage 5 will drop the props in one sweep.
+// All Phase 4 cinematic photo-band machinery is gone. The `cinematic` prop and
+// the `AuthShellTheme` / `AuthShellCinematic` types survive it, and the runtime
+// ignores both.
+//
+// ⚠️ CORRECTED BY C1-d: this note used to say they were "kept for back-compat
+// with login/page.tsx etc. that still pass them". Nothing passes them. All six
+// auth pages were checked (`theme=` / `cinematic=` → no hits, against a control
+// of `eyebrow=` hitting all six), and `AuthShellTheme` / `AuthShellCinematic`
+// have no consumer anywhere outside this file. They are dead, not compatible —
+// and a comment asserting a caller that does not exist is the reason the next
+// reader stops looking. Item F retires the old skin and takes them with it.
 
 import type { ReactNode } from 'react';
 import { isSkinBeta } from '@/config/skin-beta';
+import { isSkinRounds } from '@/config/skin-rounds';
 import { Ic } from './icon';
 
 export type AuthShellTheme = 'legacy' | 'clinician';
@@ -68,7 +76,18 @@ export function AuthShell({
   // OFF → the split-screen shell below renders, byte-identical.
   if (isSkinBeta()) {
     return (
-      <div className="qm-c3-auth">
+      // ── THE ROUNDS BRIDGE, on the C3 branch only ──────────────────────────
+      // A BRIDGE rather than a fork, and that is the honest treatment here:
+      // this branch carries no inline styles at all — its whole appearance is
+      // `globals.css:5233-5330`, which reads `--color-linear-*`. Redeclaring
+      // those custom properties on this node retints the card AND every inline
+      // object in the form beneath it, because custom properties resolve at
+      // computed-value time and inherit. `rounds-tokens.css` § C1-d carries the
+      // shape and the three contrast forks the bridge cannot reach.
+      //
+      // Flag-OFF: `isSkinRounds()` is build-time, so this collapses to the bare
+      // `qm-c3-auth` string and nothing moves.
+      <div className={isSkinRounds() ? 'qm-c3-auth qm-rounds-host qm-rounds-auth' : 'qm-c3-auth'}>
         <main className="qm-c3-auth-card">
           <div className="qm-c3-auth-brand">
             <span aria-hidden className="qm-c3-auth-mark">
@@ -81,7 +100,24 @@ export function AuthShell({
             <AuthTitle>{title}</AuthTitle>
           </h1>
           {subtitle && <p className="qm-c3-auth-sub">{subtitle}</p>}
-          <div className="qm-c3-auth-form">{children}</div>
+          {/* ⚠️ THE SECOND CLASS IS THE GATE, NOT DECORATION. Gate C decides
+              ownership by climbing to the nearest ancestor-or-self carrying ANY
+              class and testing it for `qm-rounds-`. The five auth forms are
+              inline-styled with almost no classes, so every violation inside
+              them resolves UP — and it stops HERE. Without `qm-rounds-authform`
+              the nearest classed ancestor is `qm-c3-auth-form`, which does not
+              match, so every input, label and error in the form would be
+              classified "inherited" and merely reported. `violations: []` while
+              measuring nothing — trap 3, on the surface it matters most. */}
+          <div
+            className={
+              isSkinRounds()
+                ? 'qm-c3-auth-form qm-rounds-authform'
+                : 'qm-c3-auth-form'
+            }
+          >
+            {children}
+          </div>
           <div className="qm-c3-auth-trust">
             <span>
               <Ic.shield width={12} height={12} aria-hidden />
@@ -404,6 +440,7 @@ export function AuthFieldLabel({
     >
       <label
         htmlFor={htmlFor}
+        className={isSkinRounds() ? 'qm-rounds-label' : undefined}
         style={{
           fontFamily: 'var(--font-mono)',
           fontSize: 10.5,
@@ -415,6 +452,19 @@ export function AuthFieldLabel({
       >
         {children}
       </label>
+      {/* ⚠️ `hint` IS A SIBLING OF THE LABEL AND MUST STAY ONE. Folding it
+          inside — the obvious move when restyling a two-item flex row — is the
+          single edit in this file that breaks the whole suite. Playwright's
+          `getByLabel('Password', { exact: true })` matches the label's
+          whitespace-normalised text against the WHOLE string; /login passes
+          "Forgot?" through this prop, so folding it makes that text
+          "Password Forgot?" and reds every login in the suite — seven spec
+          files, via `helpers/auth.ts` and `helpers/signup.ts`. Pinned by
+          `gate-c1d-auth`.
+          Casing is safe to change: the engine reads DOM text, not the
+          accessible name, so `textTransform: uppercase` above is invisible to
+          it. Adding an `aria-label` to a field is NOT safe — it would override
+          the visible label with no HTML a reviewer would flag. */}
       {hint}
     </div>
   );
@@ -424,8 +474,14 @@ export function AuthFieldLabel({
 export function AuthFieldError({ message }: { message?: string }) {
   if (!message) return null;
   return (
+    // The colour needs no fork: `--color-linear-coral` already bridges to
+    // `--rounds-critical-on-dark`, the text-safe variant (7.70:1 on surface-1).
+    // The class is here for OWNERSHIP — this is the only `role="alert"`
+    // reachable on /signup, so it is the node the pack scopes its refusal
+    // assertion to, and it must be gate-visible when it renders.
     <p
       role="alert"
+      className={isSkinRounds() ? 'qm-rounds-error' : undefined}
       style={{
         marginTop: 6,
         fontFamily: 'var(--font-sans)',

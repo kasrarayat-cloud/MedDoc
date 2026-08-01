@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
+import { isSkinRounds } from '@/config/skin-rounds';
 
 interface Props {
   email: string;
@@ -20,6 +21,9 @@ const linkStyle: React.CSSProperties = {
 };
 
 export function CheckEmailResend({ email }: Props) {
+  // Build-time, so flag-OFF folds to a constant and this component renders
+  // exactly as it does today.
+  const rounds = isSkinRounds();
   const [pending, setPending] = useState(false);
   const [sent, setSent] = useState(false);
 
@@ -123,7 +127,7 @@ export function CheckEmailResend({ email }: Props) {
         type="button"
         disabled={!canSend}
         onClick={onResend}
-        className="qm-lin-btn"
+        className={rounds ? 'qm-lin-btn qm-rounds-btn-secondary' : 'qm-lin-btn'}
         style={{
           width: '100%',
           height: 36,
@@ -148,7 +152,7 @@ export function CheckEmailResend({ email }: Props) {
           marginTop: 18,
         }}
       >
-        <Link href="/login" style={linkStyle}>
+        <Link href="/login" className={rounds ? 'qm-rounds-link' : undefined} style={linkStyle}>
           Back to sign in →
         </Link>
       </div>

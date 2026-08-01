@@ -386,6 +386,28 @@ jobs:
           CI: "true"
         run: npx playwright test --project=rounds-a11y
 
+      # ── ROUNDS C1-d — the auth surface, flag-ON. Same image, its own
+      #    recreate, and it must stay AHEAD of the screenshot upload below:
+      #    one upload serves every Rounds pack, so a pack placed after it
+      #    writes captures nothing collects — and `if-no-files-found: error`
+      #    cannot catch that, because the directory is already non-empty from
+      #    the packs that ran first. Pinned by gate-shot-durability.
+      #    (Deliberately no literal project flag in this prose:
+      #    gate-project-env's event scan reads raw lines with no comment
+      #    filter, so a project name written here emits a phantom run event
+      #    adjudicated against whichever recreate happens to precede it.) ──
+      - name: Recreate app on the Rounds image (C1 auth pack)
+        run: >
+          docker compose -f docker-compose.qa.yml -f docker-compose.qa.rounds.yml
+          up -d --wait transcribe-md
+
+      - name: Run E2E (rounds-c1 — C1-d, auth to tokens)
+        working-directory: apps/transcribe-md
+        env:
+          PW_BASE_URL: http://localhost:9020
+          CI: "true"
+        run: npx playwright test --project=rounds-c1
+
       # ── Gate B's screenshots clause, made retrievable. ──
       # They are uploaded HERE rather than at the end of the job, and on
       # `always()` rather than `failure()`, because both of those were the bug:
