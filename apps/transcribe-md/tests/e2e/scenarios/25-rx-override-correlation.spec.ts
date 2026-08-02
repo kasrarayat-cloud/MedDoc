@@ -37,6 +37,7 @@ import {
   rxWarningSeverities,
   seedFabricatedCriticalOverride,
 } from '../helpers/rxSafety';
+import { signViaApi } from '../helpers/sign';
 
 const GATE = process.env.NOTE_FORMAT_E2E !== '1';
 const GATE_MSG =
@@ -86,10 +87,7 @@ test('scenario 25: fabricated "critical" override rows do NOT clear the sign gat
   expect(countCriticalOverrides(visitId)).toBe(3);
 
   // Hit the sign endpoint DIRECTLY (the gate must hold for scripted callers).
-  const res = await page.request.post(`/api/visits/${visitId}/sign`, {
-    data: { destinations: ['pdf'] },
-    headers: { 'Content-Type': 'application/json' },
-  });
+  const res = await signViaApi(page, visitId, { destinations: ['pdf'] });
 
   // Still blocked: the 3 fabricated rows cover NONE of the real critical
   // warning's id, so coverage is unmet.
@@ -129,10 +127,7 @@ test('scenario 25: a genuine override of the REAL warning clears the gate → 20
   expect(overrides[0].reason).toContain('benefit outweighs');
 
   // Sign now SUCCEEDS — every genuine critical warning is individually covered.
-  const res = await page.request.post(`/api/visits/${visitId}/sign`, {
-    data: { destinations: ['pdf'] },
-    headers: { 'Content-Type': 'application/json' },
-  });
+  const res = await signViaApi(page, visitId, { destinations: ['pdf'] });
   expect(res.status()).toBe(200);
   expect(getVisitStatus(visitId)).toBe('SIGNED');
 });
@@ -156,10 +151,7 @@ test('scenario 25: a genuine override clears the gate even amid fabricated noise
 
   // Sign SUCCEEDS — the genuine, real-id override provides full coverage; the
   // bogus rows are simply ignored by the gate.
-  const res = await page.request.post(`/api/visits/${visitId}/sign`, {
-    data: { destinations: ['pdf'] },
-    headers: { 'Content-Type': 'application/json' },
-  });
+  const res = await signViaApi(page, visitId, { destinations: ['pdf'] });
   expect(res.status()).toBe(200);
   expect(getVisitStatus(visitId)).toBe('SIGNED');
 });
