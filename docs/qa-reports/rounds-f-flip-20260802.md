@@ -117,6 +117,17 @@ outstanding`), and after both confirmations **`signedCode` froze to the doctor's
 Audit order, walk (b): `VISIT_CREATED → ANCHOR_FLAGS_RECORDED → CHAT_EDIT_TURN →
 EM_RESCORED → VISIT_SIGNED → EXPORT_PDF_DOWNLOADED → EXPORT_DOCX_DOWNLOADED`.
 
+**(c) the Rx gate — closed after this report first said it was not.** The first two walks produced no
+critical-Rx warning, so the gate never appeared. That is an absence of *opportunity*, not a pass, and
+it was named as unverified rather than counted. A third smoke visit dictated warfarin 5 mg alongside
+ibuprofen 600 mg TID; the real pipeline flagged it (`RX_DRUG_PAIR_INTERACTION` +
+`RX_COMPLEX_DOSING_VERIFY_INDIVIDUALLY`) and the flow became `1 | CRITICAL INTERACTIONS |
+2 | DOCUMENTATION LEVEL | 3 | SIGN & LOCK`. **7/7** — the gate arrives by portal into the step host,
+there is **exactly one** `review-doc-rx-gate` in the document, `next` is disabled beforehand, the
+override demands a typed free-text reason, **confirm is refused while that reason is empty**, the
+warning then reads *overridden*, the flow unblocks, and `RX_OVERRIDE_RECORDED` lands in the audit
+trail.
+
 **C2-b's gates hold on real signed artifacts:** DOCX `w:pgSz w=12240 h=15840` and
 PDF `MediaBox [0 0 612 792]` — the same US Letter page — with Charter as the
 document default in `styles.xml` and Inter Tight as the per-run override in
