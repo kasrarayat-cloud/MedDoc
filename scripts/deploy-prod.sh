@@ -78,13 +78,28 @@ docker compose build transcribe-md-worker
 docker compose build transcribe-md
 echo
 
+# C2-b: gotenberg is a BUILD service now, not a stock tag. It carries the fonts
+# the PDF export embeds, and the on-screen preview is its render of the DOCX —
+# without them LibreOffice substitutes Noto Serif and the preview shows a
+# different typeface from the downloaded file.
+#
+# ⚠️ IT MUST BE BUILT **AND RECREATED** HERE. Step 6 only ups the app and the
+# worker, so a gotenberg still running the old stock image would keep rendering
+# substituted type after a deploy that "succeeded" — the same shape as the
+# stale `db-migrate` this script already guards against: a service left behind
+# by a deploy that never names it.
+echo "=== 5b. build + recreate the converter (fonts live in this image) ==="
+docker compose build gotenberg
+docker compose up -d gotenberg
+echo
+
 echo "=== 6. recreate ==="
 docker compose up -d transcribe-md transcribe-md-worker
 echo
 
 echo "=== 7. settle, then health ==="
 sleep 30
-docker compose ps --format '{{.Service}}\t{{.State}}\t{{.Status}}' | grep -E 'transcribe-md'
+docker compose ps --format '{{.Service}}\t{{.State}}\t{{.Status}}' | grep -E 'transcribe-md|gotenberg'
 echo "app /api/health: $(curl -s -o /dev/null -w '%{http_code}' --max-time 15 https://app.quillmd.com/api/health)"
 echo
 echo "=== deploy complete — full log at $LOG ==="

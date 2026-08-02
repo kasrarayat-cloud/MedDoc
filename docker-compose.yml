@@ -482,7 +482,16 @@ services:
   # the container. Nothing about a converted document touches disk, and there
   # is no volume to retain it.
   gotenberg:
-    image: gotenberg/gotenberg:8
+    # C2-b: gotenberg PLUS the fonts the PDF export embeds. The stock image has
+    # neither Charter nor Inter Tight, so LibreOffice substituted Noto Serif and
+    # the on-screen preview — which is this container's render of the DOCX —
+    # showed a different typeface from the file the doctor downloads. Proven by
+    # converting one DOCX through both images and reading /BaseFont out of each
+    # result. `image:` is kept so the tag stays stable for compose and rollback.
+    build:
+      context: apps/transcribe-md/fonts
+      dockerfile: ../../../docker/gotenberg-fonts.Dockerfile
+    image: meddoc-pro-gotenberg:fonts
     restart: unless-stopped
     # LibreOffice peaks well under this per conversion; the cap stops a
     # pathological document from competing with the clinical pipeline.

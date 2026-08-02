@@ -18,6 +18,7 @@ import {
   procedureProvenanceNote,
 } from './visit-export';
 import { formSignatureLines } from './form-only';
+import { PAGE_PT, TYPE_PT } from './export-page';
 
 // ---------------------------------------------------------------------------
 // Font assets — bundled in apps/transcribe-md/fonts/ (committed to repo,
@@ -41,10 +42,14 @@ const FONTS_DIR =
 // from the same grid.
 // ---------------------------------------------------------------------------
 
+// C2-b: the page comes from `export-page.ts` so the Word file can be built
+// from the SAME numbers. It was `size: 'LETTER'` here and nothing at all in the
+// docx generator, which is how the preview ended up A4 while this stayed Letter.
 const PAGE = {
-  // US Letter (612 x 792 pts), 1" margins.
-  size: 'LETTER' as const,
-  margin: 72,
+  // US Letter (612 x 792 pts), 1" margins — expressed explicitly rather than by
+  // pdfkit's 'LETTER' alias, so one module owns the number both sides read.
+  size: [PAGE_PT.width, PAGE_PT.height] as [number, number],
+  margin: PAGE_PT.margin,
 };
 
 const COLORS = {
@@ -71,11 +76,11 @@ const FONTS = {
 } as const;
 
 const SIZE = {
-  title: 16,
-  sectionHead: 12,
-  body: 10.5,
-  small: 9,
-  footer: 8.5,
+  title: TYPE_PT.title,
+  sectionHead: TYPE_PT.sectionHead,
+  body: TYPE_PT.body,
+  small: TYPE_PT.small,
+  footer: TYPE_PT.footer,
 };
 
 // ---------------------------------------------------------------------------

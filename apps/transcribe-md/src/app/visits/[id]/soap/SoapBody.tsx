@@ -86,7 +86,18 @@ export function SoapBody({
   };
 
   return (
-    <div className="qm-lin-soap-body-v6">
+    /* C2-b — THE DEFAULT PAPER'S TYPE, finally worn.
+       `docs/design-tokens.md` is the authority and says Source Serif 4 covers
+       "ALL clinical prose, including the default QuillMD paper template", at
+       15–16.5px/1.7. `.rounds-clinical` has carried exactly that since the
+       tokens landed and had ZERO consumers — declared, never applied.
+
+       This is the node: SoapBody is the clinical prose, and under Rounds it
+       renders inside `.rounds-paper`, which is why the rule's `--rounds-ink`
+       (dark) is the right colour here rather than a stage tier. The class is
+       unconditional because every `.rounds-clinical` declaration is
+       `[data-skin='rounds']`-scoped, so with the flag off it is inert. */
+    <div className="qm-lin-soap-body-v6 rounds-clinical">
       {sections.map((section) => {
         const node = (
           <SoapSection
