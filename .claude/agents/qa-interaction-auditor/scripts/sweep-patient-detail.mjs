@@ -94,6 +94,7 @@ import {
   newAppContext,
   clickAndClassify,
   snapshotAuditCount,
+  APP_BASE,
 } from './lib/walker-base.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -105,7 +106,12 @@ const SEEDED_IDS_PATH = resolve(__dirname, '..', 'fixtures', 'seeded-ids.json');
 
 function parseArgs(args) {
   const opts = {
-    base: env.QA_AUDITOR_BASE_URL ?? 'https://app.quillmd.com',
+    // Defaults to the SAME target walker-base already refuses to point at
+    // production without an opt-in. It used to default to
+    // 'https://app.quillmd.com' independently, under a DIFFERENT env var
+    // (QA_AUDITOR_BASE_URL, not QA_AUDITOR_APP_URL), so the fail-closed
+    // guard never saw it. Rounds item F, 2026-08-02.
+    base: env.QA_AUDITOR_BASE_URL ?? APP_BASE,
     patientId: null,
     tab: null,
     skipClicks: false,

@@ -246,16 +246,52 @@ docker compose up -d <service>
 
 ### 3.1 Tagged image rollbacks
 
-Every promotion tags the outgoing images before recreating, so a rollback is a
-compose override rather than a rebuild:
+⚠️ **CORRECTED 2026-08-02.** This section used to open "Every promotion tags the
+outgoing images before recreating". **Nothing does that.** `scripts/deploy-prod.sh`
+has no tagging step — its only `tag` match is an unrelated comment on line 81 —
+and §2.4's manual equivalent has none either. So the tags below exist because
+somebody typed the command by hand, and a promotion that forgets leaves no
+rollback target at all. The sentence described a guarantee the deploy path does
+not provide, which is the most expensive kind of documentation error: it reads
+as reassurance and is discovered during an incident.
+
+**Tagging is a MANUAL PRE-STEP. Do it BEFORE `deploy-prod.sh`, not after — once
+the build finishes, `:latest` is the new image and the outgoing one is
+untagged.**
+
+```bash
+# Run this FIRST, before deploy-prod.sh. <slug> names what is being changed.
+D=$(date -u +%Y%m%d)
+docker tag meddoc-pro-transcribe-md:latest        meddoc-pro-transcribe-md:pre-<slug>-$D
+docker tag meddoc-pro-transcribe-md-worker:latest meddoc-pro-transcribe-md-worker:pre-<slug>-$D
+docker images --format '{{.Repository}}:{{.Tag}}\t{{.ID}}' | grep "pre-<slug>-$D"   # record these IDs in the table
+```
 
 | Tag | What it restores | Notes |
 |---|---|---|
 | `:pre-readonlypaper-20260728` | the review page BEFORE it became read-only paper | app `4719eef70099` / worker `09ea62317b44` |
 | `:pre-emrehome-20260728` | the review page BEFORE the E/M level row returned to the gate stack | app `bc2bd303740f` / worker `10eb2d4baec1` |
 
-Never rebuild `:latest` to stage a rollback — tag a separate image and point a
-compose override at it.
+Four further families exist on the host and were never recorded here:
+`:pre-exportguard-20260728`, `:pre-lanedelete-20260727`, `:pre-auditonly-20260727`
+and `:pre-verifierfix-20260727`. **`:pre-verifierfix-20260727` is UNPAIRED — the
+worker image exists and the app image does not**, so restoring it would leave app
+and worker on mismatched builds. Treat it as unusable.
+
+**The no-rebuild restore path** (seconds, versus ~10 minutes for a rebuild). It
+existed only inside old QA reports; it belongs here:
+
+```bash
+docker tag meddoc-pro-transcribe-md:pre-<slug>-<date>        meddoc-pro-transcribe-md:latest
+docker tag meddoc-pro-transcribe-md-worker:pre-<slug>-<date> meddoc-pro-transcribe-md-worker:latest
+docker compose -f /opt/meddoc-pro/docker-compose.yml up -d --no-deps --force-recreate \
+  transcribe-md transcribe-md-worker
+```
+
+Never *rebuild* `:latest` to stage a rollback. Note the distinction the old
+wording blurred: this path **retags onto** `:latest`, which is fine and is how
+compose finds the image; what is forbidden is *building* a rollback into
+`:latest`, because then the thing you rolled back from no longer exists.
 
 ### 3.2 KNOWN CONSTRAINT — a flag rollback of `NEXT_PUBLIC_REVIEW_DOC_VIEW`
 ### leaves E/M confirm-only, with no override control
