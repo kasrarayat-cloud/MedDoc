@@ -88,6 +88,22 @@ test.describe('the sign modal keeps its signature controls on screen', () => {
       await expect(submit).toBeDisabled();
       await page.getByTestId('sign-attestation-toggle').click();
       await expect(submit).toBeEnabled();
+
+      // ⚠️ ENABLED IS NOT THE SAME AS WORKING, and that gap cost three specs.
+      // `disabled` reads fresh state from JSX every render, so the button lit
+      // up the instant the box was ticked — while the memoised `submit`
+      // callback, missing `attestationSatisfied` from its dep array, still held
+      // `false` and returned at the attestation guard. No request, no audit
+      // row, no toast: a control that looks ready and does nothing.
+      // Asserting the dialog CLOSES is the cheapest proof the handler actually
+      // ran, and it is the assertion that would have named this immediately.
+      await submit.click();
+      await expect(
+        page.getByRole('dialog'),
+        'the submit was enabled and clicked, and the dialog is still open — ' +
+          'the handler returned early (a stale closure over a gate, or a guard ' +
+          'the UI is not showing)',
+      ).toBeHidden({ timeout: 15_000 });
     });
   }
 });

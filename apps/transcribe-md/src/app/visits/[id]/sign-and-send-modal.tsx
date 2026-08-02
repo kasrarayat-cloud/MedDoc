@@ -279,6 +279,16 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
     props.emPendingChange,
     emChangeRequired,
     emChangeConfirmed,
+    // ⚠️ WITHOUT THIS THE CALLBACK CAPTURES `false` FOREVER, and the symptom is
+    // a button that looks ready and does nothing. `disabled` reads the fresh
+    // value from JSX on every render, so the control ENABLES the moment the
+    // doctor ticks the box — while `submit`, memoised without this dep, still
+    // holds the value from first render and returns at the attestation guard.
+    // No request, no audit row, no toast the test could see: three specs failed
+    // 10s later on "waiting for event download".
+    // A real doctor would have ticked the box, seen the button light up,
+    // clicked, and had nothing happen.
+    attestationSatisfied,
     router,
     selected,
   ]);
