@@ -113,6 +113,37 @@ export interface ReviewDocumentViewProps {
    * change un-confirms the card and the count together.
    */
   onEmConfirmedChange?: (confirmed: boolean) => void;
+
+  /**
+   * Whether to render the signature footer AT ALL. Defaults to `true`, which is
+   * every pre-Rounds caller — their paper IS the whole review surface and the
+   * bar belongs in it.
+   *
+   * ⚠️ ROUNDS PASSES `false` UNTIL THE FLOW IS HOSTING IT, AND THAT IS A GATE
+   * FIX, NOT A LAYOUT ONE.
+   *
+   * The Rounds stage draws its own action rail whose primary NAVIGATES to the
+   * gate flow and never signs. This bar signs. Both were on screen at once, and
+   * they disagreed: the rail's label counts EVERY applicable gate — including
+   * `attestation`, which `sign-gates.ts` marks `serverEnforced: false` — while
+   * this bar's `blocked` is `rxBlocking || emBlocking` and has no `attested`
+   * term. Measured on production 2026-08-02, on one clean READY visit at one
+   * moment:
+   *
+   *     action rail        "Review & sign · 1 blocker"
+   *     this bar           "Reviewed"        Sign & Download  disabled=false
+   *
+   * So the doctor could sign straight past the attestation, and because that
+   * gate is UI-only there was nothing behind it to catch the bypass.
+   *
+   * Hiding the bar with CSS would not have fixed it — the button stays in the
+   * DOM, focusable and clickable by keyboard and by assistive tech. The node
+   * has to be ABSENT. It still cannot be deleted outright, because
+   * `gate-flow.tsx` ADOPTS this exact node by `appendChild` at Gate 3; so the
+   * flow's own state decides when it exists, and the one control that can start
+   * a signature is reachable only from inside the gate stack that guards it.
+   */
+  renderSignbar?: boolean;
 }
 
 export function ReviewDocumentView(props: ReviewDocumentViewProps) {
@@ -371,8 +402,11 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
       {/* `data-testid` only — no copy, no behaviour. The Rounds action rail
           NAVIGATES here rather than signing, so it needs a stable anchor, and
           a class selector would make the styling a load-bearing contract. This
-          stays the ONE control that can start a signature. */}
-      {slot('signbar', (
+          stays the ONE control that can start a signature — and under Rounds it
+          now EXISTS only while the gate flow is hosting it (see
+          `renderSignbar`), so "the only one" and "reachable only through the
+          gates" are finally the same statement. */}
+      {(props.renderSignbar ?? true) && slot('signbar', (
         <div className="qm-c3-rev2-signbar" data-testid="review-doc-signbar">
           <div className="qm-c3-rev2-signbar-in">
             <div className="qm-c3-rev2-sign-status">

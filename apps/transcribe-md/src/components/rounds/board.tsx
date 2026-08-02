@@ -29,6 +29,16 @@ import { ROUNDS_STAGES } from '@/lib/rounds/stages';
 import type { BoardLane } from '@/lib/rounds/board-data';
 import { RoundsRetryButton } from './retry-button';
 
+/** The board's modality word. There is NO `modality` column — the honest
+ *  source is `specialty`, which is what decides imaging-vs-office everywhere
+ *  else in the product. Rendered as a short label rather than the raw id so a
+ *  marker reads like a marker. */
+function modalityLabel(specialty: string): string {
+  const s = specialty.trim().toLowerCase();
+  if (!s) return '—';
+  return s.replace(/[-_]+/g, ' ');
+}
+
 function hhmm(iso: string | null): string {
   if (!iso) return '';
   const d = new Date(iso);
@@ -186,6 +196,56 @@ function LaneCard({ lane }: { lane: BoardLane }) {
       {lane.kind === 'signed' ? (
         <span className="qm-rounds-kicker">signed {hhmm(lane.signedAt)}</span>
       ) : null}
+
+      {/* ── R1 — THE MARKER'S META, AND ONLY WHAT THE MODEL TRULY HAS ───────
+          SPEC: "every datum derives from the real queue source. Park visibly
+          anything with no real data. NEVER FAKE."
+
+          MODALITY and RECORDED TIME were already on `BoardLane` and rendered
+          nowhere — `specialty` was read only by the filter, `createdAt` only by
+          the sort. Nothing new is queried for them.
+
+          ⚠️ MRN IS PARKED, DELIBERATELY, and this is the note that stops the
+          next reader "just adding it". The board's patient select is
+          `{ name: true }`, so the datum is not in this query at all — and there
+          are TWO candidate columns: `TranscribeMdPatient.externalId` (which the
+          Rounds STAGE labels MRN today) and a separate `mrn` column the stage
+          does not read. Rendering one of them here would silently make the
+          board and the stage disagree about what "MRN" means on the same
+          patient. That is a decision to take on purpose, not in passing.
+          The slot is reserved the way SPEC reserves the vitals chip: named,
+          empty, and honest about why. */}
+      <div
+        data-testid={`rounds-lane-meta-${lane.id}`}
+        style={{
+          marginTop: 4,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          fontFamily: 'var(--rounds-font-mono)',
+          fontSize: 10.5,
+          letterSpacing: '0.04em',
+          textTransform: 'uppercase',
+          color:
+            lane.kind === 'signed'
+              ? 'var(--rounds-text-3)'
+              : 'var(--rounds-text-2)',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        <span data-testid={`rounds-lane-modality-${lane.id}`}>
+          {modalityLabel(lane.specialty)}
+        </span>
+        <span aria-hidden>·</span>
+        {/* "recorded" is `createdAt` — the same aliasing the stage already
+            makes (`stage-data.ts` → `recordedAtIso`). Naming it the same thing
+            in both places is the point. */}
+        <span data-testid={`rounds-lane-recorded-${lane.id}`}>
+          {hhmm(lane.createdAt)}
+        </span>
+      </div>
 
       {/* ONE line, and only when there is a real one to show. A critical card
           with nothing readable in the payload renders no line rather than a

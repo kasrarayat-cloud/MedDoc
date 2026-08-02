@@ -1041,6 +1041,19 @@ export function VisitReadyView(props: VisitReadyViewProps) {
           // exactly the tree it was before: `hosted()` returns its node
           // untouched and nothing reports state upward.
           onEmConfirmedChange={roundsActive ? setEmConfirmedSession : undefined}
+          /* ONE SIGN PATH. Off Rounds the bar is the review surface's own
+             footer and always renders. Under Rounds the stage's action rail is
+             the entry point, and this bar EXISTS only once the flow has walked
+             the doctor to the attestation step — the step that adopts it.
+             Before that the node is absent, not hidden, so there is nothing to
+             tab to and nothing for a screen reader to announce.
+             `emArtifact` is excluded deliberately: the flow declines to host a
+             gate there and the server refuses the signature, so an enabled
+             button would be a promise the server breaks. */
+          renderSignbar={
+            !roundsActive ||
+            (flowOpen && flowStep === 'attestation' && !roundsView?.emArtifact)
+          }
         />
       );
 
