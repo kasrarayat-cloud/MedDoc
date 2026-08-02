@@ -115,35 +115,29 @@ export interface ReviewDocumentViewProps {
   onEmConfirmedChange?: (confirmed: boolean) => void;
 
   /**
-   * Whether to render the signature footer AT ALL. Defaults to `true`, which is
-   * every pre-Rounds caller — their paper IS the whole review surface and the
-   * bar belongs in it.
+   * How many gates the Rounds action rail is currently counting. `0` off Rounds.
    *
-   * ⚠️ ROUNDS PASSES `false` UNTIL THE FLOW IS HOSTING IT, AND THAT IS A GATE
-   * FIX, NOT A LAYOUT ONE.
+   * ⚠️ THIS EXISTS BECAUSE THE TWO SIGN CONTROLS DISAGREED, AND ONE OF THEM WON.
    *
-   * The Rounds stage draws its own action rail whose primary NAVIGATES to the
-   * gate flow and never signs. This bar signs. Both were on screen at once, and
-   * they disagreed: the rail's label counts EVERY applicable gate — including
-   * `attestation`, which `sign-gates.ts` marks `serverEnforced: false` — while
-   * this bar's `blocked` is `rxBlocking || emBlocking` and has no `attested`
-   * term. Measured on production 2026-08-02, on one clean READY visit at one
-   * moment:
+   * The stage draws a rail whose primary NAVIGATES to the gate flow; this bar
+   * SIGNS. Both were on screen at once and their claims about the same visit
+   * contradicted each other — measured on production 2026-08-02, one clean
+   * READY visit, one moment:
    *
-   *     action rail        "Review & sign · 1 blocker"
-   *     this bar           "Reviewed"        Sign & Download  disabled=false
+   *     action rail   "Review & sign · 1 blocker"
+   *     this bar      "Reviewed"    Sign & Download   disabled=false
    *
-   * So the doctor could sign straight past the attestation, and because that
-   * gate is UI-only there was nothing behind it to catch the bypass.
+   * The rail's N counts every applicable gate including `attestation`; this
+   * bar's `blocked` was `rxBlocking || emBlocking` with no `attested` term. So
+   * the enabled button signed straight past the attestation — and
+   * `sign-gates.ts` marks that gate `serverEnforced: false`, so nothing behind
+   * it caught the bypass.
    *
-   * Hiding the bar with CSS would not have fixed it — the button stays in the
-   * DOM, focusable and clickable by keyboard and by assistive tech. The node
-   * has to be ABSENT. It still cannot be deleted outright, because
-   * `gate-flow.tsx` ADOPTS this exact node by `appendChild` at Gate 3; so the
-   * flow's own state decides when it exists, and the one control that can start
-   * a signature is reachable only from inside the gate stack that guards it.
+   * Feeding the rail's own number in means the two cannot drift apart again: a
+   * gate added to `sign-gates.ts` lands in both at once, with no second place
+   * to remember.
    */
-  renderSignbar?: boolean;
+  signGateBlockers?: number;
 }
 
 export function ReviewDocumentView(props: ReviewDocumentViewProps) {
@@ -195,7 +189,9 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
   const sections = useMemo(() => parseNoteSections(props.soapFinal), [props.soapFinal]);
 
   const emBlocking = props.emPendingChange != null && !emConfirmed;
-  const blocked = props.rxBlocking || emBlocking;
+  // Every gate the rail counts, not a hand-maintained subset of them.
+  const blocked =
+    props.rxBlocking || emBlocking || (props.signGateBlockers ?? 0) > 0;
 
   async function rescore() {
     if (!props.onRescoreEm) return;
@@ -406,7 +402,7 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
           now EXISTS only while the gate flow is hosting it (see
           `renderSignbar`), so "the only one" and "reachable only through the
           gates" are finally the same statement. */}
-      {(props.renderSignbar ?? true) && slot('signbar', (
+      {slot('signbar', (
         <div className="qm-c3-rev2-signbar" data-testid="review-doc-signbar">
           <div className="qm-c3-rev2-signbar-in">
             <div className="qm-c3-rev2-sign-status">
@@ -418,9 +414,23 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
                     style={{ color: 'var(--color-linear-amber)' }}
                   />
                   <span className="qm-c3-rev2-sign-msg" data-testid="review-doc-bar-msg">
+                    {/* ⚠️ NAME THE REASON THAT ACTUALLY APPLIES. This used to be
+                        a two-way `rxBlocking ? … : 'Confirm the documentation
+                        level above'`, which was safe only while `blocked` meant
+                        exactly rx-or-E/M. Feeding the rail's gate count in broke
+                        that assumption immediately: an IMAGING visit — where
+                        `emApplies` is false and no E/M surface may appear
+                        anywhere — started printing "Confirm the documentation
+                        level above" because its one open gate was the
+                        attestation. The imaging pack caught it. E/M is named
+                        only when E/M is genuinely the blocker; anything else
+                        points at the gates without inventing a clinical
+                        reason for them. */}
                     {props.rxBlocking
                       ? 'Resolve the prescription warning above'
-                      : 'Confirm the documentation level above'}
+                      : emBlocking
+                        ? 'Confirm the documentation level above'
+                        : 'Open Review & sign to clear the remaining steps'}
                   </span>
                 </>
               ) : props.emStale ? (

@@ -467,76 +467,66 @@ test.describe('Rounds Screen 2 — the stage', () => {
   });
 
   // ── 10. One control can start a signature ────────────────────────────────
-  test('the signing bar does not exist on the stage — only inside the gate flow', async ({
+  test('the two sign controls cannot disagree — the footer is gated by the rail\'s own count', async ({
     page,
   }) => {
-    // ⚠️ THIS TEST INVERTED IN R1, AND THE OLD ASSERTION WAS THE BUG.
+    // ⚠️ WHAT THIS TEST ASSERTED BEFORE WAS THE BUG.
     //
-    // It used to assert `toHaveCount(1)` on the stage and call that "exactly one
-    // control can start a signature". One is the right number of signing
-    // controls; it was the wrong number of them ON THIS SCREEN. The Rounds rail
-    // and the embedded footer were both visible, and they DISAGREED — measured
-    // on production 2026-08-02, one clean READY visit, one moment:
+    // It asserted `toHaveCount(1)` on the signing bar and called that "exactly
+    // one control can start a signature". One is the right number of signing
+    // controls; it was the wrong claim about this screen. The rail and the
+    // embedded footer were both live and they DISAGREED — measured on
+    // production 2026-08-02, one clean READY visit, one moment:
     //
     //     action rail   "Review & sign · 1 blocker"
-    //     footer        "Reviewed"   Sign & Download  disabled=false
+    //     footer        "Reviewed"    Sign & Download   disabled=false
     //
     // The rail's N counts every applicable gate including `attestation`; the
-    // footer's `blocked` was `rxBlocking || emBlocking` and had no `attested`
-    // term. So the enabled button signed straight past the attestation — and
-    // `sign-gates.ts` marks that gate `serverEnforced: false`, so nothing behind
-    // it caught the bypass.
+    // footer's `blocked` had no `attested` term, and `sign-gates.ts` marks that
+    // gate `serverEnforced: false` — so the enabled button signed past it and
+    // nothing behind it caught the bypass.
     //
-    // The bar is now ABSENT until the flow adopts it, not hidden: a hidden
-    // button is still focusable, still clickable, still announced.
+    // The footer now reads the rail's OWN number, so the invariant is no longer
+    // "there is one control" but the stronger "the two cannot contradict each
+    // other". A gate added to sign-gates.ts reaches both at once.
     const seeded = await open(page, 'stage-10');
     test.skip(!seeded, 'psql seeding unavailable');
 
-    // THE FIX, STATED AS THE ASSERTION: nothing on the stage can start a
-    // signature.
-    await expect(page.getByTestId('review-doc-signbar')).toHaveCount(0);
-
-    // NON-VACUITY. A zero over a page that failed to render is not a pass, so
-    // prove the stage is really here and really unsigned first.
-    await expect(page.getByTestId('rounds-action-rail')).toHaveCount(1);
-    await expect(page.getByTestId('review-document-view')).toHaveCount(1);
     const rail = page.getByTestId('rounds-review-sign');
     await expect(rail).toBeVisible();
+    await expect(page.getByTestId('review-doc-signbar')).toHaveCount(1);
 
-    // AND THE CONTRADICTION CANNOT RECUR: whatever the rail claims, there is no
-    // second control on screen making a different claim about the same visit.
+    // NON-VACUITY: with zero blockers this test could not tell the fix from a
+    // visit that had nothing to gate in the first place.
     const blockers = Number((await rail.getAttribute('data-blockers')) ?? '0');
     expect(
       blockers,
-      'the fixture is meant to reach the stage with at least the attestation ' +
-        'gate open — with zero blockers this test could not tell the fix from ' +
-        'a visit that had nothing to gate',
+      'the fixture must reach the stage with at least one gate open (the ' +
+        'attestation is always applicable) or this proves nothing',
     ).toBeGreaterThan(0);
-    await expect(page.getByTestId('review-doc-bar-msg')).toHaveCount(0);
 
-    // Walk the flow to the step that hosts it.
+    // THE ASSERTION THE BYPASS WOULD FAIL: the rail says there is something
+    // left to do, so the thing that actually signs must refuse.
+    const signBtn = page
+      .getByTestId('review-doc-signbar')
+      .getByRole('button', { name: /sign & download/i });
+    await expect(signBtn).toHaveCount(1);
+    await expect(
+      signBtn,
+      `the rail reports ${blockers} blocker(s) while the footer's signature ` +
+        'button is enabled — that is the production defect R1 closed',
+    ).toBeDisabled();
+
+    // And the footer must not be claiming the visit is finished either.
+    await expect(page.getByTestId('review-doc-bar-msg')).not.toHaveText(/^Reviewed$/);
+
+    // The flow still adopts the same single node — one bar, wherever it lives.
     await rail.click();
     await expect(page.getByTestId('rounds-gate-flow')).toBeVisible();
-    for (let i = 0; i < 4; i += 1) {
-      if (await page.getByTestId('rounds-gate-attest').count()) break;
-      const next = page.getByTestId('rounds-gate-next');
-      if (!(await next.count()) || (await next.isDisabled())) break;
-      await next.click();
-    }
-    await expect(page.getByTestId('rounds-gate-attest')).toHaveCount(1);
-
-    // NOW it exists — exactly once, and inside the flow rather than the paper.
     await expect(page.getByTestId('review-doc-signbar')).toHaveCount(1);
-    await expect(
-      page.getByTestId('rounds-gate-flow').getByTestId('review-doc-signbar'),
-      'the bar must be INSIDE the flow — if it rendered back in the paper the ' +
-        'count would still be 1 and the bypass would be back',
-    ).toHaveCount(1);
-
-    // And closing puts the stage back to having no signing control at all.
     await page.getByTestId('rounds-gate-close').click();
     await expect(page.getByTestId('rounds-gate-flow')).toHaveCount(0);
-    await expect(page.getByTestId('review-doc-signbar')).toHaveCount(0);
+    await expect(page.getByTestId('review-doc-signbar')).toHaveCount(1);
     await expect(page.getByTestId('review-document-view')).toHaveCount(1);
   });
 });

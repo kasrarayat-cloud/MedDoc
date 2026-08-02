@@ -1050,10 +1050,23 @@ export function VisitReadyView(props: VisitReadyViewProps) {
              `emArtifact` is excluded deliberately: the flow declines to host a
              gate there and the server refuses the signature, so an enabled
              button would be a promise the server breaks. */
-          renderSignbar={
-            !roundsActive ||
-            (flowOpen && flowStep === 'attestation' && !roundsView?.emArtifact)
-          }
+          /* ⚠️ THE BYPASS IS CLOSED BY TYING THE TWO CONTROLS TOGETHER, NOT
+             BY REMOVING ONE — and the removal was tried first, four times.
+             `gate-flow.tsx` ADOPTS this bar by `appendChild`. Making React
+             conditionally unmount a node another component physically
+             relocates puts React's tree and the real DOM in disagreement: when
+             the flow closed, React removed a node that was no longer where it
+             thought, and the whole paper subtree went with it
+             (`review-document-view` → 0). That is a real architectural
+             conflict, not a tuning problem, and re-homing the bar into the flow
+             is its own piece of work.
+             So the bar stays mounted and React keeps owning it. What changes is
+             that it can no longer DISAGREE: `signGateBlockers` is the rail's
+             own number, so the footer is disabled for exactly the gates the rail
+             is counting — including `attestation`, the one that was skippable.
+             The duplication is now cosmetic; the contradiction and the bypass
+             are gone. */
+          signGateBlockers={roundsActive ? (roundsView?.n ?? 0) : 0}
         />
       );
 

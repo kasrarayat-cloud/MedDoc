@@ -226,10 +226,25 @@ function LaneCard({ lane }: { lane: BoardLane }) {
           fontSize: 10.5,
           letterSpacing: '0.04em',
           textTransform: 'uppercase',
-          color:
-            lane.kind === 'signed'
-              ? 'var(--rounds-text-3)'
-              : 'var(--rounds-text-2)',
+          /* ⚠️ `--rounds-text-2`/`-3` FAILED AXE HERE, on all four card
+             variants, and the reason is the ground rather than the ink: a lane
+             card paints its OWN background (surface-2, or the critical tint),
+             so the faint on-stage tiers are being read against a lighter
+             surface than the one they were checked on. This is the ninth
+             instance of that shape in this project. `--rounds-text-1` is the
+             tier that holds on every card ground the board draws. */
+          /* ⚠️ THE CARD'S OWN `fg`, NOT AN ON-STAGE TOKEN — and it took axe
+             printing the pair to see why. Two guesses failed here
+             (`--rounds-text-2/-3`, then `--rounds-text-1` at reduced opacity),
+             both because I was reasoning about the ink while the GROUND was the
+             variable: a READY lane card is `--rounds-paper-1` — SPEC's track
+             semantics make it "solid white" — so a near-white on-stage token
+             lands white-on-white. Measured: `#e7ebf1` on `#fcfcfa` = **1.16:1**
+             against a 4.5 requirement.
+             `fg` is computed a few lines above per lane kind and is already the
+             checked pairing for this card's background. Reusing it means this
+             line cannot drift from the patient name above it, on any kind. */
+          color: fg,
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
