@@ -31,6 +31,7 @@ import {
   procedureProvenanceNote,
 } from './visit-export';
 import { formSignatureLines } from './form-only';
+import { EXPORT_FONT, PAGE_PT, TYPE_PT, toHalfPt, toTwip } from './export-page';
 
 // T-M22.4: typography tokens. Font NAMES are set on every TextRun
 // so Word renders Charter (body) and Inter Tight (labels + brand)
@@ -43,8 +44,8 @@ import { formSignatureLines } from './form-only';
 // PDFs keep rendering in embedded Charter + Inter Tight; DOCX
 // typography is best-effort.
 const FONTS = {
-  body:  'Charter',
-  label: 'Inter Tight',
+  body:  EXPORT_FONT.body,
+  label: EXPORT_FONT.label,
 } as const;
 
 export async function generateVisitDocx(
@@ -188,7 +189,7 @@ export async function generateVisitDocx(
             new TextRun({
               text: `Modifier -${m.code}: ${m.rationale}`,
               italics: true,
-              size: 20,
+              size: toHalfPt(TYPE_PT.body),
               color: '666666',
             }),
           ],
@@ -227,7 +228,7 @@ export async function generateVisitDocx(
             new TextRun({
               text: `   (${r.urgency})`,
               color: '666666',
-              size: 20,
+              size: toHalfPt(TYPE_PT.body),
             }),
           ],
         })
@@ -247,7 +248,7 @@ export async function generateVisitDocx(
                 text: `    ${r.relevant_history}`,
                 italics: true,
                 color: '666666',
-                size: 20,
+                size: toHalfPt(TYPE_PT.body),
               }),
             ],
           })
@@ -279,7 +280,7 @@ export async function generateVisitDocx(
       children.push(
         new Paragraph({
           spacing: { after: 20 },
-          children: [new TextRun({ text: line, size: 20 })],
+          children: [new TextRun({ text: line, size: toHalfPt(TYPE_PT.body) })],
         })
       );
     }
@@ -335,7 +336,27 @@ export async function generateVisitDocx(
         },
       ],
     },
-    sections: [{ children }],
+    sections: [
+      {
+        // ⚠️ C2-b — THIS WAS `sections: [{ children }]`, WITH NO PAGE AT ALL.
+        // The `docx` library then uses its own default, A4 (11906x16838
+        // twips). The PDF has always been US Letter. Since the on-screen
+        // preview is Gotenberg's render of THIS file, the doctor read A4 and
+        // downloaded Letter — and no text-comparison parity check could see it.
+        properties: {
+          page: {
+            size: { width: toTwip(PAGE_PT.width), height: toTwip(PAGE_PT.height) },
+            margin: {
+              top: toTwip(PAGE_PT.margin),
+              right: toTwip(PAGE_PT.margin),
+              bottom: toTwip(PAGE_PT.margin),
+              left: toTwip(PAGE_PT.margin),
+            },
+          },
+        },
+        children,
+      },
+    ],
   });
 
   return Packer.toBuffer(doc) as unknown as Buffer;

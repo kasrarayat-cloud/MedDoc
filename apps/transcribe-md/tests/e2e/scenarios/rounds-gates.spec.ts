@@ -34,6 +34,7 @@ import {
   type ReviewDocClass,
 } from '../helpers/seedReviewDocVisit';
 import { signupFreshUser } from '../helpers/signup';
+import { docxGeometry, hasFamily, pdfGeometry } from '../helpers/exportGeometry';
 
 const OVERRIDE_REASON =
   'Benefit outweighs risk; monitoring renal function weekly and patient counselled.';
@@ -372,6 +373,44 @@ test.describe('Rounds Screen 3 — the gates', () => {
       files.map((f) => f.suggestedFilename().replace(/^.*\./, '')).sort(),
       'one PDF and one DOCX',
     ).toEqual(['docx', 'pdf']);
+
+    // ⚠️ C2-b — GEOMETRY AND TYPE, READ FROM THE BYTES, BESIDE THE TEXT CHECK.
+    // The clause this test discharges is "PDF/Word parity re-proven at 1440",
+    // and until now it compared section-heading STRINGS. `exportText.ts` strips
+    // every XML tag to do that, so `w:pgSz` / `w:rFonts` / `w:sz` were never in
+    // its universe — and a US-Letter PDF and an A4 Word file with the same
+    // words passed it for as long as both existed. The preview is Gotenberg's
+    // render of the DOCX, so that split was also preview-vs-download.
+    {
+      const byExt = new Map(
+        files.map((f) => [f.suggestedFilename().replace(/^.*\./, ''), f]),
+      );
+      const pdfPath = await byExt.get('pdf')!.path();
+      const docxPath = await byExt.get('docx')!.path();
+      const [pdfG, docxG] = await Promise.all([
+        pdfGeometry(pdfPath!),
+        docxGeometry(docxPath!),
+      ]);
+      expect(
+        { w: docxG.widthPt, h: docxG.heightPt },
+        'the Word file is a different page size from the PDF — and since the ' +
+          'on-screen preview is a render of that Word file, the doctor is ' +
+          'reading one page and downloading another',
+      ).toEqual({ w: pdfG.widthPt, h: pdfG.heightPt });
+      // US Letter, stated rather than merely "equal to each other" — two
+      // artifacts agreeing on the wrong page would satisfy an equality alone.
+      expect({ w: pdfG.widthPt, h: pdfG.heightPt }).toEqual({ w: 612, h: 792 });
+      // The PDF EMBEDS its faces; the DOCX can only name them, which is why the
+      // converter image had to gain them.
+      expect(
+        hasFamily(pdfG.fonts, 'Charter'),
+        `the PDF does not embed Charter — it carries ${pdfG.fonts.join(', ')}`,
+      ).toBe(true);
+      expect(
+        hasFamily(docxG.fonts, 'Charter'),
+        `the Word file does not name Charter — it names ${docxG.fonts.join(', ')}`,
+      ).toBe(true);
+    }
 
     for (const f of files) {
       const path = await f.path();
