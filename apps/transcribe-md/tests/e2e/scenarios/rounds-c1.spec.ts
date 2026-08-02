@@ -495,7 +495,7 @@ test.describe('Rounds C1 — auth to tokens, flag-ON', () => {
 
     await page.evaluate(() => document.querySelector('#rounds-c1-bridged-probe')?.remove());
 
-    // ── (4) THE SAME BLIND SPOT ON SETTINGS, WHICH IS THE WORSE CASE ───────
+    // ── (4) THE BLIND SPOT ON SETTINGS — CLOSED BY C2, VERDICT INVERTED ───────
     // Added by C1-e, here rather than in its own describe, because it is the
     // FOURTH case of one control and splitting a control across two tests is
     // how one half gets fixed and the other rots.
@@ -510,13 +510,23 @@ test.describe('Rounds C1 — auth to tokens, flag-ON', () => {
     // label and paragraph inside a settings panel is therefore REPORTED, never
     // gated.
     //
-    // Asserted as a blind spot rather than closed. Closing it means classing
-    // shipped C3 chrome, which belongs to C2/F — and rule 4 forbids widening a
-    // partial skin to make a gate greener. What C2 inherits is the decision,
-    // not the discovery: either the C3 chrome gains paired owned classes when
-    // C2 takes it, or the settings panels stay outside the gate and that is
-    // said out loud. If a future change makes the adjudicator climb PAST a
-    // classed node, this reddens and sends the reader here.
+    // ⚠️ C2 TOOK THE FIRST OF THE TWO OPTIONS THIS CONTROL NAMED. It said:
+    // "either the C3 chrome gains paired owned classes when C2 takes it, or
+    // the settings panels stay outside the gate and that is said out loud."
+    // `.qm-c3-set-panel` now also carries `qm-rounds-setpanel`, and
+    // `.qm-c3-set-content` carries `qm-rounds-setbody`, so the walk reaches a
+    // Rounds name and every field, label and paragraph in the seven panels is
+    // GATED rather than merely reported.
+    // 
+    // The verdict below is therefore INVERTED from what C1-e shipped, and the
+    // inversion IS the assertion: `toBe(true)` where it read `toBe(false)`.
+    // Case (2) and this case now agree, which is the point — the argument for
+    // `qm-rounds-authform` was always that a bridged surface Rounds colours is
+    // a surface Rounds must answer for, and settings is that surface.
+    // 
+    // Rule 4 is not breached: nothing was restyled to make a gate greener. The
+    // markup is untouched; it gained an ownership marker so failures ALREADY
+    // PRESENT can block instead of scrolling past in a log.
     await signupFreshUser(page, 'rounds-c1e-ctl');
     await page.goto('/settings');
     await expect(
@@ -541,17 +551,19 @@ test.describe('Rounds C1 — auth to tokens, flag-ON', () => {
       blocking(panelRun.violations).some((e) =>
         e.targets.some((t) => t.includes('rounds-c1e-panel-probe')),
       ),
-      'a classless node inside a C3 settings panel was GATED — the ownership ' +
-        'rule changed. That may be an improvement, but C1-e and C2 both reason ' +
-        'from the documented blind spot, so update them together',
-    ).toBe(false);
+      'a classless node inside a settings panel is NOT gated — the C2 anchors ' +
+        '(`qm-rounds-setpanel` / `qm-rounds-setbody`) are missing, or the walk ' +
+        'stops before them, so every field and paragraph in the seven panels is ' +
+        'back to being reported and never blocking',
+      ).toBe(true);
     expect(
       inheritedBlocking(panelRun.violations).some((e) =>
         e.targets.some((t) => t.includes('rounds-c1e-panel-probe')),
       ),
-      'the settings probe was neither gated NOR reported as inherited — it fell ' +
-        'out of the harness entirely, which is worse than either',
-    ).toBe(true);
+      'the settings probe is reported as INHERITED as well as gated — the two ' +
+        'buckets must stay disjoint, or a reader cannot tell which one a finding ' +
+        'is in',
+      ).toBe(false);
     await page.evaluate(() => document.querySelector('#rounds-c1e-panel-probe')?.remove());
 
     cleanupTestUsers();
@@ -1367,6 +1379,208 @@ test.describe('Rounds C1-f — templates, flag-ON', () => {
     expect(
       violations.map((f) => `${f.state}@${f.width} ${f.entry.id} (${f.entry.impact})`),
       'serious/critical axe violations on Rounds-owned templates nodes',
+    ).toEqual([]);
+  });
+});
+
+// ============================================================================
+// C2 — GATE C: the doors that were built and never opened.
+// ----------------------------------------------------------------------------
+// Gate C is "axe on every restyled screen". C1-c restyled the error boundary,
+// both 404s, three loading states and the skeletons; `C1-PLAN.md:338` recorded
+// its axe as "deferred to C1-d's pack"; and C1-d's pack sweeps the six AUTH
+// routes and nothing else. C1-c2 then built `/dev/states` and called it, in its
+// own header, "the Gate C door".
+//
+// So of that route's states, only the two C1-f added were ever walked. Five
+// doors, built, never opened — and the deferral that produced it is written
+// down in the plan, where it read as done.
+//
+// ⚠️ EVERY SURFACE HERE IS ANCHORED FIRST. Sweeping an unanchored surface buys
+// a green tick over nothing: `ownedByDom` stops at the first classed
+// ancestor-or-self, so a violation under a non-Rounds class files as inherited
+// and cannot block. `/board`'s chrome was exactly that — its header, filter
+// group, search form, pagination and day meter are all inline-styled and
+// classless, so the long-green `board` state was measuring the lane rows alone.
+// ============================================================================
+
+test.describe('Rounds C2 — Gate C, the unswept surfaces', () => {
+  const violations: Finding[] = [];
+  const inherited: Finding[] = [];
+  const hiddenTraps: Array<{ state: string; width: number; sel: string }> = [];
+  const measured: string[] = [];
+
+  function record(state: string, width: number, run: AxeRun) {
+    measured.push(`${state}@${width}`);
+    for (const e of blocking(run.violations)) violations.push({ state, width, entry: e });
+    for (const e of inheritedBlocking(run.violations)) inherited.push({ state, width, entry: e });
+    for (const sel of run.ariaHiddenFocusable) hiddenTraps.push({ state, width, sel });
+  }
+  async function sweep(page: Page, state: string, width: number) {
+    record(state, width, await runAxe(page));
+    await shoot(page, state, width);
+  }
+
+  test('every /dev/states door is walked and swept', async ({ page }) => {
+    test.setTimeout(120_000);
+    await signupFreshUser(page, 'c2-states');
+    await page.setViewportSize({ width: WIDE, height: 1000 });
+
+    // Derived from the route's own enum rather than a list kept here: a state
+    // added to `/dev/states` and not swept is the defect this test exists for,
+    // and a hand-written list would reproduce it exactly.
+    const states = [
+      'error',
+      'error-stale',
+      'loading-visit',
+      'loading-board',
+      'loading-settings',
+      'skeletons',
+    ];
+    for (const state of states) {
+      const res = await page.goto(`/dev/states?state=${state}`);
+      expect(res?.status(), `/dev/states?state=${state} did not serve`).toBe(200);
+      // `resolveState` falls back to 'error' for anything it does not know, so
+      // a typo here would silently sweep the error page six times and pass.
+      await expect(
+        page.locator('[data-testid="dev-states"]'),
+        `${state}: the preview root is absent`,
+      ).toHaveAttribute('data-state', state);
+      await expect(page.locator('.qm-rounds-host.qm-rounds-devstates')).toHaveCount(1);
+      await sweep(page, `gatec:${state}`, WIDE);
+    }
+    expect(measured.length, 'fewer states swept than driven').toBeGreaterThanOrEqual(states.length);
+  });
+
+  test('both 404s and the empty board are swept', async ({ page }) => {
+    test.setTimeout(120_000);
+    await signupFreshUser(page, 'c2-notfound');
+    await page.setViewportSize({ width: WIDE, height: 1000 });
+
+    // The root 404 — reachable by navigation, which is why C1-c could prove it
+    // renders. Proving it renders is not measuring it.
+    const root = await page.goto('/no-such-page-c2');
+    expect(root?.status(), 'a bad URL did not 404').toBe(404);
+    await expect(page.locator('.qm-rounds-host.qm-rounds-notfound')).toHaveCount(1);
+    await sweep(page, 'gatec:404-root', WIDE);
+
+    // The visit 404 — a different component with its own copy and its own link.
+    //
+    // ⚠️ THIS ONE SERVES **200**, AND THAT IS NOT A DEFECT — it is where the
+    // status is decided. An UNMATCHED route (above) is resolved by the router
+    // before anything renders, so it can still send 404. `/visits/[id]` MATCHES;
+    // its `notFound()` is at `page.tsx:272`, after the layout has begun
+    // streaming, and a status cannot be recalled once the shell is on the wire.
+    // The doctor sees the right page; the header is already gone.
+    //
+    // So the assertion is on WHAT RENDERS, which is what Gate C needs, plus a
+    // floor that still catches a real regression: a 5xx is never acceptable.
+    // Asserting `toBe(404)` here would be asserting a property of Next's
+    // streaming, not of this product. (Same mechanism as `/board` flag-OFF,
+    // recorded in C1-f's row as unexplained — this is the explanation.)
+    const visit = await page.goto('/visits/00000000-0000-0000-0000-0000000c2404');
+    const vs = visit?.status() ?? 0;
+    expect(vs, `a bogus visit id returned ${vs} — a server error, not a refusal`).toBeLessThan(500);
+    await expect(
+      page.locator('.qm-rounds-notfound'),
+      'the visit not-found surface did not render — whatever the status says, ' +
+        'this is the page a doctor with a stale link actually sees',
+    ).not.toHaveCount(0);
+    await sweep(page, 'gatec:404-visit', WIDE);
+
+    // ⚠️ THE EMPTY BOARD, which no pack has ever rendered: `rounds-a11y` seeds
+    // three visits before it walks `/board`, so the one state a brand-new
+    // doctor sees on their first login is the one state never measured.
+    await page.goto('/board');
+    await expect(
+      page.getByTestId('rounds-board-empty'),
+      'this fresh doctor has visits — the empty board is not being rendered, so ' +
+        'the sweep below would be measuring the populated board again',
+    ).toBeVisible({ timeout: 15_000 });
+    await sweep(page, 'gatec:board-empty', WIDE);
+  });
+
+  test('⚠️ the board CHROME is now gated — positive control', async ({ page }) => {
+    // The long-green `board` state proved nothing about the chrome. This plants
+    // a real contrast failure into the header and asserts it BLOCKS; before the
+    // C2 anchor it would have climbed to `<body>` and filed as inherited.
+    await signupFreshUser(page, 'c2-chrome-ctl');
+    await page.goto('/board');
+    await expect(page.locator('.qm-rounds-boardchrome')).toHaveCount(1);
+
+    // ⚠️ WAIT FOR HYDRATION BEFORE PLANTING, AND CHECK THE PROBE SURVIVED.
+    // This test failed once and passed on retry — a flake, which the ledger's
+    // own rule says is a claim about a boundary nobody has drawn. The boundary
+    // is React: `/board` hydrates after `goto` resolves, and a node injected
+    // into a subtree React then re-renders is simply gone by the time axe runs.
+    // The symptom is indistinguishable from "the anchor does not work", which
+    // is the one conclusion this control exists to license — so it is made
+    // deterministic rather than retried.
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByTestId('rounds-search')).toBeVisible();
+
+    expect(
+      blocking((await runAxe(page)).violations),
+      'the board must start clean, or "planting a failure made it red" proves nothing',
+    ).toEqual([]);
+
+    await page.evaluate(() => {
+      const chrome = document.querySelector('.qm-rounds-boardchrome header');
+      const el = document.createElement('p');
+      el.setAttribute('id', 'c2-chrome-probe');
+      el.setAttribute('style', 'color:#777;background:#888;font-size:12px;padding:4px');
+      el.textContent = 'planted probe in the board chrome';
+      chrome!.appendChild(el);
+    });
+    await expect(
+      page.locator('#c2-chrome-probe'),
+      'the planted probe was removed before axe ran — React re-rendered the ' +
+        'chrome. Nothing below is a statement about ownership; re-plant after ' +
+        'the page is settled',
+    ).toHaveCount(1);
+    expect(
+      blocking((await runAxe(page)).violations).some((e) =>
+        e.targets.some((t) => t.includes('c2-chrome-probe')),
+      ),
+      'a contrast failure in the board chrome was NOT gated — the chrome anchor ' +
+        'is missing, so the header, filters, search, pagination and day meter ' +
+        'are all outside the gate and `board` is green on the lane rows alone',
+    ).toBe(true);
+    await page.evaluate(() => document.querySelector('#c2-chrome-probe')?.remove());
+  });
+
+  test('no serious or critical violation on a Rounds-owned Gate C surface', async () => {
+    expect(
+      measured.length,
+      'nothing was measured — the assertion below would pass on an empty set',
+    ).toBeGreaterThanOrEqual(9);
+    expect(hiddenTraps, 'focusable elements inside an aria-hidden Rounds container').toEqual([]);
+    if (inherited.length > 0) {
+      const set = new Set<string>();
+      for (const f of inherited)
+        f.entry.targets.filter((t) => !ROUNDS_OWNED.test(t)).forEach((t) => set.add(t));
+      console.log(
+        `\n[rounds-c2] ${inherited.length} inherited serious/critical finding(s) on the ` +
+          'Gate C surfaces — reported, not gated:\n' +
+          [...set].slice(0, 20).map((t) => `    ${t}`).join('\n') + '\n',
+      );
+    }
+    expect(
+      // ⚠️ THE COLOUR PAIR IS IN THE MESSAGE, not just the rule id. C1-e spent
+      // three rebuild cycles on a `color-contrast` hit that named four
+      // selectors and no colours; `runAxe` has carried axe's own
+      // fgColor/bgColor/contrastRatio ever since, and a summary that drops them
+      // re-creates the defect one layer up.
+      violations.map((f) => {
+        const d = (f.entry.data ?? []).find(
+          (x) => x && (x as Record<string, unknown>).contrastRatio !== undefined,
+        ) as Record<string, unknown> | undefined;
+        const pair = d
+          ? ` ${String(d.fgColor)} on ${String(d.bgColor)} = ${String(d.contrastRatio)} (needs ${String(d.expectedContrastRatio)})`
+          : '';
+        return `${f.state}@${f.width} ${f.entry.id} (${f.entry.impact})${pair} ${f.entry.targets.slice(0, 2).join(' , ')}`;
+      }),
+      'serious/critical axe violations on Rounds-owned Gate C surfaces',
     ).toEqual([]);
   });
 });

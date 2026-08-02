@@ -73,7 +73,10 @@ export function RoundsRetryButton({ visitId }: { visitId: string }) {
           fontFamily: 'var(--rounds-font-ui)',
           fontSize: 12,
           fontWeight: 600,
-          color: 'var(--rounds-critical)',
+          // C2: the LABEL takes the on-dark variant (2.72:1 → 6.18:1); the
+          // BORDER keeps the true red. Latent until now — this control only
+          // renders on a FAILED lane, which no axe fixture has ever produced.
+          color: 'var(--rounds-critical-on-dark)',
           background: 'transparent',
           border: '1px solid var(--rounds-critical)',
           borderRadius: 'var(--rounds-radius-sm)',

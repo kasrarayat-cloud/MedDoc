@@ -38,6 +38,7 @@ import { isSkinRounds } from '@/config/skin-rounds';
 // The REAL loading components, imported rather than reimplemented — a preview
 // of a second implementation proves nothing about the first.
 import BoardLoadingPreview from '@/app/board/loading';
+import SettingsLoadingPreview from '@/app/settings/loading';
 import VisitLoadingPreview from '@/app/visits/[id]/loading';
 import { DevErrorState } from './client';
 import { DevTmplProcessing, DevTmplRejected } from './templates-preview';
@@ -60,6 +61,12 @@ const STATES = [
   // copy would measure something the product never draws.
   'tmpl-processing',
   'tmpl-rejected',
+  // C2 — the settings loading state had NO DOOR AT ALL. `/settings` resolves
+  // fast enough that a walk never catches its `loading.tsx`, and unlike the
+  // board and visit ones it was not even reachable here. Gate C asks for axe on
+  // every restyled screen; a screen with no way to render it is not swept, it
+  // is assumed.
+  'loading-settings',
 ] as const;
 type State = (typeof STATES)[number];
 
@@ -142,6 +149,12 @@ export default async function DevStatesPage({
       {state === 'loading-board' ? (
         <div data-testid="dev-loading-board">
           <BoardLoadingPreview />
+        </div>
+      ) : null}
+
+      {state === 'loading-settings' ? (
+        <div data-testid="dev-loading-settings">
+          <SettingsLoadingPreview />
         </div>
       ) : null}
 

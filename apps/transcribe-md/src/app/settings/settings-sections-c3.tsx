@@ -74,7 +74,27 @@ export function SettingsSectionsC3({
             id={s.id}
             aria-label={s.title}
             hidden={active !== s.id}
-            className={`qm-c3-set-panel ${s.danger ? 'danger' : ''}`}
+            /* C2 — THE DECISION C1-e HANDED FORWARD, TAKEN.
+             *
+             * `ownedByDom` stops at the first classed ancestor-or-self, so every
+             * heading, subtitle, helper paragraph and button in these seven
+             * panels climbed to `.qm-c3-set-panel` / `.qm-c3-set-content`,
+             * matched no `qm-rounds-*` name, and filed as *inherited* —
+             * reported, never blocking. `rounds-c1.spec.ts`'s fourth positive
+             * control asserts exactly that, deliberately, as a blind spot.
+             *
+             * It is Rounds' to answer for. The markup is C3's, but under this
+             * skin the COLOURS are ours: the host bridge redeclares every
+             * `--color-linear-*` these panels read, so a contrast failure here
+             * is a Rounds choice rendered in C3 markup. That is the same
+             * reasoning C1-d used when it put `qm-rounds-authform` on a
+             * `.qm-c3-auth-form` container rather than leaving the whole form
+             * outside the gate.
+             *
+             * Both nodes are anchored because they are two shields: the panel
+             * owns the heading and subtitle, the content div owns everything a
+             * panel renders inside it. */
+            className={`qm-c3-set-panel qm-rounds-setpanel ${s.danger ? 'danger' : ''}`}
           >
             <h2
               className={`qm-c3-set-h ${s.danger ? 'danger' : ''}`}
@@ -82,7 +102,7 @@ export function SettingsSectionsC3({
               {s.title}
             </h2>
             {s.subtitle && <p className="qm-c3-set-sub">{s.subtitle}</p>}
-            <div className="qm-c3-set-content">{s.content}</div>
+            <div className="qm-c3-set-content qm-rounds-setbody">{s.content}</div>
           </section>
         ))}
       </div>

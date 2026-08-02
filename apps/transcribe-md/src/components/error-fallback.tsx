@@ -196,7 +196,14 @@ export function ErrorFallback({
             : 'We hit an unexpected error. The issue has been logged. Try again in a moment — if it keeps happening, send the error ID below to support.'}
         </p>
 
+        {/* C2 — this chip REPAINTS ITS GROUND to surface-2 while the state
+            around it is the stage, and its label is `--color-linear-text-3`.
+            On the stage that token is 4.91:1; one step lighter it is 4.17:1,
+            which is what Gate C caught the moment this surface was finally
+            swept. Ninth instance of one defect: nothing about the text
+            changed, the thing UNDER it did. */}
         <div
+          className="qm-rounds-errorid"
           style={{
             display: 'inline-block',
             marginTop: 18,
