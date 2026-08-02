@@ -150,6 +150,44 @@ test.describe('Rounds Screen 3 — the gates', () => {
     await expect(page.getByTestId('rounds-gate-next')).toBeEnabled();
   });
 
+  // ── THE THIRD REFUSAL CLASS — the attestation is a SERVER term ──────────
+  test('POST /sign REFUSES a request with no attestation, on the real route', async ({
+    page,
+  }) => {
+    // The UI cannot produce this request any more, which is exactly why it is
+    // worth asserting: the gate used to live only in the UI, a second sign
+    // control shipped that did not count it, and a signature could pass it with
+    // no refusal and no audit row. This drives the ROUTE directly, past every
+    // client-side guard, and asks the server the question the doctor's browser
+    // no longer can.
+    const seeded = await openFlow(page, 'gates-attest', { specialtyClass: 'imaging' });
+    test.skip(!seeded, 'psql seeding unavailable');
+
+    const visitId = new URL(page.url()).pathname.split('/').pop()!;
+
+    const refused = await page.request.post(`/api/visits/${visitId}/sign`, {
+      data: { destinations: [] },
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect(refused.status(), 'a sign with no attestation was not refused').toBe(400);
+    const body = (await refused.json()) as { ok: boolean; code: string };
+    expect(body.ok).toBe(false);
+    expect(body.code).toBe('ATTESTATION_REQUIRED');
+
+    // POSITIVE CONTROL — the same request WITH the attestation is not refused
+    // for this reason. Without it, a route that refused everything would pass.
+    const withAck = await page.request.post(`/api/visits/${visitId}/sign`, {
+      data: { destinations: [], attestation: { acknowledged: true } },
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const ackBody = (await withAck.json().catch(() => ({}))) as { code?: string };
+    expect(
+      ackBody.code,
+      'the attested request was ALSO refused for want of an attestation — the ' +
+        'route is refusing unconditionally and the assertion above proves nothing',
+    ).not.toBe('ATTESTATION_REQUIRED');
+  });
+
   // ── 3. THE TEST THIS PACK EXISTS FOR ────────────────────────────────────
   test('stepping BACK does not un-clear a gate', async ({ page }) => {
     // If the flow re-mounted its gates instead of portaling them, RxTab's

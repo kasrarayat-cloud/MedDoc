@@ -125,7 +125,22 @@ function visitRow(over: Record<string, unknown> = {}) {
   };
 }
 
-function call(body: unknown) {
+/** ⚠️ EVERY SIGN IN THIS FILE NOW ATTESTS.
+ *  `POST /sign` gained a required `attestation` term on 2026-08-02 (see
+ *  `sign-gates.ts` — the gate stopped being UI-only after a second sign control
+ *  shipped that could walk past it). These tests are about the E/M gate, so
+ *  they attest by default and stay about their own subject; the attestation
+ *  refusal has its own tests. A caller that wants to prove the refusal passes
+ *  `{ attestation: undefined }` explicitly. */
+function withAttestation(body: unknown): unknown {
+  if (typeof body !== 'object' || body === null) return body;
+  const b = body as Record<string, unknown>;
+  if ('attestation' in b) return b;
+  return { ...b, attestation: { acknowledged: true } };
+}
+
+function call(rawBody: unknown) {
+  const body = withAttestation(rawBody);
   const req = { json: async () => body } as unknown as NextRequest;
   return POST(req, { params: Promise.resolve({ id: VISIT }) });
 }
@@ -145,6 +160,52 @@ beforeEach(() => {
     patientName: 'P',
     signedAt: new Date('2026-06-12T11:00:00.000Z'),
     createdAt: new Date('2026-06-12T09:00:00.000Z'),
+  });
+});
+
+// ── THE THIRD REFUSAL CLASS ─────────────────────────────────────────────────
+describe('sign gate — the attestation is a SERVER term (2026-08-02)', () => {
+  it('REFUSES 400 ATTESTATION_REQUIRED when no attestation is sent', async () => {
+    // The gate used to live only in the UI. A second sign control shipped that
+    // did not count it, so a signature could pass it with no refusal and no
+    // audit row — measured on production. This is that hole, closed.
+    const res = await call({ destinations: [], attestation: undefined });
+    expect(res.status).toBe(400);
+    const body = res.body as unknown as { ok: boolean; code: string; error: string };
+    expect(body.ok).toBe(false);
+    expect(body.code).toBe('ATTESTATION_REQUIRED');
+    expect(body.error).toMatch(/attest/i);
+  });
+
+  it('writes the SIGN_BLOCKED_NO_ATTESTATION audit row on the refusal', async () => {
+    await call({ destinations: [], attestation: undefined });
+    const rows = mocks.logAudit.mock.calls.map((c) => c[0] as { action: string; success?: boolean; errorCode?: string });
+    const row = rows.find((r) => r.action === 'SIGN_BLOCKED_NO_ATTESTATION');
+    expect(row, `no refusal row; saw ${rows.map((r) => r.action).join(', ') || '(none)'}`).toBeTruthy();
+    expect(row!.success).toBe(false);
+    expect(row!.errorCode).toBe('ATTESTATION_REQUIRED');
+  });
+
+  it('DOES NOT SIGN on the refusal — the status never flips', async () => {
+    await call({ destinations: [], attestation: undefined });
+    // `updateMany` is the READY→SIGNED writer in this route.
+    const wrote = mocks.updateMany.mock.calls.some((c) =>
+      JSON.stringify(c[0] ?? {}).includes('SIGNED'),
+    );
+    expect(wrote, 'a refused sign still wrote SIGNED').toBe(false);
+  });
+
+  it('POSITIVE CONTROL — the SAME request WITH an attestation is not refused for this reason', async () => {
+    // Without this, the three assertions above would pass just as well against
+    // a route that refused everything.
+    const res = await call({ destinations: [] });
+    const body = res.body as unknown as { code?: string };
+    expect(body.code).not.toBe('ATTESTATION_REQUIRED');
+  });
+
+  it('a malformed attestation is NOT an attestation — acknowledged must be literal true', async () => {
+    const res = await call({ destinations: [], attestation: { acknowledged: false } });
+    expect(res.status).toBe(400);
   });
 });
 

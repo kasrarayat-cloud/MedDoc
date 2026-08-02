@@ -1067,6 +1067,10 @@ export function VisitReadyView(props: VisitReadyViewProps) {
              The duplication is now cosmetic; the contradiction and the bypass
              are gone. */
           signGateBlockers={roundsActive ? (roundsView?.n ?? 0) : 0}
+          /* Gate 3 already collects this; forwarding it means the doctor
+             attests once. Off Rounds it is undefined and the modal collects
+             its own — the route requires it either way. */
+          attested={roundsActive ? attested : undefined}
         />
       );
 

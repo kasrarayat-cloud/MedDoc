@@ -103,6 +103,19 @@ const BodySchema = z.object({
       to: z.string().min(1).max(16),
     })
     .optional(),
+  /** THE DOCTOR'S ATTESTATION — required, 2026-08-02.
+   *
+   *  Until this field existed the attestation was a UI-only gate
+   *  (`sign-gates.ts` marked it `serverEnforced: false`). A second sign control
+   *  shipped to production that did not count it, and because nothing here
+   *  counted it either, the gate could be passed with no refusal and no audit
+   *  row. Optional in the SCHEMA so a request without it produces the typed
+   *  refusal below rather than a generic 400 the caller cannot act on. */
+  attestation: z
+    .object({
+      acknowledged: z.literal(true),
+    })
+    .optional(),
 });
 
 const FORMAT_FOR_CHANNEL: Partial<
@@ -347,6 +360,32 @@ export const POST = withApiHandler<{ id: string }>(
             at: new Date().toISOString(),
           } as unknown as typeof visit.emPendingChange)
         : null;
+    }
+
+    // ── GATE 3 — THE ATTESTATION, NOW A SERVER TERM ─────────────────────
+    // Same shape as the E/M refusal below: typed code, audit row, 400. It runs
+    // for every visit that is actually being signed, on every path, because the
+    // lesson that produced it is that a gate only the UI holds is one alternate
+    // control away from not existing.
+    if (visit.status === TranscribeVisitStatus.READY && !parsed.data.attestation) {
+      log.warn('api:visits:sign', 'attestation missing', { userId, visitId });
+      void logAudit({
+        action: 'SIGN_BLOCKED_NO_ATTESTATION',
+        targetType: 'TranscribeVisit',
+        targetId: visitId,
+        success: false,
+        errorCode: 'ATTESTATION_REQUIRED',
+        metadata: { status: visit.status },
+      });
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            'This note has not been attested. Confirm the attestation before signing.',
+          code: 'ATTESTATION_REQUIRED',
+        },
+        { status: 400 }
+      );
     }
 
     const pendingEm =

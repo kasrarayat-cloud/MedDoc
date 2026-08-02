@@ -73,6 +73,12 @@ interface SignAndSendModalProps {
   emailEnabled: boolean;
   /** The trigger button's label — "Sign & Send" vs "Export again". */
   triggerLabel: string;
+  /** Whether the doctor has ALREADY attested upstream (Rounds Gate 3 collects
+   *  it). When true this modal renders no attestation control of its own and
+   *  simply forwards it — the doctor attests once, not twice. When undefined,
+   *  this modal is the place it gets collected, which is what keeps the
+   *  non-Rounds paths signable now that the route requires it. */
+  attested?: boolean;
   /** Icon shown on the trigger. */
   triggerIcon: React.ReactNode;
   /** Variant of the trigger button — primary for sign, secondary for
@@ -135,6 +141,12 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
   const emChangeRequired =
     props.signOnSubmit && props.emPendingChange != null;
   const [emChangeConfirmed, setEmChangeConfirmed] = useState(false);
+  // Collected HERE only when nobody upstream did. `POST /sign` refuses without
+  // it (400 ATTESTATION_REQUIRED), so this is the UI half of a real gate rather
+  // than a courtesy checkbox.
+  const [modalAttested, setModalAttested] = useState(false);
+  const attestationNeededHere = props.signOnSubmit && props.attested !== true;
+  const attestationSatisfied = props.attested === true || modalAttested;
   const [prevOpen, setPrevOpen] = useState(open);
   if (prevOpen !== open) {
     setPrevOpen(open);
@@ -168,6 +180,10 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
       toast.error('Confirm the documentation level change before signing.');
       return;
     }
+    if (props.signOnSubmit && !attestationSatisfied) {
+      toast.error('Attest to this note before signing.');
+      return;
+    }
     startTransition(async () => {
       try {
         // Step 1: the server-side work (sign + collect clipboard text /
@@ -180,7 +196,8 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
               destinations,
               emChangeRequired && emChangeConfirmed
                 ? (props.emPendingChange ?? undefined)
-                : undefined
+                : undefined,
+              attestationSatisfied
             )
           : await prepareDeliverOnly(props.visitId, destinations);
 
@@ -379,6 +396,48 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
               color-mix family as the suggestions lane / review banner).
               Rendered OUTSIDE the scroll area so it can never scroll out
               of sight behind a long destination list. */}
+          {attestationNeededHere && (
+            <div
+              role="group"
+              aria-label="Attestation required"
+              data-testid="sign-attestation"
+              className="rounded-lg border"
+              style={{
+                margin: '4px 24px 12px',
+                padding: '10px 12px',
+                borderColor: 'var(--color-linear-border)',
+                background: 'var(--color-linear-surface-2)',
+              }}
+            >
+              <p
+                className="mb-0 text-[12px] leading-relaxed"
+                style={{ color: 'var(--color-linear-text-3)' }}
+              >
+                Signing is an attestation. Confirm that you have reviewed this
+                note and that it reflects the encounter.
+              </p>
+              <button
+                type="button"
+                onClick={() => setModalAttested((a) => !a)}
+                aria-pressed={modalAttested}
+                data-testid="sign-attestation-toggle"
+                className="mt-2 flex w-full items-center gap-3 rounded-md border px-3 py-2 text-left"
+                style={{
+                  borderColor: modalAttested
+                    ? 'color-mix(in srgb, var(--color-linear-sage) 45%, transparent)'
+                    : 'var(--color-linear-border)',
+                  background: modalAttested
+                    ? 'color-mix(in srgb, var(--color-linear-sage) 14%, transparent)'
+                    : 'transparent',
+                }}
+              >
+                <span className="text-[13px]">
+                  I have reviewed this note and attest to it
+                </span>
+              </button>
+            </div>
+          )}
+
           {emChangeRequired && props.emPendingChange && (
             <div
               role="group"
@@ -496,7 +555,11 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
                 // E/M visible-confirm: the sign CTA stays disabled until
                 // the doctor explicitly confirms a recorded level change.
                 // The server gate rejects unconfirmed signs regardless.
-                disabled={pending || (emChangeRequired && !emChangeConfirmed)}
+                disabled={
+                  pending ||
+                  (emChangeRequired && !emChangeConfirmed) ||
+                  (props.signOnSubmit && !attestationSatisfied)
+                }
               >
                 {pending ? (
                   <>
@@ -612,7 +675,11 @@ async function fetchSignAndDeliver(
    *  Omitted when there is nothing to confirm. The server rejects the
    *  sign (400, EM_CHANGE_UNACKNOWLEDGED) if a recorded change exists
    *  and this is absent or stale. */
-  acknowledgedEmChange?: { from: string; to: string }
+  acknowledgedEmChange?: { from: string; to: string },
+  /** The doctor's attestation. Required by the route since 2026-08-02 —
+   *  omitted only by a caller that has not collected it, which the server then
+   *  refuses (400 ATTESTATION_REQUIRED) rather than signing. */
+  attested?: boolean
 ): Promise<SignResponse> {
   const res = await fetch(`/api/visits/${visitId}/sign`, {
     method: 'POST',
@@ -620,6 +687,7 @@ async function fetchSignAndDeliver(
     body: JSON.stringify({
       destinations,
       ...(acknowledgedEmChange ? { acknowledgedEmChange } : {}),
+      ...(attested ? { attestation: { acknowledged: true as const } } : {}),
     }),
   });
   const body = (await res.json()) as SignResponse & { error?: string };
