@@ -25,6 +25,8 @@
 import type { ReactNode } from 'react';
 import { auth } from '@/lib/nextauth';
 import { isSkinBeta } from '@/config/skin-beta';
+import { isSkinRounds } from '@/config/skin-rounds';
+import { RoundsAppFrame } from '@/components/rounds/app-frame-rounds';
 import { TopNav } from './top-nav';
 import { IconRail } from './icon-rail';
 import { SidebarC3 } from './sidebar-c3';
@@ -45,6 +47,26 @@ export async function AppFrame({ children }: AppFrameProps) {
   const session = await auth();
   const userName = session?.user?.name || session?.user?.email || 'Doctor';
   const userEmail = session?.user?.email ?? undefined;
+
+  // ── ROUNDS (R1) ─────────────────────────────────────────────────────────────
+  // ⚠️ THIS BRANCH IS WHY THE APP WAS SPLIT-BRAIN. The Rounds flip shipped a
+  // board, a visit stage and a paper — but `AppFrame` wraps every OTHER authed
+  // route and forked ONLY on `isSkinBeta()`. Measured on production after the
+  // flip: `/board` had 0 asides and the Rounds nav, while `/patients`,
+  // `/dashboard` and `/settings` each rendered a 240px C3 sidebar with a
+  // DIFFERENT nav — and `/settings` rendered a Rounds host *inside* that legacy
+  // aside. One doctor, one session, two products.
+  //
+  // Ordered before the C3 branch deliberately: both flags are on in production,
+  // and Rounds is the newer decision. `isSkinBeta()` stays exactly as it was for
+  // every environment where Rounds is off.
+  //
+  // No <aside>. The nav is horizontal and shared with the board, so there is
+  // one nav in the app and it cannot drift. Full detail, and the measurement
+  // that found the fork, in `components/rounds/app-frame-rounds.tsx`.
+  if (isSkinRounds()) {
+    return <RoundsAppFrame userName={userName}>{children}</RoundsAppFrame>;
+  }
 
   // ── C3 calm-skin chrome (Stage 1b, flag-gated) ──────────────────────────────
   // Reuses the SAME .qm-lin-app grid + content-column + <main> overflow parent as

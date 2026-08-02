@@ -9,14 +9,22 @@
 // the whole list. Rows link to the existing /patients/[id].
 //
 // PRESENTATION ONLY: no write path, no behavior change.
+//
+// R1: the search / cursor / race-guard logic moved to `usePatientsRoster` so the
+// Rounds roster is the SAME list with different markup rather than a second
+// implementation that drifts. This file is now markup only.
 // ============================================================================
 
-import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 
 import { c3Status } from '@/lib/visit-status-c3';
-import { searchPatientsAction } from '@/actions/patients';
 import type { C3PatientRow, C3PatientsCursor } from '@/lib/c3-list-pagination';
+
+import {
+  usePatientsRoster,
+  initialsOf,
+  ageFrom,
+} from '@/lib/patients-roster';
 
 export function PatientsListC3({
   initialRows,
@@ -27,56 +35,17 @@ export function PatientsListC3({
   initialCursor: C3PatientsCursor | null;
   total: number;
 }) {
-  const [rows, setRows] = useState<C3PatientRow[]>(initialRows);
-  const [cursor, setCursor] = useState<C3PatientsCursor | null>(initialCursor);
-  const [query, setQuery] = useState('');
-  const [searching, setSearching] = useState(false);
-  const [loadingMore, startLoadMore] = useTransition();
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const reqIdRef = useRef(0);
-
-  const runSearch = useCallback((q: string) => {
-    const myReq = ++reqIdRef.current;
-    setSearching(true);
-    searchPatientsAction(null, q)
-      .then((page) => {
-        if (reqIdRef.current !== myReq) return;
-        setRows(page.rows);
-        setCursor(page.nextCursor);
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (reqIdRef.current === myReq) setSearching(false);
-      });
-  }, []);
-
-  const onQueryChange = (value: string) => {
-    setQuery(value);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => runSearch(value.trim()), 220);
-  };
-
-  useEffect(() => {
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, []);
-
-  const loadMore = () => {
-    if (!cursor) return;
-    const q = query.trim();
-    startLoadMore(async () => {
-      try {
-        const page = await searchPatientsAction(cursor, q);
-        setRows((prev) => [...prev, ...page.rows]);
-        setCursor(page.nextCursor);
-      } catch {
-        /* transient — keep current list */
-      }
-    });
-  };
-
-  const isFiltered = query.trim().length > 0;
+  const {
+    rows,
+    query,
+    searching,
+    loadingMore,
+    isFiltered,
+    cursor,
+    onQueryChange,
+    clearQuery,
+    loadMore,
+  } = usePatientsRoster(initialRows, initialCursor);
 
   return (
     <div style={{ maxWidth: 880, margin: '0 auto', padding: '4px 24px 80px' }}>
@@ -103,11 +72,7 @@ export function PatientsListC3({
             type="button"
             className="qm-c3-search-clear qm-tap-44"
             aria-label="Clear search"
-            onClick={() => {
-              setQuery('');
-              if (debounceRef.current) clearTimeout(debounceRef.current);
-              runSearch('');
-            }}
+            onClick={clearQuery}
           >
             ✕
           </button>
@@ -148,28 +113,6 @@ export function PatientsListC3({
       )}
     </div>
   );
-}
-
-function initialsOf(name: string): string {
-  return (
-    name
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((s) => s[0]?.toUpperCase() ?? '')
-      .join('') || '·'
-  );
-}
-
-function ageFrom(dobIso: string | null): number | null {
-  if (!dobIso) return null;
-  const d = new Date(dobIso);
-  if (Number.isNaN(d.getTime())) return null;
-  const now = new Date();
-  let age = now.getFullYear() - d.getFullYear();
-  const m = now.getMonth() - d.getMonth();
-  if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
-  return age >= 0 && age < 150 ? age : null;
 }
 
 function PatientRow({ p }: { p: C3PatientRow }) {

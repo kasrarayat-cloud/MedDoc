@@ -408,6 +408,25 @@ jobs:
           CI: "true"
         run: npx playwright test --project=rounds-c1
 
+      # ── R1 — the unification pass. Same flag-ON image, its own recreate, so
+      #    gate-project-env's contiguous recreate→run pairing holds. The pack
+      #    asserts the SHELL on every authenticated route (0 asides, one Main
+      #    nav, one <main id="main">) and the /patients roster's full function.
+      #    It is here rather than folded into a screen pack because a red is a
+      #    shell regression, and the flip shipped one that every screen pack
+      #    was green through. ──
+      - name: Recreate app on the Rounds image (R1 unification pack)
+        run: >
+          docker compose -f docker-compose.qa.yml -f docker-compose.qa.rounds.yml
+          up -d --wait transcribe-md
+
+      - name: Run E2E (rounds-r1 — one app, one nav, on every authed route)
+        working-directory: apps/transcribe-md
+        env:
+          PW_BASE_URL: http://localhost:9020
+          CI: "true"
+        run: npx playwright test --project=rounds-r1
+
       # ── Gate B's screenshots clause, made retrievable. ──
       # They are uploaded HERE rather than at the end of the job, and on
       # `always()` rather than `failure()`, because both of those were the bug:

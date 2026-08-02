@@ -31,7 +31,31 @@ import {
   procedureProvenanceNote,
 } from './visit-export';
 import { formSignatureLines } from './form-only';
-import { EXPORT_FONT, PAGE_PT, TYPE_PT, toHalfPt, toTwip } from './export-page';
+import {
+  EXPORT_FONT,
+  PAGE_PT,
+  TYPE_PT,
+  toHalfPt,
+  toTwip,
+  EXPORT_COLOR,
+  RULE_PT,
+  SECTION_MARK,
+  SECTION_TRACKING_PT,
+  EMPTY_VALUE,
+  META_LABEL_COL_PT,
+  CONTENT_WIDTH_PT,
+  LOCKUP_PT,
+  toEighthPt,
+  bareHex,
+} from './export-page';
+
+/** R1.4 — the hairline both generators draw, in the unit `docx` takes. */
+const HAIRLINE = {
+  style: BorderStyle.SINGLE,
+  size: toEighthPt(RULE_PT),
+  color: bareHex(EXPORT_COLOR.rule),
+  space: 2,
+} as const;
 
 // T-M22.4: typography tokens. Font NAMES are set on every TextRun
 // so Word renders Charter (body) and Inter Tight (labels + brand)
@@ -63,12 +87,12 @@ export async function generateVisitDocx(
     children.push(
       new Paragraph({
         alignment: AlignmentType.CENTER,
-        spacing: { after: 240 },
+        spacing: { after: toTwip(LOCKUP_PT.ruleToBody) },
         children: [
           new TextRun({
             text: (data.formTitle ?? '').trim().toUpperCase() || 'NOTE',
             bold: true,
-            size: 32, // 16pt
+            size: toHalfPt(TYPE_PT.title),
           }),
         ],
       })
@@ -76,33 +100,38 @@ export async function generateVisitDocx(
   } else {
     children.push(
       new Paragraph({
-        spacing: { after: 120 },
+        spacing: { after: toTwip(LOCKUP_PT.eyebrowToTitle) },
         children: [
           new TextRun({
             text: 'QUILLMD',
             bold: true,
-            color: '7C3AED',
-            size: 18, // half-points (9pt)
+            color: bareHex(EXPORT_COLOR.accent),
+            size: toHalfPt(TYPE_PT.small),
             font: FONTS.label,
-            // T-M22.5: match PDF's 1.2pt letterspacing on the brand
-            // wordmark. docx character-spacing unit is 1/20 pt, so 24
-            // ≈ 1.2pt — same visual rhythm as the pdf-generator's
-            // `characterSpacing: 1.2` in the section-heading primitive.
-            characterSpacing: 24,
+            // docx's character-spacing unit is 1/20 pt, which is what
+            // `toTwip` converts to. It was the literal 24 with a comment
+            // explaining the arithmetic — right, and unable to follow the
+            // point value if anyone changed it.
+            characterSpacing: toTwip(SECTION_TRACKING_PT),
           }),
         ],
       })
     );
     children.push(
       new Paragraph({
-        spacing: { after: 240 },
+        // R1.4: the title now carries the rule the PDF has always drawn under
+        // it. A paragraph bottom border is how Word draws a full-measure rule
+        // — there is no line primitive — and `space` is the gap above it, in
+        // points, which is exactly the lockup token.
+        border: { bottom: { ...HAIRLINE, space: LOCKUP_PT.titleToRule } },
+        spacing: { after: toTwip(LOCKUP_PT.ruleToBody) },
         children: [
           new TextRun({
             text: data.clinicianName
               ? `${data.clinicianName} · ${data.specialty}`
               : data.specialty,
             bold: true,
-            size: 32,
+            size: toHalfPt(TYPE_PT.title),
           }),
         ],
       })
@@ -120,7 +149,7 @@ export async function generateVisitDocx(
   // place of the app's generic patient info bar — same slot, no duplicate
   // "Patient" line. Deterministically filled; blanks render as "—".
   if (data.headerFields.length > 0) {
-    children.push(...renderHeaderFieldsBlock(data.headerFields));
+    children.push(renderHeaderFieldsBlock(data.headerFields));
   } else {
     children.push(renderPatientInfoBar(data));
   }
@@ -366,25 +395,88 @@ export async function generateVisitDocx(
 // Primitives
 // ---------------------------------------------------------------------------
 
-/** T-M22.2: patient info bar as a Word table with all borders set
- *  to NONE. One row, N cells where N is the count of populated
- *  fields (2 minimum — Patient + Visit Date; up to 4 with Chief
- *  Complaint + Status). Cell layout mirrors PDF T-M21.2: label
- *  on top (bold, uppercase, muted), value below (regular, larger). */
-/** Render the doctor's parsed form header (feat/template-header-fields) as a
- *  compact labeled block — one line per field, "LABEL: value", with a blank
- *  value shown as "—". Presentation-only; values were filled deterministically. */
-function renderHeaderFieldsBlock(fields: RenderedHeaderField[]): Paragraph[] {
-  return fields.map(
-    (f) =>
-      new Paragraph({
-        spacing: { after: 40 },
+/** R1.4 — one metadata row: LABEL | value, in a borderless two-column table.
+ *  The PDF draws the same grid at the same sizes from the same tokens. */
+function metaRows(
+  cells: Array<{ label: string; value: string }>,
+): Table {
+  const invisible = {
+    style: BorderStyle.NONE,
+    size: 0,
+    color: 'FFFFFF',
+  } as const;
+  const invisibleBorders = {
+    top: invisible,
+    bottom: invisible,
+    left: invisible,
+    right: invisible,
+    insideHorizontal: invisible,
+    insideVertical: invisible,
+  };
+  // The label column is a POINT width shared with the PDF, expressed to Word
+  // in twips. A percentage would have made it a different measure on any page
+  // size — and this document's page size was A4-by-accident until C2-b.
+  const labelW = toTwip(META_LABEL_COL_PT);
+  const valueW = toTwip(CONTENT_WIDTH_PT - META_LABEL_COL_PT);
+
+  return new Table({
+    width: { size: toTwip(CONTENT_WIDTH_PT), type: WidthType.DXA },
+    borders: invisibleBorders,
+    rows: cells.map(({ label, value }) => {
+      const v = value.trim() || EMPTY_VALUE;
+      return new TableRow({
         children: [
-          new TextRun({ text: `${f.label}: `, bold: true }),
-          new TextRun({ text: f.value.trim() ? f.value.trim() : '—' }),
+          new TableCell({
+            width: { size: labelW, type: WidthType.DXA },
+            borders: invisibleBorders,
+            children: [
+              new Paragraph({
+                spacing: { after: 30 },
+                children: [
+                  new TextRun({
+                    text: label.toUpperCase(),
+                    bold: true,
+                    color: bareHex(EXPORT_COLOR.textMuted),
+                    size: toHalfPt(TYPE_PT.fieldLabel),
+                    font: FONTS.label,
+                  }),
+                ],
+              }),
+            ],
+          }),
+          new TableCell({
+            width: { size: valueW, type: WidthType.DXA },
+            borders: invisibleBorders,
+            children: [
+              new Paragraph({
+                spacing: { after: 30 },
+                children: [
+                  new TextRun({
+                    text: v,
+                    // Muted when it is an em-dash: the absence of a value is
+                    // not a value, and it should not read with the same weight
+                    // as one.
+                    color:
+                      v === EMPTY_VALUE
+                        ? bareHex(EXPORT_COLOR.textMuted)
+                        : bareHex(EXPORT_COLOR.textPrimary),
+                    size: toHalfPt(TYPE_PT.fieldValue),
+                  }),
+                ],
+              }),
+            ],
+          }),
         ],
-      })
-  );
+      });
+    }),
+  });
+}
+
+/** The doctor's parsed form header (feat/template-header-fields), in the same
+ *  grid as everything else. It was `**LABEL:** value` paragraphs — a third
+ *  presentation of metadata in a document that should have one. */
+function renderHeaderFieldsBlock(fields: RenderedHeaderField[]): Table {
+  return metaRows(fields.map((f) => ({ label: f.label, value: f.value })));
 }
 
 function renderPatientInfoBar(data: VisitExportData): Table {
@@ -401,70 +493,23 @@ function renderPatientInfoBar(data: VisitExportData): Table {
   if (data.signedAt) {
     cells.push({ label: 'Status', value: 'Signed' });
   }
-
-  const invisibleBorder = {
-    style: BorderStyle.NONE,
-    size: 0,
-    color: 'FFFFFF',
-  } as const;
-  const invisibleBorders = {
-    top: invisibleBorder,
-    bottom: invisibleBorder,
-    left: invisibleBorder,
-    right: invisibleBorder,
-    insideHorizontal: invisibleBorder,
-    insideVertical: invisibleBorder,
-  };
-
-  return new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
-    borders: invisibleBorders,
-    rows: [
-      new TableRow({
-        children: cells.map(
-          ({ label, value }) =>
-            new TableCell({
-              borders: invisibleBorders,
-              children: [
-                new Paragraph({
-                  spacing: { after: 20 },
-                  children: [
-                    new TextRun({
-                      text: label.toUpperCase(),
-                      bold: true,
-                      color: '666666',
-                      size: 16, // 8pt label
-                      font: FONTS.label,
-                    }),
-                  ],
-                }),
-                new Paragraph({
-                  children: [
-                    new TextRun({
-                      text: value,
-                      size: 22, // 11pt value
-                    }),
-                  ],
-                }),
-              ],
-            })
-        ),
-      }),
-    ],
-  });
+  // R1.4: was ONE row of N side-by-side cells at `100% / n` each, so the
+  // layout got narrower the more facts the visit had. Now one row per field.
+  return metaRows(cells);
 }
 
 function sectionHeading(text: string): Paragraph {
   return new Paragraph({
     heading: HeadingLevel.HEADING_2,
     spacing: { before: 240, after: 80 },
+    border: { bottom: HAIRLINE },
     children: [
       new TextRun({
-        text: text.toUpperCase(),
+        text: `${SECTION_MARK}  ${text.toUpperCase()}`,
         bold: true,
-        color: '7C3AED',
-        characterSpacing: 20,
-        size: 22,
+        color: bareHex(EXPORT_COLOR.accent),
+        characterSpacing: toTwip(SECTION_TRACKING_PT),
+        size: toHalfPt(TYPE_PT.sectionHead),
         font: FONTS.label,
       }),
     ],

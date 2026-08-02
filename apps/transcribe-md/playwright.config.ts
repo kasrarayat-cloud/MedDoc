@@ -119,6 +119,12 @@ export default defineConfig({
         // gate-flag-coverage.test.ts, which derives the pairing from the
         // projects array rather than from a maintained list.
         '**/rounds-c1.spec.ts',
+        // ROUNDS R1 — the unification pack. Every route it walks exists
+        // flag-OFF, and every one of them renders the legacy shell there: the
+        // aside it asserts away is CORRECT with the flag off. Same shape as
+        // the line above — collected by the default run, it reds the required
+        // gate for a reason that has nothing to do with the change.
+        '**/rounds-r1.spec.ts',
         '**/a11y.spec.ts',
         '**/23-note-format-phi-parse-reject.spec.ts',
         '**/24-rx-clinical-safety.spec.ts',
@@ -244,6 +250,18 @@ export default defineConfig({
       // tokens.
       name: 'rounds-c1',
       testMatch: ['**/rounds-c1.spec.ts'],
+      fullyParallel: false,
+      workers: 1,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      // R1 — the unification pass. Asserts the SHELL on every authenticated
+      // route (0 asides, one Main nav, one <main id="main">) plus the
+      // /patients roster's full function. Its own project for the same reason
+      // as the pack above: a red here is a shell regression, and folding it
+      // into a screen pack would let it read as one.
+      name: 'rounds-r1',
+      testMatch: ['**/rounds-r1.spec.ts'],
       fullyParallel: false,
       workers: 1,
       use: { ...devices['Desktop Chrome'] },

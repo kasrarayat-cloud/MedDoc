@@ -60,6 +60,7 @@ import {
   consumeDbInviteCode,
 } from '@/lib/signup-invite';
 import { logAudit } from '@/lib/audit';
+import { recoveryHref } from '@/lib/recovery-href';
 
 export interface FormErrorState {
   ok: false;
@@ -349,7 +350,7 @@ async function postLoginRedirectFor(): Promise<string> {
   } catch {
     // headers() outside a request context — fall through to the default
   }
-  return '/dashboard';
+  return recoveryHref();
 }
 
 /** Signup: creates a synthetic Practice + User atomically, grants
@@ -578,5 +579,5 @@ export async function signupAction(
     };
   }
 
-  return { ok: true, redirect: '/dashboard' };
+  return { ok: true, redirect: recoveryHref() };
 }

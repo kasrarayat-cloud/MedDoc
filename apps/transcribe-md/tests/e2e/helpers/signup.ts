@@ -3,8 +3,8 @@
 // ============================================================================
 
 import type { Page } from '@playwright/test';
-import { expect } from '@playwright/test';
 
+import { expectAtHome } from './home';
 import { TEST_PASSWORD, uniqueTestEmail } from './test-utils';
 
 /** Invite-only pilot (2026-07-28). The E2E stack sets SIGNUP_INVITE_CODES to
@@ -20,7 +20,8 @@ export interface SignupResult {
    *  subsequent navigations to authed pages work without re-login. */
 }
 
-/** Fills the signup form and asserts the caller lands on /dashboard.
+/** Fills the signup form and asserts the caller lands on the app's home
+ *  (`/board` under Rounds, `/dashboard` otherwise — see helpers/home.ts).
  *  The T-M9 fix (585fad4) routes auto-login failures to /login with a
  *  `warning` marker; this helper fails loudly if that path triggers so
  *  flakiness shows up as a real assertion, not a silent half-signup. */
@@ -43,11 +44,12 @@ export async function signupFreshUser(
   await page.getByRole('checkbox').check(); // accept terms
   await page.getByRole('button', { name: /create account/i }).click();
 
-  // Auto-login should land us on /dashboard within the default
-  // navigation timeout. If it lands on /login instead (auto-login
-  // bombed), fail here with a clear error — the tests don't try to
-  // recover because that would mask a real regression of T-M9's fix.
-  await expect(page).toHaveURL(/\/dashboard$/, { timeout: 15_000 });
+  // Auto-login should land us on the app's home within the default
+  // navigation timeout. WHICH home is a build-time fork (see helpers/home.ts).
+  // If it lands on /login instead (auto-login bombed), fail here with a clear
+  // error — the tests don't try to recover because that would mask a real
+  // regression of T-M9's fix.
+  await expectAtHome(page);
 
   return { email, password: TEST_PASSWORD };
 }

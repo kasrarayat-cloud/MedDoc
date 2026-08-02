@@ -1872,3 +1872,295 @@ body[data-skin='rounds'] {
 [data-skin='rounds'] .qm-rounds-overflow-body {
   padding-top: 10px;
 }
+
+/* ── R1 — the one top bar ────────────────────────────────────────────────
+   Shared by the board and by AppFrame's Rounds branch, so the nav cannot
+   drift between them again. Was inline styles inside board-chrome. */
+[data-skin='rounds'] .qm-rounds-topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--rounds-line-1);
+  background: var(--rounds-stage-bg-2);
+}
+
+[data-skin='rounds'] .qm-rounds-topbar-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+}
+
+[data-skin='rounds'] .qm-rounds-topbar-mark {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--rounds-accent);
+  color: var(--rounds-on-accent);
+  font-family: var(--rounds-font-display);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+[data-skin='rounds'] .qm-rounds-topbar-word {
+  font-family: var(--rounds-font-display);
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--rounds-text-1);
+}
+
+[data-skin='rounds'] .qm-rounds-topbar-nav {
+  display: flex;
+  gap: 14px;
+}
+
+[data-skin='rounds'] .qm-rounds-topbar-link {
+  font-family: var(--rounds-font-ui);
+  font-size: 13.5px;
+  color: var(--rounds-text-2);
+  text-decoration: none;
+}
+
+[data-skin='rounds'] .qm-rounds-topbar-link[data-active='true'] {
+  color: var(--rounds-text-1);
+}
+
+[data-skin='rounds'] .qm-rounds-topbar-link:hover {
+  color: var(--rounds-text-1);
+}
+
+/* ── R1 — AppFrame's Rounds branch ──────────────────────────────────────
+   No sidebar, no aside: one horizontal nav shared with the board. */
+[data-skin='rounds'] .qm-rounds-app {
+  min-height: 100vh;
+  /* NO background. The stage gradient is painted on `body` (see the
+     `[data-skin='rounds'] body` rule above) and a flat fill here would cover
+     it — the frame would look right in isolation and wrong beside the board,
+     which is exactly the kind of divergence R1 exists to remove. */
+}
+
+[data-skin='rounds'] .qm-rounds-app-main {
+  outline: none;
+  min-width: 0;
+}
+
+[data-skin='rounds'] .qm-rounds-topbar-who {
+  font-family: var(--rounds-font-ui);
+  font-size: 13px;
+  color: var(--rounds-text-2);
+}
+
+/* ── R1 — patients roster ────────────────────────────────────────────────
+   Same list as the C3 roster (shared `usePatientsRoster`), Rounds markup. */
+[data-skin='rounds'] .qm-rounds-roster {
+  max-width: 940px;
+  margin: 0 auto;
+  padding: 22px 24px 80px;
+}
+
+[data-skin='rounds'] .qm-rounds-roster-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding-bottom: 14px;
+}
+
+[data-skin='rounds'] .qm-rounds-roster-title {
+  font-family: var(--rounds-font-display);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--rounds-text-1);
+  margin: 0;
+}
+
+[data-skin='rounds'] .qm-rounds-roster-count {
+  font-family: var(--rounds-font-ui);
+  font-size: 13px;
+  color: var(--rounds-text-2);
+}
+
+[data-skin='rounds'] .qm-rounds-roster-new {
+  font-family: var(--rounds-font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--rounds-on-accent);
+  background: var(--rounds-accent);
+  border-radius: 8px;
+  padding: 7px 14px;
+  text-decoration: none;
+  align-self: center;
+}
+
+[data-skin='rounds'] .qm-rounds-roster-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+[data-skin='rounds'] .qm-rounds-roster-input {
+  width: 100%;
+  font-family: var(--rounds-font-ui);
+  font-size: 13.5px;
+  color: var(--rounds-text-1);
+  background: var(--rounds-surface-2);
+  border: 1px solid var(--rounds-line-1);
+  border-radius: 9px;
+  padding: 9px 34px 9px 12px;
+  outline: none;
+}
+
+[data-skin='rounds'] .qm-rounds-roster-input:focus-visible {
+  border-color: var(--rounds-accent);
+}
+
+[data-skin='rounds'] .qm-rounds-roster-input::placeholder {
+  color: var(--rounds-text-3);
+}
+
+[data-skin='rounds'] .qm-rounds-roster-clear,
+[data-skin='rounds'] .qm-rounds-roster-spin {
+  position: absolute;
+  right: 10px;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  background: none;
+  border: 0;
+  color: var(--rounds-text-2);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+[data-skin='rounds'] .qm-rounds-roster-spin {
+  border: 2px solid var(--rounds-line-1);
+  border-top-color: var(--rounds-accent);
+  border-radius: 50%;
+  animation: qm-rounds-roster-spin 0.7s linear infinite;
+}
+
+@keyframes qm-rounds-roster-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-skin='rounds'] .qm-rounds-roster-spin {
+    animation: none;
+  }
+}
+
+[data-skin='rounds'] .qm-rounds-roster-list {
+  display: flex;
+  flex-direction: column;
+}
+
+[data-skin='rounds'] .qm-rounds-roster-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 4px;
+  border-bottom: 1px solid var(--rounds-line-1);
+  text-decoration: none;
+  min-height: 44px;
+}
+
+[data-skin='rounds'] .qm-rounds-roster-row:hover {
+  background: var(--rounds-surface-2);
+}
+
+[data-skin='rounds'] .qm-rounds-roster-avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--rounds-surface-3);
+  color: var(--rounds-text-2);
+  font-family: var(--rounds-font-ui);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+[data-skin='rounds'] .qm-rounds-roster-idcol {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+[data-skin='rounds'] .qm-rounds-roster-name {
+  font-family: var(--rounds-font-ui);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--rounds-text-1);
+}
+
+[data-skin='rounds'] .qm-rounds-roster-meta {
+  font-family: var(--rounds-font-ui);
+  font-size: 12px;
+  color: var(--rounds-text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-skin='rounds'] .qm-rounds-roster-status {
+  flex: none;
+  font-family: var(--rounds-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--rounds-text-2);
+  border: 1px solid var(--rounds-line-1);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+
+[data-skin='rounds'] .qm-rounds-roster-chev {
+  flex: none;
+  color: var(--rounds-text-3);
+  font-size: 13px;
+}
+
+[data-skin='rounds'] .qm-rounds-roster-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 14px;
+}
+
+[data-skin='rounds'] .qm-rounds-roster-shown,
+[data-skin='rounds'] .qm-rounds-roster-empty {
+  font-family: var(--rounds-font-ui);
+  font-size: 12.5px;
+  color: var(--rounds-text-2);
+}
+
+[data-skin='rounds'] .qm-rounds-roster-empty {
+  padding: 28px 4px;
+}
+
+[data-skin='rounds'] .qm-rounds-roster-more {
+  font-family: var(--rounds-font-ui);
+  font-size: 12.5px;
+  color: var(--rounds-text-1);
+  background: var(--rounds-surface-2);
+  border: 1px solid var(--rounds-line-1);
+  border-radius: 8px;
+  padding: 7px 14px;
+  min-height: 36px;
+  cursor: pointer;
+}
+
+[data-skin='rounds'] .qm-rounds-roster-more:disabled {
+  color: var(--rounds-text-3);
+  cursor: default;
+}

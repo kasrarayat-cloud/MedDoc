@@ -149,6 +149,12 @@ export function toBoardLane(v: BoardLaneInput): BoardLane {
 
 export type BoardFilter =
   | 'active'
+  // R1: the legacy dashboard's "drafts ready" quick-list — up to three
+  // READY-but-unsigned visits — folded in here as a first-class rail rather
+  // than reproduced as a second widget. The board already carried these as
+  // `ready` lanes inside `active`; what the quick-list added was the ability
+  // to look at ONLY them, which is a filter, not a list.
+  | 'ready'
   | 'signed'
   | 'soap'
   | 'ultrasound'
@@ -165,6 +171,8 @@ export function laneMatchesFilter(
   switch (filter) {
     case 'active':
       return lane.kind !== 'signed' && lane.kind !== 'failed';
+    case 'ready':
+      return lane.kind === 'ready';
     case 'signed':
       return lane.kind === 'signed';
     case 'failed':
