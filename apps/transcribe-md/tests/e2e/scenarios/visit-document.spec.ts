@@ -22,6 +22,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 import { loginUser } from '../helpers/auth';
 import { QA_COMPOSE, QA_DB } from '../helpers/qa-compose';
+import { attestAndSubmit, signViaApi } from '../helpers/sign';
 import {
   STYLED_VISIT_ID,
   prepareVisitDocLogin,
@@ -196,7 +197,7 @@ test.describe('the visit page is the document', () => {
     }
     await page.getByRole('button', { name: /sign & download/i }).click();
     const pending = page.waitForEvent('download', { timeout: 120_000 });
-    await page.getByRole('button', { name: /^sign & deliver$/i }).dispatchEvent('click');
+    await attestAndSubmit(page);
     const download = await pending;
     const file = await download.path();
     writeFileSync('/tmp/qa-signed-preview.pdf', readFileSync(file!));
@@ -276,9 +277,7 @@ test.describe('the visit page is the document', () => {
     // Signing re-scores server-side rather than refusing and pointing at a
     // control that may not be rendered — the gate is enforced by the route
     // that owns the transition, not by whichever surface happens to be up.
-    const attempt = await page.request.post(`/api/visits/${seeded.visitId}/sign`, {
-      data: { destinations: [] },
-    });
+    const attempt = await signViaApi(page, seeded.visitId);
     expect([200, 400, 409]).toContain(attempt.status());
 
     // TWO LEGITIMATE OUTCOMES, and the re-score is a real model call so which
@@ -321,9 +320,7 @@ test.describe('the visit page is the document', () => {
         `"emPendingChange"=null where id='${seeded.visitId}'`,
     );
 
-    const r = await page.request.post(`/api/visits/${seeded.visitId}/sign`, {
-      data: { destinations: [] },
-    });
+    const r = await signViaApi(page, seeded.visitId);
     expect(r.status(), 'a moved level must block the signature').not.toBe(200);
     expect(await r.text()).toMatch(/confirm the new level/i);
     expect(sqlOne(`select status from transcribe_visits where id='${seeded.visitId}'`)).toBe(

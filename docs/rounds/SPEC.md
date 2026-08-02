@@ -227,6 +227,35 @@ co-tenants verified. **Host nginx for ingress, never Caddy.**
 
 ---
 
+## Gate semantics — a strengthening, recorded
+
+**2026-08-02: the attestation became SERVER-ENFORCED.** It was a UI-only gate —
+`sign-gates.ts` marked it `serverEnforced: false` and said so out loud, so that
+anyone reconciling the strip's N against a 4xx knew which term the route could
+not see.
+
+That honesty did not save it. A second sign control shipped to the stage whose
+own blocked-state did not count the attestation, and because nothing on the
+server counted it either, a signature could pass the gate with **no refusal and
+no audit row**. Measured on production, one clean READY visit, one moment:
+
+    action rail   "Review & sign · 1 blocker"
+    embedded bar  "Reviewed"    Sign & Download   disabled=false
+
+**A gate that nothing enforces is one alternate path away from not existing.**
+
+`POST /sign` now requires `attestation: { acknowledged: true }` and answers
+`400 ATTESTATION_REQUIRED` with a `SIGN_BLOCKED_NO_ATTESTATION` audit row
+without it. Every gate the strip counts now has a refusal behind it, and
+`sign-gates.test.ts` asserts that with no exception.
+
+**Gates only ever gain requirements.** Nothing here weakens: this adds a term a
+signature must satisfy, it does not remove one. Any future gate added to
+`sign-gates.ts` inherits the same obligation — a gate counted in the UI and
+absent from the route is now a failing test, not a footnote.
+
+---
+
 ## Stop-condition
 
 > If any phase's gate cannot go green after genuine fix attempts, **stop there,

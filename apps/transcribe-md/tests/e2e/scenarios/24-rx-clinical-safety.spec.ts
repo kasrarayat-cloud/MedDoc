@@ -29,6 +29,7 @@ import {
   getVisitStatus,
   rxWarningSeverities,
 } from '../helpers/rxSafety';
+import { attestAndSubmit, signViaApi } from '../helpers/sign';
 
 const GATE = process.env.NOTE_FORMAT_E2E !== '1';
 const GATE_MSG =
@@ -88,10 +89,7 @@ test('scenario 24: signing with an un-overridden CRITICAL warning is blocked ser
 
   // Hit the sign endpoint DIRECTLY (the gate must hold for non-UI callers too —
   // the F5-1 hardening). page.request rides the browser's auth cookie.
-  const res = await page.request.post(`/api/visits/${visitId}/sign`, {
-    data: { destinations: ['pdf'] },
-    headers: { 'Content-Type': 'application/json' },
-  });
+  const res = await signViaApi(page, visitId, { destinations: ['pdf'] });
   expect(res.status()).toBe(422);
   const body = (await res.json()) as { code?: string; error?: string };
   expect(body.code).toBe('OVERRIDE_REQUIRED');
@@ -135,10 +133,7 @@ test('scenario 24: overriding the critical warning records the audit row + clear
   // (the tier distinction: only critical gates).
   const sevs = rxWarningSeverities(visitId);
   expect(sevs.some((s) => s !== 'critical')).toBe(true);
-  const res = await page.request.post(`/api/visits/${visitId}/sign`, {
-    data: { destinations: ['pdf'] },
-    headers: { 'Content-Type': 'application/json' },
-  });
+  const res = await signViaApi(page, visitId, { destinations: ['pdf'] });
   expect(res.status()).toBe(200);
   expect(getVisitStatus(visitId)).toBe('SIGNED');
 });
@@ -155,7 +150,7 @@ test('scenario 24: the UI Sign & Send is blocked (and the doctor is told) until 
   // Attempt to sign via the real Sign & Send modal with the critical un-overridden.
   await page.getByRole('button', { name: /sign & send/i }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
-  await page.getByRole('button', { name: /sign & deliver/i }).click();
+  await attestAndSubmit(page);
 
   // The doctor is told, NOT silently failed — and the visit stays READY.
   await expect(page.getByText(/override before signing/i)).toBeVisible({ timeout: 10_000 });

@@ -26,6 +26,7 @@ import { cleanupTestUsers } from '../helpers/cleanup';
 import { createPatientAndContinue } from '../helpers/patient';
 import { signupFreshUser } from '../helpers/signup';
 import { waitForVisitStatus } from '../helpers/waitForReady';
+import { attestAndSubmit } from '../helpers/sign';
 
 // Reuse the 3-sec ID3-header fixture. The mock-deepgram bypass
 // doesn't read the bytes, and MinIO takes whatever we hand it.
@@ -92,7 +93,7 @@ test('scenario 2: fresh signup → voice dictation → READY → sign clipboard'
   // in scenario 1).
   await page.getByRole('button', { name: /download pdf/i }).click();
 
-  await page.getByRole('button', { name: /sign & deliver/i }).click();
+  await attestAndSubmit(page);
   await expect(page.getByRole('dialog')).toBeHidden({ timeout: 5_000 });
 
   await waitForVisitStatus(page, visitId, 'SIGNED', { timeoutMs: 10_000 });

@@ -208,6 +208,13 @@ export type AuditAction =
   // { from, to, cause } of the pending change.
   | 'EM_LEVEL_CHANGED'
   | 'EM_SIGN_BLOCKED_UNACKNOWLEDGED_CHANGE'
+  // SIGN_BLOCKED_NO_ATTESTATION: a sign request arrived without the doctor's
+  // explicit attestation. Until 2026-08-02 the attestation was UI-ONLY
+  // (`sign-gates.ts` marked it `serverEnforced: false`) — and a second sign
+  // control that did not count it shipped to production, so the gate could be
+  // walked around entirely. A gate nothing enforces is one alternate path away
+  // from not existing; this row is what makes the refusal auditable.
+  | 'SIGN_BLOCKED_NO_ATTESTATION'
   // F-8 audit leg (2026-07-02) — deterministic drug-pair floor (L7c).
   // RX_DRUG_PAIR_* metadata: { ruleId, primaryDrug, otherDrug, severity,
   // doseMgPerDay? }. RX_COMPLEX_DOSING_VERIFY_INDIVIDUALLY carries the

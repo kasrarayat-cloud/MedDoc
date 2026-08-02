@@ -138,6 +138,11 @@ export interface ReviewDocumentViewProps {
    * to remember.
    */
   signGateBlockers?: number;
+
+  /** The doctor's Gate-3 attestation, forwarded to the sign modal so it is
+   *  collected once. `POST /sign` requires it (ATTESTATION_REQUIRED) — see
+   *  `sign-gates.ts`. */
+  attested?: boolean;
 }
 
 export function ReviewDocumentView(props: ReviewDocumentViewProps) {
@@ -473,6 +478,7 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
                   emailEnabled={props.emailEnabled}
                   signOnSubmit
                   emPendingChange={props.emPendingChange}
+                  attested={props.attested}
                   triggerLabel="Sign &amp; Download"
                   triggerIcon={<FileSignature className="h-3.5 w-3.5" aria-hidden />}
                   disabled={blocked}

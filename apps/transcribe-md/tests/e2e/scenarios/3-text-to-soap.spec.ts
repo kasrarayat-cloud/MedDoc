@@ -17,6 +17,7 @@ import { cleanupTestUsers } from '../helpers/cleanup';
 import { createPatientAndContinue } from '../helpers/patient';
 import { signupFreshUser } from '../helpers/signup';
 import { waitForVisitStatus } from '../helpers/waitForReady';
+import { attestAndSubmit } from '../helpers/sign';
 
 const CLINICAL_NOTES = readFileSync(
   resolve(__dirname, '../fixtures/notes/clinical-notes.txt'),
@@ -56,7 +57,7 @@ test('scenario 3: fresh signup → text → READY → sign PDF', async ({ page }
   // PDF should already be checked.
 
   const downloadPromise = page.waitForEvent('download', { timeout: 20_000 });
-  await page.getByRole('button', { name: /sign & deliver/i }).click();
+  await attestAndSubmit(page);
   const pdf = await downloadPromise;
 
   expect(pdf.suggestedFilename()).toMatch(/\.pdf$/);

@@ -13,6 +13,7 @@ import { expect, test } from '@playwright/test';
 import { cleanupTestUsers } from '../helpers/cleanup';
 import { signupFreshUser } from '../helpers/signup';
 import { createPatientViaApi, createReadyTextVisit } from '../helpers/visit-setup';
+import { signViaApi } from '../helpers/sign';
 
 test.afterEach(() => {
   cleanupTestUsers();
@@ -78,10 +79,7 @@ test('lifecycle: archive a SIGNED visit → hidden from the active list', async 
   const visitId = await createReadyTextVisit(page, { patientName: 'Archive Patient' });
 
   // Sign via the API (no delivery destinations) so the visit reaches SIGNED.
-  const signRes = await page.request.post(`/api/visits/${visitId}/sign`, {
-    data: { destinations: [] },
-    headers: { 'Content-Type': 'application/json' },
-  });
+  const signRes = await signViaApi(page, visitId);
   expect(
     signRes.ok(),
     `sign failed: ${signRes.status()} ${await signRes.text()}`,

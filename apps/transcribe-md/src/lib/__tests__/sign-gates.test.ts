@@ -14,6 +14,8 @@
 // imaging cases below would pass for the wrong reason. It is set explicitly.
 // ============================================================================
 
+import { readFileSync } from 'node:fs';
+
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
@@ -219,8 +221,25 @@ describe('attestation', () => {
     expect(gateIds(input({ specialty: PRIMARY }))).toContain('attestation');
   });
 
-  it('is marked NOT server-enforced — POST /sign has no attestation field', () => {
-    expect(gate(input(), 'attestation')?.serverEnforced).toBe(false);
+  it('IS server-enforced — POST /sign refuses without an attestation', () => {
+    // ⚠️ THIS TEST INVERTED ON 2026-08-02, AND THE OLD ASSERTION WAS THE
+    // WARNING LABEL ON A REAL HOLE. It read "is marked NOT server-enforced —
+    // POST /sign has no attestation field" and it was accurate: nothing on the
+    // server could see this gate. Then a second sign control shipped that did
+    // not count it either, and a signature could pass the attestation with no
+    // refusal and no audit row. Measured on production.
+    // Gates only gain requirements. The route now carries the field.
+    expect(gate(input(), 'attestation')?.serverEnforced).toBe(true);
+
+    // AND THE ROUTE REALLY HAS IT — a flag flipped in this file with no term
+    // behind it would be the same lie in the other direction.
+    const route = readFileSync(
+      'src/app/api/visits/[id]/sign/route.ts',
+      'utf8',
+    );
+    expect(route).toMatch(/attestation:\s*z$/m);
+    expect(route).toContain("code: 'ATTESTATION_REQUIRED'");
+    expect(route).toContain("action: 'SIGN_BLOCKED_NO_ATTESTATION'");
   });
 
   it('NEGATIVE CONTROL — the other gates ARE server-enforced', () => {
@@ -367,12 +386,21 @@ describe('THE B2 RULING — the E/M gate exists always, counts only when the ser
   });
 
   it('every gate reported as server-enforced corresponds to a real refusal', () => {
-    // The contract that makes N a promise about POST /sign. Attestation is the
-    // one term the route cannot see, and it says so.
+    // The contract that makes N a promise about POST /sign. Since 2026-08-02
+    // there is no exception: EVERY gate the strip counts has a refusal behind
+    // it, attestation included.
     const set = signGates(input({ specialty: PRIMARY, emPendingChange: PENDING_EM }));
-    expect(set.gates.find((g) => g.id === 'attestation')!.serverEnforced).toBe(false);
-    for (const g of set.gates.filter((x) => x.id !== 'attestation')) {
+    // This fixture has no critical Rx, so the applicable set is {em, attestation}.
+    expect(set.gates.length, 'no gates — this loop would assert nothing').toBeGreaterThanOrEqual(2);
+    for (const g of set.gates) {
       expect(g.serverEnforced, `${g.id} claims a refusal the route may not have`).toBe(true);
+    }
+
+    // Each one names a refusal code in the route. A gate whose enforcement is
+    // asserted here but absent there is the exact drift this test exists for.
+    const route = readFileSync('src/app/api/visits/[id]/sign/route.ts', 'utf8');
+    for (const code of ['OVERRIDE_REQUIRED', 'EM_CHANGE_UNACKNOWLEDGED', 'ATTESTATION_REQUIRED']) {
+      expect(route, `${code} is not refused by the route`).toContain(code);
     }
   });
 });

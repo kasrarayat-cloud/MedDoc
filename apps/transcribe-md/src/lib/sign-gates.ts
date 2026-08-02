@@ -19,12 +19,18 @@
 //     stale as +1 would make the strip claim a blocker the server does not
 //     have. It renders as a `needs_recheck` note on the E/M node instead.
 //
-//  2. **Attestation is not server-enforced at all.** The sign body schema is
-//     `{destinations, emailTo?, acknowledgedEmChange?}` — there is no
-//     attestation field and no refusal keyed on one. It is a real gate in the
-//     UI's contract with the doctor, and it is counted, but it is marked
-//     `serverEnforced: false` so that anyone reconciling this strip against a
-//     422 is told which term the server cannot see.
+//  2. **Attestation IS server-enforced, since 2026-08-02.** It was not, and the
+//     cost of that arrived exactly as this note predicted it could: the sign
+//     body schema was `{destinations, emailTo?, acknowledgedEmChange?}` with no
+//     attestation field and no refusal keyed on one, so the gate lived only in
+//     the UI's contract with the doctor. A second sign control then shipped
+//     that did not count the gate — and with nothing on the server counting it
+//     either, a signature could pass it without refusal and without an audit
+//     row. Measured on production 2026-08-02.
+//     The body schema now carries `attestation: { acknowledged: true }`, and a
+//     request without it is refused 400 `ATTESTATION_REQUIRED` with a
+//     `SIGN_BLOCKED_NO_ATTESTATION` audit row. **A gate that nothing enforces
+//     is one alternate path away from not existing.**
 //
 //  3. **The route's E/M refusal is NOT conditioned on the specialty.** Only the
 //     stale re-score branch checks `emAppliesToSpecialty`; the unacknowledged-
@@ -226,11 +232,19 @@ export function signGates(input: SignGateInput): SignGateSet {
   }
 
   // ── Gate 3 — attestation ────────────────────────────────────────────────
-  // Always applicable, never server-enforced. See the header.
+  // Always applicable, and SERVER-ENFORCED since 2026-08-02. See the header.
   gates.push({
     id: 'attestation',
     unresolved: input.attested ? 0 : 1,
-    serverEnforced: false,
+    // ⚠️ TRUE SINCE 2026-08-02, AND THE CHANGE IS A STRENGTHENING.
+    // This was `false`, and the comment above still called the gate "never
+    // server-enforced". That was accurate and it was the problem: a second
+    // sign control shipped that did not count this gate, and because nothing
+    // on the server did either, the attestation could be walked past with no
+    // refusal and no audit row. `POST /sign` now requires an explicit
+    // `attestation` and answers SIGN_BLOCKED_NO_ATTESTATION without it.
+    // Gates only ever gain requirements — see SPEC.
+    serverEnforced: true,
   });
 
   return { gates, n: blockerCount(gates), emArtifact };
