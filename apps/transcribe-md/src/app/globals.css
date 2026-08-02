@@ -2029,7 +2029,20 @@ body {
   font-size: 9.5px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--color-linear-text-4);
+  /* ⚠️ WAS `--color-linear-text-4` — #4b5159 on #0d0e10 is **2.41:1**, against
+     a 4.5 requirement, at 9.5px uppercase mono. These are the DOSE, FREQ, QTY
+     and REFILLS labels on a prescription card; a doctor reading a dose should
+     not be the person who discovers the label is under half the required
+     contrast.
+     Found by the Rounds a11y pack, which composes this card inside the gate
+     flow — and only INTERMITTENTLY, at 390px, because whether axe reaches the
+     node varies while the violation does not. Chasing the flake found a real
+     defect underneath it.
+     Pre-existing and NOT Rounds-owned: the measured ground is the legacy
+     `--color-linear-surface-1`, so the Rounds bridge never reaches this rule.
+     Fixed here rather than scoped away, because it is wrong on both skins.
+     `--color-linear-text-3` is 5.94:1 on the same ground. */
+  color: var(--color-linear-text-3);
 }
 .qm-lin-rx-row-grid .cell .v {
   font-family: var(--font-mono);
