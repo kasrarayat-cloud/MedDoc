@@ -489,7 +489,16 @@ test.describe('Rounds Screen 2 — the stage', () => {
     // The footer now reads the rail's OWN number, so the invariant is no longer
     // "there is one control" but the stronger "the two cannot contradict each
     // other". A gate added to sign-gates.ts reaches both at once.
-    const seeded = await open(page, 'stage-10');
+    // ⚠️ IMAGING, AND THE FIXTURE IS THE WHOLE TEST.
+    // On the office fixture this assertion is VACUOUS: that visit has an E/M
+    // gate, so `blocked = rxBlocking || emBlocking` is true with or without the
+    // coupling — severing it changes nothing and the test passes on the bug.
+    // Proven by doing exactly that: the mutant (coupling removed) went 12/12
+    // green on the office fixture.
+    // Imaging has no E/M gate and no Rx, so the attestation is the ONLY
+    // applicable gate — which makes the rail's count the only thing that can
+    // disable the footer, and severing the coupling flips it to enabled.
+    const seeded = await open(page, 'stage-10', { specialtyClass: 'imaging' });
     test.skip(!seeded, 'psql seeding unavailable');
 
     const rail = page.getByTestId('rounds-review-sign');
@@ -504,6 +513,17 @@ test.describe('Rounds Screen 2 — the stage', () => {
       'the fixture must reach the stage with at least one gate open (the ' +
         'attestation is always applicable) or this proves nothing',
     ).toBeGreaterThan(0);
+
+    // AND the open gate must be the attestation ALONE — no E/M surface, no Rx
+    // rail. If either were present the footer would be disabled for a reason
+    // that is not the rail's count, and this test would pass on a severed
+    // coupling. This is the assertion that makes the mutation visible.
+    await expect(
+      page.getByTestId('review-doc-em-level'),
+      'an E/M gate on the imaging fixture — the imaging invariant broke, and ' +
+        'this test would stop discriminating',
+    ).toHaveCount(0);
+    expect(blockers, 'more than the attestation is open here').toBe(1);
 
     // THE ASSERTION THE BYPASS WOULD FAIL: the rail says there is something
     // left to do, so the thing that actually signs must refuse.
@@ -524,6 +544,31 @@ test.describe('Rounds Screen 2 — the stage', () => {
     await rail.click();
     await expect(page.getByTestId('rounds-gate-flow')).toBeVisible();
     await expect(page.getByTestId('review-doc-signbar')).toHaveCount(1);
+
+    // ── THE OTHER HALF OF THE ⇔ ──────────────────────────────────────────
+    // "Disabled while blocked" alone is satisfied by a button that is ALWAYS
+    // disabled, which would be a different bug with the same green tick. Clear
+    // the last gate and the two must agree in the other direction too: rail
+    // count 0 ⇔ footer enabled.
+    for (let i = 0; i < 4; i += 1) {
+      if (await page.getByTestId('rounds-gate-attest').count()) break;
+      const next = page.getByTestId('rounds-gate-next');
+      if (!(await next.count()) || (await next.isDisabled())) break;
+      await next.click();
+    }
+    if (await page.getByTestId('rounds-gate-attest').count()) {
+      await page.getByTestId('rounds-gate-attest').check();
+      await expect(
+        rail,
+        'attesting did not drop the rail count — the overlay is not recomputing',
+      ).toHaveAttribute('data-blockers', '0');
+      await expect(
+        signBtn,
+        'the rail says zero blockers and the footer is STILL disabled — the two ' +
+          'disagree in the other direction',
+      ).toBeEnabled();
+    }
+
     await page.getByTestId('rounds-gate-close').click();
     await expect(page.getByTestId('rounds-gate-flow')).toHaveCount(0);
     await expect(page.getByTestId('review-doc-signbar')).toHaveCount(1);
