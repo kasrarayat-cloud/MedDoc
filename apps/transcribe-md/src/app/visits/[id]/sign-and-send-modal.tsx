@@ -313,6 +313,16 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
           className={cn(
             'qm-lin-spotlight-panel',
             'fixed left-1/2 top-[12vh] z-[201] -translate-x-1/2',
+            // ⚠️ BOUNDED + FLEX COLUMN, so the footer can be PINNED.
+            // The dialog used to have no height bound at all and the body a
+            // fixed `max-h-[60vh]`. Total height was therefore
+            // 12vh + header + 60vh + gates + action row, which overflows the
+            // viewport — and the overflow lands on the BOTTOM, i.e. on the
+            // control that signs. Adding a required attestation above the
+            // action row pushed "Sign & Deliver" off-screen entirely at 720px
+            // and three signing specs failed on a button they could not reach.
+            // Bounded here, body flexes, footer never scrolls away.
+            'flex max-h-[76vh] flex-col',
             'focus:outline-none qm-lin-blur-in',
             'data-[state=closed]:animate-out data-[state=closed]:fade-out-0',
             'data-[state=closed]:zoom-out-95'
@@ -320,7 +330,7 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
           style={{ width: 'min(94vw, 560px)' }}
         >
           <div
-            className="flex items-start justify-between gap-4"
+            className="flex flex-none items-start justify-between gap-4"
             style={{ padding: '20px 24px 12px' }}
           >
             <div>
@@ -362,7 +372,7 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
           </div>
 
           <div
-            className="max-h-[60vh] overflow-y-auto"
+            className="min-h-0 flex-1 overflow-y-auto"
             style={{ padding: '4px 24px 8px' }}
           >
             <Group
@@ -401,7 +411,7 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
               role="group"
               aria-label="Attestation required"
               data-testid="sign-attestation"
-              className="rounded-lg border"
+              className="flex-none rounded-lg border"
               style={{
                 margin: '4px 24px 12px',
                 padding: '10px 12px',
@@ -443,7 +453,7 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
               role="group"
               aria-label="Documentation level changed — confirmation required"
               data-testid="em-change-confirm"
-              className="rounded-lg border"
+              className="flex-none rounded-lg border"
               style={{
                 margin: '4px 24px 12px',
                 padding: '10px 12px',
@@ -524,7 +534,7 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
           )}
 
           <div
-            className="flex items-center justify-between gap-3"
+            className="flex flex-none items-center justify-between gap-3"
             style={{
               borderTop: '1px solid var(--color-linear-hairline)',
               background: 'var(--color-linear-surface-2)',

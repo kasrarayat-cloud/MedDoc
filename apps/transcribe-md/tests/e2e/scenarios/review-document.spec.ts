@@ -30,6 +30,7 @@ import {
 } from '../helpers/seedReviewDocVisit';
 import { signupFreshUser } from '../helpers/signup';
 import { extractExportText } from '../helpers/exportText';
+import { attestAndSubmit } from '../helpers/sign';
 
 const SUGG = '[data-testid="review-doc-suggestion"]';
 const ACCEPT = '[data-testid="review-doc-accept"]';
@@ -319,7 +320,7 @@ test.describe('pre-sign review as the document', () => {
     // reports visible/enabled/stable. The real handler still runs — this
     // bypasses Playwright's wait, not the application.
     const download = page.waitForEvent('download', { timeout: 60_000 });
-    await dialog.getByRole('button', { name: /sign & deliver/i }).dispatchEvent('click');
+    await attestAndSubmit(page);
     const file = await download;
     expect(file.suggestedFilename()).toMatch(/\.(docx|pdf)$/);
   });
@@ -499,7 +500,7 @@ test.describe('pre-sign review as the document', () => {
 
           // dispatchEvent, not click(): the actionability check never settles
           // behind a download, and the dialog is taller than the viewport.
-          await dialog.getByRole('button', { name: /sign & deliver/i }).dispatchEvent('click');
+          await attestAndSubmit(page);
 
           await expect
             .poll(() => downloads.length, {
@@ -560,7 +561,7 @@ test.describe('pre-sign review as the document', () => {
           await dialog.getByRole('button', { name: /download docx/i }).click();
           const modalEm = dialog.getByTestId('em-change-confirm-toggle');
           await expect(modalEm, 'nothing to confirm on an imaging report').toHaveCount(0);
-          await dialog.getByRole('button', { name: /sign & deliver/i }).dispatchEvent('click');
+          await attestAndSubmit(page);
           const file = await dl;
           expect(file.suggestedFilename()).toMatch(/\.(docx|pdf)$/);
 

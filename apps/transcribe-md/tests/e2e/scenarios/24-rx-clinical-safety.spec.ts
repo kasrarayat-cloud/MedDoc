@@ -29,6 +29,7 @@ import {
   getVisitStatus,
   rxWarningSeverities,
 } from '../helpers/rxSafety';
+import { attestAndSubmit } from '../helpers/sign';
 
 const GATE = process.env.NOTE_FORMAT_E2E !== '1';
 const GATE_MSG =
@@ -155,7 +156,7 @@ test('scenario 24: the UI Sign & Send is blocked (and the doctor is told) until 
   // Attempt to sign via the real Sign & Send modal with the critical un-overridden.
   await page.getByRole('button', { name: /sign & send/i }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
-  await page.getByRole('button', { name: /sign & deliver/i }).click();
+  await attestAndSubmit(page);
 
   // The doctor is told, NOT silently failed — and the visit stays READY.
   await expect(page.getByText(/override before signing/i)).toBeVisible({ timeout: 10_000 });

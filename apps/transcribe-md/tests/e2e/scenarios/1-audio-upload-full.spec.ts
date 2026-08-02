@@ -20,6 +20,7 @@ import { cleanupTestUsers } from '../helpers/cleanup';
 import { createPatientAndContinue } from '../helpers/patient';
 import { signupFreshUser } from '../helpers/signup';
 import { waitForVisitStatus } from '../helpers/waitForReady';
+import { attestAndSubmit } from '../helpers/sign';
 
 const AUDIO_FIXTURE = resolve(__dirname, '../fixtures/audio/silence-3sec.mp3');
 
@@ -58,7 +59,7 @@ test('scenario 1: fresh signup → audio upload → sign clipboard+PDF+DOCX', as
 
   // Two downloads expected: PDF then DOCX (T-M8 Bug 2 — 600ms gap).
   const pdfPromise = page.waitForEvent('download', { timeout: 10_000 });
-  await page.getByRole('button', { name: /sign & deliver/i }).click();
+  await attestAndSubmit(page);
   const pdf = await pdfPromise;
   expect(pdf.suggestedFilename()).toMatch(/\.pdf$/);
 

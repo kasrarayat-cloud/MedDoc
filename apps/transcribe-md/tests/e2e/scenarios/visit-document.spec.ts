@@ -22,6 +22,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 import { loginUser } from '../helpers/auth';
 import { QA_COMPOSE, QA_DB } from '../helpers/qa-compose';
+import { attestAndSubmit } from '../helpers/sign';
 import {
   STYLED_VISIT_ID,
   prepareVisitDocLogin,
@@ -196,7 +197,7 @@ test.describe('the visit page is the document', () => {
     }
     await page.getByRole('button', { name: /sign & download/i }).click();
     const pending = page.waitForEvent('download', { timeout: 120_000 });
-    await page.getByRole('button', { name: /^sign & deliver$/i }).dispatchEvent('click');
+    await attestAndSubmit(page);
     const download = await pending;
     const file = await download.path();
     writeFileSync('/tmp/qa-signed-preview.pdf', readFileSync(file!));
