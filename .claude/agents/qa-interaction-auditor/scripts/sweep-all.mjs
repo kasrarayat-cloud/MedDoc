@@ -55,6 +55,11 @@ const WALKERS = [
   { name: 'marketing-contact', file: 'sweep-marketing-contact.mjs', auth: false },
   { name: 'marketing-terms', file: 'sweep-marketing-terms.mjs', auth: false },
   // Authenticated pages — login required, hits the seeded QA user.
+  // ⚠️ `board` needs a Rounds FLAG-ON image. NEXT_PUBLIC_SKIN_ROUNDS is
+  // build-time inlined and board/page.tsx fails closed to a 404, so on a
+  // flag-OFF build this walker refuses at its premise check rather than
+  // walking the 404 and reporting ok:true. See sweep-board.mjs's header.
+  { name: 'board', file: 'sweep-board.mjs', auth: true },
   { name: 'dashboard', file: 'sweep-dashboard.mjs', auth: true },
   { name: 'visits-list', file: 'sweep-visits-list.mjs', auth: true },
   { name: 'new-visit', file: 'sweep-new-visit.mjs', auth: true },

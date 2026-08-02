@@ -60,6 +60,58 @@ function assertNonProdAppTarget() {
 }
 assertNonProdAppTarget();
 
+/** Is the app target production? Decided once, from the same string the
+ *  refusal above reads, so the two can never disagree. */
+const APP_TARGET_IS_PROD = (() => {
+  try {
+    return PROD_APP_HOSTS.has(new URL(APP_BASE).hostname);
+  } catch {
+    return false;
+  }
+})();
+
+// ──────────────────────────────────────────────────────────────────────
+// Ingress access log — the container is DERIVED FROM THE TARGET, never
+// hardcoded (Rounds item F, 2026-08-02).
+// ----------------------------------------------------------------------
+// `recentMutations()` used to run `docker logs meddoc-pro-caddy-1`
+// unconditionally. The QA stack has no Caddy container at all — but
+// PRODUCTION'S IS ALWAYS RUNNING ON THIS HOST, so the call did not fail
+// and did not return empty: it returned production's POST/PATCH/PUT/
+// DELETE traffic and fed it into the classifier for a click made on QA.
+//
+// That is the failure this project keeps meeting from a new angle: the
+// probe answered, so nothing looked wrong, and the answer was about a
+// different system entirely. An unrelated production write inside the
+// 12-second window is enough to reclassify a QA click.
+//
+// Now: no container is scraped unless one is named, and the QA target
+// names none. The other three write signals (row-level DB snapshot,
+// audit-count delta, and Playwright's own non-GET waitForResponse) are
+// per-target and carry the assertion. And "we did not look" is recorded
+// distinctly from "we looked and saw nothing" — a zero whose provenance
+// is unknown is exactly what this rule exists to stop.
+// ──────────────────────────────────────────────────────────────────────
+const INGRESS_LOG_CONTAINER =
+  process.env.QA_AUDITOR_INGRESS_CONTAINER ??
+  (APP_TARGET_IS_PROD ? 'meddoc-pro-caddy-1' : '');
+
+let ingressLogUnavailableReason = INGRESS_LOG_CONTAINER
+  ? null
+  : 'no ingress log container for this target — QA has no Caddy, and ' +
+    "production's log describes a different system";
+
+/** Whether the ingress-log write signal was actually available this run.
+ *  Walkers put this on their result so a reader can tell an observed
+ *  zero from an unobservable one. */
+export function ingressLogSource() {
+  return {
+    container: INGRESS_LOG_CONTAINER || null,
+    available: Boolean(INGRESS_LOG_CONTAINER) && !ingressLogUnavailableReason,
+    reason: ingressLogUnavailableReason,
+  };
+}
+
 // DB target for the snapshot/diff helpers. Previously hardcoded to the prod
 // container + prod database in three separate places, so the "zero DB writes"
 // assertions read PRODUCTION state even when driving the QA app — comparing
@@ -253,9 +305,12 @@ export function snapshotAuditCountWithSettle(
  *  classifying whether a click fired a server-side write. Filters out
  *  static-asset and Next.js internal POSTs. */
 export function recentMutations(sinceSeconds = 10) {
+  // No container named for this target → do not scrape anything. Reading
+  // production's ingress log while driving QA is worse than reading none.
+  if (!INGRESS_LOG_CONTAINER) return [];
   try {
     const raw = execSync(
-      `docker logs meddoc-pro-caddy-1 --since "${sinceSeconds}s" 2>&1`,
+      `docker logs ${INGRESS_LOG_CONTAINER} --since "${sinceSeconds}s" 2>&1`,
       { encoding: 'utf-8', maxBuffer: 16 * 1024 * 1024 }
     );
     const muts = [];
@@ -275,7 +330,11 @@ export function recentMutations(sinceSeconds = 10) {
       }
     }
     return muts;
-  } catch {
+  } catch (err) {
+    // A named container we could not read is "we did not look", not
+    // "nothing happened". Record it so ingressLogSource() stops
+    // claiming the signal was available.
+    ingressLogUnavailableReason = `docker logs ${INGRESS_LOG_CONTAINER} failed: ${err.message}`;
     return [];
   }
 }
@@ -636,6 +695,33 @@ export function snapshotTables(spec) {
 }
 
 // (snapshotAuditCount is defined earlier in this file — reused here.)
+
+/** Snapshot COUNTS rather than rows. Added for the Rounds board walker
+ *  (item F, 2026-08-02), and preferable to snapshotTables wherever the
+ *  question is "did anything get written" rather than "did this row
+ *  change":
+ *
+ *   - snapshotTables does `SELECT *`, so on transcribe_visits it pulls
+ *     soapDraft/soapFinal into the walker's memory to answer a yes/no
+ *     question. A count never touches clinical text.
+ *   - it also LIMITs to one row, so an INSERT that lands outside the
+ *     ordered window is invisible. A count sees every row.
+ *
+ *  Returns { [label]: number|null }. A null is a FAILED probe, already
+ *  recorded in dbErrors — emit() will downgrade the walker's ok for it.
+ *  Callers must treat null as "did not measure", never as zero. */
+export function snapshotCounts(spec) {
+  const out = {};
+  for (const entry of spec) {
+    const raw = psql(
+      `SELECT COUNT(*) FROM ${entry.table} WHERE ${entry.where};`,
+      `snapshotCounts:${entry.label ?? entry.table}`
+    );
+    out[entry.label ?? entry.table] =
+      raw === null ? null : (parseInt(raw, 10) ?? null);
+  }
+  return out;
+}
 
 /** Locate an element by a Playwright-style selector spec. Spec can be
  *  a string (CSS) or `{ role, name }` (accessibility). Returns the

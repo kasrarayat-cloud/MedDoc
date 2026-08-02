@@ -39,6 +39,7 @@ import {
   clickAndClassify,
   snapshotTables,
   snapshotAuditCount,
+  APP_BASE,
 } from './lib/walker-base.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -97,6 +98,11 @@ const FORBIDDEN_BUTTONS = [
     risk: 'would-satisfy-a-clinical-gate',
     note: 'critical-Rx override. assertCriticalRxOverrideFlow walks this deliberately under --scenario criticalRx and cancels; blind clicking must not.',
   },
+  {
+    pattern: /\bretry(ing)?\b/i,
+    risk: 'would-requeue-the-ai-pipeline',
+    note: "the Rounds board's RoundsRetryButton (retry-button.tsx:36). POSTs /api/visits/[id]/retry, which re-queues process-visit — a real BullMQ job, a real model call against the shared Anthropic balance, and a status write on someone's visit. It renders in the board grid with the plain label \"Retry\" and matched NO existing pattern, so the deny-list was silent on the one write the board surfaces. Added with the board walker, Rounds item F.",
+  },
 ];
 
 function forbiddenMatch(label) {
@@ -126,7 +132,12 @@ function resolveScenarioToVisitId(scenario) {
 function parseArgs(args) {
   const opts = {
     url: null,
-    base: env.QA_AUDITOR_BASE_URL ?? 'https://app.quillmd.com',
+    // Defaults to the SAME target walker-base already refuses to point at
+    // production without an opt-in. It used to default to
+    // 'https://app.quillmd.com' independently, under a DIFFERENT env var
+    // (QA_AUDITOR_BASE_URL, not QA_AUDITOR_APP_URL), so the fail-closed
+    // guard never saw it. Rounds item F, 2026-08-02.
+    base: env.QA_AUDITOR_BASE_URL ?? APP_BASE,
     skipClicks: false,
     visitId: null,
     scenario: env.QA_SCENARIO ?? null,
