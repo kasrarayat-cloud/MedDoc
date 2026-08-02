@@ -584,6 +584,23 @@ body[data-skin='rounds'] {
 }
 
 /* ── Action rail ────────────────────────────────────────────────────────── */
+/* ⚠️ THE RAIL IS NOT PINNED, AND THE ATTEMPT TO PIN IT IS RECORDED HERE.
+   SPEC makes "Review & sign" the primary, and it sits in flow at the bottom of
+   the stage — so it scrolls away, while the legacy `.qm-c3-rev2-signbar` that
+   R1 just removed was `position: sticky` and stayed glued to the viewport. That
+   asymmetry is real and worth fixing.
+   It was fixed and REVERTED in the same item, because pinning it broke three
+   packs and the cause was never where it looked. `RoundsChatDrawer` renders
+   INSIDE this rail (stage.tsx), and its scrim is `position: fixed; inset: 0`.
+   Any sticky rail is a positioned ancestor of both; with `z-index` it becomes a
+   stacking context that traps them, and `backdrop-filter` additionally makes it
+   a containing block for `position: fixed` descendants. Either way
+   `rounds-chat-close` and `rounds-gate-back` reported "visible, enabled and
+   stable" and swallowed every click — a failure that names the drawer and the
+   gate flow, and never the rail.
+   PINNING THIS RAIL IS A REAL TASK, NOT A DECLARATION: it needs the drawer
+   lifted out of the rail first, so the rail can be positioned without being an
+   ancestor of a modal. Left in flow until then, deliberately. */
 [data-skin='rounds'] .qm-rounds-rail {
   display: flex;
   align-items: center;
@@ -628,11 +645,11 @@ body[data-skin='rounds'] {
   cursor: pointer;
 }
 
-[data-skin='rounds'] .qm-rounds-rail-kbd {
-  font-family: var(--rounds-font-mono);
-  font-size: 11px;
-  color: var(--rounds-text-3);
-}
+/* `.qm-rounds-rail-kbd` was deleted with its only consumer (R1) — the duplicate
+   standalone "[E] edit" span beside the chat trigger that already carries it.
+   The rule is gone rather than left orphaned: a selector with no element is an
+   invitation to re-add the element. `.qm-rounds-kbd` below SURVIVES — the chat
+   trigger still uses it, and that one has the listener behind it. */
 
 [data-skin='rounds'] .qm-rounds-kbd {
   padding: 1px 5px;
@@ -1810,4 +1827,48 @@ body[data-skin='rounds'] {
  * introduced. Measured: text-2 on surface-2 is 5.97:1. */
 [data-skin='rounds'] .qm-rounds-errorid {
   --color-linear-text-3: var(--rounds-text-2);
+}
+
+/* ── R1 — the quiet overflow ─────────────────────────────────────────────
+   Where destructive visit actions live under Rounds. They used to sit in a
+   right-aligned row directly above the note, level with the patient's name;
+   `Delete` is not a peer of "read this carefully". A native <details> is
+   deliberate: it is keyboard-operable and screen-reader-announced without a
+   line of JavaScript, and it starts closed. */
+[data-skin='rounds'] .qm-rounds-overflow {
+  max-width: 820px;
+  margin: 8px auto 40px;
+  padding: 0 24px;
+}
+
+[data-skin='rounds'] .qm-rounds-overflow-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: var(--rounds-radius-sm, 6px);
+  font-family: var(--rounds-font-ui);
+  font-size: 12.5px;
+  color: var(--rounds-text-3);
+  cursor: pointer;
+  list-style: none;
+}
+
+[data-skin='rounds'] .qm-rounds-overflow-summary::-webkit-details-marker {
+  display: none;
+}
+
+[data-skin='rounds'] .qm-rounds-overflow-summary::before {
+  content: '⋯';
+  font-size: 15px;
+  line-height: 1;
+}
+
+[data-skin='rounds'] .qm-rounds-overflow-summary:hover {
+  color: var(--rounds-text-2);
+  background: var(--rounds-surface-2);
+}
+
+[data-skin='rounds'] .qm-rounds-overflow-body {
+  padding-top: 10px;
 }

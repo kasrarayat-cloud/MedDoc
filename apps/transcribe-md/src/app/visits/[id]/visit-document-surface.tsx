@@ -153,9 +153,16 @@ export function VisitDocumentSurface(props: VisitDocumentSurfaceProps) {
           label={styledLayout ? 'this visit' : 'this visit, on your form'}
           caption={
             styledLayout
-              ? // NOT "your form" — this is our layout, and saying otherwise is
-                // the exact false claim this surface exists to stop making.
-                'QuillMD’s layout. Upload your own blank form in Settings › My Note Format and this becomes your page.'
+              ? // ⚠️ R1 — SAID ONCE, NOT TWICE. The toolbar above already
+                // carries this exact sentence (`visit-document-styled-note`),
+                // so on the styled layout this figcaption repeated it verbatim
+                // below the pages: one message, two chrome rows, the paper
+                // sandwiched between them. The toolbar is the spec's slim row
+                // and it wins; the caption yields.
+                // It is NOT dropped for a custom form — there the toolbar hint
+                // does not render at all, so the sentence below is the only
+                // place the doctor is told what they are looking at.
+                undefined
               : 'Your form, filled so far. Blank fields are what has not been dictated yet.'
           }
         />

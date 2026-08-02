@@ -247,9 +247,17 @@ export function RoundsStage({
           </RoundsChatDrawer>
         ) : null}
 
-        <span className="qm-rounds-rail-kbd" aria-hidden>
-          <kbd className="qm-rounds-kbd">E</kbd> edit
-        </span>
+        {/* ⚠️ THE SECOND [E] HINT IS GONE, AND IT WAS THE UNGUARDED ONE.
+            `RoundsChatDrawer`'s trigger already reads "Edit with chat [E]" and
+            it is the thing that OWNS the keydown listener (chat-drawer.tsx —
+            `SHORTCUT_KEY = 'e'`). This span sat immediately beside it, so the
+            rail read "… Edit with chat E · E edit": the same shortcut, twice,
+            one word apart.
+            It was also the half that could lie. The drawer renders only when
+            `chat` is non-null; this span had no guard, so on any surface
+            without the chat editor it advertised a shortcut with no listener
+            behind it. A hint for a key that does nothing is worse than no hint.
+            The label lives with its handler now. */}
       </div>
     </div>
   );

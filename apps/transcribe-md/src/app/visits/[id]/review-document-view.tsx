@@ -113,6 +113,31 @@ export interface ReviewDocumentViewProps {
    * change un-confirms the card and the count together.
    */
   onEmConfirmedChange?: (confirmed: boolean) => void;
+
+  /**
+   * How many gates the Rounds action rail is currently counting. `0` off Rounds.
+   *
+   * ⚠️ THIS EXISTS BECAUSE THE TWO SIGN CONTROLS DISAGREED, AND ONE OF THEM WON.
+   *
+   * The stage draws a rail whose primary NAVIGATES to the gate flow; this bar
+   * SIGNS. Both were on screen at once and their claims about the same visit
+   * contradicted each other — measured on production 2026-08-02, one clean
+   * READY visit, one moment:
+   *
+   *     action rail   "Review & sign · 1 blocker"
+   *     this bar      "Reviewed"    Sign & Download   disabled=false
+   *
+   * The rail's N counts every applicable gate including `attestation`; this
+   * bar's `blocked` was `rxBlocking || emBlocking` with no `attested` term. So
+   * the enabled button signed straight past the attestation — and
+   * `sign-gates.ts` marks that gate `serverEnforced: false`, so nothing behind
+   * it caught the bypass.
+   *
+   * Feeding the rail's own number in means the two cannot drift apart again: a
+   * gate added to `sign-gates.ts` lands in both at once, with no second place
+   * to remember.
+   */
+  signGateBlockers?: number;
 }
 
 export function ReviewDocumentView(props: ReviewDocumentViewProps) {
@@ -164,7 +189,9 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
   const sections = useMemo(() => parseNoteSections(props.soapFinal), [props.soapFinal]);
 
   const emBlocking = props.emPendingChange != null && !emConfirmed;
-  const blocked = props.rxBlocking || emBlocking;
+  // Every gate the rail counts, not a hand-maintained subset of them.
+  const blocked =
+    props.rxBlocking || emBlocking || (props.signGateBlockers ?? 0) > 0;
 
   async function rescore() {
     if (!props.onRescoreEm) return;
@@ -371,7 +398,10 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
       {/* `data-testid` only — no copy, no behaviour. The Rounds action rail
           NAVIGATES here rather than signing, so it needs a stable anchor, and
           a class selector would make the styling a load-bearing contract. This
-          stays the ONE control that can start a signature. */}
+          stays the ONE control that can start a signature — and under Rounds it
+          now EXISTS only while the gate flow is hosting it (see
+          `renderSignbar`), so "the only one" and "reachable only through the
+          gates" are finally the same statement. */}
       {slot('signbar', (
         <div className="qm-c3-rev2-signbar" data-testid="review-doc-signbar">
           <div className="qm-c3-rev2-signbar-in">
@@ -384,9 +414,23 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
                     style={{ color: 'var(--color-linear-amber)' }}
                   />
                   <span className="qm-c3-rev2-sign-msg" data-testid="review-doc-bar-msg">
+                    {/* ⚠️ NAME THE REASON THAT ACTUALLY APPLIES. This used to be
+                        a two-way `rxBlocking ? … : 'Confirm the documentation
+                        level above'`, which was safe only while `blocked` meant
+                        exactly rx-or-E/M. Feeding the rail's gate count in broke
+                        that assumption immediately: an IMAGING visit — where
+                        `emApplies` is false and no E/M surface may appear
+                        anywhere — started printing "Confirm the documentation
+                        level above" because its one open gate was the
+                        attestation. The imaging pack caught it. E/M is named
+                        only when E/M is genuinely the blocker; anything else
+                        points at the gates without inventing a clinical
+                        reason for them. */}
                     {props.rxBlocking
                       ? 'Resolve the prescription warning above'
-                      : 'Confirm the documentation level above'}
+                      : emBlocking
+                        ? 'Confirm the documentation level above'
+                        : 'Open Review & sign to clear the remaining steps'}
                   </span>
                 </>
               ) : props.emStale ? (

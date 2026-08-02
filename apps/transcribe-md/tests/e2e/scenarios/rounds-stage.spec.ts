@@ -467,31 +467,63 @@ test.describe('Rounds Screen 2 — the stage', () => {
   });
 
   // ── 10. One control can start a signature ────────────────────────────────
-  test('the rail opens the gate flow; the sign bar is still the only thing that signs', async ({
+  test('the two sign controls cannot disagree — the footer is gated by the rail\'s own count', async ({
     page,
   }) => {
-    // ⚠️ DELIBERATE BEHAVIOUR CHANGE, MADE BY B2 — not a test fixed to match a
-    // surprise. In B1 this control NAVIGATED: it scrolled to the first blocking
-    // gate and asserted that no dialog opened. B2 makes it open Screen 3, which
-    // IS a dialog, so the old assertion could not survive and is replaced here
-    // rather than deleted.
+    // ⚠️ WHAT THIS TEST ASSERTED BEFORE WAS THE BUG.
     //
-    // THE INVARIANT UNDERNEATH IS UNCHANGED and is what this test now pins:
-    // exactly one control in the document can start a signature. The gate flow
-    // does not add a second one — it ADOPTS the existing signing bar into its
-    // last step, so the count stays at one whether the flow is open or shut.
+    // It asserted `toHaveCount(1)` on the signing bar and called that "exactly
+    // one control can start a signature". One is the right number of signing
+    // controls; it was the wrong claim about this screen. The rail and the
+    // embedded footer were both live and they DISAGREED — measured on
+    // production 2026-08-02, one clean READY visit, one moment:
+    //
+    //     action rail   "Review & sign · 1 blocker"
+    //     footer        "Reviewed"    Sign & Download   disabled=false
+    //
+    // The rail's N counts every applicable gate including `attestation`; the
+    // footer's `blocked` had no `attested` term, and `sign-gates.ts` marks that
+    // gate `serverEnforced: false` — so the enabled button signed past it and
+    // nothing behind it caught the bypass.
+    //
+    // The footer now reads the rail's OWN number, so the invariant is no longer
+    // "there is one control" but the stronger "the two cannot contradict each
+    // other". A gate added to sign-gates.ts reaches both at once.
     const seeded = await open(page, 'stage-10');
     test.skip(!seeded, 'psql seeding unavailable');
 
+    const rail = page.getByTestId('rounds-review-sign');
+    await expect(rail).toBeVisible();
     await expect(page.getByTestId('review-doc-signbar')).toHaveCount(1);
 
-    await page.getByTestId('rounds-review-sign').click();
+    // NON-VACUITY: with zero blockers this test could not tell the fix from a
+    // visit that had nothing to gate in the first place.
+    const blockers = Number((await rail.getAttribute('data-blockers')) ?? '0');
+    expect(
+      blockers,
+      'the fixture must reach the stage with at least one gate open (the ' +
+        'attestation is always applicable) or this proves nothing',
+    ).toBeGreaterThan(0);
+
+    // THE ASSERTION THE BYPASS WOULD FAIL: the rail says there is something
+    // left to do, so the thing that actually signs must refuse.
+    const signBtn = page
+      .getByTestId('review-doc-signbar')
+      .getByRole('button', { name: /sign & download/i });
+    await expect(signBtn).toHaveCount(1);
+    await expect(
+      signBtn,
+      `the rail reports ${blockers} blocker(s) while the footer's signature ` +
+        'button is enabled — that is the production defect R1 closed',
+    ).toBeDisabled();
+
+    // And the footer must not be claiming the visit is finished either.
+    await expect(page.getByTestId('review-doc-bar-msg')).not.toHaveText(/^Reviewed$/);
+
+    // The flow still adopts the same single node — one bar, wherever it lives.
+    await rail.click();
     await expect(page.getByTestId('rounds-gate-flow')).toBeVisible();
-
-    // Still exactly one, now living inside the flow.
     await expect(page.getByTestId('review-doc-signbar')).toHaveCount(1);
-
-    // And closing it puts everything back — the bar returns to the paper.
     await page.getByTestId('rounds-gate-close').click();
     await expect(page.getByTestId('rounds-gate-flow')).toHaveCount(0);
     await expect(page.getByTestId('review-doc-signbar')).toHaveCount(1);

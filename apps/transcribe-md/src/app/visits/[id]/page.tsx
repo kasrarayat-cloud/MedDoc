@@ -291,8 +291,70 @@ export default async function VisitPage({
   const statusLabel = visitStatusLabel(visit.status, visit.needsReview);
   const statusPillCls = visitStatusPillClass(visit.status, visit.needsReview);
 
+  // ── R1 — THE STAGE STOPS RENDERING TWO GENERATIONS AT ONCE ──────────────
+  // Everything between here and the VisitBody wrapper is pre-Rounds chrome:
+  // a "Dashboard › <name> › Visit · ready" breadcrumb, a meta strip that
+  // reprints the patient name (uppercased), specialty, MRN and chief complaint,
+  // and a right-aligned Delete row. Under Rounds every one of those is drawn
+  // AGAIN, better, by `RoundsStageIdentity` — so the live page showed the
+  // patient's name three times and their MRN twice, with the status word
+  // uppercased into a "NEEDS REVIEW" badge that the Rounds pipeline strip
+  // already states.
+  // It is gated rather than deleted because the flag-OFF build is still a
+  // supported build until F-ret retires it, and that build has no other header.
+  const roundsChrome = isSkinRounds();
+
+  // The lifecycle actions (Delete, and the draft-edit dialog) are hoisted so
+  // BOTH shells can place them. Off Rounds they keep their prime-header row.
+  // Under Rounds they move into a quiet disclosure BELOW the note: destroying
+  // a visit is not a primary action on the screen where you read it, and a
+  // right-aligned `Delete` sitting level with the patient's name is one
+  // mis-click from a surface whose whole job is careful review.
+  const lifecycleActions = (
+      <VisitLifecycleActions
+        visitId={visit.id}
+        status={visit.status}
+        deletedAt={visit.deletedAt ? visit.deletedAt.toISOString() : null}
+        archivedAt={
+          visit.archivedAt ? visit.archivedAt.toISOString() : null
+        }
+        hasInput={hasInput}
+        editSlot={
+          visit.status === TranscribeVisitStatus.QUEUED &&
+          visit.audioKey === null &&
+          visit.dictationAudioKey === null &&
+          (visit.rawTextInput === null ||
+            visit.rawTextInput.length === 0) &&
+          visit.deletedAt === null &&
+          visit.patient !== null ? (
+            <EditDraftDialog
+              visitId={visit.id}
+              initialPatient={{
+                id: visit.patient.id,
+                name: visit.patient.name,
+                dateOfBirth: visit.patient.dateOfBirth
+                  ? visit.patient.dateOfBirth.toISOString().slice(0, 10)
+                  : null,
+                externalId: visit.patient.externalId,
+              }}
+              initialSpecialty={visit.specialty}
+              initialChiefComplaint={visit.chiefComplaint}
+              initialInputMode={
+                visit.inputMode as
+                  | 'audio_upload'
+                  | 'voice_dictation'
+                  | 'text_notes'
+              }
+            />
+          ) : null
+        }
+      />
+  );
+
   return (
     <AppFrame>
+      {!roundsChrome && (
+      <>
       {/* Linear V1 breadcrumb — sits at the top of the content
           column, hairline-separated from the meta strip below. */}
       <div
@@ -408,46 +470,9 @@ export default async function VisitPage({
         </div>
       </div>
 
-      <div style={{ padding: '14px 24px 0' }}>
-        <VisitLifecycleActions
-          visitId={visit.id}
-          status={visit.status}
-          deletedAt={visit.deletedAt ? visit.deletedAt.toISOString() : null}
-          archivedAt={
-            visit.archivedAt ? visit.archivedAt.toISOString() : null
-          }
-          hasInput={hasInput}
-          editSlot={
-            visit.status === TranscribeVisitStatus.QUEUED &&
-            visit.audioKey === null &&
-            visit.dictationAudioKey === null &&
-            (visit.rawTextInput === null ||
-              visit.rawTextInput.length === 0) &&
-            visit.deletedAt === null &&
-            visit.patient !== null ? (
-              <EditDraftDialog
-                visitId={visit.id}
-                initialPatient={{
-                  id: visit.patient.id,
-                  name: visit.patient.name,
-                  dateOfBirth: visit.patient.dateOfBirth
-                    ? visit.patient.dateOfBirth.toISOString().slice(0, 10)
-                    : null,
-                  externalId: visit.patient.externalId,
-                }}
-                initialSpecialty={visit.specialty}
-                initialChiefComplaint={visit.chiefComplaint}
-                initialInputMode={
-                  visit.inputMode as
-                    | 'audio_upload'
-                    | 'voice_dictation'
-                    | 'text_notes'
-                }
-              />
-            ) : null
-          }
-        />
-      </div>
+      <div style={{ padding: '14px 24px 0' }}>{lifecycleActions}</div>
+      </>
+      )}
 
       <div style={{ padding: '18px 24px 48px' }}>
         <VisitBody
@@ -500,6 +525,13 @@ export default async function VisitPage({
           rxOverrides={rxOverrides}
         />
       </div>
+
+      {roundsChrome && (
+        <details className="qm-rounds-overflow" data-testid="rounds-visit-overflow">
+          <summary className="qm-rounds-overflow-summary">Visit actions</summary>
+          <div className="qm-rounds-overflow-body">{lifecycleActions}</div>
+        </details>
+      )}
     </AppFrame>
   );
 }

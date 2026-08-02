@@ -29,6 +29,16 @@ import { ROUNDS_STAGES } from '@/lib/rounds/stages';
 import type { BoardLane } from '@/lib/rounds/board-data';
 import { RoundsRetryButton } from './retry-button';
 
+/** The board's modality word. There is NO `modality` column — the honest
+ *  source is `specialty`, which is what decides imaging-vs-office everywhere
+ *  else in the product. Rendered as a short label rather than the raw id so a
+ *  marker reads like a marker. */
+function modalityLabel(specialty: string): string {
+  const s = specialty.trim().toLowerCase();
+  if (!s) return '—';
+  return s.replace(/[-_]+/g, ' ');
+}
+
 function hhmm(iso: string | null): string {
   if (!iso) return '';
   const d = new Date(iso);
@@ -186,6 +196,71 @@ function LaneCard({ lane }: { lane: BoardLane }) {
       {lane.kind === 'signed' ? (
         <span className="qm-rounds-kicker">signed {hhmm(lane.signedAt)}</span>
       ) : null}
+
+      {/* ── R1 — THE MARKER'S META, AND ONLY WHAT THE MODEL TRULY HAS ───────
+          SPEC: "every datum derives from the real queue source. Park visibly
+          anything with no real data. NEVER FAKE."
+
+          MODALITY and RECORDED TIME were already on `BoardLane` and rendered
+          nowhere — `specialty` was read only by the filter, `createdAt` only by
+          the sort. Nothing new is queried for them.
+
+          ⚠️ MRN IS PARKED, DELIBERATELY, and this is the note that stops the
+          next reader "just adding it". The board's patient select is
+          `{ name: true }`, so the datum is not in this query at all — and there
+          are TWO candidate columns: `TranscribeMdPatient.externalId` (which the
+          Rounds STAGE labels MRN today) and a separate `mrn` column the stage
+          does not read. Rendering one of them here would silently make the
+          board and the stage disagree about what "MRN" means on the same
+          patient. That is a decision to take on purpose, not in passing.
+          The slot is reserved the way SPEC reserves the vitals chip: named,
+          empty, and honest about why. */}
+      <div
+        data-testid={`rounds-lane-meta-${lane.id}`}
+        style={{
+          marginTop: 4,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          fontFamily: 'var(--rounds-font-mono)',
+          fontSize: 10.5,
+          letterSpacing: '0.04em',
+          textTransform: 'uppercase',
+          /* ⚠️ `--rounds-text-2`/`-3` FAILED AXE HERE, on all four card
+             variants, and the reason is the ground rather than the ink: a lane
+             card paints its OWN background (surface-2, or the critical tint),
+             so the faint on-stage tiers are being read against a lighter
+             surface than the one they were checked on. This is the ninth
+             instance of that shape in this project. `--rounds-text-1` is the
+             tier that holds on every card ground the board draws. */
+          /* ⚠️ THE CARD'S OWN `fg`, NOT AN ON-STAGE TOKEN — and it took axe
+             printing the pair to see why. Two guesses failed here
+             (`--rounds-text-2/-3`, then `--rounds-text-1` at reduced opacity),
+             both because I was reasoning about the ink while the GROUND was the
+             variable: a READY lane card is `--rounds-paper-1` — SPEC's track
+             semantics make it "solid white" — so a near-white on-stage token
+             lands white-on-white. Measured: `#e7ebf1` on `#fcfcfa` = **1.16:1**
+             against a 4.5 requirement.
+             `fg` is computed a few lines above per lane kind and is already the
+             checked pairing for this card's background. Reusing it means this
+             line cannot drift from the patient name above it, on any kind. */
+          color: fg,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        <span data-testid={`rounds-lane-modality-${lane.id}`}>
+          {modalityLabel(lane.specialty)}
+        </span>
+        <span aria-hidden>·</span>
+        {/* "recorded" is `createdAt` — the same aliasing the stage already
+            makes (`stage-data.ts` → `recordedAtIso`). Naming it the same thing
+            in both places is the point. */}
+        <span data-testid={`rounds-lane-recorded-${lane.id}`}>
+          {hhmm(lane.createdAt)}
+        </span>
+      </div>
 
       {/* ONE line, and only when there is a real one to show. A critical card
           with nothing readable in the payload renders no line rather than a
