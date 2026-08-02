@@ -271,6 +271,7 @@ docker images --format '{{.Repository}}:{{.Tag}}\t{{.ID}}' | grep "pre-<slug>-$D
 |---|---|---|
 | `:pre-readonlypaper-20260728` | the review page BEFORE it became read-only paper | app `4719eef70099` / worker `09ea62317b44` |
 | `:pre-emrehome-20260728` | the review page BEFORE the E/M level row returned to the gate stack | app `bc2bd303740f` / worker `10eb2d4baec1` |
+| `:pre-rounds-20260802` | the app BEFORE the Rounds skin went live — **and before C1-d…C2-b, see §3.3** | app `cfa6df5520f6` / worker `d391ddb62cff` / gotenberg `4bd4489d15b7` (the stock `gotenberg/gotenberg:8`) |
 
 Four further families exist on the host and were never recorded here:
 `:pre-exportguard-20260728`, `:pre-lanedelete-20260727`, `:pre-auditonly-20260727`
@@ -322,6 +323,72 @@ the fix is to give `BillingCardC3` its own required-reason step — not to resto
 a reasonless caller. Rolling back the IMAGE (`:pre-emrehome-20260728`, §3.1)
 restores the old dropdown too and does not have this constraint; prefer it when
 the concern is the E/M surface specifically rather than the whole review page.
+
+### 3.3 KNOWN CONSTRAINT — the Rounds rollback is NOT flag-shaped, and it
+### carries five other items back with it
+
+**Decided 2026-08-02. Accepted. Do not "fix" it by re-adding a flag branch.**
+
+`NEXT_PUBLIC_SKIN_ROUNDS=true` went live on 2026-08-02 (relay item F). Two
+things about rolling it back are not what the flag's name suggests.
+
+**First: the flag path is a REBUILD, not a restart.** `NEXT_PUBLIC_*` is inlined
+into the client *and* server bundle at `docker compose build`. Setting the value
+false in `.env` and recreating the container changes nothing — the old value is
+already compiled in. The flag path costs a full app rebuild (~10 minutes). And
+after the old-skin retirement it stops working entirely, because there is no
+longer an OFF branch to fall back to.
+
+**Second, and the part to actually plan around: production had not been deployed
+since 2026-07-29.** The running image predated **C1-d, C1-e, C1-f, C1-g, C2-a and
+C2-b**, all of which shipped dark behind the flag and all of which this deploy
+carried to production alongside it. So `:pre-rounds-20260802` is not "the same
+app minus a skin" — it is the app as of 2026-07-29.
+
+Rolling the image back therefore also reverts:
+
+- **the A4/US-Letter export fix (C2-b), which is flag-INDEPENDENT.** Before it,
+  `docx-generator.ts` declared no page properties and Word used the library's
+  default A4 while the PDF drew US Letter — so the doctor read an A4 page on
+  screen and downloaded a Letter one. A rollback reinstates that split page for
+  every doctor, including any who never see Rounds.
+- the converter: `meddoc-pro-gotenberg:fonts` back to stock `gotenberg/gotenberg:8`,
+  which has neither Charter nor Inter Tight installed and silently substitutes
+  Noto Serif in every preview.
+- C1-d…C2-a's contrast fixes on the auth, settings and templates surfaces.
+
+**PREFER THE IMAGE ROLLBACK ANYWAY** — it is seconds and it is the only path
+that still exists after retirement. Just know it is a six-item revert, not a
+one-flag revert, and say so in the incident note.
+
+**The rollback line, verbatim:**
+
+```bash
+docker tag meddoc-pro-transcribe-md:pre-rounds-20260802        meddoc-pro-transcribe-md:latest
+docker tag meddoc-pro-transcribe-md-worker:pre-rounds-20260802 meddoc-pro-transcribe-md-worker:latest
+docker tag meddoc-pro-gotenberg:pre-rounds-20260802            meddoc-pro-gotenberg:fonts
+docker compose -f /opt/meddoc-pro/docker-compose.yml up -d --no-deps --force-recreate \
+  transcribe-md transcribe-md-worker gotenberg
+```
+
+No rebuild, no `.env` edit, no compose edit. **Verify it landed** the same way
+the flip was verified — on the bytes, not the env:
+
+```bash
+docker exec meddoc-pro-transcribe-md-1 sh -c \
+  'D=/app/apps/transcribe-md/.next;
+   echo "rounds: $(grep -rl qm-rounds- $D | wc -l)  (0 = rolled back)";
+   echo "control: $(grep -rl qm-lin- $D | wc -l)  (non-zero = the grep works)"'
+```
+
+⚠️ **The gotenberg line is stable only until the next deploy.** `deploy-prod.sh`
+step 5b rebuilds the converter from `docker/gotenberg-fonts.Dockerfile` and
+retags `:fonts`, so a converter rollback is undone by the next promotion. That
+is correct — the fonts image is the intended steady state — but do not assume a
+retag survives a deploy.
+
+**Migrations are not a concern for this one:** the deploy applied none (83 in
+repo, 83 recorded, before and after), so the image rollback needs no schema work.
 
 ---
 
