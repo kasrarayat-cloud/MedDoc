@@ -328,8 +328,22 @@ test.describe('R1 — /patients kept every capability it had', () => {
     await expect(page.locator('body')).toContainText('Barbara McClintock');
 
     // New visit, from the roster.
+    //
+    // ⚠️ R3.1 CHANGED THE TESTID, AND THE REASON IS THE POINT. This asserted
+    // `rounds-patients-new-visit` — a Link this file rendered itself, with its
+    // own label and href. The roster now mounts the SHARED `RoundsNewVisitCta`
+    // (`rounds-new-visit-bar`), the same component the board's top bar uses, so
+    // the label, the destination and the hover treatment cannot drift between
+    // the two surfaces. R2 already had to rename this action's sibling once for
+    // exactly that reason.
+    //
+    // The expected set moved by hand, declared in the ledger. Asserting the
+    // destination as well as the click keeps the claim about the ACTION rather
+    // than about the element that happens to carry it.
     await page.goto('/patients');
-    await page.getByTestId('rounds-patients-new-visit').click();
+    const rosterCta = page.getByTestId('rounds-new-visit-bar');
+    await expect(rosterCta).toHaveAttribute('href', '/visits/new');
+    await rosterCta.click();
     await page.waitForURL(/\/visits\/new/);
   });
 });

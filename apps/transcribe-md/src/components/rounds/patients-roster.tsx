@@ -32,14 +32,17 @@
 
 import Link from 'next/link';
 
+import { RoundsNewVisitCta } from './new-visit-cta';
+
 import { c3Status } from '@/lib/visit-status-c3';
 import type { C3PatientRow, C3PatientsCursor } from '@/lib/c3-list-pagination';
 
 import {
   usePatientsRoster,
-  initialsOf,
   ageFrom,
 } from '@/lib/patients-roster';
+
+import { cardEntranceDelayMs } from './board';
 
 export function RoundsPatientsRoster({
   initialRows,
@@ -64,25 +67,24 @@ export function RoundsPatientsRoster({
 
   return (
     <div className="qm-rounds-roster" data-testid="rounds-patients">
+      {/* ── R3.1 — THE DISPLAY-FACE HEADER, and the Rounds top pattern ──────
+          The title takes `--rounds-font-display` (Bricolage), which is what the
+          board's own headings use; the count sits beside it as a mono kicker
+          rather than as body copy, because a count is looked up, not read.
+          Search and the primary sit on the SAME row — the Rounds top pattern —
+          instead of the search living in a band of its own below. */}
       <div className="qm-rounds-roster-head">
-        <h1 className="qm-rounds-roster-title">Patients</h1>
-        <span
-          className="qm-rounds-roster-count"
-          data-testid="rounds-patients-count"
-        >
-          {total} patient{total === 1 ? '' : 's'}
-        </span>
+        <div className="qm-rounds-roster-headline">
+          <h1 className="qm-rounds-roster-title">Patients</h1>
+          <span
+            className="qm-rounds-roster-count"
+            data-testid="rounds-patients-count"
+          >
+            {total} patient{total === 1 ? '' : 's'}
+          </span>
+        </div>
         <div style={{ flex: 1 }} />
-        <Link
-          href="/visits/new"
-          className="qm-rounds-roster-new"
-          data-testid="rounds-patients-new-visit"
-        >
-          New visit
-        </Link>
-      </div>
-
-      <div className="qm-rounds-roster-search">
+        <div className="qm-rounds-roster-search">
         <input
           type="search"
           inputMode="search"
@@ -109,6 +111,14 @@ export function RoundsPatientsRoster({
             ✕
           </button>
         ) : null}
+        </div>
+        {/* ⚠️ THE SAME COMPONENT AS THE BOARD'S PRIMARY, not a second button
+            wearing the same words. `actions keep their names end-to-end`, and
+            R2 already had to rename this surface's sibling once — one renderer
+            means the label, the href and the hover treatment cannot drift.
+            No shortcut here: the board's top-bar mount owns `n`, and two
+            document listeners on one key double-navigate. */}
+        <RoundsNewVisitCta variant="bar" />
       </div>
 
       {rows.length === 0 ? (
@@ -123,9 +133,11 @@ export function RoundsPatientsRoster({
         </div>
       ) : (
         <>
+          {/* A GRID OF MARKER CARDS, not a list of rows. Same `role="list"`
+              semantics — the change is anatomy, not accessibility. */}
           <div className="qm-rounds-roster-list" role="list">
-            {rows.map((p) => (
-              <RosterRow key={p.id} p={p} />
+            {rows.map((p, i) => (
+              <RosterRow key={p.id} p={p} index={i} />
             ))}
           </div>
           <div className="qm-rounds-roster-foot">
@@ -154,8 +166,24 @@ export function RoundsPatientsRoster({
   );
 }
 
-function RosterRow({ p }: { p: C3PatientRow }) {
+// ── R3.1 — THE MARKER CARD, the board's anatomy applied to a patient ────────
+// The owner's verdict on the previous cut was "a redesign, not a recolor", and
+// this is the difference: the old row was avatar + name + meta + a status WORD
+// + a chevron, which is a list item wearing Rounds colours. A marker card is
+// name, a MONO kicker of things you look up rather than read, and status
+// expressed as a TREATMENT of the card itself.
+//
+// ⚠️ STATUS IS THE CARD, NOT A CHIP. `c3Status` hands back a `pillClass` full
+// of `qm-lin-pill*` — the legacy chip. It is deliberately not used here: the
+// key drives `data-status`, and the stylesheet paints the card's own border and
+// its status line from that. Rendering the pill would have re-imported the
+// exact legacy family this round exists to remove, on the one surface the
+// census reported clean.
+function RosterRow({ p, index }: { p: C3PatientRow; index: number }) {
   const age = ageFrom(p.dateOfBirth);
+  // Mono, uppercased by the stylesheet: age · visits · modality. Only what the
+  // row model genuinely has — a patient with no visits says so rather than
+  // rendering an empty kicker.
   const metaBits = [
     age != null ? `${age}y` : null,
     `${p.visitCount} visit${p.visitCount === 1 ? '' : 's'}`,
@@ -172,24 +200,22 @@ function RosterRow({ p }: { p: C3PatientRow }) {
     <Link
       href={`/patients/${p.id}`}
       role="listitem"
-      className="qm-rounds-roster-row"
+      className="qm-rounds-pcard"
       data-testid="rounds-patient-row"
+      data-status={status?.key ?? 'none'}
+      /* The stagger is R2.3's, shared rather than re-derived — and capped in
+         the same place for the same reason: a long roster must not make its
+         last card wait, which reads as a load failure. */
+      style={{ animationDelay: `${cardEntranceDelayMs(index)}ms` }}
+      aria-label={`${p.name}${status ? `, ${status.label}` : ''}`}
     >
-      <span className="qm-rounds-roster-avatar" aria-hidden>
-        {initialsOf(p.name)}
-      </span>
-      <span className="qm-rounds-roster-idcol">
-        <span className="qm-rounds-roster-name">{p.name}</span>
-        <span className="qm-rounds-roster-meta">
-          {metaBits.join(' · ') || 'No visits yet'}
-        </span>
+      <span className="qm-rounds-pcard-name">{p.name}</span>
+      <span className="qm-rounds-pcard-kicker">
+        {metaBits.join(' · ') || 'No visits yet'}
       </span>
       {status ? (
-        <span className="qm-rounds-roster-status">{status.label}</span>
+        <span className="qm-rounds-pcard-status">{status.label}</span>
       ) : null}
-      <span aria-hidden className="qm-rounds-roster-chev">
-        →
-      </span>
     </Link>
   );
 }

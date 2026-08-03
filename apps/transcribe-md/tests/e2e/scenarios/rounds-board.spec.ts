@@ -84,28 +84,62 @@ test('the chrome carries the shipped capabilities', async ({ page }) => {
   // search box, this fails.
   await expect(page.getByTestId('rounds-search')).toBeVisible();
 
-  // All six filters, and they are links so the view is shareable.
-  for (const f of ['active', 'signed', 'soap', 'ultrasound', 'critical', 'failed']) {
-    await expect(page.getByTestId(`rounds-filter-${f}`)).toBeVisible();
+  // ⚠️ R3.8 — THE FILTER CHIPS ARE GONE, AND THE EXPECTED SET MOVED BY HAND.
+  // This asserted six chips visible. Owner ruling: POSITION IS THE STATUS — the
+  // board is a lanes × stage-columns matrix, so a card's column already says
+  // where the visit is and the chip row was a second, weaker encoding of it.
+  // Deleted, not hidden.
+  //
+  // The assertion INVERTS rather than disappearing: a check that simply stopped
+  // looking could not tell "removed" from "renamed", and this round is about
+  // ending whack-a-mole. Declared in the ledger.
+  for (const f of ['active', 'ready', 'signed', 'soap', 'ultrasound', 'critical', 'failed']) {
+    await expect(
+      page.getByTestId(`rounds-filter-${f}`),
+      `the ${f} filter chip is back — R3.8 deleted the row, position carries status`,
+    ).toHaveCount(0);
   }
+  await expect(
+    page.getByRole('group', { name: 'Filters' }),
+    'the filter group is back',
+  ).toHaveCount(0);
 
   await expect(page.getByTestId('rounds-day-meter')).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible();
 });
 
-test('a filter narrows the queue and survives a reload', async ({ page }) => {
+test('⚠️ R3.8 — the filter PARAM survives the chips, because a redirect points at it', async ({
+  page,
+}) => {
+  // This test used to click a chip and assert `aria-current` on it. The chips
+  // are gone; the CAPABILITY is not, and that distinction is the whole reason
+  // this test was rewritten instead of deleted.
+  //
+  // R1 ships a config redirect `/dashboard?tab=all → /board?filter=active`.
+  // Deleting the param with the control would turn that into a link to nothing
+  // — a deep link a doctor may have bookmarked. So the param is still read, the
+  // search form still forwards it, and a filtered URL still filters.
   await signupFreshUser(page, 'board-filter');
-  await page.goto('/board');
-  await page.getByTestId('rounds-filter-signed').click();
-  await expect(page).toHaveURL(/filter=signed/);
 
-  // The filter is in the URL, so a reload keeps it — which is what makes a
-  // board view something a clinician can bookmark or send to a colleague.
-  await page.reload();
-  await expect(page.getByTestId('rounds-filter-signed')).toHaveAttribute(
-    'aria-current',
-    'true',
-  );
+  const res = await page.request.get('/dashboard?tab=all', {
+    maxRedirects: 0,
+    failOnStatusCode: false,
+  });
+  const loc = new URL(res.headers()['location'] ?? '', 'http://x');
+  expect(loc.pathname).toBe('/board');
+  expect(
+    loc.searchParams.get('filter'),
+    'the R1 deep link no longer resolves — R3.8 removed the chips, not the param',
+  ).toBe('active');
+
+  // And the destination is a real page, not a 404 or an empty render.
+  await page.goto('/board?filter=signed');
+  await expect(page.getByTestId('rounds-topbar')).toBeVisible();
+  expect(new URL(page.url()).searchParams.get('filter')).toBe('signed');
+
+  // Search REMAINS and still carries the filter — the two are independent
+  // capabilities and only one of them lost its chrome.
+  await expect(page.getByTestId('rounds-search')).toBeVisible();
 });
 
 test('search is a GET, so the result is linkable', async ({ page }) => {

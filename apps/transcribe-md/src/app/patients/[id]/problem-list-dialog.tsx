@@ -132,7 +132,7 @@ export function ProblemListDialog({
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-black/60 backdrop-blur-[2px]" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[85vh] w-[calc(100%-40px)] max-w-[560px] -translate-x-1/2 -translate-y-1/2 overflow-auto rounded-lg border border-linear-border-strong bg-linear-surface-2 p-6 shadow-[0_30px_80px_rgba(0,0,0,0.6)] outline-none">
+        <Dialog.Content className="qm-rounds-host qm-rounds-dialog fixed left-1/2 top-1/2 z-50 max-h-[85vh] w-[calc(100%-40px)] max-w-[560px] -translate-x-1/2 -translate-y-1/2 overflow-auto rounded-lg border border-linear-border-strong bg-linear-surface-2 p-6 shadow-[0_30px_80px_rgba(0,0,0,0.6)] outline-none">
           <div className="mb-4 flex items-start justify-between gap-3">
             <div>
               <Dialog.Title className="m-0 text-[18px] font-semibold tracking-tight text-linear-text">
@@ -226,7 +226,7 @@ export function ProblemListDialog({
 
           <div className="mt-5 flex items-center justify-end gap-2 border-t border-linear-border pt-4">
             <Dialog.Close asChild>
-              <button type="button" className="qm-lin-btn">
+              <button type="button" className="qm-lin-btn qm-rounds-btn-secondary">
                 Cancel
               </button>
             </Dialog.Close>
@@ -234,7 +234,7 @@ export function ProblemListDialog({
               type="button"
               disabled={!dirty || submitting}
               onClick={onSave}
-              className="qm-lin-btn-primary disabled:cursor-not-allowed disabled:opacity-50"
+              className="qm-lin-btn-primary qm-rounds-btn-primary disabled:cursor-not-allowed disabled:opacity-50"
             >
               {submitting ? 'Saving…' : 'Save problem list'}
             </button>

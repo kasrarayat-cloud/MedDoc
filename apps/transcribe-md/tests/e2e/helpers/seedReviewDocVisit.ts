@@ -269,6 +269,10 @@ export interface SeededReviewDocVisit {
   claimCount: number;
   /** The class this fixture was seeded as, so a spec cannot drift from it. */
   specialtyClass: ReviewDocClass;
+  /** R3 — the patient row this visit hangs off, so a caller can walk
+   *  `/patients/[id]`. It was already generated here and simply not returned;
+   *  the legacy-island census needs that route and had no way to reach it. */
+  patientId: string;
 }
 
 /** THE GUARD. Read the row back and refuse to hand a spec an imaging fixture
@@ -502,7 +506,7 @@ export function seedReviewDocVisit(
   if (imaging && !opts.imagingEmArtifact && !opts.imagingEmPending)
     assertImagingHasNoEm(visitId);
 
-  return { visitId, claimCount: CLAIMS.length, specialtyClass: cls };
+  return { visitId, patientId, claimCount: CLAIMS.length, specialtyClass: cls };
 }
 
 /** THE DATABASE-WIDE NET, for artifacts that arrive from outside any seeder.

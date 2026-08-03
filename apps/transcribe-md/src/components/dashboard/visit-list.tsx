@@ -18,6 +18,7 @@ import Link from 'next/link';
 import type { TranscribeVisitStatus } from '@prisma/client';
 
 import { Ic } from '@/components/ui/icon';
+import { isSkinRounds } from '@/config/skin-rounds';
 import { LocalTime } from '@/components/ui/local-time';
 import {
   bucketForLocalDay,
@@ -41,29 +42,33 @@ export type DashboardVisit = {
   audioDurationSec: number | null;
 };
 
+/** R3 — `key` joins `cls`/`label` so a caller can express status as a
+ *  TREATMENT instead of a chip. The legacy `cls` is untouched and still the
+ *  flag-OFF path; nothing about the existing pill changes. */
 function pillFor(
   status: TranscribeVisitStatus,
   needsReview: boolean,
   signedAt: string | null,
-): { cls: string; label: string; suffix?: string } {
+): { cls: string; label: string; suffix?: string; key: string } {
   // Batch H — signedAt overrides every other lifecycle signal.
   if (signedAt !== null) {
     return {
       cls: 'qm-lin-pill qm-lin-pill--signed',
       label: 'Signed',
       suffix: formatLocalDate(signedAt),
+      key: 'signed',
     };
   }
   if (status === 'SIGNED')
-    return { cls: 'qm-lin-pill qm-lin-pill--signed', label: 'Signed' };
+    return { cls: 'qm-lin-pill qm-lin-pill--signed', label: 'Signed', key: 'signed' };
   if (status === 'READY') {
     return needsReview
-      ? { cls: 'qm-lin-pill qm-lin-pill--review', label: 'Needs review' }
-      : { cls: 'qm-lin-pill qm-lin-pill--ready', label: 'Ready' };
+      ? { cls: 'qm-lin-pill qm-lin-pill--review', label: 'Needs review', key: 'ready' }
+      : { cls: 'qm-lin-pill qm-lin-pill--ready', label: 'Ready', key: 'ready' };
   }
   if (status === 'FAILED')
-    return { cls: 'qm-lin-pill qm-lin-pill--review', label: 'Error' };
-  return { cls: 'qm-lin-pill qm-lin-pill--processing', label: 'Drafting' };
+    return { cls: 'qm-lin-pill qm-lin-pill--review', label: 'Error', key: 'failed' };
+  return { cls: 'qm-lin-pill qm-lin-pill--processing', label: 'Drafting', key: 'processing' };
 }
 
 function formatDuration(sec: number | null): string {
@@ -112,7 +117,19 @@ interface VisitListProps {
 
 export function VisitList({ visits }: VisitListProps) {
   const groups = groupByDay(visits);
-  return (
+  // ⚠️ R3 — THE BRIDGE, NOT A REWRITE OF 300 LINES OF INLINE STYLE.
+  // Every colour in this component is an inline `var(--color-linear-*)`, and on
+  // a Rounds route those resolve to the LEGACY values: `.qm-rounds-host` is
+  // applied to settings, auth and the board, never here. That is precisely what
+  // the census counted on `/visits` and `/patients/[id]`.
+  //
+  // `.qm-rounds-host` REDECLARES all 22 of those custom properties on a scoped
+  // class, so hosting this subtree retints every inline token at once — which
+  // is the mechanism the bridge exists for, and why the census reports hosted
+  // nodes separately from islands. Rewriting the inline styles would change the
+  // flag-OFF product for no reason.
+  const roundsSkin = isSkinRounds();
+  const body = (
     <div style={{ padding: '14px 24px 32px' }}>
       {groups.map((group) => (
         <div key={group.label} style={{ marginBottom: 18 }}>
@@ -233,7 +250,17 @@ export function VisitList({ visits }: VisitListProps) {
                       gap: 6,
                     }}
                   >
-                    <span className={pill.cls}>
+                    {/* ⚠️ R3 — STATUS AS TREATMENT, NOT A CHIP, under Rounds.
+                        The owner's ruling on /patients/[id] was "zero legacy
+                        chips": `pill.cls` is `qm-lin-pill*`, the exact family
+                        the census flags on this route AND on /visits, which
+                        this same component renders. The legacy chip stays on
+                        the flag-OFF path untouched — `roundsSkin` is the fork,
+                        and `pill.label` is byte-identical in both. */}
+                    <span
+                      className={roundsSkin ? 'qm-rounds-vstatus' : pill.cls}
+                      data-status={roundsSkin ? pill.key : undefined}
+                    >
                       {pill.label}
                       {pill.suffix && (
                         <span
@@ -264,5 +291,11 @@ export function VisitList({ visits }: VisitListProps) {
         </div>
       ))}
     </div>
+  );
+
+  return roundsSkin ? (
+    <div className="qm-rounds-host qm-rounds-vlist">{body}</div>
+  ) : (
+    body
   );
 }
