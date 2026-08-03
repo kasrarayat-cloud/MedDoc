@@ -268,17 +268,41 @@ docker tag meddoc-pro-transcribe-md-worker:latest meddoc-pro-transcribe-md-worke
 docker images --format '{{.Repository}}:{{.Tag}}\t{{.ID}}' | grep "pre-<slug>-$D"   # record these IDs in the table
 ```
 
-| Tag | What it restores | Notes |
-|---|---|---|
-| `:pre-readonlypaper-20260728` | the review page BEFORE it became read-only paper | app `4719eef70099` / worker `09ea62317b44` |
-| `:pre-emrehome-20260728` | the review page BEFORE the E/M level row returned to the gate stack | app `bc2bd303740f` / worker `10eb2d4baec1` |
-| `:pre-rounds-20260802` | the app BEFORE the Rounds skin went live — **and before C1-d…C2-b, see §3.3** | app `cfa6df5520f6` / worker `d391ddb62cff` / gotenberg `4bd4489d15b7` (the stock `gotenberg/gotenberg:8`) |
+**THIS TABLE IS THE CONTRACT: nothing it names gets pruned, and nothing pruned
+stays named.** It was reconciled against the daemon on 2026-08-03 after the R4
+reclaim — before that it listed three tags, four more existed unrecorded, and one
+of those was unusable. A table that does not match `docker images` is worse than
+no table, because it is trusted.
 
-Four further families exist on the host and were never recorded here:
-`:pre-exportguard-20260728`, `:pre-lanedelete-20260727`, `:pre-auditonly-20260727`
-and `:pre-verifierfix-20260727`. **`:pre-verifierfix-20260727` is UNPAIRED — the
-worker image exists and the app image does not**, so restoring it would leave app
-and worker on mismatched builds. Treat it as unusable.
+**TWO GENERATIONS ARE KEPT. That is the whole set.**
+
+| Tag | What it restores | Image IDs (verified on the daemon) |
+|---|---|---|
+| `:pre-r4-20260803` | **one step back** — production immediately BEFORE R4 (the Rx-panel host + the New-visit patient context) | app `7cb56d8e82a0` / worker `7ed393c06373` / gotenberg `2d05d22572ba` |
+| `:pre-r3b3-20260803` | **two steps back** — before R3 batch 3 (creation flow, pipeline states, `/visits`) | app `633207ec5c6d` / worker `a8caa939f752` / gotenberg `2d05d22572ba` |
+
+⚠️ **Both generations share ONE gotenberg image** (`2d05d22572ba`) — the converter
+has not been rebuilt since C2-b. That is correct, and it is also a trap:
+`docker rmi` by IMAGE ID on any gotenberg rollback tag deletes the image
+production is running. **Untag by NAME, never by id.** The R4 reclaim caught this
+before acting — four superseded gotenberg tags pointed at the live image.
+
+**Everything older was removed on 2026-08-03, deliberately.** Thirty-one tags
+spanning `:pre-readonlypaper-20260728` … `:pre-r3b2-20260803` **all predate the
+R1–R4 skin work, so their rollback value was zero**: restoring any of them would
+resurrect the split-brain app R1 fixed. Keeping them cost ~19 GB to preserve an
+option nobody could take.
+
+One tag survived the sweep and is named rather than hidden:
+`meddoc-pro-transcribe-md-worker:pre-20260802-attest` (`ad05601a7528`) — the **QA
+stack's worker is running it**, so removing it was refused by the daemon and
+forcing it would have been the "unlink before resolving the failure" mistake.
+It goes when the QA stack is next rebuilt.
+
+⚠️ **`:pre-verifierfix-20260727` was UNPAIRED** — a worker image with no matching
+app image, so restoring it would have left the two on mismatched builds. It is
+gone; the warning is kept here because the shape recurs whenever a tag is cut for
+one service and not its pair. **Cut all three, or none.**
 
 **The no-rebuild restore path** (seconds, versus ~10 minutes for a rebuild). It
 existed only inside old QA reports; it belongs here:
@@ -394,6 +418,16 @@ repo, 83 recorded, before and after), so the image rollback needs no schema work
 ---
 
 ### 3.4 — R1 unification rollback (`:pre-r1-20260803`)
+
+> ⚠️ **THE IMAGES THIS SECTION NAMES NO LONGER EXIST.** They were removed in the
+> 2026-08-03 R4 reclaim: every pre-R1 tag predates the R1–R4 skin work, so
+> restoring one would resurrect the split-brain app R1 fixed — the rollback value
+> was zero and the cost was ~19 GB. **The commands below are kept as a RECORD of
+> what was done and why, not as a path anyone can run today.** Running them now
+> fails on a missing tag; the live rollback set is the two-generation table in
+> §3.1. Written this way rather than deleted because the reasoning in these
+> sections is still the reasoning, and an operator mid-incident needs to know
+> immediately that this door is closed.
 
 R1 merged `7f5fddeb` (#507) and deployed 2026-08-03. The images running
 immediately before it were tagged FIRST and verified against the running
