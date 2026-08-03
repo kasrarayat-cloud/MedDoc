@@ -21,6 +21,7 @@
 // tile and edit affordances are suppressed.
 // ============================================================================
 
+import { isSkinRounds } from '@/config/skin-rounds';
 import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/cn';
@@ -205,6 +206,32 @@ export function RxTab({
     setActiveRxId((current) => (current === rxId ? null : rxId));
   }, []);
 
+  // ── R4.1 — THE HOST LIVES HERE, ON THE COMPONENT, NOT ON ITS CALLERS ───────
+  // ⚠️ R3.4 WRAPPED ONE MOUNT AND THERE ARE THREE. It hosted the stage's
+  // `rxGateNode` (visit-ready-view.tsx:1027) and verified it there — correctly,
+  // and incompletely. The other two were never covered:
+  //
+  //   · :721  the `tabs` array's `rx` entry, rendered by `<ReviewTabsV2>` —
+  //           the fall-through when neither the stage nor the signed branch
+  //           claims the render. THIS is the owner's cream panel.
+  //   · :1451 the SIGNED review path (`isUxSimplify() && isSigned`).
+  //
+  // A per-caller wrapper is a list that has to be kept complete by hand, and it
+  // was already incomplete the day it shipped. On the component it cannot be:
+  // every present and future mount inherits the treatment, which is what "one
+  // component, every path" means.
+  //
+  // ⚠️ SEMANTICS UNTOUCHED — same reasoning as R3.4, and it is why this is a
+  // class on the existing root rather than a new wrapper element. No
+  // conditional, no handler, no class the gate keys on moves; `rxBlocking` is
+  // computed by the caller from `onResolvedChange`, which this does not touch.
+  // The two advisory classes on the owner's fixture (agent-not-specified and
+  // the deterministic not-in-database check) are CORRECT clinical behaviour and
+  // are not softened: nothing here reads or rewrites a warning.
+  //
+  // Flag-OFF it is the empty string, so the legacy render is byte-identical.
+  const roundsHost = isSkinRounds() ? 'qm-rounds-host qm-rounds-rx' : '';
+
   const handleWarningFocus = useCallback((rxId: string) => {
     setActiveRxId(rxId);
   }, []);
@@ -212,7 +239,7 @@ export function RxTab({
   // Empty state: zero prescriptions AND zero warnings.
   if (prescriptions.length === 0 && warnings.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-linear-border bg-linear-surface-1 p-8 text-center">
+      <div className={`${roundsHost} rounded-lg border border-dashed border-linear-border bg-linear-surface-1 p-8 text-center`}>
         <div className="text-[14px] font-medium text-linear-text">
           No prescriptions from this visit
         </div>
@@ -227,7 +254,7 @@ export function RxTab({
   const activeCount = decoratedRx.filter((p) => p.action !== 'unclear').length;
 
   return (
-    <div className="qm-lin-rx-split">
+    <div className={`${roundsHost} qm-lin-rx-split`}>
       {/* LEFT pane — Rx list */}
       <section>
         <div className="qm-lin-rx-pane-head">

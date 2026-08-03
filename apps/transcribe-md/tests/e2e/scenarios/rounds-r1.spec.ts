@@ -38,6 +38,7 @@ import { test, expect, type Page } from '@playwright/test';
 
 import { signupFreshUser } from '../helpers/signup';
 import { createReadyTextVisit } from '../helpers/visit-setup';
+import { seedReviewDocVisit } from '../helpers/seedReviewDocVisit';
 
 /** Board · Patients · Settings. Written out rather than imported so a change to
  *  the nav has to be made in two places on purpose — the point of the pack is
@@ -240,6 +241,69 @@ test.describe('R1 — the shell is the same on every authenticated route', () =>
     // And the root, so the first hop after login is not a double redirect.
     await page.goto('/');
     expect(new URL(page.url()).pathname).toBe('/board');
+  });
+
+  // ── R4.2 — THE PATIENT TRAVELS WITH THE ACTION ──────────────────────────
+  test('R4.2 — every New-visit CTA carries patient context, or correctly omits it', async ({
+    page,
+  }) => {
+    // ⚠️ THIS IS A REGRESSION I SHIPPED, and the test is written against the
+    // exact failure. R3.2 replaced `/patients/[id]`'s header link — which
+    // carried `?patientId=…` — with the SHARED `RoundsNewVisitCta`, and that
+    // component hardcoded a bare `/visits/new`. So on the one page where the
+    // patient is already known, the button dropped them and landed the doctor
+    // in create-a-patient. The empty-state link on the same page still carried
+    // the param, which is why only ONE of the two misbehaved — and why "the
+    // patient page has a working New visit link" was true and useless.
+    //
+    // RED-PROVABLE: on today's production build the header CTA's href is
+    // `/visits/new` with no query, so the first assertion fails.
+    const { email } = await signupFreshUser(page, 'r4cta');
+    const seeded = seedReviewDocVisit(email, { idSalt: 'r4' });
+    expect(seeded, 'seeding failed — this test would prove nothing').not.toBeNull();
+
+    await page.goto(`/patients/${seeded!.patientId}`);
+
+    // 1. The header CTA CARRIES the patient.
+    const header = page.getByTestId('rounds-new-visit-bar');
+    await expect(header).toBeVisible();
+    const href = await header.getAttribute('href');
+    expect(
+      href,
+      'the patient-page New visit CTA dropped the patient — it lands the doctor ' +
+        'in create-a-patient on the one page where the patient is known',
+    ).toContain(`patientId=${seeded!.patientId}`);
+
+    // 2. Following it PRESELECTS that patient — the destination honours the
+    //    param, which is the half a href assertion alone cannot prove.
+    await header.click();
+    await page.waitForURL(/\/visits\/new/);
+    await expect(
+      page.getByLabel('Specialty'),
+      'landed on "Who\'s this visit for?" rather than on specialty/capture — ' +
+        'the patient was not preselected',
+    ).toBeVisible({ timeout: 30_000 });
+    // The posted contract still holds on this entry path.
+    await expect(page.locator('input[name="patientId"]')).toHaveValue(seeded!.patientId);
+    // And the doctor can still change their mind.
+    await expect(page.getByRole('button', { name: /change patient/i })).toBeVisible();
+
+    // 3. THE COMPLEMENT — surfaces with NO patient in scope must NOT invent one.
+    //    Without this, a component that appended a stale id everywhere would
+    //    satisfy assertion 1 and be a worse bug.
+    for (const [route, testid] of [
+      ['/board', 'rounds-new-visit-bar'],
+      ['/patients', 'rounds-new-visit-bar'],
+      ['/visits', 'rounds-new-visit-bar'],
+    ] as const) {
+      await page.goto(route);
+      const cta = page.getByTestId(testid);
+      if (!(await cta.count())) continue;
+      expect(
+        await cta.getAttribute('href'),
+        `${route}'s CTA carries a patientId, and no patient is in scope there`,
+      ).toBe('/visits/new');
+    }
   });
 
   // ── R2 — Templates folded into Settings ──────────────────────────────────

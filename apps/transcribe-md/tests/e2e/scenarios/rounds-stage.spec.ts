@@ -99,6 +99,10 @@ test.describe('Rounds Screen 2 — the stage', () => {
       imagingEmPending?: boolean;
       chiefComplaint?: string;
       patient?: { dob?: string; externalId?: string };
+      /** R4.1 — an imaging visit that DOES carry prescriptions. The default
+       *  imaging fixture writes none, which is why the owner's cream panel was
+       *  unrenderable in every automated environment. */
+      imagingWithRx?: boolean;
     } = {},
   ) {
     const { email } = await signupFreshUser(page, tag);
@@ -464,6 +468,67 @@ test.describe('Rounds Screen 2 — the stage', () => {
     // HALF TWO — it happened, exactly once, and with the drawer already gone.
     await expect.poll(async () => (await gateScrolls()).length).toBe(1);
     expect((await gateScrolls())[0].drawerOpen).toBe(false);
+  });
+
+  // ── R4.1 — THE Rx SURFACE IS ROUNDS-TREATED ON EVERY PATH ────────────────
+  test('R4.1 — the Rx surface renders hosted, on the owner\'s own fixture', async ({
+    page,
+  }) => {
+    // ⚠️ THE GUARD FOR A CLASS THE CENSUS CANNOT SEE. R3.4 hosted ONE of three
+    // `RxTab` mounts and verified it on the stage — correctly, and
+    // incompletely. The owner then found the cream panel on a path that walk
+    // never rendered: an ULTRASOUND visit whose plan orders anticoagulation.
+    //
+    // Two things had to be true for that to hide:
+    //   · the imaging fixture wrote `rxDrafts: null`, so no seeded imaging
+    //     visit could show an Rx surface at all;
+    //   · QA runs MOCK_AI, whose pipeline writes no rxDrafts either — measured:
+    //     every visit in the QA database had `rxDrafts IS NULL`.
+    // So the panel was unrenderable in every automated environment, and a route
+    // walk reported it clean because it was never on screen. This test RENDERS
+    // the state rather than walking to it.
+    const seeded = await open(page, 'stage-r41', {
+      specialtyClass: 'imaging',
+      imagingWithRx: true,
+    });
+    test.skip(!seeded, 'psql seeding unavailable');
+
+    // NON-VACUITY FIRST: an Rx surface must actually be on screen, or every
+    // assertion below is about an element that is not there.
+    const anyRx = page.locator('[class*="qm-lin-rx-"]').first();
+    await expect(
+      anyRx,
+      'no Rx surface rendered — the fixture no longer produces one, and this ' +
+        'test would pass by measuring nothing',
+    ).toBeVisible();
+
+    // THE ASSERTION: hosted, on this path, without a per-caller wrapper.
+    const hosted = await page.evaluate(() => {
+      const el = document.querySelector('[class*="qm-lin-rx-"]') as HTMLElement | null;
+      return el ? !!el.closest('.qm-rounds-host') : null;
+    });
+    expect(
+      hosted,
+      'the Rx surface is not inside a qm-rounds-host — a legacy cream panel is ' +
+        'rendering on a Rounds route, which is the R4 defect',
+    ).toBe(true);
+
+    // ⚠️ AND THE CLINICAL BEHAVIOUR IS UNCHANGED, which is the half a reskin
+    // must never quietly cost. Both advisory classes on this fixture are
+    // CORRECT and must survive un-softened: the plan orders anticoagulation
+    // without naming an agent, so the prescription is `unclear` and the
+    // advisory says so. A reskin that "cleaned up" either would be a clinical
+    // regression wearing new paint.
+    const body = await page.locator('body').innerText();
+    expect(
+      /unclear/i.test(body),
+      'the unclear action disappeared — the agent is genuinely unspecified and ' +
+        'the surface must keep saying so',
+    ).toBe(true);
+    expect(
+      /agent not specified/i.test(body),
+      'the advisory text was softened or dropped',
+    ).toBe(true);
   });
 
   // ── R3.3 — THE RAIL IS REACHABLE WHILE THE PAPER SCROLLS ─────────────────

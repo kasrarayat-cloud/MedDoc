@@ -1022,8 +1022,13 @@ export function VisitReadyView(props: VisitReadyViewProps) {
                still owns the override flow, and every `data-testid` the packs
                use is where it was. Rewriting 79 rules by hand is the version of
                this change that could silently move a gate. */
+            /* ⚠️ R4.1 REMOVED THE WRAPPER THAT USED TO BE HERE. R3.4 hosted
+               this ONE mount and there are three; the host now lives on
+               `RxTab` itself, so every path inherits it and the list cannot go
+               stale again. Leaving both would double-apply the bridge —
+               harmless in CSS, but it would put the "which one is real"
+               question back into the file. */
             rxHasContent ? (
-              <div className="qm-rounds-host qm-rounds-rx">
               <RxTab
                 rx={props.rxDrafts}
                 visitId={props.visitId}
@@ -1035,7 +1040,6 @@ export function VisitReadyView(props: VisitReadyViewProps) {
                 // gain a state update it has no consumer for.
                 onUnresolvedChange={roundsActive ? setRxUnresolved : undefined}
               />
-              </div>
             ) : null
           }
           rxBlocking={!rxResolved}

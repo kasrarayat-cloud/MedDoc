@@ -48,6 +48,23 @@ function isTypingTarget(el: EventTarget | null): boolean {
 
 export interface RoundsNewVisitCtaProps {
   /**
+   * Start the visit FOR THIS PATIENT — `/visits/new?patientId=…`, which the
+   * route already honours by preselecting them and landing the doctor on
+   * specialty/capture instead of "Who's this visit for?".
+   *
+   * ⚠️ THIS PROP EXISTS BECAUSE ITS ABSENCE WAS A REGRESSION I SHIPPED. R3.2
+   * replaced `/patients/[id]`'s header link — which carried
+   * `?patientId=${patient.id}` — with this shared component, and the component
+   * hardcoded a bare `/visits/new`. The button therefore dropped the patient
+   * and landed the doctor in create-a-patient, on the one page where the
+   * patient is already known. The empty-state link on the same page still
+   * carried the param, which is why only one of the two misbehaved.
+   *
+   * Optional, and omitted is correct on the board, the roster and `/visits` —
+   * there is no patient in scope on any of them.
+   */
+  patientId?: string;
+  /**
    * `bar` — the compact primary in the top bar.
    * `empty` — the larger invitation in the board's empty state.
    *
@@ -61,8 +78,14 @@ export interface RoundsNewVisitCtaProps {
 export function RoundsNewVisitCta({
   variant = 'bar',
   withShortcut = false,
+  patientId,
 }: RoundsNewVisitCtaProps) {
   const router = useRouter();
+  // One destination, computed once, so the link and the keyboard shortcut
+  // cannot disagree about where the action goes.
+  const href = patientId
+    ? `${NEW_VISIT_HREF}?patientId=${encodeURIComponent(patientId)}`
+    : NEW_VISIT_HREF;
 
   useEffect(() => {
     if (!withShortcut) return;
@@ -73,15 +96,15 @@ export function RoundsNewVisitCta({
       if (isTypingTarget(e.target)) return;
       if (e.key.toLowerCase() !== SHORTCUT_KEY) return;
       e.preventDefault();
-      router.push(NEW_VISIT_HREF);
+      router.push(href);
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [withShortcut, router]);
+  }, [withShortcut, router, href]);
 
   return (
     <Link
-      href={NEW_VISIT_HREF}
+      href={href}
       data-testid={`rounds-new-visit-${variant}`}
       data-shortcut={withShortcut ? SHORTCUT_KEY : undefined}
       /* ⚠️ WRITTEN OUT, NOT INTERPOLATED, AND A GUARD MADE ME DO IT.

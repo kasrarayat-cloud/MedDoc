@@ -97,6 +97,38 @@ const RX = {
   ],
 };
 
+/** R4.1 — the owner's fixture: an imaging visit whose plan orders
+ *  anticoagulation without naming an agent. Reproduces BOTH advisory classes
+ *  the walkthrough screenshot shows, and both are CORRECT clinical behaviour
+ *  that must survive un-softened:
+ *    · `unclear` — the agent is not specified, so nothing can be dispensed
+ *    · a deterministic not-in-database check on the unnamed agent
+ *  The shape matches what layer 7c persists, positional identity included; a
+ *  seed that does not match production is a test of the seed. */
+const IMAGING_RX = {
+  prescriptions: [
+    {
+      lineNumber: 1,
+      drug: 'Anticoagulation',
+      strength: null,
+      form: null,
+      sig: 'Start anticoagulation per vascular service',
+      quantity: null,
+      refills: null,
+      action: 'unclear',
+    },
+  ],
+  warnings: [
+    {
+      severity: 'info',
+      rx_drug: 'Anticoagulation',
+      message:
+        'Agent not specified — the plan orders anticoagulation without naming a drug, dose or duration.',
+      evidence_quote: 'start anticoagulation',
+    },
+  ],
+};
+
 /** parseEmPendingChange is STRICT and fails closed: `{from,to}` alone is
  *  malformed and coerces to null, which renders "unknown" and tests nothing.
  *  `cause` and `at` are required. */
@@ -355,6 +387,19 @@ export function seedReviewDocVisit(
      *  row. A queue spec seeds three and would then assert "1 of 1" against a
      *  fixture it believes is three, with nothing erroring. */
     idSalt?: string;
+    /** ⚠️ R4.1 — SEED AN IMAGING VISIT THAT DOES CARRY PRESCRIPTIONS.
+     *
+     *  The imaging fixture writes `rxDrafts: null` by default, on the sound
+     *  reasoning that an ultrasound report usually orders no medication. The
+     *  owner's defect was found on exactly the case that reasoning excludes: an
+     *  ultrasound whose PLAN orders anticoagulation. No fixture could express
+     *  that combination, so no walk could render the panel, and the census
+     *  reported the surface clean because it was never on screen.
+     *
+     *  This is the "surface that only exists after a live pipeline run" class —
+     *  now two members, with the processing card. The cure for that class is a
+     *  fixture that RENDERS the state, not a route walk. */
+    imagingWithRx?: boolean;
     /** The reason line on the Rounds identity header. Not written otherwise. */
     chiefComplaint?: string;
     /** Fields the identity header's MRN / age cells read. Omitted by default so
@@ -460,7 +505,7 @@ export function seedReviewDocVisit(
           '${j(CLAIMS)}'::jsonb,
           -- No medications on an imaging report, so no Rx gate. Its ABSENCE is
           -- asserted; the office fixture keeps the critical interaction.
-          ${imaging ? 'null' : `'${j(RX)}'::jsonb`},
+          ${imaging && !opts.imagingWithRx ? 'null' : `'${j(imaging ? IMAGING_RX : RX)}'::jsonb`},
           -- AND NO PENDING E/M CHANGE, ever, on imaging: there is no level to
           -- have moved. Seeding one would be seeding the bug.
           ${
