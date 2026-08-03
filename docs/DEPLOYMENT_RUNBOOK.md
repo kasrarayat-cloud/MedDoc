@@ -6,6 +6,7 @@ Target host: Ubuntu 24 LTS, single VPS, ≥2 GB RAM, ≥40 GB disk. All procedur
 
 ---
 
+
 ## 1. First-time deploy on a fresh VPS
 
 ### 1.1 Host prep
@@ -391,6 +392,42 @@ retag survives a deploy.
 repo, 83 recorded, before and after), so the image rollback needs no schema work.
 
 ---
+
+### 3.4 — R1 unification rollback (`:pre-r1-20260803`)
+
+R1 merged `7f5fddeb` (#507) and deployed 2026-08-03. The images running
+immediately before it were tagged FIRST and verified against the running
+container ids (app `ed2769c1e2e7` · worker `34d1e5ef49ff` · gotenberg
+`2d05d22572ba`, three-for-three MATCH).
+
+```bash
+docker tag meddoc-pro-transcribe-md:pre-r1-20260803        meddoc-pro-transcribe-md:latest
+docker tag meddoc-pro-transcribe-md-worker:pre-r1-20260803 meddoc-pro-transcribe-md-worker:latest
+docker tag meddoc-pro-gotenberg:pre-r1-20260803            meddoc-pro-gotenberg:fonts
+docker compose -f /opt/meddoc-pro/docker-compose.yml up -d --no-deps --force-recreate \
+  transcribe-md transcribe-md-worker gotenberg
+```
+
+**⚠️ WHAT ROLLING BACK COSTS, so nobody rediscovers it mid-incident.**
+
+- **The app goes split-brain again.** `/patients`, `/dashboard` and `/settings`
+  return to the 240px C3 sidebar with a different nav from `/board`'s. Nothing
+  breaks; the product just reads as two products, which is the state R1 existed
+  to end.
+- **`/dashboard` renders again** instead of forwarding. Deep links keep working
+  either way, so this is cosmetic — but a bookmark saved after R1 pointing at
+  `/board?filter=active` is fine, and one pointing at `/dashboard` starts
+  rendering rather than redirecting.
+- **The export paper reverts to the SPLIT state**, and this is the one to weigh:
+  section headings go back to 11pt in Word against 12pt in the PDF, the Word
+  file loses its section and title rules entirely, and the metadata reverts to
+  the layout that narrows as it gains fields. **This is flag-INDEPENDENT** — it
+  affects every doctor, not just Rounds — so a rollback taken for a Rounds
+  reason still un-fixes the paper. If the concern is the shell rather than the
+  paper, prefer reverting only the shell rather than the whole image.
+- **Two contrast fixes are lost**: the cleared-gate rows drop to 3.65:1 and
+  `.qm-lin-rx-rail-group-n` to 2.15:1, both below AA. Accessibility regressions
+  are not cosmetic; note them in the incident if the rollback is held.
 
 ## 4. Restore from backup
 

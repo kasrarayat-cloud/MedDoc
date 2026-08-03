@@ -54,13 +54,31 @@ const AUTHED_ROUTES = [
   '/visits/new',
   '/settings',
   '/settings/note-format',
+  // ⚠️ THE VISIT STAGE JOINED LATE, AND ITS ABSENCE WAS A REAL COVERAGE GAP.
+  // `/visits/[id]` is the single most-used authenticated route in the product
+  // and the first version of this list omitted it, because it needs a visit id
+  // and the others do not. A prod smoke walked it and reported two asides —
+  // which turned out to be fine (see `shellShape`) but which this pack could
+  // not have told anyone either way. Filled in by the caller below.
 ];
 
 async function shellShape(page: Page) {
   return page.evaluate(() => {
     const navs = [...document.querySelectorAll('nav[aria-label="Main"]')];
+    // ⚠️ THE PREDICATE IS "NO LEGACY SIDEBAR", NOT "NO <aside>", AND THE FIRST
+    // VERSION GOT THAT WRONG. `<aside>` is the correct element for
+    // complementary content, and the Rounds visit stage legitimately renders
+    // two — `qm-rounds-peek-prev` / `-next`, the deck affordances. A blanket
+    // `asides === 0` reds on correct markup and pushes the next person to
+    // delete a landmark to satisfy a test. An over-strict probe is a defect in
+    // the probe. What R1 actually removed is the 240px legacy sidebar, so that
+    // is what is counted; `asides` is still reported, for context, never gated.
+    const LEGACY_SHELL_ASIDE = /qm-lin-sidebar|qm-c3-sidebar|qm-lin-iconrail/;
+    const asides = [...document.querySelectorAll('aside')];
     return {
-      asides: document.querySelectorAll('aside').length,
+      legacyAsides: asides.filter((a) => LEGACY_SHELL_ASIDE.test(a.className)).length,
+      asidesTotal: asides.length,
+      asideClasses: asides.map((a) => a.className || '(none)'),
       navCount: navs.length,
       navLabels: navs[0]
         ? [...navs[0].querySelectorAll('a')].map((a) => (a.textContent ?? '').trim())
@@ -93,8 +111,31 @@ test.describe('R1 — the shell is the same on every authenticated route', () =>
     ).toBe('rounds');
     expect(board.navLabels, 'the board has no Main nav at all').toEqual(NAV);
 
+    // NON-VACUITY ON THE ASIDE PREDICATE ITSELF: the matcher must be able to
+    // SEE a legacy sidebar, or `legacyAsides === 0` is true for every page in
+    // the world including a blank one.
+    const matcherWorks = await page.evaluate(() => {
+      const probe = document.createElement('aside');
+      probe.className = 'qm-lin-sidebar qm-c3-sidebar';
+      document.body.appendChild(probe);
+      const seen = [...document.querySelectorAll('aside')].filter((a) =>
+        /qm-lin-sidebar|qm-c3-sidebar|qm-lin-iconrail/.test(a.className),
+      ).length;
+      probe.remove();
+      return seen;
+    });
+    expect(
+      matcherWorks,
+      'the legacy-sidebar matcher cannot detect a legacy sidebar injected right ' +
+        'in front of it — every zero it reports below is meaningless',
+    ).toBe(1);
+
+    // The visit stage — the route a doctor spends their day on, and the one
+    // the first version of this list left out because it needs an id.
+    const visitId = await createReadyTextVisit(page, { patientName: 'R1 Shell' });
+
     const seen: Record<string, Awaited<ReturnType<typeof shellShape>>> = {};
-    for (const route of AUTHED_ROUTES) {
+    for (const route of [...AUTHED_ROUTES, `/visits/${visitId}`]) {
       await page.goto(route, { waitUntil: 'domcontentloaded' });
       // A route that redirected to /login would render a clean, aside-free
       // page and pass every assertion below for the wrong reason.
@@ -103,7 +144,11 @@ test.describe('R1 — the shell is the same on every authenticated route', () =>
     }
 
     for (const [route, shape] of Object.entries(seen)) {
-      expect(shape.asides, `${route} renders ${shape.asides} <aside> — the legacy sidebar`).toBe(0);
+      expect(
+        shape.legacyAsides,
+        `${route} still renders the legacy 240px sidebar — asides present: ` +
+          `[${shape.asideClasses.join(', ')}]`,
+      ).toBe(0);
       expect(
         shape.legacyShellRoots,
         `${route} resolved to the legacy .qm-lin-app / .qm-c3-app shell`,
