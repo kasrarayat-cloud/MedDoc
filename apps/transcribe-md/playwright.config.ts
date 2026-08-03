@@ -125,6 +125,10 @@ export default defineConfig({
         // the line above — collected by the default run, it reds the required
         // gate for a reason that has nothing to do with the change.
         '**/rounds-r1.spec.ts',
+        // ROUNDS R3 item 0 — the census. Flag-OFF every route renders legacy by
+        // definition, so this would "find" the whole product and red the
+        // required gate for an environment reason. Its own project below.
+        '**/rounds-legacy-census.spec.ts',
         '**/a11y.spec.ts',
         '**/23-note-format-phi-parse-reject.spec.ts',
         '**/24-rx-clinical-safety.spec.ts',
@@ -262,6 +266,19 @@ export default defineConfig({
       // into a screen pack would let it read as one.
       name: 'rounds-r1',
       testMatch: ['**/rounds-r1.spec.ts'],
+      fullyParallel: false,
+      workers: 1,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      // R3 item 0 — THE LEGACY-ISLAND CENSUS. Its own project because it walks
+      // EVERY authenticated route on the flag-ON image and emits a report,
+      // rather than passing or failing one surface. Flag-ON only: with the flag
+      // off every route renders legacy BY DEFINITION, so the census would
+      // enumerate the entire product and fail for an environment reason — the
+      // same trap the ignore-list above exists for.
+      name: 'rounds-census',
+      testMatch: ['**/rounds-legacy-census.spec.ts'],
       fullyParallel: false,
       workers: 1,
       use: { ...devices['Desktop Chrome'] },
