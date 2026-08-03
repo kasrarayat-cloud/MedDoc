@@ -370,15 +370,6 @@ export function RoundsGateFlow({
               Signing locks the note. Later changes require a dated addendum.
             </p>
 
-            {/* ── THE SIGNATURE ──────────────────────────────────────────────
-                R2: an ordinary React child, not an adopted DOM node. Last on
-                the step, after the summary, the attestation and the warning —
-                the order in which a doctor should meet them. */}
-            {signbar ? (
-              <div className="qm-rounds-gateflow-sign" data-testid="rounds-gate-signbar-host">
-                {signbar}
-              </div>
-            ) : null}
           </div>
         ) : null}
 
@@ -390,6 +381,26 @@ export function RoundsGateFlow({
               ? `1 ${gateLabel(active!.id)} outstanding`
               : `${active!.unresolved} ${gateLabel(active!.id)}s outstanding`}
           </p>
+        ) : null}
+
+        {/* ── THE SIGNATURE ────────────────────────────────────────────────
+            R2: an ordinary React child, not an adopted DOM node.
+
+            ⚠️ AFTER THE LOCK LINE, DELIBERATELY, and it was the other way round
+            first. Rendered inside the attestation block it came out ABOVE
+            "🔒 Complete blockers to advance", so the doctor met a greyed-out
+            Sign & Download and then, underneath it, the sentence explaining why
+            — the reason arriving after the thing it explains. Reading order is
+            the affordance here: what remains, then the act.
+
+            Outside the attestation block for the same reason it is guarded by
+            `active.id === 'attestation'`: the signature belongs to the STEP,
+            not to the checkbox, and nesting it in the attest markup is what put
+            it in the wrong place to begin with. */}
+        {active && active.id === 'attestation' && !emArtifact && signbar ? (
+          <div className="qm-rounds-gateflow-sign" data-testid="rounds-gate-signbar-host">
+            {signbar}
+          </div>
         ) : null}
 
         <footer className="qm-rounds-gateflow-nav">
