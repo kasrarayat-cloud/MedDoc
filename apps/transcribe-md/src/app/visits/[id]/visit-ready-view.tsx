@@ -1006,7 +1006,24 @@ export function VisitReadyView(props: VisitReadyViewProps) {
             // neither still drew a "Prescription safety" heading over an empty
             // panel. The GATE behaviour is untouched — it keys on
             // `rxBlocking`, below, exactly as before.
+            /* ⚠️ R3.4 — HOSTED, AND THE SEMANTICS ARE UNTOUCHED BY CONSTRUCTION.
+               The prescription-safety surface is ~79 `qm-lin-rx-*` rules in
+               `globals.css`, all painted from `--color-linear-*`, and the
+               census counted 30+ of its classes on the stage plus legacy SAGE
+               on `-ghost-sm` and `-tag`. `.qm-rounds-host` redeclares all 22 of
+               those custom properties on a scoped class, so the whole family
+               retints at once.
+
+               THE POINT OF DOING IT THIS WAY IS THAT IT CANNOT CHANGE
+               BEHAVIOUR. The brief requires advisory/ack/gate semantics
+               byte-identical and the sign-block E2Es unchanged in meaning — a
+               wrapper adds one div and touches no conditional, no handler and
+               no class the gate keys on. `rxBlocking` still decides, `RxTab`
+               still owns the override flow, and every `data-testid` the packs
+               use is where it was. Rewriting 79 rules by hand is the version of
+               this change that could silently move a gate. */
             rxHasContent ? (
+              <div className="qm-rounds-host qm-rounds-rx">
               <RxTab
                 rx={props.rxDrafts}
                 visitId={props.visitId}
@@ -1018,6 +1035,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
                 // gain a state update it has no consumer for.
                 onUnresolvedChange={roundsActive ? setRxUnresolved : undefined}
               />
+              </div>
             ) : null
           }
           rxBlocking={!rxResolved}

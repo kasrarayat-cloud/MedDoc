@@ -145,7 +145,12 @@ export function RoundsStage({
         {visitActions ? (
           <details className="qm-rounds-overflow" data-testid="rounds-visit-overflow">
             <summary className="qm-rounds-overflow-summary">Visit actions</summary>
-            <div className="qm-rounds-overflow-body">{visitActions}</div>
+            {/* R3.4 — hosted. `VisitLifecycleActions` is composed server-side in
+                `page.tsx` and carries `qm-lin-btn` on its destructive control;
+                the census found it as the stage's last non-toggle island. The
+                bridge retints it in place, which is the same treatment the
+                patient-detail row and the dialogs take. */}
+            <div className="qm-rounds-overflow-body qm-rounds-host">{visitActions}</div>
           </details>
         ) : null}
       </div>

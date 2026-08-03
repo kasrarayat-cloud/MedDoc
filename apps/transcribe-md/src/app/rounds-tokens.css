@@ -706,6 +706,102 @@ body[data-skin='rounds'] {
   margin-top: 0;
 }
 
+/* ── R3.5 — THE WORD PREVIEW: ZERO VIEWER CHROME, AND THE SAME WIDTH AS PDF ──
+ * MEASURED before and after, on the flag-ON image, at 1024 / 1440 / 1920:
+ *
+ *     before   PDF page 756px · WORD page 674px   (identical at all three)
+ *     after    PDF page 756px · WORD page 756px
+ *
+ * An 82px, ~11% discrepancy on a toggle whose whole promise is that it is the
+ * same document — and `globals.css:7000` claims exactly that promise in a
+ * comment ("Both formats are centred inside it at the same width, so PDF and
+ * Word frame identically"). The comment described an intention the code did not
+ * have. Third instance of that shape this round.
+ *
+ * ⚠️ THE CAUSE IS ONE ELEMENT, and the box chain named it in a single
+ * measurement rather than three hypotheses:
+ *
+ *     section.qm-docxp        client=816 rect=674   ← fitted correctly…
+ *     div.qm-docxp-wrapper    client=816 rect=674
+ *     div.qm-npv-stage        client=754 rect=756  pad=40px/40px  ← …to THIS
+ *     figure.qm-npv           client=756 rect=756
+ *
+ * `.qm-npv-stage` is the NATIVE preview's viewer chrome — a dark
+ * `--color-linear-bg` ground, a border, a radius, its own `overflow: auto`
+ * scroll box and 40px of side padding. The PDF path does not render through it
+ * at all, which is why only Word was short. The fit function was never wrong:
+ * it fitted the page to its container faithfully, and the container was 82px
+ * narrower than the one the PDF fills.
+ *
+ * So the chrome goes and the width follows. Nothing is added to the fit logic —
+ * its `ResizeObserver` re-fits when the host widens, which is why removing the
+ * padding is sufficient rather than merely necessary.
+ *
+ * ⚠️ SCOPED TO THE ROUNDS SHEET. `.qm-npv-stage` is the flag-OFF preview's real
+ * chrome and the default `chromium` pack builds flag-OFF. */
+[data-skin='rounds'] .qm-rounds-sheet .qm-npv-stage {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0 0 20px;
+  /* The Rounds sheet is the scroller. A nested `overflow: auto` box inside the
+   * paper is a viewer INSIDE a document — the exact chrome this item removes,
+   * and it also traps the page at `max-height: min(72vh, 780px)`. */
+  overflow: visible;
+  max-height: none;
+}
+
+/* docx-preview paints its own wrapper `rgb(128, 128, 128)` with 30px of
+ * vertical padding — measured, not assumed. Inside a white Rounds sheet that is
+ * a grey band above and below the page: the "gray viewer chrome band" the
+ * walkthrough reported. The horizontal gutter was already zeroed in
+ * `globals.css`; the ground and the vertical band were not. */
+[data-skin='rounds'] .qm-rounds-sheet .qm-docxp-wrapper {
+  background: none;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+/* The focus ring on the stage takes the LEGACY sage. It is a real focus
+ * affordance and must not simply be removed — retinted to the Rounds accent,
+ * which is also what the census's composite arm would otherwise keep finding. */
+[data-skin='rounds'] .qm-rounds-sheet .qm-npv-stage:focus-visible {
+  outline-color: var(--rounds-accent);
+}
+
+/* ⚠️ THE WORD PAGE KEPT THE DARK-GROUND SHADOW, and the rule meant to handle it
+ * IS DEAD CODE. `globals.css:7096-7104` scopes the Word page's framing to
+ * `.qm-vdoc .qm-npv-docx` — but `.qm-npv-docx` is rendered ONLY by
+ * `NativeDocumentPreview`, whose branch emits no `.qm-vdoc` at all (its root is
+ * an unclassed div). So the selector cannot match, and the comment above it —
+ * "The Word view inside the visit document, framed identically" — describes an
+ * intention wired to a selector that does not occur. Measured:
+ * `section.qm-docxp` computes `rgba(0,0,0,.4) 0 1px 2px, rgba(0,0,0,.45) …`
+ * on #fcfcfa paper.
+ *
+ * Softened to the SAME values R2.1 gave `.qm-npv-page`, so the two formats
+ * finally match on depth as well as width — which is the toggle's promise, and
+ * the thing three separate comments have now claimed without delivering. The
+ * dead rules in `globals.css` are left alone deliberately: they are flag-OFF
+ * territory, and deleting them is a cleanup with its own blast radius, recorded
+ * for F-ret rather than smuggled into a skin item. */
+/* The ACTIVE format button marks itself with `border-color:
+ * var(--color-linear-sage)` — the legacy sage, on the one control the Rounds
+ * toolbar row is built around. The census's composite arm is what kept
+ * surfacing it (a border colour the exact-match arm sampled, and a
+ * `box-shadow` blend it did not). The Rounds accent says the same thing in the
+ * skin's own vocabulary. */
+[data-skin='rounds'] .qm-rounds-sheet .qm-vdoc-format .qm-vdoc-format-on {
+  border-color: var(--rounds-accent);
+  color: var(--rounds-ink);
+}
+
+[data-skin='rounds'] .qm-rounds-sheet section.qm-docxp {
+  box-shadow:
+    0 1px 2px rgba(25, 30, 38, 0.1),
+    0 4px 14px -6px rgba(25, 30, 38, 0.16);
+}
+
 /* The document canvases keep their own lift, but a gentler one. `.qm-npv-page`
  * ships `0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.45)` — correct against
  * `.qm-vdoc`'s #08090a matting, and far too heavy now that the same canvas sits
@@ -802,28 +898,54 @@ body[data-skin='rounds'] {
 }
 
 /* ── Action rail ────────────────────────────────────────────────────────── */
-/* ⚠️ THE RAIL IS NOT PINNED, AND THE ATTEMPT TO PIN IT IS RECORDED HERE.
-   SPEC makes "Review & sign" the primary, and it sits in flow at the bottom of
-   the stage — so it scrolls away, while the legacy `.qm-c3-rev2-signbar` that
-   R1 just removed was `position: sticky` and stayed glued to the viewport. That
-   asymmetry is real and worth fixing.
-   It was fixed and REVERTED in the same item, because pinning it broke three
-   packs and the cause was never where it looked. `RoundsChatDrawer` renders
-   INSIDE this rail (stage.tsx), and its scrim is `position: fixed; inset: 0`.
-   Any sticky rail is a positioned ancestor of both; with `z-index` it becomes a
-   stacking context that traps them, and `backdrop-filter` additionally makes it
-   a containing block for `position: fixed` descendants. Either way
-   `rounds-chat-close` and `rounds-gate-back` reported "visible, enabled and
-   stable" and swallowed every click — a failure that names the drawer and the
-   gate flow, and never the rail.
-   PINNING THIS RAIL IS A REAL TASK, NOT A DECLARATION: it needs the drawer
-   lifted out of the rail first, so the rail can be positioned without being an
-   ancestor of a modal. Left in flow until then, deliberately. */
+/* ⚠️ R3.3 — THE RAIL IS DOCKED NOW, AND THE PRIOR REVERT IS WHY IT COULD NOT BE.
+ * This block used to read "THE RAIL IS NOT PINNED, AND THE ATTEMPT TO PIN IT IS
+ * RECORDED HERE": pinning was built and reverted in one item because
+ * `RoundsChatDrawer` rendered INSIDE the rail and its scrim is
+ * `position: fixed; inset: 0`. Any positioned rail became an ancestor of both —
+ * with `z-index` a stacking context that trapped them, and with
+ * `backdrop-filter` a containing block for `position: fixed` descendants. Three
+ * packs failed naming `rounds-chat-close` and `rounds-gate-back`, never the
+ * rail.
+ *
+ * That note ended: "PINNING THIS RAIL IS A REAL TASK, NOT A DECLARATION: it
+ * needs the drawer lifted out of the rail first." R3.3 did the lift — the
+ * drawer's scrim and panel are `createPortal`'d to `<body>` — so the rail has
+ * no `position: fixed` descendants left to trap, and this is the task rather
+ * than the declaration.
+ *
+ * ⚠️ NO `backdrop-filter` AND NO `z-index` ABOVE THE OVERLAYS. Both are what
+ * made the old attempt fail, and neither is needed: an opaque stage-surface
+ * background reads correctly over the paper, and the portalled drawer and the
+ * gate flow now sit on `<body>` where the rail cannot reach them. Adding either
+ * back is how this regresses. */
 [data-skin='rounds'] .qm-rounds-rail {
+  position: sticky;
+  bottom: 0;
   display: flex;
   align-items: center;
   gap: 12px;
   margin-top: 24px;
+  padding: 12px 0 max(12px, env(safe-area-inset-bottom, 0px));
+  background: var(--rounds-stage-bg-3);
+  border-top: 1px solid var(--rounds-line-1);
+  /* The paper scrolls UNDER it, so the rail needs to sit above the sheet — but
+   * only just. The drawer and gate flow are portalled to body and are not in
+   * this stacking context at all. */
+  z-index: 2;
+}
+
+/* ⚠️ THE STICKY RESOLVES AGAINST `AppFrame`'s `<main>`, which `stage.tsx`
+ * documents as the deliberate overflow parent — that comment is why the sheet
+ * wrapper is a DIV and not a second `<main>`. A nearer landmark ancestor is how
+ * a sticky control silently stops sticking. */
+
+@media (prefers-reduced-motion: reduce) {
+  /* Nothing animates here; the rule exists so a future transition on the rail
+   * inherits the still state rather than being added without one. */
+  [data-skin='rounds'] .qm-rounds-rail {
+    transition: none;
+  }
 }
 
 [data-skin='rounds'] .qm-rounds-rail-primary {
@@ -2340,6 +2462,57 @@ body[data-skin='rounds'] {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 10px;
+}
+
+/* ── R3.4 — THE PRESCRIPTION-SAFETY SURFACE ──────────────────────────────────
+ * `.qm-rounds-host` on the wrapper retints all ~79 `qm-lin-rx-*` rules at once,
+ * because every one of them paints from `--color-linear-*`. What the bridge
+ * CANNOT do is change type or express advisory level on the status palette —
+ * those are the two things this block adds, and nothing here touches a
+ * conditional, a handler or a class the gate keys on.
+ *
+ * ⚠️ SEMANTICS ARE BYTE-IDENTICAL BY CONSTRUCTION, not by inspection. The brief
+ * requires the advisory/ack/gate behaviour untouched and the sign-block E2Es
+ * unchanged in meaning; a stylesheet cannot move a gate, and the wrapper adds
+ * one div. `rxBlocking` still decides. */
+
+/* Kickers are LOOKED UP, not read — the rail's title, the pane heads, the
+ * severity group labels and the drug tags all become mono per the type rule. */
+[data-skin='rounds'] .qm-rounds-rx .qm-lin-rx-rail-title,
+[data-skin='rounds'] .qm-rounds-rx .qm-lin-rx-pane-title,
+[data-skin='rounds'] .qm-rounds-rx .qm-lin-rx-rail-group-l,
+[data-skin='rounds'] .qm-rounds-rx .qm-lin-rx-tag,
+[data-skin='rounds'] .qm-rounds-rx .qm-lin-rx-id {
+  font-family: var(--rounds-font-mono);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* ── ADVISORY LEVELS ON THE STATUS PALETTE ───────────────────────────────────
+ * CRITICAL takes the on-dark red; the panel ground is a stage surface, and this
+ * file records that `--rounds-critical` as small text on surface-2 is 2.72:1.
+ * The fill keeps the true red for borders and dots, exactly as the board does. */
+[data-skin='rounds'] .qm-rounds-rx .qm-lin-rx-rail-group-l-critical {
+  color: var(--rounds-critical-on-dark);
+}
+
+[data-skin='rounds'] .qm-rounds-rx .qm-lin-rx-warn-tally {
+  font-family: var(--rounds-font-mono);
+  color: var(--rounds-em-text);
+}
+
+/* ⚠️ THE TWO CONTROLS THE CENSUS'S COMPOSITE ARM CAUGHT. `-ghost-sm` ("+ Add
+ * Rx") and `-tag` ("Continue") carried legacy SAGE, and only as a composite
+ * value — a box-shadow/border blend the exact-match arm could not see. The
+ * bridge retints their `--color-linear-*` reads; these two lines take the
+ * remaining hard-coded accent onto the Rounds one. */
+[data-skin='rounds'] .qm-rounds-rx .qm-lin-rx-ghost-sm-sage {
+  color: var(--rounds-accent-text);
+  border-color: var(--rounds-line-2);
+}
+
+[data-skin='rounds'] .qm-rounds-rx .qm-lin-rx-tag-active {
+  color: var(--rounds-accent-text);
 }
 
 /* ── R3.2 — VISIT-ROW STATUS AS A TREATMENT ──────────────────────────────────
