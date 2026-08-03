@@ -297,8 +297,31 @@ class must have a rule, and every rule must have a caller.
 | `.qm-rounds-setpanel` | the settings panel — heading + subtitle | C2. **Ownership anchor.** The markup is C3's; under this skin the colours are ours, so a contrast failure inside it must BLOCK rather than file as inherited |
 | `.qm-rounds-setbody` | the settings panel's content column | C2. The second shield — `.qm-c3-set-content` owns everything a panel renders inside it, so the panel anchor alone does not reach it |
 | `.qm-rounds-tmpl-*` | the templates surfaces — `-row`, `-card`, `-alert`, `-editor`, `-actionbar`, `-proc`, `-confirm` | C1-f. **Ownership anchors first, styling second.** Two of them (`-actionbar`, `-proc`) set no colour at all: a non-Rounds class at that node shields its whole subtree from the axe gate, and what `-actionbar` shielded was the primary CTA. The three that repaint their ground to surface-2 also re-bridge the faintest text tiers upward for their own subtree — `--rounds-text-3` is 4.68:1 on surface-1 and 4.18:1 one step lighter |
-| `.qm-rounds-overflow` | the visit's **quiet overflow** — a native `<details>` holding the destructive lifecycle actions | R1. `Delete` used to sit in a right-aligned row directly above the note, level with the patient's name; destroying a visit is not a peer of "read this carefully". Native `<details>` on purpose: keyboard-operable and screen-reader-announced with no JavaScript, and it starts closed |
-| `.qm-rounds-overflow-*` | its parts — `-summary` (the `⋯ Visit actions` trigger), `-body` (the disclosed content) | R1. The summary hides the native marker and draws its own `⋯`, so the affordance reads as an overflow rather than a heading |
+| `.qm-rounds-gate-signbar` | the **re-homed signature**, inside Gate 3 | R2. A control primitive because it is applied on a SHARED surface (`review-sign-bar.tsx`), not a Rounds-native directory — the same file renders the legacy `.qm-c3-rev2-signbar` footer with the flag off. It sets no colour: the sign trigger inside it is `SignAndSendModal`'s own button, and repainting it here would fork a control two other surfaces share. Deliberately **not** `position: sticky` — the legacy bar was, and being pinned to the viewport is what made it a permanent second sign control on the stage |
+
+**⚠️ R2 — `.qm-rounds-overflow*` LEFT THIS TABLE, AND THE MOVE IS THE REASON.**
+R1 documented it here correctly: it was applied in `visits/[id]/page.tsx`, a
+shared surface, which made it a control primitive by this section's own
+boundary. R2 moved the `<details>` into `RoundsStage` — so it is now applied
+only under `src/components/rounds/`, which makes it **Rounds-native anatomy**,
+and `gate-controls-contract`'s first direction reds on a documented class that
+files as native. Both directions of that guard are load-bearing and neither was
+weakened to accommodate this; the row moved because the code did.
+
+The decision it recorded is still the decision, so it is kept here rather than
+deleted: `Delete` used to sit in a right-aligned row directly above the note,
+level with the patient's name, and destroying a visit is not a peer of "read
+this carefully". A native `<details>` is keyboard-operable and
+screen-reader-announced with no JavaScript, and it starts closed. R2 moved it
+again for the same class of reason — it had been rendering *after the entire
+visit body*, below the action rail and past the end of the note.
+
+The same applies to R2's other new classes — `.qm-rounds-newvisit*`,
+`.qm-rounds-lane-card`, `.qm-rounds-stage-head`, `.qm-rounds-gateflow-sign`.
+All are applied only in `components/rounds/`, so all are native anatomy and
+none belongs in this table. They are documented at their rules in
+`rounds-tokens.css`. **This paragraph exists because adding them here was the
+first thing tried, and the guard refused it** — which is the contract working.
 
 **A class that was declared and then removed, in the change that declared it.**
 `.qm-rounds-btn-danger` is not in this table because it does not exist. C1-e

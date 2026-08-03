@@ -523,15 +523,22 @@ export default async function VisitPage({
           // the flag-off path.
           chiefComplaint={visit.chiefComplaint}
           rxOverrides={rxOverrides}
+          /* R2 — into the STAGE HEADER, not the page foot. See below. */
+          visitActions={roundsChrome ? lifecycleActions : undefined}
         />
       </div>
 
-      {roundsChrome && (
-        <details className="qm-rounds-overflow" data-testid="rounds-visit-overflow">
-          <summary className="qm-rounds-overflow-summary">Visit actions</summary>
-          <div className="qm-rounds-overflow-body">{lifecycleActions}</div>
-        </details>
-      )}
+      {/* ⚠️ R2 REMOVED THE PAGE-FOOT OVERFLOW. It rendered here, after the whole
+          visit body, so "Visit actions" floated at the very bottom of the
+          stage — below the action rail, below the peeks, past the end of the
+          note. A destructive control (archive, delete) in the last place a
+          doctor looks is both hard to find and easy to hit while scrolling to
+          the end of a long note.
+          It is now a quiet `<details>` in the stage header, beside the identity
+          block, rendered by `RoundsStage`. Same node, same actions, same
+          `data-testid` — only the position moved. The flag-OFF path is
+          untouched: it still renders its own row near the top of the page in
+          the `!roundsChrome` branch above. */}
     </AppFrame>
   );
 }
@@ -617,6 +624,21 @@ interface VisitBodyProps {
    *  filtered by the READER, never by the query — the same rows are the sign
    *  gate's coverage input. */
   rxOverrides: { warningId: string; severity: string; overriddenAt: Date }[];
+  /**
+   * R2 — the lifecycle actions (archive / delete / edit draft), for the STAGE
+   * HEADER's quiet overflow.
+   *
+   * ⚠️ A SERVER-RENDERED NODE PASSED THROUGH A CLIENT BOUNDARY, deliberately.
+   * `VisitLifecycleActions` composes server-only pieces (`EditDraftDialog` is
+   * built from the visit's Prisma row), so it is COMPOSED here and travels as
+   * an already-rendered node. Rebuilding it inside the client stage would mean
+   * threading the patient record down as props — more surface, and a second
+   * place for it to drift from the one `page.tsx` renders on the flag-OFF path.
+   *
+   * Optional: absent off Rounds, where the actions render in their own row near
+   * the top of the page (the `!roundsChrome` branch above) exactly as before.
+   */
+  visitActions?: React.ReactNode;
 }
 
 async function VisitBody(props: VisitBodyProps) {
@@ -907,6 +929,7 @@ async function VisitBody(props: VisitBodyProps) {
   return (
     <VisitReadyView
       rounds={rounds}
+      visitActions={props.visitActions}
       visitId={props.visitId}
       // 2026-06-11 L6-gate smoke finding: the review reason was DB-only —
       // the READY view never received it, so the doctor saw a bare

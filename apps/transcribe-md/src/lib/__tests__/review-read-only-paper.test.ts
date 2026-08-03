@@ -106,6 +106,9 @@ const stripComments = (src: string) =>
   src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, ' ');
 
 const REVIEW_DOC = 'src/app/visits/[id]/review-document-view.tsx';
+/** R2 — the sign bar left `review-document-view.tsx` so it could be re-homed
+ *  into Rounds Gate 3. One renderer, two mutually exclusive homes. */
+const SIGN_BAR = 'src/app/visits/[id]/review-sign-bar.tsx';
 const READY_VIEW = 'src/app/visits/[id]/visit-ready-view.tsx';
 const SOAP_EDITOR = 'src/app/visits/[id]/soap-editor.tsx';
 const VISIT_PAGE = 'src/app/visits/[id]/page.tsx';
@@ -225,7 +228,62 @@ describe('the inline panels are gone from the review page', () => {
     expect(src).toContain('review-doc-em-stale-gate');
     expect(src).toContain('review-doc-em-gate');
     expect(src).toContain('review-doc-em-rescore');
-    expect(src).toContain('<SignAndSendModal');
+
+    // ⚠️ R2 MOVED THE SIGN CONTROL OUT OF THIS FILE, and the assertion follows
+    // it rather than being deleted. `<SignAndSendModal` used to appear in
+    // `review-document-view.tsx`; the bar is now `review-sign-bar.tsx`, used by
+    // this surface as the legacy footer AND by Rounds Gate 3 — one renderer,
+    // two mutually exclusive homes.
+    //
+    // What this test is actually for is unchanged: the signature must not have
+    // been lost in a refactor of the paper. So it asserts BOTH halves — the bar
+    // still contains the modal, and this surface still mounts the bar. Checking
+    // only the first would pass on a paper that renders no signature at all.
+    expect(read(SIGN_BAR), 'the sign bar no longer contains the sign modal').toContain(
+      '<SignAndSendModal',
+    );
+    expect(src, 'the review surface stopped mounting the sign bar').toContain(
+      '<ReviewSignBar',
+    );
+  });
+
+  it('⚠️ R2 — the sign bar is mounted CONDITIONALLY, and Rounds is what turns it off', () => {
+    // The bug this pins: for the whole of R1 this file rendered the footer
+    // unconditionally while its own comment claimed it "EXISTS only while the
+    // gate flow is hosting it (see `renderSignbar`)". There was no
+    // `renderSignbar` anywhere in the tree. A comment is not a mechanism, so
+    // the mechanism gets a test.
+    //
+    // ⚠️ THE OBVIOUS FORM OF THIS ASSERTION IS VACUOUS, AND IT WAS CAUGHT BY
+    // MUTATION RATHER THAN BY READING. `expect(src).toContain('hostSignbar')`
+    // passes on a file that renders the bar unconditionally, because the word
+    // also appears in the PROP DECLARATION a few hundred lines above.
+    // Replacing the condition with `{false ? null : slot(...)}` — the R1 defect
+    // exactly — left the interface intact and the test green.
+    //
+    // So the assertion is on the render EXPRESSION, with comments stripped so a
+    // sentence about `hostSignbar` cannot satisfy a check about code. This
+    // project has already shipped a source-grep guard that tripped on its own
+    // explanatory comment; this is the same hazard from the other side.
+    const code = stripComments(src);
+    expect(
+      code,
+      'the sign bar render is unconditional again — a second sign control is ' +
+        'back on the Rounds stage',
+    ).toContain('props.hostSignbar === false');
+
+    // And the caller must actually pass it, or the default (true) silently
+    // restores that second control.
+    const jsx = jsxElement(read(READY_VIEW), 'ReviewDocumentView');
+    expect(jsx, 'ReviewDocumentView is never passed hostSignbar={').toContain(
+      'hostSignbar={',
+    );
+    // Passed AND driven by the flag. `hostSignbar={true}` would satisfy the
+    // line above while putting the footer straight back.
+    expect(
+      stripComments(jsx),
+      'hostSignbar is passed but not derived from roundsActive',
+    ).toMatch(/hostSignbar=\{!roundsActive\}/);
   });
 
   it('the SIGNED view is untouched — it keeps its own transcript disclosure', () => {

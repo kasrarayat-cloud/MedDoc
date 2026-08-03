@@ -50,6 +50,7 @@ import {
 } from '@/lib/rounds/stage-view-model';
 import { createDeferredScroll } from '@/lib/rounds/deferred-scroll';
 import { ReviewDocumentView } from './review-document-view';
+import { ReviewSignBar } from './review-sign-bar';
 import { SignedDocumentView } from './signed-document-view';
 import { extractIcdRows } from '@/lib/em-coding/icd-rows';
 import { BillingCardC3 } from './billing-card-c3';
@@ -146,6 +147,9 @@ export interface VisitReadyViewProps {
    * only correct on the server — see the block there.
    */
   rounds?: RoundsStageData | null;
+  /** R2 — server-composed lifecycle actions for the stage header's overflow.
+   *  Undefined off Rounds, where `page.tsx` renders them in its own row. */
+  visitActions?: React.ReactNode;
   /** 2026-06-11 (L6-gate prod smoke finding): READY visits can carry a
    *  pipeline review flag (fabrication-gate rejection, unfixable critique
    *  criticals, allergy-conflict) — previously written to the DB but never
@@ -1050,23 +1054,25 @@ export function VisitReadyView(props: VisitReadyViewProps) {
              `emArtifact` is excluded deliberately: the flow declines to host a
              gate there and the server refuses the signature, so an enabled
              button would be a promise the server breaks. */
-          /* ⚠️ THE BYPASS IS CLOSED BY TYING THE TWO CONTROLS TOGETHER, NOT
-             BY REMOVING ONE — and the removal was tried first, four times.
-             `gate-flow.tsx` ADOPTS this bar by `appendChild`. Making React
-             conditionally unmount a node another component physically
-             relocates puts React's tree and the real DOM in disagreement: when
-             the flow closed, React removed a node that was no longer where it
-             thought, and the whole paper subtree went with it
-             (`review-document-view` → 0). That is a real architectural
-             conflict, not a tuning problem, and re-homing the bar into the flow
-             is its own piece of work.
-             So the bar stays mounted and React keeps owning it. What changes is
-             that it can no longer DISAGREE: `signGateBlockers` is the rail's
-             own number, so the footer is disabled for exactly the gates the rail
-             is counting — including `attestation`, the one that was skippable.
-             The duplication is now cosmetic; the contradiction and the bypass
-             are gone. */
+          /* ⚠️ R2 DID THE RE-HOME R1 DEFERRED. The note that stood here said:
+             "re-homing the bar into the flow is its own piece of work", and
+             kept the bar mounted on the stage with `signGateBlockers` tying it
+             to the rail's count so the two could not disagree. That closed the
+             BYPASS and left the DUPLICATION — a second sign control on the
+             stage, which R1 called cosmetic and the owner's walkthrough called
+             a defect.
+             It is gone now: `hostSignbar={false}` under Rounds, and the bar is
+             rendered inside Gate 3 instead (see `signbarNode` below). The four
+             failed removals all tried to conditionally unmount a node that
+             `gate-flow` was physically relocating with `appendChild`; the cure
+             was to stop relocating it, which was available because — unlike the
+             Rx and E/M slots — this bar holds no local state.
+             `signGateBlockers` STAYS. It is now the single source of `blocked`
+             for the re-homed bar rather than a reconciliation between two
+             controls, so a gate added to `sign-gates.ts` still lands in the
+             rail and the signature together, with no second place to remember. */
           signGateBlockers={roundsActive ? (roundsView?.n ?? 0) : 0}
+          hostSignbar={!roundsActive}
           /* Gate 3 already collects this; forwarding it means the doctor
              attests once. Off Rounds it is undefined and the modal collects
              its own — the route requires it either way. */
@@ -1094,6 +1100,9 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               emArtifact={roundsView.emArtifact}
               criticalUnresolved={roundsView.criticalUnresolved}
               chat={chatPanel}
+              /* R2 — the lifecycle overflow, into the stage header. Composed
+                 server-side in `page.tsx` and passed straight through. */
+              visitActions={props.visitActions}
               onReviewAndSign={handleReviewAndSign}
               // Given ONLY when there is somewhere to go. The button renders
               // only when the prop is present, so "no next patient" is an
@@ -1121,6 +1130,39 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               onAttestedChange={setAttested}
               patientLabel={roundsView.identity.patientLabel}
               visitDateLabel={roundsView.identity.recordedAtIso.slice(0, 10)}
+              /* ── R2 — THE SIGNATURE, RE-HOMED ──────────────────────────────
+                 The stage's paper renders no sign bar under Rounds
+                 (`hostSignbar={false}` above); this is the only one, and it
+                 exists only while Gate 3 is showing.
+
+                 `blocked` is `roundsView.n > 0` — the SAME number the action
+                 rail's label and the pipeline strip's padlock carry. One number
+                 for one question, which is what R1 established when the two
+                 controls were found disagreeing on a live visit.
+
+                 ⚠️ NOT RENDERED ON AN `emArtifact` VISIT. An imaging report
+                 holding an office E/M level has no gate that can clear it and
+                 the sign route WILL refuse, so the flow shows the anomaly
+                 notice instead. An enabled signature there would be a promise
+                 the server breaks; a disabled one would invite the doctor to
+                 hunt for the blocker that would enable it. Absent is the honest
+                 third answer — the same reasoning `gate-flow` already applies
+                 to the gate host itself. */
+              signbar={
+                roundsView.emArtifact ? null : (
+                  <ReviewSignBar
+                    variant="gate"
+                    visitId={props.visitId}
+                    doctorEmail={props.doctorEmail}
+                    emailEnabled={props.emailEnabled}
+                    emPendingChange={pendingEmChange}
+                    attested={attested}
+                    blocked={roundsView.n > 0}
+                    emStale={props.emNotApplicable ? false : emStale}
+                    onRescoreEm={rescoreEm}
+                  />
+                )
+              }
             />
           </div>
         );

@@ -55,6 +55,21 @@ export interface RoundsGateFlowProps {
   patientLabel: string;
   /** The encounter date, already formatted by the caller. */
   visitDateLabel: string;
+  /**
+   * The sign bar, rendered at the attestation step.
+   *
+   * ⚠️ R2. A SLOT, not a control this component builds — the file's standing
+   * rule is that it renders nothing clinical, and that still holds: the node is
+   * `<ReviewSignBar variant="gate">`, composed by the route wiring which owns
+   * the visit's props. What changed is the delivery mechanism, from a DOM
+   * `appendChild` adoption to an ordinary React child. The bar carries no local
+   * state, so nothing is lost by mounting it here and unmounting it on close —
+   * which is precisely why it, alone of the three slots, could be re-homed.
+   *
+   * Optional so the component still renders on a surface that has no signature
+   * to offer; absent means the step shows the attestation and summary only.
+   */
+  signbar?: React.ReactNode;
 }
 
 export function RoundsGateFlow({
@@ -69,6 +84,7 @@ export function RoundsGateFlow({
   onAttestedChange,
   patientLabel,
   visitDateLabel,
+  signbar,
 }: RoundsGateFlowProps) {
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -130,12 +146,27 @@ export function RoundsGateFlow({
   // ORIGINAL parent when the paper unmounts, and a node adopted elsewhere at
   // that moment throws. Effect cleanup runs before unmount, so putting it back
   // here is what keeps that safe.
+  //
+  // ⚠️ R2 — `attestation` NO LONGER ADOPTS ANYTHING, and the narrowing is the
+  // point rather than a tidy-up. This used to map `attestation` → the paper's
+  // `signbar` slot, which is what kept a permanent second sign control mounted
+  // on the stage: the bar had to exist down there for this effect to come and
+  // fetch it. It now arrives as `signbar`, an ordinary React node rendered
+  // below, and the paper does not render one at all.
+  //
+  // Adoption survives for `rx` and `em` because those two genuinely need it —
+  // both hold lazily-seeded local state (`RxTab.overriddenIds`,
+  // `ReviewDocumentView.emConfirmed`) that a remount would silently un-clear.
+  // The sign bar held no state, so it never needed moving; it only needed a
+  // home. See `review-sign-bar.tsx`.
   useEffect(() => {
     if (!open || !active || emArtifact) return;
+    // Only the two stateful gates are relocated. An `attestation` step has no
+    // `[data-gate-slot]` to find, and asking for one would silently match
+    // nothing — so it is excluded by name rather than by a failed lookup.
+    if (active.id !== 'rx' && active.id !== 'em') return;
     const host = hostElRef.current;
-    const slot = document.querySelector<HTMLElement>(
-      `[data-gate-slot="${active.id === 'attestation' ? 'signbar' : active.id}"]`
-    );
+    const slot = document.querySelector<HTMLElement>(`[data-gate-slot="${active.id}"]`);
     if (!host || !slot) return;
 
     const home = slot.parentElement;
@@ -261,18 +292,43 @@ export function RoundsGateFlow({
               </span>
             </label>
 
-            {/* NAMED AS WHAT IT IS. `signGates` marks attestation
-                `serverEnforced: false` — the route has no such field and B2
-                does not add one. Implying the server checked it would be a
-                promise nobody keeps. */}
+            {/* ⚠️ THIS SENTENCE WAS FALSE AND A TEST WAS HOLDING IT TRUE.
+                It read: "This attestation is recorded on this screen. The
+                server does not check it." That was accurate when B2 wrote it —
+                `signGates` marked the gate `serverEnforced: false`.
+
+                It stopped being accurate on 2026-08-02, when the attestation
+                became server-enforced: `sign-gates.ts:247` is now
+                `serverEnforced: true`, `POST /sign` refuses without
+                `attestation: { acknowledged: true }`, and the refusal writes a
+                `SIGN_BLOCKED_NO_ATTESTATION` audit row. The strengthening
+                landed; this copy did not move with it, and
+                `rounds-gates.spec.ts` asserted `/server does not check/i`, so
+                the stale claim had a green check standing behind it.
+
+                A UI that tells a doctor a clinical gate is unenforced, when it
+                is enforced, is worse than saying nothing: it invites them to
+                treat the tick as paperwork. Corrected in R2 because R2 is
+                already rebuilding this step, and leaving a knowingly false
+                safety statement in a file being edited is not an option. */}
             <p className="qm-rounds-gateflow-note" data-testid="rounds-gate-attest-note">
-              This attestation is recorded on this screen. The server does not
-              check it.
+              Signing without this attestation is refused by the server, and the
+              refusal is recorded.
             </p>
 
             <p className="qm-rounds-gateflow-foot">
               Signing locks the note. Later changes require a dated addendum.
             </p>
+
+            {/* ── THE SIGNATURE ──────────────────────────────────────────────
+                R2: an ordinary React child, not an adopted DOM node. Last on
+                the step, after the summary, the attestation and the warning —
+                the order in which a doctor should meet them. */}
+            {signbar ? (
+              <div className="qm-rounds-gateflow-sign" data-testid="rounds-gate-signbar-host">
+                {signbar}
+              </div>
+            ) : null}
           </div>
         ) : null}
 

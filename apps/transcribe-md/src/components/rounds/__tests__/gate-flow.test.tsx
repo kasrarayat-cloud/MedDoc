@@ -192,13 +192,52 @@ describe('the attestation step', () => {
     expect(label?.textContent).toContain('2026-07-30');
   });
 
-  it('SAYS the server does not check it — because signGates says so', () => {
-    // attestation is serverEnforced: false and the sign route has no such
-    // field. A UI that implied otherwise would be making a promise nobody
-    // keeps, on the screen whose job is to be believed.
+  it('⚠️ SAYS THE SERVER REFUSES WITHOUT IT — because since 2026-08-02 it does', () => {
+    // ⚠️ THIS ASSERTION WAS INVERTED, AND IT HELD A FALSE STATEMENT IN PLACE.
+    //
+    // It used to require `/server does not check/i`, which was correct when B2
+    // wrote it: `signGates` marked the attestation `serverEnforced: false` and
+    // the sign route had no such field. The UI said so out loud, deliberately,
+    // so that anyone reconciling the strip's N against a 4xx knew which term
+    // the route could not see. That honesty was right.
+    //
+    // On 2026-08-02 the gate became SERVER-ENFORCED — `sign-gates.ts` is now
+    // `serverEnforced: true`, `POST /sign` answers 400 ATTESTATION_REQUIRED
+    // without `attestation: { acknowledged: true }`, and the refusal writes a
+    // `SIGN_BLOCKED_NO_ATTESTATION` audit row. The copy did not move with it,
+    // and THIS TEST is why it could not: the stale sentence had a green check
+    // standing behind it, so every run confirmed the claim was still there
+    // rather than still true.
+    //
+    // A gate's UI text is part of the gate. Telling a doctor a clinical
+    // safeguard is unenforced when it is enforced invites them to treat the
+    // tick as paperwork — the precise failure the strengthening exists to stop.
+    renderFlow({ gates: [ATTEST()], step: 'attestation' });
+    const note = screen.getByTestId('rounds-gate-attest-note').textContent ?? '';
+    expect(note).toMatch(/refused by the server/i);
+    // AND the old claim is gone, not merely joined by the new one.
+    expect(note).not.toMatch(/server does not check/i);
+  });
+
+  it('⚠️ the note cannot drift from `sign-gates.ts` again', () => {
+    // The failure above was a UI sentence and a server fact disagreeing with
+    // nothing watching the pair. This reads BOTH and refuses to let the copy
+    // claim less than the route enforces. If a future change makes the
+    // attestation advisory again, this reddens and the sentence gets rewritten
+    // in the same commit — which is the only way the two stay honest.
+    const gates = readFileSync('src/lib/sign-gates.ts', 'utf8');
+    const attestBlock = gates.slice(gates.indexOf("id: 'attestation'"));
+    const serverEnforced = /serverEnforced:\s*true/.test(
+      attestBlock.slice(0, attestBlock.indexOf('}')),
+    );
+    expect(
+      serverEnforced,
+      'attestation is no longer serverEnforced — the Gate 3 note now overclaims',
+    ).toBe(true);
+
     renderFlow({ gates: [ATTEST()], step: 'attestation' });
     expect(screen.getByTestId('rounds-gate-attest-note').textContent).toMatch(
-      /server does not check/i
+      /refused by the server/i,
     );
   });
 
