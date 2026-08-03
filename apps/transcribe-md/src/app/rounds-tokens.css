@@ -837,7 +837,20 @@ body[data-skin='rounds'] {
 }
 
 [data-skin='rounds'] .qm-rounds-gateflow-summary li[data-cleared='true'] {
-  color: var(--rounds-signed);
+  /* ⚠️ THE LABEL SIBLING, NOT THE STATUS COLOUR — MEASURED, NOT ADJUSTED BY EYE.
+     `--rounds-signed` (#6b7480) is the FILL colour: it is what a signed dot or
+     a signed lane bar is painted with, on grounds where a solid block of it
+     reads correctly. As TEXT on the gate panel (`--rounds-surface-1`, #161b24)
+     it is 3.65:1 — under AA's 4.5, and axe called it serious on
+     `rounds-gate-summary-rx` and `-em` at both 1440 and 390.
+     `--rounds-signed-text` (#9aa4b2) is the on-dark sibling that exists for
+     exactly this role: 6.85:1 on the same ground. Same pair, same reasoning as
+     `--rounds-critical` / `--rounds-critical-on-dark` on the board's critical
+     tally, where the label takes the on-dark variant and the border keeps the
+     true colour.
+     This is the row that tells a doctor a safety gate is CLEARED. It is the
+     last text worth rendering in a shade that has to be hunted for. */
+  color: var(--rounds-signed-text);
 }
 
 [data-skin='rounds'] .qm-rounds-gateflow-checkbox {
