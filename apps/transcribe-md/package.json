@@ -80,7 +80,7 @@
     "jsdom": "^29.0.2",
     "tailwindcss": "^4",
     "tailwindcss-animate": "^1.0.7",
-    "typescript": "^5",
+    "typescript": "^7",
     "vitest": "^4.1.4"
   }
 }
