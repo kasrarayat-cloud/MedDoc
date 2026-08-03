@@ -153,6 +153,25 @@ test.describe('Rounds — axe across every surface, flag-ON', () => {
       await expect(page.getByTestId('rounds-board')).toBeVisible();
       await sampleAcrossAnimation(page, 'board', width);
 
+      // ── R3.1 / R3.2 — THE PATIENTS SURFACES ──────────────────────────────
+      // ⚠️ ADDED BECAUSE THE GATE WAS GREEN ABOUT SURFACES IT NEVER WALKED.
+      // This sweep covered board · stage · signed (and rounds-c1 covers auth,
+      // settings and templates). `/patients` and `/patients/[id]` were swept by
+      // NOTHING — so R3 could rebuild both and still report "axe zero
+      // serious/critical", which would have been an answer about a set that
+      // excluded the very screens the round changed.
+      //
+      // The roster's marker cards paint their own ground and their status lines
+      // take `-text` status tokens, so they are exactly the pairing this file
+      // records nine previous contrast failures for. They get measured now.
+      await page.goto('/patients');
+      await expect(page.getByTestId('rounds-patients')).toBeVisible();
+      await sampleAcrossAnimation(page, 'patients', width);
+
+      await page.goto(`/patients/${primary!.patientId}`);
+      await expect(page.locator('body')).toBeVisible();
+      await sampleAcrossAnimation(page, 'patient:detail', width);
+
       // ── The stage, primary-care ──────────────────────────────────────────
       await page.goto(`/visits/${primary!.visitId}`);
       await expect(page.getByTestId('rounds-stage')).toBeVisible();
