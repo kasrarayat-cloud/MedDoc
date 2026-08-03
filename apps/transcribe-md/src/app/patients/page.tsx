@@ -21,6 +21,7 @@ import prisma from '@meddoc/db';
 import { auth } from '@/lib/nextauth';
 import { logAudit } from '@/lib/audit';
 import { isSkinBeta } from '@/config/skin-beta';
+import { isSkinRounds } from '@/config/skin-rounds';
 import { AppFrame } from '@/components/ui/app-frame';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Ic } from '@/components/ui/icon';
@@ -28,6 +29,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { type DashboardPatient } from '@/components/dashboard/patient-card';
 import { PatientsListClient } from './patients-list-client';
 import { PatientsListC3 } from './patients-list-c3';
+import { RoundsPatientsRoster } from '@/components/rounds/patients-roster';
 import {
   C3_PATIENTS_PAGE_SIZE,
   type C3PatientsCursor,
@@ -53,7 +55,12 @@ export default async function PatientsPage() {
   // audit, re-laid-out as the calm row list with READ-ONLY server search +
   // cursor pagination (searchPatientsAction) so it scales past the old 100-row
   // client cap. Flag OFF → the existing card grid below runs verbatim.
-  if (isSkinBeta()) {
+  // ── The scaling roster (Rounds and C3 share it) ───────────────────────────
+  // R1 folds Rounds in HERE rather than adding a third query. The read, the
+  // audit row and the cursor are identical; only the component differs. The
+  // legacy 100-row card grid below is what neither of them uses.
+  const rounds = isSkinRounds();
+  if (rounds || isSkinBeta()) {
     type C3PatientRaw = {
       id: string;
       name: string;
@@ -99,7 +106,10 @@ export default async function PatientsPage() {
     void logAudit({
       action: 'VIEWED_PATIENT_LIST',
       targetType: 'TranscribeMdPatient',
-      metadata: { source: 'rsc:/patients:c3', count: Math.min(firstRaw.length, C3_PATIENTS_PAGE_SIZE) },
+      metadata: {
+        source: rounds ? 'rsc:/patients:rounds' : 'rsc:/patients:c3',
+        count: Math.min(firstRaw.length, C3_PATIENTS_PAGE_SIZE),
+      },
     });
 
     const hasMore = firstRaw.length > C3_PATIENTS_PAGE_SIZE;
@@ -135,6 +145,23 @@ export default async function PatientsPage() {
     const last = firstPage[firstPage.length - 1];
     const firstCursor: C3PatientsCursor | null =
       hasMore && last ? { updatedAt: last.updatedAt.toISOString(), id: last.id } : null;
+
+    // Rounds draws its own header inside the roster (title, count, New visit),
+    // because `PageHeader` is C3 chrome and rendering it here would put a
+    // second, differently-styled heading above every list. The empty state is
+    // the roster's too — a shared <EmptyState> would have been the third
+    // skin on the page.
+    if (rounds) {
+      return (
+        <AppFrame>
+          <RoundsPatientsRoster
+            initialRows={firstRows}
+            initialCursor={firstCursor}
+            total={total}
+          />
+        </AppFrame>
+      );
+    }
 
     return (
       <AppFrame>

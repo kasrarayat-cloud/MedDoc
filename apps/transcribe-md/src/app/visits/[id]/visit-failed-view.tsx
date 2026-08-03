@@ -20,6 +20,7 @@ import { Loader2, RefreshCw, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { failureCopyFor } from './visit-failed-copy';
+import { recoveryHref, recoveryLabel } from '@/lib/recovery-href';
 
 type VisitFailedViewTheme = 'legacy' | 'clinician';
 
@@ -168,12 +169,15 @@ export function VisitFailedView({
             )}
           </button>
         )}
+        {/* R1: href AND label from the same call. "Back to dashboard"
+            pointing at /board is the small lie `recoveryLabel` exists to
+            prevent — each half looks right on its own. */}
         <Link
-          href="/dashboard"
+          href={recoveryHref()}
           className="qm-lin-btn"
           style={{ textDecoration: 'none' }}
         >
-          Back to dashboard
+          {recoveryLabel()}
         </Link>
       </div>
     </div>

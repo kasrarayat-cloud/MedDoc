@@ -90,6 +90,7 @@ import {
 } from '../helpers/rounds-axe';
 import { signupFreshUser } from '../helpers/signup';
 import { TEST_EMAIL_PREFIX, TEST_PASSWORD } from '../helpers/test-utils';
+import { expectAtHome } from '../helpers/home';
 
 /** Widths the spec's screenshot clause names. */
 const WIDE = 1440;
@@ -370,7 +371,13 @@ test.describe('Rounds C1 — auth to tokens, flag-ON', () => {
     await page.getByLabel('Email').fill(unverified.email);
     await page.getByLabel('Password', { exact: true }).fill(TEST_PASSWORD);
     await page.getByRole('button', { name: /^sign in$/i }).click();
-    await expect(page).toHaveURL(/\/dashboard$/, { timeout: 15_000 });
+    // R1: the app's home is a build-time fork (/board under Rounds), so this
+    // asserts "authenticated and home" rather than naming one. It was an inline
+    // copy of what `helpers/auth.ts` does — which is why fixing the two shared
+    // helpers did not fix this, and only running the pack found it. A traversal
+    // that enumerates helpers misses every caller that hand-rolled the same
+    // assertion beside them.
+    await expectAtHome(page);
     console.log(
       '\n[rounds-c1] NOT PHOTOGRAPHED: login needs-verification ' +
         '(login-form.tsx:260-303). Unreachable while the QA stack is severed ' +

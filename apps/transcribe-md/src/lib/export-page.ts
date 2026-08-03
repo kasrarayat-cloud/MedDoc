@@ -77,3 +77,98 @@ export const toHalfPt = (pt: number): number => Math.round(pt * 2);
  *  11906 x 16838, which is A4. The two are close enough to look like a rounding
  *  difference in a diff and are a different sheet of paper in a printer. */
 export const toTwip = (pt: number): number => Math.round(pt * 20);
+
+// ── R1.4 — the shared paper structure ───────────────────────────────────────
+// Everything below was a LITERAL on each side, typed twice, and the two sides
+// had drifted. The measured divergences this closes:
+//
+//   role                 PDF (pdfkit)          DOCX (docx lib)     now
+//   ------------------   -------------------   -----------------   ----------
+//   section head size    12pt (TYPE_PT)        `size: 22` = 11pt   12pt, both
+//   section head rule    200pt hairline        none at all         full width
+//   section tracking     1.2pt                 `20` = 1.0pt        1.2pt, both
+//   accent               COLORS.accent         '7C3AED' literal    one token
+//   metadata label       `LABEL_SIZE = 8`      `size: 16` = 8pt    TYPE_PT
+//   metadata value       `VALUE_SIZE = 11`     `size: 22` = 11pt   TYPE_PT
+//
+// The sizes that already agreed agreed by luck — the same defect `TYPE_PT`'s
+// own header describes, one layer out. A literal that happens to be right is
+// not a shared definition; it is a coincidence waiting for one side to be
+// edited.
+
+/** Ink. The PDF's `COLORS` and the DOCX's inline hex strings, unified. */
+export const EXPORT_COLOR = {
+  textPrimary: '#111111',
+  textMuted: '#666666',
+  rule: '#dddddd',
+  accent: '#7C3AED',
+} as const;
+
+/** The width the content actually occupies, in points. The PDF's section rule
+ *  was 200pt — a number with no relationship to the page — and the Word file
+ *  drew none. A rule that stops in the middle of nowhere reads as an artifact;
+ *  one that spans the measure reads as a rule. */
+export const CONTENT_WIDTH_PT = PAGE_PT.width - PAGE_PT.margin * 2;
+
+/** Hairline weight, in points, for the section rules in both generators. */
+export const RULE_PT = 0.6;
+
+/** Section marker.
+ *
+ *  ⚠️ VERIFIED AGAINST THE FONT FILES, NOT ASSUMED. This module's siblings
+ *  already record a tofu incident (the task-list checkbox is vector-drawn
+ *  because U+2610/U+2612 are absent from the bundled faces). Checked with
+ *  fontkit's `hasGlyphForCodePoint` across all seven TTFs in
+ *  `apps/transcribe-md/fonts/`, with a positive control (U+0041 present) and a
+ *  negative one (U+1F600 absent):
+ *
+ *      §  U+00A7  present in all 7        ← chosen
+ *      —  U+2014  present in all 7
+ *      ·  U+00B7  present in all 7
+ *      ▪  U+25AA  MISSING from all 4 Charter faces
+ *      ■  U+25A0  MISSING from all 4 Charter faces
+ *      ─  U+2500  MISSING from all 7
+ *
+ *  The two geometric marks a designer would reach for first are exactly the
+ *  ones that would have shipped as tofu in the body face. */
+export const SECTION_MARK = '§';
+
+/** Letter-spacing for section headings, in points. pdfkit takes points;
+ *  `docx` takes twentieths of a point, so it goes through `toTwip`. */
+export const SECTION_TRACKING_PT = 1.2;
+
+/** What an empty metadata value prints as — muted, never blank, never a
+ *  bullet. A blank cell is indistinguishable from a cell that failed to
+ *  render; an em-dash says "asked, and there is nothing". */
+export const EMPTY_VALUE = '—';
+
+/** The metadata grid's label column, in points. Two columns — label, value —
+ *  one field per row. The previous layout was N side-by-side columns whose
+ *  width was `contentWidth / N`, so adding a fourth field silently narrowed
+ *  the other three and a long chief complaint wrapped to three lines while its
+ *  neighbours sat on one. */
+export const META_LABEL_COL_PT = 118;
+
+/** points → eighths of a point, the unit `docx` uses for border widths. */
+export const toEighthPt = (pt: number): number => Math.max(1, Math.round(pt * 8));
+
+/** '#7C3AED' → '7C3AED'. `docx` wants bare hex; pdfkit wants the hash. One
+ *  token, two spellings, converted rather than duplicated. */
+export const bareHex = (hex: string): string => hex.replace('#', '').toUpperCase();
+
+/** The title lockup's vertical rhythm, in points, for both generators.
+ *
+ *  Another pair that was never shared: the PDF drove it with pdfkit's
+ *  `moveDown(n)`, which is n × the CURRENT LINE HEIGHT — so the gap under the
+ *  wordmark depended on the font size in effect when it ran — while the Word
+ *  file used absolute twips (6pt and 12pt). And the PDF drew a rule under the
+ *  title that the Word file simply did not have, which is the same
+ *  rule-vs-nothing split as the section headings, one block higher up. */
+export const LOCKUP_PT = {
+  /** Wordmark → title. Was ~2.2pt (PDF) vs 6pt (Word). */
+  eyebrowToTitle: 3,
+  /** Title → its rule. */
+  titleToRule: 6,
+  /** Rule → the metadata grid. */
+  ruleToBody: 12,
+} as const;

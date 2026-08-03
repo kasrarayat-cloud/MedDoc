@@ -42,6 +42,7 @@ import { toast } from 'sonner';
 
 import { TranscribeVisitStatus } from '@prisma/client';
 import { cn } from '@/lib/cn';
+import { recoveryHref } from '@/lib/recovery-href';
 
 type LifecycleTheme = 'legacy' | 'clinician';
 
@@ -293,7 +294,7 @@ function ArchiveButton({ visitId }: { visitId: string }) {
       }
       toast.success('Visit archived');
       setOpen(false);
-      router.push('/dashboard');
+      router.push(recoveryHref());
     } catch {
       toast.error('Network error. Please try again.');
     } finally {
@@ -356,7 +357,7 @@ function DeleteButton({
       }
       toast.success(willHardDelete ? 'Visit deleted' : 'Visit moved to trash');
       setOpen(false);
-      router.push('/dashboard');
+      router.push(recoveryHref());
     } catch {
       toast.error('Network error. Please try again.');
     } finally {
@@ -431,7 +432,7 @@ function DeletePermanentlyButton({
       }
       toast.success('Visit permanently deleted');
       setOpen(false);
-      router.push('/dashboard');
+      router.push(recoveryHref());
     } catch {
       toast.error('Network error. Please try again.');
     } finally {

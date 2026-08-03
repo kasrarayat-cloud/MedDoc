@@ -18,7 +18,18 @@ import {
   procedureProvenanceNote,
 } from './visit-export';
 import { formSignatureLines } from './form-only';
-import { PAGE_PT, TYPE_PT } from './export-page';
+import {
+  PAGE_PT,
+  TYPE_PT,
+  EXPORT_COLOR,
+  CONTENT_WIDTH_PT,
+  RULE_PT,
+  SECTION_MARK,
+  SECTION_TRACKING_PT,
+  EMPTY_VALUE,
+  META_LABEL_COL_PT,
+  LOCKUP_PT,
+} from './export-page';
 
 // ---------------------------------------------------------------------------
 // Font assets — bundled in apps/transcribe-md/fonts/ (committed to repo,
@@ -53,11 +64,13 @@ const PAGE = {
 };
 
 const COLORS = {
-  textPrimary: '#111111',
+  // R1.4: four of these now come from `export-page` so the Word file cannot
+  // drift from them. `textSecondary` has no DOCX counterpart and stays local.
+  textPrimary: EXPORT_COLOR.textPrimary,
   textSecondary: '#333333',
-  textMuted: '#666666',
-  rule: '#dddddd',
-  accent: '#7C3AED',
+  textMuted: EXPORT_COLOR.textMuted,
+  rule: EXPORT_COLOR.rule,
+  accent: EXPORT_COLOR.accent,
 };
 
 const FONTS = {
@@ -200,51 +213,33 @@ function renderHeader(
     doc.moveDown(0.8);
     return;
   }
+  // R1.4 — the lockup's gaps are absolute points, shared with the Word file.
+  // `moveDown(n)` is n × the CURRENT line height, so these gaps used to change
+  // with whatever font size was in effect; the Word side used fixed twips. Two
+  // units, one lockup, and no way for them to agree by construction.
   doc.font(FONTS.brand).fontSize(SIZE.small).fillColor(COLORS.accent);
   doc.text('QUILLMD', { align: 'left' });
-  doc.moveDown(0.25);
+  doc.y += LOCKUP_PT.eyebrowToTitle;
 
   doc.font(FONTS.bodyBold).fontSize(SIZE.title).fillColor(COLORS.textPrimary);
   const clinicianHeading = data.clinicianName
     ? `${data.clinicianName} · ${data.specialty}`
     : data.specialty;
   doc.text(clinicianHeading);
-  doc.moveDown(0.5);
+  doc.y += LOCKUP_PT.titleToRule;
   drawRule(doc);
-  doc.moveDown(0.8);
+  doc.y += LOCKUP_PT.ruleToBody;
 }
 
-/** T-M21.2: patient metadata as a horizontal info bar (columns, not
- *  stacked rows). Each cell is label-on-top / value-below with
- *  absolute x-positioning so the columns align cleanly regardless
- *  of the value's character count. The old inline-continued layout
- *  stacked everything in one column because `\n` between rows plus
- *  the lineGap(4) advance produced a vertical list — fine for
- *  transcript blocks but wrong for a chart-header info bar. */
-/** Render the doctor's parsed form header (feat/template-header-fields) as a
- *  vertical labeled list — one "LABEL: value" line per field, blanks as "—".
- *  Presentation-only; values were filled deterministically. */
 function renderHeaderFieldsBlock(
   doc: PDFKit.PDFDocument,
   data: VisitExportData
 ): void {
-  const LABEL_SIZE = 9;
-  for (const f of data.headerFields) {
-    doc
-      .font(FONTS.labelBold)
-      .fontSize(LABEL_SIZE)
-      .fillColor(COLORS.textMuted)
-      .text(`${f.label}:  `, PAGE.margin, doc.y, {
-        continued: true,
-        lineBreak: false,
-      });
-    doc
-      .font(FONTS.bodyRegular)
-      .fontSize(LABEL_SIZE + 1)
-      .fillColor(COLORS.textPrimary)
-      .text(f.value.trim() ? f.value.trim() : '—');
-  }
-  doc.x = PAGE.margin;
+  // R1.4: the same two-column grid the app's own patient block uses. It was a
+  // continued-run "LABEL:  value" line at its own private sizes (9 / 10pt),
+  // which is a third presentation of metadata in a document that should have
+  // one.
+  for (const f of data.headerFields) metaRow(doc, f.label, f.value);
   doc.moveDown(0.6);
 }
 
@@ -263,55 +258,15 @@ function renderPatientBlock(
     cells.push({ label: 'Status', value: 'Signed' });
   }
 
-  const n = cells.length;
-  const availableWidth = doc.page.width - PAGE.margin * 2;
-  const colWidth = availableWidth / n;
-  const colInnerGap = 10; // right-side padding inside each column
-  const startY = doc.y;
-
-  // Typography tokens for this block — tuned for a chart-header look:
-  // label smaller + uppercase + muted, value larger + primary.
-  const LABEL_SIZE = 8;
-  const VALUE_SIZE = 11;
-  const LABEL_VALUE_GAP = 2; // pts between the label baseline and the value top
-
-  let maxY = startY;
-  for (let i = 0; i < n; i++) {
-    const { label, value } = cells[i];
-    const x = PAGE.margin + i * colWidth;
-    const cellWidth = colWidth - colInnerGap;
-
-    // Label (top line): InterTight-SemiBold, small, uppercase, muted.
-    doc
-      .font(FONTS.labelBold)
-      .fontSize(LABEL_SIZE)
-      .fillColor(COLORS.textMuted)
-      .text(label.toUpperCase(), x, startY, {
-        width: cellWidth,
-        lineBreak: false,
-      });
-    const afterLabelY = doc.y;
-
-    // Value (below label): Charter, larger, primary. Wrap within the
-    // column on overflow so a long Chief Complaint doesn't bleed
-    // into the neighbouring cell — the maxY tally below handles the
-    // uneven-column-height case.
-    doc
-      .font(FONTS.bodyRegular)
-      .fontSize(VALUE_SIZE)
-      .fillColor(COLORS.textPrimary)
-      .text(value, x, afterLabelY + LABEL_VALUE_GAP, {
-        width: cellWidth,
-      });
-
-    if (doc.y > maxY) maxY = doc.y;
-  }
-
-  // Reset cursor to after the tallest column so the next block
-  // (renderSoap → sectionHeading('Clinical Note')) starts below
-  // every cell regardless of which one wrapped furthest.
-  doc.x = PAGE.margin;
-  doc.y = maxY;
+  // R1.4 — two columns, one field per ROW.
+  //
+  // ⚠️ THE OLD LAYOUT NARROWED ITSELF AS IT GAINED CONTENT. It laid the fields
+  // out side by side at `contentWidth / n`, so a visit with a chief complaint
+  // and a signature got four ~117pt columns: the complaint wrapped to three
+  // lines while "Patient" and "Status" sat on one, and every row's height was
+  // set by whichever cell wrapped furthest. Four facts, and the layout got
+  // worse the more of them you had.
+  for (const { label, value } of cells) metaRow(doc, label, value);
   doc.moveDown(0.6);
 }
 
@@ -558,20 +513,60 @@ function renderPatientSummary(
 // Primitives
 // ---------------------------------------------------------------------------
 
+/** R1.4 — the section heading, identical in structure to the DOCX one:
+ *  `§  NAME` in the accent, tracked, over a full-measure hairline.
+ *
+ *  ⚠️ THE RULE STARTS AT THE MARGIN, NOT AT `doc.x`. The old version drew from
+ *  wherever the cursor happened to be to `doc.x + 200` — a length with no
+ *  relationship to the page, and a start that moved with whatever block ran
+ *  before it. The Word file drew no rule at all, so the preview and the
+ *  download disagreed on the single most repeated element in the document. */
 function sectionHeading(doc: PDFKit.PDFDocument, text: string): void {
   doc.moveDown(0.3);
   doc
     .font(FONTS.labelBold)
     .fontSize(SIZE.sectionHead)
     .fillColor(COLORS.accent)
-    .text(text.toUpperCase(), { characterSpacing: 1.2 });
+    .text(`${SECTION_MARK}  ${text.toUpperCase()}`, PAGE.margin, doc.y, {
+      characterSpacing: SECTION_TRACKING_PT,
+    });
+  const ruleY = doc.y + 2;
   doc
-    .moveTo(doc.x, doc.y + 2)
-    .lineTo(doc.x + 200, doc.y + 2)
-    .lineWidth(0.4)
+    .moveTo(PAGE.margin, ruleY)
+    .lineTo(PAGE.margin + CONTENT_WIDTH_PT, ruleY)
+    .lineWidth(RULE_PT)
     .strokeColor(COLORS.rule)
     .stroke();
-  doc.moveDown(0.3);
+  doc.x = PAGE.margin;
+  doc.moveDown(0.35);
+}
+
+/** R1.4 — one metadata row: LABEL in the left column, value in the right.
+ *  Shared by the app's patient block and the doctor's parsed form header, so
+ *  the two cannot present the same kind of fact two different ways. */
+function metaRow(doc: PDFKit.PDFDocument, label: string, value: string): void {
+  const v = value.trim() || EMPTY_VALUE;
+  const y = doc.y;
+  doc
+    .font(FONTS.labelBold)
+    .fontSize(TYPE_PT.fieldLabel)
+    .fillColor(COLORS.textMuted)
+    // +2pt: the label is 8pt beside an 11pt value, so aligning their TOPS
+    // leaves the label visibly high. This sits it on the value's x-height.
+    .text(label.toUpperCase(), PAGE.margin, y + 2, {
+      width: META_LABEL_COL_PT - 8,
+      lineBreak: false,
+    });
+  doc
+    .font(FONTS.bodyRegular)
+    .fontSize(TYPE_PT.fieldValue)
+    // An em-dash is muted: it is the absence of a value, not a value.
+    .fillColor(v === EMPTY_VALUE ? COLORS.textMuted : COLORS.textPrimary)
+    .text(v, PAGE.margin + META_LABEL_COL_PT, y, {
+      width: CONTENT_WIDTH_PT - META_LABEL_COL_PT,
+    });
+  doc.x = PAGE.margin;
+  doc.moveDown(0.15);
 }
 
 function drawRule(doc: PDFKit.PDFDocument): void {
@@ -579,7 +574,7 @@ function drawRule(doc: PDFKit.PDFDocument): void {
   doc
     .moveTo(PAGE.margin, y)
     .lineTo(doc.page.width - PAGE.margin, y)
-    .lineWidth(0.5)
+    .lineWidth(RULE_PT)
     .strokeColor(COLORS.rule)
     .stroke();
 }

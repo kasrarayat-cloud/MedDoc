@@ -2284,7 +2284,15 @@ body {
   font-family: var(--font-mono);
   font-size: 9.5px;
   letter-spacing: 0.06em;
-  color: var(--color-linear-text-4);
+  /* ⚠️ `--color-linear-text-4` (#4b5159) IS NOT A TEXT COLOUR AT THIS SIZE, and
+     this is the SECOND node found carrying it. The first sweep (2026-08-02)
+     cured the prescription DOSE/FREQ/QTY/REFILLS labels — 2.41:1 on the legacy
+     ground — and missed this one because it renders only inside the Rx rail's
+     grouped view. axe caught it here at 2.15:1 on the Rounds gate panel
+     (#161b24), 9.5px, so no large-text exemption applies.
+     `-text-3` is 4.90:1 on that ground and 5.48:1 on the legacy one, so the
+     fix holds in both places this rail is drawn. */
+  color: var(--color-linear-text-3);
 }
 .qm-lin-rx-rail-empty {
   padding: 18px 16px;

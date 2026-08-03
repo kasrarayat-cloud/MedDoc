@@ -9,6 +9,8 @@ import { expect } from '@playwright/test';
 
 import { TEST_PASSWORD } from './test-utils';
 
+import { expectAtHome } from './home';
+
 /** Log in through the /login form and assert we reach /dashboard. For an
  *  MFA-enabled account, pass `totp` — the form re-renders with the 6-digit
  *  field after the first submit and we complete the second factor. */
@@ -33,7 +35,7 @@ export async function loginUser(
     await page.getByRole('button', { name: /^sign in$/i }).click();
   }
 
-  await expect(page).toHaveURL(/\/dashboard$/, { timeout: 15_000 });
+  await expectAtHome(page);
 }
 
 /** Sign out via the user menu; returns only once the session cookie is actually

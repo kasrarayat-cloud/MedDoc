@@ -2,6 +2,7 @@
 
 import { useRouter, usePathname } from 'next/navigation';
 import { useShortcuts } from '@/lib/shortcuts';
+import { recoveryHref } from '@/lib/recovery-href';
 
 interface GlobalShortcutsProps {
   authed: boolean;
@@ -34,7 +35,8 @@ export function GlobalShortcuts({ authed }: GlobalShortcutsProps) {
           {
             key: 'd',
             onFire: () => {
-              if (pathname !== '/dashboard') router.push('/dashboard');
+              const home = recoveryHref();
+              if (pathname !== home) router.push(home);
             },
           },
           {

@@ -18,8 +18,11 @@ import Link from 'next/link';
 
 import type { BoardFilter } from '@/lib/rounds/board-data';
 
+import { RoundsTopBar } from './top-bar';
+
 const FILTER_LABELS: { id: BoardFilter; label: string }[] = [
   { id: 'active', label: 'Active' },
+  { id: 'ready', label: 'Ready' },
   { id: 'signed', label: 'Signed' },
   { id: 'soap', label: 'SOAP' },
   { id: 'ultrasound', label: 'Ultrasound' },
@@ -88,81 +91,17 @@ export function RoundsBoardChrome({
        rows alone, which carry classes of their own.
        One class here owns the whole subtree, because everything under it is
        classless by construction. */
-    <div className="qm-rounds-boardchrome" style={{ minHeight: '100vh', padding: '0 24px 40px' }}>
-      {/* ── Top bar ─────────────────────────────────────────────────────── */}
-      <header
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 20,
-          padding: '16px 0',
-          borderBottom: '1px solid var(--rounds-line-1)',
-        }}
-      >
-        <Link
-          href="/board"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 8,
-            textDecoration: 'none',
-          }}
-        >
-          <span
-            aria-hidden
-            style={{
-              display: 'grid',
-              placeItems: 'center',
-              width: 26,
-              height: 26,
-              borderRadius: 7,
-              background: 'var(--rounds-accent)',
-              color: '#fff',
-              fontFamily: 'var(--rounds-font-display)',
-              fontWeight: 700,
-              fontSize: 14,
-            }}
-          >
-            Q
-          </span>
-          <span
-            style={{
-              fontFamily: 'var(--rounds-font-display)',
-              fontWeight: 600,
-              fontSize: 16,
-              color: 'var(--rounds-text-1)',
-            }}
-          >
-            QuillMD
-          </span>
-        </Link>
-
-        <nav aria-label="Main" style={{ display: 'flex', gap: 14 }}>
-          {[
-            { href: '/board', label: 'Board' },
-            { href: '/settings/note-format', label: 'Templates' },
-            { href: '/settings', label: 'Settings' },
-          ].map((n) => (
-            <Link
-              key={n.href}
-              href={n.href}
-              style={{
-                fontFamily: 'var(--rounds-font-ui)',
-                fontSize: 13.5,
-                color:
-                  n.label === 'Board'
-                    ? 'var(--rounds-text-1)'
-                    : 'var(--rounds-text-2)',
-                textDecoration: 'none',
-              }}
-            >
-              {n.label}
-            </Link>
-          ))}
-        </nav>
-
-        <div style={{ flex: 1 }} />
-
+    <div className="qm-rounds-boardchrome" style={{ minHeight: '100vh' }}>
+      {/* ── Top bar ──────────────────────────────────────────────────────
+          R1: this WAS ~110 lines of inline-styled brand + nav, and it was the
+          only nav the Rounds skin had. `AppFrame` — every other authed route —
+          had no Rounds branch at all, so the app read as two products. The bar
+          now comes from `components/rounds/top-bar.tsx` and is the same node
+          everywhere; only the right-hand instruments below are the board's.
+          The board's own nav also hardcoded `n.label === 'Board'` as the
+          current item, which is a bug the moment the component renders
+          anywhere else — the shared one derives it from the path. */}
+      <RoundsTopBar>
         {/* Critical tally. Rendered ONLY when there is something to tally — a
             permanent "0 critical" badge trains the eye to ignore the place
             criticals appear. */}
@@ -198,155 +137,158 @@ export function RoundsBoardChrome({
         >
           {clinicianName}
         </span>
-      </header>
+      </RoundsTopBar>
 
-      {/* ── Filter strip ────────────────────────────────────────────────── */}
-      <div
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          alignItems: 'center',
-          gap: 12,
-          padding: '14px 0',
-        }}
-      >
-        <span
-          style={{
-            fontFamily: 'var(--rounds-font-ui)',
-            fontSize: 13,
-            color: 'var(--rounds-text-2)',
-          }}
-        >
-          {today}
-          <span style={{ color: 'var(--rounds-text-3)' }}>
-            {' · '}
-            {shownCount} of {totalCount}
-          </span>
-        </span>
+      <div style={{ padding: '0 24px 40px' }}>
 
-        <div role="group" aria-label="Filters" style={{ display: 'flex', gap: 6 }}>
-          {FILTER_LABELS.map((f) => {
-            const active = f.id === filter;
-            return (
-              <Link
-                key={f.id}
-                href={hrefWith(params, { filter: f.id, page: undefined })}
-                aria-current={active ? 'true' : undefined}
-                data-testid={`rounds-filter-${f.id}`}
-                style={{
-                  fontFamily: 'var(--rounds-font-ui)',
-                  fontSize: 12.5,
-                  padding: '4px 10px',
-                  borderRadius: 999,
-                  textDecoration: 'none',
-                  color: active ? 'var(--rounds-text-1)' : 'var(--rounds-text-2)',
-                  background: active ? 'var(--rounds-accent-tint-16)' : 'transparent',
-                  border: `1px solid ${active ? 'var(--rounds-accent)' : 'var(--rounds-line-1)'}`,
-                }}
-              >
-                {f.label}
-              </Link>
-            );
-          })}
-        </div>
-
-        {/* The shipped whole-queue search, restyled. A plain GET form: no JS
-            needed, survives reload with the query intact, and the result is a
-            linkable URL. */}
-        <form action="/board" method="get" style={{ display: 'flex', gap: 6 }}>
-          <input type="hidden" name="filter" value={filter} />
-          <label htmlFor="rounds-search" className="sr-only">
-            Search visits
-          </label>
-          <input
-            id="rounds-search"
-            name="q"
-            type="search"
-            defaultValue={query}
-            placeholder="Search patient or reason…"
-            maxLength={100}
-            data-testid="rounds-search"
-            style={{
-              height: 30,
-              minWidth: 220,
-              padding: '0 10px',
-              borderRadius: 'var(--rounds-radius-sm)',
-              border: '1px solid var(--rounds-line-1)',
-              background: 'var(--rounds-surface-1)',
-              color: 'var(--rounds-text-1)',
-              fontFamily: 'var(--rounds-font-ui)',
-              fontSize: 13,
-            }}
-          />
-          <button
-            type="submit"
-            style={{
-              height: 30,
-              padding: '0 12px',
-              borderRadius: 'var(--rounds-radius-sm)',
-              border: '1px solid var(--rounds-line-2)',
-              background: 'var(--rounds-surface-2)',
-              color: 'var(--rounds-text-1)',
-              fontFamily: 'var(--rounds-font-ui)',
-              fontSize: 13,
-              cursor: 'pointer',
-            }}
-          >
-            Search
-          </button>
-        </form>
-
-        <div style={{ flex: 1 }} />
-
-        {nextReviewHref ? (
-          <Link
-            href={nextReviewHref}
-            data-testid="rounds-open-next"
-            style={{
-              fontFamily: 'var(--rounds-font-ui)',
-              fontSize: 13,
-              fontWeight: 600,
-              color: 'var(--rounds-accent-text)',
-              textDecoration: 'none',
-            }}
-          >
-            Open next review →
-          </Link>
-        ) : null}
-      </div>
-
-      <main id="main">{children}</main>
-
-      {/* ── Pagination ──────────────────────────────────────────────────── */}
-      {totalPages > 1 ? (
-        <nav
-          aria-label="Pagination"
-          data-testid="rounds-pagination"
+        {/* ── Filter strip ────────────────────────────────────────────────── */}
+        <div
           style={{
             display: 'flex',
+            flexWrap: 'wrap',
             alignItems: 'center',
             gap: 12,
-            marginTop: 20,
-            fontFamily: 'var(--rounds-font-ui)',
-            fontSize: 13,
-            color: 'var(--rounds-text-2)',
+            padding: '14px 0',
           }}
         >
-          {page > 1 ? (
-            <Link href={hrefWith(params, { page: page - 1 })} data-testid="rounds-page-prev">
-              ← Previous
-            </Link>
-          ) : null}
-          <span>
-            Page {page} of {totalPages}
+          <span
+            style={{
+              fontFamily: 'var(--rounds-font-ui)',
+              fontSize: 13,
+              color: 'var(--rounds-text-2)',
+            }}
+          >
+            {today}
+            <span style={{ color: 'var(--rounds-text-3)' }}>
+              {' · '}
+              {shownCount} of {totalCount}
+            </span>
           </span>
-          {page < totalPages ? (
-            <Link href={hrefWith(params, { page: page + 1 })} data-testid="rounds-page-next">
-              Next →
+
+          <div role="group" aria-label="Filters" style={{ display: 'flex', gap: 6 }}>
+            {FILTER_LABELS.map((f) => {
+              const active = f.id === filter;
+              return (
+                <Link
+                  key={f.id}
+                  href={hrefWith(params, { filter: f.id, page: undefined })}
+                  aria-current={active ? 'true' : undefined}
+                  data-testid={`rounds-filter-${f.id}`}
+                  style={{
+                    fontFamily: 'var(--rounds-font-ui)',
+                    fontSize: 12.5,
+                    padding: '4px 10px',
+                    borderRadius: 999,
+                    textDecoration: 'none',
+                    color: active ? 'var(--rounds-text-1)' : 'var(--rounds-text-2)',
+                    background: active ? 'var(--rounds-accent-tint-16)' : 'transparent',
+                    border: `1px solid ${active ? 'var(--rounds-accent)' : 'var(--rounds-line-1)'}`,
+                  }}
+                >
+                  {f.label}
+                </Link>
+              );
+            })}
+          </div>
+
+          {/* The shipped whole-queue search, restyled. A plain GET form: no JS
+              needed, survives reload with the query intact, and the result is a
+              linkable URL. */}
+          <form action="/board" method="get" style={{ display: 'flex', gap: 6 }}>
+            <input type="hidden" name="filter" value={filter} />
+            <label htmlFor="rounds-search" className="sr-only">
+              Search visits
+            </label>
+            <input
+              id="rounds-search"
+              name="q"
+              type="search"
+              defaultValue={query}
+              placeholder="Search patient or reason…"
+              maxLength={100}
+              data-testid="rounds-search"
+              style={{
+                height: 30,
+                minWidth: 220,
+                padding: '0 10px',
+                borderRadius: 'var(--rounds-radius-sm)',
+                border: '1px solid var(--rounds-line-1)',
+                background: 'var(--rounds-surface-1)',
+                color: 'var(--rounds-text-1)',
+                fontFamily: 'var(--rounds-font-ui)',
+                fontSize: 13,
+              }}
+            />
+            <button
+              type="submit"
+              style={{
+                height: 30,
+                padding: '0 12px',
+                borderRadius: 'var(--rounds-radius-sm)',
+                border: '1px solid var(--rounds-line-2)',
+                background: 'var(--rounds-surface-2)',
+                color: 'var(--rounds-text-1)',
+                fontFamily: 'var(--rounds-font-ui)',
+                fontSize: 13,
+                cursor: 'pointer',
+              }}
+            >
+              Search
+            </button>
+          </form>
+
+          <div style={{ flex: 1 }} />
+
+          {nextReviewHref ? (
+            <Link
+              href={nextReviewHref}
+              data-testid="rounds-open-next"
+              style={{
+                fontFamily: 'var(--rounds-font-ui)',
+                fontSize: 13,
+                fontWeight: 600,
+                color: 'var(--rounds-accent-text)',
+                textDecoration: 'none',
+              }}
+            >
+              Open next review →
             </Link>
           ) : null}
-        </nav>
-      ) : null}
+        </div>
+
+        <main id="main">{children}</main>
+
+        {/* ── Pagination ──────────────────────────────────────────────────── */}
+        {totalPages > 1 ? (
+          <nav
+            aria-label="Pagination"
+            data-testid="rounds-pagination"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              marginTop: 20,
+              fontFamily: 'var(--rounds-font-ui)',
+              fontSize: 13,
+              color: 'var(--rounds-text-2)',
+            }}
+          >
+            {page > 1 ? (
+              <Link href={hrefWith(params, { page: page - 1 })} data-testid="rounds-page-prev">
+                ← Previous
+              </Link>
+            ) : null}
+            <span>
+              Page {page} of {totalPages}
+            </span>
+            {page < totalPages ? (
+              <Link href={hrefWith(params, { page: page + 1 })} data-testid="rounds-page-next">
+                Next →
+              </Link>
+            ) : null}
+          </nav>
+        ) : null}
+      </div>
     </div>
   );
 }

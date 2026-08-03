@@ -26,6 +26,7 @@ import { TranscribeVisitStatus } from '@prisma/client';
 import { auth } from '@/lib/nextauth';
 import { logAudit } from '@/lib/audit';
 import { isSkinBeta } from '@/config/skin-beta';
+import { isSkinRounds } from '@/config/skin-rounds';
 import { AppFrame } from '@/components/ui/app-frame';
 import { DashboardC3Body } from '@/components/dashboard/dashboard-c3';
 import { StatCard } from '@/components/dashboard/stat-card';
@@ -55,6 +56,20 @@ export default async function DashboardPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
+  // ── R1: under Rounds this route is not a page, it is a forward ────────────
+  // The board IS the day's home. Leaving /dashboard rendering meant two homes,
+  // two navs and a brand mark that went somewhere different depending on which
+  // one you were standing in.
+  //
+  // ⚠️ THIS IS A BACKSTOP. THE REAL FORWARD IS `next.config.ts`'s `redirects()`,
+  // and it has to be, because `dashboard/loading.tsx` wraps this segment in
+  // Suspense: a `redirect()` thrown here after ANY await — including `await
+  // searchParams` — arrives as a streamed 200 + skeleton rather than a 307. The
+  // config also owns the `?tab=all` → `?filter=active` deep-link mapping, which
+  // is why this one takes no parameters: reading them is exactly what suspends.
+  // Reached only if that config is ever removed, and then it still forwards.
+  if (isSkinRounds()) redirect('/board');
+
   const session = await auth();
   if (!session?.user?.id) redirect('/login');
 
@@ -66,6 +81,7 @@ export default async function DashboardPage({
 
   const params = await searchParams;
   const tabRaw = Array.isArray(params.tab) ? params.tab[0] : params.tab;
+
   const activeTab: ActiveTab = tabRaw === 'all' ? 'all' : 'patients';
 
   return (

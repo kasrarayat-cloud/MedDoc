@@ -2,8 +2,43 @@ import path from 'node:path';
 import type { NextConfig } from 'next';
 import { withSentryConfig } from '@sentry/nextjs';
 
+import { roundsRedirects } from './src/config/rounds-redirects';
+
 const nextConfig: NextConfig = {
   output: 'standalone',
+
+  // ── R1 — /dashboard forwards to /board under Rounds ───────────────────────
+  // ⚠️ THIS IS HERE, NOT IN THE ROUTE, AND IT TOOK TWO WRONG PLACES TO LEARN
+  // WHY. `app/dashboard/loading.tsx` wraps that segment in Suspense, so a
+  // `redirect()` thrown anywhere in the page component AFTER an await cannot be
+  // an HTTP redirect: the response has already begun, and Next answers `200`
+  // with the loading skeleton and streams the redirect in the RSC payload.
+  //
+  // Measured, three ways, on the QA image:
+  //   redirect after `await auth()`        → 200 + skeleton, URL stays /dashboard
+  //   redirect hoisted above auth, but     → 200 + skeleton (STILL) — because
+  //     still `await searchParams` first      reading searchParams suspends too
+  //   this config redirect                 → 307, Location: /board
+  //
+  // The doctor reached the board in all three; the first two just charged them
+  // a skeleton flash and a round trip, and told every bookmark and crawler that
+  // `/dashboard` was a live 200. `redirects()` runs before routing, so nothing
+  // renders and nothing suspends. It also keeps the auth edge middleware
+  // (`src/proxy.ts`) untouched, which is not a file to experiment in.
+  //
+  // Evaluated at BUILD time, which is the same time `NEXT_PUBLIC_SKIN_ROUNDS`
+  // is inlined — so the fork is baked into the image, exactly like every other
+  // consumer of the flag. Flag off → an empty array → `/dashboard` is a page
+  // again, unchanged.
+  //
+  // ORDER MATTERS: the `?tab=all` rule must come first. Next takes the first
+  // match, and the bare `/dashboard` rule matches regardless of query string,
+  // so reversing these silently drops the deep link.
+  async redirects() {
+    return roundsRedirects(process.env.NEXT_PUBLIC_SKIN_ROUNDS);
+  },
+
+
   outputFileTracingRoot: path.join(__dirname, '..', '..'),
   // T-M7: pdfkit + resend both reach into Node-only built-ins (fs, net,
   // tls, dns) and ship asset files (font AFM, type-1 metrics) that

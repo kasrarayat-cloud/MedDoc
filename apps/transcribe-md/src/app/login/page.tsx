@@ -7,6 +7,7 @@ import { auth } from '@/lib/nextauth';
 import { AuthShell } from '@/components/ui/auth-shell';
 import { LoginForm } from './login-form';
 import { VerifyToast } from './verify-toast';
+import { recoveryHref } from '@/lib/recovery-href';
 
 // Root layout noindexes all of app.quillmd.com; re-enable for /login
 // so the public entry page can be surfaced via search.
@@ -29,7 +30,7 @@ export default async function LoginPage() {
       .split(':')[0];
     const isAdminHost =
       host === 'admin.quillmd.com' || host.startsWith('admin.');
-    redirect(isAdminHost ? '/admin' : '/dashboard');
+    redirect(isAdminHost ? '/admin' : recoveryHref());
   }
 
   return (

@@ -51,6 +51,7 @@ const QUERY_MAX = 100;
 
 const FILTERS: BoardFilter[] = [
   'active',
+  'ready',
   'signed',
   'soap',
   'ultrasound',

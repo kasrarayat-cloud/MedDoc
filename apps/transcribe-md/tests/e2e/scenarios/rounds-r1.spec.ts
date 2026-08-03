@@ -1,0 +1,218 @@
+// ============================================================================
+// ROUNDS R1 — one app, one nav. Measured on the LIVE DOM, route by route.
+// ----------------------------------------------------------------------------
+// ⚠️ THIS PACK EXISTS BECAUSE THE FLIP LEFT THE APP SPLIT-BRAIN AND EVERY
+// EXISTING GATE WAS GREEN THROUGH IT.
+//
+// Measured on production the day after Item F flipped:
+//
+//   /board      qm-rounds                0 asides   Board · Templates · Settings
+//   /patients   qm-c3 qm-lin             1 aside    Home · Patients · Settings
+//   /dashboard  qm-c3 qm-lin             1 aside    (same legacy shell)
+//   /settings   qm-c3 qm-lin qm-rounds   1 aside    (a Rounds host INSIDE it)
+//
+// Nothing failed. The Rounds packs walk Rounds' own screens — the board, the
+// stage, the gate flow, the signed paper — and every one of them was correct.
+// `AppFrame`, which wraps everything else, forked only on `isSkinBeta()` and no
+// pack asked it anything. A doctor moving from the board to their patient list
+// crossed into a different product, and the suite had no opinion.
+//
+// So the assertion is deliberately about the SHELL rather than about any
+// screen: on every authenticated route, zero <aside>, exactly one <nav
+// aria-label="Main">, and the same four items in it. That is a claim the old
+// arrangement could not have satisfied by accident.
+//
+// ─── WHAT WOULD MAKE THIS FAIL (rule 7) ─────────────────────────────────────
+//  · a route that renders SidebarC3 or IconRail under Rounds  → aside count 1
+//  · a second nav (the board keeping its own inline copy)     → nav count 2
+//  · the nav drifting on one surface but not the other        → labels differ
+//  · /dashboard rendering instead of forwarding               → URL assertion
+//  · the roster losing search or pagination in the restyle    → the function
+//    test below drives both against the real server action
+//
+// Every one of those is a thing that was true, or nearly true, this session.
+// ============================================================================
+
+import { test, expect, type Page } from '@playwright/test';
+
+import { signupFreshUser } from '../helpers/signup';
+import { createReadyTextVisit } from '../helpers/visit-setup';
+
+/** Board · Patients · Templates · Settings. Written out rather than imported
+ *  so a change to the nav has to be made in two places on purpose — the point
+ *  of the pack is that the nav is a contract, not an implementation detail. */
+const NAV = ['Board', 'Patients', 'Templates', 'Settings'];
+
+/** Every authenticated route a clinician can reach. `/admin/*` is excluded on
+ *  purpose and the boundary is stated rather than left implied: it is
+ *  SUPER_ADMIN-only and 404s for a clinician, so it is a different product
+ *  surface, not a route this pack silently skipped. */
+const AUTHED_ROUTES = [
+  '/board',
+  '/patients',
+  '/visits',
+  '/visits/new',
+  '/settings',
+  '/settings/note-format',
+];
+
+async function shellShape(page: Page) {
+  return page.evaluate(() => {
+    const navs = [...document.querySelectorAll('nav[aria-label="Main"]')];
+    return {
+      asides: document.querySelectorAll('aside').length,
+      navCount: navs.length,
+      navLabels: navs[0]
+        ? [...navs[0].querySelectorAll('a')].map((a) => (a.textContent ?? '').trim())
+        : [],
+      mains: document.querySelectorAll('main#main').length,
+      skin: document.documentElement.getAttribute('data-skin'),
+      // The legacy shells' own root classes. Presence of either means a route
+      // resolved to a shell this skin is supposed to have replaced.
+      legacyShellRoots: document.querySelectorAll('.qm-lin-app, .qm-c3-app').length,
+    };
+  });
+}
+
+test.describe('R1 — the shell is the same on every authenticated route', () => {
+  test('0 asides, exactly one Main nav, one <main id="main">, everywhere', async ({
+    page,
+  }) => {
+    await signupFreshUser(page, 'r1shell');
+
+    // NON-VACUITY FIRST. If the flag were off, every route below would render
+    // the legacy shell and the aside assertion would fail loudly — but if the
+    // ROUTE LIST were empty, or navigation silently failed, the loop would
+    // assert nothing and read as a pass. Prove the skin is on and the walker
+    // moves before trusting anything it reports.
+    await page.goto('/board');
+    const board = await shellShape(page);
+    expect(
+      board.skin,
+      'the app is not rendering the Rounds skin — this pack measures nothing',
+    ).toBe('rounds');
+    expect(board.navLabels, 'the board has no Main nav at all').toEqual(NAV);
+
+    const seen: Record<string, Awaited<ReturnType<typeof shellShape>>> = {};
+    for (const route of AUTHED_ROUTES) {
+      await page.goto(route, { waitUntil: 'domcontentloaded' });
+      // A route that redirected to /login would render a clean, aside-free
+      // page and pass every assertion below for the wrong reason.
+      expect(new URL(page.url()).pathname, `${route} bounced to login`).not.toBe('/login');
+      seen[route] = await shellShape(page);
+    }
+
+    for (const [route, shape] of Object.entries(seen)) {
+      expect(shape.asides, `${route} renders ${shape.asides} <aside> — the legacy sidebar`).toBe(0);
+      expect(
+        shape.legacyShellRoots,
+        `${route} resolved to the legacy .qm-lin-app / .qm-c3-app shell`,
+      ).toBe(0);
+      expect(shape.navCount, `${route} has ${shape.navCount} Main navs`).toBe(1);
+      expect(shape.navLabels, `${route}'s nav does not read ${NAV.join(' · ')}`).toEqual(NAV);
+      expect(
+        shape.mains,
+        `${route} has ${shape.mains} <main id="main"> — the skip-link target ` +
+          'must exist exactly once or the skip link goes nowhere (or somewhere ambiguous)',
+      ).toBe(1);
+      expect(shape.skin, `${route} lost the skin attribute`).toBe('rounds');
+    }
+  });
+
+  test('the legacy home forwards to the board, with its deep link mapped', async ({
+    page,
+  }) => {
+    await signupFreshUser(page, 'r1home');
+
+    // ⚠️ ASSERT THE **SERVER** REDIRECT, NOT JUST THE FINAL URL.
+    // `app/dashboard/loading.tsx` wraps this segment in Suspense, so a redirect
+    // placed after the route's first `await` STREAMS: Next answers 200 with the
+    // loading skeleton and delivers the redirect later in the RSC payload. The
+    // doctor still ends up on the board, so a `waitForURL` would go green — but
+    // they pay a skeleton flash and a second round trip, and a bookmark or a
+    // crawler sees `200 /dashboard`. That is what shipped on the first attempt
+    // here, and only the raw status told me.
+    const raw = await page.request.get('/dashboard', {
+      maxRedirects: 0,
+      failOnStatusCode: false,
+    });
+    expect(
+      raw.status(),
+      `GET /dashboard answered ${raw.status()}. A 200 means the redirect is ` +
+        'STREAMED behind loading.tsx rather than issued — hoist it above every ' +
+        'await in the route so the segment never suspends',
+    ).toBeGreaterThanOrEqual(300);
+    // ⚠️ PARSE THE LOCATION, DO NOT SUBSTRING IT. Next APPENDS any query params
+    // the rule did not consume, so `/dashboard?tab=all` lands on
+    // `/board?tab=all&filter=active` — the original `tab` rides along. The
+    // board ignores unknown params, so this is harmless, but a
+    // `toContain('/board?filter=active')` assertion fails on it and reads like
+    // a broken redirect. Substring matching on URLs is the same trap as
+    // 'dashboard'.includes('board'), one layer up.
+    const loc = new URL(raw.headers()['location'] ?? '', 'http://x');
+    expect(loc.pathname, 'no Location, or it does not point at the board').toBe('/board');
+
+    await page.goto('/dashboard');
+    expect(new URL(page.url()).pathname, '/dashboard still renders a second home').toBe('/board');
+
+    // `?tab=all` was the whole-queue view. It maps, rather than being dropped
+    // on the floor — a bookmark has to keep meaning what it meant.
+    const rawAll = await page.request.get('/dashboard?tab=all', {
+      maxRedirects: 0,
+      failOnStatusCode: false,
+    });
+    const locAll = new URL(rawAll.headers()['location'] ?? '', 'http://x');
+    expect(locAll.pathname).toBe('/board');
+    expect(
+      locAll.searchParams.get('filter'),
+      'the deep link lost its meaning',
+    ).toBe('active');
+
+    await page.goto('/dashboard?tab=all');
+    const url = new URL(page.url());
+    expect(url.pathname).toBe('/board');
+    expect(url.searchParams.get('filter'), 'the deep link lost its meaning').toBe('active');
+
+    // And the root, so the first hop after login is not a double redirect.
+    await page.goto('/');
+    expect(new URL(page.url()).pathname).toBe('/board');
+  });
+});
+
+test.describe('R1 — /patients kept every capability it had', () => {
+  test('list, search, clear and per-patient history all work', async ({ page }) => {
+    await signupFreshUser(page, 'r1roster');
+    // Two patients so a search can actually discriminate. `createReadyTextVisit`
+    // creates the patient as a side effect of the visit, which is also what
+    // gives the roster a "1 visit" meta line to render.
+    await createReadyTextVisit(page, { patientName: 'Rosalind Franklin' });
+    await createReadyTextVisit(page, { patientName: 'Barbara McClintock' });
+
+    await page.goto('/patients');
+    const rows = page.getByTestId('rounds-patient-row');
+    await expect(rows).toHaveCount(2);
+
+    // SERVER search — the debounced `searchPatientsAction`, not a client filter.
+    await page.getByTestId('rounds-patients-search').fill('Rosalind');
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toContainText('Rosalind Franklin');
+
+    // A search that matches nothing must say so, not render an empty list that
+    // looks identical to a roster with no patients.
+    await page.getByTestId('rounds-patients-search').fill('Zzzznobody');
+    await expect(page.getByTestId('rounds-patients-empty')).toContainText('No patients match');
+
+    await page.getByTestId('rounds-patients-clear').click();
+    await expect(rows).toHaveCount(2);
+
+    // Per-patient history.
+    await rows.filter({ hasText: 'Barbara McClintock' }).first().click();
+    await page.waitForURL(/\/patients\/c[a-z0-9]{10,}/);
+    await expect(page.locator('body')).toContainText('Barbara McClintock');
+
+    // New visit, from the roster.
+    await page.goto('/patients');
+    await page.getByTestId('rounds-patients-new-visit').click();
+    await page.waitForURL(/\/visits\/new/);
+  });
+});
