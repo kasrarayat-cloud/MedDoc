@@ -56,6 +56,42 @@ discovered scope, declared here and in the ledger.
    that over-claims what a check cannot see is the same defect as one that
    over-claims what it can.
 
+## UPDATE — the blind spot is CLOSED, not just recorded (owner ruling)
+
+The first version sampled `color`, `backgroundColor` and `borderTopColor` only,
+and R3.2 found an island it structurally could not see: `ring-linear-sage/40` on
+the Edit and Delete triggers — legacy sage, on a focus ring, on controls this
+round de-legacies. Tailwind compiles a ring to a **box-shadow**, and an alpha
+ring resolves to `rgba(122, 166, 140, 0.4)`, so a map keyed on `rgb(...)` could
+never match it even if the property had been sampled.
+
+A **composite arm** now samples `boxShadow`, `outlineColor` and `borderColor`,
+testing whether the value CONTAINS a legacy triplet rather than equals a colour.
+The triplets are derived from the same palette map, so the two arms cannot
+drift. **It has its own positive control** — a probe carrying an alpha ring,
+exercising the exact shape it was added for; a control that only proved the
+exact-match arm would have moved the blind spot rather than closed it.
+
+**Result: 10 newly-visible rows, ZERO new surfaces.** Everything it found is
+inside scope already assigned, which is the outcome that says the earlier
+assignment was right:
+
+| newly visible | surface | batch |
+|---|---|---|
+| `qm-vdoc-format-on` (the PDF/Word toggle) | `/visits/[id]` + `/record` | **2** — item 5 |
+| `qm-lin-rx-ghost-sm`, `qm-lin-rx-tag`, `qm-lin-rx-pane-dot` | `/visits/[id]` + `/record` | **2** — item 4 |
+| `qm-lin-btn-primary`, `qm-lin-pill` | `/visits` | **3** — discovered scope |
+
+The patient dialogs' rings no longer appear: they are hosted now, and the census
+scores hosted nodes as re-skinned.
+
+**A state the census still cannot reach, named rather than left implicit:** a
+Radix dialog is a PORTAL onto `<body>`, so its panel is not rendered during the
+walk and its contents are never enumerated. That is how the ring survived to be
+found by hand. The panels now carry `qm-rounds-host qm-rounds-dialog` — the
+pairing § Controls prescribes for exactly this reason — but the census is not
+what verified it.
+
 ## How it is kept honest
 
 - **Per-route load assertion** — a route that 404s would otherwise read as clean.

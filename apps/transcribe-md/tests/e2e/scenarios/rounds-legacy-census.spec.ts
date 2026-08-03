@@ -135,8 +135,10 @@ test('R3.0 — the legacy-island census', async ({ page }, testInfo) => {
           });
         }
 
-        // Computed-colour arm — catches a legacy colour on ANY class name.
+        // ── Computed-colour arm — a legacy colour on ANY class name ────────
         const cs = getComputedStyle(he);
+
+        // EXACT match, for properties that resolve to a single colour.
         for (const prop of ['color', 'backgroundColor', 'borderTopColor'] as const) {
           const v = cs[prop];
           const label = (colors as Record<string, string>)[v];
@@ -153,6 +155,40 @@ test('R3.0 — the legacy-island census', async ({ page }, testInfo) => {
             sample: (he.textContent || '').trim().slice(0, 40),
           });
         }
+
+        // ⚠️ SUBSTRING match, for COMPOSITE properties — and this arm exists
+        // because the census missed a real island and I only recorded it.
+        // R3.2 found `ring-linear-sage/40` on the Edit and Delete triggers:
+        // legacy sage, on a focus ring, on controls this round de-legacies.
+        // Tailwind compiles a ring to a BOX-SHADOW, and an alpha ring resolves
+        // to `rgba(122, 166, 140, 0.4)` — so an exact-match map keyed on
+        // `rgb(...)` could never see it, and the arm above sampled neither
+        // box-shadow nor outline anyway.
+        //
+        // Composite values hold several colours and an alpha, so the test is
+        // "does this string CONTAIN a legacy triplet", not equality. The
+        // triplets are derived from the same map, so the two arms cannot drift.
+        for (const prop of ['boxShadow', 'outlineColor', 'borderColor'] as const) {
+          const v = cs[prop as keyof CSSStyleDeclaration] as string;
+          if (!v || v === 'none') continue;
+          for (const [rgb, label] of Object.entries(colors as Record<string, string>)) {
+            // `rgb(122, 166, 140)` → `122, 166, 140`, which also appears inside
+            // any `rgba(122, 166, 140, .4)` the browser reports.
+            const triplet = rgb.replace(/^rgba?\(/, '').replace(/\)$/, '');
+            if (!v.includes(triplet)) continue;
+            const key = `comp:${prop}:${triplet}:${classes[0] || he.tagName}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            out.push({
+              family: `${label} (composite)`,
+              cls: classes[0] || `<${he.tagName.toLowerCase()}>`,
+              tag: he.tagName.toLowerCase(),
+              hosted,
+              why: `${prop} contains ${triplet}`,
+              sample: (he.textContent || '').trim().slice(0, 40),
+            });
+          }
+        }
       }
       return out;
     }, LEGACY_COLORS);
@@ -168,17 +204,31 @@ test('R3.0 — the legacy-island census', async ({ page }, testInfo) => {
     const probe = document.createElement('div');
     probe.className = 'qm-c3-census-probe';
     probe.style.cssText =
-      'position:fixed;top:0;left:0;width:10px;height:10px;color:rgb(122, 166, 140)';
+      'position:fixed;top:0;left:0;width:10px;height:10px;' +
+      'color:rgb(122, 166, 140);box-shadow:0 0 0 2px rgba(122, 166, 140, 0.4)';
     probe.textContent = 'probe';
     document.body.appendChild(probe);
     const he = probe as HTMLElement;
     const classHit = (he.getAttribute('class') || '').split(/\s+/).some((c) => c.startsWith('qm-c3-'));
-    const colorHit = !!(colors as Record<string, string>)[getComputedStyle(he).color];
+    const cs = getComputedStyle(he);
+    const colorHit = !!(colors as Record<string, string>)[cs.color];
+    // ⚠️ THE COMPOSITE ARM GETS ITS OWN CONTROL, exercising the exact shape it
+    // was added for: an ALPHA ring, which is what `ring-linear-sage/40`
+    // compiles to. A control that only proved the exact-match arm would leave
+    // the new one unverified — the blind spot moved rather than closed.
+    const compositeHit = Object.keys(colors as Record<string, string>).some((rgb) => {
+      const triplet = rgb.replace(/^rgba?\(/, '').replace(/\)$/, '');
+      return cs.boxShadow.includes(triplet);
+    });
     probe.remove();
-    return { classHit, colorHit };
+    return { classHit, colorHit, compositeHit };
   }, LEGACY_COLORS);
   expect(control.classHit, 'the CLASS arm of the census matcher is blind').toBe(true);
   expect(control.colorHit, 'the COLOUR arm of the census matcher is blind').toBe(true);
+  expect(
+    control.compositeHit,
+    'the COMPOSITE arm is blind — it would miss ring-linear-sage again',
+  ).toBe(true);
 
   // ── ARM 2 — THE SOURCE SWEEP, AND WHY THE DOM ARM ALONE IS NOT A CENSUS ──
   // A DOM walk can only see states it can REACH. Three of R3's eight items live
