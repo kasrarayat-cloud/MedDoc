@@ -337,6 +337,32 @@ to build; this says what is built, what is next, and what proof exists.
    candidates for removal, and the cleaner already enforces that — the danger is
    a human reaching past it.
 
+7d. **A SHARED COMPONENT MUST ACCEPT EVERY CONTEXT ITS PREDECESSORS CARRIED.**
+   Diff the callers' dropped props and params BEFORE the replacement lands, and
+   assert both directions in the migration test — carries when given, omits when
+   there is none. See `AGENTS.md` § "Shared components — diff the callers BEFORE
+   you replace them" for the two R4 reference implementations: context as a prop
+   (`RoundsNewVisitCta.patientId`) and treatment on the component
+   (`rx-tab.tsx`'s own host).
+
+   *Cost that produced this:* R4 was an entire round spent on two defects that
+   were the same mistake in two shapes, both from consolidations that were
+   otherwise right, and neither visible to the census — a class sweep cannot see
+   a missing query param or an unhosted third mount.
+
+7e. **A THIRD MID-ROUND HIGH ADVISORY RAISES THE POSTURE QUESTION.** Two were
+   absorbed one at a time (`brace-expansion` 2026-08-03, `fast-uri` the same
+   day) — both transitive, both published upstream between one green run and the
+   next, both fixed rather than waived. That is a coincidence. A third is a
+   pattern, and the response is to raise pinning or an audit schedule with the
+   owner, not to keep absorbing them mid-round.
+
+7f. **THE FONT ESCALATION IS SPENT.** CI's Turbopack build failed three times on
+   one `bricolage_grotesque` Google-font fetch inside its sandbox; the evidence
+   that it was environmental (no font/layout/config file in the diff, identical
+   build green locally) bought exactly ONE re-run, and that re-run passed.
+   **Recurrence means vendoring Bricolage Grotesque, not retrying harder.**
+
 ## Invariants re-checked every item
 
 Read-only paper · chat editor is the only edit path · all four fail-closed gates
