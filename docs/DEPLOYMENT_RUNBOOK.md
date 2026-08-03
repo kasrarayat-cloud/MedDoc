@@ -352,6 +352,14 @@ the concern is the E/M surface specifically rather than the whole review page.
 ### 3.3 KNOWN CONSTRAINT — the Rounds rollback is NOT flag-shaped, and it
 ### carries five other items back with it
 
+> ⚠️ **THE IMAGES THIS SECTION NAMES NO LONGER EXIST.** `:pre-rounds-20260802`
+> was removed in the 2026-08-03 R4 reclaim — it predates the R1–R4 skin work, so
+> restoring it would resurrect the split-brain app R1 fixed. **The commands below
+> are a RECORD of what was done and why, not a path anyone can run today**; they
+> fail on a missing tag. The live rollback set is the two-generation table in
+> §3.1. Kept rather than deleted because the CONSTRAINT this section documents —
+> that the Rounds rollback is not flag-shaped — is still true and still matters.
+
 **Decided 2026-08-02. Accepted. Do not "fix" it by re-adding a flag branch.**
 
 `NEXT_PUBLIC_SKIN_ROUNDS=true` went live on 2026-08-02 (relay item F). Two
