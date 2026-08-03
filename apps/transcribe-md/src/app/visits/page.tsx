@@ -16,6 +16,7 @@ import { TranscribeVisitStatus } from '@prisma/client';
 import { auth } from '@/lib/nextauth';
 import { logAudit } from '@/lib/audit';
 import { AppFrame } from '@/components/ui/app-frame';
+import { RoundsNewVisitCta } from '@/components/rounds/new-visit-cta';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Ic } from '@/components/ui/icon';
 import { PageHeader } from '@/components/ui/page-header';
@@ -172,14 +173,13 @@ export default async function VisitsPage({
             : 'No visits yet — start one below.'
         }
         actions={
-          <Link
-            href="/visits/new"
-            className="qm-lin-btn-primary"
-            style={{ textDecoration: 'none' }}
-          >
-            <Ic.plus width={14} height={14} />
-            New visit
-          </Link>
+          /* R3 discovered scope — the census found this route's own header
+             carrying `qm-lin-btn-primary` (legacy SAGE) even though `VisitList`
+             below it was already bridged. The shared CTA replaces it, so the
+             board, the roster, the patient page and this list all mount ONE
+             component: the label and the destination cannot drift across four
+             surfaces. No shortcut here — the board's top-bar mount owns `n`. */
+          <RoundsNewVisitCta variant="bar" />
         }
       />
 
@@ -190,14 +190,12 @@ export default async function VisitsPage({
           title="No visits yet"
           body="Capture your first encounter — live recording, audio upload, or text."
           cta={
-            <Link
-              href="/visits/new"
-              className="qm-lin-btn-primary"
-              style={{ textDecoration: 'none' }}
-            >
-              <Ic.plus width={14} height={14} />
-              Start a visit
-            </Link>
+            /* ⚠️ THIS SAID "Start a visit" — the SAME fourth name for
+               `/visits/new` that R2.5 removed from the board's empty state.
+               SPEC.md's copy register is "actions keep their names end-to-end",
+               and the census cannot see a naming drift, only a class. Found by
+               reading the file the census pointed at. */
+            <RoundsNewVisitCta variant="empty" />
           }
         />
       ) : (
@@ -245,6 +243,18 @@ function FilterBar({ active }: { active: Filter }) {
   // tint via `.qm-lin-pill--sage`.
   return (
     <div
+      /* ⚠️ R3 — HOSTED, AND THE CHIPS STAY, which is a different ruling from
+         R3.8's on the board. There the chip row was DELETED because the board
+         is a lanes × stage-columns matrix and a card's COLUMN already says
+         where the visit is — position carries status, so the chips were a
+         second, weaker encoding. `/visits` is a flat chronological LIST:
+         position carries date, not state, so the filter is the only way to
+         narrow it and removing it would remove a capability rather than a
+         redundancy.
+         So they are re-skinned, not deleted. `.qm-rounds-host` retints the
+         `qm-lin-pill--sage` active tint and the hairline in place; the chips
+         keep their hrefs, their `aria-current` and their behaviour. */
+      className="qm-rounds-host"
       style={{
         padding: '14px 24px 4px',
         display: 'flex',

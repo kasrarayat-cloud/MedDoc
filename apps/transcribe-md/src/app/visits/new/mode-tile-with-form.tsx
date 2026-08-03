@@ -50,7 +50,15 @@ export function ModeTileWithForm({
       form={formId}
       name="inputMode"
       value={value}
-      className="group block w-full rounded-lg border border-linear-border bg-linear-surface-1 p-6 text-left transition-colors hover:border-[rgba(122,166,140,0.45)] hover:bg-linear-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-linear-sage focus-visible:ring-offset-2 focus-visible:ring-offset-linear-bg"
+      /* ⚠️ R3.7 — `qm-rounds-modetile` CARRIES THE HOVER AND FOCUS, and the two
+         Tailwind utilities it replaces are why hosting alone was not enough
+         here. `hover:border-[rgba(122,166,140,0.45)]` is a LITERAL rgba — the
+         legacy sage written out, not a custom property — so `.qm-rounds-host`
+         cannot retint it, and `focus-visible:ring-linear-sage` is the same
+         colour on the focus ring. Those are the "legacy green buttons" this
+         item kills. Layout stays Tailwind; only the two state colours move, and
+         the tile gains the same lift the board and roster cards use. */
+      className="qm-rounds-modetile group block w-full rounded-lg border border-linear-border bg-linear-surface-1 p-6 text-left transition-colors focus-visible:outline-none"
       style={{ minHeight: 132, cursor: 'pointer' }}
     >
       <span

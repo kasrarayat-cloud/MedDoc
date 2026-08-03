@@ -37,7 +37,22 @@ export function NewVisitClientC3({
   const [patient, setPatient] = useState<SelectedPatient | null>(initialPatient);
 
   return (
-    <div className="qm-c3-nv">
+    /* ⚠️ R3.7 — HOSTED, AND THE POSTED CONTRACT IS UNTOUCHED BY CONSTRUCTION.
+       The census counted 10 `qm-c3-nv-*` islands on this route. `.qm-rounds-host`
+       retints all of them plus the `qm-lin-btn` controls at once.
+
+       THE REASON IT IS A WRAPPER AND NOT A REWRITE is the brief's own
+       constraint: "Function and posted field names unchanged — the specialty
+       hidden-input contract from the smoke walks stays." Both prod smoke walks
+       assert `input[name="specialty"]` carries the SLUG (`primary-care`, not the
+       "Primary Care" label), and the whole flow posts through a server action
+       keyed on those names. A wrapper cannot rename a field; a rewrite of the
+       form markup is precisely the change that could, silently.
+
+       What is NOT hosted, because hosting cannot fix it: the capture tiles'
+       hover and focus, which hard-code the legacy sage as a literal rgba. Those
+       are `.qm-rounds-modetile`. */
+    <div className="qm-rounds-host qm-c3-nv">
       <div className="qm-c3-nv-card">
         {patient === null ? (
           <>

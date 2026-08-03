@@ -407,7 +407,29 @@ export function ProcessingTypewriter({
     const di = phaseIndex(displayPhase);
     const allDone = di >= VISIT_PHASES.length - 1 && displayPhase === 'Coding';
     return (
-      <div style={{ maxWidth: 520, margin: '40px auto 64px', padding: '0 20px' }}>
+      /* ⚠️ R3.6 — HOSTED. This is a state the CENSUS STRUCTURALLY CANNOT REACH:
+         it exists only while a real pipeline run is in flight, so a route walk
+         never renders it and it was found by reading the file rather than by
+         the sweep. Its card, spinner, heading, step list and hints are all
+         `qm-c3-rec-*` painted from `--color-linear-*` — under Rounds that is a
+         legacy card on the stage ground, which is what the walkthrough
+         reported as "the old error sometimes appears".
+
+         `.qm-rounds-host` retints the whole family, and it also covers the
+         RETRY surface inside THIS branch (`RetryButton`), which is the second
+         half of item 6 and shares the same tokens. ⚠️ NOT "both call sites" —
+         an earlier draft of this comment said that and it was wrong. The other
+         `RetryButton` lives in the `qm-tw-*` branch below, which only renders
+         with skin-beta OFF; hosting it would restyle a surface Rounds never
+         shows. Corrected here rather than left, because a comment claiming
+         coverage it does not have is the exact defect this round has now found
+         three times in other people's files. The progress itself
+         is untouched — the phases, the timings and the honest "stuck" copy are
+         behaviour, not skin. */
+      <div
+        className="qm-rounds-host"
+        style={{ maxWidth: 520, margin: '40px auto 64px', padding: '0 20px' }}
+      >
         <div className="qm-c3-rec-card" style={{ margin: '0 auto' }}>
           <div
             className={allDone ? 'qm-c3-rec-spin done' : 'qm-c3-rec-spin'}

@@ -2464,6 +2464,40 @@ body[data-skin='rounds'] {
   gap: 10px;
 }
 
+/* ── R3.7 — THE CAPTURE-MODE TILES ───────────────────────────────────────────
+ * The three tiles on /visits/new (Upload audio · Dictate live · Text to SOAP)
+ * are the flow's real choice, and they carried the legacy sage on BOTH states:
+ * `hover:border-[rgba(122,166,140,0.45)]` — a literal rgba the bridge cannot
+ * reach, since it is not a custom property — and `focus-visible:ring-linear-sage`.
+ *
+ * They get the same treatment as the board's marker cards and the patient
+ * roster's: hover lift, pressed, and the file's ONE `:focus-visible` outline
+ * rather than a second ring definition. Layout stays Tailwind. */
+[data-skin='rounds'] .qm-rounds-modetile {
+  transition:
+    transform 140ms ease-out,
+    box-shadow 140ms ease-out,
+    border-color 140ms ease-out;
+}
+
+[data-skin='rounds'] .qm-rounds-modetile:hover {
+  transform: translateY(-2px);
+  border-color: var(--rounds-accent);
+  box-shadow: 0 6px 18px -6px rgba(8, 10, 14, 0.55);
+}
+
+[data-skin='rounds'] .qm-rounds-modetile:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px -3px rgba(8, 10, 14, 0.5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-skin='rounds'] .qm-rounds-modetile {
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
 /* ── R3.4 — THE PRESCRIPTION-SAFETY SURFACE ──────────────────────────────────
  * `.qm-rounds-host` on the wrapper retints all ~79 `qm-lin-rx-*` rules at once,
  * because every one of them paints from `--color-linear-*`. What the bridge
