@@ -356,7 +356,10 @@ export default async function PatientPage({
               left implicit. */}
           {roundsSkin ? (
             <div className="qm-rounds-host qm-rounds-pdetail-actions">
-              {!isDeleted && <RoundsNewVisitCta variant="bar" />}
+              {/* R4.2 — the patient TRAVELS with the action. Without this the
+                  button lands the doctor in create-a-patient on the one page
+                  where the patient is already known. */}
+              {!isDeleted && <RoundsNewVisitCta variant="bar" patientId={patient.id} />}
               {latestVisit && (
                 <Link
                   href={`/visits/${latestVisit.id}`}
