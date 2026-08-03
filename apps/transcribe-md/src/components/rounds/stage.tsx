@@ -48,6 +48,22 @@ export interface RoundsStageProps {
   children: React.ReactNode;
   /** The existing `<ChatEditorPanel>`, dropped into the drawer. */
   chat?: React.ReactNode;
+  /**
+   * R2 — the lifecycle actions (archive / delete / edit draft), as a quiet
+   * overflow in the stage header.
+   *
+   * ⚠️ IT USED TO FLOAT AT THE PAGE FOOT. `page.tsx` rendered the `<details>`
+   * after the entire visit body, which put a destructive control below the
+   * action rail and past the end of the note — the last place a doctor looks,
+   * and one they scroll through to reach the end of a long note. SPEC.md's
+   * stage has no page-foot region at all; it ends at the rail.
+   *
+   * A SLOT, like the paper and the chat: this component composes the stage and
+   * renders nothing of the visit itself. The node is built server-side in
+   * `page.tsx` because `EditDraftDialog` inside it is assembled from the
+   * visit's Prisma row.
+   */
+  visitActions?: React.ReactNode;
   /** Fires when the doctor asks to sign. The gate flow is B2's. */
   onReviewAndSign?: () => void;
   /** Navigate to the next encounter without signing this one. */
@@ -98,6 +114,7 @@ export function RoundsStage({
   criticalUnresolved = 0,
   children,
   chat,
+  visitActions,
   onReviewAndSign,
   onSkip,
   onOpenQueue,
@@ -117,7 +134,21 @@ export function RoundsStage({
         emArtifact={emArtifact}
       />
 
-      <RoundsStageIdentity identity={identity} />
+      {/* ── Identity, and the quiet overflow beside it ─────────────────────
+          R2. The actions sit WITH the thing they act on — this visit, named
+          right there — rather than at the foot of the page. Collapsed by
+          default: `<details>` needs no JavaScript, is keyboard-operable and
+          screen-reader-announced for free, and keeps a destructive control one
+          deliberate click away instead of one stray one. */}
+      <div className="qm-rounds-stage-head">
+        <RoundsStageIdentity identity={identity} />
+        {visitActions ? (
+          <details className="qm-rounds-overflow" data-testid="rounds-visit-overflow">
+            <summary className="qm-rounds-overflow-summary">Visit actions</summary>
+            <div className="qm-rounds-overflow-body">{visitActions}</div>
+          </details>
+        ) : null}
+      </div>
 
       {/* RESERVED, DELIBERATELY EMPTY — structured vitals do not exist yet.
           Do not fill this. See the header. */}

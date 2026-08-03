@@ -28,7 +28,13 @@ const EM = (unresolved: number): SignGate => ({
 const ATTEST = (unresolved = 1): SignGate => ({
   id: 'attestation',
   unresolved,
-  serverEnforced: false,
+  // ⚠️ TRUE SINCE 2026-08-02. This fixture said `false`, which was correct when
+  // it was written and stale from the moment the gate became server-enforced:
+  // `sign-gates.ts` is `serverEnforced: true`, and `POST /sign` answers 400
+  // ATTESTATION_REQUIRED without it. Nothing asserted the fixture's value, so
+  // nothing reddened — but a fixture that models the server wrongly is how a
+  // future test comes to "prove" behaviour the server does not have.
+  serverEnforced: true,
 });
 
 function renderFlow(
@@ -192,13 +198,52 @@ describe('the attestation step', () => {
     expect(label?.textContent).toContain('2026-07-30');
   });
 
-  it('SAYS the server does not check it — because signGates says so', () => {
-    // attestation is serverEnforced: false and the sign route has no such
-    // field. A UI that implied otherwise would be making a promise nobody
-    // keeps, on the screen whose job is to be believed.
+  it('⚠️ SAYS THE SERVER REFUSES WITHOUT IT — because since 2026-08-02 it does', () => {
+    // ⚠️ THIS ASSERTION WAS INVERTED, AND IT HELD A FALSE STATEMENT IN PLACE.
+    //
+    // It used to require `/server does not check/i`, which was correct when B2
+    // wrote it: `signGates` marked the attestation `serverEnforced: false` and
+    // the sign route had no such field. The UI said so out loud, deliberately,
+    // so that anyone reconciling the strip's N against a 4xx knew which term
+    // the route could not see. That honesty was right.
+    //
+    // On 2026-08-02 the gate became SERVER-ENFORCED — `sign-gates.ts` is now
+    // `serverEnforced: true`, `POST /sign` answers 400 ATTESTATION_REQUIRED
+    // without `attestation: { acknowledged: true }`, and the refusal writes a
+    // `SIGN_BLOCKED_NO_ATTESTATION` audit row. The copy did not move with it,
+    // and THIS TEST is why it could not: the stale sentence had a green check
+    // standing behind it, so every run confirmed the claim was still there
+    // rather than still true.
+    //
+    // A gate's UI text is part of the gate. Telling a doctor a clinical
+    // safeguard is unenforced when it is enforced invites them to treat the
+    // tick as paperwork — the precise failure the strengthening exists to stop.
+    renderFlow({ gates: [ATTEST()], step: 'attestation' });
+    const note = screen.getByTestId('rounds-gate-attest-note').textContent ?? '';
+    expect(note).toMatch(/refused by the server/i);
+    // AND the old claim is gone, not merely joined by the new one.
+    expect(note).not.toMatch(/server does not check/i);
+  });
+
+  it('⚠️ the note cannot drift from `sign-gates.ts` again', () => {
+    // The failure above was a UI sentence and a server fact disagreeing with
+    // nothing watching the pair. This reads BOTH and refuses to let the copy
+    // claim less than the route enforces. If a future change makes the
+    // attestation advisory again, this reddens and the sentence gets rewritten
+    // in the same commit — which is the only way the two stay honest.
+    const gates = readFileSync('src/lib/sign-gates.ts', 'utf8');
+    const attestBlock = gates.slice(gates.indexOf("id: 'attestation'"));
+    const serverEnforced = /serverEnforced:\s*true/.test(
+      attestBlock.slice(0, attestBlock.indexOf('}')),
+    );
+    expect(
+      serverEnforced,
+      'attestation is no longer serverEnforced — the Gate 3 note now overclaims',
+    ).toBe(true);
+
     renderFlow({ gates: [ATTEST()], step: 'attestation' });
     expect(screen.getByTestId('rounds-gate-attest-note').textContent).toMatch(
-      /server does not check/i
+      /refused by the server/i,
     );
   });
 
@@ -216,14 +261,48 @@ describe('the imaging E/M anomaly', () => {
     renderFlow({ gates: [ATTEST()], step: 'attestation', emArtifact: true });
 
     expect(screen.getByTestId('rounds-gate-em-artifact')).toBeTruthy();
-    expect(screen.queryByTestId('rounds-gate-host-attestation')).toBeNull();
     expect(screen.queryByTestId('rounds-gate-attest')).toBeNull();
+    // ⚠️ R2 — THE SIGNATURE ANCHOR ON THIS STEP IS A DIFFERENT ELEMENT NOW.
+    // It used to be `rounds-gate-host-attestation`, the ADOPTION host that
+    // `gate-flow` moved the paper's footer node into. The signature is a plain
+    // React child today (`signbar`), so the anchor is
+    // `rounds-gate-signbar-host` — and the adoption host is not rendered on
+    // this step at all, because nothing adopts here any more.
+    expect(screen.queryByTestId('rounds-gate-host-attestation')).toBeNull();
+    expect(screen.queryByTestId('rounds-gate-signbar-host')).toBeNull();
   });
 
   it('NEGATIVE CONTROL — without the artifact the signature host exists', () => {
-    renderFlow({ gates: [ATTEST()], step: 'attestation' });
+    // The negative control is what makes the assertion above mean anything: an
+    // absence proves nothing unless the same probe can find a presence.
+    // `renderFlow` must therefore SUPPLY a signbar, or this passes for the
+    // wrong reason — no signature because none was offered.
+    renderFlow({
+      gates: [ATTEST()],
+      step: 'attestation',
+      signbar: <button data-testid="probe-sign">Sign &amp; Download</button>,
+    });
     expect(screen.queryByTestId('rounds-gate-em-artifact')).toBeNull();
-    expect(screen.getByTestId('rounds-gate-host-attestation')).toBeTruthy();
+    expect(screen.getByTestId('rounds-gate-signbar-host')).toBeTruthy();
+    expect(screen.getByTestId('probe-sign')).toBeTruthy();
+    // And STILL no adoption host — the re-home did not simply rename one.
+    expect(screen.queryByTestId('rounds-gate-host-attestation')).toBeNull();
+  });
+
+  it('⚠️ R2 — the adoption host exists for the two gates that ADOPT, and only those', () => {
+    // The effect looks up `[data-gate-slot="rx"|"em"]` and nothing else. A host
+    // rendered for a step that never adopts is a landmark advertising a
+    // mechanism it does not participate in — which is how the next reader
+    // concludes the adoption still covers three slots. Caught by the E2E pack
+    // when the markup had not followed the effect.
+    for (const g of [RX(1), EM(1)]) {
+      const { unmount } = renderFlow({ gates: [g], step: g.id });
+      expect(
+        screen.getByTestId(`rounds-gate-host-${g.id}`),
+        `${g.id} lost its adoption host — its live gate has nowhere to land`,
+      ).toBeTruthy();
+      unmount();
+    }
   });
 });
 
@@ -279,10 +358,33 @@ describe('it does not know what a specialty is, and must not learn', () => {
 
   it('branches on no gate id of its own except the one that owns the signature', () => {
     // `attestation` appears because the last step carries the checkbox and the
-    // signing bar — that is a step's own chrome, not a clinical decision.
-    // `rx` and `em` must never be branched on: they arrive as data.
-    expect(SRC).not.toContain("=== 'rx'");
-    expect(SRC).not.toContain("=== 'em'");
+    // signature — that is a step's own chrome, not a clinical decision.
+    // The other two must never be branched on: they arrive as data.
+    //
+    // ⚠️ R2 — COMMENTS ARE STRIPPED FIRST, and that is a fix rather than a
+    // loosening. This grepped the RAW source, so any prose explaining the ban
+    // tripped it: R2's `ADOPTED_SLOTS` docstring described the rule, spelled
+    // the comparison it forbids, and reddened this test while the code it
+    // guards was clean. That is the same defect the sibling guard above already
+    // dodges by assembling its tokens from fragments — and the third sighting
+    // of "a source grep reading its own explanation" in this repo.
+    // The ban itself is UNCHANGED; it now applies to code, which is all it ever
+    // meant to cover.
+    const code = SRC.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, ' ');
+    expect(code).not.toContain("=== 'rx'");
+    expect(code).not.toContain("=== 'em'");
+    expect(code).not.toContain('=== "rx"');
+    expect(code).not.toContain('=== "em"');
+
+    // NON-VACUITY: stripping is what makes this test weaker if it goes wrong.
+    // A regex that ate the whole file would pass every assertion above, so
+    // prove real code survived — and prove the stripper actually removed prose.
+    expect(code, 'the comment stripper ate the source').toContain('ADOPTED_SLOTS');
+    expect(code).toContain('RoundsGateFlow');
+    expect(
+      code.length,
+      'stripping removed nothing — the guard is still reading comments',
+    ).toBeLessThan(SRC.length);
   });
 
   it('NEGATIVE CONTROL — the matcher can find a token that IS present', () => {

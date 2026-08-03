@@ -25,20 +25,35 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-/** Board · Patients · Templates · Settings. `/patients` joined in R1; before
- *  that the route was reachable only from the legacy sidebar, so a doctor on
- *  the board could not get to their patient list at all. */
+/** Board · Patients · Settings. `/patients` joined in R1; before that the
+ *  route was reachable only from the legacy sidebar, so a doctor on the board
+ *  could not get to their patient list at all.
+ *
+ *  ⚠️ R2 — TEMPLATES FOLDED INTO SETTINGS, AND IT WAS ALREADY THERE.
+ *  The item pointed at `/settings/note-format`: a fourth top-level noun for a
+ *  destination that is a SECTION of the third. A doctor reading the bar saw two
+ *  peers and reached one page. Note format is reached from Settings now, and
+ *  `/templates` — a deep link that has never had a route and 404'd — forwards
+ *  there (`config/rounds-redirects.ts`).
+ *
+ *  This subtracts a NAME, not a capability: the note-format screen, its URL and
+ *  every existing link into it are untouched. */
 const NAV = [
   { href: '/board', label: 'Board' },
   { href: '/patients', label: 'Patients' },
-  { href: '/settings/note-format', label: 'Templates' },
   { href: '/settings', label: 'Settings' },
 ] as const;
 
-/** Longest-prefix match, so `/patients/<id>` lights Patients and
- *  `/settings/note-format` lights Templates rather than Settings. A plain
- *  `startsWith` would light BOTH — `/settings/note-format` starts with
- *  `/settings` — which is the substring trap this project has shipped before. */
+/** Longest-prefix match, so `/patients/<id>` lights Patients.
+ *
+ *  ⚠️ IT IS STILL LONGEST-PREFIX AFTER R2, AND DELETING THAT WOULD BE A SILENT
+ *  REGRESSION. With `Templates` gone the two-candidate case it was written for
+ *  (`/settings/note-format` matching both `/settings` and the Templates entry)
+ *  no longer arises from NAV — so a plain `startsWith` would pass every test
+ *  here today. It stays because the property it enforces is "the most specific
+ *  entry wins", which is what makes `/settings/note-format` light **Settings**
+ *  rather than nothing, and what will hold the next time a nested entry is
+ *  added. A guard that only looks unnecessary is not the same as one that is. */
 export function activeNavHref(pathname: string): string | null {
   let best: string | null = null;
   for (const n of NAV) {

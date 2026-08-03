@@ -141,9 +141,30 @@ describe('the gate cannot strand a doctor', () => {
   });
 
   it('reaching for Sign re-checks first', () => {
-    expect(src).toContain('onRescoreEm?.()');
-    const signArea = src.slice(src.indexOf('<SignAndSendModal') - 500, src.indexOf('<SignAndSendModal'));
-    expect(signArea).toContain('emStale');
+    // ⚠️ R2 MOVED THE SIGN BAR OUT OF `review-document-view.tsx` into
+    // `review-sign-bar.tsx`, so it could be re-homed into Rounds Gate 3. The
+    // BEHAVIOUR this pins is unchanged — reaching for Sign while the level is
+    // stale re-scores first, so the doctor meets the confirm card rather than a
+    // refusal they have to interpret — so the assertion follows the code
+    // instead of being deleted.
+    const bar = readFileSync('src/app/visits/[id]/review-sign-bar.tsx', 'utf8');
+    expect(bar).toContain('onRescoreEm?.()');
+
+    // ⚠️ AND IT NO LONGER SLICES BY CHARACTER OFFSET. This read
+    // `src.slice(indexOf('<SignAndSendModal') - 500, …)` and asserted `emStale`
+    // appeared in that window — a guess about how much text happens to sit
+    // above the element. Moving the modal a few lines, or adding a prop,
+    // silently changes what is measured; and where the modal sits inside the
+    // first 500 characters, `slice` clamps to 0 and the window becomes the
+    // whole preamble. The relationship being asserted is that the re-check
+    // GUARDS the sign trigger, so assert that shape directly.
+    const guard = bar.slice(bar.indexOf('onClickCapture'), bar.indexOf('<SignAndSendModal'));
+    expect(
+      guard,
+      'the re-check no longer wraps the sign trigger — a stale level can reach ' +
+        'the modal unchecked',
+    ).toContain('emStale');
+    expect(guard).toContain('onRescoreEm');
   });
 });
 

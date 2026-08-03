@@ -27,6 +27,7 @@ import Link from 'next/link';
 
 import { ROUNDS_STAGES } from '@/lib/rounds/stages';
 import type { BoardLane } from '@/lib/rounds/board-data';
+import { RoundsNewVisitCta } from './new-visit-cta';
 import { RoundsRetryButton } from './retry-button';
 
 /** The board's modality word. There is NO `modality` column — the honest
@@ -107,7 +108,22 @@ function LaneTrack({ lane }: { lane: BoardLane }) {
   );
 }
 
-function LaneCard({ lane }: { lane: BoardLane }) {
+/** R2 — the entrance stagger, capped.
+ *
+ * ⚠️ THE CAP IS THE POINT, NOT THE STEP. At 28ms a 60-lane board would make the
+ * last card wait 1.68s before appearing, and a doctor scrolling to the bottom
+ * of a busy morning would find an empty column and read it as a load failure.
+ * Ten steps (280ms) is the whole run; every card past the tenth starts with the
+ * tenth. Real boards on this product routinely exceed ten lanes, so this is the
+ * ordinary path, not a defensive edge case. */
+const STAGGER_STEP_MS = 28;
+const STAGGER_MAX_STEPS = 10;
+
+export function cardEntranceDelayMs(index: number): number {
+  return Math.min(index, STAGGER_MAX_STEPS) * STAGGER_STEP_MS;
+}
+
+function LaneCard({ lane, index }: { lane: BoardLane; index: number }) {
   const critical = lane.criticalCount > 0;
 
   const border = critical
@@ -146,6 +162,13 @@ function LaneCard({ lane }: { lane: BoardLane }) {
       data-lane-kind={lane.kind}
       data-critical={critical ? 'true' : 'false'}
       aria-label={`${lane.patientLabel}, ${lane.kind}${critical ? ', critical interaction' : ''}`}
+      /* R2. Hover lift, pressed, focus-visible and the entrance live in
+         `rounds-tokens.css` — a pseudo-class cannot be expressed inline, which
+         is why this element gained a class rather than more `style` keys. The
+         colour properties below stay inline: they are computed per lane kind
+         and each pairing is contrast-checked against the ground THAT card
+         paints. */
+      className="qm-rounds-lane-card"
       style={{
         position: 'relative',
         display: 'block',
@@ -156,6 +179,7 @@ function LaneCard({ lane }: { lane: BoardLane }) {
         color: fg,
         textDecoration: 'none',
         minWidth: 0,
+        animationDelay: `${cardEntranceDelayMs(index)}ms`,
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -288,13 +312,15 @@ function LaneCard({ lane }: { lane: BoardLane }) {
   );
 }
 
-export function RoundsBoard({
-  lanes,
-  emptyHref = '/visits/new',
-}: {
-  lanes: BoardLane[];
-  emptyHref?: string;
-}) {
+/** ⚠️ R2 REMOVED `emptyHref`, and removing it was the point rather than tidying.
+ *  The empty state's CTA is now `<RoundsNewVisitCta>`, which owns the
+ *  destination (`NEW_VISIT_HREF`) so the board and the top bar cannot disagree
+ *  about where "New visit" goes. Left in place, the prop would have been
+ *  declared, defaulted and IGNORED — a caller could pass one and be silently
+ *  overruled, which is the same shape as `emStale`'s falsy default: an option
+ *  that reads as supported and does nothing. Nobody passed it (grepped: zero
+ *  call sites outside the declaration). */
+export function RoundsBoard({ lanes }: { lanes: BoardLane[] }) {
   if (lanes.length === 0) {
     // An invitation to record, not a mood. No illustration, no "nothing here
     // yet" shrug — the one thing a doctor would want to do next.
@@ -333,22 +359,14 @@ export function RoundsBoard({
         >
           Record a visit and the note writes itself while you move on.
         </p>
-        <Link
-          href={emptyHref}
-          style={{
-            display: 'inline-block',
-            padding: '9px 16px',
-            borderRadius: 'var(--rounds-radius-sm)',
-            background: 'var(--rounds-accent)',
-            color: '#fff',
-            fontFamily: 'var(--rounds-font-ui)',
-            fontWeight: 600,
-            fontSize: 13.5,
-            textDecoration: 'none',
-          }}
-        >
-          Start a visit
-        </Link>
+        {/* ⚠️ R2 — "New visit", NOT "Start a visit", and the rename is the
+            point. SPEC.md's copy register is "actions keep their names
+            end-to-end"; this was the only surface in the product calling
+            `/visits/new` anything else, so a doctor met a fourth name for the
+            action on the one screen where they had never seen the other three.
+            Shortcut deliberately NOT registered here — the top bar's copy owns
+            it, and two listeners on one key double-navigate. */}
+        <RoundsNewVisitCta variant="empty" />
       </div>
     );
   }
@@ -406,7 +424,7 @@ export function RoundsBoard({
       </div>
 
       <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-        {lanes.map((lane) => {
+        {lanes.map((lane, laneIndex) => {
           const col = cardColumn(lane);
           return (
             <li
@@ -431,7 +449,7 @@ export function RoundsBoard({
               >
                 {ROUNDS_STAGES.map((s) => (
                   <div key={s.id} style={{ minWidth: 0 }}>
-                    {s.n === col ? <LaneCard lane={lane} /> : null}
+                    {s.n === col ? <LaneCard lane={lane} index={laneIndex} /> : null}
                   </div>
                 ))}
               </div>

@@ -466,96 +466,108 @@ test.describe('Rounds Screen 2 — the stage', () => {
     expect((await gateScrolls())[0].drawerOpen).toBe(false);
   });
 
-  // ── 10. One control can start a signature ────────────────────────────────
-  test('the two sign controls cannot disagree — the footer is gated by the rail\'s own count', async ({
+  // ── 10. EXACTLY ONE control can start a signature, and it is not on the stage ──
+  test('the stage carries NO signature control — the rail and the gates are the only path', async ({
     page,
   }) => {
-    // ⚠️ WHAT THIS TEST ASSERTED BEFORE WAS THE BUG.
+    // ⚠️ THIS TEST HAS BEEN THREE DIFFERENT CLAIMS. Read the history before
+    // changing it again, because two of the three were wrong on this screen.
     //
-    // It asserted `toHaveCount(1)` on the signing bar and called that "exactly
-    // one control can start a signature". One is the right number of signing
-    // controls; it was the wrong claim about this screen. The rail and the
-    // embedded footer were both live and they DISAGREED — measured on
-    // production 2026-08-02, one clean READY visit, one moment:
+    // 1. ORIGINALLY it asserted `toHaveCount(1)` on the signing bar and called
+    //    that "exactly one control can start a signature". One is the right
+    //    number; it was the wrong claim about this screen. The rail and the
+    //    embedded footer were BOTH live and they DISAGREED — measured on
+    //    production 2026-08-02, one clean READY visit, one moment:
     //
-    //     action rail   "Review & sign · 1 blocker"
-    //     footer        "Reviewed"    Sign & Download   disabled=false
+    //        action rail   "Review & sign · 1 blocker"
+    //        footer        "Reviewed"    Sign & Download   disabled=false
     //
-    // The rail's N counts every applicable gate including `attestation`; the
-    // footer's `blocked` had no `attested` term, and `sign-gates.ts` marks that
-    // gate `serverEnforced: false` — so the enabled button signed past it and
-    // nothing behind it caught the bypass.
+    //    The footer's `blocked` had no `attested` term, so the enabled button
+    //    signed straight past the attestation.
     //
-    // The footer now reads the rail's OWN number, so the invariant is no longer
-    // "there is one control" but the stronger "the two cannot contradict each
-    // other". A gate added to sign-gates.ts reaches both at once.
-    // ⚠️ IMAGING, AND THE FIXTURE IS THE WHOLE TEST.
-    // On the office fixture this assertion is VACUOUS: that visit has an E/M
-    // gate, so `blocked = rxBlocking || emBlocking` is true with or without the
-    // coupling — severing it changes nothing and the test passes on the bug.
-    // Proven by doing exactly that: the mutant (coupling removed) went 12/12
-    // green on the office fixture.
-    // Imaging has no E/M gate and no Rx, so the attestation is the ONLY
-    // applicable gate — which makes the rail's count the only thing that can
-    // disable the footer, and severing the coupling flips it to enabled.
+    // 2. R1 COUPLED THEM (`signGateBlockers`) and this test became "the two
+    //    cannot contradict each other" — the footer-agrees guard. That closed
+    //    the bypass and left the duplication: a second sign control still sat
+    //    pinned to the stage.
+    //
+    // 3. R2 RE-HOMED THE BAR into Gate 3, so the claim returns to ABSENCE —
+    //    which is what it should have been able to say all along.
+    //    THE FOOTER-AGREES GUARD IS RETIRED WITH THE FOOTER, deliberately and
+    //    on the record (docs/rounds/RELAY.md, R2 row). It is not weakened and
+    //    not silently dropped: it asserted a relationship between two controls,
+    //    and there is now one control, so the relationship has no referent. Its
+    //    replacement is strictly stronger — a bar that cannot be reached cannot
+    //    disagree with anything.
     const seeded = await open(page, 'stage-10', { specialtyClass: 'imaging' });
     test.skip(!seeded, 'psql seeding unavailable');
 
     const rail = page.getByTestId('rounds-review-sign');
     await expect(rail).toBeVisible();
-    await expect(page.getByTestId('review-doc-signbar')).toHaveCount(1);
 
-    // NON-VACUITY: with zero blockers this test could not tell the fix from a
-    // visit that had nothing to gate in the first place.
+    // NON-VACUITY, FIRST. An absence assertion over a page that failed to load
+    // is true and worthless. The stage must be present AND have something to
+    // gate, or "no sign control here" proves nothing.
     const blockers = Number((await rail.getAttribute('data-blockers')) ?? '0');
     expect(
       blockers,
       'the fixture must reach the stage with at least one gate open (the ' +
         'attestation is always applicable) or this proves nothing',
     ).toBeGreaterThan(0);
+    await expect(page.getByTestId('review-document-view')).toHaveCount(1);
 
-    // AND the open gate must be the attestation ALONE — no E/M surface, no Rx
-    // rail. If either were present the footer would be disabled for a reason
-    // that is not the rail's count, and this test would pass on a severed
-    // coupling. This is the assertion that makes the mutation visible.
+    // THE ASSERTION. Zero signature controls on the stage itself.
     await expect(
-      page.getByTestId('review-doc-em-level'),
-      'an E/M gate on the imaging fixture — the imaging invariant broke, and ' +
-        'this test would stop discriminating',
+      page.getByTestId('review-doc-signbar'),
+      'the legacy sign bar is back on the stage — R2 re-homed it into Gate 3, ' +
+        'and `hostSignbar` is what keeps it there',
     ).toHaveCount(0);
-    expect(blockers, 'more than the attestation is open here').toBe(1);
 
-    // THE ASSERTION THE BYPASS WOULD FAIL: the rail says there is something
-    // left to do, so the thing that actually signs must refuse.
-    const signBtn = page
-      .getByTestId('review-doc-signbar')
-      .getByRole('button', { name: /sign & download/i });
-    await expect(signBtn).toHaveCount(1);
+    // And nothing else grew one. A `Sign` button anywhere outside the gate flow
+    // is the same defect wearing a different testid — this is the half that
+    // survives someone re-adding the control under a new name.
     await expect(
-      signBtn,
-      `the rail reports ${blockers} blocker(s) while the footer's signature ` +
-        'button is enabled — that is the production defect R1 closed',
-    ).toBeDisabled();
+      page.getByRole('button', { name: /sign & download/i }),
+      'a Sign & Download control is reachable on the stage without opening the gates',
+    ).toHaveCount(0);
 
-    // And the footer must not be claiming the visit is finished either.
-    await expect(page.getByTestId('review-doc-bar-msg')).not.toHaveText(/^Reviewed$/);
+    // ── AND IT IS NOT MERELY HIDDEN ─────────────────────────────────────────
+    // `toHaveCount(0)` is satisfied by `display: none` too, and a hidden-but-
+    // mounted button is still a second path. Assert ABSENCE FROM THE DOM, which
+    // is the claim being made.
+    const mounted = await page.evaluate(
+      () => document.querySelectorAll('[data-testid="review-doc-signbar"]').length,
+    );
+    expect(mounted, 'the sign bar is mounted but hidden — that is not removal').toBe(0);
 
-    // The flow still adopts the same single node — one bar, wherever it lives.
+    // ── THE OTHER HALF: it exists where it SHOULD ───────────────────────────
+    // Absence alone is satisfied by deleting the signature outright, which
+    // would be a far worse bug with the same green tick. Walk to the
+    // attestation and prove the one control is there, and disabled while the
+    // gate is open.
     await rail.click();
     await expect(page.getByTestId('rounds-gate-flow')).toBeVisible();
-    await expect(page.getByTestId('review-doc-signbar')).toHaveCount(1);
-
-    // ── THE OTHER HALF OF THE ⇔ ──────────────────────────────────────────
-    // "Disabled while blocked" alone is satisfied by a button that is ALWAYS
-    // disabled, which would be a different bug with the same green tick. Clear
-    // the last gate and the two must agree in the other direction too: rail
-    // count 0 ⇔ footer enabled.
     for (let i = 0; i < 4; i += 1) {
       if (await page.getByTestId('rounds-gate-attest').count()) break;
       const next = page.getByTestId('rounds-gate-next');
       if (!(await next.count()) || (await next.isDisabled())) break;
       await next.click();
     }
+    await expect(
+      page.getByTestId('rounds-gate-signbar-host').getByTestId('review-doc-signbar'),
+      'the signature is not inside Gate 3 either — it has been lost, not re-homed',
+    ).toHaveCount(1);
+
+    const signBtn = page
+      .getByTestId('review-doc-signbar')
+      .getByRole('button', { name: /sign & download/i });
+    await expect(signBtn).toHaveCount(1);
+    await expect(
+      signBtn,
+      'the attestation is unticked and the signature is enabled',
+    ).toBeDisabled();
+
+    // ⇔ THE OTHER DIRECTION. "Disabled while blocked" alone is satisfied by a
+    // button that is ALWAYS disabled — a different bug, same green tick.
     if (await page.getByTestId('rounds-gate-attest').count()) {
       await page.getByTestId('rounds-gate-attest').check();
       await expect(
@@ -564,14 +576,22 @@ test.describe('Rounds Screen 2 — the stage', () => {
       ).toHaveAttribute('data-blockers', '0');
       await expect(
         signBtn,
-        'the rail says zero blockers and the footer is STILL disabled — the two ' +
-          'disagree in the other direction',
+        'the rail says zero blockers and the signature is STILL disabled',
       ).toBeEnabled();
     }
 
+    // Closing returns to a stage with no signature control, not to a restored
+    // footer. The four failed removals all died on the way BACK.
     await page.getByTestId('rounds-gate-close').click();
     await expect(page.getByTestId('rounds-gate-flow')).toHaveCount(0);
-    await expect(page.getByTestId('review-doc-signbar')).toHaveCount(1);
-    await expect(page.getByTestId('review-document-view')).toHaveCount(1);
+    await expect(
+      page.getByTestId('review-doc-signbar'),
+      'closing the gate flow put a sign bar back on the stage',
+    ).toHaveCount(0);
+    await expect(
+      page.getByTestId('review-document-view'),
+      'the paper did not survive the gate flow closing — this is the exact ' +
+        'symptom of the DOM-adoption conflict the four prior removals hit',
+    ).toHaveCount(1);
   });
 });

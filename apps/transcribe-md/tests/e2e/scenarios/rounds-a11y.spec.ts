@@ -44,6 +44,7 @@ import {
   blocking,
   inheritedBlocking,
   runAxe,
+  settleEntrances,
   shoot,
   type AxeRun,
   type Finding,
@@ -94,6 +95,19 @@ test.describe('Rounds — axe across every surface, flag-ON', () => {
    * of these surfaces is caught.
    */
   async function sampleAcrossAnimation(page: Page, state: string, width: number) {
+    // ⚠️ SETTLE ONE-SHOT ENTRANCES FIRST — see `settleEntrances`. R2's card
+    // entrance made axe return `incomplete` for every marker card on the first
+    // sample, which is the gate silently ceasing to measure them. Infinite
+    // animations (the REC pulse) are deliberately NOT awaited; the 3-sample
+    // sweep below is what covers those, and it is unchanged.
+    const settle = await settleEntrances(page);
+    expect(
+      settle.timedOut,
+      `${state}@${width}: one-shot animations did not finish in 2s — axe is ` +
+        'about to sample a moving surface and will report incomplete rather ' +
+        'than measuring it',
+    ).toBe(false);
+
     for (let i = 0; i < 3; i++) {
       record(state, width, await runAxe(page));
       if (i === 0) await shoot(page, state, width);

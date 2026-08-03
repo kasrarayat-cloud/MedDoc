@@ -35,7 +35,7 @@ import { AlertTriangle, Check, FileSignature, RefreshCw } from 'lucide-react';
 import { spokenBody } from '@/lib/spoken-body';
 import { parseNoteSections, type NoteSection } from '@/lib/parse-note-sections';
 import { emChangeEq } from '@/lib/suggestion-labels';
-import { SignAndSendModal } from './sign-and-send-modal';
+import { ReviewSignBar } from './review-sign-bar';
 import { EmLevelCard } from './em-level-card';
 
 export interface ReviewDocumentViewProps {
@@ -143,6 +143,22 @@ export interface ReviewDocumentViewProps {
    *  collected once. `POST /sign` requires it (ATTESTATION_REQUIRED) — see
    *  `sign-gates.ts`. */
   attested?: boolean;
+
+  /**
+   * Whether THIS surface renders the sign bar. Default `true` — the legacy
+   * review footer, unchanged.
+   *
+   * ⚠️ R2. Under Rounds the caller passes `false` and mounts
+   * `<ReviewSignBar variant="gate">` inside Gate 3 instead, so the stage carries
+   * no second sign control at all. Defaulted rather than required because every
+   * flag-OFF caller must keep its footer with no edit — `undefined` has to mean
+   * "as before", not "gone".
+   *
+   * It is a BOOLEAN rather than a node slot on purpose: handing the bar out as
+   * `React.ReactNode` would let a caller render it twice, which is the exact
+   * property this prop exists to make impossible.
+   */
+  hostSignbar?: boolean;
 }
 
 export function ReviewDocumentView(props: ReviewDocumentViewProps) {
@@ -400,94 +416,38 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
           signature it applies to. */}
 
       {/* ── THE BAR ─────────────────────────────────────────────────────── */}
-      {/* `data-testid` only — no copy, no behaviour. The Rounds action rail
-          NAVIGATES here rather than signing, so it needs a stable anchor, and
-          a class selector would make the styling a load-bearing contract. This
-          stays the ONE control that can start a signature — and under Rounds it
-          now EXISTS only while the gate flow is hosting it (see
-          `renderSignbar`), so "the only one" and "reachable only through the
-          gates" are finally the same statement. */}
-      {slot('signbar', (
-        <div className="qm-c3-rev2-signbar" data-testid="review-doc-signbar">
-          <div className="qm-c3-rev2-signbar-in">
-            <div className="qm-c3-rev2-sign-status">
-              {blocked ? (
-                <>
-                  <AlertTriangle
-                    className="h-3.5 w-3.5 flex-none"
-                    aria-hidden
-                    style={{ color: 'var(--color-linear-amber)' }}
-                  />
-                  <span className="qm-c3-rev2-sign-msg" data-testid="review-doc-bar-msg">
-                    {/* ⚠️ NAME THE REASON THAT ACTUALLY APPLIES. This used to be
-                        a two-way `rxBlocking ? … : 'Confirm the documentation
-                        level above'`, which was safe only while `blocked` meant
-                        exactly rx-or-E/M. Feeding the rail's gate count in broke
-                        that assumption immediately: an IMAGING visit — where
-                        `emApplies` is false and no E/M surface may appear
-                        anywhere — started printing "Confirm the documentation
-                        level above" because its one open gate was the
-                        attestation. The imaging pack caught it. E/M is named
-                        only when E/M is genuinely the blocker; anything else
-                        points at the gates without inventing a clinical
-                        reason for them. */}
-                    {props.rxBlocking
-                      ? 'Resolve the prescription warning above'
-                      : emBlocking
-                        ? 'Confirm the documentation level above'
-                        : 'Open Review & sign to clear the remaining steps'}
-                  </span>
-                </>
-              ) : props.emStale ? (
-                <>
-                  <AlertTriangle
-                    className="h-3.5 w-3.5 flex-none"
-                    aria-hidden
-                    style={{ color: 'var(--color-linear-amber)' }}
-                  />
-                  <span className="qm-c3-rev2-sign-msg" data-testid="review-doc-bar-msg">
-                    Re-check the documentation level above
-                  </span>
-                </>
-              ) : (
-                <>
-                  <Check
-                    className="h-3.5 w-3.5 flex-none"
-                    aria-hidden
-                    style={{ color: 'var(--color-linear-sage-bright)' }}
-                  />
-                  <span className="qm-c3-rev2-sign-msg" data-testid="review-doc-bar-msg">
-                    Reviewed
-                  </span>
-                </>
-              )}
-            </div>
+      {/* ⚠️ R2 — UNDER ROUNDS THIS RENDERS NOTHING, AND THAT IS THE FIX.
+          The previous comment here claimed the bar "EXISTS only while the gate
+          flow is hosting it (see `renderSignbar`)". There was no `renderSignbar`
+          — the identifier appeared nowhere in the codebase but that sentence —
+          and `slot('signbar', …)` below was unconditional. The stage therefore
+          carried a permanent second sign control while its own comment said it
+          did not, which is why the footer kept being reported as "still there"
+          after four attempts to remove it.
 
-            <div className="qm-c3-rev2-sign-action qm-rdoc-bar-actions">
-              {/* Re-check before the modal opens. The gate render IS a moment the
-                  doctor is looking at the level, and it means they meet the
-                  confirm card rather than a refusal they have to interpret. */}
-              <span
-                onClickCapture={() => {
-                  if (props.emStale) void props.onRescoreEm?.();
-                }}
-              >
-                <SignAndSendModal
-                  visitId={props.visitId}
-                  doctorEmail={props.doctorEmail}
-                  emailEnabled={props.emailEnabled}
-                  signOnSubmit
-                  emPendingChange={props.emPendingChange}
-                  attested={props.attested}
-                  triggerLabel="Sign &amp; Download"
-                  triggerIcon={<FileSignature className="h-3.5 w-3.5" aria-hidden />}
-                  disabled={blocked}
-                />
-              </span>
-            </div>
-          </div>
-        </div>
-      ))}
+          `hostSignbar` is now the real mechanism. Off Rounds it defaults true
+          and this surface owns its footer exactly as before. Under Rounds the
+          caller passes false and renders `<ReviewSignBar variant="gate">` INSIDE
+          Gate 3 — see `review-sign-bar.tsx` for why re-homing works where
+          conditional unmounting of an adopted node could not. */}
+      {props.hostSignbar === false
+        ? null
+        : slot(
+            'signbar',
+            <ReviewSignBar
+              variant="footer"
+              visitId={props.visitId}
+              doctorEmail={props.doctorEmail}
+              emailEnabled={props.emailEnabled}
+              emPendingChange={props.emPendingChange}
+              attested={props.attested}
+              blocked={blocked}
+              rxBlocking={props.rxBlocking}
+              emBlocking={emBlocking}
+              emStale={props.emStale}
+              onRescoreEm={props.onRescoreEm}
+            />,
+          )}
     </div>
   );
 }

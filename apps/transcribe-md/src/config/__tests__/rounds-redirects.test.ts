@@ -1,5 +1,7 @@
 // ============================================================================
-// The /dashboard forward: fires under Rounds, inert without it, ordered right.
+// The Rounds forwards: fire under Rounds, inert without it, ordered right.
+//   R1 — /dashboard → /board  (two rules, the deep link first)
+//   R2 — /templates → /settings/note-format
 // ============================================================================
 
 import { describe, expect, it } from 'vitest';
@@ -19,7 +21,10 @@ describe('R1 — the /dashboard → /board redirect rules', () => {
   it('POSITIVE CONTROL — it does fire on the literal "true"', () => {
     // Without this, a helper that returned [] unconditionally would pass every
     // assertion above and ship a forward that never forwards.
-    expect(roundsRedirects('true').length).toBe(2);
+    // R2: 2 → 3. The count is asserted rather than the emptiness, so ADDING a
+    // rule has to come here and be looked at, instead of sliding under a
+    // `.length > 0`.
+    expect(roundsRedirects('true').length).toBe(3);
   });
 
   it('⚠️ the SPECIFIC rule comes first, or the deep link is silently dropped', () => {
@@ -43,7 +48,57 @@ describe('R1 — the /dashboard → /board redirect rules', () => {
     }
   });
 
-  it('nothing else is forwarded — the blast radius is one route', () => {
-    expect(roundsRedirects('true').map((r) => r.source)).toEqual(['/dashboard', '/dashboard']);
+  it('nothing else is forwarded — the blast radius is the named routes', () => {
+    expect(roundsRedirects('true').map((r) => r.source)).toEqual([
+      '/dashboard',
+      '/dashboard',
+      '/templates',
+    ]);
+  });
+});
+
+describe('R2 — the /templates → /settings/note-format redirect', () => {
+  const templates = () => roundsRedirects('true').filter((r) => r.source === '/templates');
+
+  it('exists exactly once, and lands on the note-format section', () => {
+    const rules = templates();
+    expect(rules, 'expected exactly one /templates rule').toHaveLength(1);
+    // `toBe`, not `toContain`. RELAY rule 7: '/settings/note-format' CONTAINS
+    // '/settings', so a rule that forwarded to the Settings index instead of
+    // the note-format section would satisfy a substring check while sending
+    // the doctor to the wrong screen. The expected value is knowable, so it is
+    // stated.
+    expect(rules[0].destination).toBe('/settings/note-format');
+  });
+
+  it('is UNCONDITIONAL — no query condition, so every deep link is caught', () => {
+    // A `has:` clause here would forward only the query shape someone thought
+    // of, and 404 the rest — the same silent-drop failure the /dashboard
+    // ordering rule exists to prevent, arriving from the other direction.
+    expect(templates()[0].has).toBeUndefined();
+  });
+
+  it('is TEMPORARY, like every other flag-scoped forward', () => {
+    expect(templates()[0].permanent).toBe(false);
+  });
+
+  it('⚠️ INERT with the flag off — /templates keeps its current behaviour', () => {
+    // Flag-OFF the nav still shows Templates and this path is a 404, exactly as
+    // on `main`. The default `chromium` pack builds flag-OFF; a redirect firing
+    // there would change a route none of R2 touched.
+    for (const off of ['false', '', 'TRUE', '1', undefined]) {
+      expect(
+        roundsRedirects(off).some((r) => r.source === '/templates'),
+        `flag=${String(off)} produced a /templates forward`,
+      ).toBe(false);
+    }
+  });
+
+  it('does not shadow the destination — no rule forwards /settings/*', () => {
+    // A `/settings/note-format` source would make the redirect a loop. Cheap to
+    // assert, and the failure mode is a hang rather than an error.
+    for (const r of roundsRedirects('true')) {
+      expect(r.source.startsWith('/settings')).toBe(false);
+    }
   });
 });

@@ -19,8 +19,9 @@
 //
 // So the assertion is deliberately about the SHELL rather than about any
 // screen: on every authenticated route, zero <aside>, exactly one <nav
-// aria-label="Main">, and the same four items in it. That is a claim the old
-// arrangement could not have satisfied by accident.
+// aria-label="Main">, and the same items in it (R1: four; R2 folded Templates
+// into Settings, so three). That is a claim the old arrangement could not have
+// satisfied by accident.
 //
 // ─── WHAT WOULD MAKE THIS FAIL (rule 7) ─────────────────────────────────────
 //  · a route that renders SidebarC3 or IconRail under Rounds  → aside count 1
@@ -38,10 +39,18 @@ import { test, expect, type Page } from '@playwright/test';
 import { signupFreshUser } from '../helpers/signup';
 import { createReadyTextVisit } from '../helpers/visit-setup';
 
-/** Board · Patients · Templates · Settings. Written out rather than imported
- *  so a change to the nav has to be made in two places on purpose — the point
- *  of the pack is that the nav is a contract, not an implementation detail. */
-const NAV = ['Board', 'Patients', 'Templates', 'Settings'];
+/** Board · Patients · Settings. Written out rather than imported so a change to
+ *  the nav has to be made in two places on purpose — the point of the pack is
+ *  that the nav is a contract, not an implementation detail.
+ *
+ *  ⚠️ R2 DROPPED `Templates`, DELIBERATELY, and this line is the declaration.
+ *  It pointed at `/settings/note-format` — a SECTION of Settings promoted to a
+ *  peer of it. The screen, its URL and every link into it are unchanged; only
+ *  the top-level noun is gone, and `/templates` now forwards there. Because the
+ *  comparison below is `toEqual` on the whole array, this edit is what lets the
+ *  pack go green — which is the intended shape: the expected set moves by hand,
+ *  in the open, or not at all. */
+const NAV = ['Board', 'Patients', 'Settings'];
 
 /** Every authenticated route a clinician can reach. `/admin/*` is excluded on
  *  purpose and the boundary is stated rather than left implied: it is
@@ -83,6 +92,16 @@ async function shellShape(page: Page) {
       navLabels: navs[0]
         ? [...navs[0].querySelectorAll('a')].map((a) => (a.textContent ?? '').trim())
         : [],
+      // R2. Which item claims the current route, read from `aria-current` —
+      // the thing a screen reader actually announces, not the `data-active`
+      // mirror beside it. `null` when nothing is lit, which is a real answer
+      // and a distinct one from "the label is wrong": folding Templates away
+      // could leave `/settings/note-format` lighting NOTHING, and that would
+      // be invisible to a labels-only assertion.
+      activeNav:
+        navs[0]
+          ?.querySelector('a[aria-current="page"]')
+          ?.textContent?.trim() ?? null,
       mains: document.querySelectorAll('main#main').length,
       skin: document.documentElement.getAttribute('data-skin'),
       // The legacy shells' own root classes. Presence of either means a route
@@ -221,6 +240,59 @@ test.describe('R1 — the shell is the same on every authenticated route', () =>
     // And the root, so the first hop after login is not a double redirect.
     await page.goto('/');
     expect(new URL(page.url()).pathname).toBe('/board');
+  });
+
+  // ── R2 — Templates folded into Settings ──────────────────────────────────
+  test('R2 — /templates forwards to the note-format section, query intact', async ({
+    page,
+  }) => {
+    await signupFreshUser(page, 'r2tmpl');
+
+    // Same discipline as /dashboard above: the RAW status, not the final URL.
+    // A 200 here would mean the path started rendering something.
+    const raw = await page.request.get('/templates', {
+      maxRedirects: 0,
+      failOnStatusCode: false,
+    });
+    expect(
+      raw.status(),
+      `GET /templates answered ${raw.status()} — expected a real 3xx from ` +
+        'next.config redirects(), which run before routing',
+    ).toBeGreaterThanOrEqual(300);
+    expect(raw.status(), 'a 308 outlives the flag and is cached forever').toBe(307);
+
+    // PARSE, do not substring: '/settings/note-format' CONTAINS '/settings',
+    // so a forward to the Settings index would pass a `toContain` while
+    // dropping the doctor on the wrong screen.
+    const loc = new URL(raw.headers()['location'] ?? '', 'http://x');
+    expect(loc.pathname, 'no Location, or it does not reach note-format').toBe(
+      '/settings/note-format',
+    );
+
+    // THE QUERY SURVIVES. Next forwards it automatically when the destination
+    // names none — asserted rather than assumed, because "automatically" is a
+    // property of the framework version, not of this rule.
+    const rawQ = await page.request.get('/templates?from=nav&x=1', {
+      maxRedirects: 0,
+      failOnStatusCode: false,
+    });
+    const locQ = new URL(rawQ.headers()['location'] ?? '', 'http://x');
+    expect(locQ.pathname).toBe('/settings/note-format');
+    expect(locQ.searchParams.get('from'), 'the deep link lost its query').toBe('nav');
+    expect(locQ.searchParams.get('x')).toBe('1');
+
+    // And it actually lands, with the shell intact and Settings lit — the fold
+    // is only real if the destination claims the doctor's position in the nav.
+    await page.goto('/templates');
+    expect(new URL(page.url()).pathname).toBe('/settings/note-format');
+    const shape = await shellShape(page);
+    expect(shape.navLabels, 'the forwarded page lost the Rounds nav').toEqual(NAV);
+    expect(
+      shape.activeNav,
+      'note-format lights nothing — Templates left the nav and Settings did ' +
+        'not inherit the route. `activeNavHref` is longest-prefix; if this is ' +
+        'null the entry it used to match is gone and nothing replaced it',
+    ).toBe('Settings');
   });
 });
 

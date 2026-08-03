@@ -295,6 +295,151 @@ body[data-skin='rounds'] {
   }
 }
 
+/* ── R2 — the marker card: interaction states and entrance ───────────────── */
+/* ⚠️ EVERY COLOUR ON THIS CARD IS STILL SET INLINE, AND THAT IS DELIBERATE.
+ * `board.tsx` computes `border`, `bg` and `fg` per lane kind, and each pairing
+ * was contrast-checked against the ground THAT card paints — a READY card is
+ * `--rounds-paper-1` (SPEC's "solid white") while a processing card is
+ * `--rounds-surface-2`. Nine separate axe failures in this project came from
+ * reasoning about the ink while the GROUND was the variable, so this block
+ * touches no colour property at all: only `transform`, `box-shadow` and
+ * `outline`, none of which are set inline and none of which change a contrast
+ * pair. A hover treatment that repainted the card would put all four variants
+ * back through the gate. */
+[data-skin='rounds'] .qm-rounds-lane-card {
+  transition:
+    transform 140ms ease-out,
+    box-shadow 140ms ease-out;
+  will-change: transform;
+}
+
+[data-skin='rounds'] .qm-rounds-lane-card:hover {
+  /* One layer, small. `--rounds-paper-shadow` is the PAPER's two-layer lift and
+   * this file already records that the paper is its only consumer — a board
+   * card borrowing it would claim the same elevation as the note itself. */
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px -6px rgba(8, 10, 14, 0.55);
+  z-index: 1;
+}
+
+/* PRESSED. Returns to rest rather than going lower: the card is a link to
+ * another screen, and a push-down reads as a toggle. */
+[data-skin='rounds'] .qm-rounds-lane-card:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px -3px rgba(8, 10, 14, 0.5);
+}
+
+/* FOCUS-VISIBLE. The global `:focus-visible` rule at the top of this file gives
+ * every Rounds control a 2px accent outline; this adds the same lift the mouse
+ * gets, so keyboard and pointer see the same card state. The outline itself is
+ * NOT redeclared — one definition, in one place. */
+[data-skin='rounds'] .qm-rounds-lane-card:focus-visible {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px -6px rgba(8, 10, 14, 0.55);
+  z-index: 1;
+}
+
+/* ENTRANCE — a short fade-and-rise, staggered down the board.
+ *
+ * ⚠️ NO `opacity: 0` IN THE BASE RULE. Putting the hidden state on the element
+ * and relying on an animation to undo it means any environment that drops the
+ * animation — an old browser, a CSS load race, `animation: none` from a future
+ * reduced-motion rule — leaves a board of INVISIBLE cards holding a doctor's
+ * patient list. The `from` keyframe carries the hidden state instead, so the
+ * failure mode of "no animation" is "no animation", not "no content".
+ *
+ * The per-card delay is set inline by `board.tsx` (`animationDelay`), capped
+ * there — a 60-lane board must not make the last card wait a second and a half. */
+@keyframes qm-rounds-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+[data-skin='rounds'] .qm-rounds-lane-card {
+  animation: qm-rounds-card-in 260ms ease-out both;
+}
+
+/* The reduced-motion block at the top of this file already forces
+ * `animation-duration` and `transition-duration` to 0.001ms with `!important`,
+ * which is what actually disables this. THIS block is not a duplicate of it:
+ * `both` fill-mode plus a ~0 duration lands on the `to` keyframe, so the card
+ * is correctly visible — but it still runs an animation and still honours the
+ * inline `animation-delay`, which on a long board means cards appearing in
+ * sequence with no transition, a stutter rather than a still page. Setting
+ * `animation: none` and neutralising the delay makes the reduced-motion state
+ * DELIBERATE, the same way the REC pulse above is. */
+@media (prefers-reduced-motion: reduce) {
+  [data-skin='rounds'] .qm-rounds-lane-card {
+    animation: none !important;
+    animation-delay: 0ms !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
+/* ── R2 — "New visit", the board's primary action ────────────────────────── */
+[data-skin='rounds'] .qm-rounds-newvisit {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: var(--rounds-radius-sm);
+  background: var(--rounds-accent);
+  color: #fff;
+  font-family: var(--rounds-font-ui);
+  font-weight: 600;
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition:
+    background-color 120ms ease-out,
+    transform 120ms ease-out;
+}
+
+[data-skin='rounds'] .qm-rounds-newvisit--bar {
+  padding: 7px 13px;
+  font-size: 13px;
+}
+
+[data-skin='rounds'] .qm-rounds-newvisit--empty {
+  padding: 9px 16px;
+  font-size: 13.5px;
+}
+
+[data-skin='rounds'] .qm-rounds-newvisit:hover {
+  background: var(--rounds-accent-hover);
+}
+
+[data-skin='rounds'] .qm-rounds-newvisit:active {
+  transform: translateY(1px);
+}
+
+[data-skin='rounds'] .qm-rounds-newvisit-plus {
+  font-size: 15px;
+  line-height: 1;
+  /* Optical: a "+" sits high in its box next to cap-height text. */
+  margin-top: -1px;
+}
+
+/* The shortcut hint. `--rounds-accent` is the button's own ground, so the hint
+ * is drawn with a translucent white rather than a stage token — an on-stage
+ * text tier here would be the white-on-white class of error this file has
+ * recorded twice on the board already. */
+[data-skin='rounds'] .qm-rounds-newvisit-kbd {
+  font-family: var(--rounds-font-mono);
+  font-size: 10.5px;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+}
+
 /* ── Screen 2 — the stage ───────────────────────────────────────────────── */
 [data-skin='rounds'] .qm-rounds-stage {
   min-height: 100vh;
@@ -497,6 +642,67 @@ body[data-skin='rounds'] {
 
 [data-skin='rounds'] .qm-rounds-sheet {
   padding: 32px;
+}
+
+/* ── R2 — THE SHEET IS THE PAPER, AND IT WAS NESTED IN TWO MORE ─────────────
+ * SPEC.md Screen 2: "The elevated white sheet IS the existing paper preview
+ * component". It was not.
+ *
+ * The measured stack under Rounds, outermost first:
+ *
+ *   .rounds-paper.qm-rounds-sheet  white, 18px, two-layer shadow  ← CORRECT, SPEC's paper
+ *     .qm-rdoc                     padding-bottom: 104px          → the dead white space
+ *       article.qm-rdoc-page       1px border, 14px radius,
+ *                                  bg --color-linear-surface-1    → a NEAR-BLACK card…
+ *         .qm-vdoc                 1px border, 10px radius,
+ *                                  bg --color-linear-bg (#08090a) → …inside DARKER matting
+ *           .qm-npv-page           white canvas + a shadow tuned
+ *                                  for a dark ground
+ *
+ * `globals.css` carries ZERO `[data-skin]` rules, so all of that renders
+ * byte-identically flag-ON and flag-OFF; and the `.qm-rounds-host` token bridge
+ * that would retint `--color-linear-*` is applied to settings, auth and the
+ * board — never to this route. So the dark values are the real ones here, not a
+ * theoretical fallback: the doctor was looking at black cards inside a white
+ * sheet, with a hand's width of empty paper under the last line of the note.
+ *
+ * The 104px allowance is doubly wrong under Rounds — it clears "the pinned bar
+ * (+ mobile nav under it)", and `MobileNavC3` renders only in `AppFrame`'s
+ * `isSkinBeta()` branch, which Rounds returns before reaching.
+ *
+ * ⚠️ NEUTRALISED UNDER `[data-skin='rounds']` ONLY, never edited in
+ * `globals.css`. Those rules are the flag-OFF review surface's real chrome and
+ * two REQUIRED checks build flag-OFF — the default `chromium` pack and
+ * `a11y.yml`, neither of which sets the skin flag. Changing them at source
+ * would repaint a surface this item never looked at, which is the precise
+ * failure mode the F-ret stopper is written about.
+ *
+ * The 104px is removable BECAUSE the bar it was reserving space for is gone:
+ * `hostSignbar={false}` (visit-ready-view.tsx) and the signature now lives in
+ * Gate 3. If a future change re-homes the bar back onto the stage, this padding
+ * has to come back with it — they are one decision, not two. */
+[data-skin='rounds'] .qm-rounds-sheet .qm-rdoc {
+  padding-bottom: 0;
+}
+
+[data-skin='rounds'] .qm-rounds-sheet .qm-rdoc-page,
+[data-skin='rounds'] .qm-rounds-sheet .qm-vdoc {
+  border: 0;
+  border-radius: 0;
+  background: none;
+  padding: 0;
+  margin-top: 0;
+}
+
+/* The document canvases keep their own lift, but a gentler one. `.qm-npv-page`
+ * ships `0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.45)` — correct against
+ * `.qm-vdoc`'s #08090a matting, and far too heavy now that the same canvas sits
+ * on #fcfcfa paper. Softened rather than removed: the pages are still discrete
+ * sheets and need an edge, or a multi-page export reads as one long column. */
+[data-skin='rounds'] .qm-rounds-sheet .qm-npv-page {
+  box-shadow:
+    0 1px 2px rgba(25, 30, 38, 0.1),
+    0 4px 14px -6px rgba(25, 30, 38, 0.16);
 }
 
 [data-skin='rounds'] .qm-rounds-critical-band {
@@ -867,6 +1073,24 @@ body[data-skin='rounds'] {
   font-size: 12px;
   color: var(--rounds-text-2);
   margin: 0;
+}
+
+/* ── R2 — the re-homed signature, inside Gate 3 ──────────────────────────── */
+/* ⚠️ NOT `position: sticky`. The legacy `.qm-c3-rev2-signbar` was pinned to the
+ * viewport, which is what made it a permanent presence on the stage. In here it
+ * is the last thing on a short panel, in flow, reached by reading the step —
+ * which is the entire behavioural difference this re-home is for. */
+[data-skin='rounds'] .qm-rounds-gateflow-sign {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--rounds-line-1);
+}
+
+[data-skin='rounds'] .qm-rounds-gate-signbar {
+  display: inline-flex;
+  align-items: center;
 }
 
 [data-skin='rounds'] .qm-rounds-gateflow-lock {
@@ -1848,6 +2072,34 @@ body[data-skin='rounds'] {
    `Delete` is not a peer of "read this carefully". A native <details> is
    deliberate: it is keyboard-operable and screen-reader-announced without a
    line of JavaScript, and it starts closed. */
+/* ── R2 — the stage header: identity, with the overflow beside it ────────── */
+/* `baseline` rather than `center`: the summary is a 12.5px line and the
+ * identity block is a multi-line header, so centring would float the control
+ * against the patient's name. */
+[data-skin='rounds'] .qm-rounds-stage-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: 820px;
+  margin: 0 auto;
+}
+
+/* The identity block must not be squeezed by the overflow beside it. */
+[data-skin='rounds'] .qm-rounds-stage-head > :first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+[data-skin='rounds'] .qm-rounds-stage-head .qm-rounds-overflow {
+  flex: 0 0 auto;
+  /* Overrides the page-foot geometry below — this instance is inline in a
+   * header row, not a centred 820px block at the end of the document. */
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
 [data-skin='rounds'] .qm-rounds-overflow {
   max-width: 820px;
   margin: 8px auto 40px;

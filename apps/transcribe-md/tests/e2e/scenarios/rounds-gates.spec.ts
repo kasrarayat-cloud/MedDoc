@@ -305,6 +305,13 @@ test.describe('Rounds Screen 3 — the gates', () => {
     await expect(page.getByTestId('rounds-gate-step-em')).toHaveCount(0);
     // And no signature host on the anomaly path.
     await expect(page.getByTestId('rounds-gate-host-attestation')).toHaveCount(0);
+    // R2 — nor the re-homed bar itself. `visit-ready-view` passes `signbar={null}`
+    // when `emArtifact`, so there is no signature to offer ANYWHERE on this
+    // visit: not on the stage (never, since R2) and not in the flow. An enabled
+    // button here would be a promise the server breaks; a disabled one would
+    // invite a hunt for the blocker that would enable it.
+    await expect(page.getByTestId('rounds-gate-signbar-host')).toHaveCount(0);
+    await expect(page.getByTestId('review-doc-signbar')).toHaveCount(0);
   });
 
   // ── 7. Gate 3 — one control can sign, and the summary is honest ────────
@@ -323,14 +330,40 @@ test.describe('Rounds Screen 3 — the gates', () => {
     // was cleared. A fabricated row would be a claim about work nobody did.
     await expect(page.getByTestId('rounds-gate-summary-rx')).toHaveCount(0);
 
-    // The signing bar is PORTALED in — the same one, still the only one.
+    // ⚠️ R2 — THE BAR IS NO LONGER ADOPTED, IT IS RENDERED HERE.
+    // Until R2 this assertion read `rounds-gate-host-attestation` containing
+    // the bar, because `gate-flow` physically MOVED the paper's footer node
+    // into the step with `appendChild`. That adoption is what forced a second
+    // sign control to stay mounted on the stage all session — the node had to
+    // exist down there for the flow to come and fetch it.
+    // The bar is now an ordinary React child of the attestation step
+    // (`signbar` prop), so it lives in `rounds-gate-signbar-host`, and the
+    // paper renders none. Adoption survives for `rx` and `em` ONLY, which are
+    // the slots that genuinely need it — they hold local state a remount would
+    // silently un-clear.
     await expect(
-      page.getByTestId('rounds-gate-host-attestation').getByTestId('review-doc-signbar'),
+      page.getByTestId('rounds-gate-signbar-host').getByTestId('review-doc-signbar'),
     ).toHaveCount(1);
+    // Still exactly one, product-wide — the claim never weakened, its mechanism
+    // changed.
     await expect(page.getByTestId('review-doc-signbar')).toHaveCount(1);
+    // And the attestation step is NOT an adoption host any more.
+    await expect(page.getByTestId('rounds-gate-host-attestation')).toHaveCount(0);
 
-    // The attestation is labelled as UI-only, because the route cannot see it.
+    // ⚠️ THE NOTE SAYS THE SERVER REFUSES, AND IT SAYS SO BECAUSE IT DOES.
+    // This asserted `/server does not check/i` until R2 — true when B2 wrote
+    // it, false from 2026-08-02, when the attestation became server-enforced
+    // (`sign-gates.ts` → `serverEnforced: true`; the route answers 400
+    // ATTESTATION_REQUIRED and writes SIGN_BLOCKED_NO_ATTESTATION). The copy
+    // did not move with the strengthening and THIS ASSERTION is why it could
+    // not: a green check stood behind the stale sentence, confirming every run
+    // that the claim was still THERE rather than still TRUE. Test 3 in this
+    // file has proven the refusal on the real route since 2026-08-02, so the
+    // pack contained both halves of the contradiction.
     await expect(page.getByTestId('rounds-gate-attest-note')).toContainText(
+      /refused by the server/i,
+    );
+    await expect(page.getByTestId('rounds-gate-attest-note')).not.toContainText(
       /server does not check/i,
     );
     await expect(page.getByTestId('rounds-gate-attest')).toBeVisible();

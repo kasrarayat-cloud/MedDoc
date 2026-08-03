@@ -23,7 +23,7 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
 }));
 
-import { RoundsBoard } from '../board';
+import { RoundsBoard, cardEntranceDelayMs } from '../board';
 import { toBoardLane } from '@/lib/rounds/board-data';
 
 const base = {
@@ -45,7 +45,32 @@ describe('the empty state invites', () => {
     render(<RoundsBoard lanes={[]} />);
     expect(screen.getByTestId('rounds-board-empty')).toBeTruthy();
     // The thing a doctor would want to do next, as a real link.
-    expect(screen.getByRole('link', { name: /start a visit/i })).toBeTruthy();
+    //
+    // ⚠️ R2 RENAMED THIS FROM "Start a visit", and the expected value moved by
+    // hand so the rename could not happen silently. SPEC.md's copy register is
+    // "actions keep their names end-to-end": `/visits/new` is reached from
+    // `/patients`, `/visits` and a patient's own page, and all three call it
+    // "New visit". This surface was the only one using a different verb.
+    const cta = screen.getByRole('link', { name: /new visit/i });
+    expect(cta).toBeTruthy();
+    expect(cta.getAttribute('href')).toBe('/visits/new');
+
+    // AND THE OLD NAME IS GONE, not merely joined. Without this a card
+    // rendering BOTH labels would satisfy the assertion above while leaving the
+    // fourth name on screen — the exact "did the change land, or did it only
+    // get added?" question a positive-only check cannot answer.
+    expect(screen.queryByRole('link', { name: /start a visit/i })).toBeNull();
+  });
+
+  it('⚠️ the empty-state CTA does NOT register the keyboard shortcut', () => {
+    // The board's top bar owns the `n` key. Two document-level listeners on one
+    // key means one press queues two navigations, and a hint rendered without
+    // the listener would promise a handler that is not there — the orphaned
+    // "[E]" defect the action rail already paid for once.
+    render(<RoundsBoard lanes={[]} />);
+    const cta = screen.getByRole('link', { name: /new visit/i });
+    expect(cta.getAttribute('data-shortcut')).toBeNull();
+    expect(cta.querySelector('kbd')).toBeNull();
   });
 });
 
@@ -246,5 +271,46 @@ describe('retry integrates with the JSON route correctly', () => {
       ),
     );
     vi.unstubAllGlobals();
+  });
+});
+
+// ── R2 — the entrance stagger, and the cap that keeps it honest ────────────
+describe('the entrance stagger is bounded', () => {
+  it('steps 28ms per lane and STOPS at the tenth', () => {
+    // The cap is the assertion, not the step. Uncapped, a 60-lane board makes
+    // the last card wait 1.68s and a doctor scrolling a busy morning sees an
+    // empty column — indistinguishable from a load failure.
+    expect(cardEntranceDelayMs(0)).toBe(0);
+    expect(cardEntranceDelayMs(1)).toBe(28);
+    expect(cardEntranceDelayMs(9)).toBe(252);
+    expect(cardEntranceDelayMs(10)).toBe(280);
+
+    // Everything past the tenth starts WITH the tenth.
+    expect(cardEntranceDelayMs(11)).toBe(280);
+    expect(cardEntranceDelayMs(60)).toBe(280);
+    expect(cardEntranceDelayMs(5000)).toBe(280);
+
+    // NON-VACUITY: a function that returned 280 for everything would satisfy
+    // every cap assertion above. The early values must actually differ.
+    expect(cardEntranceDelayMs(0)).not.toBe(cardEntranceDelayMs(1));
+  });
+
+  it('the whole run is under a third of a second, however long the board', () => {
+    // A ceiling stated as a duration rather than as a step count, so changing
+    // the step without re-thinking the cap trips here.
+    expect(cardEntranceDelayMs(Number.MAX_SAFE_INTEGER)).toBeLessThanOrEqual(300);
+  });
+
+  it('every card carries the class the motion and states are defined on', () => {
+    // The hover lift, the pressed state, the focus ring and the entrance are
+    // all `[data-skin="rounds"] .qm-rounds-lane-card` rules in
+    // rounds-tokens.css. A card rendered without the class silently loses all
+    // four — and no rendering assertion elsewhere would notice, because the
+    // inline colours are what the other tests read.
+    render(<RoundsBoard lanes={[lane({ status: 'READY' })]} />);
+    const card = screen.getByTestId('rounds-lane-card-v1');
+    expect(card.className).toContain('qm-rounds-lane-card');
+    // And the per-card delay reached the DOM, or the stagger is dead code.
+    expect(card.getAttribute('style')).toMatch(/animation-delay:\s*0ms/);
   });
 });
