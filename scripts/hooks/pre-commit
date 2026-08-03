@@ -50,6 +50,23 @@ while IFS= read -r f; do
     # see "Tracked fixtures" in AGENTS.md. Do not re-flag it.
     "WM IOV Template.docx")                              continue ;;
     "colon_blank_answers.pdf")                           continue ;;
+    # ── ADJUDICATED, NOT ASSUMED — 2026-08-03 ────────────────────────────
+    # A 17-page code/logic audit report. READ before it was allowed: title
+    # "Comprehensive code/logic/data quality audit — QuillMD pilot readiness",
+    # generated 2026-05-14, no clinical content of any kind. It predates this
+    # hook (committed in May; the guard blocks ADDED files, so it was never
+    # offered to it) and so had been sitting outside the allowlist — neither
+    # blocked nor sanctioned.
+    #
+    # ⚠️ THE POINT IS THE PROCESS, NOT THE FILE. A stray that nobody has read
+    # is permanent ambiguity: every future sweep re-derives the same question,
+    # and the answer degrades from "unknown" to "probably fine" purely through
+    # repetition. READ IT, THEN DECIDE, THEN WRITE THE DECISION DOWN HERE —
+    # this list is the guard's single source of truth, so an adjudicated
+    # non-clinical report belongs ON it rather than in the gap beside it.
+    # The reverse also holds: a stray nobody can read does not get the benefit
+    # of the doubt. See "A tracked clinical file means a HISTORY REWRITE".
+    "docs/qa-reports/comprehensive-audit-20260514T030426Z.pdf") continue ;;
     # Committed test fixtures: blank forms and sample inputs.
     apps/transcribe-md/tests/e2e/fixtures/*)             continue ;;
     apps/transcribe-md/src/*/__tests__/__fixtures__/*)   continue ;;
