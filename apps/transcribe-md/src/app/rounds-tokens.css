@@ -706,6 +706,102 @@ body[data-skin='rounds'] {
   margin-top: 0;
 }
 
+/* ── R3.5 — THE WORD PREVIEW: ZERO VIEWER CHROME, AND THE SAME WIDTH AS PDF ──
+ * MEASURED before and after, on the flag-ON image, at 1024 / 1440 / 1920:
+ *
+ *     before   PDF page 756px · WORD page 674px   (identical at all three)
+ *     after    PDF page 756px · WORD page 756px
+ *
+ * An 82px, ~11% discrepancy on a toggle whose whole promise is that it is the
+ * same document — and `globals.css:7000` claims exactly that promise in a
+ * comment ("Both formats are centred inside it at the same width, so PDF and
+ * Word frame identically"). The comment described an intention the code did not
+ * have. Third instance of that shape this round.
+ *
+ * ⚠️ THE CAUSE IS ONE ELEMENT, and the box chain named it in a single
+ * measurement rather than three hypotheses:
+ *
+ *     section.qm-docxp        client=816 rect=674   ← fitted correctly…
+ *     div.qm-docxp-wrapper    client=816 rect=674
+ *     div.qm-npv-stage        client=754 rect=756  pad=40px/40px  ← …to THIS
+ *     figure.qm-npv           client=756 rect=756
+ *
+ * `.qm-npv-stage` is the NATIVE preview's viewer chrome — a dark
+ * `--color-linear-bg` ground, a border, a radius, its own `overflow: auto`
+ * scroll box and 40px of side padding. The PDF path does not render through it
+ * at all, which is why only Word was short. The fit function was never wrong:
+ * it fitted the page to its container faithfully, and the container was 82px
+ * narrower than the one the PDF fills.
+ *
+ * So the chrome goes and the width follows. Nothing is added to the fit logic —
+ * its `ResizeObserver` re-fits when the host widens, which is why removing the
+ * padding is sufficient rather than merely necessary.
+ *
+ * ⚠️ SCOPED TO THE ROUNDS SHEET. `.qm-npv-stage` is the flag-OFF preview's real
+ * chrome and the default `chromium` pack builds flag-OFF. */
+[data-skin='rounds'] .qm-rounds-sheet .qm-npv-stage {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0 0 20px;
+  /* The Rounds sheet is the scroller. A nested `overflow: auto` box inside the
+   * paper is a viewer INSIDE a document — the exact chrome this item removes,
+   * and it also traps the page at `max-height: min(72vh, 780px)`. */
+  overflow: visible;
+  max-height: none;
+}
+
+/* docx-preview paints its own wrapper `rgb(128, 128, 128)` with 30px of
+ * vertical padding — measured, not assumed. Inside a white Rounds sheet that is
+ * a grey band above and below the page: the "gray viewer chrome band" the
+ * walkthrough reported. The horizontal gutter was already zeroed in
+ * `globals.css`; the ground and the vertical band were not. */
+[data-skin='rounds'] .qm-rounds-sheet .qm-docxp-wrapper {
+  background: none;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+/* The focus ring on the stage takes the LEGACY sage. It is a real focus
+ * affordance and must not simply be removed — retinted to the Rounds accent,
+ * which is also what the census's composite arm would otherwise keep finding. */
+[data-skin='rounds'] .qm-rounds-sheet .qm-npv-stage:focus-visible {
+  outline-color: var(--rounds-accent);
+}
+
+/* ⚠️ THE WORD PAGE KEPT THE DARK-GROUND SHADOW, and the rule meant to handle it
+ * IS DEAD CODE. `globals.css:7096-7104` scopes the Word page's framing to
+ * `.qm-vdoc .qm-npv-docx` — but `.qm-npv-docx` is rendered ONLY by
+ * `NativeDocumentPreview`, whose branch emits no `.qm-vdoc` at all (its root is
+ * an unclassed div). So the selector cannot match, and the comment above it —
+ * "The Word view inside the visit document, framed identically" — describes an
+ * intention wired to a selector that does not occur. Measured:
+ * `section.qm-docxp` computes `rgba(0,0,0,.4) 0 1px 2px, rgba(0,0,0,.45) …`
+ * on #fcfcfa paper.
+ *
+ * Softened to the SAME values R2.1 gave `.qm-npv-page`, so the two formats
+ * finally match on depth as well as width — which is the toggle's promise, and
+ * the thing three separate comments have now claimed without delivering. The
+ * dead rules in `globals.css` are left alone deliberately: they are flag-OFF
+ * territory, and deleting them is a cleanup with its own blast radius, recorded
+ * for F-ret rather than smuggled into a skin item. */
+/* The ACTIVE format button marks itself with `border-color:
+ * var(--color-linear-sage)` — the legacy sage, on the one control the Rounds
+ * toolbar row is built around. The census's composite arm is what kept
+ * surfacing it (a border colour the exact-match arm sampled, and a
+ * `box-shadow` blend it did not). The Rounds accent says the same thing in the
+ * skin's own vocabulary. */
+[data-skin='rounds'] .qm-rounds-sheet .qm-vdoc-format .qm-vdoc-format-on {
+  border-color: var(--rounds-accent);
+  color: var(--rounds-ink);
+}
+
+[data-skin='rounds'] .qm-rounds-sheet section.qm-docxp {
+  box-shadow:
+    0 1px 2px rgba(25, 30, 38, 0.1),
+    0 4px 14px -6px rgba(25, 30, 38, 0.16);
+}
+
 /* The document canvases keep their own lift, but a gentler one. `.qm-npv-page`
  * ships `0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.45)` — correct against
  * `.qm-vdoc`'s #08090a matting, and far too heavy now that the same canvas sits
