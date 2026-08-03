@@ -20,6 +20,19 @@ test.afterEach(() => {
   cleanupTestUsers();
 });
 
+/** ⚠️ A SEED THAT FAILED IS A DEFECT IN CI, NOT A SKIP. `test.skip(!seeded)`
+ *  alone lets a broken fixture exit 0 on a pack that measured nothing — the
+ *  failure mode B3 found in eleven never-run tests. Hoisted to module scope in
+ *  R2 (it was nested inside one describe) so every block in this file uses the
+ *  same rule rather than a second copy of it. */
+function requireSeed<T>(seeded: T | null, what: string): T | null {
+  if (seeded) return seeded;
+  if (process.env.CI) {
+    throw new Error(`seeding FAILED for ${what}. In CI this is a defect, not a skip.`);
+  }
+  return null;
+}
+
 test('the board renders for an invited clinician', async ({ page }) => {
   await signupFreshUser(page, 'board');
   await page.goto('/board');
@@ -134,14 +147,6 @@ test.describe('the ultrasound filter splits on the ID, not the label', () => {
   // Both directions are asserted, because "the imaging visit appears under
   // Ultrasound" alone is satisfied by a filter that lets EVERYTHING through.
 
-  function requireSeed<T>(seeded: T | null, what: string): T | null {
-    if (seeded) return seeded;
-    if (process.env.CI) {
-      throw new Error(`seeding FAILED for ${what}. In CI this is a defect, not a skip.`);
-    }
-    return null;
-  }
-
   test('an imaging visit is under Ultrasound and a SOAP visit is not', async ({ page }) => {
     const { email } = await signupFreshUser(page, 'board-imaging');
     const soap = requireSeed(seedReviewDocVisit(email, { idSalt: 'q' }), 'soap');
@@ -160,5 +165,106 @@ test.describe('the ultrasound filter splits on the ID, not the label', () => {
     await page.goto('/board?filter=soap');
     await expect(page.getByTestId(`rounds-lane-card-${soap!.visitId}`)).toBeVisible();
     await expect(page.getByTestId(`rounds-lane-card-${imaging!.visitId}`)).toHaveCount(0);
+  });
+});
+
+// ── R2 — the entrance honours prefers-reduced-motion, PROVEN BOTH WAYS ───────
+//
+// ⚠️ AN ABSENCE ASSERTION ALONE IS WORTHLESS HERE, and this pack has the scar
+// tissue to say so. "No animation under reduced motion" is satisfied by a card
+// that has no animation at all, by a selector that matches nothing, and by a
+// stylesheet that failed to load. So the reduced-motion case is asserted
+// BESIDE its own positive control, in the same file, against the same element:
+// motion present by default, absent when asked. Neither half means anything
+// without the other.
+test.describe('the board entrance honours reduced motion', () => {
+  /** Computed motion on the first marker card. */
+  async function motionOf(page: import('@playwright/test').Page, testid: string) {
+    return page.evaluate((id) => {
+      const el = document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+      if (!el) return null;
+      const cs = getComputedStyle(el);
+      const secs = (v: string) =>
+        v.split(',').map((s) => {
+          const t = s.trim();
+          return t.endsWith('ms') ? parseFloat(t) / 1000 : parseFloat(t) || 0;
+        });
+      return {
+        animationName: cs.animationName,
+        // The longest declared duration, in seconds.
+        animationDuration: Math.max(...secs(cs.animationDuration), 0),
+        transitionDuration: Math.max(...secs(cs.transitionDuration), 0),
+      };
+    }, testid);
+  }
+
+  test('motion is PRESENT by default — the positive control', async ({ page }) => {
+    const { email } = await signupFreshUser(page, 'board-motion-on');
+    const v = requireSeed(seedReviewDocVisit(email, { idSalt: 'm1' }), 'motion-on');
+    test.skip(!v, 'psql seeding unavailable');
+
+    await page.goto('/board');
+    const id = `rounds-lane-card-${v!.visitId}`;
+    await expect(page.getByTestId(id)).toBeVisible();
+
+    const m = await motionOf(page, id);
+    expect(m, 'the card was not found — the reduced-motion case below would ' +
+      'have passed for that reason alone').not.toBeNull();
+    expect(
+      m!.animationName,
+      'no entrance animation is declared at all, so the reduced-motion ' +
+        'assertion below proves nothing',
+    ).toContain('qm-rounds-card-in');
+    expect(m!.animationDuration).toBeGreaterThan(0);
+    expect(
+      m!.transitionDuration,
+      'no hover/press transition is declared — same problem',
+    ).toBeGreaterThan(0);
+  });
+
+  test('motion is ABSENT under prefers-reduced-motion', async ({ browser }) => {
+    // A separate context: the emulation must be in place BEFORE first paint,
+    // and toggling it on a live page leaves the already-started animation
+    // running — which would read as "the rule does not work".
+    const ctx = await browser.newContext({ reducedMotion: 'reduce' });
+    const page = await ctx.newPage();
+    try {
+      const { email } = await signupFreshUser(page, 'board-motion-off');
+      const v = requireSeed(seedReviewDocVisit(email, { idSalt: 'm2' }), 'motion-off');
+      test.skip(!v, 'psql seeding unavailable');
+
+      await page.goto('/board');
+      const id = `rounds-lane-card-${v!.visitId}`;
+      await expect(page.getByTestId(id)).toBeVisible();
+
+      const m = await motionOf(page, id);
+      expect(m, 'the card was not found — this assertion would be vacuous').not.toBeNull();
+      expect(
+        m!.animationName,
+        'the entrance still runs with reduced motion requested',
+      ).toBe('none');
+      expect(
+        m!.transitionDuration,
+        'the hover/press transition still runs with reduced motion requested',
+      ).toBe(0);
+
+      // AND THE CARD IS STILL THERE. This is the failure the CSS is written to
+      // avoid: an entrance that hides the element and relies on an animation to
+      // reveal it leaves a board of INVISIBLE cards the moment the animation is
+      // dropped — a doctor's patient list, gone, with nothing reporting an
+      // error. The `from` keyframe carries the hidden state for exactly this
+      // reason, and this asserts it worked.
+      const opacity = await page.evaluate(
+        (t) => getComputedStyle(document.querySelector(`[data-testid="${t}"]`)!).opacity,
+        id,
+      );
+      expect(
+        Number(opacity),
+        'reduced motion left the card invisible — the hidden state escaped the ' +
+          'keyframe onto the element',
+      ).toBe(1);
+    } finally {
+      await ctx.close();
+    }
   });
 });
