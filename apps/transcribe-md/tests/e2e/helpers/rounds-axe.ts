@@ -112,6 +112,53 @@ export interface AxeRun {
   modal: { open: boolean; focusInside: boolean; label: string };
 }
 
+/**
+ * Let ONE-SHOT animations finish before axe samples.
+ *
+ * ⚠️ R2 ADDED THIS BECAUSE R2 BROKE THE THING IT FIXES. The board's marker
+ * cards gained a 260ms fade-and-rise entrance (staggered up to 280ms), and the
+ * a11y pack's first sample lands while it is still running. axe cannot resolve
+ * a colour pair through an in-flight `opacity`, so all fifteen card nodes came
+ * back as ROUNDS-OWNED **incomplete** rather than as passes.
+ *
+ * Nothing failed, and that is exactly why it matters: the gate went from
+ * MEASURING those cards to not measuring them, and reported the same green
+ * either way. This project has a name for that shape — an answer about a set
+ * whose boundary was never established — and it has already paid for the
+ * animation-composited variant once, in C1-e, where three rebuild cycles went
+ * into a contrast failure whose colours "were not in the palette at all, they
+ * were tokens COMPOSITED mid-animation".
+ *
+ * ⚠️ INFINITE ANIMATIONS ARE EXCLUDED, AND THE EXCLUSION IS THE WHOLE DESIGN.
+ * `.qm-rounds-kicker--rec::before` pulses forever; awaiting its `finished`
+ * promise is a wait that can never be satisfied — the "cannot distinguish 'not
+ * yet' from 'never'" defect the relay records twice. So only effects with a
+ * finite iteration count are awaited, and even those get a deadline with a
+ * DISTINCT outcome: this returns what it did rather than hanging or lying.
+ *
+ * The 3-sample sweep in the pack STAYS. It exists for continuous motion, which
+ * this deliberately does not touch.
+ */
+export async function settleEntrances(
+  page: Page,
+  deadlineMs = 2000,
+): Promise<{ settled: number; timedOut: boolean; infiniteSkipped: number }> {
+  return page.evaluate(async (deadline) => {
+    const all = document.getAnimations();
+    const finite = all.filter((a) => {
+      const it = (a.effect?.getComputedTiming?.().iterations ?? 1) as number;
+      return Number.isFinite(it);
+    });
+    const infiniteSkipped = all.length - finite.length;
+    let timedOut = false;
+    await Promise.race([
+      Promise.allSettled(finite.map((a) => a.finished)),
+      new Promise((r) => setTimeout(() => { timedOut = true; r(null); }, deadline)),
+    ]);
+    return { settled: finite.length, timedOut, infiniteSkipped };
+  }, deadlineMs);
+}
+
 /** Inject axe and return BOTH buckets. */
 export async function runAxe(page: Page): Promise<AxeRun> {
   return page.evaluate(async (cdnUrl) => {

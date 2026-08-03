@@ -10,32 +10,70 @@
 //    them; existing sign-block E2Es pass with semantics unchanged."
 //
 // SO THIS COMPONENT RENDERS NOTHING CLINICAL. It draws headings, step
-// indicators, blocker language and a lock affordance, and it renders an empty
-// HOST DIV per step. The real gate — the Rx override card with its reason
-// modal, the E/M card with its adjust-level flow, the signing bar with
-// SignAndSendModal inside it — is PORTALED in from `ReviewDocumentView`,
-// unchanged and still mounted where it always was.
+// indicators, blocker language and a lock affordance. The real gates arrive
+// from outside, by two different mechanisms — and which mechanism a gate uses
+// is a fact about its STATE, not about its clinical weight:
 //
-// WHY A PORTAL AND NOT A RE-RENDER. Both cleared-gate states over there are
-// lazily-seeded local React state with no `router.refresh()` behind them:
-// `RxTab`'s `overriddenIds` and `ReviewDocumentView`'s `emConfirmed`. A
-// sequential flow that re-mounted them would silently un-clear a gate — the
-// doctor sent back to re-justify a warning already written to
-// `rx_warning_overrides`, and the blocker count ticking back up. Stepping
-// forward and back is the *normal* interaction here, so that would not be an
-// edge case.
+//   · `rx` and `em` are ADOPTED — their live DOM is borrowed out of the paper
+//     (`ADOPTED_SLOTS`, below). Both hold lazily-seeded local React state with
+//     no `router.refresh()` behind it — `RxTab`'s `overriddenIds` and
+//     `ReviewDocumentView`'s `emConfirmed` — so a flow that RE-MOUNTED them
+//     would silently un-clear a gate: the doctor sent back to re-justify a
+//     warning already written to `rx_warning_overrides`, and the blocker count
+//     ticking back up. Stepping forward and back is the *normal* interaction
+//     here, so that is not an edge case. Moving the node touches React's tree
+//     not at all; a portal would not do, because `createPortal(node, host)` and
+//     a bare node are different element TYPES to React and flipping between
+//     them remounts.
+//
+//   · the SIGN BAR is an ordinary React child (`signbar`), passed in by the
+//     route wiring. ⚠️ R2 CHANGED THIS, and the old arrangement is why the
+//     legacy footer could not be removed for four attempts: `attestation` used
+//     to adopt too, so the bar had to stay mounted on the stage all session for
+//     this component to come and fetch it. It holds no local state — every
+//     input is a prop — so it never needed moving, only a home.
+//
+// The rule that falls out: a gate is adopted only if a remount would LOSE
+// something. Everything else is a child.
 //
 // THE STEPS ARE `gates.map(...)`. There is no `emApplies` here, no specialty
-// name, no `'em'` in any conditional of this component's own. An inapplicable
-// gate is ABSENT from the array upstream, so on an imaging visit this renders
-// two steps and there is nothing to hide or disable. A guard test asserts this
-// file names no specialty.
+// name, and no equality branch on a gate id anywhere in this component's own
+// logic — `ADOPTED_SLOTS` is a declared set, consulted by membership, precisely
+// so that stays true. An inapplicable gate is ABSENT from the array upstream,
+// so on an imaging visit this renders two steps and there is nothing to hide or
+// disable. Guard tests assert both: that this file names no specialty, and that
+// it branches on no gate id.
 // ============================================================================
 
 import { useCallback, useEffect, useId, useMemo, useRef } from 'react';
 
 import type { SignGate, SignGateId } from '@/lib/sign-gates';
 import { GATE_HEADING, gateLabel } from '@/lib/rounds/gate-labels';
+
+/**
+ * The gates whose UI arrives by DOM ADOPTION rather than as a React child.
+ *
+ * ⚠️ THIS IS A FACT ABOUT THE MECHANISM, NOT ABOUT MEDICINE, and it is declared
+ * once as data because this file is forbidden to branch on a gate id. The guard
+ * (`gate-flow.test.tsx` → "branches on no gate id of its own") bans equality
+ * comparisons against a gate id for a good reason: which gates EXIST is the
+ * server's answer, arriving in the `gates` array, and a component that
+ * hard-codes one is one edit away from deciding a clinical question.
+ * (The banned comparisons are described rather than spelled — a source grep
+ * reads this comment too, and a guard that trips on its own explanation is a
+ * defect this repo has paid for twice.)
+ *
+ * Membership here says something different: these two slots hold lazily-seeded
+ * local React state (`RxTab.overriddenIds`, `ReviewDocumentView.emConfirmed`)
+ * that a remount would silently un-clear — so their live DOM is borrowed rather
+ * than re-rendered. `attestation` was in this set until R2, which is what kept a
+ * second sign control permanently mounted on the stage: the node had to exist
+ * down there for the effect to come and fetch it. Its bar holds no state, so it
+ * is now an ordinary React child (`signbar`) and adopts nothing.
+ *
+ * Adding an id here means that gate's UI is rendered elsewhere and moved in.
+ */
+const ADOPTED_SLOTS: ReadonlySet<SignGateId> = new Set<SignGateId>(['rx', 'em']);
 
 export interface RoundsGateFlowProps {
   open: boolean;
@@ -164,7 +202,7 @@ export function RoundsGateFlow({
     // Only the two stateful gates are relocated. An `attestation` step has no
     // `[data-gate-slot]` to find, and asking for one would silently match
     // nothing — so it is excluded by name rather than by a failed lookup.
-    if (active.id !== 'rx' && active.id !== 'em') return;
+    if (!ADOPTED_SLOTS.has(active.id)) return;
     const host = hostElRef.current;
     const slot = document.querySelector<HTMLElement>(`[data-gate-slot="${active.id}"]`);
     if (!host || !slot) return;
@@ -247,9 +285,21 @@ export function RoundsGateFlow({
           </div>
         ) : null}
 
-        {/* ── THE GATE ITSELF ARRIVES HERE, BY PORTAL. Empty on purpose: this
-            component never renders a clinical control of its own. ── */}
-        {active && !emArtifact ? (
+        {/* ── THE GATE ITSELF ARRIVES HERE, BY ADOPTION. Empty on purpose: this
+            component never renders a clinical control of its own. ──
+            ⚠️ R2 — ONLY FOR THE STEPS THAT ACTUALLY ADOPT. This used to render
+            for any `active` gate, which after the signature was re-homed left an
+            EMPTY host on the attestation step: a div named
+            `rounds-gate-host-attestation`, wired to `hostElRef`, that nothing
+            could ever move into, because the effect above no longer looks up a
+            `[data-gate-slot]` for that id.
+            It rendered nothing and broke nothing, which is exactly why it is
+            worth deleting rather than leaving: a landmark that advertises a
+            mechanism it no longer participates in is how the next reader
+            concludes the adoption still covers three slots. Caught by the pack
+            asserting the host was gone — the assertion was right and the markup
+            had not followed the effect. */}
+        {active && !emArtifact && ADOPTED_SLOTS.has(active.id) ? (
           <div
             className="qm-rounds-gateflow-host"
             data-testid={`rounds-gate-host-${active.id}`}

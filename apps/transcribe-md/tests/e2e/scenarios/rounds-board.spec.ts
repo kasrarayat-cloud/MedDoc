@@ -27,7 +27,39 @@ test('the board renders for an invited clinician', async ({ page }) => {
   // A brand-new account has no visits — the empty state is the correct render,
   // and it must invite rather than shrug.
   await expect(page.getByTestId('rounds-board-empty')).toBeVisible();
-  await expect(page.getByRole('link', { name: /start a visit/i })).toBeVisible();
+
+  // ⚠️ R2 RENAMED THIS FROM "Start a visit". SPEC.md's copy register is
+  // "actions keep their names end-to-end", and `/visits/new` is called "New
+  // visit" from `/patients`, `/visits` and a patient's own page — this empty
+  // state was the only surface in the product using a different verb for it.
+  // ⚠️ ON AN EMPTY BOARD THERE ARE **TWO** — the top bar's primary and the
+  // empty state's — so a bare role locator is a strict-mode violation, not a
+  // missing element. That is the correct product behaviour and the reason this
+  // test is the right place to pin the pair: it is the only state where both
+  // mounts are on screen at once.
+  const empty = page.getByTestId('rounds-new-visit-empty');
+  const bar = page.getByTestId('rounds-new-visit-bar');
+  await expect(page.getByRole('link', { name: /new visit/i })).toHaveCount(2);
+  await expect(empty).toBeVisible();
+  await expect(bar).toBeVisible();
+  // ONE action, so one destination. Two CTAs that drifted apart would be the
+  // board's own version of the two-sign-controls defect.
+  await expect(empty).toHaveAttribute('href', '/visits/new');
+  await expect(bar).toHaveAttribute('href', '/visits/new');
+
+  // And the old name is GONE, not merely joined — otherwise a state rendering
+  // both labels would satisfy the assertions above.
+  await expect(page.getByRole('link', { name: /start a visit/i })).toHaveCount(0);
+
+  // "Two mounts, exactly one shortcut" is observable only here. Two
+  // document-level listeners on `n` means one press queues two navigations.
+  await expect(bar).toHaveAttribute('data-shortcut', 'n');
+  // ABSENT, not empty: the component passes `undefined` when it does not own
+  // the key, so React omits the attribute entirely. `toHaveAttribute(…, /^$/)`
+  // would fail here for the right reason and read like the wrong one.
+  await expect(page.getByTestId('rounds-new-visit-empty')).not.toHaveAttribute(
+    'data-shortcut',
+  );
 });
 
 test('the chrome carries the shipped capabilities', async ({ page }) => {

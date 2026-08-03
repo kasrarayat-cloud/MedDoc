@@ -28,7 +28,13 @@ const EM = (unresolved: number): SignGate => ({
 const ATTEST = (unresolved = 1): SignGate => ({
   id: 'attestation',
   unresolved,
-  serverEnforced: false,
+  // ⚠️ TRUE SINCE 2026-08-02. This fixture said `false`, which was correct when
+  // it was written and stale from the moment the gate became server-enforced:
+  // `sign-gates.ts` is `serverEnforced: true`, and `POST /sign` answers 400
+  // ATTESTATION_REQUIRED without it. Nothing asserted the fixture's value, so
+  // nothing reddened — but a fixture that models the server wrongly is how a
+  // future test comes to "prove" behaviour the server does not have.
+  serverEnforced: true,
 });
 
 function renderFlow(
@@ -255,14 +261,48 @@ describe('the imaging E/M anomaly', () => {
     renderFlow({ gates: [ATTEST()], step: 'attestation', emArtifact: true });
 
     expect(screen.getByTestId('rounds-gate-em-artifact')).toBeTruthy();
-    expect(screen.queryByTestId('rounds-gate-host-attestation')).toBeNull();
     expect(screen.queryByTestId('rounds-gate-attest')).toBeNull();
+    // ⚠️ R2 — THE SIGNATURE ANCHOR ON THIS STEP IS A DIFFERENT ELEMENT NOW.
+    // It used to be `rounds-gate-host-attestation`, the ADOPTION host that
+    // `gate-flow` moved the paper's footer node into. The signature is a plain
+    // React child today (`signbar`), so the anchor is
+    // `rounds-gate-signbar-host` — and the adoption host is not rendered on
+    // this step at all, because nothing adopts here any more.
+    expect(screen.queryByTestId('rounds-gate-host-attestation')).toBeNull();
+    expect(screen.queryByTestId('rounds-gate-signbar-host')).toBeNull();
   });
 
   it('NEGATIVE CONTROL — without the artifact the signature host exists', () => {
-    renderFlow({ gates: [ATTEST()], step: 'attestation' });
+    // The negative control is what makes the assertion above mean anything: an
+    // absence proves nothing unless the same probe can find a presence.
+    // `renderFlow` must therefore SUPPLY a signbar, or this passes for the
+    // wrong reason — no signature because none was offered.
+    renderFlow({
+      gates: [ATTEST()],
+      step: 'attestation',
+      signbar: <button data-testid="probe-sign">Sign &amp; Download</button>,
+    });
     expect(screen.queryByTestId('rounds-gate-em-artifact')).toBeNull();
-    expect(screen.getByTestId('rounds-gate-host-attestation')).toBeTruthy();
+    expect(screen.getByTestId('rounds-gate-signbar-host')).toBeTruthy();
+    expect(screen.getByTestId('probe-sign')).toBeTruthy();
+    // And STILL no adoption host — the re-home did not simply rename one.
+    expect(screen.queryByTestId('rounds-gate-host-attestation')).toBeNull();
+  });
+
+  it('⚠️ R2 — the adoption host exists for the two gates that ADOPT, and only those', () => {
+    // The effect looks up `[data-gate-slot="rx"|"em"]` and nothing else. A host
+    // rendered for a step that never adopts is a landmark advertising a
+    // mechanism it does not participate in — which is how the next reader
+    // concludes the adoption still covers three slots. Caught by the E2E pack
+    // when the markup had not followed the effect.
+    for (const g of [RX(1), EM(1)]) {
+      const { unmount } = renderFlow({ gates: [g], step: g.id });
+      expect(
+        screen.getByTestId(`rounds-gate-host-${g.id}`),
+        `${g.id} lost its adoption host — its live gate has nowhere to land`,
+      ).toBeTruthy();
+      unmount();
+    }
   });
 });
 
@@ -318,10 +358,33 @@ describe('it does not know what a specialty is, and must not learn', () => {
 
   it('branches on no gate id of its own except the one that owns the signature', () => {
     // `attestation` appears because the last step carries the checkbox and the
-    // signing bar — that is a step's own chrome, not a clinical decision.
-    // `rx` and `em` must never be branched on: they arrive as data.
-    expect(SRC).not.toContain("=== 'rx'");
-    expect(SRC).not.toContain("=== 'em'");
+    // signature — that is a step's own chrome, not a clinical decision.
+    // The other two must never be branched on: they arrive as data.
+    //
+    // ⚠️ R2 — COMMENTS ARE STRIPPED FIRST, and that is a fix rather than a
+    // loosening. This grepped the RAW source, so any prose explaining the ban
+    // tripped it: R2's `ADOPTED_SLOTS` docstring described the rule, spelled
+    // the comparison it forbids, and reddened this test while the code it
+    // guards was clean. That is the same defect the sibling guard above already
+    // dodges by assembling its tokens from fragments — and the third sighting
+    // of "a source grep reading its own explanation" in this repo.
+    // The ban itself is UNCHANGED; it now applies to code, which is all it ever
+    // meant to cover.
+    const code = SRC.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, ' ');
+    expect(code).not.toContain("=== 'rx'");
+    expect(code).not.toContain("=== 'em'");
+    expect(code).not.toContain('=== "rx"');
+    expect(code).not.toContain('=== "em"');
+
+    // NON-VACUITY: stripping is what makes this test weaker if it goes wrong.
+    // A regex that ate the whole file would pass every assertion above, so
+    // prove real code survived — and prove the stripper actually removed prose.
+    expect(code, 'the comment stripper ate the source').toContain('ADOPTED_SLOTS');
+    expect(code).toContain('RoundsGateFlow');
+    expect(
+      code.length,
+      'stripping removed nothing — the guard is still reading comments',
+    ).toBeLessThan(SRC.length);
   });
 
   it('NEGATIVE CONTROL — the matcher can find a token that IS present', () => {
