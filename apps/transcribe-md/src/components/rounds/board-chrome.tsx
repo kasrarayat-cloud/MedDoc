@@ -18,6 +18,7 @@ import Link from 'next/link';
 
 import type { BoardFilter } from '@/lib/rounds/board-data';
 
+import { RoundsNewVisitCta } from './new-visit-cta';
 import { RoundsTopBar } from './top-bar';
 
 const FILTER_LABELS: { id: BoardFilter; label: string }[] = [
@@ -137,6 +138,13 @@ export function RoundsBoardChrome({
         >
           {clinicianName}
         </span>
+
+        {/* ── R2 — the primary action, back on the landing screen ───────────
+            Last, so it reads as the thing to DO after the instruments that say
+            what the day looks like. THIS is the mount that owns the `n`
+            shortcut; the empty state's copy must not, or one press queues two
+            navigations. */}
+        <RoundsNewVisitCta variant="bar" withShortcut />
       </RoundsTopBar>
 
       <div style={{ padding: '0 24px 40px' }}>
