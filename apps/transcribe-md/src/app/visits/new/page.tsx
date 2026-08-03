@@ -135,9 +135,13 @@ export default async function NewVisitPage({
   if (isSkinBeta()) {
     return (
       <AppFrame>
-        <div className="qm-c3-nv-top">
+        <div className="qm-rounds-host qm-c3-nv-top">
           <span className="qm-c3-nv-eyebrow">New visit</span>
-          <a href="/dashboard" className="qm-lin-btn" style={{ textDecoration: 'none' }}>
+          {/* R3.7 — `/board`, not `/dashboard`. R1 made `/dashboard` a config
+              307 to `/board`, so this Cancel took the doctor through a redirect
+              on every use. The destination is unchanged in intent; the hop is
+              gone. */}
+          <a href="/board" className="qm-lin-btn" style={{ textDecoration: 'none' }}>
             <Ic.close width={13} height={13} />
             Cancel
           </a>
