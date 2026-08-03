@@ -802,28 +802,54 @@ body[data-skin='rounds'] {
 }
 
 /* ── Action rail ────────────────────────────────────────────────────────── */
-/* ⚠️ THE RAIL IS NOT PINNED, AND THE ATTEMPT TO PIN IT IS RECORDED HERE.
-   SPEC makes "Review & sign" the primary, and it sits in flow at the bottom of
-   the stage — so it scrolls away, while the legacy `.qm-c3-rev2-signbar` that
-   R1 just removed was `position: sticky` and stayed glued to the viewport. That
-   asymmetry is real and worth fixing.
-   It was fixed and REVERTED in the same item, because pinning it broke three
-   packs and the cause was never where it looked. `RoundsChatDrawer` renders
-   INSIDE this rail (stage.tsx), and its scrim is `position: fixed; inset: 0`.
-   Any sticky rail is a positioned ancestor of both; with `z-index` it becomes a
-   stacking context that traps them, and `backdrop-filter` additionally makes it
-   a containing block for `position: fixed` descendants. Either way
-   `rounds-chat-close` and `rounds-gate-back` reported "visible, enabled and
-   stable" and swallowed every click — a failure that names the drawer and the
-   gate flow, and never the rail.
-   PINNING THIS RAIL IS A REAL TASK, NOT A DECLARATION: it needs the drawer
-   lifted out of the rail first, so the rail can be positioned without being an
-   ancestor of a modal. Left in flow until then, deliberately. */
+/* ⚠️ R3.3 — THE RAIL IS DOCKED NOW, AND THE PRIOR REVERT IS WHY IT COULD NOT BE.
+ * This block used to read "THE RAIL IS NOT PINNED, AND THE ATTEMPT TO PIN IT IS
+ * RECORDED HERE": pinning was built and reverted in one item because
+ * `RoundsChatDrawer` rendered INSIDE the rail and its scrim is
+ * `position: fixed; inset: 0`. Any positioned rail became an ancestor of both —
+ * with `z-index` a stacking context that trapped them, and with
+ * `backdrop-filter` a containing block for `position: fixed` descendants. Three
+ * packs failed naming `rounds-chat-close` and `rounds-gate-back`, never the
+ * rail.
+ *
+ * That note ended: "PINNING THIS RAIL IS A REAL TASK, NOT A DECLARATION: it
+ * needs the drawer lifted out of the rail first." R3.3 did the lift — the
+ * drawer's scrim and panel are `createPortal`'d to `<body>` — so the rail has
+ * no `position: fixed` descendants left to trap, and this is the task rather
+ * than the declaration.
+ *
+ * ⚠️ NO `backdrop-filter` AND NO `z-index` ABOVE THE OVERLAYS. Both are what
+ * made the old attempt fail, and neither is needed: an opaque stage-surface
+ * background reads correctly over the paper, and the portalled drawer and the
+ * gate flow now sit on `<body>` where the rail cannot reach them. Adding either
+ * back is how this regresses. */
 [data-skin='rounds'] .qm-rounds-rail {
+  position: sticky;
+  bottom: 0;
   display: flex;
   align-items: center;
   gap: 12px;
   margin-top: 24px;
+  padding: 12px 0 max(12px, env(safe-area-inset-bottom, 0px));
+  background: var(--rounds-stage-bg-3);
+  border-top: 1px solid var(--rounds-line-1);
+  /* The paper scrolls UNDER it, so the rail needs to sit above the sheet — but
+   * only just. The drawer and gate flow are portalled to body and are not in
+   * this stacking context at all. */
+  z-index: 2;
+}
+
+/* ⚠️ THE STICKY RESOLVES AGAINST `AppFrame`'s `<main>`, which `stage.tsx`
+ * documents as the deliberate overflow parent — that comment is why the sheet
+ * wrapper is a DIV and not a second `<main>`. A nearer landmark ancestor is how
+ * a sticky control silently stops sticking. */
+
+@media (prefers-reduced-motion: reduce) {
+  /* Nothing animates here; the rule exists so a future transition on the rail
+   * inherits the still state rather than being added without one. */
+  [data-skin='rounds'] .qm-rounds-rail {
+    transition: none;
+  }
 }
 
 [data-skin='rounds'] .qm-rounds-rail-primary {
@@ -2340,6 +2366,57 @@ body[data-skin='rounds'] {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 10px;
+}
+
+/* ── R3.4 — THE PRESCRIPTION-SAFETY SURFACE ──────────────────────────────────
+ * `.qm-rounds-host` on the wrapper retints all ~79 `qm-lin-rx-*` rules at once,
+ * because every one of them paints from `--color-linear-*`. What the bridge
+ * CANNOT do is change type or express advisory level on the status palette —
+ * those are the two things this block adds, and nothing here touches a
+ * conditional, a handler or a class the gate keys on.
+ *
+ * ⚠️ SEMANTICS ARE BYTE-IDENTICAL BY CONSTRUCTION, not by inspection. The brief
+ * requires the advisory/ack/gate behaviour untouched and the sign-block E2Es
+ * unchanged in meaning; a stylesheet cannot move a gate, and the wrapper adds
+ * one div. `rxBlocking` still decides. */
+
+/* Kickers are LOOKED UP, not read — the rail's title, the pane heads, the
+ * severity group labels and the drug tags all become mono per the type rule. */
+[data-skin='rounds'] .qm-rounds-rx .qm-lin-rx-rail-title,
+[data-skin='rounds'] .qm-rounds-rx .qm-lin-rx-pane-title,
+[data-skin='rounds'] .qm-rounds-rx .qm-lin-rx-rail-group-l,
+[data-skin='rounds'] .qm-rounds-rx .qm-lin-rx-tag,
+[data-skin='rounds'] .qm-rounds-rx .qm-lin-rx-id {
+  font-family: var(--rounds-font-mono);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* ── ADVISORY LEVELS ON THE STATUS PALETTE ───────────────────────────────────
+ * CRITICAL takes the on-dark red; the panel ground is a stage surface, and this
+ * file records that `--rounds-critical` as small text on surface-2 is 2.72:1.
+ * The fill keeps the true red for borders and dots, exactly as the board does. */
+[data-skin='rounds'] .qm-rounds-rx .qm-lin-rx-rail-group-l-critical {
+  color: var(--rounds-critical-on-dark);
+}
+
+[data-skin='rounds'] .qm-rounds-rx .qm-lin-rx-warn-tally {
+  font-family: var(--rounds-font-mono);
+  color: var(--rounds-em-text);
+}
+
+/* ⚠️ THE TWO CONTROLS THE CENSUS'S COMPOSITE ARM CAUGHT. `-ghost-sm` ("+ Add
+ * Rx") and `-tag` ("Continue") carried legacy SAGE, and only as a composite
+ * value — a box-shadow/border blend the exact-match arm could not see. The
+ * bridge retints their `--color-linear-*` reads; these two lines take the
+ * remaining hard-coded accent onto the Rounds one. */
+[data-skin='rounds'] .qm-rounds-rx .qm-lin-rx-ghost-sm-sage {
+  color: var(--rounds-accent-text);
+  border-color: var(--rounds-line-2);
+}
+
+[data-skin='rounds'] .qm-rounds-rx .qm-lin-rx-tag-active {
+  color: var(--rounds-accent-text);
 }
 
 /* ── R3.2 — VISIT-ROW STATUS AS A TREATMENT ──────────────────────────────────

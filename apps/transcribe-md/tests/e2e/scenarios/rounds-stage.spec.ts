@@ -466,6 +466,70 @@ test.describe('Rounds Screen 2 — the stage', () => {
     expect((await gateScrolls())[0].drawerOpen).toBe(false);
   });
 
+  // ── R3.3 — THE RAIL IS REACHABLE WHILE THE PAPER SCROLLS ─────────────────
+  test('R3.3 — the action rail is visible at the TOP and the BOTTOM of a long paper', async ({
+    page,
+  }) => {
+    // ⚠️ THE PRIOR ATTEMPT AT THIS SHIPPED AND WAS REVERTED, so this test is
+    // written against the failure mode rather than the feature. Pinning the
+    // rail once trapped the chat drawer's `position: fixed` scrim, and the
+    // symptom was NOT an invisible rail — it was `rounds-chat-close` reporting
+    // "visible, enabled and stable" while swallowing every click. So visibility
+    // alone would have passed on the reverted build. This asserts the rail is
+    // reachable AND that the overlay it used to trap still works.
+    const seeded = await open(page, 'stage-r33');
+    test.skip(!seeded, 'psql seeding unavailable');
+
+    for (const width of [1440, 1024]) {
+      await page.setViewportSize({ width, height: 800 });
+      const rail = page.getByTestId('rounds-action-rail');
+      const sign = page.getByTestId('rounds-review-sign');
+
+      // TOP of the paper.
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await expect(rail, `@${width}: rail not visible at the top`).toBeInViewport();
+
+      // NON-VACUITY: a page too short to scroll would satisfy both checks
+      // trivially, and every stage fixture would "pass" a docking test on a
+      // build with no docking at all.
+      const scrollable = await page.evaluate(
+        () => document.documentElement.scrollHeight - window.innerHeight,
+      );
+      expect(
+        scrollable,
+        `@${width}: the paper does not scroll, so this proves nothing about a ` +
+          'docked rail — seed a longer note or shrink the viewport',
+      ).toBeGreaterThan(200);
+
+      // BOTTOM of the paper.
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await page.waitForTimeout(250);
+      await expect(rail, `@${width}: rail not visible after scrolling`).toBeInViewport();
+      await expect(sign, `@${width}: the primary scrolled out of reach`).toBeInViewport();
+    }
+
+    // ── AND THE OVERLAY THE OLD ATTEMPT TRAPPED STILL WORKS ────────────────
+    // This is the half that would have caught the revert. The rail is sticky;
+    // the drawer is portalled to <body> so the rail cannot be its containing
+    // block. If someone re-adds `backdrop-filter` or a taller `z-index` to the
+    // rail, the close button goes back to being visible and unclickable.
+    await page.setViewportSize({ width: 1440, height: 800 });
+    await page.getByTestId('rounds-chat-trigger').click();
+    await expect(page.getByTestId('rounds-chat-drawer')).toBeVisible();
+    const scrimParent = await page.evaluate(() => {
+      const el = document.querySelector('[data-testid="rounds-chat-scrim"]');
+      return el?.parentElement?.tagName.toLowerCase() ?? '(none)';
+    });
+    expect(
+      scrimParent,
+      'the chat overlay is no longer a direct child of <body> — a positioned ' +
+        'rail can trap it again, which is exactly how the last pinning attempt ' +
+        'failed',
+    ).toBe('body');
+    await page.getByTestId('rounds-chat-close').click();
+    await expect(page.getByTestId('rounds-chat-drawer')).toHaveCount(0);
+  });
+
   // ── 10. EXACTLY ONE control can start a signature, and it is not on the stage ──
   test('the stage carries NO signature control — the rail and the gates are the only path', async ({
     page,

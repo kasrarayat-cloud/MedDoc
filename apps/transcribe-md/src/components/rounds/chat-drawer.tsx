@@ -25,6 +25,7 @@
 // ============================================================================
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 export interface RoundsChatDrawerProps {
   /** The existing `<ChatEditorPanel>`, passed through untouched. */
@@ -69,6 +70,11 @@ export function RoundsChatDrawer({
   defaultOpen = false,
 }: RoundsChatDrawerProps) {
   const [open, setOpen] = useState(defaultOpen);
+  // `document.body` does not exist while this renders on the server. Portalling
+  // only after mount keeps the first client render identical to the server's,
+  // which is what avoids a hydration mismatch on a route the doctor lands on.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const titleId = useId();
@@ -136,39 +142,61 @@ export function RoundsChatDrawer({
         </kbd>
       </button>
 
-      {open ? (
-        <>
-          <div
-            aria-hidden
-            data-testid="rounds-chat-scrim"
-            className="qm-rounds-chat-scrim"
-            onClick={close}
-          />
-          <div
-            ref={panelRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={titleId}
-            data-testid="rounds-chat-drawer"
-            className="qm-rounds-chat-drawer"
-          >
-            <div className="qm-rounds-chat-head">
-              <h2 id={titleId} className="qm-rounds-chat-title">
-                Edit with chat
-              </h2>
-              <button
-                type="button"
+      {/* ⚠️ THE OVERLAY IS PORTALLED TO <body>, AND THAT IS WHAT UNBLOCKS R3.3.
+          `rounds-tokens.css` records a pinned action rail built and REVERTED in
+          one item. The cause was here, not there: this drawer renders INSIDE
+          the rail and its scrim is `position: fixed; inset: 0`. A positioned
+          rail becomes an ancestor of both — with `z-index` a stacking context
+          that traps them, and with `backdrop-filter` a containing block for
+          `position: fixed` descendants outright. Either way
+          `rounds-chat-close` reported "visible, enabled and stable" and
+          swallowed every click, a failure that names the drawer and never the
+          rail. That note ends: "it needs the drawer lifted out of the rail
+          first". This is the lift.
+
+          ⚠️ AND IT IS NOT THE PORTAL DEFECT R2 RECORDED. `gate-flow.tsx` warns
+          that `createPortal(node, host)` and a bare node are different element
+          TYPES to React, so FLIPPING between them remounts and un-clears a
+          gate. Nothing flips here: the overlay is already `{open ? … : null}`,
+          so it mounts and unmounts on every open/close and holds no state a
+          remount could lose. The TRIGGER — which owns the keydown listener and
+          the focus return — stays in the rail, unmoved. */}
+      {open && mounted
+        ? createPortal(
+            <>
+              <div
+                aria-hidden
+                data-testid="rounds-chat-scrim"
+                className="qm-rounds-chat-scrim"
                 onClick={close}
-                data-testid="rounds-chat-close"
-                className="qm-rounds-chat-close"
+              />
+              <div
+                ref={panelRef}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={titleId}
+                data-testid="rounds-chat-drawer"
+                className="qm-rounds-chat-drawer"
               >
-                Close
-              </button>
-            </div>
-            {children}
-          </div>
-        </>
-      ) : null}
+                <div className="qm-rounds-chat-head">
+                  <h2 id={titleId} className="qm-rounds-chat-title">
+                    Edit with chat
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={close}
+                    data-testid="rounds-chat-close"
+                    className="qm-rounds-chat-close"
+                  >
+                    Close
+                  </button>
+                </div>
+                {children}
+              </div>
+            </>,
+            document.body,
+          )
+        : null}
     </>
   );
 }
