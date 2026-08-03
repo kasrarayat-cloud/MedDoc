@@ -40,6 +40,21 @@ the legacy sage `qm-lin-btn-primary` and `qm-lin-pill--sage`. It is an
 authenticated Rounds route a doctor reaches from the nav, so it joins R3 as
 discovered scope, declared here and in the ledger.
 
+## JUSTIFIED, PERMANENTLY — classes that stay and why
+
+A census whose only verdict is "fix it" cannot converge. These are enumerated,
+adjudicated, and **kept**:
+
+| class | surface | why it stays |
+|---|---|---|
+| `qm-c3-rev2-root` | `/visits/[id]` | **Owner ruling 2026-08-03: JUSTIFIED-KEEP.** It has **zero rules** in `globals.css` (`grep -c 'qm-c3-rev2-root' → 0`), so it paints nothing and cannot render legacy skin. Renaming buys nothing and would churn a class other code may key on. The census's class arm flags it because it matches `qm-c3-*`; that is the arm being correct about a name, not about a rendering. **Permanent — do not re-open in a later round.** |
+
+⚠️ **The distinction this row teaches: a class-family match is evidence of a
+NAME, not of a rendering.** A future census could be made more precise by
+cross-referencing whether a matched class has any CSS rule at all — worth doing
+if this table ever grows past a handful of rows, and deliberately not done for
+one entry.
+
 ## STATED BOUNDARY — what this census does NOT establish
 
 1. **It cannot see "correct tokens, wrong anatomy."** `/patients` reports **zero**

@@ -319,6 +319,24 @@ to build; this says what is built, what is next, and what proof exists.
    rather than skipping, because a guard that silently stops running is the
    defect it exists to catch.
 
+7c. **INVESTIGATE, DO NOT RESTORE — any baseline mismatch touching a
+   non-smoke account.** A smoke run compares counts before and after. When the
+   after does not match, the reflex is to "restore the baseline"; on a LIVE
+   production database that reflex deletes real clinical work.
+
+   *Cost that produced this rule (avoided, not paid):* R3 batch 1's prod
+   verification baselined `transcribe_visits` at 23 and read **24** afterwards,
+   with the smoke cleaner reporting `visits=0` deleted. The extra row belonged
+   to `kasra.rayat@gmail.com` and was created at 07:12 **during the session** —
+   ordinary clinical activity by a real doctor. A "restore to 23" would have
+   destroyed a live note, and the cleaner was right to leave it: it scopes every
+   delete to the fixture's own user and practice.
+
+   So: a mismatch is a QUESTION, and the first move is `select … join users` to
+   learn WHOSE row it is. Only rows owned by the synthetic fixture are ever
+   candidates for removal, and the cleaner already enforces that — the danger is
+   a human reaching past it.
+
 ## Invariants re-checked every item
 
 Read-only paper · chat editor is the only edit path · all four fail-closed gates
