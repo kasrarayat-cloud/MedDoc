@@ -26,6 +26,8 @@ import prisma from '@meddoc/db';
 import { auth } from '@/lib/nextauth';
 import { logAudit } from '@/lib/audit';
 import { isSkinBeta } from '@/config/skin-beta';
+import { isSkinRounds } from '@/config/skin-rounds';
+import { RoundsNewVisitCta } from '@/components/rounds/new-visit-cta';
 import { AppFrame } from '@/components/ui/app-frame';
 import { Avatar } from '@/components/ui/avatar';
 import { Ic } from '@/components/ui/icon';
@@ -236,6 +238,9 @@ export default async function PatientPage({
   // <VisitsTab>/<TrashTab>/dialogs the legacy view renders. Flag OFF → the
   // existing tabbed layout below runs, byte-identical.
   if (isSkinBeta()) {
+    // R3.2 — the Rounds fork of this layout. Beta and Rounds are different
+    // flags; only the latter guarantees the tokens these controls resolve.
+    const roundsSkin = isSkinRounds();
     const age = dob ? yearsFrom(dob) : null;
     const metaBits = [
       dobIso ? `DOB ${dobIso}${age != null ? ` (${age})` : ''}` : null,
@@ -299,14 +304,103 @@ export default async function PatientPage({
                     No problem list yet.
                   </span>
                 )}
-                <ProblemListDialog
-                  patientId={patient.id}
-                  initialProblemList={patient.problemList}
-                />
+                {/* R3.2 — the problem-list affordance. Item 2 names it as part
+                    of the identity header, and the census found its trigger
+                    still on `qm-lin-btn`: the LAST legacy class on this route.
+                    Hosted rather than restyled, for the same reason as the
+                    action row — the dialog inside it is Radix + `linear-*`
+                    utilities, so the bridge retints the trigger and the panel
+                    together, and a hand-restyle of the trigger alone would
+                    leave the panel behind. */}
+                <span className="qm-rounds-host">
+                  <ProblemListDialog
+                    patientId={patient.id}
+                    initialProblemList={patient.problemList}
+                  />
+                </span>
               </div>
             </div>
           </div>
 
+          {/* ── R3.2 — THE ACTION ROW, REBUILT IN ROUNDS CONTROLS ─────────────
+              Three things changed and each was a finding, not a preference:
+
+              1. The primary was `qm-lin-btn-primary` — the LEGACY SAGE the
+                 census flagged on this route. It is the shared Rounds CTA now,
+                 the same component the board and the roster mount, so the label
+                 and the destination cannot drift between three surfaces.
+              2. DELETE WAS A PEER OF EXPORT. A control that destroys a
+                 patient's record sat in a flat row beside "Export" and "Edit",
+                 one mis-click from a surface whose job is careful review — the
+                 same reasoning that moved "Visit actions" off the stage foot in
+                 R2. It is in a quiet `<details>` overflow now, closed by
+                 default, keyboard-operable and screen-reader-announced with no
+                 JavaScript.
+              3. The remaining actions take `.qm-rounds-btn-secondary` rather
+                 than `qm-lin-btn`.
+
+              ⚠️ FORKED ON `isSkinRounds()`, NOT ON `isSkinBeta()`. This whole
+              branch is the skin-beta layout, and in production skin-beta is on
+              wherever Rounds is — but they are different flags, and a build with
+              beta and without Rounds would otherwise get Rounds controls with no
+              Rounds tokens behind them. */}
+          {/* ⚠️ `qm-rounds-host` ON THIS ROW IS LOAD-BEARING, not decoration.
+              The Edit and Delete triggers are Radix dialogs styled with Tailwind
+              `linear-*` utilities — including a `ring-linear-sage/40` focus
+              ring, i.e. the legacy sage, on controls this round is meant to
+              de-legacy. Those resolve custom properties, so the bridge retints
+              all of them at once; restyling two dialog triggers by hand would
+              leave the next one to be found later.
+              It is also an island the CENSUS CANNOT SEE — its colour arm samples
+              color/background/border, not ring. Named in the report rather than
+              left implicit. */}
+          {roundsSkin ? (
+            <div className="qm-rounds-host qm-rounds-pdetail-actions">
+              {!isDeleted && <RoundsNewVisitCta variant="bar" />}
+              {latestVisit && (
+                <Link
+                  href={`/visits/${latestVisit.id}`}
+                  className="qm-rounds-btn-secondary"
+                  style={{ textDecoration: 'none' }}
+                >
+                  Open last note
+                </Link>
+              )}
+              <EditPatientDialog
+                patientId={patient.id}
+                initialName={patient.name}
+                initialDob={dobIso}
+                initialExternalId={patient.externalId}
+                initialMrn={patient.mrn}
+                initialInsurance={patient.insurance}
+              />
+              {activeCount > 0 && (
+                <a
+                  href={`/api/patients/${patient.id}/export`}
+                  className="qm-rounds-btn-secondary"
+                  style={{ textDecoration: 'none' }}
+                >
+                  <Ic.download width={13} height={13} />
+                  Export
+                </a>
+              )}
+              <details
+                className="qm-rounds-overflow"
+                data-testid="rounds-patient-overflow"
+              >
+                <summary className="qm-rounds-overflow-summary">
+                  Patient actions
+                </summary>
+                <div className="qm-rounds-overflow-body">
+                  <DeletePatientDialog
+                    patientId={patient.id}
+                    patientName={patient.name}
+                    visitCount={activeCount}
+                  />
+                </div>
+              </details>
+            </div>
+          ) : (
           <div className="flex flex-wrap items-center gap-2">
             {!isDeleted && (
               <Link
@@ -351,6 +445,7 @@ export default async function PatientPage({
               visitCount={activeCount}
             />
           </div>
+          )}
         </div>
 
         {/* Quiet one-line summary — replaces the 4 vanity stat cards. */}

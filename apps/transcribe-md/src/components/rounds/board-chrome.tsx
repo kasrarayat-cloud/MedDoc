@@ -21,16 +21,6 @@ import type { BoardFilter } from '@/lib/rounds/board-data';
 import { RoundsNewVisitCta } from './new-visit-cta';
 import { RoundsTopBar } from './top-bar';
 
-const FILTER_LABELS: { id: BoardFilter; label: string }[] = [
-  { id: 'active', label: 'Active' },
-  { id: 'ready', label: 'Ready' },
-  { id: 'signed', label: 'Signed' },
-  { id: 'soap', label: 'SOAP' },
-  { id: 'ultrasound', label: 'Ultrasound' },
-  { id: 'critical', label: 'Critical' },
-  { id: 'failed', label: 'Failed' },
-];
-
 function hrefWith(
   base: Record<string, string | number | undefined>,
   over: Record<string, string | number | undefined>,
@@ -173,31 +163,21 @@ export function RoundsBoardChrome({
             </span>
           </span>
 
-          <div role="group" aria-label="Filters" style={{ display: 'flex', gap: 6 }}>
-            {FILTER_LABELS.map((f) => {
-              const active = f.id === filter;
-              return (
-                <Link
-                  key={f.id}
-                  href={hrefWith(params, { filter: f.id, page: undefined })}
-                  aria-current={active ? 'true' : undefined}
-                  data-testid={`rounds-filter-${f.id}`}
-                  style={{
-                    fontFamily: 'var(--rounds-font-ui)',
-                    fontSize: 12.5,
-                    padding: '4px 10px',
-                    borderRadius: 999,
-                    textDecoration: 'none',
-                    color: active ? 'var(--rounds-text-1)' : 'var(--rounds-text-2)',
-                    background: active ? 'var(--rounds-accent-tint-16)' : 'transparent',
-                    border: `1px solid ${active ? 'var(--rounds-accent)' : 'var(--rounds-line-1)'}`,
-                  }}
-                >
-                  {f.label}
-                </Link>
-              );
-            })}
-          </div>
+          {/* ⚠️ R3.8 — THE FILTER CHIP ROW IS DELETED, NOT HIDDEN.
+              Owner ruling: POSITION IS THE STATUS. The board is a
+              patient-lanes × stage-columns matrix — a card's COLUMN already
+              says where the visit is, so a chip row asking "Active / Ready /
+              Signed / SOAP / Ultrasound / Critical / Failed" was a second,
+              weaker encoding of the thing the layout already encodes, and it
+              cost a row of chrome above the work.
+
+              ⚠️ THE `filter` PARAM SURVIVES THE CHIPS, DELIBERATELY, and this is
+              the part not to "tidy up" later. R1 ships a config redirect
+              `/dashboard?tab=all → /board?filter=active`; the route still reads
+              the param, and the search form below still forwards it. Deleting
+              the param with the chips would turn that redirect into a link to
+              nothing — a deep link a doctor may have bookmarked. What was
+              removed is the CONTROL, not the capability. */}
 
           {/* The shipped whole-queue search, restyled. A plain GET form: no JS
               needed, survives reload with the query intact, and the result is a

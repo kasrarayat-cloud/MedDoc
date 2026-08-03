@@ -306,14 +306,22 @@ body[data-skin='rounds'] {
  * `outline`, none of which are set inline and none of which change a contrast
  * pair. A hover treatment that repainted the card would put all four variants
  * back through the gate. */
-[data-skin='rounds'] .qm-rounds-lane-card {
+/* ⚠️ R3.1 — TWO CONSUMERS, ONE DEFINITION. `.qm-rounds-pcard` (the patients
+ * roster's marker card) joins every rule below rather than copying them. The
+ * board and the roster are the same idea applied to different rows, and two
+ * copies of a hover treatment drift — this project has already paid for a
+ * duplicated sign control and a duplicated nav. Adding a third consumer means
+ * adding it to these selector lists, not writing a fourth block. */
+[data-skin='rounds'] .qm-rounds-lane-card,
+[data-skin='rounds'] .qm-rounds-pcard {
   transition:
     transform 140ms ease-out,
     box-shadow 140ms ease-out;
   will-change: transform;
 }
 
-[data-skin='rounds'] .qm-rounds-lane-card:hover {
+[data-skin='rounds'] .qm-rounds-lane-card:hover,
+[data-skin='rounds'] .qm-rounds-pcard:hover {
   /* One layer, small. `--rounds-paper-shadow` is the PAPER's two-layer lift and
    * this file already records that the paper is its only consumer — a board
    * card borrowing it would claim the same elevation as the note itself. */
@@ -324,7 +332,8 @@ body[data-skin='rounds'] {
 
 /* PRESSED. Returns to rest rather than going lower: the card is a link to
  * another screen, and a push-down reads as a toggle. */
-[data-skin='rounds'] .qm-rounds-lane-card:active {
+[data-skin='rounds'] .qm-rounds-lane-card:active,
+[data-skin='rounds'] .qm-rounds-pcard:active {
   transform: translateY(0);
   box-shadow: 0 2px 6px -3px rgba(8, 10, 14, 0.5);
 }
@@ -333,7 +342,8 @@ body[data-skin='rounds'] {
  * every Rounds control a 2px accent outline; this adds the same lift the mouse
  * gets, so keyboard and pointer see the same card state. The outline itself is
  * NOT redeclared — one definition, in one place. */
-[data-skin='rounds'] .qm-rounds-lane-card:focus-visible {
+[data-skin='rounds'] .qm-rounds-lane-card:focus-visible,
+[data-skin='rounds'] .qm-rounds-pcard:focus-visible {
   transform: translateY(-2px);
   box-shadow: 0 6px 18px -6px rgba(8, 10, 14, 0.55);
   z-index: 1;
@@ -361,7 +371,8 @@ body[data-skin='rounds'] {
   }
 }
 
-[data-skin='rounds'] .qm-rounds-lane-card {
+[data-skin='rounds'] .qm-rounds-lane-card,
+[data-skin='rounds'] .qm-rounds-pcard {
   animation: qm-rounds-card-in 260ms ease-out both;
 }
 
@@ -375,7 +386,8 @@ body[data-skin='rounds'] {
  * `animation: none` and neutralising the delay makes the reduced-motion state
  * DELIBERATE, the same way the REC pulse above is. */
 @media (prefers-reduced-motion: reduce) {
-  [data-skin='rounds'] .qm-rounds-lane-card {
+  [data-skin='rounds'] .qm-rounds-lane-card,
+  [data-skin='rounds'] .qm-rounds-pcard {
     animation: none !important;
     animation-delay: 0ms !important;
     transition: none !important;
@@ -2228,9 +2240,19 @@ body[data-skin='rounds'] {
 
 [data-skin='rounds'] .qm-rounds-roster-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 12px;
-  padding-bottom: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+/* Title and count read as one unit — the count is a mono kicker beside the
+ * display face, not a second sentence under it. */
+[data-skin='rounds'] .qm-rounds-roster-headline {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
 }
 
 [data-skin='rounds'] .qm-rounds-roster-title {
@@ -2242,28 +2264,22 @@ body[data-skin='rounds'] {
 }
 
 [data-skin='rounds'] .qm-rounds-roster-count {
-  font-family: var(--rounds-font-ui);
-  font-size: 13px;
-  color: var(--rounds-text-2);
-}
-
-[data-skin='rounds'] .qm-rounds-roster-new {
-  font-family: var(--rounds-font-ui);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--rounds-on-accent);
-  background: var(--rounds-accent);
-  border-radius: 8px;
-  padding: 7px 14px;
-  text-decoration: none;
-  align-self: center;
+  font-family: var(--rounds-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--rounds-text-3);
 }
 
 [data-skin='rounds'] .qm-rounds-roster-search {
   position: relative;
   display: flex;
   align-items: center;
-  margin-bottom: 14px;
+  /* MEASURED: at its previous width the box computed to 201px and clipped its
+   * own placeholder ("Search patients by nam…"). A search whose prompt does not
+   * fit reads as broken before it is used. */
+  flex: 0 1 320px;
+  min-width: 220px;
 }
 
 [data-skin='rounds'] .qm-rounds-roster-input {
@@ -2321,77 +2337,197 @@ body[data-skin='rounds'] {
 }
 
 [data-skin='rounds'] .qm-rounds-roster-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
 }
 
-[data-skin='rounds'] .qm-rounds-roster-row {
+/* ── R3.2 — VISIT-ROW STATUS AS A TREATMENT ──────────────────────────────────
+ * `VisitList` renders the visit history on `/patients/[id]` AND the whole of
+ * `/visits`, so this one rule clears both census surfaces. It replaces
+ * `qm-lin-pill*` — a filled chip — with a mono label carrying its status colour,
+ * matching how the board and the patient card express state.
+ *
+ * Foregrounds take the `-text` sibling of each status token, never the fill.
+ * The ground here is the row, which the bridge paints `--rounds-surface-1`. */
+[data-skin='rounds'] .qm-rounds-vstatus {
+  font-family: var(--rounds-font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--rounds-text-3);
+  white-space: nowrap;
+}
+
+[data-skin='rounds'] .qm-rounds-vstatus[data-status='ready'] {
+  color: var(--rounds-ready-text);
+}
+[data-skin='rounds'] .qm-rounds-vstatus[data-status='signed'] {
+  color: var(--rounds-signed-text);
+}
+[data-skin='rounds'] .qm-rounds-vstatus[data-status='failed'] {
+  color: var(--rounds-critical-on-dark);
+}
+[data-skin='rounds'] .qm-rounds-vstatus[data-status='processing'] {
+  color: var(--rounds-processing-text);
+}
+
+/* The hosted list itself — the bridge does the colour work; this only owns the
+ * surface marker so a violation inside it is OWNED rather than inherited. */
+[data-skin='rounds'] .qm-rounds-vlist {
+  display: block;
+}
+
+/* ── R3.2 — the patient-detail action row ─────────────────────────────────── */
+[data-skin='rounds'] .qm-rounds-pdetail-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
-  padding: 11px 4px;
-  border-bottom: 1px solid var(--rounds-line-1);
-  text-decoration: none;
-  min-height: 44px;
+  gap: 8px;
 }
 
-[data-skin='rounds'] .qm-rounds-roster-row:hover {
+[data-skin='rounds'] .qm-rounds-pdetail-actions .qm-rounds-overflow {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* ⚠️ `.qm-rounds-btn-secondary` IS A FORK, NOT A STANDALONE CONTROL, and this
+ * block is the cost of forgetting that. The § Controls table says so plainly —
+ * it is "the same treatment applied OVER an old-skin `.qm-lin-btn*`" — so it
+ * carries radius, font and colour and NOTHING ELSE. R3.2 dropped `qm-lin-btn`
+ * (it is the legacy family this round removes) and left the fork alone, which
+ * took the layout with it: Export rendered its icon stacked ABOVE its label,
+ * visible in the first capture.
+ *
+ * Completed HERE, scoped to this row, rather than by filling in the shared
+ * class — auth and settings still use it as the fork it was designed to be, and
+ * widening it would restyle surfaces this item never looked at. */
+[data-skin='rounds'] .qm-rounds-pdetail-actions .qm-rounds-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  font-size: 13px;
+  border: 1px solid var(--rounds-line-2);
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+[data-skin='rounds'] .qm-rounds-pdetail-actions .qm-rounds-btn-secondary:hover {
   background: var(--rounds-surface-2);
 }
 
-[data-skin='rounds'] .qm-rounds-roster-avatar {
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: var(--rounds-surface-3);
-  color: var(--rounds-text-2);
-  font-family: var(--rounds-font-ui);
-  font-size: 11.5px;
-  font-weight: 600;
-}
-
-[data-skin='rounds'] .qm-rounds-roster-idcol {
+/* ── R3.1 — THE PATIENT MARKER CARD ──────────────────────────────────────────
+ * The board's anatomy applied to a patient: name, a MONO kicker of things you
+ * look up rather than read, and status expressed as a TREATMENT of the card
+ * rather than as a chip beside it.
+ *
+ * ⚠️ THE GROUND IS `--rounds-surface-2` AND THE INK IS `--rounds-text-1`, which
+ * is the pairing the board's cards already use and axe already measured. This
+ * file records nine separate contrast failures that came from reasoning about
+ * the ink while the GROUND was the variable — a roster card is not a lane card
+ * and could not simply inherit their numbers, so it takes a pairing that was
+ * checked rather than a new one that looks right. */
+[data-skin='rounds'] .qm-rounds-pcard {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 5px;
+  position: relative;
+  padding: 12px 14px;
+  border: 1px solid var(--rounds-line-1);
+  border-radius: var(--rounds-radius-md);
+  background: var(--rounds-surface-2);
+  text-decoration: none;
   min-width: 0;
-  flex: 1;
 }
 
-[data-skin='rounds'] .qm-rounds-roster-name {
+[data-skin='rounds'] .qm-rounds-pcard-name {
   font-family: var(--rounds-font-ui);
-  font-size: 13.5px;
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 600;
   color: var(--rounds-text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-[data-skin='rounds'] .qm-rounds-roster-meta {
-  font-family: var(--rounds-font-ui);
-  font-size: 12px;
+/* Looked up, not read: age, visit count, modality. Mono per the type rule. */
+[data-skin='rounds'] .qm-rounds-pcard-kicker {
+  font-family: var(--rounds-font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: var(--rounds-text-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-[data-skin='rounds'] .qm-rounds-roster-status {
-  flex: none;
+/* ── STATUS AS TREATMENT ─────────────────────────────────────────────────────
+ * A left rule on the card plus the status line's own colour, driven by
+ * `data-status`. Each foreground takes the `-text` sibling of its status token,
+ * never the fill: this palette has learned that rule six times, and
+ * `--rounds-ready` as text on surface-2 is 2.60:1. */
+[data-skin='rounds'] .qm-rounds-pcard-status {
   font-family: var(--rounds-font-mono);
-  font-size: 11px;
-  letter-spacing: 0.02em;
-  color: var(--rounds-text-2);
-  border: 1px solid var(--rounds-line-1);
-  border-radius: 999px;
-  padding: 2px 9px;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--rounds-text-3);
 }
 
-[data-skin='rounds'] .qm-rounds-roster-chev {
-  flex: none;
-  color: var(--rounds-text-3);
-  font-size: 13px;
+[data-skin='rounds'] .qm-rounds-pcard::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--rounds-line-2);
+}
+
+[data-skin='rounds'] .qm-rounds-pcard[data-status='ready']::before {
+  background: var(--rounds-ready);
+}
+[data-skin='rounds'] .qm-rounds-pcard[data-status='ready'] .qm-rounds-pcard-status {
+  color: var(--rounds-ready-text);
+}
+
+[data-skin='rounds'] .qm-rounds-pcard[data-status='signed']::before {
+  background: var(--rounds-signed);
+}
+[data-skin='rounds'] .qm-rounds-pcard[data-status='signed'] .qm-rounds-pcard-status {
+  color: var(--rounds-signed-text);
+}
+
+[data-skin='rounds'] .qm-rounds-pcard[data-status='failed']::before {
+  background: var(--rounds-critical);
+}
+[data-skin='rounds'] .qm-rounds-pcard[data-status='failed'] .qm-rounds-pcard-status {
+  color: var(--rounds-critical-on-dark);
+}
+
+[data-skin='rounds'] .qm-rounds-pcard[data-status='processing']::before {
+  background: var(--rounds-processing);
+}
+[data-skin='rounds'] .qm-rounds-pcard[data-status='processing'] .qm-rounds-pcard-status {
+  color: var(--rounds-processing-text);
+}
+
+[data-skin='rounds'] .qm-rounds-pcard[data-status='recording']::before {
+  background: var(--rounds-critical);
+}
+[data-skin='rounds'] .qm-rounds-pcard[data-status='recording'] .qm-rounds-pcard-status {
+  color: var(--rounds-critical-on-dark);
+}
+
+/* A patient with no visits gets the neutral rule and no status line at all —
+ * an empty status slot would be a claim about a visit that does not exist. */
+[data-skin='rounds'] .qm-rounds-pcard[data-status='none']::before {
+  background: var(--rounds-line-1);
 }
 
 [data-skin='rounds'] .qm-rounds-roster-foot {
