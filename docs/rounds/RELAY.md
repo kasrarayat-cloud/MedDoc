@@ -15,6 +15,22 @@ to build; this says what is built, what is next, and what proof exists.
 
    **When local and CI disagree, CI wins and the item reverts to in-progress.**
 
+   **⚠️ THE MERGE-COMMIT EXPECTED SET IS **SIX**, NOT SEVEN — DO NOT READ THE
+   MISSING SEVENTH AS A FAILURE.** `a11y.yml` is `pull_request`-only
+   (`.github/workflows/a11y.yml:24`), so **`axe-core sweep` does not exist on a
+   merge commit** and never will. A PR head therefore carries seven check-runs
+   and its merge commit carries six:
+
+   > `test` · `unit tests` · `npm audit` · `dev-dependency advisories` ·
+   > `TruffleHog` · `Playwright E2E`
+
+   Counting the absent axe sweep as a missing check is exactly as wrong as not
+   noticing a pack that silently `skipped` — both are the same error, an
+   expected set that does not match the thing being read. **Cite the six by id,
+   and cite the axe run separately from the PR head** (that is where it ran and
+   where it passed). Verified on R1: PR #507 head carried 7, merge commit
+   `7f5fddeb` carried 6, all green.
+
    *Why this is written down:* A2 was marked ✅ DONE with "chromium E2E green"
    as evidence. It was green — on the local flag-ON `:rounds` image, honestly
    run. CI was red the whole time, and not for a Rounds reason: the spec was

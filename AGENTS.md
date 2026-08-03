@@ -457,16 +457,43 @@ file is fine without checking that list is guessing. As of 2026-07-28 it is:
 |---|---|
 | `WM IOV Template.docx` | the customer's BLANK form — recorded decision, see "Tracked fixtures" |
 | `colon_blank_answers.pdf` | committed blank form |
+| `docs/qa-reports/comprehensive-audit-20260514T030426Z.pdf` | **adjudicated 2026-08-03** — 17-page code/logic audit report, NO clinical content, predates the hook |
 | `apps/transcribe-md/tests/e2e/fixtures/**` | committed E2E fixtures |
 | `apps/transcribe-md/src/**/__tests__/__fixtures__/**` | committed unit fixtures |
 | `apps/transcribe-md/src/**/__fixtures__/**` | committed unit fixtures |
 
-Every one of these is BLANK or a sample input. **They must survive every future
+Every one of these is BLANK, a sample input, or an adjudicated non-clinical report. **They must survive every future
 sweep** — a sweep that eats the blank fixtures breaks the twin work, which is
 why they are named here as carefully as what must not survive.
 
 Adding a row here means adding the same row to the hook. If the two ever
 disagree, the hook is right and this table is stale.
+
+#### READ IT, THEN ADJUDICATE, THEN WRITE THE DECISION DOWN
+
+**The standing pattern for any future stray.** The May audit PDF sat tracked and
+unlisted for eleven weeks — not blocked (the hook only sees ADDED files, and it
+predates the hook), not sanctioned either. Every sweep that met it re-derived the
+same question and moved on, and an unanswered question decays: "unknown" becomes
+"probably fine" through nothing but repetition.
+
+So when a sweep finds a `.docx`/`.pdf` that is not on the list:
+
+1. **READ IT.** Not the filename, not the directory, not who committed it — the
+   CONTENT. `unpdf` / `unzip` take seconds. A filename is a claim, and
+   `synthetic_`-style prefixes have already been rejected as evidence once
+   (see the launch-readiness rulings: three files were non-PHI by OWNERSHIP,
+   never by their names).
+2. **ADJUDICATE.** Filled clinical content → it is PHI, and the remedy is the
+   history rewrite above, not `git rm`. Blank form, sample input, or a report
+   with no clinical content → it belongs on the allowlist.
+3. **WRITE IT DOWN, IN THE HOOK,** with the date and what you actually read.
+   A decision that lives only in a session transcript is not a decision; the
+   next sweep cannot see it and will ask again.
+
+**A stray nobody can read does not get the benefit of the doubt.** If it cannot
+be opened, treat it as filled and escalate — that asymmetry is deliberate,
+because the two errors are not symmetric.
 
 #### A second purge, and what it cost — 2026-07-28
 
