@@ -377,8 +377,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // from `auth()`, and `auth()` cannot run here — the signOut event is
         // outside request scope, so the session resolves to null and every
         // LOGOUT row would land UNATTRIBUTED. Until 2026-08-04 it was worse
-        // than that: the resolver fell back to `'clinic_main'`, so 64 solo
-        // doctors' logouts were filed under the largest shared practice.
+        // than that: the resolver fell back to `'clinic_main'`, so solo
+        // doctors' logouts were filed under the largest shared practice —
+        // 64 rows when first measured, 65 by the time the repair ran.
         // One primary-key lookup is the whole cost of getting it right.
         let practiceId: string | null = null;
         try {

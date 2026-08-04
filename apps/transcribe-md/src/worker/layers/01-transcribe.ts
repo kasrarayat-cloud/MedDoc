@@ -314,9 +314,18 @@ export async function runLayer1Transcribe(
   // (logAudit is internally try/wrapped per the file's contract).
   if (result.fallbackUsed) {
     // Worker context — no Next.js request lifecycle, so pass
-    // userId + practiceId explicitly (otherwise logAudit's session
-    // resolution returns null + the row gets the 'clinic_main'
-    // sentinel practice).
+    // userId + practiceId explicitly. Otherwise logAudit's session
+    // resolution returns null and the row is written UNATTRIBUTED
+    // (practiceId NULL + an 'UNATTRIBUTED' tombstone) with a loud
+    // console.error naming this call site.
+    //
+    // ⚠️ THIS COMMENT SAID "the row gets the 'clinic_main' sentinel
+    // practice" UNTIL 2026-08-04, AND IT WAS DESCRIBING A BUG.
+    // `clinic_main` is not a sentinel — it is the largest SHARED
+    // practice in production, and the fallback that wrote it there was
+    // a tenant boundary failing OPEN. It is gone; see the
+    // UNATTRIBUTED_PRACTICE block in `lib/audit.ts`. The advice this
+    // comment gives (pass both explicitly) was and remains correct.
     void logAudit({
       action: 'TRANSCRIPTION_PROVIDER_FALLBACK',
       targetType: 'TranscribeVisit',

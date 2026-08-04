@@ -70,10 +70,28 @@ async function proLogin(
 //   2. A "Go to <other app>" link appears on the page    → cross-app redirect
 //   3. A generic "Invalid email or password" / inline error appears
 async function expectTmdSuccess(page: import('@playwright/test').Page) {
-  await page.waitForURL(/\/dashboard/, { timeout: 15_000 });
-  expect(page.url()).toMatch(/\/dashboard/);
+  // ⚠️ /board JOINED THIS PATTERN 2026-08-04, AND IT IS WHY THE NIGHTLY WENT
+  // RED ON 2026-08-03 — the day after the Rounds skin flipped live.
+  //
+  // Under Rounds, `/dashboard` is a CONFIG-LEVEL 307 to `/board`
+  // (`next.config.ts` redirects(), via `config/rounds-redirects.ts:46`). So a
+  // successful login lands on /board, the browser leaves /dashboard
+  // immediately, and `waitForURL(/\/dashboard/)` burned its full 15s and
+  // timed out. Two cells failed every night — 'TMD-only user → success' and
+  // 'Bundle user → success' — and the failure looked like a broken LOGIN
+  // rather than a moved destination, which is why it sat for two days.
+  //
+  // Both names are accepted deliberately, not just the new one: this file runs
+  // against production, and pinning it to /board alone would make it a false
+  // RED the moment anyone rolls the skin back to the flag-OFF image. The claim
+  // that matters is "login reached the authenticated home", and that home has
+  // two legitimate spellings right now.
+  await page.waitForURL(/\/(board|dashboard)/, { timeout: 15_000 });
+  expect(page.url()).toMatch(/\/(board|dashboard)/);
 }
 async function expectProSuccess(page: import('@playwright/test').Page) {
+  // pro.quillmd.com is offline and every caller of this is `describe.skip`ped;
+  // left untouched so the retired specification still reads correctly.
   await page.waitForURL(/\/(dashboard|system-admin)/, { timeout: 15_000 });
   expect(page.url()).toMatch(/\/(dashboard|system-admin)/);
 }
