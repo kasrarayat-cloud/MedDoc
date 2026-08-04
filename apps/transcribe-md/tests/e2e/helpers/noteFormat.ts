@@ -25,7 +25,32 @@ export const SAMPLE_NOTE = [
 
 /** Navigate to the note-format manager (Settings, section id=note-format). */
 export async function gotoNoteFormat(page: Page): Promise<void> {
-  await page.goto('/settings');
+  // ⚠️ WAS `page.goto('/settings')`, AND THAT BROKE THE MOMENT THE REQUIRED
+  // PACK STARTED BUILDING THE SHIPPED PRODUCT (F-ret.1, 2026-08-04).
+  //
+  // Under the production flag set the settings shell opens on the `profile`
+  // section and every other panel keeps the `hidden` attribute
+  // (`settings-sections-c3.tsx:76`). The note-format manager is therefore
+  // MOUNTED BUT INVISIBLE, so `getByLabel('Paste a note').fill(...)` waits on
+  // an element that is in the DOM and will never become visible — a 15s action
+  // timeout that reads as a broken form. It took out eleven tests across four
+  // specs at once, and every one of them arrived here.
+  //
+  // `/settings/note-format` is a real route that renders
+  // `<SettingsPage initialSection="note-format" />` — the same shell with that
+  // section ACTIVE. It is also how a doctor actually reaches this screen from
+  // the Rounds nav, so the test now walks the product's own path rather than a
+  // page that happened to render everything at once under the old skin.
+  await page.goto('/settings/note-format');
+
+  // Named, so the next regression is a sentence rather than a timeout inside
+  // whichever helper happened to touch the form first.
+  await expect(
+    page.locator('#nf-paste').or(page.getByTestId('note-format-manager')).first(),
+    'the note-format manager is not visible on /settings/note-format — the ' +
+      'section did not open, so every paste/upload below would time out on a ' +
+      'hidden element',
+  ).toBeVisible({ timeout: 15_000 });
 }
 
 /** From the ENTRY view (paste box visible), paste a note and parse it, landing
