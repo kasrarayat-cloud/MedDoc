@@ -87,14 +87,66 @@ jobs:
       #    step; the Dockerfile bakes --max-old-space-size=6144 + the
       #    unpdf/mammoth bundle-assert, both of which run here). The 16 GB
       #    GitHub runner absorbs the 6 GB build heap. ──
-      # The E2E specs target the stable (pre-C3) UI contract. The prod
-      # docker-compose pins NEXT_PUBLIC_SKIN_BETA=true (the C3 skin is the
-      # live UI); pin it OFF here so the regression gate stays decoupled from
-      # the deploy flag and its specs keep matching. (C3-flag-ON E2E coverage
-      # is a tracked follow-up.)
+      # ⚠️ F-ret.1, 2026-08-04 — THE DEFAULT PACK NOW BUILDS THE SHIPPED PRODUCT.
+      #
+      # This step used to pin `NEXT_PUBLIC_SKIN_BETA: "false"`, with the comment
+      # "pin it OFF here so the regression gate stays decoupled from the deploy
+      # flag and its specs keep matching. (C3-flag-ON E2E coverage is a tracked
+      # follow-up.)"
+      #
+      # That decoupling is exactly what went wrong. The required check was
+      # measuring a build NOBODY RUNS — the flag has been ON in production since
+      # the C3 promotion (2026-06-15) and Rounds since 2026-08-02 — so the gate
+      # was green for two months about a product that did not exist. Run
+      # flag-ON for the first time on 2026-08-04 it produced **19 failures out
+      # of 59**, and one of them was a real defect that had been live for a day:
+      # a doctor could not archive a signed note (#523).
+      #
+      # A gate decoupled from the deploy is not a conservative gate. It is a
+      # gate pointed somewhere else.
+      #
+      # The flag set below is PRODUCTION'S, deliberately — the same list
+      # `docker-compose.yml` bakes, so "the pack is green" and "the shipped
+      # product works" are one statement. `gate-flag-coverage.test.ts` pins the
+      # list; if you add a flag to prod and not here, that guard reds.
+      #
+      # ⚠️ SKIN_ROUNDS IS **NOT** SET HERE, AND THAT IS DELIBERATE. Prod's
+      # compose does not bake it into the app image build args either — the
+      # Rounds surfaces get their own separately-tagged flag-ON image and their
+      # own projects further down this file, because those packs need
+      # DEV_STATES and seeded fixtures the default pack does not build. What
+      # changes here is only the flags prod's own `build.args` carry.
+      #
+      # ⚠️ THE WHOLE SET IS PASSED, NOT JUST THE SKIN FLAG, AND THAT IS THE
+      # DIFFERENCE BETWEEN "production-shaped" AND "nearly". `docker-compose.yml`
+      # reads every one of these as `${VAR:-false}`, and CI has no `.env` — so
+      # setting only SKIN_BETA would have left REVIEW_DOC_VIEW, UX_SIMPLIFY,
+      # CHAT_EDITOR and the rest at **false** while the step's name and comment
+      # claimed the shipped product. Verified with
+      # `docker compose --env-file /dev/null config`, which resolves them all to
+      # "false" without a `.env` present.
+      #
+      # The values below mirror production's `.env` exactly. If prod turns a
+      # flag on and this list is not updated, the required gate silently goes
+      # back to testing a build nobody runs — which is the failure this change
+      # exists to end.
+      #
+      # NOT SET, deliberately: NEXT_PUBLIC_DEV_STATES. Prod does not set it; it
+      # exists for the Rounds packs' seeded fixtures and they build their own
+      # separately-tagged image further down.
       - name: Build app + worker images
         env:
-          NEXT_PUBLIC_SKIN_BETA: "false"
+          NEXT_PUBLIC_SKIN_ROUNDS: "true"
+          NEXT_PUBLIC_SKIN_BETA: "true"
+          NEXT_PUBLIC_REVIEW_DOC_VIEW: "true"
+          NEXT_PUBLIC_UX_SIMPLIFY: "true"
+          NEXT_PUBLIC_CHAT_EDITOR: "true"
+          NEXT_PUBLIC_DOC_PREVIEW: "true"
+          NEXT_PUBLIC_SETTINGS_SIMPLE_ROW: "true"
+          NEXT_PUBLIC_VISIT_DOC_PAGE: "true"
+          NEXT_PUBLIC_ULTRASOUND_SPECIALTY: "true"
+          NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX: "true"
+          NEXT_PUBLIC_TEMPLATE_NATIVE_PDF: "true"
         run: docker compose -p meddoc-pro -f docker-compose.yml build transcribe-md transcribe-md-worker
 
       - name: Build db-migrate image (prisma CLI)

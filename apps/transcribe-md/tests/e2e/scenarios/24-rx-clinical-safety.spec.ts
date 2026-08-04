@@ -18,7 +18,7 @@
 // NOTE_FORMAT_E2E=1 (a fresh build with the mock fixtures present).
 // ============================================================================
 
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
 import { cleanupTestUsers } from '../helpers/cleanup';
 import { signupFreshUser } from '../helpers/signup';
@@ -29,7 +29,8 @@ import {
   getVisitStatus,
   rxWarningSeverities,
 } from '../helpers/rxSafety';
-import { attestAndSubmit, signViaApi } from '../helpers/sign';
+import { openRxGate } from '../helpers/rxGate';
+import { signViaApi } from '../helpers/sign';
 
 const GATE = process.env.NOTE_FORMAT_E2E !== '1';
 const GATE_MSG =
@@ -42,13 +43,11 @@ test.afterEach(() => {
   cleanupTestUsers();
 });
 
-/** Open the visit's Rx tab and assert it is selected. */
-async function openRxTab(page: Page, visitId: string): Promise<void> {
-  await page.goto(`/visits/${visitId}`);
-  const rxTab = page.getByRole('tab', { name: 'Rx' });
-  await rxTab.click();
-  await expect(rxTab).toHaveAttribute('aria-selected', 'true');
-}
+// ⚠️ RE-POINTED 2026-08-04, F-ret.1 tail. The local `openRxTab` opened a tab
+// that cannot render under the shipped flag set; the gate is now inline on the
+// read-only paper and `openRxGate` waits for it instead. The full arithmetic,
+// the measured DOM and the reason this is a STRENGTHENING rather than a
+// weakening are in `helpers/rxGate.ts`. Every assertion below is unchanged.
 
 test('scenario 24: the Rx rail renders warnings by severity + the drafted prescriptions (MOCK)', async ({
   page,
@@ -63,7 +62,7 @@ test('scenario 24: the Rx rail renders warnings by severity + the drafted prescr
   expect(sevs.filter((s) => s === 'critical')).toHaveLength(1);
   expect(sevs.some((s) => s !== 'critical')).toBe(true);
 
-  await openRxTab(page, visitId);
+  await openRxGate(page, visitId);
 
   // Critical warning renders, not yet overridden, with an Override control.
   const critical = page.locator('.qm-warn-critical[data-overridden="false"]').first();
@@ -107,7 +106,7 @@ test('scenario 24: overriding the critical warning records the audit row + clear
 
   await signupFreshUser(page, 'rx3');
   const visitId = await createReadyTextVisit(page);
-  await openRxTab(page, visitId);
+  await openRxGate(page, visitId);
 
   // Override the critical warning: open the modal, type a reason, confirm.
   await page.locator('button.qm-warn-override-btn').first().click();
@@ -138,7 +137,7 @@ test('scenario 24: overriding the critical warning records the audit row + clear
   expect(getVisitStatus(visitId)).toBe('SIGNED');
 });
 
-test('scenario 24: the UI Sign & Send is blocked (and the doctor is told) until the override (MOCK)', async ({
+test('scenario 24: the UI sign flow is blocked (and the doctor is told) until the override (MOCK)', async ({
   page,
 }) => {
   test.skip(GATE, GATE_MSG);
@@ -147,13 +146,57 @@ test('scenario 24: the UI Sign & Send is blocked (and the doctor is told) until 
   const visitId = await createReadyTextVisit(page);
   await page.goto(`/visits/${visitId}`);
 
-  // Attempt to sign via the real Sign & Send modal with the critical un-overridden.
-  await page.getByRole('button', { name: /sign & send/i }).click();
-  await expect(page.getByRole('dialog')).toBeVisible();
-  await attestAndSubmit(page);
+  // ⚠️ RE-POINTED 2026-08-04 — a SECOND, DISTINCT drift, not the Rx tab. This
+  // test never touched the rail; it timed out on
+  // `getByRole('button', { name: /sign & send/i })`, because the Rounds stage
+  // reaches signing through the action rail → gate flow, not a bare button.
+  //
+  // ⚠️ AND THE FIRST REPAIR WAS WRONG, WHICH IS WHY IT WAS DRIVEN. Swapping in
+  // `openSignFlow` failed at `helpers/sign.ts:95` — "the gate flow never
+  // presented the attestation". That helper is correct and the product is
+  // correct; the ASSUMPTION was wrong. On a visit whose critical interaction is
+  // un-overridden the flow never reaches attestation at all, so a helper that
+  // waits for it can only time out.
+  //
+  // The old shape — attest, submit, read the refusal — has NO analogue here.
+  // Under Rounds the doctor is stopped one step EARLIER and told why, which is
+  // a stronger property than the one this test used to assert: they never get
+  // to attest to a note they cannot sign.
+  //
+  // Measured on the QA stack against the flag-ON image, not inferred:
+  //   steps  "1 CRITICAL INTERACTIONS / 2 DOCUMENTATION LEVEL / 3 SIGN & LOCK"
+  //   lock   "🔒 Complete blockers to advance — 1 critical interaction outstanding"
+  //   rounds-gate-attest  count = 0
+  //
+  // ⚠️ FLAG-DEPENDENT ON PURPOSE, AND SAID OUT LOUD. These testids exist only on
+  // the Rounds gate flow. A `NEXT_PUBLIC_SKIN_ROUNDS=false` rollback would need
+  // the legacy modal path back. That is not hedged for here because F-ret.3
+  // removes the flag together with the flag-OFF arm — a branch written now would
+  // be written for deletion this week. If that plan changes, this is the test to
+  // revisit.
+  await page.getByTestId('rounds-review-sign').first().click();
 
-  // The doctor is told, NOT silently failed — and the visit stays READY.
-  await expect(page.getByText(/override before signing/i)).toBeVisible({ timeout: 10_000 });
+  // The flow opens ON the Rx blocker.
+  await expect(
+    page.getByTestId('rounds-gate-host-rx'),
+    'the sign flow did not present the Rx blocker — a critical interaction ' +
+      'would be skipped on the way to signing',
+  ).toBeVisible({ timeout: 15_000 });
+
+  // The doctor is TOLD, and told specifically — the count is named, so a lock
+  // that appears with a generic message while the real blocker is something
+  // else does not satisfy this.
+  await expect(page.getByTestId('rounds-gate-lock')).toContainText(
+    /1 critical interaction outstanding/i,
+  );
+
+  // THE ASSERTION THAT MATTERS: the attestation is step 3 and is not reachable.
+  // This is what would catch a regression letting a doctor attest past an
+  // un-reviewed critical interaction.
+  await expect(page.getByTestId('rounds-gate-attest')).toHaveCount(0);
+
+  // SAFETY-CRITICAL, unchanged: the visit stays READY and nothing fabricated an
+  // override on the way through.
   expect(getVisitStatus(visitId)).toBe('READY');
   expect(countCriticalOverrides(visitId)).toBe(0);
 });

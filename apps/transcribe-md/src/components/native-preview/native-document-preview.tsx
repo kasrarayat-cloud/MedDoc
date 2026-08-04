@@ -267,7 +267,39 @@ export function NativeDocumentPreview(props: NativeDocumentPreviewProps) {
             We couldn&rsquo;t draw this document in the browser. Your template is unaffected.
           </p>
         ) : (
-          <div ref={docxHost} className="qm-npv-docx" aria-label={label} />
+          /* ⚠️ `tabIndex` + `role` ARE LOAD-BEARING, NOT DECORATION.
+           *
+           * `.qm-npv-docx` sets `overflow-x: hidden` (globals.css:7307) so the
+           * Word tab cannot grow a horizontal scrollbar the PDF tab lacks. Per
+           * CSS, when one axis is `hidden` the other's `visible` computes to
+           * **auto** — so this div is a VERTICAL SCROLL CONTAINER whenever the
+           * document is taller than its box, without anyone writing
+           * `overflow-y`. Measured on the live page, not assumed.
+           *
+           * A scrollable region a keyboard user cannot focus cannot be
+           * scrolled by keyboard at all: axe's `scrollable-region-focusable`,
+           * serious. It failed the required a11y gate on /visits/[id] the
+           * first time that gate was ever pointed at the shipped skin
+           * (F-ret.2), and the gate named this node only after it was taught
+           * to print selectors.
+           *
+           * `role="region"` is needed as well: an `aria-label` on a bare <div>
+           * is not exposed without a role, so the label here was doing nothing.
+           *
+           * ⚠️ IT ONLY OVERFLOWS SOMETIMES, AND THE FIX DOES NOT DEPEND ON
+           * THAT. Whether the box scrolls is a function of document height,
+           * which is font-metric dependent — it reproduced in CI and never
+           * locally, at any viewport. The rule is unconditional: a region that
+           * CAN scroll must be reachable. Fixing it only when it happens to
+           * overflow would make the guarantee depend on the renderer's fonts.
+           */
+          <div
+            ref={docxHost}
+            className="qm-npv-docx"
+            role="region"
+            aria-label={label}
+            tabIndex={0}
+          />
         )}
       </div>
       {kind === 'pdf' && pdfUrl && !pdfFailed ? (

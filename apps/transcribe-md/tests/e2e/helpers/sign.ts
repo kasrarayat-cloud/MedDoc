@@ -29,6 +29,91 @@ import { expect, type Page } from '@playwright/test';
  * collected it and forwards it, so there is nothing to tick — which is why this
  * is conditional rather than an unconditional click that would fail there.
  */
+/**
+ * Open the sign flow and get to the modal, on WHICHEVER SKIN IS BUILT.
+ *
+ * ⚠️ THIS EXISTS BECAUSE FIVE SPECS EACH HAND-ROLLED THE SIGN WALK, AND ALL
+ * FIVE BROKE THE SAME WAY WHEN THE SKIN SHIPPED.
+ *
+ * Flag-OFF the opener is one button labelled "Sign & Send". Under Rounds there
+ * is no such button: the stage rail carries `rounds-review-sign` ("Review &
+ * sign"), which opens the gate flow, and the modal's trigger is the gate
+ * signbar's "Sign & Download" (`review-sign-bar.tsx:118`). Two different walks
+ * to the same modal.
+ *
+ * F-ret.1 found five specs (#1, #9, #12, #13, #14) failing on
+ * `getByRole('button', { name: /sign & send/i })`. Fixing them five times over
+ * would rebuild exactly the hand-kept list AGENTS.md records as "wrong
+ * eventually" — so the walk lives here, once.
+ *
+ * ⚠️ DELIBERATELY BRANCHES ON THE DOM, NOT ON A FLAG. `NEXT_PUBLIC_SKIN_ROUNDS`
+ * is inlined at docker-build time and is NOT in the Playwright runner's
+ * environment, so a test-side `isSkinRounds()` reads `undefined` and would
+ * confidently walk the wrong path on the flag-ON image. Same reasoning as
+ * `helpers/home.ts`, and the same trap.
+ *
+ * ⚠️ AND IT MUST NOT USE `getByRole('dialog')`. Under Rounds the gate flow
+ * carries `role="dialog"` (`gate-flow.tsx:228`) AND so does the Radix modal —
+ * two open at once, so the role query goes strict-mode ambiguous and an
+ * "is the dialog gone?" assertion can resolve against the wrong node. Callers
+ * should assert on `review-doc-signbar` / `rounds-gate-attest` instead.
+ */
+export async function openSignFlow(page: Page): Promise<void> {
+  // ⚠️ SETTLE BEFORE BRANCHING. `count()` does NOT auto-wait, so a caller that
+  // arrives straight off a `page.reload()` can evaluate this before the stage
+  // has painted, silently take the LEGACY branch, and die 10s later claiming
+  // neither control exists — a timing fault wearing a product fault's clothes.
+  // This exact shape cost `16-account-settings` a failure on the first
+  // production-shaped run, in a `if (await tab.count() > 0)` branch.
+  // ⚠️ `state: 'visible'`, NOT `'attached'`. A server-rendered container can be
+  // attached while the client-rendered control inside it is not — measured on
+  // the settings rail, where railCount=1 and tabCount=0 at the same instant.
+  // Branch on the control itself, in the state the click needs.
+  const roundsRail = page.getByTestId('rounds-review-sign');
+  await roundsRail
+    .first()
+    .waitFor({ state: 'visible', timeout: 5_000 })
+    .catch(() => {
+      /* legacy build has no rail — the branch below is the honest answer */
+    });
+
+  if (await roundsRail.count()) {
+    // ── Rounds: rail → gate flow → the signbar's trigger ──────────────────
+    await expect(
+      roundsRail.first(),
+      'the Rounds review-and-sign rail button is present but never enabled',
+    ).toBeEnabled({ timeout: 10_000 });
+    await roundsRail.first().click();
+
+    // The gate flow is the thing that collects the attestation. Assert we
+    // actually reached it, or a later "the modal did not open" is reported
+    // miles from its cause.
+    const attest = page.getByTestId('rounds-gate-attest');
+    await expect(
+      attest.first(),
+      'clicked Review & sign but the gate flow never presented the attestation',
+    ).toBeVisible({ timeout: 10_000 });
+    await attest.first().click();
+
+    const bar = page.getByTestId('review-doc-signbar');
+    await expect(
+      bar.first(),
+      'the gate signbar never appeared — the gates are still blocking',
+    ).toBeVisible({ timeout: 10_000 });
+    await bar.first().getByRole('button', { name: /sign & download/i }).click();
+    return;
+  }
+
+  // ── Legacy: one button, straight to the modal ────────────────────────────
+  const legacy = page.getByRole('button', { name: /sign & send/i });
+  await expect(
+    legacy.first(),
+    'neither the Rounds rail (rounds-review-sign) nor the legacy "Sign & Send" ' +
+      'button is present — this is not a signable visit surface',
+  ).toBeVisible({ timeout: 10_000 });
+  await legacy.first().click();
+}
+
 export async function attestAndSubmit(page: Page): Promise<void> {
   const toggle = page.getByTestId('sign-attestation-toggle');
   if (await toggle.count()) {
@@ -70,6 +155,37 @@ export async function attestAndSubmit(page: Page): Promise<void> {
   } catch {
     await submit.dispatchEvent('click');
   }
+}
+
+/**
+ * Assert the sign modal has actually CLOSED — i.e. the server accepted.
+ *
+ * ⚠️ DO NOT ANCHOR THIS ON THE SUBMIT BUTTON. That was the first attempt and it
+ * was vacuous: during the `useTransition` pending window the submit re-renders
+ * as "Signing…" with an `aria-hidden` spinner (`sign-and-send-modal.tsx:584-598`),
+ * so `getByRole('button', { name: /sign & deliver/i })` resolves to ZERO nodes
+ * and `toBeHidden()` passes the instant the click enters the transition. It
+ * asserted "the handler started", not "the sign succeeded" — and a subsequent
+ * 400 ATTESTATION_REQUIRED would re-render the button and leave the modal open
+ * with nothing ever noticing.
+ *
+ * ⚠️ AND DO NOT USE `getByRole('dialog')`, which is what it replaced. Under
+ * Rounds the gate flow carries `role="dialog"` (`gate-flow.tsx:228`) as well as
+ * the Radix modal (`sign-and-send-modal.tsx:321`), so the query is strict-mode
+ * ambiguous on the flag-ON image.
+ *
+ * `Download PDF` threads that needle: it is defined once in the whole app
+ * (`sign-and-send-modal.tsx:46`), it exists only inside the modal, and it is
+ * NOT re-rendered by the pending state — so it disappears exactly when
+ * `setOpen(false)` runs, which is after the server accepted.
+ */
+export async function expectSignModalClosed(page: Page, timeout = 10_000): Promise<void> {
+  await expect(
+    page.getByRole('button', { name: /^download pdf$/i }),
+    'the sign modal never closed — POST /sign did not succeed (a refused ' +
+      'attestation, an unconfirmed E/M change, or a delivery error all leave ' +
+      'it open)',
+  ).toBeHidden({ timeout });
 }
 
 /**

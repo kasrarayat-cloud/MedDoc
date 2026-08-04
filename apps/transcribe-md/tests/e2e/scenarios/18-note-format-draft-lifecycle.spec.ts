@@ -18,7 +18,9 @@ import { expect, test } from '@playwright/test';
 
 import { cleanupTestUsers } from '../helpers/cleanup';
 import { signupFreshUser } from '../helpers/signup';
-import { expectHome, gotoNoteFormat, parseToReview } from '../helpers/noteFormat';
+import { expectHome, gotoNoteFormat, parseToReview,
+  templateAction,
+} from '../helpers/noteFormat';
 import { countActive, getDoctorId, listTemplates } from '../helpers/noteTemplates';
 
 const GATE = process.env.NOTE_FORMAT_E2E !== '1';
@@ -89,7 +91,11 @@ test('scenario 18: editing a DRAFT updates in place (no new version) (MOCK)', as
   // Re-open the draft, rename, save as draft again.
   await expectHome(page);
   await page.reload();
-  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  // ⚠️ WAS a top-level `Edit` button. Under the production flag set the
+  // template card shows `Replace · Delete · ⋯` and editing lives in the
+  // overflow as "Advanced editor" — established by driving the build, not by
+  // reading it. The capability is LIVE, one click deeper.
+  await templateAction(page, 'Advanced editor');
   await expect(page.locator('#nf-name')).toHaveValue('Draft Editable', { timeout: 10_000 });
   await page.locator('#nf-name').fill('Draft Edited Name');
   await page.getByRole('button', { name: /save as draft/i }).click();
@@ -122,7 +128,11 @@ test('scenario 18: duplicating a template creates a draft copy, original untouch
   // Duplicate from the row.
   await expectHome(page);
   await page.reload();
-  await page.getByRole('button', { name: 'Duplicate Original Format' }).click();
+  // ⚠️ WAS `Duplicate Original Format` — the template name was part of the
+  // accessible name. The overflow's item is plain "Duplicate"; the template it
+  // acts on is identified by WHICH card's overflow was opened, which is what
+  // `templateAction` does.
+  await templateAction(page, 'Duplicate');
   await expect(page.getByText('Duplicated as a draft')).toBeVisible({ timeout: 10_000 });
 
   // A new DRAFT copy (v1, "(copy)") exists; the original stays the lone active.

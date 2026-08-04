@@ -608,6 +608,31 @@ reach what it tested, one asserting a URL the product had moved, and one alarm
 that could not ring. Together they hid a two-day-old regression in a week when
 somebody was watching closely.
 
+### ⚠️ THE MEMBERSHIP COROLLARY — banked beside the arithmetic-tell
+
+The arithmetic-tell says: *a number that does not add up to the set it came
+from is the tell.* It is necessary and it is **not sufficient**.
+
+I ran the flag-ON pack locally, got `40 passed / 19 skipped / 0 failed = 59`,
+reconciled it against `--list`'s `Total: 59`, and called it green. CI then
+failed — because `e2e.yml` runs a SECOND step, *"chromium; scenario 5
+note-format UN-GATED via NOTE_FORMAT_E2E"* (`:271`), which EXECUTES the very
+specs my run skipped. Fourteen of them failed there.
+
+**Skipped is not covered. A reconciled sum does not prove set equality.**
+
+So the local verification loop for a required pack must either:
+
+1. **replicate CI's un-gating environment** — enumerate it from the workflow
+   files rather than remembering it. Today that is `NOTE_FORMAT_E2E=1`
+   (`e2e.yml:275`, `:604`) and `MOCK_TEMPLATE_PHI_FLAG` for the `phi-reject`
+   project; or
+2. **enumerate the delta explicitly** — list which CI-executed specs the local
+   run did not execute, and say so in the same breath as the number.
+
+A local green that silently covers a smaller set than CI is the same defect as
+a gate pointed at a build nobody runs, one scope down.
+
 ### The triage table — F-ret.1's actual deliverable, seeded
 
 19 failures, by error class rather than by spec, because the class is what
