@@ -57,6 +57,32 @@ export interface RoundsSignedProps {
   children: React.ReactNode;
   /** Open the next encounter to review. Absent when there is none. */
   onContinue?: () => void;
+  /**
+   * The visit's lifecycle actions — for a SIGNED visit that is the **Archive**
+   * control, and it is the only one there is.
+   *
+   * ⚠️ THIS PROP EXISTS BECAUSE ARCHIVE WAS UNREACHABLE IN PRODUCTION FOR A
+   * DAY, ON EVERY SIGNED NOTE.
+   *
+   * R2 removed a page-foot overflow that was gated on `roundsChrome` **alone,
+   * with no status condition** — so it rendered for SIGNED visits too — and
+   * moved it into `RoundsStage`. Signed visits never mount `RoundsStage`; they
+   * mount THIS component, which had no way to receive it. The commit's own
+   * comment said *"Same node, same actions, same `data-testid` — only the
+   * position moved."* That was true for unsigned visits and false for signed
+   * ones, which is precisely the class of comment the R3 census kept finding.
+   *
+   * Nothing was corrupted and no gate weakened; the control simply was not in
+   * the DOM, with no error. HIPAA retention forbids deleting a signed note, so
+   * archiving is the only disposal a doctor has — and 16 signed visits in
+   * production had no path to it.
+   *
+   * Mount coverage is asserted by `gate-rounds-visit-overflow`, not kept
+   * correct by hand. AGENTS.md § "Shared components": put the behaviour where
+   * it cannot be forgotten, and where a per-caller list is unavoidable, make
+   * the missing case fail a test rather than render quietly.
+   */
+  visitActions?: React.ReactNode;
 }
 
 export function RoundsSigned({
@@ -65,6 +91,7 @@ export function RoundsSigned({
   identity,
   queue,
   trail,
+  visitActions,
   signedByLabel,
   emCode,
   children,
@@ -156,6 +183,24 @@ export function RoundsSigned({
       <p className="qm-rounds-signed-foot" data-testid="rounds-signed-addendum">
         This note is locked. Corrections require a dated addendum.
       </p>
+
+      {/* ── Lifecycle actions — Archive, and only Archive ─────────────────
+          Same anatomy as the stage's overflow (`stage.tsx:146`): a collapsed
+          `<details>` carrying the same `data-testid`, so one selector finds it
+          on both surfaces and a doctor meets the same control in the same
+          shape wherever they are. Collapsed on purpose — a destructive action
+          should cost a deliberate click, which is the reasoning R2 recorded
+          when it moved the control out of the page foot.
+
+          It sits AFTER the addendum notice and BEFORE the deck: filing the
+          note away is the last thing you do with this note, and advancing to
+          the next encounter is the first thing you do with the next one. */}
+      {visitActions ? (
+        <details className="qm-rounds-overflow" data-testid="rounds-visit-overflow">
+          <summary className="qm-rounds-overflow-summary">Visit actions</summary>
+          <div className="qm-rounds-overflow-body qm-rounds-host">{visitActions}</div>
+        </details>
+      ) : null}
 
       {/* ── The deck advances ────────────────────────────────────────────── */}
       {onContinue ? (

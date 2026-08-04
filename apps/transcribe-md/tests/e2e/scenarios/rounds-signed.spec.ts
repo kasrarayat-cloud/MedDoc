@@ -106,6 +106,46 @@ test.describe('Rounds Screen 4 — signed & locked', () => {
     await expect(page.getByTestId('rounds-gate-flow')).toHaveCount(0);
   });
 
+  // ── 1b. ARCHIVE IS REACHABLE ─────────────────────────────────────────────
+  // ⚠️ THIS EXISTS BECAUSE IT WAS NOT, IN PRODUCTION, ON EVERY SIGNED NOTE,
+  // FOR A DAY. R2 moved the lifecycle overflow into `RoundsStage` — which the
+  // test above asserts is ABSENT on this screen — and `RoundsSigned` had no
+  // slot for it, so `ArchiveButton` never reached the DOM. Production carried
+  // 16 signed visits and 0 archived ones, and HIPAA retention forbids deleting
+  // a signed note, so archiving is the only disposal a doctor has.
+  //
+  // The unit gate (`gate-rounds-visit-overflow`) reads SOURCE and asserts the
+  // mount count. It cannot see whether the control actually renders, opens, or
+  // carries a usable button. That is this test.
+  test('ARCHIVE is reachable — the lifecycle overflow is on the signed screen', async ({
+    page,
+  }) => {
+    const seeded = await openSigned(page, 'signed-archive');
+    test.skip(!seeded, 'psql seeding unavailable');
+
+    // Non-vacuity: we are on Screen 4, not on some other page that happens to
+    // lack the control for an unrelated reason.
+    await expect(page.getByTestId('rounds-signed-lock')).toBeVisible();
+
+    const overflow = page.getByTestId('rounds-visit-overflow');
+    await expect(
+      overflow,
+      'no Visit-actions disclosure on the signed screen — Archive is unreachable, ' +
+        'which is exactly the regression this test was written for',
+    ).toBeVisible();
+
+    // Collapsed by default: a destructive control costs a deliberate click.
+    await expect(overflow).not.toHaveAttribute('open', /.*/);
+
+    // And it must actually CONTAIN the archive control, not merely exist. An
+    // empty <details> is a control that appears to be there.
+    await overflow.getByRole('group').or(overflow).click();
+    await expect(
+      page.getByRole('button', { name: 'Archive', exact: true }),
+      'the disclosure opens but carries no Archive button',
+    ).toBeVisible();
+  });
+
   // ── 2. The strip, fully checked ──────────────────────────────────────────
   test('the strip is fully checked, with nothing "now reviewing"', async ({ page }) => {
     const seeded = await openSigned(page, 'signed-2');
