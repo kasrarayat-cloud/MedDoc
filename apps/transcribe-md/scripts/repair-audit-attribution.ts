@@ -54,6 +54,12 @@
 //     practiceId and practiceIdSnapshot AND a NULL userId. Their tenant is
 //     genuinely unrecoverable. They are reported with determinable=false
 //     rather than guessed at, and their emitter no longer exists in the tree.
+//   • NOT in scope — any row that ALREADY has a correction pointing at it. The
+//     script is idempotent by construction: re-running it after a successful
+//     apply finds nothing, because both queries exclude rows with an existing
+//     AUDIT_ATTRIBUTION_CORRECTED whose targetId is theirs. This matters more
+//     here than in a normal script: the table is APPEND-ONLY, so a duplicate
+//     set of corrections could never be cleaned up afterwards.
 // ============================================================================
 
 import prisma from '@meddoc/db';
@@ -136,6 +142,20 @@ async function main() {
     JOIN users u ON u.id = a."userId"
     WHERE a."practiceId" = ${WRONG_PRACTICE}
       AND u."practiceId" IS DISTINCT FROM ${WRONG_PRACTICE}
+      -- ⚠️ IDEMPOTENCY. Without this clause the script is NOT safe to re-run:
+      -- the originals are never edited (that is the whole design), so they keep
+      -- matching the predicate forever, and a second --apply would append a
+      -- SECOND full set of corrections. An append-only table cannot be
+      -- de-duplicated afterwards, so the guard has to be here.
+      --
+      -- Found the honest way: after the first apply, a report-only re-run
+      -- printed "existing correction rows: 71" and then listed all 65 as still
+      -- needing repair. It reported the fact and ignored it.
+      AND NOT EXISTS (
+        SELECT 1 FROM audit_logs c
+        WHERE c.action::text = 'AUDIT_ATTRIBUTION_CORRECTED'
+          AND c."targetId" = a.id
+      )
     ORDER BY a."timestamp"
   `;
 
@@ -188,6 +208,12 @@ async function main() {
     WHERE a."practiceId" IS NULL
       AND a."practiceIdSnapshot" IS NULL
       AND a."userId" IS NULL
+      -- same idempotency guard as above
+      AND NOT EXISTS (
+        SELECT 1 FROM audit_logs c
+        WHERE c.action::text = 'AUDIT_ATTRIBUTION_CORRECTED'
+          AND c."targetId" = a.id
+      )
     ORDER BY a."timestamp"
   `;
 
