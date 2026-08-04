@@ -59,11 +59,27 @@ test('MFA: enroll TOTP → verify → recovery codes, then enforced at login', a
   await page.getByLabel('Password', { exact: true }).fill(TEST_PASSWORD);
   await page.getByRole('button', { name: /^sign in$/i }).click();
   await expect(page.locator('#totpToken')).toBeVisible({ timeout: 10_000 });
-  await expect(page).not.toHaveURL(/\/dashboard/);
+  // ⚠️ THIS LINE WAS `not.toHaveURL(/\/dashboard/)` AND IT WENT VACUOUS WHEN
+  // THE ROUNDS SKIN SHIPPED. `actions/auth.ts:353` returns `recoveryHref()`,
+  // which is `/board` under Rounds — so a login that WRONGLY SUCCEEDED lands on
+  // /board and satisfies "not /dashboard". The assertion could no longer fail.
+  //
+  // Being precise about what that cost, because the first telling of it
+  // overstated the damage: MFA enforcement was still guarded the whole time by
+  // the `#totpToken` visibility check on the line above, which a successful
+  // login would fail. One of two assertions went quiet, not the gate. A
+  // weakened belt-and-braces, not an open door.
+  //
+  // Now written against the authenticated home BY BOTH ITS NAMES, so it holds
+  // flag-ON and flag-OFF alike — same shape as `helpers/home.ts`. A rollback to
+  // the flag-OFF image must not turn this into a false red.
+  await expect(page).not.toHaveURL(/\/(board|dashboard)$/);
 
   // Completing the second factor logs in.
   await page.getByLabel('Password', { exact: true }).fill(TEST_PASSWORD);
   await page.locator('#totpToken').fill(generateTotp(secret));
   await page.getByRole('button', { name: /^sign in$/i }).click();
-  await expect(page).toHaveURL(/\/dashboard$/, { timeout: 15_000 });
+  // Same reasoning as above, positive direction: the authenticated home has two
+  // legitimate spellings right now and the claim is "login reached it".
+  await expect(page).toHaveURL(/\/(board|dashboard)$/, { timeout: 15_000 });
 });
