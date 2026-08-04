@@ -274,12 +274,42 @@ reclaim — before that it listed three tags, four more existed unrecorded, and 
 of those was unusable. A table that does not match `docker images` is worse than
 no table, because it is trusted.
 
-**TWO GENERATIONS ARE KEPT. That is the whole set.**
+⚠️ **RECONCILED AGAINST THE DAEMON 2026-08-04.** The line above this table used
+to say "TWO GENERATIONS ARE KEPT. That is the whole set." **Four existed.** Two
+deploys on 2026-08-04 added generations and the table was not updated — which is
+the exact failure the paragraph above warns about, committed by the person who
+wrote the warning. **FOUR generations are kept today**, and the count is a fact
+to re-read on the daemon, not a policy to remember.
 
 | Tag | What it restores | Image IDs (verified on the daemon) |
 |---|---|---|
-| `:pre-r4-20260803` | **one step back** — production immediately BEFORE R4 (the Rx-panel host + the New-visit patient context) | app `7cb56d8e82a0` / worker `7ed393c06373` / gotenberg `2d05d22572ba` |
-| `:pre-r3b3-20260803` | **two steps back** — before R3 batch 3 (creation flow, pipeline states, `/visits`) | app `633207ec5c6d` / worker `a8caa939f752` / gotenberg `2d05d22572ba` |
+| `:pre-repairhardening-20260804` | **one step back** — before the second 2026-08-04 deploy. Restores the worker image whose `repair-audit-attribution.ts` still carries the pre-adjudication predicate. ⚠️ Rolling back to it re-arms a script that would "correct" a CORRECT row | app `faafefd5f683` / worker `a63d1841e5c1` / gotenberg `2d05d22572ba` |
+| `:pre-secblock-20260804` | **two steps back** — production immediately BEFORE the security block: Stripe still in the clinical worker, the `?? 'clinic_main'` audit fail-open still live, no account menu (no sign-out anywhere but Settings) | app `cdfa16cc599b` / worker `1526b97cf960` / gotenberg `2d05d22572ba` |
+| `:pre-r4-20260803` | **three steps back** — before R4 (the Rx-panel host + the New-visit patient context) | app `7cb56d8e82a0` / worker `7ed393c06373` / gotenberg `2d05d22572ba` |
+| `:pre-r3b3-20260803` | **four steps back** — before R3 batch 3 (creation flow, pipeline states, `/visits`) | app `633207ec5c6d` / worker `a8caa939f752` / gotenberg `2d05d22572ba` |
+
+#### ⚠️ WHAT AN IMAGE ROLLBACK CANNOT RESTORE — read this BEFORE an incident
+
+**No tag in this table brings pro.quillmd.com back.** It was taken offline on
+2026-08-04 at the **host-nginx edge** (an explicit `server` block answering 410)
+and by stopping its container. Neither of those lives in an image. Rolling the
+app back to `:pre-secblock-20260804` restores the code that predates the
+security block and the host still answers **410**.
+
+That asymmetry is the dangerous kind: an operator mid-incident rolls back
+expecting the previous world and gets *most* of it. The restore path is §3.5,
+and it is a separate, deliberate act.
+
+Two more things a tag cannot undo, for the same reason — they are DATA, not
+image state:
+
+- **The 71 appended audit corrections.** `audit_logs` is append-only; a code
+  rollback does not remove rows, and it should not. The corrections stay
+  correct whatever image is running.
+- **Migration `20260804015500_audit_attribution_corrected`.** Rolling the image
+  back leaves the enum label in place. That is harmless — an unused enum value
+  costs nothing — but do not expect `assert-migrations-applied.sh` to agree
+  with an older image's expectations.
 
 ⚠️ **Both generations share ONE gotenberg image** (`2d05d22572ba`) — the converter
 has not been rebuilt since C2-b. That is correct, and it is also a trap:
