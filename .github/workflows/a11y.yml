@@ -152,6 +152,24 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq postgresql-client
 
+      # ⚠️ F-ret.2, 2026-08-04 — THIS SWEEP NOW BUILDS THE SHIPPED PRODUCT.
+      #
+      # It used to pass three NEXT_PUBLIC_* vars and nothing else, so every
+      # feature flag took its `false` default and the required accessibility
+      # gate measured the LEGACY skin — the same defect F-ret.1 found in the
+      # e2e pack, on the same day, for the same reason. A contrast sweep over
+      # surfaces nobody renders is not a conservative check; it is a check
+      # pointed somewhere else.
+      #
+      # ⚠️ THE FULL SET, NEVER ONE FLAG. This build goes through `npm run build`
+      # rather than compose, so there is no `${VAR:-false}` indirection here —
+      # but the lesson transfers exactly: setting only the skin flag would leave
+      # REVIEW_DOC_VIEW, UX_SIMPLIFY and the rest at their `false` defaults
+      # while the step's name claimed otherwise. The list mirrors production's
+      # `.env`, and `gate-flag-coverage.test.ts` pins it.
+      #
+      # NOT SET, deliberately: NEXT_PUBLIC_DEV_STATES (prod does not set it) and
+      # NEXT_PUBLIC_SHOW_PIPELINE_TAB (prod pins it false).
       - name: Build transcribe-md (production)
         run: npm run build -w transcribe-md
         env:
@@ -160,6 +178,17 @@ jobs:
           NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL: http://localhost:9020
           NEXT_PUBLIC_MARKETING_URL: http://localhost:9010
           NEXT_PUBLIC_SHOW_PIPELINE_TAB: 'false'
+          NEXT_PUBLIC_SKIN_ROUNDS: 'true'
+          NEXT_PUBLIC_SKIN_BETA: 'true'
+          NEXT_PUBLIC_REVIEW_DOC_VIEW: 'true'
+          NEXT_PUBLIC_UX_SIMPLIFY: 'true'
+          NEXT_PUBLIC_CHAT_EDITOR: 'true'
+          NEXT_PUBLIC_DOC_PREVIEW: 'true'
+          NEXT_PUBLIC_SETTINGS_SIMPLE_ROW: 'true'
+          NEXT_PUBLIC_VISIT_DOC_PAGE: 'true'
+          NEXT_PUBLIC_ULTRASOUND_SPECIALTY: 'true'
+          NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX: 'true'
+          NEXT_PUBLIC_TEMPLATE_NATIVE_PDF: 'true'
 
       - name: Start transcribe-md in background
         # Production `next start` listens on $PORT (9020 from env above).

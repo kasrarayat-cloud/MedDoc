@@ -122,6 +122,30 @@ const ROUTES: RouteSpec[] = [
   // this static scan.
   { path: '/settings',               label: 'settings',        auth: 'user' },
 
+  // ── F-ret.2, 2026-08-04 — THE ROUNDS SURFACES. ───────────────────────────
+  // This sweep built flag-OFF until today, so none of these had ever been
+  // measured for contrast — including the ones a doctor now spends their whole
+  // day on. `/dashboard` above is KEPT rather than replaced: under Rounds it is
+  // a config-level 307 to `/board`, so walking it still exercises the redirect,
+  // and it keeps the route set equal-or-wider rather than a swap.
+  //
+  // ⚠️ `/patients` is here because a previous axe pass reported green about the
+  // screens R1 had just rebuilt — it had never walked them. A gate that does
+  // not visit a surface says nothing about it, and says it in the same colour
+  // as a gate that did.
+  //
+  // ⚠️ `/patients/:id` IS NOT COVERED, AND THAT IS A NAMED GAP RATHER THAN AN
+  // OVERSIGHT. `seedVisitStates` creates a patient row but returns only the
+  // three visit ids (`SeededVisitIds`), and the route table's substitution
+  // machinery is keyed on `requiresVisit`. Covering it means returning the
+  // patient id and adding a second substitution key — a small change, but one
+  // that touches the seeding channel every route in this file depends on, and
+  // it is not worth risking the gate for inside F-ret. Recorded in
+  // `docs/rounds/RELAY.md` as its own item.
+  { path: '/board',                  label: 'board',           auth: 'user' },
+  { path: '/patients',               label: 'patients',        auth: 'user' },
+  { path: '/settings/note-format',   label: 'settings-note-format', auth: 'user' },
+
   // /admin/* — TODO(v1.1.0): cover after JWT-refresh helper exists.
   // /dev/rx-warnings — excluded; production build prunes /dev/*.
 ];
