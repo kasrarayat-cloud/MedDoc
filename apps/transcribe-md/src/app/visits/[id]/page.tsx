@@ -535,10 +535,21 @@ export default async function VisitPage({
           doctor looks is both hard to find and easy to hit while scrolling to
           the end of a long note.
           It is now a quiet `<details>` in the stage header, beside the identity
-          block, rendered by `RoundsStage`. Same node, same actions, same
-          `data-testid` — only the position moved. The flag-OFF path is
-          untouched: it still renders its own row near the top of the page in
-          the `!roundsChrome` branch above. */}
+          block, rendered by `RoundsStage`. The flag-OFF path is untouched: it
+          still renders its own row near the top of the page in the
+          `!roundsChrome` branch above.
+
+          ⚠️ CORRECTED 2026-08-04 — THIS COMMENT USED TO END "Same node, same
+          actions, same `data-testid` — only the position moved." THAT WAS
+          FALSE, AND IT COST A DAY OF UNREACHABLE ARCHIVE ON EVERY SIGNED NOTE.
+          The block it replaced was gated on `roundsChrome` ALONE, with no
+          status condition, so it also rendered for SIGNED visits. `RoundsStage`
+          is mounted only by the unsigned branch (`visit-ready-view.tsx:848`,
+          `if (isReviewDocView() && !isSigned)`); a signed visit mounts
+          `RoundsSigned`, which had no slot for it. "Only the position moved"
+          was true for the surface I looked at and false for the one I did not.
+          Both surfaces take the node now, and `gate-rounds-visit-overflow`
+          asserts the mount count so the next move cannot drop one silently. */}
     </AppFrame>
   );
 }

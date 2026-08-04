@@ -163,6 +163,19 @@ with its **two named exclusions** — `audit_logs` (S4c, cited) and
 (DISCOVERY §B.3). ⚠ Template Twin's ingest is load-bearing on every `.docx`
 upload — that write path is exercised, not assumed.
 
+### ⚠️ TEAMS EXIT GATE — carried open items that must be RESOLVED OR RESTATED
+
+TEAMS is not closed while any of these is silently unaddressed. Each is a
+question somebody already asked and nobody has answered; closing the phase
+without a written verdict on each is how they become invisible.
+
+| Carried item | What closing it looks like |
+|---|---|
+| **`worker.ts:983` read-after-write** — the per-visit cost sum reads `ai_calls` in the same tick-chain that wrote it. Phase 0 left this **UNSURE** and said so rather than guessing; the L7 fan-out takes seconds so earlier writes have almost certainly landed, but the last-writer case was never proved either way and was not reproduced. | Either a reproduction (or a proof it cannot race), **or** a written statement that it is accepted-unproven and why. Not silence. |
+| **`practiceIdSnapshot` backfill** — 38 rows predate the S4c column (DISCOVERY §B.8). | Cheap, separate, non-blocking. Do it or say why not. |
+| **`audit_logs` named as an S4c exclusion** in the same commit that writes the fail-closed "no clinical row without practiceId" rule. | Named by name, with the S4c reasoning cited, so a future tidy-up cannot "fix" it and re-break account deletion. |
+| **The 12 `MEDDOC_PRO`-only accounts** — GATE 0 ruled *excluded + deactivated, rows retained*, with an **owner veto window open until the TEAMS migration runs** (SPEC §4.1). | Confirm the veto has lapsed **before** excluding them. Four of the twelve carry the operator's own name. |
+
 ### T8 — invites carry practice + role
 **Gate:** a code minted for `(practice, CLINICIAN)` produces a member of that
 practice with that role, and one minted for a practice that no longer exists

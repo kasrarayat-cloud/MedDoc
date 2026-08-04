@@ -1263,6 +1263,12 @@ export function VisitReadyView(props: VisitReadyViewProps) {
         return (
           <div className="w-full qm-c3-rev2-root">
             <RoundsSigned
+              /* ⚠️ 2026-08-04 — WITHOUT THIS PROP A SIGNED NOTE HAS NO ARCHIVE
+                 CONTROL AT ALL. The same node the stage receives at :1127;
+                 that call site is inside `if (isReviewDocView() && !isSigned)`
+                 (:848), so a signed visit never reached it. See the prop's own
+                 doc comment in `components/rounds/signed.tsx`. */
+              visitActions={props.visitActions}
               status={roundsView.status}
               signedAt={roundsView.signedAt ?? ''}
               identity={roundsView.identity}
