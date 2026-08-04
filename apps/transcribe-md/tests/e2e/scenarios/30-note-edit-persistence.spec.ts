@@ -57,11 +57,27 @@ test.afterEach(() => {
 /** The first anchored section heading on the paper — whatever the doctor's own
  *  template happens to call it. Named, so a missing paper is not a bare wait. */
 async function firstSectionLabel(page: Page): Promise<string> {
+  // ⚠️ TWO SEPARATE CLAIMS, ASSERTED SEPARATELY — because when this failed in
+  // CI (and only in CI) the single assertion below could not tell me WHICH had
+  // gone wrong: the paper never drew, or it drew without anchors. That is the
+  // same defect as the a11y gate reporting "(1 node)" and naming nothing.
+  //
+  // 1. the paper drew at all
+  await expect(
+    page.getByTestId('review-document-view'),
+    'the read-only paper never rendered — the visit is not on the review ' +
+      'surface (still processing, or it took a different branch entirely)',
+  ).toBeVisible({ timeout: 60_000 });
+
+  // 2. and it carries the S/O/A/P anchors the chat addresses by name
+  //    (`SoapSection.tsx:91` sets data-section to the section letter)
   const anchored = page.locator('[data-section]').first();
   await expect(
     anchored,
-    'the note has no anchored sections — the paper did not draw',
-  ).toBeAttached({ timeout: 60_000 });
+    'the paper DREW but carries no [data-section] anchors — the note rendered ' +
+      'through a path that does not emit them, so there is no section name to ' +
+      'address the chat edit to',
+  ).toBeAttached({ timeout: 30_000 });
   return (await anchored.getAttribute('data-section'))!;
 }
 
