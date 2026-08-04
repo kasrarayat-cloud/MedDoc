@@ -108,6 +108,12 @@ export default defineConfig({
         // taking every downstream pack with it.
         '**/rounds-signed.spec.ts',
         '**/rounds-a11y.spec.ts',
+        // ROUNDS 2026-08-04 — the account menu. Flag-OFF the legacy shells
+        // render their OWN account menu, so this pack would pass on the wrong
+        // component and prove nothing about the Rounds bar. Same reasoning as
+        // the four above, opposite failure mode: a false GREEN rather than a
+        // false red.
+        '**/rounds-account.spec.ts',
         // ROUNDS C1-d — the auth surface. Unlike /board this is NOT a fast 404:
         // /login, /signup and the other four EXIST flag-OFF and render the old
         // skin perfectly. Omitting this line means the default run collects the
@@ -266,6 +272,19 @@ export default defineConfig({
       // into a screen pack would let it read as one.
       name: 'rounds-r1',
       testMatch: ['**/rounds-r1.spec.ts'],
+      fullyParallel: false,
+      workers: 1,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      // 2026-08-04 — THE ACCOUNT MENU. Flag-ON only, and for the plain reason:
+      // with the flag off the LEGACY shells render, they have their own account
+      // menu, and this pack would pass while saying nothing about Rounds. Its
+      // own project rather than a case inside rounds-r1 because it signs out —
+      // a spec that destroys its own session must not share a worker with one
+      // that assumes it still has one.
+      name: 'rounds-account',
+      testMatch: ['**/rounds-account.spec.ts'],
       fullyParallel: false,
       workers: 1,
       use: { ...devices['Desktop Chrome'] },
