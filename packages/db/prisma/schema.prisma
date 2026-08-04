@@ -409,6 +409,18 @@ enum AuditAction {
   /// Metadata is CATEGORY COUNTS ONLY (visitId + {reason: n}) — never a line
   /// of note text, so the audit stream stays PHI-free.
   ANCHOR_FLAGS_RECORDED
+
+  /// 2026-08-04 — the repair record for the `?? 'clinic_main'` fail-open in
+  /// `lib/audit.ts`. This table is APPEND-ONLY: a wrongly-attributed row is
+  /// never UPDATEd, because an audit trail that can be rewritten is not one.
+  /// A correction is a NEW row whose `targetId` is the id of the row being
+  /// corrected and whose metadata is exactly
+  ///   { wrongPracticeId, correctPracticeId | null, determinable, basis }
+  /// — ids and a basis string only, never PHI. `determinable: false` is a
+  /// real, recordable outcome: the six pre-S4c EM_LEVEL_CHANGED rows carry
+  /// NULL in both practiceId and practiceIdSnapshot and have no userId, so
+  /// their tenant is genuinely unrecoverable and is stated, not guessed.
+  AUDIT_ATTRIBUTION_CORRECTED
 }
 
 /// Document lifecycle status

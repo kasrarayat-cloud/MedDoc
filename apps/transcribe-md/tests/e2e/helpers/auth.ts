@@ -48,6 +48,24 @@ export async function loginUser(
  *  a fresh cookie, so a tight goto-retry loop can re-mint faster than the clear
  *  settles and never converges. Polling cookies touches nothing server-side. */
 export async function logoutViaMenu(page: Page): Promise<void> {
+  // ⚠️ THESE TWO SELECTORS WERE UNCHANGED ON 2026-08-04 AND THAT IS THE POINT.
+  //
+  // Between the Rounds flip (2026-08-02) and 2026-08-04 this helper could not
+  // pass against a flag-ON build: the Rounds bar rendered the clinician's name
+  // as a plain <span>, so there was no account menu and no sign-out anywhere
+  // outside Settings. It sat inside the 21 failures the default pack shows
+  // flag-ON, and a test that has been red long enough stops being read.
+  //
+  // The ruling was to restore the affordance, NOT to re-point the selector at
+  // whatever happened to exist. `components/rounds/account-menu.tsx` was
+  // therefore built to satisfy exactly these two queries — a real <button>
+  // labelled "Account menu for <name>" (not a <summary>, whose role=button
+  // mapping is an implicit-AAM bet) opening role=menu with role=menuitem
+  // children. `gate-rounds-account-menu` pins both, so this helper is a
+  // legitimate consumer of the product rather than a thing patched around it.
+  //
+  // If this line ever needs editing again, ask first whether the product lost
+  // a control.
   await page.getByRole('button', { name: /account menu/i }).click();
   await page.getByRole('menuitem', { name: /sign out/i }).click();
   await expect(page).toHaveURL(/\/login$/, { timeout: 15_000 });

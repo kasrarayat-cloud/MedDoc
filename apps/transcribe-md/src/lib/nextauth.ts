@@ -373,7 +373,31 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         );
       }
       if (userId) {
-        void logAudit({ action: 'LOGOUT', userId });
+        // Thread the tenant BY TRAVERSAL. `logAudit` resolves the practice
+        // from `auth()`, and `auth()` cannot run here — the signOut event is
+        // outside request scope, so the session resolves to null and every
+        // LOGOUT row would land UNATTRIBUTED. Until 2026-08-04 it was worse
+        // than that: the resolver fell back to `'clinic_main'`, so 64 solo
+        // doctors' logouts were filed under the largest shared practice.
+        // One primary-key lookup is the whole cost of getting it right.
+        let practiceId: string | null = null;
+        try {
+          const u = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { practiceId: true },
+          });
+          practiceId = u?.practiceId ?? null;
+        } catch (err) {
+          // Deliberately not rethrown: sign-out must complete. The row is
+          // still written, as UNATTRIBUTED and loudly, which is the honest
+          // outcome — a logout we cannot attribute is not a logout we should
+          // attribute to somebody.
+          console.error(
+            '[auth:signOut] practice lookup failed; LOGOUT row will be UNATTRIBUTED',
+            redactPhi(err instanceof Error ? err.message : String(err)),
+          );
+        }
+        void logAudit({ action: 'LOGOUT', userId, practiceId });
       }
       // Round 3 PR-H — clear Sentry user scope on signout so a
       // subsequent error from this process doesn't carry the

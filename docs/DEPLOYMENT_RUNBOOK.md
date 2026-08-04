@@ -471,6 +471,60 @@ docker compose -f /opt/meddoc-pro/docker-compose.yml up -d --no-deps --force-rec
   `.qm-lin-rx-rail-group-n` to 2.15:1, both below AA. Accessibility regressions
   are not cosmetic; note them in the incident if the rollback is held.
 
+### 3.5 pro.quillmd.com is OFFLINE — how to put it back, and what not to do
+
+**Taken offline 2026-08-04 01:45 UTC.** Owner ruling: the *capability* dies
+now; the *code* deletion stays scheduled last (`docs/foundation/RELAY.md` A6).
+Full reasoning in `docs/foundation/DISCOVERY.md` §A.2.
+
+Two independent controls, both reversible:
+
+1. **Edge.** `/etc/nginx/sites-available/quillmd` — `pro.quillmd.com` was
+   removed from the `:443` `server_name` and given its own `server` block that
+   answers **410**. It deliberately STAYS on the `:80` `server_name`.
+2. **Container.** `docker compose stop meddoc-pro`. `restart: unless-stopped`
+   means an explicit stop survives a daemon restart.
+
+`scripts/deploy-prod.sh` names its services explicitly
+(`up -d transcribe-md transcribe-md-worker`, `up -d gotenberg`), so **a normal
+deploy will not resurrect it.** A bare `docker compose up -d` would.
+
+**To restore:** delete the 410 block, put `pro.quillmd.com` back on the `:443`
+`server_name`, `nginx -t`, `systemctl reload nginx`, then
+`docker compose up -d meddoc-pro`.
+
+#### Three things that will bite whoever touches this
+
+- **⚠️ DO NOT just delete the hostname from `server_name`.**
+  `sites-enabled/dealhunter` declares `server_name 5.231.107.93 _;` and sorts
+  first in the `sites-enabled/*` glob, making it the de-facto default server.
+  An unnamed `pro.quillmd.com` **falls through to a co-tenant** rather than
+  going away. The explicit 410 block is what actually terminates the host.
+- **⚠️ DO NOT remove `pro.quillmd.com` from the `:80` block.** The shared
+  Let's Encrypt cert (`/etc/letsencrypt/live/quillmd.com/`) covers it, so the
+  ACME challenge path must keep answering or **renewal breaks for every
+  QuillMD hostname**. Verify with
+  `curl -o /dev/null -w '%{http_code}' http://pro.quillmd.com/.well-known/acme-challenge/probe`
+  — 404 is correct (location served, token absent); 301 or 410 is not.
+- **⚠️ NOTHING GOES IN `sites-enabled/` THAT IS NOT A SYMLINK.** nginx includes
+  `sites-enabled/*` with no extension filter. A file named
+  `quillmd.bak-20260725` sat there from 2026-07-25 to 2026-08-04 being parsed
+  on every start: 22 `conflicting server name … ignored` warnings, and a copy
+  of the **pre-S2 spoofable `X-Forwarded-For $proxy_add_x_forwarded_for`**. It
+  was inert only because `quillmd` sorts before `quillmd.bak-…`. Backups live
+  in `/etc/nginx/vhost-backups/` now. If `nginx -t` ever prints
+  `conflicting server name`, a shadow vhost is back.
+
+**Credentials.** `DATABASE_URL` is byte-identical across `meddoc-pro`,
+`transcribe-md` and the worker, and Postgres has exactly one login role
+(`meddoc`, SUPERUSER). There was nothing app-specific to revoke — **the
+container stop IS the control.** Least-privilege per-app roles land in
+TEAMS-phase hygiene.
+
+**Preflight note.** The health-check skill's Check 4 baseline lists
+`meddoc-pro` among the expected services. It is expected to be `exited` now.
+That is not a failure.
+
 ## 4. Restore from backup
 
 ```bash

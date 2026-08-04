@@ -41,7 +41,77 @@ and still publicly served at **pro.quillmd.com, which returns 200**.
 `apps/transcribe-md/src/app/admin/**` is the current surface: 6 pages, 29 API
 routes, uniformly gated.
 
-### A.2 The finding that outranks its framing
+### A.2 The finding that outranks its framing — **ACTIONED 2026-08-04**
+
+> ## ✅ pro.quillmd.com IS OFFLINE. The capability died 2026-08-04 01:45 UTC.
+>
+> Owner ruling: **the capability dies today; the code deletion stays scheduled
+> last** (item A6). What was done, and what it cost:
+>
+> | | Before | After |
+> |---|---|---|
+> | `https://pro.quillmd.com/` | 200 | **410** |
+> | `/login` `/register` `/dashboard` `/system-admin` | 200 | **410** |
+> | `/api/health` `/api/patients` (GET **and** POST) | 200 | **410** |
+> | `meddoc-pro` container | Up 5 days (healthy) | **exited (143)** |
+> | app · admin · quillmd · www · staging | 307 · 404 · 200 · 200 · 200 | **unchanged** |
+> | 5 co-tenant hostnames | 3 up, 3 pre-existing failures | **unchanged, same 3** |
+> | 16 non-meddoc containers | running | **untouched** |
+>
+> **⚠️ "DISABLE ONLY ITS OWN VHOST" WAS NOT POSSIBLE — THERE IS NO PER-HOST
+> VHOST.** One `sites-available/quillmd` file carries all five QuillMD
+> hostnames on a single `server_name` line. And deleting the name is **not**
+> the same as taking the host down: `sites-enabled/dealhunter` declares
+> `server_name 5.231.107.93 _;` and, being first in the `sites-enabled/*` glob,
+> is the de-facto default server for these listeners. **An unnamed
+> pro.quillmd.com would have fallen through to a co-tenant.** So the change is
+> an explicit `server` block that answers 410 — the hostname is *terminated*,
+> not merely unlisted.
+>
+> `pro.quillmd.com` deliberately **stays** on the `:80` server_name: the shared
+> Let's Encrypt cert covers it, so the ACME challenge path must keep answering
+> or renewal breaks for **every** QuillMD hostname. Verified after the change —
+> `/.well-known/acme-challenge/<probe>` returns 404 (served, token absent),
+> not 301 or 410.
+>
+> **⚠️ AND IT FOUND A SHADOW VHOST THAT WAS BEING LOADED.**
+> `sites-enabled/quillmd.bak-20260725` was a **regular file, not a symlink**,
+> inside `sites-enabled/` — and nginx's include is `sites-enabled/*` with no
+> extension filter, so it was parsed on every start. It declared the same five
+> hostnames, producing **22 `conflicting server name … ignored` warnings**, and
+> it carried the **pre-S2 `X-Forwarded-For $proxy_add_x_forwarded_for`** — the
+> spoofable form that the 2026-07-25 client-IP fix replaced.
+>
+> It was inert *only because of glob order*: `quillmd` sorts before
+> `quillmd.bak-…`, so nginx kept the first block and ignored the second. Which
+> means removing `pro.quillmd.com` from the live file would have **promoted the
+> shadow block's copy of it to the winner** and silently reverted the client-IP
+> fix for that host. It has been moved to `/etc/nginx/vhost-backups/`. The 22
+> warnings are gone; `nginx -t` now emits only the two pre-existing co-tenant
+> `protocol options redefined` warnings.
+>
+> **CREDENTIALS: SHARED, NOT SEPARABLE.** `DATABASE_URL` is **byte-identical**
+> across `meddoc-pro`, `transcribe-md` and the worker (compared by sha256, not
+> by eye). And there is exactly **one** login role in Postgres — `meddoc`, and
+> it is **SUPERUSER**. So there was nothing to revoke: a per-app credential does
+> not exist to be withdrawn, and revoking the shared one would take production
+> down. **Container-stop is the control.** Credential separation — a
+> least-privilege role per app — lands in **TEAMS-phase hygiene**, and it is a
+> new role plus a grant audit, not a config edit.
+>
+> Worth recording, because it is the real blast radius: the container took
+> `env_file: - .env`, so it also held `ANTHROPIC_API_KEY`, `DEEPGRAM_API_KEY`,
+> `OPENAI_API_KEY`, `RESEND_API_KEY`, `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD`,
+> `MINIO_KMS_SECRET_KEY`, `AUTH_SECRET` and `SCRIBE_SERVICE_TOKEN` — the entire
+> production secret set. **No rotation is being triggered by this change**, and
+> that is a judgement, not an oversight: these are the same keys the live app
+> uses, `.env` is mode `0600`, and nothing indicates disclosure. The finding is
+> about blast radius, not about a leak.
+>
+> **Restore procedure** is written into the nginx block itself and into
+> `docs/DEPLOYMENT_RUNBOOK.md` §3.5.
+
+### A.2 (original finding, as measured)
 
 The brief asked for a census. The census produced one fact that is not a
 tidiness item:
@@ -320,18 +390,55 @@ excluded by name from any "no clinical row without practiceId" rule, with the
 S4c reasoning cited** — otherwise someone will "fix" it and re-break account
 deletion, which is what S4c exists to prevent.
 
-**Fail-open fallback.** `lib/audit.ts:293-294`:
+**Fail-open fallback.** `lib/audit.ts:293-294`, as it stood:
 
 ```ts
 const practiceId = input.practiceId ?? sessionPracticeId ?? 'clinic_main';
 ```
 
-Re-run by hand: **65 rows in production are misattributed** — 64 `LOGOUT`, 1
-`USER_GRANTED_SUPER_ADMIN`, every one of them pointed at `clinic_main`. The
-fallback fails *open, into the largest shared practice* — the exact opposite of
-what a tenant boundary should do on unknown input. If practice-scoped audit
-views ship as specced, 64 solo doctors' logout events appear in Main Clinic's
-feed.
+The fallback failed *open, into the largest shared practice* — the exact
+opposite of what a tenant boundary should do on unknown input. If
+practice-scoped audit views had shipped as specced, 64 solo doctors' logout
+events would have appeared in Main Clinic's feed.
+
+> ### ✅ CLOSED 2026-08-04 — and the number was **64, not 65**
+>
+> **Self-correction, recorded rather than quietly fixed.** This section first
+> said 65 misattributed rows, "64 `LOGOUT`, 1 `USER_GRANTED_SUPER_ADMIN`". The
+> `USER_GRANTED_SUPER_ADMIN` row is **correct**, and the query that produced
+> the 65 was wrong.
+>
+> That query asked `a."practiceId" <> actor."practiceId"`, i.e. it assumed an
+> audit row's practice should always be the *actor's*. It should not.
+> `api/admin/users/[id]/grant-admin/route.ts:82` deliberately passes
+> `practiceId: user.practiceId` — the **target's** practice — because the event
+> belongs to the tenant being changed, not to the admin doing the changing.
+> Verified on the row itself: `practiceId = clinic_main` and
+> `target_practice = clinic_main` agree.
+>
+> **A repair driven by the naive query would have "corrected" a correct row.**
+> The lesson generalises past this row: a cross-tenant admin action has two
+> defensible tenants, and a checker that knows about only one of them
+> manufactures findings.
+>
+> **The fix**, all in one change:
+> - `lib/audit.ts` — the fallback is gone. The resolution now ends in `null`,
+>   the row is written `practiceId = NULL` with
+>   `practiceIdSnapshot = 'UNATTRIBUTED'` (the FK column cannot hold a sentinel
+>   without inventing a `Practice` row), and it is reported at **error** level,
+>   because an unattributable write is a defect in the *caller*.
+> - `lib/nextauth.ts` — the `signOut` event now resolves the practice **by
+>   traversal** (one primary-key lookup) before writing `LOGOUT`. `auth()`
+>   cannot run there; that is why the fallback was reached at all.
+> - `gate-audit-attribution-failclosed` — a guard proven red against four
+>   mutations, including the literal pre-fix line.
+> - `AUDIT_ATTRIBUTION_CORRECTED` — a new `AuditAction`, **with its Prisma
+>   migration**, because a TS-only label is discarded silently.
+> - `scripts/repair-audit-attribution.ts` — read-only by default. **It never
+>   updates and never deletes.** `audit_logs` is append-only, so the 64 wrong
+>   rows stay wrong and a correction row is *appended* per original, pointing
+>   at it via `targetId`. The six unattributable pre-S4c rows get correction
+>   rows too, carrying `determinable: false` — stated, not guessed.
 
 A further 38 rows have a `practiceId` but a NULL `practiceIdSnapshot` — they
 predate migration `20260725040000_s4c_deletable_account_audit_preserving`. A
@@ -763,6 +870,33 @@ that the pre-pilot BAA status contradicts. Both live on pro.quillmd.com today.
 > Original claim: *"The only Stripe footprint is two UNUSED dependencies in the
 > legacy `apps/meddoc-pro` app. They are installed at the repo root but do not
 > reach the running production image."* → **REFUTED.**
+
+> ## ✅ REMOVED 2026-08-04
+>
+> **Root cause, and it is not "standalone tracing".** The worker does not use
+> standalone tracing at all. `apps/transcribe-md/Dockerfile.worker:62` is
+> `COPY --from=prod-deps /app/node_modules ./node_modules` — the **entire**
+> workspace-root tree from `npm ci --omit=dev`. Because every app's
+> `package.json` is copied in first so the workspace graph resolves (line 39,
+> and the header explains why: the ioredis regression), that `npm ci` installs
+> the CRM's dependencies too, hoists them to the root, and the whole thing is
+> copied wholesale into the runner. The web app escapes because *its* runner
+> copies `.next/standalone` — node-file-trace output, only what is imported.
+>
+> **The class is bigger than Stripe, and is quantified rather than waved at:**
+> 9 of the CRM's 28 production dependencies are unique to it and therefore ship
+> in the clinical worker for no reason — `@auth/prisma-adapter`,
+> `@hookform/resolvers`, `@stripe/stripe-js`, `file-saver`, `pdf-parse`, `pg`,
+> `react-hook-form`, `stripe`, `zustand`. **Only the two Stripe entries are
+> removed here**, per the ruling; the other seven disappear when
+> `apps/meddoc-pro` is deleted in item **A6**, and they are named so that is a
+> checked outcome rather than a hoped-for one.
+>
+> **The fix:** both entries deleted from `apps/meddoc-pro/package.json`.
+> Lockfile diff is exactly two removals, nothing added
+> (1187 → 1185 packages), and the **sharp subtree is intact at 28 entries
+> before and after** — the known `npm update` splice trap, checked with a
+> positive control rather than assumed.
 
 Sentence one holds — `apps/meddoc-pro/package.json:29,46` are the only Stripe
 entries repo-wide and nothing imports them. Sentence two checked **one** of four

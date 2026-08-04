@@ -25,6 +25,8 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+import { RoundsAccountMenu } from './account-menu';
+
 /** Board · Patients · Settings. `/patients` joined in R1; before that the
  *  route was reachable only from the legacy sidebar, so a doctor on the board
  *  could not get to their patient list at all.
@@ -64,7 +66,29 @@ export function activeNavHref(pathname: string): string | null {
   return best;
 }
 
-export function RoundsTopBar({ children }: { children?: React.ReactNode }) {
+/**
+ * ⚠️ `userName` IS A PROP, NOT A CHILD, AND THAT IS THE WHOLE FIX.
+ *
+ * Before 2026-08-04 both callers rendered the clinician's name themselves —
+ * `app-frame-rounds.tsx` as `<span className="qm-rounds-topbar-who">`,
+ * `board-chrome.tsx` as an inline-styled span with the same three
+ * declarations spelled out again. Two hand-maintained copies of one piece of
+ * anatomy, and NEITHER of them had a sign-out in it.
+ *
+ * AGENTS.md § "Shared components — diff the callers BEFORE you replace them"
+ * is explicit about the cure: *put the behaviour where it cannot be forgotten
+ * — on the component.* So the account menu lives here, every present and
+ * future mount inherits it, and the mount count is asserted by
+ * `gate-rounds-account-menu` rather than kept correct by hand. R3.4 lost a
+ * round to exactly the per-caller version of this mistake.
+ */
+export function RoundsTopBar({
+  userName,
+  children,
+}: {
+  userName?: string;
+  children?: React.ReactNode;
+}) {
   const pathname = usePathname() ?? '';
   const active = activeNavHref(pathname);
 
@@ -95,6 +119,13 @@ export function RoundsTopBar({ children }: { children?: React.ReactNode }) {
       <div style={{ flex: 1 }} />
 
       {children}
+
+      {/* LAST in the bar, after whatever instruments the caller supplied.
+          Rendered only when a name is known — an "Account menu for undefined"
+          is worse than none, and the guard test asserts BOTH directions so a
+          future caller that forgets the prop fails loudly rather than
+          silently dropping the only way out of the product. */}
+      {userName ? <RoundsAccountMenu userName={userName} /> : null}
     </header>
   );
 }
