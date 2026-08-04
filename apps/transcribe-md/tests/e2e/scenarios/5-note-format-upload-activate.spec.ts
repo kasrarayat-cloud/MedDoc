@@ -20,6 +20,7 @@ import { expect, test } from '@playwright/test';
 
 import { cleanupTestUsers } from '../helpers/cleanup';
 import { signupFreshUser } from '../helpers/signup';
+import { gotoNoteFormat } from '../helpers/noteFormat';
 
 // A plain, representative note. Content is irrelevant under MOCK (the fixture is
 // returned regardless), but it must be non-empty and free of angle-bracket
@@ -49,9 +50,28 @@ test('scenario 5: note-format paste → parse → review → activate (MOCK)', a
 
   // The note-format manager lives in /settings (section id="note-format"). A
   // fresh user has no templates, so it opens in the "entry" (bring-a-note) view.
-  await page.goto('/settings');
+  // ⚠️ WAS `goto('/settings')`. Under the production flag set the settings
+  // shell opens on `profile` and every other panel keeps `hidden`
+  // (settings-sections-c3.tsx:76), so the paste box is MOUNTED BUT INVISIBLE
+  // and `fill()` waits 15s on an element that will never become visible.
+  // `gotoNoteFormat` walks the route a doctor uses and names the failure.
+  await gotoNoteFormat(page);
   await page.getByLabel('Paste a note').fill(SAMPLE_NOTE);
   await page.getByRole('button', { name: /read my format/i }).click();
+
+  // ⚠️ THE PARSE LANDS ON THE CONFIRM STEP, NOT THE EDITOR. Established by
+  // driving the production-shaped build: paste AND upload both reach
+  // upload-flow's "Looks right — use this format" / "Something's off"
+  // (upload-flow.tsx:320); the review editor is behind the second. Both
+  // components are live — accept door vs edit door — so each is named by its
+  // own exact label rather than a matcher that would pass on either.
+  // This spec asserts the EDITOR, so it takes the edit door.
+  const somethingsOff = page.getByRole('button', { name: /something.s off/i });
+  await expect(
+    somethingsOff,
+    'the parse never reached the confirm step',
+  ).toBeVisible({ timeout: 30_000 });
+  await somethingsOff.click();
 
   // Parse (mocked) resolves into the review editor.
   await expect(
@@ -89,9 +109,28 @@ test('scenario 5: the live sample-note preview renders in the parsed format (syn
 
   await signupFreshUser(page, 's5p');
 
-  await page.goto('/settings');
+  // ⚠️ WAS `goto('/settings')`. Under the production flag set the settings
+  // shell opens on `profile` and every other panel keeps `hidden`
+  // (settings-sections-c3.tsx:76), so the paste box is MOUNTED BUT INVISIBLE
+  // and `fill()` waits 15s on an element that will never become visible.
+  // `gotoNoteFormat` walks the route a doctor uses and names the failure.
+  await gotoNoteFormat(page);
   await page.getByLabel('Paste a note').fill(SAMPLE_NOTE);
   await page.getByRole('button', { name: /read my format/i }).click();
+
+  // ⚠️ THE PARSE LANDS ON THE CONFIRM STEP, NOT THE EDITOR. Established by
+  // driving the production-shaped build: paste AND upload both reach
+  // upload-flow's "Looks right — use this format" / "Something's off"
+  // (upload-flow.tsx:320); the review editor is behind the second. Both
+  // components are live — accept door vs edit door — so each is named by its
+  // own exact label rather than a matcher that would pass on either.
+  // This spec asserts the EDITOR, so it takes the edit door.
+  const somethingsOff = page.getByRole('button', { name: /something.s off/i });
+  await expect(
+    somethingsOff,
+    'the parse never reached the confirm step',
+  ).toBeVisible({ timeout: 30_000 });
+  await somethingsOff.click();
 
   // Review editor reached.
   await expect(

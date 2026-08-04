@@ -54,6 +54,23 @@ async function uploadFile(page: Page, file: string): Promise<void> {
  *  review editor with the fixture template. */
 async function uploadAndExpectReview(page: Page, file: string): Promise<void> {
   await uploadFile(page, file);
+
+  // ⚠️ THE UPLOAD PATH LANDS ON THE CONFIRM STEP FIRST, NOT THE EDITOR.
+  // Established by DRIVING the production-shaped build, both entry modes:
+  //     PASTE  → uploadConfirm=true  reviewEditor=false
+  //     UPLOAD → uploadConfirm=true  reviewEditor=false
+  //     …then "Something's off" → reviewEditor=TRUE
+  // Flag-OFF an upload landed straight on `template-review-editor`. Both
+  // components are LIVE — the confirm step is the ACCEPT door, the editor the
+  // EDIT door — so each is asserted by its own exact label rather than a
+  // matcher that would pass on either surface and prove neither.
+  const confirm = page.getByRole('button', { name: /something.s off/i });
+  await expect(
+    confirm,
+    'the upload extracted but never reached the confirm step',
+  ).toBeVisible({ timeout: 20_000 });
+  await confirm.click();
+
   await expect(page.getByRole('button', { name: /save & activate/i })).toBeVisible({
     timeout: 20_000,
   });

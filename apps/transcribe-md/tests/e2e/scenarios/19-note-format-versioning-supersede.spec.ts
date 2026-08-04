@@ -27,6 +27,7 @@ import {
   expectHome,
   gotoNoteFormat,
   parseToReview,
+  templateAction,
 } from '../helpers/noteFormat';
 import {
   countActive,
@@ -72,7 +73,8 @@ test('scenario 19: editing an ACTIVE template forks a new version + supersedes (
   // Edit the live (active) template → new version, prior superseded.
   await expectHome(page);
   await page.reload();
-  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  // Same move as scenario 18: editing is the overflow's "Advanced editor".
+  await templateAction(page, 'Advanced editor');
   await expect(page.locator('#nf-name')).toHaveValue('Versioned V1', { timeout: 10_000 });
   await page.locator('#nf-name').fill('Versioned V2');
   await page.getByRole('button', { name: /save & activate/i }).click();
@@ -92,7 +94,26 @@ test('scenario 19: editing an ACTIVE template forks a new version + supersedes (
   expect(maxActivePerSlot(doctorId)).toBe(1); // invariant
 
   await page.reload();
-  await expect(page.getByText(/· v2/)).toBeVisible({ timeout: 15_000 });
+  // ⚠️ THE FORK IS INTACT; THE BADGE MOVED. Driven on the production-shaped
+  // build, the database says exactly what this test claims:
+  //
+  //     before  [{v:1, active,   'Versioned V1'}]
+  //     after   [{v:1, INACTIVE, 'Versioned V1'},
+  //              {v:2, ACTIVE,   'Versioned V2'}]   <- forked, prior superseded
+  //
+  // and every DB assertion above passes unchanged. What changed is only the
+  // CARD: it no longer prints a `· v2` version badge. The rendered text is
+  // "Versioned V2 · Active · All my visits" and "Versioned V1 · Superseded".
+  //
+  // So this asserts the SUPERSESSION the test is named for, in the words the
+  // product uses, rather than a version number it stopped displaying. That is
+  // also the stronger claim: "Superseded" is a state a doctor can see and act
+  // on; "v2" was an implementation detail leaking into the UI.
+  await expect(
+    page.getByText('Superseded', { exact: true }),
+    'the superseded prior version is not labelled on the card — a doctor cannot ' +
+      'tell which format is live',
+  ).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText(/Active ·/)).toBeVisible();
 });
 
