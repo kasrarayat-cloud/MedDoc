@@ -17,6 +17,17 @@ concurrency:
   group: nightly-tests
   cancel-in-progress: false
 
+# ⚠️ WITHOUT THIS BLOCK THE FAILURE NOTIFICATION SILENTLY DOES NOTHING.
+# The "Open issue on failure" step below calls issues.create, and the default
+# GITHUB_TOKEN is read-only for issues, so it died with
+# `HttpError: Resource not accessible by integration` — observed on run
+# 30876327406. The job still failed, so the RED was real; but the mechanism
+# meant to carry that red to a human was itself broken, which is the worse
+# half: a nightly nobody is told about is a nightly nobody reads.
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   run:
     name: smoke + e2e
