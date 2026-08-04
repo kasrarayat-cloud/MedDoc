@@ -362,3 +362,73 @@ measurement, not by looking for them.
    (DISCOVERY §E.2)
 
 Neither is a build item. Both are decisions the owner can take this week.
+
+## Found on the way past — 2026-08-04, during F-ret.1
+
+Neither of these belongs to F-ret and neither was looked for. They are written
+here because a finding that lives only in a session transcript is not a finding:
+the next sweep cannot see it, and an unanswered question decays into "probably
+fine" through nothing but repetition. That is exactly how the May audit PDF sat
+tracked and unlisted for eleven weeks.
+
+### 1. `em-coding:llm-mdm` does not honour `MOCK_AI_CALLS`
+
+The `e2e` job's app logs carry real Anthropic requests:
+
+```
+scope: em-coding:llm-mdm   error: 401 {"type":"authentication_error",
+                                       "message":"invalid x-api-key"}
+```
+
+They failed only because CI's key is a dummy — which is the second condition
+working exactly as AGENTS.md says it must: *"`MOCK_AI_CALLS=true` stops calls
+only while every code path honours the flag; dummy credentials are what survives
+a code regression."* This is a code path that does not honour it.
+
+**Nothing leaked and no balance was burned here.** The concern is the same shape
+as the 298 real Anthropic calls the QA stack made on 2026-07-28 — a stack whose
+header promised it could reach nothing. `scripts/check-qa-mock-posture.sh` reads
+the running containers' env; it cannot see a code path that ignores what it
+finds there.
+
+**Located, not just observed.** `src/lib/em-coding/llm-mdm.ts` contains **no
+reference to `MOCK_AI_CALLS` at all** — it constructs its client and calls, and
+logs the vendor's refusal at `:500`. Sibling paths do check the flag
+(`src/worker/layers/04b-anchor-verify.ts`,
+`src/actions/preview-note-template.ts`), so this is one path that was missed,
+not a convention nobody follows.
+
+**The verification that matters is not the compose file.** `docker-compose.qa.yml`
+hardcodes `MOCK_AI_CALLS: "true"` for both app and worker (`:211`, `:308`) — and
+the calls happened anyway. That is the whole point: reading config proves
+nothing about a path that never reads it. `scripts/check-qa-mock-posture.sh`
+inspects the running containers' env, so it would report this stack GREEN while
+it was calling a vendor.
+
+**Not yet established:** how many other vendor-calling paths skip the flag. The
+sweep is cheap and has an obvious shape — enumerate every construction of an
+Anthropic/OpenAI/Deepgram client under `src/`, subtract the ones with a mock
+branch, and report the count **with a positive control**, or the zero means
+nothing.
+
+### 2. `a11y-ci` never runs on `main`
+
+`.github/workflows/a11y.yml` triggers on `pull_request` **only**. The other
+three required workflows (`CI`, `e2e`, `secrets-scan`) all carry
+`push: [main]` as well.
+
+So the axe-core sweep validates the PR head and **never the merge result**.
+Anything reaching `main` by another path — a direct push, or a merge whose
+outcome differs from the head that was tested — is structurally invisible to it.
+It reads as coverage and there is a route it cannot see, which is the two-month
+gate defect in miniature for the third time this program.
+
+Found while citing #525's merge commit `c150b600` across all four workflows by
+name: three could be cited and the fourth could not, because it does not run
+there. Quoting its PR-head green next to a merge SHA would have been precisely
+the substitution the citation rule exists to prevent.
+
+**The fix is one line** — add `push: [main]` to `a11y.yml`. It is *not* applied
+here because it adds a ~4.5-minute job to every push to `main`, which is a
+cadence decision for the owner rather than a correctness one. State a verdict
+either way; do not leave it as a third silent gap.
