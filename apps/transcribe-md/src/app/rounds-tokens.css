@@ -2352,6 +2352,101 @@ body[data-skin='rounds'] {
   color: var(--rounds-text-2);
 }
 
+/* ── 2026-08-04 — the account menu ───────────────────────────────────────
+   THE ROUNDS SKIN SHIPPED WITH NO WAY TO SIGN OUT. The bar rendered the
+   clinician's name as a plain span (`.qm-rounds-topbar-who` above, and an
+   inline-styled duplicate in `board-chrome`), while the legacy shells it
+   replaced both carried an account menu with Sign out in it. Settings kept
+   working the whole time, so it was an affordance regression rather than a
+   lockout — but on a shared clinical workstation an unfindable sign-out means
+   the next clinician inherits the last one's session.
+
+   ⚠️ EVERY COLOUR HERE IS CONTRAST-CHECKED AGAINST THE GROUND IT ACTUALLY
+   PAINTS ON, not against the page background. Measured:
+     name    text-2  #98a2b1 on the bar  #171d27  →  6.56:1
+     item    text-1  #e7ebf1 on the menu #1e2530  → 12.88:1
+     item    text-1  #e7ebf1 on hover    #2c3442  → 10.47:1
+     signout critical-on-dark #ff8d7e on #1e2530  →  6.87:1
+     signout critical-on-dark #ff8d7e on #2c3442  →  5.58:1
+   ⚠️ AND `--rounds-critical` (#c93a2e) IS **NOT** USABLE AS TEXT HERE — it
+   measures 3.03:1 on the menu ground and fails AA. That is the same shape as
+   the `--color-linear-text-4` finding in the Rounds relay: a token whose name
+   says "colour" and whose only safe role is fill. The `-on-dark` sibling
+   exists for exactly this, which is why it is used. */
+[data-skin='rounds'] .qm-rounds-account {
+  position: relative;
+}
+
+[data-skin='rounds'] .qm-rounds-account-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border: 1px solid transparent;
+  border-radius: var(--rounds-radius-sm, 6px);
+  background: transparent;
+  font-family: var(--rounds-font-ui);
+  font-size: 13px;
+  color: var(--rounds-text-2);
+  cursor: pointer;
+}
+
+[data-skin='rounds'] .qm-rounds-account-trigger:hover,
+[data-skin='rounds'] .qm-rounds-account-trigger[aria-expanded='true'] {
+  color: var(--rounds-text-1);
+  background: var(--rounds-surface-2);
+  border-color: var(--rounds-line-1);
+}
+
+/* The caret is decorative and aria-hidden; `aria-expanded` on the button is
+   what actually announces the state. */
+[data-skin='rounds'] .qm-rounds-account-caret {
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 4px solid currentColor;
+  opacity: 0.7;
+}
+
+[data-skin='rounds'] .qm-rounds-account-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  min-width: 172px;
+  display: flex;
+  flex-direction: column;
+  padding: 5px;
+  border: 1px solid var(--rounds-line-1);
+  border-radius: var(--rounds-radius-md, 8px);
+  background: var(--rounds-surface-2);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 45%);
+}
+
+[data-skin='rounds'] .qm-rounds-account-item {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: var(--rounds-radius-sm, 6px);
+  background: transparent;
+  font-family: var(--rounds-font-ui);
+  font-size: 12.5px;
+  text-align: left;
+  text-decoration: none;
+  color: var(--rounds-text-1);
+  cursor: pointer;
+}
+
+[data-skin='rounds'] .qm-rounds-account-item:hover {
+  background: var(--rounds-line-1);
+}
+
+[data-skin='rounds'] .qm-rounds-account-item-exit {
+  color: var(--rounds-critical-on-dark);
+}
+
 /* ── R1 — patients roster ────────────────────────────────────────────────
    Same list as the C3 roster (shared `usePatientsRoster`), Rounds markup. */
 [data-skin='rounds'] .qm-rounds-roster {

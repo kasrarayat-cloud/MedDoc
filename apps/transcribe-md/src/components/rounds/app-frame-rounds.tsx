@@ -35,9 +35,11 @@ export function RoundsAppFrame({
 }) {
   return (
     <div className="qm-rounds-app" data-testid="rounds-app-frame">
-      <RoundsTopBar>
-        <span className="qm-rounds-topbar-who">{userName}</span>
-      </RoundsTopBar>
+      {/* 2026-08-04 — the name was a plain <span> here and an inline-styled
+          one in `board-chrome`. It is now `userName`, and the bar renders the
+          account menu (name → Settings · Sign out) itself. See the prop's
+          doc comment in `top-bar.tsx` for why it is a prop and not a child. */}
+      <RoundsTopBar userName={userName} />
       {/* `id="main"` + `tabIndex={-1}` are carried over verbatim from the two
           branches below it in AppFrame: `id` is the skip-link target declared
           in layout.tsx, and a <main> does not take focus on a fragment hop

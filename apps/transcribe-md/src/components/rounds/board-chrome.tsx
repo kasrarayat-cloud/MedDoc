@@ -92,7 +92,7 @@ export function RoundsBoardChrome({
           The board's own nav also hardcoded `n.label === 'Board'` as the
           current item, which is a bug the moment the component renders
           anywhere else — the shared one derives it from the path. */}
-      <RoundsTopBar>
+      <RoundsTopBar userName={clinicianName}>
         {/* Critical tally. Rendered ONLY when there is something to tally — a
             permanent "0 critical" badge trains the eye to ignore the place
             criticals appear. */}
@@ -119,15 +119,12 @@ export function RoundsBoardChrome({
 
         <RoundsDayMeter progress={progress} pct={pct} />
 
-        <span
-          style={{
-            fontFamily: 'var(--rounds-font-ui)',
-            fontSize: 13,
-            color: 'var(--rounds-text-2)',
-          }}
-        >
-          {clinicianName}
-        </span>
+        {/* 2026-08-04 — the clinician's name used to be an inline-styled span
+            RIGHT HERE, duplicating `app-frame-rounds`'s `.qm-rounds-topbar-who`
+            with the same three declarations written out again. Both copies
+            were name-only: neither had a sign-out. `RoundsTopBar` now renders
+            the account menu from the `userName` prop passed above, so there is
+            one copy and it cannot go missing on one caller. */}
 
         {/* ── R2 — the primary action, back on the landing screen ───────────
             Last, so it reads as the thing to DO after the instruments that say

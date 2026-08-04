@@ -181,28 +181,107 @@ ambiguous cases, and it is not negotiable for convenience.
 
 ---
 
-## 4. What Phase 0 did NOT decide
+## 4. GATE 0 rulings — decided 2026-08-04
 
-Named here so the war room knows what it is being asked, rather than
-discovering it mid-build:
+Phase 0 deliberately did not make these. The war room did. **Recorded verbatim
+from the ruling; the commentary under each is a pointer, not an amendment.**
 
-1. **The fate of the 12 `MEDDOC_PRO`-only accounts.** Four of them are on
-   `@meddoc.com` with the operator's own name, created on day one, all with a
-   login. An entitlement row is not a contract, but neither is a domain a
-   proof. **This is an owner decision.** (DISCOVERY §A.5)
-2. **Whether `NEXT_PUBLIC_MEDDOC_PRO_APP_URL` redirect users get granted
-   `TRANSCRIBE_MD` or get deleted.** Either is defensible; doing neither leaves
-   a login error whose only offered remedy is a dead link.
-3. **Whether "one active note template" means per-doctor or per-practice.**
-   The existing unique index says per-doctor. If the product intent is a shared
-   practice format, that index is the thing that will silently keep it
-   per-doctor.
-4. **The micro-unit denominator** (µUSD? 1/1e6 of a dollar? of a cent?) and the
-   rounding rule for `× 1.5`.
-5. **Whether `stripe`/`@stripe/stripe-js` stay in `apps/meddoc-pro/package.json`.**
-   They are unused by any import, but they *do* ship inside the live clinical
-   worker image (DISCOVERY §E.2) — so they are a real supply-chain surface
-   today, not a harmless lockfile entry.
+### 4.1 The 12 `MEDDOC_PRO`-only accounts
+
+> **EXCLUDED from backfill, DEACTIVATED (login disabled), rows retained — no
+> deletion. Owner veto window is open until the TEAMS migration runs.**
+
+Four of the twelve are on `@meddoc.com` carrying the operator's own name,
+created on the project's first two days, all with a real login (DISCOVERY §A.5).
+Deactivation is reversible and deletion is not, which is what makes the veto
+window meaningful. **The window closes when the TEAMS migration runs** — that
+is item **T7**, and whoever runs it must confirm the veto has lapsed before
+excluding these rows.
+
+### 4.2 Cross-app redirect users
+
+> **Classify by where clinical data lives — transcribe-md data → normal
+> personal-practice backfill; none → the deactivation bucket.**
+
+The classifier is data, not entitlement: a `MEDDOC_PRO` product row says what
+someone was *given*, not what they *did*. The query is "does this user own any
+`transcribe_visits` / `transcribe_md_patients` row", and it must be run at
+migration time, not copied from this document.
+
+The redirect itself (`actions/auth.ts:227-241`) is retired in item **A5**, and
+the two must land together — removing the redirect while a live account still
+needs it leaves a login error whose only offered remedy is a dead link.
+
+### 4.3 Templates
+
+> **PER-DOCTOR in TEAMS v1 (solo behavior unchanged); practice-shared library
+> recorded as a post-TEAMS flag item.**
+
+This means `note_templates_one_active_per_doctor_encounter` — the unique index
+keyed on `("doctorId","encounterType")` — **stays as it is**, and DISCOVERY §B.9
+should be read as "correct for v1" rather than as a defect. The two
+platform-global rows with `doctorId = NULL` still need the explicit carve-out
+from §1.5; that part is unchanged.
+
+**Post-TEAMS, flag-gated:** a practice-shared template library. Filed, not
+scheduled.
+
+### 4.4 Money
+
+> **Integer MICRO-DOLLARS ledger-wide; charge = cost_micro × 3 / 2 in integer
+> math, round half-up at the micro-dollar, cent rounding at display only; rule
+> goes verbatim into SPEC and the future ToS-wording task.**
+
+Restating the two properties that a future implementer is most likely to erode:
+
+- `× 3 / 2`, in that order, in integer arithmetic — **not** `* 1.5`, which is a
+  float and reintroduces the drift the micro-dollar unit exists to prevent.
+- **Cent rounding is a DISPLAY concern only.** Nothing in the ledger, the
+  wallet, or the reconciliation report ever rounds to cents. A cent-rounded
+  value that gets written back is a value that no longer reconciles.
+
+**Downstream task, recorded here so it is not lost:** the ToS wording must
+state the multiplier in the same terms the code uses.
+
+### 4.5 Resend, and the price table's provenance
+
+> **NOT metered — subscription folds into margin; only per-run vendors
+> (Anthropic, Deepgram) produce UsageEvents. Price-table schema gains
+> PROVENANCE per rate (published URL + date / invoice-derived /
+> console-quoted); nova-3-medical seeds from invoice/console truth, never the
+> undated post; the 3.4× in-code Deepgram rate is corrected by the price table
+> when BILLING lands — no billing math ships before then.**
+
+Three consequences worth spelling out:
+
+- `UsageEvent` is for **per-run** vendors only. Resend's 219 rows in
+  `api_usage_events` (all with a NULL `userId`) stop being a billing input and
+  become a cost line in the monthly reconciliation.
+- **PROVENANCE is a required column, not a comment.** Every rate carries one of
+  `published` (URL + read-date), `invoice`, or `console`. DISCOVERY §D is a
+  `published`-provenance seed for Anthropic, OpenAI and Resend — and explicitly
+  **not** a valid seed for `nova-3-medical`, whose only public figure is an
+  undated announcement post.
+- **The in-code `$0.0145/min` Deepgram default is NOT patched now.** It is
+  wrong by ~3.4× against the vendor's published figure, and it feeds only
+  `costUsdCents` on observability rows today — no doctor is billed from it,
+  because no billing math exists. It is corrected by the price table in item
+  **B3**, with provenance, and **no billing math ships before then.** Changing
+  the constant now would silently re-base a year of historical `ai_calls`
+  comparisons for no benefit.
+
+---
+
+## 5. Still open
+
+1. **Whether `stripe`/`@stripe/stripe-js` stay in `apps/meddoc-pro/package.json`.**
+   → **RESOLVED 2026-08-04: removed.** They were unused by any import and *did*
+   ship inside the live clinical worker image. BILLING reintroduces the SDK
+   properly, web-side only. See DISCOVERY §E.2.
+2. **`worker.ts:983` read-after-write.** The per-visit cost sum reads `ai_calls`
+   in the same tick-chain that wrote it. Left UNSURE by Phase 0 — not
+   reproduced either way. **Carried as a named open item on the TEAMS gate**,
+   not silently dropped.
 
 ---
 

@@ -124,9 +124,30 @@ describe('logAudit session resolution — worker-context safety', () => {
     expect(mocks.prismaCreate).toHaveBeenCalledTimes(1);
     const arg = mocks.prismaCreate.mock.calls[0][0];
     expect(arg.data.userId).toBe('caller_user');
-    // Falls through to 'clinic_main' sentinel since we couldn't
-    // resolve the session.
-    expect(arg.data.practiceId).toBe('clinic_main');
+    // ⚠️ ASSERTION CHANGED 2026-08-04, DELIBERATELY AND DECLARED.
+    //
+    // This line used to read `expect(arg.data.practiceId).toBe('clinic_main')`
+    // — it asserted the fail-OPEN fallback, and passed, for months. That is
+    // the uncomfortable part and the reason this comment is long: the test was
+    // green the whole time, faithfully pinning the wrong behaviour. A guard
+    // that encodes a defect is indistinguishable from one that encodes a
+    // requirement, right up until somebody reads the value.
+    //
+    // What was wrong with it: `clinic_main` is the largest SHARED practice in
+    // production (11 users). Attributing an unresolvable write to it means a
+    // tenant boundary whose answer to "whose is this?" is "the biggest one".
+    // 64 production LOGOUT rows, from 64 different solo doctors, landed there.
+    //
+    // The contract now: unresolvable means NULL in the FK column and the
+    // UNATTRIBUTED sentinel in the tombstone column, plus a console.error.
+    // Enforced by `gate-audit-attribution-failclosed`, which is proven red
+    // against the exact pre-fix line.
+    //
+    // The behaviour this test actually exists for is UNCHANGED and still
+    // asserted above: a synchronous throw from `auth()` must not stop the row
+    // being written.
+    expect(arg.data.practiceId).toBeNull();
+    expect(arg.data.practiceIdSnapshot).toBe('UNATTRIBUTED');
   });
 
   it('survives a REJECTED-promise throw from auth() (legacy failure mode)', async () => {

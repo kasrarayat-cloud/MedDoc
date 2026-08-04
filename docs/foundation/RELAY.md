@@ -5,32 +5,54 @@
 
 ---
 
-## GATE 0 — the war room reviews DISCOVERY
+## GATE 0 — ✅ CLEARED 2026-08-04
 
-**No build item below may start until this gate clears.** Phase 0 produced five
-decisions the war room owns, not the implementer:
+All five decisions are made and are recorded **verbatim in `SPEC.md` §4**.
+Summary only — SPEC is the contract:
 
-| # | Decision | Where |
-|---|---|---|
-| 0.1 | Fate of the 12 `MEDDOC_PRO`-only accounts — four carry the operator's own name | SPEC §4.1, DISCOVERY §A.5 |
-| 0.2 | Grant `TRANSCRIBE_MD` to the cross-app-redirect users, or delete them | SPEC §4.2 |
-| 0.3 | "One active note template" — per-doctor or per-practice | SPEC §4.3, DISCOVERY §B.9 |
-| 0.4 | The micro-unit denominator and the `× 1.5` rounding rule | SPEC §4.4 |
-| 0.5 | Is Resend billed at all? It is a subscription, not a meter | DISCOVERY §D.4 |
+| # | Decision | Ruling | Where |
+|---|---|---|---|
+| 0.1 | The 12 `MEDDOC_PRO`-only accounts | Excluded from backfill, **deactivated**, rows retained, no deletion. **Owner veto window open until the TEAMS migration runs** | SPEC §4.1 |
+| 0.2 | Cross-app redirect users | Classify **by where clinical data lives**, not by entitlement | SPEC §4.2 |
+| 0.3 | Note templates | **PER-DOCTOR in v1** — the existing unique index stays. Practice-shared library is post-TEAMS, flag-gated | SPEC §4.3 |
+| 0.4 | Money | Integer **micro-dollars**; `cost_micro × 3 / 2` in integer math, half-up at the micro-dollar; **cent rounding at display only** | SPEC §4.4 |
+| 0.5 | Resend | **Not metered.** Only per-run vendors produce `UsageEvent`s. Price table gains **PROVENANCE** per rate | SPEC §4.5 |
 
-Two items are **not** decisions and should be scheduled regardless of the
-review's outcome, because they are live defects this pass surfaced:
+### The security block that jumped the queue — ✅ DONE 2026-08-04
 
-- **`audit_logs` fails OPEN into `clinic_main`.** 65 production rows are
-  misattributed today. → item **T2**.
-- **The Deepgram rate is ~3.4× the vendor's published number**, and the
-  record shows the correct value was considered and discarded. → item **B3**.
+Three items were ruled to precede every build item. All three shipped in one
+change; see the ledger row.
 
-And one item is not a decision but a **security posture question** the owner
-should see before the deletion phase: pro.quillmd.com is a publicly-reachable,
-PHI-capable write path into the production clinical database, with every table
-it touches currently empty (DISCOVERY §A.2). It can be shut off long before it
-is deleted.
+1. **pro.quillmd.com is OFFLINE.** 410 at the edge on every path, container
+   stopped. The capability died; the **code** deletion is still item **A6**.
+   Credentials were shared, not separable — container-stop is the control, and
+   least-privilege per-app Postgres roles move into **TEAMS-phase hygiene** as
+   a named item (today there is exactly one login role and it is SUPERUSER).
+2. **The Stripe SDK is out of the clinical worker.** Root cause was not
+   standalone tracing; the worker ships the whole workspace-root
+   `node_modules`. Seven further CRM-only packages still ride along and are
+   named in DISCOVERY §E.2 so **A6** can check them off rather than hope.
+3. **Audit attribution fails closed.** No fallback practice; unresolvable means
+   `NULL` + an `UNATTRIBUTED` tombstone + a loud error. The 64 wrong rows are
+   repaired by **APPENDING** corrections — never by editing, because an audit
+   trail that can be rewritten is not one.
+
+⚠️ **The count was 64, not 65.** DISCOVERY's original figure included one
+`USER_GRANTED_SUPER_ADMIN` row that is *correct* — `grant-admin/route.ts`
+deliberately files the event under the **target's** practice, not the actor's.
+Corrected in place. A repair driven by the original query would have damaged a
+correct row, which is the general lesson: **a cross-tenant admin action has two
+defensible tenants, and a checker that knows one of them manufactures
+findings.**
+
+### Still standing from Phase 0
+
+- **The Deepgram rate is ~3.4× the vendor's published number.** Deliberately
+  **NOT** patched now (SPEC §4.5): no billing math exists to be wrong yet, and
+  re-basing the constant would silently move a year of historical `ai_calls`
+  comparisons. → corrected by the price table in **B3**.
+- **`worker.ts:983` read-after-write** — carried as a named open item on the
+  TEAMS gate, not dropped.
 
 ---
 
@@ -82,16 +104,22 @@ from.
 demonstrated by mutation, not asserted. Without the red, T1 is not done.
 **Blocks:** every item below.
 
-### T2 — close the audit fail-open
-`lib/audit.ts:293-294` — `?? 'clinic_main'` becomes a refusal or an explicit
-`null`, never a silent write into the largest shared practice. Backfill
-`practiceIdSnapshot` on the 38 rows that predate it. The 6 unrecoverable rows
-stay unrecoverable and are named in the migration.
-**Gate:** the 65 misattributed rows are enumerated before and after (F3); a new
-audit write with no session practice is proven not to land in `clinic_main`;
-`audit_logs` is named as an S4c exclusion in the same commit that writes the
-fail-closed rule.
-**Independent of T1** — schedule it first if the war room is slow.
+### T2 — close the audit fail-open — 🟩 **DONE 2026-08-04** (code) / ⏸ repair pending
+The code half shipped ahead of TEAMS as part of the security block:
+`?? 'clinic_main'` is gone, `signOut` threads the practice by traversal,
+`gate-audit-attribution-failclosed` is proven red against four mutations, and
+`AUDIT_ATTRIBUTION_CORRECTED` shipped **with its Prisma migration**.
+
+**Still to run, deliberately not run yet:**
+`npx tsx scripts/repair-audit-attribution.ts --apply` against production. It is
+read-only by default and it **never updates or deletes** — it appends one
+correction per wrong row. Holding it until the migration is applied to prod
+(the enum label must exist first, or every insert is rejected — silently, per
+`535d30d9`).
+
+Still owed in TEAMS proper: backfill `practiceIdSnapshot` on the 38 rows that
+predate the column, and name `audit_logs` as an S4c exclusion in the same
+commit that writes the fail-closed rule.
 
 ### T3 — `practiceId` on `transcribe_visits`, with a stated derivation
 Column added nullable, backfilled, then `NOT NULL`. **Write down which

@@ -222,7 +222,16 @@ export type AuditAction =
   // rule class only, never note/transcript content.
   | 'RX_DRUG_PAIR_INTERACTION'
   | 'RX_DRUG_PAIR_DOSE_CAP'
-  | 'RX_COMPLEX_DOSING_VERIFY_INDIVIDUALLY';
+  | 'RX_COMPLEX_DOSING_VERIFY_INDIVIDUALLY'
+  // 2026-08-04 — the repair record for the `?? 'clinic_main'` fail-open.
+  // `audit_logs` is APPEND-ONLY: a wrong row is never edited, because an
+  // audit trail you can rewrite is not one. Attribution is corrected by
+  // APPENDING a row that points at the original via targetId.
+  // Metadata: EXACTLY { wrongPracticeId, correctPracticeId | null,
+  // determinable: boolean, basis } — ids and a basis string, never PHI.
+  // `determinable: false` is a real outcome and is recorded as such rather
+  // than guessed at.
+  | 'AUDIT_ATTRIBUTION_CORRECTED';
 
 export interface AuditLogInput {
   action: AuditAction;
@@ -238,10 +247,41 @@ export interface AuditLogInput {
   /** Override user email snapshot — same rationale. */
   userEmail?: string | null;
   /** Override practiceId. Required for truly-anonymous events;
-   *  otherwise resolved from the session. Falls back to
-   *  'clinic_main' (same sentinel as meddoc-pro). */
+   *  otherwise resolved from the session.
+   *
+   *  ⚠️ There is NO fallback practice. If neither this nor the session
+   *  supplies one, the row is written UNATTRIBUTED and loudly — see
+   *  `UNATTRIBUTED_PRACTICE`. Pass it explicitly from any caller that
+   *  runs outside request scope (workers, auth events, webhooks). */
   practiceId?: string | null;
 }
+
+/**
+ * Written to `practiceIdSnapshot` when a write has no resolvable tenant.
+ *
+ * ⚠️ THIS REPLACED A FALLBACK THAT FAILED **OPEN**. Until 2026-08-04 the
+ * line below read `input.practiceId ?? sessionPracticeId ?? 'clinic_main'`
+ * — so any write with no practice in scope was silently attributed to
+ * `clinic_main`, which is the largest SHARED practice in production (11
+ * users). A tenant boundary whose behaviour on unknown input is "assume the
+ * biggest tenant" is the exact inverse of a boundary. Measured on production
+ * the day it was found: **64 `LOGOUT` rows** from 64 different solo doctors,
+ * all filed under Main Clinic. Under the practice-scoped audit views the
+ * FOUNDATION spec calls for, every one of them would have been visible to a
+ * practice they never belonged to.
+ *
+ * The sentinel lives in `practiceIdSnapshot`, not `practiceId`, and that is
+ * deliberate: `practiceId` is a foreign key to `practices`, so it cannot hold
+ * a sentinel without inventing a Practice row — and inventing one would put a
+ * fake tenant into every practice count in the product. The snapshot column
+ * carries no FK (that is why S4c added it), so it is the honest home for
+ * "we know this happened and we do not know whose it was".
+ *
+ * A row shaped `practiceId = NULL, practiceIdSnapshot = 'UNATTRIBUTED'` is
+ * therefore distinguishable from the six pre-S4c rows, which have NULL in
+ * BOTH columns and whose tenant is unrecoverable.
+ */
+export const UNATTRIBUTED_PRACTICE = 'UNATTRIBUTED';
 
 async function getRequestContext(): Promise<{
   ipAddress: string | null;
@@ -290,8 +330,22 @@ export async function logAudit(input: AuditLogInput): Promise<void> {
     const sessionPracticeId = (session?.user as any)?.practiceId as
       | string
       | undefined;
-    const practiceId =
-      input.practiceId ?? sessionPracticeId ?? 'clinic_main';
+    // FAIL CLOSED. No fallback practice — see `UNATTRIBUTED_PRACTICE` for
+    // what the old `?? 'clinic_main'` cost. An unresolvable tenant is a
+    // defect in the CALLER (it is running outside request scope and did not
+    // thread the practice through), so it is reported at error level rather
+    // than swallowed: a silent UNATTRIBUTED row is only marginally better
+    // than a silently wrong one.
+    const practiceId = input.practiceId ?? sessionPracticeId ?? null;
+    if (practiceId === null) {
+      console.error(
+        '[audit] UNATTRIBUTED WRITE — no practice in scope. ' +
+          `action=${input.action} userId=${userId ?? '(none)'} ` +
+          'row written with practiceId=NULL, practiceIdSnapshot=UNATTRIBUTED. ' +
+          'Fix the CALLER: pass practiceId explicitly (auth events, workers ' +
+          'and webhooks have no session for logAudit to read).',
+      );
+    }
 
     const entry = {
       userId,
@@ -311,7 +365,10 @@ export async function logAudit(input: AuditLogInput): Promise<void> {
       // audit trail). This copy carries no FK and therefore survives, keeping
       // "which tenant did this happen in" answerable afterwards — the same job
       // userEmailSnapshot does for the user.
-      practiceIdSnapshot: practiceId,
+      //
+      // 2026-08-04: it is also where the UNATTRIBUTED sentinel lives, because
+      // it is the only one of the two columns without an FK to `practices`.
+      practiceIdSnapshot: practiceId ?? UNATTRIBUTED_PRACTICE,
     };
 
     // Prisma's shared barrel exports `any` (see memory note on typing).
