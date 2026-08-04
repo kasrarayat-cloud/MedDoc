@@ -39,6 +39,31 @@ test('account: profile edit persists across reload', async ({ page }) => {
   await signupFreshUser(page, 'profile');
 
   await page.goto('/settings');
+
+  // ⚠️ WAIT FOR THE CLIENT SHELL BEFORE SUBMITTING. Root-caused from a
+  // reproducible 1-in-8 flake: "the profile panel never showed its saved chip".
+  //
+  // `ProfileForm` is `<form action={formAction}>` driven by `useActionState`.
+  // `fill()` and `click()` operate on the DOM and do NOT wait for hydration, so
+  // a click that lands first submits as a NATIVE form POST: the save happens,
+  // the page navigates, `state` stays `null`, and the chip — which renders only
+  // on `state?.ok === true` (`profile-form.tsx:45,140`) — never appears. The
+  // reload assertion below still passed, which is why this looked like a chip
+  // bug rather than a timing one. `showSaved` persisting until the next action
+  // ruled out a vanishing toast; `workers: 1` ruled out a worker race.
+  //
+  // ⚠️ A RAIL-BUTTON WAIT WAS TRIED FIRST AND WAS NOT ENOUGH — 1 failure in 10
+  // runs, identical symptom. The rail's buttons render before this form is
+  // interactive, so their presence is a weaker signal than it looks. Recorded
+  // because the next person will reach for the same proxy.
+  //
+  // `networkidle` holds: 12/12 in a direct probe that drove this exact save
+  // twelve times, and 12/12 full-test runs below. It is a blunt instrument —
+  // it waits for the network, not for React — and that is stated rather than
+  // dressed up. It is the strongest settle signal available here without a
+  // hydration marker the app does not expose.
+  await page.waitForLoadState('networkidle');
+
   await page.locator('#profile-name').fill('Dr. Renamed');
   // Confirm the new value is in the DOM before submitting, so the server action
   // can't capture a stale FormData value under load.
