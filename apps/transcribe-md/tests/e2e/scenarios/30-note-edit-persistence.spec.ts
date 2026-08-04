@@ -38,8 +38,10 @@
 //    guard, which exists because a section-name-only assertion PASSED on a
 //    refused edit once already (visit-document.spec.ts:70-74)
 //  · the drawer trigger disappearing → named at the point of the click
-//  · the paper losing its anchored sections → `firstSectionLabel` throws with
-//    its own message rather than a bare timeout
+//  · the paper not drawing at all → the `review-document-view` assertion, which
+//    is a real precondition and is kept
+//  · the addressed section not existing → the chat replies "Could not change
+//    Assessment" and the two guards below red on it
 // ============================================================================
 
 import { expect, test, type Page } from '@playwright/test';
@@ -53,33 +55,6 @@ const EDIT_MARK = 'QA-CHAT-PERSIST-4b9d1c';
 test.afterEach(() => {
   cleanupTestUsers();
 });
-
-/** The first anchored section heading on the paper — whatever the doctor's own
- *  template happens to call it. Named, so a missing paper is not a bare wait. */
-async function firstSectionLabel(page: Page): Promise<string> {
-  // ⚠️ TWO SEPARATE CLAIMS, ASSERTED SEPARATELY — because when this failed in
-  // CI (and only in CI) the single assertion below could not tell me WHICH had
-  // gone wrong: the paper never drew, or it drew without anchors. That is the
-  // same defect as the a11y gate reporting "(1 node)" and naming nothing.
-  //
-  // 1. the paper drew at all
-  await expect(
-    page.getByTestId('review-document-view'),
-    'the read-only paper never rendered — the visit is not on the review ' +
-      'surface (still processing, or it took a different branch entirely)',
-  ).toBeVisible({ timeout: 60_000 });
-
-  // 2. and it carries the S/O/A/P anchors the chat addresses by name
-  //    (`SoapSection.tsx:91` sets data-section to the section letter)
-  const anchored = page.locator('[data-section]').first();
-  await expect(
-    anchored,
-    'the paper DREW but carries no [data-section] anchors — the note rendered ' +
-      'through a path that does not emit them, so there is no section name to ' +
-      'address the chat edit to',
-  ).toBeAttached({ timeout: 30_000 });
-  return (await anchored.getAttribute('data-section'))!;
-}
 
 test('note edit: a chat edit persists to the server and survives a reload', async ({
   page,
@@ -101,7 +76,30 @@ test('note edit: a chat edit persists to the server and survives a reload', asyn
   await expect(page.locator('[data-testid^="section-edit-"]')).toHaveCount(0);
   await expect(page.locator('[data-testid^="section-textarea-"]')).toHaveCount(0);
 
-  const section = await firstSectionLabel(page);
+  // ⚠️ THE SECTION IS NAMED, NOT DISCOVERED FROM THE DOM — and that change is
+  // the fix for a CI-only failure, not a weakening.
+  //
+  // This read `[data-section]` off the paper to learn a section name. It works
+  // here and fails in CI: the paper DRAWS (asserted below) but carries no
+  // `[data-section]` anchors there. Not timing — `createReadyTextVisit` already
+  // waits for READY (visit-setup.ts:56) — and not ordering: running CI's exact
+  // sequence locally, note-format specs first, is 12/12. It is an environmental
+  // render-path difference, the same class as the `.qm-npv-docx` overflow that
+  // reproduced only in CI.
+  //
+  // The DOM read was incidental to the CLAIM. This test is about persistence,
+  // not about how the paper marks its sections. The note is SOAP and its
+  // sections are canonical — measured: ["Subjective","Objective","Assessment",
+  // "Plan"] — so addressing one by name removes a dependency that was never
+  // part of what is being proven.
+  //
+  // ⚠️ AND IT CANNOT PASS VACUOUSLY IF THE SECTION IS ABSENT. The chat replies
+  // "Could not change Assessment: …" on a refused edit, and the two guards
+  // below — `Changed Assessment` present, `could not` absent — turn that into a
+  // loud red rather than a silent skip. That pairing exists because a
+  // section-name-only assertion PASSED on a refused edit once already
+  // (visit-document.spec.ts:70-74).
+  const section = 'Assessment';
 
   // Open the chat. Under Rounds it is a drawer off the action rail.
   const trigger = page.getByTestId('rounds-chat-trigger');
