@@ -15,6 +15,8 @@ import { signupFreshUser } from '../helpers/signup';
 import { TEST_PASSWORD } from '../helpers/test-utils';
 import { generateTotp, logoutViaMenu, totpSecretFromUri } from '../helpers/auth';
 
+import { expectAtHome, HOME_URL_RE } from '../helpers/home';
+
 test.afterEach(() => {
   cleanupTestUsers();
 });
@@ -71,9 +73,28 @@ test('MFA: enroll TOTP → verify → recovery codes, then enforced at login', a
   // weakened belt-and-braces, not an open door.
   //
   // Now written against the authenticated home BY BOTH ITS NAMES, so it holds
-  // flag-ON and flag-OFF alike — same shape as `helpers/home.ts`. A rollback to
-  // the flag-OFF image must not turn this into a false red.
-  await expect(page).not.toHaveURL(/\/(board|dashboard)$/);
+  // flag-ON and flag-OFF alike. A rollback to the flag-OFF image must not turn
+  // this into a false red.
+  //
+  // 2026-08-04 — TIGHTENED FROM A HAND-ROLLED `/\/(board|dashboard)$/` TO THE
+  // SHARED `HOME_URL_RE` (`helpers/home.ts:30`), for two reasons:
+  //   1. The hand-rolled copy dropped the helper's `(\?.*)?` clause, and on a
+  //      NEGATED assertion a narrower pattern is a HOLE, not a stricter check —
+  //      a login that wrongly succeeded and landed on `/board?anything` fails to
+  //      match, so `not.toHaveURL` passes. Re-opening the same vacuity in a
+  //      smaller doorway is not a fix.
+  //   2. The destination has ONE definition. `helpers/home.ts` mirrors the
+  //      product's `recoveryHref()` (`src/lib/recovery-href.ts:30`, which
+  //      `actions/auth.ts:353` returns as the post-login redirect). At item F,
+  //      when home collapses to `/board` alone, the helper is what gets edited —
+  //      a private copy here would silently keep accepting `/dashboard`.
+  //
+  // WHAT WOULD MAKE THIS FAIL: MFA enforcement regressing so that email +
+  // password alone completes the sign-in. `loginAction` would return
+  // `redirect: recoveryHref()` instead of `mfaRequired: true`, `login-form.tsx:55`
+  // would `router.push` it, and the URL would be the app home — with or without
+  // a query string.
+  await expect(page).not.toHaveURL(HOME_URL_RE);
 
   // Completing the second factor logs in.
   await page.getByLabel('Password', { exact: true }).fill(TEST_PASSWORD);
@@ -81,5 +102,16 @@ test('MFA: enroll TOTP → verify → recovery codes, then enforced at login', a
   await page.getByRole('button', { name: /^sign in$/i }).click();
   // Same reasoning as above, positive direction: the authenticated home has two
   // legitimate spellings right now and the claim is "login reached it".
-  await expect(page).toHaveURL(/\/(board|dashboard)$/, { timeout: 15_000 });
+  //
+  // 2026-08-04 — was a hand-rolled `toHaveURL(/\/(board|dashboard)$/, 15_000)`.
+  // `expectAtHome` (`helpers/home.ts:33`) IS that assertion — same 15s default,
+  // same regex, plus a failure message that distinguishes "auto-login failed"
+  // from "a redirect moved and nobody told the helper". Calling it keeps the
+  // negative above and this positive reading from one definition, so they cannot
+  // drift apart.
+  //
+  // WHAT WOULD MAKE THIS FAIL: the second factor not actually completing the
+  // login — a wrong/rejected TOTP leaves the form on `/login` with the error
+  // from `actions/auth.ts:312`, which is not the app home.
+  await expectAtHome(page);
 });

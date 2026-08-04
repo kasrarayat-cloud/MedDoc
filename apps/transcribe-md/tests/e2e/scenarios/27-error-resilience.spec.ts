@@ -28,6 +28,7 @@
 import { expect, test } from '@playwright/test';
 
 import { cleanupTestUsers } from '../helpers/cleanup';
+import { expectAtHome, HOME_URL_RE } from '../helpers/home';
 import { signupFreshUser } from '../helpers/signup';
 import { gotoNoteFormat, parseToReview } from '../helpers/noteFormat';
 
@@ -48,11 +49,56 @@ test('scenario 27: a nonexistent route renders the styled 404 page (not a crash)
   // The styled 404 renders — not a white screen / raw stack trace.
   await expect(page.getByText('404', { exact: true }).first()).toBeVisible();
 
+  // ── RE-POINT ─────────────────────────────────────────────────────────────
   // The recovery CTA actually navigates (graceful, not a dead end).
-  const dash = page.getByRole('link', { name: /go to dashboard/i });
-  await expect(dash).toBeVisible();
-  await dash.click();
-  await expect(page).toHaveURL(/\/dashboard$/);
+  //
+  // WAS: getByRole('link', { name: /go to dashboard/i }) → toHaveURL(/\/dashboard$/).
+  // WHY THAT BROKE: the root 404 FORKED for Rounds and returns EARLY at
+  //   src/app/not-found.tsx:31, so the shipped (flag-ON) build never reaches
+  //   the legacy branch at not-found.tsx:197-199 that carried the
+  //   "Go to dashboard" label. The live CTA is the testid'd link at
+  //   not-found.tsx:95-101 — label recoveryLabel() = 'Back to the board'
+  //   (src/lib/recovery-href.ts:37-39), href recoveryHref() = '/board'
+  //   (recovery-href.ts:30-32).
+  // WHERE IT IS NOW: [data-testid="notfound-recover"] (not-found.tsx:98).
+  //   The legacy branch is still what a flag-OFF rollback image renders, and
+  //   it draws a <SpecularButton>, which does NOT forward a testid
+  //   (src/components/specular-button.tsx:79-85) — so this locator also
+  //   accepts that branch's label, matched EXACTLY, never as a substring.
+  //   The destination is asserted with HOME_URL_RE (helpers/home.ts:30), which
+  //   accepts either skin's home, so a rollback image is not a false red.
+  //
+  // WHAT WOULD MAKE THIS FAIL: the CTA losing its testid or its exact label;
+  //   its href drifting off the app's own computed home — a hand-written
+  //   '/board' with the flag off is a 404 → 404 loop, which is the precise
+  //   failure recovery-href.ts:9-15 exists to prevent; a second recovery CTA
+  //   appearing (toHaveCount(1)); or the click landing on another 404 rather
+  //   than the home surface (the two negative assertions after the click —
+  //   without them, a 404→404 loop still satisfies HOME_URL_RE).
+  const recover = page
+    .getByTestId('notfound-recover')
+    .or(page.getByRole('link', { name: 'Go to dashboard', exact: true }));
+  await expect(recover, 'exactly one recovery CTA on the 404').toHaveCount(1);
+  await expect(recover).toBeVisible();
+  // The href is the app's OWN computed home, not a hardcoded one.
+  await expect(recover).toHaveAttribute('href', HOME_URL_RE);
+  // ⚠️ AND THE LABEL, which the testid-only re-point had stopped asserting on
+  // the shipped path. `recoveryLabel()` (`lib/recovery-href.ts`) is deliberately
+  // kept beside `recoveryHref()` so the two cannot drift — "Back to dashboard"
+  // pointing at /board is exactly the small lie that survives review because
+  // each half looks right alone. A testid check cannot see that drift; this can.
+  // Anchored alternation over BOTH skins' output, so a flag-OFF rollback image
+  // is not a false red.
+  await expect(recover).toHaveAccessibleName(/^(back to the board|go to dashboard)$/i);
+
+  await recover.click();
+  await expectAtHome(page);
+  // …and it is a real landing, not a 404 loop.
+  await expect(
+    page.getByText('404', { exact: true }),
+    'recovery landed on another 404 — the CTA points somewhere that does not exist for this build',
+  ).toHaveCount(0);
+  await expect(page.getByTestId('notfound-recover')).toHaveCount(0);
 });
 
 test('scenario 27: a nonexistent visit renders the visit-404 (not a crash, no ID enumeration leak)', async ({
@@ -73,8 +119,45 @@ test('scenario 27: a nonexistent visit renders the visit-404 (not a crash, no ID
   await expect(
     page.getByText(/doesn.t exist or you don.t have access/i),
   ).toBeVisible();
-  // The recovery link is present (graceful exit).
-  await expect(page.getByRole('link', { name: /dashboard/i })).toBeVisible();
+  // ── RE-POINT ─────────────────────────────────────────────────────────────
+  // The recovery link is present, and it is a graceful EXIT — not just a
+  // graceful-looking link.
+  //
+  // WAS: getByRole('link', { name: /dashboard/i }) — a BARE SUBSTRING over the
+  //   accessible name, and the one that stopped meaning anything.
+  // WHY THAT BROKE: the label is now recoveryLabel() — 'Back to the board'
+  //   under Rounds (src/app/visits/[id]/not-found.tsx:61-64,
+  //   src/lib/recovery-href.ts:37-39) — which /dashboard/i does not match at
+  //   all.
+  // WHERE IT IS NOW: the same single <Link> at
+  //   src/app/visits/[id]/not-found.tsx:61-64. It carries no testid (this file
+  //   is one of the two not-found pages that outlive the skin, and no app
+  //   source may be touched for this row), so the name is matched ANCHORED and
+  //   whole over BOTH labels, and the href — the load-bearing half — is
+  //   asserted against HOME_URL_RE (helpers/home.ts:30) so a flag-OFF rollback
+  //   image is not a false red.
+  //
+  // WHAT WOULD MAKE THIS FAIL: the label drifting from recoveryLabel(); the
+  //   href being hardcoded instead of recoveryHref() — a literal '/board' on a
+  //   flag-OFF build is a 404 → 404 loop (recovery-href.ts:9-15); a second link
+  //   appearing so the exit is ambiguous (toHaveCount(1)); or the click not
+  //   actually reaching the home surface / landing on another 404.
+  const recover = page.getByRole('link', {
+    name: /^back to (the board|dashboard)$/i,
+  });
+  await expect(
+    recover,
+    'exactly one recovery link on the visit-404',
+  ).toHaveCount(1);
+  await expect(recover).toBeVisible();
+  await expect(recover).toHaveAttribute('href', HOME_URL_RE);
+
+  await recover.click();
+  await expectAtHome(page);
+  await expect(
+    page.getByText('404', { exact: true }),
+    'the visit-404 recovery link walked to another 404',
+  ).toHaveCount(0);
 });
 
 test('scenario 27: invalid note-format input surfaces a FRIENDLY message, not a raw Zod dump (MOCK)', async ({

@@ -451,8 +451,23 @@ export default async function PatientPage({
           )}
         </div>
 
-        {/* Quiet one-line summary — replaces the 4 vanity stat cards. */}
-        <div className="px-6 pt-4 font-mono text-[12px] text-linear-text-3 sm:px-10">
+        {/* Quiet one-line summary — replaces the 4 vanity stat cards.
+            ⚠️ `data-testid` + `data-visit-count` ADDED for E2E scenario 6
+            ("patient detail: header + stats + visit history reflect a real
+            visit"). That spec asserted the visible label "Total visits", which
+            now exists ONLY on the dead legacy return below (the <StatCard> at
+            :547) — under skin-beta the four tiles collapsed into this line, so
+            the assertion was matching nothing reachable.
+            The COUNT is exposed as an attribute rather than left to be scraped
+            out of the prose, because the prose is copy ("1 visit · 0 signed ·
+            last 3m ago · 1 this Aug") and the next wording change would re-red a
+            test that is really asking "does this page see the patient's visit?".
+            Presentation-only: no new query, no new read. */}
+        <div
+          className="px-6 pt-4 font-mono text-[12px] text-linear-text-3 sm:px-10"
+          data-testid="patient-visit-summary"
+          data-visit-count={activeCount}
+        >
           {activeCount} visit{activeCount === 1 ? '' : 's'}
           {' · '}
           {signedCount} signed

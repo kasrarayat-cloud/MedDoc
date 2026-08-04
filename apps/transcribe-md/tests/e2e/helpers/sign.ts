@@ -59,7 +59,23 @@ import { expect, type Page } from '@playwright/test';
  * should assert on `review-doc-signbar` / `rounds-gate-attest` instead.
  */
 export async function openSignFlow(page: Page): Promise<void> {
+  // ⚠️ SETTLE BEFORE BRANCHING. `count()` does NOT auto-wait, so a caller that
+  // arrives straight off a `page.reload()` can evaluate this before the stage
+  // has painted, silently take the LEGACY branch, and die 10s later claiming
+  // neither control exists — a timing fault wearing a product fault's clothes.
+  // This exact shape cost `16-account-settings` a failure on the first
+  // production-shaped run, in a `if (await tab.count() > 0)` branch.
+  // ⚠️ `state: 'visible'`, NOT `'attached'`. A server-rendered container can be
+  // attached while the client-rendered control inside it is not — measured on
+  // the settings rail, where railCount=1 and tabCount=0 at the same instant.
+  // Branch on the control itself, in the state the click needs.
   const roundsRail = page.getByTestId('rounds-review-sign');
+  await roundsRail
+    .first()
+    .waitFor({ state: 'visible', timeout: 5_000 })
+    .catch(() => {
+      /* legacy build has no rail — the branch below is the honest answer */
+    });
 
   if (await roundsRail.count()) {
     // ── Rounds: rail → gate flow → the signbar's trigger ──────────────────
@@ -139,6 +155,37 @@ export async function attestAndSubmit(page: Page): Promise<void> {
   } catch {
     await submit.dispatchEvent('click');
   }
+}
+
+/**
+ * Assert the sign modal has actually CLOSED — i.e. the server accepted.
+ *
+ * ⚠️ DO NOT ANCHOR THIS ON THE SUBMIT BUTTON. That was the first attempt and it
+ * was vacuous: during the `useTransition` pending window the submit re-renders
+ * as "Signing…" with an `aria-hidden` spinner (`sign-and-send-modal.tsx:584-598`),
+ * so `getByRole('button', { name: /sign & deliver/i })` resolves to ZERO nodes
+ * and `toBeHidden()` passes the instant the click enters the transition. It
+ * asserted "the handler started", not "the sign succeeded" — and a subsequent
+ * 400 ATTESTATION_REQUIRED would re-render the button and leave the modal open
+ * with nothing ever noticing.
+ *
+ * ⚠️ AND DO NOT USE `getByRole('dialog')`, which is what it replaced. Under
+ * Rounds the gate flow carries `role="dialog"` (`gate-flow.tsx:228`) as well as
+ * the Radix modal (`sign-and-send-modal.tsx:321`), so the query is strict-mode
+ * ambiguous on the flag-ON image.
+ *
+ * `Download PDF` threads that needle: it is defined once in the whole app
+ * (`sign-and-send-modal.tsx:46`), it exists only inside the modal, and it is
+ * NOT re-rendered by the pending state — so it disappears exactly when
+ * `setOpen(false)` runs, which is after the server accepted.
+ */
+export async function expectSignModalClosed(page: Page, timeout = 10_000): Promise<void> {
+  await expect(
+    page.getByRole('button', { name: /^download pdf$/i }),
+    'the sign modal never closed — POST /sign did not succeed (a refused ' +
+      'attestation, an unconfirmed E/M change, or a delivery error all leave ' +
+      'it open)',
+  ).toBeHidden({ timeout });
 }
 
 /**

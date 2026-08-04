@@ -26,7 +26,7 @@ import { cleanupTestUsers } from '../helpers/cleanup';
 import { createPatientAndContinue } from '../helpers/patient';
 import { signupFreshUser } from '../helpers/signup';
 import { waitForVisitStatus } from '../helpers/waitForReady';
-import { attestAndSubmit } from '../helpers/sign';
+import { attestAndSubmit, openSignFlow, expectSignModalClosed } from '../helpers/sign';
 
 // Reuse the 3-sec ID3-header fixture. The mock-deepgram bypass
 // doesn't read the bytes, and MinIO takes whatever we hand it.
@@ -87,14 +87,76 @@ test('scenario 2: fresh signup → voice dictation → READY → sign clipboard'
   // to refresh).
   await page.reload();
 
-  await page.getByRole('button', { name: /sign & send/i }).click();
-  // Default: clipboard_epic + pdf. Uncheck PDF to avoid triggering
-  // a download event in this scenario (we already cover downloads
-  // in scenario 1).
-  await page.getByRole('button', { name: /download pdf/i }).click();
+  // ── RE-POINT (F-ret) ──────────────────────────────────────────────────────
+  // WAS: `page.getByRole('button', { name: /sign & send/i }).click()`.
+  // That single button is the FLAG-OFF opener only (`soap-editor.tsx:478`,
+  // `review-tabs-v2.tsx:258` set `triggerLabel="Sign & Send"`). Under the
+  // shipped Rounds skin there is no such button: the stage's action rail
+  // carries `rounds-review-sign` (`src/components/rounds/stage.tsx:259`), which
+  // opens the gate flow, and the modal's trigger is the gate signbar's
+  // "Sign & Download" (`src/app/visits/[id]/review-sign-bar.tsx:118`, rendered
+  // at `variant="gate"` on line 127). Two walks, one modal.
+  //
+  // `openSignFlow` branches on the DOM — NOT on a flag — so this scenario runs
+  // on both the flag-ON and flag-OFF images. It is deliberately not re-derived
+  // here: five specs hand-rolled this walk and all five broke together.
+  //
+  // WHAT WOULD MAKE IT FAIL: no `rounds-review-sign` rail AND no "Sign & Send"
+  // button on a READY visit (the helper asserts exactly that and says so); the
+  // rail present but never enabled; the gate flow never presenting
+  // `rounds-gate-attest`; or the gates never clearing to reveal
+  // `review-doc-signbar`. It cannot pass on a visit that is not signable.
+  await openSignFlow(page);
+
+  // Default: clipboard_epic + pdf (`sign-and-send-modal.tsx:130`). Uncheck PDF
+  // to avoid triggering a download event in this scenario (we already cover
+  // downloads in scenario 1).
+  //
+  // WAS: a blind `.click()` on /download pdf/i. That row is a TOGGLE
+  // (`CheckboxRow`, `sign-and-send-modal.tsx:645` — `aria-pressed={checked}`),
+  // not a command, so a blind click SELECTS it if the default ever flips, and
+  // this scenario would start firing an unhandled download while still passing
+  // the click. Read the state, act only if needed, then assert the state we
+  // actually depend on.
+  //
+  // WHAT WOULD MAKE IT FAIL: the PDF destination staying pressed after the
+  // click (a broken toggle), or the row disappearing from the modal — either
+  // way `toHaveAttribute('aria-pressed', 'false')` has nothing to resolve
+  // against and reports it.
+  const pdfDestination = page.getByRole('button', {
+    name: /^download pdf$/i,
+  });
+  if ((await pdfDestination.getAttribute('aria-pressed')) === 'true') {
+    await pdfDestination.click();
+  }
+  await expect(
+    pdfDestination,
+    'the PDF destination is still selected — this scenario would fire an ' +
+      'unhandled download',
+  ).toHaveAttribute('aria-pressed', 'false');
 
   await attestAndSubmit(page);
-  await expect(page.getByRole('dialog')).toBeHidden({ timeout: 5_000 });
+
+  // WAS: `expect(page.getByRole('dialog')).toBeHidden()`.
+  // ⚠️ `role="dialog"` IS AMBIGUOUS UNDER ROUNDS. The gate flow carries it
+  // (`src/components/rounds/gate-flow.tsx:228`) AND so does the Radix modal
+  // (`sign-and-send-modal.tsx:321`), so on the flag-ON image the role query
+  // resolves to two nodes and a strict-mode `toBeHidden` either violates or
+  // answers about the wrong one. Anchor on the modal's own submit control
+  // instead: "Sign & Deliver" exists ONLY at `sign-and-send-modal.tsx:596` and
+  // only while `signOnSubmit` is true, so it is gone the moment `submit()`
+  // calls `setOpen(false)` (line 208) — i.e. only after the server accepted the
+  // signature. The re-export modal on a SIGNED visit renders "Deliver", which
+  // this regex does not match.
+  //
+  // NOT VACUOUS BY RENAME: `attestAndSubmit` has just asserted that exact
+  // locator is present and enabled (`helpers/sign.ts:110-124`), so a renamed
+  // button fails loudly one line earlier rather than passing here silently.
+  //
+  // WHAT WOULD MAKE IT FAIL: the sign request being refused (400
+  // ATTESTATION_REQUIRED, an unconfirmed E/M change, a delivery error) — the
+  // modal stays open and the button stays on screen.
+  await expectSignModalClosed(page);
 
   await waitForVisitStatus(page, visitId, 'SIGNED', { timeoutMs: 10_000 });
 });
