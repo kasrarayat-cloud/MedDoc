@@ -209,6 +209,28 @@ cannot see a missing query param or an unhosted third mount. If this shape
 recurs, the answer is a contract test on the shared component — its accepted
 context, and its mount count — not another sweep.
 
+## Multi-session programs have relay ledgers — READ THEM FIRST
+
+A relay ledger is the contract between sessions. It says what is built, what is
+next, and what proof exists. **Nothing in this file used to point at one, which
+is how a session can open, do good work, and duplicate or contradict a ruling
+made three sessions ago.**
+
+| Program | SPEC (what to build) | RELAY (what is built, what is next) |
+|---|---|---|
+| **Rounds** — the shipped skin | `docs/rounds/SPEC.md` | `docs/rounds/RELAY.md` |
+| **Foundation** — teams → billing → admin | `docs/foundation/SPEC.md` | `docs/foundation/RELAY.md` |
+
+Foundation additionally has `docs/foundation/DISCOVERY.md` — evidence about the
+system as it is today, with seven claims recorded **as corrected** after
+adversarial re-verification. When SPEC and DISCOVERY disagree, that is a
+finding, not a typo.
+
+Read the relay's `## Rules` section before touching its program. The Rounds
+rules (one item per session; merge-commit CI cited by SHA; no push mid-run; no
+evidence before the event; say what would make the check fail, then make it
+fail) apply to both and are not restated in the Foundation ledger.
+
 ## Branch cadence — standing rule
 
 **Branch from `main`. Merge back promptly. No long-lived divergence.**
