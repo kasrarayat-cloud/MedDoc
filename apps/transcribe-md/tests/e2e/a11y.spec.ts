@@ -162,6 +162,22 @@ interface AxeViolation {
   help: string;
   helpUrl?: string;
   nodes: number;
+  /**
+   * The CSS selectors axe resolved, capped at five.
+   *
+   * WHY THIS EXISTS: "1 node" is not a finding, it is a riddle. On 2026-08-04
+   * this gate reported `[serious] scrollable-region-focusable (1 node)` on the
+   * Rounds stage and named nothing. It did not reproduce locally at any
+   * viewport, so identifying the element meant guessing among four scroll
+   * containers -- and guessing which one to make focusable risks adding a
+   * stray tab stop to the doctor's primary surface.
+   *
+   * A check that says a surface is wrong without saying WHERE forces the next
+   * person to reproduce it before they can act. Same reasoning as the sweep
+   * rule's "state the boundary": an answer nobody can check is worth less
+   * than it looks.
+   */
+  targets: string[];
 }
 
 /** Inject axe-core via <script src="…cdn…">, run axe.run on the
@@ -215,6 +231,12 @@ async function runAxeViolations(page: Page): Promise<AxeViolation[]> {
       help: v.help,
       helpUrl: v.helpUrl,
       nodes: v.nodes.length,
+      // First five nodes' selectors -- enough to act on, bounded so a
+      // 200-node contrast violation does not produce an unreadable error.
+      targets: (v.nodes as Array<{ target?: unknown[] }>)
+        .slice(0, 5)
+        .map((n) => (Array.isArray(n.target) ? n.target.join(' ') : String(n.target)))
+        .filter((t) => Boolean(t) && t !== 'undefined'),
     }));
   }, AXE_CDN_URL);
 }
@@ -247,6 +269,10 @@ function formatViolations(violations: AxeViolation[]): string {
     .map(
       (v) =>
         `  [${v.impact}] ${v.id} (${v.nodes} node${v.nodes === 1 ? '' : 's'}) — ${v.help}` +
+        (v.targets && v.targets.length
+          ? `\n    nodes: ` + v.targets.join(' | ') +
+            (v.nodes > v.targets.length ? ` … and ${v.nodes - v.targets.length} more` : '')
+          : '') +
         (v.helpUrl ? `\n    ${v.helpUrl}` : '')
     )
     .join('\n');
