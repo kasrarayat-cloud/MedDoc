@@ -37,6 +37,7 @@ import {
   rxWarningSeverities,
   seedFabricatedCriticalOverride,
 } from '../helpers/rxSafety';
+import { openRxGate } from '../helpers/rxGate';
 import { signViaApi } from '../helpers/sign';
 
 const GATE = process.env.NOTE_FORMAT_E2E !== '1';
@@ -54,10 +55,11 @@ test.afterEach(() => {
  *  the legit path. Uses the production rail → modal → recordOverride flow, so
  *  the warningId sent is the real `rx-warning-<index>` the rail derives. */
 async function overrideCriticalViaUi(page: Page, visitId: string): Promise<void> {
-  await page.goto(`/visits/${visitId}`);
-  const rxTab = page.getByRole('tab', { name: 'Rx' });
-  await rxTab.click();
-  await expect(rxTab).toHaveAttribute('aria-selected', 'true');
+  // ⚠️ RE-POINTED 2026-08-04, F-ret.1 tail — this was the SECOND copy of a tab
+  // dance that cannot render under the shipped flag set, which is why both
+  // specs broke identically and why the replacement lives in one helper.
+  // Arithmetic and measured DOM: `helpers/rxGate.ts`.
+  await openRxGate(page, visitId);
 
   await page.locator('button.qm-warn-override-btn').first().click();
   const reason = page.locator('textarea#override-reason');
