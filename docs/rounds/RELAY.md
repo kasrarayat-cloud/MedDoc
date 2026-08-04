@@ -547,14 +547,102 @@ test helper that has been failing since.
 is a product decision, not a test fix — which is precisely why it must not be
 resolved by quietly editing the selector.
 
+### ⚠️ RE-MEASURED 2026-08-04, AFTER THE ACCOUNT MENU SHIPPED — 19, NOT 21
+
+And the correction matters more than the number.
+
+I predicted that `helpers/auth.ts:51` "accounts for a large share of the 21",
+because it is the SHARED logout helper and one broken selector in a shared
+helper is the classic multiplier. Re-run against the deployed code:
+
+> **19 failed · 22 passed · 18 skipped, of 59** (26 files, collected count
+> unchanged).
+
+**The account menu fixed exactly TWO.** The prediction was wrong, and it was
+wrong in the direction that feels most reasonable — "shared helper, therefore
+broad blast radius". The helper is used by the specs that log OUT, and most of
+these never do.
+
+⚠️ **AND THE RUN'S OWN SUMMARY READS LIKE A PASS.** The `list` reporter's tail
+prints the failing test NAMES and then:
+
+    18 skipped
+    22 passed (7.8m)
+
+No "19 failed" line anywhere in the tail. `22 + 18 = 40` against a collected
+59, and the only unambiguous signal is `EXIT=1`. This is the emptiness-test
+defect in a new coat: **a number that does not add up to the set it came from.**
+Always reconcile the arithmetic against `--list`'s `Total:` before believing a
+Playwright tail.
+
+### ⚠️ AND THE NIGHTLY'S OWN FAILURE WAS THE SAME BUG, CONFIRMED
+
+Three of the 19 fail on `expect(page).toHaveURL()`. The scheduled nightly was
+failing on exactly that shape and it took reading the artefact to name it:
+`expectAppSuccess` waited for `/\/dashboard/`, and under Rounds `/dashboard` is
+a **config-level 307 to `/board`** (`config/rounds-redirects.ts:46`, verified
+live: `curl -sI https://app.quillmd.com/dashboard` → `HTTP/2 307`). The skin
+flipped 2026-08-02; the first nightly after it, 08-03, went red; it stayed red
+for two nights.
+
+Fixed as `/(board|dashboard)` — **both**, because that file runs against
+PRODUCTION and pinning it to the new name alone would turn it into a false RED
+the moment anyone rolls back to the flag-OFF image.
+
+**Verified, not assumed** — re-dispatched after the fix landed on `main`:
+
+> `nightly-tests` **conclusion=success** · smoke-health 8/8 · e2e **10 pass, 0
+> fail** (was 8 pass / 2 fail) · the six pro.quillmd.com cells correctly skipped
+
+Two further defects surfaced in the same run and are fixed alongside it:
+
+- `run-all.sh:87` `cd`'d to a hardcoded `/opt/meddoc-pro/apps/transcribe-md`,
+  which cannot exist on a GitHub runner — **the nightly's Playwright leg had
+  never run in CI**, since PR #56. Derived from `$HERE` now.
+- `Open issue on failure` was dying with `Resource not accessible by
+  integration`: the default token is read-only for issues, so **a failing
+  nightly had been notifying nobody**. `permissions: issues: write` added.
+
+Three checks, three different ways of being green-adjacent: one that could not
+reach what it tested, one asserting a URL the product had moved, and one alarm
+that could not ring. Together they hid a two-day-old regression in a week when
+somebody was watching closely.
+
+### The triage table — F-ret.1's actual deliverable, seeded
+
+19 failures, by error class rather than by spec, because the class is what
+predicts the fix:
+
+| Class | Count | Shape |
+|---|---:|---|
+| `locator.click` timeout | 8 | 1, 2, 3, 9, 12, 13, 14, 15, 19 — a control the Rounds skin moved or renamed |
+| `expect(locator).toBeVisible()` | 4 | 6, 10, 11, 17 — an element the skin no longer renders in that place |
+| `expect(page).toHaveURL()` | 3 | 4, 5, 8 — **almost certainly the `/dashboard` → `/board` 307**, the same root cause that reddened the nightly |
+| `locator.fill` timeout | 2 | 7, 16 — an input that moved |
+| `toHaveAttribute` | 1 | 18 |
+
+Full list with spec + line in the session record; the 5 specs carrying 2+
+failures are `6-patients`, `10-visit-lifecycle`, `16-account-settings`,
+`27-error-resilience`, `29-sign-modal-geometry`.
+
+**Start with the three `toHaveURL` failures.** The nightly's two app-side
+failures had exactly this cause and it took one line to fix once named
+(`/(board|dashboard)`), so that class is likely cheap and is likely the same
+bug three times. **Do not assume it is** — the point of the triage is that each
+one gets read.
+
 ### What this means for the item
 
 **F-ret stays ⬜ TODO and is now explicitly multi-session.** Suggested split,
 so the next session does not re-derive it:
 
-- **F-ret.1** — the `helpers/auth.ts` ruling above, then re-run and produce the
-  triage table: 59 tests, each marked drift / retire / defect, with the retires
-  named. Ends with a number, not a fix.
+- **F-ret.1** — ~~the `helpers/auth.ts` ruling~~ **RULED AND SHIPPED
+  2026-08-04**: the owner's call was *account menu in the top bar*, so the
+  helper is unchanged and is now a legitimate consumer of a real control
+  (`components/rounds/account-menu.tsx`, pack `rounds-account`, 5/5 + a mutant
+  proof). What remains of .1 is the **triage table above, worked**: 19
+  failures, each marked drift / retire-with-note / defect, with the retires
+  named in this ledger. Ends with a number, not a fix.
 - **F-ret.2** — `a11y.yml` pointed at Rounds routes, with the route set
   enumerated **before and after** (the brief's "coverage equal-or-wider" is a
   claim that needs both lists to be checkable).
