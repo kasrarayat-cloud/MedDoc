@@ -471,6 +471,102 @@ here — `.qm-vdoc .qm-npv-docx` cannot match, because the Word branch renders n
 
 ---
 
+## What F-ret STEP 1 measured — the migration is a multi-session item, and it found a product defect
+
+**Measured 2026-08-03/04. Nothing was migrated, nothing was deleted, nothing
+shipped.** This section exists so the next session starts from a number instead
+of from the assumption the brief carried.
+
+### The number
+
+The brief's first sub-item reads *"Migrate the two flag-OFF required checks to
+the Rounds contract first (default `chromium` pack rebuilt against the flag-ON
+production-shaped image)."* That is one sentence and it is not one session.
+
+Running the default `chromium` pack against the **flag-ON** QA stack:
+
+> **21 failed · 20 passed · 18 skipped, of 59 tests.**
+
+The pack is 24 specs of the app's non-Rounds behaviour. Migrating it is not
+re-pointing a config value — **it is 21 individual triages**, each of which is
+one of three different things, and they cannot be told apart in bulk:
+
+1. **Selector drift** — the spec asserts a legacy affordance that the Rounds
+   shell renders differently or not at all. Fix the selector.
+2. **Retire-with-a-note** — the spec asserts something the Rounds skin
+   deliberately does not have. Delete it *and say so in this ledger*, per R2's
+   footer-agrees precedent: a guard retires WITH the thing it guards, declared,
+   never silently.
+3. **A real defect.** At least one already is — see below.
+
+Sampling one to prove the class: `12-auth-login` dies at
+`TimeoutError: locator.click … waiting for getByRole('button', { name: /account menu/i })`,
+which comes from `tests/e2e/helpers/auth.ts:51` — the **shared** logout helper.
+One helper line accounts for a large share of the 21, which is exactly why the
+count must be triaged rather than divided.
+
+### The product defect it surfaced
+
+Chasing that selector produced a finding that is not about tests. Measured on
+the live Rounds DOM, authenticated:
+
+```
+/board     { signOutText: false, signOutControl: 0, accountish: [] }
+/patients  { signOutText: false, signOutControl: 0, accountish: [] }
+/settings  { signOutText: true,  signOutControl: 2,
+             accountish: ['Profile','Save profile','Delete my account'] }
+```
+
+Confirmed from source rather than left as a DOM reading:
+
+- `components/rounds/top-bar.tsx` renders the brand, three links
+  (`/board`, `/patients`, `/settings`) and the user's name as a plain `<span>`.
+  **No account menu. No sign-out.**
+- `components/rounds/app-frame-rounds.tsx` renders `RoundsTopBar` and `<main>`
+  and nothing else — so no route under the Rounds shell reaches the legacy
+  chrome.
+- The four `signOut(` callers in the app are
+  `components/ui/top-nav.tsx:298` and `components/ui/sidebar-c3.tsx:89` (both
+  **legacy shells, unreachable under the flag** — R1 confirmed this on
+  production), `admin/_components/AdminOverview.client.tsx` (admin only), and
+  `settings/delete-account-dialog.tsx:92` (a side effect of deleting your
+  account).
+- The two controls the probe found on `/settings` are
+  `settings/session-panel.tsx:73` **"Sign out"** and `:118` **"Sign out all
+  devices"**.
+
+**So: signing out still works, and it lives in exactly one place —
+Settings.** It is not a lockout, because Settings is in the nav. It *is* a
+regression in affordance from the legacy account menu, shipped with the flip on
+2026-08-02, and nobody noticed because the only thing that exercised it was a
+test helper that has been failing since.
+
+**Ruling owed:** either the Rounds top bar grows an account menu (and
+`helpers/auth.ts` keeps its selector), or sign-out is Settings-only by design
+(and the helper is rewritten to walk there, with the change declared here). It
+is a product decision, not a test fix — which is precisely why it must not be
+resolved by quietly editing the selector.
+
+### What this means for the item
+
+**F-ret stays ⬜ TODO and is now explicitly multi-session.** Suggested split,
+so the next session does not re-derive it:
+
+- **F-ret.1** — the `helpers/auth.ts` ruling above, then re-run and produce the
+  triage table: 59 tests, each marked drift / retire / defect, with the retires
+  named. Ends with a number, not a fix.
+- **F-ret.2** — `a11y.yml` pointed at Rounds routes, with the route set
+  enumerated **before and after** (the brief's "coverage equal-or-wider" is a
+  claim that needs both lists to be checkable).
+- **F-ret.3 …** — the deletion itself, unchanged, still gated on .1 and .2.
+
+**The stopper recorded in the F-ret row is untouched by this.** The 9
+non-`qm-rounds-*`-scoped `[data-skin='rounds']` rules and the two flag-OFF
+required checks are exactly as measured; this section only establishes the size
+of step 1.
+
+---
+
 ## What arming F-pre found — a stale `@reboot` cron that could push to `main`
 
 Removed 2026-07-29, from the `claude` user crontab (backed up first; the 4
