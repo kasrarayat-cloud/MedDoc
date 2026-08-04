@@ -41,6 +41,13 @@
 
 import { test, expect, type Page } from '@playwright/test';
 
+// ⚠️ the `tag` argument is REQUIRED — it is what makes each signup's email
+// unique. The first version of this pack omitted it and PASSED anyway
+// (`uniqueTestEmail(undefined)` still produced a usable address), so the only
+// signal was `tsc`. Which CI does not run over tests/e2e — Next's build
+// typechecks the app, and these files are not part of it. Recorded because a
+// green pack plus a green CI plus a broken call is exactly the combination
+// this repo keeps paying for.
 import { signupFreshUser } from '../helpers/signup';
 import { logoutViaMenu } from '../helpers/auth';
 // The repo's OWN axe harness, not `@axe-core/playwright` (which is not a
@@ -69,7 +76,7 @@ async function openMenu(page: Page) {
 
 test.describe('the Rounds account menu', () => {
   test('exists at EVERY mount, with both items, by ROLE', async ({ page }) => {
-    await signupFreshUser(page);
+    await signupFreshUser(page, 'acct-mounts');
 
     for (const route of MOUNTS) {
       await page.goto(route);
@@ -105,7 +112,7 @@ test.describe('the Rounds account menu', () => {
   });
 
   test('is keyboard-operable and returns focus on Escape', async ({ page }) => {
-    await signupFreshUser(page);
+    await signupFreshUser(page, 'acct-kbd');
     await page.goto('/board');
 
     const trigger = page.getByRole('button', { name: /account menu/i });
@@ -126,7 +133,7 @@ test.describe('the Rounds account menu', () => {
   });
 
   test('closes on an outside click without signing anything out', async ({ page }) => {
-    await signupFreshUser(page);
+    await signupFreshUser(page, 'acct-outside');
     await page.goto('/board');
     await openMenu(page);
 
@@ -138,7 +145,7 @@ test.describe('the Rounds account menu', () => {
   });
 
   test('SIGNS OUT, and the session is actually gone', async ({ page }) => {
-    await signupFreshUser(page);
+    await signupFreshUser(page, 'acct-signout');
     await page.goto('/board');
 
     // The repo's own helper, unchanged — the point of the whole change. If
@@ -156,7 +163,7 @@ test.describe('the Rounds account menu', () => {
   });
 
   test('axe — zero owned serious/critical on the OPEN menu', async ({ page }) => {
-    await signupFreshUser(page);
+    await signupFreshUser(page, 'acct-axe');
     await page.goto('/board');
     await openMenu(page);
 

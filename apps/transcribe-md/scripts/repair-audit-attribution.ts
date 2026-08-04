@@ -32,6 +32,24 @@
 //     `grant-admin/route.ts` deliberately passes the TARGET user's practice,
 //     not the actor's, because the event belongs to the tenant being changed.
 //     A repair driven by the naive query would have corrupted a correct row.
+//
+// ⚠️⚠️ AND THE FIRST VERSION OF THIS SCRIPT DID EXACTLY THAT — the paragraph
+// above was in its header while its SQL disagreed with it. The report-only run
+// against production printed:
+//
+//     misattributed (determinable) : 66
+//       by action                  : USER_GRANTED_SUPER_ADMIN=1, LOGOUT=65
+//
+// One row that the header calls out BY NAME as correct, selected for repair.
+// Caught by reading the output, not by the abort guard — which only asked
+// "does the actor resolve to a practice?", and it does.
+//
+// The cure is an ACTION ALLOWLIST plus a REFUSAL. The tenant a row should carry
+// depends on the ACTION, not on a single universal rule: a self-service event
+// belongs to the actor's practice, a cross-tenant admin event belongs to the
+// target's. A repair script cannot infer which without knowing the call site,
+// so it is told, and it STOPS rather than guesses when it meets a shape that is
+// not on the list.
 //   • NOT in scope — the 6 pre-S4c `EM_LEVEL_CHANGED` rows with NULL in BOTH
 //     practiceId and practiceIdSnapshot AND a NULL userId. Their tenant is
 //     genuinely unrecoverable. They are reported with determinable=false
@@ -42,6 +60,43 @@ import prisma from '@meddoc/db';
 
 const APPLY = process.argv.includes('--apply');
 const WRONG_PRACTICE = 'clinic_main';
+
+/**
+ * The ONLY actions whose rows this script may correct.
+ *
+ * An action qualifies when its call site passed NO practiceId and had no
+ * session to resolve one from — i.e. it genuinely fell through to the removed
+ * `?? 'clinic_main'` fallback, so the actor's practice IS the right answer.
+ *
+ * `LOGOUT` is the whole list. `lib/nextauth.ts`'s signOut event was the only
+ * `logAudit` caller in the tree passing userId-only from outside request scope.
+ *
+ * ⚠️ ADDING TO THIS LIST IS A CLAIM ABOUT A CALL SITE, NOT ABOUT A ROW COUNT.
+ * Read the caller and confirm it passes no practiceId before adding anything.
+ * `USER_GRANTED_SUPER_ADMIN` is the counter-example that must never be added:
+ * `grant-admin/route.ts:82` passes `practiceId: user.practiceId` — the TARGET's
+ * practice — deliberately, because the event belongs to the tenant being
+ * changed rather than to the admin changing it.
+ */
+const REPAIRABLE_ACTIONS = ['LOGOUT'] as const;
+
+/**
+ * Actions that match the loose predicate and are ADJUDICATED CORRECT — read,
+ * ruled on, and deliberately left alone. Not the same as "not repairable":
+ * these rows are RIGHT.
+ *
+ * `USER_GRANTED_SUPER_ADMIN` — `grant-admin/route.ts:82` passes
+ * `practiceId: user.practiceId`, the TARGET's practice, because a cross-tenant
+ * admin action belongs to the tenant being changed. It matches the loose
+ * predicate only because the ACTOR happens to sit elsewhere. Verified on the
+ * single production row: `row_practice = clinic_main` and
+ * `target_practice = clinic_main` agree.
+ *
+ * ⚠️ AN ACTION IN NEITHER LIST ABORTS THE RUN. That is the point: a shape
+ * nobody has adjudicated is a question, and a repair script must not answer
+ * questions.
+ */
+const ADJUDICATED_CORRECT = ['USER_GRANTED_SUPER_ADMIN'] as const;
 
 type Undeterminable = { id: string; action: string };
 
@@ -70,7 +125,7 @@ async function main() {
 
   // ---- 2. The misattributed set. Raw SQL because the predicate joins the row
   // to its own user, which Prisma's relation filters cannot express directly.
-  const misattributed = await prisma.$queryRaw<Row[]>`
+  const candidates = await prisma.$queryRaw<Row[]>`
     SELECT a.id,
            a.action::text          AS action,
            a."userId",
@@ -83,6 +138,48 @@ async function main() {
       AND u."practiceId" IS DISTINCT FROM ${WRONG_PRACTICE}
     ORDER BY a."timestamp"
   `;
+
+  // ---- 2b. REFUSE on any shape that is not on the allowlist. Skipping quietly
+  // would be the same defect in a politer coat: the operator would read a
+  // smaller number and never learn that a row was passed over.
+  const known = [
+    ...(REPAIRABLE_ACTIONS as readonly string[]),
+    ...(ADJUDICATED_CORRECT as readonly string[]),
+  ];
+  const offList = (candidates as Row[]).filter((r: Row) => !known.includes(r.action));
+  if (offList.length > 0) {
+    const byAction = new Map<string, number>();
+    for (const r of offList) byAction.set(r.action, (byAction.get(r.action) ?? 0) + 1);
+    console.error(
+      `\nABORT: ${offList.length} candidate row(s) carry an action that is NOT on ` +
+        `REPAIRABLE_ACTIONS [${REPAIRABLE_ACTIONS.join(', ')}]:\n` +
+        [...byAction].map(([a, n]) => `    ${a} = ${n}`).join('\n') +
+        '\n\n  These matched only because the ACTOR sits in a different practice ' +
+        'than the row. That is not evidence of misattribution — a cross-tenant ' +
+        'admin action legitimately files under the TARGET\'s practice ' +
+        '(grant-admin/route.ts:82). Read the call site, decide, and either add ' +
+        'the action to REPAIRABLE_ACTIONS or leave it alone.\n' +
+        '  Nothing was written.',
+    );
+    process.exit(4);
+  }
+  // Adjudicated-correct rows are REPORTED, then excluded. Silence here would
+  // let a future reader believe the loose predicate and the repair set are the
+  // same thing, which is the belief that nearly corrupted a correct row.
+  const excluded = (candidates as Row[]).filter((r: Row) =>
+    (ADJUDICATED_CORRECT as readonly string[]).includes(r.action),
+  );
+  if (excluded.length > 0) {
+    const byAction = new Map<string, number>();
+    for (const r of excluded) byAction.set(r.action, (byAction.get(r.action) ?? 0) + 1);
+    console.log(
+      `adjudicated CORRECT, excluded  : ${excluded.length} ` +
+        `(${[...byAction].map(([a, n]) => `${a}=${n}`).join(', ')})`,
+    );
+  }
+  const misattributed = (candidates as Row[]).filter((r: Row) =>
+    (REPAIRABLE_ACTIONS as readonly string[]).includes(r.action),
+  );
 
   // ---- 3. The undeterminable set — reported, never guessed.
   const undeterminable = await prisma.$queryRaw<Undeterminable[]>`
