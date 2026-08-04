@@ -26,10 +26,20 @@ if ! touch "$LOG" 2>/dev/null; then
 fi
 touch "$LOG" "$STATE"
 
+# ⚠️ pro.quillmd.com WAS REMOVED FROM THIS LIST 2026-08-04, DECLARED.
+#
+# It was taken offline deliberately — a publicly reachable, PHI-capable write
+# path into the production clinical database, decommissioned since 2026-05-04
+# and still serving. See DEPLOYMENT_RUNBOOK §3.5 and docs/foundation/DISCOVERY
+# §A.2. `check_one` here passes on 2xx/3xx, so leaving it in would page
+# somebody every cycle for a state that is intended.
+#
+# It is NOT simply dropped: `tests/automated/smoke/health.sh` now asserts the
+# host answers **410**, so "the host came back" is still a detectable event.
+# This file is the paging path and should stay quiet; that one is the audit.
 URLS=(
   "$TEST_MARKETING_URL"
   "$TEST_APP_URL/api/health"
-  "$TEST_PRO_URL/api/health"
 )
 
 ts() { date -u '+%Y-%m-%dT%H:%M:%SZ'; }

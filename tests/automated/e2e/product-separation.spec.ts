@@ -149,7 +149,30 @@ test.describe('Product separation — app.quillmd.com (TranscribeMD)', () => {
   });
 });
 
-test.describe('Product separation — pro.quillmd.com (MedDoc Pro)', () => {
+// ⚠️ SKIPPED 2026-08-04, DECLARED — this whole describe block logs INTO
+// pro.quillmd.com, which no longer answers.
+//
+// pro.quillmd.com was taken offline on 2026-08-04: a publicly reachable,
+// PHI-capable WRITE path into the production clinical database, decommissioned
+// since 2026-05-04 and still serving, sharing one DATABASE_URL with the live
+// app. Owner ruling — the capability dies now; the CODE deletion is item A6 in
+// docs/foundation/RELAY.md, and this file is retired for good at that point.
+// See DEPLOYMENT_RUNBOOK §3.5.
+//
+// SKIPPED RATHER THAN DELETED, on purpose. This file and the two smoke
+// assertions were, by DISCOVERY §A.7's own reckoning, the only things keeping
+// the CRM "in use". Deleting the block now would erase the record of what the
+// twelve-cell matrix used to prove, three weeks before the deletion PR that
+// should be reading it. `.skip` keeps the specification visible and stops the
+// nightly going red for an intended state.
+//
+// ⚠️ THE SIX APP-SIDE CELLS ABOVE STAY LIVE, INCLUDING
+// 'PRO-only user → cross-app redirect to MedDoc Pro'. That one now asserts a
+// redirect to a host that answers 410 — which is the CORRECT thing to assert
+// today: the redirect branch still exists in `actions/auth.ts:227-241` and is
+// retired in item A5 together with the fate of the 12 MEDDOC_PRO-only
+// accounts. If it starts failing, that is a real signal about A5, not noise.
+test.describe.skip('Product separation — pro.quillmd.com (MedDoc Pro)', () => {
   test('PRO-only user → success', async ({ page }) => {
     await proLogin(page, PRO_ONLY.email, PASSWORD);
     await expectProSuccess(page);
