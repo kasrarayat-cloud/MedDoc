@@ -83,8 +83,16 @@ run_playwright_suite() {
   # --reporter override on the CLI: that would replace the config's
   # reporter list and the json file with outputFile would never be
   # written. Config-level reporters include list, json (our file), html.
+  # ⚠️ THIS `cd` WAS A HARDCODED ABSOLUTE VPS PATH UNTIL 2026-08-04:
+  # `cd /opt/meddoc-pro/apps/transcribe-md`. That directory does not exist on a
+  # GitHub runner (the checkout lands in /home/runner/work/MedDoc/MedDoc), so on
+  # CI the subshell failed at the `cd`, Playwright never ran, and the leg
+  # reported "no playwright-latest.json produced". Present since PR #56.
+  #
+  # Derived from $HERE instead, which is this script's own directory, so it
+  # works from the repo root, from a clone, from the VPS and from a runner.
   (
-    cd /opt/meddoc-pro/apps/transcribe-md
+    cd "$HERE/../../apps/transcribe-md" || exit 1
     npx playwright test --config="$HERE/e2e/playwright.config.ts" \
       >/dev/null 2>&1
   ) || FAIL=1
