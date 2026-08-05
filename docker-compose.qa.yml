@@ -133,6 +133,13 @@ services:
     build:
       context: .
       dockerfile: apps/transcribe-md/Dockerfile
+      # ⚠️ `target: builder` IS LOAD-BEARING AND OMITTING IT BROKE CI ONCE.
+      # This service's entrypoint is `npx --no-install prisma`, and the Prisma
+      # CLI is a devDependency — present only in the BUILDER stage. Building the
+      # default (runtime) stage produces an image that starts fine and then dies
+      # with `npx canceled due to missing packages: ["prisma@7.9.1"]`.
+      # Mirrors docker-compose.yml's db-migrate exactly.
+      target: builder
     restart: "no"
     depends_on:
       postgres:
@@ -410,6 +417,12 @@ services:
     build:
       context: .
       dockerfile: apps/marketing/Dockerfile
+      # Mirrors prod's args. Omitting build args is the same class of miss as
+      # the `target: builder` above: a partial copy of a build block produces an
+      # image that looks right and behaves differently.
+      args:
+        NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL: "http://localhost:9020"
+        NEXT_PUBLIC_MARKETING_URL: "http://localhost:9010"
     profiles: ["marketing"]
     restart: "no"
     mem_limit: 256m
