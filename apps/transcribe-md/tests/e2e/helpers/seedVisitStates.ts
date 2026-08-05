@@ -107,14 +107,29 @@ export function seedVisitStates(email: string): SeededVisitIds | null {
     PROCESSING: `cmvpa11y${stamp}`,
   };
 
+  // ⚠️ T3 — `practiceId` is DERIVED FROM THE PATIENT IN SQL, not passed in.
+  // These are raw INSERTs, so the Prisma type checker never sees them: a
+  // required column added to the model is invisible here until the database
+  // refuses the row at runtime. Deriving it with a subselect rather than
+  // threading another parameter means it CANNOT drift from the patient — which
+  // is what the composite FK (patientId, practiceId) enforces anyway, so a
+  // hand-passed value could only ever be right or rejected.
+  //
+  // Found the hard way: T3 reddened six rounds-board tests with
+  // `null value in column "practiceId" violates not-null constraint`, because
+  // the enumeration that fixed the eight Prisma call sites searched the ORM
+  // METHOD and not the TABLE.
+
   // READY visit — has soapFinal but isn't yet signed. Visit-detail view
   // renders the editable SOAP, "Sign & Send" CTA, and the export bar.
   psql(`
     INSERT INTO transcribe_visits
-      (id, "userId", "patientId", "patientName", specialty, "inputMode", status,
+      (id, "userId", "patientId", "practiceId", "patientName", specialty, "inputMode", status,
        "transcriptText", "soapFinal", "createdAt", "updatedAt")
     VALUES
-      ('${ids.READY}', '${userId}', '${patientId}', 'A11y Test Patient',
+      ('${ids.READY}', '${userId}', '${patientId}',
+       (SELECT "practiceId" FROM transcribe_md_patients WHERE id = '${patientId}'),
+       'A11y Test Patient',
        'Family Medicine', 'audio_upload', 'READY',
        'Synthetic transcript for accessibility QA.',
        E'## Subjective\\nPatient seen for routine follow-up.\\n\\n## Objective\\nVitals stable.\\n\\n## Assessment\\nWell.\\n\\n## Plan\\nReturn in 6 months.',
@@ -126,10 +141,12 @@ export function seedVisitStates(email: string): SeededVisitIds | null {
   // renders the read-only signed SOAP and the "delivered" status banner.
   psql(`
     INSERT INTO transcribe_visits
-      (id, "userId", "patientId", "patientName", specialty, "inputMode", status,
+      (id, "userId", "patientId", "practiceId", "patientName", specialty, "inputMode", status,
        "transcriptText", "soapFinal", "signedSoap", "signedAt", "createdAt", "updatedAt")
     VALUES
-      ('${ids.SIGNED}', '${userId}', '${patientId}', 'A11y Test Patient',
+      ('${ids.SIGNED}', '${userId}', '${patientId}',
+       (SELECT "practiceId" FROM transcribe_md_patients WHERE id = '${patientId}'),
+       'A11y Test Patient',
        'Family Medicine', 'audio_upload', 'READY',
        'Synthetic transcript (signed).',
        E'## Subjective\\nPost-op week 2 follow-up.\\n\\n## Plan\\nDischarge.',
@@ -142,10 +159,12 @@ export function seedVisitStates(email: string): SeededVisitIds | null {
   // view renders the progress UI / pending state with no SOAP yet.
   psql(`
     INSERT INTO transcribe_visits
-      (id, "userId", "patientId", "patientName", specialty, "inputMode", status,
+      (id, "userId", "patientId", "practiceId", "patientName", specialty, "inputMode", status,
        "createdAt", "updatedAt")
     VALUES
-      ('${ids.PROCESSING}', '${userId}', '${patientId}', 'A11y Test Patient',
+      ('${ids.PROCESSING}', '${userId}', '${patientId}',
+       (SELECT "practiceId" FROM transcribe_md_patients WHERE id = '${patientId}'),
+       'A11y Test Patient',
        'Family Medicine', 'audio_upload', 'TRANSCRIBING',
        NOW(), NOW())
     ON CONFLICT (id) DO NOTHING;
