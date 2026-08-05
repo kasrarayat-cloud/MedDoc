@@ -13,6 +13,77 @@
 //   • sidecar down → the page still works, with a named reason
 //
 // Nothing here skips. A missing fixture FAILS.
+//
+// ----------------------------------------------------------------------------
+// ⚠️ RE-POINTED 2026-08-05 (F-ret.3). THE PRODUCT DID NOT CHANGE; THIS PACK'S
+// IMAGE DID.
+//
+// The `visit-doc` CI job builds VISIT_DOC_PAGE + DOC_PREVIEW + REVIEW_DOC_VIEW
+// + SETTINGS_SIMPLE_ROW + TEMPLATE_NATIVE_DOCX + UX_SIMPLIFY + SKIN_BETA +
+// CHAT_EDITOR, and never carried `NEXT_PUBLIC_SKIN_ROUNDS` — so for its whole
+// life it exercised the document page on the LEGACY skin. F-ret.3 deleted that
+// flag AND its OFF arm, so the Rounds skin is unconditional (`page.tsx:718`
+// always composes `rounds`, so `roundsActive` is always true) and the
+// configuration this pack was written against can no longer be built. Six
+// selectors went red on markup that only ever existed on the legacy rendering.
+// Same class as the `review-document.spec.ts` repair, same day's cause, and
+// this file MIRRORS that repair rather than inventing a second approach.
+//
+// THE TWO DEAD SELECTORS, and what carries each claim now:
+//
+//   1. `getByRole('button', { name: /sign & download/i })` at PAGE level, in
+//      four presence tests. The string is not gone — it is still
+//      `review-sign-bar.tsx:118` — but under Rounds the paper renders NO footer
+//      (`hostSignbar={!roundsActive}`, `visit-ready-view.tsx:1094`) and the bar
+//      exists only as Gate 3's child (`gate-flow.tsx:400`,
+//      `data-testid="review-doc-signbar"`). So "there is a Sign & Download on
+//      the page" is now FALSE BY DESIGN and its honest successor is
+//      `expectSignatureReachable` below: nothing on the stage can start a
+//      signature, the rail opens the flow, the flow lands on the attestation,
+//      and the real button is there — disabled until the doctor attests, live
+//      the moment they do. That is strictly more than the old assertion made:
+//      `toBeVisible()` never once looked at whether the control could be used.
+//
+//   2. `[data-testid="review-doc-bar-msg"]` — the footer bar's status line,
+//      asserted to say "Re-check the documentation level above" after a chat
+//      edit. `review-sign-bar.tsx` still renders it, but only in its `footer`
+//      variant, which this surface no longer mounts. The sentence itself lives
+//      on `review-doc-em-stale-gate` ("Documentation level needs re-checking"),
+//      and the claim the BAR made — that the doctor is told *where the
+//      signature is*, not only up in the paper — is carried by the gate flow's
+//      DOM adoption: on the E/M step, `[data-gate-slot="em"]` is physically
+//      moved into the flow (`gate-flow.tsx:200-219`), so the stale gate is
+//      inside the signing walk. That is what the re-point asserts, scoped to
+//      `rounds-gate-flow` so it cannot pass on the copy still sitting in the
+//      paper behind the overlay.
+//
+// NOTHING WAS RETIRED AND NOTHING WAS WEAKENED.
+//
+// ⚠️ WHAT THIS PACK'S FIXTURE MAKES TRUE, and where it is assumed. The twin
+// visit is CLONED from the newest row in the QA database and inherits its
+// `rxDrafts`, `specialty` and `emPendingChange`, so its gate set is a property
+// of the stack rather than of this file. Three facts are relied on, and each is
+// asserted rather than assumed:
+//   · `emAppliesToSpecialty` is true for EVERY visit on this image — the E/M
+//     gate is flag-gated on `NEXT_PUBLIC_ULTRASOUND_SPECIALTY`, which this
+//     build does not set (the same fact the imaging-chrome test below already
+//     records). So the gate array is `[rx?] + [em] + [attestation]`.
+//   · nothing in front of the attestation is outstanding — which the legacy
+//     pack already depended on silently, because a page-level Sign & Download
+//     is rendered `disabled={blocked}` and this spec clicked it and signed.
+//     `expectGateStep(page, 'attestation')` now says so out loud, so a fixture
+//     that acquires an unmet critical warning fails naming the step it stopped
+//     on instead of timing out on a control that was never going to render.
+//   · `firstOpenStep` (`stage-view-model.ts:197`) opens the flow on the first
+//     gate with anything outstanding, and the attestation always has one until
+//     it is ticked — so the flow opens EITHER on a real blocker or on Gate 3,
+//     never on a cleared step. That is why the walks below never click Next.
+//
+// ⚠️ `openSignFlow` IS USED WHERE IT FITS AND DELIBERATELY NOT WHERE IT DOES
+// NOT. It waits on `rounds-gate-attest` (`helpers/sign.ts:95`), which a visit
+// with an outstanding blocker never presents. The one test that actually SIGNS
+// uses it; the presence tests use `openGateFlow` + `expectGateStep`, which say
+// which step they reached.
 // ============================================================================
 
 import { execSync } from 'node:child_process';
@@ -22,7 +93,13 @@ import { expect, test, type Page } from '@playwright/test';
 
 import { loginUser } from '../helpers/auth';
 import { QA_COMPOSE, QA_DB } from '../helpers/qa-compose';
-import { attestAndSubmit, signViaApi } from '../helpers/sign';
+import {
+  attestAndSubmit,
+  expectGateStep,
+  openGateFlow,
+  openSignFlow,
+  signViaApi,
+} from '../helpers/sign';
 import {
   STYLED_VISIT_ID,
   prepareVisitDocLogin,
@@ -44,6 +121,84 @@ const sqlOne = (q: string) =>
 
 /** Written by the chat-editor walk and looked for in the signed file. */
 const EDIT_MARK = 'Bilateral study completed without complication.';
+
+/** The gate signbar's trigger — the ONLY control that can start a signature on
+ *  this surface, and it exists only while Gate 3 is showing. Scoped to the bar
+ *  rather than taken off the page, for the reason `review-sign-bar.tsx:98` gives:
+ *  the testid is deliberately the SAME in both homes, so "there is exactly one
+ *  sign control" stays assertable — and a page-wide `getByRole` would quietly
+ *  absorb a second home instead of failing on it. */
+const signTrigger = (page: Page) =>
+  page.getByTestId('review-doc-signbar').getByRole('button', { name: /sign & download/i });
+
+/**
+ * "Signing is reachable" — the Rounds reading of a page-level Sign & Download.
+ *
+ * ⚠️ THE OLD ASSERTION CANNOT BE PORTED, BECAUSE ITS SUBJECT IS GONE ON PURPOSE.
+ * `hostSignbar={!roundsActive}` means the paper renders no footer bar at all, so
+ * `getByRole('button', { name: /sign & download/i })` on the page resolves to
+ * nothing. Re-anchoring it on the gate signbar alone would be just as wrong in
+ * the other direction — that node does not exist until the flow is open.
+ *
+ * So this asserts the whole claim rather than one node of it, in the order a
+ * doctor meets it, and it is non-vacuous by construction: the two `toHaveCount(0)`
+ * assertions are bracketed by a positive one on the SAME testid, so a rename or
+ * a deletion of the signbar cannot make the negatives pass for free.
+ *
+ *   1. nothing on the stage can start a signature (the R2 invariant — one sign
+ *      control, and the stage is not its home)
+ *   2. the rail opens the flow, and the flow lands on Gate 3 — which also says,
+ *      out loud, that nothing in front of the attestation is outstanding
+ *   3. the real button is THERE, and DISABLED — `blocked={roundsView.n > 0}`,
+ *      and the unticked attestation is itself one of those blockers
+ *   4. ticking the attestation makes it LIVE. This half is new: `toBeVisible()`
+ *      on the old footer never once looked at whether the control could be used,
+ *      and R1's bypass was exactly a sign control that ignored a gate.
+ *   5. the flow closes and the stage is back to having no sign control, so a
+ *      caller can go on measuring the paper.
+ */
+async function expectSignatureReachable(page: Page) {
+  // ⚠️ THE POSITIVE FIRST, AND IT IS NOT DECORATION. `toHaveCount(0)` does not
+  // wait for anything to appear, so run against a page that has not painted it
+  // passes instantly and for nothing — the same free-passing negative that made
+  // the old `review-doc-bar-msg` assertions worthless once their subject left.
+  // Waiting for the rail establishes that the stage is on screen, so the count
+  // below is a statement about the rendered surface.
+  await expect(
+    page.getByTestId('rounds-review-sign'),
+    'the Rounds action rail never rendered — nothing below is measuring the ' +
+      'surface doctors use',
+  ).toBeVisible({ timeout: 30_000 });
+  await expect(
+    page.getByTestId('review-doc-signbar'),
+    'a sign control is mounted on the stage — under Rounds the signature lives ' +
+      'only inside Gate 3 (review-sign-bar.tsx, hostSignbar={false})',
+  ).toHaveCount(0);
+
+  await openGateFlow(page);
+  // Not "a step" — THIS step. `firstOpenStep` opens on the first gate with
+  // anything outstanding, so landing anywhere else means a gate in front of the
+  // signature is blocking and the fixture is not what this test assumes.
+  await expectGateStep(page, 'attestation');
+
+  await expect(signTrigger(page), 'Gate 3 rendered no signature').toBeVisible();
+  await expect(
+    signTrigger(page),
+    'the signature is live before the doctor has attested',
+  ).toBeDisabled();
+  await page.getByTestId('rounds-gate-attest').click();
+  await expect(
+    signTrigger(page),
+    'the attestation was ticked and the signature never became live',
+  ).toBeEnabled();
+
+  await page.getByTestId('rounds-gate-close').click();
+  await expect(page.getByTestId('rounds-gate-flow')).toHaveCount(0);
+  await expect(
+    page.getByTestId('review-doc-signbar'),
+    'the closed flow left its sign control behind on the stage',
+  ).toHaveCount(0);
+}
 
 /**
  * Amend one section THROUGH THE CHAT EDITOR — the only way to change a note
@@ -146,8 +301,12 @@ test.describe('the visit page is the document', () => {
 
     // The Rx gate is the SAME component, in the same place in the flow.
     await expect(page.getByTestId('review-doc-rx-gate')).toBeVisible();
-    // And the pinned bar is untouched.
-    await expect(page.getByRole('button', { name: /sign & download/i })).toBeVisible();
+    // WAS: `expect(getByRole('button', /sign & download/i)).toBeVisible()` —
+    // "the pinned bar is untouched". The bar is not pinned to this surface any
+    // more and there is nothing to pin: the signature is Gate 3's child. The
+    // walk below is the same claim, and it additionally proves the control is
+    // USABLE, which a visibility check never did.
+    await expectSignatureReachable(page);
   });
 
 
@@ -195,7 +354,22 @@ test.describe('the visit page is the document', () => {
       await dismiss.click();
       await page.waitForTimeout(2500);
     }
-    await page.getByRole('button', { name: /sign & download/i }).click();
+    // ⚠️ `openSignFlow` FITS HERE, and it is the one place in this file that
+    // uses it: both gates in front of the signature are clear by now, so the
+    // flow opens ON the attestation and the helper's walk (rail → tick → the
+    // gate signbar's Sign & Download) completes. Re-pointed from a page-level
+    // `getByRole('button', /sign & download/i)`, which under Rounds resolves to
+    // nothing until Gate 3 is showing.
+    await openSignFlow(page);
+
+    // The modal keeps its OWN E/M confirmation and it remains the enforcement —
+    // the inline card above is an additional visible blocker in front of it,
+    // never a replacement. Present only when the re-check actually moved the
+    // level, which the mocked scorer does not always do, so it is conditional
+    // here exactly as it is in `review-document.spec.ts`.
+    const modalEm = page.getByTestId('em-change-confirm-toggle');
+    if (await modalEm.count()) await modalEm.click();
+
     const pending = page.waitForEvent('download', { timeout: 120_000 });
     await attestAndSubmit(page);
     const download = await pending;
@@ -251,8 +425,43 @@ test.describe('the visit page is the document', () => {
     await expect(page.getByTestId('review-doc-em-stale-gate')).toBeVisible();
     await expect(page.getByTestId('em-stale-badge')).toBeVisible();
     await expect(page.getByTestId('review-doc-em-rescore')).toBeVisible();
-    // …and the sign bar says so too, where the signature is.
-    await expect(page.getByTestId('review-doc-bar-msg')).toContainText(/re-check/i);
+
+    // …and it says so WHERE THE SIGNATURE IS, too.
+    //
+    // WAS: `expect(review-doc-bar-msg).toContainText(/re-check/i)` — the footer
+    // bar's "Re-check the documentation level above". That bar is the `footer`
+    // variant and this surface no longer mounts one, so the locator resolves to
+    // zero nodes. In its POSITIVE form that fails loudly, which is how this was
+    // found — but the fix must not be a lazy re-point onto some other dead node,
+    // because the same selector NEGATED would then pass for nothing at all.
+    // Hence the anchor below is one whose presence is asserted, not assumed.
+    //
+    // The claim is not "some element says re-check". It is that a doctor
+    // walking to the signature MEETS the reason, rather than having to find it
+    // back up the page. Under Rounds that is carried by the flow's DOM
+    // adoption: on the E/M step, `[data-gate-slot="em"]` is physically moved
+    // into the flow (`gate-flow.tsx:200-219`), so the stale gate is inside the
+    // signing walk. Scoped to `rounds-gate-flow` on purpose — an unscoped
+    // lookup would match the copy sitting in the paper behind the overlay and
+    // prove nothing about the walk. Exact heading text, not `/re-check/i`,
+    // which also matches the button's own "Re-check level".
+    await openGateFlow(page);
+    // Staleness is NOT a blocker — the route re-scores rather than refusing
+    // (`sign-gates.ts:20`), so it contributes no `unresolved` and the flow opens
+    // PAST E/M, on the attestation. The E/M step is one Back away.
+    await expectGateStep(page, 'attestation');
+    await page.getByTestId('rounds-gate-back').click();
+    await expectGateStep(page, 'em');
+    await expect(
+      page.getByTestId('rounds-gate-flow').getByTestId('review-doc-em-stale-gate'),
+      'the stale level is not named anywhere on the walk to the signature',
+    ).toContainText('Documentation level needs re-checking');
+    // Put the gate back on the paper before the re-check below is driven from
+    // it — the adoption is restored on close, and clicking a control the flow
+    // has borrowed measures the wrong surface.
+    await page.getByTestId('rounds-gate-close').click();
+    await expect(page.getByTestId('rounds-gate-flow')).toHaveCount(0);
+    await expect(page.getByTestId('review-doc-em-stale-gate')).toBeVisible();
 
     const scoredCode = () =>
       execSync(`${QA_COMPOSE} exec -T postgres psql -U meddoc -d ${QA_DB} -A -t -f -`, {
@@ -430,7 +639,11 @@ test.describe('the visit page is the document', () => {
     // three things a doctor can act on — chat, the gates, and the signature.
     await expect(page.locator('[data-testid^="section-edit-"]')).toHaveCount(0);
     await expect(page.getByTestId('chat-editor')).toBeVisible();
-    await expect(page.getByRole('button', { name: /sign & download/i })).toBeVisible();
+    // Re-pointed with the rest — the signature is Gate 3's, not the paper's.
+    // Same helper as the template visit, which is the point of this test: the
+    // two surfaces must offer the same interaction model, so they are asserted
+    // by the same walk rather than by two selectors that could drift.
+    await expectSignatureReachable(page);
 
     // And the preview offers both formats.
     await expect(page.getByTestId('preview-format-pdf')).toBeVisible();
@@ -529,7 +742,12 @@ test.describe('the visit page is the document', () => {
     // STILL HERE, and these three are the whole interaction model:
     await expect(page.getByTestId('review-doc-rx-gate')).toBeVisible();
     await expect(page.getByTestId('chat-editor')).toBeVisible();
-    await expect(page.getByRole('button', { name: /sign & download/i })).toBeVisible();
+    // The third is no longer ON the paper, and this test is the one that would
+    // notice a leftover: it is the visit with codes, a level, medications and a
+    // warning — the one that WOULD draw every retired surface. So the negative
+    // half of the helper (no sign control on the stage) is doing real work here
+    // rather than restating the R2 invariant.
+    await expectSignatureReachable(page);
 
     // The coding did not stop being COMPUTED — it stopped being drawn. It is
     // still on the row, which is what export and billing read.
@@ -565,7 +783,11 @@ test.describe('the visit page is the document', () => {
           .getByTestId('visit-document-fallback')
           .or(page.getByTestId('review-document-view')),
       ).toBeVisible({ timeout: 120_000 });
-      await expect(page.getByRole('button', { name: /sign & download/i })).toBeVisible();
+      // "…and signing must still work" — asserted as the walk now, which is a
+      // better fit for the claim than the old visibility check ever was: with
+      // the converter down, what matters is that the signature is still
+      // REACHABLE and still becomes LIVE, not merely that a button is painted.
+      await expectSignatureReachable(page);
       await expect(page.getByTestId('review-doc-rx-gate')).toBeVisible();
       expect(visitDocManifestCount()).toBe(0);
     } finally {
