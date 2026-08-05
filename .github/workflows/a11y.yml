@@ -178,7 +178,6 @@ jobs:
           NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL: http://localhost:9020
           NEXT_PUBLIC_MARKETING_URL: http://localhost:9010
           NEXT_PUBLIC_SHOW_PIPELINE_TAB: 'false'
-          NEXT_PUBLIC_SKIN_ROUNDS: 'true'
           NEXT_PUBLIC_SKIN_BETA: 'true'
           NEXT_PUBLIC_REVIEW_DOC_VIEW: 'true'
           NEXT_PUBLIC_UX_SIMPLIFY: 'true'

@@ -18,7 +18,6 @@ import Link from 'next/link';
 import type { TranscribeVisitStatus } from '@prisma/client';
 
 import { Ic } from '@/components/ui/icon';
-import { isSkinRounds } from '@/config/skin-rounds';
 import { LocalTime } from '@/components/ui/local-time';
 import {
   bucketForLocalDay,
@@ -43,8 +42,9 @@ export type DashboardVisit = {
 };
 
 /** R3 — `key` joins `cls`/`label` so a caller can express status as a
- *  TREATMENT instead of a chip. The legacy `cls` is untouched and still the
- *  flag-OFF path; nothing about the existing pill changes. */
+ *  TREATMENT instead of a chip. `key` is what this list renders, as a
+ *  `data-status` attribute; `cls` is the legacy chip class, kept on the
+ *  return shape but no longer read here. */
 function pillFor(
   status: TranscribeVisitStatus,
   needsReview: boolean,
@@ -118,17 +118,16 @@ interface VisitListProps {
 export function VisitList({ visits }: VisitListProps) {
   const groups = groupByDay(visits);
   // ⚠️ R3 — THE BRIDGE, NOT A REWRITE OF 300 LINES OF INLINE STYLE.
-  // Every colour in this component is an inline `var(--color-linear-*)`, and on
-  // a Rounds route those resolve to the LEGACY values: `.qm-rounds-host` is
-  // applied to settings, auth and the board, never here. That is precisely what
-  // the census counted on `/visits` and `/patients/[id]`.
+  // Every colour in this component is an inline `var(--color-linear-*)`, and
+  // those resolve to the LEGACY values unless a `.qm-rounds-host` ancestor is
+  // in scope — it is applied to settings, auth and the board, never here. That
+  // is precisely what the census counted on `/visits` and `/patients/[id]`.
   //
   // `.qm-rounds-host` REDECLARES all 22 of those custom properties on a scoped
   // class, so hosting this subtree retints every inline token at once — which
   // is the mechanism the bridge exists for, and why the census reports hosted
-  // nodes separately from islands. Rewriting the inline styles would change the
-  // flag-OFF product for no reason.
-  const roundsSkin = isSkinRounds();
+  // nodes separately from islands. Rewriting the inline styles would buy
+  // nothing the host wrapper below does not already do.
   const body = (
     <div style={{ padding: '14px 24px 32px' }}>
       {groups.map((group) => (
@@ -250,16 +249,16 @@ export function VisitList({ visits }: VisitListProps) {
                       gap: 6,
                     }}
                   >
-                    {/* ⚠️ R3 — STATUS AS TREATMENT, NOT A CHIP, under Rounds.
+                    {/* ⚠️ R3 — STATUS AS TREATMENT, NOT A CHIP.
                         The owner's ruling on /patients/[id] was "zero legacy
                         chips": `pill.cls` is `qm-lin-pill*`, the exact family
                         the census flags on this route AND on /visits, which
-                        this same component renders. The legacy chip stays on
-                        the flag-OFF path untouched — `roundsSkin` is the fork,
-                        and `pill.label` is byte-identical in both. */}
+                        this same component renders. So the status renders as
+                        the Rounds treatment carrying `pill.key`; `pill.label`
+                        is unchanged. */}
                     <span
-                      className={roundsSkin ? 'qm-rounds-vstatus' : pill.cls}
-                      data-status={roundsSkin ? pill.key : undefined}
+                      className="qm-rounds-vstatus"
+                      data-status={pill.key}
                     >
                       {pill.label}
                       {pill.suffix && (
@@ -293,9 +292,5 @@ export function VisitList({ visits }: VisitListProps) {
     </div>
   );
 
-  return roundsSkin ? (
-    <div className="qm-rounds-host qm-rounds-vlist">{body}</div>
-  ) : (
-    body
-  );
+  return <div className="qm-rounds-host qm-rounds-vlist">{body}</div>;
 }

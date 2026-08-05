@@ -20,9 +20,9 @@
 //   (2) the converter can resolve the fonts they name — asserted here against
 //       the image definition, and behaviourally on the host in the item's proof.
 //
-// ⚠️ THIS FILE IS FLAG-INDEPENDENT ON PURPOSE. Both generators run with
-// `NEXT_PUBLIC_SKIN_ROUNDS` off; the divergence it pins ships in production
-// today and has nothing to do with the skin.
+// ⚠️ THIS FILE IS SKIN-INDEPENDENT ON PURPOSE. Neither generator knows anything
+// about the skin; the divergence it pins ships in production today and has
+// nothing to do with it.
 // ============================================================================
 
 import { readFileSync, readdirSync } from 'node:fs';
@@ -245,18 +245,18 @@ describe('C2-b — the converter can resolve the type the document names', () =>
   });
 });
 
-describe('C2-b — the export path is flag-INDEPENDENT, and that is checked', () => {
+describe('C2-b — the export path is skin-INDEPENDENT, and that is checked', () => {
   // ⚠️ WHY THIS IS ASSERTED RATHER THAN STATED. Everything above runs the real
   // generators directly, so it is a faithful proof of the bytes the export
   // route streams — `pdf = nativePdf ?? await generateVisitPdf(data)` and the
   // DOCX equivalent do no post-processing. But "the unit test is the export
   // path" only holds while nothing in that path branches on the skin. If a
-  // generator ever read `isSkinRounds()`, this file would be measuring one
+  // generator ever emitted a skin token, this file would be measuring one
   // configuration and production would ship another, and nothing would say so.
   //
-  // So the property is pinned: the export modules read NO skin flag. That is
+  // So the property is pinned: the export modules carry NO skin state. That is
   // also what makes the Letter/A4 fix a change to the CURRENT product rather
-  // than to a flagged one — it ships to every doctor on the next deploy,
+  // than to a skinned one — it ships to every doctor on the next deploy,
   // which is why it needed proving on a production-shaped build.
   const MODULES = [
     'src/lib/export-page.ts',
@@ -264,12 +264,19 @@ describe('C2-b — the export path is flag-INDEPENDENT, and that is checked', ()
     'src/lib/docx-generator.ts',
   ];
 
-  it('no export module reads the Rounds skin flag', () => {
+  it('no export module carries Rounds skin state', () => {
     const offenders: string[] = [];
     for (const m of MODULES) {
       const src = readFileSync(m, 'utf8')
         .replace(/\/\*[\s\S]*?\*\//g, ' ')
         .replace(/\/\/[^\n]*/g, ' ');
+      // ⚠️ HONEST WEAKENING, RECORDED. `NEXT_PUBLIC_SKIN_ROUNDS` and its reader
+      // `isSkinRounds` no longer exist anywhere in the repo — the skin is
+      // permanent — so those two needles are now trivially absent and can never
+      // fire. They are kept only as cheap tripwires against a re-introduction
+      // under the old names. The load-bearing half of this check is `data-skin`
+      // and `--rounds-`: those are live tokens the shipped skin still uses, and
+      // an export module could pick one up tomorrow.
       for (const needle of ['isSkinRounds', 'NEXT_PUBLIC_SKIN_ROUNDS', 'data-skin', '--rounds-']) {
         if (src.includes(needle)) offenders.push(`${m}: reads ${needle}`);
       }
@@ -277,15 +284,16 @@ describe('C2-b — the export path is flag-INDEPENDENT, and that is checked', ()
     expect(
       offenders,
       'an export module branches on the skin. The exported document is the same ' +
-        'artifact for every doctor regardless of flag, and a Rounds token cannot ' +
-        'reach a filled export — if that changed, these parity assertions stop ' +
-        'describing what production ships:\n  ' + offenders.join('\n  '),
+        'artifact for every doctor, and a Rounds token cannot reach a filled ' +
+        'export — if that changed, these parity assertions stop describing what ' +
+        'production ships:\n  ' + offenders.join('\n  '),
     ).toEqual([]);
   });
 
-  it('the flag scan can FIND one — negative control', () => {
+  it('the needle scan can FIND one — negative control', () => {
     // Without this, a scan that matched nothing would report independence over
-    // a module that read the flag on every line.
+    // a module that carried a needle on every line. The sample text below is a
+    // FIXTURE for the comment stripper, not a live flag read.
     const fixture = `const x = isSkinRounds() ? 1 : 2;`;
     expect(fixture.includes('isSkinRounds')).toBe(true);
     // …and the comment stripper must not hide a real read inside code.

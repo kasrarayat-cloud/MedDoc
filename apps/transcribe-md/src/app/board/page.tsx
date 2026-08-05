@@ -14,22 +14,28 @@
 // the two honest about being the same search without pretending the scopes are
 // the same.
 //
-// FLAG-GATED: renders only when NEXT_PUBLIC_SKIN_ROUNDS is on. With the flag
-// off this route 404s, so the old skin is untouched and nothing links here.
+// UNCONDITIONAL since F-ret.3 (2026-08-05). This route used to fail closed —
+// `notFound()` before `auth()`, so with the skin flag off it did not exist and
+// nothing could link here. The flag and its OFF arm are gone, so the guard has
+// nothing left to protect against and was removed with them. `/board` is now
+// simply the home surface.
+//
+// The guard's removal is what allowed `lib/recovery-href.ts` to collapse from a
+// fork to a constant: every recovery affordance can point here now without the
+// risk of sending a doctor from one 404 to another.
 //
 // PHI-read audit: an RSC reading visit rows IS a doctor seeing the queue, and
 // §164.312(b) wants that recorded — same as /visits does.
 // ============================================================================
 
 import type { Metadata } from 'next';
-import { notFound, redirect } from 'next/navigation';
+import { redirect } from 'next/navigation';
 
 import prisma from '@meddoc/db';
 import type { Prisma } from '@prisma/client';
 
 import { auth } from '@/lib/nextauth';
 import { logAudit } from '@/lib/audit';
-import { isSkinRounds } from '@/config/skin-rounds';
 import { emAppliesToSpecialty } from '@meddoc/shared/specialties';
 import {
   laneMatchesFilter,
@@ -72,10 +78,6 @@ export default async function BoardPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  // Fail closed. With the flag off this route does not exist, rather than
-  // rendering a half-skinned page nobody meant to ship.
-  if (!isSkinRounds()) notFound();
-
   const session = await auth();
   if (!session?.user?.id) redirect('/login');
 

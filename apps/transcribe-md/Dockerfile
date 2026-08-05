@@ -91,13 +91,15 @@ ENV NEXT_PUBLIC_SHOW_PIPELINE_TAB=${NEXT_PUBLIC_SHOW_PIPELINE_TAB}
 ARG NEXT_PUBLIC_SKIN_BETA=false
 ENV NEXT_PUBLIC_SKIN_BETA=${NEXT_PUBLIC_SKIN_BETA}
 
-# ROUNDS — the full app re-skin. Build-time and DEFAULT OFF, like its sibling
-# above. It must be declared HERE or `--build-arg NEXT_PUBLIC_SKIN_ROUNDS=true`
-# is silently discarded ("were not consumed") and the flag never inlines: the
-# image builds, the tag says rounds, and the old skin renders. Caught exactly
-# that way on the first flag-ON build.
-ARG NEXT_PUBLIC_SKIN_ROUNDS=false
-ENV NEXT_PUBLIC_SKIN_ROUNDS=${NEXT_PUBLIC_SKIN_ROUNDS}
+# ROUNDS — the re-skin's build flag was REMOVED 2026-08-05 (F-ret.3) with the
+# flag-OFF arm. The ARG/ENV pair that lived here is gone; the skin is now
+# unconditional, so there is nothing to inline and nothing to declare.
+#
+# ⚠️ THE LESSON IT TAUGHT SURVIVES IT, because it applies to every sibling
+# above and below: a `NEXT_PUBLIC_*` build arg must be declared in THIS stage
+# or `--build-arg` is silently discarded ("were not consumed"), the flag never
+# inlines, and the image builds green carrying the wrong behaviour behind a tag
+# that claims the right one. That was caught on the first flag-ON build here.
 
 # Ultrasound specialty gate. Like SKIN_BETA, NEXT_PUBLIC_* must be set in the
 # BUILDER env so `next build` inlines it into the frontend bundle (the specialty

@@ -35,7 +35,6 @@
 
 import type { ReactNode } from 'react';
 import { isSkinBeta } from '@/config/skin-beta';
-import { isSkinRounds } from '@/config/skin-rounds';
 import { Ic } from './icon';
 
 export type AuthShellTheme = 'legacy' | 'clinician';
@@ -84,10 +83,7 @@ export function AuthShell({
       // object in the form beneath it, because custom properties resolve at
       // computed-value time and inherit. `rounds-tokens.css` § C1-d carries the
       // shape and the three contrast forks the bridge cannot reach.
-      //
-      // Flag-OFF: `isSkinRounds()` is build-time, so this collapses to the bare
-      // `qm-c3-auth` string and nothing moves.
-      <div className={isSkinRounds() ? 'qm-c3-auth qm-rounds-host qm-rounds-auth' : 'qm-c3-auth'}>
+      <div className="qm-c3-auth qm-rounds-host qm-rounds-auth">
         <main className="qm-c3-auth-card">
           <div className="qm-c3-auth-brand">
             <span aria-hidden className="qm-c3-auth-mark">
@@ -109,15 +105,7 @@ export function AuthShell({
               match, so every input, label and error in the form would be
               classified "inherited" and merely reported. `violations: []` while
               measuring nothing — trap 3, on the surface it matters most. */}
-          <div
-            className={
-              isSkinRounds()
-                ? 'qm-c3-auth-form qm-rounds-authform'
-                : 'qm-c3-auth-form'
-            }
-          >
-            {children}
-          </div>
+          <div className="qm-c3-auth-form qm-rounds-authform">{children}</div>
           <div className="qm-c3-auth-trust">
             <span>
               <Ic.shield width={12} height={12} aria-hidden />
@@ -440,7 +428,7 @@ export function AuthFieldLabel({
     >
       <label
         htmlFor={htmlFor}
-        className={isSkinRounds() ? 'qm-rounds-label' : undefined}
+        className="qm-rounds-label"
         style={{
           fontFamily: 'var(--font-mono)',
           fontSize: 10.5,
@@ -481,7 +469,7 @@ export function AuthFieldError({ message }: { message?: string }) {
     // assertion to, and it must be gate-visible when it renders.
     <p
       role="alert"
-      className={isSkinRounds() ? 'qm-rounds-error' : undefined}
+      className="qm-rounds-error"
       style={{
         marginTop: 6,
         fontFamily: 'var(--font-sans)',

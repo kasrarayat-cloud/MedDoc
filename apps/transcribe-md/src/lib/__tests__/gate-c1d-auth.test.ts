@@ -189,9 +189,13 @@ describe('C1-d — text on the accent fill clears AA', () => {
 
     // (c) waitlist's inline submit — forked in TSX, because an inline style
     //     beats any class we could write.
-    expect(FORM_SRC.waitlist).toMatch(
-      /color:\s*rounds\s*\?\s*'var\(--rounds-on-accent\)'\s*:\s*'#08090a'/,
-    );
+    // ⚠️ RE-POINTED 2026-08-05 (F-ret.3): this was a build-flag fork
+    // (`rounds ? 'var(--rounds-on-accent)' : '#08090a'`). The fork is gone with
+    // the flag, so the token is now read unconditionally. The PROPERTY being
+    // guarded is unchanged and is the whole point of this suite — that this
+    // inline style resolves the token rather than a raw literal, because an
+    // inline style beats any class we could write.
+    expect(FORM_SRC.waitlist).toMatch(/color:\s*'var\(--rounds-on-accent\)'/);
 
     // (d) the hover fill, which the bridge inverts. `sage-bright` maps to
     //     `--rounds-accent-text` — right for the ~13 sites that read it as
@@ -207,7 +211,13 @@ describe('C1-d — text on the accent fill clears AA', () => {
     // stops shipping these values, the forks are dead code and should go.
     expect(GLOBALS).toMatch(/\.qm-lin-btn-primary\s*\{[^}]*color:\s*#0d1611/);
     expect(GLOBALS).toMatch(/\.qm-c3-auth-mark\s*\{[^}]*color:\s*#0c1410/);
-    expect(FORM_SRC.waitlist).toContain('#08090a');
+    // ⚠️ THE WAITLIST LEG OF THIS CONTROL WAS DROPPED 2026-08-05 (F-ret.3).
+    // It asserted the old-skin literal '#08090a' was still present in the
+    // waitlist source — proving the fork above guarded something live. With the
+    // fork collapsed there is no second arm and no literal, so the leg can only
+    // fail. The two CSS legs above still carry the control's job: they prove the
+    // old-skin values are still shipped and the `[data-skin]` overrides are not
+    // dead code.
   });
 
   it('every text tier reachable inside .qm-rounds-panel clears AA on it', () => {

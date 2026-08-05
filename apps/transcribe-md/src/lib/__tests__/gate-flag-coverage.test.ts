@@ -30,7 +30,12 @@ const IMAGES: { tag: string; needs: string[]; why: string }[] = [
   {
     tag: 'meddoc-pro-transcribe-md:rounds',
     needs: [
-      'NEXT_PUBLIC_SKIN_ROUNDS',
+      // NEXT_PUBLIC_SKIN_ROUNDS was REMOVED here 2026-08-05 (F-ret.3) because the
+      // flag itself is gone — the skin is unconditional, so no image needs the
+      // build arg and requiring it would red every build. This entry is deleted
+      // rather than commented out in the array: a needs-list that names a flag
+      // nothing passes is a gate that fails for a reason unrelated to what it
+      // guards.
       // ADDED with Gate B (Screen 2). The stage pack drives the chat DRAWER,
       // and the drawer only mounts when the stage is given a `chat` node —
       // which VisitReadyView only builds behind isChatEditor(). Without this

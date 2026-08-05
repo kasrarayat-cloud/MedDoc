@@ -28,15 +28,23 @@
 // so every arithmetic primitive below has its own control, and if the control
 // ever stops being able to fail, the zeros mean nothing.
 //
-// ─── 2. FLAG SAFETY OF EVERY FORK ──────────────────────────────────────────
+// ─── 2. THE TRAVERSAL BOUNDARY (was: flag safety of every fork) ─────────────
 //
-// `--rounds-*` is declared ONLY under `[data-skin='rounds']`. A bare
-// `var(--rounds-x)` with the flag off is invalid-at-computed-value-time: no
-// build error, no console error, the property falls to its INITIAL value
-// (`background` → transparent). This repo has already shipped that bug on
-// paper once. So every `var(--rounds-…)` on this surface must either carry a
-// FALLBACK or sit inside an `isSkinRounds()` branch — checked by traversal,
-// with the classifier positive-controlled on all four shapes.
+// MOSTLY RETIRED — see the block above `C1-e — the traversal boundary` below.
+// This section used to police a hazard that existed only while the skin was
+// optional: `--rounds-*` is declared under `[data-skin='rounds']`, so a bare
+// `var(--rounds-x)` rendered with the skin OFF was invalid-at-computed-value-
+// time — no build error, no console error, the property silently falling to
+// its INITIAL value (`background` → transparent). Every reference therefore
+// had to carry a FALLBACK or sit on the true branch of the skin flag, and a
+// classifier decided which.
+//
+// There is one skin now. `layout.tsx` sets `data-skin="rounds"` on `<html>`
+// unconditionally, so the attribute that DECLARES the tokens is always
+// present and there is no second state left to be unsafe in. What survives is
+// the half that was never about the flag: the traversal must actually reach
+// this surface, or every "nothing found" answer in this file is an answer
+// about the empty set.
 //
 // ─── 3. THE PORTAL INVARIANT ───────────────────────────────────────────────
 //
@@ -293,26 +301,37 @@ describe('C1-e — the MFA stepper disc', () => {
     expect(contrast('#0d1611', fill)).toBeCloseTo(3.43, 2);
   });
 
-  it('the FLAG-OFF half of the fork is still safe on the old sage', () => {
-    // The fallback form has two branches and only one of them is new. #0d1611
-    // on --color-linear-sage is 6.72:1 and must stay that way, or "byte-
-    // identical with the flag off" would be a claim about bytes and not about
-    // what a doctor can read.
-    expect(contrast('#0d1611', linearToken('--color-linear-sage'))).toBeGreaterThanOrEqual(AA);
-    expect(contrast('#0d1611', linearToken('--color-linear-sage'))).toBeCloseTo(6.72, 2);
-  });
+  // ── RETIRED: 'the FLAG-OFF half of the fork is still safe on the old sage' ──
+  //
+  // WHAT IT PINNED: #0d1611 on `--color-linear-sage` at 6.72:1 — the ratio a
+  // doctor actually read when the skin was off and the disc kept raw sage. It
+  // was the second half of "byte-identical with the flag off", asserted so
+  // that claim was about legibility rather than about bytes.
+  //
+  // WHY THE PREMISE EXPIRED: there is no flag-off render. `data-skin="rounds"`
+  // is unconditional on `<html>` and this panel mounts inside
+  // `settings/security/mfa/page.tsx`'s `qm-rounds-host`, so the disc's
+  // `--color-linear-sage` fill is ALWAYS bridged to `--rounds-accent`. The
+  // pair this measured is one nothing composites.
+  //
+  // WHAT STILL HOLDS, and is still asserted above: the label resolves to
+  // `--rounds-on-accent` on the BRIDGED fill and clears AA there, and the
+  // pre-fix literal still fails on that same fill. Those are the live path.
 
-  it('the failing literal is GONE from the call site — it survives ONLY as a fallback', () => {
+  it('the failing literal is GONE from the call site — it survives ONLY as a CSS fallback', () => {
     // ⚠️ THE PRECISE CLAIM, because the loose one is false. `#0d1611` is still
-    // in this file — it is the flag-OFF branch of `var(--rounds-on-accent,
-    // #0d1611)`, and it must be. What must be gone is the BARE form, where the
-    // literal is the value the bridge then retints underneath.
+    // in this file — it is the FALLBACK arm of `var(--rounds-on-accent,
+    // #0d1611)`, a CSS default keyed on the same attribute that declares the
+    // token, and it must stay. (It is unreachable while `data-skin` is
+    // unconditional; it is cheap, and it is not this gate's to remove.) What
+    // must be gone is the BARE form, where the literal is the value the bridge
+    // then retints underneath — still a real 3.43:1 defect if it returns.
     const all = [...code.matchAll(/#0d1611/g)];
     const asFallback = [...code.matchAll(/var\(\s*--rounds-[a-z0-9-]+\s*,\s*#0d1611\s*\)/g)];
     // Non-vacuity FIRST: if the literal has vanished entirely, "every
-    // occurrence is a fallback" is trivially true of zero occurrences — and the
-    // flag-OFF branch would have silently lost its colour.
-    expect(all.length, 'the #0d1611 flag-OFF fallback has disappeared entirely').toBeGreaterThanOrEqual(1);
+    // occurrence is a fallback" is trivially true of zero occurrences, and this
+    // guard would go green on a file it can no longer say anything about.
+    expect(all.length, 'the #0d1611 CSS fallback has disappeared entirely').toBeGreaterThanOrEqual(1);
     expect(
       all.length,
       'a BARE #0d1611 literal is back on this surface — the bridge retints the ' +
@@ -327,13 +346,14 @@ describe('C1-e — the MFA "on" pill', () => {
   const code = executableOnly(src);
 
   it('the comment stripper is doing work — negative control', () => {
-    // This file EXPLAINS, in prose, why a bare `var(--rounds-ready)` cannot be
-    // used — and writes the token in the explanation. A scan over raw text
-    // counts the explanation as a use. Same defect as gate-rounds-bridge:332.
-    expect(src).toContain('A bare `var(--rounds-ready)` cannot be used');
-    expect(code).not.toContain('A bare `var(--rounds-ready)` cannot be used');
-    const raw = [...src.matchAll(/var\(--rounds-/g)].length;
-    const exe = [...code.matchAll(/var\(--rounds-/g)].length;
+    // This file EXPLAINS, in prose, which token family the pill had to land on
+    // and which ones it had to reject — naming three `--rounds-*` tokens in the
+    // explanation. A scan over raw text counts every one of them as a use. Same
+    // defect as gate-rounds-bridge:332.
+    expect(src).toContain('So the pill reads `--rounds-ready` directly');
+    expect(code).not.toContain('So the pill reads `--rounds-ready` directly');
+    const raw = [...src.matchAll(/--rounds-[a-z]/g)].length;
+    const exe = [...code.matchAll(/--rounds-[a-z]/g)].length;
     expect(raw, 'prose in this file no longer names a --rounds-* token').toBeGreaterThan(exe);
     expect(exe, 'the executable text has no --rounds-* token at all').toBeGreaterThanOrEqual(3);
   });
@@ -356,9 +376,9 @@ describe('C1-e — the MFA "on" pill', () => {
     const [, washToken, washPct] = wash!;
     const pillGround = composite(token(washToken), ground, Number(washPct) / 100);
 
-    // The label: the token on the Rounds side of the fork.
-    const labelToken = code.match(/color:\s*rounds\s*\?\s*'var\((--rounds-[a-z0-9-]+)\)'/)?.[1];
-    expect(labelToken, 'the pill label is no longer a forked --rounds-* token').toBeTruthy();
+    // The label: read unconditionally, because there is nothing to fork on.
+    const labelToken = code.match(/(?:^|\s)color:\s*'var\((--rounds-[a-z0-9-]+)\)'/m)?.[1];
+    expect(labelToken, 'the pill label is no longer a --rounds-* token').toBeTruthy();
 
     expect(
       contrast(token(labelToken!), pillGround),
@@ -376,9 +396,9 @@ describe('C1-e — the MFA "on" pill', () => {
     expect(contrast(token('--rounds-ready'), pillGround)).toBeLessThan(AA);
   });
 
-  it('the fork moves the label into the READY family, not the accent family', () => {
+  it('the label is on the READY family, not the accent family', () => {
     // ⚠️ THIS ONE IS NOT A CONTRAST BUG AND MUST NOT BE ASSERTED AS ONE.
-    // Un-forked, the label reads `--color-linear-sage-bright`, which the bridge
+    // The obvious label here is `--color-linear-sage-bright`, which the bridge
     // maps to `--rounds-accent-text` — a LIGHT indigo that clears AA on the
     // green wash comfortably. The defect is semantic: an indigo label inside a
     // green border, brand-coloured where the surface's whole job is to say
@@ -393,122 +413,94 @@ describe('C1-e — the MFA "on" pill', () => {
     ).toBeGreaterThanOrEqual(AA);
 
     const labelToken = executableOnly(srcOf(MANAGE)).match(
-      /color:\s*rounds\s*\?\s*'var\((--rounds-[a-z0-9-]+)\)'/,
+      /(?:^|\s)color:\s*'var\((--rounds-[a-z0-9-]+)\)'/m,
     )![1];
     expect(labelToken.startsWith('--rounds-ready')).toBe(true);
     expect(labelToken).not.toBe('--rounds-accent-text');
   });
 
-  it('the flag-OFF branch of every pill fork is still a literal the old skin ships', () => {
-    // The other half of "byte-identical with the flag off". If the sage
-    // literals go, the fork's else-branch is dead and the whole thing should be
-    // simplified — but only then.
-    expect(code).toMatch(/:\s*'rgba\(122, 166, 140, 0\.13\)'/);
-    expect(code).toMatch(/:\s*'1px solid rgba\(122, 166, 140, 0\.32\)'/);
-    expect(code).toMatch(/:\s*'var\(--color-linear-sage-bright\)'/);
-  });
+  // ── RETIRED: 'the flag-OFF branch of every pill fork is still a literal the
+  //             old skin ships' ─────────────────────────────────────────────
+  //
+  // WHAT IT PINNED: the else-arm of each pill fork — `rgba(122,166,140,0.13)`,
+  // `1px solid rgba(122,166,140,0.32)` and `var(--color-linear-sage-bright)`.
+  // It was the other half of "byte-identical with the flag off", and it carried
+  // its own retirement instruction: if the sage literals go, the else-branch is
+  // dead and the whole thing should be simplified — but only then.
+  //
+  // WHY THE PREMISE EXPIRED: that is exactly what happened. There is one skin
+  // and the pill has no second arm. Both `rgba(122,166,140,·)` literals are
+  // gone from the executable source — they survive only in the panel's prose,
+  // as the rejected option the comment explains, so asserting them would now
+  // pin a comment. `var(--color-linear-sage-bright)` is still in the file but
+  // on a DIFFERENT element, which is the other reason this cannot be salvaged:
+  // it would go green on a match that was never the pill.
+  //
+  // WHAT STILL HOLDS: the two assertions above, which never needed the fork —
+  // the label clears AA on its own composited wash, and it is on the READY
+  // family rather than the accent family.
 });
 
+// ── RETIRED: the flag-safety classifier, and everything built on it ─────────
+//
+// This describe block was `C1-e — no --rounds-* token resolves undeclared with
+// the flag off`. Four of its five items are deleted. The fifth — the traversal
+// non-vacuity check — was never about the flag and is kept below.
+//
+// WHAT THEY PINNED
+//
+//   · `lastTernaryQ` / `scan` / the `Verdict` classifier — for every
+//     `var(--rounds-…)` under `src/app/settings`, a three-way verdict:
+//     `fallback` (the reference carries a CSS default), `guarded` (it sits on
+//     the TRUE arm of a ternary whose condition is this module's own
+//     `isSkinRounds()` binding), or `UNSAFE`.
+//   · 'the classifier can fail — four positive controls and one narrowing
+//     control' — the bare / fallback / flag-guarded / guarded-by-SOMETHING-ELSE
+//     shapes, plus the `?.`-is-not-a-ternary narrowing. Case (4) was the
+//     load-bearing one: it separated "is behind a ternary" from "is behind the
+//     flag", and without it a `isCompact ? …` would have passed.
+//   · 'every var(--rounds-*) under src/app/settings is fallback-safe or
+//     flag-guarded' — the actual sweep, emptiness-asserted only after
+//     non-vacuity and after proving both safe verdicts occurred on real code.
+//   · 'a file that build-time forks really does import the flag' — that a
+//     `guarded` verdict meant the REAL `isSkinRounds`, imported from
+//     `@/config/skin-rounds`, and not a local shadow with the same name.
+//
+// WHY THE PREMISE EXPIRED
+//
+// All four rest on there being two render states. The hazard was that
+// `--rounds-*` is declared under `[data-skin='rounds']`, so a reference with
+// the skin OFF was invalid-at-computed-value-time — silent, no build error, no
+// console error, the property falling to its INITIAL value. There is one skin
+// now: `NEXT_PUBLIC_SKIN_ROUNDS` and `@/config/skin-rounds` are deleted, and
+// `layout.tsx` sets `data-skin="rounds"` on `<html>` unconditionally, so the
+// declaring attribute is always present and no reference can resolve
+// undeclared. The settings sources have already dropped their forks to match —
+// the MFA pill now reads `var(--rounds-ready)` and `var(--rounds-ready-text)`
+// BARE, which is correct under one skin and which the retired sweep would have
+// reported as UNSAFE. The `guarded` verdict is likewise unreachable: nothing
+// under `src/app/settings` calls `isSkinRounds` any more, so both the sweep's
+// `refs.some(guarded)` precondition and the import check would fail on a
+// surface that is not broken. DO NOT RESURRECT THEM BY RELAXING THEM — a
+// classifier with its discriminating control removed is worse than no
+// classifier.
+//
+// WHAT STILL HOLDS
+//
+// Everything the tokens themselves have to satisfy, all of it asserted
+// elsewhere in this file and none of it flag-dependent: the arithmetic block,
+// the disc and pill contrast items, the portal invariant, and — in the
+// stylesheet describe — that every `qm-rounds-*` class applied under settings
+// has a rule and every class the C1-e block declares has a caller. If a token
+// hazard needs policing again, it is a question about a DECLARATION, not about
+// a fork.
 // ============================================================================
-describe('C1-e — no --rounds-* token resolves undeclared with the flag off', () => {
-  /** Is a `var(--rounds-…)` at `idx` SAFE with the flag off?
-   *
-   *  Two ways to be safe, and only two:
-   *    · a FALLBACK — `var(--rounds-x, #0d1611)`. Keyed on the same attribute
-   *      that declares the token, so there is ONE condition rather than two
-   *      that must agree.
-   *    · a BUILD-TIME GUARD — the value sits on the true branch of a ternary
-   *      whose condition is this module's `isSkinRounds()` flag.
-   *
-   *  ⚠️ THE GUARD MUST BE **THIS FILE'S ROUNDS FLAG**, not any condition. A
-   *  `var(--rounds-x)` behind `isCompact ? … : …` is exactly as undeclared with
-   *  the flag off as a bare one, and a classifier that accepted any ternary
-   *  would pass it. Controlled below, case (4).
-   *
-   *  ⚠️ AND THE `?` MUST BE A TERNARY `?`. `error?.field` and `a ?? b` both put
-   *  a `?` in the text; treating either as a guard would let an unsafe value
-   *  through on nothing more than an optional chain happening to sit above it.
-   *  Narrowed deliberately — an over-strict probe is also a defect — and the
-   *  narrowed case still asserts: case (5) below is flagged. */
-  function lastTernaryQ(s: string): number {
-    for (let i = s.length - 1; i >= 0; i--) {
-      if (s[i] !== '?') continue;
-      if (s[i + 1] === '.' || s[i + 1] === '?') continue; // `?.` / `??`
-      if (s[i - 1] === '?') continue; // second half of `??`
-      return i;
-    }
-    return -1;
-  }
-
-  type Verdict = 'fallback' | 'guarded' | 'UNSAFE';
-  interface Ref {
-    file: string;
-    tokenName: string;
-    verdict: Verdict;
-  }
-
-  function scan(file: string, raw: string): Ref[] {
-    const src = executableOnly(raw);
-    // The flag identifier is DERIVED from the file, not assumed to be `rounds`.
-    const flagVar = src.match(
-      /const\s+([A-Za-z_$][\w$]*)\s*=\s*isSkinRounds\s*\(\s*\)/,
-    )?.[1];
-    const guardRe = new RegExp(
-      flagVar ? `\\b${flagVar}\\b|isSkinRounds\\s*\\(` : 'isSkinRounds\\s*\\(',
-    );
-    const out: Ref[] = [];
-    for (const m of src.matchAll(/var\(\s*(--rounds-[a-z0-9-]+)\s*(,?)/g)) {
-      const [, tokenName, comma] = m;
-      if (comma === ',') {
-        out.push({ file, tokenName, verdict: 'fallback' });
-        continue;
-      }
-      const before = src.slice(0, m.index!);
-      const q = lastTernaryQ(before);
-      if (q === -1) {
-        out.push({ file, tokenName, verdict: 'UNSAFE' });
-        continue;
-      }
-      // The condition is whatever sits between the enclosing property/argument
-      // boundary and the `?`. Newline is NOT a boundary: the shipped forks are
-      // prettier-wrapped as `background: rounds\n  ? '…'`.
-      const bound = Math.max(
-        before.lastIndexOf(':', q),
-        before.lastIndexOf('{', q),
-        before.lastIndexOf(',', q),
-        before.lastIndexOf('(', q),
-        before.lastIndexOf(';', q),
-      );
-      const cond = before.slice(bound + 1, q);
-      out.push({ file, tokenName, verdict: guardRe.test(cond) ? 'guarded' : 'UNSAFE' });
-    }
-    return out;
-  }
-
-  it('the classifier can fail — four positive controls and one narrowing control', () => {
-    const P = 'const rounds = isSkinRounds();\n';
-    const one = (s: string) => scan('probe.tsx', s)[0]?.verdict;
-
-    // (1) bare — the recorded incident: undeclared, falls to initial value.
-    expect(one(P + "x = { color: 'var(--rounds-text-1)' };")).toBe('UNSAFE');
-    // (2) fallback — safe, one condition.
-    expect(one(P + "x = { color: 'var(--rounds-text-1, #0d1611)' };")).toBe('fallback');
-    // (3) guarded by THIS file's flag — safe, build-time fork.
-    expect(one(P + "x = { color: rounds ? 'var(--rounds-text-1)' : '#111' };")).toBe('guarded');
-    // (4) ⚠️ guarded by SOMETHING ELSE — must NOT count. This is the control
-    //     that separates "is behind a ternary" from "is behind the flag".
-    expect(one(P + "x = { color: isCompact ? 'var(--rounds-text-1)' : '#111' };")).toBe('UNSAFE');
-    // (5) the narrowing control: an optional chain above a bare value is not a
-    //     guard, and must not be mistaken for one.
-    expect(one(P + "const f = error?.field;\nx = { color: 'var(--rounds-text-1)' };")).toBe('UNSAFE');
-    // …and a file with no flag at all cannot launder anything through a local
-    // variable that merely happens to be named `rounds`.
-    expect(one("x = { color: rounds ? 'var(--rounds-text-1)' : '#111' };")).toBe('UNSAFE');
-  });
-
+describe('C1-e — the traversal boundary', () => {
   it('the traversal reached the settings surface — non-vacuity', () => {
     // A traversal that silently covers nothing returns "no offenders" for every
-    // question asked of it. State the boundary and prove it was entered.
+    // question asked of it. State the boundary and prove it was entered. This
+    // outlived the flag because every emptiness assertion in this file — the
+    // portal sweep, the applied/declared census — is worthless without it.
     expect(SETTINGS_FILES.length, `only ${SETTINGS_FILES.length} files under ${SETTINGS_ROOT}`)
       .toBeGreaterThanOrEqual(15);
     for (const f of [ENROLL, MANAGE, DELETE_DIALOG, EMAIL_DIALOG, 'src/app/settings/page.tsx']) {
@@ -517,48 +509,9 @@ describe('C1-e — no --rounds-* token resolves undeclared with the flag off', (
     // …and it descended (the MFA files are two levels down).
     expect(SETTINGS_FILES.some((f) => f.split('/').length > 4)).toBe(true);
     // Positive control on the CONTENT, not just the paths: the traversal must
-    // find a string we know is there.
+    // find a string we know is there. Unconditional now — the settings surface
+    // carries the bridge class on every render, not on a flag.
     expect([...SETTINGS_SRC.values()].join('\n')).toContain('qm-rounds-host');
-  });
-
-  it('every var(--rounds-*) under src/app/settings is fallback-safe or flag-guarded', () => {
-    const refs = SETTINGS_FILES.flatMap((f) => scan(f, srcOf(f)));
-
-    // Non-vacuity BEFORE the emptiness assertion: if nothing was examined, an
-    // empty offender list means the scanner found no work, not that the surface
-    // is safe.
-    expect(
-      refs.length,
-      'no var(--rounds-*) reference was examined at all — the scan covered nothing',
-    ).toBeGreaterThanOrEqual(4);
-    // And both safe shapes are actually present, or one branch of the
-    // classifier has never been exercised on real code.
-    expect(refs.some((r) => r.verdict === 'fallback')).toBe(true);
-    expect(refs.some((r) => r.verdict === 'guarded')).toBe(true);
-
-    const unsafe = refs
-      .filter((r) => r.verdict === 'UNSAFE')
-      .map((r) => `${r.file}: ${r.tokenName}`);
-    expect(
-      unsafe,
-      'these resolve UNDECLARED with the flag off — no build error, no console ' +
-        'error, the property silently falls to its INITIAL value:\n  ' +
-        unsafe.join('\n  '),
-    ).toEqual([]);
-  });
-
-  it('a file that build-time forks really does import the flag', () => {
-    // The guarded verdict is only worth anything if `isSkinRounds` is the real
-    // one. A local shadow would be a different function with the same name.
-    const guarding = SETTINGS_FILES.filter((f) =>
-      scan(f, srcOf(f)).some((r) => r.verdict === 'guarded'),
-    );
-    expect(guarding.length, 'no settings file uses the build-time fork').toBeGreaterThanOrEqual(1);
-    for (const f of guarding) {
-      expect(srcOf(f), `${f} forks on isSkinRounds without importing it`).toMatch(
-        /import\s*\{[^}]*isSkinRounds[^}]*\}\s*from\s*'@\/config\/skin-rounds'/,
-      );
-    }
   });
 });
 

@@ -453,6 +453,35 @@ retag survives a deploy.
 **Migrations are not a concern for this one:** the deploy applied none (83 in
 repo, 83 recorded, before and after), so the image rollback needs no schema work.
 
+#### ⚠️ AS OF 2026-08-05 (F-ret.3) THERE IS NO FLAG PATH AT ALL
+
+The paragraph above says the flag path *"stops working entirely after the
+old-skin retirement, because there is no longer an OFF branch to fall back to."*
+**That retirement has now happened.** This section's future tense is spent.
+
+`NEXT_PUBLIC_SKIN_ROUNDS` **no longer exists** — not in `docker-compose.yml`, not
+in `.env`, not in the `Dockerfile`, not in the CI workflows, not in the source.
+The flag-OFF arm is deleted, not disabled.
+
+**So the rollback is TAGGED IMAGES ONLY.** Concretely:
+
+- Setting `NEXT_PUBLIC_SKIN_ROUNDS=false` anywhere does **nothing**. There is no
+  variable to read and no branch to select. It will not error either — it is
+  simply an unused line, which is the more dangerous failure: it looks like a
+  lever.
+- A rebuild cannot produce an old-skin image from current `main`. The only way
+  back to the pre-Rounds UI is `git revert` of the retirement plus a rebuild,
+  which is a code change and takes the normal gate — not an incident-window
+  action.
+- **The live rollback set is the tagged-image table in §3.1**, and that is the
+  whole of it for this surface.
+
+This is the intended end state, not a regression. A flag that gates nothing
+advertises a rollback that does not exist, and carrying a dead OFF branch
+"just in case" is how a codebase acquires two products and tests one. The cost
+is stated plainly here so nobody reaches for a lever that was removed on
+purpose.
+
 ---
 
 ### 3.4 — R1 unification rollback (`:pre-r1-20260803`)

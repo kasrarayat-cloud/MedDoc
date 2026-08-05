@@ -10,13 +10,12 @@
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 
-import { isSkinRounds } from '@/config/skin-rounds';
 import { recoveryHref, recoveryLabel } from '@/lib/recovery-href';
 
 export default function VisitNotFound() {
   return (
     <div
-      className={isSkinRounds() ? 'qm-rounds-host qm-rounds-notfound' : undefined}
+      className="qm-rounds-host qm-rounds-notfound"
       style={{
         minHeight: '100vh',
         background: 'var(--color-linear-bg)',

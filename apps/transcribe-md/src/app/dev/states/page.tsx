@@ -13,7 +13,7 @@
 //
 // WHY THE ROUTE EXISTS AT ALL — narrowed from the plan's claim, by checking:
 //   · both 404s are ALREADY reachable by navigation (a bad URL renders the
-//     Rounds branch), so they do NOT need this route;
+//     Rounds not-found surface), so they do NOT need this route;
 //   · the ERROR BOUNDARY does — nothing navigates to it, and
 //     `27-error-resilience.spec.ts` says as much in its own source;
 //   · the LOADING states do — they paint for well under 100ms on QA, so a walk
@@ -34,7 +34,6 @@ import {
   SkeletonVisitGrid,
 } from '@/components/skeleton';
 import { isDevStates } from '@/config/dev-states';
-import { isSkinRounds } from '@/config/skin-rounds';
 // The REAL loading components, imported rather than reimplemented — a preview
 // of a second implementation proves nothing about the first.
 import BoardLoadingPreview from '@/app/board/loading';
@@ -99,7 +98,7 @@ export default async function DevStatesPage({
 
   return (
     <div
-      className={isSkinRounds() ? 'qm-rounds-host qm-rounds-devstates' : undefined}
+      className="qm-rounds-host qm-rounds-devstates"
       data-testid="dev-states"
       data-state={state}
       style={{ minHeight: '100vh' }}

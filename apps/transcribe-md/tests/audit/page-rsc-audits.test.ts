@@ -39,33 +39,37 @@ function readSource(relPath: string): string {
   return readFileSync(resolve(REPO_ROOT, relPath), 'utf-8');
 }
 
-describe('F-09: /dashboard emits VIEWED_DASHBOARD audit row', () => {
-  const src = readSource('apps/transcribe-md/src/app/dashboard/page.tsx');
-
-  it("imports logAudit from '@/lib/audit'", () => {
-    expect(src).toMatch(/import\s+\{\s*logAudit\s*\}\s+from\s+['"]@\/lib\/audit['"]/);
-  });
-
-  it('contains a void logAudit call with action=VIEWED_DASHBOARD', () => {
-    // Match the call with whitespace tolerance; the surrounding `void`
-    // pattern keeps audit fire-and-forget per the file's precedents.
-    expect(src).toMatch(/void\s+logAudit\s*\(\s*\{[\s\S]*?action:\s*['"]VIEWED_DASHBOARD['"]/);
-  });
-
-  it("audit metadata declares source='rsc:/dashboard'", () => {
-    expect(src).toMatch(/source:\s*['"]rsc:\/dashboard['"]/);
-  });
-
-  it("targets the user (targetType='User', targetId=userId)", () => {
-    // The dashboard is an aggregate view of one user's surface; the
-    // user is the audit target.
-    const auditBlock = src.match(
-      /void\s+logAudit\s*\(\s*\{[\s\S]*?\n\s*\}\s*\)\s*;/m
-    );
-    expect(auditBlock?.[0]).toMatch(/targetType:\s*['"]User['"]/);
-    expect(auditBlock?.[0]).toMatch(/targetId:\s*userId/);
-  });
-});
+// ============================================================================
+// ⚠️ F-09's /dashboard SUITE WAS RETIRED 2026-08-05 (F-ret.3), AND RETIRING AN
+// AUDIT TEST NEEDS EVIDENCE, NOT AN ARGUMENT.
+// ----------------------------------------------------------------------------
+// It asserted four things about `app/dashboard/page.tsx`: that it imports
+// `logAudit`, calls it with `action: 'VIEWED_DASHBOARD'`, declares
+// `source: 'rsc:/dashboard'`, and targets the user. That page is now a
+// 51-line unconditional `redirect('/board')` — the 682-line body those
+// assertions read had not executed in production since 2026-08-02, because the
+// skin flag redirected above it.
+//
+// THE OBLIGATION MOVED; IT WAS NOT DROPPED. §164.312(b) wants a doctor's read of
+// a PHI-adjacent landing page recorded, and `/board` — the surface that replaced
+// /dashboard as the home — writes its own row. Measured on PRODUCTION, read-only:
+//
+//     VIEWED_DASHBOARD    2361 rows   2026-05-06 → 2026-08-03
+//     VIEWED_VISIT_LIST    301 rows   2026-08-02 → 2026-08-05 (current)
+//
+// The old row stops at the flip; the new one starts at it and is current, with a
+// one-day overlap during the transition. So F-09 stays CLOSED, by its successor.
+//
+// ⚠️ WITHOUT THAT QUERY THIS WOULD HAVE BEEN A COMPLIANCE CHANGE WEARING A
+// REFACTOR'S CLOTHES. "The code is unreachable" is an argument about source; it
+// is not evidence that the audit trail is unbroken. The rows are.
+//
+// The F-11 /settings suite below is UNTOUCHED and still enforced — /settings is
+// still a page, and still writes VIEWED_SETTINGS.
+//
+// UN-RETIRE CONDITION: if /dashboard ever renders again rather than forwarding,
+// its access row comes back and this suite is where its test belongs.
+// ============================================================================
 
 describe('F-11: /settings emits VIEWED_SETTINGS audit row', () => {
   const src = readSource('apps/transcribe-md/src/app/settings/page.tsx');

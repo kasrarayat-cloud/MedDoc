@@ -21,7 +21,6 @@
 // tile and edit affordances are suppressed.
 // ============================================================================
 
-import { isSkinRounds } from '@/config/skin-rounds';
 import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/cn';
@@ -229,8 +228,8 @@ export function RxTab({
   // the deterministic not-in-database check) are CORRECT clinical behaviour and
   // are not softened: nothing here reads or rewrites a warning.
   //
-  // Flag-OFF it is the empty string, so the legacy render is byte-identical.
-  const roundsHost = isSkinRounds() ? 'qm-rounds-host qm-rounds-rx' : '';
+  // The Rounds skin is permanent, so the host classes are unconditional.
+  const roundsHost = 'qm-rounds-host qm-rounds-rx';
 
   const handleWarningFocus = useCallback((rxId: string) => {
     setActiveRxId(rxId);
