@@ -175,7 +175,63 @@ Still owed in TEAMS proper: backfill `practiceIdSnapshot` on the 38 rows that
 predate the column, and name `audit_logs` as an S4c exclusion in the same
 commit that writes the fail-closed rule.
 
-### T3 — `practiceId` on `transcribe_visits`, with a stated derivation
+### ✅ T3 — `practiceId` on `transcribe_visits` — DONE 2026-08-05
+
+#### THE DERIVATION, STATED: `patient.practiceId`. NOT `user.practiceId`.
+
+Both agreed on all 26 production rows when this was written — measured
+2026-08-05: **26 visits, 26 agree, 0 disagree, 0 nulls, 0 visits without a
+patient.** Nothing in the database kept them agreeing, which is exactly why the
+choice had to be made rather than inherited from whichever join was handy.
+
+**Why the patient wins.** A note belongs to the practice that owns the CHART. A
+locum from practice B seeing a patient of practice A creates a note in **A**;
+deriving from the author would file it in B and split that patient's history
+across tenants — silently, and irreversibly by the time anyone noticed.
+
+**And structurally:** `transcribe_md_patients.practiceId` is already the tenancy
+anchor. Deriving from the patient keeps **one** source of truth. Deriving from
+the user creates a **second, independent** one, and two sources that nothing
+reconciles is precisely the drift this column exists to end.
+
+#### ⚠️ THE CONSTRAINT IS A COMPOSITE FK, NOT A TRIGGER
+
+    transcribe_visits(patientId, practiceId) → transcribe_md_patients(id, practiceId)
+
+A trigger can be disabled, skipped by a bulk load, or dropped in a restore. A
+composite FK makes the bad row **unrepresentable**: there is no `(id, practiceId)`
+pair to point at, so the storage layer refuses it and application code has
+nothing to route around. It required adding `@@unique([id, practiceId])` to the
+patient model — redundant for uniqueness (`id` is the PK), required for
+referenceability, and noted in the schema so a tidy-up cannot remove it without
+removing the guarantee.
+
+#### GATE — MET, AND PROVEN BY ATTEMPT
+
+    cross-practice INSERT   → ERROR: violates transcribe_visits_patientId_practiceId_fkey
+    same INSERT, correct    → INSERT 0 1
+
+⚠️ **The positive control is what makes the refusal mean anything.** "The insert
+failed" proves nothing alone — a typo'd column, a missing user, a dropped table
+all fail too. Only the pair shows the constraint rejects the wrong TENANT
+specifically.
+
+Backfill: **58 visits on QA, 0 null, 0 mismatch**, counted after; the migration
+itself `RAISE EXCEPTION`s if any row is still NULL before `SET NOT NULL`, so a
+half-run migration cannot report success. Column is `NOT NULL`. Scoping index
+added.
+
+Repeatable gate: `tests/e2e/scenarios/32-visit-practice-constraint.spec.ts`,
+**mutation-proven** — dropping the FK reds 2 of its 4 tests.
+
+⚠️ **NOT YET APPLIED TO PRODUCTION.** The migration lands with the next
+`deploy-prod.sh`, which runs `prisma migrate deploy` and asserts afterwards. The
+26 prod rows will backfill from the same derivation; the abort guard is what
+makes that safe to do unattended.
+
+---
+
+### T3 (original wording) — `practiceId` on `transcribe_visits`, with a stated derivation
 Column added nullable, backfilled, then `NOT NULL`. **Write down which
 derivation path was used** (`user.practiceId` or `patient.practiceId`) — they
 agree on all 26 rows today and nothing in the database keeps them agreeing

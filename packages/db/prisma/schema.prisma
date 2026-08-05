@@ -541,6 +541,7 @@ model Practice {
   // privacy posture (TranscribeMdPatient stores full DOB; CRM Patient
   // stores birthYear only per Safe Harbor).
   transcribeMdPatients TranscribeMdPatient[]
+  transcribeVisits     TranscribeVisit[]
   // Phase 6 — per-call external API spend; rolled up in the admin
   // usage endpoints.
   apiUsageEvents       ApiUsageEvent[]
@@ -1617,6 +1618,9 @@ enum TranscribeVisitStatus {
 //     search + lists; linked TranscribeVisit rows keep the FK intact.
 // ============================================================================
 
+/// ⚠️ Carries `@@unique([id, practiceId])` — see the note on that line. It is
+/// the target of `TranscribeVisit`'s composite FK and is what makes a
+/// cross-practice visit impossible at the storage layer.
 model TranscribeMdPatient {
   id String @id @default(cuid())
 
@@ -1682,6 +1686,13 @@ model TranscribeMdPatient {
   transcribeVisits TranscribeVisit[]
 
   @@index([practiceId, deletedAt])
+  /// ⚠️ T3 — THE TARGET OF TranscribeVisit's COMPOSITE FK. `id` alone is already
+  /// unique (it is the PK), so this adds no uniqueness. It exists because
+  /// Postgres will not accept a composite foreign key unless the referenced
+  /// columns carry a UNIQUE together — and that FK is what makes a visit whose
+  /// practice differs from its patient's UNREPRESENTABLE rather than merely
+  /// discouraged. Removing this line silently removes that guarantee.
+  @@unique([id, practiceId])
   // Trigram GIN index for fuzzy name search is added by the migration
   // SQL directly (Prisma doesn't natively express `USING gin (LOWER(name)
   // gin_trgm_ops)`). See migration 20260420_*_add_transcribe_md_patients.
@@ -1700,6 +1711,17 @@ model TranscribeVisit {
   /// every insert.
   patientId String
   patient   TranscribeMdPatient @relation(fields: [patientId], references: [id], onDelete: Restrict)
+
+  /// T3 — the visit's tenant. DERIVED FROM THE PATIENT, never from the author.
+  ///
+  /// A note belongs to the practice that owns the CHART: a locum from practice
+  /// B seeing a patient of practice A creates a note in A. Deriving from
+  /// `user.practiceId` would file it in B and split that patient's history
+  /// across tenants. Both paths agreed on all 26 rows at migration time and
+  /// NOTHING kept them agreeing — hence the explicit choice, and the composite
+  /// FK below that makes the alternative unrepresentable.
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id])
 
   /// Legacy free-text patient name — kept nullable through T-M17.2
   /// because some older visits never set it. After the Phase 1
