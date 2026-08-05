@@ -191,8 +191,21 @@ from the ruling; the commentary under each is a pointer, not an amendment.**
 > **EXCLUDED from backfill, DEACTIVATED (login disabled), rows retained — no
 > deletion. Owner veto window is open until the TEAMS migration runs.**
 
-Four of the twelve are on `@meddoc.com` carrying the operator's own name,
+⚠️ **CORRECTED 2026-08-05 — it is THREE, not four.** Measured against the live
+table: `kash@`, `kasra@` and `kas@meddoc.com` carry the operator's name. The
+likely fourth, `doctor@meddoc.local`, is on a **different domain** and carries a
+**different person's name** — "Dr. Bakhtiar Moussazadeh". The distinction is not
+pedantry: deactivating your own test accounts and deactivating one bearing a
+named clinician are different decisions, and the second is the one that needed
+the owner's eyes. It was surfaced to them before the veto question was put.
+
+The remaining eight are unambiguous fixtures (`@test.dev` ×7, `qa-pro@quillmd.local`),
 created on the project's first two days, all with a real login (DISCOVERY §A.5).
+
+**✅ VETO LAPSED — OWNER CONFIRMED 2026-08-05.** All 12 excluded + deactivated,
+rows retained. Also measured: all 12 own **zero** clinical rows, so deactivation
+costs nothing clinically and stays reversible. See the TEAMS EXIT GATE in
+`docs/foundation/RELAY.md` for the full ruling.
 Deactivation is reversible and deletion is not, which is what makes the veto
 window meaningful. **The window closes when the TEAMS migration runs** — that
 is item **T7**, and whoever runs it must confirm the veto has lapsed before

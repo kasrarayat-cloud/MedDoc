@@ -176,6 +176,101 @@ without a written verdict on each is how they become invisible.
 | **`audit_logs` named as an S4c exclusion** in the same commit that writes the fail-closed "no clinical row without practiceId" rule. | Named by name, with the S4c reasoning cited, so a future tidy-up cannot "fix" it and re-break account deletion. |
 | **The 12 `MEDDOC_PRO`-only accounts** — GATE 0 ruled *excluded + deactivated, rows retained*, with an **owner veto window open until the TEAMS migration runs** (SPEC §4.1). | Confirm the veto has lapsed **before** excluding them. Four of the twelve carry the operator's own name. |
 
+### ✅ TEAMS EXIT GATE — ALL FOUR ROWS RULED, 2026-08-05
+
+Written before any migration runs, which is the point of the gate.
+
+#### 1. `worker.ts:983` read-after-write — ⚠️ RACE CONFIRMED BY CONSTRUCTION
+
+Phase 0 left this UNSURE and said so. It is no longer unsure, and the answer did
+not need a reproduction:
+
+    packages/ai/src/log.ts:33
+      export function logAiCall(input: AiCallLogInput): void {
+        void prisma.aiCall.create({ … }).catch(…);
+      }
+
+The function returns `void` **synchronously** and discards the promise. There is
+no flush, no drain, no queue — `grep` for one across `log.ts`/`index.ts` returns
+nothing, so a caller has no way to wait for outstanding writes. `worker.ts:983`
+then does `prisma.aiCall.findMany({ where: { visitId } })` and sums.
+
+**There is no happens-before edge between the last write and that read.** So the
+question was never "can it race" — by construction it can. Asking for a
+reproduction would have been asking how OFTEN, which is a different question and
+a much weaker one: a race that reproduces rarely is still a race.
+
+**Impact today: none that matters.** The code's own comment is correct — "the
+cost number is observability, not load-bearing for correctness" — and the L7
+fan-out takes seconds, so all but the last writer have almost certainly landed.
+
+⚠️ **IT STOPS BEING OBSERVABILITY WHEN BILLING LANDS.** B6 makes this number the
+input to `charge = cost_micro × 3 / 2`. An undercounting sum then becomes an
+undercharge — silent, unbounded, and invisible because the number still looks
+plausible. **VERDICT: accepted for now, ASSIGNED to BILLING B1/B4**, which must
+either await the writes or accumulate the cost in memory rather than re-reading
+the table it just wrote. Not deferred silently; deferred to the item where it
+first matters.
+
+#### 2. `practiceIdSnapshot` backfill — ✅ DONE
+
+⚠️ **THE COUNT WAS 44, NOT 38.** DISCOVERY §B.8's 38 was the *resolvable*
+subset; six more rows have no practice on their user either and cannot be
+backfilled from anything.
+
+**Applied:** 38 rows, one transaction, guarded — expected count pinned inside the
+transaction, `GET DIAGNOSTICS ROW_COUNT` compared to it, and a post-check that
+zero remain, with `RAISE EXCEPTION` on either mismatch. Total row count
+unchanged at 10500. All 38 belonged to a single **QA Audit Practice**, not a
+clinician's.
+
+⚠️ **WHY THIS IS NOT A BREACH OF APPEND-ONLY, stated because it looks like one.**
+The rule protects what a row SAYS HAPPENED — action, actor, time, target.
+`practiceIdSnapshot` is none of those: it is a denormalised copy of `practiceId`,
+which the row **already carries**, added by S4c so the value survives the FK
+being detached at deletion. Copying it from the row's own authoritative field
+asserts nothing new and changes no claim.
+
+Contrast with the audit-attribution repair of 2026-08-04, where the stored
+`practiceId` was itself WRONG (`?? 'clinic_main'`): fixing that in place would
+have changed what the row claimed, so correction records were the only honest
+route. **The test is whether the edit changes a claim, not whether it changes a
+byte.**
+
+The 6 unresolvable rows are left NULL. Inventing a tenant for them would be the
+breach this paragraph rules out.
+
+#### 3. `audit_logs` as an S4c exclusion — ⏭ CARRIED AS A REQUIREMENT ON T5/T7
+
+Nothing to do yet: the fail-closed "no clinical row without `practiceId`" rule
+does not exist. **The requirement is recorded here so the commit that writes it
+cannot omit it** — `audit_logs` must be named BY NAME as an exclusion, with the
+S4c reasoning cited inline, because a future tidy-up that "fixes" the nullable
+`practiceId` re-breaks account deletion: the deletion path depends on the FK
+being SET NULL while `practiceIdSnapshot` preserves the tenant
+(`delete-account/route.ts:126-134`).
+
+#### 4. The 12 `MEDDOC_PRO`-only accounts — ✅ VETO LAPSED, OWNER CONFIRMED 2026-08-05
+
+**The owner was asked and answered in writing before this row was written.**
+Verdict: *lapsed — deactivate all 12.* GATE 0's ruling stands: excluded from
+backfill, login disabled, rows retained, **no deletion**.
+
+⚠️ **SPEC §4.1 IS IMPRECISE AND IS CORRECTED HERE.** It says "Four of the twelve
+are on `@meddoc.com` carrying the operator's own name." Measured, **three** are —
+`kash@`, `kasra@`, `kas@meddoc.com`. The likely fourth, `doctor@meddoc.local`, is
+on a **different domain** and carries a **different person's name**, "Dr.
+Bakhtiar Moussazadeh". That distinction was surfaced to the owner before the
+question was put, because deactivating your own test accounts and deactivating
+one bearing a named clinician are not the same decision.
+
+Also measured: **all 12 own zero clinical rows**, so deactivation costs nothing
+clinically and remains reversible — which is what made the window meaningful.
+
+**T7 may now exclude these rows.** The veto is closed.
+
+---
+
 ### T8 — invites carry practice + role
 **Gate:** a code minted for `(practice, CLINICIAN)` produces a member of that
 practice with that role, and one minted for a practice that no longer exists
