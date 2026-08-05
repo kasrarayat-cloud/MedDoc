@@ -24,6 +24,22 @@ on:
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review]
+  # ⚠️ ADDED 2026-08-05 (TEAMS hygiene 2). This workflow was `pull_request`-ONLY
+  # while CI, e2e and secrets-scan all also carried `push: [main]` — so the
+  # axe sweep validated the PR head and NEVER the merge result. Anything
+  # reaching `main` by another route was structurally invisible to it: it read
+  # as coverage and had a path it could not see.
+  #
+  # Found while citing a merge commit across all four workflows by name: three
+  # could be cited and the fourth could not, because it does not run there.
+  # Quoting its PR-head green beside a merge SHA would have been exactly the
+  # substitution the citation rule exists to prevent, so for two merges the row
+  # read "DID NOT RUN — stated". It no longer has to.
+  #
+  # The cost is a ~4.5-minute job on every push to main. That is the price of a
+  # merge-commit citation that is complete rather than three-quarters complete.
+  push:
+    branches: [main]
 
 concurrency:
   group: a11y-${{ github.ref }}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useEffect, useRef } from 'react';
+import { useActionState, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { visibleSpecialties, findSpecialty } from '@meddoc/shared/specialties';
 import { updateProfileAction, type ProfileState } from '@/actions/profile';
@@ -60,9 +60,30 @@ export function ProfileForm({
 
   const errors = state && !state.ok ? state.errors : {};
 
+  // ⚠️ A HYDRATION MARKER, EXISTING FOR THE TESTS AND SAID SO PLAINLY.
+  // This form is `<form action={formAction}>` driven by `useActionState`.
+  // Playwright's `fill()` and `click()` operate on the DOM and do NOT wait for
+  // React, so a click landing before hydration submits as a NATIVE form POST:
+  // the save happens, the page navigates, `state` stays null, and the success
+  // chip — which renders only on `state?.ok` — never appears.
+  //
+  // `16-account-settings` chased that twice. A rail-button wait failed 1 in 10
+  // (the rail renders before this form is interactive). `networkidle` then held
+  // 12/12 locally and STILL failed twice in one CI run: it waits for the
+  // network, not for React, so it narrows the window without closing it. Its
+  // own comment said the real fix needed "a hydration marker the app does not
+  // expose". This is that marker.
+  //
+  // An effect body cannot run during SSR, so `data-hydrated` appears if and only
+  // if this component has hydrated on the client — which is exactly the
+  // condition a test needs and the only one that is not a proxy for it.
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
+
   return (
     <form
       action={formAction}
+      data-hydrated={hydrated ? 'true' : undefined}
       style={{ display: 'flex', flexDirection: 'column', gap: 14 }}
     >
       <Row>

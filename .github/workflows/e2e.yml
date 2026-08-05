@@ -157,10 +157,15 @@ jobs:
           NEXT_PUBLIC_ULTRASOUND_SPECIALTY: "true"
           NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX: "true"
           NEXT_PUBLIC_TEMPLATE_NATIVE_PDF: "true"
-        run: docker compose -p meddoc-pro -f docker-compose.yml build transcribe-md transcribe-md-worker
+        # ⚠️ BUILT VIA THE QA COMPOSE, NOT PROD'S — 2026-08-05 (TEAMS hygiene 1).
+        # This used `-f docker-compose.yml`, which tags `:latest`. On the VPS
+        # that is the tag production deploys from, so a QA build silently
+        # re-pointed it. QA now owns `:qa` end to end and never reads or writes
+        # prod's tag; `scripts/check-qa-tag-isolation.sh` asserts it by digest.
+        run: docker compose -p meddoc-qa -f docker-compose.qa.yml build transcribe-md transcribe-md-worker
 
       - name: Build db-migrate image (prisma CLI)
-        run: docker compose -p meddoc-pro -f docker-compose.yml --profile migrations build db-migrate
+        run: docker compose -p meddoc-qa -f docker-compose.qa.yml build db-migrate
 
       # ── Bring up the isolated qa stack from the committed recipe. ──
       - name: Start qa infra (postgres + redis + minio)
