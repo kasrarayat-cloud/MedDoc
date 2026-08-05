@@ -673,6 +673,126 @@ so the next session does not re-derive it:
   claim that needs both lists to be checkable).
 - **F-ret.3 …** — the deletion itself, unchanged, still gated on .1 and .2.
 
+### ✅ F-ret.1 AND F-ret.2 — CLOSED 2026-08-04
+
+PR **#525** → merge commit **`c150b600`** (parents `214103d9` + `3d8cb23f`).
+
+**Merge-commit evidence, by workflow name — and one of the four could not be
+cited, which is stated rather than papered over:**
+
+| Workflow | Run | Conclusion |
+|---|---|---|
+| `CI` | `30939703503` | success — `test`, `unit tests`, `npm audit`, `dev-dependency advisories` |
+| `e2e` | `30939703687` | success — `Playwright E2E (transcribe-md)` |
+| `secrets-scan` | `30939703383` | success — `TruffleHog` |
+| `a11y-ci` | — | **DID NOT RUN.** `a11y.yml` triggers on `pull_request` only |
+
+`total_count: 6, success: 6, non-success: 0`, re-read from the API rather than
+remembered. `a11y-ci` was green on the PR head `3d8cb23f` (axe-core sweep,
+4m24s); quoting that beside a merge SHA would be exactly the substitution the
+citation rule exists to prevent, so it is not quoted as such. The gap itself is
+recorded in `docs/foundation/RELAY.md` — it is not specific to this PR.
+
+**The table: 16 drift · 2 retire · 1 new required spec · ZERO overturned.**
+
+The two retires, with their notes in the spec files themselves rather than only
+here:
+
+| Retired | Verdict |
+|---|---|
+| `8-visit-detail-tabs.spec.ts` — **PARTIAL** | The tab strip is unreachable under the shipped flag set (`visit-ready-view.tsx:645/848/1203` all exit before `:1317 <ReviewTabsV2>`). It died with the C3 promotion and the read-only paper, NOT with the Rounds flip. **The list→detail navigation survives deliberately** — it is the only proof a `/visits` anchor resolves to a real visit page, and retiring the whole file would have dropped it silently. |
+| `9-soap-edit.spec.ts` — **FULL, as a tombstone** | The inline SOAP editor cannot render on any shipped surface (`SoapInlineEdit.tsx:92` returns a bare div when `readonly`; both live mounts pass `chromeless`). Kept as a `describe.skip` holding the record, because deleting the file would have erased **what the required pack lost**. |
+
+**The new spec exists because retiring `9-soap-edit` opened a hole in the same
+pass that closed it.** `30-note-edit-persistence.spec.ts` promotes the *claim*
+rather than the spec — `visit-document.spec.ts` needs a certified-twin fixture
+and the Gotenberg sidecar, neither of which the required pack stands up. A
+capability covered only by non-required packs is the two-month gate defect in
+miniature.
+
+**⚠️ WHAT THIS ITEM COST, AND THE ONE LESSON WORTH CARRYING.** Giving e2e.yml's
+fixture-image build the production flag set fixed the default pack **and broke
+`rx-safety`** — five of its eight tests — because `phi-reject` and `rx-safety`
+run on that same image and had been silently flag-OFF. The product never
+changed; the harness started looking at the shipped surface. Repaired in
+`3d8cb23f`.
+
+Three things from that repair generalise:
+
+1. **Two failures that look alike can have different causes.** Four of the five
+   died on `getByRole('tab', {name:'Rx'})`; the fifth died on
+   `getByRole('button', {name:/sign & send/i})`. Reading only the first would
+   have generalised the wrong cause across all five.
+2. **My first repair of the fifth was wrong, and only DRIVING caught it.**
+   Swapping in `openSignFlow` failed at `sign.ts:95` — "the gate flow never
+   presented the attestation". The helper was right and the product was right;
+   the assumption was wrong. A visit with an un-overridden critical interaction
+   never reaches attestation, so the old shape (attest → submit → read the
+   refusal) has **no analogue**. Under Rounds the doctor is stopped one step
+   earlier and told *"1 critical interaction outstanding"* — a stronger
+   property, measured on the stack, not inferred from the component.
+3. **`toHaveCount(0)` passes vacuously on a misspelled testid.** The mutation
+   that mattered pointed it at a testid that IS present; it went red. Without
+   that, the assertion would have asserted nothing forever.
+
+Both Rx specs had their own copy of the tab dance and both broke identically, so
+the replacement lives in one place (`helpers/rxGate.ts`) — a per-caller list is
+kept complete by hand, and hand-kept lists are wrong eventually (R3.4).
+
+**F-ret.2 — the route set, both lists, because "equal-or-wider" is a claim that
+needs checking rather than asserting.** Baseline `d02484f3` → `cc397d93`:
+
+| | Routes |
+|---|---|
+| **Before** (14) | `/login` `/signup` `/waitlist` `/forgot-password` `/reset-password` `/check-email` `/dashboard` `/visits` `/visits/new` `/settings` … |
+| **Added** (3) | `/board` · `/patients` · `/settings/note-format` |
+| **Removed** | **none** |
+| **After** | **17** |
+
+⟹ equal-or-wider: **YES**, by set difference rather than by counting.
+
+`a11y.yml`'s build step also gained the same 11 `NEXT_PUBLIC_*` flags as
+`e2e.yml`, so the sweep runs against a production-shaped build. **The full flag
+set, never one flag** — the `/dev/null --env-file` lesson applies identically
+here: a single flag flipped in isolation produces a build that exists nowhere.
+
+That re-point immediately found a real defect rather than a harness one: the
+Word preview's `.qm-npv-docx` was a keyboard trap under
+`scrollable-region-focusable` (`overflow-x: hidden` implies `overflow-y: auto`,
+so the container scrolls and was not reachable by keyboard). Fixed at
+`native-document-preview.tsx:270` with `role="region"` + `aria-label` +
+`tabIndex={0}`; green at both viewports, 34/34.
+
+**Note-edit persistence regained REQUIRED coverage** via
+`30-note-edit-persistence.spec.ts` rather than being explained away — see above.
+
+**F-ret.3 remains ⬜ TODO**, and three of its inputs are now measured rather
+than assumed:
+
+- **The `NEXT_PUBLIC_SKIN_ROUNDS` decoy is NOT a compose line.** `docker-compose.yml`
+  names the flag exactly once, at `:560`, as a build arg. The inert runtime value
+  in both containers comes from `env_file: ['.env']` → `.env:115`. The worker
+  proves it: no `SKIN_ROUNDS` build arg at all, no client bundle to inline into,
+  and it still carries `NEXT_PUBLIC_SKIN_ROUNDS=true` at runtime. **Three removal
+  sites, not two** — deleting only the compose line would leave `.env:115`
+  sourcing a variable nothing reads.
+- **`globals.css:7096-7104` (`.qm-vdoc .qm-npv-docx`) is provably dead** — by
+  complete enumeration, not a spot check. `.qm-vdoc` has one emitter
+  (`DocumentPages`) with one mount; the `.qm-npv-docx` emitter has four mounts,
+  one of which is a **mutually exclusive sibling branch** behind an early
+  `return` and three of which are under `settings/note-format`. ⚠️ The near-miss
+  is why this needed proving: `document-pages.tsx` DOES emit `qm-npv-page` and
+  `qm-npv-note`, so grepping the subtree for `qm-npv` returns hits and would have
+  argued the rules were live.
+- **The "PDF and Word frame identically" comment is NO LONGER FALSE.** It was
+  catalogued at `globals.css:7000` on measured evidence (756 vs 674), and
+  **R3-b2 then fixed the defect** — both measure 756 after the viewer chrome was
+  removed. The code was changed to match the comment. Correcting or deleting it
+  now would turn an accurate statement into a false one. ⚠️ This rests on
+  R3-b2's *recorded* measurement, not on one I took; re-measuring is F-ret.3's
+  first step for this item. The sweep therefore stands at **4 of 5 resolved**,
+  not 5.
+
 **The stopper recorded in the F-ret row is untouched by this.** The 9
 non-`qm-rounds-*`-scoped `[data-skin='rounds']` rules and the two flag-OFF
 required checks are exactly as measured; this section only establishes the size
