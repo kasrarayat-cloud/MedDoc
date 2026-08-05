@@ -334,6 +334,12 @@ async function main() {
         id: DONOR_VISIT_ID,
         userId: user.id,
         patientId: patient.id,
+        // T3 — from the PATIENT, per the stated derivation. The patient row
+        // was created (or found) under `user.practiceId` a few lines up, so this
+        // is the same value by construction; the patient's `select` does not
+        // expose the column, and widening it just to read back what we already
+        // hold would be noise. The composite FK refuses a mismatch either way.
+        practiceId: user.practiceId,
         specialty: 'ultrasound',
         inputMode: 'text',
         status: 'READY',

@@ -81,6 +81,10 @@ export function createEphemeralVisitNoteGenerator(
         data: {
           userId: input.userId,
           patientId: patient.id,
+          // T3 — from the patient, which this function just created with
+          // `input.practiceId`. Threaded from the same value rather than read
+          // back, but it must MATCH: the composite FK refuses anything else.
+          practiceId: input.practiceId,
           specialty: deps.specialty,
           inputMode: 'text_notes',
           // The synthetic encounter itself — already cleared by the
