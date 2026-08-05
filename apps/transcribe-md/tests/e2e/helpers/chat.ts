@@ -55,8 +55,41 @@ export async function openChatEditor(page: Page): Promise<void> {
  */
 export async function assertChatReachable(page: Page): Promise<void> {
   await openChatEditor(page);
+  await closeChatEditor(page);
+}
+
+/**
+ * Close the chat drawer and wait until it can no longer intercept a click.
+ *
+ * ⚠️ EVERY CALLER THAT OPENS THE DRAWER MUST CLOSE IT unless the test ends
+ * there. The scrim covers the stage, so a caller that types an edit and then
+ * reaches for the paper or the action rail will find its target present,
+ * enabled, and permanently un-clickable.
+ */
+export async function closeChatEditor(page: Page): Promise<void> {
   const close = page.getByTestId('rounds-chat-close');
   await expect(close, 'the chat drawer has no close control').toBeVisible();
   await close.click();
-  await expect(page.getByTestId('chat-editor')).toBeHidden({ timeout: 15_000 });
+
+  // ⚠️ WAIT ON THE SCRIM, NOT THE EDITOR — and the first version of this waited
+  // on the editor, which is why two visit-doc tests still failed with
+  // "28 × waiting for element to be visible, enabled and stable" on
+  // `rounds-review-sign`. The rail was THERE the whole time; it was covered.
+  //
+  // `rounds-chat-scrim` is `position: fixed; inset: 0` and `createPortal`'d to
+  // <body> (chat-drawer.tsx:165-170), so it overlays the entire stage including
+  // the action rail. `chat-editor` hiding says the DRAWER is going; it says
+  // nothing about when the scrim has left the hit-testing tree. Anything that
+  // clicks the rail immediately afterwards races it.
+  //
+  // Asserted by COUNT rather than visibility: the node is portalled and
+  // conditionally rendered (`{open ? … : null}`), so "gone" means detached, and
+  // `toBeHidden` would also pass on a still-present node that merely became
+  // invisible mid-transition.
+  await expect(
+    page.getByTestId('rounds-chat-scrim'),
+    'the chat scrim is still in the tree — it covers the action rail and will ' +
+      'swallow the next click',
+  ).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByTestId('chat-editor')).toHaveCount(0, { timeout: 15_000 });
 }

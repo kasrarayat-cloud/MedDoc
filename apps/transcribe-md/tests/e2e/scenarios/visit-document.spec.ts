@@ -92,7 +92,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 
 import { loginUser } from '../helpers/auth';
-import { assertChatReachable, openChatEditor } from '../helpers/chat';
+import { assertChatReachable, closeChatEditor, openChatEditor } from '../helpers/chat';
 import { QA_COMPOSE, QA_DB } from '../helpers/qa-compose';
 import {
   attestAndSubmit,
@@ -214,8 +214,7 @@ async function expectSignatureReachable(page: Page) {
  */
 async function chatEditSection(page: Page, section: string, body: string) {
   // ⚠️ RE-POINTED 2026-08-05 (F-ret.3). The editor is not inline any more — it
-  // lives in a drawer behind `rounds-chat-trigger`. This opens it and LEAVES it
-  // open, because everything below types into it.
+  // lives in a drawer behind `rounds-chat-trigger`.
   await openChatEditor(page);
   const before = await page.getByTestId('chat-turn-assistant').count();
   await page.getByTestId('chat-input').fill(`MOCKEDIT ${section} :: ${body}`);
@@ -234,6 +233,21 @@ async function chatEditSection(page: Page, section: string, body: string) {
   await expect(actions).toContainText(new RegExp(`Changed ${section}`, 'i'));
   await expect(actions).not.toContainText(/could not/i);
   await expect(actions.locator('.qm-chat-action-fail')).toHaveCount(0);
+
+  // ⚠️ CLOSE THE DRAWER, AND THIS LINE IS THE FIX FOR TWO CI FAILURES.
+  // The first version of this re-point left the drawer OPEN — correct for the
+  // typing above, wrong for everything after it. `rounds-chat-scrim` is
+  // `position: fixed; inset: 0` and portalled to <body> (chat-drawer.tsx:165),
+  // so it covers the whole stage; every caller of this helper goes on to click
+  // the paper or the action rail. Both remaining visit-doc failures were that:
+  // `review-doc-em-rescore` and `rounds-review-sign` reported "28 × waiting for
+  // element to be visible, enabled and stable" — the elements were THERE the
+  // whole time and simply covered.
+  //
+  // The wait is on the SCRIM's detachment, not the editor's: the editor hiding
+  // says the drawer is going, not that the thing intercepting clicks has left
+  // the tree.
+  await closeChatEditor(page);
 }
 
 /** The first anchored section heading on the drawn document — whatever the
