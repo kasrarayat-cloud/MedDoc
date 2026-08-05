@@ -708,32 +708,49 @@ container, every zero against a live positive control:**
 Standing checks 5/5 ✅ clean post-deploy. Co-tenants unchanged: app `307`,
 marketing `200`, admin `404`, pro `410`.
 
-#### ⚠️ THE SMOKE IS PARTIAL, AND THE UNVERIFIED HALF IS NAMED
+#### THE SMOKE — COMPLETE, INCLUDING THE ATTESTED SIGN
 
-Steps 1–7 passed against production on the synthetic smoke account: the board is
-home with its top bar and account menu; `/visits/new` draws; **zero legacy nav
-components**; `data-skin="rounds"` unconditional; the 404 recovery link is
-"Back to the board" → `/board` with no "Back to dashboard" anywhere; `/dashboard`
-forwards rather than renders; a visit was created and the stage + paper drew.
+Run against production on the synthetic smoke account.
 
-**THE ATTESTED SIGN WAS NOT COMPLETED, and the log line claiming it was is the
-lesson.** My walk printed `SMOKE 8/9 attested + signed` immediately after
-clicking the sign control — before anything confirmed it. The database says
-`status=READY`, `signedAt` null, and there is **no `VISIT_SIGNED` audit row**.
-Step 9 caught it.
+Structural leg: the board is home with its top bar and account menu;
+`/visits/new` draws; **zero legacy nav components**; `data-skin="rounds"`
+unconditional; the 404 recovery link is "Back to the board" → `/board` with no
+"Back to dashboard" anywhere; `/dashboard` forwards rather than renders.
 
-**The product is not implicated.** No `POST /sign` reached the server at all — no
-sign-related log line in 20 minutes — because "Sign & Download" opens
-`SignAndSendModal` and my walk never submitted it. A harness that stops one
-control short, not a broken gate. The attested-sign path IS covered by the
-`rounds-gates` and `visit-doc` packs, green on this merge commit.
+Clinical leg: patient → visit → stage drew → gate flow → attestation ticked →
+`SignAndSendModal` → destination chosen → submitted → **SIGNED**.
 
-**Evidence written at the moment of an action is not evidence.** That is relay
-rule 2c, and I broke it in my own smoke while quoting it elsewhere in the same
-session.
+Verified THREE independent ways, none of which can pass on a click that went
+nowhere:
 
-Smoke data cleaned to baseline: visits 2 → **0**, patients 2 → 0, **audit rows
-PRESERVED (949)** — deleting them would be the tampering the trail exists to
+    modal      `Download PDF` gone — it exists only inside the modal and is not
+               re-rendered by the pending transition, so it disappears exactly
+               when the server accepted
+    API        GET /api/visits/<id> → status SIGNED
+    DATABASE   status=SIGNED, signedAt=2026-08-05 14:43:22.749, and the audit
+               chain TM_PATIENT_CREATED → VISIT_CREATED →
+               ANCHOR_FLAGS_RECORDED → VISIT_SIGNED
+
+⚠️ **THE FIRST ATTEMPT FAILED, AND HOW IT FAILED IS THE LESSON.** It clicked the
+gate flow's "Sign & Download" — which OPENS the modal — and stopped there. No
+`POST /sign` ever reached the server; the visit stayed READY with no
+`VISIT_SIGNED` row. **And it printed `SMOKE 8/9 attested + signed` anyway**,
+because the log line sat immediately after the click rather than after anything
+that confirmed it. A step that reports its own success at the moment of the
+action is not evidence — relay rule 2c, broken in my own smoke while it was
+being quoted elsewhere the same day. The only reason it was caught is that the
+NEXT step asked the server, and the server disagreed.
+
+The repair was to stop guessing and read `helpers/sign.ts`, which already
+encoded both traps: `expectSignModalClosed` must anchor on `Download PDF` and
+NOT on the submit button (which vanishes during `useTransition`, so
+`toBeHidden` passes the instant the click enters the transition — asserting
+"the handler started", not "the sign succeeded"), and not on
+`getByRole('dialog')` (strict-mode ambiguous under Rounds, where the gate flow
+carries the role too).
+
+Smoke data cleaned to baseline: visits → **0**, patients → 0, **audit rows
+PRESERVED (964)** — deleting them would be the tampering the trail exists to
 prevent. Real-clinician visits unchanged at 26.
 
 #### 19:56 — DISPOSITION: BRANCH (a), FORK OBSERVED AND RE-POINTED
