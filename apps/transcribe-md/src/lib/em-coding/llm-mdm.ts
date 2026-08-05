@@ -367,6 +367,34 @@ function getAnthropicClient(): Anthropic {
 /** Calls the LLM up to 2 times (per rubric §4.3 retry-once-on-parse-fail
  *  policy). Returns null if both attempts fail or time out. */
 async function callClaudeMdm(args: JudgeMdmArgs): Promise<MdmJudgement | null> {
+  // ⚠️ MOCK SHORT-CIRCUIT — ADDED 2026-08-05. THIS PATH DID NOT HONOUR
+  // `MOCK_AI_CALLS` AND MADE REAL ANTHROPIC CALLS FROM CI.
+  //
+  // Found in the e2e job's app logs: `em-coding:llm-mdm  llm call failed
+  // 401 invalid x-api-key`. They failed only because CI's key is a dummy —
+  // which is the second condition doing exactly the job AGENTS.md assigns it:
+  // "MOCK_AI_CALLS=true stops calls only while every code path honours the
+  // flag; dummy credentials are what survives a code regression."
+  //
+  // ⚠️ THE COMPOSE FILE WAS NOT THE PROBLEM, AND THAT IS THE POINT.
+  // `docker-compose.qa.yml` hardcodes `MOCK_AI_CALLS: "true"` for both app and
+  // worker (not a `${VAR:-}` default), and the calls happened anyway. Reading
+  // config proves nothing about a path that never reads it —
+  // `check-qa-mock-posture.sh` inspects container env and would have reported
+  // this stack GREEN while it was calling a vendor. Same shape as the 298 real
+  // calls of 2026-07-28.
+  //
+  // RETURNING `null` IS THE CORRECT MOCK, not a stub judgement: null is the
+  // established "the LLM did not produce this" signal, and `judgeMdm` already
+  // routes it to a DETERMINISTIC fallback that scores from the structured
+  // signals. So the mock path yields a real, reproducible MDM level with
+  // `llmJudged: false` — which is true, and which the E/M fixtures can assert.
+  // A fabricated judgement here would have been a mock that lies about its own
+  // provenance.
+  if (process.env.MOCK_AI_CALLS === 'true') {
+    return null;
+  }
+
   const userPrompt = args.soap.trim();
   const purpose = 'judge' as const;
   const aiLogContext = {

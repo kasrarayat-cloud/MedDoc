@@ -484,8 +484,12 @@ export function seedReviewDocVisit(
     }
 
     psql(
+      // ⚠️ T3 — `practiceId` DERIVED FROM THE PATIENT in SQL. Raw INSERT, so
+      // Prisma's types never see it and a required column is invisible here
+      // until the database refuses the row. The subselect cannot drift from the
+      // patient, which is what the composite FK enforces anyway.
       `insert into transcribe_visits
-         (id, "userId", "patientId", specialty, "inputMode", status,
+         (id, "userId", "patientId", "practiceId", specialty, "inputMode", status,
           "signedAt", "signedSoap",
           "chiefComplaint",
           "transcriptText", "soapFinal", "soapVersion",
@@ -495,6 +499,7 @@ export function seedReviewDocVisit(
           "createdAt", "updatedAt")
        values
          ('${visitId}', '${userId}', '${patientId}',
+          (select "practiceId" from transcribe_md_patients where id = '${patientId}'),
           '${imaging ? 'ultrasound' : 'primary-care'}', 'text_notes',
           '${opts.signed ? 'SIGNED' : 'READY'}',
           ${opts.signed ? `'${SIGNED_AT}'::timestamptz` : 'null'},

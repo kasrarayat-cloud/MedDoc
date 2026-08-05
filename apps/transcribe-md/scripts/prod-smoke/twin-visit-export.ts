@@ -90,6 +90,10 @@ async function main() {
       data: {
         userId: doctorId,
         patientId: patient.id,
+        // T3 — from the PATIENT, per the stated derivation. This function
+        // created the patient with `practiceId` on the line above, so the value
+        // is the same by construction.
+        practiceId,
         specialty: 'Vascular Surgery',
         inputMode: 'text_notes',
         transcriptText: DICTATION,

@@ -359,6 +359,10 @@ async function main() {
 
     const baseVisitFields = {
       userId: user.id,
+      // T3 — the visit's tenant, from the PATIENT's practice. Every fixture
+      // patient in this seed is created under `user.practiceId`, so this is the
+      // same value by construction; the composite FK refuses a mismatch.
+      practiceId: user.practiceId,
       status: 'READY' as const,
       inputMode: 'text_notes' as const,
       soapVersion: 1,

@@ -286,7 +286,13 @@ function RoundsDayMeter({
   pct: (n: number) => number;
 }) {
   return (
-    <div data-testid="rounds-day-meter" style={{ minWidth: 190 }}>
+    // ⚠️ A CLASS, NOT AN INLINE `minWidth: 190` — changed 2026-08-05.
+    // An inline style beats any media query, so the old form made this element
+    // 190px wide at EVERY width including 390px, where it was one of the two
+    // things pushing the board's top bar past the viewport. The width still
+    // wants to be 190 on a desktop (the three-segment meter is unreadable
+    // narrower); it just has to be able to stop being 190 on a phone.
+    <div data-testid="rounds-day-meter" className="qm-rounds-day-meter">
       <div
         style={{
           display: 'flex',

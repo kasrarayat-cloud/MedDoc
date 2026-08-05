@@ -128,7 +128,18 @@ services:
   # `bash scripts/assert-migrations-applied.sh meddoc-qa-postgres-1 meddoc_qa_test`,
   # which caught exactly this on its first real use.
   db-migrate:
-    image: meddoc-pro-db-migrate:latest
+    # Own tag, own build — see the note on transcribe-md above.
+    image: meddoc-pro-db-migrate:qa
+    build:
+      context: .
+      dockerfile: apps/transcribe-md/Dockerfile
+      # ⚠️ `target: builder` IS LOAD-BEARING AND OMITTING IT BROKE CI ONCE.
+      # This service's entrypoint is `npx --no-install prisma`, and the Prisma
+      # CLI is a devDependency — present only in the BUILDER stage. Building the
+      # default (runtime) stage produces an image that starts fine and then dies
+      # with `npx canceled due to missing packages: ["prisma@7.9.1"]`.
+      # Mirrors docker-compose.yml's db-migrate exactly.
+      target: builder
     restart: "no"
     depends_on:
       postgres:
@@ -140,7 +151,38 @@ services:
     command: ["migrate", "deploy"]
 
   transcribe-md:
-    image: meddoc-pro-transcribe-md:latest
+    # ⚠️ QA HAS ITS OWN TAG AND BUILDS IT ITSELF — 2026-08-05 (TEAMS hygiene 1).
+    # This read `meddoc-pro-transcribe-md:latest`, the SAME tag production builds
+    # to, on the SAME daemon. So staging any image for QA meant retagging
+    # `:latest`, which silently re-points the tag prod's compose would deploy.
+    # DEPLOYMENT_RUNBOOK forbids exactly that ("never rebuild prod's :latest to
+    # stage something") and this file left no other way in — a prohibition the
+    # default path violated. It cost a ~1h window on 2026-08-05 where a prod
+    # `compose up` would have shipped an untested image (nothing ran; rollback
+    # tags were verified intact).
+    #
+    # The build args mirror production's deliberately: QA must be
+    # production-SHAPED, and "the pack is green" and "the shipped product works"
+    # have to be one statement. `scripts/check-qa-tag-isolation.sh` asserts no QA
+    # container ever runs the prod :latest digest.
+    image: meddoc-pro-transcribe-md:qa
+    build:
+      context: .
+      dockerfile: apps/transcribe-md/Dockerfile
+      args:
+        NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL: "http://localhost:9020"
+        NEXT_PUBLIC_MARKETING_URL: "http://localhost:9010"
+        NEXT_PUBLIC_SHOW_PIPELINE_TAB: "false"
+        NEXT_PUBLIC_SKIN_BETA: "${NEXT_PUBLIC_SKIN_BETA:-true}"
+        NEXT_PUBLIC_REVIEW_DOC_VIEW: "${NEXT_PUBLIC_REVIEW_DOC_VIEW:-true}"
+        NEXT_PUBLIC_UX_SIMPLIFY: "${NEXT_PUBLIC_UX_SIMPLIFY:-true}"
+        NEXT_PUBLIC_CHAT_EDITOR: "${NEXT_PUBLIC_CHAT_EDITOR:-true}"
+        NEXT_PUBLIC_DOC_PREVIEW: "${NEXT_PUBLIC_DOC_PREVIEW:-true}"
+        NEXT_PUBLIC_SETTINGS_SIMPLE_ROW: "${NEXT_PUBLIC_SETTINGS_SIMPLE_ROW:-true}"
+        NEXT_PUBLIC_VISIT_DOC_PAGE: "${NEXT_PUBLIC_VISIT_DOC_PAGE:-true}"
+        NEXT_PUBLIC_ULTRASOUND_SPECIALTY: "${NEXT_PUBLIC_ULTRASOUND_SPECIALTY:-true}"
+        NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX: "${NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX:-true}"
+        NEXT_PUBLIC_TEMPLATE_NATIVE_PDF: "${NEXT_PUBLIC_TEMPLATE_NATIVE_PDF:-true}"
     restart: "no"
     mem_limit: 512m
     cpus: '1.0'
@@ -281,7 +323,11 @@ services:
 
 
   transcribe-md-worker:
-    image: meddoc-pro-transcribe-md-worker:latest
+    # Own tag, own build — see the note on transcribe-md above.
+    image: meddoc-pro-transcribe-md-worker:qa
+    build:
+      context: .
+      dockerfile: apps/transcribe-md/Dockerfile.worker
     restart: "no"
     mem_limit: 1g
     cpus: '1.0'
@@ -364,7 +410,19 @@ services:
   # build with TRANSCRIBE_MD_AUTH_URL=http://localhost:9020 for the funnel
   # assertion. NOT wired into the required e2e CI gate (see scenario 28 header).
   marketing:
-    image: meddoc-pro-marketing:latest
+    # Own tag — see the note on transcribe-md above. Profile-gated (`marketing`),
+    # so the default QA stack never starts it; the build is declared anyway so
+    # enabling the profile does not fail on a missing image.
+    image: meddoc-pro-marketing:qa
+    build:
+      context: .
+      dockerfile: apps/marketing/Dockerfile
+      # Mirrors prod's args. Omitting build args is the same class of miss as
+      # the `target: builder` above: a partial copy of a build block produces an
+      # image that looks right and behaves differently.
+      args:
+        NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL: "http://localhost:9020"
+        NEXT_PUBLIC_MARKETING_URL: "http://localhost:9010"
     profiles: ["marketing"]
     restart: "no"
     mem_limit: 256m

@@ -2423,7 +2423,38 @@ body[data-skin='rounds'] {
    is required on both the flex item and its parent or `text-overflow` does
    nothing — a flex child's default `min-width: auto` refuses to shrink below
    its content. */
+/* The day meter's intrinsic width. Was an inline `minWidth: 190` on the element,
+   which no media query can override — see board-chrome.tsx. */
+[data-skin='rounds'] .qm-rounds-day-meter {
+  min-width: 190px;
+}
+
 @media (max-width: 460px) {
+  /* ⚠️ THE BOARD'S TOP BAR CARRIES MORE THAN ANY OTHER PAGE'S — brand, nav,
+     critical tally, day meter, New-visit CTA and the account menu, six things
+     on one flex line. At 390px that was 76px of PAGE-LEVEL horizontal overflow
+     (measured), on the doctor's home screen, live in production.
+
+     RULED: the page NEVER scrolls sideways at any width. Between the two ways
+     to honour that — a contained horizontal scroller, or wrapping — this wraps.
+     A scroller on a phone hides controls off-screen behind a gesture with no
+     affordance, and the things hidden would be the day meter and the New-visit
+     CTA: the board's whole point. Wrapping keeps every control present and
+     legible and spends vertical space, which is the axis a phone has.
+
+     Position-as-status was ALREADY handled and is untouched here: the lane grid
+     collapses to one column below 1100px and the head row hides, with the
+     status degrading to the stage kicker (pre-existing, documented above). This
+     change is about the CHROME, not the lanes. */
+  [data-skin='rounds'] .qm-rounds-topbar {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+  [data-skin='rounds'] .qm-rounds-day-meter {
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+
   [data-skin='rounds'] .qm-rounds-topbar {
     gap: 10px;
     padding: 10px 12px;

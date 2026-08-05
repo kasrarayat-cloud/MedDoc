@@ -94,6 +94,9 @@ async function createVisitForScenario(
   const data: any = {
     userId: USER_ID,
     patientId,
+    // T3 — the visit's tenant. The runner's patient is created under
+    // PRACTICE_ID, so this matches by construction.
+    practiceId: PRACTICE_ID,
     patientName: TEST_PATIENT_NAME,
     specialty: scenario.specialty,
     chiefComplaint: scenario.title.slice(0, 120),

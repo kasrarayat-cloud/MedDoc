@@ -96,7 +96,61 @@ not the compose file, for exactly this reason. A `${STRIPE_SECRET_KEY:-…}` in
 
 Dependency order. Each item is one session, taken to its gate.
 
-### T1 — the multi-seat fixture
+### ✅ T1 — the multi-seat fixture — DONE 2026-08-05
+
+**Gate met by DEMONSTRATION.** T1's own wording: *"a filter test that FAILS when
+the practice predicate is removed — demonstrated by mutation, not asserted.
+Without the red, T1 is not done."* Three mutations, each red:
+
+    M1  remove the practice predicate  → THE GATE reds
+    M2  point the fixture tag at nothing → the non-vacuity guard reds
+    M3  scope patients to a missing slug → the native-column path reds
+
+Clean run 4/4 green. Fixture: `t1-alpha` **2 members / 6 visits**, `t1-beta`
+**1 member / 3 visits**, both with patients, templates and a SIGNED/READY mix.
+`scripts/seed-t1-multiseat.ts` (fail-closed via `assertNonProdDatabase`, and it
+THROWS if either side lands empty), wired into `e2e.yml` after the guarded seed.
+Gate: `tests/e2e/scenarios/31-practice-isolation.spec.ts`.
+
+#### ⚠️ WHAT MEASUREMENT CHANGED ABOUT THIS ITEM
+
+**The "Practice entity + personal-practice backfill" half was ALREADY SHIPPED.**
+Measured against production: 196 users, **0 without a practice**, 197 practices,
+**178 of them personal** and named `solo-<hash>-<hash>` — an automated
+personal-practice path already exists. Nothing to design; nothing to backfill.
+Recorded so it is not built twice.
+
+**But the multi-seat half was NOT, and the reason is the whole point of T1.**
+Three multi-member practices already existed — `main-clinic` (11 members),
+`qa-audit` (5), `test-clinic-b` (2) — and every one has **ZERO visits, ZERO
+templates**. A filter test over an empty practice cannot go red: drop the
+predicate and the answer does not change, because there was nothing to leak.
+That is why T1 blocks everything below it, and it is a structural instance of the
+vacuity trap — an assertion about a set whose size was never established.
+
+**The gate is written to be BREAKABLE.** `scopedVisits()` takes the predicate as
+an argument, and the gate runs it twice — scoped and unscoped — asserting the two
+answers DIFFER, and that the difference is exactly beta's row count. A test that
+only asserted "alpha's rows come back" would pass on a query that filters nothing.
+
+#### TWO FACTS FOR T3, MEASURED HERE
+
+- **`transcribe_visits` has NO practice column.** A practice scope is a JOIN
+  through `users` today. T3's job.
+- **`transcribe_md_patients` IS already `practiceId`-scoped natively.** So the
+  two clinical tables sit on **different tenancy models right now**. The gate
+  exercises both deliberately, so the native-column path is not left untested
+  until T3 changes the other one.
+
+#### CARRIED
+
+**16 orphaned practices with zero members**, left behind by deleted users
+(`solo-*` slugs). Harmless, not blocking, not cleaned — recorded so a future
+count of "practices" is not mistaken for a count of tenants.
+
+---
+
+### T1 (original wording) — the multi-seat fixture
 Build a QA practice with **≥2 members and real clinical data** (visits,
 deliveries, edit patterns, templates), and a second practice to be excluded
 from.
@@ -121,7 +175,63 @@ Still owed in TEAMS proper: backfill `practiceIdSnapshot` on the 38 rows that
 predate the column, and name `audit_logs` as an S4c exclusion in the same
 commit that writes the fail-closed rule.
 
-### T3 — `practiceId` on `transcribe_visits`, with a stated derivation
+### ✅ T3 — `practiceId` on `transcribe_visits` — DONE 2026-08-05
+
+#### THE DERIVATION, STATED: `patient.practiceId`. NOT `user.practiceId`.
+
+Both agreed on all 26 production rows when this was written — measured
+2026-08-05: **26 visits, 26 agree, 0 disagree, 0 nulls, 0 visits without a
+patient.** Nothing in the database kept them agreeing, which is exactly why the
+choice had to be made rather than inherited from whichever join was handy.
+
+**Why the patient wins.** A note belongs to the practice that owns the CHART. A
+locum from practice B seeing a patient of practice A creates a note in **A**;
+deriving from the author would file it in B and split that patient's history
+across tenants — silently, and irreversibly by the time anyone noticed.
+
+**And structurally:** `transcribe_md_patients.practiceId` is already the tenancy
+anchor. Deriving from the patient keeps **one** source of truth. Deriving from
+the user creates a **second, independent** one, and two sources that nothing
+reconciles is precisely the drift this column exists to end.
+
+#### ⚠️ THE CONSTRAINT IS A COMPOSITE FK, NOT A TRIGGER
+
+    transcribe_visits(patientId, practiceId) → transcribe_md_patients(id, practiceId)
+
+A trigger can be disabled, skipped by a bulk load, or dropped in a restore. A
+composite FK makes the bad row **unrepresentable**: there is no `(id, practiceId)`
+pair to point at, so the storage layer refuses it and application code has
+nothing to route around. It required adding `@@unique([id, practiceId])` to the
+patient model — redundant for uniqueness (`id` is the PK), required for
+referenceability, and noted in the schema so a tidy-up cannot remove it without
+removing the guarantee.
+
+#### GATE — MET, AND PROVEN BY ATTEMPT
+
+    cross-practice INSERT   → ERROR: violates transcribe_visits_patientId_practiceId_fkey
+    same INSERT, correct    → INSERT 0 1
+
+⚠️ **The positive control is what makes the refusal mean anything.** "The insert
+failed" proves nothing alone — a typo'd column, a missing user, a dropped table
+all fail too. Only the pair shows the constraint rejects the wrong TENANT
+specifically.
+
+Backfill: **58 visits on QA, 0 null, 0 mismatch**, counted after; the migration
+itself `RAISE EXCEPTION`s if any row is still NULL before `SET NOT NULL`, so a
+half-run migration cannot report success. Column is `NOT NULL`. Scoping index
+added.
+
+Repeatable gate: `tests/e2e/scenarios/32-visit-practice-constraint.spec.ts`,
+**mutation-proven** — dropping the FK reds 2 of its 4 tests.
+
+⚠️ **NOT YET APPLIED TO PRODUCTION.** The migration lands with the next
+`deploy-prod.sh`, which runs `prisma migrate deploy` and asserts afterwards. The
+26 prod rows will backfill from the same derivation; the abort guard is what
+makes that safe to do unattended.
+
+---
+
+### T3 (original wording) — `practiceId` on `transcribe_visits`, with a stated derivation
 Column added nullable, backfilled, then `NOT NULL`. **Write down which
 derivation path was used** (`user.practiceId` or `patient.practiceId`) — they
 agree on all 26 rows today and nothing in the database keeps them agreeing
@@ -175,6 +285,101 @@ without a written verdict on each is how they become invisible.
 | **`practiceIdSnapshot` backfill** — 38 rows predate the S4c column (DISCOVERY §B.8). | Cheap, separate, non-blocking. Do it or say why not. |
 | **`audit_logs` named as an S4c exclusion** in the same commit that writes the fail-closed "no clinical row without practiceId" rule. | Named by name, with the S4c reasoning cited, so a future tidy-up cannot "fix" it and re-break account deletion. |
 | **The 12 `MEDDOC_PRO`-only accounts** — GATE 0 ruled *excluded + deactivated, rows retained*, with an **owner veto window open until the TEAMS migration runs** (SPEC §4.1). | Confirm the veto has lapsed **before** excluding them. Four of the twelve carry the operator's own name. |
+
+### ✅ TEAMS EXIT GATE — ALL FOUR ROWS RULED, 2026-08-05
+
+Written before any migration runs, which is the point of the gate.
+
+#### 1. `worker.ts:983` read-after-write — ⚠️ RACE CONFIRMED BY CONSTRUCTION
+
+Phase 0 left this UNSURE and said so. It is no longer unsure, and the answer did
+not need a reproduction:
+
+    packages/ai/src/log.ts:33
+      export function logAiCall(input: AiCallLogInput): void {
+        void prisma.aiCall.create({ … }).catch(…);
+      }
+
+The function returns `void` **synchronously** and discards the promise. There is
+no flush, no drain, no queue — `grep` for one across `log.ts`/`index.ts` returns
+nothing, so a caller has no way to wait for outstanding writes. `worker.ts:983`
+then does `prisma.aiCall.findMany({ where: { visitId } })` and sums.
+
+**There is no happens-before edge between the last write and that read.** So the
+question was never "can it race" — by construction it can. Asking for a
+reproduction would have been asking how OFTEN, which is a different question and
+a much weaker one: a race that reproduces rarely is still a race.
+
+**Impact today: none that matters.** The code's own comment is correct — "the
+cost number is observability, not load-bearing for correctness" — and the L7
+fan-out takes seconds, so all but the last writer have almost certainly landed.
+
+⚠️ **IT STOPS BEING OBSERVABILITY WHEN BILLING LANDS.** B6 makes this number the
+input to `charge = cost_micro × 3 / 2`. An undercounting sum then becomes an
+undercharge — silent, unbounded, and invisible because the number still looks
+plausible. **VERDICT: accepted for now, ASSIGNED to BILLING B1/B4**, which must
+either await the writes or accumulate the cost in memory rather than re-reading
+the table it just wrote. Not deferred silently; deferred to the item where it
+first matters.
+
+#### 2. `practiceIdSnapshot` backfill — ✅ DONE
+
+⚠️ **THE COUNT WAS 44, NOT 38.** DISCOVERY §B.8's 38 was the *resolvable*
+subset; six more rows have no practice on their user either and cannot be
+backfilled from anything.
+
+**Applied:** 38 rows, one transaction, guarded — expected count pinned inside the
+transaction, `GET DIAGNOSTICS ROW_COUNT` compared to it, and a post-check that
+zero remain, with `RAISE EXCEPTION` on either mismatch. Total row count
+unchanged at 10500. All 38 belonged to a single **QA Audit Practice**, not a
+clinician's.
+
+⚠️ **WHY THIS IS NOT A BREACH OF APPEND-ONLY, stated because it looks like one.**
+The rule protects what a row SAYS HAPPENED — action, actor, time, target.
+`practiceIdSnapshot` is none of those: it is a denormalised copy of `practiceId`,
+which the row **already carries**, added by S4c so the value survives the FK
+being detached at deletion. Copying it from the row's own authoritative field
+asserts nothing new and changes no claim.
+
+Contrast with the audit-attribution repair of 2026-08-04, where the stored
+`practiceId` was itself WRONG (`?? 'clinic_main'`): fixing that in place would
+have changed what the row claimed, so correction records were the only honest
+route. **The test is whether the edit changes a claim, not whether it changes a
+byte.**
+
+The 6 unresolvable rows are left NULL. Inventing a tenant for them would be the
+breach this paragraph rules out.
+
+#### 3. `audit_logs` as an S4c exclusion — ⏭ CARRIED AS A REQUIREMENT ON T5/T7
+
+Nothing to do yet: the fail-closed "no clinical row without `practiceId`" rule
+does not exist. **The requirement is recorded here so the commit that writes it
+cannot omit it** — `audit_logs` must be named BY NAME as an exclusion, with the
+S4c reasoning cited inline, because a future tidy-up that "fixes" the nullable
+`practiceId` re-breaks account deletion: the deletion path depends on the FK
+being SET NULL while `practiceIdSnapshot` preserves the tenant
+(`delete-account/route.ts:126-134`).
+
+#### 4. The 12 `MEDDOC_PRO`-only accounts — ✅ VETO LAPSED, OWNER CONFIRMED 2026-08-05
+
+**The owner was asked and answered in writing before this row was written.**
+Verdict: *lapsed — deactivate all 12.* GATE 0's ruling stands: excluded from
+backfill, login disabled, rows retained, **no deletion**.
+
+⚠️ **SPEC §4.1 IS IMPRECISE AND IS CORRECTED HERE.** It says "Four of the twelve
+are on `@meddoc.com` carrying the operator's own name." Measured, **three** are —
+`kash@`, `kasra@`, `kas@meddoc.com`. The likely fourth, `doctor@meddoc.local`, is
+on a **different domain** and carries a **different person's name**, "Dr.
+Bakhtiar Moussazadeh". That distinction was surfaced to the owner before the
+question was put, because deactivating your own test accounts and deactivating
+one bearing a named clinician are not the same decision.
+
+Also measured: **all 12 own zero clinical rows**, so deactivation costs nothing
+clinically and remains reversible — which is what made the window meaningful.
+
+**T7 may now exclude these rows.** The veto is closed.
+
+---
 
 ### T8 — invites carry practice + role
 **Gate:** a code minted for `(practice, CLINICIAN)` produces a member of that

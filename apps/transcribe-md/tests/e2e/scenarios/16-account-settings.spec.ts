@@ -62,7 +62,19 @@ test('account: profile edit persists across reload', async ({ page }) => {
   // it waits for the network, not for React — and that is stated rather than
   // dressed up. It is the strongest settle signal available here without a
   // hydration marker the app does not expose.
-  await page.waitForLoadState('networkidle');
+  // ⚠️ WAIT ON THE HYDRATION MARKER, NOT ON THE NETWORK — changed 2026-08-05.
+  // `networkidle` held 12/12 locally and then failed TWICE in one CI run. It
+  // waits for the network, not for React: it narrows the window without closing
+  // it. `profile-form.tsx` now sets `data-hydrated` from an effect, and an
+  // effect body cannot run during SSR — so this attribute appears if and only if
+  // the component is interactive. That is the condition, rather than a proxy
+  // for it. The two proxies that were tried and are recorded above (rail
+  // buttons: 1-in-10; networkidle: 2 failures in one CI run) are why this is
+  // worth a product-side attribute.
+  await expect(
+    page.locator('#profile form[data-hydrated="true"]'),
+    'the profile form never hydrated — a submit here would post natively',
+  ).toBeVisible({ timeout: 30_000 });
 
   await page.locator('#profile-name').fill('Dr. Renamed');
   // Confirm the new value is in the DOM before submitting, so the server action

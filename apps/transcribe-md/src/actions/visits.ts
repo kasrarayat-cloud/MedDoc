@@ -120,7 +120,7 @@ async function resolvePatient(
   practiceId: string,
   patientId: string | null,
   patientName: string | null
-): Promise<{ id: string; name: string }> {
+): Promise<{ id: string; name: string; practiceId: string }> {
   if (patientId) {
     const patient = await prisma.transcribeMdPatient.findUnique({
       where: { id: patientId },
@@ -138,7 +138,7 @@ async function resolvePatient(
     ) {
       throw new Error('Invalid patient');
     }
-    return { id: patient.id, name: patient.name };
+    return { id: patient.id, name: patient.name, practiceId: patient.practiceId };
   }
 
   // Free-text name (or the fallback "Unknown patient" bucket).
@@ -149,7 +149,7 @@ async function resolvePatient(
       deletedAt: null,
       name: { equals: canonicalName, mode: 'insensitive' },
     },
-    select: { id: true, name: true },
+    select: { id: true, name: true, practiceId: true },
   });
   if (existing) return existing;
 
@@ -162,7 +162,12 @@ async function resolvePatient(
       // the explicit /api/patients POST requires DOB; this auto-
       // create path is the backward-compat safety net.
     },
-    select: { id: true, name: true },
+    // ⚠️ T3 — `practiceId` is selected so the CALLER reads the patient's own
+    // tenant rather than assuming it equals the argument. It does equal it on
+    // every path here (this function scopes and creates by it), but the visit's
+    // practice is DERIVED FROM THE PATIENT by ruling, and a derivation that
+    // silently reads a different variable is one refactor from being wrong.
+    select: { id: true, name: true, practiceId: true },
   });
   return created;
 }
@@ -200,6 +205,17 @@ export async function createVisitAction(formData: FormData): Promise<void> {
     data: {
       userId: session.user.id,
       patientId: patient.id,
+      // ⚠️ T3 — THE VISIT'S TENANT COMES FROM THE PATIENT, NOT THE AUTHOR.
+      // A note belongs to the practice that owns the CHART: a locum from
+      // practice B seeing a patient of practice A creates a note in A.
+      // `session.user.practiceId` is deliberately NOT used here even though it
+      // is in scope two lines up — using it would file the note under the
+      // author's practice and split that patient's history across tenants.
+      //
+      // The composite FK (patientId, practiceId) → (id, practiceId) refuses any
+      // other value, so a mistake here fails at the database rather than
+      // producing a row nobody can see.
+      practiceId: patient.practiceId,
       // patientName column stays populated (schema.prisma notes its
       // removal is deferred to a follow-up). Prefer the resolved
       // patient's canonical name over whatever free-text the form
