@@ -14,6 +14,62 @@
 // All three FAILED CLOSED, which is exactly why they survived review: a gate
 // that hasn't unlocked and a gate that can't unlock render identically. Only
 // driving them in a browser tells them apart, so that is what this does.
+//
+// ----------------------------------------------------------------------------
+// ⚠️ RE-POINTED 2026-08-05 (F-ret.3). THE PRODUCT DID NOT CHANGE; THIS PACK'S
+// IMAGE DID.
+//
+// The `review-doc` CI job builds REVIEW_DOC_VIEW + SKIN_BETA + ULTRASOUND and
+// used to omit NEXT_PUBLIC_SKIN_ROUNDS — so for its whole life it exercised the
+// pre-sign document surface on the LEGACY skin. F-ret.3 deleted that flag AND
+// its OFF arm, so the Rounds skin is unconditional and the configuration this
+// pack was written against can no longer be built. Eight of eighteen tests went
+// red on selectors that only ever existed on the legacy rendering. Same class as
+// the rx-safety repair (commit 3d8cb23f), same day's cause.
+//
+// THE TWO DEAD SELECTORS, and what carries each claim now:
+//
+//   1. `[data-testid="review-doc-bar-msg"]` — the sticky footer bar's status
+//      line. `review-sign-bar.tsx` still renders it, but only in its `footer`
+//      variant, and under Rounds the paper passes `hostSignbar={false}`
+//      (`visit-ready-view.tsx:1153`). There is no footer on the stage at all.
+//      The bar named the NEXT blocker; three surfaces now do, each narrower and
+//      each asserted where it belongs:
+//        · `rounds-critical-band`     — the stage banner, names the Rx blocker
+//        · `rounds-gate-lock`         — inside the flow, names the blocker AND
+//                                       its count for the step being shown
+//        · `review-doc-em-stale-gate` — "Documentation level needs re-checking"
+//
+//   2. `getByRole('button', { name: /sign & download/i })` on the page. The
+//      string is not gone — it is the gate signbar's trigger — but the control
+//      exists ONLY inside Gate 3 (`gate-flow.tsx:400`), and only once the gates
+//      in front of it are clear. "Sign is disabled" therefore has a STRONGER
+//      analogue than a disabled button: the signature is not reachable at all,
+//      i.e. `review-doc-signbar` has count 0. Where the original asserted
+//      ENABLED, the walk advances to the attestation step and asserts the real
+//      button, which is disabled until `rounds-gate-attest` is ticked.
+//
+// NOTHING WAS RETIRED AND NOTHING WAS WEAKENED. Every claim survives, re-anchored
+// on the element that now carries it, with the count or the exact phrase kept
+// rather than softened to a substring. Three moved in the STRENGTHENING
+// direction and each says so at the call site:
+//
+//   · "sign is disabled"  → the sign control is not MOUNTED (count 0), and the
+//     attestation is not reachable either. A doctor cannot attest to a note
+//     they cannot sign — a property the disabled button never had.
+//   · "sign is enabled"   → the walk advances to Gate 3, where the real button
+//     is disabled until `rounds-gate-attest` is ticked. The old footer bar's
+//     `blocked` term did not count the attestation at all; that was R1's bypass.
+//   · the imaging half of the stale spec asserted absence ON THE BAR. With the
+//     bar unreachable that assertion resolves to zero nodes and passes for free,
+//     so it is widened to `body` — a negative assertion whose subject does not
+//     exist proves nothing.
+//
+// ⚠️ `openSignFlow` IS USED WHERE IT FITS AND DELIBERATELY NOT WHERE IT DOES
+// NOT. It waits for `rounds-gate-attest` (`helpers/sign.ts:95`), which a
+// deliberately-blocked visit never presents. The four blocked-visit tests drive
+// the rail with `openGateFlow` and assert the lock instead. That distinction is
+// the one the rx-safety repair got wrong first.
 // ============================================================================
 
 import { test, expect } from '@playwright/test';
@@ -30,12 +86,53 @@ import {
 } from '../helpers/seedReviewDocVisit';
 import { signupFreshUser } from '../helpers/signup';
 import { extractExportText } from '../helpers/exportText';
-import { attestAndSubmit } from '../helpers/sign';
+import {
+  attestAndSubmit,
+  expectGateStep,
+  openGateFlow,
+  openSignFlow,
+} from '../helpers/sign';
 
 const SUGG = '[data-testid="review-doc-suggestion"]';
 const ACCEPT = '[data-testid="review-doc-accept"]';
 const BULK = '[data-testid="review-doc-accept-remaining"]';
-const BAR = '[data-testid="review-doc-bar-msg"]';
+
+// ⚠️ `BAR` WAS HERE. `[data-testid="review-doc-bar-msg"]` is the footer sign
+// bar's status line and it is unreachable on this pack's image — see the header.
+// Not replaced by one selector, because it was one element making three
+// different claims; each is now asserted on the element that makes it.
+
+/** The gate signbar's trigger — the ONLY control on the Rounds stage that can
+ *  start a signature, and it exists only while Gate 3 is showing. Scoped to the
+ *  bar rather than taken off the page: `expectSignModalClosed` relies on the
+ *  same label appearing nowhere else, and scoping keeps a future second home
+ *  from being silently absorbed by a page-wide `.first()`. */
+const signTrigger = (page: import('@playwright/test').Page) =>
+  page.getByTestId('review-doc-signbar').getByRole('button', { name: /sign & download/i });
+
+/** "Sign is disabled" has no analogue under Rounds — the signature is not
+ *  RENDERED until the gates in front of it are clear. This is the stronger
+ *  reading of the same claim, and it is non-vacuous because the tests that
+ *  clear the gates go on to assert the very same testid is present. */
+async function expectSignatureUnreachable(page: import('@playwright/test').Page) {
+  await expect(
+    page.getByTestId('review-doc-signbar'),
+    'a sign control is mounted while a gate is still outstanding',
+  ).toHaveCount(0);
+  await expect(
+    page.getByTestId('rounds-gate-attest'),
+    'the attestation is reachable while a gate is still outstanding — the ' +
+      'doctor can attest to a note they cannot sign',
+  ).toHaveCount(0);
+}
+
+/** The rail's own label. It is `signLabel(n)` over the SAME `n` the signature is
+ *  wired to (`blocked = roundsView.n > 0`), so it is the doctor-facing statement
+ *  of "is this note signable" that the footer bar used to make. Exact text, with
+ *  the count — a substring would pass on any number of blockers. */
+async function expectRail(page: import('@playwright/test').Page, label: string) {
+  await expect(page.getByTestId('rounds-review-sign')).toHaveText(label);
+}
 
 test.describe('pre-sign review as the document', () => {
   test.beforeAll(() => {
@@ -88,7 +185,16 @@ test.describe('pre-sign review as the document', () => {
   async function clearRxGate(page: import('@playwright/test').Page) {
     const gate = page.getByTestId('review-doc-rx-gate');
     await gate.getByRole('button', { name: /override/i }).first().click();
-    const dialog = page.getByRole('dialog');
+    // ⚠️ NOT `getByRole('dialog')`. This helper is now also called with the gate
+    // flow OPEN — the flow adopts the Rx gate's live DOM into its step host — and
+    // `gate-flow.tsx:228` carries `role="dialog"` itself. Two dialogs at once
+    // makes the role query strict-mode ambiguous, and the failure would read as
+    // "the override modal has no textarea" rather than as a locator fault. The
+    // override modal's identity is its own confirm control, which is defined
+    // once (`override-confirm-modal.tsx`).
+    const dialog = page
+      .locator('.qm-lin-spotlight-panel')
+      .filter({ has: page.getByRole('button', { name: /confirm override/i }) });
     await dialog
       .locator('textarea')
       .fill('Benefit outweighs risk; monitoring renal function weekly and patient counselled.');
@@ -141,15 +247,43 @@ test.describe('pre-sign review as the document', () => {
     test.skip(!(await open(page, 'rdoc-7')), 'psql seeding unavailable');
     const gate = page.getByTestId('review-doc-rx-gate');
     await expect(gate).toBeVisible();
-    await expect(page.locator(BAR)).toContainText('prescription');
-    const sign = page.getByRole('button', { name: /sign & download/i });
-    await expect(sign).toBeDisabled();
+
+    // WAS: `expect(BAR).toContainText('prescription')`. The stage has no footer
+    // bar; the blocker is named across the top of the paper instead, and it says
+    // where it gets cleared. Exact text with the count — "prescription" as a
+    // substring would have passed on any wording that merely mentioned one.
+    await expect(page.getByTestId('rounds-critical-band')).toHaveText(
+      '1 critical interaction — you’ll clear it at Gate 1',
+    );
+    // WAS: `expect(sign).toBeDisabled()`. Stronger now — there is no sign
+    // control to disable until the gates in front of it are clear.
+    await expect(page.getByTestId('review-doc-signbar')).toHaveCount(0);
+
+    // ⚠️ `openGateFlow`, NOT `openSignFlow`. This visit is deliberately blocked,
+    // so the flow opens ON the blocker and never presents the attestation —
+    // a helper that waits for one can only time out (helpers/sign.ts:95).
+    await openGateFlow(page);
+    await expectGateStep(page, 'rx');
+    await expect(page.getByTestId('rounds-gate-lock')).toContainText(
+      '1 critical interaction outstanding',
+    );
+    await expect(page.getByTestId('rounds-gate-next')).toBeDisabled();
+    await expectSignatureUnreachable(page);
 
     await clearRxGate(page);
-    // Sign stays disabled — the E/M level is ALSO pending. The bar names the
-    // next blocker rather than pretending the note is ready.
-    await expect(page.locator(BAR)).toContainText('documentation level');
-    await expect(sign).toBeDisabled();
+
+    // The step clears in place and the flow advances — but signing does NOT
+    // become possible, because the E/M level is ALSO pending. The surface names
+    // the NEXT blocker rather than pretending the note is ready, which is
+    // exactly what the bar's second assertion pinned.
+    await expect(page.getByTestId('rounds-gate-lock')).toHaveCount(0);
+    await expect(page.getByTestId('rounds-gate-next')).toBeEnabled();
+    await page.getByTestId('rounds-gate-next').click();
+    await expectGateStep(page, 'em');
+    await expect(page.getByTestId('rounds-gate-lock')).toContainText(
+      '1 documentation level outstanding',
+    );
+    await expectSignatureUnreachable(page);
   });
 
   test('the E/M card blocks signing until the level is confirmed', async ({ page }) => {
@@ -160,12 +294,30 @@ test.describe('pre-sign review as the document', () => {
     const em = page.getByTestId('review-doc-em-gate');
     await expect(em).toBeVisible();
     await expect(em).toContainText('99214');
-    await expect(page.locator(BAR)).toContainText('documentation level');
-    await expect(page.getByRole('button', { name: /sign & download/i })).toBeDisabled();
+
+    // WAS: `expect(BAR).toContainText('documentation level')` + a disabled Sign.
+    // With Rx already cleared the flow opens straight on E/M, and the lock names
+    // it with its count.
+    await openGateFlow(page);
+    await expectGateStep(page, 'em');
+    await expect(page.getByTestId('rounds-gate-lock')).toContainText(
+      '1 documentation level outstanding',
+    );
+    await expectSignatureUnreachable(page);
 
     await page.getByTestId('review-doc-em-confirm').click();
     await expect(page.getByTestId('review-doc-em-confirm')).toContainText(/confirmed/i);
-    await expect(page.getByRole('button', { name: /sign & download/i })).toBeEnabled();
+
+    // WAS: `expect(sign).toBeEnabled()`. The signature becomes REACHABLE — and
+    // then, and only then, is there a button to talk about being enabled. It is
+    // disabled until the attestation is ticked, which is the same gate the old
+    // footer bar's `blocked` term never counted (R1's bypass).
+    await expect(page.getByTestId('rounds-gate-lock')).toHaveCount(0);
+    await page.getByTestId('rounds-gate-next').click();
+    await expectGateStep(page, 'attestation');
+    await expect(signTrigger(page)).toBeDisabled();
+    await page.getByTestId('rounds-gate-attest').click();
+    await expect(signTrigger(page)).toBeEnabled();
   });
 
   test('the level can be adjusted — and an adjusted level still needs confirming', async ({
@@ -178,8 +330,14 @@ test.describe('pre-sign review as the document', () => {
     // adjustment and not left over from the fixture.
     await page.getByTestId('review-doc-em-confirm').click();
     await expect(page.getByTestId('review-doc-em-confirm')).toContainText(/confirmed/i);
-    const sign = page.getByRole('button', { name: /sign & download/i });
-    await expect(sign).toBeEnabled();
+    // WAS: `expect(sign).toBeEnabled()`. There is no sign control on the stage,
+    // so the claim is anchored on the rail's own label — `signLabel(n)` over the
+    // SAME `n` the signature is wired to (`blocked = roundsView.n > 0`). Rx
+    // overridden and the level confirmed leaves exactly one term: the
+    // attestation. Exact text, because '· 1 blocker' is a substring of nothing
+    // useful and 'Review & sign' is a substring of every state including the
+    // blocked ones.
+    await expectRail(page, 'Review & sign · 1 blocker');
 
     // THE LEVEL ROW: calm, states the level, offers to change it.
     const row = page.getByTestId('review-doc-em-level');
@@ -219,8 +377,13 @@ test.describe('pre-sign review as the document', () => {
     const gate = page.getByTestId('review-doc-em-gate');
     await expect(gate).toBeVisible({ timeout: 30_000 });
     await expect(gate).toContainText(target);
-    await expect(sign, 'an adjusted level must be confirmed before signing').toBeDisabled();
-    await expect(page.locator(BAR)).toContainText('documentation level');
+    // WAS: `expect(sign).toBeDisabled()` + `expect(BAR).toContainText(…)`. The
+    // count went back UP — from one term (the attestation) to two — which is the
+    // arithmetic behind "an adjusted level must be confirmed before signing".
+    await expectRail(
+      page,
+      'Review & sign · 2 blockers',
+    );
 
     // NO DIRECTION IN THE COPY. This adjustment went DOWN; the card must not
     // describe it as going up, and must not argue for the level at all.
@@ -228,10 +391,31 @@ test.describe('pre-sign review as the document', () => {
     expect(gateText).not.toMatch(/\bup from\b|\bdown from\b|\bsupports\b|\bhigher\b|\blower\b/);
     expect(gateText).toContain('changed from');
 
-    await page.getByTestId('review-doc-em-confirm').click();
-    await expect(sign).toBeEnabled();
+    // …and it is a real BLOCK, not just a number: the flow re-opens on E/M and
+    // the signature is once again out of reach. This is the half a count alone
+    // cannot prove — `n` could rise while the gate flow happily walked past it.
+    await openGateFlow(page);
+    await expectGateStep(page, 'em');
+    await expect(page.getByTestId('rounds-gate-lock')).toContainText(
+      '1 documentation level outstanding',
+    );
+    await expectSignatureUnreachable(page);
 
-    // And the row now states the level the doctor chose.
+    await page.getByTestId('review-doc-em-confirm').click();
+    // WAS: `expect(sign).toBeEnabled()`. Confirming clears the step, the flow
+    // advances, and the signature exists — disabled until attested, then live.
+    await expect(page.getByTestId('rounds-gate-lock')).toHaveCount(0);
+    await page.getByTestId('rounds-gate-next').click();
+    await expectGateStep(page, 'attestation');
+    await expect(signTrigger(page)).toBeDisabled();
+    await page.getByTestId('rounds-gate-attest').click();
+    await expect(signTrigger(page)).toBeEnabled();
+
+    // And the row — back on the paper, where the doctor reads it — now states
+    // the level they chose. Closed first, so this is measured on the stage and
+    // not on a node the flow had borrowed.
+    await page.getByTestId('rounds-gate-close').click();
+    await expect(page.getByTestId('rounds-gate-flow')).toHaveCount(0);
     await expect(page.getByTestId('em-level-current')).toHaveText(target);
   });
 
@@ -305,14 +489,24 @@ test.describe('pre-sign review as the document', () => {
     await clearRxGate(page);
     await page.getByTestId('review-doc-em-confirm').click();
 
-    await page.getByRole('button', { name: /sign & download/i }).click();
-    const dialog = page.getByRole('dialog');
-    await dialog.getByRole('button', { name: /download docx/i }).click();
+    // ⚠️ `openSignFlow` FITS HERE and does not fit four tests above: both gates
+    // in front of the signature are clear, so the flow opens ON the attestation
+    // and the helper's walk (rail → tick → the bar's Sign & Download) completes.
+    // Re-pointed from a page-level `getByRole('button', /sign & download/i)`,
+    // which under Rounds resolves to nothing until Gate 3 is showing.
+    await openSignFlow(page);
+
+    // ⚠️ NOT `getByRole('dialog')`. The gate flow carries `role="dialog"` too
+    // (`gate-flow.tsx:228`) and both are open at this moment, so the role query
+    // goes strict-mode ambiguous. "Download DOCX" is defined once in the whole
+    // app (`sign-and-send-modal.tsx:47`) and lives only inside the modal, so it
+    // identifies the modal's controls without a container at all.
+    await page.getByRole('button', { name: /^download docx$/i }).click();
     // The modal keeps its OWN E/M confirmation, and it remains the enforcement:
     // the inline card is an additional visible blocker in front of it, never a
     // replacement. Two acknowledgements for a billing-level change is the
     // deliberate design, so the test acknowledges twice too.
-    const modalEm = dialog.getByTestId('em-change-confirm-toggle');
+    const modalEm = page.getByTestId('em-change-confirm-toggle');
     if (await modalEm.count()) await modalEm.click();
 
     // dispatchEvent, not click(): submitting triggers a download, and the
@@ -424,15 +618,31 @@ test.describe('pre-sign review as the document', () => {
         if (cls.emApplies) {
           await expect(page.getByTestId('review-doc-em-stale-gate')).toBeVisible();
           await expect(page.getByTestId('review-doc-em-rescore')).toBeVisible();
-          await expect(page.locator(BAR)).toContainText(/documentation level/i);
+          // WAS: `expect(BAR).toContainText(/documentation level/i)` — the
+          // footer bar's "Re-check the documentation level above". The bar is
+          // gone; the same sentence is the stale gate's own heading, which is
+          // where the doctor now reads it. Asserted as exact text rather than
+          // the old case-insensitive fragment.
+          await expect(page.getByTestId('review-doc-em-stale-gate')).toContainText(
+            'Documentation level needs re-checking',
+          );
         } else {
           await expect(
             page.getByTestId('review-doc-em-stale-gate'),
             'an imaging report has no level to re-check',
           ).toHaveCount(0);
           await expect(page.getByTestId('review-doc-em-rescore')).toHaveCount(0);
-          // The bar must not name a blocker that cannot be cleared.
-          await expect(page.locator(BAR)).not.toContainText(/documentation level/i);
+          // The surface must not name a blocker that cannot be cleared.
+          //
+          // ⚠️ WIDENED FROM `BAR` TO `body`, AND THAT IS THE POINT. With the
+          // footer bar unreachable, `expect(BAR).not.toContainText(…)` would
+          // resolve to ZERO nodes and pass for free — a negative assertion whose
+          // subject does not exist proves nothing, and it would have gone on
+          // reporting green while the regression this test was written for
+          // (an ultrasound demanding a level re-check) reappeared anywhere else
+          // on the page. The office half above is the positive control for the
+          // same words.
+          await expect(page.locator('body')).not.toContainText(/documentation level/i);
           await expect(page.locator('body')).not.toContainText(/re-check/i);
         }
       });
@@ -482,18 +692,29 @@ test.describe('pre-sign review as the document', () => {
           const downloads: import('@playwright/test').Download[] = [];
           page.on('download', (d) => downloads.push(d));
 
-          await page.getByRole('button', { name: /sign & download/i }).click();
-          const dialog = page.getByRole('dialog');
+          // ⚠️ RE-POINTED. This fixture's ONLY gate is the attestation — an
+          // imaging report has no Rx gate and no E/M gate, and `emArtifact` is
+          // false here because the row carries a `cptCodes` blob but NO pending
+          // change (`sign-gates.ts:231` needs both). So the flow opens straight
+          // on Gate 3 and `openSignFlow` walks it. A page-level
+          // `getByRole('button', /sign & download/i)` matched nothing: the
+          // trigger exists only inside Gate 3.
+          await openSignFlow(page);
 
           // Toggles, not commands: PDF is pressed by default, so a blind click
           // DESELECTS it. Press only what is not already pressed.
-          for (const label of [/download pdf/i, /download docx/i]) {
-            const btn = dialog.getByRole('button', { name: label });
+          //
+          // ⚠️ NO `getByRole('dialog')` CONTAINER — the gate flow carries that
+          // role as well (`gate-flow.tsx:228`) and both are open here, so the
+          // query is strict-mode ambiguous. Anchored on the exact labels
+          // instead, which are defined once in the app and only in this modal.
+          for (const label of [/^download pdf$/i, /^download docx$/i]) {
+            const btn = page.getByRole('button', { name: label });
             if ((await btn.getAttribute('aria-pressed')) !== 'true') await btn.click();
           }
-          for (const label of [/download pdf/i, /download docx/i]) {
+          for (const label of [/^download pdf$/i, /^download docx$/i]) {
             await expect(
-              dialog.getByRole('button', { name: label }),
+              page.getByRole('button', { name: label }),
               `${label} must be selected before submitting`,
             ).toHaveAttribute('aria-pressed', 'true');
           }
@@ -556,10 +777,13 @@ test.describe('pre-sign review as the document', () => {
           // Then the artifact. The signed export is what outlives every UI
           // decision, so it gets checked as text rather than trusted.
           const dl = page.waitForEvent('download', { timeout: 60_000 });
-          await page.getByRole('button', { name: /sign & download/i }).click();
-          const dialog = page.getByRole('dialog');
-          await dialog.getByRole('button', { name: /download docx/i }).click();
-          const modalEm = dialog.getByTestId('em-change-confirm-toggle');
+          // Re-pointed with the export-guard test above, same cause, same shape:
+          // the attestation is this visit's only gate, so `openSignFlow` reaches
+          // the modal, and the modal's controls are found by their unique labels
+          // rather than through an ambiguous `role="dialog"`.
+          await openSignFlow(page);
+          await page.getByRole('button', { name: /^download docx$/i }).click();
+          const modalEm = page.getByTestId('em-change-confirm-toggle');
           await expect(modalEm, 'nothing to confirm on an imaging report').toHaveCount(0);
           await attestAndSubmit(page);
           const file = await dl;

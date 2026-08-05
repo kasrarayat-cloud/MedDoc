@@ -114,6 +114,62 @@ export async function openSignFlow(page: Page): Promise<void> {
   await legacy.first().click();
 }
 
+/**
+ * Open the Rounds gate flow and stop there — WITHOUT walking to the signature.
+ *
+ * ⚠️ THIS IS THE HALF `openSignFlow` CANNOT DO, and it exists because assuming
+ * otherwise has now cost two repairs. `openSignFlow` waits for
+ * `rounds-gate-attest` (line 95). On a visit with an OUTSTANDING BLOCKER the
+ * flow opens on that blocker's step and never presents the attestation, so the
+ * helper can only time out — 24-rx-clinical-safety hit exactly that, and
+ * `review-document.spec.ts` has four more tests of the same shape: their whole
+ * subject is the surface REFUSING to reach a signature.
+ *
+ * So a test whose visit is deliberately blocked drives the rail directly and
+ * asserts the LOCK. That walk lives here rather than in each spec, for the
+ * reason AGENTS.md gives about hand-kept lists: this is its third caller.
+ *
+ * Leaves the flow OPEN, on whatever step `firstOpenStep(gates)` chose. Callers
+ * assert the step with `expectGateStep` rather than assuming one — which step
+ * is first is a fact about the visit's gates, not about the walk.
+ */
+export async function openGateFlow(page: Page): Promise<void> {
+  const rail = page.getByTestId('rounds-review-sign');
+  await expect(
+    rail.first(),
+    'the Rounds review-and-sign rail button never rendered — this is not the ' +
+      'shipped stage, so nothing below is measuring the surface doctors use',
+  ).toBeVisible({ timeout: 30_000 });
+  await expect(
+    rail.first(),
+    'the Rounds review-and-sign rail button is present but never enabled',
+  ).toBeEnabled({ timeout: 10_000 });
+  await rail.first().click();
+
+  await expect(
+    page.getByTestId('rounds-gate-flow'),
+    'clicked Review & sign but the gate flow never opened',
+  ).toBeVisible({ timeout: 10_000 });
+}
+
+/**
+ * Assert WHICH gate step the flow is showing.
+ *
+ * Reads `data-step` off `rounds-gate-flow` (`gate-flow.tsx:227`) and compares it
+ * whole. Deliberately not a text match on the step rail: the rail lists every
+ * applicable step at once, so "the rail mentions Documentation level" is true on
+ * the Rx step too — the same vacuity trap as 'dashboard' containing 'board'.
+ */
+export async function expectGateStep(
+  page: Page,
+  step: 'rx' | 'em' | 'attestation',
+): Promise<void> {
+  await expect(
+    page.getByTestId('rounds-gate-flow'),
+    `the gate flow is not on the ${step} step`,
+  ).toHaveAttribute('data-step', step, { timeout: 10_000 });
+}
+
 export async function attestAndSubmit(page: Page): Promise<void> {
   const toggle = page.getByTestId('sign-attestation-toggle');
   if (await toggle.count()) {
