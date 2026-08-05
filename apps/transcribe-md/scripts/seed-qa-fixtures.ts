@@ -359,6 +359,8 @@ async function main() {
 
     const baseVisitFields = {
       userId: user.id,
+      // T4 — the author. Same value as userId in every fixture here.
+      createdBy: user.id,
       // T3 — the visit's tenant, from the PATIENT's practice. Every fixture
       // patient in this seed is created under `user.practiceId`, so this is the
       // same value by construction; the composite FK refuses a mismatch.

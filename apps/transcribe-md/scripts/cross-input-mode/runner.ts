@@ -94,6 +94,9 @@ async function createVisitForScenario(
   const data: any = {
     userId: USER_ID,
     patientId,
+    // T4 — the author. `data` is typed `any`, so tsc CANNOT catch a missing
+    // required column here; this line is verified by reading, not by the compiler.
+    createdBy: USER_ID,
     // T3 — the visit's tenant. The runner's patient is created under
     // PRACTICE_ID, so this matches by construction.
     practiceId: PRACTICE_ID,

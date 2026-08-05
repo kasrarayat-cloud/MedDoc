@@ -334,6 +334,8 @@ async function main() {
         id: DONOR_VISIT_ID,
         userId: user.id,
         patientId: patient.id,
+        // T4 — the author.
+        createdBy: user.id,
         // T3 — from the PATIENT, per the stated derivation. The patient row
         // was created (or found) under `user.practiceId` a few lines up, so this
         // is the same value by construction; the patient's `select` does not

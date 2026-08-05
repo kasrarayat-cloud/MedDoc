@@ -48,8 +48,8 @@ const cleanup = () =>
 /** The same insert both ways — only `practiceId` differs. */
 const insertVisit = (id: string, practiceExpr: string) => `
   INSERT INTO transcribe_visits
-    (id,"userId","patientId",specialty,"inputMode","practiceId","updatedAt","createdAt")
-  SELECT '${id}', u.id, p.id, 'primary-care', 'text_notes', ${practiceExpr}, now(), now()
+    (id,"userId","patientId",specialty,"inputMode","practiceId","createdBy","updatedAt","createdAt")
+  SELECT '${id}', u.id, p.id, 'primary-care', 'text_notes', ${practiceExpr}, u.id, now(), now()
   FROM transcribe_md_patients p
   CROSS JOIN LATERAL (SELECT id FROM users LIMIT 1) u
   LIMIT 1;

@@ -124,11 +124,12 @@ export function seedVisitStates(email: string): SeededVisitIds | null {
   // renders the editable SOAP, "Sign & Send" CTA, and the export bar.
   psql(`
     INSERT INTO transcribe_visits
-      (id, "userId", "patientId", "practiceId", "patientName", specialty, "inputMode", status,
+      (id, "userId", "patientId", "practiceId", "createdBy", "patientName", specialty, "inputMode", status,
        "transcriptText", "soapFinal", "createdAt", "updatedAt")
     VALUES
       ('${ids.READY}', '${userId}', '${patientId}',
        (SELECT "practiceId" FROM transcribe_md_patients WHERE id = '${patientId}'),
+       '${userId}',
        'A11y Test Patient',
        'Family Medicine', 'audio_upload', 'READY',
        'Synthetic transcript for accessibility QA.',
@@ -141,11 +142,12 @@ export function seedVisitStates(email: string): SeededVisitIds | null {
   // renders the read-only signed SOAP and the "delivered" status banner.
   psql(`
     INSERT INTO transcribe_visits
-      (id, "userId", "patientId", "practiceId", "patientName", specialty, "inputMode", status,
+      (id, "userId", "patientId", "practiceId", "createdBy", "patientName", specialty, "inputMode", status,
        "transcriptText", "soapFinal", "signedSoap", "signedAt", "createdAt", "updatedAt")
     VALUES
       ('${ids.SIGNED}', '${userId}', '${patientId}',
        (SELECT "practiceId" FROM transcribe_md_patients WHERE id = '${patientId}'),
+       '${userId}',
        'A11y Test Patient',
        'Family Medicine', 'audio_upload', 'READY',
        'Synthetic transcript (signed).',
@@ -159,11 +161,12 @@ export function seedVisitStates(email: string): SeededVisitIds | null {
   // view renders the progress UI / pending state with no SOAP yet.
   psql(`
     INSERT INTO transcribe_visits
-      (id, "userId", "patientId", "practiceId", "patientName", specialty, "inputMode", status,
+      (id, "userId", "patientId", "practiceId", "createdBy", "patientName", specialty, "inputMode", status,
        "createdAt", "updatedAt")
     VALUES
       ('${ids.PROCESSING}', '${userId}', '${patientId}',
        (SELECT "practiceId" FROM transcribe_md_patients WHERE id = '${patientId}'),
+       '${userId}',
        'A11y Test Patient',
        'Family Medicine', 'audio_upload', 'TRANSCRIBING',
        NOW(), NOW())

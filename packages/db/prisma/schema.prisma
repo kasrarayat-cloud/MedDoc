@@ -688,6 +688,10 @@ model User {
   billingEventsSubmitted BillingEvent[]      @relation("BillingSubmitter")
   // TranscribeMD (T-M2)
   transcribeVisits       TranscribeVisit[]
+  /// T4 back-relations. Named because TranscribeVisit now points at User three
+  /// ways — owner, creator, signer — and Prisma cannot disambiguate unnamed ones.
+  visitsCreated        TranscribeVisit[] @relation("VisitCreatedBy")
+  visitsSigned         TranscribeVisit[] @relation("VisitSignedBy")
   userSessions           UserSession[]
   // T-M14.1: per-doctor edit tracking (one row per signed visit).
   doctorEditPatterns     DoctorEditPattern[]
@@ -1722,6 +1726,21 @@ model TranscribeVisit {
   /// FK below that makes the alternative unrepresentable.
   practiceId String
   practice   Practice @relation(fields: [practiceId], references: [id])
+  /// T4 — who CREATED this visit. Same value as `userId` today; the separate
+  /// column is what lets `userId` come to mean "owner" without rewriting the
+  /// record of who made it.
+  createdBy String
+  creator   User   @relation("VisitCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+
+  /// T4 — who SIGNED it. NULL until signed, and NULL is honest: an unsigned
+  /// visit has no signer and a sentinel would be a lie about attestation.
+  ///
+  /// ⚠️ A SIGNATURE WITHOUT A SIGNER IS UNREPRESENTABLE, not merely avoided:
+  /// the migration adds CHECK ("signedAt" IS NULL OR "signedBy" IS NOT NULL).
+  /// Stamped server-side from the session in the same statement as `signedAt`
+  /// (`api/visits/[id]/sign/route.ts`) — never from a request body.
+  signedBy String?
+  signer   User?   @relation("VisitSignedBy", fields: [signedBy], references: [id], onDelete: Restrict)
 
   /// Legacy free-text patient name — kept nullable through T-M17.2
   /// because some older visits never set it. After the Phase 1
