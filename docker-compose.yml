@@ -552,12 +552,11 @@ services:
         # ROLLBACK: NEXT_PUBLIC_SKIN_BETA=false docker compose build transcribe-md
         #           && docker compose up -d --no-deps transcribe-md  (→ old UI).
         NEXT_PUBLIC_SKIN_BETA: "${NEXT_PUBLIC_SKIN_BETA:-true}"
-        # ROUNDS — the full app re-skin (Ward Board × Focus Flow). Build-time,
-        # fail-closed, DEFAULT OFF. Presentation only: nothing behind it changes
-        # a gate's server semantics, and POST /sign stays the sole source of
-        # truth. docs/design-tokens.md is the authority for the visual side.
-        # ROLLBACK: NEXT_PUBLIC_SKIN_ROUNDS=false docker compose build transcribe-md
-        NEXT_PUBLIC_SKIN_ROUNDS: "${NEXT_PUBLIC_SKIN_ROUNDS:-false}"
+        # NEXT_PUBLIC_SKIN_ROUNDS was REMOVED 2026-08-05 (F-ret.3) together with
+        # its flag-OFF arm. The Rounds skin is now the only skin — there is no
+        # branch left to select, so a flag here would be a lever attached to
+        # nothing. Rollback for this surface is TAGGED IMAGES ONLY; see
+        # DEPLOYMENT_RUNBOOK §3.3.
         # Ultrasound specialty gate (build-time inlined into the frontend; the
         # worker reads the same var at runtime via env_file: .env). Default OFF
         # so a build with no override never offers Ultrasound; prod enables it

@@ -26,7 +26,6 @@ import prisma from '@meddoc/db';
 import { auth } from '@/lib/nextauth';
 import { logAudit } from '@/lib/audit';
 import { isSkinBeta } from '@/config/skin-beta';
-import { isSkinRounds } from '@/config/skin-rounds';
 import { RoundsNewVisitCta } from '@/components/rounds/new-visit-cta';
 import { AppFrame } from '@/components/ui/app-frame';
 import { Avatar } from '@/components/ui/avatar';
@@ -238,9 +237,6 @@ export default async function PatientPage({
   // <VisitsTab>/<TrashTab>/dialogs the legacy view renders. Flag OFF → the
   // existing tabbed layout below runs, byte-identical.
   if (isSkinBeta()) {
-    // R3.2 — the Rounds fork of this layout. Beta and Rounds are different
-    // flags; only the latter guarantees the tokens these controls resolve.
-    const roundsSkin = isSkinRounds();
     const age = dob ? yearsFrom(dob) : null;
     const metaBits = [
       dobIso ? `DOB ${dobIso}${age != null ? ` (${age})` : ''}` : null,
@@ -339,11 +335,9 @@ export default async function PatientPage({
               3. The remaining actions take `.qm-rounds-btn-secondary` rather
                  than `qm-lin-btn`.
 
-              ⚠️ FORKED ON `isSkinRounds()`, NOT ON `isSkinBeta()`. This whole
-              branch is the skin-beta layout, and in production skin-beta is on
-              wherever Rounds is — but they are different flags, and a build with
-              beta and without Rounds would otherwise get Rounds controls with no
-              Rounds tokens behind them. */}
+              This row is unconditional: the Rounds skin is permanent, so the
+              `qm-rounds-*` tokens these controls resolve are always present and
+              there is no legacy `qm-lin-btn` action row left to fall back to. */}
           {/* ⚠️ `qm-rounds-host` ON THIS ROW IS LOAD-BEARING, not decoration.
               The Edit and Delete triggers are Radix dialogs styled with Tailwind
               `linear-*` utilities — including a `ring-linear-sage/40` focus
@@ -354,71 +348,15 @@ export default async function PatientPage({
               It is also an island the CENSUS CANNOT SEE — its colour arm samples
               color/background/border, not ring. Named in the report rather than
               left implicit. */}
-          {roundsSkin ? (
-            <div className="qm-rounds-host qm-rounds-pdetail-actions">
-              {/* R4.2 — the patient TRAVELS with the action. Without this the
-                  button lands the doctor in create-a-patient on the one page
-                  where the patient is already known. */}
-              {!isDeleted && <RoundsNewVisitCta variant="bar" patientId={patient.id} />}
-              {latestVisit && (
-                <Link
-                  href={`/visits/${latestVisit.id}`}
-                  className="qm-rounds-btn-secondary"
-                  style={{ textDecoration: 'none' }}
-                >
-                  Open last note
-                </Link>
-              )}
-              <EditPatientDialog
-                patientId={patient.id}
-                initialName={patient.name}
-                initialDob={dobIso}
-                initialExternalId={patient.externalId}
-                initialMrn={patient.mrn}
-                initialInsurance={patient.insurance}
-              />
-              {activeCount > 0 && (
-                <a
-                  href={`/api/patients/${patient.id}/export`}
-                  className="qm-rounds-btn-secondary"
-                  style={{ textDecoration: 'none' }}
-                >
-                  <Ic.download width={13} height={13} />
-                  Export
-                </a>
-              )}
-              <details
-                className="qm-rounds-overflow"
-                data-testid="rounds-patient-overflow"
-              >
-                <summary className="qm-rounds-overflow-summary">
-                  Patient actions
-                </summary>
-                <div className="qm-rounds-overflow-body">
-                  <DeletePatientDialog
-                    patientId={patient.id}
-                    patientName={patient.name}
-                    visitCount={activeCount}
-                  />
-                </div>
-              </details>
-            </div>
-          ) : (
-          <div className="flex flex-wrap items-center gap-2">
-            {!isDeleted && (
-              <Link
-                href={`/visits/new?patientId=${patient.id}`}
-                className="qm-lin-btn-primary"
-                style={{ textDecoration: 'none' }}
-              >
-                <Ic.plus width={14} height={14} />
-                New visit
-              </Link>
-            )}
+          <div className="qm-rounds-host qm-rounds-pdetail-actions">
+            {/* R4.2 — the patient TRAVELS with the action. Without this the
+                button lands the doctor in create-a-patient on the one page
+                where the patient is already known. */}
+            {!isDeleted && <RoundsNewVisitCta variant="bar" patientId={patient.id} />}
             {latestVisit && (
               <Link
                 href={`/visits/${latestVisit.id}`}
-                className="qm-lin-btn"
+                className="qm-rounds-btn-secondary"
                 style={{ textDecoration: 'none' }}
               >
                 Open last note
@@ -435,20 +373,29 @@ export default async function PatientPage({
             {activeCount > 0 && (
               <a
                 href={`/api/patients/${patient.id}/export`}
-                className="qm-lin-btn"
+                className="qm-rounds-btn-secondary"
                 style={{ textDecoration: 'none' }}
               >
                 <Ic.download width={13} height={13} />
                 Export
               </a>
             )}
-            <DeletePatientDialog
-              patientId={patient.id}
-              patientName={patient.name}
-              visitCount={activeCount}
-            />
+            <details
+              className="qm-rounds-overflow"
+              data-testid="rounds-patient-overflow"
+            >
+              <summary className="qm-rounds-overflow-summary">
+                Patient actions
+              </summary>
+              <div className="qm-rounds-overflow-body">
+                <DeletePatientDialog
+                  patientId={patient.id}
+                  patientName={patient.name}
+                  visitCount={activeCount}
+                />
+              </div>
+            </details>
           </div>
-          )}
         </div>
 
         {/* Quiet one-line summary — replaces the 4 vanity stat cards.

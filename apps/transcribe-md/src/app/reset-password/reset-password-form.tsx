@@ -10,7 +10,6 @@ import {
   AuthFieldError,
   AuthFieldLabel,
 } from '@/components/ui/auth-shell';
-import { isSkinRounds } from '@/config/skin-rounds';
 
 interface Props {
   token: string;
@@ -46,9 +45,6 @@ const linkStyle: React.CSSProperties = {
 };
 
 export function ResetPasswordForm({ token }: Props) {
-  // Build-time, so flag-OFF folds to a constant and this component renders
-  // exactly as it does today.
-  const rounds = isSkinRounds();
   const router = useRouter();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -59,7 +55,7 @@ export function ResetPasswordForm({ token }: Props) {
   if (!token) {
     return (
       <div
-        className={rounds ? 'qm-rounds-panel' : undefined}
+        className="qm-rounds-panel"
         style={{
           marginTop: 22,
           display: 'flex',
@@ -132,12 +128,12 @@ export function ResetPasswordForm({ token }: Props) {
   // to 4.18:1 on /forgot-password. The panel class re-bridges the faint tiers
   // for that reason, and `gate-c1d-auth` asserts the pairing by arithmetic, so
   // this text is covered by a unit even though no walk photographs it.
-  // `17-password-reset.spec.ts` (the required chromium gate) does drive it —
-  // flag-OFF.
+  // `17-password-reset.spec.ts` (the required chromium gate) does drive it,
+  // now always in the Rounds skin.
   if (done) {
     return (
       <p
-        className={rounds ? 'qm-rounds-panel' : undefined}
+        className="qm-rounds-panel"
         style={{
           marginTop: 22,
           textAlign: 'center',
@@ -168,7 +164,7 @@ export function ResetPasswordForm({ token }: Props) {
           minLength={10}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className={rounds ? 'qm-rounds-input' : undefined}
+          className="qm-rounds-input"
           style={{ ...inputStyle, marginTop: 6 }}
         />
         <p
@@ -198,7 +194,7 @@ export function ResetPasswordForm({ token }: Props) {
           minLength={10}
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
-          className={rounds ? 'qm-rounds-input' : undefined}
+          className="qm-rounds-input"
           style={{ ...inputStyle, marginTop: 6 }}
         />
         {fieldError === 'confirmPassword' && (
@@ -211,7 +207,7 @@ export function ResetPasswordForm({ token }: Props) {
       <button
         type="submit"
         disabled={pending || !password || !confirmPassword}
-        className={rounds ? 'qm-lin-btn-primary qm-rounds-btn-primary' : 'qm-lin-btn-primary'}
+        className="qm-lin-btn-primary qm-rounds-btn-primary"
         style={{
           width: '100%',
           marginTop: 22,
@@ -235,7 +231,7 @@ export function ResetPasswordForm({ token }: Props) {
           marginTop: 18,
         }}
       >
-        <Link href="/login" className={rounds ? 'qm-rounds-link' : undefined} style={linkStyle}>
+        <Link href="/login" className="qm-rounds-link" style={linkStyle}>
           Back to sign in →
         </Link>
       </div>

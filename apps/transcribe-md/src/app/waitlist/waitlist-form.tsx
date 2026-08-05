@@ -4,7 +4,6 @@ import { useActionState } from 'react';
 
 import { AuthFieldError, AuthFieldLabel } from '@/components/ui/auth-shell';
 import { joinWaitlistAction, type WaitlistState } from '@/actions/waitlist';
-import { isSkinRounds } from '@/config/skin-rounds';
 
 const initialState: WaitlistState = { ok: false };
 
@@ -27,14 +26,11 @@ export function WaitlistForm() {
     joinWaitlistAction,
     initialState,
   );
-  // Build-time, so flag-OFF folds to a constant and this file renders exactly
-  // as it does today.
-  const rounds = isSkinRounds();
 
   if (state.ok && state.message) {
     return (
       <div
-        className={rounds ? 'qm-rounds-panel' : undefined}
+        className="qm-rounds-panel"
         style={{
           marginTop: 20,
           padding: 16,
@@ -64,7 +60,7 @@ export function WaitlistForm() {
           autoComplete="email"
           required
           maxLength={254}
-          className={rounds ? 'qm-rounds-input' : undefined}
+          className="qm-rounds-input"
           style={{ ...inputStyle, marginTop: 6 }}
         />
         <AuthFieldError message={state.errors?.email} />
@@ -78,7 +74,7 @@ export function WaitlistForm() {
           type="text"
           autoComplete="name"
           maxLength={120}
-          className={rounds ? 'qm-rounds-input' : undefined}
+          className="qm-rounds-input"
           style={{ ...inputStyle, marginTop: 6 }}
         />
       </div>
@@ -93,7 +89,7 @@ export function WaitlistForm() {
           type="text"
           maxLength={500}
           placeholder="e.g. vascular ultrasound, solo practice"
-          className={rounds ? 'qm-rounds-input' : undefined}
+          className="qm-rounds-input"
           style={{ ...inputStyle, marginTop: 6 }}
         />
         {/* Said plainly, because this box is on a medical product and someone
@@ -110,24 +106,21 @@ export function WaitlistForm() {
         </p>
       </div>
 
-      {/* ⚠️ THE LABEL COLOUR IS FORKED, AND IT IS A CONTRAST FIX, NOT A TASTE
+      {/* ⚠️ THE LABEL COLOUR IS A TOKEN, AND IT IS A CONTRAST FIX, NOT A TASTE
           CHANGE. `--color-linear-sage` bridges to `--rounds-accent`, a mid
-          indigo. `#08090a` on sage measures 7.27:1; on the accent it is
-          **3.71:1 — an AA failure**, on the submit button of the most-visited
-          unauthenticated page in the product. The bridge retints the fill and
-          cannot touch the literal sitting on it.
+          indigo. A hardcoded `#08090a` measures 7.27:1 on sage but only
+          **3.71:1 on the accent — an AA failure**, on the submit button of the
+          most-visited unauthenticated page in the product. The bridge retints
+          the fill and cannot touch a literal sitting on it, so the label must
+          come from `--rounds-on-accent`. Do not re-hardcode it.
           Gate C could not have caught this: axe ownership climbs to the
           nearest classed ancestor-or-self, and a classed button answers for
           itself — so the violation would be logged "inherited" and never
-          block. `gate-c1d-auth` computes the ratio instead.
-          (`#08090a` is also the app BACKGROUND value rather than the product's
-          text-on-accent literal `#0d1611` — off-convention before Rounds
-          touched it. The Rounds branch uses the token; the old branch is left
-          exactly as it was, because changing it is not this item's to do.) */}
+          block. `gate-c1d-auth` computes the ratio instead. */}
       <button
         type="submit"
         disabled={pending}
-        className={rounds ? 'qm-rounds-btn-primary' : undefined}
+        className="qm-rounds-btn-primary"
         style={{
           marginTop: 20,
           width: '100%',
@@ -135,7 +128,7 @@ export function WaitlistForm() {
           borderRadius: 6,
           border: 'none',
           background: 'var(--color-linear-sage)',
-          color: rounds ? 'var(--rounds-on-accent)' : '#08090a',
+          color: 'var(--rounds-on-accent)',
           fontFamily: 'var(--font-sans)',
           fontSize: 13.5,
           fontWeight: 600,
@@ -161,7 +154,7 @@ export function WaitlistForm() {
             SERIOUS — anyone who cannot separate the two hues sees prose. */}
         <a
           href="/signup"
-          className={rounds ? 'qm-rounds-link' : undefined}
+          className="qm-rounds-link"
           style={{
             color: 'var(--color-linear-sage-bright)',
             textDecoration: 'underline',

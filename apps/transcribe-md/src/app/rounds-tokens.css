@@ -2400,6 +2400,66 @@ body[data-skin='rounds'] {
 
 /* The caret is decorative and aria-hidden; `aria-expanded` on the button is
    what actually announces the state. */
+/* ⚠️ NARROW VIEWPORTS — THIS FIXED A LIVE 7px HORIZONTAL OVERFLOW.
+   Added 2026-08-05 (F-ret.3), and the bug it fixes shipped on 2026-08-04 with
+   the account menu itself.
+
+   The top bar is a flex row with no breakpoint, and the trigger renders the
+   clinician's FULL name. At 390px that pushed `.qm-rounds-account` to
+   right=397 on a 390px viewport — exactly 7px of `documentElement.scrollWidth`
+   over `clientWidth`, on EVERY authed page. A doctor on a phone got a
+   horizontally scrolling app.
+
+   ⚠️ NOTHING WAS WATCHING FOR IT, and that is the part worth keeping. The
+   axe sweep runs at mobile and passed: axe checks accessibility, not layout
+   overflow. The one check that measures `scrollWidth - clientWidth` lives in
+   `doc-preview.spec.ts:93` — and that pack built the LEGACY skin, so it had
+   never once measured this. Deleting the skin flag is what pointed it at the
+   real product, and it failed immediately. The test was right; the app was wrong.
+
+   THE NAME TRUNCATES RATHER THAN DISAPPEARING. Hiding it would take the
+   clinician's identity off a shared workstation's screen, which is the same
+   class of regression that put this menu here in the first place. `min-width: 0`
+   is required on both the flex item and its parent or `text-overflow` does
+   nothing — a flex child's default `min-width: auto` refuses to shrink below
+   its content. */
+@media (max-width: 460px) {
+  [data-skin='rounds'] .qm-rounds-topbar {
+    gap: 10px;
+    padding: 10px 12px;
+    min-width: 0;
+  }
+  [data-skin='rounds'] .qm-rounds-account {
+    min-width: 0;
+    flex: 0 1 auto;
+  }
+  /* ⚠️ `max-width: 100%`, NOT A vw FRACTION — and the first attempt used
+     `42vw`, which made the overflow WORSE (7px → 31px) rather than better.
+     Measured, not reasoned: the flex algorithm had already shrunk
+     `.qm-rounds-account` to 79px, but the trigger INSIDE it is not a flex item
+     of anything constrained, so it rendered at its content width of 122 and the
+     name span at 88 overflowed its 79px parent. A viewport fraction of 163px
+     never binds at that size. Constraining the trigger to its (already-shrunk)
+     PARENT is what makes `text-overflow: ellipsis` on the name do anything at
+     all — measured 31px → 0px on /settings and /patients. */
+  [data-skin='rounds'] .qm-rounds-account-trigger {
+    min-width: 0;
+    max-width: 100%;
+  }
+  /* The nav is the other item refusing to give ground: a flex child defaults to
+     `min-width: auto`, so it will not shrink below its content no matter what
+     the account does. */
+  [data-skin='rounds'] .qm-rounds-topbar-nav {
+    min-width: 0;
+  }
+  [data-skin='rounds'] .qm-rounds-account-who {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
 [data-skin='rounds'] .qm-rounds-account-caret {
   width: 0;
   height: 0;

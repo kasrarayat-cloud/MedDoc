@@ -6998,7 +6998,22 @@ body {
   outline-offset: 2px;
 }
 /* The page column. Both formats are centred inside it at the same width, so
-   PDF and Word frame identically — the toggle's whole promise. */
+   PDF and Word frame identically — the toggle's whole promise.
+
+   ⚠️ THIS COMMENT WAS ONCE FALSE AND IS NOW TRUE. It was catalogued in the R3
+   false-comment census on measured evidence (PDF 756px vs WORD 674px, at every
+   width). R3-b2 then FIXED the defect rather than the sentence, so the code was
+   changed to match the comment. F-ret.3 therefore leaves it standing —
+   "correcting" it now would introduce the error the census existed to remove.
+
+   Re-verified 2026-08-05 STRUCTURALLY rather than by re-measuring pixels, which
+   is the stronger check: the rule below is the ONLY thing setting outer width
+   for either format, and the two docx-only rules (`overflow-x` at the
+   `.qm-npv-docx` line further down, and the `.qm-docxp-wrapper` gutter removal)
+   touch the INNER wrapper, never the column. `.qm-npv-stage`'s padding and
+   border wrap both formats equally and so cannot be the asymmetry. Identical
+   framing is therefore a property of the cascade, not of a measurement that
+   could drift. */
 .qm-npv-pdf,
 .qm-npv-docx {
   display: block;
@@ -7092,16 +7107,22 @@ body {
      changed the document. */
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.45);
 }
-/* The Word view inside the visit document, framed identically. */
-.qm-vdoc .qm-npv-docx {
-  width: min(100%, var(--qm-page-w, 820px));
-  margin: 20px auto 0;
-  padding: 0;
-}
-.qm-vdoc .qm-npv-docx .qm-docxp-wrapper > section.qm-docxp {
-  border-radius: 2px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.45);
-}
+/* DELETED 2026-08-05, F-ret.3 — `.qm-vdoc .qm-npv-docx` was DEAD, proven by
+   complete enumeration rather than by a spot check:
+
+     .qm-vdoc emitters                 1  (DocumentPages)
+     DocumentPages mounts              1  (visit-document-surface.tsx:195)
+     .qm-npv-docx emitter mounts       4  (…:149 + three under settings/note-format)
+     the two at their shared parent    MUTUALLY EXCLUSIVE — separated by an early
+                                       `return` on result.kind === 'docx_fallback'
+
+   ⚠️ ENUMERATION WAS THE METHOD BECAUSE THE NEAR-MISS DEFEATS A GREP.
+   `document-pages.tsx` DOES emit `qm-npv-page` and `qm-npv-note`, so searching
+   the `.qm-vdoc` subtree for `qm-npv` returns hits and argues the rules were
+   live. Only the exact class `qm-npv-docx` is absent, and only from the whole
+   subtree. "The class exists" would have saved a dead rule; "I don't see it"
+   would have deleted a live one. Neither shortcut answers; the mount census
+   does. */
 
 /* Visually hidden, still announced. The document renders as canvases, so the
    note's text lives here for anyone reading with assistive technology. */

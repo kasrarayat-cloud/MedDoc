@@ -110,12 +110,23 @@ jobs:
       # product works" are one statement. `gate-flag-coverage.test.ts` pins the
       # list; if you add a flag to prod and not here, that guard reds.
       #
-      # ⚠️ SKIN_ROUNDS IS **NOT** SET HERE, AND THAT IS DELIBERATE. Prod's
-      # compose does not bake it into the app image build args either — the
-      # Rounds surfaces get their own separately-tagged flag-ON image and their
-      # own projects further down this file, because those packs need
-      # DEV_STATES and seeded fixtures the default pack does not build. What
-      # changes here is only the flags prod's own `build.args` carry.
+      # ⚠️ THE ROUNDS FLAG IS GONE — REMOVED 2026-08-05 (F-ret.3) with the
+      # flag-OFF arm. The skin is unconditional, so there is nothing to set and
+      # every image below is a Rounds image whether or not its step name says so.
+      #
+      # ⚠️ AND THE COMMENT THAT STOOD HERE WAS FALSE FOR A DAY, BY MY OWN HAND.
+      # It read "SKIN_ROUNDS IS NOT SET HERE, AND THAT IS DELIBERATE" while the
+      # step below set it to "true" — F-ret.1 added the flag and left the
+      # sentence claiming the opposite. That is the third comment in this
+      # program asserting a property the code does not have, and the first one
+      # this session's own work created. Changing a step and not its comment is
+      # how the next reader is misled by something that looks authoritative.
+      #
+      # FOLLOW-UP, NAMED NOT DONE: the separately-tagged "flag-ON" images further
+      # down are now byte-identical in flag terms to this one. Collapsing them
+      # would cut CI time substantially, but it is a workflow restructure and is
+      # deliberately NOT bundled with a flag deletion — a failure in either
+      # would be unattributable.
       #
       # ⚠️ THE WHOLE SET IS PASSED, NOT JUST THE SKIN FLAG, AND THAT IS THE
       # DIFFERENCE BETWEEN "production-shaped" AND "nearly". `docker-compose.yml`
@@ -136,7 +147,6 @@ jobs:
       # separately-tagged image further down.
       - name: Build app + worker images
         env:
-          NEXT_PUBLIC_SKIN_ROUNDS: "true"
           NEXT_PUBLIC_SKIN_BETA: "true"
           NEXT_PUBLIC_REVIEW_DOC_VIEW: "true"
           NEXT_PUBLIC_UX_SIMPLIFY: "true"
@@ -332,7 +342,6 @@ jobs:
       - name: Build Rounds flag-ON image
         run: >
           docker build -f apps/transcribe-md/Dockerfile
-          --build-arg NEXT_PUBLIC_SKIN_ROUNDS=true
           --build-arg NEXT_PUBLIC_SKIN_BETA=true
           --build-arg NEXT_PUBLIC_ULTRASOUND_SPECIALTY=true
           --build-arg NEXT_PUBLIC_REVIEW_DOC_VIEW=true

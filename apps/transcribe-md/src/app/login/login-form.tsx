@@ -11,7 +11,6 @@ import {
   AuthFieldLabel,
 } from '@/components/ui/auth-shell';
 import { loginAction, type AuthActionState } from '@/actions/auth';
-import { isSkinRounds } from '@/config/skin-rounds';
 
 const initialState: AuthActionState = null;
 
@@ -43,9 +42,6 @@ const linkStyle: React.CSSProperties = {
 };
 
 export function LoginForm() {
-  // Build-time, so flag-OFF folds to a constant and this component renders
-  // exactly as it does today.
-  const rounds = isSkinRounds();
   const [state, formAction, pending] = useActionState(loginAction, initialState);
   const router = useRouter();
   const [resendPending, setResendPending] = useState(false);
@@ -117,7 +113,7 @@ export function LoginForm() {
           defaultValue={values.email ?? ''}
           required
           maxLength={254}
-          className={rounds ? 'qm-rounds-input' : undefined}
+          className="qm-rounds-input"
           style={{ ...inputStyle, marginTop: 6 }}
         />
         <AuthFieldError message={errors.email} />
@@ -143,7 +139,7 @@ export function LoginForm() {
           type="password"
           autoComplete="current-password"
           required
-          className={rounds ? 'qm-rounds-input' : undefined}
+          className="qm-rounds-input"
           style={{ ...inputStyle, marginTop: 6 }}
         />
         <AuthFieldError message={errors.password} />
@@ -162,7 +158,7 @@ export function LoginForm() {
             placeholder="123456"
             required
             autoFocus
-            className={rounds ? 'qm-rounds-input' : undefined}
+            className="qm-rounds-input"
             style={{
               ...inputStyle,
               marginTop: 6,
@@ -203,7 +199,7 @@ export function LoginForm() {
             placeholder="ABCD-1234"
             required
             autoFocus
-            className={rounds ? 'qm-rounds-input' : undefined}
+            className="qm-rounds-input"
             style={{
               ...inputStyle,
               marginTop: 6,
@@ -251,7 +247,7 @@ export function LoginForm() {
           </p>
           <a
             href={crossAppRedirect.url}
-            className={rounds ? 'qm-lin-btn qm-rounds-btn-secondary' : 'qm-lin-btn'}
+            className="qm-lin-btn qm-rounds-btn-secondary"
             style={{
               marginTop: 10,
               fontSize: 12,
@@ -313,7 +309,7 @@ export function LoginForm() {
       <button
         type="submit"
         disabled={pending}
-        className={rounds ? 'qm-lin-btn-primary qm-rounds-btn-primary' : 'qm-lin-btn-primary'}
+        className="qm-lin-btn-primary qm-rounds-btn-primary"
         style={{
           width: '100%',
           marginTop: 22,
@@ -336,7 +332,7 @@ export function LoginForm() {
         }}
       >
         No account?{' '}
-        <Link href="/signup" className={rounds ? 'qm-rounds-link' : undefined} style={linkStyle}>
+        <Link href="/signup" className="qm-rounds-link" style={linkStyle}>
           Sign up →
         </Link>
       </div>

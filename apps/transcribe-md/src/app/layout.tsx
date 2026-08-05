@@ -13,7 +13,6 @@ import { auth } from '@/lib/nextauth';
 import { CommandPalette } from '@/components/command-palette';
 import { GlobalShortcuts } from '@/components/global-shortcuts';
 import { Toaster } from '@/components/toaster';
-import { isSkinRounds } from '@/config/skin-rounds';
 import './globals.css';
 import './rounds-tokens.css';
 
@@ -107,7 +106,7 @@ export default async function RootLayout({
       // data-skin scopes the whole Rounds token layer, and it is set on <html>
       // for two reasons: the stage gradient has to cascade from the root, and a
       // screenshot of any page then carries evidence of which skin produced it.
-      {...(isSkinRounds() ? { 'data-skin': 'rounds' } : {})}
+      data-skin="rounds"
       className={`${GeistSans.variable} ${GeistMono.variable} ${sans.variable} ${mono.variable} ${roundsDisplay.variable} ${roundsUi.variable} ${roundsClinical.variable} dark`}
       suppressHydrationWarning
     >

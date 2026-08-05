@@ -25,6 +25,34 @@
 // the E2E now asserts the raw status and why this asserts the SHAPE. Both,
 // because they fail differently: this one fails on the PR that introduces the
 // regression, without needing an image.
+//
+// ----------------------------------------------------------------------------
+// RE-POINTED 2026-08-05, WHEN `NEXT_PUBLIC_SKIN_ROUNDS` WAS DELETED.
+//
+// The guard used to locate the forward by finding `isSkinRounds()` and counting
+// the awaits above it. F-ret.3 then reduced `dashboard/page.tsx` to an
+// unconditional `redirect('/board')` with no flag, no parameters and no awaits
+// at all — so the old anchor no longer exists in the file it guards.
+//
+// The INVARIANT DID NOT GO AWAY WITH THE FLAG. `dashboard/loading.tsx` is still
+// there, the segment still suspends, and a redirect that ends up below an await
+// is still a streamed 200. Deleting this gate because its anchor moved would
+// have retired a live property for a bookkeeping reason.
+//
+// So the anchor moved to the property itself, and got STRICTER in the process.
+// It now asserts, on every forwarding route whose segment suspends:
+//
+//   1. the body forwards to `/board` at all;
+//   2. the route component declares NO PARAMETERS. Reading `params`/
+//      `searchParams` is precisely what suspends the segment — a route that
+//      cannot name them cannot await them, whatever anyone adds later;
+//   3. ZERO `await`s appear above the `redirect(`.
+//
+// (2) is new, and it is why this is a stronger form of the same check rather
+// than a like-for-like translation: the old version tolerated an `await
+// searchParams` as long as it sat inside the flag branch, which was true but
+// fragile. A signature with empty parens makes the failure impossible to
+// reintroduce by editing the body.
 // ============================================================================
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -32,7 +60,7 @@ import { dirname } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-/** Routes that forward under Rounds. */
+/** Routes whose whole job is to forward somewhere else. */
 const FORWARDING_ROUTES = [
   'src/app/dashboard/page.tsx',
   'src/app/page.tsx',
@@ -71,31 +99,55 @@ function routeBody(src: string): string {
 describe('R1 — a forwarding route forwards before it suspends', () => {
   it('the parser finds a route body — non-vacuity', () => {
     // Checked over ALL the routes, suspending or not: a parse that silently
-    // returned '' would make the real assertion below quantify over nothing.
+    // returned '' would make the real assertions below quantify over nothing.
+    //
+    // ⚠️ This used to assert `body.length > 100`, a threshold calibrated when
+    // `/dashboard` was a 753-line page. The correct file is now three lines, so
+    // a byte count would redden on exactly the shape this gate wants. It asks
+    // for the two things that actually prove a parse instead.
     for (const file of FORWARDING_ROUTES) {
       const body = routeBody(codeOnly(readFileSync(file, 'utf8')));
-      expect(body.length, `${file}: no default async export found`).toBeGreaterThan(100);
+      expect(body, `${file}: no default async export found`).toMatch(
+        /^export default async function \w+\s*\(/,
+      );
       expect(body, `${file}: no redirect at all`).toContain('redirect(');
     }
   });
 
-  it('NEGATIVE CONTROL — the detector fires on a route shaped the wrong way', () => {
-    const bad = `export default async function P() {
+  it('NEGATIVE CONTROL — the detectors fire on routes shaped the wrong way', () => {
+    const awaitsFirst = `export default async function P() {
       const s = await auth();
-      if (isSkinRounds()) redirect('/board');
+      redirect('/board');
+    }`;
+    expect(
+      awaitsBeforeForward(awaitsFirst),
+      'the await detector cannot see the defect',
+    ).toBeGreaterThan(0);
+
+    const takesSearchParams = `export default async function P({ searchParams }) {
+      redirect('/board');
+    }`;
+    expect(
+      declaredParameters(takesSearchParams),
+      'the parameter detector cannot see the defect',
+    ).not.toBe('');
+
+    // And the sentinel: a route with no forward at all must not read as "zero
+    // awaits above the forward", which is what a plain count would return.
+    const noForward = `export default async function P() {
       return null;
     }`;
-    expect(awaitsBeforeSkinRedirect(bad), 'the detector cannot see the defect').toBeGreaterThan(0);
+    expect(awaitsBeforeForward(noForward), 'a missing forward passes vacuously').toBe(-1);
+
     const good = `export default async function P() {
-      if (isSkinRounds()) redirect('/board');
-      const s = await auth();
-      return null;
+      redirect('/board');
     }`;
-    expect(awaitsBeforeSkinRedirect(good), 'the detector fires on a correct route').toBe(0);
+    expect(awaitsBeforeForward(good), 'the await detector fires on a correct route').toBe(0);
+    expect(declaredParameters(good), 'the parameter detector fires on a correct route').toBe('');
   });
 
   it('the suspending set is not empty — this guard has something to guard', () => {
-    // If `loading.tsx` were renamed or the detector broke, the assertion below
+    // If `loading.tsx` were renamed or the detector broke, the assertions below
     // would loop over zero files and read exactly like a pass.
     const suspending = FORWARDING_ROUTES.filter(segmentSuspends);
     expect(
@@ -107,27 +159,49 @@ describe('R1 — a forwarding route forwards before it suspends', () => {
     expect(segmentSuspends('src/app/page.tsx')).toBe(false);
   });
 
-  it('⚠️ `/dashboard` redirects with NOTHING awaited above it', () => {
-    // The exception, and it is deliberate: `await searchParams` INSIDE the
-    // `if (isSkinRounds())` block is fine — it only runs on the branch that is
-    // about to redirect, and Next resolves it before the segment renders. What
-    // must not happen is an await on the path to the decision.
+  it('⚠️ `/dashboard` forwards to /board with nothing awaited — and cannot await', () => {
     for (const file of FORWARDING_ROUTES.filter(segmentSuspends)) {
       const body = routeBody(codeOnly(readFileSync(file, 'utf8')));
+
+      expect(body, `${file}: does not forward to /board`).toMatch(
+        /redirect\(\s*['"`]\/board['"`]/,
+      );
+
       expect(
-        awaitsBeforeSkinRedirect(body),
-        `${file}: the Rounds redirect sits below ${awaitsBeforeSkinRedirect(body)} ` +
+        declaredParameters(body),
+        `${file}: the route component declares parameters ` +
+          `(${declaredParameters(body)}). Reading params/searchParams is what ` +
+          'suspends the segment, and this segment has a loading.tsx — so the ' +
+          'forward would be delivered as a streamed 200 + skeleton rather than ' +
+          'a 307. A pure forward takes no arguments.',
+      ).toBe('');
+
+      expect(
+        awaitsBeforeForward(body),
+        `${file}: the forward sits below ${awaitsBeforeForward(body)} ` +
           'await(s). With a loading.tsx in the segment the response has already ' +
           'started, so Next answers 200 + skeleton and streams the redirect ' +
-          'instead of issuing it. Hoist the isSkinRounds() check to the top.',
+          'instead of issuing it. Hoist the redirect() above every await.',
       ).toBe(0);
     }
   });
 });
 
-/** How many `await`s the route evaluates before reaching its skin redirect. */
-function awaitsBeforeSkinRedirect(body: string): number {
-  const at = body.indexOf('isSkinRounds()');
-  if (at === -1) return 0;
+/** How many `await`s the route evaluates before reaching its forward.
+ *
+ *  Returns **-1** when there is no forward at all, deliberately: a plain count
+ *  would return 0 there, and 0 is the passing value. A sentinel that cannot be
+ *  mistaken for success turns a vanished redirect into a red test. */
+function awaitsBeforeForward(body: string): number {
+  const at = body.search(/\bredirect\(/);
+  if (at === -1) return -1;
   return (body.slice(0, at).match(/\bawait\b/g) ?? []).length;
+}
+
+/** The parameter list the route component declares, trimmed — `''` when it
+ *  takes none. Returns a sentinel rather than `''` if the signature cannot be
+ *  parsed, so an unreadable file fails instead of looking parameterless. */
+function declaredParameters(body: string): string {
+  const m = body.match(/^export default async function \w+\s*\(([^)]*)\)/);
+  return m ? m[1].trim() : '<unparsed signature>';
 }

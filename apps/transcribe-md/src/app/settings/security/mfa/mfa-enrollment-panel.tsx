@@ -368,15 +368,17 @@ function Stepper({ step }: { step: Step }) {
                    cannot touch a literal sitting on it: `#0d1611` measures
                    6.72:1 on sage and **3.43:1** on the accent, and at 10.5px
                    this glyph takes the 4.5:1 bar.
-                   The FALLBACK FORM, not an `isSkinRounds()` fork, and that is
-                   deliberate. `--rounds-on-accent` is declared only under
+                   This is the FALLBACK FORM — a CSS default on the token, not
+                   a JS fork on the skin — and that is deliberate.
+                   `--rounds-on-accent` is declared only under
                    `[data-skin='rounds']`; written bare it would be undeclared
-                   with the flag off and `color` would fall to its INITIAL
-                   value — the recorded incident. `var(--x, #0d1611)` is keyed
-                   on the SAME attribute that declares the token, so there is
-                   one condition rather than two that must agree.
-                   Flag OFF → #0d1611 on sage, 6.72:1, byte-identical to today.
-                   Flag ON  → #fff on the accent, 5.37:1. */
+                   anywhere that attribute is absent and `color` would fall to
+                   its INITIAL value — the recorded incident.
+                   `var(--x, #0d1611)` is keyed on the SAME attribute that
+                   declares the token, so there is one condition rather than
+                   two that must agree.
+                   Without `[data-skin='rounds']` → #0d1611 on sage, 6.72:1.
+                   Under   `[data-skin='rounds']` → #fff on the accent, 5.37:1. */
                 color: isActive || isDone ? 'var(--rounds-on-accent, #0d1611)' : 'var(--color-linear-text-3)',
                 border: isActive || isDone ? 'none' : '1px solid var(--color-linear-border)',
               }}

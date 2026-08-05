@@ -26,16 +26,20 @@ const nextConfig: NextConfig = {
   // renders and nothing suspends. It also keeps the auth edge middleware
   // (`src/proxy.ts`) untouched, which is not a file to experiment in.
   //
-  // Evaluated at BUILD time, which is the same time `NEXT_PUBLIC_SKIN_ROUNDS`
-  // is inlined — so the fork is baked into the image, exactly like every other
-  // consumer of the flag. Flag off → an empty array → `/dashboard` is a page
-  // again, unchanged.
+  // Evaluated at BUILD time. There is no longer a flag to consult: F-ret.3
+  // removed the skin fork, so `/dashboard` always forwards and this file no
+  // longer reads `process.env` at all.
+  //
+  // ⚠️ THIS WAS THE SECOND, NON-IMPORTING READER OF THE SKIN FLAG, and it is
+  // why a census built from `grep -rl isSkinRounds` came up short: this path
+  // read the raw env var and never touched the helper. A flag inventory has to
+  // search the VARIABLE, not the accessor that usually wraps it.
   //
   // ORDER MATTERS: the `?tab=all` rule must come first. Next takes the first
   // match, and the bare `/dashboard` rule matches regardless of query string,
   // so reversing these silently drops the deep link.
   async redirects() {
-    return roundsRedirects(process.env.NEXT_PUBLIC_SKIN_ROUNDS);
+    return roundsRedirects();
   },
 
 

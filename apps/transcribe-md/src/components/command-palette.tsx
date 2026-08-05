@@ -203,9 +203,20 @@ export function CommandPalette({ authed }: CommandPaletteProps) {
                   hint="N"
                 />
                 <PaletteItem
-                  onSelect={() => navTo('/dashboard')}
+                  // ⚠️ RE-POINTED 2026-08-05 (F-ret.3) — FOUND BY THE BUNDLE DIFF,
+                  // NOT BY THE SOURCE CENSUS. This entry never touched
+                  // `isSkinRounds`; it hardcoded the destination, so a census
+                  // built from flag consumers could not see it. The shipped
+                  // chunk still carried the string "Go to dashboard" after every
+                  // flag site was collapsed, which is how it surfaced.
+                  //
+                  // It was not broken — /dashboard 307s to /board — but it named
+                  // a surface that no longer exists and put a legacy URL in the
+                  // history of anyone who used Cmd+K, which is the exact double
+                  // hop R1 removed from the root route.
+                  onSelect={() => navTo('/board')}
                   icon={<LayoutDashboard className="h-3.5 w-3.5" />}
-                  label="Go to dashboard"
+                  label="Go to the board"
                   hint="D"
                 />
                 <PaletteItem

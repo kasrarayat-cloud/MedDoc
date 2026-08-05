@@ -13,6 +13,19 @@
 // arrives as a streamed `200` + skeleton instead of a `307`. Measured all three
 // ways on the QA image; only this one issues a real redirect. See the block
 // comment in `next.config.ts`.
+//
+// ⚠️ UNCONDITIONAL SINCE 2026-08-05 (F-ret.3). This used to take the skin flag
+// and return `[]` when it was not exactly the string 'true'.
+//
+// THE STATED REASON FOR THAT FAIL-CLOSED BRANCH HAD ALREADY EXPIRED, and it is
+// worth recording how: the comment read "INERT WITH THE FLAG OFF, and that is
+// load-bearing: the default `chromium` E2E pack builds flag-OFF and 24 of its
+// specs live on `/dashboard`. A redirect that fired there would delete the page
+// they test." True when written. F-ret.1 then gave that pack production's flag
+// set — so it builds flag-ON — and re-pointed those specs to `/board`. The
+// branch outlived its justification by two days, with a comment still asserting
+// it. Same session, same hand: changing a thing and not its explanation is how
+// the next reader is misled by something that looks authoritative.
 // ============================================================================
 
 export interface RoundsRedirect {
@@ -23,24 +36,25 @@ export interface RoundsRedirect {
 }
 
 /**
- * Evaluated at BUILD time — the same moment `NEXT_PUBLIC_SKIN_ROUNDS` is
- * inlined — so the fork is baked into the image like every other consumer of
- * the flag. Takes the flag as an argument rather than reading `process.env`
- * directly so the off case is testable without mutating global state.
+ * Evaluated at BUILD time. No longer takes the flag — there is one skin, so
+ * `/dashboard` always forwards.
+ *
+ * ⚠️ STILL A FUNCTION RATHER THAN A CONST, deliberately: `next.config.ts` calls
+ * it from an async `redirects()`, and the ordering invariant below is asserted
+ * by its own test against the returned array. A bare exported const would be
+ * equally testable but would invite inlining back into the config, which is the
+ * arrangement that made the ordering untestable in the first place.
  */
-export function roundsRedirects(flag: string | undefined): RoundsRedirect[] {
-  // ⚠️ INERT WITH THE FLAG OFF, and that is load-bearing: the default
-  // `chromium` E2E pack builds flag-OFF and 24 of its specs live on
-  // `/dashboard`. A redirect that fired there would delete the page they test.
-  if (flag !== 'true') return [];
+export function roundsRedirects(): RoundsRedirect[] {
   return [
     // FIRST — the specific rule. See the ordering note above.
     {
       source: '/dashboard',
       has: [{ type: 'query', key: 'tab', value: 'all' }],
       destination: '/board?filter=active',
-      // 307, not 308: a product decision that rolls back with the flag, and a
-      // permanent redirect is cached by the browser effectively forever.
+      // 307, not 308. A permanent redirect is cached by the browser
+      // effectively forever, and that is not a thing to do to a URL on the
+      // strength of an IA decision — even one we now consider settled.
       permanent: false,
     },
     { source: '/dashboard', destination: '/board', permanent: false },
@@ -54,10 +68,6 @@ export function roundsRedirects(flag: string | undefined): RoundsRedirect[] {
     // obvious reading ("a redirect that shadows a live page") is wrong here:
     // there is no page to shadow. What it catches is bookmarks, typed URLs and
     // anything that ever linked to the noun the nav used to show.
-    //
-    // 307, matching `/dashboard` above: a product decision that rolls back with
-    // the flag. A `permanent: true` would be cached by the browser effectively
-    // forever, which is not a thing to do to a URL on a hunch about the IA.
     //
     // QUERY IS PRESERVED BY NEXT, NOT BY THIS RULE. `redirects()` forwards the
     // query string automatically whenever the destination does not specify its

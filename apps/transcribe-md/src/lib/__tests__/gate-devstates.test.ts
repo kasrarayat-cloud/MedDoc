@@ -82,7 +82,18 @@ describe('/dev/states — the Gate C door', () => {
     expect(argsBlock).not.toContain('NEXT_PUBLIC_DEV_STATES');
     // Positive control: the matcher CAN see flags in that block, so the
     // absence above is a real absence and not a broken slice.
-    expect(argsBlock).toContain('NEXT_PUBLIC_SKIN_ROUNDS');
+    //
+    // ⚠️ THE NEEDLE MOVED 2026-08-05 (F-ret.3). This named NEXT_PUBLIC_SKIN_ROUNDS,
+    // which was removed from compose along with the flag. Leaving it would have
+    // reddened this gate for a reason unrelated to what it guards — and worse,
+    // invited the next person to "fix" it by deleting the control instead of
+    // re-pointing it, which would turn the assertion above into an absence check
+    // with nothing proving the slice still works.
+    //
+    // A POSITIVE CONTROL IS ONLY AS GOOD AS ITS LANDMARK, so the landmark has to
+    // be maintained when it is removed. SKIN_BETA is the replacement: same
+    // service, same `args:` block, and not scheduled for deletion.
+    expect(argsBlock).toContain('NEXT_PUBLIC_SKIN_BETA');
   });
 
   it('the flag predicate is strict equality — unset and "1" are OFF', async () => {

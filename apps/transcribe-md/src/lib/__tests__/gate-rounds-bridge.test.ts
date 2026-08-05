@@ -181,8 +181,8 @@ const DEFERRED_FORKS: Record<string, { sites: number; owner: string; why: string
 //   • TERNARY  — `color: checked ? 'var(--color-linear-sage)' : '…'`
 //   • FALLBACK — `color: 'var(--color-linear-sage, #7AA68C)'`
 //
-// and the fallback form is the one flag-safety guidance RECOMMENDS, so the
-// blind spot was set to GROW.
+// and the fallback form is the one recommended wherever a custom property might
+// not be declared at computed-value time, so the blind spot was set to GROW.
 //
 // ⚠️ WHAT MADE IT INVISIBLE IS WORSE THAN THE REGEX. The assertion meant to
 // catch a stale `sites:` count RECOMPUTED that count with the SAME regex. A
@@ -197,27 +197,32 @@ const FOREGROUND_DECL =
   /(?<![a-zA-Z-])(?:color|stroke|fill)\s*:\s*((?:\((?:[^()]|\([^()]*\))*\)|[^,;}()])*)/g;
 const LINEAR_NAME = /--color-linear-[a-zA-Z0-9-]+/g;
 
-/** Identifiers bound to `isSkinRounds()` in a file, so a value gated on one can
- *  be recognised. A `--color-linear-*` name in the FALSE branch of such a
- *  ternary is the flag-OFF path and never renders on a Rounds surface, so it is
- *  not a bridged foreground and must not be counted as one. */
-function skinTestIds(src: string): string[] {
-  const ids = ['isSkinRounds()'];
-  for (const m of src.matchAll(/const\s+([A-Za-z_$][\w$]*)\s*=\s*isSkinRounds\(\)/g)) ids.push(m[1]);
-  return ids;
-}
+// ── the skin-fork exemption, RETIRED ────────────────────────────────────────
+//
+// This matcher used to carry a second job: find the identifiers a file bound to
+// the Rounds skin flag, and mark a `--color-linear-*` name sitting in the
+// flag-OFF branch of such a ternary as "not a bridged foreground", because that
+// branch never rendered on a Rounds surface.
+//
+// ⚠️ THE PREMISE EXPIRED. The skin flag is gone and the skin is unconditional,
+// so no surface writes that fork any more and there is no flag-OFF branch for a
+// name to hide in. The tracing helper was left finding nothing — which does not
+// fail, it just quietly stops exempting anything, and every assertion built on
+// it becomes a statement about an input set that is always empty. That is the
+// exact defect this file exists to catch, so the exemption was removed rather
+// than left to read green over nothing.
+//
+// The consequence is deliberate and is a TIGHTENING: every `--color-linear-*`
+// name used as a foreground on a C1 surface is now measured against AA, with no
+// branch that can excuse it.
 
 /** Every `--color-linear-*` name used as a FOREGROUND in `src`. */
-function foregroundSites(src: string): { name: string; skinForked: boolean; value: string }[] {
-  const ids = skinTestIds(src);
-  const out: { name: string; skinForked: boolean; value: string }[] = [];
+function foregroundSites(src: string): { name: string; value: string }[] {
+  const out: { name: string; value: string }[] = [];
   for (const m of src.matchAll(FOREGROUND_DECL)) {
     const value = m[1] ?? '';
-    const forked = ids.some((id) =>
-      new RegExp(`(?:^|[^\\w$])${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\?`).test(value),
-    );
     for (const name of value.match(LINEAR_NAME) ?? []) {
-      out.push({ name, skinForked: forked, value: value.replace(/\s+/g, ' ').trim() });
+      out.push({ name, value: value.replace(/\s+/g, ' ').trim() });
     }
   }
   return out;
@@ -282,11 +287,9 @@ describe('C1 host bridge', () => {
     // colour and must clear 4.5:1 on the worst Rounds backdrop.
     const foreground = new Set<string>();
     for (const f of files) {
-      for (const site of foregroundSites(readFileSync(f, 'utf8'))) {
-        // A name in the flag-OFF branch of an `isSkinRounds() ? …` fork never
-        // renders on a Rounds surface, so it is not a bridged foreground.
-        if (!site.skinForked) foreground.add(site.name);
-      }
+      // Every foreground counts. There is no skin fork left to exempt one — see
+      // the retirement note above `foregroundSites`.
+      for (const site of foregroundSites(readFileSync(f, 'utf8'))) foreground.add(site.name);
     }
     expect(foreground.size, 'no foreground usages found — the matcher is broken').toBeGreaterThan(3);
 
@@ -331,7 +334,7 @@ describe('C1 host bridge', () => {
 
     for (const [name, debt] of entries) {
       const fg = files.reduce(
-        (n, f) => n + foregroundSites(readFileSync(f, 'utf8')).filter((s2) => !s2.skinForked && s2.name === name).length,
+        (n, f) => n + foregroundSites(readFileSync(f, 'utf8')).filter((s2) => s2.name === name).length,
         0,
       );
       expect(
@@ -360,7 +363,8 @@ describe('C1 host bridge', () => {
       '--color-linear-text-3',
     ]);
 
-    // The shape flag-safety guidance recommends, so the blind spot would grow.
+    // The shape recommended wherever a token might be undeclared, so the blind
+    // spot would have grown.
     const fallback = foregroundSites(`style={{ color: 'var(--color-linear-sage, #7AA68C)' }}`);
     expect(fallback.map((f) => f.name), 'FALLBACK shape').toEqual(['--color-linear-sage']);
 
@@ -373,17 +377,28 @@ describe('C1 host bridge', () => {
       '--color-linear-text',
     ]);
 
-    // A skin fork: the --color-linear-* branch is the flag-OFF path.
+    // ⚠️ THE TWO FIXTURES BELOW ARE THE RETIRED SKIN FORK, KEPT ON PURPOSE.
+    // The shape is EXTINCT in source — the skin flag is gone, the skin is
+    // unconditional, and no surface writes this ternary any more. The strings
+    // are retained as inert fixtures because the claim worth pinning survived
+    // the flag: the exemption path that used to swallow the second branch is
+    // GONE, and a name in either arm is now counted. Asserting the NAMES rather
+    // than a former `skinForked` boolean keeps this measurable — the expected
+    // arrays are non-empty, so this cannot pass by examining nothing.
     const forked = foregroundSites(
       `color: isSkinRounds() ? 'var(--rounds-critical-on-dark)' : 'var(--color-linear-danger)'`,
     );
-    expect(forked.map((f) => f.skinForked), 'SKIN-FORK shape').toEqual([true]);
+    expect(forked.map((f) => f.name), 'formerly-exempted ternary — arm is counted').toEqual([
+      '--color-linear-danger',
+    ]);
 
-    // …and via a const binding, which is how the surfaces actually write it.
+    // …and via a const binding, which is how the surfaces used to write it.
     const viaConst = foregroundSites(
       `const rounds = isSkinRounds();\ncolor: rounds ? 'var(--rounds-text-1)' : 'var(--color-linear-text)'`,
     );
-    expect(viaConst.map((f) => f.skinForked), 'SKIN-FORK via const').toEqual([true]);
+    expect(viaConst.map((f) => f.name), 'formerly-exempted via const — arm is counted').toEqual([
+      '--color-linear-text',
+    ]);
 
     // NEGATIVE CONTROLS — things that must NOT read as a foreground.
     expect(

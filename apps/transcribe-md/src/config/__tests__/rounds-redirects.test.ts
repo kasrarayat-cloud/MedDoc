@@ -1,7 +1,24 @@
 // ============================================================================
-// The Rounds forwards: fire under Rounds, inert without it, ordered right.
+// The Rounds forwards: unconditional, ordered right.
 //   R1 — /dashboard → /board  (two rules, the deep link first)
 //   R2 — /templates → /settings/note-format
+//
+// ⚠️ THE "INERT WITH THE FLAG OFF" TESTS WERE RETIRED 2026-08-05 (F-ret.3).
+// `roundsRedirects` no longer takes the skin flag — there is one skin, so the
+// forwards always apply. Two tests pinned the fail-closed branch and are gone
+// with it, and the reason they existed is worth keeping because it expired in a
+// way that was invisible: "the default `chromium` E2E pack builds flag-OFF and
+// 24 of its specs live on /dashboard. A redirect firing there deletes the page
+// they test." F-ret.1 gave that pack production's flag set and re-pointed those
+// specs to /board, so the justification was already false for two days before
+// the branch was removed.
+//
+// ⚠️ WHAT REPLACES THE POSITIVE CONTROL. The old one guarded a real hazard — a
+// helper returning [] unconditionally would have satisfied every emptiness
+// assertion and shipped a forward that never forwards. Emptiness is no longer
+// asserted anywhere, so that exact trap is gone; the rule COUNT is still pinned
+// at 3 below, so adding or dropping a rule still has to be looked at rather
+// than sliding under a `.length > 0`.
 // ============================================================================
 
 import { describe, expect, it } from 'vitest';
@@ -9,26 +26,14 @@ import { describe, expect, it } from 'vitest';
 import { roundsRedirects } from '../rounds-redirects';
 
 describe('R1 — the /dashboard → /board redirect rules', () => {
-  it('⚠️ INERT with the flag off, absent, or anything but the literal "true"', () => {
-    // Load-bearing: the default `chromium` E2E pack builds flag-OFF and 24 of
-    // its specs live on /dashboard. A redirect firing there deletes the page
-    // they test — and the failure would read as "the dashboard is broken".
-    for (const off of ['false', '', 'TRUE', '1', undefined]) {
-      expect(roundsRedirects(off), `flag=${String(off)} produced redirects`).toEqual([]);
-    }
-  });
-
-  it('POSITIVE CONTROL — it does fire on the literal "true"', () => {
-    // Without this, a helper that returned [] unconditionally would pass every
-    // assertion above and ship a forward that never forwards.
-    // R2: 2 → 3. The count is asserted rather than the emptiness, so ADDING a
-    // rule has to come here and be looked at, instead of sliding under a
-    // `.length > 0`.
-    expect(roundsRedirects('true').length).toBe(3);
+  it('the rule COUNT is pinned — adding one has to be looked at', () => {
+    // Asserted as an exact count rather than `.length > 0`, so a new rule
+    // cannot slide in unexamined and a dropped one cannot pass quietly.
+    expect(roundsRedirects().length).toBe(3);
   });
 
   it('⚠️ the SPECIFIC rule comes first, or the deep link is silently dropped', () => {
-    const rules = roundsRedirects('true');
+    const rules = roundsRedirects();
     // Next takes the FIRST match. The bare `/dashboard` rule matches regardless
     // of query string, so if it were first, `?tab=all` would land on the board's
     // default and nobody would ever see an error.
@@ -43,13 +48,13 @@ describe('R1 — the /dashboard → /board redirect rules', () => {
     // 308 is cached by the browser indefinitely. Rolling the flag back would
     // leave doctors bouncing to a board that no longer exists, with no
     // server-side way to take it back.
-    for (const r of roundsRedirects('true')) {
+    for (const r of roundsRedirects()) {
       expect(r.permanent, `${r.source} → ${r.destination} is permanent`).toBe(false);
     }
   });
 
   it('nothing else is forwarded — the blast radius is the named routes', () => {
-    expect(roundsRedirects('true').map((r) => r.source)).toEqual([
+    expect(roundsRedirects().map((r) => r.source)).toEqual([
       '/dashboard',
       '/dashboard',
       '/templates',
@@ -58,7 +63,7 @@ describe('R1 — the /dashboard → /board redirect rules', () => {
 });
 
 describe('R2 — the /templates → /settings/note-format redirect', () => {
-  const templates = () => roundsRedirects('true').filter((r) => r.source === '/templates');
+  const templates = () => roundsRedirects().filter((r) => r.source === '/templates');
 
   it('exists exactly once, and lands on the note-format section', () => {
     const rules = templates();
@@ -82,22 +87,11 @@ describe('R2 — the /templates → /settings/note-format redirect', () => {
     expect(templates()[0].permanent).toBe(false);
   });
 
-  it('⚠️ INERT with the flag off — /templates keeps its current behaviour', () => {
-    // Flag-OFF the nav still shows Templates and this path is a 404, exactly as
-    // on `main`. The default `chromium` pack builds flag-OFF; a redirect firing
-    // there would change a route none of R2 touched.
-    for (const off of ['false', '', 'TRUE', '1', undefined]) {
-      expect(
-        roundsRedirects(off).some((r) => r.source === '/templates'),
-        `flag=${String(off)} produced a /templates forward`,
-      ).toBe(false);
-    }
-  });
 
   it('does not shadow the destination — no rule forwards /settings/*', () => {
     // A `/settings/note-format` source would make the redirect a loop. Cheap to
     // assert, and the failure mode is a hang rather than an error.
-    for (const r of roundsRedirects('true')) {
+    for (const r of roundsRedirects()) {
       expect(r.source.startsWith('/settings')).toBe(false);
     }
   });

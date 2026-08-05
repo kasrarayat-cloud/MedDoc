@@ -12,7 +12,6 @@ import {
 } from '@/components/ui/auth-shell';
 import { signupAction, type AuthActionState } from '@/actions/auth';
 import { MARKETING_URL } from '@/lib/constants';
-import { isSkinRounds } from '@/config/skin-rounds';
 
 const initialState: AuthActionState = null;
 
@@ -42,9 +41,6 @@ const linkStyle: React.CSSProperties = {
 };
 
 export function SignupForm() {
-  // Build-time, so flag-OFF folds to a constant and this component renders
-  // exactly as it does today.
-  const rounds = isSkinRounds();
   const [state, formAction, pending] = useActionState(signupAction, initialState);
   const router = useRouter();
   const [password, setPassword] = useState('');
@@ -105,7 +101,7 @@ export function SignupForm() {
           defaultValue={values.inviteCode ?? ''}
           required
           maxLength={64}
-          className={rounds ? 'qm-rounds-input' : undefined}
+          className="qm-rounds-input"
           style={{ ...inputStyle, marginTop: 6, letterSpacing: '0.04em' }}
         />
         <p
@@ -124,7 +120,7 @@ export function SignupForm() {
               inconsistency with the file's own `linkStyle` default. */}
           <a
             href="/waitlist"
-            className={rounds ? 'qm-rounds-link' : undefined}
+            className="qm-rounds-link"
             style={{ textDecoration: 'underline' }}
           >
             Join the waitlist
@@ -143,7 +139,7 @@ export function SignupForm() {
           autoComplete="name"
           defaultValue={values.name ?? ''}
           required
-          className={rounds ? 'qm-rounds-input' : undefined}
+          className="qm-rounds-input"
           style={{ ...inputStyle, marginTop: 6 }}
         />
         <AuthFieldError message={errors.name} />
@@ -159,7 +155,7 @@ export function SignupForm() {
           defaultValue={values.email ?? ''}
           required
           maxLength={254}
-          className={rounds ? 'qm-rounds-input' : undefined}
+          className="qm-rounds-input"
           style={{ ...inputStyle, marginTop: 6 }}
         />
         <AuthFieldError message={errors.email} />
@@ -175,7 +171,7 @@ export function SignupForm() {
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className={rounds ? 'qm-rounds-input' : undefined}
+          className="qm-rounds-input"
           style={{ ...inputStyle, marginTop: 6 }}
         />
         <p
@@ -202,7 +198,7 @@ export function SignupForm() {
           required
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
-          className={rounds ? 'qm-rounds-input' : undefined}
+          className="qm-rounds-input"
           style={{ ...inputStyle, marginTop: 6 }}
         />
         <AuthFieldError message={mismatchMessage} />
@@ -231,7 +227,7 @@ export function SignupForm() {
           type="checkbox"
           name="acceptTerms"
           required
-          className={rounds ? 'qm-rounds-check' : undefined}
+          className="qm-rounds-check"
           style={{
             marginTop: 3,
             width: 14,
@@ -245,7 +241,7 @@ export function SignupForm() {
             href={`${MARKETING_URL}/terms`}
             target="_blank"
             rel="noopener noreferrer"
-            className={rounds ? 'qm-rounds-link' : undefined} style={linkStyle}
+            className="qm-rounds-link" style={linkStyle}
           >
             terms of service
           </a>{' '}
@@ -254,7 +250,7 @@ export function SignupForm() {
             href={`${MARKETING_URL}/privacy`}
             target="_blank"
             rel="noopener noreferrer"
-            className={rounds ? 'qm-rounds-link' : undefined} style={linkStyle}
+            className="qm-rounds-link" style={linkStyle}
           >
             privacy policy
           </a>
@@ -268,7 +264,7 @@ export function SignupForm() {
         type="submit"
         disabled={pending}
         aria-disabled={pending || Boolean(mismatchMessage)}
-        className={rounds ? 'qm-lin-btn-primary qm-rounds-btn-primary' : 'qm-lin-btn-primary'}
+        className="qm-lin-btn-primary qm-rounds-btn-primary"
         style={{
           width: '100%',
           marginTop: 22,
@@ -292,7 +288,7 @@ export function SignupForm() {
         }}
       >
         Have an account?{' '}
-        <Link href="/login" className={rounds ? 'qm-rounds-link' : undefined} style={linkStyle}>
+        <Link href="/login" className="qm-rounds-link" style={linkStyle}>
           Sign in →
         </Link>
       </div>

@@ -99,10 +99,19 @@ describe('F-12 closure: dashboard/error.tsx renders ErrorFallback on render fail
     expect(screen.queryByText(messageSnippet)).toBeNull();
   });
 
-  it('includes a "Back to dashboard" link as the calm-recovery affordance', () => {
+  it('includes a "Back to the board" link as the calm-recovery affordance', () => {
+    // ⚠️ RE-POINTED 2026-08-05 (F-ret.3). This named "back to dashboard" → /dashboard.
+    // `recoveryHref()`/`recoveryLabel()` collapsed to constants when the skin flag
+    // went, so the affordance is now the board.
+    //
+    // ⚠️ EXACT VALUES, NOT SUBSTRINGS — deliberately, because this pair has already
+    // produced a vacuous assertion in this repo: **'dashboard' contains 'board'**,
+    // so a label reverted to "Back to dashboard" would satisfy a naive
+    // `toContain('board')` check. The href is asserted by equality for the same
+    // reason.
     render(<DashboardError error={makeError()} reset={vi.fn()} />);
-    const back = screen.getByRole('link', { name: /back to dashboard/i });
-    expect(back.getAttribute('href')).toBe('/dashboard');
+    const back = screen.getByRole('link', { name: /back to the board/i });
+    expect(back.getAttribute('href')).toBe('/board');
   });
 
   it('fires a sendBeacon to /api/client-errors with scope="dashboard" on mount', () => {

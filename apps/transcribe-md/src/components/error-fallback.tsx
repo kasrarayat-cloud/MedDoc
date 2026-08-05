@@ -17,7 +17,6 @@ import { ArrowLeft, RefreshCw } from 'lucide-react';
 
 import { SpecularButton } from '@/components/specular-button';
 import { isStaleDeploymentError } from '@/lib/stale-deployment';
-import { isSkinRounds } from '@/config/skin-rounds';
 import { recoveryHref, recoveryLabel } from '@/lib/recovery-href';
 
 type ErrorFallbackTheme = 'legacy' | 'clinician';
@@ -119,7 +118,7 @@ export function ErrorFallback({
       // being touched. `qm-rounds-errorstate` is what axe's ownership rule
       // spends: a violation on a node under a `qm-rounds-*` class blocks the
       // Gate C sweep, and a node with no such class is classified inherited.
-      className={isSkinRounds() ? 'qm-rounds-host qm-rounds-errorstate' : undefined}
+      className="qm-rounds-host qm-rounds-errorstate"
       style={{
         minHeight: '60vh',
         display: 'flex',
@@ -158,9 +157,7 @@ export function ErrorFallback({
             // destructive fill stays red, which leaves this one site at
             // 2.72:1. Forked to the text-safe token rather than bending the
             // bridge and paling the fill.
-            color: isSkinRounds()
-              ? 'var(--rounds-critical-on-dark)'
-              : 'var(--color-linear-danger)',
+            color: 'var(--rounds-critical-on-dark)',
             marginBottom: 18,
             fontSize: 18,
           }}

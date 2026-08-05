@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import * as Sentry from '@sentry/nextjs';
 
@@ -14,7 +13,6 @@ import {
 import { auth } from '@/lib/nextauth';
 import { logAudit } from '@/lib/audit';
 import { AppFrame } from '@/components/ui/app-frame';
-import { Ic } from '@/components/ui/icon';
 import { type SpecialtyKind } from '@/components/ui/spec-chip';
 import { AudioUploader } from '@/components/audio-uploader';
 import { VoiceDictator } from '@/components/voice-dictator';
@@ -33,7 +31,6 @@ import {
   extractEmOverride,
 } from '@/lib/em-coding/displayed-level';
 import { parseEmPendingChange, unacknowledgedEmChange } from '@/lib/em-pending-change';
-import { isSkinRounds } from '@/config/skin-rounds';
 import { signGates } from '@/lib/sign-gates';
 import { toStageIdentity, toQueuePosition } from '@/lib/rounds/stage-data';
 import { fetchStageQueueIds } from '@/lib/rounds/stage-queue';
@@ -79,36 +76,6 @@ function specialtyId(raw: string): string {
 }
 
 void KNOWN_SPECIALTIES;
-
-// Phase 5 — collapse the seven-state TranscribeVisitStatus into the
-// labels the meta strip + status pill exposes.
-function visitStatusLabel(status: TranscribeVisitStatus, needsReview: boolean) {
-  if (status === TranscribeVisitStatus.SIGNED) return 'Signed';
-  if (status === TranscribeVisitStatus.FAILED) return 'Failed';
-  if (status === TranscribeVisitStatus.READY)
-    return needsReview ? 'Needs review' : 'Ready';
-  if (status === TranscribeVisitStatus.QUEUED) return 'Queued';
-  return 'Processing';
-}
-
-function visitStatusPillClass(
-  status: TranscribeVisitStatus,
-  needsReview: boolean
-) {
-  if (status === TranscribeVisitStatus.SIGNED) {
-    return 'qm-lin-pill qm-lin-pill--signed';
-  }
-  if (status === TranscribeVisitStatus.FAILED) {
-    return 'qm-lin-pill bg-linear-danger/15 text-linear-danger';
-  }
-  if (status === TranscribeVisitStatus.READY) {
-    return needsReview ? 'qm-lin-pill qm-lin-pill--review' : 'qm-lin-pill qm-lin-pill--ready';
-  }
-  if (status === TranscribeVisitStatus.QUEUED) {
-    return 'qm-lin-pill qm-lin-pill--draft';
-  }
-  return 'qm-lin-pill qm-lin-pill--processing';
-}
 
 export default async function VisitPage({
   params,
@@ -286,30 +253,18 @@ export default async function VisitPage({
     visit.dictationAudioKey !== null ||
     (visit.rawTextInput !== null && visit.rawTextInput.length > 0);
 
-  const patientDisplayName =
-    visit.patient?.name ?? visit.patientName ?? 'Patient';
-  const statusLabel = visitStatusLabel(visit.status, visit.needsReview);
-  const statusPillCls = visitStatusPillClass(visit.status, visit.needsReview);
-
-  // ── R1 — THE STAGE STOPS RENDERING TWO GENERATIONS AT ONCE ──────────────
-  // Everything between here and the VisitBody wrapper is pre-Rounds chrome:
-  // a "Dashboard › <name> › Visit · ready" breadcrumb, a meta strip that
-  // reprints the patient name (uppercased), specialty, MRN and chief complaint,
-  // and a right-aligned Delete row. Under Rounds every one of those is drawn
-  // AGAIN, better, by `RoundsStageIdentity` — so the live page showed the
-  // patient's name three times and their MRN twice, with the status word
-  // uppercased into a "NEEDS REVIEW" badge that the Rounds pipeline strip
+  // ── R1 — THE STAGE RENDERS ONE GENERATION OF CHROME ─────────────────────
+  // The page's own breadcrumb, patient meta strip and right-aligned Delete row
+  // are gone: `RoundsStageIdentity` draws all of it, better, so the live page
+  // used to show the patient's name three times and their MRN twice, with the
+  // status word uppercased into a "NEEDS REVIEW" badge the pipeline strip
   // already states.
-  // It is gated rather than deleted because the flag-OFF build is still a
-  // supported build until F-ret retires it, and that build has no other header.
-  const roundsChrome = isSkinRounds();
 
-  // The lifecycle actions (Delete, and the draft-edit dialog) are hoisted so
-  // BOTH shells can place them. Off Rounds they keep their prime-header row.
-  // Under Rounds they move into a quiet disclosure BELOW the note: destroying
-  // a visit is not a primary action on the screen where you read it, and a
-  // right-aligned `Delete` sitting level with the patient's name is one
-  // mis-click from a surface whose whole job is careful review.
+  // The lifecycle actions (Delete, and the draft-edit dialog) are composed here
+  // and handed to the stage, which places them in a quiet disclosure BELOW the
+  // note: destroying a visit is not a primary action on the screen where you
+  // read it, and a right-aligned `Delete` sitting level with the patient's name
+  // is one mis-click from a surface whose whole job is careful review.
   const lifecycleActions = (
       <VisitLifecycleActions
         visitId={visit.id}
@@ -353,127 +308,6 @@ export default async function VisitPage({
 
   return (
     <AppFrame>
-      {!roundsChrome && (
-      <>
-      {/* Linear V1 breadcrumb — sits at the top of the content
-          column, hairline-separated from the meta strip below. */}
-      <div
-        style={{
-          padding: '14px 24px 0',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          fontFamily: 'var(--font-sans)',
-          fontSize: 13,
-          color: 'var(--color-linear-text-3)',
-        }}
-      >
-        <Link
-          href="/dashboard"
-          className="qm-tap-44"
-          style={{
-            color: 'var(--color-linear-text-3)',
-            textDecoration: 'none',
-            display: 'inline-flex',
-            alignItems: 'center',
-          }}
-        >
-          Dashboard
-        </Link>
-        <Ic.chevRight width={12} height={12} />
-        {visit.patient ? (
-          <>
-            <Link
-              href={`/patients/${visit.patient.id}`}
-              className="qm-tap-44"
-              style={{
-                color: 'var(--color-linear-text-3)',
-                textDecoration: 'none',
-                display: 'inline-flex',
-                alignItems: 'center',
-              }}
-            >
-              {visit.patient.name}
-            </Link>
-            <Ic.chevRight width={12} height={12} />
-          </>
-        ) : null}
-        <span style={{ color: 'var(--color-linear-text), inherit' }}>
-          Visit · {visit.status.toLowerCase()}
-        </span>
-      </div>
-
-      {/* Linear V1 patient meta strip — mono uppercase fields with
-          hairline dividers. Mirrors visit-detail.html. */}
-      <div
-        style={{
-          margin: '14px 24px 0',
-          padding: '10px 0 14px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 0,
-          flexWrap: 'wrap',
-          borderBottom: '1px solid var(--color-linear-hairline)',
-          fontFamily: 'var(--font-mono)',
-          fontSize: 11,
-          letterSpacing: '0.06em',
-          textTransform: 'uppercase',
-          color: 'var(--color-linear-text-2)',
-        }}
-      >
-        <div
-          style={{
-            paddingRight: 14,
-            borderRight: '1px solid var(--color-linear-hairline)',
-            color: 'var(--color-linear-text)',
-            fontWeight: 500,
-          }}
-        >
-          {patientDisplayName.toUpperCase()}
-        </div>
-        <div
-          style={{
-            padding: '0 14px',
-            borderRight: '1px solid var(--color-linear-hairline)',
-          }}
-        >
-          {specialtyLabel(visit.specialty)}
-        </div>
-        {visit.patient?.externalId && (
-          <div
-            style={{
-              padding: '0 14px',
-              borderRight: '1px solid var(--color-linear-hairline)',
-            }}
-          >
-            <span style={{ color: 'var(--color-linear-text-3)' }}>MRN&nbsp;</span>
-            {visit.patient.externalId}
-          </div>
-        )}
-        {visit.chiefComplaint && (
-          <div
-            style={{
-              padding: '0 14px',
-              borderRight: '1px solid var(--color-linear-hairline)',
-            }}
-          >
-            <span style={{ color: 'var(--color-linear-text-3)' }}>CC&nbsp;</span>
-            <span style={{ textTransform: 'none', letterSpacing: '-0.005em' }}>
-              {visit.chiefComplaint}
-            </span>
-          </div>
-        )}
-        <div style={{ padding: '0 14px', marginLeft: 'auto' }}>
-          <span className={statusPillCls} style={{ textTransform: 'uppercase' }}>
-            {statusLabel}
-          </span>
-        </div>
-      </div>
-
-      <div style={{ padding: '14px 24px 0' }}>{lifecycleActions}</div>
-      </>
-      )}
-
       <div style={{ padding: '18px 24px 48px' }}>
         <VisitBody
           visitId={visit.id}
@@ -518,13 +352,11 @@ export default async function VisitPage({
           patientName={visit.patientName}
           patient={visit.patient}
           createdAt={visit.createdAt}
-          // Selected since the meta strip needed it; threaded down now because
-          // the Rounds identity header renders it as the reason line. Inert on
-          // the flag-off path.
+          // The Rounds identity header renders it as the reason line.
           chiefComplaint={visit.chiefComplaint}
           rxOverrides={rxOverrides}
           /* R2 — into the STAGE HEADER, not the page foot. See below. */
-          visitActions={roundsChrome ? lifecycleActions : undefined}
+          visitActions={lifecycleActions}
         />
       </div>
 
@@ -535,15 +367,13 @@ export default async function VisitPage({
           doctor looks is both hard to find and easy to hit while scrolling to
           the end of a long note.
           It is now a quiet `<details>` in the stage header, beside the identity
-          block, rendered by `RoundsStage`. The flag-OFF path is untouched: it
-          still renders its own row near the top of the page in the
-          `!roundsChrome` branch above.
+          block, rendered by `RoundsStage` — the only place the page renders it.
 
           ⚠️ CORRECTED 2026-08-04 — THIS COMMENT USED TO END "Same node, same
           actions, same `data-testid` — only the position moved." THAT WAS
           FALSE, AND IT COST A DAY OF UNREACHABLE ARCHIVE ON EVERY SIGNED NOTE.
-          The block it replaced was gated on `roundsChrome` ALONE, with no
-          status condition, so it also rendered for SIGNED visits. `RoundsStage`
+          The block it replaced carried no status condition, so it also rendered
+          for SIGNED visits. `RoundsStage`
           is mounted only by the unsigned branch (`visit-ready-view.tsx:848`,
           `if (isReviewDocView() && !isSigned)`); a signed visit mounts
           `RoundsSigned`, which had no slot for it. "Only the position moved"
@@ -644,12 +474,12 @@ interface VisitBodyProps {
    * built from the visit's Prisma row), so it is COMPOSED here and travels as
    * an already-rendered node. Rebuilding it inside the client stage would mean
    * threading the patient record down as props — more surface, and a second
-   * place for it to drift from the one `page.tsx` renders on the flag-OFF path.
+   * place for it to drift from the one node `page.tsx` composes.
    *
-   * Optional: absent off Rounds, where the actions render in their own row near
-   * the top of the page (the `!roundsChrome` branch above) exactly as before.
+   * Always supplied: `page.tsx` is the sole caller and the stage header is the
+   * only place these actions render.
    */
-  visitActions?: React.ReactNode;
+  visitActions: React.ReactNode;
 }
 
 async function VisitBody(props: VisitBodyProps) {
@@ -858,84 +688,80 @@ async function VisitBody(props: VisitBodyProps) {
   //
   // And it is placed after the E/M compute and after the `emScoredCode`
   // baseline write on purpose: there is no early return between here and the
-  // top of the function, so a flag-off render executes every statement above
-  // in the same order and differs only by one prop whose value is null.
-  // `isSkinRounds()` inlines at build time, so flag-off never runs the query.
-  let rounds: RoundsStageData | null = null;
-  if (isSkinRounds()) {
-    const userId = session?.user?.id;
-    const queueIds = userId ? await fetchStageQueueIds(userId) : [];
+  // top of the function, so every statement above has already run in order by
+  // the time the stage data is assembled.
+  const userId = session?.user?.id;
+  const queueIds = userId ? await fetchStageQueueIds(userId) : [];
 
-    if (userId) {
-      // The flag-on path reads OTHER visits' rows to place this one in the
-      // queue. §164.312(b) wants that recorded, exactly as /board records it.
-      // Names and free text stay out — a count is enough to show the read.
-      void logAudit({
-        action: 'VIEWED_VISIT_LIST',
-        targetType: 'TranscribeVisit',
-        metadata: {
-          source: 'rsc:/visits/[id]#rounds-queue',
-          count: queueIds.length,
-        },
-      });
-    }
-
-    const gateSet = signGates({
-      rxDrafts: props.rxDrafts,
-      overriddenWarningIds: props.rxOverriddenWarningIds,
-      specialty: props.specialtyId,
-      emPendingChange: props.emPendingChange,
-      emStale: props.emStale,
-    });
-
-    rounds = {
-      status: props.status,
-      signedAt: props.signedAt?.toISOString() ?? null,
-      identity: toStageIdentity({
-        id: props.visitId,
-        patientName: props.patient?.name ?? null,
-        patientFallback: props.patientName,
-        patientExternalId: props.patient?.externalId ?? null,
-        patientDob: props.patient?.dateOfBirth ?? null,
-        chiefComplaint: props.chiefComplaint,
-        createdAt: props.createdAt,
-        // The RESOLVED duration, not `props.audioDurationSec` — a dictated
-        // visit keeps its length in `dictationDurationSec`, so the raw column
-        // would render every one of them as a plausible empty slot.
-        audioDurationSec: durationSec,
-      }),
-      queue: toQueuePosition(props.visitId, queueIds),
-      gates: gateSet.gates,
-      n: gateSet.n,
-      emArtifact: gateSet.emArtifact,
-      // OFF THE SAME GATE SET. Deriving it a second time from
-      // `unmetCriticalWarnings` would put two computations of one number on
-      // one screen, and the band would eventually contradict the padlock.
-      criticalUnresolved:
-        gateSet.gates.find((g) => g.id === 'rx')?.unresolved ?? 0,
-      // ── Screen 4's safety trail — only what a column can prove ──────────
-      trail: {
-        // Severity filtered HERE, not in the query: the same rows populate
-        // `rxOverriddenWarningIds`, which is the sign gate's coverage input.
-        // And compared against the signature rather than assumed — the override
-        // route guards ownership, not visit status, so a row CAN postdate a
-        // signature and "overridden before signing" has to mean it.
-        criticalOverridesBeforeSign: props.signedAt
-          ? props.rxOverrides.filter(
-              (o) =>
-                o.severity === 'critical' &&
-                o.overriddenAt.getTime() <= props.signedAt!.getTime()
-            ).length
-          : 0,
-        // The RAW column, not the coerced display pair — that one is null on
-        // every signed visit by construction, because the coercion returns null
-        // once the change has been acknowledged.
-        emAcknowledgedAt: emNotApplicable
-          ? null
-          : (parseEmPendingChange(props.emPendingChange)?.acknowledgedAt ?? null),
+  if (userId) {
+    // The stage reads OTHER visits' rows to place this one in the queue.
+    // §164.312(b) wants that recorded, exactly as /board records it.
+    // Names and free text stay out — a count is enough to show the read.
+    void logAudit({
+      action: 'VIEWED_VISIT_LIST',
+      targetType: 'TranscribeVisit',
+      metadata: {
+        source: 'rsc:/visits/[id]#rounds-queue',
+        count: queueIds.length,
       },
-    };
+    });
   }
+
+  const gateSet = signGates({
+    rxDrafts: props.rxDrafts,
+    overriddenWarningIds: props.rxOverriddenWarningIds,
+    specialty: props.specialtyId,
+    emPendingChange: props.emPendingChange,
+    emStale: props.emStale,
+  });
+
+  const rounds: RoundsStageData = {
+    status: props.status,
+    signedAt: props.signedAt?.toISOString() ?? null,
+    identity: toStageIdentity({
+      id: props.visitId,
+      patientName: props.patient?.name ?? null,
+      patientFallback: props.patientName,
+      patientExternalId: props.patient?.externalId ?? null,
+      patientDob: props.patient?.dateOfBirth ?? null,
+      chiefComplaint: props.chiefComplaint,
+      createdAt: props.createdAt,
+      // The RESOLVED duration, not `props.audioDurationSec` — a dictated
+      // visit keeps its length in `dictationDurationSec`, so the raw column
+      // would render every one of them as a plausible empty slot.
+      audioDurationSec: durationSec,
+    }),
+    queue: toQueuePosition(props.visitId, queueIds),
+    gates: gateSet.gates,
+    n: gateSet.n,
+    emArtifact: gateSet.emArtifact,
+    // OFF THE SAME GATE SET. Deriving it a second time from
+    // `unmetCriticalWarnings` would put two computations of one number on
+    // one screen, and the band would eventually contradict the padlock.
+    criticalUnresolved:
+      gateSet.gates.find((g) => g.id === 'rx')?.unresolved ?? 0,
+    // ── Screen 4's safety trail — only what a column can prove ──────────
+    trail: {
+      // Severity filtered HERE, not in the query: the same rows populate
+      // `rxOverriddenWarningIds`, which is the sign gate's coverage input.
+      // And compared against the signature rather than assumed — the override
+      // route guards ownership, not visit status, so a row CAN postdate a
+      // signature and "overridden before signing" has to mean it.
+      criticalOverridesBeforeSign: props.signedAt
+        ? props.rxOverrides.filter(
+            (o) =>
+              o.severity === 'critical' &&
+              o.overriddenAt.getTime() <= props.signedAt!.getTime()
+          ).length
+        : 0,
+      // The RAW column, not the coerced display pair — that one is null on
+      // every signed visit by construction, because the coercion returns null
+      // once the change has been acknowledged.
+      emAcknowledgedAt: emNotApplicable
+        ? null
+        : (parseEmPendingChange(props.emPendingChange)?.acknowledgedAt ?? null),
+    },
+  };
 
   return (
     <VisitReadyView

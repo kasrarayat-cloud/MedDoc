@@ -8,7 +8,6 @@ import {
   AuthFieldError,
   AuthFieldLabel,
 } from '@/components/ui/auth-shell';
-import { isSkinRounds } from '@/config/skin-rounds';
 
 // Phase 5 — Linear V1 Faithful forgot-password form. Server-side
 // /api/auth/forgot-password contract is unchanged: anti-enumeration,
@@ -36,9 +35,6 @@ const linkStyle: React.CSSProperties = {
 };
 
 export function ForgotPasswordForm() {
-  // Build-time, so flag-OFF folds to a constant and this component renders
-  // exactly as it does today.
-  const rounds = isSkinRounds();
   const [email, setEmail] = useState('');
   const [pending, setPending] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -75,7 +71,7 @@ export function ForgotPasswordForm() {
   if (submitted) {
     return (
       <div
-        className={rounds ? 'qm-rounds-panel' : undefined}
+        className="qm-rounds-panel"
         style={{
           marginTop: 22,
           display: 'flex',
@@ -131,7 +127,7 @@ export function ForgotPasswordForm() {
           maxLength={254}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className={rounds ? 'qm-rounds-input' : undefined}
+          className="qm-rounds-input"
           style={{ ...inputStyle, marginTop: 6 }}
         />
       </div>
@@ -141,7 +137,7 @@ export function ForgotPasswordForm() {
       <button
         type="submit"
         disabled={pending || !email.trim()}
-        className={rounds ? 'qm-lin-btn-primary qm-rounds-btn-primary' : 'qm-lin-btn-primary'}
+        className="qm-lin-btn-primary qm-rounds-btn-primary"
         style={{
           width: '100%',
           marginTop: 22,
@@ -165,7 +161,7 @@ export function ForgotPasswordForm() {
         }}
       >
         Remembered it?{' '}
-        <Link href="/login" className={rounds ? 'qm-rounds-link' : undefined} style={linkStyle}>
+        <Link href="/login" className="qm-rounds-link" style={linkStyle}>
           Back to sign in →
         </Link>
       </div>

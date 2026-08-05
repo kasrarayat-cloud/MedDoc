@@ -36,7 +36,6 @@ import { isUxSimplify } from '@/config/ux-simplify';
 // Pre-sign review as one document — flag-gated, UNSIGNED visits.
 import { isReviewDocView } from '@/config/review-doc-view';
 // Rounds Screen 2 — the stage. Composes; never renders the note itself.
-import { isSkinRounds } from '@/config/skin-rounds';
 import { RoundsStage } from '@/components/rounds/stage';
 import { RoundsGateFlow } from '@/components/rounds/gate-flow';
 import { RoundsSigned } from '@/components/rounds/signed';
@@ -142,9 +141,9 @@ function scrollToChatTarget(target: string): void {
 export interface VisitReadyViewProps {
   visitId: string;
   /**
-   * Rounds Screen 2's server-computed view model, or null when the skin flag
-   * is off. Computed in `VisitBody` because two of its three gate inputs are
-   * only correct on the server — see the block there.
+   * Rounds Screen 2's server-computed view model, or null when there is no
+   * stage to render. Computed in `VisitBody` because two of its three gate
+   * inputs are only correct on the server — see the block there.
    */
   rounds?: RoundsStageData | null;
   /** R2 — server-composed lifecycle actions for the stage header's overflow.
@@ -454,7 +453,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
   const [rxResolved, setRxResolved] = useState(initialRxResolved);
 
   // ── ROUNDS, Screen 2 ─────────────────────────────────────────────────────
-  // Computed unconditionally (hooks rule); only the flag-ON branch consumes it.
+  // Computed unconditionally (hooks rule); only the stage branches consume it.
   const router = useRouter();
 
   // ── Screen 3's three in-session signals ──────────────────────────────────
@@ -479,11 +478,10 @@ export function VisitReadyView(props: VisitReadyViewProps) {
         : null,
     [props.rounds, rxUnresolved, rxResolved, emConfirmedSession, attested]
   );
-  // BOTH halves, deliberately. The flag alone would render a stage with no
-  // data if the prop were ever dropped; the prop alone would render one on a
-  // flag-off build. Requiring both means a wiring mistake shows as the old
-  // skin, never as a half-built new one.
-  const roundsActive = isSkinRounds() && roundsView !== null;
+  // THE DATA IS THE CONDITION. `rounds` is computed server-side in `VisitBody`
+  // and arrives null when there is no view model to render, so a wiring mistake
+  // shows as the old skin rather than as a stage with no data behind it.
+  const roundsActive = roundsView !== null;
 
   // The chat drawer sits OVER the sheet, so a scroll issued while it is open
   // moves something the doctor cannot see. Record on the way in, release after
@@ -557,8 +555,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
   }, [router, headVisitId]);
 
   const handleOpenQueue = useCallback(() => {
-    // The board IS the queue, and it lives behind the same flag. B4 may
-    // replace this with an in-place drawer.
+    // The board IS the queue. B4 may replace this with an in-place drawer.
     router.push('/board');
   }, [router]);
 
@@ -899,8 +896,8 @@ export function VisitReadyView(props: VisitReadyViewProps) {
           </p>
         ) : null;
 
-      // Under the flag this same node moves INSIDE the drawer. `false` and
-      // `null` render identically, so the flag-off output is unchanged.
+      // On the Rounds stage this same node moves INSIDE the drawer. `false`
+      // and `null` render identically, so the off-stage output is unchanged.
       const chatPanel =
         chatEditor && !props.signedAt ? (
           <ChatEditorPanel
@@ -934,7 +931,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
             // and a write path resolving one identifier with two matchers is a
             // defect this project has already shipped once.
             //
-            // Under the Rounds flag this DEFERS instead of scrolling: the chat
+            // On the Rounds stage this DEFERS instead of scrolling: the chat
             // is a drawer over the sheet, so scrolling now would move something
             // the doctor cannot see while the message claims it navigated.
             onScrollTo={handleChatScrollTo}
@@ -1036,7 +1033,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
                 initialOverriddenIds={props.rxOverriddenWarningIds}
                 onResolvedChange={setRxResolved}
                 // The same fact as a COUNT, for the gate flow's partial
-                // credit. Only under the flag, so the flag-off render does not
+                // credit. Only on the stage, so the off-stage render does not
                 // gain a state update it has no consumer for.
                 onUnresolvedChange={roundsActive ? setRxUnresolved : undefined}
               />
@@ -1063,9 +1060,9 @@ export function VisitReadyView(props: VisitReadyViewProps) {
           onAdjustEm={adjustEm}
           readonly={props.readonly || props.signedAt !== null}
           // ── Rounds Screen 3 ──────────────────────────────────────────────
-          // Both undefined unless the flag is on, so the flag-OFF render is
-          // exactly the tree it was before: `hosted()` returns its node
-          // untouched and nothing reports state upward.
+          // Both undefined off the stage, so that render is exactly the tree
+          // it was before: `hosted()` returns its node untouched and nothing
+          // reports state upward.
           onEmConfirmedChange={roundsActive ? setEmConfirmedSession : undefined}
           /* ONE SIGN PATH. Off Rounds the bar is the review surface's own
              footer and always renders. Under Rounds the stage's action rail is
