@@ -109,6 +109,19 @@ async function seedClinicalData(
       data: {
         userId,
         patientId: patient.id,
+        // ⚠️ T3 MADE THIS REQUIRED, AND OMITTING IT FAILS CONFUSINGLY.
+        // Prisma reports `Argument \`user\` is missing` — not "practiceId is
+        // missing". Passing scalar FKs selects the UNCHECKED create variant;
+        // drop one required scalar and Prisma falls back to the CHECKED
+        // variant, which wants `user: { connect: … }`. The error names the
+        // symptom, not the cause.
+        //
+        // It must equal the patient's practice — the composite FK
+        // (patientId, practiceId) → (id, practiceId) refuses anything else, by
+        // design. Passing it explicitly rather than deriving it here keeps the
+        // fixture honest: if the derivation ever disagreed, this seed would
+        // fail loudly instead of quietly writing a row the constraint allows.
+        practiceId,
         specialty: 'primary-care',
         inputMode: 'text_notes',
         status: signed ? 'SIGNED' : 'READY',
