@@ -92,6 +92,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 
 import { loginUser } from '../helpers/auth';
+import { assertChatReachable, openChatEditor } from '../helpers/chat';
 import { QA_COMPOSE, QA_DB } from '../helpers/qa-compose';
 import {
   attestAndSubmit,
@@ -212,8 +213,10 @@ async function expectSignatureReachable(page: Page) {
  * pill used to reach. That shared write path is why parity holds.
  */
 async function chatEditSection(page: Page, section: string, body: string) {
-  const editor = page.getByTestId('chat-editor');
-  await expect(editor, 'the chat editor is the edit surface').toBeVisible({ timeout: 60_000 });
+  // ⚠️ RE-POINTED 2026-08-05 (F-ret.3). The editor is not inline any more — it
+  // lives in a drawer behind `rounds-chat-trigger`. This opens it and LEAVES it
+  // open, because everything below types into it.
+  await openChatEditor(page);
   const before = await page.getByTestId('chat-turn-assistant').count();
   await page.getByTestId('chat-input').fill(`MOCKEDIT ${section} :: ${body}`);
   await page.getByTestId('chat-send').click();
@@ -638,7 +641,10 @@ test.describe('the visit page is the document', () => {
     // Same interaction model as a template visit: read-only paper, and the
     // three things a doctor can act on — chat, the gates, and the signature.
     await expect(page.locator('[data-testid^="section-edit-"]')).toHaveCount(0);
-    await expect(page.getByTestId('chat-editor')).toBeVisible();
+    // ⚠️ RE-POINTED: the editor is behind the drawer now. This opens it, proves
+    // the editor is really there, and closes it again — the drawer's scrim is a
+    // <body> portal, and the gate/signature assertions below need the stage back.
+    await assertChatReachable(page);
     // Re-pointed with the rest — the signature is Gate 3's, not the paper's.
     // Same helper as the template visit, which is the point of this test: the
     // two surfaces must offer the same interaction model, so they are asserted
@@ -741,7 +747,10 @@ test.describe('the visit page is the document', () => {
 
     // STILL HERE, and these three are the whole interaction model:
     await expect(page.getByTestId('review-doc-rx-gate')).toBeVisible();
-    await expect(page.getByTestId('chat-editor')).toBeVisible();
+    // ⚠️ RE-POINTED: the editor is behind the drawer now. This opens it, proves
+    // the editor is really there, and closes it again — the drawer's scrim is a
+    // <body> portal, and the gate/signature assertions below need the stage back.
+    await assertChatReachable(page);
     // The third is no longer ON the paper, and this test is the one that would
     // notice a leftover: it is the visit with codes, a level, medications and a
     // warning — the one that WOULD draw every retired surface. So the negative
