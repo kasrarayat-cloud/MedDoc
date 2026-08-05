@@ -96,7 +96,61 @@ not the compose file, for exactly this reason. A `${STRIPE_SECRET_KEY:-…}` in
 
 Dependency order. Each item is one session, taken to its gate.
 
-### T1 — the multi-seat fixture
+### ✅ T1 — the multi-seat fixture — DONE 2026-08-05
+
+**Gate met by DEMONSTRATION.** T1's own wording: *"a filter test that FAILS when
+the practice predicate is removed — demonstrated by mutation, not asserted.
+Without the red, T1 is not done."* Three mutations, each red:
+
+    M1  remove the practice predicate  → THE GATE reds
+    M2  point the fixture tag at nothing → the non-vacuity guard reds
+    M3  scope patients to a missing slug → the native-column path reds
+
+Clean run 4/4 green. Fixture: `t1-alpha` **2 members / 6 visits**, `t1-beta`
+**1 member / 3 visits**, both with patients, templates and a SIGNED/READY mix.
+`scripts/seed-t1-multiseat.ts` (fail-closed via `assertNonProdDatabase`, and it
+THROWS if either side lands empty), wired into `e2e.yml` after the guarded seed.
+Gate: `tests/e2e/scenarios/31-practice-isolation.spec.ts`.
+
+#### ⚠️ WHAT MEASUREMENT CHANGED ABOUT THIS ITEM
+
+**The "Practice entity + personal-practice backfill" half was ALREADY SHIPPED.**
+Measured against production: 196 users, **0 without a practice**, 197 practices,
+**178 of them personal** and named `solo-<hash>-<hash>` — an automated
+personal-practice path already exists. Nothing to design; nothing to backfill.
+Recorded so it is not built twice.
+
+**But the multi-seat half was NOT, and the reason is the whole point of T1.**
+Three multi-member practices already existed — `main-clinic` (11 members),
+`qa-audit` (5), `test-clinic-b` (2) — and every one has **ZERO visits, ZERO
+templates**. A filter test over an empty practice cannot go red: drop the
+predicate and the answer does not change, because there was nothing to leak.
+That is why T1 blocks everything below it, and it is a structural instance of the
+vacuity trap — an assertion about a set whose size was never established.
+
+**The gate is written to be BREAKABLE.** `scopedVisits()` takes the predicate as
+an argument, and the gate runs it twice — scoped and unscoped — asserting the two
+answers DIFFER, and that the difference is exactly beta's row count. A test that
+only asserted "alpha's rows come back" would pass on a query that filters nothing.
+
+#### TWO FACTS FOR T3, MEASURED HERE
+
+- **`transcribe_visits` has NO practice column.** A practice scope is a JOIN
+  through `users` today. T3's job.
+- **`transcribe_md_patients` IS already `practiceId`-scoped natively.** So the
+  two clinical tables sit on **different tenancy models right now**. The gate
+  exercises both deliberately, so the native-column path is not left untested
+  until T3 changes the other one.
+
+#### CARRIED
+
+**16 orphaned practices with zero members**, left behind by deleted users
+(`solo-*` slugs). Harmless, not blocking, not cleaned — recorded so a future
+count of "practices" is not mistaken for a count of tenants.
+
+---
+
+### T1 (original wording) — the multi-seat fixture
 Build a QA practice with **≥2 members and real clinical data** (visits,
 deliveries, edit patterns, templates), and a second practice to be excluded
 from.

@@ -188,6 +188,17 @@ jobs:
           --entrypoint sh db-migrate
           -c 'cd /app/apps/transcribe-md && npx --no-install tsx scripts/seed-qa-user.ts'
 
+      # T1 — the multi-seat fixture. Two practices WITH CLINICAL DATA, because a
+      # practice-scoping test over an empty practice passes for free: remove the
+      # predicate and nothing changes. Production's three multi-member practices
+      # all have zero visits, which is exactly how this gate would have proven
+      # nothing. The seed itself throws if either side lands empty.
+      - name: Seed the T1 multi-seat fixture (practice isolation)
+        run: >
+          docker compose -f docker-compose.qa.yml run --rm
+          --entrypoint sh db-migrate
+          -c 'cd /app/apps/transcribe-md && npx --no-install tsx scripts/seed-t1-multiseat.ts'
+
       # MUST run BEFORE the app starts. /api/health (the app's docker
       # healthcheck, docker-compose.qa.yml) gates on
       # `bucketExists(transcribe-md-audio)` as a REQUIRED check — so with no
