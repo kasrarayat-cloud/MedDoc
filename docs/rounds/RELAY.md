@@ -673,6 +673,140 @@ so the next session does not re-derive it:
   claim that needs both lists to be checkable).
 - **F-ret.3 …** — the deletion itself, unchanged, still gated on .1 and .2.
 
+### ✅ F-ret.3 — CLOSED 2026-08-05. THE ROUNDS RELAY IS COMPLETE END-TO-END.
+
+PR **#527** → merge commit **`2cda8f9d`** (parents `0444bed6` + `8634d9dc`).
+Deployed to production 2026-08-05, log `docs/deploy-logs/deploy-20260805T110923Z.log`.
+
+| Workflow | Run | Conclusion |
+|---|---|---|
+| `CI` | `30997743530` | success |
+| `e2e` | `30997743548` | success |
+| `secrets-scan` | `30997743533` | success |
+| `a11y-ci` | — | **DID NOT RUN** — `pull_request`-only. Not borrowed from the PR head. |
+
+`total=6, success=6, non-success=0`, re-read from the API.
+
+**58 files, +1122/−4145, 18 files deleted.** The flag, its OFF arm, and every
+decoy site are gone. Rollback for this surface is **tagged images only**
+(`:pre-fret3-20260805`, ID-verified against the running containers) — and that
+tag is now the ONLY place the old skin exists: `main` cannot build it and no flag
+can select it. Runbook §3.1/§3.3.
+
+**BUNDLE DIFF — the deletion's proof, measured in the RUNNING production
+container, every zero against a live positive control:**
+
+| needle | before | after |
+|---|---|---|
+| runtime `SKIN_ROUNDS` (app) | `=true` | **ABSENT** (12 other `NEXT_PUBLIC_*` present) |
+| runtime `SKIN_ROUNDS` (worker) | `=true` | **ABSENT** (11 other present) |
+| `"Go to dashboard"` | 3 chunks | **0** |
+| `"Back to dashboard"` | 3 chunks | **0** |
+| `"Back to the board"` / `"Go to the board"` | — | 3 / 2 |
+| `qm-rounds-` | 65 | 72 |
+
+Standing checks 5/5 ✅ clean post-deploy. Co-tenants unchanged: app `307`,
+marketing `200`, admin `404`, pro `410`.
+
+#### ⚠️ THE SMOKE IS PARTIAL, AND THE UNVERIFIED HALF IS NAMED
+
+Steps 1–7 passed against production on the synthetic smoke account: the board is
+home with its top bar and account menu; `/visits/new` draws; **zero legacy nav
+components**; `data-skin="rounds"` unconditional; the 404 recovery link is
+"Back to the board" → `/board` with no "Back to dashboard" anywhere; `/dashboard`
+forwards rather than renders; a visit was created and the stage + paper drew.
+
+**THE ATTESTED SIGN WAS NOT COMPLETED, and the log line claiming it was is the
+lesson.** My walk printed `SMOKE 8/9 attested + signed` immediately after
+clicking the sign control — before anything confirmed it. The database says
+`status=READY`, `signedAt` null, and there is **no `VISIT_SIGNED` audit row**.
+Step 9 caught it.
+
+**The product is not implicated.** No `POST /sign` reached the server at all — no
+sign-related log line in 20 minutes — because "Sign & Download" opens
+`SignAndSendModal` and my walk never submitted it. A harness that stops one
+control short, not a broken gate. The attested-sign path IS covered by the
+`rounds-gates` and `visit-doc` packs, green on this merge commit.
+
+**Evidence written at the moment of an action is not evidence.** That is relay
+rule 2c, and I broke it in my own smoke while quoting it elsewhere in the same
+session.
+
+Smoke data cleaned to baseline: visits 2 → **0**, patients 2 → 0, **audit rows
+PRESERVED (949)** — deleting them would be the tampering the trail exists to
+prevent. Real-clinician visits unchanged at 26.
+
+#### 19:56 — DISPOSITION: BRANCH (a), FORK OBSERVED AND RE-POINTED
+
+Driven on the production-shaped build. The database showed a genuine fork —
+`v1 INACTIVE` + `v2 ACTIVE`, original row untouched — and every DB assertion
+passed unchanged. Only the card's `· v2` version badge went away, so the
+assertion moved to **"Superseded"**: the word the product uses, a state a doctor
+can see and act on, rather than an implementation detail leaking into the UI.
+Strictly stronger than what it replaced.
+
+#### TWO CANON COROLLARIES, BANKED
+
+1. **Search the VARIABLE, not the accessor.** A flag census built from
+   `grep -rl isSkinRounds` missed `next.config.ts:38`, which read
+   `process.env.NEXT_PUBLIC_SKIN_ROUNDS` raw and never touched the helper. It
+   controlled `/dashboard`'s HTTP status. A wrapper is a convention, not a
+   guarantee — inventory the thing itself.
+   ⚠️ **And one step further: search the DESTINATION too.** The bundle diff
+   found `command-palette.tsx:206` still offering "Go to dashboard" → `/dashboard`
+   on every authed page behind Cmd+K. It never touched the flag; it hardcoded
+   where it went.
+
+2. **A compliance row retires on SUCCESSOR EVIDENCE, never on a reachability
+   argument.** Deleting `/dashboard`'s §164.312(b) `VIEWED_DASHBOARD` row was
+   safe *because the production audit trail showed the obligation had moved* —
+   `VIEWED_DASHBOARD` 2361 rows ending 2026-08-03, `VIEWED_VISIT_LIST` 301 rows
+   starting 2026-08-02 and current, with a one-day overlap. "This code is
+   unreachable" is a claim about source; it is not evidence the trail is
+   unbroken. The rows are. Without that query this would have been a compliance
+   change wearing a refactor's clothes.
+
+#### ⚠️ OPEN ITEMS CARRIED OUT OF ROUNDS — none of these is closed
+
+| Item | Detail |
+|---|---|
+| **`/board` overflows 76px at 390px** | LIVE on the doctor's home page. `board-chrome.tsx:289` carries an inline `style={{ minWidth: 190 }}` on the day meter inside a non-wrapping flex row. NOT fixed here: the remedy is a design decision and `rounds-board` asserts on that surface. Found only because the deletion pointed the one overflow check at the real skin. |
+| **`16-account-settings` flake** | My own `networkidle` fix narrowed the window without closing it — 0/12 locally, then two failures in one CI run. The submit can still beat the client tree. Needs a hydration-PROVING wait, not a network condition. |
+| **`docker-compose.qa.yml` hardcodes `:latest`** | The same tag production builds to, on one daemon. AGENTS.md forbids moving prod's `:latest` to stage something, and the QA compose leaves no other way — I moved it and opened a ~1h window where a prod `compose up` would have shipped an untested image (nothing ran; rollback tags verified intact). The overrides `qa.rounds.yml`/`qa.reviewdoc.yml` show the correct pattern. The base file should pin its own QA tag so the prohibition is enforceable rather than remembered. |
+| **`a11y-ci` never runs on `main`** | `pull_request`-only. Recorded in `docs/foundation/RELAY.md`. |
+| **`em-coding:llm-mdm` ignores `MOCK_AI_CALLS`** | Recorded in `docs/foundation/RELAY.md`. |
+
+#### THE FINDING THAT OUTGREW THE ITEM
+
+**Four E2E packs were certifying configurations that were not production**, each
+surfacing only when the flag's deletion forced it: the default `chromium` pack
+(19 failures, F-ret.1), `rx-safety` (5), `review-doc` (8), `visit-doc` (11 across
+two rounds). Three had dead selectors. The fourth held the **only** check in the
+entire suite that measures horizontal overflow — and had never once run it
+against the shipped skin. On its first real run it caught a **live 7px overflow
+on every authed page at phone width**, shipped 2026-08-04 with the account menu.
+
+That is the argument for deleting a flag rather than parking it, stated better
+than anyone would have argued it in the abstract: **a flag left on keeps a second
+product alive that the test suite quietly attests to.** For three days the
+suite's answer to "does the app work on a phone" was about a build nobody shipped.
+
+⚠️ It also means "F-ret.1 migrated the packs" was true only of the packs that
+BROKE. The per-pack image build args were never audited as a set until F-ret.3
+did it — and that audit found `visit-doc` before CI did.
+
+---
+
+## 🟩 ROUNDS — COMPLETE, END TO END
+
+Every item from the flag's first flip to its deletion is closed. The skin is not
+a feature behind a flag; it is the product. **The next session opens TEAMS per
+`docs/foundation/RELAY.md`, with the exit gate intact — including the owner veto
+window on the 12 `MEDDOC_PRO`-only accounts, which must be confirmed lapsed
+BEFORE the TEAMS migration excludes them. Four of those twelve carry the
+operator's own name.**
+
+
 ### ✅ F-ret.1 AND F-ret.2 — CLOSED 2026-08-04
 
 PR **#525** → merge commit **`c150b600`** (parents `214103d9` + `3d8cb23f`).
