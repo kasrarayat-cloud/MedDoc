@@ -283,10 +283,11 @@ to re-read on the daemon, not a policy to remember.
 
 | Tag | What it restores | Image IDs (verified on the daemon) |
 |---|---|---|
-| `:pre-repairhardening-20260804` | **one step back** — before the second 2026-08-04 deploy. Restores the worker image whose `repair-audit-attribution.ts` still carries the pre-adjudication predicate. ⚠️ Rolling back to it re-arms a script that would "correct" a CORRECT row | app `faafefd5f683` / worker `a63d1841e5c1` / gotenberg `2d05d22572ba` |
-| `:pre-secblock-20260804` | **two steps back** — production immediately BEFORE the security block: Stripe still in the clinical worker, the `?? 'clinic_main'` audit fail-open still live, no account menu (no sign-out anywhere but Settings) | app `cdfa16cc599b` / worker `1526b97cf960` / gotenberg `2d05d22572ba` |
-| `:pre-r4-20260803` | **three steps back** — before R4 (the Rx-panel host + the New-visit patient context) | app `7cb56d8e82a0` / worker `7ed393c06373` / gotenberg `2d05d22572ba` |
-| `:pre-r3b3-20260803` | **four steps back** — before R3 batch 3 (creation flow, pipeline states, `/visits`) | app `633207ec5c6d` / worker `a8caa939f752` / gotenberg `2d05d22572ba` |
+| `:pre-fret3-20260805` | **one step back** — production immediately BEFORE the old-skin retirement. ⚠️ **THIS TAG IS NOW THE ONLY PLACE THE OLD SKIN EXISTS.** F-ret.3 deleted the flag-OFF arm from the source, so `main` cannot build it and no flag can select it. The legacy dashboard, the pre-Rounds 404, the `qm-lin-btn` auth chrome and the C3 patients grid live in these IMAGE LAYERS and nowhere else. Treat the tag accordingly: it is not a convenience, it is the artifact | app `69a55c75b2ee` / worker `079e9900d8fc` (both verified against the RUNNING containers at tag time) |
+| `:pre-repairhardening-20260804` | **two steps back** — before the second 2026-08-04 deploy. Restores the worker image whose `repair-audit-attribution.ts` still carries the pre-adjudication predicate. ⚠️ Rolling back to it re-arms a script that would "correct" a CORRECT row | app `faafefd5f683` / worker `a63d1841e5c1` / gotenberg `2d05d22572ba` |
+| `:pre-secblock-20260804` | **three steps back** — production immediately BEFORE the security block: Stripe still in the clinical worker, the `?? 'clinic_main'` audit fail-open still live, no account menu (no sign-out anywhere but Settings) | app `cdfa16cc599b` / worker `1526b97cf960` / gotenberg `2d05d22572ba` |
+| `:pre-r4-20260803` | **four steps back** — before R4 (the Rx-panel host + the New-visit patient context) | app `7cb56d8e82a0` / worker `7ed393c06373` / gotenberg `2d05d22572ba` |
+| `:pre-r3b3-20260803` | **five steps back** — before R3 batch 3 (creation flow, pipeline states, `/visits`) | app `633207ec5c6d` / worker `a8caa939f752` / gotenberg `2d05d22572ba` |
 
 #### ⚠️ WHAT AN IMAGE ROLLBACK CANNOT RESTORE — read this BEFORE an incident
 
