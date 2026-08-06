@@ -2,7 +2,7 @@
 // T5 — the guard that keeps the practice-scoped accessor the ONLY way in.
 // ----------------------------------------------------------------------------
 // ⚠️ THIS IS A RATCHET, NOT A WALL, AND THAT IS DELIBERATE.
-// There are 82 request-context clinical reads that predate the accessor. A guard
+// There are 81 request-context clinical reads that predate the accessor. A guard
 // that demanded zero on day one would be red for the whole migration, and a
 // permanently-red gate is a gate everyone learns to ignore — which is worse than
 // no gate, because it looks like coverage.
@@ -12,7 +12,7 @@
 // number only ever goes down, and the day it reaches zero this becomes a wall
 // with no further work.
 //
-// ⚠️ WHY THE GUARD LANDS BEFORE THE ADOPTION. If 82 call sites were migrated
+// ⚠️ WHY THE GUARD LANDS BEFORE THE ADOPTION. If 81 call sites were migrated
 // first and the guard added last, the guard's first run would be a bug report
 // against work already declared done — and every site missed would be found one
 // CI cycle at a time. That is the exact failure T3 and T4 paid five cycles for.
@@ -80,7 +80,7 @@ const SYSTEM_ALLOWLIST: Record<string, number> = {
  * UP, a new clinical read was added without practice scoping, and the fix is to
  * scope it — not to move the line. Measured 2026-08-06.
  */
-const MAX_UNSCOPED_REQUEST_READS = 82;
+const MAX_UNSCOPED_REQUEST_READS = 81;
 
 function walk(dir: string): string[] {
   const out: string[] = [];
@@ -98,18 +98,122 @@ function walk(dir: string): string[] {
 
 const isSystem = (p: string) => SYSTEM_PATHS.some((s) => p.startsWith(s));
 
-function clinicalReads(): { request: string[]; system: string[] } {
+/**
+ * ⚠️ MATCHES THAT LIVE IN COMMENTS, DECLARED BY FILE AND COUNT.
+ *
+ * A commented-out read is not a read, and the scanner has to know that — but a
+ * scanner that silently reclassifies things is worse than one that miscounts,
+ * because the dangerous direction is invisible: if `stripComments` ever mistakes
+ * real CODE for a comment, a genuine unscoped read disappears from the count and
+ * the gate reports green about a leak.
+ *
+ * So every comment-resident match is declared here and checked with `toEqual`.
+ * A new one fails until someone writes it down; a misclassification of real code
+ * fails the same way. Measured 2026-08-06.
+ */
+const COMMENT_MATCHES: Record<string, number> = {
+  // The accessor's own usage example, which shows the shape it replaces.
+  'src/lib/practice-scope.ts': 1,
+};
+
+/**
+ * Blanks comments, preserving length and newlines so offsets and line numbers
+ * still map to the original source.
+ *
+ * ⚠️ WHY THIS EXISTS AT ALL. The first version of this guard matched raw source,
+ * so the usage example inside `practice-scope.ts`'s own doc comment counted as an
+ * unscoped read. That is one unit of free headroom — a real unscoped read could
+ * be added and stay under the ceiling — and, worse, it put a floor of 1 under a
+ * ratchet whose whole purpose is to reach 0 and become a wall.
+ *
+ * String states are tracked so a `//` inside a URL literal is not read as the
+ * start of a comment.
+ */
+function stripComments(src: string): string {
+  const out = src.split('');
+  type Mode = 'code' | 'line' | 'block' | 'sq' | 'dq' | 'tpl';
+  let mode: Mode = 'code';
+  let i = 0;
+  while (i < src.length) {
+    const c = src[i];
+    const d = src[i + 1];
+    if (mode === 'code') {
+      if (c === '/' && d === '/') {
+        mode = 'line';
+        out[i] = ' ';
+        out[i + 1] = ' ';
+        i += 2;
+        continue;
+      }
+      if (c === '/' && d === '*') {
+        mode = 'block';
+        out[i] = ' ';
+        out[i + 1] = ' ';
+        i += 2;
+        continue;
+      }
+      if (c === "'") mode = 'sq';
+      else if (c === '"') mode = 'dq';
+      else if (c === '`') mode = 'tpl';
+      i += 1;
+      continue;
+    }
+    if (mode === 'line') {
+      if (c === '\n') mode = 'code';
+      else out[i] = ' ';
+      i += 1;
+      continue;
+    }
+    if (mode === 'block') {
+      if (c === '*' && d === '/') {
+        mode = 'code';
+        out[i] = ' ';
+        out[i + 1] = ' ';
+        i += 2;
+        continue;
+      }
+      if (c !== '\n') out[i] = ' ';
+      i += 1;
+      continue;
+    }
+    // Inside a string literal.
+    if (c === '\\') {
+      i += 2;
+      continue;
+    }
+    if ((mode === 'sq' && c === "'") || (mode === 'dq' && c === '"') || (mode === 'tpl' && c === '`'))
+      mode = 'code';
+    i += 1;
+  }
+  return out.join('');
+}
+
+function clinicalReads(): { request: string[]; system: string[]; commented: string[] } {
   const re = new RegExp(`prisma\\.(${CLINICAL_MODELS.join('|')})\\.${READ_METHODS}\\(`, 'g');
   const request: string[] = [];
   const system: string[] = [];
+  const commented: string[] = [];
   for (const file of walk('src')) {
     const src = readFileSync(file, 'utf8');
+    const code = stripComments(src);
     for (const m of src.matchAll(re)) {
       const line = src.slice(0, m.index).split('\n').length;
-      (isSystem(file) ? system : request).push(`${file}:${line}`);
+      const at = `${file}:${line}`;
+      // The match survives in the blanked copy only if it was real code.
+      if (code.slice(m.index, m.index! + m[0].length) !== m[0]) commented.push(at);
+      else (isSystem(file) ? system : request).push(at);
     }
   }
-  return { request, system };
+  return { request, system, commented };
+}
+
+function byFile(hits: string[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const h of hits) {
+    const file = h.slice(0, h.lastIndexOf(':'));
+    out[file] = (out[file] ?? 0) + 1;
+  }
+  return out;
 }
 
 describe('T5 — clinical reads go through the practice-scoped accessor', () => {
@@ -157,25 +261,54 @@ describe('T5 — clinical reads go through the practice-scoped accessor', () => 
     // path prefix; a listed file whose count DROPPED means a read moved and the
     // allowlist is now stale, which is how an allowlist becomes a rubber stamp.
     const { system } = clinicalReads();
-    const actual: Record<string, number> = {};
-    for (const s of system) {
-      const file = s.slice(0, s.lastIndexOf(':'));
-      actual[file] = (actual[file] ?? 0) + 1;
-    }
-    expect(actual, 'the system-context read map changed — update SYSTEM_ALLOWLIST deliberately').toEqual(
-      SYSTEM_ALLOWLIST,
-    );
+    expect(
+      byFile(system),
+      'the system-context read map changed — update SYSTEM_ALLOWLIST deliberately',
+    ).toEqual(SYSTEM_ALLOWLIST);
   });
 
-  it('POSITIVE CONTROL — the scanner would SEE a new unscoped read', () => {
+  it('matches living in COMMENTS are declared, not silently dropped', () => {
+    // The reclassification this guards is the invisible-failure direction: if
+    // stripComments ever mistakes real code for a comment, a genuine unscoped
+    // read vanishes from the ratchet and the gate goes green over a leak.
+    const { commented } = clinicalReads();
+    expect(
+      byFile(commented),
+      'a clinical read was classified as living in a comment without being declared',
+    ).toEqual(COMMENT_MATCHES);
+  });
+
+  it('POSITIVE CONTROL — the scanner SEES a new unscoped read', () => {
     // Proves the ratchet can actually fire. Without this, a regex that matches
     // nothing keeps the count at 0 forever and the gate passes through any
     // amount of new unscoped access.
-    const fixture = `const v = await prisma.transcribeVisit.findMany({ where: {} });`;
     const re = new RegExp(`prisma\\.(${CLINICAL_MODELS.join('|')})\\.${READ_METHODS}\\(`, 'g');
+    const code = `const v = await prisma.transcribeVisit.findMany({ where: {} });`;
     expect(
-      [...fixture.matchAll(re)].length,
+      [...stripComments(code).matchAll(re)].length,
       'the scanner does not match a plainly unscoped clinical read',
+    ).toBe(1);
+  });
+
+  it('NEGATIVE CONTROL — a COMMENTED read is not counted, but a URL string is not a comment', () => {
+    const re = new RegExp(`prisma\\.(${CLINICAL_MODELS.join('|')})\\.${READ_METHODS}\\(`, 'g');
+
+    const commented = `// const v = await prisma.transcribeVisit.findMany({ where: {} });\n`;
+    expect(
+      [...stripComments(commented).matchAll(re)].length,
+      'a commented-out read still counts — the ratchet can never reach zero',
+    ).toBe(0);
+
+    const block = `/**\n * const v = await prisma.transcribeVisit.findMany({});\n */\n`;
+    expect([...stripComments(block).matchAll(re)].length, 'a doc-comment read still counts').toBe(0);
+
+    // ⚠️ And the stripper must not be over-eager: `//` inside a string is not a
+    // comment, and an over-eager stripper hides real reads — the direction that
+    // fails silently.
+    const url = `const u = 'https://x/y'; await prisma.transcribeVisit.findMany({});`;
+    expect(
+      [...stripComments(url).matchAll(re)].length,
+      'a read after a URL literal was swallowed — the stripper treats // in a string as a comment',
     ).toBe(1);
   });
 });
