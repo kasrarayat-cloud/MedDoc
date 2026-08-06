@@ -247,6 +247,69 @@ Columns added; `POST /api/visits/[id]/sign` records the actual signer.
 three disagreeing signer records (36 / 16 / 16, DISCOVERY §B.7) or state in the
 ledger why they still disagree.
 
+### ⏸ T4 — createdBy / signedBy — **PARTIAL 2026-08-06. Blocked as a DEPENDENCY.**
+
+**T4-a LANDED** (PR #529, merge `ee6aabfb`, deployed 2026-08-06). Both columns,
+both derivations stated in the migration header, the author fallback DECLARED as
+a fallback, server-side `signedBy` in the sign statement, and the CHECK.
+
+Production backfill verified: **26 visits · createdBy null 0 · differs 0 ·
+signed 16 · unattributed 0**, and all **16 signedBy came from the 1:1 audit
+rows** (`matches_audit 16 / differs 0`) — the fallback never fired, exactly as
+the header predicted. `transcribe_visits_signed_requires_signer` is live.
+
+#### ⚠️ THE POSITIVE GATE IS BLOCKED ON T5+T6. IT IS NOT A MISSING TEST.
+
+> **"the positive gate is blocked on T5+T6; it is not a missing test."**
+
+`src/app/api/visits/[id]/sign/route.ts:208`:
+
+    if (!visit || visit.userId !== userId) return apiError('not found', 404);
+
+The sign route is **owner-only**. A second member signing a visit the owner
+created receives a 404. There is exactly one authorization check and no
+practice-scoped path anywhere: visit access is `userId`-scoped throughout, and
+`practiceId` appears in those routes only to gate PATIENT FK changes.
+
+So T4's gate — *"a non-owner member signs and signedBy ≠ userId"* — is
+**structurally unpassable today**. That is the gate working as designed: its own
+wording says *"a solo-practice run cannot pass this gate (F1)."* It was written
+to stay red until multi-seat access exists.
+
+Building it inside T4 would mean implementing T5's accessor and T6's role model
+under T4's name. **T4 CLOSES WHEN T6 LANDS** and a second CLINICIAN signs through
+the real role-gated route, proven three ways: on the wire, in the database, and
+in the audit chain where `VISIT_SIGNED` names the second member.
+
+#### Schema drift — enumerated, and two items were MINE
+
+| Drift item | Class | Disposition |
+|---|---|---|
+| `note_templates_one_system_default` | PARTIAL unique | **inexpressible in Prisma** — documented in place |
+| `note_templates_one_active_per_doctor_encounter` | PARTIAL unique, `NULLS NOT DISTINCT` | **inexpressible** — documented, with a DO-NOT-FIX warning |
+| `transcribe_md_patients_name_trgm_idx` | GIN/expression | already documented (`schema:1700`) |
+| `transcribe_visits_practiceId_idx` | plain | **mine, T3** — now declared |
+| `transcribe_visits_signedBy_idx` | plain | **mine, T4** — now declared |
+
+⚠️ **THE PRESCRIBED FIX WOULD HAVE BROKEN PRODUCTION, and the war room ratified
+the correction.** The instruction was to *"declare the `@@unique` Postgres
+already enforces"*. Postgres does not enforce that. It enforces a PARTIAL unique
+`WHERE status='active' AND doctorId IS NOT NULL`, with `NULLS NOT DISTINCT` —
+Prisma expresses neither. `@@unique([doctorId, encounterType])` would be a FULL
+unique, strictly stronger, and production **already holds 1 doctor+encounterType
+group with more than one row** across all statuses (0 among active). It would
+fail to apply or start rejecting legitimate inactive history.
+
+**Consequence, recorded so nobody re-opens it:** there is no compound unique
+Prisma can see, so `noteTemplate.upsert` on that pair is impossible. Seeds use
+find-then-create. That is the only available shape, not an unfinished workaround.
+
+**Standing expectation, now canon:** the drift enumeration reports
+**UNDECLARED-PLAIN = 0**. Partial and expression indexes are the only permitted
+residue, each documented in place.
+
+---
+
 ### T5 — the one practice-scoped accessor, and the guard that keeps it one
 Every clinical read/write moves behind it. It takes the practice as an
 argument; it does not read the session.
