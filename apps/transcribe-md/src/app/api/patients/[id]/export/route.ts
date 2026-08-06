@@ -33,7 +33,7 @@ import { PassThrough, Readable } from 'node:stream';
 import { ZipArchive } from 'archiver';
 
 import prisma from '@meddoc/db';
-import { visitScope } from '@/lib/practice-scope';
+import { patientScope, visitScope } from '@/lib/practice-scope';
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { logAudit } from '@/lib/audit';
 import { getSession } from '@/lib/auth';
@@ -69,7 +69,7 @@ export const GET = withApiHandler<{ id: string }>(
     if (!user) return apiError('user not found', 404);
 
     const patient = await prisma.transcribeMdPatient.findUnique({
-      where: { id: patientId },
+      where: { id: patientId, ...patientScope(user.practiceId) },
       select: {
         id: true,
         practiceId: true,

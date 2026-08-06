@@ -23,7 +23,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 
 import prisma from '@meddoc/db';
-import { visitScope, type PracticeId } from '@/lib/practice-scope';
+import { patientScope, type PracticeId, visitScope } from '@/lib/practice-scope';
 import { getSession } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 import { isSkinBeta } from '@/config/skin-beta';
@@ -150,8 +150,10 @@ export default async function PatientPage({
     updatedAt: Date;
   };
 
-  const patient: PatientRow | null = await prisma.transcribeMdPatient.findUnique({
-    where: { id },
+  // The predicate, not a post-fetch comparison. Same refusal, one layer down,
+  // where it cannot be forgotten by the next person editing this page.
+  const patient: PatientRow | null = await prisma.transcribeMdPatient.findFirst({
+    where: { id, ...patientScope(session.user.practiceId) },
     select: {
       id: true,
       practiceId: true,

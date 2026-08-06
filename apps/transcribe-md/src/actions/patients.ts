@@ -8,7 +8,7 @@
 // ============================================================================
 
 import prisma from '@meddoc/db';
-import { visitScope } from '@/lib/practice-scope';
+import { patientScope, visitScope } from '@/lib/practice-scope';
 import { Prisma, type TranscribeVisitStatus } from '@prisma/client';
 import { requireSession } from '@/lib/auth';
 import { fetchPatientsPage } from '@/lib/patients-query';
@@ -80,7 +80,7 @@ export async function searchPatientsAction(
   }
 
   const where: Prisma.TranscribeMdPatientWhereInput = {
-    practiceId,
+    ...patientScope(practiceId),
     deletedAt: null,
   };
   if (andClauses.length) where.AND = andClauses;

@@ -16,7 +16,7 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 
 import prisma from '@meddoc/db';
-import { visitScope } from '@/lib/practice-scope';
+import { patientScope, visitScope } from '@/lib/practice-scope';
 import { auth } from '@/lib/nextauth';
 import { logAudit } from '@/lib/audit';
 import { AppFrame } from '@/components/ui/app-frame';
@@ -57,7 +57,7 @@ export default async function PatientsPage() {
   };
   const [firstRaw, total] = (await Promise.all([
     prisma.transcribeMdPatient.findMany({
-      where: { practiceId: user.practiceId, deletedAt: null },
+      where: { ...patientScope(user.practiceId), deletedAt: null },
       orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
       take: C3_PATIENTS_PAGE_SIZE + 1,
       select: {
@@ -80,7 +80,7 @@ export default async function PatientsPage() {
       },
     }),
     prisma.transcribeMdPatient.count({
-      where: { practiceId: user.practiceId, deletedAt: null },
+      where: { ...patientScope(user.practiceId), deletedAt: null },
     }),
   ])) as [C3PatientRaw[], number];
 

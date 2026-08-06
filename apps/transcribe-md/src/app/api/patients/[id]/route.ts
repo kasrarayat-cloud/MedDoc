@@ -15,7 +15,7 @@ import { z } from 'zod';
 import { NextResponse } from 'next/server';
 
 import prisma from '@meddoc/db';
-import { visitScope } from '@/lib/practice-scope';
+import { patientScope, visitScope, type PracticeId } from '@/lib/practice-scope';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { getSession } from '@/lib/auth';
@@ -28,11 +28,11 @@ export const dynamic = 'force-dynamic';
 
 async function loadPatientForSession(
   id: string,
-  practiceId: string,
+  practiceId: PracticeId,
   { includeDeleted = false }: { includeDeleted?: boolean } = {}
 ) {
   const patient = await prisma.transcribeMdPatient.findUnique({
-    where: { id },
+    where: { id, ...patientScope(practiceId) },
     select: {
       id: true,
       practiceId: true,

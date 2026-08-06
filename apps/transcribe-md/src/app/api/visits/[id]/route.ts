@@ -41,7 +41,7 @@ import { TranscribeVisitStatus } from '@prisma/client';
 import { SPECIALTY_IDS } from '@meddoc/shared/specialties';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
-import { visitByIdScope } from '@/lib/practice-scope';
+import { patientScope, visitByIdScope } from '@/lib/practice-scope';
 import { getSession } from '@/lib/auth';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { log } from '@/lib/log';
@@ -244,7 +244,7 @@ export const PATCH = withApiHandler<{ id: string }>(
       parsed.data.patientId !== visit.patientId
     ) {
       const newPatient = await prisma.transcribeMdPatient.findUnique({
-        where: { id: parsed.data.patientId },
+        where: { id: parsed.data.patientId, ...patientScope(session.user.practiceId) },
         select: { id: true, name: true, practiceId: true, deletedAt: true },
       });
       if (
@@ -278,7 +278,7 @@ export const PATCH = withApiHandler<{ id: string }>(
       // anywhere that still reads `visit.patientName` agrees with
       // the linked patient's name.
       const newPatient = await prisma.transcribeMdPatient.findUnique({
-        where: { id: parsed.data.patientId },
+        where: { id: parsed.data.patientId, ...patientScope(session.user.practiceId) },
         select: { name: true },
       });
       if (newPatient) data.patientName = newPatient.name;

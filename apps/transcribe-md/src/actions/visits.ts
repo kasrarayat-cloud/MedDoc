@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
 import prisma from '@meddoc/db';
-import { visitScope } from '@/lib/practice-scope';
+import { PracticeId, patientScope, visitScope } from '@/lib/practice-scope';
 import { Prisma, type TranscribeVisitStatus } from '@prisma/client';
 import { SPECIALTY_IDS } from '@meddoc/shared/specialties';
 import { requireSession } from '@/lib/auth';
@@ -118,13 +118,13 @@ async function resolveRequestedTemplate(
  *  Throws on a bad patientId so the caller's try/catch surfaces the
  *  problem to the UI instead of silently dropping the relation. */
 async function resolvePatient(
-  practiceId: string,
+  practiceId: PracticeId,
   patientId: string | null,
   patientName: string | null
 ): Promise<{ id: string; name: string; practiceId: string }> {
   if (patientId) {
-    const patient = await prisma.transcribeMdPatient.findUnique({
-      where: { id: patientId },
+    const patient = await prisma.transcribeMdPatient.findFirst({
+      where: { id: patientId, ...patientScope(practiceId) },
       select: {
         id: true,
         name: true,
@@ -134,6 +134,10 @@ async function resolvePatient(
     });
     if (
       !patient ||
+      // ⚠️ REDUNDANT BY CONSTRUCTION SINCE T5 — the predicate above already
+      // scopes this read, so this can no longer be true. KEPT deliberately:
+      // tenancy is the one place a second check costs nothing and a missing
+      // one costs a chart. It is not a leftover.
       patient.practiceId !== practiceId ||
       patient.deletedAt !== null
     ) {
@@ -146,7 +150,7 @@ async function resolvePatient(
   const canonicalName = patientName ?? UNKNOWN_PATIENT_NAME;
   const existing = await prisma.transcribeMdPatient.findFirst({
     where: {
-      practiceId,
+      ...patientScope(practiceId),
       deletedAt: null,
       name: { equals: canonicalName, mode: 'insensitive' },
     },
