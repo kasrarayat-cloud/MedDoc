@@ -75,8 +75,12 @@ export async function carryForwardPdfCertification(input: {
   encounterType: string | null;
   newTemplateId: string;
 }): Promise<CarryForwardResult> {
-  const row = await prisma.noteTemplate.findUnique({
-    where: { id: input.newTemplateId },
+  // ⚠️ ITS OWN PREDICATE, not the caller's scope inherited by habit. Callers
+  // pass a template they just created or already verified — so `doctorId` here
+  // is a no-op on every real path and a refusal on the one that matters. T5's
+  // rule: a read does not borrow the authorisation of the read above it.
+  const row = await prisma.noteTemplate.findFirst({
+    where: { id: input.newTemplateId, doctorId: input.doctorId },
     select: { sections: true, styleProfile: true },
   });
   if (!row) return { carried: false, reason: 'no_template' };

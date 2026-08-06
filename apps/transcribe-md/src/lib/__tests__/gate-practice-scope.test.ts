@@ -100,7 +100,7 @@ const SYSTEM_ALLOWLIST: Record<string, number> = {
  * UP, a new clinical read was added without practice scoping, and the fix is to
  * scope it — not to move the line. Measured 2026-08-06.
  */
-const MAX_UNSCOPED_REQUEST_READS = 22;
+const MAX_UNSCOPED_REQUEST_READS = 10;
 
 function walk(dir: string): string[] {
   const out: string[] = [];
@@ -227,6 +227,51 @@ const PERSONAL_SCOPE: Record<string, number> = {
   'src/app/api/settings/delete-account/route.ts': 2,
 };
 
+/**
+ * ⚠️ NOTE TEMPLATES ARE DOCTOR-SCOPED, AND THAT IS THE RULING — NOT AN OMISSION.
+ *
+ * §4.1b makes reads practice-uniform for the practice's CLINICAL DATA. A note
+ * template is not clinical data: it is the doctor's own note FORMAT, authored by
+ * them, offered to them at visit creation, managed under "Settings → My Note
+ * Format". Widening it would put a colleague's formats in your template picker
+ * and list them as yours in Settings — a worse product and a wrong answer.
+ *
+ * ⚠️ AND THERE IS NO TENANCY HOLE TO CLOSE HERE, which is the load-bearing part.
+ * `doctorId = session.user.id` is STRICTLY NARROWER than a practice predicate: a
+ * doctor can only ever reach their own rows, so no cross-practice read is
+ * reachable. Routing these through `templateScope` would WIDEN them. Every site
+ * below was traced to the session before being listed here — none takes a
+ * caller-supplied doctor id.
+ *
+ * `templateScope` stays in the accessor for the day templates become a shared
+ * clinic asset. That is a product decision nobody has made, and it is not T5's
+ * to make. Measured 2026-08-06.
+ */
+const DOCTOR_SCOPE: Record<string, number> = {
+  'src/actions/certify-pdf-template.ts': 1,
+  'src/actions/visits.ts': 1,
+  'src/actions/note-template-lifecycle.ts': 4,
+  'src/actions/preview-native-document.ts': 1,
+  'src/app/settings/page.tsx': 1,
+  'src/app/visits/new/page.tsx': 1,
+  'src/lib/note-template-persist/read.ts': 1,
+  'src/lib/pdf-native/carry-forward.ts': 2,
+};
+
+/**
+ * ⚠️ THE SYSTEM-DEFAULT TEMPLATE — global BY DESIGN, and the one read here that
+ * is deliberately unfiltered. `where: { isSystemDefault: true }` selects the
+ * built-in format every practice starts from; scoping it to a practice would
+ * mean every practice needs its own copy of a row nobody owns.
+ *
+ * Listed rather than pattern-matched, because "an unscoped template read is
+ * fine when it looks global" is exactly the reasoning that lets a real one
+ * through.
+ */
+const SYSTEM_DEFAULT_READS: Record<string, number> = {
+  'src/actions/visits.ts': 1,
+};
+
 const ACCESSORS = /\b(visitScope|visitByIdScope|patientScope|templateScope)\s*\(/;
 
 /**
@@ -251,6 +296,8 @@ function clinicalReads(): {
   commented: string[];
   scoped: string[];
   personal: string[];
+  doctor: string[];
+  systemDefault: string[];
 } {
   const re = new RegExp(`prisma\\.(${CLINICAL_MODELS.join('|')})\\.${READ_METHODS}\\(`, 'g');
   const request: string[] = [];
@@ -258,6 +305,8 @@ function clinicalReads(): {
   const commented: string[] = [];
   const scoped: string[] = [];
   const personal: string[] = [];
+  const doctor: string[] = [];
+  const systemDefault: string[] = [];
   for (const file of walk('src')) {
     const src = readFileSync(file, 'utf8');
     const code = stripComments(src);
@@ -267,12 +316,21 @@ function clinicalReads(): {
       // The match survives in the blanked copy only if it was real code.
       if (code.slice(m.index, m.index! + m[0].length) !== m[0]) commented.push(at);
       else if (isSystem(file)) system.push(at);
-      else if (file in PERSONAL_SCOPE) personal.push(at);
+      else if (m[1] === 'noteTemplate' && isSystemDefaultRead(code, m.index! + m[0].length))
+        systemDefault.push(at);
+      else if (m[1] === 'noteTemplate' && file in DOCTOR_SCOPE) doctor.push(at);
+      else if (m[1] !== 'noteTemplate' && file in PERSONAL_SCOPE) personal.push(at);
       else if (isScoped(code, m.index! + m[0].length)) scoped.push(at);
       else request.push(at);
     }
   }
-  return { request, system, commented, scoped, personal };
+  return { request, system, commented, scoped, personal, doctor, systemDefault };
+}
+
+/** True when a noteTemplate read selects the global built-in format. */
+function isSystemDefaultRead(code: string, at: number): boolean {
+  const end = code.indexOf(')', at);
+  return /isSystemDefault:\s*true/.test(code.slice(at, end > at ? end + 200 : at + 200));
 }
 
 function byFile(hits: string[]): Record<string, number> {
@@ -294,9 +352,16 @@ describe('T5 — clinical reads go through the practice-scoped accessor', () => 
     // request + system only, so as adoption moved reads into `scoped` the total
     // fell and this test went red for the SUCCESS of the migration — a check
     // that fails when the thing it guards is working is a check nobody keeps.
-    const { request, system, scoped, personal, commented } = clinicalReads();
+    const { request, system, scoped, personal, commented, doctor, systemDefault } =
+      clinicalReads();
     const total =
-      request.length + system.length + scoped.length + personal.length + commented.length;
+      request.length +
+      system.length +
+      scoped.length +
+      personal.length +
+      commented.length +
+      doctor.length +
+      systemDefault.length;
     expect(total, 'the scanner found NO clinical reads').toBeGreaterThan(50);
     expect(system.length, 'no system-context reads found — the worker paths moved').toBeGreaterThan(
       0,
@@ -440,6 +505,22 @@ describe('T5 — clinical reads go through the practice-scoped accessor', () => 
   // duplicates the type checker is noise — and the cost of noise is that the
   // whole file gets skimmed. It is replaced, not simply deleted, by the
   // cast-ban above: the one hole a brand cannot see.
+
+  it('the DOCTOR-scope map matches reality, file by file', () => {
+    // Both directions, like the others. An unlisted doctor-scoped template read
+    // is undeclared; a listed file whose count dropped means one moved and the
+    // ruling above no longer describes the code.
+    const { doctor } = clinicalReads();
+    expect(byFile(doctor), 'the doctor-scoped template read map changed').toEqual(DOCTOR_SCOPE);
+  });
+
+  it('the SYSTEM-DEFAULT template reads are exactly the declared ones', () => {
+    const { systemDefault } = clinicalReads();
+    expect(
+      byFile(systemDefault),
+      'an unfiltered template read appeared that claims to be the system default',
+    ).toEqual(SYSTEM_DEFAULT_READS);
+  });
 
   it('POSITIVE CONTROL — the scanner SEES a new unscoped read', () => {
     // Proves the ratchet can actually fire. Without this, a regex that matches
