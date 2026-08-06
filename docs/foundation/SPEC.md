@@ -211,6 +211,45 @@ window meaningful. **The window closes when the TEAMS migration runs** — that
 is item **T7**, and whoever runs it must confirm the veto has lapsed before
 excluding these rows.
 
+### 4.1a WHO MAY SIGN — governance ruling, 2026-08-06
+
+**Recorded here for T6 to build against. This is a clinical-governance decision,
+not a plumbing one, and it was ruled by the war room rather than inferred from
+the code.**
+
+> **The signer signs as themselves, always. There is no on-behalf-of.**
+
+Within a practice, **OWNER and CLINICIAN may sign any UNSIGNED visit in that
+practice, regardless of who created it.** The target workflow is
+*tech-creates, doctor-signs*, and the locum principle carries straight through:
+**the chart owns the note; the signer owns the signature.**
+
+**TECH is refused by name, server-side, fail-closed.** Not hidden in the UI —
+refused by the route, so a scripted caller is refused identically. The refusal
+names the role rather than 404-ing, because "you may not sign" and "this does not
+exist" are different facts and a clinician deserves the true one.
+
+Accountability is carried by four things together, none of which is optional:
+
+| | |
+|---|---|
+| **attestation** | the signer's explicit act, collected before the write |
+| **`signedBy`** | stamped SERVER-SIDE from the session, in the same statement as `signedAt` (T4-a) |
+| **`createdBy`** | who made the record, preserved separately so authorship survives (T4-a) |
+| **audit chain** | `VISIT_SIGNED` naming the actual signer |
+
+⚠️ **`signedBy` is never client-supplied.** A client-supplied signer is a
+client-supplied claim about who attested to a clinical record. T4-a already
+enforces this; T6 must not relax it when it widens *who* may sign.
+
+⚠️ **Widening WHO may sign must not weaken WHAT signing requires.** The
+attestation gate, the Rx critical-override gate and the E/M confirmation are
+independent of identity and stay exactly as they are.
+
+**The T1 fixture gains roles when T6 lands**, so its second member is a
+CLINICIAN — which is what finally makes T4's positive gate passable. Until then
+T4 is PARTIAL by dependency, not by omission (`docs/foundation/RELAY.md`).
+
 ### 4.2 Cross-app redirect users
 
 > **Classify by where clinical data lives — transcribe-md data → normal

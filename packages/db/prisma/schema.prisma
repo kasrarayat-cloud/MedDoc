@@ -2055,6 +2055,15 @@ model TranscribeVisit {
   /// Phase 0 note-format provenance FK. Indexed for the eventual
   /// "which visits used template X" lookup; unused in Phase 0.
   @@index([noteTemplateId])
+  /// ⚠️ DECLARED 2026-08-06 — these existed in the DATABASE ONLY, created by the
+  /// T3 and T4 migrations' raw `CREATE INDEX` and never added here. I introduced
+  /// schema drift in the same programme that was fixing it. They are plain
+  /// single-column indexes, so unlike the partial uniques on `note_templates`
+  /// they ARE expressible, and there is no reason for them to live outside the
+  /// schema. Names already match Prisma's convention, so this declaration
+  /// produces no migration.
+  @@index([practiceId])
+  @@index([signedBy])
   @@map("transcribe_visits")
 }
 
@@ -2251,6 +2260,31 @@ model NoteTemplate {
 
   @@index([doctorId, status])
   @@index([isSystemDefault])
+  /// ⚠️ TWO UNIQUE INDEXES ON THIS TABLE EXIST IN POSTGRES AND CANNOT BE
+  /// DECLARED HERE. Prisma has no syntax for PARTIAL indexes, and both are
+  /// partial:
+  ///
+  ///   note_templates_one_system_default
+  ///     UNIQUE ("isSystemDefault") WHERE "isSystemDefault" = true
+  ///   note_templates_one_active_per_doctor_encounter
+  ///     UNIQUE ("doctorId","encounterType") NULLS NOT DISTINCT
+  ///     WHERE status = 'active' AND "doctorId" IS NOT NULL
+  ///
+  /// ⚠️ DO NOT "FIX" THIS WITH `@@unique([doctorId, encounterType])`. That would
+  /// be a FULL unique, not a partial one, and it is strictly STRONGER than what
+  /// the database enforces: production currently holds 1 doctor+encounterType
+  /// group with more than one row across all statuses (0 among ACTIVE ones), so
+  /// the declaration would either fail to apply or start rejecting legitimate
+  /// inactive history. It would also silently drop NULLS NOT DISTINCT.
+  ///
+  /// Same convention as the trigram index on `transcribe_md_patients`: the
+  /// index lives in migration SQL and is documented here so nobody mistakes its
+  /// absence for an oversight.
+  ///
+  /// CONSEQUENCE, worth knowing before you reach for it: there is no compound
+  /// unique Prisma can see, so `noteTemplate.upsert` on (doctorId,
+  /// encounterType) is IMPOSSIBLE. Seeds use find-then-create. That is not a
+  /// workaround anyone forgot to clean up — it is the only shape available.
   @@map("note_templates")
 }
 
