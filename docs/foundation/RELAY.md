@@ -401,6 +401,28 @@ NEW ✘ ("alpha-2 got a not-found for a colleague's visit"), UNCHANGED ✓, NOT
 WIDENED ✓. Then 3/3 against a build of this branch. The transition is
 attributable to the code and nothing else.
 
+#### ⚠️ IN PRODUCTION THE WIDENING IS A NO-OP, BY CONSTRUCTION — measured 2026-08-06
+
+The reads widened from author to practice. **No production user's visible set
+changes**, and that is a fact about the data, not a hope:
+
+    visits in a practice with MORE THAN ONE member ........  0
+    visits in a practice with at least one member .........  26   ← positive control
+    total visits .........................................  26
+
+The second line is the control and it is not decoration: a query that traverses
+nothing returns 0 for every predicate you try, so the `> 1` zero means nothing
+without a `> 0` that returns everything. It does.
+
+Every practice holding clinical data is SOLO. The three multi-member practices —
+`clinic_main` (11), `qa-practice-audit` (5), `clinic_test_b` (2) — hold **zero
+visits between them**. So "the practice's day" and "my day" are the same set for
+every real user today, and the change is only observable on the T1 fixture.
+
+That is a good deploy posture and a bad test posture, and it is exactly why T1
+exists: **a scoping test over an empty practice passes for free.** Production
+could never have proven this either way.
+
 #### Branded ids — the closing hardening
 
 `PracticeId` / `UserId`, minted only at `getSession()`. `loadVisitExportData`'s
