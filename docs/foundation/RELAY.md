@@ -364,7 +364,7 @@ appeared to answer. Found by re-reading the item's own acceptance criteria befor
 writing this row, not by any check. **"The gate passed" is not "the gate covered
 what was asked."** Fixed in `6a36ab84`; zero holds with the table in scope.
 
-#### ⚠️ TRANCHE 2 IS A RULING, NOT A MIGRATION — and it wants a war-room nod
+#### ✅ TRANCHE 2 EXECUTES GATE 0.3 — ratified 2026-08-06
 
 `note_templates` stay **doctor-scoped**. A template is the doctor's own note
 FORMAT, not clinical data about a patient; widening it would put a colleague's
@@ -375,10 +375,22 @@ STRICTLY NARROWER than a practice predicate, so no cross-practice template read
 is reachable. Migrating them would WIDEN them. All 12 sites were traced to the
 session before being declared.
 
-This is consistent with **T7**, which already carves `note_templates` out as
-"the platform-global carve-out". If the intent was that templates also become
-practice-uniform — a clinic with one house format — that is a **product change
-with UI consequences**, its own item, not a scoping change.
+⚠️ **AND IT WAS ALREADY THE STANDING RULING — I RE-DERIVED IT INSTEAD OF CITING
+IT.** GATE 0.3 decided this on 2026-08-04, recorded verbatim at **SPEC §4.3**:
+*"PER-DOCTOR in TEAMS v1 (solo behavior unchanged); practice-shared library
+recorded as a post-TEAMS flag item."* The tranche-2 verdict is that ruling being
+**executed**, not a new decision, and it reached the same answer by the same
+reasoning — which is reassuring about the reasoning and says nothing good about
+the process. **Read the standing rulings before deciding what a tranche should
+do; a ruling that has to be rediscovered is a ruling that can be contradicted.**
+
+Consistent with **T7**, which carves `note_templates` out as "the platform-global
+carve-out", and with §4.3's own note that the unique index on
+`("doctorId","encounterType")` stays as it is.
+
+**The practice-shared template library remains the named post-TEAMS, flag-gated
+item — never a T5 side effect.** A clinic with one house format is a product
+change with UI consequences, and it arrives through that item or not at all.
 
 #### The E2E pair, proven red on the pre-change build
 
@@ -422,6 +434,36 @@ every real user today, and the change is only observable on the T1 fixture.
 That is a good deploy posture and a bad test posture, and it is exactly why T1
 exists: **a scoping test over an empty practice passes for free.** Production
 could never have proven this either way.
+
+#### ⚠️ CARRIED — a stale fixture flag in a LONG-LIVED worker container
+
+Found 2026-08-06 while verifying T5 locally. The default `chromium` pack came
+back **6 failed**, all one symptom: *"clicked Review & sign but the gate flow
+never presented the attestation"*.
+
+Not the code. **`MOCK_RX_WARNINGS=true` was still set on the WORKER**, left from
+an earlier flag-gated run. The worker is what emits the Rx drafts, so every visit
+it processed carried a critical Warfarin interaction and the gate flow opened at
+Gate 1 instead of the attestation. The app container was clean; only the worker
+was contaminated, because a rebuild had recreated `transcribe-md` and left
+`transcribe-md-worker` up for two days.
+
+Three things worth carrying:
+
+- **A partial `up -d` leaves half the stack on the previous invocation's env.**
+  The flags come from the shell at `up` time, so recreating one service and not
+  the other is enough to split the stack's configuration.
+- **`check-qa-mock-posture.sh` does NOT catch this.** It asks whether QA can
+  reach a vendor — `MOCK_AI_CALLS` plus credentials — and correctly reported
+  green throughout. A leftover *fixture* flag is a different failure: it silently
+  changes what the pack is testing, which is the "packs certifying a
+  configuration that is not production" class from F-ret.
+- **The exit code lied, again.** The run was piped through `tail -40`, so `$?`
+  was `tail`'s and read 0 while the summary said `6 failed`. Count the ✓/✘
+  marks; never trust a piped exit status.
+
+After recreating the worker without the flag: the same 7 specs pass, and the full
+default pack is **74 passed · 0 failed · 1 skipped**, marks counted.
 
 #### Branded ids — the closing hardening
 
