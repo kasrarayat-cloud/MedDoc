@@ -284,15 +284,6 @@ export const authConfig: NextAuthConfig = {
 //   SUPER_ADMIN    — bypass all tenant scoping. Platform ops only.
 // ---------------------------------------------------------------------------
 
-export function canBypassTenantScope(session: Session): boolean {
-  return session.user.role === 'SUPER_ADMIN';
-}
-
-export function tenantScope(session: Session): { practiceId?: string } {
-  if (canBypassTenantScope(session)) return {};
-  return { practiceId: session.user.practiceId };
-}
-
 export class TenantScopeError extends Error {
   constructor(message: string) {
     super(message);
@@ -300,11 +291,54 @@ export class TenantScopeError extends Error {
   }
 }
 
+// ⚠️ `canBypassTenantScope` IS GONE — RULED 2026-08-06 (RULINGS.md).
+//
+// It returned true for `role === 'SUPER_ADMIN'`, and `tenantScope` then returned
+// `{}` — which as a Prisma `where` is not "no results", it is EVERY TENANT. One
+// role could read across the practice wall by construction.
+//
+// ⚠️ WHAT THE ENUMERATION FOUND, because the blast radius was not what it looked
+// like. All four consumers lived in `apps/meddoc-pro` — the legacy CRM, which
+// has been STOPPED since the 2026-08-04 security block (`pro.quillmd.com` 410,
+// container not running). They read `auditLog` ×2, `user` and `apiUsage`:
+// **no clinical table**, and `apps/meddoc-pro` reads no clinical table at all.
+// `apps/transcribe-md` — the live clinical app — had ZERO consumers (measured
+// against a positive control of 15 in meddoc-pro).
+//
+// So this removal does not close an active leak. It closes the DOOR to one:
+// nothing stops a future admin surface from reaching for a helper named
+// "bypass tenant scope", and the next such surface will be in the app that does
+// hold charts. `gate-no-tenant-bypass.test.ts` keeps it shut.
+//
+// Platform-operator needs route through the ADMIN phase, which already rules
+// ZERO clinical content in admin.
+
+/**
+ * The tenant predicate for a session. There is no bypass and no caller-supplied
+ * override — the practice comes from the session or the call throws.
+ *
+ * ⚠️ IT RETURNS A REQUIRED KEY, NOT AN OPTIONAL ONE. The old signature was
+ * `{ practiceId?: string }`, and an optional key is exactly how this failed
+ * open: Prisma DROPS a `where` key whose value is `undefined`, so a session
+ * without a practice silently produced `{}` — every tenant — with no error.
+ */
+export function tenantScope(session: Session): { practiceId: string } {
+  const practiceId = session.user.practiceId;
+  if (typeof practiceId !== 'string' || practiceId.length === 0) {
+    throw new TenantScopeError(
+      'tenantScope: session has no practice. Refusing to build a predicate ' +
+        'Prisma would treat as "all tenants".',
+    );
+  }
+  return { practiceId };
+}
+
 export async function assertSamePracticeUser(
   session: Session,
   targetUserId: string
 ): Promise<void> {
-  if (canBypassTenantScope(session)) return;
+  // No bypass. Ruled 2026-08-06: no role crosses the practice wall through the
+  // app, and "same practice" is exactly what this function is named for.
   const target = await prisma.user.findUnique({
     where: { id: targetUserId },
     select: { practiceId: true },
