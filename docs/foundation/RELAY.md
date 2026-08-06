@@ -310,21 +310,148 @@ residue, each documented in place.
 
 ---
 
-### T5 — the one practice-scoped accessor, and the guard that keeps it one
-Every clinical read/write moves behind it. It takes the practice as an
-argument; it does not read the session.
-**Gate:** **mutation** — add a raw `prisma.transcribeVisit.findMany` outside the
-accessor, watch the guard redden, restore. The guard must also catch
-`doctor_edit_patterns` (DISCOVERY §B.4), which is the table a source grep is
-most likely to miss and the one that leaks whole notes.
+### ✅ T5 — the one practice-scoped accessor — **CLOSED 2026-08-06**
 
-### T6 — roles, and the sign gate that refuses
+`src/lib/practice-scope.ts`. It takes the practice as an argument and does not
+read the session, as specified. It returns a **PREDICATE, not a wrapped query**:
+a wrapper owning the whole query has to re-expose every Prisma option its callers
+use, and the first one it fails to expose gets worked around with a raw call —
+the exact leak it exists to close.
+
+**Gate MET, and then some.** The specified mutation (a raw
+`prisma.transcribeVisit.findMany` outside the accessor) reds it. So does an
+unscoped `doctorEditPattern` read — see the ⚠️ below. So does routing
+`visitScope` through the author (`user: { practiceId }`), an undeclared system
+read, a cast that manufactures a brand, and a stripper that mistakes code for a
+comment. Each was proven and restored.
+
+#### THE LEDGER — the ratchet, and the number that closed it
+
+Every step lowered **in the same commit as the code that earned it**, so the
+number in the guard and the number in the codebase never disagreed.
+
+| | count | what happened |
+|---|---|---|
+| accessor lands | **81** | the guard BEFORE the adoption, deliberately |
+| declaration | **78** | `PERSONAL_SCOPE` — reads whose SUBJECT is the user |
+| tranche 1a | **60** | by-id API routes. **No authorization change.** |
+| tranche 1b | **22** | `transcribe_visits` finished; reads widened to the practice |
+| tranche 2 | **10** | `note_templates` **RULED doctor-scoped — not migrated** |
+| tranche 3 | **0** | `transcribe_md_patients` |
+| **the flip** | **wall** | its own commit, `2e69a967` |
+
+**What the zero means, narrowly:** every request-context read of a clinical model
+either carries the accessor's predicate or sits in a bucket declared BY FILE AND
+COUNT and checked in both directions — SYSTEM 18, PERSONAL 3, DOCTOR 12,
+SYSTEM_DEFAULT 1, COMMENT 1. It does **not** mean the app is free of tenancy
+bugs. It means there is no longer a clinical read that nobody has looked at.
+
+**The ratchet was not deleted at zero.** `MAX_UNSCOPED_REQUEST_READS` stays, at
+0, with the assertion unchanged — the same line that said "do not grow" now says
+"do not exist". A fresh check that reports zero on its first run has proved
+nothing; this one has been running and falling since the first commit.
+
+#### ⚠️ THE GUARD WAS NOT WATCHING `doctor_edit_patterns` — the table this spec named
+
+The spec said, in as many words, that the guard must catch it: *"the table a
+source grep is most likely to miss and the one that leaks whole notes."* It was
+absent from `CLINICAL_MODELS` through all three tranches, so **the wall reached
+zero having never looked at it.**
+
+Nothing would have surfaced it. Both reads are correct, no test failed, no sweep
+complained — the guard was telling the truth about a smaller question than it
+appeared to answer. Found by re-reading the item's own acceptance criteria before
+writing this row, not by any check. **"The gate passed" is not "the gate covered
+what was asked."** Fixed in `6a36ab84`; zero holds with the table in scope.
+
+#### ⚠️ TRANCHE 2 IS A RULING, NOT A MIGRATION — and it wants a war-room nod
+
+`note_templates` stay **doctor-scoped**. A template is the doctor's own note
+FORMAT, not clinical data about a patient; widening it would put a colleague's
+formats in your template picker and list them as yours in Settings.
+
+And there is **no tenancy hole to close**: `doctorId = session.user.id` is
+STRICTLY NARROWER than a practice predicate, so no cross-practice template read
+is reachable. Migrating them would WIDEN them. All 12 sites were traced to the
+session before being declared.
+
+This is consistent with **T7**, which already carves `note_templates` out as
+"the platform-global carve-out". If the intent was that templates also become
+practice-uniform — a clinic with one house format — that is a **product change
+with UI consequences**, its own item, not a scoping change.
+
+#### The E2E pair, proven red on the pre-change build
+
+`tests/e2e/scenarios/34-practice-uniform-read.spec.ts`. `31-practice-isolation`
+proves the COLUMN isolates by running two SQL queries; it is structurally blind
+to whether the APP uses that column, and a route still filtering on `userId`
+leaves it completely green. So 34 drives a browser through a real session:
+
+- **NEW** — alpha-2 opens a visit authored by alpha-1 → the note renders.
+- **UNCHANGED** — beta-1 opens the same visit → refused.
+- **NOT WIDENED** — the personal data export stays author-scoped.
+
+The first alone passes on a route that dropped tenancy entirely, and **fails
+open**. The second alone passes on the pre-T5 code. Only the pair separates "the
+wall moved to the practice boundary" from "the wall is gone".
+
+⚠️ **The QA stack was running an image built 2026-08-05 — genuinely pre-T5** — so
+rather than mutate source to manufacture a red, the pair ran against THAT image:
+NEW ✘ ("alpha-2 got a not-found for a colleague's visit"), UNCHANGED ✓, NOT
+WIDENED ✓. Then 3/3 against a build of this branch. The transition is
+attributable to the code and nothing else.
+
+#### Branded ids — the closing hardening
+
+`PracticeId` / `UserId`, minted only at `getSession()`. `loadVisitExportData`'s
+second parameter was renamed `userId` → `practiceId` in tranche 1b and **nine
+call sites kept passing a user id**, silent through `tsc`, because both are
+`string`. It is now `Argument of type 'UserId' is not assignable to parameter of
+type 'PracticeId'`.
+
+The **argument-shape source guard is RETIRED with a note in place** — the type
+checker carries that guarantee on every call now, and a source rule duplicating
+the type checker is noise. Replaced, not deleted, by a **cast ban**: a brand
+cannot see `userId as PracticeId`, so casts are confined to the session boundary
+and to the runtime guard's own forced-value proof.
+
+The runtime `requirePractice` **stays**: `{ practiceId: undefined }` is `{}` to
+Prisma — **every tenant** — and that is the one failure here that is silent and
+WIDER. A brand stops honest callers, not an `as any`.
+
+### ▶ T6 — roles, and the sign gate that refuses — **OPEN, next**
 OWNER / CLINICIAN / TECH. The sign gate is server-side and fail-closed: an
 unrecognised or absent role refuses.
 **Gate:** a TECH member's `POST /sign` is **refused by the route** — proven with
 a direct request, not by a hidden button — and the refusal writes an audit row.
 This is the R1 lesson: a gate nothing enforces is one path away from not
 existing.
+
+**Scope, as ruled 2026-08-06 — four things, not one:**
+
+1. **The roles model**, and **invites carrying practice + role**.
+2. **The sign gate refusing TECH by name**, server-side. Named, not 404'd:
+   "you may not sign" and "this does not exist" are different facts and a
+   clinician deserves the true one (§4.1a).
+3. ⚠️ **REMOVE THE AUTHOR CONJUNCTS — this is T6's, by ruling §4.1c.** T5 widened
+   READS and deliberately left every ACTION carrying `userId: session.user.id`
+   beside its new practice predicate, because with no role column consulted at a
+   write path the alternatives were to widen writes with nothing distinguishing
+   a TECH from a CLINICIAN, or to ship nothing. **The conjunct is a placeholder
+   standing exactly where the role check goes.** The list is not kept by memory:
+   it is every write path carrying `userId: session.user.id` **beside** a
+   `visitScope`/`visitByIdScope` call, which is greppable precisely because the
+   two appear together.
+
+   Why this is written down rather than discovered: a later reader finding a
+   practice-scoped read next to an author-scoped write concludes the write was
+   MISSED, widens it, and arrives at §4.1a's end state with none of §4.1a's
+   refusals. **A conservatism nobody recorded is indistinguishable from an
+   oversight, and gets "fixed".**
+4. **T4's positive gate finally runs through the real route** — a non-owner
+   member signs and `signedBy ≠ createdBy` — flipping **T4 PARTIAL → CLOSED**.
+   The T1 fixture gains roles here, so its second member is a CLINICIAN, which
+   is what makes that gate passable at all.
 
 ### T7 — the remaining tables gain `practiceId`
 `visit_deliveries`, `doctor_edit_patterns`, `rx_warning_overrides`, the four
