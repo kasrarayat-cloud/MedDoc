@@ -301,6 +301,15 @@ jobs:
           PW_BASE_URL: http://localhost:9020
           NOTE_FORMAT_E2E: "1"
           CI: "true"
+          # ⚠️ THE SAME VALUE THE SEED STEP USES, AND IT HAS TO BE REPEATED HERE.
+          # That step passes it with `-e` into a docker container; this step is
+          # the Playwright RUNNER on the host and inherits nothing from it.
+          # `34-practice-uniform-read` logs the fixture members in, so without
+          # this it fails as "login timed out" — which reads like a browser flake
+          # and sends the next person to the wrong place. The spec asserts the
+          # variable is set rather than defaulting it, so the failure names the
+          # cause.
+          T1_MEMBER_PASSWORD: T1E2eFixtureThrowaway9x
         run: npx playwright test --project=chromium
 
       # ── Flag-gated MOCK fixtures that can't share the main suite's app env:
